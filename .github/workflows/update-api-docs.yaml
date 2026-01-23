@@ -3,6 +3,10 @@ name: Update API Documentation
 on:
   release:
     types: [published]
+  push:
+    tags:
+      - 'v[0-9]*.[0-9]*.[0-9]*'        # Stable releases (v0.5.3)
+      - 'v[0-9]*.[0-9]*.[0-9]*-b*'     # Beta releases (v0.6.0-b5)
   workflow_dispatch:
     inputs:
       version:
@@ -34,7 +38,11 @@ jobs:
         run: |
           if [ -n "${{ github.event.inputs.version }}" ]; then
             VERSION="${{ github.event.inputs.version }}"
+          elif [ "${{ github.event_name }}" = "push" ]; then
+            # Extract version from tag push (refs/tags/v0.6.0-b5 -> v0.6.0-b5)
+            VERSION="${GITHUB_REF#refs/tags/}"
           else
+            # Extract from release event
             VERSION="${{ github.event.release.tag_name }}"
           fi
           echo "version=${VERSION}" >> $GITHUB_OUTPUT
@@ -114,10 +122,20 @@ jobs:
           fi
 
           git add docs/api/openapi.json
+
+          # Create commit message based on trigger type
+          if [ "${{ github.event_name }}" = "release" ]; then
+            TRIGGER_INFO="Release: ${{ github.event.release.html_url }}"
+          elif [ "${{ github.event_name }}" = "push" ]; then
+            TRIGGER_INFO="Tag: ${{ github.server_url }}/${{ github.repository }}/releases/tag/${{ steps.version.outputs.version }}"
+          else
+            TRIGGER_INFO="Manual trigger"
+          fi
+
           git commit -m "Update OpenAPI spec for ${{ steps.version.outputs.version }}
 
-          Automatically generated from depictio release.
-          Release: ${{ github.event.release.html_url || 'Manual trigger' }}"
+          Automatically generated from depictio ${{ github.event_name }}.
+          ${TRIGGER_INFO}"
 
           git push origin main
 
