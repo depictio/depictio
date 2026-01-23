@@ -71,13 +71,14 @@ def create_standalone_html(
         value_font_size = card.get("value_font_size", "32px")
 
         cards_html += f"""
-        <div class="metric-card" style="background-color: {background_color};">
-            <div class="metric-header">
-                <iconify-icon icon="{icon_name}" style="color: {icon_color}; font-size: 24px;"></iconify-icon>
-                <div class="metric-title" style="color: {title_color}; font-size: {title_font_size};">{card_title}</div>
-            </div>
-            <div class="metric-value" style="font-size: {value_font_size};">{card_value}</div>
-            {f'<div class="metric-subtitle">{card_subtitle}</div>' if card_subtitle else ""}
+        <div class="metric-card" style="background-color: {background_color}; position: relative;">
+            <iconify-icon
+                icon="{icon_name}"
+                style="position: absolute; right: 10px; top: 10px; color: {icon_color}; font-size: 40px; opacity: 0.3;">
+            </iconify-icon>
+            <div class="metric-title" style="color: {title_color}; font-size: {title_font_size};">{card_title}</div>
+            <div class="metric-value" style="color: {title_color}; font-size: {value_font_size};">{card_value}</div>
+            {f'<div class="metric-subtitle" style="color: {title_color};">{card_subtitle}</div>' if card_subtitle else ""}
         </div>
         """
 
@@ -176,12 +177,15 @@ def create_standalone_html(
 
         .metric-card {{
             background: var(--card-bg);
-            padding: 20px;
-            border-radius: 12px;
+            padding: 16px;
+            border-radius: 8px;
             box-shadow: var(--shadow);
+            border: 1px solid var(--border-color);
             display: flex;
             flex-direction: column;
-            gap: 12px;
+            justify-content: center;
+            gap: 4px;
+            min-height: 120px;
             transition: transform 0.2s ease, box-shadow 0.2s ease;
         }}
 
@@ -190,32 +194,26 @@ def create_standalone_html(
             box-shadow: 0 4px 12px rgba(0,0,0,0.15);
         }}
 
-        .metric-header {{
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }}
-
         .metric-title {{
             font-size: 0.75rem;
-            font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            color: var(--text-muted);
-            flex: 1;
+            font-weight: 700;
+            margin: 0;
+            margin-left: -2px;
         }}
 
         .metric-value {{
             font-size: 2rem;
             font-weight: 700;
-            color: var(--primary-color);
             line-height: 1.2;
+            margin: 0;
+            margin-left: -2px;
         }}
 
         .metric-subtitle {{
             font-size: 0.85rem;
-            color: var(--text-muted);
-            margin-top: -4px;
+            margin: 0;
+            margin-left: -2px;
+            opacity: 0.8;
         }}
 
         .charts-grid {{
