@@ -449,14 +449,18 @@ def create_triangle_background() -> html.Div:
         animation_class = ANIMATION_CLASSES[i % len(ANIMATION_CLASSES)]
         x, y = _calculate_particle_position(i, grid_cols, grid_rows)
 
+        initial_rotation = (i * 73) % 360
+        # Negative delay starts animation mid-cycle so movement is visible immediately
+        animation_offset = -((i * 1.7) % 8)
         triangle = html.Div(
             className=f"triangle-particle triangle-{size_key} {animation_class}",
             style={
                 "left": f"{x}%",
                 "top": f"{y}%",
                 "background": _create_triangle_svg(size_key, color_hex),
-                "--initial-rotation": f"{(i * 73) % 360}deg",
-                "animation-delay": f"{(i * 0.2) % 3}s",
+                "transform": f"rotate({initial_rotation}deg) translateZ(0)",
+                "--initial-rotation": f"{initial_rotation}deg",
+                "animationDelay": f"{animation_offset}s",
             },
         )
         triangle_particles.append(triangle)
