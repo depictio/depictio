@@ -920,6 +920,9 @@ def _build_slider_kwargs(
             "track": {
                 "minWidth": "50px",
             },
+            "markLabel": {
+                "color": "var(--mantine-color-text)",
+            },
         },
     }
 
