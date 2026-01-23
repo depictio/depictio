@@ -1972,6 +1972,9 @@ def build_figure(**kwargs) -> html.Div | dcc.Loading:
     Returns:
         Figure component as HTML div with skeleton loader
     """
+    # Import fullscreen button creator
+    from depictio.dash.modules.fullscreen import create_fullscreen_button
+
     # Extract essential parameters
     index = kwargs.get("index")
     visu_type = kwargs.get("visu_type", "scatter")
@@ -2006,7 +2009,7 @@ def build_figure(**kwargs) -> html.Div | dcc.Loading:
         "last_updated": datetime.now().isoformat(),
     }
 
-    # Phase 1: Simple structure - Trigger store + Skeleton + Graph + Metadata store
+    # Phase 1: Simple structure - Trigger store + Skeleton + Graph + Metadata store + Fullscreen button
     return html.Div(
         id={"type": "figure-container", "index": index},
         className="figure-container",
@@ -2034,6 +2037,8 @@ def build_figure(**kwargs) -> html.Div | dcc.Loading:
                 id={"type": "stored-metadata-component", "index": index},
                 data=store_component_data,
             ),
+            # Fullscreen button (hidden by default, visible on hover)
+            create_fullscreen_button(index),
             # Graph (populated by callback) - No Loading wrapper to allow dynamic updates
             dcc.Graph(
                 id={"type": "figure-graph", "index": index},
@@ -2047,6 +2052,7 @@ def build_figure(**kwargs) -> html.Div | dcc.Loading:
             "width": "100%",
             "display": "flex",
             "flexDirection": "column",
+            "position": "relative",  # Required for fullscreen button positioning
         },
     )
 
