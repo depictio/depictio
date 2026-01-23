@@ -1,10 +1,13 @@
 import asyncio
 import json
+import uuid
 from datetime import datetime
+from typing import Any
 from uuid import UUID
 
 from bson import ObjectId
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, UploadFile
+from fastapi.responses import Response
 
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
@@ -14,6 +17,16 @@ from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user, ge
 from depictio.models.models.base import PyObjectId, convert_objectid_to_str
 from depictio.models.models.dashboards import DashboardData
 from depictio.models.models.users import TokenBeanie, User, UserBeanie
+from depictio.models.yaml_serialization import (
+    delete_dashboard_yaml,
+    ensure_yaml_directory,
+    export_dashboard_to_yaml_dir,
+    import_dashboard_from_yaml_dir,
+    list_yaml_dashboards,
+    sync_status,
+    validate_dashboard_yaml,
+    yaml_to_dashboard_dict,
+)
 
 dashboards_endpoint_router = APIRouter()
 
@@ -446,7 +459,39 @@ async def save_dashboard(
             if result.get("dashboard_id", None) == dashboard_id
             else "Dashboard data inserted successfully."
         )
-        return {"message": message, "dashboard_id": str(dashboard_id)}
+        logger.info(message)
+
+        # Auto-export to YAML if enabled
+        yaml_export_path = None
+        try:
+            if settings.dashboard_yaml.enabled and settings.dashboard_yaml.auto_export_on_save:
+                # Get project name for organization
+                project_id = result.get("project_id")
+                project = (
+                    projects_collection.find_one({"_id": ObjectId(project_id)})
+                    if project_id
+                    else None
+                )
+                project_name = project.get("name", "unknown") if project else "unknown"
+
+                # Export to YAML directory
+                yaml_export_path = export_dashboard_to_yaml_dir(
+                    dashboard_data=data.model_dump(),
+                    project_name=project_name,
+                )
+                logger.info(f"Auto-exported dashboard {dashboard_id} to {yaml_export_path}")
+        except Exception as e:
+            logger.warning(f"Auto-export to YAML failed: {e}")
+            # Don't fail the save operation if YAML export fails
+
+        # Convert dashboard_id to string to ensure proper JSON serialization
+        dashboard_id_str = str(dashboard_id)
+
+        response = {"message": message, "dashboard_id": dashboard_id_str}
+        if yaml_export_path:
+            response["yaml_export_path"] = str(yaml_export_path)
+
+        return response
     else:
         raise HTTPException(status_code=404, detail="Failed to insert or update dashboard data.")
 
@@ -919,3 +964,1002 @@ async def bulk_get_component_data_endpoint(
         logger.warning(f"⚠️ Missing components: {missing_ids}")
 
     return bulk_data
+
+
+# ============================================================================
+# YAML Export/Import Endpoints
+# ============================================================================
+
+
+@dashboards_endpoint_router.get("/export/{dashboard_id}/yaml")
+async def export_dashboard_to_yaml(
+    dashboard_id: PyObjectId,
+    include_metadata: bool = True,
+    current_user: User = Depends(get_user_or_anonymous),
+):
+    """
+    Export a dashboard to YAML format.
+
+    This endpoint allows exporting dashboards as YAML for:
+    - Version control (git-friendly format)
+    - Backup and restore
+    - Template creation
+    - Infrastructure as code workflows
+
+    Args:
+        dashboard_id: The dashboard ID to export
+        include_metadata: Whether to include export metadata (timestamp, version)
+        current_user: The authenticated user
+
+    Returns:
+        YAML file download response
+    """
+    # Check if dashboard exists
+    dashboard_data = dashboards_collection.find_one({"dashboard_id": dashboard_id})
+    if not dashboard_data:
+        raise HTTPException(
+            status_code=404, detail=f"Dashboard with ID '{dashboard_id}' not found."
+        )
+
+    # Get project_id and check permissions
+    project_id = dashboard_data.get("project_id")
+    if not project_id:
+        raise HTTPException(status_code=500, detail="Dashboard is not associated with a project.")
+
+    # Check project-based permissions (viewer level required for export)
+    if not check_project_permission(project_id, current_user, "viewer"):
+        raise HTTPException(
+            status_code=403, detail="You don't have permission to export this dashboard."
+        )
+
+    # Convert MongoDB document to DashboardData model, then to YAML
+    dashboard = DashboardData.from_mongo(dashboard_data)
+    yaml_content = dashboard.to_yaml(include_metadata=include_metadata)
+
+    # Create filename from dashboard title
+    safe_title = "".join(c if c.isalnum() or c in "-_" else "_" for c in dashboard.title)
+    filename = f"dashboard_{safe_title}_{str(dashboard_id)[:8]}.yaml"
+
+    logger.info(f"Exported dashboard {dashboard_id} to YAML for user {current_user.email}")
+
+    return Response(
+        content=yaml_content,
+        media_type="application/x-yaml",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )
+
+
+@dashboards_endpoint_router.get("/export/{dashboard_id}/yaml/preview")
+async def preview_dashboard_yaml(
+    dashboard_id: PyObjectId,
+    include_metadata: bool = False,
+    current_user: User = Depends(get_user_or_anonymous),
+):
+    """
+    Preview a dashboard as YAML without downloading.
+
+    Returns the YAML content as JSON for preview in the UI.
+
+    Args:
+        dashboard_id: The dashboard ID to preview
+        include_metadata: Whether to include export metadata
+        current_user: The authenticated user
+
+    Returns:
+        JSON with yaml_content field
+    """
+    # Check if dashboard exists
+    dashboard_data = dashboards_collection.find_one({"dashboard_id": dashboard_id})
+    if not dashboard_data:
+        raise HTTPException(
+            status_code=404, detail=f"Dashboard with ID '{dashboard_id}' not found."
+        )
+
+    # Get project_id and check permissions
+    project_id = dashboard_data.get("project_id")
+    if not project_id:
+        raise HTTPException(status_code=500, detail="Dashboard is not associated with a project.")
+
+    # Check project-based permissions
+    if not check_project_permission(project_id, current_user, "viewer"):
+        raise HTTPException(
+            status_code=403, detail="You don't have permission to view this dashboard."
+        )
+
+    # Convert to YAML
+    dashboard = DashboardData.from_mongo(dashboard_data)
+    yaml_content = dashboard.to_yaml(include_metadata=include_metadata)
+
+    return {
+        "success": True,
+        "dashboard_id": str(dashboard_id),
+        "title": dashboard.title,
+        "yaml_content": yaml_content,
+    }
+
+
+@dashboards_endpoint_router.post("/import/yaml")
+async def import_dashboard_from_yaml(
+    yaml_content: str,
+    project_id: PyObjectId,
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Import a dashboard from YAML content.
+
+    Creates a new dashboard from the provided YAML configuration.
+    A new dashboard_id will be generated, and the current user will be set as owner.
+
+    Args:
+        yaml_content: The YAML content defining the dashboard
+        project_id: The project to create the dashboard in
+        current_user: The authenticated user (will be set as owner)
+
+    Returns:
+        Created dashboard information including new dashboard_id
+    """
+    # Additional check for anonymous users
+    if hasattr(current_user, "is_anonymous") and current_user.is_anonymous:
+        raise HTTPException(
+            status_code=403,
+            detail="Anonymous users cannot import dashboards. Please login to continue.",
+        )
+
+    # Check if user has editor permission on the target project
+    if not check_project_permission(project_id, current_user, "editor"):
+        raise HTTPException(
+            status_code=403,
+            detail="You don't have permission to create dashboards in this project.",
+        )
+
+    # Validate YAML content
+    is_valid, errors = validate_dashboard_yaml(yaml_content)
+    if not is_valid:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid dashboard YAML: {'; '.join(errors)}",
+        )
+
+    # Parse YAML to dictionary
+    try:
+        dashboard_dict = yaml_to_dashboard_dict(yaml_content)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+    # Generate new IDs for the imported dashboard
+    new_dashboard_id = ObjectId()
+
+    # Override/set required fields for import
+    dashboard_dict["dashboard_id"] = new_dashboard_id
+    dashboard_dict["project_id"] = ObjectId(project_id)
+    dashboard_dict["version"] = 1
+    dashboard_dict["last_saved_ts"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    # Set current user as owner
+    dashboard_dict["permissions"] = {
+        "owners": [{"_id": ObjectId(current_user.id)}],
+        "editors": [],
+        "viewers": [],
+    }
+
+    # Generate new UUIDs for all components to avoid conflicts
+    if "stored_metadata" in dashboard_dict:
+        for component in dashboard_dict["stored_metadata"]:
+            old_index = component.get("index")
+            new_index = str(uuid.uuid4())
+            component["index"] = new_index
+
+            # Update layout data references if they exist
+            for layout_key in [
+                "left_panel_layout_data",
+                "right_panel_layout_data",
+                "stored_layout_data",
+            ]:
+                if layout_key in dashboard_dict:
+                    for layout_item in dashboard_dict[layout_key]:
+                        if layout_item.get("i") == old_index:
+                            layout_item["i"] = new_index
+
+    # Validate with Pydantic model
+    try:
+        dashboard = DashboardData.from_mongo(dashboard_dict)
+    except Exception as e:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Dashboard validation failed: {e}",
+        ) from e
+
+    # Insert into database
+    result = dashboards_collection.insert_one(dashboard.mongo())
+
+    if not result.inserted_id:
+        raise HTTPException(status_code=500, detail="Failed to import dashboard.")
+
+    logger.info(
+        f"Imported dashboard from YAML: {dashboard.title} (ID: {new_dashboard_id}) "
+        f"by user {current_user.email}"
+    )
+
+    return {
+        "success": True,
+        "message": "Dashboard imported successfully",
+        "dashboard_id": str(new_dashboard_id),
+        "title": dashboard.title,
+        "project_id": str(project_id),
+    }
+
+
+@dashboards_endpoint_router.post("/import/yaml/file")
+async def import_dashboard_from_yaml_file(
+    file: UploadFile,
+    project_id: PyObjectId,
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Import a dashboard from an uploaded YAML file.
+
+    Args:
+        file: The uploaded YAML file
+        project_id: The project to create the dashboard in
+        current_user: The authenticated user
+
+    Returns:
+        Created dashboard information
+    """
+    # Validate file extension
+    if not file.filename or not file.filename.endswith((".yaml", ".yml")):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid file format. Please upload a .yaml or .yml file.",
+        )
+
+    # Read file content
+    try:
+        content = await file.read()
+        yaml_content = content.decode("utf-8")
+    except Exception as e:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Failed to read file: {e}",
+        ) from e
+
+    # Delegate to the main import endpoint
+    return await import_dashboard_from_yaml(
+        yaml_content=yaml_content,
+        project_id=project_id,
+        current_user=current_user,
+    )
+
+
+@dashboards_endpoint_router.post("/validate/yaml")
+async def validate_dashboard_yaml_endpoint(
+    yaml_content: str,
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Validate dashboard YAML content without importing.
+
+    Use this endpoint to check if YAML is valid before import.
+
+    Args:
+        yaml_content: The YAML content to validate
+        current_user: The authenticated user
+
+    Returns:
+        Validation result with any errors found
+    """
+    is_valid, errors = validate_dashboard_yaml(yaml_content)
+
+    if is_valid:
+        # Also try to parse and check structure
+        try:
+            dashboard_dict = yaml_to_dashboard_dict(yaml_content)
+            component_count = len(dashboard_dict.get("stored_metadata", []))
+
+            return {
+                "valid": True,
+                "message": "Dashboard YAML is valid",
+                "title": dashboard_dict.get("title", "Untitled"),
+                "component_count": component_count,
+            }
+        except ValueError as e:
+            return {
+                "valid": False,
+                "message": "Dashboard YAML has structural issues",
+                "errors": [str(e)],
+            }
+    else:
+        return {
+            "valid": False,
+            "message": "Dashboard YAML validation failed",
+            "errors": errors,
+        }
+
+
+@dashboards_endpoint_router.put("/update/{dashboard_id}/from_yaml")
+async def update_dashboard_from_yaml(
+    dashboard_id: PyObjectId,
+    yaml_content: str,
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Update an existing dashboard from YAML content.
+
+    This is a "switch to YAML" operation that replaces the dashboard
+    configuration while preserving the dashboard_id and project association.
+
+    Args:
+        dashboard_id: The dashboard ID to update
+        yaml_content: The new YAML configuration
+        current_user: The authenticated user
+
+    Returns:
+        Updated dashboard information
+    """
+    # Check if dashboard exists
+    existing = dashboards_collection.find_one({"dashboard_id": dashboard_id})
+    if not existing:
+        raise HTTPException(
+            status_code=404, detail=f"Dashboard with ID '{dashboard_id}' not found."
+        )
+
+    # Check permissions
+    project_id = existing.get("project_id")
+    if not check_project_permission(project_id, current_user, "editor"):
+        raise HTTPException(
+            status_code=403, detail="You don't have permission to update this dashboard."
+        )
+
+    # Validate YAML
+    is_valid, errors = validate_dashboard_yaml(yaml_content)
+    if not is_valid:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid dashboard YAML: {'; '.join(errors)}",
+        )
+
+    # Parse YAML
+    try:
+        dashboard_dict = yaml_to_dashboard_dict(yaml_content)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+    # Preserve critical fields from existing dashboard
+    dashboard_dict["dashboard_id"] = dashboard_id
+    dashboard_dict["project_id"] = existing["project_id"]
+    dashboard_dict["permissions"] = existing.get("permissions", {})
+    dashboard_dict["is_public"] = existing.get("is_public", False)
+    dashboard_dict["last_saved_ts"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    # Increment version
+    dashboard_dict["version"] = existing.get("version", 0) + 1
+
+    # Validate with Pydantic
+    try:
+        dashboard = DashboardData.from_mongo(dashboard_dict)
+    except Exception as e:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Dashboard validation failed: {e}",
+        ) from e
+
+    # Update in database
+    result = dashboards_collection.find_one_and_update(
+        {"dashboard_id": dashboard_id},
+        {"$set": dashboard.mongo()},
+        return_document=True,
+    )
+
+    if not result:
+        raise HTTPException(status_code=500, detail="Failed to update dashboard.")
+
+    logger.info(f"Updated dashboard {dashboard_id} from YAML by user {current_user.email}")
+
+    return {
+        "success": True,
+        "message": "Dashboard updated from YAML successfully",
+        "dashboard_id": str(dashboard_id),
+        "title": dashboard.title,
+        "version": dashboard.version,
+    }
+
+
+# ============================================================================
+# YAML Directory-based Endpoints
+# ============================================================================
+
+
+@dashboards_endpoint_router.get("/yaml-dir/list")
+async def list_yaml_directory(
+    project_name: str | None = None,
+    current_user: User = Depends(get_current_user),
+):
+    """
+    List all dashboard YAML files in the configured directory.
+
+    Args:
+        project_name: Optional filter by project subdirectory
+        current_user: The authenticated user
+
+    Returns:
+        List of YAML files with metadata
+    """
+    from depictio.api.v1.configs.config import settings
+
+    if not settings.dashboard_yaml.enabled:
+        raise HTTPException(
+            status_code=400,
+            detail="YAML directory management is not enabled",
+        )
+
+    # Ensure directory exists
+    yaml_dir = ensure_yaml_directory()
+
+    files = list_yaml_dashboards(project_name=project_name)
+
+    return {
+        "success": True,
+        "yaml_directory": str(yaml_dir),
+        "files": files,
+        "count": len(files),
+    }
+
+
+@dashboards_endpoint_router.post("/yaml-dir/export/{dashboard_id}")
+async def export_to_yaml_directory(
+    dashboard_id: PyObjectId,
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Export a dashboard to the YAML directory.
+
+    The file will be created/updated in the configured YAML directory,
+    organized by project name.
+
+    Args:
+        dashboard_id: The dashboard ID to export
+        current_user: The authenticated user
+
+    Returns:
+        Path to the created YAML file
+    """
+    from depictio.api.v1.configs.config import settings
+
+    if not settings.dashboard_yaml.enabled:
+        raise HTTPException(
+            status_code=400,
+            detail="YAML directory management is not enabled",
+        )
+
+    # Get dashboard from database
+    dashboard_data = dashboards_collection.find_one({"dashboard_id": dashboard_id})
+    if not dashboard_data:
+        raise HTTPException(
+            status_code=404, detail=f"Dashboard with ID '{dashboard_id}' not found."
+        )
+
+    # Check permissions
+    project_id = dashboard_data.get("project_id")
+    if not check_project_permission(project_id, current_user, "viewer"):
+        raise HTTPException(
+            status_code=403, detail="You don't have permission to export this dashboard."
+        )
+
+    # Get project name for organization
+    project = projects_collection.find_one({"_id": ObjectId(project_id)})
+    project_name = project.get("name", "unknown") if project else "unknown"
+
+    # Convert to model and export
+    dashboard = DashboardData.from_mongo(dashboard_data)
+    filepath = export_dashboard_to_yaml_dir(
+        dashboard_data=dashboard.model_dump(),
+        project_name=project_name,
+    )
+
+    logger.info(f"Exported dashboard {dashboard_id} to {filepath}")
+
+    return {
+        "success": True,
+        "message": "Dashboard exported to YAML directory",
+        "dashboard_id": str(dashboard_id),
+        "title": dashboard.title,
+        "filepath": str(filepath),
+        "project": project_name,
+    }
+
+
+@dashboards_endpoint_router.post("/yaml-dir/export-all")
+async def export_all_to_yaml_directory(
+    project_id: PyObjectId | None = None,
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Export all dashboards (or all in a project) to the YAML directory.
+
+    Args:
+        project_id: Optional project ID to filter dashboards
+        current_user: The authenticated user
+
+    Returns:
+        Summary of exported dashboards
+    """
+    from depictio.api.v1.configs.config import settings
+
+    if not settings.dashboard_yaml.enabled:
+        raise HTTPException(
+            status_code=400,
+            detail="YAML directory management is not enabled",
+        )
+
+    # Build query
+    query: dict[str, Any] = {}
+    if project_id:
+        # Check permission on specific project
+        if not check_project_permission(project_id, current_user, "viewer"):
+            raise HTTPException(
+                status_code=403, detail="You don't have permission to access this project."
+            )
+        query["project_id"] = ObjectId(project_id)
+
+    # Get dashboards
+    dashboards = list(dashboards_collection.find(query))
+
+    exported = []
+    failed = []
+
+    for dash_data in dashboards:
+        dash_id = dash_data.get("dashboard_id")
+
+        # Check permission for each dashboard's project
+        proj_id = dash_data.get("project_id")
+        if not check_project_permission(proj_id, current_user, "viewer"):
+            continue
+
+        try:
+            # Get project name
+            project = projects_collection.find_one({"_id": ObjectId(proj_id)})
+            project_name = project.get("name", "unknown") if project else "unknown"
+
+            dashboard = DashboardData.from_mongo(dash_data)
+            filepath = export_dashboard_to_yaml_dir(
+                dashboard_data=dashboard.model_dump(),
+                project_name=project_name,
+            )
+
+            exported.append(
+                {
+                    "dashboard_id": str(dash_id),
+                    "title": dashboard.title,
+                    "filepath": str(filepath),
+                }
+            )
+        except Exception as e:
+            failed.append({"dashboard_id": str(dash_id), "error": str(e)})
+
+    return {
+        "success": True,
+        "exported_count": len(exported),
+        "failed_count": len(failed),
+        "exported": exported,
+        "failed": failed,
+    }
+
+
+@dashboards_endpoint_router.post("/yaml-dir/import")
+async def import_from_yaml_directory(
+    filepath: str,
+    project_id: PyObjectId,
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Import a dashboard from a YAML file in the directory.
+
+    Creates a new dashboard or updates an existing one if the dashboard_id
+    in the YAML matches an existing dashboard.
+
+    Args:
+        filepath: Path to the YAML file (relative to yaml directory or absolute)
+        project_id: The project to import into
+        current_user: The authenticated user
+
+    Returns:
+        Imported dashboard information
+    """
+    from depictio.api.v1.configs.config import settings
+
+    if not settings.dashboard_yaml.enabled:
+        raise HTTPException(
+            status_code=400,
+            detail="YAML directory management is not enabled",
+        )
+
+    # Check permission on target project
+    if not check_project_permission(project_id, current_user, "editor"):
+        raise HTTPException(
+            status_code=403,
+            detail="You don't have permission to import dashboards to this project.",
+        )
+
+    try:
+        dashboard_dict = import_dashboard_from_yaml_dir(filepath)
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail=f"YAML file not found: {filepath}")
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    # Check if dashboard already exists
+    existing_dashboard_id = dashboard_dict.get("dashboard_id")
+    existing = None
+    if existing_dashboard_id:
+        existing = dashboards_collection.find_one({"dashboard_id": ObjectId(existing_dashboard_id)})
+
+    if existing:
+        # Update existing dashboard
+        dashboard_dict["project_id"] = existing["project_id"]
+        dashboard_dict["permissions"] = existing.get("permissions", {})
+        dashboard_dict["is_public"] = existing.get("is_public", False)
+        dashboard_dict["version"] = existing.get("version", 0) + 1
+        dashboard_dict["last_saved_ts"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+        dashboard = DashboardData.from_mongo(dashboard_dict)
+
+        dashboards_collection.find_one_and_update(
+            {"dashboard_id": ObjectId(existing_dashboard_id)},
+            {"$set": dashboard.mongo()},
+        )
+
+        return {
+            "success": True,
+            "action": "updated",
+            "message": "Dashboard updated from YAML file",
+            "dashboard_id": str(existing_dashboard_id),
+            "title": dashboard.title,
+            "version": dashboard.version,
+        }
+    else:
+        # Create new dashboard
+        new_dashboard_id = ObjectId()
+        dashboard_dict["dashboard_id"] = new_dashboard_id
+        dashboard_dict["project_id"] = ObjectId(project_id)
+        dashboard_dict["version"] = 1
+        dashboard_dict["last_saved_ts"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        dashboard_dict["permissions"] = {
+            "owners": [{"_id": ObjectId(current_user.id)}],
+            "editors": [],
+            "viewers": [],
+        }
+
+        # Generate new UUIDs for components
+        if "stored_metadata" in dashboard_dict:
+            for component in dashboard_dict["stored_metadata"]:
+                old_index = component.get("index")
+                new_index = str(uuid.uuid4())
+                component["index"] = new_index
+
+                for layout_key in [
+                    "left_panel_layout_data",
+                    "right_panel_layout_data",
+                    "stored_layout_data",
+                ]:
+                    if layout_key in dashboard_dict:
+                        for layout_item in dashboard_dict[layout_key]:
+                            if layout_item.get("i") == old_index:
+                                layout_item["i"] = new_index
+
+        dashboard = DashboardData.from_mongo(dashboard_dict)
+        dashboards_collection.insert_one(dashboard.mongo())
+
+        return {
+            "success": True,
+            "action": "created",
+            "message": "Dashboard created from YAML file",
+            "dashboard_id": str(new_dashboard_id),
+            "title": dashboard.title,
+            "project_id": str(project_id),
+        }
+
+
+@dashboards_endpoint_router.get("/yaml-dir/sync-status/{dashboard_id}")
+async def get_yaml_sync_status(
+    dashboard_id: PyObjectId,
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Get the sync status between MongoDB and YAML for a dashboard.
+
+    Args:
+        dashboard_id: The dashboard ID to check
+        current_user: The authenticated user
+
+    Returns:
+        Sync status information
+    """
+    from depictio.api.v1.configs.config import settings
+
+    if not settings.dashboard_yaml.enabled:
+        raise HTTPException(
+            status_code=400,
+            detail="YAML directory management is not enabled",
+        )
+
+    # Get dashboard from database
+    dashboard_data = dashboards_collection.find_one({"dashboard_id": dashboard_id})
+    if not dashboard_data:
+        raise HTTPException(
+            status_code=404, detail=f"Dashboard with ID '{dashboard_id}' not found."
+        )
+
+    # Check permissions
+    project_id = dashboard_data.get("project_id")
+    if not check_project_permission(project_id, current_user, "viewer"):
+        raise HTTPException(
+            status_code=403, detail="You don't have permission to access this dashboard."
+        )
+
+    status = sync_status(
+        dashboard_id=str(dashboard_id),
+        dashboard_data=dashboard_data,
+    )
+
+    return {
+        "success": True,
+        "dashboard_id": str(dashboard_id),
+        **status,
+    }
+
+
+@dashboards_endpoint_router.delete("/yaml-dir/delete/{dashboard_id}")
+async def delete_from_yaml_directory(
+    dashboard_id: PyObjectId,
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Delete a dashboard YAML file from the directory.
+
+    Does NOT delete the dashboard from MongoDB.
+
+    Args:
+        dashboard_id: The dashboard ID whose YAML to delete
+        current_user: The authenticated user
+
+    Returns:
+        Deletion result
+    """
+    from depictio.api.v1.configs.config import settings
+
+    if not settings.dashboard_yaml.enabled:
+        raise HTTPException(
+            status_code=400,
+            detail="YAML directory management is not enabled",
+        )
+
+    # Get dashboard from database to check permissions
+    dashboard_data = dashboards_collection.find_one({"dashboard_id": dashboard_id})
+    if not dashboard_data:
+        raise HTTPException(
+            status_code=404, detail=f"Dashboard with ID '{dashboard_id}' not found."
+        )
+
+    # Check permissions (need editor to delete YAML)
+    project_id = dashboard_data.get("project_id")
+    if not check_project_permission(project_id, current_user, "editor"):
+        raise HTTPException(
+            status_code=403, detail="You don't have permission to delete this YAML file."
+        )
+
+    deleted = delete_dashboard_yaml(str(dashboard_id))
+
+    if deleted:
+        return {
+            "success": True,
+            "message": "Dashboard YAML file deleted",
+            "dashboard_id": str(dashboard_id),
+        }
+    else:
+        return {
+            "success": False,
+            "message": "No YAML file found for this dashboard",
+            "dashboard_id": str(dashboard_id),
+        }
+
+
+@dashboards_endpoint_router.get("/yaml-dir/config")
+async def get_yaml_directory_config(
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Get the current YAML directory configuration.
+
+    Returns:
+        YAML directory settings and status
+    """
+    from depictio.api.v1.configs.config import settings
+
+    yaml_config = settings.dashboard_yaml
+
+    return {
+        "enabled": yaml_config.enabled,
+        "base_dir": yaml_config.yaml_dir_path,
+        "organize_by_project": yaml_config.organize_by_project,
+        "use_dashboard_title": yaml_config.use_dashboard_title,
+        "include_export_metadata": yaml_config.include_export_metadata,
+        "auto_export_on_save": yaml_config.auto_export_on_save,
+        "auto_import_on_change": yaml_config.auto_import_on_change,
+        "watcher_debounce_seconds": yaml_config.watcher_debounce_seconds,
+        "watcher_auto_start": yaml_config.watcher_auto_start,
+    }
+
+
+# ============================================================================
+# YAML Watcher Endpoints (Auto-sync)
+# ============================================================================
+
+
+@dashboards_endpoint_router.post("/yaml-dir/watcher/start")
+async def start_yaml_watcher_endpoint(
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Start the YAML file watcher for auto-sync.
+
+    When running, the watcher monitors the YAML directory for changes
+    and automatically syncs modified files to MongoDB.
+
+    Args:
+        current_user: The authenticated user (must be admin)
+
+    Returns:
+        Watcher start status
+    """
+    if not current_user.is_admin:
+        raise HTTPException(
+            status_code=403,
+            detail="Only administrators can control the YAML watcher.",
+        )
+
+    from depictio.api.v1.services.yaml_watcher import get_watcher_status, start_yaml_watcher
+
+    if not settings.dashboard_yaml.enabled:
+        raise HTTPException(
+            status_code=400,
+            detail="YAML directory management is not enabled",
+        )
+
+    started = start_yaml_watcher()
+
+    status = get_watcher_status()
+
+    if started:
+        return {
+            "success": True,
+            "message": "YAML watcher started successfully",
+            **status,
+        }
+    else:
+        return {
+            "success": False,
+            "message": "YAML watcher already running or could not be started",
+            **status,
+        }
+
+
+@dashboards_endpoint_router.post("/yaml-dir/watcher/stop")
+async def stop_yaml_watcher_endpoint(
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Stop the YAML file watcher.
+
+    Args:
+        current_user: The authenticated user (must be admin)
+
+    Returns:
+        Watcher stop status
+    """
+    if not current_user.is_admin:
+        raise HTTPException(
+            status_code=403,
+            detail="Only administrators can control the YAML watcher.",
+        )
+
+    from depictio.api.v1.services.yaml_watcher import get_watcher_status, stop_yaml_watcher
+
+    stopped = stop_yaml_watcher()
+
+    status = get_watcher_status()
+
+    if stopped:
+        return {
+            "success": True,
+            "message": "YAML watcher stopped successfully",
+            **status,
+        }
+    else:
+        return {
+            "success": False,
+            "message": "YAML watcher was not running",
+            **status,
+        }
+
+
+@dashboards_endpoint_router.get("/yaml-dir/watcher/status")
+async def get_yaml_watcher_status_endpoint(
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Get the current status of the YAML file watcher.
+
+    Args:
+        current_user: The authenticated user
+
+    Returns:
+        Watcher status information
+    """
+    from depictio.api.v1.services.yaml_watcher import get_watcher_status
+
+    status = get_watcher_status()
+
+    return {
+        "success": True,
+        **status,
+    }
+
+
+@dashboards_endpoint_router.post("/yaml-dir/sync-all")
+async def sync_all_yaml_to_mongodb(
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Manually sync all YAML files to MongoDB.
+
+    This is a one-time sync operation that imports all YAML files
+    in the directory to update existing dashboards in MongoDB.
+
+    Args:
+        current_user: The authenticated user (must be admin)
+
+    Returns:
+        Sync results summary
+    """
+    if not current_user.is_admin:
+        raise HTTPException(
+            status_code=403,
+            detail="Only administrators can perform bulk sync operations.",
+        )
+
+    from depictio.api.v1.services.yaml_watcher import sync_yaml_to_mongodb
+
+    if not settings.dashboard_yaml.enabled:
+        raise HTTPException(
+            status_code=400,
+            detail="YAML directory management is not enabled",
+        )
+
+    # Get all YAML files
+    yaml_files = list_yaml_dashboards()
+
+    results = {
+        "total": len(yaml_files),
+        "synced": 0,
+        "skipped": 0,
+        "failed": 0,
+        "details": [],
+    }
+
+    for yaml_info in yaml_files:
+        sync_result = sync_yaml_to_mongodb(yaml_info["path"], "modified")
+        results["details"].append(sync_result)
+
+        if sync_result["success"]:
+            if sync_result["action"] in ("updated", "created"):
+                results["synced"] += 1
+            else:
+                results["skipped"] += 1
+        else:
+            results["failed"] += 1
+
+    return {
+        "success": True,
+        "message": f"Synced {results['synced']} dashboards, skipped {results['skipped']}, failed {results['failed']}",
+        **results,
+    }

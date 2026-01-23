@@ -74,7 +74,9 @@ fi
 
 sleep 5 # Allow time for other services to start
 
-if [ "$DEPICTIO_DEV_MODE" = "true" ]; then
+# Convert to lowercase for comparison (handle both "true" and "True")
+DEV_MODE_LOWER=$(echo "$DEPICTIO_DEV_MODE" | tr '[:upper:]' '[:lower:]')
+if [ "$DEV_MODE_LOWER" = "true" ]; then
     # Development mode with reload
     # Debug mode is passed to Dash in flask_dispatcher.py
     export DEPICTIO_DEV_MODE=true

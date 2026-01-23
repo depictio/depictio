@@ -281,7 +281,13 @@ def _get_required_parameters(visu_type: str) -> List[str]:
 
 
 def _get_figure_cache_key(
-    dict_kwargs: dict, visu_type: str, df_hash: str, cutoff: int, selected_point: dict, theme: str
+    dict_kwargs: dict,
+    visu_type: str,
+    df_hash: str,
+    cutoff: int,
+    selected_point: dict,
+    theme: str,
+    customizations: Optional[dict] = None,
 ) -> str:
     """Generate cache key for figure results."""
     import hashlib
@@ -294,6 +300,7 @@ def _get_figure_cache_key(
         "cutoff": cutoff,
         "selected_point": selected_point,
         "theme": theme,
+        "customizations": customizations or {},
     }
     cache_str = str(cache_data)
     return hashlib.md5(cache_str.encode()).hexdigest()
@@ -383,6 +390,7 @@ def render_figure(
     skip_validation: bool = False,
     mode: str = "ui",
     force_full_data: bool = False,
+    customizations: Optional[Dict[str, Any]] = None,
 ) -> tuple[Any, dict]:
     """Render a Plotly figure with robust parameter handling and result caching.
 
@@ -396,6 +404,8 @@ def render_figure(
         skip_validation: Skip parameter validation
         mode: Component mode ('ui' or 'code') for parameter evaluation
         force_full_data: If True, bypass sampling and load all data points
+        customizations: Optional dict of post-rendering customizations (axes, reference_lines, etc.)
+                       See depictio.dash.modules.figure_component.customizations for schema
 
     Returns:
         Tuple of (Plotly figure object, data_info dict with counts)
@@ -427,7 +437,7 @@ def render_figure(
     selected_point_clean = selected_point or {}
 
     cache_key = _get_figure_cache_key(
-        dict_kwargs, visu_type, df_hash, cutoff, selected_point_clean, theme
+        dict_kwargs, visu_type, df_hash, cutoff, selected_point_clean, theme, customizations
     )
 
     # PERFORMANCE OPTIMIZATION: Check figure result cache first
@@ -1126,6 +1136,22 @@ def render_figure(
         # Highlight selected point if provided
         if selected_point and "x" in cleaned_kwargs and "y" in cleaned_kwargs:
             _highlight_selected_point(figure, df, cleaned_kwargs, selected_point)
+
+        # Apply post-rendering customizations if provided
+        if customizations:
+            try:
+                from depictio.dash.modules.figure_component.customizations import (
+                    apply_customizations,
+                )
+
+                # Convert Polars DataFrame to Pandas for customizations that need it
+                pandas_df = df.to_pandas() if df is not None and not df.is_empty() else None
+                figure = apply_customizations(figure, customizations, df=pandas_df)
+                logger.info(f"Applied {len(customizations)} customization categories to figure")
+            except ImportError as e:
+                logger.warning(f"Could not import customizations module: {e}")
+            except Exception as e:
+                logger.error(f"Error applying customizations: {e}", exc_info=True)
 
         # PERFORMANCE OPTIMIZATION: Cache the generated figure with data info
         _figure_result_cache[cache_key] = (figure, data_info, time.time())

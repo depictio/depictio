@@ -20,7 +20,11 @@ from depictio.dash.background_callback_helpers import (
     should_use_background_for_component,
 )
 from depictio.dash.modules.card_component.utils import agg_functions
-from depictio.dash.utils import get_columns_from_data_collection, get_component_data
+from depictio.dash.utils import (
+    get_columns_from_data_collection,
+    get_component_data,
+    resolve_link_values,
+)
 
 # Use centralized background callback configuration
 USE_BACKGROUND_CALLBACKS = should_use_background_for_component("card")
@@ -560,14 +564,34 @@ def register_core_callbacks(app):
             f"[{batch_task_id}] 🚀 CARD PATCH BATCH START - {len(trigger_ids)} cards, Triggered by: {triggered_by}"
         )
 
+        # ===========================================================================
+        # DEBUG LOGGING: Trace callback state for troubleshooting
+        # ===========================================================================
+        logger.info(f"[{batch_task_id}] 📊 CARD PATCH STATE:")
+        logger.info(
+            f"[{batch_task_id}]   - filters_data: {bool(filters_data)} "
+            f"({len(filters_data.get('interactive_components_values', [])) if filters_data else 0} components)"
+        )
+        logger.info(
+            f"[{batch_task_id}]   - interactive_metadata_list: "
+            f"{len(interactive_metadata_list) if interactive_metadata_list else 0} items"
+        )
+        logger.info(
+            f"[{batch_task_id}]   - interactive_metadata_ids: "
+            f"{len(interactive_metadata_ids) if interactive_metadata_ids else 0} items"
+        )
+
         # DEFENSIVE CHECK: Handle dashboards with no interactive components
         # When no interactive components exist, dash.ALL resolves to empty list
         if not interactive_metadata_list or not interactive_metadata_ids:
-            logger.debug("No interactive components - preventing update (no filters to apply)")
+            logger.info(
+                f"[{batch_task_id}] ⚠️ NO INTERACTIVE METADATA - preventing update "
+                "(interactive-stored-metadata stores may not be populated yet)"
+            )
             raise dash.exceptions.PreventUpdate
 
         # SHARED SETUP: Reconstruct full metadata ONCE for all cards (cache optimization)
-        logger.debug("🔍 Enriching lightweight store data with full metadata (shared setup)")
+        logger.info(f"[{batch_task_id}] 🔍 Enriching lightweight store data with full metadata")
 
         # Create index → metadata mapping
         metadata_by_index = {}
@@ -597,10 +621,12 @@ def register_core_callbacks(app):
                     }
                 )
             else:
-                logger.warning(f"No metadata found for component {index[:8]}... - skipping")
+                logger.warning(
+                    f"[{batch_task_id}] ⚠️ No metadata found for component {index[:8] if index else 'unknown'}... - skipping"
+                )
 
-        logger.debug(
-            f"Enriched {len(enriched_components)}/{len(lightweight_components)} components with metadata"
+        logger.info(
+            f"[{batch_task_id}] ✅ Enriched {len(enriched_components)}/{len(lightweight_components)} components with metadata"
         )
 
         # Replace filters_data with enriched version (shared for all cards)
@@ -993,13 +1019,83 @@ def register_core_callbacks(app):
 
                 # Determine the filtering path
                 # JOINED-DC: Pre-computed join result exists
+                # LINK-DC: No pre-computed join, but DC link exists
                 # SAME-DC: No pre-computed join - use card DC only
                 use_joined_path = needs_join and result_dc_id is not None
+                use_link_path = False
+                link_resolved_filter = None
 
-                # If filters on multiple DCs but no join config, fall back to SAME-DC
-                if len(filters_by_dc) > 1 and not use_joined_path:
+                # If needs join but no pre-computed join, try link resolution
+                if needs_join and not use_joined_path and has_active_filters:
+                    # Get project_id from stored_metadata for link resolution
+                    project_id = stored_metadata.get("project_id") if stored_metadata else None
+
+                    if project_id:
+                        logger.info(
+                            f"🔗 Attempting LINK-BASED RESOLUTION for card (project_id={project_id})"
+                        )
+
+                        # Collect filter values from other DCs
+                        for filter_dc_id, filter_components in filters_by_dc.items():
+                            if filter_dc_id != card_dc_str:
+                                for comp in filter_components:
+                                    filter_value = comp.get("value")
+                                    filter_column = comp.get("metadata", {}).get("column_name")
+
+                                    if filter_value and filter_column:
+                                        filter_values = (
+                                            filter_value
+                                            if isinstance(filter_value, list)
+                                            else [filter_value]
+                                        )
+
+                                        # Try link resolution
+                                        resolved = resolve_link_values(
+                                            project_id=project_id,
+                                            source_dc_id=filter_dc_id,
+                                            source_column=filter_column,
+                                            filter_values=filter_values,
+                                            target_dc_id=card_dc_str,
+                                            token=access_token,
+                                        )
+
+                                        if resolved and resolved.get("resolved_values"):
+                                            use_link_path = True
+                                            # Create a synthetic filter for the card's DC
+                                            # using the resolved values on the target column
+                                            target_column = resolved.get(
+                                                "target_column", filter_column
+                                            )
+                                            link_resolved_filter = {
+                                                "metadata": {
+                                                    "column_name": target_column,
+                                                    "dc_id": card_dc_str,
+                                                    # Required by process_metadata_and_filter
+                                                    "interactive_component_type": "MultiSelect",
+                                                },
+                                                "value": resolved["resolved_values"],
+                                            }
+                                            logger.info(
+                                                f"✅ Link resolution success: {len(filter_values)} values -> "
+                                                f"{len(resolved['resolved_values'])} resolved values "
+                                                f"(resolver: {resolved.get('resolver_used', 'unknown')})"
+                                            )
+                                            break  # Use first successful resolution
+
+                                if use_link_path:
+                                    break
+
+                        if not use_link_path:
+                            logger.warning("⚠️ Link resolution failed - no link found or no matches")
+                    else:
+                        logger.warning(
+                            "⚠️ No project_id in stored_metadata - cannot use link resolution"
+                        )
+
+                # If filters on multiple DCs but no join config and no link, fall back to SAME-DC
+                if len(filters_by_dc) > 1 and not use_joined_path and not use_link_path:
                     logger.warning(
-                        f"⚠️ Filters on {len(filters_by_dc)} DCs but no join config - "
+                        f"⚠️ Filters on {len(filters_by_dc)} DCs but no join config or link - "
                         f"falling back to SAME-DC filtering (card DC only)"
                     )
                     # Keep only card DC filters
@@ -1041,6 +1137,23 @@ def register_core_callbacks(app):
                     )
 
                     logger.info(f"📊 Loaded result DC: {data.height:,} rows × {data.width} columns")
+
+                elif use_link_path and link_resolved_filter:
+                    # LINK-DC PATH: Use link-resolved filter to load card's DC
+                    logger.info("🔗 LINK-DC FILTERING: Loading card DC with link-resolved filter")
+
+                    # Load card's DC with the link-resolved filter
+                    data = load_deltatable_lite(
+                        ObjectId(wf_id),
+                        ObjectId(dc_id),
+                        metadata=[link_resolved_filter],
+                        TOKEN=access_token,
+                        select_columns=None,
+                    )
+
+                    logger.info(
+                        f"📊 Loaded via link resolution: {data.height:,} rows × {data.width} columns"
+                    )
 
                 else:
                     # SAME-DC PATH: Card's DC has filters, apply them directly

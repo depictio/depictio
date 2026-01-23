@@ -302,11 +302,22 @@ class PerformanceConfig(BaseSettings):
 
 
 class S3CacheConfig(BaseSettings):
-    """S3 file caching configuration for MultiQC and other S3 operations."""
+    """S3 file caching configuration for MultiQC and other S3 operations.
 
-    # Cache directory for S3 files
+    The cache directory stores downloaded S3 files locally to avoid repeated downloads.
+    Default location is ~/.depictio/s3_cache (persistent across restarts).
+
+    Environment variable: DEPICTIO_S3_CACHE_DIR
+    Example: export DEPICTIO_S3_CACHE_DIR=/data/depictio_s3_cache
+
+    Note: The previous default /tmp/depictio_s3_cache was ephemeral and caused
+    repeated downloads after system restarts.
+    """
+
+    # Cache directory for S3 files - persistent location
     cache_dir: str = Field(
-        default="/tmp/depictio_s3_cache", description="Local directory for S3 file cache"
+        default="~/.depictio/s3_cache",
+        description="Local directory for S3 file cache. Use DEPICTIO_S3_CACHE_DIR to override.",
     )
 
     # FUSE mount points (optional, comma-separated)
@@ -581,6 +592,153 @@ class ProfilingConfig(BaseSettings):
         return Path(self.profile_dir).resolve()
 
 
+class DashboardYAMLConfig(BaseSettings):
+    """Configuration for YAML-based dashboard management.
+
+    Enables file-based dashboard editing where users can read/write YAML files
+    directly from a designated directory for version control and IaC workflows.
+    """
+
+    # Enable/disable YAML dashboard sync feature
+    enabled: bool = Field(default=True, description="Enable YAML-based dashboard management")
+
+    # Local dashboards directory (instance-specific, git-ignored, auto-synced)
+    local_dir: Path = Field(
+        default_factory=lambda: Path(__file__).parent.parent.parent.parent.parent
+        / "dashboards"
+        / "local",
+        description="Directory for instance-specific dashboard YAML files (auto-synced)",
+    )
+
+    # Templates directory (version-controlled, not auto-synced by default)
+    templates_dir: Path = Field(
+        default_factory=lambda: Path(__file__).parent.parent.parent.parent.parent
+        / "dashboards"
+        / "templates",
+        description="Directory for template dashboard YAML files (version control)",
+    )
+
+    # Base directory for YAML dashboard files (backward compatibility - points to local_dir)
+    base_dir: Path | None = Field(
+        default=None,
+        description="DEPRECATED: Use local_dir instead. Base directory for dashboard YAML files",
+    )
+
+    # Organization structure
+    organize_by_project: bool = Field(
+        default=True,
+        description="Organize YAML files in subdirectories by project name",
+    )
+
+    # File naming
+    use_dashboard_title: bool = Field(
+        default=True,
+        description="Use dashboard title in filename (vs just ID)",
+    )
+
+    # Include export metadata in files
+    include_export_metadata: bool = Field(
+        default=True,
+        description="Include export timestamp and version in YAML files",
+    )
+
+    # Compact mode settings (new - 75-80% size reduction)
+    compact_mode: bool = Field(
+        default=True,
+        description="Use compact YAML format with references (75-80% smaller files)",
+    )
+
+    # MVP mode settings (new - 60-80 line minimal format for IaC)
+    mvp_mode: bool = Field(
+        default=True,  # Default to MVP for IaC-friendly dashboards
+        description="Use MVP minimal YAML format (60-80 lines, human-readable IDs, no layout)",
+    )
+
+    regenerate_stats: bool = Field(
+        default=True,
+        description="Regenerate column statistics on import instead of storing in YAML",
+    )
+
+    auto_layout: bool = Field(
+        default=False,
+        description="Auto-generate component layout on import if missing",
+    )
+
+    # Auto-sync settings
+    auto_export_on_save: bool = Field(
+        default=True,
+        description="Automatically export to YAML when dashboard is saved",
+    )
+
+    auto_import_on_change: bool = Field(
+        default=True,
+        description="Automatically import from YAML when files change (requires watcher)",
+    )
+
+    watcher_debounce_seconds: float = Field(
+        default=2.0,
+        description="Seconds to wait after file change before syncing",
+    )
+
+    watcher_auto_start: bool = Field(
+        default=True,
+        description="Automatically start the file watcher on API startup",
+    )
+
+    watch_local_dir: bool = Field(
+        default=True,
+        description="Watch and auto-sync local dashboards directory",
+    )
+
+    watch_templates_dir: bool = Field(
+        default=False,
+        description="Watch and auto-sync templates directory (useful for template development)",
+    )
+
+    # Validation settings
+    enable_validation: bool = Field(
+        default=True,
+        description="Enable validation gate before syncing YAML to MongoDB",
+    )
+
+    block_on_validation_errors: bool = Field(
+        default=True,
+        description="Block sync if validation fails (set False to only warn)",
+    )
+
+    validate_column_names: bool = Field(
+        default=True,
+        description="Validate that column names exist in data collection schema",
+    )
+
+    validate_component_types: bool = Field(
+        default=True,
+        description="Validate chart types, aggregation functions, and filter types",
+    )
+
+    model_config = SettingsConfigDict(
+        env_prefix="DEPICTIO_DASHBOARD_YAML_",
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
+
+    @computed_field
+    @property
+    def yaml_dir_path(self) -> str:
+        """Get absolute YAML directory path (defaults to local_dir)."""
+        # Use base_dir if explicitly set (backward compatibility)
+        if self.base_dir is not None:
+            return str(self.base_dir.resolve())
+        return str(self.local_dir.resolve())
+
+    @computed_field
+    @property
+    def templates_path(self) -> str:
+        """Get absolute templates directory path."""
+        return str(self.templates_dir.resolve())
+
+
 class Settings(BaseSettings):
     context: str = Field(default="server")
     fastapi: FastAPIConfig = Field(default_factory=FastAPIConfig)
@@ -598,5 +756,12 @@ class Settings(BaseSettings):
     analytics: AnalyticsConfig = Field(default_factory=AnalyticsConfig)
     google_analytics: GoogleAnalyticsConfig = Field(default_factory=GoogleAnalyticsConfig)
     profiling: ProfilingConfig = Field(default_factory=ProfilingConfig)
+    dashboard_yaml: DashboardYAMLConfig = Field(default_factory=DashboardYAMLConfig)
 
-    model_config = SettingsConfigDict(env_prefix="DEPICTIO_")
+    model_config = SettingsConfigDict(
+        env_prefix="DEPICTIO_",
+        env_file=".env",
+        env_file_encoding="utf-8",
+        case_sensitive=False,
+        extra="ignore",  # Ignore extra fields in .env that aren't in the model
+    )
