@@ -6,13 +6,31 @@
 
 
 <details>
-<summary>Click to expand the changelog for 0.6.0-b10</summary>
+<summary>Click to expand the changelog for 0.6.0-b11</summary>
 
 ### Changes 📜
 
-#### Bug Fixes 🐛
+#### New Features ✨
 
-* fix: use absolute path for secrets file on self-hosted runner [a6a1223c]
+* feat: wait for Docker build and add post-deploy CLI registration [d2cd6f6c]
+
+#### Chores 🧹
+
+* chore: update all Docker builds to use uv-based Dockerfile [53df6fc3]
+
+#### Other Changes 📝
+
+* Bump version: 0.6.0-b10 → 0.6.0-b11 [25177229]
+* Update CHANGELOG.md for v0.6.0-b10 [80767415]
+
+
+</details>
+
+### Documentation 📖
+
+For more details, please refer to the [documentation](https://depictio.github.io/depictio-docs/)
+
+er [a6a1223c]
 
 #### Other Changes 📝
 
