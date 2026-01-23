@@ -61,6 +61,10 @@ backend:
     # Performance - Balanced workers for multiple replicas
     DEPICTIO_FASTAPI_WORKERS: "4"
 
+    # Disable YAML watcher (local dev feature, not needed in Kubernetes)
+    DEPICTIO_DASHBOARD_YAML_WATCHER_AUTO_START: "false"
+    DEPICTIO_DASHBOARD_YAML_WATCH_LOCAL_DIR: "false"
+
 
 frontend:
   replicas: 2  # Multiple replicas for high availability with anti-affinity
