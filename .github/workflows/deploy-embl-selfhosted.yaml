@@ -64,7 +64,7 @@ jobs:
             -f helm-charts/depictio/values.yaml \
             -f helm-charts/depictio/values-embl-unauth.yaml \
             -f helm-charts/depictio/values-embl-demo-dev.yaml \
-            -f helm-charts/depictio/values-embl-secrets.yaml \
+            -f ~/actions-runner-embl/secrets/values-embl-secrets.yaml \
             --set backend.image.tag="${VERSION}" \
             --set frontend.image.tag="${VERSION}" \
             --wait --timeout 10m --atomic \
@@ -113,7 +113,7 @@ jobs:
             -f helm-charts/depictio/values.yaml \
             -f helm-charts/depictio/values-embl-unauth.yaml \
             -f helm-charts/depictio/values-embl-demo.yaml \
-            -f helm-charts/depictio/values-embl-secrets.yaml \
+            -f ~/actions-runner-embl/secrets/values-embl-secrets.yaml \
             --set backend.image.tag="${VERSION}" \
             --set frontend.image.tag="${VERSION}" \
             --wait --timeout 10m --atomic \
