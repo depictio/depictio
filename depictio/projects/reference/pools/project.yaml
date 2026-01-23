@@ -46,12 +46,6 @@ workflows:
             pool_name: "Name of the pool from which the sample originates"
             sample_id: "Sample identifier matching population metadata"
             cell_count: "Number of cells assigned to the sample"
-        join:
-          on_columns:
-            - sample_id
-          how: "inner"
-          with_dc:
-            - "population_metadata"
     # Strand-seq QC metrics
     # - data_collection_tag: "strandseq_qc_metrics"
     #   description: "Strand-seq quality control metrics for HGSVC samples"
@@ -77,3 +71,21 @@ workflows:
     #       how: "inner"
     #       with_dc:
     #         - "demuxid_result"
+
+# ============================================================================
+# TABLE JOINS CONFIGURATION
+# ============================================================================
+# Client-side joins executed locally with `depictio data join`
+# ============================================================================
+
+joins:
+  # Join demultiplexing results with population metadata
+  - name: "demux_with_population"
+    description: "Demultiplexing results enriched with population metadata"
+    left_dc: "demuxid_result"
+    right_dc: "population_metadata"
+    on_columns:
+      - "sample_id"
+    how: "inner"
+    persist: true
+    workflow_name: "hgsvc_pools_analysis"

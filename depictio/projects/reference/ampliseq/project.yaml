@@ -49,10 +49,6 @@ workflows:
               "Temperature": "Water temperature (°C)"
               "Salinity": "Salinity (PSU)"
               "Turbidity": "Turbidity (NTU)"
-          join:
-            on_columns: ["sample"]
-            how: "inner"
-            with_dc: ["multiqc_data"]
       # - data_collection_tag: "site_metadata"
       #   description: "Site metadata table"
       #   config:
@@ -99,10 +95,6 @@ workflows:
               "depth": "Sequencing depth"
               "iter": "Iteration number"
               "faith_pd": "Faith's Phylogenetic Diversity"
-          join:
-            on_columns: ["sample"]
-            how: "inner"
-            with_dc: ["metadata", "multiqc_data"]
       - data_collection_tag: "taxonomy_composition"
         description: "Taxonomic composition data"
         config:
@@ -121,10 +113,6 @@ workflows:
               "taxonomy": "Taxonomic classification (Kingdom;Phylum)"
               "count": "Raw count of sequences assigned to this taxonomy in the sample"
               "habitat": "Habitat type of the sample"
-          join:
-            on_columns: ["sample"]
-            how: "inner"
-            with_dc: ["metadata"]
       - data_collection_tag: "ancom_volcano"
         description: "ANCOM differential abundance results"
         config:
@@ -179,3 +167,59 @@ workflows:
       #       on_columns: ["sample"]
       #       how: "inner"
       #       with_dc: ["sample_metadata", "multiqc_data"]
+
+# ============================================================================
+# TABLE JOINS CONFIGURATION
+# ============================================================================
+# Client-side joins executed locally with `depictio data join`
+# ============================================================================
+
+joins:
+  # Join alpha rarefaction with metadata
+  - name: "alpha_rarefaction_enriched"
+    description: "Alpha rarefaction data enriched with sample metadata"
+    left_dc: "alpha_rarefaction"
+    right_dc: "metadata"
+    on_columns:
+      - "sample"
+    how: "inner"
+    persist: true
+    workflow_name: "ampliseq"
+
+  # Join taxonomy composition with metadata
+  - name: "taxonomy_enriched"
+    description: "Taxonomic composition enriched with sample metadata"
+    left_dc: "taxonomy_composition"
+    right_dc: "metadata"
+    on_columns:
+      - "sample"
+    how: "inner"
+    persist: true
+    workflow_name: "ampliseq"
+
+# ============================================================================
+# RUNTIME LINKS CONFIGURATION
+# ============================================================================
+# Runtime filtering for cross-DC interactions (especially MultiQC)
+# ============================================================================
+
+links:
+  # Link metadata to MultiQC for filtering
+  - source_dc_id: "metadata"
+    source_column: "sample"
+    target_dc_id: "multiqc_data"
+    target_type: "multiqc"
+    link_config:
+      resolver: "sample_mapping"
+      target_field: "sample_name"
+    description: "Filter MultiQC data by sample metadata"
+
+  # Link alpha rarefaction to MultiQC for filtering
+  - source_dc_id: "alpha_rarefaction"
+    source_column: "sample"
+    target_dc_id: "multiqc_data"
+    target_type: "multiqc"
+    link_config:
+      resolver: "sample_mapping"
+      target_field: "sample_name"
+    description: "Filter MultiQC data by alpha rarefaction samples"

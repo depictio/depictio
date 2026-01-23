@@ -32,10 +32,6 @@ workflows:
               "sample": "Sample identifier matching MultiQC sample names"
               "treatment": "Treatment condition applied to the sample"
               "batch": "Batch identifier for experimental runs"
-          join:
-            on_columns: ["sample"]
-            how: "inner"
-            with_dc: ["multiqc_data"]
       - data_collection_tag: "sample_qc_metrics"
         description: "Per-sample quality control metrics and statistics"
         config:
@@ -62,7 +58,48 @@ workflows:
               "gc_content": "GC content percentage"
               "q30_rate": "Percentage of bases with quality score >= 30"
               "mean_quality": "Mean base quality score"
-          join:
-            on_columns: ["sample"]
-            how: "inner"
-            with_dc: ["sample_metadata", "multiqc_data"]
+
+# ============================================================================
+# TABLE JOINS CONFIGURATION
+# ============================================================================
+# Client-side joins executed locally with `depictio data join`
+# ============================================================================
+
+joins:
+  # Join QC metrics with sample metadata
+  - name: "qc_with_metadata"
+    description: "Sample QC metrics enriched with metadata"
+    left_dc: "sample_qc_metrics"
+    right_dc: "sample_metadata"
+    on_columns:
+      - "sample"
+    how: "inner"
+    persist: true
+    workflow_name: "test-workflow"
+
+# ============================================================================
+# RUNTIME LINKS CONFIGURATION
+# ============================================================================
+# Runtime filtering for cross-DC interactions (especially MultiQC)
+# ============================================================================
+
+links:
+  # Link sample metadata to MultiQC for filtering
+  - source_dc_id: "sample_metadata"
+    source_column: "sample"
+    target_dc_id: "multiqc_data"
+    target_type: "multiqc"
+    link_config:
+      resolver: "sample_mapping"
+      target_field: "sample_name"
+    description: "Filter MultiQC data by sample metadata"
+
+  # Link QC metrics to MultiQC for filtering
+  - source_dc_id: "sample_qc_metrics"
+    source_column: "sample"
+    target_dc_id: "multiqc_data"
+    target_type: "multiqc"
+    link_config:
+      resolver: "sample_mapping"
+      target_field: "sample_name"
+    description: "Filter MultiQC data by QC metrics samples"
