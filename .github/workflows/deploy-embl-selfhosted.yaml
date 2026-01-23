@@ -1,14 +1,17 @@
 name: Deploy to EMBL (Self-Hosted)
 
 # SECURITY NOTE: This workflow uses self-hosted runners.
-# It only triggers on tags (not PRs) to prevent fork-based attacks.
+# It triggers after Docker build completes (not directly on tags).
 # Only users with write access can push tags.
 
 on:
-  push:
-    tags:
-      - 'v*.*.*'
-      - 'v*.*.*-b*'
+  # Trigger after Docker build workflow completes
+  workflow_run:
+    workflows: ["Docker Image Build (AMD64) - Beta only"]
+    types:
+      - completed
+
+  # Manual dispatch for any version
   workflow_dispatch:
     inputs:
       version:
@@ -22,10 +25,15 @@ on:
           - dev
           - demo
           - both
+      register_projects:
+        description: 'Register demo projects after deployment'
+        required: false
+        type: boolean
+        default: true
 
 # Prevent concurrent deployments
 concurrency:
-  group: embl-deploy-${{ github.ref }}
+  group: embl-deploy-${{ github.event.workflow_run.head_branch || github.ref }}
   cancel-in-progress: false
 
 jobs:
@@ -33,11 +41,13 @@ jobs:
   deploy-dev:
     name: Deploy to Dev (dev.demo.depictio.embl.org)
     runs-on: [self-hosted, embl-deploy]
-    environment: embl-demo-dev  # Requires environment to be created in repo settings
-    # Run for all tags OR manual dispatch targeting dev/both
+    environment: embl-demo-dev
+    # Run if Docker build succeeded OR manual dispatch targeting dev/both
     if: |
-      github.event_name == 'push' ||
+      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success') ||
       (github.event_name == 'workflow_dispatch' && (github.event.inputs.environment == 'dev' || github.event.inputs.environment == 'both'))
+    outputs:
+      version: ${{ steps.version.outputs.version }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -48,11 +58,27 @@ jobs:
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             VERSION="${{ github.event.inputs.version }}"
           else
-            # Extract version from tag (remove 'v' prefix)
-            VERSION="${GITHUB_REF#refs/tags/v}"
+            # Extract version from the workflow_run ref (e.g., refs/tags/v0.6.0-b10)
+            REF="${{ github.event.workflow_run.head_branch }}"
+            VERSION="${REF#v}"
           fi
           echo "version=${VERSION}" >> $GITHUB_OUTPUT
           echo "Deploying version: ${VERSION}"
+
+      - name: Wait for Docker image to be available
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          IMAGE="ghcr.io/depictio/depictio:${VERSION}"
+          echo "Checking for image: ${IMAGE}"
+
+          for i in {1..30}; do
+            if docker manifest inspect "${IMAGE}" > /dev/null 2>&1; then
+              echo "Image ${IMAGE} is available"
+              break
+            fi
+            echo "Waiting for image... (attempt $i/30)"
+            sleep 10
+          done
 
       - name: Deploy to Dev environment
         run: |
@@ -78,15 +104,94 @@ jobs:
           kubectl get pods -n datasci-depictio-project-demo-dev -l app.kubernetes.io/instance=devdemo
           kubectl get ingress -n datasci-depictio-project-demo-dev
 
+      - name: Wait for services to be ready
+        run: |
+          echo "⏳ Waiting for backend to be ready..."
+          kubectl wait --for=condition=ready pod \
+            -l app.kubernetes.io/instance=devdemo,app.kubernetes.io/component=backend \
+            -n datasci-depictio-project-demo-dev \
+            --timeout=300s
+
+          echo "⏳ Waiting for frontend to be ready..."
+          kubectl wait --for=condition=ready pod \
+            -l app.kubernetes.io/instance=devdemo,app.kubernetes.io/component=frontend \
+            -n datasci-depictio-project-demo-dev \
+            --timeout=300s
+
+  # Register demo projects after dev deployment
+  register-projects-dev:
+    name: Register Demo Projects (Dev)
+    runs-on: [self-hosted, embl-deploy]
+    needs: deploy-dev
+    if: |
+      (github.event_name == 'workflow_run') ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.register_projects == 'true')
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python and CLI
+        run: |
+          # Use system Python or install via uv
+          if command -v uv &> /dev/null; then
+            cd depictio/cli
+            uv venv venv --python 3.11
+            source venv/bin/activate
+            uv pip install -e .
+          else
+            cd depictio/cli
+            python3 -m venv venv
+            source venv/bin/activate
+            pip install -e .
+          fi
+
+      - name: Get admin token from backend pod
+        id: token
+        run: |
+          # Get admin config from backend pod
+          BACKEND_POD=$(kubectl get pods -n datasci-depictio-project-demo-dev \
+            -l app.kubernetes.io/instance=devdemo,app.kubernetes.io/component=backend \
+            -o jsonpath='{.items[0].metadata.name}')
+
+          echo "Getting admin config from pod: ${BACKEND_POD}"
+          kubectl cp datasci-depictio-project-demo-dev/${BACKEND_POD}:/app/depictio/.depictio/admin_config.yaml ./admin_config.yaml
+
+          # Mask the token in logs
+          TOKEN=$(grep 'access_token' admin_config.yaml | awk '{print $2}' | tr -d "'\"")
+          echo "::add-mask::${TOKEN}"
+          echo "token=${TOKEN}" >> $GITHUB_OUTPUT
+
+      - name: Register Iris demo project
+        run: |
+          cd depictio/cli
+          source venv/bin/activate
+
+          echo "📊 Registering Iris demo project..."
+          depictio-cli config validate-project-config \
+            --project-config-path ../api/v1/configs/iris_dataset/initial_project_cli.yaml \
+            --CLI-config-path ../../admin_config.yaml || true
+
+          # Register the project (if command exists)
+          # depictio-cli project register \
+          #   --project-config-path ../api/v1/configs/iris_dataset/initial_project_cli.yaml \
+          #   --CLI-config-path ../../admin_config.yaml || true
+
+      - name: Cleanup
+        if: always()
+        run: |
+          rm -f admin_config.yaml
+
   # Demo environment - Only STABLE tags (no -b* suffix) deploy here
   deploy-demo:
     name: Deploy to Demo (demo.depictio.embl.org)
     runs-on: [self-hosted, embl-deploy]
-    environment: embl-demo  # Requires environment to be created in repo settings
-    # Run only for stable tags (not containing -b) OR manual dispatch targeting demo/both
+    environment: embl-demo
+    # Run only for stable tags (workflow_run won't trigger for stable, use dispatch)
+    # Or manual dispatch targeting demo/both
     if: |
-      (github.event_name == 'push' && !contains(github.ref, '-b')) ||
       (github.event_name == 'workflow_dispatch' && (github.event.inputs.environment == 'demo' || github.event.inputs.environment == 'both'))
+    outputs:
+      version: ${{ steps.version.outputs.version }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -94,14 +199,24 @@ jobs:
       - name: Determine version
         id: version
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            VERSION="${{ github.event.inputs.version }}"
-          else
-            # Extract version from tag (remove 'v' prefix)
-            VERSION="${GITHUB_REF#refs/tags/v}"
-          fi
+          VERSION="${{ github.event.inputs.version }}"
           echo "version=${VERSION}" >> $GITHUB_OUTPUT
           echo "Deploying version: ${VERSION}"
+
+      - name: Wait for Docker image to be available
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          IMAGE="ghcr.io/depictio/depictio:${VERSION}"
+          echo "Checking for image: ${IMAGE}"
+
+          for i in {1..30}; do
+            if docker manifest inspect "${IMAGE}" > /dev/null 2>&1; then
+              echo "Image ${IMAGE} is available"
+              break
+            fi
+            echo "Waiting for image... (attempt $i/30)"
+            sleep 10
+          done
 
       - name: Deploy to Demo environment
         run: |
@@ -126,3 +241,71 @@ jobs:
           echo "📋 Checking deployment status..."
           kubectl get pods -n datasci-depictio-project-demo -l app.kubernetes.io/instance=demo
           kubectl get ingress -n datasci-depictio-project-demo
+
+      - name: Wait for services to be ready
+        run: |
+          echo "⏳ Waiting for backend to be ready..."
+          kubectl wait --for=condition=ready pod \
+            -l app.kubernetes.io/instance=demo,app.kubernetes.io/component=backend \
+            -n datasci-depictio-project-demo \
+            --timeout=300s
+
+          echo "⏳ Waiting for frontend to be ready..."
+          kubectl wait --for=condition=ready pod \
+            -l app.kubernetes.io/instance=demo,app.kubernetes.io/component=frontend \
+            -n datasci-depictio-project-demo \
+            --timeout=300s
+
+  # Register demo projects after demo deployment
+  register-projects-demo:
+    name: Register Demo Projects (Demo)
+    runs-on: [self-hosted, embl-deploy]
+    needs: deploy-demo
+    if: |
+      github.event_name == 'workflow_dispatch' && github.event.inputs.register_projects == 'true'
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python and CLI
+        run: |
+          if command -v uv &> /dev/null; then
+            cd depictio/cli
+            uv venv venv --python 3.11
+            source venv/bin/activate
+            uv pip install -e .
+          else
+            cd depictio/cli
+            python3 -m venv venv
+            source venv/bin/activate
+            pip install -e .
+          fi
+
+      - name: Get admin token from backend pod
+        id: token
+        run: |
+          BACKEND_POD=$(kubectl get pods -n datasci-depictio-project-demo \
+            -l app.kubernetes.io/instance=demo,app.kubernetes.io/component=backend \
+            -o jsonpath='{.items[0].metadata.name}')
+
+          echo "Getting admin config from pod: ${BACKEND_POD}"
+          kubectl cp datasci-depictio-project-demo/${BACKEND_POD}:/app/depictio/.depictio/admin_config.yaml ./admin_config.yaml
+
+          TOKEN=$(grep 'access_token' admin_config.yaml | awk '{print $2}' | tr -d "'\"")
+          echo "::add-mask::${TOKEN}"
+          echo "token=${TOKEN}" >> $GITHUB_OUTPUT
+
+      - name: Register Iris demo project
+        run: |
+          cd depictio/cli
+          source venv/bin/activate
+
+          echo "📊 Registering Iris demo project..."
+          depictio-cli config validate-project-config \
+            --project-config-path ../api/v1/configs/iris_dataset/initial_project_cli.yaml \
+            --CLI-config-path ../../admin_config.yaml || true
+
+      - name: Cleanup
+        if: always()
+        run: |
+          rm -f admin_config.yaml
