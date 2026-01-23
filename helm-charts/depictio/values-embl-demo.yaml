@@ -1,0 +1,67 @@
+# EMBL Stable Demo Environment - demo.depictio.embl.org
+# Only stable tags (without -b* suffix) deploy to this environment
+#
+# Layered on top of:
+#   - values.yaml (base configuration)
+#   - values-embl-unauth.yaml (EMBL infrastructure + unauthenticated mode)
+#   - values-embl-secrets.yaml (S3 credentials)
+
+# Celery worker (enabled for background tasks)
+celery:
+  enabled: true
+  replicas: 1
+  resources:
+    requests:
+      memory: "512Mi"
+      cpu: "250m"
+    limits:
+      memory: "2Gi"
+      cpu: "1"
+
+# Google Analytics - Production Tracking ID
+backend:
+  env:
+    DEPICTIO_GOOGLE_ANALYTICS_ENABLED: "true"
+    DEPICTIO_GOOGLE_ANALYTICS_TRACKING_ID: "G-GM8MYRJDHL"
+
+frontend:
+  env:
+    DEPICTIO_GOOGLE_ANALYTICS_ENABLED: "true"
+    DEPICTIO_GOOGLE_ANALYTICS_TRACKING_ID: "G-GM8MYRJDHL"
+
+# Ingress - Stable Demo Environment
+ingress:
+  enabled: true
+  ingressClassName: "external-users"
+
+  annotations:
+    cert-manager.io/cluster-issuer: harica-issuer
+
+  hosts:
+    - host: "demo.depictio.embl.org"
+      paths:
+        - path: /
+          pathType: Prefix
+          service:
+            name: depictio-frontend
+            portName: http
+    - host: "api.demo.depictio.embl.org"
+      paths:
+        - path: /
+          pathType: Prefix
+          service:
+            name: depictio-backend
+            portName: http
+
+  tls:
+    - hosts:
+        - "demo.depictio.embl.org"
+        - "api.demo.depictio.embl.org"
+      secretName: demo-depictio-tls
+
+# Global domain settings
+global:
+  domain: "depictio.embl.org"
+  urlPattern:
+    type: "prefix"
+    subdomain: ""

@@ -1,0 +1,128 @@
+name: Deploy to EMBL (Self-Hosted)
+
+# SECURITY NOTE: This workflow uses self-hosted runners.
+# It only triggers on tags (not PRs) to prevent fork-based attacks.
+# Only users with write access can push tags.
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+      - 'v*.*.*-b*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to deploy (e.g., 0.6.0-b8 or 0.6.1)'
+        required: true
+      environment:
+        description: 'Target environment'
+        required: true
+        type: choice
+        options:
+          - dev
+          - demo
+          - both
+
+# Prevent concurrent deployments
+concurrency:
+  group: embl-deploy-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  # Dev environment - ALL tags deploy here
+  deploy-dev:
+    name: Deploy to Dev (dev.demo.depictio.embl.org)
+    runs-on: [self-hosted, embl-deploy]
+    environment: embl-demo-dev  # Requires environment to be created in repo settings
+    # Run for all tags OR manual dispatch targeting dev/both
+    if: |
+      github.event_name == 'push' ||
+      (github.event_name == 'workflow_dispatch' && (github.event.inputs.environment == 'dev' || github.event.inputs.environment == 'both'))
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Determine version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+          else
+            # Extract version from tag (remove 'v' prefix)
+            VERSION="${GITHUB_REF#refs/tags/v}"
+          fi
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "Deploying version: ${VERSION}"
+
+      - name: Deploy to Dev environment
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          echo "🚀 Deploying version ${VERSION} to dev.demo.depictio.embl.org"
+
+          helm upgrade --install devdemo ./helm-charts/depictio \
+            --namespace datasci-depictio-project-demo-dev \
+            -f helm-charts/depictio/values.yaml \
+            -f helm-charts/depictio/values-embl-unauth.yaml \
+            -f helm-charts/depictio/values-embl-demo-dev.yaml \
+            -f helm-charts/depictio/values-embl-secrets.yaml \
+            --set backend.image.tag="${VERSION}" \
+            --set frontend.image.tag="${VERSION}" \
+            --wait --timeout 10m --atomic \
+            --insecure-skip-tls-verify
+
+          echo "✅ Dev deployment complete"
+
+      - name: Verify deployment
+        run: |
+          echo "📋 Checking deployment status..."
+          kubectl get pods -n datasci-depictio-project-demo-dev -l app.kubernetes.io/instance=devdemo
+          kubectl get ingress -n datasci-depictio-project-demo-dev
+
+  # Demo environment - Only STABLE tags (no -b* suffix) deploy here
+  deploy-demo:
+    name: Deploy to Demo (demo.depictio.embl.org)
+    runs-on: [self-hosted, embl-deploy]
+    environment: embl-demo  # Requires environment to be created in repo settings
+    # Run only for stable tags (not containing -b) OR manual dispatch targeting demo/both
+    if: |
+      (github.event_name == 'push' && !contains(github.ref, '-b')) ||
+      (github.event_name == 'workflow_dispatch' && (github.event.inputs.environment == 'demo' || github.event.inputs.environment == 'both'))
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Determine version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+          else
+            # Extract version from tag (remove 'v' prefix)
+            VERSION="${GITHUB_REF#refs/tags/v}"
+          fi
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "Deploying version: ${VERSION}"
+
+      - name: Deploy to Demo environment
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          echo "🚀 Deploying version ${VERSION} to demo.depictio.embl.org"
+
+          helm upgrade --install demo ./helm-charts/depictio \
+            --namespace datasci-depictio-project-demo \
+            -f helm-charts/depictio/values.yaml \
+            -f helm-charts/depictio/values-embl-unauth.yaml \
+            -f helm-charts/depictio/values-embl-demo.yaml \
+            -f helm-charts/depictio/values-embl-secrets.yaml \
+            --set backend.image.tag="${VERSION}" \
+            --set frontend.image.tag="${VERSION}" \
+            --wait --timeout 10m --atomic \
+            --insecure-skip-tls-verify
+
+          echo "✅ Demo deployment complete"
+
+      - name: Verify deployment
+        run: |
+          echo "📋 Checking deployment status..."
+          kubectl get pods -n datasci-depictio-project-demo -l app.kubernetes.io/instance=demo
+          kubectl get ingress -n datasci-depictio-project-demo
