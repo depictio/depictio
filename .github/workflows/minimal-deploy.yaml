@@ -331,7 +331,7 @@ jobs:
 
           # Run CLI commands - validate project config
           depictio-cli config validate-project-config \
-            --project-config-path ../api/v1/configs/iris_dataset/initial_project_cli.yaml \
+            --project-config-path ../api/v1/configs/projects/init/iris/project.yaml \
             --CLI-config-path admin_config.yaml
 
 
