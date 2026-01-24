@@ -378,7 +378,7 @@ def register_ui_callbacks(app):
         # Reference lines
         if reference_lines and isinstance(reference_lines, list):
             customizations["reference_lines"] = []
-            for line in reference_lines:
+            for idx, line in enumerate(reference_lines):
                 line_config = {
                     "type": line.get("type", "hline"),
                     "y": line.get("position") if line.get("type") == "hline" else None,
@@ -388,8 +388,13 @@ def register_ui_callbacks(app):
                     "line_width": line.get("width", 2),
                 }
                 # Only add annotation if present and not empty
-                if line.get("annotation") and line.get("annotation").strip():
-                    line_config["annotation_text"] = line.get("annotation")
+                annotation = line.get("annotation", "")
+                if annotation and annotation.strip():
+                    line_config["annotation_text"] = annotation
+                    logger.warning(
+                        f"📝 Reference line {idx} has annotation: '{annotation}'. "
+                        "To remove: edit component and clear the annotation field."
+                    )
                 customizations["reference_lines"].append(line_config)
 
         # Highlights
@@ -488,7 +493,7 @@ def register_ui_callbacks(app):
             "dash": "dash",
             "width": 2,
             "annotation": "",
-            "show_slider": False,
+            "show_slider": True,  # Enable slider by default for view mode controls
         }
         lines.append(new_line)
 

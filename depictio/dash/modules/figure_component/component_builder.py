@@ -8,7 +8,7 @@ for figure parameters, replacing the fragile nested dictionary approach.
 from typing import Any, Dict, List, Optional, Union
 
 import dash_mantine_components as dmc
-from dash import dcc, html
+from dash import html
 from dash_iconify import DashIconify
 
 from .models import FigureComponentState, ParameterDefinition, ParameterType
@@ -583,14 +583,8 @@ class AccordionBuilder:
                         "index": self.component_builder.component_index,
                     },
                 ),
-                # Hidden store for highlights data
-                dcc.Store(
-                    id={
-                        "type": "highlights-store",
-                        "index": self.component_builder.component_index,
-                    },
-                    data=highlights,
-                ),
+                # NOTE: highlights-store is now created at page level (stepper_page.py)
+                # to prevent callback registration errors. Don't create duplicate here.
             ]
         )
 
@@ -776,14 +770,8 @@ class AccordionBuilder:
                         "index": self.component_builder.component_index,
                     },
                 ),
-                # Hidden store for reference lines data
-                dcc.Store(
-                    id={
-                        "type": "reflines-store",
-                        "index": self.component_builder.component_index,
-                    },
-                    data=reference_lines,
-                ),
+                # NOTE: reflines-store is now created at page level (stepper_page.py)
+                # to prevent callback registration errors. Don't create duplicate here.
             ]
         )
 
