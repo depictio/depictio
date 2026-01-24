@@ -12,12 +12,14 @@
 
 #### Bug Fixes 🐛
 
+* fix: sync all version files to 0.6.0-b17 [5138b1b0]
 * fix: correct corrupted appVersion in Chart.yaml [eb620716]
 * fix: correct corrupted version strings across all files [f52a31ae]
 * fix: add explicit API URL and reduce replicas for EMBL dev [543df3c8]
 
 #### Other Changes 📝
 
+* Update CHANGELOG.md for v0.6.0-b17 [0cbce25d]
 * Update CHANGELOG.md for v0.6.0-b16 [96a3e7c0]
 * Update CHANGELOG.md for v0.6.0-b15 [feb56cae]
 * Bump version: 0.6.0-b14 → 0.6.0-b15 [6bbd147b]
@@ -29,17 +31,7 @@
 
 For more details, please refer to the [documentation](https://depictio.github.io/depictio-docs/)
 
-ecessary steps [a2e22184]
-* refactor: Standardize import statements across multiple files for consistency [0349df19]
-* refactor: Reorganize import statements for consistency across multiple files [abd9c70d]
-* refactor: Standardize import statements across multiple files for consistency [50c50cf6]
-* refactor: Implement robust typing commands for improved input reliability in tests [f85a98e4]
-* refactor: remove excessive logging and unused settings checks in API and layout files [ae0ac70b]
-* refactor: clean up imports and formatting in logo.py for improved readability [08418f16]
-* refactor: update ASCII art logo display with scaling and color mapping enhancements [e24e6cdc]
-* refactor: comment out password management tests for future implementation [389ed2d6]
-* refactor: simplify input handling in save and text component callbacks [8937bea3]
-* style: enhance draggable grid and edit mode layout by minimizing padding and hiding unnecessary elements [37e2b7f8]
+ecessary elements [37e2b7f8]
 * style: remove conflicting pseudo-elements from ActionIcon drag handles and ensure proper display of children [324861e8]
 * style: adjust button alignment and padding in draggable grid components [ed2d08c0]
 * refactor: update auth modal styles for improved appearance and consistency [7ed7c995]
