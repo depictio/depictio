@@ -308,6 +308,10 @@ def design_multiqc(
                 id={"type": "multiqc-s3-store", "index": component_id},
                 data=[],
             ),
+            dcc.Store(
+                id={"type": "multiqc-trace-metadata", "index": component_id},
+                data={},  # Will be populated by callbacks
+            ),
             # CRITICAL: stored-metadata-component store for save functionality
             # Follow same pattern as card component for -tmp suffix handling
             dcc.Store(
