@@ -191,6 +191,45 @@ class ReferenceDatasetProcessor:
                 skipped_joins.append(join_name)
                 continue
 
+            # Check for known problematic join combinations
+            # Skip metadata+aggregate joins (different depictio_run_id granularities)
+            left_dc = next(
+                (
+                    dc
+                    for dc in project.workflows[0].data_collections
+                    if dc.data_collection_tag == left_dc_tag
+                ),
+                None,
+            )
+            right_dc = next(
+                (
+                    dc
+                    for dc in project.workflows[0].data_collections
+                    if dc.data_collection_tag == right_dc_tag
+                ),
+                None,
+            )
+
+            if left_dc and right_dc:
+                left_metatype = (
+                    left_dc.config.metatype if hasattr(left_dc.config, "metatype") else None
+                )
+                right_metatype = (
+                    right_dc.config.metatype if hasattr(right_dc.config, "metatype") else None
+                )
+
+                # Skip joins between Metadata and Aggregate (incompatible run_id granularities)
+                if (left_metatype == "Metadata" and right_metatype == "Aggregate") or (
+                    left_metatype == "Aggregate" and right_metatype == "Metadata"
+                ):
+                    logger.warning(
+                        f"Skipping join '{join_name}': incompatible metatypes "
+                        f"({left_dc_tag}={left_metatype}, {right_dc_tag}={right_metatype}). "
+                        f"Metadata and Aggregate have different depictio_run_id granularities."
+                    )
+                    skipped_joins.append(join_name)
+                    continue
+
             executable_joins.append(join_name)
 
         if not executable_joins:
