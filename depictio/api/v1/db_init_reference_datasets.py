@@ -243,11 +243,17 @@ class ReferenceDatasetRegistry:
 async def create_reference_datasets(
     admin_user: UserBeanie, token_payload: dict[str, Any]
 ) -> list[dict[str, Any]]:
-    """Create all reference datasets (iris, penguins, multiqc)."""
+    """Create all reference datasets (iris, penguins).
+
+    Note: multiqc dataset is currently disabled due to missing data files.
+    To enable, add "multiqc" to the dataset list and create:
+    - depictio/projects/reference/multiqc/run_*/multiqc_data.json
+    - depictio/projects/reference/multiqc/run_*/sample_qc_metrics.csv
+    """
     created_projects = []
 
-    # Always create all three datasets
-    for dataset_name in ["iris", "penguins", "multiqc"]:
+    # Create iris and penguins datasets (multiqc disabled - missing data files)
+    for dataset_name in ["iris", "penguins"]:
         logger.info(f"Creating reference dataset: {dataset_name}")
 
         result = await ReferenceDatasetRegistry.create_reference_project(
