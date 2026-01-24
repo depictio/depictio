@@ -57,17 +57,26 @@ def delayed_process_data_collections() -> asyncio.Future:
     Returns:
         A future that can be cancelled during shutdown (placeholder for compatibility)
     """
-    # Wait for API to fully start
-    delay = 5
-    logger.info(f"Worker {WORKER_ID}: Waiting {delay}s before processing reference datasets")
-    time.sleep(delay)
 
-    # Process all datasets (replaces iris-specific logic)
-    from depictio.api.v1.services.process_reference_datasets import process_all_reference_datasets
+    def process_after_delay():
+        """Run processing in background thread with delay."""
+        # Wait for API to fully start
+        delay = 5
+        logger.info(f"Worker {WORKER_ID}: Waiting {delay}s before processing reference datasets")
+        time.sleep(delay)
 
-    logger.info(f"Worker {WORKER_ID}: Starting reference dataset processing thread")
+        # Process all datasets
+        from depictio.api.v1.services.process_reference_datasets import (
+            process_all_reference_datasets,
+        )
+
+        logger.info(f"Worker {WORKER_ID}: Starting reference dataset processing")
+        asyncio.run(process_all_reference_datasets())
+
+    # Start thread immediately without blocking
+    logger.info(f"Worker {WORKER_ID}: Background processing thread created")
     thread = threading.Thread(
-        target=lambda: asyncio.run(process_all_reference_datasets()),
+        target=process_after_delay,
         daemon=True,
     )
     thread.start()
