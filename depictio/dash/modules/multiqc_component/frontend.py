@@ -524,6 +524,10 @@ def design_multiqc_from_model(component: MultiQCDashboardComponent) -> dmc.Paper
                 id={"type": "multiqc-s3-store", "index": component_id},
                 data=state.s3_locations,
             ),
+            dcc.Store(
+                id={"type": "multiqc-trace-metadata", "index": component_id},
+                data={},  # Will be populated by callbacks
+            ),
             # CRITICAL: stored-metadata-component store for save functionality with rich metadata
             dcc.Store(
                 id={"type": "stored-metadata-component", "index": component_id},
