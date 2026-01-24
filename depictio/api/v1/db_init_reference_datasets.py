@@ -99,6 +99,12 @@ class ReferenceDatasetRegistry:
             viewers=[],
         )
 
+        # Extract and remove _static_dc_id from join definitions (not allowed in ProjectBeanie)
+        # These will be handled during join execution in the background processor
+        if "joins" in project_config:
+            for join_def in project_config["joins"]:
+                join_def.pop("_static_dc_id", None)
+
         # Create project (reuse existing _helper_create_project_beanie logic)
         from depictio.api.v1.endpoints.projects_endpoints.utils import _helper_create_project_beanie
         from depictio.models.models.projects import ProjectBeanie
