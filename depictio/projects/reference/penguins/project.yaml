@@ -12,7 +12,7 @@ workflows:
       structure: "sequencing-runs"
       runs_regex: "run_*"
       locations:
-        - /app/depictio/projects/reference/penguins
+        - /app/depictio/projects/reference/penguins/data
     data_collections:
       # Physical features only
       - data_collection_tag: "physical_features"
