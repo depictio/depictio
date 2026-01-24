@@ -100,6 +100,14 @@ class ReferenceDatasetProcessor:
         if dataset_metadata.get("has_joins"):
             await self._execute_joins(project, dataset_metadata)
 
+        # Step 3: Log link registration status
+        if dataset_metadata.get("has_links"):
+            link_count = len(dataset_metadata.get("link_definitions", []))
+            logger.info(
+                f"Dataset {dataset_name} has {link_count} links registered "
+                f"(registered during project creation)"
+            )
+
         return {"success": True, "dataset": dataset_name}
 
     def _is_join_result(self, dc_tag: str, dataset_metadata: dict[str, Any]) -> bool:

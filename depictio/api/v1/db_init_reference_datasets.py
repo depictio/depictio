@@ -73,6 +73,66 @@ class ReferenceDatasetRegistry:
         return project_config
 
     @classmethod
+    async def _register_links(cls, project, links_config: list[dict[str, Any]]) -> None:
+        """Resolve DC tags to IDs and register links in project.
+
+        Args:
+            project: Created ProjectBeanie instance
+            links_config: List of link definitions from YAML with DC tags
+        """
+        from depictio.api.v1.db import projects_collection
+        from depictio.models.models.base import PyObjectId
+        from depictio.models.models.links import DCLink
+
+        # Build DC tag -> ID mapping
+        dc_tag_to_id = {}
+        for workflow in project.workflows:
+            for dc in workflow.data_collections:
+                dc_tag_to_id[dc.data_collection_tag] = str(dc.id)
+
+        # Convert links from tag-based to ID-based
+        resolved_links = []
+        for link_config in links_config:
+            source_tag = link_config.get("source_dc_id")
+            target_tag = link_config.get("target_dc_id")
+
+            source_id = dc_tag_to_id.get(source_tag)
+            target_id = dc_tag_to_id.get(target_tag)
+
+            if not source_id or not target_id:
+                logger.warning(
+                    f"Skipping link {source_tag} -> {target_tag}: DC not found. "
+                    f"Available DCs: {list(dc_tag_to_id.keys())}"
+                )
+                continue
+
+            # Create DCLink with resolved IDs
+            link = DCLink(
+                id=PyObjectId(),
+                source_dc_id=source_id,
+                source_column=link_config["source_column"],
+                target_dc_id=target_id,
+                target_type=link_config["target_type"],
+                link_config=link_config.get("link_config", {}),
+                description=link_config.get("description"),
+                enabled=link_config.get("enabled", True),
+            )
+            resolved_links.append(link)
+
+        # Update project document with resolved links
+        if resolved_links:
+            link_dicts = [link.model_dump() for link in resolved_links]
+            # Convert PyObjectId to string for MongoDB
+            for link_dict in link_dicts:
+                link_dict["id"] = str(link_dict["id"])
+
+            projects_collection.update_one(
+                {"_id": ObjectId(str(project.id))},
+                {"$set": {"links": link_dicts}},
+            )
+            logger.info(f"Registered {len(resolved_links)} links for project {project.name}")
+
+    @classmethod
     async def create_reference_project(
         cls, dataset_name: str, admin_user: UserBeanie, token_payload: dict[str, Any]
     ) -> dict[str, Any]:
@@ -92,6 +152,9 @@ class ReferenceDatasetRegistry:
         # Inject static IDs
         project_config = cls.inject_static_ids(project_config, dataset_name)
 
+        # Extract links early (needed for both new and existing projects)
+        links_config = project_config.get("links", [])
+
         # Check if project already exists (idempotent initialization)
         from depictio.api.v1.db import projects_collection
 
@@ -105,11 +168,20 @@ class ReferenceDatasetRegistry:
             from depictio.models.models.projects import ProjectBeanie
 
             project = ProjectBeanie.from_mongo(existing_project)
+
+            # Register links if not already present
+            existing_links = existing_project.get("links", [])
+            if not existing_links and links_config:
+                logger.info(f"Registering links for existing project {dataset_name}")
+                await cls._register_links(project, links_config)
+
             return {
                 "success": True,
                 "project": project,
                 "has_joins": "joins" in project_config,
                 "join_definitions": project_config.get("joins", []),
+                "has_links": len(links_config) > 0,
+                "link_definitions": links_config,
             }
 
         # Set permissions
@@ -124,6 +196,11 @@ class ReferenceDatasetRegistry:
         if "joins" in project_config:
             for join_def in project_config["joins"]:
                 join_def.pop("_static_dc_id", None)
+
+        # Remove links from project_config - will be resolved and added after project creation
+        # Links use DC tags which need to be converted to DC IDs
+        # (already extracted earlier for use in both new and existing project paths)
+        project_config.pop("links", None)
 
         # Create project (reuse existing _helper_create_project_beanie logic)
         from depictio.api.v1.endpoints.projects_endpoints.utils import _helper_create_project_beanie
@@ -147,12 +224,19 @@ class ReferenceDatasetRegistry:
         }
 
         payload = await _helper_create_project_beanie(project, original_ids=original_ids)
+        created_project = payload["project"]
+
+        # Step 2: Resolve and register links if present in YAML
+        if links_config:
+            await cls._register_links(created_project, links_config)
 
         return {
             "success": payload["success"],
-            "project": payload["project"],
+            "project": created_project,
             "has_joins": "joins" in project_config,
             "join_definitions": project_config.get("joins", []),
+            "has_links": len(links_config) > 0,
+            "link_definitions": links_config,
         }
 
 
@@ -182,6 +266,8 @@ async def create_reference_datasets(
                     ],
                     "has_joins": result["has_joins"],
                     "join_definitions": result.get("join_definitions", []),
+                    "has_links": result.get("has_links", False),
+                    "link_definitions": result.get("link_definitions", []),
                 }
             )
             logger.info(f"✅ Created {dataset_name} project")
