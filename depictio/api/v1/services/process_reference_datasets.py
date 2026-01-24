@@ -147,6 +147,64 @@ class ReferenceDatasetProcessor:
         """
         logger.info(f"Executing joins for {dataset_metadata['name']}")
 
+        # Pre-check: Verify all join dependencies are registered
+        join_definitions = dataset_metadata.get("join_definitions", [])
+        if not join_definitions:
+            logger.info(f"No joins defined for {dataset_metadata['name']}")
+            return {"success": True, "joins_processed": 0}
+
+        # Build DC tag -> ID mapping
+        dc_tag_to_id = {}
+        for workflow in project.workflows:
+            for dc in workflow.data_collections:
+                dc_tag_to_id[dc.data_collection_tag] = str(dc.id)
+
+        # Check which joins can be executed
+        executable_joins = []
+        skipped_joins = []
+
+        for join_def in join_definitions:
+            left_dc_tag = join_def["left_dc"]
+            right_dc_tag = join_def["right_dc"]
+            join_name = join_def["name"]
+
+            left_dc_id = dc_tag_to_id.get(left_dc_tag)
+            right_dc_id = dc_tag_to_id.get(right_dc_tag)
+
+            if not left_dc_id or not right_dc_id:
+                logger.warning(
+                    f"Skipping join '{join_name}': DC tags not found in project "
+                    f"(left: {left_dc_tag}, right: {right_dc_tag})"
+                )
+                skipped_joins.append(join_name)
+                continue
+
+            # Check if both DCs are registered in deltatables
+            left_registered = self._already_processed(left_dc_id)
+            right_registered = self._already_processed(right_dc_id)
+
+            if not left_registered or not right_registered:
+                logger.warning(
+                    f"Skipping join '{join_name}': dependencies not registered "
+                    f"({left_dc_tag}={left_registered}, {right_dc_tag}={right_registered})"
+                )
+                skipped_joins.append(join_name)
+                continue
+
+            executable_joins.append(join_name)
+
+        if not executable_joins:
+            logger.warning(
+                f"No executable joins for {dataset_metadata['name']} "
+                f"(all {len(join_definitions)} joins skipped due to missing dependencies)"
+            )
+            return {"success": True, "joins_processed": 0, "joins_skipped": skipped_joins}
+
+        logger.info(
+            f"Executing {len(executable_joins)} joins for {dataset_metadata['name']} "
+            f"({len(skipped_joins)} skipped)"
+        )
+
         # Use existing join system from CLI
         from depictio.cli.cli.utils.joins import process_project_joins
 
