@@ -9,9 +9,7 @@ import os
 import threading
 import time
 
-from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
-from depictio.api.v1.endpoints.utils_endpoints.process_data_collections import process_collections
 
 WORKER_ID = os.getpid()
 
@@ -52,49 +50,26 @@ def check_s3_delta_table_exists(bucket: str, data_collection_id: str) -> bool:
 
 def delayed_process_data_collections() -> asyncio.Future:
     """
-    Process initial data collections after a delay to ensure the API is fully started.
+    Process all reference datasets after a delay to ensure the API is fully started.
 
-    Skips processing if delta table already exists in S3 (for multi-instance deployments).
+    Replaces hardcoded iris processing with multi-dataset support.
 
     Returns:
         A future that can be cancelled during shutdown (placeholder for compatibility)
     """
-    from depictio.api.v1.db import deltatables_collection, projects_collection
-
-    # Find the iris_table data collection
-    project_doc = projects_collection.find_one(
-        {"workflows.data_collections.data_collection_tag": "iris_table"}
-    )
-
-    if project_doc:
-        workflows = project_doc.get("workflows", [])
-        if workflows:
-            data_collections = workflows[0].get("data_collections", [])
-            if data_collections:
-                dc_id = data_collections[0].get("_id")
-
-                if dc_id:
-                    # Check if already processed in local MongoDB
-                    if deltatables_collection.find_one({"data_collection_id": dc_id}, {"_id": 1}):
-                        logger.info(
-                            f"Worker {WORKER_ID}: Data collections already processed in local DB, skipping"
-                        )
-                        return asyncio.Future()
-
-                    # Check S3 for existing delta table (multi-instance scenario)
-                    dc_id_str = str(dc_id)
-                    if check_s3_delta_table_exists(settings.minio.bucket, dc_id_str):
-                        logger.info(
-                            f"Worker {WORKER_ID}: Delta table exists in S3, will process with overwrite=True"
-                        )
-
     # Wait for API to fully start
-    logger.info(f"Worker {WORKER_ID}: Waiting 5 seconds before processing data collections")
-    time.sleep(5)
+    delay = 5
+    logger.info(f"Worker {WORKER_ID}: Waiting {delay}s before processing reference datasets")
+    time.sleep(delay)
 
-    # Run processing in a background thread
-    logger.info(f"Worker {WORKER_ID}: Starting data collection processing thread")
-    thread = threading.Thread(target=process_collections, daemon=True)
+    # Process all datasets (replaces iris-specific logic)
+    from depictio.api.v1.services.process_reference_datasets import process_all_reference_datasets
+
+    logger.info(f"Worker {WORKER_ID}: Starting reference dataset processing thread")
+    thread = threading.Thread(
+        target=lambda: asyncio.run(process_all_reference_datasets()),
+        daemon=True,
+    )
     thread.start()
 
     return asyncio.Future()

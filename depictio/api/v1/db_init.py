@@ -1,5 +1,6 @@
 import json
 import os
+from datetime import datetime, timezone
 from typing import Any
 
 from bson import ObjectId
@@ -22,7 +23,9 @@ from depictio.models.models.users import GroupBeanie, Permission, TokenBeanie, U
 from depictio.models.utils import get_config
 
 
-async def create_initial_project(admin_user: UserBeanie, token_payload: dict | None) -> dict | None:
+async def create_initial_project_legacy(
+    admin_user: UserBeanie, token_payload: dict | None
+) -> dict | None:
     """Create initial demo project with static IDs for K8s consistency."""
     project_yaml_path = os.path.join(
         os.path.dirname(__file__), "..", "..", "projects", "init", "iris", "project.yaml"
@@ -365,12 +368,27 @@ async def initialize_db(wipe: bool = False) -> UserBeanie | None:
         logger.error("Cannot proceed with project creation: admin_user or token_payload is None")
         raise RuntimeError("Admin user and token are required for initialization")
 
-    project_payload = await create_initial_project(
+    # Create all reference datasets (replaces hardcoded iris logic)
+    from depictio.api.v1.db_init_reference_datasets import create_reference_datasets
+
+    created_projects = await create_reference_datasets(
         admin_user=admin_user, token_payload=token_payload
     )
-    logger.debug(f"Project payload: {project_payload}")
 
-    # Create initial dashboard
+    # Store metadata for background processing
+    from depictio.api.v1.db import initialization_collection
+
+    initialization_collection.insert_one(
+        {
+            "_id": "reference_datasets_metadata",
+            "projects": created_projects,
+            "created_at": datetime.now(timezone.utc),
+        }
+    )
+
+    logger.info(f"Created {len(created_projects)} reference datasets")
+
+    # Create dashboard (only iris has one currently)
     dashboard_payload = await create_initial_dashboard(admin_user=admin_user)
     logger.debug(f"Dashboard payload: {dashboard_payload}")
 
