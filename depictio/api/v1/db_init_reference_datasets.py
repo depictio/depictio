@@ -92,6 +92,26 @@ class ReferenceDatasetRegistry:
         # Inject static IDs
         project_config = cls.inject_static_ids(project_config, dataset_name)
 
+        # Check if project already exists (idempotent initialization)
+        from depictio.api.v1.db import projects_collection
+
+        static_project_id = ObjectId(project_config["id"])
+        existing_project = await projects_collection.find_one({"_id": static_project_id})
+
+        if existing_project:
+            logger.info(
+                f"Project {dataset_name} already exists with ID {static_project_id}, skipping creation"
+            )
+            from depictio.models.models.projects import ProjectBeanie
+
+            project = ProjectBeanie.from_mongo(existing_project)
+            return {
+                "success": True,
+                "project": project,
+                "has_joins": "joins" in project_config,
+                "join_definitions": project_config.get("joins", []),
+            }
+
         # Set permissions
         project_config["permissions"] = Permission(
             owners=[UserBase(id=admin_user.id, email=admin_user.email, is_admin=True)],
