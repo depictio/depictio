@@ -11,7 +11,8 @@ from depictio.api.v1.configs.logging_init import logger
 class ReferenceDatasetProcessor:
     """Orchestrates processing of reference datasets including joins."""
 
-    def __init__(self, CLI_config: dict[str, Any]):
+    def __init__(self, CLI_config):
+        """Initialize with CLIConfig instance (from depictio.models.models.cli)."""
         self.CLI_config = CLI_config
 
     async def process_dataset(self, dataset_metadata: dict[str, Any]) -> dict[str, Any]:
@@ -39,8 +40,13 @@ class ReferenceDatasetProcessor:
             logger.error(f"Project {project_id} not found")
             return {"success": False, "dataset": dataset_name, "error": "Project not found"}
 
-        project = ProjectBeanie.from_mongo(project_doc)
-        workflow = project.workflows[0]
+        project_beanie = ProjectBeanie.from_mongo(project_doc)
+        workflow = project_beanie.workflows[0]
+
+        # Convert to Project model for CLI functions
+        from depictio.models.models.projects import Project
+
+        project = Project.model_validate(project_beanie.model_dump())
 
         # Step 1: Process base data collections (not join results)
         base_dcs = [
@@ -49,40 +55,45 @@ class ReferenceDatasetProcessor:
             if not self._is_join_result(dc["tag"], dataset_metadata)
         ]
 
+        # Use project-level helper for scan/process (handles both single and aggregate modes)
+        from depictio.cli.cli.utils.helpers import process_project_helper
+
         for dc_info in base_dcs:
             dc_id = dc_info["id"]
+            dc_tag = dc_info["tag"]
 
             # Check if already processed (multi-instance safety)
             if self._already_processed(dc_id):
-                logger.info(f"DC {dc_info['tag']} already processed, skipping")
+                logger.info(f"DC {dc_tag} already processed, skipping")
                 continue
 
-            # SCAN and PROCESS phases
-            from depictio.cli.cli.utils.helpers import process_data_collection_helper
-
-            logger.info(f"Scanning DC: {dc_info['tag']}")
+            # SCAN phase - use project helper with DC filter
+            logger.info(f"Scanning DC: {dc_tag}")
             try:
-                process_data_collection_helper(
+                process_project_helper(
                     CLI_config=self.CLI_config,
-                    wf=workflow,
-                    dc_id=dc_id,
+                    project_config=project,
                     mode="scan",
+                    workflow_name=workflow.name,
+                    data_collection_tag=dc_tag,
                 )
             except Exception as e:
-                logger.error(f"Failed to scan DC {dc_info['tag']}: {e}")
+                logger.error(f"Failed to scan DC {dc_tag}: {e}")
                 continue
 
-            logger.info(f"Processing DC: {dc_info['tag']}")
+            # PROCESS phase
+            logger.info(f"Processing DC: {dc_tag}")
             try:
-                process_data_collection_helper(
+                process_project_helper(
                     CLI_config=self.CLI_config,
-                    wf=workflow,
-                    dc_id=dc_id,
+                    project_config=project,
                     mode="process",
+                    workflow_name=workflow.name,
+                    data_collection_tag=dc_tag,
                     command_parameters={"overwrite": True},
                 )
             except Exception as e:
-                logger.error(f"Failed to process DC {dc_info['tag']}: {e}")
+                logger.error(f"Failed to process DC {dc_tag}: {e}")
                 continue
 
         # Step 2: Execute joins if dataset has them
@@ -115,19 +126,20 @@ class ReferenceDatasetProcessor:
     async def _execute_joins(
         self, project: Any, dataset_metadata: dict[str, Any]
     ) -> dict[str, Any]:
-        """Execute joins using existing CLI infrastructure."""
+        """Execute joins using existing CLI infrastructure.
+
+        Args:
+            project: Project model instance (already converted from ProjectBeanie)
+            dataset_metadata: Dataset metadata dict
+        """
         logger.info(f"Executing joins for {dataset_metadata['name']}")
 
         # Use existing join system from CLI
         from depictio.cli.cli.utils.joins import process_project_joins
-        from depictio.models.models.projects import Project
-
-        # Convert to Project model (not ProjectBeanie)
-        project_model = Project.model_validate(project.model_dump())
 
         try:
             result = process_project_joins(
-                project=project_model,
+                project=project,
                 CLI_config=self.CLI_config,
                 join_name=None,  # Process all joins
                 preview_only=False,
@@ -169,6 +181,8 @@ async def process_all_reference_datasets() -> None:
         return
 
     # Build CLI config matching CLIConfig model structure
+    from depictio.models.models.cli import CLIConfig
+
     cli_config_dict = {
         "user": {
             "id": str(admin_user["_id"]),
@@ -192,7 +206,9 @@ async def process_all_reference_datasets() -> None:
         "s3_storage": settings.minio,
     }
 
-    processor = ReferenceDatasetProcessor(cli_config_dict)
+    # Convert dict to CLIConfig instance (some functions don't have @validate_call)
+    cli_config = CLIConfig(**cli_config_dict)
+    processor = ReferenceDatasetProcessor(cli_config)
 
     # Process each dataset
     for dataset_metadata in metadata_doc["projects"]:
