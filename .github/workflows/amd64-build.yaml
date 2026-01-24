@@ -64,7 +64,7 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: .
-          file: docker-images/Dockerfile_depictio.dockerfile
+          file: docker-images/Dockerfile_depictio_uv.dockerfile
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
@@ -73,3 +73,16 @@ jobs:
             VERSION=${{ steps.version.outputs.VERSION }}
           cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache
           cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache,mode=max
+
+      - name: Notify docs repository
+        uses: peter-evans/repository-dispatch@v3
+        with:
+          token: ${{ secrets.GHCR_PAT }}
+          repository: depictio/depictio-docs
+          event-type: new-release
+          client-payload: |
+            {
+              "version": "v${{ steps.version.outputs.VERSION }}",
+              "release_url": "https://github.com/${{ github.repository }}/releases/tag/v${{ steps.version.outputs.VERSION }}",
+              "prerelease": "true"
+            }

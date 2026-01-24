@@ -115,7 +115,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: docker-images/Dockerfile_depictio.dockerfile
+          file: docker-images/Dockerfile_depictio_uv.dockerfile
           platforms: linux/amd64  # Specify platform for consistency
           push: true
           load: false  # Don't load locally when pushing
