@@ -5,10 +5,9 @@ from typing import Any
 
 from bson import ObjectId
 
-from depictio.api.v1.configs.config import get_config
-from depictio.api.v1.configs.logging import logger
-from depictio.api.v1.models.mongo_models import UserBeanie
-from depictio.models.models.permissions import Permission, UserBase
+from depictio.api.v1.configs.logging_init import logger
+from depictio.models.models.users import Permission, UserBase, UserBeanie
+from depictio.models.utils import get_config
 
 
 class ReferenceDatasetRegistry:
@@ -101,8 +100,8 @@ class ReferenceDatasetRegistry:
         )
 
         # Create project (reuse existing _helper_create_project_beanie logic)
-        from depictio.api.v1.endpoints.project_endpoints.utils import _helper_create_project_beanie
-        from depictio.api.v1.models.mongo_models import ProjectBeanie
+        from depictio.api.v1.endpoints.projects_endpoints.utils import _helper_create_project_beanie
+        from depictio.models.models.projects import ProjectBeanie
 
         project = ProjectBeanie(**project_config)
 

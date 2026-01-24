@@ -5,7 +5,7 @@ from typing import Any
 from bson import ObjectId
 
 from depictio.api.v1.configs.config import settings
-from depictio.api.v1.configs.logging import logger
+from depictio.api.v1.configs.logging_init import logger
 
 
 class ReferenceDatasetProcessor:
@@ -32,7 +32,7 @@ class ReferenceDatasetProcessor:
 
         # Fetch project from MongoDB
         from depictio.api.v1.db import projects_collection
-        from depictio.api.v1.models.mongo_models import ProjectBeanie
+        from depictio.models.models.projects import ProjectBeanie
 
         project_doc = await projects_collection.find_one({"_id": ObjectId(project_id)})
         if not project_doc:
