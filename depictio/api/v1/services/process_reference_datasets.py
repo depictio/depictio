@@ -53,7 +53,7 @@ class ReferenceDatasetProcessor:
             dc_id = dc_info["id"]
 
             # Check if already processed (multi-instance safety)
-            if await self._already_processed(dc_id):
+            if self._already_processed(dc_id):
                 logger.info(f"DC {dc_info['tag']} already processed, skipping")
                 continue
 
@@ -97,7 +97,7 @@ class ReferenceDatasetProcessor:
         join_names = [j["name"] for j in join_defs]
         return dc_tag in join_names
 
-    async def _already_processed(self, dc_id: str) -> bool:
+    def _already_processed(self, dc_id: str) -> bool:
         """Check if DC already processed (MongoDB + S3)."""
         from depictio.api.v1.db import deltatables_collection
         from depictio.api.v1.services.background_tasks import check_s3_delta_table_exists
@@ -144,14 +144,18 @@ class ReferenceDatasetProcessor:
 
 async def process_all_reference_datasets() -> None:
     """Main entry point for background processing."""
+    logger.info("🚀 Starting background processing for reference datasets")
+
     from depictio.api.v1.db import initialization_collection, tokens_collection, users_collection
 
     # Retrieve metadata
     metadata_doc = initialization_collection.find_one({"_id": "reference_datasets_metadata"})
 
     if not metadata_doc:
-        logger.warning("No reference datasets metadata found")
+        logger.warning("⚠️  No reference datasets metadata found in initialization_collection")
         return
+
+    logger.info(f"📋 Found metadata for {len(metadata_doc.get('projects', []))} reference datasets")
 
     # Get admin user credentials
     admin_user = users_collection.find_one({"is_admin": True})
@@ -181,7 +185,11 @@ async def process_all_reference_datasets() -> None:
     # Process each dataset
     for dataset_metadata in metadata_doc["projects"]:
         try:
+            logger.info(f"📦 Processing dataset: {dataset_metadata['name']}")
             result = await processor.process_dataset(dataset_metadata)
             logger.info(f"✅ Successfully processed {result['dataset']}")
         except Exception as e:
             logger.error(f"❌ Failed to process {dataset_metadata['name']}: {e}")
+            import traceback
+
+            logger.error(f"Traceback: {traceback.format_exc()}")
