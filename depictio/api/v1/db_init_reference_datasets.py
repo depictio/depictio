@@ -105,18 +105,18 @@ class ReferenceDatasetRegistry:
 
         project = ProjectBeanie(**project_config)
 
-        # Restore original IDs (like iris does)
+        # Restore original IDs using integer indices (required by _helper_create_project_beanie)
         original_ids = {
-            "project_id": ObjectId(project_config["id"]),
+            "project": ObjectId(project_config["id"]),
             "workflows": {
-                wf["name"]: {
+                wf_idx: {
                     "id": ObjectId(wf["id"]),
                     "data_collections": {
-                        dc["data_collection_tag"]: ObjectId(dc["id"])
-                        for dc in wf["data_collections"]
+                        dc_idx: ObjectId(dc["id"])
+                        for dc_idx, dc in enumerate(wf["data_collections"])
                     },
                 }
-                for wf in project_config["workflows"]
+                for wf_idx, wf in enumerate(project_config["workflows"])
             },
         }
 
