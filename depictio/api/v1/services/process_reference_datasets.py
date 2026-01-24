@@ -168,16 +168,28 @@ async def process_all_reference_datasets() -> None:
         logger.error("No token found for admin user")
         return
 
-    # Build CLI config
+    # Build CLI config matching CLIConfig model structure
     cli_config_dict = {
         "user": {
             "id": str(admin_user["_id"]),
             "email": admin_user["email"],
             "is_admin": admin_user["is_admin"],
-            "token": token["access_token"],  # Token document has 'access_token' field
+            # Token as dict matching TokenBase structure (token doc already has all fields)
+            "token": {
+                "user_id": token["user_id"],
+                "access_token": token["access_token"],
+                "refresh_token": token["refresh_token"],
+                "token_type": token.get("token_type", "bearer"),
+                "token_lifetime": token.get("token_lifetime", "short-lived"),
+                "expire_datetime": token["expire_datetime"],
+                "refresh_expire_datetime": token["refresh_expire_datetime"],
+                "name": token.get("name"),
+                "created_at": token.get("created_at"),
+            },
         },
         "api_base_url": settings.fastapi.url,
-        "s3_storage": settings.minio.model_dump(),
+        # Use settings.minio directly - it's already an S3DepictioCLIConfig instance
+        "s3_storage": settings.minio,
     }
 
     processor = ReferenceDatasetProcessor(cli_config_dict)
