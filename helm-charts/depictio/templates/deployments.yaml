@@ -693,8 +693,8 @@ spec:
               ls -la /app/depictio/keys/ || echo "Keys directory not accessible"
 
               while [ $elapsed -lt $timeout ]; do
-                if [ -f /app/depictio/keys/private_key.pem ]; then
-                  echo "✅ Private key file found"
+                if [ -f /app/depictio/keys/api_internal_key.pem ]; then
+                  echo "✅ API internal key file found"
                   ls -la /app/depictio/keys/
                   exit 0
                 fi
@@ -918,8 +918,8 @@ spec:
               timeout=120
               elapsed=0
               while [ $elapsed -lt $timeout ]; do
-                if [ -f /app/depictio/keys/private_key.pem ]; then
-                  echo "Private key file found"
+                if [ -f /app/depictio/keys/api_internal_key.pem ]; then
+                  echo "API key file found"
                   exit 0
                 fi
                 echo "Waiting for key file... (${elapsed}s/${timeout}s)"
