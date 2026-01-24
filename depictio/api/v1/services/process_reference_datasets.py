@@ -48,7 +48,7 @@ class ReferenceDatasetProcessor:
 
         project = Project.model_validate(project_beanie.model_dump())
 
-        # Step 1: Process base data collections (not join results)
+        # Step 1: Scan and process base data collections (not join results)
         base_dcs = [
             dc
             for dc in dataset_metadata["data_collections"]
@@ -58,6 +58,25 @@ class ReferenceDatasetProcessor:
         # Use project-level helper for scan/process (handles both single and aggregate modes)
         from depictio.cli.cli.utils.helpers import process_project_helper
 
+        # SCAN ALL DCs in workflow at once (they share the same runs)
+        # Scanning one DC at a time would skip existing runs for subsequent DCs
+        any_unprocessed = any(not self._already_processed(dc["id"]) for dc in base_dcs)
+
+        if any_unprocessed:
+            logger.info(f"Scanning workflow {workflow.name} for all data collections")
+            try:
+                process_project_helper(
+                    CLI_config=self.CLI_config,
+                    project_config=project,
+                    mode="scan",
+                    workflow_name=workflow.name,
+                    data_collection_tag=None,  # Scan all DCs in workflow
+                )
+            except Exception as e:
+                logger.error(f"Failed to scan workflow {workflow.name}: {e}")
+                return {"success": False, "dataset": dataset_name, "error": str(e)}
+
+        # PROCESS each DC individually
         for dc_info in base_dcs:
             dc_id = dc_info["id"]
             dc_tag = dc_info["tag"]
@@ -65,20 +84,6 @@ class ReferenceDatasetProcessor:
             # Check if already processed (multi-instance safety)
             if self._already_processed(dc_id):
                 logger.info(f"DC {dc_tag} already processed, skipping")
-                continue
-
-            # SCAN phase - use project helper with DC filter
-            logger.info(f"Scanning DC: {dc_tag}")
-            try:
-                process_project_helper(
-                    CLI_config=self.CLI_config,
-                    project_config=project,
-                    mode="scan",
-                    workflow_name=workflow.name,
-                    data_collection_tag=dc_tag,
-                )
-            except Exception as e:
-                logger.error(f"Failed to scan DC {dc_tag}: {e}")
                 continue
 
             # PROCESS phase
