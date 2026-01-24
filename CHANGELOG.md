@@ -6,18 +6,17 @@
 
 
 <details>
-<summary>Click to expand the changelog for 0.6.0-b12</summary>
+<summary>Click to expand the changelog for 0.6.0-b15</summary>
 
 ### Changes 📜
 
 #### Bug Fixes 🐛
 
-* fix: disable YAML watcher for Kubernetes deployments [58917171]
+* fix: add explicit API URL and reduce replicas for EMBL dev [543df3c8]
 
 #### Other Changes 📝
 
-* Bump version: 0.6.0-b11 → 0.6.0-b12 [76592335]
-* Update CHANGELOG.md for v0.6.0-b11 [3ae510e5]
+* Bump version: 0.6.0-b14 → 0.6.0-b15 [6bbd147b]
 
 
 </details>
@@ -26,12 +25,7 @@
 
 For more details, please refer to the [documentation](https://depictio.github.io/depictio-docs/)
 
-ing and upserting processes [a3ed533a]
-* feat: add improved Depictio logo with brand colors and unique character patterns [1a67d8c8]
-* feat: update environment configuration to enable logging verbosity and add Google OAuth2 settings [28861f93]
-* feat: enable development mode in CI configuration for improved local testing [86330302]
-* feat: add data preview functionality in stepper with enhanced AG Grid integration for improved user experience [76fcfe86]
-* feat: add placeholder figure creation when auto-generation is disabled, enhancing user experience with informative annotations [b4f5e6a2]
+otations [b4f5e6a2]
 * feat: enhance project creation flow by handling anonymous users and redirecting to profile for project creation [b9299bf4]
 * feat: enhance user access control by allowing anonymous users to view only public projects and update dashboard management to handle user not found scenario [1060779f]
 * feat: disable auto-refresh for TextInput aggregation method and update description in agg_functions [30734a75]
