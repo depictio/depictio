@@ -712,13 +712,20 @@ def register_core_callbacks(app):
                 logger.warning(f"No MultiQC reports found for DC {dc_id}")
                 return {}, [], [], "No MultiQC reports found"
 
-            data_locations = [r.get("s3_location") for r in reports if r.get("s3_location")]
+            # Extract s3_location from nested report structure
+            # API wraps reports in MultiQCReportResponse: {"report": {...}, "data_collection_tag": "...", ...}
+            data_locations = [
+                r.get("report", {}).get("s3_location")
+                for r in reports
+                if r.get("report", {}).get("s3_location")
+            ]
 
             if not data_locations:
                 logger.error("No data locations found in reports")
                 return {}, [], [], "Error: No data locations found"
 
-            report_id = reports[0].get("id")
+            # Extract report ID from nested structure
+            report_id = reports[0].get("report", {}).get("id")
             if not report_id:
                 logger.error("No report ID in first report")
                 return {}, data_locations, [], "Error: Invalid report structure"
