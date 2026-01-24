@@ -6,22 +6,18 @@
 
 
 <details>
-<summary>Click to expand the changelog for 0.6.0-b11</summary>
+<summary>Click to expand the changelog for 0.6.0-b12</summary>
 
 ### Changes 📜
 
-#### New Features ✨
+#### Bug Fixes 🐛
 
-* feat: wait for Docker build and add post-deploy CLI registration [d2cd6f6c]
-
-#### Chores 🧹
-
-* chore: update all Docker builds to use uv-based Dockerfile [53df6fc3]
+* fix: disable YAML watcher for Kubernetes deployments [58917171]
 
 #### Other Changes 📝
 
-* Bump version: 0.6.0-b10 → 0.6.0-b11 [25177229]
-* Update CHANGELOG.md for v0.6.0-b10 [80767415]
+* Bump version: 0.6.0-b11 → 0.6.0-b12 [76592335]
+* Update CHANGELOG.md for v0.6.0-b11 [3ae510e5]
 
 
 </details>
@@ -30,70 +26,7 @@
 
 For more details, please refer to the [documentation](https://depictio.github.io/depictio-docs/)
 
-er [a6a1223c]
-
-#### Other Changes 📝
-
-* Bump version: 0.6.0-b9 → 0.6.0-b10 [40a2fa48]
-* Update CHANGELOG.md for v0.6.0-b9 [fbe2c2d9]
-
-
-</details>
-
-### Documentation 📖
-
-For more details, please refer to the [documentation](https://depictio.github.io/depictio-docs/)
-
-er issue and improve UI responsiveness [38112c70]
-* refactor: Improve component selection logic in register_callbacks_stepper_part_one [66c2cd52]
-* refactor: Rename update_interactive_component to update_interactive_component_sync for consistency [6498d074]
-* refactor: Comment out celery worker service in docker-compose for clarity [9aa74c8d]
-* refactor: Update CSS selectors for action buttons and improve debug menu logging [cbd2185f]
-* refactor: Remove async build functions and update documentation to reflect synchronous functionality [b25d3ee7]
-
-#### Documentation Updates 📚
-
-* docs: Add default Python path and usage instructions to CLAUDE.md [c60eac69]
-
-#### Other Changes 📝
-
-* Bump version: 0.3.2 → 0.4.0-b1 [7d351c08]
-* Implement code changes to enhance functionality and improve performance [5ec2c1df]
-* Implement code changes to enhance functionality and improve performance [8fe4971f]
-* cli: Enhance progress display in scan_files_for_workflow with formatted descriptions for data collections and runs [392bd9d1]
-* Update CHANGELOG.md for v0.3.2 [2d83969b]
-* Bump version: 0.3.1 → 0.3.2 [f33b9639]
-
-
-</details>
-
-### Documentation 📖
-
-For more details, please refer to the [documentation](https://depictio.github.io/depictio-docs/)
-
-ections analytics to the dashboard [146e042a]
-* feat: Enhance analytics data service with user ID validation and filtering [41061497]
-* feat: Implement Admin Analytics Dashboard and related functionalities [8837a4fd]
-* feat: Implement analytics tracking and middleware [c29c37ab]
-* feat: Add workflow for debugging Ruff import sorting issues [9ae022c4]
-* feat: Add persistent volume claims for config and uploads, enhance backend and frontend resource configurations ; enhance EMBL config and set up EMBL S3 MinIO instance (not pushed) [9efbd184]
-* feat: enhance cleanup of expired temporary users by deleting associated projects, dashboards, files, and deltatables [2faa3e07]
-* feat: optimize DataFrame loading by applying metadata filters during lazy scan [a308c300]
-* feat: enhance draggable component handling with detailed logging and layout preservation [02a78028]
-* feat: enhance cleanup tasks with flexible interval parameters and update tests [697b6ceb]
-* feat: implement adaptive memory management for DataFrame loading and caching [8afcdf2e]
-* feat: enhance button enabling logic by incorporating visualization type selection [35d66858]
-* feat: update callback to return modified draggable children without direct state modification [2e4246d7]
-* feat: enhance component removal logging and update metadata handling for code-generated figures [0a521ef2]
-* feat: add callback to close edit modal and update AG Grid theme based on current theme [c7207080]
-* feat: add callback to sync dict_kwargs from stored metadata and log component metadata [cabc7d79]
-* feat: add textual dependency for enhanced terminal UI support [32db13e7]
-* feat: implement colored ASCII logo display with scaling options and black & white version support [63a0e62f]
-* feat: enhance logo display with version option for CLI and DEPICTIO names [f20d8f97]
-* feat: add customizable logo display with layout and size options in ASCII art [9a39af91]
-* feat: implement modal-based workflow and data collection management in project wizard [b9cb4727]
-* feat: implement total storage size calculation and display for data collections [bfcb6fd8]
-* feat: add deltatable size tracking and progress indicators in scanning and upserting processes [a3ed533a]
+ing and upserting processes [a3ed533a]
 * feat: add improved Depictio logo with brand colors and unique character patterns [1a67d8c8]
 * feat: update environment configuration to enable logging verbosity and add Google OAuth2 settings [28861f93]
 * feat: enable development mode in CI configuration for improved local testing [86330302]
