@@ -74,6 +74,22 @@ def _evaluate_condition(
 
     col_data = df[column]
 
+    # Convert value to match column dtype for numeric comparisons
+    if operator in [
+        HighlightConditionOperator.GT,
+        HighlightConditionOperator.GE,
+        HighlightConditionOperator.LT,
+        HighlightConditionOperator.LE,
+    ]:
+        try:
+            # Try to convert to numeric if column is numeric
+            if pd.api.types.is_numeric_dtype(col_data):
+                if isinstance(value, str):
+                    value = float(value) if "." in value else int(value)
+        except (ValueError, TypeError):
+            logger.warning(f"Could not convert value '{value}' to numeric for comparison")
+            return pd.Series([False] * len(df), index=df.index)
+
     if operator == HighlightConditionOperator.EQ:
         return col_data == value
     elif operator == HighlightConditionOperator.NE:

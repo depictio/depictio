@@ -460,6 +460,7 @@ def _process_single_figure(
     figure_to_load_key: dict[int, LoadKey | None],
     current_theme: str,
     batch_task_id: str,
+    stored_metadata: dict | None = None,
 ) -> tuple[dict | go.Figure, dict]:
     """
     Process a single figure and return the figure and metadata.
@@ -472,6 +473,7 @@ def _process_single_figure(
         figure_to_load_key: Mapping from figure index to load key
         current_theme: Current theme name
         batch_task_id: Task ID for logging
+        stored_metadata: Stored component metadata (includes customizations)
 
     Returns:
         Tuple of (figure, metadata) where figure is a Plotly figure dict
@@ -489,6 +491,11 @@ def _process_single_figure(
         visu_type = trigger_data.get("visu_type", "scatter")
         dict_kwargs = trigger_data.get("dict_kwargs", {})
         code_content = trigger_data.get("code_content", "")
+
+        # Extract customizations from stored metadata
+        customizations = None
+        if stored_metadata and isinstance(stored_metadata, dict):
+            customizations = stored_metadata.get("customizations")
 
         load_key = figure_to_load_key.get(figure_index)
         if not load_key or load_key not in dc_cache:
@@ -523,6 +530,7 @@ def _process_single_figure(
                 theme=current_theme,
                 selection_enabled=selection_enabled,
                 selection_column=selection_column,
+                customizations=customizations,
             )
 
         if isinstance(fig, go.Figure):
@@ -699,6 +707,11 @@ def register_core_callbacks(app):
         all_metadata = []
 
         for i, (trigger_data, trigger_id) in enumerate(zip(trigger_data_list, trigger_ids)):
+            # Get stored metadata for this component to extract customizations
+            stored_metadata = None
+            if stored_metadata_list and i < len(stored_metadata_list):
+                stored_metadata = stored_metadata_list[i]
+
             fig_dict, metadata = _process_single_figure(
                 trigger_data,
                 trigger_id,
@@ -707,6 +720,7 @@ def register_core_callbacks(app):
                 figure_to_load_key,
                 current_theme,
                 batch_task_id,
+                stored_metadata=stored_metadata,
             )
             all_figures.append(fig_dict)
             all_metadata.append(metadata)
@@ -760,6 +774,7 @@ def _create_figure_from_data(
     theme: str = "light",
     selection_enabled: bool = False,
     selection_column: str | None = None,
+    customizations: dict | None = None,
 ) -> go.Figure:
     """
     Create Plotly figure from DataFrame and parameters.
@@ -771,6 +786,7 @@ def _create_figure_from_data(
         theme: Theme name (light or dark)
         selection_enabled: Whether to enable scatter selection filtering
         selection_column: Column to include in customdata for selection extraction
+        customizations: Optional customizations dict (axes, reference_lines, highlights)
 
     Returns:
         Plotly Figure object
@@ -841,6 +857,12 @@ def _create_figure_from_data(
 
         plot_func = getattr(px, visu_type)
         fig = plot_func(pandas_df, **cleaned_kwargs)
+
+        # Apply customizations if provided
+        if customizations:
+            from depictio.dash.modules.figure_component.customizations import apply_customizations
+
+            fig = apply_customizations(fig, customizations)
 
         layout_updates = {
             "paper_bgcolor": "rgba(0,0,0,0)",

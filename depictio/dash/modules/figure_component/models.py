@@ -255,3 +255,39 @@ ADVANCED_PARAMETERS = [
         description="Y-axis range",
     ),
 ]
+
+# Customization parameters for interactive controls
+CUSTOMIZATION_PARAMETERS = [
+    # Axis scale toggle
+    ParameterDefinition(
+        name="axis_scale_enabled",
+        type=ParameterType.BOOLEAN,
+        category=ParameterCategory.ADVANCED,
+        label="Enable Axis Scale Control",
+        description="Show scale toggle in view mode",
+        default=False,
+    ),
+    ParameterDefinition(
+        name="axis_scale_axis",
+        type=ParameterType.SELECT,
+        category=ParameterCategory.ADVANCED,
+        label="Axis to Control",
+        description="Which axis to enable scale control for",
+        options=["x", "y", "both"],
+        default="y",
+        depends_on=["axis_scale_enabled"],
+    ),
+    ParameterDefinition(
+        name="axis_scale_default",
+        type=ParameterType.SELECT,
+        category=ParameterCategory.ADVANCED,
+        label="Default Scale",
+        description="Default scale for the axis",
+        options=["linear", "log"],
+        default="linear",
+        depends_on=["axis_scale_enabled"],
+    ),
+    # Note: Reference lines and highlights are configured via custom UI
+    # Reference lines: build_reference_lines_ui() in component_builder.py
+    # Highlights: build_highlights_ui() in component_builder.py
+]
