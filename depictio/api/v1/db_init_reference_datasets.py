@@ -2,11 +2,11 @@
 
 import os
 from typing import Any
-from datetime import datetime, timezone
+
 from bson import ObjectId
 
-from depictio.api.v1.configs.logging import logger
 from depictio.api.v1.configs.config import get_config
+from depictio.api.v1.configs.logging import logger
 from depictio.api.v1.models.mongo_models import UserBeanie
 from depictio.models.models.permissions import Permission, UserBase
 
@@ -112,7 +112,10 @@ class ReferenceDatasetRegistry:
             "workflows": {
                 wf["name"]: {
                     "id": ObjectId(wf["id"]),
-                    "data_collections": {dc["data_collection_tag"]: ObjectId(dc["id"]) for dc in wf["data_collections"]},
+                    "data_collections": {
+                        dc["data_collection_tag"]: ObjectId(dc["id"])
+                        for dc in wf["data_collections"]
+                    },
                 }
                 for wf in project_config["workflows"]
             },
@@ -128,7 +131,9 @@ class ReferenceDatasetRegistry:
         }
 
 
-async def create_reference_datasets(admin_user: UserBeanie, token_payload: dict[str, Any]) -> list[dict[str, Any]]:
+async def create_reference_datasets(
+    admin_user: UserBeanie, token_payload: dict[str, Any]
+) -> list[dict[str, Any]]:
     """Create all reference datasets (iris, penguins, multiqc)."""
     created_projects = []
 

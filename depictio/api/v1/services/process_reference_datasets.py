@@ -1,14 +1,11 @@
 """Background processing for reference datasets with join execution."""
 
-import asyncio
-import threading
-import time
 from typing import Any
 
 from bson import ObjectId
 
-from depictio.api.v1.configs.logging import logger
 from depictio.api.v1.configs.config import settings
+from depictio.api.v1.configs.logging import logger
 
 
 class ReferenceDatasetProcessor:
@@ -115,7 +112,9 @@ class ReferenceDatasetProcessor:
 
         return False
 
-    async def _execute_joins(self, project: Any, dataset_metadata: dict[str, Any]) -> dict[str, Any]:
+    async def _execute_joins(
+        self, project: Any, dataset_metadata: dict[str, Any]
+    ) -> dict[str, Any]:
         """Execute joins using existing CLI infrastructure."""
         logger.info(f"Executing joins for {dataset_metadata['name']}")
 
@@ -145,8 +144,7 @@ class ReferenceDatasetProcessor:
 
 async def process_all_reference_datasets() -> None:
     """Main entry point for background processing."""
-    from depictio.api.v1.db import initialization_collection, users_collection, tokens_collection
-    from depictio.models.models.cli import CLIConfig, UserBaseCLIConfig
+    from depictio.api.v1.db import initialization_collection, tokens_collection, users_collection
 
     # Retrieve metadata
     metadata_doc = await initialization_collection.find_one({"_id": "reference_datasets_metadata"})
