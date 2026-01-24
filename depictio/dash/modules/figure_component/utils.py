@@ -1970,6 +1970,7 @@ def build_figure(**kwargs) -> html.Div | dcc.Loading:
             - code_content: Python code for code mode figures (default: "")
             - selection_enabled: Enable scatter selection filtering (default: False)
             - selection_column: Column to extract from selected points (default: None)
+            - customization_ui_state: Customization UI state for view mode controls
 
     Returns:
         Figure component as HTML div with skeleton loader
@@ -1986,6 +1987,7 @@ def build_figure(**kwargs) -> html.Div | dcc.Loading:
     # Selection filtering configuration
     selection_enabled = kwargs.get("selection_enabled", False)
     selection_column = kwargs.get("selection_column")
+    customization_ui_state = kwargs.get("customization_ui_state")
 
     # Defensive handling: ensure dict_kwargs is always a dict
     if not isinstance(dict_kwargs, dict):
@@ -2010,8 +2012,28 @@ def build_figure(**kwargs) -> html.Div | dcc.Loading:
         "code_content": code_content,
         "selection_enabled": selection_enabled,
         "selection_column": selection_column,
+        "customizations": kwargs.get("customizations"),  # CRITICAL: Pass through for view mode
+        "customization_ui_state": kwargs.get("customization_ui_state"),  # For view mode controls
         "last_updated": datetime.now().isoformat(),
     }
+
+    # Create graph component
+    graph_component = dcc.Graph(
+        id={"type": "figure-graph", "index": index},
+        figure={},  # Empty - populated by batch rendering callback
+        config={"displayModeBar": "hover", "responsive": True},
+        style={"height": "100%", "width": "100%"},
+    )
+
+    # Wrap with view controls if customization UI state exists
+    if customization_ui_state:
+        from .view_controls import wrap_figure_with_controls
+
+        # Use default axis ranges (will be updated by callbacks after figure renders)
+        default_axis_ranges = {"x": (0, 100), "y": (0, 100)}
+        graph_component = wrap_figure_with_controls(
+            graph_component, index, customization_ui_state, default_axis_ranges
+        )
 
     # Phase 1: Simple structure - Trigger store + Skeleton + Graph + Metadata store + Fullscreen button
     return html.Div(
@@ -2043,13 +2065,8 @@ def build_figure(**kwargs) -> html.Div | dcc.Loading:
                 id={"type": "stored-metadata-component", "index": index},
                 data=store_component_data,
             ),
-            # Graph (populated by callback) - No Loading wrapper to allow dynamic updates
-            dcc.Graph(
-                id={"type": "figure-graph", "index": index},
-                figure={},  # Empty - populated by batch rendering callback
-                config={"displayModeBar": "hover", "responsive": True},
-                style={"height": "100%", "width": "100%"},
-            ),
+            # Graph (possibly wrapped with view controls)
+            graph_component,
         ],
         style={
             "height": "100%",
