@@ -149,6 +149,16 @@ def dashboard_to_yaml_dict(
             if value is not None and value != "":
                 compact_comp[field] = convert_for_yaml(value)
 
+        # ADD: Include customizations if present
+        if comp.get("customizations"):
+            compact_comp["customizations"] = convert_for_yaml(comp["customizations"])
+
+        # ADD: Include customization UI state if present
+        if comp.get("customization_ui_state"):
+            compact_comp["customization_ui_state"] = convert_for_yaml(
+                comp["customization_ui_state"]
+            )
+
         compact_components.append(compact_comp)
 
     compact_dict["stored_metadata"] = compact_components
@@ -324,6 +334,14 @@ def yaml_dict_to_dashboard(
             "figure",
         ]:
             full_comp["cols_json"] = {}
+
+        # ADD: Preserve customizations from YAML
+        if "customizations" in comp:
+            full_comp["customizations"] = comp["customizations"]
+
+        # ADD: Preserve customization UI state
+        if "customization_ui_state" in comp:
+            full_comp["customization_ui_state"] = comp["customization_ui_state"]
 
         full_comp.setdefault("parent_index", None)
         full_comp.setdefault("filter_applied", False)

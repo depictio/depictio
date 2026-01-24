@@ -19,6 +19,10 @@ def register_render_callbacks(app):
         [
             Input({"type": "dict_kwargs", "index": MATCH}, "data"),
             Input({"type": "segmented-control-visu-graph", "index": MATCH}, "value"),
+            Input({"type": "reflines-store", "index": MATCH}, "data"),
+            Input({"type": "highlights-store", "index": MATCH}, "data"),
+            Input({"type": "axis-scale-x", "index": MATCH}, "value"),
+            Input({"type": "axis-scale-y", "index": MATCH}, "value"),
         ],
         [
             State({"type": "workflow-selection-label", "index": MATCH}, "value"),
@@ -34,6 +38,10 @@ def register_render_callbacks(app):
     def render_figure_preview(
         dict_kwargs,
         visu_type,
+        reflines_data,
+        highlights_data,
+        axis_scale_x,
+        axis_scale_y,
         workflow,
         data_collection,
         metadata,
@@ -94,6 +102,81 @@ def register_render_callbacks(app):
             elif isinstance(theme_data, str):
                 current_theme = theme_data
 
+            # Build customizations from stores
+            customizations = {}
+
+            # Add axis scales
+            if axis_scale_x or axis_scale_y:
+                customizations["axes"] = {}
+                if axis_scale_x and axis_scale_x != "linear":
+                    customizations["axes"]["x"] = {"scale": axis_scale_x}
+                if axis_scale_y and axis_scale_y != "linear":
+                    customizations["axes"]["y"] = {"scale": axis_scale_y}
+
+            # Add reference lines
+            if reflines_data and isinstance(reflines_data, list):
+                customizations["reference_lines"] = []
+                for line in reflines_data:
+                    line_config = {
+                        "type": line.get("type", "hline"),
+                        "line_color": line.get("color", "red"),
+                        "line_dash": line.get("dash", "dash"),
+                        "line_width": line.get("width", 2),
+                    }
+                    # Add position based on line type
+                    if line.get("type") == "hline":
+                        line_config["y"] = line.get("position", 0)
+                    else:  # vline
+                        line_config["x"] = line.get("position", 0)
+
+                    # Add annotation if present and not empty
+                    if line.get("annotation") and line.get("annotation").strip():
+                        line_config["annotation_text"] = line.get("annotation")
+
+                    customizations["reference_lines"].append(line_config)
+
+            # Add highlights
+            if highlights_data and isinstance(highlights_data, list):
+                customizations["highlights"] = []
+                for hl in highlights_data:
+                    if not hl.get("column"):
+                        continue  # Skip highlights without column selection
+
+                    # Map condition to operator
+                    condition_map = {
+                        "equals": "eq",
+                        "greater than": "gt",
+                        "less than": "lt",
+                        "contains": "contains",
+                    }
+                    operator = condition_map.get(hl.get("condition", "equals"), "eq")
+
+                    # Build style dict with type safety
+                    style_dict = {
+                        "marker_color": hl.get("color", "red"),
+                        "marker_size": hl.get("size", 12),
+                        "dim_opacity": 0.3,
+                    }
+
+                    # Add outline if specified
+                    if hl.get("outline"):
+                        style_dict["marker_line_color"] = hl.get("outline")
+                        style_dict["marker_line_width"] = 2
+
+                    highlight_config = {
+                        "conditions": [
+                            {
+                                "column": hl.get("column", ""),
+                                "operator": operator,
+                                "value": hl.get("value", ""),
+                            }
+                        ],
+                        "logic": "and",
+                        "style": style_dict,
+                    }
+
+                    customizations["highlights"].append(highlight_config)
+
             # Render figure
             try:
                 figure, trace_metadata = render_figure(
@@ -101,6 +184,7 @@ def register_render_callbacks(app):
                     visu_type=visu_type,
                     df=df,
                     theme=current_theme,
+                    customizations=customizations if customizations else None,
                 )
                 return figure
             except Exception as render_error:
