@@ -244,6 +244,7 @@ def _create_component_buttons(
     create_reset_button,
     create_export_button,
     create_fullscreen_button,
+    create_customization_controls_button,
     create_alignment_button=None,
     create_metadata_button=None,
     create_partial_data_warning_button=None,
@@ -282,9 +283,9 @@ def _create_component_buttons(
         "figure": {
             "orientation": "vertical",
             "edit_only": ["drag", "duplicate", "edit", "remove"],
-            "view_accessible": ["fullscreen", "metadata"],
+            "view_accessible": ["controls", "fullscreen", "metadata"],
             "scatter_edit_only": ["partial_data", "drag", "duplicate", "edit", "remove"],
-            "scatter_view_accessible": ["fullscreen", "metadata", "reset"],
+            "scatter_view_accessible": ["controls", "fullscreen", "metadata", "reset"],
         },
         "interactive": {
             "orientation": "horizontal",
@@ -351,6 +352,9 @@ def _create_component_buttons(
 
     # Add fullscreen button
     button_functions["fullscreen"] = create_fullscreen_button
+
+    # Add customization controls button
+    button_functions["controls"] = create_customization_controls_button
 
     # Add alignment button only if the function is provided
     if create_alignment_button is not None:
@@ -585,6 +589,19 @@ def enable_box_edit_mode(
             size="sm",
             radius=0,  # Remove border radius
             children=DashIconify(icon="mdi:fullscreen", width=16, color="white"),
+            n_clicks=0,  # Required for callback to trigger properly
+        )
+
+    def create_customization_controls_button():
+        """Create customization controls toggle button for figure component."""
+        logger.info(f"🎛️  Creating toggle-controls-btn with index: {btn_index}")
+        return dmc.ActionIcon(
+            id={"type": "toggle-controls-btn", "index": f"{btn_index}"},
+            color="teal",
+            variant="filled",
+            size="sm",
+            radius=0,  # Remove border radius
+            children=DashIconify(icon="mdi:tune", width=16, color="white"),
             n_clicks=0,  # Required for callback to trigger properly
         )
 
@@ -891,6 +908,7 @@ def enable_box_edit_mode(
         create_reset_button,
         create_export_button,
         create_fullscreen_button,
+        create_customization_controls_button,
         create_alignment_button,
         create_metadata_button,
         partial_data_button_func,

@@ -2020,12 +2020,21 @@ def build_figure(**kwargs) -> html.Div | dcc.Loading:
 
     # Wrap with view controls if customization UI state exists
     if customization_ui_state:
-        from .view_controls import wrap_figure_with_controls
+        logger.info(
+            f"🎛️  VIEW CONTROLS: Wrapping figure {index} with controls. "
+            f"UI state keys: {list(customization_ui_state.keys())}"
+        )
+        from .callbacks.view_controls import wrap_figure_with_controls
 
         # Use default axis ranges (will be updated by callbacks after figure renders)
         default_axis_ranges = {"x": (0, 100), "y": (0, 100)}
         graph_component = wrap_figure_with_controls(
             graph_component, index, customization_ui_state, default_axis_ranges
+        )
+    else:
+        logger.debug(
+            f"🎛️  VIEW CONTROLS: No customization_ui_state for figure {index}, "
+            "controls will NOT be shown. Re-save component to enable controls."
         )
 
     # Phase 1: Simple structure - Trigger store + Skeleton + Graph + Metadata store + Fullscreen button

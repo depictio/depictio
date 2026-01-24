@@ -202,6 +202,17 @@ def create_stepper_page(
             storage_type="session",
             data={},  # Empty dict - no interactive components in stepper
         ),
+        # Figure customization stores required by figure UI callbacks
+        # These stores are normally created in the accordion, but must exist at page load
+        # to prevent callback registration errors
+        dcc.Store(
+            id={"type": "reflines-store", "index": "stepper-component"},
+            data=[],  # Empty list - no reference lines initially
+        ),
+        dcc.Store(
+            id={"type": "highlights-store", "index": "stepper-component"},
+            data=[],  # Empty list - no highlights initially
+        ),
     ]
 
     # Create main layout with AppShell
