@@ -34,7 +34,7 @@ class ReferenceDatasetProcessor:
         from depictio.api.v1.db import projects_collection
         from depictio.models.models.projects import ProjectBeanie
 
-        project_doc = await projects_collection.find_one({"_id": ObjectId(project_id)})
+        project_doc = projects_collection.find_one({"_id": ObjectId(project_id)})
         if not project_doc:
             logger.error(f"Project {project_id} not found")
             return {"success": False, "dataset": dataset_name, "error": "Project not found"}
@@ -103,7 +103,7 @@ class ReferenceDatasetProcessor:
         from depictio.api.v1.services.background_tasks import check_s3_delta_table_exists
 
         # Check local MongoDB
-        if await deltatables_collection.find_one({"data_collection_id": dc_id}):
+        if deltatables_collection.find_one({"data_collection_id": dc_id}):
             return True
 
         # Check S3
@@ -147,19 +147,19 @@ async def process_all_reference_datasets() -> None:
     from depictio.api.v1.db import initialization_collection, tokens_collection, users_collection
 
     # Retrieve metadata
-    metadata_doc = await initialization_collection.find_one({"_id": "reference_datasets_metadata"})
+    metadata_doc = initialization_collection.find_one({"_id": "reference_datasets_metadata"})
 
     if not metadata_doc:
         logger.warning("No reference datasets metadata found")
         return
 
     # Get admin user credentials
-    admin_user = await users_collection.find_one({"is_admin": True})
+    admin_user = users_collection.find_one({"is_admin": True})
     if not admin_user:
         logger.error("No admin user found")
         return
 
-    token = await tokens_collection.find_one({"user_id": admin_user["_id"]})
+    token = tokens_collection.find_one({"user_id": admin_user["_id"]})
     if not token:
         logger.error("No token found for admin user")
         return

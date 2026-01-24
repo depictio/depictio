@@ -96,7 +96,7 @@ class ReferenceDatasetRegistry:
         from depictio.api.v1.db import projects_collection
 
         static_project_id = ObjectId(project_config["id"])
-        existing_project = await projects_collection.find_one({"_id": static_project_id})
+        existing_project = projects_collection.find_one({"_id": static_project_id})
 
         if existing_project:
             logger.info(
