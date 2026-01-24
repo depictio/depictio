@@ -174,7 +174,7 @@ async def process_all_reference_datasets() -> None:
             "id": str(admin_user["_id"]),
             "email": admin_user["email"],
             "is_admin": admin_user["is_admin"],
-            "token": token["token"],
+            "token": token["access_token"],  # Token document has 'access_token' field
         },
         "api_base_url": settings.fastapi.url,
         "s3_storage": settings.minio.model_dump(),
