@@ -1263,11 +1263,32 @@ def register_core_callbacks(app):
             # ============================================================================
             if use_link_resolution and project_id:
                 # Collect filter values from interactive components
+                # ONLY from categorical/sample-based filters (not numeric RangeSliders)
                 filter_values = []
                 for comp_data in interactive_components_dict.values():
-                    value = comp_data.get("value", [])
-                    if value:
-                        filter_values.extend(value if isinstance(value, list) else [value])
+                    comp_metadata = comp_data.get("metadata", {})
+                    comp_type = comp_metadata.get("interactive_component_type", "")
+                    column_type = comp_metadata.get("column_type", "")
+                    column_name = comp_metadata.get("column_name", "")
+
+                    # Only collect values from categorical filters (MultiSelect or object columns)
+                    # Skip numeric range filters (RangeSlider with float/int columns)
+                    is_categorical = comp_type == "MultiSelect" or column_type == "object"
+                    is_sample_column = column_name == join_column  # join_column is typically "sample"
+
+                    if is_categorical or is_sample_column:
+                        value = comp_data.get("value", [])
+                        if value:
+                            filter_values.extend(value if isinstance(value, list) else [value])
+                            logger.debug(
+                                f"Including filter values from {column_name} "
+                                f"({comp_type}, {column_type}): {value}"
+                            )
+                    else:
+                        logger.debug(
+                            f"Skipping numeric filter {column_name} "
+                            f"({comp_type}, {column_type}) - not used for sample filtering"
+                        )
 
                 if not filter_values and not has_active_filters and figure_was_patched:
                     # RESET MODE: Get all samples via link resolution without filter
