@@ -39,12 +39,34 @@
         "color": "species",
         "size": "bill_length_mm",
         "color_discrete_map": "{\"Adelie\": \"#1f77b4\", \"Chinstrap\": \"#ff7f0e\", \"Gentoo\": \"#2ca02c\"}",
-        "title": "Penguin Body Mass vs Flipper Length",
+        "title": "Body Mass vs Flipper Length",
         "template": "mantine_light",
         "size_max": 20,
         "marginal_x": "histogram",
         "marginal_y": "rug",
         "trendline": "ols"
+      }
+    },
+    {
+      "index": "box-bill-length-species",
+      "component_type": "figure",
+      "visu_type": "box",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8c9e"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca1"
+      },
+      "dict_kwargs": {
+        "x": "species",
+        "y": "bill_length_mm",
+        "color": "species",
+        "color_discrete_map": "{\"Adelie\": \"#1f77b4\", \"Chinstrap\": \"#ff7f0e\", \"Gentoo\": \"#2ca02c\"}",
+        "title": "Bill Length by Species",
+        "template": "mantine_light",
+        "boxmode": "group",
+        "points": "all",
+        "notched": true
       }
     },
     {
@@ -84,6 +106,55 @@
       "value_font_size": "xl"
     },
     {
+      "component_type": "interactive",
+      "interactive_component_type": "MultiSelect",
+      "index": "species-filter",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8c9e"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca1"
+      },
+      "column_name": "species",
+      "column_type": "object",
+      "value": ["Adelie", "Chinstrap", "Gentoo"],
+      "scale": "linear",
+      "marks_number": 2,
+      "title_size": "md",
+      "custom_color": "#858585",
+      "icon_name": "mdi:filter",
+      "default_state": {
+        "type": "select",
+        "options": ["Adelie", "Chinstrap", "Gentoo"],
+        "default_value": null
+      }
+    },
+    {
+      "component_type": "interactive",
+      "interactive_component_type": "RangeSlider",
+      "index": "body-mass-slider",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8c9e"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca1"
+      },
+      "column_name": "body_mass_g",
+      "column_type": "float64",
+      "value": [2700, 6300],
+      "scale": "linear",
+      "marks_number": 2,
+      "title_size": "md",
+      "custom_color": "#45B8AC",
+      "icon_name": "bx:slider-alt",
+      "default_state": {
+        "type": "range",
+        "min_value": 2700,
+        "max_value": 6300,
+        "default_range": [2700, 6300]
+      }
+    },
+    {
       "index": "data-table",
       "component_type": "table",
       "wf_id": {
@@ -99,27 +170,48 @@
       "i": "box-scatter-flipper-body",
       "x": 0,
       "y": 0,
-      "w": 32,
-      "h": 16
+      "w": 24,
+      "h": 14
+    },
+    {
+      "i": "box-box-bill-length-species",
+      "x": 24,
+      "y": 0,
+      "w": 24,
+      "h": 14
     },
     {
       "i": "box-species-count",
-      "x": 32,
-      "y": 0,
+      "x": 0,
+      "y": 14,
       "w": 8,
-      "h": 8
+      "h": 6
     },
     {
       "i": "box-body-mass-average",
-      "x": 40,
-      "y": 0,
+      "x": 8,
+      "y": 14,
       "w": 8,
-      "h": 8
+      "h": 6
+    },
+    {
+      "i": "box-species-filter",
+      "x": 16,
+      "y": 14,
+      "w": 16,
+      "h": 6
+    },
+    {
+      "i": "box-body-mass-slider",
+      "x": 32,
+      "y": 14,
+      "w": 16,
+      "h": 6
     },
     {
       "i": "box-data-table",
       "x": 0,
-      "y": 16,
+      "y": 20,
       "w": 48,
       "h": 16
     }
