@@ -17,10 +17,89 @@ Key features:
 from typing import Any, Dict, List, Optional, Tuple
 
 import dash_mantine_components as dmc
-from dash import Input, Output, State, clientside_callback, dcc, html
+from dash import Input, Output, State, dcc, html
 from dash.dependencies import ALL, MATCH
 
 from depictio.models.logging import logger
+
+# =============================================================================
+# Helper Functions for Highlight-Slider Synchronization
+# =============================================================================
+
+
+def _should_sync_condition(line_type: str, condition_column: Optional[str]) -> bool:
+    """
+    Determine if a highlight condition should sync with a reference line slider.
+
+    Args:
+        line_type: Type of reference line ("hline" or "vline")
+        condition_column: Column name used in the highlight condition
+
+    Returns:
+        True if the condition should sync with this slider, False otherwise
+    """
+    if not condition_column:
+        return False
+
+    # Heuristic: Match by common column names
+    if line_type == "hline":
+        # Horizontal lines often control p-value, significance, y-threshold
+        return condition_column in [
+            "pvalue",
+            "p_value",
+            "padj",
+            "p_adj",
+            "FDR",
+            "significance",
+            "y",
+            "-log10(pvalue)",
+            "-log10(p_value)",
+        ]
+    elif line_type == "vline":
+        # Vertical lines often control fold-change, x-threshold, depth
+        return condition_column in [
+            "log2FoldChange",
+            "fold_change",
+            "fc",
+            "logFC",
+            "depth",
+            "x",
+            "threshold",
+        ]
+    return False
+
+
+def _transform_value(slider_value: float, line_type: str, condition_column: Optional[str]) -> float:
+    """
+    Transform slider value to condition value if needed.
+
+    For example, if the slider shows -log10(p-value) but the condition
+    needs the actual p-value, this function converts it.
+
+    Args:
+        slider_value: Value from the slider
+        line_type: Type of reference line ("hline" or "vline")
+        condition_column: Column name used in the highlight condition
+
+    Returns:
+        Transformed value appropriate for the condition
+    """
+    if not condition_column:
+        return slider_value
+
+    # Handle -log10 transformation for p-values
+    # If slider is in -log10 space but condition needs raw p-value
+    if line_type == "hline" and condition_column in ["pvalue", "p_value", "padj", "p_adj", "FDR"]:
+        # Check if slider value looks like -log10 (typically > 1)
+        # Raw p-values are typically < 1, -log10(p-values) are typically > 0
+        # This heuristic assumes slider shows -log10(p) values
+        if slider_value > 0:
+            # Convert -log10(p) back to p-value: p = 10^(-log10(p))
+            return 10 ** (-slider_value)
+
+    # For most cases, use slider value directly
+    return slider_value
+
 
 # =============================================================================
 # Layout Builders
@@ -50,6 +129,10 @@ def wrap_figure_with_controls(
     Returns:
         html.Div containing graph + control panel + toggle button
     """
+    # CRITICAL: Ensure index is a string to match button ID format in edit.py
+    # The button uses f"{btn_index}" which converts to string, so stores must match
+    index = str(index)
+
     # Validate input
     if not customization_ui_state or not isinstance(customization_ui_state, dict):
         logger.warning(f"Invalid customization_ui_state for figure {index}")
@@ -65,13 +148,44 @@ def wrap_figure_with_controls(
         f"sliders_enabled={[rl.get('show_slider', False) for rl in refline_controls]}"
     )
 
-    # If no controls to show, return unwrapped graph
+    # Check if there are controls to show
     has_controls = bool(scale_config) or any(
         rl.get("show_slider", False) for rl in refline_controls
     )
     if not has_controls:
-        logger.warning(f"🎛️  No controls to show for {index} - returning unwrapped graph")
-        return graph_component
+        logger.warning(f"🎛️  No controls to show for {index} - returning graph with empty Store")
+        # IMPORTANT: Still create the Store so the toggle callback can fire
+        # The button is always created in edit.py, so the Store must exist for MATCH to work
+        return html.Div(
+            style={"position": "relative", "width": "100%", "height": "100%"},
+            children=[
+                graph_component,
+                # Store must exist for toggle callback to work (MATCH pattern requires both components)
+                dcc.Store(
+                    id={"type": "controls-panel-visible", "index": str(index)},
+                    data=False,
+                ),
+                # Empty container - no controls to show
+                html.Div(
+                    id={"type": "controls-panel-container", "index": str(index)},
+                    style={"display": "none"},
+                    children=[
+                        dmc.Paper(
+                            shadow="sm",
+                            p="xs",
+                            withBorder=True,
+                            children=[
+                                dmc.Text(
+                                    "No controls available. Re-save component to enable.",
+                                    size="xs",
+                                    c="dimmed",
+                                )
+                            ],
+                        )
+                    ],
+                ),
+            ],
+        )
 
     logger.info(f"🎛️  Building controls UI for {index}")
 
@@ -104,6 +218,7 @@ def wrap_figure_with_controls(
 
     # Build complete layout
     # NOTE: Toggle button is now in the ActionIcon group (edit.py), not overlaid on the graph
+    # CRITICAL: Use str(index) to ensure consistency with button ID format in edit.py
     return html.Div(
         style={"position": "relative", "width": "100%", "height": "100%"},
         children=[
@@ -111,13 +226,17 @@ def wrap_figure_with_controls(
             graph_component,
             # Store for panel visibility state
             dcc.Store(
-                id={"type": "controls-panel-visible", "index": index},
+                id={"type": "controls-panel-visible", "index": str(index)},
                 data=False,  # Initially hidden
             ),
             # Control panel container (collapsible)
+            # NOTE: The container itself gets absolute positioning via callback
+            # when visible, not the Paper inside (which stays in normal flow)
             html.Div(
-                id={"type": "controls-panel-container", "index": index},
-                style={"display": "none"},  # Hidden by default
+                id={"type": "controls-panel-container", "index": str(index)},
+                style={
+                    "display": "none"
+                },  # Hidden by default; callback sets positioning when visible
                 children=[
                     dmc.Paper(
                         shadow="lg",
@@ -125,14 +244,11 @@ def wrap_figure_with_controls(
                         withBorder=True,
                         radius="md",
                         style={
-                            "position": "absolute",
-                            "top": "4px",  # Closer to top
-                            "right": "4px",  # Closer to edge
-                            "width": "240px",  # Even narrower
-                            "maxHeight": "300px",  # Smaller max height
+                            # No absolute positioning here - container handles that
+                            "width": "240px",
+                            "maxHeight": "300px",
                             "overflowY": "auto",
-                            "overflowX": "hidden",  # Prevent horizontal overflow
-                            "zIndex": 1001,  # Higher z-index to ensure visibility
+                            "overflowX": "hidden",
                         },
                         children=[
                             dmc.Stack(
@@ -305,8 +421,8 @@ def _calculate_slider_bounds(
 # Callback Registration
 # =============================================================================
 
-# Track if view control callbacks have been registered
-_view_control_callbacks_registered = False
+# Track which apps have had callbacks registered (app-specific tracking)
+_registered_apps = set()
 
 
 def register_view_control_callbacks(app):
@@ -321,61 +437,109 @@ def register_view_control_callbacks(app):
     Returns:
         bool: True if callbacks were registered, False if already registered
     """
-    global _view_control_callbacks_registered
+    # Use Dash app ID (not Flask server ID) to track per-app registration
+    # IMPORTANT: Multiple Dash apps can share the same Flask server (e.g., viewer/editor apps)
+    # so we need to track by Dash app instance, not Flask server instance
+    app_id = id(app)
 
-    if _view_control_callbacks_registered:
-        logger.debug("View control callbacks already registered, skipping duplicate registration")
+    logger.warning(
+        f"🔍 register_view_control_callbacks called for app {app_id}, "
+        f"already_registered={app_id in _registered_apps}"
+    )
+
+    if app_id in _registered_apps:
+        logger.warning(
+            f"⚠️  View control callbacks already registered for app {app_id}, "
+            "skipping duplicate registration"
+        )
         return False
 
-    logger.info("Registering view control callbacks for figure component")
+    logger.warning(f"📝 Registering view control callbacks for app {app_id}")
     _register_toggle_callback(app)
     _register_scale_callback(app)
     _register_refline_callback(app)
     _register_refline_value_display_callback(app)
 
-    _view_control_callbacks_registered = True
-    logger.info("View control callbacks registered successfully")
+    _registered_apps.add(app_id)
+    logger.warning(f"✅ View control callbacks registered successfully for app {app_id}")
     return True
 
 
 def _register_toggle_callback(app):
-    """Register clientside callback to toggle control panel visibility."""
-    logger.info("📝 Registering toggle callback for controls-panel-visible")
+    """Register callback to toggle control panel visibility."""
+    logger.warning("📝 REGISTERING TOGGLE CALLBACK for controls-panel-visible")
 
-    # TEMPORARY DEBUG: Server-side callback to verify button clicks are detected
+    # PRIMARY CALLBACK: Toggle the visibility store when button is clicked
     @app.callback(
         Output({"type": "controls-panel-visible", "index": MATCH}, "data"),
         Input({"type": "toggle-controls-btn", "index": MATCH}, "n_clicks"),
         State({"type": "controls-panel-visible", "index": MATCH}, "data"),
         prevent_initial_call=True,
     )
-    def debug_toggle_controls(n_clicks, current_visible):
-        """Debug callback to test if button clicks are detected."""
+    def toggle_controls_visibility(n_clicks, current_visibility):
+        """Toggle the visibility state when button is clicked."""
         from dash import ctx
 
-        logger.warning(
-            f"🔥 DEBUG: Toggle button clicked! n_clicks={n_clicks}, current={current_visible}"
-        )
-        logger.warning(f"🔥 DEBUG: Triggered by: {ctx.triggered_id}")
-        new_state = not current_visible
-        logger.warning(f"🔥 DEBUG: Setting visibility to: {new_state}")
-        return new_state
+        logger.warning(f"🔥 TOGGLE: Button clicked! n_clicks={n_clicks}")
+        logger.warning(f"🔥 TOGGLE: Current visibility={current_visibility}")
+        logger.warning(f"🔥 TOGGLE: Triggered by: {ctx.triggered_id}")
 
-    # Companion callback to update container display based on visibility state
-    # TEMPORARY DEBUG: Server-side callback
+        # Toggle the visibility state
+        new_visibility = not current_visibility
+        logger.warning(f"🔥 TOGGLE: New visibility={new_visibility}")
+        return new_visibility
+
+    # SECONDARY CALLBACK: Update panel style based on visibility store
     @app.callback(
         Output({"type": "controls-panel-container", "index": MATCH}, "style"),
         Input({"type": "controls-panel-visible", "index": MATCH}, "data"),
     )
-    def debug_update_panel_style(is_visible):
-        """Debug callback to update panel visibility."""
+    def update_panel_style(is_visible):
+        """Update panel display style based on visibility state."""
         from dash import ctx
 
-        logger.warning(f"🔥 DEBUG STYLE: Updating panel style, is_visible={is_visible}")
-        logger.warning(f"🔥 DEBUG STYLE: Triggered by: {ctx.triggered_id}")
-        style = {} if is_visible else {"display": "none"}
-        logger.warning(f"🔥 DEBUG STYLE: Returning style: {style}")
+        logger.warning(f"🔥 STYLE: Updating panel style, is_visible={is_visible}")
+        logger.warning(f"🔥 STYLE: Triggered by: {ctx.triggered_id}")
+
+        if is_visible:
+            # When visible: absolute position in top-right corner of parent
+            style = {
+                "display": "block",
+                "position": "absolute",
+                "top": "4px",
+                "right": "4px",
+                "zIndex": 1002,  # Higher than other elements
+            }
+        else:
+            style = {"display": "none"}
+
+        logger.warning(f"🔥 STYLE: Returning style: {style}")
         return style
+
+    # TERTIARY CALLBACK: Update button appearance for visual feedback
+    @app.callback(
+        Output({"type": "toggle-controls-btn", "index": MATCH}, "color"),
+        Output({"type": "toggle-controls-btn", "index": MATCH}, "variant"),
+        Input({"type": "controls-panel-visible", "index": MATCH}, "data"),
+    )
+    def update_button_appearance(is_visible):
+        """Update button color/variant to show active state."""
+        from dash import ctx
+
+        logger.warning(f"🔥 BUTTON: Updating button appearance, is_visible={is_visible}")
+        logger.warning(f"🔥 BUTTON: Triggered by: {ctx.triggered_id}")
+
+        if is_visible:
+            # Active state - green/filled
+            color, variant = "green", "filled"
+        else:
+            # Inactive state - teal/filled
+            color, variant = "teal", "filled"
+
+        logger.warning(f"🔥 BUTTON: Returning color={color}, variant={variant}")
+        return color, variant
+
+    logger.warning("✅ TOGGLE CALLBACKS REGISTERED SUCCESSFULLY")
 
 
 def _register_scale_callback(app):
@@ -515,6 +679,83 @@ def _register_refline_callback(app):
                                 f"{'y' if line_type == 'hline' else 'x'}={new_value}"
                             )
 
+                            # Update linked highlight conditions
+                            highlights = customizations.get("highlights", [])
+
+                            # OPTION 2: Check for explicit links first (preset-defined)
+                            linked_highlights = line.get("linked_highlights")
+                            if linked_highlights and isinstance(linked_highlights, list):
+                                # Use explicit links from preset
+                                logger.warning(
+                                    f"🔗 Using {len(linked_highlights)} EXPLICIT links for line {line_idx}"
+                                )
+                                for link in linked_highlights:
+                                    highlight_idx = link.get("highlight_idx")
+                                    condition_idx = link.get("condition_idx")
+                                    transform = link.get("transform", "none")
+
+                                    if highlight_idx < len(highlights) and condition_idx < len(
+                                        highlights[highlight_idx].get("conditions", [])
+                                    ):
+                                        # Apply transformation
+                                        if transform == "inverse_log10":
+                                            # Convert -log10(p) back to p-value
+                                            transformed_value = (
+                                                10 ** (-new_value) if new_value > 0 else new_value
+                                            )
+                                        else:
+                                            transformed_value = new_value
+
+                                        # Update the condition value
+                                        highlights[highlight_idx]["conditions"][condition_idx][
+                                            "value"
+                                        ] = transformed_value
+                                        condition_column = highlights[highlight_idx]["conditions"][
+                                            condition_idx
+                                        ].get("column", "?")
+                                        logger.warning(
+                                            f"🔗 EXPLICIT: Updated highlight[{highlight_idx}]."
+                                            f"condition[{condition_idx}] ({condition_column}) "
+                                            f"to {transformed_value:.6f} (slider: {new_value})"
+                                        )
+                            else:
+                                # OPTION 1: Fall back to heuristics (user-created sliders)
+                                # Only applies to DYNAMIC highlights, not static ones
+                                logger.warning(
+                                    f"🔍 Using HEURISTIC matching for line {line_idx} (no explicit links)"
+                                )
+                                for highlight_idx, highlight in enumerate(highlights):
+                                    # Skip static highlights - they should never change with sliders
+                                    link_type = highlight.get("link_type", "static")
+                                    if link_type == "static":
+                                        logger.debug(
+                                            f"🔍 HEURISTIC: Skipping highlight[{highlight_idx}] "
+                                            f"(link_type=static)"
+                                        )
+                                        continue
+
+                                    conditions = highlight.get("conditions", [])
+                                    for condition_idx, condition in enumerate(conditions):
+                                        condition_column = condition.get("column")
+
+                                        # Heuristic matching by column name
+                                        if _should_sync_condition(line_type, condition_column):
+                                            transformed_value = _transform_value(
+                                                new_value, line_type, condition_column
+                                            )
+
+                                            # Update the condition value
+                                            conditions[condition_idx]["value"] = transformed_value
+                                            logger.warning(
+                                                f"🔍 HEURISTIC: Linked highlight[{highlight_idx}]."
+                                                f"condition[{condition_idx}] ({condition_column}) "
+                                                f"to slider value: {new_value} "
+                                                f"(transformed: {transformed_value})"
+                                            )
+
+                            # Update highlights in metadata
+                            customizations["highlights"] = highlights
+
                         slider_idx += 1
 
             # Update customizations
@@ -531,8 +772,16 @@ def _register_refline_callback(app):
             new_trigger = current_trigger or {}
             new_trigger["timestamp"] = time.time()
             new_trigger["source"] = "refline_slider"
+            # Include customizations in trigger to bypass State race condition
+            # The batch render callback reads State at invocation time, which may be stale
+            # By including customizations in the trigger (Input), we guarantee fresh values
+            new_trigger["customizations"] = customizations
 
-            logger.warning("🔥 SLIDER: Returning updated metadata + trigger, forcing batch render")
+            logger.warning(
+                f"🔥 SLIDER: Including customizations in trigger: "
+                f"{len(customizations.get('highlights', []))} highlights, "
+                f"{len(customizations.get('reference_lines', []))} reflines"
+            )
             return stored_metadata, new_trigger
 
         except Exception as e:
@@ -544,7 +793,9 @@ def _register_refline_callback(app):
 
 def _register_refline_value_display_callback(app):
     """Register clientside callback to update slider value displays."""
-    clientside_callback(
+    # Use app.clientside_callback instead of bare clientside_callback
+    # to ensure proper per-app registration in multi-app architecture
+    app.clientside_callback(
         """
         function(slider_value) {
             if (slider_value === null || slider_value === undefined) {
