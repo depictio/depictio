@@ -1989,6 +1989,11 @@ def build_figure(**kwargs) -> html.Div | dcc.Loading:
     selection_column = kwargs.get("selection_column")
     customization_ui_state = kwargs.get("customization_ui_state")
 
+    # CRITICAL DEBUG: Log customization_ui_state presence
+    logger.warning(
+        f"🎛️  BUILD_FIGURE DEBUG: index={index}, customization_ui_state={'PRESENT with keys: ' + str(list(customization_ui_state.keys())) if customization_ui_state else 'MISSING/NONE'}"
+    )
+
     # Defensive handling: ensure dict_kwargs is always a dict
     if not isinstance(dict_kwargs, dict):
         logger.warning(f"Expected dict for dict_kwargs, got {type(dict_kwargs)}: {dict_kwargs}")
@@ -2001,6 +2006,21 @@ def build_figure(**kwargs) -> html.Div | dcc.Loading:
     # The batch rendering callback in callbacks/core.py handles all data loading and figure generation
 
     # Component metadata for dashboard save/restore
+    customizations = kwargs.get("customizations")
+
+    # DEBUG: Log customizations to see if annotation_text is present
+    if customizations and isinstance(customizations, dict):
+        reflines = customizations.get("reference_lines", [])
+        if reflines:
+            logger.warning(f"🔍 DEBUG: Loading figure {index} with {len(reflines)} reference lines")
+            for idx, line in enumerate(reflines):
+                has_annotation = "annotation_text" in line
+                annotation_value = line.get("annotation_text") if has_annotation else None
+                logger.warning(
+                    f"🔍 DEBUG: Line {idx}: type={line.get('type')}, "
+                    f"annotation_text={'YES: ' + repr(annotation_value) if has_annotation else 'NO'}"
+                )
+
     store_component_data = {
         "index": str(index),
         "component_type": "figure",
@@ -2025,24 +2045,34 @@ def build_figure(**kwargs) -> html.Div | dcc.Loading:
         style={"height": "100%", "width": "100%"},
     )
 
-    # Wrap with view controls if customization UI state exists
+    # ALWAYS wrap with view controls to ensure Store exists for toggle callback
+    # The toggle button is always created in edit.py, so the Store must always exist
+    from .callbacks.view_controls import wrap_figure_with_controls
+
+    # Use default axis ranges (will be updated by callbacks after figure renders)
+    default_axis_ranges = {"x": (0, 100), "y": (0, 100)}
+
+    # Always wrap - if no customization_ui_state, use empty dict
+    effective_ui_state = customization_ui_state or {}
+
     if customization_ui_state:
-        logger.info(
+        logger.warning(
             f"🎛️  VIEW CONTROLS: Wrapping figure {index} with controls. "
             f"UI state keys: {list(customization_ui_state.keys())}"
         )
-        from .callbacks.view_controls import wrap_figure_with_controls
-
-        # Use default axis ranges (will be updated by callbacks after figure renders)
-        default_axis_ranges = {"x": (0, 100), "y": (0, 100)}
-        graph_component = wrap_figure_with_controls(
-            graph_component, index, customization_ui_state, default_axis_ranges
-        )
     else:
-        logger.debug(
+        logger.warning(
             f"🎛️  VIEW CONTROLS: No customization_ui_state for figure {index}, "
-            "controls will NOT be shown. Re-save component to enable controls."
+            "wrapping with empty controls (Store still created for toggle callback)."
         )
+
+    graph_component = wrap_figure_with_controls(
+        graph_component, index, effective_ui_state, default_axis_ranges
+    )
+    logger.warning(
+        f"🎛️  VIEW CONTROLS: Stores created for {index}: "
+        f"controls-panel-visible and controls-panel-container"
+    )
 
     # Phase 1: Simple structure - Trigger store + Skeleton + Graph + Metadata store + Fullscreen button
     return html.Div(
@@ -2074,7 +2104,7 @@ def build_figure(**kwargs) -> html.Div | dcc.Loading:
                 id={"type": "stored-metadata-component", "index": index},
                 data=store_component_data,
             ),
-            # Graph (possibly wrapped with view controls)
+            # Graph wrapped with view controls (includes controls-panel-visible Store)
             graph_component,
         ],
         style={

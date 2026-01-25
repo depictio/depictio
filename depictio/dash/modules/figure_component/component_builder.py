@@ -896,7 +896,7 @@ class AccordionBuilder:
         return dmc.AccordionItem(
             children=[
                 dmc.AccordionControl(
-                    "Customizations", icon=DashIconify(icon="mdi:tune-variant", width=20)
+                    "Customizations (beta)", icon=DashIconify(icon="mdi:tune-variant", width=20)
                 ),
                 dmc.AccordionPanel(content),
             ],

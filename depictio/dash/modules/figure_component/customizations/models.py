@@ -141,6 +141,16 @@ class AxesConfig(BaseModel):
 # =============================================================================
 
 
+class HighlightLink(BaseModel):
+    """Link between a reference line slider and a highlight condition."""
+
+    highlight_idx: int = Field(..., description="Index of the highlight in highlights list")
+    condition_idx: int = Field(..., description="Index of the condition in highlight.conditions")
+    transform: Literal["none", "inverse_log10"] = Field(
+        "none", description="Transformation to apply to slider value before updating condition"
+    )
+
+
 class ReferenceLineConfig(BaseModel):
     """Configuration for a reference line (hline, vline, diagonal)."""
 
@@ -172,6 +182,12 @@ class ReferenceLineConfig(BaseModel):
 
     # Layer
     layer: Literal["above", "below"] = Field("below", description="Draw above or below traces")
+
+    # Slider-Highlight Linkage
+    linked_highlights: Optional[List[HighlightLink]] = Field(
+        None,
+        description="Explicit links to highlight conditions that should update with this slider",
+    )
 
     @field_validator("opacity")
     @classmethod
@@ -225,6 +241,13 @@ class HighlightStyle(BaseModel):
     dim_color: Optional[str] = Field(None, description="Color for non-highlighted points")
 
 
+class HighlightLinkType(str, Enum):
+    """Whether a highlight should update when reference line sliders move."""
+
+    STATIC = "static"  # Fixed selection, never changes with sliders (e.g., gene list)
+    DYNAMIC = "dynamic"  # Threshold-based, updates when sliders move
+
+
 class HighlightConfig(BaseModel):
     """Configuration for highlighting specific points based on conditions."""
 
@@ -238,6 +261,11 @@ class HighlightConfig(BaseModel):
     label: Optional[str] = Field(None, description="Label for highlighted group in legend")
     show_labels: bool = Field(False, description="Show text labels for highlighted points")
     label_column: Optional[str] = Field(None, description="Column to use for point labels")
+    link_type: HighlightLinkType = Field(
+        HighlightLinkType.STATIC,
+        description="Whether this highlight updates with reference line sliders. "
+        "'static' = fixed selection (e.g., gene list), 'dynamic' = threshold-based",
+    )
 
 
 # =============================================================================

@@ -246,40 +246,56 @@ def _apply_reference_line(
         # Note: x0/x1 in config are for partial lines, but add_hline draws full-width by default
         # For partial horizontal lines, use shapes instead
 
-        fig.add_hline(
-            y=config.y,
-            line_color=config.line_color,
-            line_width=config.line_width,
-            line_dash=_line_style_to_plotly(config.line_dash),
-            opacity=config.opacity,
-            annotation_text=config.annotation_text,
-            annotation_position=config.annotation_position.value
-            if config.annotation_text
-            else None,
-            annotation_font_size=config.annotation_font_size,
-            annotation_font_color=config.annotation_font_color,
-            layer=config.layer,
-        )
+        # Build kwargs for add_hline
+        hline_kwargs = {
+            "y": config.y,
+            "line_color": config.line_color,
+            "line_width": config.line_width,
+            "line_dash": _line_style_to_plotly(config.line_dash),
+            "opacity": config.opacity,
+            "layer": config.layer,
+        }
+
+        # Only add annotation parameters if annotation_text is provided
+        if config.annotation_text:
+            hline_kwargs.update(
+                {
+                    "annotation_text": config.annotation_text,
+                    "annotation_position": config.annotation_position.value,
+                    "annotation_font_size": config.annotation_font_size,
+                    "annotation_font_color": config.annotation_font_color,
+                }
+            )
+
+        fig.add_hline(**hline_kwargs)
 
     elif config.type == ReferenceLineType.VLINE:
         if config.x is None:
             logger.warning("vline requires 'x' value")
             return
 
-        fig.add_vline(
-            x=config.x,
-            line_color=config.line_color,
-            line_width=config.line_width,
-            line_dash=_line_style_to_plotly(config.line_dash),
-            opacity=config.opacity,
-            annotation_text=config.annotation_text,
-            annotation_position=config.annotation_position.value
-            if config.annotation_text
-            else None,
-            annotation_font_size=config.annotation_font_size,
-            annotation_font_color=config.annotation_font_color,
-            layer=config.layer,
-        )
+        # Build kwargs for add_vline
+        vline_kwargs = {
+            "x": config.x,
+            "line_color": config.line_color,
+            "line_width": config.line_width,
+            "line_dash": _line_style_to_plotly(config.line_dash),
+            "opacity": config.opacity,
+            "layer": config.layer,
+        }
+
+        # Only add annotation parameters if annotation_text is provided
+        if config.annotation_text:
+            vline_kwargs.update(
+                {
+                    "annotation_text": config.annotation_text,
+                    "annotation_position": config.annotation_position.value,
+                    "annotation_font_size": config.annotation_font_size,
+                    "annotation_font_color": config.annotation_font_color,
+                }
+            )
+
+        fig.add_vline(**vline_kwargs)
 
     elif config.type == ReferenceLineType.DIAGONAL:
         # Add y=x diagonal line
@@ -482,8 +498,14 @@ def _apply_highlight_to_traces(
         # Update the trace
         marker_update: Dict[str, Any] = {"opacity": opacities}
 
-        if style.marker_color is not None or style.dim_color is not None:
-            marker_update["color"] = colors
+        # Only update color if we have valid non-empty color values
+        if (style.marker_color and style.marker_color.strip()) or (
+            style.dim_color and style.dim_color.strip()
+        ):
+            # Filter out any empty strings that might have slipped through
+            colors = [c if c and str(c).strip() else None for c in colors]
+            if any(colors):  # Only set if we have at least some valid colors
+                marker_update["color"] = colors
 
         if style.marker_size is not None:
             marker_update["size"] = sizes
@@ -495,7 +517,8 @@ def _apply_highlight_to_traces(
             ]
             marker_update["symbol"] = symbols
 
-        if style.marker_line_color is not None:
+        # Only apply line color if it's a valid non-empty string
+        if style.marker_line_color and style.marker_line_color.strip():
             # Use transparent for non-highlighted points instead of None
             line_colors = [
                 style.marker_line_color if i in highlight_indices else "rgba(0,0,0,0)"
@@ -796,7 +819,21 @@ def apply_customizations(
     # Convert dict to FigureCustomizations if needed
     if isinstance(customizations, dict):
         try:
+            # DEBUG: Log before validation
+            if "reference_lines" in customizations:
+                logger.warning(
+                    f"🔍 PROCESSOR: Before validation, ref_lines dict: {customizations['reference_lines']}"
+                )
+
             customizations = FigureCustomizations.model_validate(customizations)
+
+            # DEBUG: Log after validation
+            if customizations.reference_lines:
+                for idx, line in enumerate(customizations.reference_lines):
+                    logger.warning(
+                        f"🔍 PROCESSOR: After validation, line {idx}: "
+                        f"type={line.type}, annotation_text={repr(line.annotation_text)}"
+                    )
         except Exception as e:
             logger.error(f"Failed to parse customizations dict: {e}")
             return fig

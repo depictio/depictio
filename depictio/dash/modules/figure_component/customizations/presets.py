@@ -17,6 +17,8 @@ from .models import (
     HighlightCondition,
     HighlightConditionOperator,
     HighlightConfig,
+    HighlightLink,
+    HighlightLinkType,
     HighlightStyle,
     LineStyle,
     ReferenceLineConfig,
@@ -73,7 +75,7 @@ def volcano_plot_customizations(
             ),
         ),
         reference_lines=[
-            # Significance threshold
+            # Significance threshold (p-value line)
             ReferenceLineConfig(
                 type=ReferenceLineType.HLINE,
                 y=neg_log_threshold,
@@ -83,6 +85,19 @@ def volcano_plot_customizations(
                 opacity=0.7,
                 annotation_text=f"p = {significance_threshold}",
                 annotation_position=AnnotationPosition.TOP_RIGHT,
+                # Link to both upregulated and downregulated highlight conditions
+                linked_highlights=[
+                    HighlightLink(
+                        highlight_idx=0,  # Upregulated highlight
+                        condition_idx=0,  # First condition (pvalue < threshold)
+                        transform="inverse_log10",  # Slider is -log10, condition needs raw p-value
+                    ),
+                    HighlightLink(
+                        highlight_idx=1,  # Downregulated highlight
+                        condition_idx=0,  # First condition (pvalue < threshold)
+                        transform="inverse_log10",
+                    ),
+                ],
             ),
             # Left fold change threshold
             ReferenceLineConfig(
@@ -92,6 +107,14 @@ def volcano_plot_customizations(
                 line_dash=LineStyle.DASH,
                 line_width=1,
                 opacity=0.7,
+                # Link to downregulated highlight (negative fold change)
+                linked_highlights=[
+                    HighlightLink(
+                        highlight_idx=1,  # Downregulated highlight
+                        condition_idx=1,  # Second condition (log2FC < -threshold)
+                        transform="none",  # Direct value, but need to negate
+                    ),
+                ],
             ),
             # Right fold change threshold
             ReferenceLineConfig(
@@ -101,10 +124,18 @@ def volcano_plot_customizations(
                 line_dash=LineStyle.DASH,
                 line_width=1,
                 opacity=0.7,
+                # Link to upregulated highlight (positive fold change)
+                linked_highlights=[
+                    HighlightLink(
+                        highlight_idx=0,  # Upregulated highlight
+                        condition_idx=1,  # Second condition (log2FC > threshold)
+                        transform="none",  # Direct value
+                    ),
+                ],
             ),
         ],
         highlights=[
-            # Highlight significantly upregulated
+            # Highlight significantly upregulated (dynamic = updates with slider)
             HighlightConfig(
                 conditions=[
                     HighlightCondition(
@@ -126,8 +157,9 @@ def volcano_plot_customizations(
                     dim_color=dim_color,
                 ),
                 label="Upregulated",
+                link_type=HighlightLinkType.DYNAMIC,  # Updates when slider moves
             ),
-            # Highlight significantly downregulated
+            # Highlight significantly downregulated (dynamic = updates with slider)
             HighlightConfig(
                 conditions=[
                     HighlightCondition(
@@ -149,6 +181,7 @@ def volcano_plot_customizations(
                     dim_color=dim_color,
                 ),
                 label="Downregulated",
+                link_type=HighlightLinkType.DYNAMIC,  # Updates when slider moves
             ),
         ],
     )

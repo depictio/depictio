@@ -621,15 +621,22 @@ def enable_box_edit_mode(
 
     def create_customization_controls_button():
         """Create customization controls toggle button for figure component."""
-        logger.info(f"🎛️  Creating toggle-controls-btn with index: {btn_index}")
+        button_id = {"type": "toggle-controls-btn", "index": f"{btn_index}"}
+        logger.warning(f"🎛️  Creating toggle-controls-btn with ID: {button_id}")
+        logger.warning(f"🎛️  Button index type: {type(btn_index)}, value: {repr(btn_index)}")
         return dmc.ActionIcon(
-            id={"type": "toggle-controls-btn", "index": f"{btn_index}"},
+            id=button_id,
             color="teal",
             variant="filled",
             size="sm",
             radius=0,  # Remove border radius
             children=DashIconify(icon="mdi:tune", width=16, color="white"),
             n_clicks=0,  # Required for callback to trigger properly
+            style={
+                "cursor": "pointer",
+                "zIndex": 10000,  # Very high z-index to ensure it's on top
+                "pointerEvents": "auto",  # Explicitly enable pointer events
+            },
         )
 
     def create_alignment_button():
