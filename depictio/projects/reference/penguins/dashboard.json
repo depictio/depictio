@@ -24,7 +24,7 @@
   },
   "stored_metadata": [
     {
-      "index": "scatter-flipper-body",
+      "index": "9bb3858f-9b18-43a4-86ac-467b5dc5ddd6",
       "component_type": "figure",
       "visu_type": "scatter",
       "wf_id": {
@@ -50,7 +50,7 @@
       }
     },
     {
-      "index": "box-bill-length-species",
+      "index": "92741cf5-bc3e-4d68-9739-e8cb47cf0192",
       "component_type": "figure",
       "visu_type": "box",
       "wf_id": {
@@ -73,7 +73,7 @@
       }
     },
     {
-      "index": "histogram-bill-depth",
+      "index": "d69527a8-3367-4d09-bd76-d9f3d85a0fed",
       "component_type": "figure",
       "visu_type": "histogram",
       "wf_id": {
@@ -96,7 +96,7 @@
       }
     },
     {
-      "index": "custom-island-morphology",
+      "index": "a67e6d14-8c3d-429a-a26c-253ccd15cfcb",
       "component_type": "figure",
       "mode": "code",
       "wf_id": {
@@ -108,7 +108,7 @@
       "code_content": "df_modified = df.to_pandas().groupby(['island','species']).agg({'body_mass_g':'mean','bill_length_mm':'count'}).reset_index().rename(columns={'bill_length_mm':'count'})\nfig = px.sunburst(df_modified,path=['island','species'],values='count',color='island',color_discrete_map={\"Biscoe\":\"#6366f1\",\"Dream\":\"#f59e0b\",\"Torgersen\":\"#10b981\"},title='Palmer Penguins: Island & Species Distribution',hover_data={'body_mass_g':':.0f'})\n"
     },
     {
-      "index": "species-count",
+      "index": "5253ea1b-c289-49bb-84cf-b0311ab78ba5",
       "component_type": "card",
       "wf_id": {
         "$oid": "646b0f3c1e4a2d7f8e5b8c9e"
@@ -127,7 +127,7 @@
       "value_font_size": "xl"
     },
     {
-      "index": "body-mass-average",
+      "index": "6495257f-4401-4e6f-b5f6-0b8b337b2015",
       "component_type": "card",
       "wf_id": {
         "$oid": "646b0f3c1e4a2d7f8e5b8c9e"
@@ -146,7 +146,7 @@
       "value_font_size": "xl"
     },
     {
-      "index": "total-count",
+      "index": "d9bacf32-c2ff-44ca-8abc-0f108a2aee5e",
       "component_type": "card",
       "wf_id": {
         "$oid": "646b0f3c1e4a2d7f8e5b8c9e"
@@ -165,7 +165,7 @@
       "value_font_size": "xl"
     },
     {
-      "index": "avg-flipper",
+      "index": "6074afc3-9b9b-4cfc-9b29-5bf30d672092",
       "component_type": "card",
       "wf_id": {
         "$oid": "646b0f3c1e4a2d7f8e5b8c9e"
@@ -186,7 +186,7 @@
     {
       "component_type": "interactive",
       "interactive_component_type": "MultiSelect",
-      "index": "species-filter",
+      "index": "23a83a6c-c03f-4515-a428-b53b7bc5deae",
       "wf_id": {
         "$oid": "646b0f3c1e4a2d7f8e5b8c9e"
       },
@@ -218,7 +218,7 @@
     {
       "component_type": "interactive",
       "interactive_component_type": "RangeSlider",
-      "index": "body-mass-slider",
+      "index": "718548d3-8dd8-42e7-8aea-bdd63b1966a2",
       "wf_id": {
         "$oid": "646b0f3c1e4a2d7f8e5b8c9e"
       },
@@ -249,7 +249,7 @@
     {
       "component_type": "interactive",
       "interactive_component_type": "MultiSelect",
-      "index": "island-filter",
+      "index": "ea1e161c-ea12-4386-89a4-c40796dcc0c0",
       "wf_id": {
         "$oid": "646b0f3c1e4a2d7f8e5b8c9e"
       },
@@ -281,7 +281,7 @@
     {
       "component_type": "interactive",
       "interactive_component_type": "MultiSelect",
-      "index": "sex-filter",
+      "index": "4c131970-f698-43dc-a1f1-4c08d169f104",
       "wf_id": {
         "$oid": "646b0f3c1e4a2d7f8e5b8c9e"
       },
@@ -311,7 +311,7 @@
     {
       "component_type": "interactive",
       "interactive_component_type": "RangeSlider",
-      "index": "bill-length-slider",
+      "index": "5cf056cb-dcec-42ab-a9f9-6043b98ec780",
       "wf_id": {
         "$oid": "646b0f3c1e4a2d7f8e5b8c9e"
       },
@@ -340,7 +340,7 @@
       }
     },
     {
-      "index": "data-table",
+      "index": "0c386b67-7594-4599-8f71-99195c14a6a9",
       "component_type": "table",
       "wf_id": {
         "$oid": "646b0f3c1e4a2d7f8e5b8c9e"
@@ -352,98 +352,98 @@
   ],
   "stored_layout_data": [
     {
-      "i": "box-scatter-flipper-body",
+      "i": "box-9bb3858f-9b18-43a4-86ac-467b5dc5ddd6",
       "x": 0,
       "y": 0,
       "w": 48,
       "h": 18
     },
     {
-      "i": "box-bill-length-species",
+      "i": "box-92741cf5-bc3e-4d68-9739-e8cb47cf0192",
       "x": 0,
       "y": 18,
       "w": 24,
       "h": 14
     },
     {
-      "i": "box-histogram-bill-depth",
+      "i": "box-d69527a8-3367-4d09-bd76-d9f3d85a0fed",
       "x": 24,
       "y": 18,
       "w": 24,
       "h": 14
     },
     {
-      "i": "box-custom-island-morphology",
+      "i": "box-a67e6d14-8c3d-429a-a26c-253ccd15cfcb",
       "x": 0,
       "y": 32,
       "w": 48,
       "h": 20
     },
     {
-      "i": "box-species-count",
+      "i": "box-5253ea1b-c289-49bb-84cf-b0311ab78ba5",
       "x": 0,
       "y": 52,
       "w": 8,
       "h": 6
     },
     {
-      "i": "box-body-mass-average",
+      "i": "box-6495257f-4401-4e6f-b5f6-0b8b337b2015",
       "x": 8,
       "y": 52,
       "w": 8,
       "h": 6
     },
     {
-      "i": "box-total-count",
+      "i": "box-d9bacf32-c2ff-44ca-8abc-0f108a2aee5e",
       "x": 16,
       "y": 52,
       "w": 8,
       "h": 6
     },
     {
-      "i": "box-avg-flipper",
+      "i": "box-6074afc3-9b9b-4cfc-9b29-5bf30d672092",
       "x": 24,
       "y": 52,
       "w": 8,
       "h": 6
     },
     {
-      "i": "box-species-filter",
+      "i": "box-23a83a6c-c03f-4515-a428-b53b7bc5deae",
       "x": 32,
       "y": 52,
       "w": 16,
       "h": 6
     },
     {
-      "i": "box-body-mass-slider",
+      "i": "box-718548d3-8dd8-42e7-8aea-bdd63b1966a2",
       "x": 0,
       "y": 58,
       "w": 16,
       "h": 6
     },
     {
-      "i": "box-island-filter",
+      "i": "box-ea1e161c-ea12-4386-89a4-c40796dcc0c0",
       "x": 16,
       "y": 58,
       "w": 16,
       "h": 6
     },
     {
-      "i": "box-sex-filter",
+      "i": "box-4c131970-f698-43dc-a1f1-4c08d169f104",
       "x": 32,
       "y": 58,
       "w": 16,
       "h": 6
     },
     {
-      "i": "box-bill-length-slider",
+      "i": "box-5cf056cb-dcec-42ab-a9f9-6043b98ec780",
       "x": 0,
       "y": 64,
       "w": 16,
       "h": 6
     },
     {
-      "i": "box-data-table",
+      "i": "box-0c386b67-7594-4599-8f71-99195c14a6a9",
       "x": 0,
       "y": 70,
       "w": 48,
