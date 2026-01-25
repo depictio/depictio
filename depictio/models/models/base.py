@@ -227,17 +227,23 @@ class DirectoryPath(BaseModel):
 
     @field_validator("path", mode="before")
     def validate_path(cls, v):
-        # Ensure the path is valid
+        # Ensure the path is valid type
         if not isinstance(v, str | Path):
             raise ValueError(f"Invalid type for path: {type(v)}. Must be a string or Path.")
-        v = Path(v)  # Ensure it's a Path object
-        if not v.exists():
-            raise ValueError(f"The directory '{v}' does not exist.")
-        if not v.is_dir():
-            raise ValueError(f"'{v}' is not a directory.")
-        if not os.access(v, os.R_OK):
-            raise ValueError(f"'{v}' is not readable.")
-        return str(v)  # Return validated Path object
+
+        # Convert to Path for validation
+        path_obj = Path(v)
+
+        # Only validate path existence/accessibility if path exists in current environment
+        # This allows Docker-specific paths (e.g., /app/depictio/...) to pass validation
+        # when running CLI on host, while still validating actual local paths
+        if path_obj.exists():
+            if not path_obj.is_dir():
+                raise ValueError(f"'{v}' is not a directory.")
+            if not os.access(path_obj, os.R_OK):
+                raise ValueError(f"'{v}' is not readable.")
+
+        return str(v)  # Return as string
 
 
 class HashModel(BaseModel):
