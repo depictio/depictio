@@ -105,7 +105,7 @@
       "dc_id": {
         "$oid": "646b0f3c1e4a2d7f8e5b8ca1"
       },
-      "code_content": "df_modified = df.to_pandas()\nfig = px.scatter(df_modified, x='bill_length_mm', y='flipper_length_mm', color='island', size='body_mass_g', title='Palmer Penguins: Island Morphology', color_discrete_map={'Biscoe': '#6366f1', 'Dream': '#f59e0b', 'Torgersen': '#10b981'}, template='plotly_white')\n"
+      "code_content": "df_modified = df.to_pandas().groupby(['island', 'species']).agg({'body_mass_g': 'mean', 'bill_length_mm': 'count'}).reset_index().rename(columns={'bill_length_mm': 'count'})\nfig = px.sunburst(df_modified, path=['island', 'species'], values='count', color='island', color_discrete_map={'Biscoe': '#6366f1', 'Dream': '#f59e0b', 'Torgersen': '#10b981'}, title='Palmer Penguins: Island & Species Distribution', hover_data={'body_mass_g': ':.0f'})\n"
     },
     {
       "index": "species-count",
