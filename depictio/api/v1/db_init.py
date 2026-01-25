@@ -177,14 +177,20 @@ async def create_initial_dashboards(admin_user: UserBeanie) -> list[dict | None]
             ),
             "static_dc_id": STATIC_IDS["iris"]["data_collections"]["iris_table"],
         },
-        # Add more dashboards here:
-        # {
-        #     "name": "penguins",
-        #     "json_path": os.path.join(
-        #         os.path.dirname(__file__), "..", "..", "projects", "reference", "penguins", "dashboard.json"
-        #     ),
-        #     "static_dc_id": STATIC_IDS["penguins"]["data_collections"]["physical_features"],
-        # },
+        {
+            "name": "penguins",
+            "json_path": os.path.join(
+                os.path.dirname(__file__), "..", "..", "projects", "reference", "penguins", "dashboard.json"
+            ),
+            "static_dc_id": STATIC_IDS["penguins"]["data_collections"]["penguins_complete"],
+        },
+        {
+            "name": "multiqc",
+            "json_path": os.path.join(
+                os.path.dirname(__file__), "..", "..", "projects", "reference", "multiqc", "dashboard.json"
+            ),
+            "static_dc_id": STATIC_IDS["multiqc"]["data_collections"]["multiqc_data"],
+        },
     ]
 
     results = []
@@ -461,9 +467,9 @@ async def initialize_db(wipe: bool = False) -> UserBeanie | None:
 
     logger.info(f"Created {len(created_projects)} reference datasets")
 
-    # Create dashboard (only iris has one currently)
-    dashboard_payload = await create_initial_dashboard(admin_user=admin_user)
-    logger.debug(f"Dashboard payload: {dashboard_payload}")
+    # Create dashboards for all reference datasets
+    dashboard_payloads = await create_initial_dashboards(admin_user=admin_user)
+    logger.info(f"Created {len([p for p in dashboard_payloads if p])} dashboards")
 
     logger.info("Database initialization completed successfully.")
 

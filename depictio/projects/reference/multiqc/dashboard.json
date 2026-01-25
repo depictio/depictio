@@ -1,0 +1,78 @@
+{
+  "_id": {
+    "$oid": "6824cb3b89d2b72169309739"
+  },
+  "dashboard_id": {
+    "$oid": "6824cb3b89d2b72169309739"
+  },
+  "title": "MultiQC Quality Control Dashboard",
+  "project_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8ca2"
+  },
+  "permissions": {
+    "owners": [
+      {
+        "_id": {
+          "$oid": "67658ba033c8b59ad489d7c7"
+        },
+        "email": "admin@example.com",
+        "is_admin": true
+      }
+    ],
+    "editors": [],
+    "viewers": []
+  },
+  "stored_metadata": [
+    {
+      "index": "multiqc-fastqc-general",
+      "component_type": "multiqc",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca4"
+      },
+      "multiqc_config": {
+        "module": "fastqc",
+        "plot_type": "general_stats"
+      }
+    },
+    {
+      "index": "sample-count",
+      "component_type": "card",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca5"
+      },
+      "aggregation": "count",
+      "column_type": "object",
+      "column_name": "sample_name",
+      "title_color": "#8BC34A",
+      "icon_name": "mdi:dna",
+      "icon_color": "#8BC34A",
+      "title_font_size": "xl",
+      "value_font_size": "xl"
+    }
+  ],
+  "stored_layout_data": [
+    {
+      "i": "box-multiqc-fastqc-general",
+      "x": 0,
+      "y": 0,
+      "w": 40,
+      "h": 20
+    },
+    {
+      "i": "box-sample-count",
+      "x": 40,
+      "y": 0,
+      "w": 8,
+      "h": 8
+    }
+  ],
+  "is_public": true,
+  "icon": "/assets/images/icons/favicon.png",
+  "version": 1
+}

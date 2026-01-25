@@ -1,0 +1,130 @@
+{
+  "_id": {
+    "$oid": "6824cb3b89d2b72169309738"
+  },
+  "dashboard_id": {
+    "$oid": "6824cb3b89d2b72169309738"
+  },
+  "title": "Penguins Species Analysis",
+  "project_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8c9d"
+  },
+  "permissions": {
+    "owners": [
+      {
+        "_id": {
+          "$oid": "67658ba033c8b59ad489d7c7"
+        },
+        "email": "admin@example.com",
+        "is_admin": true
+      }
+    ],
+    "editors": [],
+    "viewers": []
+  },
+  "stored_metadata": [
+    {
+      "index": "scatter-flipper-body",
+      "component_type": "figure",
+      "visu_type": "scatter",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8c9e"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca1"
+      },
+      "dict_kwargs": {
+        "x": "flipper_length_mm",
+        "y": "body_mass_g",
+        "color": "species",
+        "size": "bill_length_mm",
+        "color_discrete_map": "{\"Adelie\": \"#1f77b4\", \"Chinstrap\": \"#ff7f0e\", \"Gentoo\": \"#2ca02c\"}",
+        "title": "Penguin Body Mass vs Flipper Length",
+        "template": "mantine_light",
+        "size_max": 20,
+        "marginal_x": "histogram",
+        "marginal_y": "rug",
+        "trendline": "ols"
+      }
+    },
+    {
+      "index": "species-count",
+      "component_type": "card",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8c9e"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca1"
+      },
+      "aggregation": "nunique",
+      "column_type": "object",
+      "column_name": "species",
+      "title_color": "#8BC34A",
+      "icon_name": "mdi:penguin",
+      "icon_color": "#8BC34A",
+      "title_font_size": "xl",
+      "value_font_size": "xl"
+    },
+    {
+      "index": "body-mass-average",
+      "component_type": "card",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8c9e"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca1"
+      },
+      "aggregation": "average",
+      "column_type": "float64",
+      "column_name": "body_mass_g",
+      "title_color": "#F68B33",
+      "icon_name": "mdi:weight",
+      "icon_color": "#F68B33",
+      "title_font_size": "xl",
+      "value_font_size": "xl"
+    },
+    {
+      "index": "data-table",
+      "component_type": "table",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8c9e"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca1"
+      }
+    }
+  ],
+  "stored_layout_data": [
+    {
+      "i": "box-scatter-flipper-body",
+      "x": 0,
+      "y": 0,
+      "w": 32,
+      "h": 16
+    },
+    {
+      "i": "box-species-count",
+      "x": 32,
+      "y": 0,
+      "w": 8,
+      "h": 8
+    },
+    {
+      "i": "box-body-mass-average",
+      "x": 40,
+      "y": 0,
+      "w": 8,
+      "h": 8
+    },
+    {
+      "i": "box-data-table",
+      "x": 0,
+      "y": 16,
+      "w": 48,
+      "h": 16
+    }
+  ],
+  "is_public": true,
+  "icon": "/assets/images/icons/favicon.png",
+  "version": 1
+}
