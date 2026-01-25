@@ -245,6 +245,7 @@ dashboards/local/
 !demographic_data.csv
 !physical_features.csv
 !sample_metadata.csv
+!test_data.csv
 
 # Cypress
 depictio/tests/e2e-tests/node_modules/
