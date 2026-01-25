@@ -158,25 +158,77 @@ async def create_initial_project_legacy(
         }
 
 
-async def create_initial_dashboard(admin_user: UserBeanie) -> dict | None:
-    """Create initial demo dashboard with static dc_ids for K8s consistency."""
-    from depictio.api.v1.db import dashboards_collection
+async def create_initial_dashboards(admin_user: UserBeanie) -> list[dict | None]:
+    """Create all initial demo dashboards for reference datasets.
 
-    dashboard_json_path = os.path.join(
-        os.path.dirname(__file__), "..", "..", "projects", "init", "iris", "dashboard.json"
-    )
+    Args:
+        admin_user: Admin user to set as dashboard owner
+
+    Returns:
+        List of dashboard creation responses
+    """
+    from depictio.api.v1.db_init_reference_datasets import STATIC_IDS
+
+    dashboards_config = [
+        {
+            "name": "iris",
+            "json_path": os.path.join(
+                os.path.dirname(__file__), "..", "..", "projects", "init", "iris", "dashboard.json"
+            ),
+            "static_dc_id": STATIC_IDS["data_collections"]["iris"]["iris_table"],
+        },
+        # Add more dashboards here:
+        # {
+        #     "name": "penguins",
+        #     "json_path": os.path.join(
+        #         os.path.dirname(__file__), "..", "..", "projects", "reference", "penguins", "dashboard.json"
+        #     ),
+        #     "static_dc_id": STATIC_IDS["data_collections"]["penguins"]["penguins_data"],
+        # },
+    ]
+
+    results = []
+    for dashboard_config in dashboards_config:
+        logger.info(f"Creating dashboard: {dashboard_config['name']}")
+        result = await create_dashboard_from_json(
+            admin_user=admin_user,
+            dashboard_json_path=dashboard_config["json_path"],
+            static_dc_id=dashboard_config["static_dc_id"],
+        )
+        results.append(result)
+
+    return results
+
+
+async def create_dashboard_from_json(
+    admin_user: UserBeanie,
+    dashboard_json_path: str,
+    static_dc_id: str,
+) -> dict | None:
+    """Create dashboard from JSON file with static dc_ids for K8s consistency.
+
+    Args:
+        admin_user: Admin user to set as dashboard owner
+        dashboard_json_path: Path to dashboard JSON file
+        static_dc_id: Static data collection ID to use for all components
+
+    Returns:
+        Dashboard creation response or None
+    """
     # Load the dashboard configuration from the JSON file
     from bson import json_util
+
+    from depictio.api.v1.db import dashboards_collection
+
+    if not os.path.exists(dashboard_json_path):
+        logger.warning(f"Dashboard JSON not found: {dashboard_json_path}")
+        return None
 
     dashboard_data = json.load(open(dashboard_json_path, "r"), object_hook=json_util.object_hook)
     logger.debug(f"Dashboard data: {dashboard_data}")
     _check = dashboards_collection.find_one({"_id": ObjectId(dashboard_data["_id"])})
 
-    # CRITICAL: Force static data collection ID in dashboard components
-    # This ensures dashboard references the correct static dc_id across K8s instances
-    STATIC_DC_ID = "646b0f3c1e4a2d7f8e5b8c9c"
-
-    logger.info(f"Forcing static data collection ID in dashboard: {STATIC_DC_ID}")
+    logger.info(f"Forcing static data collection ID in dashboard: {static_dc_id}")
 
     # If dashboard already exists, verify and fix dc_ids in existing dashboard
     if _check:
@@ -188,24 +240,24 @@ async def create_initial_dashboard(admin_user: UserBeanie) -> dict | None:
                 # Check and fix top-level dc_id
                 if "dc_id" in component:
                     current_dc_id = str(component["dc_id"])
-                    if current_dc_id != STATIC_DC_ID:
+                    if current_dc_id != static_dc_id:
                         logger.warning(
                             f"Component {component.get('index', 'unknown')} has wrong dc_id: "
-                            f"{current_dc_id}, fixing to {STATIC_DC_ID}"
+                            f"{current_dc_id}, fixing to {static_dc_id}"
                         )
-                        component["dc_id"] = ObjectId(STATIC_DC_ID)
+                        component["dc_id"] = ObjectId(static_dc_id)
                         needs_update = True
 
                 # Check and fix nested dc_config._id
                 if "dc_config" in component and isinstance(component["dc_config"], dict):
                     if "_id" in component["dc_config"]:
                         current_config_id = str(component["dc_config"]["_id"])
-                        if current_config_id != STATIC_DC_ID:
+                        if current_config_id != static_dc_id:
                             logger.warning(
                                 f"Component {component.get('index', 'unknown')} has wrong dc_config._id: "
-                                f"{current_config_id}, fixing to {STATIC_DC_ID}"
+                                f"{current_config_id}, fixing to {static_dc_id}"
                             )
-                            component["dc_config"]["_id"] = ObjectId(STATIC_DC_ID)
+                            component["dc_config"]["_id"] = ObjectId(static_dc_id)
                             needs_update = True
 
         if needs_update:
@@ -232,23 +284,23 @@ async def create_initial_dashboard(admin_user: UserBeanie) -> dict | None:
             # Note: json_util.object_hook converts {"$oid": "..."} to ObjectId objects
             if "dc_id" in component:
                 current_dc_id = str(component.get("dc_id", ""))
-                if current_dc_id != STATIC_DC_ID:
+                if current_dc_id != static_dc_id:
                     logger.debug(
                         f"Updating component {component.get('index', 'unknown')} dc_id "
-                        f"from {current_dc_id} to {STATIC_DC_ID}"
+                        f"from {current_dc_id} to {static_dc_id}"
                     )
-                    component["dc_id"] = ObjectId(STATIC_DC_ID)
+                    component["dc_id"] = ObjectId(static_dc_id)
 
             # Force nested dc_config._id
             if "dc_config" in component and isinstance(component["dc_config"], dict):
                 if "_id" in component["dc_config"]:
                     current_config_id = str(component["dc_config"].get("_id", ""))
-                    if current_config_id != STATIC_DC_ID:
+                    if current_config_id != static_dc_id:
                         logger.debug(
                             f"Updating component {component.get('index', 'unknown')} dc_config._id "
-                            f"from {current_config_id} to {STATIC_DC_ID}"
+                            f"from {current_config_id} to {static_dc_id}"
                         )
-                        component["dc_config"]["_id"] = ObjectId(STATIC_DC_ID)
+                        component["dc_config"]["_id"] = ObjectId(static_dc_id)
 
     logger.info(
         f"Updated {len(dashboard_data.get('stored_metadata', []))} dashboard components with static dc_id"
@@ -276,6 +328,25 @@ async def create_initial_dashboard(admin_user: UserBeanie) -> dict | None:
     )
     logger.debug(f"Dashboard response: {response}")
     return response
+
+
+async def create_initial_dashboard(admin_user: UserBeanie) -> dict | None:
+    """Legacy wrapper for backward compatibility - creates only Iris dashboard.
+
+    For creating multiple dashboards, use create_initial_dashboards() instead.
+    """
+    from depictio.api.v1.db_init_reference_datasets import STATIC_IDS
+
+    dashboard_json_path = os.path.join(
+        os.path.dirname(__file__), "..", "..", "projects", "init", "iris", "dashboard.json"
+    )
+    static_dc_id = STATIC_IDS["data_collections"]["iris"]["iris_table"]
+
+    return await create_dashboard_from_json(
+        admin_user=admin_user,
+        dashboard_json_path=dashboard_json_path,
+        static_dc_id=static_dc_id,
+    )
 
 
 async def initialize_db(wipe: bool = False) -> UserBeanie | None:

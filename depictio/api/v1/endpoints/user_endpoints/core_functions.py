@@ -663,10 +663,29 @@ async def _create_user_in_db(
         last_login=current_time,
     )
 
-    await user_beanie.create()
+    try:
+        await user_beanie.create()
+        return {
+            "success": True,
+            "message": "User created successfully",
+            "user": user_beanie,
+        }
+    except Exception as e:
+        # Handle race condition: another worker created the user between check and create
+        from pymongo.errors import DuplicateKeyError
 
-    return {
-        "success": True,
-        "message": "User created successfully",
-        "user": user_beanie,
-    }
+        if isinstance(e.__cause__, DuplicateKeyError) or "duplicate key error" in str(e).lower():
+            logger.warning(
+                f"Race condition detected: user {email} was created by another worker. "
+                f"Retrieving existing user."
+            )
+            # Retrieve the user that was created by the other worker
+            existing_user = await UserBeanie.find_one(search_query)
+            if existing_user:
+                return {
+                    "success": False,
+                    "message": "User already exists (created by another worker)",
+                    "user": existing_user,
+                }
+        # Re-raise if it's a different error
+        raise
