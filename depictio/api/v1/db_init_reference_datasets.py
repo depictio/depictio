@@ -9,44 +9,44 @@ from depictio.api.v1.configs.logging_init import logger
 from depictio.models.models.users import Permission, UserBase, UserBeanie
 from depictio.models.utils import get_config
 
+# Static ID mappings (hardcoded for K8s consistency)
+STATIC_IDS = {
+    "iris": {
+        "project": "646b0f3c1e4a2d7f8e5b8c9a",
+        "workflows": {"iris_workflow": "646b0f3c1e4a2d7f8e5b8c9b"},
+        "data_collections": {
+            "iris_table": "646b0f3c1e4a2d7f8e5b8c9c",
+        },
+    },
+    "penguins": {
+        "project": "646b0f3c1e4a2d7f8e5b8c9d",
+        "workflows": {"penguin_species_analysis": "646b0f3c1e4a2d7f8e5b8c9e"},
+        "data_collections": {
+            "physical_features": "646b0f3c1e4a2d7f8e5b8c9f",
+            "demographic_data": "646b0f3c1e4a2d7f8e5b8ca0",
+            "penguins_complete": "646b0f3c1e4a2d7f8e5b8ca1",  # Join result
+        },
+    },
+    "multiqc": {
+        "project": "646b0f3c1e4a2d7f8e5b8ca2",
+        "workflows": {"test-workflow": "646b0f3c1e4a2d7f8e5b8ca3"},
+        "data_collections": {
+            "multiqc_data": "646b0f3c1e4a2d7f8e5b8ca4",
+            "sample_metadata": "646b0f3c1e4a2d7f8e5b8ca5",
+            "sample_qc_metrics": "646b0f3c1e4a2d7f8e5b8ca6",
+            "qc_with_metadata": "646b0f3c1e4a2d7f8e5b8ca7",  # Join result
+        },
+    },
+}
+
 
 class ReferenceDatasetRegistry:
     """Central registry for reference datasets with static ID management."""
 
-    # Static ID mappings (hardcoded for K8s consistency)
-    STATIC_IDS = {
-        "iris": {
-            "project": "646b0f3c1e4a2d7f8e5b8c9a",
-            "workflows": {"iris_workflow": "646b0f3c1e4a2d7f8e5b8c9b"},
-            "data_collections": {
-                "iris_table": "646b0f3c1e4a2d7f8e5b8c9c",
-            },
-        },
-        "penguins": {
-            "project": "646b0f3c1e4a2d7f8e5b8c9d",
-            "workflows": {"penguin_species_analysis": "646b0f3c1e4a2d7f8e5b8c9e"},
-            "data_collections": {
-                "physical_features": "646b0f3c1e4a2d7f8e5b8c9f",
-                "demographic_data": "646b0f3c1e4a2d7f8e5b8ca0",
-                "penguins_complete": "646b0f3c1e4a2d7f8e5b8ca1",  # Join result
-            },
-        },
-        "multiqc": {
-            "project": "646b0f3c1e4a2d7f8e5b8ca2",
-            "workflows": {"test-workflow": "646b0f3c1e4a2d7f8e5b8ca3"},
-            "data_collections": {
-                "multiqc_data": "646b0f3c1e4a2d7f8e5b8ca4",
-                "sample_metadata": "646b0f3c1e4a2d7f8e5b8ca5",
-                "sample_qc_metrics": "646b0f3c1e4a2d7f8e5b8ca6",
-                "qc_with_metadata": "646b0f3c1e4a2d7f8e5b8ca7",  # Join result
-            },
-        },
-    }
-
     @classmethod
     def inject_static_ids(cls, project_config: dict[str, Any], dataset_name: str) -> dict[str, Any]:
         """Inject static IDs into project configuration including join results."""
-        static_ids = cls.STATIC_IDS[dataset_name]
+        static_ids = STATIC_IDS[dataset_name]
 
         # Set project ID
         project_config["id"] = static_ids["project"]

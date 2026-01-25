@@ -175,7 +175,7 @@ async def create_initial_dashboards(admin_user: UserBeanie) -> list[dict | None]
             "json_path": os.path.join(
                 os.path.dirname(__file__), "..", "..", "projects", "init", "iris", "dashboard.json"
             ),
-            "static_dc_id": STATIC_IDS["data_collections"]["iris"]["iris_table"],
+            "static_dc_id": STATIC_IDS["iris"]["data_collections"]["iris_table"],
         },
         # Add more dashboards here:
         # {
@@ -183,7 +183,7 @@ async def create_initial_dashboards(admin_user: UserBeanie) -> list[dict | None]
         #     "json_path": os.path.join(
         #         os.path.dirname(__file__), "..", "..", "projects", "reference", "penguins", "dashboard.json"
         #     ),
-        #     "static_dc_id": STATIC_IDS["data_collections"]["penguins"]["penguins_data"],
+        #     "static_dc_id": STATIC_IDS["penguins"]["data_collections"]["physical_features"],
         # },
     ]
 
@@ -340,7 +340,7 @@ async def create_initial_dashboard(admin_user: UserBeanie) -> dict | None:
     dashboard_json_path = os.path.join(
         os.path.dirname(__file__), "..", "..", "projects", "init", "iris", "dashboard.json"
     )
-    static_dc_id = STATIC_IDS["data_collections"]["iris"]["iris_table"]
+    static_dc_id = STATIC_IDS["iris"]["data_collections"]["iris_table"]
 
     return await create_dashboard_from_json(
         admin_user=admin_user,
