@@ -421,6 +421,8 @@ def register_ui_callbacks(app):
                         "marker_line_width": 2 if hl.get("outline") else 0,
                         "dim_opacity": 0.3,
                     },
+                    # link_type: "static" = fixed selection, "dynamic" = updates with slider
+                    "link_type": hl.get("link_type", "static"),
                 }
                 for hl in highlights
             ]
@@ -477,13 +479,18 @@ def register_ui_callbacks(app):
     )
     def add_reference_line(n_clicks, current_lines, store_id):
         """Add a new reference line."""
+        logger.warning(f"🔥 ADD REFLINE CALLBACK FIRED! n_clicks={n_clicks}, store_id={store_id}")
+
         if not n_clicks:
+            logger.warning("🔥 ADD REFLINE: No clicks, preventing update")
             raise dash.exceptions.PreventUpdate
 
         component_index = store_id["index"]
+        logger.warning(f"🔥 ADD REFLINE: component_index={component_index}")
 
         # Get current lines or initialize empty list
         lines = current_lines if isinstance(current_lines, list) else []
+        logger.warning(f"🔥 ADD REFLINE: current lines count={len(lines)}")
 
         # Add new line with defaults
         new_line = {
@@ -496,12 +503,17 @@ def register_ui_callbacks(app):
             "show_slider": True,  # Enable slider by default for view mode controls
         }
         lines.append(new_line)
+        logger.warning(f"🔥 ADD REFLINE: Added new line, total={len(lines)}")
 
         # Update state manager
         state = state_manager.get_state(component_index)
         if state:
+            logger.warning("🔥 ADD REFLINE: State found, updating state manager")
             state.set_parameter_value("reference_lines", lines)
+        else:
+            logger.error(f"🔥 ADD REFLINE: NO STATE FOUND for index {component_index}!")
 
+        logger.warning(f"🔥 ADD REFLINE: Returning {len(lines)} lines")
         return lines
 
     # Callback to update reflines container when store changes
@@ -753,13 +765,18 @@ def register_ui_callbacks(app):
     )
     def add_highlight(n_clicks, current_highlights, store_id):
         """Add a new highlight to the list."""
+        logger.warning(f"🔥 ADD HIGHLIGHT CALLBACK FIRED! n_clicks={n_clicks}, store_id={store_id}")
+
         if not n_clicks:
+            logger.warning("🔥 ADD HIGHLIGHT: No clicks, preventing update")
             raise dash.exceptions.PreventUpdate
 
         component_index = store_id["index"]
+        logger.warning(f"🔥 ADD HIGHLIGHT: component_index={component_index}")
 
         # Get current highlights
         highlights = current_highlights if isinstance(current_highlights, list) else []
+        logger.warning(f"🔥 ADD HIGHLIGHT: current highlights count={len(highlights)}")
 
         # Add new highlight with default values
         new_highlight = {
@@ -769,14 +786,20 @@ def register_ui_callbacks(app):
             "color": "red",
             "size": 12,
             "outline": "",
+            "link_type": "static",  # Default to static (won't change with sliders)
         }
         highlights.append(new_highlight)
+        logger.warning(f"🔥 ADD HIGHLIGHT: Added new highlight, total={len(highlights)}")
 
         # Update state manager
         state = state_manager.get_state(component_index)
         if state:
+            logger.warning("🔥 ADD HIGHLIGHT: State found, updating state manager")
             state.set_parameter_value("highlights", highlights)
+        else:
+            logger.error(f"🔥 ADD HIGHLIGHT: NO STATE FOUND for index {component_index}!")
 
+        logger.warning(f"🔥 ADD HIGHLIGHT: Returning {len(highlights)} highlights")
         return highlights
 
     # Callback to update highlights display
@@ -945,6 +968,25 @@ def register_ui_callbacks(app):
                                     ],
                                     gutter="xs",
                                 ),
+                                # Link type selector (static vs dynamic)
+                                dmc.Select(
+                                    label="Update behavior",
+                                    description="Static: fixed selection. Dynamic: updates with slider.",
+                                    data=[
+                                        {"value": "static", "label": "Static (fixed selection)"},
+                                        {
+                                            "value": "dynamic",
+                                            "label": "Dynamic (updates with slider)",
+                                        },
+                                    ],
+                                    value=hl.get("link_type", "static"),
+                                    id={
+                                        "type": "highlight-link-type",
+                                        "index": component_index,
+                                        "hl_idx": idx,
+                                    },
+                                    size="xs",
+                                ),
                             ],
                             gap="xs",
                         ),
@@ -1001,13 +1043,22 @@ def register_ui_callbacks(app):
             Input({"type": "highlight-color", "index": MATCH, "hl_idx": ALL}, "value"),
             Input({"type": "highlight-size", "index": MATCH, "hl_idx": ALL}, "value"),
             Input({"type": "highlight-outline", "index": MATCH, "hl_idx": ALL}, "value"),
+            Input({"type": "highlight-link-type", "index": MATCH, "hl_idx": ALL}, "value"),
         ],
         State({"type": "highlights-store", "index": MATCH}, "data"),
         State({"type": "highlights-store", "index": MATCH}, "id"),
         prevent_initial_call=True,
     )
     def update_highlight_properties(
-        columns, conditions, values, colors, sizes, outlines, current_highlights, store_id
+        columns,
+        conditions,
+        values,
+        colors,
+        sizes,
+        outlines,
+        link_types,
+        current_highlights,
+        store_id,
     ):
         """Update highlight properties."""
         if not dash.callback_context.triggered:
@@ -1028,6 +1079,7 @@ def register_ui_callbacks(app):
                 "color": colors[idx] if idx < len(colors) else "red",
                 "size": sizes[idx] if idx < len(sizes) else 12,
                 "outline": outlines[idx] if idx < len(outlines) else "",
+                "link_type": link_types[idx] if idx < len(link_types) else "static",
             }
             updated_highlights.append(updated_highlight)
 

@@ -492,10 +492,24 @@ def _process_single_figure(
         dict_kwargs = trigger_data.get("dict_kwargs", {})
         code_content = trigger_data.get("code_content", "")
 
-        # Extract customizations from stored metadata
+        # Extract customizations - PRIORITY ORDER:
+        # 1. From trigger_data (guaranteed fresh from slider callback, bypasses State race condition)
+        # 2. From stored_metadata (fallback for non-slider triggers)
         customizations = None
-        if stored_metadata and isinstance(stored_metadata, dict):
+
+        # PRIORITY 1: Use customizations from trigger (guaranteed fresh from slider callback)
+        if trigger_data.get("customizations"):
+            customizations = trigger_data["customizations"]
+            logger.warning(
+                f"[{task_id}] 🔥 RENDER: Got customizations from TRIGGER "
+                f"({len(customizations.get('highlights', []))} highlights)"
+            )
+
+        # PRIORITY 2: Fall back to stored metadata
+        if not customizations and stored_metadata and isinstance(stored_metadata, dict):
             customizations = stored_metadata.get("customizations")
+            if customizations:
+                logger.debug(f"[{task_id}] Got customizations from stored_metadata")
 
         load_key = figure_to_load_key.get(figure_index)
         if not load_key or load_key not in dc_cache:
@@ -862,7 +876,8 @@ def _create_figure_from_data(
         if customizations:
             from depictio.dash.modules.figure_component.customizations import apply_customizations
 
-            fig = apply_customizations(fig, customizations)
+            # Pass DataFrame to enable highlight evaluation
+            fig = apply_customizations(fig, customizations, df=pandas_df)
 
         layout_updates = {
             "paper_bgcolor": "rgba(0,0,0,0)",
