@@ -6,28 +6,14 @@
 
 
 <details>
-<summary>Click to expand the changelog for 0.6.0-b18</summary>
+<summary>Click to expand the changelog for 0.6.0</summary>
 
 ### Changes 📜
 
-#### Bug Fixes 🐛
-
-* fix: sync Chart.yaml appVersion to 0.6.0-b17 [28d9b9bb]
-* fix: allow explicit DEPICTIO_FASTAPI_PUBLIC_URL override in configmaps [656cc710]
-* fix: sync all version files to 0.6.0-b17 [5138b1b0]
-* fix: correct corrupted appVersion in Chart.yaml [eb620716]
-* fix: correct corrupted version strings across all files [f52a31ae]
-* fix: add explicit API URL and reduce replicas for EMBL dev [543df3c8]
-
 #### Other Changes 📝
 
-* Bump version: 0.6.0-b17 → 0.6.0-b18 [8519a0b2]
-* Update CHANGELOG.md for v0.6.0-b18 [b8bfb9ce]
-* Update CHANGELOG.md for v0.6.0-b17 [9ec681ef]
-* Update CHANGELOG.md for v0.6.0-b17 [0cbce25d]
-* Update CHANGELOG.md for v0.6.0-b16 [96a3e7c0]
-* Update CHANGELOG.md for v0.6.0-b15 [feb56cae]
-* Bump version: 0.6.0-b14 → 0.6.0-b15 [6bbd147b]
+* Bump version: 0.6.0-b18 → 0.6.0 [7fdd448d]
+* Bump version: 0.6.0-b17 → 0.6.0-b18 [1afcd278]
 
 
 </details>
@@ -36,18 +22,7 @@
 
 For more details, please refer to the [documentation](https://depictio.github.io/depictio-docs/)
 
-ection [8913f698]
-* fix: update mock CLI configuration for backup tests [58f27258]
-* fix: resolve CLI configuration field name inconsistencies [fa9481b1]
-
-#### Improvements 🚀
-
-* refactor: Comment out Ruff action steps for clarity and debugging [0cd82e67]
-* refactor: Add version file parameter to Ruff checks for consistency [4d831913]
-* refactor: Update Ruff steps for improved debugging and formatting checks [6c92693a]
-* refactor: Update Ruff action steps for improved formatting and error handling [d1c5d584]
-* refactor: Remove unused imports and clean up test file for import sorting [53b6b467]
-* refactor: Simplify debug workflow by commenting out unnecessary steps [a2e22184]
+ecessary steps [a2e22184]
 * refactor: Standardize import statements across multiple files for consistency [0349df19]
 * refactor: Reorganize import statements for consistency across multiple files [abd9c70d]
 * refactor: Standardize import statements across multiple files for consistency [50c50cf6]
