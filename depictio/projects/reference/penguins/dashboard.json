@@ -37,14 +37,16 @@
         "x": "flipper_length_mm",
         "y": "body_mass_g",
         "color": "species",
+        "symbol": "island",
         "size": "bill_length_mm",
         "color_discrete_map": "{\"Adelie\": \"#1f77b4\", \"Chinstrap\": \"#ff7f0e\", \"Gentoo\": \"#2ca02c\"}",
-        "title": "Body Mass vs Flipper Length",
+        "title": "Body Mass vs Flipper Length by Species and Island",
         "template": "mantine_light",
-        "size_max": 20,
-        "marginal_x": "histogram",
-        "marginal_y": "rug",
-        "trendline": "ols"
+        "size_max": 15,
+        "marginal_x": "box",
+        "marginal_y": "violin",
+        "trendline": "lowess",
+        "labels": "{\"flipper_length_mm\": \"Flipper Length (mm)\", \"body_mass_g\": \"Body Mass (g)\", \"bill_length_mm\": \"Bill Length (mm)\", \"island\": \"Island\", \"species\": \"Species\"}"
       }
     },
     {
@@ -60,14 +62,50 @@
       "dict_kwargs": {
         "x": "species",
         "y": "bill_length_mm",
-        "color": "species",
-        "color_discrete_map": "{\"Adelie\": \"#1f77b4\", \"Chinstrap\": \"#ff7f0e\", \"Gentoo\": \"#2ca02c\"}",
-        "title": "Bill Length by Species",
+        "color": "sex",
+        "color_discrete_map": "{\"male\": \"#1976D2\", \"female\": \"#E91E63\"}",
+        "title": "Bill Length Distribution by Species and Sex",
         "template": "mantine_light",
         "boxmode": "group",
         "points": "all",
-        "notched": true
+        "notched": true,
+        "labels": "{\"bill_length_mm\": \"Bill Length (mm)\", \"species\": \"Species\", \"sex\": \"Sex\"}"
       }
+    },
+    {
+      "index": "histogram-bill-depth",
+      "component_type": "figure",
+      "visu_type": "histogram",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8c9e"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca1"
+      },
+      "dict_kwargs": {
+        "x": "bill_depth_mm",
+        "color": "species",
+        "color_discrete_map": "{\"Adelie\": \"#1f77b4\", \"Chinstrap\": \"#ff7f0e\", \"Gentoo\": \"#2ca02c\"}",
+        "title": "Bill Depth Distribution by Species",
+        "template": "mantine_light",
+        "barmode": "overlay",
+        "opacity": 0.7,
+        "nbins": 30,
+        "marginal": "rug",
+        "labels": "{\"bill_depth_mm\": \"Bill Depth (mm)\", \"species\": \"Species\"}"
+      }
+    },
+    {
+      "index": "custom-island-morphology",
+      "component_type": "figure",
+      "mode": "code",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8c9e"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca1"
+      },
+      "code_content": "import plotly.graph_objects as go\ntry:\n    from plotly.subplots import make_subplots\nexcept ImportError:\n    import plotly.tools as tls\n    make_subplots = tls.make_subplots\n\n# Custom color palette for islands\nisland_colors = {\n    'Biscoe': '#6366f1',      # Indigo\n    'Dream': '#f59e0b',       # Amber\n    'Torgersen': '#10b981'    # Emerald\n}\n\n# Create subplots: 2 rows, 2 columns\nfig = make_subplots(\n    rows=2, cols=2,\n    subplot_titles=(\n        'Body Mass Distribution by Island',\n        'Flipper Length vs Bill Length',\n        'Bill Dimensions Comparison',\n        'Morphological Summary by Island'\n    ),\n    specs=[\n        [{'type': 'box'}, {'type': 'scatter'}],\n        [{'type': 'scatter'}, {'type': 'bar'}]\n    ],\n    vertical_spacing=0.12,\n    horizontal_spacing=0.10\n)\n\n# Plot 1: Box plot of body mass by island\nfor island in df['island'].unique():\n    island_data = df[df['island'] == island]\n    fig.add_trace(\n        go.Box(\n            y=island_data['body_mass_g'],\n            name=island,\n            marker_color=island_colors[island],\n            boxmean='sd',\n            showlegend=True\n        ),\n        row=1, col=1\n    )\n\n# Plot 2: Scatter of flipper vs bill length colored by island\nfor island in df['island'].unique():\n    island_data = df[df['island'] == island]\n    fig.add_trace(\n        go.Scatter(\n            x=island_data['bill_length_mm'],\n            y=island_data['flipper_length_mm'],\n            mode='markers',\n            name=island,\n            marker=dict(\n                color=island_colors[island],\n                size=8,\n                opacity=0.7,\n                line=dict(width=1, color='white')\n            ),\n            showlegend=False\n        ),\n        row=1, col=2\n    )\n\n# Plot 3: Bill length vs depth with custom styling\nfor island in df['island'].unique():\n    island_data = df[df['island'] == island]\n    fig.add_trace(\n        go.Scatter(\n            x=island_data['bill_length_mm'],\n            y=island_data['bill_depth_mm'],\n            mode='markers',\n            name=island,\n            marker=dict(\n                color=island_colors[island],\n                size=island_data['body_mass_g'] / 400,\n                opacity=0.6,\n                line=dict(width=1.5, color='white'),\n                symbol='diamond'\n            ),\n            showlegend=False\n        ),\n        row=2, col=1\n    )\n\n# Plot 4: Average measurements by island\nisland_summary = df.groupby('island').agg({\n    'body_mass_g': 'mean',\n    'flipper_length_mm': 'mean',\n    'bill_length_mm': 'mean',\n    'bill_depth_mm': 'mean'\n}).reset_index()\n\nmeasurements = ['body_mass_g', 'flipper_length_mm', 'bill_length_mm', 'bill_depth_mm']\nmeasurement_labels = ['Body Mass (g)', 'Flipper (mm)', 'Bill Length (mm)', 'Bill Depth (mm)']\n\nfor i, (measurement, label) in enumerate(zip(measurements, measurement_labels)):\n    # Normalize to 0-1 scale for visualization\n    values = island_summary[measurement]\n    normalized = (values - values.min()) / (values.max() - values.min()) * 100\n    \n    fig.add_trace(\n        go.Bar(\n            x=island_summary['island'],\n            y=normalized,\n            name=label,\n            marker_color=['#ef4444', '#3b82f6', '#22c55e', '#f59e0b'][i],\n            opacity=0.8,\n            showlegend=True\n        ),\n        row=2, col=2\n    )\n\n# Update layout\nfig.update_xaxes(title_text='Island', row=1, col=1)\nfig.update_yaxes(title_text='Body Mass (g)', row=1, col=1)\n\nfig.update_xaxes(title_text='Bill Length (mm)', row=1, col=2)\nfig.update_yaxes(title_text='Flipper Length (mm)', row=1, col=2)\n\nfig.update_xaxes(title_text='Bill Length (mm)', row=2, col=1)\nfig.update_yaxes(title_text='Bill Depth (mm)', row=2, col=1)\n\nfig.update_xaxes(title_text='Island', row=2, col=2)\nfig.update_yaxes(title_text='Normalized Scale (%)', row=2, col=2)\n\nfig.update_layout(\n    title_text='Palmer Penguins: Island-Based Morphological Analysis',\n    title_font_size=18,\n    height=650,\n    showlegend=True,\n    legend=dict(\n        orientation='h',\n        yanchor='bottom',\n        y=-0.15,\n        xanchor='center',\n        x=0.5\n    ),\n    plot_bgcolor='rgba(0,0,0,0)',\n    paper_bgcolor='rgba(0,0,0,0)',\n    font=dict(size=11)\n)\n\nfig.update_layout(barmode='group')\n\nfig"
     },
     {
       "index": "species-count",
@@ -81,6 +119,7 @@
       "aggregation": "nunique",
       "column_type": "object",
       "column_name": "species",
+      "title": "Species Diversity",
       "title_color": "#8BC34A",
       "icon_name": "mdi:penguin",
       "icon_color": "#8BC34A",
@@ -99,10 +138,49 @@
       "aggregation": "average",
       "column_type": "float64",
       "column_name": "body_mass_g",
+      "title": "Avg Body Mass (g)",
       "title_color": "#F68B33",
       "icon_name": "mdi:weight",
       "icon_color": "#F68B33",
       "title_font_size": "xl",
+      "value_font_size": "xl"
+    },
+    {
+      "index": "total-count",
+      "component_type": "card",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8c9e"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca1"
+      },
+      "aggregation": "count",
+      "column_type": "object",
+      "column_name": "individual_id",
+      "title": "Total Individuals",
+      "title_color": "#5C6BC0",
+      "icon_name": "mdi:counter",
+      "icon_color": "#5C6BC0",
+      "title_font_size": "xl",
+      "value_font_size": "xl"
+    },
+    {
+      "index": "avg-flipper",
+      "component_type": "card",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8c9e"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca1"
+      },
+      "aggregation": "average",
+      "column_type": "float64",
+      "column_name": "flipper_length_mm",
+      "title": "`avg_flipper_length_mm`",
+      "title_color": "#26A69A",
+      "icon_name": "mdi:ruler",
+      "icon_color": "#26A69A",
+      "title_font_size": "md",
       "value_font_size": "xl"
     },
     {
@@ -155,6 +233,79 @@
       }
     },
     {
+      "component_type": "interactive",
+      "interactive_component_type": "MultiSelect",
+      "index": "island-filter",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8c9e"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca1"
+      },
+      "column_name": "island",
+      "column_type": "object",
+      "value": ["Biscoe", "Dream", "Torgersen"],
+      "scale": "linear",
+      "marks_number": 2,
+      "title_size": "md",
+      "custom_color": "#7E57C2",
+      "icon_name": "mdi:island",
+      "default_state": {
+        "type": "select",
+        "options": ["Biscoe", "Dream", "Torgersen"],
+        "default_value": null
+      }
+    },
+    {
+      "component_type": "interactive",
+      "interactive_component_type": "MultiSelect",
+      "index": "sex-filter",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8c9e"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca1"
+      },
+      "column_name": "sex",
+      "column_type": "object",
+      "value": ["male", "female"],
+      "scale": "linear",
+      "marks_number": 2,
+      "title_size": "md",
+      "custom_color": "#EC407A",
+      "icon_name": "mdi:gender-male-female",
+      "default_state": {
+        "type": "select",
+        "options": ["male", "female"],
+        "default_value": null
+      }
+    },
+    {
+      "component_type": "interactive",
+      "interactive_component_type": "RangeSlider",
+      "index": "bill-length-slider",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8c9e"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca1"
+      },
+      "column_name": "bill_length_mm",
+      "column_type": "float64",
+      "value": [32.1, 59.6],
+      "scale": "linear",
+      "marks_number": 2,
+      "title_size": "md",
+      "custom_color": "#FF7043",
+      "icon_name": "bx:slider",
+      "default_state": {
+        "type": "range",
+        "min_value": 32.1,
+        "max_value": 59.6,
+        "default_range": [32.1, 59.6]
+      }
+    },
+    {
       "index": "data-table",
       "component_type": "table",
       "wf_id": {
@@ -170,48 +321,97 @@
       "i": "box-scatter-flipper-body",
       "x": 0,
       "y": 0,
+      "w": 48,
+      "h": 18
+    },
+    {
+      "i": "box-box-bill-length-species",
+      "x": 0,
+      "y": 18,
       "w": 24,
       "h": 14
     },
     {
-      "i": "box-box-bill-length-species",
+      "i": "box-histogram-bill-depth",
       "x": 24,
-      "y": 0,
+      "y": 18,
       "w": 24,
       "h": 14
+    },
+    {
+      "i": "box-custom-island-morphology",
+      "x": 0,
+      "y": 32,
+      "w": 48,
+      "h": 20
     },
     {
       "i": "box-species-count",
       "x": 0,
-      "y": 14,
+      "y": 52,
       "w": 8,
       "h": 6
     },
     {
       "i": "box-body-mass-average",
       "x": 8,
-      "y": 14,
+      "y": 52,
+      "w": 8,
+      "h": 6
+    },
+    {
+      "i": "box-total-count",
+      "x": 16,
+      "y": 52,
+      "w": 8,
+      "h": 6
+    },
+    {
+      "i": "box-avg-flipper",
+      "x": 24,
+      "y": 52,
       "w": 8,
       "h": 6
     },
     {
       "i": "box-species-filter",
-      "x": 16,
-      "y": 14,
+      "x": 32,
+      "y": 52,
       "w": 16,
       "h": 6
     },
     {
       "i": "box-body-mass-slider",
+      "x": 0,
+      "y": 58,
+      "w": 16,
+      "h": 6
+    },
+    {
+      "i": "box-island-filter",
+      "x": 16,
+      "y": 58,
+      "w": 16,
+      "h": 6
+    },
+    {
+      "i": "box-sex-filter",
       "x": 32,
-      "y": 14,
+      "y": 58,
+      "w": 16,
+      "h": 6
+    },
+    {
+      "i": "box-bill-length-slider",
+      "x": 0,
+      "y": 64,
       "w": 16,
       "h": 6
     },
     {
       "i": "box-data-table",
       "x": 0,
-      "y": 20,
+      "y": 70,
       "w": 48,
       "h": 16
     }
