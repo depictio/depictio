@@ -55,25 +55,45 @@ Bioimaging generates massive datasets that are difficult to explore alongside qu
 
 A **standalone Dash application** (outside Depictio codebase) demonstrating:
 
-1. **Image Viewer** - Display OME-Zarr or OME-TIFF images with pan/zoom
-2. **Metadata Connection** - Image selection linked to a data table or dropdown
-3. **Basic Interactivity** - Selecting a row in a table shows corresponding image
-4. **Multi-channel Support** - Toggle/blend fluorescence channels (if applicable)
+1. **Image Viewer(s)** - Display images with pan/zoom (format-specific viewers)
+2. **Multi-format Support** - Different viewers for different formats (see architecture below)
+3. **Metadata Connection** - Image selection linked to other components
+4. **Basic Interactivity** - Selecting data shows corresponding image
+
+### Multi-Viewer Architecture
+
+Different formats → Different optimal viewers:
+
+| Format | Viewer | Rationale |
+|--------|--------|-----------|
+| **TIFF/PNG/JPG** | Simple `html.Img` or dash-leaflet | No special handling needed |
+| **OME-TIFF** | Viv/Avivator | Multi-channel, pyramidal support |
+| **OME-Zarr** | Vizarr | Cloud-native, chunked access |
+
+```python
+def build_image_viewer(format, source, **kwargs):
+    if format == "ome-zarr":
+        return VizarrViewer(source)
+    elif format == "ome-tiff":
+        return VivViewer(source)
+    else:  # tiff, png, jpg
+        return SimpleImageViewer(source)
+```
 
 ### Stretch Goals
 
+- **Multi-channel Controls** - Toggle/blend fluorescence channels
 - **Annotations** - Draw ROIs on images
-- **Linked Filtering** - Filter data based on image region selection
 - **3D Slicing** - Navigate Z-stacks
 - **Thumbnail Gallery** - Grid view of multiple images
-- **Performance Optimization** - Handle large pyramidal images smoothly
+- **Unified API** - Single component dispatching to format-specific viewers
 
 ### Non-Goals (For This Hackathon)
 
 - Full integration into Depictio codebase
+- Data processing/conversion (Depictio visualizes, doesn't convert)
 - Authentication/authorization
 - Cloud deployment
-- Production-grade error handling
 
 ---
 
@@ -274,7 +294,10 @@ ome_zarr download https://uk1s3.embassy.ebi.ac.uk/idr/zarr/v0.4/idr0062A/6001240
 http://avivator.gehlenborglab.org/?image_url=https://viv-demo.storage.googleapis.com/HandEuncompressed_Scan1.ome.tif
 ```
 
-### Converting Your Own Data
+### Converting Your Own Data (Outside Depictio)
+
+> **Note:** Depictio is a visualization platform, not a data processing tool.
+> Conversion happens *before* ingestion, using external tools.
 
 **TIFF → OME-Zarr:**
 ```bash
@@ -294,12 +317,28 @@ bfconvert -pyramid-resolutions 4 -pyramid-scale 2 input.tiff output.ome.tiff
 
 ## Environment Setup
 
-### Prerequisites
+### Prerequisites (Install Before Hackathon!)
 
-- **Python 3.11+**
-- **Node.js 18+** (if building custom components)
-- **Git**
-- **Docker** (optional, for full Depictio)
+Please have the following installed before arriving:
+
+1. **Docker Desktop** - https://www.docker.com/products/docker-desktop/
+
+2. **pixi** (recommended) OR **conda/mamba**:
+   ```bash
+   # pixi (faster, recommended)
+   curl -fsSL https://pixi.sh/install.sh | bash
+
+   # OR conda/mamba
+   # https://docs.conda.io/en/latest/miniconda.html
+   ```
+
+3. **Python 3.11+**
+
+4. **Node.js 18+** (if building custom components)
+
+5. **Git**
+
+6. **Code editor** (VS Code recommended)
 
 ### Standalone PoC Setup (Recommended for Hackathon)
 
@@ -353,44 +392,63 @@ uv sync
 
 ---
 
-## Getting Started
+## Schedule (CET Time Zone)
 
-### Day 1: Exploration & Setup
+### Wednesday 28 January (Day 1)
 
-**Morning:**
-1. Set up development environment
-2. Download sample OME-Zarr dataset
-3. Explore Vizarr/Avivator with sample data
-4. Discuss approaches as a team
+| Time | Activity |
+|------|----------|
+| **11:30-12:30** | **Depictio presentation & demo** (Thomas) |
+| **12:30-13:00** | Setup check - Docker, pixi/conda working? |
+| **13:00-14:00** | *Lunch (EMBL canteen)* |
+| **14:00-15:30** | **Brainstorming session:** |
+| | • Which formats to support? (TIFF, OME-TIFF, OME-Zarr) |
+| | • Explore public demo datasets online |
+| | • Define MVP scope & approach |
+| **15:30-16:00** | *Coffee break* |
+| **16:00-17:30** | **Task distribution & start coding** |
+| | • Decide: parallel approaches or collaborative? |
+| | • Start implementing based on brainstorming |
 
-**Afternoon:**
-1. Create basic Dash app skeleton
-2. Experiment with embedding Vizarr/Viv
-3. Document findings and blockers
+### Thursday 29 January (Day 2)
 
-### Day 2: Core Development
+| Time | Activity |
+|------|----------|
+| **9:30-11:00** | Continue development |
+| **11:00-11:30** | *Coffee break* |
+| **11:30-13:00** | Sync progress + integrate components |
+| **13:00-14:00** | *Lunch* |
+| **14:00-15:30** | Core functionality: viewer ↔ metadata connection |
+| **15:30-16:00** | *Coffee break* |
+| **16:00-18:00** | Polish / stretch goals |
+| **18:00-20:00** | *Pizza, beer & informal demos* 🍕 |
 
-**Morning:**
-1. Implement image viewer component
-2. Add basic pan/zoom functionality
-3. Connect to sample metadata
+### Friday 30 January (Day 3)
 
-**Afternoon:**
-1. Add data table with image list
-2. Implement selection callback (table → image)
-3. Test with multiple images
+| Time | Activity |
+|------|----------|
+| **9:30-11:00** | **Project presentations** (present your PoC!) |
+| **11:00-11:30** | *Coffee break* |
+| **11:30-13:00** | Wrap-up presentations + closing remarks |
+| **13:00** | *Lunch & end* |
 
-### Day 3: Polish & Integration
+---
 
-**Morning:**
-1. Add channel controls (if multi-channel)
-2. Improve UI/UX
-3. Handle edge cases
+## Task Distribution
 
-**Afternoon:**
-1. Documentation and demo prep
-2. Record demo video
-3. Discuss integration path to Depictio
+Tasks will be defined during **Wednesday brainstorming** based on:
+- Team skills and interests
+- Chosen technical approach(es)
+- Format priorities
+
+**Possible splits:**
+
+| Strategy | Description |
+|----------|-------------|
+| **By format** | P1: Simple TIFF viewer, P2: OME-Zarr (Vizarr), P3: OME-TIFF (Viv) |
+| **By feature** | P1: Viewer core, P2: Channel controls, P3: Callbacks/metadata |
+| **By approach** | Each person explores different viewer library |
+| **Collaborative** | All work on same codebase together |
 
 ---
 
@@ -602,13 +660,14 @@ app.layout = html.Div([
 
 ## FAQ
 
-### Q: Should we use OME-Zarr or OME-TIFF?
+### Q: Should we support one format or multiple?
 
-**A:** For this hackathon, **OME-Zarr** is recommended because:
-- Better cloud/web performance
-- Native support in Vizarr
-- No tile server needed
-- Public datasets available
+**A:** Consider supporting **multiple formats with different viewers**:
+- Simple images (TIFF/PNG) → basic viewer
+- OME-Zarr → Vizarr
+- OME-TIFF → Viv/Avivator
+
+This can be a good task split for parallel work!
 
 ### Q: What if we get stuck with CORS errors?
 
@@ -634,10 +693,11 @@ def update_image(selected, data):
 
 ### Q: Can we work in parallel or should we collaborate?
 
-**A:** Suggested approach:
-- **Day 1:** Explore together, then decide on approach
-- **Day 2:** Can split tasks (viewer, data table, styling)
-- **Day 3:** Integrate and polish together
+**A:** Decide during Wednesday brainstorming! Options:
+- **Parallel by format:** Each person tackles a different format/viewer
+- **Parallel by feature:** Split viewer/callbacks/UI
+- **Collaborative:** All work on same codebase
+- **Hybrid:** Start parallel, integrate Thursday afternoon
 
 ---
 
