@@ -223,8 +223,29 @@ class ReferenceDatasetRegistry:
             },
         }
 
-        payload = await _helper_create_project_beanie(project, original_ids=original_ids)
-        created_project = payload["project"]
+        try:
+            payload = await _helper_create_project_beanie(project, original_ids=original_ids)
+            created_project = payload["project"]
+        except Exception as e:
+            # Handle race condition: another worker created the project between check and create
+            from pymongo.errors import DuplicateKeyError
+
+            if isinstance(e.__cause__, DuplicateKeyError) or "duplicate key error" in str(e).lower():
+                logger.warning(
+                    f"Race condition detected: project {dataset_name} was created by another worker. "
+                    f"Retrieving existing project."
+                )
+                # Retrieve the project that was created by the other worker
+                existing_project = projects_collection.find_one({"_id": static_project_id})
+                if existing_project:
+                    created_project = ProjectBeanie.from_mongo(existing_project)
+                    payload = {"success": False, "project": created_project}
+                else:
+                    # This shouldn't happen, but re-raise if we can't find the project
+                    raise
+            else:
+                # Re-raise if it's a different error
+                raise
 
         # Step 2: Resolve and register links if present in YAML
         if links_config:
