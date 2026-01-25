@@ -1298,8 +1298,41 @@ def register_core_callbacks(app):
                             f"(from {len(sample_mappings)} canonical IDs)"
                         )
                     else:
-                        logger.warning("No sample_mappings available for reset")
-                        return dash.no_update
+                        # No sample_mappings available - restore from trace metadata
+                        logger.info(
+                            "No sample_mappings available - restoring original figure from trace metadata"
+                        )
+                        if trace_metadata and trace_metadata.get("original_data"):
+                            # Reconstruct original unfiltered figure from stored trace data
+                            restored_fig = copy.deepcopy(current_figure)
+                            original_traces = trace_metadata["original_data"]
+
+                            for i, trace in enumerate(restored_fig.get("data", [])):
+                                if i < len(original_traces):
+                                    trace_info = original_traces[i]
+                                    # Restore original data
+                                    if trace_info.get("original_x"):
+                                        trace["x"] = trace_info["original_x"]
+                                    if trace_info.get("original_y"):
+                                        trace["y"] = trace_info["original_y"]
+                                    if trace_info.get("original_z"):
+                                        trace["z"] = trace_info["original_z"]
+                                    # Restore visibility for scatter/line traces
+                                    if "visible" in trace:
+                                        trace["visible"] = True
+
+                            # Mark as unfiltered
+                            if "layout" not in restored_fig:
+                                restored_fig["layout"] = {}
+                            restored_fig["layout"]["_depictio_filter_applied"] = False
+
+                            logger.info(
+                                "✅ Restored original unfiltered figure from trace metadata"
+                            )
+                            return restored_fig
+                        else:
+                            logger.warning("No trace metadata available - cannot restore")
+                            return dash.no_update
 
                 elif filter_values:
                     # FILTER MODE: Use link resolution API
@@ -1392,6 +1425,36 @@ def register_core_callbacks(app):
 
             if not selected_samples:
                 logger.warning("No samples found after expansion")
+                # If in RESET MODE and no samples found, restore from trace metadata
+                if not has_active_filters and figure_was_patched:
+                    logger.info("RESET MODE: Restoring original figure from trace metadata")
+                    if trace_metadata and trace_metadata.get("original_data"):
+                        # Reconstruct original unfiltered figure from stored trace data
+                        restored_fig = copy.deepcopy(current_figure)
+                        original_traces = trace_metadata["original_data"]
+
+                        for i, trace in enumerate(restored_fig.get("data", [])):
+                            if i < len(original_traces):
+                                trace_info = original_traces[i]
+                                # Restore original data
+                                if trace_info.get("original_x"):
+                                    trace["x"] = trace_info["original_x"]
+                                if trace_info.get("original_y"):
+                                    trace["y"] = trace_info["original_y"]
+                                if trace_info.get("original_z"):
+                                    trace["z"] = trace_info["original_z"]
+                                # Restore visibility for scatter/line traces
+                                if "visible" in trace:
+                                    trace["visible"] = True
+
+                        # Mark as unfiltered
+                        if "layout" not in restored_fig:
+                            restored_fig["layout"] = {}
+                        restored_fig["layout"]["_depictio_filter_applied"] = False
+
+                        logger.info("✅ Restored original unfiltered figure from trace metadata")
+                        return restored_fig
+
                 return dash.no_update
 
             # Check if we have a current figure to patch
