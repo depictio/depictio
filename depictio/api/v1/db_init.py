@@ -446,15 +446,17 @@ async def initialize_db(wipe: bool = False) -> UserBeanie | None:
         admin_user=admin_user, token_payload=token_payload
     )
 
-    # Store metadata for background processing
+    # Store metadata for background processing (use replace_one for idempotency)
     from depictio.api.v1.db import initialization_collection
 
-    initialization_collection.insert_one(
+    initialization_collection.replace_one(
+        {"_id": "reference_datasets_metadata"},
         {
             "_id": "reference_datasets_metadata",
             "projects": created_projects,
             "created_at": datetime.now(timezone.utc),
-        }
+        },
+        upsert=True,
     )
 
     logger.info(f"Created {len(created_projects)} reference datasets")

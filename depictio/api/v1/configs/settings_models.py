@@ -600,7 +600,7 @@ class DashboardYAMLConfig(BaseSettings):
     """
 
     # Enable/disable YAML dashboard sync feature
-    enabled: bool = Field(default=True, description="Enable YAML-based dashboard management")
+    enabled: bool = Field(default=False, description="Enable YAML-based dashboard management")
 
     # Local dashboards directory (instance-specific, git-ignored, auto-synced)
     local_dir: Path = Field(
