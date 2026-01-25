@@ -24,31 +24,42 @@
   },
   "stored_metadata": [
     {
-      "index": "multiqc-general-stats",
-      "component_type": "multiqc",
+      "index": "box-quality-distribution",
+      "component_type": "figure",
+      "visu_type": "box",
       "wf_id": {
         "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
       },
       "dc_id": {
-        "$oid": "646b0f3c1e4a2d7f8e5b8ca4"
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca6"
       },
-      "multiqc_config": {
-        "module": "fastqc",
-        "plot_type": "general_stats"
+      "dict_kwargs": {
+        "x": "sample",
+        "y": "mean_quality",
+        "color": "sample",
+        "title": "Quality Score Distribution by Sample",
+        "template": "mantine_light",
+        "points": "all",
+        "notched": true
       }
     },
     {
-      "index": "multiqc-sequence-quality",
-      "component_type": "multiqc",
+      "index": "bar-read-counts",
+      "component_type": "figure",
+      "visu_type": "bar",
       "wf_id": {
         "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
       },
       "dc_id": {
-        "$oid": "646b0f3c1e4a2d7f8e5b8ca4"
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca6"
       },
-      "multiqc_config": {
-        "module": "fastqc",
-        "plot_type": "sequence_quality_histogram"
+      "dict_kwargs": {
+        "x": "sample",
+        "y": "total_reads",
+        "color": "sample",
+        "title": "Total Reads by Sample",
+        "template": "mantine_light",
+        "barmode": "group"
       }
     },
     {
@@ -161,14 +172,14 @@
   ],
   "stored_layout_data": [
     {
-      "i": "box-multiqc-general-stats",
+      "i": "box-box-quality-distribution",
       "x": 0,
       "y": 0,
       "w": 24,
       "h": 16
     },
     {
-      "i": "box-multiqc-sequence-quality",
+      "i": "box-bar-read-counts",
       "x": 24,
       "y": 0,
       "w": 24,
