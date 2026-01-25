@@ -746,12 +746,10 @@ jobs:
           cd depictio/cli
           source venv/bin/activate
 
-          # Validate project config
-          depictio-cli --verbose config validate-project-config \
-            --project-config-path ../projects/init/iris/project.yaml \
-            --CLI-config-path admin_config.yaml
+          # Skip local validation - paths are Docker-specific and project is already initialized
+          # The sync-project-config-to-server command will validate against the running API
 
-          # Sync project to server
+          # Sync project to server (validates against API)
           depictio-cli --verbose config sync-project-config-to-server \
             --update \
             --project-config-path ../projects/init/iris/project.yaml \

@@ -9,7 +9,6 @@ workflows:
     data_location:
       structure: "flat"
       locations:
-        # - "{DEPICTIO_DEMO_DATA_LOCATION}/projects/init/iris"
         - /app/depictio/projects/init/iris
     data_collections:
       - id: "646b0f3c1e4a2d7f8e5b8c9c"
@@ -21,7 +20,7 @@ workflows:
           scan:
             mode: single
             scan_parameters:
-              filename: "/app/depictio/projects/init/iris/data/iris.csv"
+              filename: /app/depictio/projects/init/iris/data/iris.csv
           dc_specific_properties:
             format: "CSV"
             polars_kwargs:
