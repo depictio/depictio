@@ -105,7 +105,7 @@
       "dc_id": {
         "$oid": "646b0f3c1e4a2d7f8e5b8ca1"
       },
-      "code_content": "import plotly.graph_objects as go\ntry:\n    from plotly.subplots import make_subplots\nexcept ImportError:\n    import plotly.tools as tls\n    make_subplots = tls.make_subplots\n\n# Custom color palette for islands\nisland_colors = {\n    'Biscoe': '#6366f1',      # Indigo\n    'Dream': '#f59e0b',       # Amber\n    'Torgersen': '#10b981'    # Emerald\n}\n\n# Create subplots: 2 rows, 2 columns\nfig = make_subplots(\n    rows=2, cols=2,\n    subplot_titles=(\n        'Body Mass Distribution by Island',\n        'Flipper Length vs Bill Length',\n        'Bill Dimensions Comparison',\n        'Morphological Summary by Island'\n    ),\n    specs=[\n        [{'type': 'box'}, {'type': 'scatter'}],\n        [{'type': 'scatter'}, {'type': 'bar'}]\n    ],\n    vertical_spacing=0.12,\n    horizontal_spacing=0.10\n)\n\n# Plot 1: Box plot of body mass by island\nfor island in df['island'].unique():\n    island_data = df[df['island'] == island]\n    fig.add_trace(\n        go.Box(\n            y=island_data['body_mass_g'],\n            name=island,\n            marker_color=island_colors[island],\n            boxmean='sd',\n            showlegend=True\n        ),\n        row=1, col=1\n    )\n\n# Plot 2: Scatter of flipper vs bill length colored by island\nfor island in df['island'].unique():\n    island_data = df[df['island'] == island]\n    fig.add_trace(\n        go.Scatter(\n            x=island_data['bill_length_mm'],\n            y=island_data['flipper_length_mm'],\n            mode='markers',\n            name=island,\n            marker=dict(\n                color=island_colors[island],\n                size=8,\n                opacity=0.7,\n                line=dict(width=1, color='white')\n            ),\n            showlegend=False\n        ),\n        row=1, col=2\n    )\n\n# Plot 3: Bill length vs depth with custom styling\nfor island in df['island'].unique():\n    island_data = df[df['island'] == island]\n    fig.add_trace(\n        go.Scatter(\n            x=island_data['bill_length_mm'],\n            y=island_data['bill_depth_mm'],\n            mode='markers',\n            name=island,\n            marker=dict(\n                color=island_colors[island],\n                size=island_data['body_mass_g'] / 400,\n                opacity=0.6,\n                line=dict(width=1.5, color='white'),\n                symbol='diamond'\n            ),\n            showlegend=False\n        ),\n        row=2, col=1\n    )\n\n# Plot 4: Average measurements by island\nisland_summary = df.groupby('island').agg({\n    'body_mass_g': 'mean',\n    'flipper_length_mm': 'mean',\n    'bill_length_mm': 'mean',\n    'bill_depth_mm': 'mean'\n}).reset_index()\n\nmeasurements = ['body_mass_g', 'flipper_length_mm', 'bill_length_mm', 'bill_depth_mm']\nmeasurement_labels = ['Body Mass (g)', 'Flipper (mm)', 'Bill Length (mm)', 'Bill Depth (mm)']\n\nfor i, (measurement, label) in enumerate(zip(measurements, measurement_labels)):\n    # Normalize to 0-1 scale for visualization\n    values = island_summary[measurement]\n    normalized = (values - values.min()) / (values.max() - values.min()) * 100\n    \n    fig.add_trace(\n        go.Bar(\n            x=island_summary['island'],\n            y=normalized,\n            name=label,\n            marker_color=['#ef4444', '#3b82f6', '#22c55e', '#f59e0b'][i],\n            opacity=0.8,\n            showlegend=True\n        ),\n        row=2, col=2\n    )\n\n# Update layout\nfig.update_xaxes(title_text='Island', row=1, col=1)\nfig.update_yaxes(title_text='Body Mass (g)', row=1, col=1)\n\nfig.update_xaxes(title_text='Bill Length (mm)', row=1, col=2)\nfig.update_yaxes(title_text='Flipper Length (mm)', row=1, col=2)\n\nfig.update_xaxes(title_text='Bill Length (mm)', row=2, col=1)\nfig.update_yaxes(title_text='Bill Depth (mm)', row=2, col=1)\n\nfig.update_xaxes(title_text='Island', row=2, col=2)\nfig.update_yaxes(title_text='Normalized Scale (%)', row=2, col=2)\n\nfig.update_layout(\n    title_text='Palmer Penguins: Island-Based Morphological Analysis',\n    title_font_size=18,\n    height=650,\n    showlegend=True,\n    legend=dict(\n        orientation='h',\n        yanchor='bottom',\n        y=-0.15,\n        xanchor='center',\n        x=0.5\n    ),\n    plot_bgcolor='rgba(0,0,0,0)',\n    paper_bgcolor='rgba(0,0,0,0)',\n    font=dict(size=11)\n)\n\nfig.update_layout(barmode='group')\n\nfig"
+      "code_content": "# Custom color palette for islands (non-default Plotly colors)\nisland_colors = {\n    'Biscoe': '#6366f1',      # Indigo\n    'Dream': '#f59e0b',       # Amber\n    'Torgersen': '#10b981'    # Emerald\n}\n\n# Convert to pandas for easier manipulation\ndf_pd = df.to_pandas()\ndf_islands = df_pd['island'].unique()\n\n# Create figure with first trace (satisfies validator requirement)\ndf_first_island = df_islands[0]\ndf_island_data = df_pd[df_pd['island'] == df_first_island]\nfig = go.Figure(data=[\n    go.Box(\n        y=df_island_data['body_mass_g'],\n        name=df_first_island,\n        marker_color=island_colors[df_first_island],\n        boxmean='sd',\n        legendgroup=df_first_island,\n        showlegend=True,\n        xaxis='x1',\n        yaxis='y1'\n    )\n])\n\n# Subplot 1 (top-left): Box plot of body mass by island - remaining islands\nfor df_island in df_islands[1:]:\n    df_island_data = df_pd[df_pd['island'] == df_island]\n    fig.add_trace(\n        go.Box(\n            y=df_island_data['body_mass_g'],\n            name=df_island,\n            marker_color=island_colors[df_island],\n            boxmean='sd',\n            legendgroup=df_island,\n            showlegend=True,\n            xaxis='x1',\n            yaxis='y1'\n        )\n    )\n\n# Subplot 2 (top-right): Scatter of flipper vs bill length by island\nfor df_island in df_islands:\n    df_island_data = df_pd[df_pd['island'] == df_island]\n    fig.add_trace(\n        go.Scatter(\n            x=df_island_data['bill_length_mm'],\n            y=df_island_data['flipper_length_mm'],\n            mode='markers',\n            name=df_island,\n            marker=dict(\n                color=island_colors[df_island],\n                size=8,\n                opacity=0.7,\n                line=dict(width=1, color='white')\n            ),\n            legendgroup=df_island,\n            showlegend=False,\n            xaxis='x2',\n            yaxis='y2'\n        )\n    )\n\n# Subplot 3 (bottom-left): Bill dimensions with body-mass-sized markers\nfor df_island in df_islands:\n    df_island_data = df_pd[df_pd['island'] == df_island]\n    fig.add_trace(\n        go.Scatter(\n            x=df_island_data['bill_length_mm'],\n            y=df_island_data['bill_depth_mm'],\n            mode='markers',\n            name=df_island,\n            marker=dict(\n                color=island_colors[df_island],\n                size=df_island_data['body_mass_g'] / 400,\n                opacity=0.6,\n                line=dict(width=1.5, color='white'),\n                symbol='diamond'\n            ),\n            legendgroup=df_island,\n            showlegend=False,\n            xaxis='x3',\n            yaxis='y3'\n        )\n    )\n\n# Subplot 4 (bottom-right): Normalized measurements by island\ndf_summary = df_pd.groupby('island').agg({\n    'body_mass_g': 'mean',\n    'flipper_length_mm': 'mean',\n    'bill_length_mm': 'mean',\n    'bill_depth_mm': 'mean'\n}).reset_index()\n\ndf_measurements = ['body_mass_g', 'flipper_length_mm', 'bill_length_mm', 'bill_depth_mm']\ndf_labels = ['Body Mass', 'Flipper', 'Bill Length', 'Bill Depth']\ndf_colors = ['#ef4444', '#3b82f6', '#22c55e', '#f59e0b']\n\nfor df_i, (df_measurement, df_label, df_color) in enumerate(zip(df_measurements, df_labels, df_colors)):\n    df_values = df_summary[df_measurement]\n    df_normalized = (df_values - df_values.min()) / (df_values.max() - df_values.min()) * 100\n\n    fig.add_trace(\n        go.Bar(\n            x=df_summary['island'],\n            y=df_normalized,\n            name=df_label,\n            marker_color=df_color,\n            opacity=0.8,\n            legendgroup=f'metric_{df_i}',\n            xaxis='x4',\n            yaxis='y4'\n        )\n    )\n\n# Configure subplot layout with domains\nfig.update_layout(\n    # Top-left: Box plot (0-0.48, 0.55-1.0)\n    xaxis1=dict(domain=[0.0, 0.48], anchor='y1', title='Island'),\n    yaxis1=dict(domain=[0.55, 1.0], anchor='x1', title='Body Mass (g)'),\n\n    # Top-right: Scatter (0.52-1.0, 0.55-1.0)\n    xaxis2=dict(domain=[0.52, 1.0], anchor='y2', title='Bill Length (mm)'),\n    yaxis2=dict(domain=[0.55, 1.0], anchor='x2', title='Flipper Length (mm)'),\n\n    # Bottom-left: Bill dimensions (0-0.48, 0-0.45)\n    xaxis3=dict(domain=[0.0, 0.48], anchor='y3', title='Bill Length (mm)'),\n    yaxis3=dict(domain=[0.0, 0.45], anchor='x3', title='Bill Depth (mm)'),\n\n    # Bottom-right: Bar chart (0.52-1.0, 0-0.45)\n    xaxis4=dict(domain=[0.52, 1.0], anchor='y4', title='Island'),\n    yaxis4=dict(domain=[0.0, 0.45], anchor='x4', title='Normalized (%)'),\n\n    title=dict(\n        text='Palmer Penguins: Island-Based Morphological Analysis',\n        font=dict(size=18),\n        x=0.5,\n        xanchor='center'\n    ),\n    height=650,\n    showlegend=True,\n    legend=dict(\n        orientation='h',\n        yanchor='top',\n        y=-0.08,\n        xanchor='center',\n        x=0.5,\n        bgcolor='rgba(255,255,255,0.8)',\n        bordercolor='rgba(0,0,0,0.2)',\n        borderwidth=1\n    ),\n    barmode='group',\n    plot_bgcolor='rgba(0,0,0,0)',\n    paper_bgcolor='rgba(0,0,0,0)',\n    font=dict(size=11)\n)\n\n# Add subplot titles as annotations\nfig.add_annotation(text='Body Mass Distribution', x=0.24, y=1.05, xref='paper', yref='paper', showarrow=False, font=dict(size=13, color='#666'))\nfig.add_annotation(text='Flipper vs Bill Length', x=0.76, y=1.05, xref='paper', yref='paper', showarrow=False, font=dict(size=13, color='#666'))\nfig.add_annotation(text='Bill Dimensions', x=0.24, y=0.50, xref='paper', yref='paper', showarrow=False, font=dict(size=13, color='#666'))\nfig.add_annotation(text='Morphological Summary', x=0.76, y=0.50, xref='paper', yref='paper', showarrow=False, font=dict(size=13, color='#666'))\n\nfig\n"
     },
     {
       "index": "species-count",
@@ -195,7 +195,11 @@
       },
       "column_name": "species",
       "column_type": "object",
-      "value": ["Adelie", "Chinstrap", "Gentoo"],
+      "value": [
+        "Adelie",
+        "Chinstrap",
+        "Gentoo"
+      ],
       "scale": "linear",
       "marks_number": 2,
       "title_size": "md",
@@ -203,7 +207,11 @@
       "icon_name": "mdi:filter",
       "default_state": {
         "type": "select",
-        "options": ["Adelie", "Chinstrap", "Gentoo"],
+        "options": [
+          "Adelie",
+          "Chinstrap",
+          "Gentoo"
+        ],
         "default_value": null
       }
     },
@@ -219,7 +227,10 @@
       },
       "column_name": "body_mass_g",
       "column_type": "float64",
-      "value": [2700, 6300],
+      "value": [
+        2700,
+        6300
+      ],
       "scale": "linear",
       "marks_number": 2,
       "title_size": "md",
@@ -229,7 +240,10 @@
         "type": "range",
         "min_value": 2700,
         "max_value": 6300,
-        "default_range": [2700, 6300]
+        "default_range": [
+          2700,
+          6300
+        ]
       }
     },
     {
@@ -244,7 +258,11 @@
       },
       "column_name": "island",
       "column_type": "object",
-      "value": ["Biscoe", "Dream", "Torgersen"],
+      "value": [
+        "Biscoe",
+        "Dream",
+        "Torgersen"
+      ],
       "scale": "linear",
       "marks_number": 2,
       "title_size": "md",
@@ -252,7 +270,11 @@
       "icon_name": "mdi:island",
       "default_state": {
         "type": "select",
-        "options": ["Biscoe", "Dream", "Torgersen"],
+        "options": [
+          "Biscoe",
+          "Dream",
+          "Torgersen"
+        ],
         "default_value": null
       }
     },
@@ -268,7 +290,10 @@
       },
       "column_name": "sex",
       "column_type": "object",
-      "value": ["male", "female"],
+      "value": [
+        "male",
+        "female"
+      ],
       "scale": "linear",
       "marks_number": 2,
       "title_size": "md",
@@ -276,7 +301,10 @@
       "icon_name": "mdi:gender-male-female",
       "default_state": {
         "type": "select",
-        "options": ["male", "female"],
+        "options": [
+          "male",
+          "female"
+        ],
         "default_value": null
       }
     },
@@ -292,7 +320,10 @@
       },
       "column_name": "bill_length_mm",
       "column_type": "float64",
-      "value": [32.1, 59.6],
+      "value": [
+        32.1,
+        59.6
+      ],
       "scale": "linear",
       "marks_number": 2,
       "title_size": "md",
@@ -302,7 +333,10 @@
         "type": "range",
         "min_value": 32.1,
         "max_value": 59.6,
-        "default_range": [32.1, 59.6]
+        "default_range": [
+          32.1,
+          59.6
+        ]
       }
     },
     {
