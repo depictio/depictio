@@ -73,8 +73,11 @@ class ScanSingle(BaseModel):
         if not v:
             raise ValueError("Filename cannot be empty")
 
-        # Only validate file existence in CLI context AND if we need strict validation
-        if DEPICTIO_CONTEXT.lower() == "cli":
+        # Check if this is a Docker container path
+        is_docker_path = str(v).startswith("/app/depictio/")
+
+        # Only validate file existence in CLI context for non-Docker paths
+        if DEPICTIO_CONTEXT.lower() == "cli" and not is_docker_path:
             # Add debugging
             import os
 
@@ -94,9 +97,9 @@ class ScanSingle(BaseModel):
             logger.debug(f"Resolved path: {resolved_path}")
             logger.debug(f"Resolved path exists: {resolved_path.exists()}")
 
-            # Only validate if file exists in current environment
-            # This allows Docker-specific paths to pass validation when CLI runs on host
-            # Note: Actual file access will be validated at runtime in the appropriate environment
+            # Validate file exists for local paths
+            if not Path(v).exists():
+                raise ValueError(f"File {v} does not exist")
         return v
 
 
