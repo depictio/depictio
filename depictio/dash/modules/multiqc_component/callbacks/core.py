@@ -1274,7 +1274,9 @@ def register_core_callbacks(app):
                     # Only collect values from categorical filters (MultiSelect or object columns)
                     # Skip numeric range filters (RangeSlider with float/int columns)
                     is_categorical = comp_type == "MultiSelect" or column_type == "object"
-                    is_sample_column = column_name == join_column  # join_column is typically "sample"
+                    is_sample_column = (
+                        column_name == join_column
+                    )  # join_column is typically "sample"
 
                     if is_categorical or is_sample_column:
                         value = comp_data.get("value", [])

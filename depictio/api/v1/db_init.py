@@ -180,14 +180,26 @@ async def create_initial_dashboards(admin_user: UserBeanie) -> list[dict | None]
         {
             "name": "penguins",
             "json_path": os.path.join(
-                os.path.dirname(__file__), "..", "..", "projects", "reference", "penguins", "dashboard.json"
+                os.path.dirname(__file__),
+                "..",
+                "..",
+                "projects",
+                "reference",
+                "penguins",
+                "dashboard.json",
             ),
             "static_dc_id": STATIC_IDS["penguins"]["data_collections"]["penguins_complete"],
         },
         {
             "name": "multiqc",
             "json_path": os.path.join(
-                os.path.dirname(__file__), "..", "..", "projects", "reference", "multiqc", "dashboard.json"
+                os.path.dirname(__file__),
+                "..",
+                "..",
+                "projects",
+                "reference",
+                "multiqc",
+                "dashboard.json",
             ),
             "static_dc_id": STATIC_IDS["multiqc"]["data_collections"]["multiqc_data"],
         },

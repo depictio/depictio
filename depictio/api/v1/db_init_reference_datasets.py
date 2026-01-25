@@ -1,11 +1,12 @@
 """Reference dataset initialization with static ID management."""
 
 import os
-from typing import Any
+from typing import Any, cast
 
 from bson import ObjectId
 
 from depictio.api.v1.configs.logging_init import logger
+from depictio.models.models.base import PyObjectId
 from depictio.models.models.users import Permission, UserBase, UserBeanie
 from depictio.models.utils import get_config
 
@@ -185,8 +186,12 @@ class ReferenceDatasetRegistry:
             }
 
         # Set permissions
+        if not admin_user.id:
+            raise ValueError("Admin user must have an ID")
         project_config["permissions"] = Permission(
-            owners=[UserBase(id=admin_user.id, email=admin_user.email, is_admin=True)],
+            owners=[
+                UserBase(id=cast(PyObjectId, admin_user.id), email=admin_user.email, is_admin=True)
+            ],
             editors=[],
             viewers=[],
         )
@@ -230,7 +235,10 @@ class ReferenceDatasetRegistry:
             # Handle race condition: another worker created the project between check and create
             from pymongo.errors import DuplicateKeyError
 
-            if isinstance(e.__cause__, DuplicateKeyError) or "duplicate key error" in str(e).lower():
+            if (
+                isinstance(e.__cause__, DuplicateKeyError)
+                or "duplicate key error" in str(e).lower()
+            ):
                 logger.warning(
                     f"Race condition detected: project {dataset_name} was created by another worker. "
                     f"Retrieving existing project."
