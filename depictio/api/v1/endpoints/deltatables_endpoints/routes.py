@@ -101,15 +101,28 @@ async def upsert_deltatable(
             detail=f"Data collection with ID {data_collection_oid} not found in any project workflow.",
         )
 
-    df = pl.read_delta(payload.delta_table_location, storage_options=polars_s3_config)
-    results = precompute_columns_specs(df, agg_functions, dc_data)
+    # Check if this is a MultiQC data collection (stored as parquet, not delta table)
+    dc_type = dc_data.get("config", {}).get("type", "")
+    is_multiqc = dc_type == "MultiQC"
 
-    hash_series = df.hash_rows(seed=0)
-    hash_bytes = hash_series.to_numpy().tobytes()
-    hash_df = hashlib.sha256(hash_bytes).hexdigest()
-    final_hash = hashlib.sha256(
-        f"{payload.delta_table_location}{datetime.now()}{hash_df}".encode()
-    ).hexdigest()
+    # For MultiQC, skip delta table validation since it's stored as raw parquet
+    if is_multiqc:
+        # Create minimal hash for MultiQC without reading the file
+        final_hash = hashlib.sha256(
+            f"{payload.delta_table_location}{datetime.now()}".encode()
+        ).hexdigest()
+        results = None  # Column specs not computed for MultiQC
+    else:
+        # Standard delta table validation and column spec computation
+        df = pl.read_delta(payload.delta_table_location, storage_options=polars_s3_config)
+        results = precompute_columns_specs(df, agg_functions, dc_data)
+
+        hash_series = df.hash_rows(seed=0)
+        hash_bytes = hash_series.to_numpy().tobytes()
+        hash_df = hashlib.sha256(hash_bytes).hexdigest()
+        final_hash = hashlib.sha256(
+            f"{payload.delta_table_location}{datetime.now()}{hash_df}".encode()
+        ).hexdigest()
 
     query_dt = deltatables_collection.find_one({"data_collection_id": data_collection_oid})
     if query_dt:

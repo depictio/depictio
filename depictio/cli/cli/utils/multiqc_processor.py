@@ -10,6 +10,7 @@ from depictio.cli.cli.utils.api_calls import (
     api_check_duplicate_multiqc_report,
     api_create_multiqc_report,
     api_update_multiqc_report,
+    api_upsert_deltatable,
 )
 from depictio.cli.cli.utils.rich_utils import rich_print_multiqc_processing_summary
 from depictio.cli.cli_logging import logger
@@ -555,6 +556,35 @@ def process_multiqc_data_collection(
                                 logger.info(
                                     f"Report {i + 1} metadata: {len(metadata.get('samples', []))} samples, {len(metadata.get('modules', []))} modules"
                                 )
+
+                                # Register the first S3 location as deltatable location
+                                # This allows dashboard components to fetch MultiQC data via standard deltatable API
+                                if i == 0:  # Only do this for the first file
+                                    try:
+                                        logger.info(
+                                            f"Registering MultiQC S3 location as deltatable: {s3_location}"
+                                        )
+                                        upsert_response = api_upsert_deltatable(
+                                            data_collection_id=str(data_collection.id),
+                                            delta_table_location=s3_location,
+                                            CLI_config=CLI_config,
+                                            update=False,
+                                            deltatable_size_bytes=file_size_bytes,
+                                        )
+                                        if upsert_response.status_code == 200:
+                                            logger.info(
+                                                "✅ Successfully registered MultiQC deltatable location"
+                                            )
+                                        else:
+                                            logger.warning(
+                                                f"Failed to register MultiQC deltatable: HTTP {upsert_response.status_code}"
+                                            )
+                                            logger.debug(f"Response: {upsert_response.text}")
+                                    except Exception as upsert_error:
+                                        logger.warning(
+                                            f"Failed to register MultiQC deltatable location: {upsert_error}"
+                                        )
+
                             except Exception as json_error:
                                 logger.error(
                                     f"Failed to parse API response JSON for report {i + 1}: {json_error}"
