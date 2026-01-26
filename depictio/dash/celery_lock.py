@@ -8,9 +8,9 @@ import time
 from functools import wraps
 from typing import TYPE_CHECKING, Any, Callable, Optional, cast
 
+import redis
 from dash import no_update
 
-import redis
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
 

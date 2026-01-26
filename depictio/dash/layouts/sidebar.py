@@ -408,12 +408,12 @@ def register_sidebar_callbacks(app) -> None:
     # Pure clientside implementation - browser directly fetches from API
     app.clientside_callback(
         """
-        async function(n_intervals, current_cache, api_base_url) {
+        async function(n_intervals, api_base_url, current_cache) {
             console.log('🔄 Clientside server status check:', n_intervals);
             console.log('🔧 API Base URL:', api_base_url);
 
-            // Don't trigger on initial load (n_intervals === 0) or if API URL not set
-            if (n_intervals === 0 || !api_base_url) {
+            // Don't trigger if API URL not set
+            if (!api_base_url) {
                 return window.dash_clientside.no_update;
             }
 
@@ -458,9 +458,9 @@ def register_sidebar_callbacks(app) -> None:
         """,
         Output("server-status-cache", "data"),
         Input("server-status-interval", "n_intervals"),
+        Input("api-base-url-store", "data"),
         State("server-status-cache", "data"),
-        State("api-base-url-store", "data"),
-        prevent_initial_call=True,
+        prevent_initial_call=False,
     )
 
     # COMMENTED OUT: Server-side callback - Testing clientside version below
@@ -669,29 +669,38 @@ def register_sidebar_callbacks(app) -> None:
 
             return [
                 {
-                    namespace: 'dash_core_components',
-                    type: 'Link',
+                    namespace: 'dash_html_components',
+                    type: 'A',
                     props: {
                         href: '/profile',
-                        children: {
-                            namespace: 'dash_mantine_components',
-                            type: 'Avatar',
-                            props: {
-                                id: 'avatar',
-                                src: avatarSrc,
-                                size: 'md',
-                                radius: 'xl'
+                        style: {
+                            textDecoration: 'none',
+                            display: 'flex',
+                            alignItems: 'center',
+                            cursor: 'pointer',
+                            color: 'inherit'
+                        },
+                        children: [
+                            {
+                                namespace: 'dash_mantine_components',
+                                type: 'Avatar',
+                                props: {
+                                    id: 'avatar',
+                                    src: avatarSrc,
+                                    size: 'md',
+                                    radius: 'xl'
+                                }
+                            },
+                            {
+                                namespace: 'dash_mantine_components',
+                                type: 'Text',
+                                props: {
+                                    children: name,
+                                    size: 'sm',
+                                    style: {marginLeft: '5px'}
+                                }
                             }
-                        }
-                    }
-                },
-                {
-                    namespace: 'dash_mantine_components',
-                    type: 'Text',
-                    props: {
-                        children: name,
-                        size: 'sm',
-                        style: {marginLeft: '5px'}
+                        ]
                     }
                 }
             ];
