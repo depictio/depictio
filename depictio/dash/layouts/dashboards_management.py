@@ -1457,16 +1457,16 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
         )
 
         # Determine which sections to expand based on content
-        # Order of prevalence: Example > Public > Accessed > Owned
+        # All non-empty sections should be opened
         default_expanded = []
+        if owned_dashboards:
+            default_expanded.append("owned")
+        if accessed_dashboards:
+            default_expanded.append("accessed")
+        if public_dashboards:
+            default_expanded.append("public")
         if example_dashboards:
             default_expanded.append("example")
-        elif public_dashboards:
-            default_expanded.append("public")
-        elif accessed_dashboards:
-            default_expanded.append("accessed")
-        elif owned_dashboards:
-            default_expanded.append("owned")
 
         # Collapsible sections using Accordion
         # Order of appearance: Owned / Accessed / Public / Example
@@ -1488,7 +1488,11 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
                                             DashIconify(
                                                 icon="mdi:account-check", width=18, color="#1c7ed6"
                                             ),
-                                            dmc.Text("Owned Dashboards", size="lg", fw="bold"),
+                                            dmc.Text(
+                                                f"Owned Dashboards ({len(owned_dashboards)})",
+                                                size="lg",
+                                                fw="bold",
+                                            ),
                                         ],
                                         gap="xs",
                                     ),
@@ -1513,7 +1517,11 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
                                                 width=18,
                                                 color="#54ca74",
                                             ),
-                                            dmc.Text("Accessed Dashboards", size="lg", fw="bold"),
+                                            dmc.Text(
+                                                f"Accessed Dashboards ({len(accessed_dashboards)})",
+                                                size="lg",
+                                                fw="bold",
+                                            ),
                                         ],
                                         gap="xs",
                                     ),
@@ -1536,7 +1544,11 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
                                             DashIconify(
                                                 icon="mdi:earth", width=18, color="#20c997"
                                             ),
-                                            dmc.Text("Public Dashboards", size="lg", fw="bold"),
+                                            dmc.Text(
+                                                f"Public Dashboards ({len(public_dashboards)})",
+                                                size="lg",
+                                                fw="bold",
+                                            ),
                                         ],
                                         gap="xs",
                                     ),
@@ -1559,7 +1571,11 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
                                             DashIconify(
                                                 icon="mdi:school-outline", width=18, color="#fd7e14"
                                             ),
-                                            dmc.Text("Example Dashboards", size="lg", fw="bold"),
+                                            dmc.Text(
+                                                f"Example Dashboards ({len(example_dashboards)})",
+                                                size="lg",
+                                                fw="bold",
+                                            ),
                                         ],
                                         gap="xs",
                                     ),
