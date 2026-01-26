@@ -744,7 +744,7 @@ async def wait_for_dashboard_content(page):
 
 
 async def hide_ui_chrome(page):
-    """Hide navbar, header, and adjust page styling for clean screenshot."""
+    """Hide navbar, header, debug menu, and adjust page styling for clean screenshot."""
     await page.evaluate(
         """() => {
         const navbar = document.querySelector('.mantine-AppShell-navbar');
@@ -752,6 +752,9 @@ async def hide_ui_chrome(page):
 
         const header = document.querySelector('.mantine-AppShell-header');
         if (header) header.style.display = 'none';
+
+        const debugMenu = document.querySelector('.dash-debug-menu__outer');
+        if (debugMenu) debugMenu.style.display = 'none';
 
         const pageContent = document.querySelector('#page-content');
         if (pageContent) {

@@ -1005,25 +1005,60 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
                 carousel_slides = []
 
                 # Add main dashboard thumbnail as first slide
-                main_filename = f"{dashboard['_id']}.png"
-                main_thumbnail_path = os.path.join(output_folder, main_filename)
-                main_thumbnail_url = f"/static/screenshots/{main_filename}"
+                main_id = dashboard["_id"]
 
-                if not os.path.exists(main_thumbnail_path):
-                    main_thumbnail_url = default_thumbnail
+                # Check for theme-specific screenshots
+                main_light_filename = f"{main_id}_light.png"
+                main_dark_filename = f"{main_id}_dark.png"
+                main_legacy_filename = f"{main_id}.png"
+
+                main_light_path = os.path.join(output_folder, main_light_filename)
+                main_dark_path = os.path.join(output_folder, main_dark_filename)
+                main_legacy_path = os.path.join(output_folder, main_legacy_filename)
+
+                # Determine URLs for both themes
+                main_light_url = (
+                    f"/static/screenshots/{main_light_filename}"
+                    if os.path.exists(main_light_path)
+                    else None
+                )
+                main_dark_url = (
+                    f"/static/screenshots/{main_dark_filename}"
+                    if os.path.exists(main_dark_path)
+                    else None
+                )
+
+                # Fallback logic
+                if not main_light_url and not main_dark_url:
+                    if os.path.exists(main_legacy_path):
+                        main_light_url = main_dark_url = (
+                            f"/static/screenshots/{main_legacy_filename}"
+                        )
+                    else:
+                        main_light_url = main_dark_url = default_thumbnail
+
+                # Use light theme as default initial display
+                main_thumbnail_url = main_light_url
 
                 carousel_slides.append(
                     dmc.CarouselSlide(
                         html.A(
-                            dmc.Image(
-                                src=main_thumbnail_url,
-                                style={
-                                    "width": "100%",
-                                    "height": "210px",
-                                    "objectFit": "cover",
-                                    "objectPosition": "center center",
+                            html.Div(
+                                dmc.Image(
+                                    src=main_thumbnail_url,
+                                    style={
+                                        "width": "100%",
+                                        "height": "210px",
+                                        "objectFit": "cover",
+                                        "objectPosition": "center center",
+                                    },
+                                    alt=f"Main: {dashboard['title']}",
+                                ),
+                                **{
+                                    "data-dashboard-id": main_id,
+                                    "data-light-src": main_light_url,
+                                    "data-dark-src": main_dark_url,
                                 },
-                                alt=f"Main: {dashboard['title']}",
                             ),
                             href=f"/dashboard/{dashboard['dashboard_id']}",
                             style={"textDecoration": "none"},
@@ -1037,25 +1072,58 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
                     tab_title = tab.get("title", "Untitled Tab")
                     tab_dashboard_id = tab.get("dashboard_id")
 
-                    tab_filename = f"{tab_id}.png"
-                    tab_thumbnail_path = os.path.join(output_folder, tab_filename)
-                    tab_thumbnail_url = f"/static/screenshots/{tab_filename}"
+                    # Check for theme-specific screenshots
+                    tab_light_filename = f"{tab_id}_light.png"
+                    tab_dark_filename = f"{tab_id}_dark.png"
+                    tab_legacy_filename = f"{tab_id}.png"
 
-                    if not os.path.exists(tab_thumbnail_path):
-                        tab_thumbnail_url = default_thumbnail
+                    tab_light_path = os.path.join(output_folder, tab_light_filename)
+                    tab_dark_path = os.path.join(output_folder, tab_dark_filename)
+                    tab_legacy_path = os.path.join(output_folder, tab_legacy_filename)
+
+                    # Determine URLs for both themes
+                    tab_light_url = (
+                        f"/static/screenshots/{tab_light_filename}"
+                        if os.path.exists(tab_light_path)
+                        else None
+                    )
+                    tab_dark_url = (
+                        f"/static/screenshots/{tab_dark_filename}"
+                        if os.path.exists(tab_dark_path)
+                        else None
+                    )
+
+                    # Fallback logic
+                    if not tab_light_url and not tab_dark_url:
+                        if os.path.exists(tab_legacy_path):
+                            tab_light_url = tab_dark_url = (
+                                f"/static/screenshots/{tab_legacy_filename}"
+                            )
+                        else:
+                            tab_light_url = tab_dark_url = default_thumbnail
+
+                    # Use light theme as default initial display
+                    tab_thumbnail_url = tab_light_url
 
                     carousel_slides.append(
                         dmc.CarouselSlide(
                             html.A(
-                                dmc.Image(
-                                    src=tab_thumbnail_url,
-                                    style={
-                                        "width": "100%",
-                                        "height": "210px",
-                                        "objectFit": "cover",
-                                        "objectPosition": "center center",
+                                html.Div(
+                                    dmc.Image(
+                                        src=tab_thumbnail_url,
+                                        style={
+                                            "width": "100%",
+                                            "height": "210px",
+                                            "objectFit": "cover",
+                                            "objectPosition": "center center",
+                                        },
+                                        alt=f"Tab: {tab_title}",
+                                    ),
+                                    **{
+                                        "data-dashboard-id": tab_id,
+                                        "data-light-src": tab_light_url,
+                                        "data-dark-src": tab_dark_url,
                                     },
-                                    alt=f"Tab: {tab_title}",
                                 ),
                                 href=f"/dashboard/{tab_dashboard_id}",
                                 style={"textDecoration": "none"},
@@ -1076,28 +1144,50 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
                 )
 
             # Define the output folder where screenshots are saved
-            output_folder = (
-                "/app/depictio/dash/static/screenshots"  # Directly set to the desired path
+            output_folder = "/app/depictio/dash/static/screenshots"
+            dashboard_id_str = dashboard["_id"]
+
+            # Check for theme-specific screenshots
+            light_filename = f"{dashboard_id_str}_light.png"
+            dark_filename = f"{dashboard_id_str}_dark.png"
+            legacy_filename = f"{dashboard_id_str}.png"
+
+            light_path = os.path.join(output_folder, light_filename)
+            dark_path = os.path.join(output_folder, dark_filename)
+            legacy_path = os.path.join(output_folder, legacy_filename)
+
+            # Determine URLs for both themes
+            light_url = (
+                f"/static/screenshots/{light_filename}" if os.path.exists(light_path) else None
             )
-            # output_folder = os.path.join(os.path.dirname(__file__), 'static', 'screenshots')
+            dark_url = f"/static/screenshots/{dark_filename}" if os.path.exists(dark_path) else None
 
-            # Define the filename and paths
-            filename = f"{dashboard['_id']}.png"
-            # Filesystem path to check existence
-            thumbnail_fs_path = os.path.join(output_folder, filename)
-            # URL path for the Image src
-            thumbnail_url = f"/static/screenshots/{filename}"
+            # Fallback logic
+            if not light_url and not dark_url:
+                # Try legacy single screenshot
+                if os.path.exists(legacy_path):
+                    light_url = dark_url = f"/static/screenshots/{legacy_filename}"
+                else:
+                    # Use default placeholder
+                    default_url = dash.get_asset_url("images/backgrounds/default_thumbnail.png")
+                    light_url = dark_url = default_url
 
-            # Simple responsive thumbnail styling for 1920x1080 images
-            # Using fixed height with proper object-fit to avoid crushing
+            # Use light theme as default initial display
+            thumbnail_url = light_url
 
-            # Check if the thumbnail exists in the static/screenshots folder
-            if not os.path.exists(thumbnail_fs_path):
-                logger.warning(f"Thumbnail not found at path: {thumbnail_fs_path}")
-                # Use the default thumbnail from static/
-                default_thumbnail_url = dash.get_asset_url(
-                    "images/backgrounds/default_thumbnail.png"
+            # Check if we have a valid thumbnail (not default placeholder)
+            has_thumbnail = (
+                os.path.exists(light_path)
+                or os.path.exists(dark_path)
+                or os.path.exists(legacy_path)
+            )
+
+            if not has_thumbnail:
+                logger.warning(
+                    f"Thumbnail not found for dashboard {dashboard_id_str} "
+                    f"(checked: {light_filename}, {dark_filename}, {legacy_filename})"
                 )
+                default_thumbnail_url = light_url  # Already set to default in fallback logic
 
                 thumbnail = html.Div(
                     [
@@ -1140,21 +1230,27 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
                     ]
                 )
             else:
-                # Better thumbnail display for 1920x1080 (16:9) aspect ratio
-                # Use object-fit: cover to fill the container and crop if needed
+                # Theme-aware thumbnail display with data attributes for clientside theme switching
                 thumbnail = html.A(
                     dmc.CardSection(
-                        dmc.Image(
-                            src=thumbnail_url,
-                            style={
-                                "width": "100%",
-                                "height": "210px",  # Adjusted for 4-column layout (maintains 16:9 proportions)
-                                "objectFit": "cover",  # Fill container completely
-                                "objectPosition": "center center",  # Center the image content
-                                "borderRadius": "8px 8px 0 0",
-                                "display": "block",  # Ensure proper display
+                        html.Div(
+                            dmc.Image(
+                                src=thumbnail_url,
+                                style={
+                                    "width": "100%",
+                                    "height": "210px",
+                                    "objectFit": "cover",
+                                    "objectPosition": "center center",
+                                    "borderRadius": "8px 8px 0 0",
+                                    "display": "block",
+                                },
+                                alt=f"Thumbnail for {dashboard['title']}",
+                            ),
+                            **{
+                                "data-dashboard-id": dashboard_id_str,
+                                "data-light-src": light_url,
+                                "data-dark-src": dark_url,
                             },
-                            alt=f"Thumbnail for {dashboard['title']}",
                         ),
                         withBorder=True,
                     ),
@@ -2445,6 +2541,8 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
                     # dcc.Store(id={"type": "dashboard-index-store", "index": user.email}, storage_type="session", data={"next_index": 1}),  # Store for dashboard index management
                     # render_welcome_section(user.email),
                     render_dashboard_list_section(user.email),
+                    # Dummy output for clientside thumbnail theme swap callback
+                    html.Div(id="thumbnail-theme-swap-dummy", style={"display": "none"}),
                 ]
             )
 
@@ -2473,3 +2571,98 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
             return dash.no_update
 
         return dash.no_update
+
+    # =============================================================================
+    # THEME-AWARE THUMBNAIL SWAPPING (CLIENTSIDE)
+    # =============================================================================
+
+    # Clientside callback to swap thumbnails based on theme changes
+    # Listens to theme-store and updates all dashboard thumbnails to match current theme
+    app.clientside_callback(
+        """
+        function(theme_data, url) {
+            console.log('🎨 THUMBNAIL THEME SWAP: theme_data=', theme_data, 'url=', url);
+
+            // Read theme from Dash store or fallback to localStorage directly
+            let theme = theme_data;
+            if (!theme) {
+                // If theme-store hasn't loaded yet, read directly from localStorage
+                const storedTheme = localStorage.getItem('theme-store');
+                if (storedTheme) {
+                    try {
+                        theme = JSON.parse(storedTheme);
+                    } catch (e) {
+                        console.warn('Failed to parse theme from localStorage:', e);
+                        theme = 'light';
+                    }
+                } else {
+                    theme = 'light';
+                }
+            }
+            console.log('→ Current theme:', theme);
+
+            // Function to swap thumbnails
+            const swapThumbnails = () => {
+                const selector = theme === 'dark' ? 'data-dark-src' : 'data-light-src';
+                console.log('→ Using selector:', selector);
+
+                const thumbnails = document.querySelectorAll('[data-dashboard-id]');
+                console.log('→ Found', thumbnails.length, 'thumbnails');
+
+                let swapped = 0;
+                thumbnails.forEach(elem => {
+                    const newSrc = elem.getAttribute(selector);
+                    if (newSrc) {
+                        const img = elem.tagName === 'IMG' ? elem : elem.querySelector('img');
+                        if (img) {
+                            const currentPath = new URL(img.src, window.location.href).pathname;
+                            const newPath = newSrc.startsWith('http') ? new URL(newSrc).pathname : newSrc;
+
+                            if (currentPath !== newPath) {
+                                console.log('  ✓ Swapping thumbnail:', elem.getAttribute('data-dashboard-id'), currentPath, '→', newPath);
+                                const cacheBustedSrc = newSrc + '?t=' + Date.now();
+                                img.src = cacheBustedSrc;
+                                swapped++;
+                            }
+                        }
+                    }
+                });
+
+                console.log('✅ Swapped', swapped, 'thumbnails for theme:', theme);
+                return swapped;
+            };
+
+            // Immediate attempt
+            let swapped = swapThumbnails();
+
+            // If no thumbnails found, set up MutationObserver to watch for when they appear
+            if (swapped === 0) {
+                console.log('→ No thumbnails found yet, setting up MutationObserver...');
+
+                const observer = new MutationObserver((mutations) => {
+                    const thumbnails = document.querySelectorAll('[data-dashboard-id]');
+                    if (thumbnails.length > 0) {
+                        console.log('→ Thumbnails detected in DOM, attempting swap...');
+                        swapThumbnails();
+                        observer.disconnect();  // Stop observing once we've swapped
+                    }
+                });
+
+                // Observe the entire document body for added nodes
+                observer.observe(document.body, {
+                    childList: true,
+                    subtree: true
+                });
+
+                // Disconnect after 5 seconds to prevent memory leaks
+                setTimeout(() => observer.disconnect(), 5000);
+            }
+
+            return window.dash_clientside.no_update;
+        }
+        """,
+        Output("thumbnail-theme-swap-dummy", "children"),
+        Input("theme-store", "data"),
+        Input("url", "pathname"),
+        prevent_initial_call=False,  # Allow initial call to swap thumbnails on page load
+    )
