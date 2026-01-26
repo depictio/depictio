@@ -132,6 +132,7 @@ def get_child_tabs_info(dashboard_id: str, token: str) -> dict:
                 "count": len(child_tabs),
                 "tabs": [
                     {
+                        "_id": tab.get("_id"),
                         "dashboard_id": tab.get("dashboard_id"),
                         "title": tab.get("title", "Untitled Tab"),
                         "tab_order": tab.get("tab_order", 0),
@@ -691,86 +692,25 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
                 ),
             )
 
-            # Tab count badge with carousel tooltip
+            # Tab count badge (only show when > 1 total tab)
             tabs_info = get_child_tabs_info(str(dashboard["dashboard_id"]), token)
-            tab_count = tabs_info["count"]
-            child_tabs = tabs_info["tabs"]
+            child_tab_count = tabs_info["count"]  # Number of child tabs only
 
-            logger.debug(f"Dashboard {dashboard['dashboard_id']}: Found {tab_count} child tabs")
+            # Total tabs = 1 (main) + child tabs count
+            total_tab_count = 1 + child_tab_count
 
-            if tab_count > 0:
-                # Create carousel items with tab screenshots
-                carousel_items = []
-                for tab in child_tabs:
-                    tab_id = tab["dashboard_id"]
-                    tab_title = tab["title"]
+            logger.debug(
+                f"Dashboard {dashboard['dashboard_id']}: "
+                f"Found {child_tab_count} child tabs, total {total_tab_count} tabs"
+            )
 
-                    # Define screenshot path
-                    screenshot_filename = f"{tab_id}.png"
-                    screenshot_url = f"/static/screenshots/{screenshot_filename}"
-                    default_thumbnail = dash.get_asset_url(
-                        "images/backgrounds/default_thumbnail.png"
-                    )
-
-                    carousel_items.append(
-                        dmc.CarouselSlide(
-                            children=[
-                                dmc.Stack(
-                                    [
-                                        dmc.Text(
-                                            tab_title,
-                                            ta="center",
-                                            fw="bold",
-                                            size="sm",
-                                            style={"marginBottom": "8px"},
-                                        ),
-                                        dmc.Image(
-                                            src=screenshot_url,
-                                            fallbackSrc=default_thumbnail,
-                                            style={
-                                                "width": "100%",
-                                                "height": "150px",
-                                                "objectFit": "cover",
-                                                "borderRadius": "4px",
-                                            },
-                                            alt=f"Screenshot of {tab_title}",
-                                        ),
-                                    ],
-                                    gap="xs",
-                                )
-                            ]
-                        )
-                    )
-
-                badge_tab_count = dmc.HoverCard(
-                    withArrow=True,
-                    width=300,
-                    shadow="md",
-                    children=[
-                        dmc.HoverCardTarget(
-                            dmc.Badge(
-                                f"{tab_count} Tab{'s' if tab_count > 1 else ''}",
-                                color=colors["orange"],
-                                variant="light",
-                                leftSection=DashIconify(icon="mdi:tab", width=16),
-                                style={"cursor": "pointer"},
-                            )
-                        ),
-                        dmc.HoverCardDropdown(
-                            dmc.Carousel(
-                                children=carousel_items,
-                                withIndicators=True if len(carousel_items) > 1 else False,
-                                withControls=True if len(carousel_items) > 1 else False,
-                                loop=True,
-                                height=200,
-                                style={"width": "100%"},
-                            )
-                            if carousel_items
-                            else dmc.Text(
-                                "No tab screenshots available", ta="center", c="gray", size="sm"
-                            )
-                        ),
-                    ],
+            # Only show badge when total > 1 (i.e., when there are child tabs)
+            if total_tab_count > 1:
+                badge_tab_count = dmc.Badge(
+                    f"{total_tab_count} Tab{'s' if total_tab_count > 1 else ''}",
+                    color=colors["orange"],
+                    variant="light",
+                    leftSection=DashIconify(icon="mdi:tab", width=16),
                 )
             else:
                 badge_tab_count = None
@@ -1023,7 +963,7 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
             )
             return group
 
-        def return_thumbnail(user_id, dashboard):
+        def return_thumbnail(user_id, dashboard, total_tab_count=1, child_tabs=None):
             """
             Generate the thumbnail image section for a dashboard card.
 
@@ -1032,6 +972,9 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
             with proper sizing and object-fit for 16:9 aspect ratio images.
             Otherwise, displays a default placeholder image with "No thumbnail
             available" text.
+
+            When total_tab_count > 1, creates a Carousel with all tab thumbnails
+            instead of a single image.
 
             The thumbnail is wrapped in a link to the dashboard view page,
             allowing users to click the image to open the dashboard.
@@ -1043,16 +986,94 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
                     - _id: MongoDB ObjectId used for thumbnail filename
                     - dashboard_id: Used for the navigation link URL
                     - title: Used for image alt text
+                total_tab_count: Total number of tabs (main + children). Default 1.
+                child_tabs: List of child tab dictionaries. Default None.
 
             Returns:
-                html.Div or html.A: Clickable thumbnail component:
-                    - If thumbnail exists: html.A wrapping dmc.CardSection
-                      with the dashboard screenshot image
+                html.Div or html.A or dmc.CardSection: Thumbnail component:
+                    - If total_tab_count > 1: dmc.CardSection with Carousel of all tabs
+                    - If single tab with screenshot: html.A with single image
                     - If no thumbnail: html.Div with default placeholder
-                      image and "No thumbnail available" message
-                    Both link to /dashboard/{dashboard_id} on click.
             """
             import os
+
+            # If multiple tabs, create a carousel with all tab thumbnails
+            if total_tab_count > 1 and child_tabs:
+                output_folder = "/app/depictio/dash/static/screenshots"
+                default_thumbnail = dash.get_asset_url("images/backgrounds/default_thumbnail.png")
+
+                carousel_slides = []
+
+                # Add main dashboard thumbnail as first slide
+                main_filename = f"{dashboard['_id']}.png"
+                main_thumbnail_path = os.path.join(output_folder, main_filename)
+                main_thumbnail_url = f"/static/screenshots/{main_filename}"
+
+                if not os.path.exists(main_thumbnail_path):
+                    main_thumbnail_url = default_thumbnail
+
+                carousel_slides.append(
+                    dmc.CarouselSlide(
+                        html.A(
+                            dmc.Image(
+                                src=main_thumbnail_url,
+                                style={
+                                    "width": "100%",
+                                    "height": "210px",
+                                    "objectFit": "cover",
+                                    "objectPosition": "center center",
+                                },
+                                alt=f"Main: {dashboard['title']}",
+                            ),
+                            href=f"/dashboard/{dashboard['dashboard_id']}",
+                            style={"textDecoration": "none"},
+                        )
+                    )
+                )
+
+                # Add child tab thumbnails
+                for tab in child_tabs:
+                    tab_id = tab.get("_id", tab.get("dashboard_id"))
+                    tab_title = tab.get("title", "Untitled Tab")
+                    tab_dashboard_id = tab.get("dashboard_id")
+
+                    tab_filename = f"{tab_id}.png"
+                    tab_thumbnail_path = os.path.join(output_folder, tab_filename)
+                    tab_thumbnail_url = f"/static/screenshots/{tab_filename}"
+
+                    if not os.path.exists(tab_thumbnail_path):
+                        tab_thumbnail_url = default_thumbnail
+
+                    carousel_slides.append(
+                        dmc.CarouselSlide(
+                            html.A(
+                                dmc.Image(
+                                    src=tab_thumbnail_url,
+                                    style={
+                                        "width": "100%",
+                                        "height": "210px",
+                                        "objectFit": "cover",
+                                        "objectPosition": "center center",
+                                    },
+                                    alt=f"Tab: {tab_title}",
+                                ),
+                                href=f"/dashboard/{tab_dashboard_id}",
+                                style={"textDecoration": "none"},
+                            )
+                        )
+                    )
+
+                # Return carousel wrapped in CardSection
+                return dmc.CardSection(
+                    dmc.Carousel(
+                        children=carousel_slides,
+                        withIndicators=True,
+                        withControls=True,
+                        height=210,
+                        style={"borderRadius": "8px 8px 0 0"},
+                    ),
+                    withBorder=True,
+                )
 
             # Define the output folder where screenshots are saved
             output_folder = (
@@ -1181,6 +1202,12 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
                 buttons = create_buttons(dashboard, user_id, current_user)
                 dashboard_header = create_dashboad_view_header(dashboard, user_id, token)
 
+                # Get tab info for thumbnail carousel
+                tabs_info = get_child_tabs_info(str(dashboard["dashboard_id"]), token)
+                child_tab_count = tabs_info["count"]
+                child_tabs = tabs_info["tabs"]
+                total_tab_count = 1 + child_tab_count
+
                 buttons = dmc.Accordion(
                     [
                         dmc.AccordionItem(
@@ -1230,7 +1257,7 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
                     # chevronPosition="right",
                 )
 
-                thumbnail = return_thumbnail(user_id, dashboard)
+                thumbnail = return_thumbnail(user_id, dashboard, total_tab_count, child_tabs)
                 view.append(
                     dmc.Card(
                         withBorder=True,
