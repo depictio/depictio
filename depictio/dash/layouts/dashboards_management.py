@@ -88,6 +88,61 @@ def load_dashboards_from_db(token: str) -> dict:
         return {"dashboards": []}
 
 
+def get_child_tabs_info(dashboard_id: str, token: str) -> dict:
+    """
+    Get information about child tabs for a dashboard.
+
+    Args:
+        dashboard_id: Parent dashboard ID to query child tabs for.
+        token: Authentication token for API access.
+
+    Returns:
+        dict: Dictionary with 'count' (number of tabs) and 'tabs' (list of tab info).
+    """
+    if not token:
+        return {"count": 0, "tabs": []}
+
+    try:
+        # Query all dashboards with include_child_tabs=True to get all tabs
+        response = httpx.get(
+            f"{API_BASE_URL}/depictio/api/v1/dashboards/list",
+            headers={"Authorization": f"Bearer {token}"},
+            params={"include_child_tabs": True},
+        )
+
+        if response.status_code == 200:
+            all_dashboards = response.json()
+
+            # Filter child tabs that belong to this parent dashboard
+            child_tabs = [
+                d
+                for d in all_dashboards
+                if d.get("parent_dashboard_id") == dashboard_id and not d.get("is_main_tab", True)
+            ]
+
+            # Sort by tab_order
+            child_tabs.sort(key=lambda x: x.get("tab_order", 0))
+
+            return {
+                "count": len(child_tabs),
+                "tabs": [
+                    {
+                        "dashboard_id": tab.get("dashboard_id"),
+                        "title": tab.get("title", "Untitled Tab"),
+                        "tab_order": tab.get("tab_order", 0),
+                    }
+                    for tab in child_tabs
+                ],
+            }
+        else:
+            logger.warning(f"Failed to fetch child tabs: {response.status_code}")
+            return {"count": 0, "tabs": []}
+
+    except Exception as e:
+        logger.error(f"Error getting child tabs info: {e}")
+        return {"count": 0, "tabs": []}
+
+
 def insert_dashboard(dashboard_id: str | PyObjectId, dashboard_data: dict, token: str) -> None:
     """
     Insert or update a dashboard in the database via API.
@@ -631,6 +686,88 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
                 ),
             )
 
+            # Tab count badge with carousel tooltip
+            tabs_info = get_child_tabs_info(dashboard["dashboard_id"], token)
+            tab_count = tabs_info["count"]
+            child_tabs = tabs_info["tabs"]
+
+            if tab_count > 0:
+                # Create carousel items with tab screenshots
+                carousel_items = []
+                for tab in child_tabs:
+                    tab_id = tab["dashboard_id"]
+                    tab_title = tab["title"]
+
+                    # Define screenshot path
+                    screenshot_filename = f"{tab_id}.png"
+                    screenshot_url = f"/static/screenshots/{screenshot_filename}"
+                    default_thumbnail = dash.get_asset_url(
+                        "images/backgrounds/default_thumbnail.png"
+                    )
+
+                    carousel_items.append(
+                        dmc.CarouselSlide(
+                            children=[
+                                dmc.Stack(
+                                    [
+                                        dmc.Text(
+                                            tab_title,
+                                            ta="center",
+                                            fw="bold",
+                                            size="sm",
+                                            style={"marginBottom": "8px"},
+                                        ),
+                                        dmc.Image(
+                                            src=screenshot_url,
+                                            fallbackSrc=default_thumbnail,
+                                            style={
+                                                "width": "100%",
+                                                "height": "150px",
+                                                "objectFit": "cover",
+                                                "borderRadius": "4px",
+                                            },
+                                            alt=f"Screenshot of {tab_title}",
+                                        ),
+                                    ],
+                                    gap="xs",
+                                )
+                            ]
+                        )
+                    )
+
+                badge_tab_count = dmc.HoverCard(
+                    withArrow=True,
+                    width=300,
+                    shadow="md",
+                    children=[
+                        dmc.HoverCardTarget(
+                            dmc.Badge(
+                                f"{tab_count} Tab{'s' if tab_count > 1 else ''}",
+                                color=colors["orange"],
+                                variant="light",
+                                leftSection=DashIconify(icon="mdi:tab", width=16),
+                                style={"cursor": "pointer"},
+                            )
+                        ),
+                        dmc.HoverCardDropdown(
+                            dmc.Carousel(
+                                children=carousel_items,
+                                withIndicators=True if len(carousel_items) > 1 else False,
+                                withControls=True if len(carousel_items) > 1 else False,
+                                loop=True,
+                                height=200,
+                                style={"width": "100%"},
+                            )
+                            if carousel_items
+                            else dmc.Text(
+                                "No tab screenshots available", ta="center", c="gray", size="sm"
+                            )
+                        ),
+                    ],
+                )
+            else:
+                badge_tab_count = None
+
             # badge_tooltip_additional_info = dmc.HoverCard(
             #     [
             #         dmc.HoverCardTarget(
@@ -737,6 +874,15 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
                     dmc.Space(h=10),
                     dmc.Stack(
                         [
+                            badge_project,
+                            badge_owner,
+                            badge_status,
+                            badge_last_modified,
+                            badge_tab_count,
+                            # badge_tooltip_additional_info,
+                        ]
+                        if badge_tab_count
+                        else [
                             badge_project,
                             badge_owner,
                             badge_status,
