@@ -1160,35 +1160,15 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
                 )
             ]
 
-        # Categorize dashboards based on ownership and access
-        owned_dashboards = [
-            d
-            for d in dashboards
-            if str(user_id) in [str(owner["_id"]) for owner in d["permissions"]["owners"]]
-        ]
+        # Categorize dashboards with precedence: Example > Public > Accessed > Owned
+        # Example dashboards take highest precedence and are filtered first
+
         # Check if current user is anonymous
         is_anonymous = hasattr(current_user, "is_anonymous") and current_user.is_anonymous
 
-        # Accessed dashboards: shared with user but not owned, excluding public ones
-        accessed_dashboards = [
-            d
-            for d in dashboards
-            if str(user_id) not in [str(owner["_id"]) for owner in d["permissions"]["owners"]]
-            and not d.get("is_public", False)
-            and (not is_anonymous or d.get("is_public", False))
-        ]
-
-        # Public dashboards: public but not owned and not already in accessed
-        # (to avoid duplication if a public dashboard is also shared)
-        public_dashboards = [
-            d
-            for d in dashboards
-            if d.get("is_public", False)
-            and str(user_id) not in [str(owner["_id"]) for owner in d["permissions"]["owners"]]
-        ]
-
         # Example dashboards: identified by owner email containing "example" or "demo"
         # or by dashboard title starting with "Example:" or by specific dashboard ID
+        # These take precedence even if the user owns them
         example_dashboard_ids = ["6824cb3b89d2b72169309737"]  # Specific example dashboards
         example_dashboards = [
             d
@@ -1202,7 +1182,34 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
                 or d.get("title", "").lower().startswith("example:")
                 or str(d.get("dashboard_id", "")) in example_dashboard_ids
             )
+        ]
+        example_ids = {str(d.get("dashboard_id", "")) for d in example_dashboards}
+
+        # Public dashboards: public but not in examples
+        public_dashboards = [
+            d
+            for d in dashboards
+            if d.get("is_public", False)
+            and str(d.get("dashboard_id", "")) not in example_ids
             and str(user_id) not in [str(owner["_id"]) for owner in d["permissions"]["owners"]]
+        ]
+
+        # Accessed dashboards: shared with user but not owned, not public, not examples
+        accessed_dashboards = [
+            d
+            for d in dashboards
+            if str(user_id) not in [str(owner["_id"]) for owner in d["permissions"]["owners"]]
+            and not d.get("is_public", False)
+            and str(d.get("dashboard_id", "")) not in example_ids
+            and (not is_anonymous or d.get("is_public", False))
+        ]
+
+        # Owned dashboards: owned by user but not in examples (lowest precedence)
+        owned_dashboards = [
+            d
+            for d in dashboards
+            if str(user_id) in [str(owner["_id"]) for owner in d["permissions"]["owners"]]
+            and str(d.get("dashboard_id", "")) not in example_ids
         ]
 
         # Create views for each category (using same icons as accordion headers)
@@ -1220,7 +1227,7 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
             loop_over_dashboards(user_id, accessed_dashboards, token, current_user)
             if accessed_dashboards
             else create_empty_state_card(
-                icon="mdi:eye",
+                icon="material-symbols:share-outline",
                 title="No accessed dashboards",
                 description="Dashboards shared with you will appear here.",
             )
@@ -1346,7 +1353,11 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
                                 dmc.AccordionControl(
                                     dmc.Group(
                                         [
-                                            DashIconify(icon="mdi:eye", width=18, color="#54ca74"),
+                                            DashIconify(
+                                                icon="material-symbols:share-outline",
+                                                width=18,
+                                                color="#54ca74",
+                                            ),
                                             dmc.Text("Accessed Dashboards", size="lg", fw="bold"),
                                         ],
                                         gap="xs",
