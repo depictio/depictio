@@ -107,7 +107,7 @@
   ],
   "stored_metadata": [
     {
-      "index": "multiqc-component",
+      "index": "06c07e87-cfe2-4a62-9692-99765322b75c",
       "component_type": "multiqc",
       "workflow_id": {
         "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
@@ -124,6 +124,9 @@
       "selected_module": "cutadapt",
       "selected_plot": "Filtered Reads",
       "selected_dataset": null,
+      "s3_locations": [
+        "s3://depictio-bucket/646b0f3c1e4a2d7f8e5b8ca4/20260126_215032_583_1/multiqc.parquet"
+      ],
       "metadata": {
         "modules": [],
         "plots": {},
@@ -133,7 +136,7 @@
       "panel": "right"
     },
     {
-      "index": "habitat-filter",
+      "index": "0ce6a827-5f26-4c80-8f3a-40bcfaabce8a",
       "component_type": "interactive",
       "interactive_component_type": "MultiSelect",
       "column_name": "habitat",
@@ -157,7 +160,7 @@
       "panel": "left"
     },
     {
-      "index": "faith-pd-plot",
+      "index": "be7bffb4-9fab-4bf7-80d7-9ab11bdcc198",
       "component_type": "figure",
       "visu_type": "line",
       "dict_kwargs": {
@@ -181,7 +184,7 @@
       "panel": "right"
     },
     {
-      "index": "taxonomy-barplot",
+      "index": "37c3f919-cd4c-4384-9366-6ab93f60d532",
       "component_type": "figure",
       "visu_type": "bar",
       "dict_kwargs": {
@@ -207,7 +210,7 @@
       "panel": "right"
     },
     {
-      "index": "ancom-volcano",
+      "index": "2988d63c-d183-41ac-aa14-877757076031",
       "component_type": "figure",
       "visu_type": "scatter",
       "dict_kwargs": {
@@ -233,7 +236,7 @@
       "panel": "right"
     },
     {
-      "index": "metadata-table",
+      "index": "9983bbce-d9d2-43ae-9a23-aa554b47f173",
       "component_type": "table",
       "wf_id": {
         "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
