@@ -967,11 +967,20 @@ async def bulk_get_component_data_endpoint(
 
 
 # ============================================================================
-# YAML Export/Import Endpoints
+# YAML Export/Import Endpoints (DEPRECATED)
+# ============================================================================
+# All YAML endpoints are deprecated in favor of JSON-based API.
+# See YAML_MONGODB_ANALYSIS.md for migration guide.
+#
+# Deprecation Details:
+# - Deprecated: 2026-01-26
+# - Removal Target: TBD (after transition period)
+# - Migration: Use JSON endpoints instead (POST /import/json, GET /export/{id}/json)
+# - Reason: 98% code reduction, native Pydantic/JSON Schema support, simpler maintenance
 # ============================================================================
 
 
-@dashboards_endpoint_router.get("/export/{dashboard_id}/yaml")
+@dashboards_endpoint_router.get("/export/{dashboard_id}/yaml", deprecated=True)
 async def export_dashboard_to_yaml(
     dashboard_id: PyObjectId,
     include_metadata: bool = True,
@@ -979,6 +988,11 @@ async def export_dashboard_to_yaml(
 ):
     """
     Export a dashboard to YAML format.
+
+    **DEPRECATED**: This endpoint is deprecated. Use JSON export instead:
+    - GET /api/v1/dashboards/export/{dashboard_id}/json
+
+    See YAML_MONGODB_ANALYSIS.md for migration details.
 
     This endpoint allows exporting dashboards as YAML for:
     - Version control (git-friendly format)
@@ -1029,7 +1043,7 @@ async def export_dashboard_to_yaml(
     )
 
 
-@dashboards_endpoint_router.get("/export/{dashboard_id}/yaml/preview")
+@dashboards_endpoint_router.get("/export/{dashboard_id}/yaml/preview", deprecated=True)
 async def preview_dashboard_yaml(
     dashboard_id: PyObjectId,
     include_metadata: bool = False,
@@ -1037,6 +1051,8 @@ async def preview_dashboard_yaml(
 ):
     """
     Preview a dashboard as YAML without downloading.
+
+    **DEPRECATED**: Use JSON export instead. See YAML_MONGODB_ANALYSIS.md for migration.
 
     Returns the YAML content as JSON for preview in the UI.
 
@@ -1078,7 +1094,7 @@ async def preview_dashboard_yaml(
     }
 
 
-@dashboards_endpoint_router.post("/import/yaml")
+@dashboards_endpoint_router.post("/import/yaml", deprecated=True)
 async def import_dashboard_from_yaml(
     yaml_content: str,
     project_id: PyObjectId,
@@ -1086,6 +1102,11 @@ async def import_dashboard_from_yaml(
 ):
     """
     Import a dashboard from YAML content.
+
+    **DEPRECATED**: Use JSON import instead:
+    - POST /api/v1/dashboards/import/json
+
+    See YAML_MONGODB_ANALYSIS.md for migration details.
 
     Creates a new dashboard from the provided YAML configuration.
     A new dashboard_id will be generated, and the current user will be set as owner.
@@ -1189,7 +1210,7 @@ async def import_dashboard_from_yaml(
     }
 
 
-@dashboards_endpoint_router.post("/import/yaml/file")
+@dashboards_endpoint_router.post("/import/yaml/file", deprecated=True)
 async def import_dashboard_from_yaml_file(
     file: UploadFile,
     project_id: PyObjectId,
@@ -1231,7 +1252,7 @@ async def import_dashboard_from_yaml_file(
     )
 
 
-@dashboards_endpoint_router.post("/validate/yaml")
+@dashboards_endpoint_router.post("/validate/yaml", deprecated=True)
 async def validate_dashboard_yaml_endpoint(
     yaml_content: str,
     current_user: User = Depends(get_current_user),
@@ -1276,7 +1297,7 @@ async def validate_dashboard_yaml_endpoint(
         }
 
 
-@dashboards_endpoint_router.put("/update/{dashboard_id}/from_yaml")
+@dashboards_endpoint_router.put("/update/{dashboard_id}/from_yaml", deprecated=True)
 async def update_dashboard_from_yaml(
     dashboard_id: PyObjectId,
     yaml_content: str,
@@ -1365,11 +1386,14 @@ async def update_dashboard_from_yaml(
 
 
 # ============================================================================
-# YAML Directory-based Endpoints
+# YAML Directory-based Endpoints (DEPRECATED)
+# ============================================================================
+# All YAML directory endpoints are deprecated. Use JSON-based API instead.
+# See YAML_MONGODB_ANALYSIS.md for migration guide.
 # ============================================================================
 
 
-@dashboards_endpoint_router.get("/yaml-dir/list")
+@dashboards_endpoint_router.get("/yaml-dir/list", deprecated=True)
 async def list_yaml_directory(
     project_name: str | None = None,
     current_user: User = Depends(get_current_user),
@@ -1405,7 +1429,7 @@ async def list_yaml_directory(
     }
 
 
-@dashboards_endpoint_router.post("/yaml-dir/export/{dashboard_id}")
+@dashboards_endpoint_router.post("/yaml-dir/export/{dashboard_id}", deprecated=True)
 async def export_to_yaml_directory(
     dashboard_id: PyObjectId,
     current_user: User = Depends(get_current_user),
@@ -1468,7 +1492,7 @@ async def export_to_yaml_directory(
     }
 
 
-@dashboards_endpoint_router.post("/yaml-dir/export-all")
+@dashboards_endpoint_router.post("/yaml-dir/export-all", deprecated=True)
 async def export_all_to_yaml_directory(
     project_id: PyObjectId | None = None,
     current_user: User = Depends(get_current_user),
@@ -1545,7 +1569,7 @@ async def export_all_to_yaml_directory(
     }
 
 
-@dashboards_endpoint_router.post("/yaml-dir/import")
+@dashboards_endpoint_router.post("/yaml-dir/import", deprecated=True)
 async def import_from_yaml_directory(
     filepath: str,
     project_id: PyObjectId,
@@ -1659,7 +1683,7 @@ async def import_from_yaml_directory(
         }
 
 
-@dashboards_endpoint_router.get("/yaml-dir/sync-status/{dashboard_id}")
+@dashboards_endpoint_router.get("/yaml-dir/sync-status/{dashboard_id}", deprecated=True)
 async def get_yaml_sync_status(
     dashboard_id: PyObjectId,
     current_user: User = Depends(get_current_user),
@@ -1708,7 +1732,7 @@ async def get_yaml_sync_status(
     }
 
 
-@dashboards_endpoint_router.delete("/yaml-dir/delete/{dashboard_id}")
+@dashboards_endpoint_router.delete("/yaml-dir/delete/{dashboard_id}", deprecated=True)
 async def delete_from_yaml_directory(
     dashboard_id: PyObjectId,
     current_user: User = Depends(get_current_user),
@@ -1763,7 +1787,7 @@ async def delete_from_yaml_directory(
         }
 
 
-@dashboards_endpoint_router.get("/yaml-dir/config")
+@dashboards_endpoint_router.get("/yaml-dir/config", deprecated=True)
 async def get_yaml_directory_config(
     current_user: User = Depends(get_current_user),
 ):
@@ -1791,11 +1815,14 @@ async def get_yaml_directory_config(
 
 
 # ============================================================================
-# YAML Watcher Endpoints (Auto-sync)
+# YAML Watcher Endpoints (Auto-sync) (DEPRECATED)
+# ============================================================================
+# YAML file watching is deprecated. Use API-driven updates instead.
+# See YAML_MONGODB_ANALYSIS.md for migration guide.
 # ============================================================================
 
 
-@dashboards_endpoint_router.post("/yaml-dir/watcher/start")
+@dashboards_endpoint_router.post("/yaml-dir/watcher/start", deprecated=True)
 async def start_yaml_watcher_endpoint(
     current_user: User = Depends(get_current_user),
 ):
@@ -1843,7 +1870,7 @@ async def start_yaml_watcher_endpoint(
         }
 
 
-@dashboards_endpoint_router.post("/yaml-dir/watcher/stop")
+@dashboards_endpoint_router.post("/yaml-dir/watcher/stop", deprecated=True)
 async def stop_yaml_watcher_endpoint(
     current_user: User = Depends(get_current_user),
 ):
@@ -1882,7 +1909,7 @@ async def stop_yaml_watcher_endpoint(
         }
 
 
-@dashboards_endpoint_router.get("/yaml-dir/watcher/status")
+@dashboards_endpoint_router.get("/yaml-dir/watcher/status", deprecated=True)
 async def get_yaml_watcher_status_endpoint(
     current_user: User = Depends(get_current_user),
 ):
@@ -1905,7 +1932,7 @@ async def get_yaml_watcher_status_endpoint(
     }
 
 
-@dashboards_endpoint_router.post("/yaml-dir/sync-all")
+@dashboards_endpoint_router.post("/yaml-dir/sync-all", deprecated=True)
 async def sync_all_yaml_to_mongodb(
     current_user: User = Depends(get_current_user),
 ):

@@ -1,5 +1,51 @@
 # Changelog
 
+## [Unreleased]
+
+### ⚠️ Deprecations
+
+#### YAML Dashboard System Deprecated (2026-01-26)
+
+The YAML-based dashboard serialization system has been **deprecated** in favor of a simpler JSON-based approach.
+
+**What's Deprecated:**
+- All YAML export/import API endpoints (marked with `deprecated=True` in OpenAPI)
+- YAML file watcher auto-sync functionality
+- YAML directory management endpoints
+- `depictio/models/yaml_serialization/` module (3,399 lines of code)
+
+**Why:**
+- 98% code reduction: JSON approach requires only ~158 lines vs 3,399 lines for YAML
+- Native Pydantic integration with `model_dump()` / `model_validate()`
+- MongoDB's native JSON format with `bson.json_util`
+- JSON Schema auto-generation for API/MCP programmatic access
+- Simpler maintenance: single format instead of 3 competing formats
+
+**Migration:**
+- Use JSON endpoints instead: `POST /api/v1/dashboards/import/json`, `GET /api/v1/dashboards/export/{id}/json`
+- Migration tool available: `python scripts/migrate_yaml_to_json.py`
+- See `YAML_MONGODB_ANALYSIS.md` for comprehensive migration guide
+
+**Configuration Changes:**
+```bash
+# YAML system now disabled by default
+DEPICTIO_DASHBOARD_YAML_ENABLED=false
+DEPICTIO_DASHBOARD_YAML_AUTO_EXPORT_ON_SAVE=false
+DEPICTIO_DASHBOARD_YAML_WATCHER_AUTO_START=false
+```
+
+**Timeline:**
+- 2026-01-26: YAML disabled by default, endpoints marked deprecated
+- TBD: Documentation updated to JSON examples
+- TBD: YAML endpoints removed after transition period
+
+For details, see:
+- Full analysis: `YAML_MONGODB_ANALYSIS.md`
+- Quick guide: `QUICK_DECISION_GUIDE.md`
+- POC code: `SIMPLE_JSON_POC.py`
+
+---
+
 ### Docker Images 🐳
 
 
