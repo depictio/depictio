@@ -551,11 +551,21 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
                 color_badge_ownership = "gray"
             badge_icon = "material-symbols:public" if public else "material-symbols:lock"
 
-            badge_owner = dmc.Badge(
-                f"Owner: {dashboard['permissions']['owners'][0]['email']}",
-                # f"Owner: {dashboard['permissions']['owners'][0]['email']} - {str(dashboard['permissions']['owners'][0]['_id'])}",
-                color=color_badge_ownership,
-                leftSection=DashIconify(icon="mdi:account", width=16, color="white"),
+            # Owner badge with tooltip
+            owner_email = dashboard["permissions"]["owners"][0]["email"]
+            badge_owner = dmc.Tooltip(
+                label=f"Owner: {owner_email}",
+                children=dmc.Badge(
+                    f"Owner: {owner_email}",
+                    color=color_badge_ownership,
+                    leftSection=DashIconify(icon="mdi:account", width=16, color="white"),
+                    style={
+                        "maxWidth": "100%",
+                        "overflow": "hidden",
+                        "textOverflow": "ellipsis",
+                        "whiteSpace": "nowrap",
+                    },
+                ),
             )
 
             # Use project cache to avoid redundant API calls
@@ -573,21 +583,52 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
                     project_name = "Unknown"
                     project_cache[project_id_str] = project_name  # Cache the failure too
 
-            badge_project = dmc.Badge(
-                f"Project: {project_name}",
-                color=colors["teal"],  # Use Depictio teal instead of green
-                leftSection=DashIconify(icon="mdi:jira", width=16, color="white"),
-                style={
-                    "maxWidth": "100%",
-                    "overflow": "visible",
-                    "whiteSpace": "normal",
-                    "wordWrap": "break-word",
-                },  # Allow text wrapping for long project names
+            # Project badge with tooltip
+            badge_project = dmc.Tooltip(
+                label=f"Project: {project_name}",
+                children=dmc.Badge(
+                    f"Project: {project_name}",
+                    color=colors["teal"],  # Use Depictio teal instead of green
+                    leftSection=DashIconify(icon="mdi:jira", width=16, color="white"),
+                    style={
+                        "maxWidth": "100%",
+                        "overflow": "hidden",
+                        "textOverflow": "ellipsis",
+                        "whiteSpace": "nowrap",
+                    },
+                ),
             )
-            badge_status = dmc.Badge(
-                "Public" if public else "Private",
-                color=colors["green"] if public else colors["purple"],  # Use Depictio colors
-                leftSection=DashIconify(icon=badge_icon, width=16, color="white"),
+
+            # Status badge with tooltip
+            status_text = "Public" if public else "Private"
+            badge_status = dmc.Tooltip(
+                label=f"Visibility: {status_text}",
+                children=dmc.Badge(
+                    status_text,
+                    color=colors["green"] if public else colors["purple"],  # Use Depictio colors
+                    leftSection=DashIconify(icon=badge_icon, width=16, color="white"),
+                ),
+            )
+
+            # Create last modified badge with tooltip
+            last_modified = "Never"
+            if dashboard.get("last_saved_ts"):
+                try:
+                    # Parse ISO format timestamp
+                    dt = datetime.fromisoformat(dashboard["last_saved_ts"].replace("Z", "+00:00"))
+                    last_modified = dt.strftime("%Y-%m-%d %H:%M")
+                except Exception as e:
+                    logger.warning(f"Failed to parse last_saved_ts: {e}")
+                    last_modified = dashboard["last_saved_ts"]
+
+            badge_last_modified = dmc.Tooltip(
+                label=f"Last modified: {last_modified}",
+                children=dmc.Badge(
+                    f"Modified: {last_modified}",
+                    color="gray",
+                    variant="light",
+                    leftSection=DashIconify(icon="mdi:clock-outline", width=16),
+                ),
             )
 
             # badge_tooltip_additional_info = dmc.HoverCard(
@@ -699,6 +740,7 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
                             badge_project,
                             badge_owner,
                             badge_status,
+                            badge_last_modified,
                             # badge_tooltip_additional_info,
                         ],
                         justify="center",
@@ -772,10 +814,8 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
                                     },
                                     variant="outline",
                                     color=colors["blue"],  # Use Depictio blue
-                                    size="sm",
-                                    # style={"fontFamily": "Virgil"},
-                                    # leftIcon=DashIconify(icon="mdi:eye", width=12, color="black"),
-                                    style={"padding": "2px 6px", "fontSize": "12px"},
+                                    size="xs",
+                                    style={"padding": "2px 4px", "fontSize": "11px"},
                                 ),
                                 href=f"/dashboard/{dashboard['dashboard_id']}",
                             ),
@@ -787,10 +827,9 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
                                 },
                                 variant="outline",
                                 color=colors["teal"],  # Use Depictio teal
-                                # style={"fontFamily": "Virgil"},
                                 disabled=disabled,
-                                size="sm",
-                                style={"padding": "2px 6px", "fontSize": "12px"},
+                                size="xs",
+                                style={"padding": "2px 4px", "fontSize": "11px"},
                             ),
                             dmc.Button(
                                 "Duplicate",
@@ -800,9 +839,8 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
                                 },
                                 variant="outline",
                                 color=colors["pink"],  # Use Depictio gray
-                                # style={"fontFamily": "Virgil"},
-                                size="sm",
-                                style={"padding": "2px 6px", "fontSize": "12px"},
+                                size="xs",
+                                style={"padding": "2px 4px", "fontSize": "11px"},
                                 disabled=duplicate_disabled,
                             ),
                             dmc.Button(
@@ -813,10 +851,9 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
                                 },
                                 variant="outline",
                                 color=colors["red"],  # Use Depictio red
-                                # style={"fontFamily": "Virgil"},
                                 disabled=disabled,
-                                size="sm",
-                                style={"padding": "2px 6px", "fontSize": "12px"},
+                                size="xs",
+                                style={"padding": "2px 4px", "fontSize": "11px"},
                             ),
                             dmc.Button(
                                 privacy_button_title,
@@ -826,17 +863,12 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
                                 },
                                 variant="outline",
                                 color=color_privacy_button,
-                                # style={"fontFamily": "Virgil"},
                                 disabled=disabled,
-                                size="sm",
-                                style={"padding": "2px 6px", "fontSize": "12px", "display": "none"},
+                                size="xs",
+                                style={"padding": "2px 4px", "fontSize": "11px", "display": "none"},
                             ),
-                        ]
-                        # align="center",
-                        # position="apart",
-                        # grow=False,
-                        # noWrap=False,
-                        # style={"width": "100%"},
+                        ],
+                        gap="xs",
                     ),
                 ]
             )
@@ -922,7 +954,7 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
                                     ],
                                     style={
                                         "width": "100%",
-                                        "height": "280px",  # Match optimized thumbnail height
+                                        "height": "210px",  # Adjusted for 4-column layout (maintains 16:9 proportions)
                                         "display": "flex",
                                         "flexDirection": "column",
                                         "alignItems": "center",
@@ -946,7 +978,7 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
                             src=thumbnail_url,
                             style={
                                 "width": "100%",
-                                "height": "280px",  # Optimized height for 3-column layout
+                                "height": "210px",  # Adjusted for 4-column layout (maintains 16:9 proportions)
                                 "objectFit": "cover",  # Fill container completely
                                 "objectPosition": "center center",  # Center the image content
                                 "borderRadius": "8px 8px 0 0",
@@ -1075,6 +1107,59 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
                 )
             return view
 
+        def create_empty_state_card(icon: str, title: str, description: str) -> list[dmc.Center]:
+            """
+            Create an empty state card similar to projects.py.
+
+            Args:
+                icon: Iconify icon name
+                title: Main title text
+                description: Description text
+
+            Returns:
+                List containing a centered empty state card
+            """
+            return [
+                dmc.Center(
+                    dmc.Paper(
+                        children=[
+                            dmc.Stack(
+                                children=[
+                                    dmc.Center(
+                                        DashIconify(
+                                            icon=icon,
+                                            width=64,
+                                            height=64,
+                                            color="#6c757d",
+                                        )
+                                    ),
+                                    dmc.Text(
+                                        title,
+                                        ta="center",
+                                        fw="bold",
+                                        size="xl",
+                                    ),
+                                    dmc.Text(
+                                        description,
+                                        ta="center",
+                                        c="gray",
+                                        size="sm",
+                                    ),
+                                ],
+                                align="center",
+                                gap="sm",
+                            )
+                        ],
+                        shadow="sm",
+                        radius="md",
+                        p="xl",
+                        withBorder=True,
+                        style={"width": "100%", "maxWidth": "500px"},
+                    ),
+                    style={"minHeight": "300px", "height": "auto"},
+                )
+            ]
+
         # Categorize dashboards based on ownership and access
         owned_dashboards = [
             d
@@ -1084,66 +1169,246 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
         # Check if current user is anonymous
         is_anonymous = hasattr(current_user, "is_anonymous") and current_user.is_anonymous
 
+        # Accessed dashboards: shared with user but not owned, excluding public ones
         accessed_dashboards = [
             d
             for d in dashboards
             if str(user_id) not in [str(owner["_id"]) for owner in d["permissions"]["owners"]]
-            and (
-                not is_anonymous or d.get("is_public", False)
-            )  # Anonymous users only see public dashboards
+            and not d.get("is_public", False)
+            and (not is_anonymous or d.get("is_public", False))
         ]
 
-        owned_dashboards_section_header = dmc.Title(
-            [
-                DashIconify(icon="mdi:account-check", width=18, color="#1c7ed6"),
-                " Owned Dashboards",
-            ],
-            order=3,
+        # Public dashboards: public but not owned and not already in accessed
+        # (to avoid duplication if a public dashboard is also shared)
+        public_dashboards = [
+            d
+            for d in dashboards
+            if d.get("is_public", False)
+            and str(user_id) not in [str(owner["_id"]) for owner in d["permissions"]["owners"]]
+        ]
+
+        # Example dashboards: identified by owner email containing "example" or "demo"
+        # or by dashboard title starting with "Example:" or by specific dashboard ID
+        example_dashboard_ids = ["6824cb3b89d2b72169309737"]  # Specific example dashboards
+        example_dashboards = [
+            d
+            for d in dashboards
+            if (
+                any(
+                    "example" in owner.get("email", "").lower()
+                    or "demo" in owner.get("email", "").lower()
+                    for owner in d["permissions"]["owners"]
+                )
+                or d.get("title", "").lower().startswith("example:")
+                or str(d.get("dashboard_id", "")) in example_dashboard_ids
+            )
+            and str(user_id) not in [str(owner["_id"]) for owner in d["permissions"]["owners"]]
+        ]
+
+        # Create views for each category (using same icons as accordion headers)
+        owned_dashboards_content = (
+            loop_over_dashboards(user_id, owned_dashboards, token, current_user)
+            if owned_dashboards
+            else create_empty_state_card(
+                icon="mdi:account-check",
+                title="No owned dashboards",
+                description="Create your first dashboard to get started.",
+            )
         )
+
+        accessed_dashboards_content = (
+            loop_over_dashboards(user_id, accessed_dashboards, token, current_user)
+            if accessed_dashboards
+            else create_empty_state_card(
+                icon="mdi:eye",
+                title="No accessed dashboards",
+                description="Dashboards shared with you will appear here.",
+            )
+        )
+
+        public_dashboards_content = (
+            loop_over_dashboards(user_id, public_dashboards, token, current_user)
+            if public_dashboards
+            else create_empty_state_card(
+                icon="mdi:earth",
+                title="No public dashboards",
+                description="Public dashboards will appear here.",
+            )
+        )
+
+        example_dashboards_content = (
+            loop_over_dashboards(user_id, example_dashboards, token, current_user)
+            if example_dashboards
+            else create_empty_state_card(
+                icon="mdi:school-outline",
+                title="No example dashboards",
+                description="Example and demo dashboards will appear here.",
+            )
+        )
+
         owned_dashboards_view = dmc.SimpleGrid(
-            loop_over_dashboards(user_id, owned_dashboards, token, current_user),
+            owned_dashboards_content,
             cols={
                 "base": 1,
                 "sm": 2,
-                "lg": 3,  # Back to 3 columns as requested
-            },  # Responsive columns: 1 on mobile, 2 on small, 3 on large
+                "lg": 4,
+            },
             spacing="xl",
             verticalSpacing="xl",
             style={"width": "100%"},
-        )
-        accessed_dashboards_section_header = dmc.Title(
-            [
-                DashIconify(icon="mdi:eye", width=18, color="#54ca74"),
-                " Accessed Dashboards",
-            ],
-            order=3,
         )
 
         accessed_dashboards_view = dmc.SimpleGrid(
-            loop_over_dashboards(user_id, accessed_dashboards, token, current_user),
+            accessed_dashboards_content,
             cols={
                 "base": 1,
                 "sm": 2,
-                "lg": 3,
-            },  # Responsive columns: 1 on mobile, 2 on small, 3 on large, 4 on xl
+                "lg": 4,
+            },
             spacing="xl",
             verticalSpacing="xl",
             style={"width": "100%"},
         )
 
-        # Optional: Add padding to the parent div for better spacing on smaller screens
+        public_dashboards_view = dmc.SimpleGrid(
+            public_dashboards_content,
+            cols={
+                "base": 1,
+                "sm": 2,
+                "lg": 4,
+            },
+            spacing="xl",
+            verticalSpacing="xl",
+            style={"width": "100%"},
+        )
+
+        example_dashboards_view = dmc.SimpleGrid(
+            example_dashboards_content,
+            cols={
+                "base": 1,
+                "sm": 2,
+                "lg": 4,
+            },
+            spacing="xl",
+            verticalSpacing="xl",
+            style={"width": "100%"},
+        )
+
+        # Determine which sections to expand based on content
+        # Order of prevalence: Example > Public > Accessed > Owned
+        default_expanded = []
+        if example_dashboards:
+            default_expanded.append("example")
+        elif public_dashboards:
+            default_expanded.append("public")
+        elif accessed_dashboards:
+            default_expanded.append("accessed")
+        elif owned_dashboards:
+            default_expanded.append("owned")
+
+        # Collapsible sections using Accordion
+        # Order of appearance: Owned / Accessed / Public / Example
         return html.Div(
             [
-                # Show owned dashboards section
-                owned_dashboards_section_header,
-                dmc.Space(h=10),
-                owned_dashboards_view,
-                dmc.Space(h=20),
-                html.Hr(),
-                # Show accessed dashboards section
-                accessed_dashboards_section_header,
-                dmc.Space(h=10),
-                accessed_dashboards_view,
+                dmc.Accordion(
+                    multiple=True,
+                    value=default_expanded,
+                    variant="default",
+                    chevronPosition="left",
+                    chevronSize=30,
+                    children=[
+                        # Owned Dashboards Section
+                        dmc.AccordionItem(
+                            [
+                                dmc.AccordionControl(
+                                    dmc.Group(
+                                        [
+                                            DashIconify(
+                                                icon="mdi:account-check", width=18, color="#1c7ed6"
+                                            ),
+                                            dmc.Text("Owned Dashboards", size="lg", fw="bold"),
+                                        ],
+                                        gap="xs",
+                                    ),
+                                ),
+                                dmc.AccordionPanel(
+                                    [
+                                        dmc.Space(h=10),
+                                        owned_dashboards_view,
+                                    ]
+                                ),
+                            ],
+                            value="owned",
+                        ),
+                        # Accessed Dashboards Section
+                        dmc.AccordionItem(
+                            [
+                                dmc.AccordionControl(
+                                    dmc.Group(
+                                        [
+                                            DashIconify(icon="mdi:eye", width=18, color="#54ca74"),
+                                            dmc.Text("Accessed Dashboards", size="lg", fw="bold"),
+                                        ],
+                                        gap="xs",
+                                    ),
+                                ),
+                                dmc.AccordionPanel(
+                                    [
+                                        dmc.Space(h=10),
+                                        accessed_dashboards_view,
+                                    ]
+                                ),
+                            ],
+                            value="accessed",
+                        ),
+                        # Public Dashboards Section
+                        dmc.AccordionItem(
+                            [
+                                dmc.AccordionControl(
+                                    dmc.Group(
+                                        [
+                                            DashIconify(
+                                                icon="mdi:earth", width=18, color="#20c997"
+                                            ),
+                                            dmc.Text("Public Dashboards", size="lg", fw="bold"),
+                                        ],
+                                        gap="xs",
+                                    ),
+                                ),
+                                dmc.AccordionPanel(
+                                    [
+                                        dmc.Space(h=10),
+                                        public_dashboards_view,
+                                    ]
+                                ),
+                            ],
+                            value="public",
+                        ),
+                        # Example Dashboards Section
+                        dmc.AccordionItem(
+                            [
+                                dmc.AccordionControl(
+                                    dmc.Group(
+                                        [
+                                            DashIconify(
+                                                icon="mdi:school-outline", width=18, color="#fd7e14"
+                                            ),
+                                            dmc.Text("Example Dashboards", size="lg", fw="bold"),
+                                        ],
+                                        gap="xs",
+                                    ),
+                                ),
+                                dmc.AccordionPanel(
+                                    [
+                                        dmc.Space(h=10),
+                                        example_dashboards_view,
+                                    ]
+                                ),
+                            ],
+                            value="example",
+                        ),
+                    ],
+                ),
             ],
             style={"width": "100%"},
         )
