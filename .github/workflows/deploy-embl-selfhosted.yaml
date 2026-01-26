@@ -169,22 +169,24 @@ jobs:
       - name: Verify deployment
         run: |
           echo "📋 Checking deployment status..."
-          kubectl get pods -n datasci-depictio-project-demo-dev -l app.kubernetes.io/instance=devdemo
+          kubectl get pods -n datasci-depictio-project-demo-dev -l release=devdemo,type=app
           kubectl get ingress -n datasci-depictio-project-demo-dev
 
       - name: Wait for services to be ready
         run: |
           echo "⏳ Waiting for backend to be ready..."
           kubectl wait --for=condition=ready pod \
-            -l app.kubernetes.io/instance=devdemo,app.kubernetes.io/component=backend \
+            -l release=devdemo,app=depictio-backend \
             -n datasci-depictio-project-demo-dev \
             --timeout=300s
 
           echo "⏳ Waiting for frontend to be ready..."
           kubectl wait --for=condition=ready pod \
-            -l app.kubernetes.io/instance=devdemo,app.kubernetes.io/component=frontend \
+            -l release=devdemo,app=depictio-frontend \
             -n datasci-depictio-project-demo-dev \
             --timeout=300s
+
+          echo "✅ All services are ready"
 
   # Register demo projects after dev deployment
   register-projects-dev:
@@ -218,7 +220,7 @@ jobs:
         run: |
           # Get admin config from backend pod
           BACKEND_POD=$(kubectl get pods -n datasci-depictio-project-demo-dev \
-            -l app.kubernetes.io/instance=devdemo,app.kubernetes.io/component=backend \
+            -l release=devdemo,app=depictio-backend \
             -o jsonpath='{.items[0].metadata.name}')
 
           echo "Getting admin config from pod: ${BACKEND_POD}"
@@ -346,22 +348,24 @@ jobs:
       - name: Verify deployment
         run: |
           echo "📋 Checking deployment status..."
-          kubectl get pods -n datasci-depictio-project-demo -l app.kubernetes.io/instance=demo
+          kubectl get pods -n datasci-depictio-project-demo -l release=demo,type=app
           kubectl get ingress -n datasci-depictio-project-demo
 
       - name: Wait for services to be ready
         run: |
           echo "⏳ Waiting for backend to be ready..."
           kubectl wait --for=condition=ready pod \
-            -l app.kubernetes.io/instance=demo,app.kubernetes.io/component=backend \
+            -l release=demo,app=depictio-backend \
             -n datasci-depictio-project-demo \
             --timeout=300s
 
           echo "⏳ Waiting for frontend to be ready..."
           kubectl wait --for=condition=ready pod \
-            -l app.kubernetes.io/instance=demo,app.kubernetes.io/component=frontend \
+            -l release=demo,app=depictio-frontend \
             -n datasci-depictio-project-demo \
             --timeout=300s
+
+          echo "✅ All services are ready"
 
   # Register demo projects after demo deployment
   register-projects-demo:
@@ -392,7 +396,7 @@ jobs:
         id: token
         run: |
           BACKEND_POD=$(kubectl get pods -n datasci-depictio-project-demo \
-            -l app.kubernetes.io/instance=demo,app.kubernetes.io/component=backend \
+            -l release=demo,app=depictio-backend \
             -o jsonpath='{.items[0].metadata.name}')
 
           echo "Getting admin config from pod: ${BACKEND_POD}"
