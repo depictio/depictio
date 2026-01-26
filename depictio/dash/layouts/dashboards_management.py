@@ -1004,13 +1004,14 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
 
                 carousel_slides = []
 
-                # Add main dashboard thumbnail as first slide
+                # Add main dashboard thumbnail as first slide (use dashboard_id for URL consistency)
                 main_id = dashboard["_id"]
+                main_dashboard_id = dashboard["dashboard_id"]
 
-                # Check for theme-specific screenshots
-                main_light_filename = f"{main_id}_light.png"
-                main_dark_filename = f"{main_id}_dark.png"
-                main_legacy_filename = f"{main_id}.png"
+                # Check for theme-specific screenshots (use dashboard_id to match URL identifier)
+                main_light_filename = f"{main_dashboard_id}_light.png"
+                main_dark_filename = f"{main_dashboard_id}_dark.png"
+                main_legacy_filename = f"{main_dashboard_id}.png"
 
                 main_light_path = os.path.join(output_folder, main_light_filename)
                 main_dark_path = os.path.join(output_folder, main_dark_filename)
@@ -1072,10 +1073,10 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
                     tab_title = tab.get("title", "Untitled Tab")
                     tab_dashboard_id = tab.get("dashboard_id")
 
-                    # Check for theme-specific screenshots
-                    tab_light_filename = f"{tab_id}_light.png"
-                    tab_dark_filename = f"{tab_id}_dark.png"
-                    tab_legacy_filename = f"{tab_id}.png"
+                    # Check for theme-specific screenshots (use dashboard_id for URL consistency)
+                    tab_light_filename = f"{tab_dashboard_id}_light.png"
+                    tab_dark_filename = f"{tab_dashboard_id}_dark.png"
+                    tab_legacy_filename = f"{tab_dashboard_id}.png"
 
                     tab_light_path = os.path.join(output_folder, tab_light_filename)
                     tab_dark_path = os.path.join(output_folder, tab_dark_filename)
@@ -1145,9 +1146,9 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
 
             # Define the output folder where screenshots are saved
             output_folder = "/app/depictio/dash/static/screenshots"
-            dashboard_id_str = dashboard["_id"]
+            dashboard_id_str = dashboard["dashboard_id"]  # Use dashboard_id to match URL identifier
 
-            # Check for theme-specific screenshots
+            # Check for theme-specific screenshots (use dashboard_id for URL consistency)
             light_filename = f"{dashboard_id_str}_light.png"
             dark_filename = f"{dashboard_id_str}_dark.png"
             legacy_filename = f"{dashboard_id_str}.png"
