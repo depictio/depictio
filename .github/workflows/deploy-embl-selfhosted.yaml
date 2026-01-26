@@ -5,9 +5,11 @@ name: Deploy to EMBL (Self-Hosted)
 # Only users with write access can push tags.
 
 on:
-  # Trigger after Docker build workflow completes
+  # Trigger after Docker build workflows complete
   workflow_run:
-    workflows: ["Docker Image Build (AMD64) - Beta only"]
+    workflows:
+      - "Docker Image Build (AMD64) - Beta only"  # Beta tags (v*-b*)
+      - "Docker Image Multi Arch Build"            # Stable tags (v*)
     types:
       - completed
 
@@ -37,15 +39,53 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  # Dev environment - ALL tags deploy here
+  # Detect tag type (beta vs stable) for workflow_run events
+  detect-tag-type:
+    name: Detect Tag Type
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success'
+    outputs:
+      is_beta: ${{ steps.detect.outputs.is_beta }}
+      is_stable: ${{ steps.detect.outputs.is_stable }}
+      version: ${{ steps.detect.outputs.version }}
+    steps:
+      - name: Detect tag type from ref
+        id: detect
+        run: |
+          # Extract ref from workflow_run event
+          REF="${{ github.event.workflow_run.head_branch }}"
+          echo "Workflow run ref: ${REF}"
+
+          # Remove 'v' prefix if present
+          VERSION="${REF#v}"
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+
+          # Check if this is a beta tag (contains -b)
+          if [[ "${VERSION}" =~ -b[0-9]+ ]]; then
+            echo "is_beta=true" >> $GITHUB_OUTPUT
+            echo "is_stable=false" >> $GITHUB_OUTPUT
+            echo "✅ Detected BETA tag: ${VERSION}"
+          else
+            echo "is_beta=false" >> $GITHUB_OUTPUT
+            echo "is_stable=true" >> $GITHUB_OUTPUT
+            echo "✅ Detected STABLE tag: ${VERSION}"
+          fi
+
+  # Dev environment - Beta tags deploy here automatically
   deploy-dev:
     name: Deploy to Dev (dev.demo.depictio.embl.org)
     runs-on: [self-hosted, embl-deploy]
     environment: embl-demo-dev
-    # Run if Docker build succeeded OR manual dispatch targeting dev/both
+    needs: [detect-tag-type]
     if: |
-      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success') ||
-      (github.event_name == 'workflow_dispatch' && (github.event.inputs.environment == 'dev' || github.event.inputs.environment == 'both'))
+      always() &&
+      (
+        (github.event_name == 'workflow_run' && needs.detect-tag-type.result == 'success' && needs.detect-tag-type.outputs.is_beta == 'true') ||
+        (github.event_name == 'workflow_dispatch' && (github.event.inputs.environment == 'dev' || github.event.inputs.environment == 'both'))
+      )
+    # Run for:
+    # 1. Beta tags (workflow_run with is_beta=true)
+    # 2. Manual dispatch targeting dev/both
     outputs:
       version: ${{ steps.version.outputs.version }}
     steps:
@@ -58,9 +98,8 @@ jobs:
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             VERSION="${{ github.event.inputs.version }}"
           else
-            # Extract version from the workflow_run ref (e.g., refs/tags/v0.6.0-b10)
-            REF="${{ github.event.workflow_run.head_branch }}"
-            VERSION="${REF#v}"
+            # Use version from detect-tag-type job
+            VERSION="${{ needs.detect-tag-type.outputs.version }}"
           fi
           echo "version=${VERSION}" >> $GITHUB_OUTPUT
           echo "Deploying version: ${VERSION}"
@@ -186,10 +225,16 @@ jobs:
     name: Deploy to Demo (demo.depictio.embl.org)
     runs-on: [self-hosted, embl-deploy]
     environment: embl-demo
-    # Run only for stable tags (workflow_run won't trigger for stable, use dispatch)
-    # Or manual dispatch targeting demo/both
+    needs: [detect-tag-type]
     if: |
-      (github.event_name == 'workflow_dispatch' && (github.event.inputs.environment == 'demo' || github.event.inputs.environment == 'both'))
+      always() &&
+      (
+        (github.event_name == 'workflow_run' && needs.detect-tag-type.result == 'success' && needs.detect-tag-type.outputs.is_stable == 'true') ||
+        (github.event_name == 'workflow_dispatch' && (github.event.inputs.environment == 'demo' || github.event.inputs.environment == 'both'))
+      )
+    # Run for:
+    # 1. Stable tags (workflow_run with is_stable=true)
+    # 2. Manual dispatch targeting demo/both
     outputs:
       version: ${{ steps.version.outputs.version }}
     steps:
@@ -199,7 +244,12 @@ jobs:
       - name: Determine version
         id: version
         run: |
-          VERSION="${{ github.event.inputs.version }}"
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+          else
+            # Use version from detect-tag-type job
+            VERSION="${{ needs.detect-tag-type.outputs.version }}"
+          fi
           echo "version=${VERSION}" >> $GITHUB_OUTPUT
           echo "Deploying version: ${VERSION}"
 
