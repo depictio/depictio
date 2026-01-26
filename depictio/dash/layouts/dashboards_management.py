@@ -894,7 +894,7 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
                         ],
                         justify="center",
                         align="flex-start",
-                        gap="xs",  # Reduced gap between badges
+                        gap=4,  # Minimal gap between badges (4px instead of xs=10px)
                     ),
                     dmc.Space(h=10),
                 ]
