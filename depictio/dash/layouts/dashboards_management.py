@@ -1310,26 +1310,32 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
             ]
 
         # Categorize dashboards with precedence: Example > Public > Accessed > Owned
-        # Example dashboards take highest precedence and are filtered first
+        # Example dashboards are ONLY those explicitly marked OR owned by example/demo users
+        # If current user owns a dashboard, it goes to Owned (not Example) unless explicitly marked
 
         # Check if current user is anonymous
         is_anonymous = hasattr(current_user, "is_anonymous") and current_user.is_anonymous
 
-        # Example dashboards: identified by owner email containing "example" or "demo"
-        # or by dashboard title starting with "Example:" or by specific dashboard ID
-        # These take precedence even if the user owns them
+        # Example dashboards: explicitly marked by ID OR owned by example/demo users (but NOT current user)
         example_dashboard_ids = ["6824cb3b89d2b72169309737"]  # Specific example dashboards
         example_dashboards = [
             d
             for d in dashboards
             if (
-                any(
-                    "example" in owner.get("email", "").lower()
-                    or "demo" in owner.get("email", "").lower()
-                    for owner in d["permissions"]["owners"]
+                # Explicitly marked as example by ID
+                str(d.get("dashboard_id", "")) in example_dashboard_ids
+                # OR owned by example/demo user (but not by current user - duplicates go to Owned)
+                or (
+                    str(user_id) not in [str(owner["_id"]) for owner in d["permissions"]["owners"]]
+                    and (
+                        any(
+                            "example" in owner.get("email", "").lower()
+                            or "demo" in owner.get("email", "").lower()
+                            for owner in d["permissions"]["owners"]
+                        )
+                        or d.get("title", "").lower().startswith("example:")
+                    )
                 )
-                or d.get("title", "").lower().startswith("example:")
-                or str(d.get("dashboard_id", "")) in example_dashboard_ids
             )
         ]
         example_ids = {str(d.get("dashboard_id", "")) for d in example_dashboards}
