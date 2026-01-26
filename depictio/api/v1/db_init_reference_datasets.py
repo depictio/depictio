@@ -28,14 +28,18 @@ STATIC_IDS = {
             "penguins_complete": "646b0f3c1e4a2d7f8e5b8ca1",  # Join result
         },
     },
-    "multiqc": {
+    "ampliseq": {
         "project": "646b0f3c1e4a2d7f8e5b8ca2",
-        "workflows": {"test-workflow": "646b0f3c1e4a2d7f8e5b8ca3"},
+        "workflows": {"ampliseq": "646b0f3c1e4a2d7f8e5b8ca3"},
         "data_collections": {
             "multiqc_data": "646b0f3c1e4a2d7f8e5b8ca4",
-            "sample_metadata": "646b0f3c1e4a2d7f8e5b8ca5",
-            "sample_qc_metrics": "646b0f3c1e4a2d7f8e5b8ca6",
-            "qc_with_metadata": "646b0f3c1e4a2d7f8e5b8ca7",  # Join result
+            "metadata": "646b0f3c1e4a2d7f8e5b8ca5",
+            "alpha_rarefaction": "646b0f3c1e4a2d7f8e5b8ca8",
+            "taxonomy_composition": "646b0f3c1e4a2d7f8e5b8ca9",
+            "ancom_volcano": "646b0f3c1e4a2d7f8e5b8caa",
+            # Join results (disabled temporarily for initial testing)
+            # "alpha_rarefaction_enriched": "646b0f3c1e4a2d7f8e5b8cab",
+            # "taxonomy_enriched": "646b0f3c1e4a2d7f8e5b8cac",
         },
     },
 }
@@ -272,18 +276,20 @@ class ReferenceDatasetRegistry:
 async def create_reference_datasets(
     admin_user: UserBeanie, token_payload: dict[str, Any]
 ) -> list[dict[str, Any]]:
-    """Create all reference datasets (iris, penguins, multiqc).
+    """Create all reference datasets (iris, penguins, ampliseq).
 
-    Note: multiqc dataset is registered but has incomplete data files.
-    The project and links will be created, but data processing will fail
-    until these files are added:
-    - depictio/projects/reference/multiqc/run_*/multiqc_data.json
-    - depictio/projects/reference/multiqc/run_*/sample_qc_metrics.csv
+    Note: ampliseq dataset uses 16S rRNA microbiome data from nf-core/ampliseq.
+    Data files are included:
+    - depictio/projects/reference/ampliseq/multiqc.parquet
+    - depictio/projects/reference/ampliseq/merged_metadata.tsv
+    - depictio/projects/reference/ampliseq/faith_pd_long.tsv
+    - depictio/projects/reference/ampliseq/taxonomy_long.tsv
+    - depictio/projects/reference/ampliseq/ancom_volcano.tsv
     """
     created_projects = []
 
-    # Create all three datasets (multiqc will fail data processing but project will exist)
-    for dataset_name in ["iris", "penguins", "multiqc"]:
+    # Create all three reference datasets
+    for dataset_name in ["iris", "penguins", "ampliseq"]:
         logger.info(f"Creating reference dataset: {dataset_name}")
 
         result = await ReferenceDatasetRegistry.create_reference_project(

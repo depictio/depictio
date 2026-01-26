@@ -36,19 +36,11 @@ workflows:
               separator: "\t"
               try_parse_dates: true
             columns_description:
-              "sample": "Sample identifier matching MultiQC sample names"
-              "name": "ID combined with habitat"
-              # "habitat": "Habitat type of the sample"
-              "condition": "Experimental condition (e.g., control, pollution)"
-              "time": "Time point of sampling"
-              "condition_detailed": "Detailed condition information"
-              # "collection_date": "Sample collection date"
-              "site_alias": "Site alias identifier"
-              "site_locality": "Locality description of the sampling site"
-              "site_date_start": "Start date of sampling at the site"
-              "Temperature": "Water temperature (°C)"
-              "Salinity": "Salinity (PSU)"
-              "Turbidity": "Turbidity (NTU)"
+              "sample": "Sample identifier (SRR accession)"
+              "name": "Sample name combining ID and habitat"
+              "habitat": "Sample habitat (Riverwater, Groundwater, Sediment, Soil)"
+              "Riv_vs_Gro": "Riverwater vs Groundwater comparison group"
+              "Sed_vs_Soil": "Sediment vs Soil comparison group"
       # - data_collection_tag: "site_metadata"
       #   description: "Site metadata table"
       #   config:
@@ -174,28 +166,35 @@ workflows:
 # Client-side joins executed locally with `depictio data join`
 # ============================================================================
 
-joins:
-  # Join alpha rarefaction with metadata
-  - name: "alpha_rarefaction_enriched"
-    description: "Alpha rarefaction data enriched with sample metadata"
-    left_dc: "alpha_rarefaction"
-    right_dc: "metadata"
-    on_columns:
-      - "sample"
-    how: "inner"
-    persist: true
-    workflow_name: "ampliseq"
+# ============================================================================
+# JOINS TEMPORARILY DISABLED
+# ============================================================================
+# Joins are disabled for initial testing to ensure data collections load first.
+# Once data collections are verified, these can be re-enabled.
+# ============================================================================
 
-  # Join taxonomy composition with metadata
-  - name: "taxonomy_enriched"
-    description: "Taxonomic composition enriched with sample metadata"
-    left_dc: "taxonomy_composition"
-    right_dc: "metadata"
-    on_columns:
-      - "sample"
-    how: "inner"
-    persist: true
-    workflow_name: "ampliseq"
+# joins:
+#   # Join alpha rarefaction with metadata
+#   - name: "alpha_rarefaction_enriched"
+#     description: "Alpha rarefaction data enriched with sample metadata"
+#     left_dc: "alpha_rarefaction"
+#     right_dc: "metadata"
+#     on_columns:
+#       - "sample"
+#     how: "inner"
+#     persist: true
+#     workflow_name: "ampliseq"
+#
+#   # Join taxonomy composition with metadata
+#   - name: "taxonomy_enriched"
+#     description: "Taxonomic composition enriched with sample metadata"
+#     left_dc: "taxonomy_composition"
+#     right_dc: "metadata"
+#     on_columns:
+#       - "sample"
+#     how: "inner"
+#     persist: true
+#     workflow_name: "ampliseq"
 
 # ============================================================================
 # RUNTIME LINKS CONFIGURATION
