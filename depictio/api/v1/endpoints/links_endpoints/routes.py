@@ -10,11 +10,19 @@ The link resolution endpoint is the primary integration point for Dash callbacks
 to apply cross-DC filtering without pre-computed joins.
 """
 
+from typing import Any
+
+import polars as pl
 from bson import ObjectId
 from fastapi import APIRouter, Depends, HTTPException, Path
 
 from depictio.api.v1.configs.logging_init import logger
-from depictio.api.v1.db import multiqc_collection, projects_collection
+from depictio.api.v1.db import (
+    data_collections_collection,
+    deltatables_collection,
+    multiqc_collection,
+    projects_collection,
+)
 from depictio.api.v1.endpoints.links_endpoints.resolvers import get_resolver
 from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user
 from depictio.models.models.base import PyObjectId
@@ -116,6 +124,93 @@ def _find_link_for_resolution(project: dict, source_dc_id: str, target_dc_id: st
         ):
             return DCLink(**link_data)
     return None
+
+
+async def _translate_filter_values(
+    source_dc_id: str,
+    filter_column: str,
+    filter_values: list[Any],
+    link_column: str,
+) -> list[Any]:
+    """Translate filter values from one column to another via source DC query.
+
+    When filtering by column A but the link is defined on column B, this function
+    queries the source DC to translate values from column A to column B.
+
+    Example:
+        Filter: habitat IN ["Groundwater", "Riverwater"]
+        Link: sample (habitat -> sample)
+        Query: SELECT sample FROM metadata WHERE habitat IN ["Groundwater", "Riverwater"]
+        Returns: ["SRR10070131", "SRR10070132", "SRR10070133", ...]
+
+    Args:
+        source_dc_id: Data collection ID to query
+        filter_column: Column being filtered (e.g., "habitat")
+        filter_values: Values selected in filter (e.g., ["Groundwater"])
+        link_column: Column used in link definition (e.g., "sample")
+
+    Returns:
+        List of unique values from link_column that match the filter
+
+    Raises:
+        HTTPException: If DC not found, Delta table not accessible, or columns missing
+    """
+    # Get Delta table location (try both string and ObjectId formats for compatibility)
+    deltatable_doc = deltatables_collection.find_one({"data_collection_id": source_dc_id})
+    if not deltatable_doc:
+        # Try with ObjectId format
+        deltatable_doc = deltatables_collection.find_one({"data_collection_id": ObjectId(source_dc_id)})
+    if not deltatable_doc or "delta_table_location" not in deltatable_doc:
+        logger.error(
+            f"Delta table not found for DC {source_dc_id}. "
+            f"Document exists: {deltatable_doc is not None}, "
+            f"Has location: {deltatable_doc and 'delta_table_location' in deltatable_doc}"
+        )
+        raise HTTPException(
+            status_code=404,
+            detail=f"Delta table not found for DC {source_dc_id}",
+        )
+
+    delta_table_location = deltatable_doc["delta_table_location"]
+    logger.debug(f"Querying Delta table at {delta_table_location}")
+
+    try:
+        # Read Delta table with S3 credentials
+        from depictio.api.v1.s3 import polars_s3_config
+
+        df = pl.read_delta(delta_table_location, storage_options=polars_s3_config)
+
+        # Validate columns exist
+        if filter_column not in df.columns:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Filter column '{filter_column}' not found in source DC. "
+                f"Available: {', '.join(df.columns)}",
+            )
+        if link_column not in df.columns:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Link column '{link_column}' not found in source DC. "
+                f"Available: {', '.join(df.columns)}",
+            )
+
+        # Filter and extract link column values
+        filtered_df = df.filter(pl.col(filter_column).is_in(filter_values))
+        link_values = filtered_df[link_column].unique().to_list()
+
+        logger.info(
+            f"Column translation: {len(filter_values)} {filter_column} values -> "
+            f"{len(link_values)} {link_column} values (from {len(filtered_df)} rows)"
+        )
+
+        return link_values
+
+    except Exception as e:
+        logger.error(f"Error querying source DC for column translation: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to query source DC for column translation: {str(e)}",
+        )
 
 
 async def _get_multiqc_sample_mappings(target_dc_id: str) -> dict[str, list[str]]:
@@ -517,6 +612,26 @@ async def resolve_link(
         f"-> {request.target_dc_id} ({link.target_type})"
     )
 
+    # Translate filter values if filtering by different column than link column
+    values_to_resolve = request.filter_values
+    if request.source_column != link.source_column:
+        logger.info(
+            f"Filter column '{request.source_column}' differs from link column '{link.source_column}'. "
+            f"Translating filter values via source DC query."
+        )
+        # Query source DC to translate filter values to link column values
+        translated_values = await _translate_filter_values(
+            source_dc_id=request.source_dc_id,
+            filter_column=request.source_column,
+            filter_values=request.filter_values,
+            link_column=link.source_column,
+        )
+        logger.info(
+            f"Translated {len(request.filter_values)} {request.source_column} values "
+            f"to {len(translated_values)} {link.source_column} values"
+        )
+        values_to_resolve = translated_values
+
     # Get resolver
     try:
         resolver = get_resolver(link.link_config.resolver)
@@ -549,7 +664,7 @@ async def resolve_link(
 
     # Resolve values
     resolved_values, unmapped_values = resolver.resolve(
-        source_values=request.filter_values,
+        source_values=values_to_resolve,
         link_config=effective_config,
         target_known_values=None,  # Could be enhanced to fetch from target DC
     )

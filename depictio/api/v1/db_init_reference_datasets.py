@@ -79,35 +79,66 @@ class ReferenceDatasetRegistry:
 
     @classmethod
     async def _register_links(cls, project, links_config: list[dict[str, Any]]) -> None:
-        """Resolve DC tags to IDs and register links in project.
+        """Resolve DC tags/IDs and register links in project.
+
+        Supports both formats:
+        - Legacy: source_dc_id="metadata" (DC tag)
+        - New: source_dc_id="646b0f3c1e4a2d7f8e5b8ca5" (DC ID)
 
         Args:
             project: Created ProjectBeanie instance
-            links_config: List of link definitions from YAML with DC tags
+            links_config: List of link definitions from YAML with DC tags or IDs
         """
         from depictio.api.v1.db import projects_collection
         from depictio.models.models.base import PyObjectId
         from depictio.models.models.links import DCLink
 
-        # Build DC tag -> ID mapping
+        # Build DC tag -> ID mapping for legacy format support
         dc_tag_to_id = {}
         for workflow in project.workflows:
             for dc in workflow.data_collections:
                 dc_tag_to_id[dc.data_collection_tag] = str(dc.id)
 
-        # Convert links from tag-based to ID-based
+        # Helper: Resolve DC identifier (tag or ID) to actual ID
+        def resolve_dc_id(dc_identifier: str | None) -> str | None:
+            """Resolve DC tag or ID to actual ObjectId string.
+
+            Args:
+                dc_identifier: Either a DC tag (e.g., "metadata") or DC ID (24-char hex), or None
+
+            Returns:
+                Valid ObjectId string or None if not found
+            """
+            if dc_identifier is None:
+                return None
+
+            # Try as DC ID first (24-char hex string)
+            if len(dc_identifier) == 24:
+                try:
+                    # Validate it's a valid ObjectId format
+                    ObjectId(dc_identifier)
+                    return dc_identifier  # Already a valid DC ID
+                except Exception:
+                    pass  # Not a valid ObjectId, try as tag
+
+            # Try as DC tag
+            return dc_tag_to_id.get(dc_identifier)
+
+        # Convert links from tag/ID-based to ID-based
         resolved_links = []
         for link_config in links_config:
-            source_tag = link_config.get("source_dc_id")
-            target_tag = link_config.get("target_dc_id")
+            source_identifier = link_config.get("source_dc_id")
+            target_identifier = link_config.get("target_dc_id")
 
-            source_id = dc_tag_to_id.get(source_tag)
-            target_id = dc_tag_to_id.get(target_tag)
+            source_id = resolve_dc_id(source_identifier)
+            target_id = resolve_dc_id(target_identifier)
 
             if not source_id or not target_id:
                 logger.warning(
-                    f"Skipping link {source_tag} -> {target_tag}: DC not found. "
-                    f"Available DCs: {list(dc_tag_to_id.keys())}"
+                    f"Skipping link - could not resolve DC identifiers: "
+                    f"source={source_identifier} (resolved={source_id}), "
+                    f"target={target_identifier} (resolved={target_id}). "
+                    f"Available DC tags: {list(dc_tag_to_id.keys())}"
                 )
                 continue
 

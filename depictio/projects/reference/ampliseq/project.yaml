@@ -133,22 +133,38 @@ workflows:
 # ============================================================================
 
 links:
-  # Link metadata to MultiQC for interactive filtering
-  - source_dc_id: "metadata"
+  # Link 1: Metadata → MultiQC (for MultiQC component filtering)
+  - source_dc_id: "646b0f3c1e4a2d7f8e5b8ca5"  # metadata
     source_column: "sample"
-    target_dc_id: "multiqc_data"
+    target_dc_id: "646b0f3c1e4a2d7f8e5b8ca4"  # multiqc_data
     target_type: "multiqc"
     link_config:
       resolver: "sample_mapping"
       target_field: "sample_name"
-    description: "Filter MultiQC data by sample metadata"
+    description: "Filter MultiQC by metadata samples (habitat selections)"
+    enabled: true
 
-  # Link alpha rarefaction to MultiQC for filtering
-  - source_dc_id: "alpha_rarefaction"
+  # Link 2: Metadata → Alpha Rarefaction (for Faith PD figure)
+  - source_dc_id: "646b0f3c1e4a2d7f8e5b8ca5"  # metadata
     source_column: "sample"
-    target_dc_id: "multiqc_data"
-    target_type: "multiqc"
+    target_dc_id: "646b0f3c1e4a2d7f8e5b8ca8"  # alpha_rarefaction
+    target_type: "table"
     link_config:
-      resolver: "sample_mapping"
-      target_field: "sample_name"
-    description: "Filter MultiQC data by alpha rarefaction samples"
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter alpha rarefaction by metadata samples"
+    enabled: true
+
+  # Link 3: Metadata → Taxonomy Composition (for taxonomy figure)
+  - source_dc_id: "646b0f3c1e4a2d7f8e5b8ca5"  # metadata
+    source_column: "sample"
+    target_dc_id: "646b0f3c1e4a2d7f8e5b8ca9"  # taxonomy_composition
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter taxonomy by metadata samples"
+    enabled: true
+
+  # Note: ANCOM volcano (646b0f3c1e4a2d7f8e5b8caa) is not linked because it shows
+  # habitat-independent differential abundance analysis and has no sample column
