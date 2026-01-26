@@ -24,6 +24,7 @@ data:
   DEPICTIO_CACHE_ENABLE_REDIS_CACHE: {{ .Values.backend.env.DEPICTIO_CACHE_ENABLE_REDIS_CACHE | default "true" | quote }}
 
   # Celery Configuration (uses Redis as broker)
+  DEPICTIO_CELERY_ENABLED: {{ .Values.celery.env.DEPICTIO_CELERY_ENABLED | quote }}
   DEPICTIO_CELERY_BROKER_HOST: {{ printf "%s-redis" .Release.Name | quote }}
   DEPICTIO_CELERY_BROKER_PORT: {{ .Values.backend.env.DEPICTIO_CELERY_BROKER_PORT | default "6379" | quote }}
   DEPICTIO_CELERY_BROKER_DB: {{ .Values.backend.env.DEPICTIO_CELERY_BROKER_DB | default "1" | quote }}
@@ -109,6 +110,7 @@ data:
   DEPICTIO_CACHE_ENABLE_REDIS_CACHE: {{ .Values.frontend.env.DEPICTIO_CACHE_ENABLE_REDIS_CACHE | default "true" | quote }}
 
   # Celery Configuration (uses Redis as broker)
+  DEPICTIO_CELERY_ENABLED: {{ .Values.celery.env.DEPICTIO_CELERY_ENABLED | quote }}
   DEPICTIO_CELERY_BROKER_HOST: {{ printf "%s-redis" .Release.Name | quote }}
   DEPICTIO_CELERY_BROKER_PORT: {{ .Values.frontend.env.DEPICTIO_CELERY_BROKER_PORT | default "6379" | quote }}
   DEPICTIO_CELERY_BROKER_DB: {{ .Values.frontend.env.DEPICTIO_CELERY_BROKER_DB | default "1" | quote }}
