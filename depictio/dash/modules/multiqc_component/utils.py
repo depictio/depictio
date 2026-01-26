@@ -287,10 +287,7 @@ def build_multiqc(**kwargs: Any):
             ],
         )
 
-    # Return container with plot, stores, and trace metadata (following card pattern)
-    # CRITICAL: Add the component ID so enable_box_edit_mode can extract it properly
-    # CRITICAL: Add flexbox-compatible styling so component is visible in edit mode
-    logger.error(
+    logger.debug(
         f"🔨 MULTIQC BUILD RETURNING - Component ID: {component_id}, "
         f"Plot wrapper type: {type(plot_component).__name__}, "
         f"Has stores: store={store_component is not None}, trace={trace_metadata_store is not None}"

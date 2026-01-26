@@ -23,12 +23,24 @@ async def check_and_set_initialization() -> bool:
     Returns:
         True if this worker should perform initialization, False otherwise
     """
+    from datetime import timedelta
+
     from depictio.api.v1.db import initialization_collection
 
     try:
         # Check if initialization is already complete
         if initialization_collection.find_one({"initialization_complete": True}):
             return False
+
+        # Clean up stale locks (older than 5 minutes)
+        stale_cutoff = datetime.now(timezone.utc) - timedelta(minutes=5)
+        stale_locks = initialization_collection.delete_many(
+            {"_id": "init_lock", "started_at": {"$lt": stale_cutoff}}
+        )
+        if stale_locks.deleted_count > 0:
+            logger.warning(
+                f"Worker {WORKER_ID}: Cleaned up {stale_locks.deleted_count} stale initialization lock(s)"
+            )
 
         # Try to insert an initialization document atomically
         # This will only succeed for the first worker that tries

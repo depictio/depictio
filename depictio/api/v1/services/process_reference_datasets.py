@@ -266,68 +266,103 @@ class ReferenceDatasetProcessor:
 
 async def process_all_reference_datasets() -> None:
     """Main entry point for background processing."""
+    from datetime import datetime, timezone
+
     logger.info("🚀 Starting background processing for reference datasets")
 
     from depictio.api.v1.db import initialization_collection, tokens_collection, users_collection
 
-    # Retrieve metadata
-    metadata_doc = initialization_collection.find_one({"_id": "reference_datasets_metadata"})
+    try:
+        # Retrieve metadata
+        metadata_doc = initialization_collection.find_one({"_id": "reference_datasets_metadata"})
 
-    if not metadata_doc:
-        logger.warning("⚠️  No reference datasets metadata found in initialization_collection")
-        return
+        if not metadata_doc:
+            logger.warning("⚠️  No reference datasets metadata found in initialization_collection")
+            return
 
-    logger.info(f"📋 Found metadata for {len(metadata_doc.get('projects', []))} reference datasets")
+        logger.info(
+            f"📋 Found metadata for {len(metadata_doc.get('projects', []))} reference datasets"
+        )
 
-    # Get admin user credentials
-    admin_user = users_collection.find_one({"is_admin": True})
-    if not admin_user:
-        logger.error("No admin user found")
-        return
+        # Get admin user credentials
+        admin_user = users_collection.find_one({"is_admin": True})
+        if not admin_user:
+            logger.error("No admin user found")
+            return
 
-    token = tokens_collection.find_one({"user_id": admin_user["_id"]})
-    if not token:
-        logger.error("No token found for admin user")
-        return
+        token = tokens_collection.find_one({"user_id": admin_user["_id"]})
+        if not token:
+            logger.error("No token found for admin user")
+            return
 
-    # Build CLI config matching CLIConfig model structure
-    from depictio.models.models.cli import CLIConfig
+        # Build CLI config matching CLIConfig model structure
+        from depictio.models.models.cli import CLIConfig
 
-    cli_config_dict = {
-        "user": {
-            "id": str(admin_user["_id"]),
-            "email": admin_user["email"],
-            "is_admin": admin_user["is_admin"],
-            # Token as dict matching TokenBase structure (token doc already has all fields)
-            "token": {
-                "user_id": token["user_id"],
-                "access_token": token["access_token"],
-                "refresh_token": token["refresh_token"],
-                "token_type": token.get("token_type", "bearer"),
-                "token_lifetime": token.get("token_lifetime", "short-lived"),
-                "expire_datetime": token["expire_datetime"],
-                "refresh_expire_datetime": token["refresh_expire_datetime"],
-                "name": token.get("name"),
-                "created_at": token.get("created_at"),
+        cli_config_dict = {
+            "user": {
+                "id": str(admin_user["_id"]),
+                "email": admin_user["email"],
+                "is_admin": admin_user["is_admin"],
+                # Token as dict matching TokenBase structure (token doc already has all fields)
+                "token": {
+                    "user_id": token["user_id"],
+                    "access_token": token["access_token"],
+                    "refresh_token": token["refresh_token"],
+                    "token_type": token.get("token_type", "bearer"),
+                    "token_lifetime": token.get("token_lifetime", "short-lived"),
+                    "expire_datetime": token["expire_datetime"],
+                    "refresh_expire_datetime": token["refresh_expire_datetime"],
+                    "name": token.get("name"),
+                    "created_at": token.get("created_at"),
+                },
             },
-        },
-        "api_base_url": settings.fastapi.url,
-        # Use settings.minio directly - it's already an S3DepictioCLIConfig instance
-        "s3_storage": settings.minio,
-    }
+            "api_base_url": settings.fastapi.url,
+            # Use settings.minio directly - it's already an S3DepictioCLIConfig instance
+            "s3_storage": settings.minio,
+        }
 
-    # Convert dict to CLIConfig instance (some functions don't have @validate_call)
-    cli_config = CLIConfig(**cli_config_dict)
-    processor = ReferenceDatasetProcessor(cli_config)
+        # Convert dict to CLIConfig instance (some functions don't have @validate_call)
+        cli_config = CLIConfig(**cli_config_dict)
+        processor = ReferenceDatasetProcessor(cli_config)
 
-    # Process each dataset
-    for dataset_metadata in metadata_doc["projects"]:
-        try:
-            logger.info(f"📦 Processing dataset: {dataset_metadata['name']}")
-            result = await processor.process_dataset(dataset_metadata)
-            logger.info(f"✅ Successfully processed {result['dataset']}")
-        except Exception as e:
-            logger.error(f"❌ Failed to process {dataset_metadata['name']}: {e}")
-            import traceback
+        # Process each dataset
+        for dataset_metadata in metadata_doc["projects"]:
+            try:
+                logger.info(f"📦 Processing dataset: {dataset_metadata['name']}")
+                result = await processor.process_dataset(dataset_metadata)
+                logger.info(f"✅ Successfully processed {result['dataset']}")
+            except Exception as e:
+                logger.error(f"❌ Failed to process {dataset_metadata['name']}: {e}")
+                import traceback
 
-            logger.error(f"Traceback: {traceback.format_exc()}")
+                logger.error(f"Traceback: {traceback.format_exc()}")
+
+        # Mark background processing as complete
+        initialization_collection.update_one(
+            {"_id": "reference_datasets_metadata"},
+            {"$set": {"background_processing_complete": True}},
+            upsert=False,
+        )
+        logger.info("✅ Background processing completed successfully")
+
+    except Exception as e:
+        logger.error(f"❌ CRITICAL: Background processing failed with exception: {e}")
+        import traceback
+
+        logger.error(f"Full traceback:\n{traceback.format_exc()}")
+
+        # Store failure state for health check
+        initialization_collection.update_one(
+            {"_id": "reference_datasets_metadata"},
+            {
+                "$set": {
+                    "background_processing_failed": True,
+                    "last_error": str(e),
+                    "last_error_time": datetime.now(timezone.utc),
+                }
+            },
+            upsert=False,
+        )
+
+        # Re-raise to ensure the error is visible
+        raise

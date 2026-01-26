@@ -126,6 +126,12 @@ class JoinDefinition(BaseModel):
             description: "Join sample data from workflow A with results from workflow B"
     """
 
+    # Optional stable ID for the join (can be specified in YAML to maintain stable DC IDs)
+    id: PyObjectId | None = Field(
+        default=None,
+        description="Stable DataCollection ID for the joined table (optional, specified in YAML)",
+    )
+
     # Human-readable name for the join (used as identifier)
     name: str = Field(
         ...,

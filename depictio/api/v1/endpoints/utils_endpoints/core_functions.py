@@ -7,7 +7,11 @@ from pydantic import BaseModel
 
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
-from depictio.api.v1.db import deltatables_collection, multiqc_collection
+from depictio.api.v1.db import (
+    deltatables_collection,
+    multiqc_collection,
+    projects_collection,
+)
 from depictio.api.v1.s3 import s3_client
 from depictio.models.models.users import UserBeanie
 
@@ -100,11 +104,16 @@ def create_bucket(current_user: UserBeanie) -> BucketResponse:
 
 async def cleanup_orphaned_s3_files(dry_run: bool = True, force: bool = False) -> dict[str, Any]:
     """
-    Clean up S3 files from data collections that no longer exist in MongoDB.
+    Clean up S3 files from data collections that no longer exist in MongoDB
+    OR MultiQC data collections that have no deltatable entry (need reprocessing).
 
     This function scans the S3 bucket for data collection prefixes and checks
     if the corresponding data collection exists in MongoDB. If not, it deletes
     the orphaned files.
+
+    Additionally, it identifies MultiQC data collections that exist but have no
+    deltatable entry, and deletes their S3 files to trigger reprocessing with
+    the new registration code.
 
     Args:
         dry_run: If True, only report what would be deleted without actually deleting
@@ -117,6 +126,8 @@ async def cleanup_orphaned_s3_files(dry_run: bool = True, force: bool = False) -
         - total_size_bytes: Total size of deleted files in bytes
         - orphaned_prefixes: List of data collection IDs that were orphaned
         - orphaned_prefixes_count: Count of orphaned data collection prefixes
+        - multiqc_reprocess_count: Number of MultiQC DCs marked for reprocessing
+        - multiqc_reprocess_ids: List of MultiQC DC IDs marked for reprocessing
         - dry_run: Whether this was a dry run
     """
 
@@ -153,7 +164,36 @@ async def cleanup_orphaned_s3_files(dry_run: bool = True, force: bool = False) -
         # Find orphaned prefixes (in S3 but not in MongoDB)
         orphaned_prefixes = list(s3_prefixes - valid_dc_ids)
 
+        # NEW: Find MultiQC data collections that exist but have no deltatable entry
+        # These need reprocessing to create the missing deltatable entries
+        multiqc_reprocess_ids = []
+
+        # Query all MultiQC data collections from projects (they're nested)
+        # Data collections are embedded in: projects.workflows.data_collections
+        for project in projects_collection.find({}):
+            for workflow in project.get("workflows", []):
+                for dc in workflow.get("data_collections", []):
+                    dc_type = dc.get("config", {}).get("type", "")
+                    dc_id = str(dc["_id"])
+
+                    # Only check multiqc data collections (lowercase!)
+                    if dc_type == "multiqc":
+                        # Check if deltatable entry exists
+                        dt_exists = deltatables_collection.find_one({"data_collection_id": dc_id})
+
+                        if not dt_exists:
+                            # MultiQC exists but no deltatable → needs reprocessing
+                            multiqc_reprocess_ids.append(dc_id)
+                            logger.info(
+                                f"Found MultiQC DC without deltatable entry (will reprocess): {dc_id}"
+                            )
+
+        # Add MultiQC DCs needing reprocessing to orphaned list
+        # (but keep them separate in the results for clarity)
+        all_prefixes_to_clean = list(set(orphaned_prefixes + multiqc_reprocess_ids))
+
         # Safety check: if all prefixes are orphaned, something might be wrong
+        # Note: We only check pure orphaned prefixes, not MultiQC reprocessing prefixes
         if len(s3_prefixes) > 0 and len(orphaned_prefixes) == len(s3_prefixes) and not force:
             logger.error(
                 "SAFETY CHECK FAILED: All S3 prefixes appear orphaned! "
@@ -165,6 +205,8 @@ async def cleanup_orphaned_s3_files(dry_run: bool = True, force: bool = False) -
                 "total_size_bytes": 0,
                 "orphaned_prefixes": [],
                 "orphaned_prefixes_count": 0,
+                "multiqc_reprocess_count": 0,
+                "multiqc_reprocess_ids": [],
                 "dry_run": dry_run,
                 "error": "Safety check failed - all prefixes orphaned (use force=True to bypass)",
             }
@@ -175,8 +217,8 @@ async def cleanup_orphaned_s3_files(dry_run: bool = True, force: bool = False) -
                 f"even though all S3 prefixes appear orphaned."
             )
 
-        # Delete files under orphaned prefixes
-        for dc_id in orphaned_prefixes:
+        # Delete files under orphaned prefixes and MultiQC DCs needing reprocessing
+        for dc_id in all_prefixes_to_clean:
             prefix = f"{dc_id}/"
 
             # List all objects under this prefix
@@ -209,11 +251,22 @@ async def cleanup_orphaned_s3_files(dry_run: bool = True, force: bool = False) -
                             pass
                 else:
                     pass
+
+        # Log cleanup summary
+        if multiqc_reprocess_ids:
+            logger.info(
+                f"Cleaned up {len(multiqc_reprocess_ids)} MultiQC DCs for reprocessing: "
+                f"{', '.join(multiqc_reprocess_ids[:5])}"
+                + ("..." if len(multiqc_reprocess_ids) > 5 else "")
+            )
+
         result = {
             "deleted_count": deleted_count,
             "total_size_bytes": total_size_bytes,
             "orphaned_prefixes": orphaned_prefixes,
             "orphaned_prefixes_count": len(orphaned_prefixes),
+            "multiqc_reprocess_count": len(multiqc_reprocess_ids),
+            "multiqc_reprocess_ids": multiqc_reprocess_ids,
             "dry_run": dry_run,
         }
 

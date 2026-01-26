@@ -99,6 +99,52 @@ async def status():
     return {"status": "online", "version": get_version()}
 
 
+@utils_endpoint_router.get("/health/initialization")
+async def check_initialization_health():
+    """Check if initialization completed successfully including data registration."""
+    from bson import ObjectId
+
+    from depictio.api.v1.db import deltatables_collection, initialization_collection
+
+    # Check basic initialization
+    init_doc = initialization_collection.find_one({"initialization_complete": True})
+    if not init_doc:
+        return {"status": "unhealthy", "reason": "Initialization not complete"}
+
+    # Check metadata exists
+    metadata_doc = initialization_collection.find_one({"_id": "reference_datasets_metadata"})
+    if not metadata_doc:
+        return {"status": "unhealthy", "reason": "Reference datasets metadata not found"}
+
+    # Check data collections are registered
+    expected_dcs = []
+    for project in metadata_doc.get("projects", []):
+        for dc in project.get("data_collections", []):
+            expected_dcs.append({"id": dc["id"], "tag": dc["tag"], "project": project["name"]})
+
+    registered_dcs = []
+    pending_dcs = []
+
+    for dc_info in expected_dcs:
+        dc_id = dc_info["id"]
+        if deltatables_collection.find_one({"data_collection_id": ObjectId(dc_id)}):
+            registered_dcs.append(dc_info)
+        else:
+            pending_dcs.append(dc_info)
+
+    status_value = "healthy" if len(pending_dcs) == 0 else "degraded"
+
+    return {
+        "status": status_value,
+        "initialization": {"complete": True, "metadata_found": True},
+        "data_collections": {
+            "expected": len(expected_dcs),
+            "registered": len(registered_dcs),
+            "pending": pending_dcs,
+        },
+    }
+
+
 @utils_endpoint_router.post("/cleanup-orphaned-s3-files")
 async def cleanup_orphaned_s3_files_endpoint(
     dry_run: bool = True,

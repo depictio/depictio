@@ -1077,6 +1077,7 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
 
         # Reference project IDs for example dashboards
         from depictio.api.v1.db_init_reference_datasets import STATIC_IDS
+
         example_project_ids = {
             STATIC_IDS["ampliseq"]["project"],
             STATIC_IDS["penguins"]["project"],
@@ -1084,16 +1085,15 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
 
         # Categorize dashboards based on project type and ownership
         example_dashboards = [
-            d
-            for d in dashboards
-            if str(d.get("project_id", "")) in example_project_ids
+            d for d in dashboards if str(d.get("project_id", "")) in example_project_ids
         ]
 
         owned_dashboards = [
             d
             for d in dashboards
             if str(user_id) in [str(owner["_id"]) for owner in d["permissions"]["owners"]]
-            and str(d.get("project_id", "")) not in example_project_ids  # Exclude example dashboards
+            and str(d.get("project_id", ""))
+            not in example_project_ids  # Exclude example dashboards
         ]
         # Check if current user is anonymous
         is_anonymous = hasattr(current_user, "is_anonymous") and current_user.is_anonymous
@@ -1102,7 +1102,8 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
             d
             for d in dashboards
             if str(user_id) not in [str(owner["_id"]) for owner in d["permissions"]["owners"]]
-            and str(d.get("project_id", "")) not in example_project_ids  # Exclude example dashboards
+            and str(d.get("project_id", ""))
+            not in example_project_ids  # Exclude example dashboards
             and (
                 not is_anonymous or d.get("is_public", False)
             )  # Anonymous users only see public dashboards
@@ -1183,31 +1184,37 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
 
         # Show example dashboards section (always at top if available)
         if example_dashboards:
-            sections.extend([
-                example_dashboards_section_header,
-                dmc.Space(h=10),
-                example_dashboards_view,
-                dmc.Space(h=20),
-                html.Hr(),
-            ])
+            sections.extend(
+                [
+                    example_dashboards_section_header,
+                    dmc.Space(h=10),
+                    example_dashboards_view,
+                    dmc.Space(h=20),
+                    html.Hr(),
+                ]
+            )
 
         # Show owned dashboards section
         if owned_dashboards:
-            sections.extend([
-                owned_dashboards_section_header,
-                dmc.Space(h=10),
-                owned_dashboards_view,
-                dmc.Space(h=20),
-                html.Hr(),
-            ])
+            sections.extend(
+                [
+                    owned_dashboards_section_header,
+                    dmc.Space(h=10),
+                    owned_dashboards_view,
+                    dmc.Space(h=20),
+                    html.Hr(),
+                ]
+            )
 
         # Show accessed dashboards section
         if accessed_dashboards:
-            sections.extend([
-                accessed_dashboards_section_header,
-                dmc.Space(h=10),
-                accessed_dashboards_view,
-            ])
+            sections.extend(
+                [
+                    accessed_dashboards_section_header,
+                    dmc.Space(h=10),
+                    accessed_dashboards_view,
+                ]
+            )
 
         # Optional: Add padding to the parent div for better spacing on smaller screens
         return html.Div(sections, style={"width": "100%"})

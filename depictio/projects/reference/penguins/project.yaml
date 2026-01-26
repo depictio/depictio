@@ -1,9 +1,11 @@
 # Palmer Penguins Multi-Species Analysis for Depictio
+id: "646b0f3c1e4a2d7f8e5b8c9d"
 name: "Palmer Penguins Species Comparison"
 project_type: "advanced"
 is_public: true
 workflows:
-  - name: "penguin_species_analysis"
+  - id: "646b0f3c1e4a2d7f8e5b8c9e"
+    name: "penguin_species_analysis"
     engine:
       name: "python"
       version: "3.11"
@@ -15,7 +17,8 @@ workflows:
         - /app/depictio/projects/reference/penguins/data
     data_collections:
       # Physical features only
-      - data_collection_tag: "physical_features"
+      - id: "646b0f3c1e4a2d7f8e5b8c9f"
+        data_collection_tag: "physical_features"
         description: "Physical characteristics measurements"
         config:
           type: "Table"
@@ -37,7 +40,8 @@ workflows:
               body_mass_g: "Body mass in grams"
 
       # Demographic data
-      - data_collection_tag: "demographic_data"
+      - id: "646b0f3c1e4a2d7f8e5b8ca0"
+        data_collection_tag: "demographic_data"
         description: "Location and demographic information"
         config:
           type: "Table"
@@ -66,7 +70,8 @@ workflows:
 
 joins:
   # Join physical features with demographic data
-  - name: "penguins_complete"
+  - id: "646b0f3c1e4a2d7f8e5b8ca1"  # Stable DC ID for joined table (matches dashboard)
+    name: "penguins_complete"
     description: "Complete penguin dataset with physical features and demographics"
     left_dc: "physical_features"
     right_dc: "demographic_data"

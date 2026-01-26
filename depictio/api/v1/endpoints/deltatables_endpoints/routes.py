@@ -103,7 +103,7 @@ async def upsert_deltatable(
 
     # Check if this is a MultiQC data collection (stored as parquet, not delta table)
     dc_type = dc_data.get("config", {}).get("type", "")
-    is_multiqc = dc_type == "MultiQC"
+    is_multiqc = dc_type.lower() == "multiqc"
 
     # For MultiQC, skip delta table validation since it's stored as raw parquet
     if is_multiqc:
@@ -111,7 +111,7 @@ async def upsert_deltatable(
         final_hash = hashlib.sha256(
             f"{payload.delta_table_location}{datetime.now()}".encode()
         ).hexdigest()
-        results = None  # Column specs not computed for MultiQC
+        results = []  # Column specs not computed for MultiQC (empty list required by Pydantic)
     else:
         # Standard delta table validation and column spec computation
         df = pl.read_delta(payload.delta_table_location, storage_options=polars_s3_config)
@@ -181,14 +181,27 @@ async def upsert_deltatable(
         )
 
     if payload.update:
+        update_doc = {
+            "$set": {
+                "delta_table_location": payload.delta_table_location,
+                "aggregation": [a.mongo() for a in deltatable.aggregation],
+            }
+        }
+        # Add size to deltatable's flexible_metadata if provided
+        if payload.deltatable_size_bytes is not None:
+            update_doc["$set"]["flexible_metadata.deltatable_size_bytes"] = (
+                payload.deltatable_size_bytes
+            )
+            update_doc["$set"]["flexible_metadata.deltatable_size_mb"] = round(
+                payload.deltatable_size_bytes / (1024 * 1024), 2
+            )
+            update_doc["$set"]["flexible_metadata.deltatable_size_updated"] = (
+                datetime.now().isoformat()
+            )
+
         deltatables_collection.update_one(
             {"data_collection_id": data_collection_oid},
-            {
-                "$set": {
-                    "delta_table_location": payload.delta_table_location,
-                    "aggregation": [a.mongo() for a in deltatable.aggregation],
-                }
-            },
+            update_doc,
             upsert=True,
         )
     else:
@@ -199,6 +212,21 @@ async def upsert_deltatable(
                 detail=f"DeltaTableAggregated with id {data_collection_oid} already exists, use update=True to update it.",
             )
         deltatables_collection.insert_one(deltatable.mongo())
+
+        # Add size to deltatable's flexible_metadata if provided
+        if payload.deltatable_size_bytes is not None:
+            deltatables_collection.update_one(
+                {"data_collection_id": data_collection_oid},
+                {
+                    "$set": {
+                        "flexible_metadata.deltatable_size_bytes": payload.deltatable_size_bytes,
+                        "flexible_metadata.deltatable_size_mb": round(
+                            payload.deltatable_size_bytes / (1024 * 1024), 2
+                        ),
+                        "flexible_metadata.deltatable_size_updated": datetime.now().isoformat(),
+                    }
+                },
+            )
 
     return {"message": "DeltaTableAggregated upserted successfully", "result": "success"}
 

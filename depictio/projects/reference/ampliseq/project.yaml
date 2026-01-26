@@ -1,8 +1,10 @@
-# Test MultiQC Data Collection Configuration
-name: "TREC x TARA - Pollution impact"
+# nf-core/ampliseq Demo Project - Microbial Community Analysis
+id: "646b0f3c1e4a2d7f8e5b8ca2"
+name: "Ampliseq Microbial Community Analysis"
 project_type: "advanced"
 workflows:
-  - name: "ampliseq"
+  - id: "646b0f3c1e4a2d7f8e5b8ca3"
+    name: "ampliseq"
     version: "2.14.0"
     engine:
       name: "nextflow"
@@ -17,17 +19,25 @@ workflows:
       locations:
         - /app/depictio/projects/reference/ampliseq
     data_collections:
-      - data_collection_tag: "multiqc_data"
+      - id: "646b0f3c1e4a2d7f8e5b8ca4"
+        data_collection_tag: "multiqc_data"
         description: "MultiQC report data"
         config:
           type: "MultiQC"
-      - data_collection_tag: "metadata"
-        description: "Sample & Sites metadata table for MultiQC integration"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "multiqc_data/multiqc.parquet"
+
+      - id: "646b0f3c1e4a2d7f8e5b8ca5"
+        data_collection_tag: "metadata"
+        description: "Sample metadata for ampliseq analysis"
         config:
           type: "Table"
           metatype: "Metadata"
           scan:
-            mode: single
+            mode: "single"
             scan_parameters:
               filename: "/app/depictio/projects/reference/ampliseq/merged_metadata.tsv"
           dc_specific_properties:
@@ -37,40 +47,14 @@ workflows:
               try_parse_dates: true
             columns_description:
               "sample": "Sample identifier (SRR accession)"
-              "name": "Sample name combining ID and habitat"
-              "habitat": "Sample habitat (Riverwater, Groundwater, Sediment, Soil)"
-              "Riv_vs_Gro": "Riverwater vs Groundwater comparison group"
-              "Sed_vs_Soil": "Sediment vs Soil comparison group"
-      # - data_collection_tag: "site_metadata"
-      #   description: "Site metadata table"
-      #   config:
-      #     type: "Table"
-      #     metatype: "Metadata"
-      #     scan:
-      #       mode: "single"
-      #       scan_parameters:
-      #         filename: "/app/depictio/projects/reference/ampliseq/site_metadata.tsv"
-      #     dc_specific_properties:
-      #       format: "TSV"
-      #       polars_kwargs:
-      #         separator: "\t"
-      #         try_parse_dates: true
-      #       columns_description:
-      #         "site_alias": "Site alias identifier"
-      #         # "latitude": "Latitude of the sampling site"
-      #         # "longitude": "Longitude of the sampling site"
-      #         # "country": "Country of the sampling site"
-      #         "site_locality": "Locality description of the sampling site"
-      #         "site_date_start": "Start date of sampling at the site"
-      #         "Temperature": "Water temperature (°C)"
-      #         "Salinity": "Salinity (PSU)"
-      #         "Turbidity": "Turbidity (NTU)"
-      #     join:
-      #       on_columns: ["site_alias"]
-      #       how: "inner"
-      #       with_dc: ["sample_metadata"]
-      - data_collection_tag: "alpha_rarefaction"
-        description: "Alpha rarefaction data"
+              "name": "Sample name"
+              "habitat": "Sample habitat type"
+              "Riv_vs_Gro": "Habitat comparison group 1"
+              "Sed_vs_Soil": "Habitat comparison group 2"
+
+      - id: "646b0f3c1e4a2d7f8e5b8ca8"
+        data_collection_tag: "alpha_rarefaction"
+        description: "Alpha diversity rarefaction curves"
         config:
           type: "Table"
           metatype: "Metadata"
@@ -86,9 +70,11 @@ workflows:
               "sample": "Sample identifier"
               "depth": "Sequencing depth"
               "iter": "Iteration number"
-              "faith_pd": "Faith's Phylogenetic Diversity"
-      - data_collection_tag: "taxonomy_composition"
-        description: "Taxonomic composition data"
+              "faith_pd": "Faith's Phylogenetic Diversity metric"
+
+      - id: "646b0f3c1e4a2d7f8e5b8ca9"
+        data_collection_tag: "taxonomy_composition"
+        description: "Taxonomic composition across samples"
         config:
           type: "Table"
           metatype: "Metadata"
@@ -103,10 +89,12 @@ workflows:
             columns_description:
               "sample": "Sample identifier"
               "taxonomy": "Taxonomic classification (Kingdom;Phylum)"
-              "count": "Raw count of sequences assigned to this taxonomy in the sample"
+              "count": "Raw sequence count for this taxonomy"
               "habitat": "Habitat type of the sample"
-      - data_collection_tag: "ancom_volcano"
-        description: "ANCOM differential abundance results"
+
+      - id: "646b0f3c1e4a2d7f8e5b8caa"
+        data_collection_tag: "ancom_volcano"
+        description: "ANCOM differential abundance analysis results"
         config:
           type: "Table"
           metatype: "Metadata"
@@ -121,80 +109,22 @@ workflows:
             columns_description:
               "id": "ASV identifier"
               "taxonomy": "Taxonomic classification (Kingdom;Phylum)"
-              "Kingdom": "Kingdom classification"
-              "Phylum": "Phylum classification"
+              "Kingdom": "Kingdom level classification"
+              "Phylum": "Phylum level classification"
               "W": "W statistic from ANCOM analysis"
-              "clr": "Centered log-ratio value"
-          # join:
-          #   on_columns: ["id"]
-          #   how: "inner"
-          #   with_dc: ["taxonomy_composition", "sample_metadata", "multiqc_data"]
-      # - data_collection_tag: "sample_qc_metrics"
-      #   description: "Per-sample quality control metrics and statistics"
-      #   config:
-      #     type: "Table"
-      #     metatype: "Aggregate"
-      #     scan:
-      #       mode: "recursive"
-      #       scan_parameters:
-      #         regex_config:
-      #           pattern: "sample_qc_metrics.csv"
-      #     dc_specific_properties:
-      #       format: "CSV"
-      #       polars_kwargs:
-      #         separator: ","
-      #       columns_description:
-      #         "sample": "Sample identifier"
-      #         "cell_id": "Individual cell or cellular compartment identifier"
-      #         "total_reads": "Total number of reads for this cell"
-      #         "mapped_reads": "Number of successfully mapped reads"
-      #         "mapping_rate": "Percentage of reads mapped to reference"
-      #         "duplicate_rate": "Percentage of duplicate reads"
-      #         "mean_coverage": "Mean genome coverage depth"
-      #         "median_insert_size": "Median insert size for paired-end reads"
-      #         "gc_content": "GC content percentage"
-      #         "q30_rate": "Percentage of bases with quality score >= 30"
-      #         "mean_quality": "Mean base quality score"
-      #     join:
-      #       on_columns: ["sample"]
-      #       how: "inner"
-      #       with_dc: ["sample_metadata", "multiqc_data"]
+              "clr": "Centered log-ratio transformed abundance"
 
 # ============================================================================
 # TABLE JOINS CONFIGURATION
 # ============================================================================
-# Client-side joins executed locally with `depictio data join`
-# ============================================================================
-
-# ============================================================================
-# JOINS TEMPORARILY DISABLED
-# ============================================================================
-# Joins are disabled for initial testing to ensure data collections load first.
-# Once data collections are verified, these can be re-enabled.
+# REMOVED: Joins were unnecessary as taxonomy_composition already contains
+# the 'habitat' column from the source TSV file. Dashboard components use
+# the original DCs directly without needing enriched versions.
 # ============================================================================
 
 # joins:
-#   # Join alpha rarefaction with metadata
-#   - name: "alpha_rarefaction_enriched"
-#     description: "Alpha rarefaction data enriched with sample metadata"
-#     left_dc: "alpha_rarefaction"
-#     right_dc: "metadata"
-#     on_columns:
-#       - "sample"
-#     how: "inner"
-#     persist: true
-#     workflow_name: "ampliseq"
-#
-#   # Join taxonomy composition with metadata
-#   - name: "taxonomy_enriched"
-#     description: "Taxonomic composition enriched with sample metadata"
-#     left_dc: "taxonomy_composition"
-#     right_dc: "metadata"
-#     on_columns:
-#       - "sample"
-#     how: "inner"
-#     persist: true
-#     workflow_name: "ampliseq"
+#   Joins removed - taxonomy_composition and alpha_rarefaction data collections
+#   already contain all required columns for the dashboard visualizations.
 
 # ============================================================================
 # RUNTIME LINKS CONFIGURATION
@@ -203,7 +133,7 @@ workflows:
 # ============================================================================
 
 links:
-  # Link metadata to MultiQC for filtering
+  # Link metadata to MultiQC for interactive filtering
   - source_dc_id: "metadata"
     source_column: "sample"
     target_dc_id: "multiqc_data"

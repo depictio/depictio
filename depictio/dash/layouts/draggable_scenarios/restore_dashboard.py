@@ -83,6 +83,11 @@ def render_dashboard(
     if "_reset_counts" in build_functions:
         build_functions["_reset_counts"]()
 
+    # Extract delta_locations from init_data (contains dc_type for MultiQC detection)
+    delta_locations = {}
+    if init_data:
+        delta_locations = init_data.get("delta_locations", {})
+
     children = []
     for child_metadata in stored_metadata:
         # Add required fields
@@ -93,9 +98,24 @@ def render_dashboard(
         if project_id:
             child_metadata["project_id"] = str(project_id)
 
-        # Add init_data if available (API optimization)
-        if init_data:
-            child_metadata["init_data"] = init_data
+        # Add component-specific init_data (delta location with dc_type for parquet detection)
+        dc_id = child_metadata.get("dc_id")
+        if dc_id and delta_locations:
+            dc_id_str = str(dc_id)
+            component_init_data = {}
+
+            # Add delta location for this component's DC
+            if dc_id_str in delta_locations:
+                component_init_data[dc_id_str] = delta_locations[dc_id_str]
+
+            # For joined DCs, add individual DC locations
+            if isinstance(dc_id, str) and "--" in dc_id:
+                for individual_dc_id in dc_id.split("--"):
+                    if individual_dc_id in delta_locations:
+                        component_init_data[individual_dc_id] = delta_locations[individual_dc_id]
+
+            if component_init_data:
+                child_metadata["init_data"] = component_init_data
 
         # Get component type
         component_type = child_metadata.get("component_type")
