@@ -100,6 +100,7 @@ def get_child_tabs_info(dashboard_id: str, token: str) -> dict:
         dict: Dictionary with 'count' (number of tabs) and 'tabs' (list of tab info).
     """
     if not token:
+        logger.debug(f"No token provided for dashboard {dashboard_id}")
         return {"count": 0, "tabs": []}
 
     try:
@@ -112,13 +113,17 @@ def get_child_tabs_info(dashboard_id: str, token: str) -> dict:
 
         if response.status_code == 200:
             all_dashboards = response.json()
+            logger.debug(f"Fetched {len(all_dashboards)} total dashboards for tab filtering")
 
             # Filter child tabs that belong to this parent dashboard
             child_tabs = [
                 d
                 for d in all_dashboards
-                if d.get("parent_dashboard_id") == dashboard_id and not d.get("is_main_tab", True)
+                if str(d.get("parent_dashboard_id")) == str(dashboard_id)
+                and not d.get("is_main_tab", True)
             ]
+
+            logger.debug(f"Found {len(child_tabs)} child tabs for parent dashboard {dashboard_id}")
 
             # Sort by tab_order
             child_tabs.sort(key=lambda x: x.get("tab_order", 0))
@@ -687,9 +692,11 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
             )
 
             # Tab count badge with carousel tooltip
-            tabs_info = get_child_tabs_info(dashboard["dashboard_id"], token)
+            tabs_info = get_child_tabs_info(str(dashboard["dashboard_id"]), token)
             tab_count = tabs_info["count"]
             child_tabs = tabs_info["tabs"]
+
+            logger.debug(f"Dashboard {dashboard['dashboard_id']}: Found {tab_count} child tabs")
 
             if tab_count > 0:
                 # Create carousel items with tab screenshots
@@ -873,21 +880,17 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
                     ),
                     dmc.Space(h=10),
                     dmc.Stack(
-                        [
-                            badge_project,
-                            badge_owner,
-                            badge_status,
-                            badge_last_modified,
-                            badge_tab_count,
-                            # badge_tooltip_additional_info,
-                        ]
-                        if badge_tab_count
-                        else [
-                            badge_project,
-                            badge_owner,
-                            badge_status,
-                            badge_last_modified,
-                            # badge_tooltip_additional_info,
+                        children=[
+                            item
+                            for item in [
+                                badge_project,
+                                badge_owner,
+                                badge_status,
+                                badge_last_modified,
+                                badge_tab_count,
+                                # badge_tooltip_additional_info,
+                            ]
+                            if item is not None
                         ],
                         justify="center",
                         align="flex-start",
