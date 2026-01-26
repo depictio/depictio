@@ -777,11 +777,9 @@ def create_dashboard_viewer_sidebar():
                             style={
                                 "marginRight": "6px",
                                 "display": "inline-block",
-                                "color": "var(--app-text-color, #000000)",
-                                "opacity": "0.7",
                             },
                         ),
-                        dmc.Text("Back to Dashboards", c="gray", size="sm"),
+                        dmc.Text("Back to Dashboards", size="sm"),
                     ],
                     href="/dashboards",
                     style={
@@ -789,6 +787,7 @@ def create_dashboard_viewer_sidebar():
                         "display": "flex",
                         "alignItems": "center",
                         "transition": "opacity 0.2s",
+                        "color": "inherit",
                     },
                     className="hover-link",
                 )
