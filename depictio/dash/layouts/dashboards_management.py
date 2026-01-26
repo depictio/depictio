@@ -1002,7 +1002,8 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
                 output_folder = "/app/depictio/dash/static/screenshots"
                 default_thumbnail = dash.get_asset_url("images/backgrounds/default_thumbnail.png")
 
-                carousel_slides = []
+                # Store slide data for both small and large carousels
+                slide_data = []
 
                 # Add main dashboard thumbnail as first slide (use dashboard_id for URL consistency)
                 main_id = dashboard["_id"]
@@ -1041,30 +1042,17 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
                 # Use light theme as default initial display
                 main_thumbnail_url = main_light_url
 
-                carousel_slides.append(
-                    dmc.CarouselSlide(
-                        html.A(
-                            html.Div(
-                                dmc.Image(
-                                    src=main_thumbnail_url,
-                                    style={
-                                        "width": "100%",
-                                        "height": "210px",
-                                        "objectFit": "cover",
-                                        "objectPosition": "center center",
-                                    },
-                                    alt=f"Main: {dashboard['title']}",
-                                ),
-                                **{
-                                    "data-dashboard-id": main_id,
-                                    "data-light-src": main_light_url,
-                                    "data-dark-src": main_dark_url,
-                                },
-                            ),
-                            href=f"/dashboard/{dashboard['dashboard_id']}",
-                            style={"textDecoration": "none"},
-                        )
-                    )
+                # Store main dashboard data
+                slide_data.append(
+                    {
+                        "id": main_id,
+                        "dashboard_id": main_dashboard_id,
+                        "title": f"Main: {dashboard['title']}",
+                        "thumbnail_url": main_thumbnail_url,
+                        "light_url": main_light_url,
+                        "dark_url": main_dark_url,
+                        "href": f"/dashboard/{dashboard['dashboard_id']}",
+                    }
                 )
 
                 # Add child tab thumbnails
@@ -1106,40 +1094,106 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
                     # Use light theme as default initial display
                     tab_thumbnail_url = tab_light_url
 
+                    # Store tab data
+                    slide_data.append(
+                        {
+                            "id": tab_id,
+                            "dashboard_id": tab_dashboard_id,
+                            "title": f"Tab: {tab_title}",
+                            "thumbnail_url": tab_thumbnail_url,
+                            "light_url": tab_light_url,
+                            "dark_url": tab_dark_url,
+                            "href": f"/dashboard/{tab_dashboard_id}",
+                        }
+                    )
+
+                # Build small carousel slides for card display
+                carousel_slides = []
+                for data in slide_data:
                     carousel_slides.append(
                         dmc.CarouselSlide(
                             html.A(
                                 html.Div(
                                     dmc.Image(
-                                        src=tab_thumbnail_url,
+                                        src=data["thumbnail_url"],
                                         style={
                                             "width": "100%",
                                             "height": "210px",
                                             "objectFit": "cover",
                                             "objectPosition": "center center",
                                         },
-                                        alt=f"Tab: {tab_title}",
+                                        alt=data["title"],
                                     ),
                                     **{
-                                        "data-dashboard-id": tab_id,
-                                        "data-light-src": tab_light_url,
-                                        "data-dark-src": tab_dark_url,
+                                        "data-dashboard-id": data["id"],
+                                        "data-light-src": data["light_url"],
+                                        "data-dark-src": data["dark_url"],
                                     },
                                 ),
-                                href=f"/dashboard/{tab_dashboard_id}",
+                                href=data["href"],
                                 style={"textDecoration": "none"},
                             )
                         )
                     )
 
-                # Return carousel wrapped in CardSection
+                # Build large carousel slides for tooltip (same data, bigger dimensions)
+                large_carousel_slides = []
+                for data in slide_data:
+                    large_carousel_slides.append(
+                        dmc.CarouselSlide(
+                            html.Div(
+                                dmc.Image(
+                                    src=data["thumbnail_url"],
+                                    style={
+                                        "width": "600px",
+                                        "height": "400px",
+                                        "objectFit": "cover",
+                                        "objectPosition": "center center",
+                                    },
+                                    alt=data["title"],
+                                ),
+                                **{
+                                    "data-dashboard-id": data["id"],
+                                    "data-light-src": data["light_url"],
+                                    "data-dark-src": data["dark_url"],
+                                },
+                            )
+                        )
+                    )
+
+                # Return carousel wrapped in HoverCard with larger carousel, then CardSection
                 return dmc.CardSection(
-                    dmc.Carousel(
-                        children=carousel_slides,
-                        withIndicators=True,
-                        withControls=True,
-                        height=210,
-                        style={"borderRadius": "8px 8px 0 0"},
+                    dmc.HoverCard(
+                        withArrow=True,
+                        position="right",
+                        offset=10,
+                        shadow="md",
+                        openDelay=300,
+                        closeDelay=200,
+                        children=[
+                            dmc.HoverCardTarget(
+                                dmc.Carousel(
+                                    children=carousel_slides,
+                                    withIndicators=True,
+                                    withControls=True,
+                                    height=210,
+                                    style={"borderRadius": "8px 8px 0 0", "cursor": "pointer"},
+                                )
+                            ),
+                            dmc.HoverCardDropdown(
+                                dmc.Carousel(
+                                    children=large_carousel_slides,
+                                    withIndicators=True,
+                                    withControls=True,
+                                    height=400,
+                                    style={
+                                        "width": "600px",
+                                        "borderRadius": "8px",
+                                    },
+                                ),
+                                style={"padding": 0},
+                            ),
+                        ],
                     ),
                     withBorder=True,
                 )
@@ -2636,28 +2690,44 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
             // Immediate attempt
             let swapped = swapThumbnails();
 
-            // If no thumbnails found, set up MutationObserver to watch for when they appear
-            if (swapped === 0) {
-                console.log('→ No thumbnails found yet, setting up MutationObserver...');
+            // Set up MutationObserver to watch for dynamically added thumbnails (e.g., HoverCard content)
+            console.log('→ Setting up MutationObserver to watch for new thumbnails...');
 
-                const observer = new MutationObserver((mutations) => {
-                    const thumbnails = document.querySelectorAll('[data-dashboard-id]');
-                    if (thumbnails.length > 0) {
-                        console.log('→ Thumbnails detected in DOM, attempting swap...');
-                        swapThumbnails();
-                        observer.disconnect();  // Stop observing once we've swapped
+            const observer = new MutationObserver((mutations) => {
+                // Check if any new elements with data-dashboard-id were added
+                for (let mutation of mutations) {
+                    if (mutation.addedNodes.length > 0) {
+                        const newThumbnails = [];
+                        mutation.addedNodes.forEach(node => {
+                            if (node.nodeType === 1) {  // Element node
+                                // Check if the node itself has data-dashboard-id
+                                if (node.hasAttribute && node.hasAttribute('data-dashboard-id')) {
+                                    newThumbnails.push(node);
+                                }
+                                // Check if any descendants have data-dashboard-id
+                                if (node.querySelectorAll) {
+                                    const descendants = node.querySelectorAll('[data-dashboard-id]');
+                                    newThumbnails.push(...descendants);
+                                }
+                            }
+                        });
+
+                        if (newThumbnails.length > 0) {
+                            console.log(`→ Detected ${newThumbnails.length} new thumbnails, swapping...`);
+                            swapThumbnails();  // Swap all thumbnails (including new ones)
+                        }
                     }
-                });
+                }
+            });
 
-                // Observe the entire document body for added nodes
-                observer.observe(document.body, {
-                    childList: true,
-                    subtree: true
-                });
+            // Observe the entire document body for added nodes (catches HoverCard portals)
+            observer.observe(document.body, {
+                childList: true,
+                subtree: true
+            });
 
-                // Disconnect after 5 seconds to prevent memory leaks
-                setTimeout(() => observer.disconnect(), 5000);
-            }
+            // Keep observer alive for the session (no auto-disconnect)
+            // This ensures HoverCard content gets theme-swapped when it appears
 
             return window.dash_clientside.no_update;
         }
