@@ -17,10 +17,11 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version to deploy (e.g., 0.6.0-b8 or 0.6.1)'
+        description: 'Version tag to deploy (without v prefix, e.g., 0.6.0-b18, 0.6.0, 0.6.1)'
         required: true
+        type: string
       environment:
-        description: 'Target environment'
+        description: 'Target environment (dev for beta, demo for stable, both for dual deployment)'
         required: true
         type: choice
         options:
@@ -91,6 +92,18 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Fetch all tags for validation
+
+      - name: Display available recent tags
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          echo "📋 Recent available tags:"
+          echo "Beta tags (for dev environment):"
+          git tag -l 'v*-b*' --sort=-version:refname | head -10 | sed 's/^v/  - /'
+          echo ""
+          echo "Stable tags (for demo environment):"
+          git tag -l 'v[0-9]*.[0-9]*.[0-9]*' --sort=-version:refname | grep -v '\-b' | head -10 | sed 's/^v/  - /'
 
       - name: Determine version
         id: version
@@ -103,6 +116,22 @@ jobs:
           fi
           echo "version=${VERSION}" >> $GITHUB_OUTPUT
           echo "Deploying version: ${VERSION}"
+
+      - name: Validate tag exists
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          TAG="v${VERSION}"
+
+          echo "🔍 Validating tag: ${TAG}"
+
+          if git rev-parse "${TAG}" >/dev/null 2>&1; then
+            echo "✅ Tag ${TAG} exists"
+          else
+            echo "❌ Error: Tag ${TAG} does not exist!"
+            echo "Available recent tags:"
+            git tag -l 'v*' --sort=-version:refname | head -20
+            exit 1
+          fi
 
       - name: Wait for Docker image to be available
         run: |
@@ -240,6 +269,18 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Fetch all tags for validation
+
+      - name: Display available recent tags
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          echo "📋 Recent available tags:"
+          echo "Beta tags (for dev environment):"
+          git tag -l 'v*-b*' --sort=-version:refname | head -10 | sed 's/^v/  - /'
+          echo ""
+          echo "Stable tags (for demo environment):"
+          git tag -l 'v[0-9]*.[0-9]*.[0-9]*' --sort=-version:refname | grep -v '\-b' | head -10 | sed 's/^v/  - /'
 
       - name: Determine version
         id: version
@@ -252,6 +293,22 @@ jobs:
           fi
           echo "version=${VERSION}" >> $GITHUB_OUTPUT
           echo "Deploying version: ${VERSION}"
+
+      - name: Validate tag exists
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          TAG="v${VERSION}"
+
+          echo "🔍 Validating tag: ${TAG}"
+
+          if git rev-parse "${TAG}" >/dev/null 2>&1; then
+            echo "✅ Tag ${TAG} exists"
+          else
+            echo "❌ Error: Tag ${TAG} does not exist!"
+            echo "Available recent tags:"
+            git tag -l 'v*' --sort=-version:refname | head -20
+            exit 1
+          fi
 
       - name: Wait for Docker image to be available
         run: |
