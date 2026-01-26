@@ -201,7 +201,8 @@ async def create_initial_dashboards(admin_user: UserBeanie) -> list[dict | None]
                 "ampliseq",
                 "dashboard.json",
             ),
-            "static_dc_id": STATIC_IDS["ampliseq"]["data_collections"]["multiqc_data"],
+            # Use None for multi-DC dashboards to preserve DC IDs from JSON file
+            "static_dc_id": None,
         },
     ]
 
@@ -246,57 +247,65 @@ async def create_dashboard_from_json(
     logger.debug(f"Dashboard data: {dashboard_data}")
     _check = dashboards_collection.find_one({"_id": ObjectId(dashboard_data["_id"])})
 
-    logger.info(f"Forcing static data collection ID in dashboard: {static_dc_id}")
+    if static_dc_id:
+        logger.info(f"Forcing static data collection ID in dashboard: {static_dc_id}")
+    else:
+        logger.info("Multi-DC dashboard: preserving DC IDs from JSON file")
 
     # If dashboard already exists, verify and fix dc_ids in existing dashboard
     if _check:
         logger.info("Dashboard already exists, verifying/fixing dc_ids...")
 
-        needs_update = False
-        if "stored_metadata" in _check:
-            for component in _check["stored_metadata"]:
-                # Check and fix top-level dc_id
-                if "dc_id" in component:
-                    current_dc_id = str(component["dc_id"])
-                    if current_dc_id != static_dc_id:
-                        logger.warning(
-                            f"Component {component.get('index', 'unknown')} has wrong dc_id: "
-                            f"{current_dc_id}, fixing to {static_dc_id}"
-                        )
-                        component["dc_id"] = ObjectId(static_dc_id)
-                        needs_update = True
-
-                # Check and fix nested dc_config._id
-                if "dc_config" in component and isinstance(component["dc_config"], dict):
-                    if "_id" in component["dc_config"]:
-                        current_config_id = str(component["dc_config"]["_id"])
-                        if current_config_id != static_dc_id:
+        # Only force static DC ID if specified (for single-DC dashboards like Iris)
+        if static_dc_id:
+            needs_update = False
+            if "stored_metadata" in _check:
+                for component in _check["stored_metadata"]:
+                    # Check and fix top-level dc_id
+                    if "dc_id" in component:
+                        current_dc_id = str(component["dc_id"])
+                        if current_dc_id != static_dc_id:
                             logger.warning(
-                                f"Component {component.get('index', 'unknown')} has wrong dc_config._id: "
-                                f"{current_config_id}, fixing to {static_dc_id}"
+                                f"Component {component.get('index', 'unknown')} has wrong dc_id: "
+                                f"{current_dc_id}, fixing to {static_dc_id}"
                             )
-                            component["dc_config"]["_id"] = ObjectId(static_dc_id)
+                            component["dc_id"] = ObjectId(static_dc_id)
                             needs_update = True
 
-        if needs_update:
-            # Update dashboard in database
-            result = dashboards_collection.update_one(
-                {"_id": ObjectId(dashboard_data["_id"])},
-                {"$set": {"stored_metadata": _check["stored_metadata"]}},
-            )
-            logger.info(
-                f"Updated existing dashboard with correct dc_ids "
-                f"(matched: {result.matched_count}, modified: {result.modified_count})"
-            )
+                    # Check and fix nested dc_config._id
+                    if "dc_config" in component and isinstance(component["dc_config"], dict):
+                        if "_id" in component["dc_config"]:
+                            current_config_id = str(component["dc_config"]["_id"])
+                            if current_config_id != static_dc_id:
+                                logger.warning(
+                                    f"Component {component.get('index', 'unknown')} has wrong dc_config._id: "
+                                    f"{current_config_id}, fixing to {static_dc_id}"
+                                )
+                                component["dc_config"]["_id"] = ObjectId(static_dc_id)
+                                needs_update = True
+
+            if needs_update:
+                # Update dashboard in database
+                result = dashboards_collection.update_one(
+                    {"_id": ObjectId(dashboard_data["_id"])},
+                    {"$set": {"stored_metadata": _check["stored_metadata"]}},
+                )
+                logger.info(
+                    f"Updated existing dashboard with correct dc_ids "
+                    f"(matched: {result.matched_count}, modified: {result.modified_count})"
+                )
+            else:
+                logger.info("Dashboard dc_ids are already correct")
         else:
-            logger.info("Dashboard dc_ids are already correct")
+            logger.info("Multi-DC dashboard: using DC IDs from JSON file")
 
         return {
             "success": True,
             "message": "Dashboard verified/updated with correct dc_ids",
         }
 
-    if "stored_metadata" in dashboard_data:
+    # Only force static DC ID if specified (for single-DC dashboards like Iris)
+    if static_dc_id and "stored_metadata" in dashboard_data:
         for component in dashboard_data["stored_metadata"]:
             # Force top-level dc_id
             # Note: json_util.object_hook converts {"$oid": "..."} to ObjectId objects
@@ -320,9 +329,14 @@ async def create_dashboard_from_json(
                         )
                         component["dc_config"]["_id"] = ObjectId(static_dc_id)
 
-    logger.info(
-        f"Updated {len(dashboard_data.get('stored_metadata', []))} dashboard components with static dc_id"
-    )
+        logger.info(
+            f"Updated {len(dashboard_data.get('stored_metadata', []))} dashboard components with static dc_id"
+        )
+    elif not static_dc_id:
+        logger.info(
+            f"Multi-DC dashboard: preserving {len(dashboard_data.get('stored_metadata', []))} "
+            f"component DC IDs from JSON file"
+        )
 
     # Convert dashboard data to the correct format
     dashboard_data = DashboardData.from_mongo(dashboard_data)
@@ -374,10 +388,18 @@ async def initialize_db(wipe: bool = False) -> UserBeanie | None:
 
     if wipe:
         logger.info("Wipe is enabled. Deleting the database...")
-        from depictio.api.v1.db import client
+        from depictio.api.v1.db import client, initialization_collection
+
+        # Preserve the init_lock before wiping to prevent other workers from acquiring lock
+        init_lock = initialization_collection.find_one({"_id": "init_lock"})
 
         client.drop_database(settings.mongodb.db_name)
         logger.info("Database deleted successfully.")
+
+        # Restore the init_lock to prevent race conditions with other workers
+        if init_lock:
+            initialization_collection.insert_one(init_lock)
+            logger.info("Restored initialization lock after database wipe")
 
     # Load and validate configuration for initial users and groups
     config_path = os.path.join(os.path.dirname(__file__), "configs", "initial_users.yaml")
