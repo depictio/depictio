@@ -47,12 +47,14 @@
 
 #### Chores 🧹
 
-* chore: clean up irrelevant markdown files and reorganize documentation [9cf53485]
+* chore: clean up irrelevant markdown files and reorganize documentation [d292de7e]
 
 #### Other Changes 📝
 
-* Bump version: 0.6.0-b18 → 0.6.1-b1 [f645ec71]
+* Bump version: 0.6.0 → 0.6.1-b1 [95e676f0]
 * Update CHANGELOG.md for v0.6.0 [1bcf4aa8]
+* Bump version: 0.6.0-b18 → 0.6.0 [7fdd448d]
+* Bump version: 0.6.0-b17 → 0.6.0-b18 [1afcd278]
 * Update CHANGELOG.md for v0.6.0-b18 [d2afe72c]
 
 
@@ -62,84 +64,7 @@
 
 For more details, please refer to the [documentation](https://depictio.github.io/depictio-docs/)
 
-ecessary elements [37e2b7f8]
-* style: remove conflicting pseudo-elements from ActionIcon drag handles and ensure proper display of children [324861e8]
-* style: adjust button alignment and padding in draggable grid components [ed2d08c0]
-* refactor: update auth modal styles for improved appearance and consistency [7ed7c995]
-* refactor: update beforeEach hooks to use 'this.skip()' for unauthenticated mode checks [1e4119cf]
-* refactor: Refactor Dash components to use updated props and styling conventions [8ed8f068]
-* refactor: Refactor Dash components to use updated props and styling conventions [c231f280]
-* refactor: Update dependencies and refactor layout components to be compatible with dash v3 and dash mantine 2.0 [a7a0e3bb]
-* refactor: Refactor Dash components to use updated props and styling conventions [3faff78c]
-* refactor: Refactor Dash components to use updated props and styling conventions [6ff2fc5d]
-* refactor: Update dependencies and refactor layout components to be compatible with dash v3 and dash mantine 2.0 [76826003]
-* refactor: Refactor code structure for improved readability and maintainability [3ff3e54d]
-* refactor: Refactor Dash components to use updated props and styling conventions [dff749a1]
-* refactor: Refactor Dash components to use updated props and styling conventions [43272aa3]
-* refactor: Refactor Dash components to use updated props and styling conventions [40113600]
-* refactor: Refactor Dash components to use updated props and styling conventions [49ad3b19]
-* refactor: Refactor Dash components to use updated props and styling conventions [060a8cc7]
-* refactor: Update dependencies and refactor layout components to be compatible with dash v3 and dash mantine 2.0 [923de838]
-* refactor: update CLI and user models for improved configuration handling [519038ea]
-* refactor: Refactor code structure for improved readability and maintainability [89e62ec9]
-* refactor: Refactor Dash components to use updated props and styling conventions [6231ff4d]
-* refactor: Refactor Dash components to use updated props and styling conventions [1f40554d]
-* refactor: Refactor Dash components to use updated props and styling conventions [734241e7]
-* refactor: Update dependencies and refactor layout components to be compatible with dash v3 and dash mantine 2.0 [e8452447]
-
-#### Chores 🧹
-
-* chore: Enhance logging in API calls and data collection processing functions [0d662764]
-* chore: disable UMAP visualization for now [593ad1dd]
-* chore: Refactor logging in various modules to reduce verbosity [322c80c1]
-* chore: add SVG format for logos ; disable E2E test for in unauth mode ; adjust logo in README according theme in GH [9a9ceb9f]
-* chore: rebase ongoing [d317ea1c]
-* chore: initial commit over pre-commit [75cb3058]
-* chore: initial commit over pre-commit [6918c128]
-
-#### Other Changes 📝
-
-* Bump version: 0.3.0 → 0.3.1 [2a6a4ab8]
-* dev: Add test file for debugging import sorting with deliberately unsorted imports [a4b2b30b]
-* Update .env [d262db79]
-* Bump version: 0.2.1 → 0.3.0 [4314fcb7]
-* Update CHANGELOG.md for v0.3.0 [b3904ecc]
-* test: enhance load_deltatable_lite test by adding size mock for lazy loading path [a399414c]
-* dev: Implement working async grid layout with dynamic component loading [591980b7]
-* Delete demo.cast [7ed4ff81]
-* dev: add textual TUI wizard for Depictio project configuration [ce36f13e]
-* dev:  Cytoscape Joins Integration Module [076dbcc3]
-* Update CHANGELOG.md for v0.2.1 [da705ea4]
-* Bump version: 0.2.0 → 0.2.1 [e5e7c08b]
-* Update CHANGELOG.md for v0.2.0 [9a9c2d06]
-* Bump version: 0.1.1 → 0.2.0 [f067e25c]
-* Update dependencies and package versions in pyproject.toml and uv.lock [57d4e602]
-* Add vertical growing CSS and refactor layout components [1cd9bfae]
-* Enhance draggable grid component styles and edit mode functionality [556d64f2]
-* Refactor inline editable text and simple markdown input components for improved structure and readability [72aefb10]
-* Add prototypes for text editing components and requirements [fe058f26]
-* Refactor component frames to always show borders for draggable delimitation; enhance loading experience with skeleton components in stepper mode across card, figure, interactive, jbrowse, table, and text components; update button colors based on metadata; implement text component with rich text editor and configuration options. [59c8fc80]
-* Refactor RangeSlider prototypes for improved readability and consistency [32e8f5dc]
-* Add tests and debug scripts for circular reference issues in DMC RichTextEditor [0917b0aa]
-* Refactor imports and clean up code across multiple files [c99be270]
-* Refactor code for improved readability and maintainability [9adb450d]
-* Update CHANGELOG.md for v0.1.1 [34c98dec]
-* Bump version: 0.1.0 → 0.1.1 [670fc233]
-* Update CHANGELOG.md for v0.1.0 [386b4423]
-
-
-</details>
-
-### Documentation 📖
-
-For more details, please refer to the [documentation](https://depictio.github.io/depictio-docs/)
-
-ing and upserting processes [a3ed533a]
-* feat: add improved Depictio logo with brand colors and unique character patterns [1a67d8c8]
-* feat: update environment configuration to enable logging verbosity and add Google OAuth2 settings [28861f93]
-* feat: enable development mode in CI configuration for improved local testing [86330302]
-* feat: add data preview functionality in stepper with enhanced AG Grid integration for improved user experience [76fcfe86]
-* feat: add placeholder figure creation when auto-generation is disabled, enhancing user experience with informative annotations [b4f5e6a2]
+otations [b4f5e6a2]
 * feat: enhance project creation flow by handling anonymous users and redirecting to profile for project creation [b9299bf4]
 * feat: enhance user access control by allowing anonymous users to view only public projects and update dashboard management to handle user not found scenario [1060779f]
 * feat: disable auto-refresh for TextInput aggregation method and update description in agg_functions [30734a75]
