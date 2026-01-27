@@ -1188,7 +1188,7 @@
         "marginal": "",
         "barnorm": "",
         "histfunc": "",
-        "nbins": 0,
+        "nbins": 30,
         "text_auto": "",
         "subtitle": "",
         "facet_col_wrap": "",
