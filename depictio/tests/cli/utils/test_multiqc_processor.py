@@ -307,20 +307,36 @@ class TestMultiQCProcessor:
                                         }
                                         mock_api.return_value = mock_response
 
-                                        result = process_multiqc_data_collection(
-                                            sample_data_collection,
-                                            sample_cli_config,
-                                            workflow=sample_workflow,
-                                        )
+                                        # Mock compute_file_hash for hash-based S3 keys
+                                        with patch(
+                                            "depictio.cli.cli.utils.multiqc_processor.compute_file_hash"
+                                        ) as mock_hash:
+                                            mock_hash.return_value = "abc123def456"
 
-                                        assert result["result"] == "success"
-                                        assert "Processed 1 MultiQC files" in result["message"]
+                                            # Mock api_upsert_deltatable for S3 location registration
+                                            with patch(
+                                                "depictio.cli.cli.utils.multiqc_processor.api_upsert_deltatable"
+                                            ) as mock_upsert:
+                                                mock_upsert_response = MagicMock()
+                                                mock_upsert_response.status_code = 200
+                                                mock_upsert.return_value = mock_upsert_response
 
-                                        # Verify S3 upload was called
-                                        mock_s3_client.upload_file.assert_called_once()
+                                                result = process_multiqc_data_collection(
+                                                    sample_data_collection,
+                                                    sample_cli_config,
+                                                    workflow=sample_workflow,
+                                                )
 
-                                        # Verify API call was made
-                                        mock_api.assert_called_once()
+                                                assert result["result"] == "success"
+                                                assert (
+                                                    "Processed 1 MultiQC files" in result["message"]
+                                                )
+
+                                                # Verify S3 upload was called
+                                                mock_s3_client.upload_file.assert_called_once()
+
+                                                # Verify API call was made
+                                                mock_api.assert_called_once()
 
     # def test_process_multiqc_data_collection_with_existing_files(
     #     self, sample_data_collection, sample_cli_config, mock_multiqc_module
