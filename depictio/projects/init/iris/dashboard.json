@@ -74,7 +74,8 @@
         "points": "all",
         "notched": true,
         "log_x": false,
-        "log_y": false
+        "log_y": false,
+        "color_continuous_scale": ""
       },
       "visu_type": "box",
       "wf_id": {
