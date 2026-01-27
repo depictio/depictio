@@ -67,6 +67,7 @@ data:
   DEPICTIO_GOOGLE_ANALYTICS_TRACKING_ID: {{ .Values.backend.env.DEPICTIO_GOOGLE_ANALYTICS_TRACKING_ID | default "G-XXXXXXXXXX" | quote }}
   {{- end }}
   # YAML Dashboard Sync configuration (disabled for K8s by default)
+  DEPICTIO_DASHBOARD_YAML_ENABLED: {{ .Values.backend.env.DEPICTIO_DASHBOARD_YAML_ENABLED | default "false" | quote }}
   DEPICTIO_DASHBOARD_YAML_WATCHER_AUTO_START: {{ .Values.backend.env.DEPICTIO_DASHBOARD_YAML_WATCHER_AUTO_START | default "false" | quote }}
   DEPICTIO_DASHBOARD_YAML_WATCH_LOCAL_DIR: {{ .Values.backend.env.DEPICTIO_DASHBOARD_YAML_WATCH_LOCAL_DIR | default "false" | quote }}
   DEPICTIO_DASHBOARD_YAML_AUTO_EXPORT_ON_SAVE: {{ .Values.backend.env.DEPICTIO_DASHBOARD_YAML_AUTO_EXPORT_ON_SAVE | default "false" | quote }}
