@@ -1,6 +1,7 @@
 from typing import Any
 
 from botocore.exceptions import ClientError
+from bson import ObjectId
 from fastapi import HTTPException
 from mypy_boto3_s3.client import S3Client
 from pydantic import BaseModel
@@ -179,18 +180,32 @@ async def cleanup_orphaned_s3_files(dry_run: bool = True, force: bool = False) -
                     # Only check multiqc data collections (lowercase!)
                     if dc_type == "multiqc":
                         # Check if deltatable entry exists
-                        dt_exists = deltatables_collection.find_one({"data_collection_id": dc_id})
+                        # CRITICAL: Convert string dc_id to ObjectId for MongoDB query
+                        dt_exists = deltatables_collection.find_one(
+                            {"data_collection_id": ObjectId(dc_id)}
+                        )
 
                         if not dt_exists:
                             # MultiQC exists but no deltatable → needs reprocessing
                             multiqc_reprocess_ids.append(dc_id)
-                            logger.info(
-                                f"Found MultiQC DC without deltatable entry (will reprocess): {dc_id}"
+                            logger.warning(
+                                f"INCONSISTENT STATE: MultiQC DC {dc_id} has reports but no deltatable entry. "
+                                f"This requires manual intervention - NOT deleting S3 files to prevent data loss."
                             )
 
-        # Add MultiQC DCs needing reprocessing to orphaned list
-        # (but keep them separate in the results for clarity)
-        all_prefixes_to_clean = list(set(orphaned_prefixes + multiqc_reprocess_ids))
+        # CRITICAL FIX: Do NOT delete S3 files for MultiQC DCs with reports but missing deltatables
+        # This prevents data loss - these DCs need manual recovery, not deletion
+        # Only delete truly orphaned prefixes (no DC, no reports)
+        all_prefixes_to_clean = list(set(orphaned_prefixes))  # Removed multiqc_reprocess_ids
+
+        # Log MultiQC DCs needing attention separately
+        if multiqc_reprocess_ids:
+            logger.error(
+                f"Found {len(multiqc_reprocess_ids)} MultiQC DCs with inconsistent state "
+                f"(reports exist but no deltatable): {multiqc_reprocess_ids[:5]}"
+                + ("..." if len(multiqc_reprocess_ids) > 5 else "")
+                + ". Manual intervention required - see admin docs for recovery steps."
+            )
 
         # Safety check: if all prefixes are orphaned, something might be wrong
         # Note: We only check pure orphaned prefixes, not MultiQC reprocessing prefixes
@@ -252,12 +267,12 @@ async def cleanup_orphaned_s3_files(dry_run: bool = True, force: bool = False) -
                 else:
                     pass
 
-        # Log cleanup summary
-        if multiqc_reprocess_ids:
+        # Log cleanup summary (only for truly orphaned prefixes, not MultiQC DCs)
+        if orphaned_prefixes:
             logger.info(
-                f"Cleaned up {len(multiqc_reprocess_ids)} MultiQC DCs for reprocessing: "
-                f"{', '.join(multiqc_reprocess_ids[:5])}"
-                + ("..." if len(multiqc_reprocess_ids) > 5 else "")
+                f"Cleaned up {len(orphaned_prefixes)} orphaned S3 prefixes: "
+                f"{', '.join(orphaned_prefixes[:5])}"
+                + ("..." if len(orphaned_prefixes) > 5 else "")
             )
 
         result = {

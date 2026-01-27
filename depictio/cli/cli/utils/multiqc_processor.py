@@ -560,30 +560,28 @@ def process_multiqc_data_collection(
                                 # Register the first S3 location as deltatable location
                                 # This allows dashboard components to fetch MultiQC data via standard deltatable API
                                 if i == 0:  # Only do this for the first file
-                                    try:
-                                        logger.info(
-                                            f"Registering MultiQC S3 location as deltatable: {s3_location}"
+                                    logger.info(
+                                        f"Registering MultiQC S3 location as deltatable: {s3_location}"
+                                    )
+                                    upsert_response = api_upsert_deltatable(
+                                        data_collection_id=str(data_collection.id),
+                                        delta_table_location=s3_location,
+                                        CLI_config=CLI_config,
+                                        update=False,
+                                        deltatable_size_bytes=file_size_bytes,
+                                    )
+
+                                    if upsert_response.status_code != 200:
+                                        error_msg = (
+                                            f"CRITICAL: Failed to register MultiQC deltatable for DC {data_collection.id}. "
+                                            f"HTTP {upsert_response.status_code}: {upsert_response.text}"
                                         )
-                                        upsert_response = api_upsert_deltatable(
-                                            data_collection_id=str(data_collection.id),
-                                            delta_table_location=s3_location,
-                                            CLI_config=CLI_config,
-                                            update=False,
-                                            deltatable_size_bytes=file_size_bytes,
-                                        )
-                                        if upsert_response.status_code == 200:
-                                            logger.info(
-                                                "✅ Successfully registered MultiQC deltatable location"
-                                            )
-                                        else:
-                                            logger.warning(
-                                                f"Failed to register MultiQC deltatable: HTTP {upsert_response.status_code}"
-                                            )
-                                            logger.debug(f"Response: {upsert_response.text}")
-                                    except Exception as upsert_error:
-                                        logger.warning(
-                                            f"Failed to register MultiQC deltatable location: {upsert_error}"
-                                        )
+                                        logger.error(error_msg)
+                                        raise RuntimeError(error_msg)  # Fail fast!
+
+                                    logger.info(
+                                        "✅ Successfully registered MultiQC deltatable location"
+                                    )
 
                             except Exception as json_error:
                                 logger.error(
