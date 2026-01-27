@@ -216,7 +216,7 @@ class JoinDefinition(BaseModel):
         description="Size of the Delta table in bytes",
     )
 
-    model_config = ConfigDict(extra="forbid", use_enum_values=True)
+    model_config = ConfigDict(extra="allow", use_enum_values=True)
 
     @field_validator("name")
     @classmethod

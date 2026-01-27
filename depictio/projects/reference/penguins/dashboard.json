@@ -383,6 +383,162 @@
           ],
           "how": "inner"
         }
+      },
+      "cols_json": {
+        "individual_id": {
+          "type": "object",
+          "description": "Unique individual penguin ID within species",
+          "specs": {
+            "count": 342,
+            "mode": "N1A1",
+            "nunique": 342
+          },
+          "filter": "agTextColumnFilter",
+          "floatingFilter": true
+        },
+        "bill_length_mm": {
+          "type": "float64",
+          "description": "Bill length in millimeters",
+          "specs": {
+            "count": 342,
+            "unique": 165,
+            "min": 32.1,
+            "max": 59.6,
+            "average": 43.92
+          },
+          "filter": "agNumberColumnFilter",
+          "floatingFilter": true,
+          "filterParams": {
+            "filterOptions": [
+              "equals",
+              "lessThan",
+              "greaterThan",
+              "inRange"
+            ],
+            "maxNumConditions": 2
+          }
+        },
+        "bill_depth_mm": {
+          "type": "float64",
+          "description": "Bill depth in millimeters",
+          "specs": {
+            "count": 342,
+            "unique": 81,
+            "min": 13.1,
+            "max": 21.5,
+            "average": 17.15
+          },
+          "filter": "agNumberColumnFilter",
+          "floatingFilter": true,
+          "filterParams": {
+            "filterOptions": [
+              "equals",
+              "lessThan",
+              "greaterThan",
+              "inRange"
+            ],
+            "maxNumConditions": 2
+          }
+        },
+        "flipper_length_mm": {
+          "type": "float64",
+          "description": "Flipper length in millimeters",
+          "specs": {
+            "count": 342,
+            "unique": 56,
+            "min": 172,
+            "max": 231,
+            "average": 200.92
+          },
+          "filter": "agNumberColumnFilter",
+          "floatingFilter": true,
+          "filterParams": {
+            "filterOptions": [
+              "equals",
+              "lessThan",
+              "greaterThan",
+              "inRange"
+            ],
+            "maxNumConditions": 2
+          }
+        },
+        "body_mass_g": {
+          "type": "float64",
+          "description": "Body mass in grams",
+          "specs": {
+            "count": 342,
+            "unique": 95,
+            "min": 2700,
+            "max": 6300,
+            "average": 4201.75
+          },
+          "filter": "agNumberColumnFilter",
+          "floatingFilter": true,
+          "filterParams": {
+            "filterOptions": [
+              "equals",
+              "lessThan",
+              "greaterThan",
+              "inRange"
+            ],
+            "maxNumConditions": 2
+          }
+        },
+        "island": {
+          "type": "object",
+          "description": "Island location (Biscoe, Dream, Torgersen)",
+          "specs": {
+            "count": 342,
+            "mode": "Biscoe",
+            "nunique": 3
+          },
+          "filter": "agTextColumnFilter",
+          "floatingFilter": true
+        },
+        "sex": {
+          "type": "object",
+          "description": "Penguin sex (male, female)",
+          "specs": {
+            "count": 342,
+            "mode": "male",
+            "nunique": 2
+          },
+          "filter": "agTextColumnFilter",
+          "floatingFilter": true
+        },
+        "year": {
+          "type": "int64",
+          "description": "Observation year",
+          "specs": {
+            "count": 342,
+            "unique": 3,
+            "min": 2007,
+            "max": 2009,
+            "average": 2008
+          },
+          "filter": "agNumberColumnFilter",
+          "floatingFilter": true,
+          "filterParams": {
+            "filterOptions": [
+              "equals",
+              "lessThan",
+              "greaterThan",
+              "inRange"
+            ],
+            "maxNumConditions": 2
+          }
+        },
+        "species": {
+          "type": "object",
+          "description": "Species name (Adelie, Chinstrap, Gentoo)",
+          "specs": {
+            "count": 342,
+            "mode": "Adelie",
+            "nunique": 3
+          },
+          "filter": "agTextColumnFilter",
+          "floatingFilter": true
+        }
       }
     }
   ],
