@@ -412,11 +412,43 @@
   ],
   "right_panel_layout_data": [
     {
-      "i": "box-9bb3858f-9b18-43a4-86ac-467b5dc5ddd6",
+      "i": "box-5253ea1b-c289-49bb-84cf-b0311ab78ba5",
       "x": 0,
       "y": 0,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-6495257f-4401-4e6f-b5f6-0b8b337b2015",
+      "x": 2,
+      "y": 0,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-d9bacf32-c2ff-44ca-8abc-0f108a2aee5e",
+      "x": 4,
+      "y": 0,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-6074afc3-9b9b-4cfc-9b29-5bf30d672092",
+      "x": 6,
+      "y": 0,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-9bb3858f-9b18-43a4-86ac-467b5dc5ddd6",
+      "x": 0,
+      "y": 2,
       "w": 8,
-      "h": 9,
+      "h": 5,
       "static": false,
       "resizeHandles": [
         "se",
@@ -429,9 +461,9 @@
     {
       "i": "box-92741cf5-bc3e-4d68-9739-e8cb47cf0192",
       "x": 0,
-      "y": 18,
+      "y": 7,
       "w": 4,
-      "h": 7,
+      "h": 5,
       "static": false,
       "resizeHandles": [
         "se",
@@ -444,9 +476,9 @@
     {
       "i": "box-d69527a8-3367-4d09-bd76-d9f3d85a0fed",
       "x": 4,
-      "y": 18,
+      "y": 7,
       "w": 4,
-      "h": 7,
+      "h": 5,
       "static": false,
       "resizeHandles": [
         "se",
@@ -459,9 +491,9 @@
     {
       "i": "box-a67e6d14-8c3d-429a-a26c-253ccd15cfcb",
       "x": 0,
-      "y": 32,
+      "y": 12,
       "w": 8,
-      "h": 10,
+      "h": 5,
       "static": false,
       "resizeHandles": [
         "se",
@@ -472,43 +504,11 @@
       ]
     },
     {
-      "i": "box-5253ea1b-c289-49bb-84cf-b0311ab78ba5",
-      "x": 0,
-      "y": 52,
-      "w": 1,
-      "h": 3,
-      "static": true
-    },
-    {
-      "i": "box-6495257f-4401-4e6f-b5f6-0b8b337b2015",
-      "x": 1,
-      "y": 52,
-      "w": 1,
-      "h": 3,
-      "static": true
-    },
-    {
-      "i": "box-d9bacf32-c2ff-44ca-8abc-0f108a2aee5e",
-      "x": 3,
-      "y": 52,
-      "w": 1,
-      "h": 3,
-      "static": true
-    },
-    {
-      "i": "box-6074afc3-9b9b-4cfc-9b29-5bf30d672092",
-      "x": 4,
-      "y": 52,
-      "w": 1,
-      "h": 3,
-      "static": true
-    },
-    {
       "i": "box-0c386b67-7594-4599-8f71-99195c14a6a9",
       "x": 0,
-      "y": 70,
+      "y": 17,
       "w": 8,
-      "h": 8,
+      "h": 5,
       "static": false,
       "resizeHandles": [
         "se",

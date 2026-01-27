@@ -1289,11 +1289,43 @@
   ],
   "right_panel_layout_data": [
     {
+      "i": "box-9496c7aa-26fb-407d-83c1-6aad223af63b",
+      "x": 0,
+      "y": 0,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-7824f8b5-f7da-4b8e-8536-f0aca0ff0f8b",
+      "x": 2,
+      "y": 0,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-0c42aafb-6d4c-46af-8ca7-777ab4039a0a",
+      "x": 4,
+      "y": 0,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-94784ec8-e270-4334-b9dc-2d267201fa94",
+      "x": 6,
+      "y": 0,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
       "i": "box-1e9febfc-e48c-4614-8f0d-5c09ba73991f",
       "x": 0,
-      "y": 17,
+      "y": 2,
       "w": 4,
-      "h": 7,
+      "h": 5,
       "static": false,
       "resizeHandles": [
         "se",
@@ -1305,57 +1337,10 @@
     },
     {
       "i": "box-b0b3001f-e17a-4993-a890-a9745ffdad2d",
-      "x": 0,
-      "y": 0,
-      "w": 4,
-      "h": 8,
-      "static": false,
-      "resizeHandles": [
-        "se",
-        "s",
-        "e",
-        "sw",
-        "w"
-      ]
-    },
-    {
-      "i": "box-9496c7aa-26fb-407d-83c1-6aad223af63b",
       "x": 4,
-      "y": 0,
-      "w": 1,
-      "h": 3,
-      "static": true
-    },
-    {
-      "i": "box-7824f8b5-f7da-4b8e-8536-f0aca0ff0f8b",
-      "x": 5,
-      "y": 0,
-      "w": 1,
-      "h": 3,
-      "static": true
-    },
-    {
-      "i": "box-0c42aafb-6d4c-46af-8ca7-777ab4039a0a",
-      "x": 6,
-      "y": 0,
-      "w": 1,
-      "h": 3,
-      "static": true
-    },
-    {
-      "i": "box-94784ec8-e270-4334-b9dc-2d267201fa94",
-      "x": 7,
-      "y": 0,
-      "w": 1,
-      "h": 3,
-      "static": true
-    },
-    {
-      "i": "box-7b8eed81-a0db-42a9-869b-707a9d6d2714",
-      "x": 0,
-      "y": 31,
-      "w": 8,
-      "h": 10,
+      "y": 2,
+      "w": 4,
+      "h": 5,
       "static": false,
       "resizeHandles": [
         "se",
@@ -1367,10 +1352,25 @@
     },
     {
       "i": "box-0f503dac-d5a7-41f9-be07-ef694e7df4a4",
-      "x": 4,
+      "x": 0,
+      "y": 7,
+      "w": 8,
+      "h": 5,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-7b8eed81-a0db-42a9-869b-707a9d6d2714",
+      "x": 0,
       "y": 12,
-      "w": 4,
-      "h": 10,
+      "w": 8,
+      "h": 5,
       "static": false,
       "resizeHandles": [
         "se",
