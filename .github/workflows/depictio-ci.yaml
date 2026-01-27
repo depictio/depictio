@@ -582,11 +582,11 @@ jobs:
       - name: Verify Ampliseq integration from system initialization
         run: |
           # Verify project
-          AMPLISEQ_PROJECT=$(docker compose exec -T mongo mongosh localhost:27018/depictioDB --eval "JSON.stringify(db.projects.find().toArray())" --quiet 2>&1 | grep '^[\[{]' | jq -r '.[] | select(.name == "Ampliseq Reference Dataset") | .name')
+          AMPLISEQ_PROJECT=$(docker compose exec -T mongo mongosh localhost:27018/depictioDB --eval "JSON.stringify(db.projects.find().toArray())" --quiet 2>&1 | grep '^[\[{]' | jq -r '.[] | select(.name == "Ampliseq Microbial Community Analysis") | .name')
           [ -z "$AMPLISEQ_PROJECT" ] && echo "❌ Ampliseq project not found" && exit 1
 
           # Verify deltatables (should have 5 data collections: metadata, multiqc_data, alpha_rarefaction, taxonomy_composition, ancom_volcano)
-          AMPLISEQ_PID=$(docker compose exec -T mongo mongosh localhost:27018/depictioDB --eval "JSON.stringify(db.projects.find().toArray())" --quiet 2>&1 | grep '^[\[{]' | jq -r '.[] | select(.name == "Ampliseq Reference Dataset") | ._id')
+          AMPLISEQ_PID=$(docker compose exec -T mongo mongosh localhost:27018/depictioDB --eval "JSON.stringify(db.projects.find().toArray())" --quiet 2>&1 | grep '^[\[{]' | jq -r '.[] | select(.name == "Ampliseq Microbial Community Analysis") | ._id')
           AMPLISEQ_DC_COUNT=$(docker compose exec -T mongo mongosh localhost:27018/depictioDB --eval "JSON.stringify(db.projects.find({\"_id\": ObjectId(\"$AMPLISEQ_PID\")}).toArray())" --quiet 2>&1 | grep '^[\[{]' | jq -r '.[].workflows[0].data_collections | length')
           [ "$AMPLISEQ_DC_COUNT" -lt 5 ] && echo "❌ Ampliseq data collections not found (expected >=5, got $AMPLISEQ_DC_COUNT)" && exit 1
 
