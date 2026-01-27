@@ -206,6 +206,150 @@ The project provides multiple Dockerfile variants:
 - Type-safe data validation and serialization
 - Support for various data collection types (tables, genomic data)
 
+### Multi-App Architecture (Dash Frontend)
+
+**CRITICAL**: The Dash frontend uses a **multi-app architecture** with three separate Dash applications. Understanding this architecture is essential for proper callback registration and feature development.
+
+#### Three Dash Applications
+
+1. **Management App** (`depictio/dash/pages/management.py`)
+   - URL: `/dashboards`, `/profile`, `/projects`, etc.
+   - Purpose: Dashboard listing, user management, project management
+   - Callbacks: Dashboard CRUD operations, user settings, project configuration
+   - File: Registers callbacks via `depictio/dash/core/callbacks.py`
+
+2. **Viewer App** (`depictio/dash/pages/dashboard_viewer.py`)
+   - URL: `/dashboard/{id}` (view mode)
+   - Purpose: Read-only dashboard viewing
+   - Callbacks: Component rendering, theme switching, data filtering
+   - File: Registers callbacks via `register_callbacks(app)` function
+   - **Key Point**: No save button, no edit controls, optimized for viewing
+
+3. **Editor App** (`depictio/dash/pages/dashboard_editor.py`)
+   - URL: `/dashboard/{id}/edit` (edit mode)
+   - Purpose: Dashboard editing and component management
+   - Callbacks: Save operations, drag-and-drop, component editing
+   - File: Registers callbacks via `register_callbacks(app)` function
+   - **Key Point**: Includes save callback and edit mode features
+
+#### Shared Components Between Apps
+
+**Location**: `depictio/dash/layouts/shared_app_shell.py`
+
+The `create_shared_stores()` function defines components available to **all apps**:
+- `local-store`: JWT tokens, user authentication
+- `theme-store`: Light/dark theme preference
+- `sidebar-collapsed`: Sidebar state
+- `screenshot-debounce-store`: Screenshot generation tracking
+- `url`: Current page location
+- Plus other session/memory stores
+
+**IMPORTANT**: Any `dcc.Store` or component that needs to be accessed by callbacks in **multiple apps** must be defined in `create_shared_stores()`.
+
+#### Callback Registration Best Practices
+
+When adding new features with callbacks, consider:
+
+1. **Viewer + Editor Apps**: Features that work in both view and edit modes
+   ```python
+   # Example: Auto-screenshot on page load
+   # File: depictio/dash/layouts/save.py
+   def register_auto_screenshot_callback(app):
+       """Register in BOTH viewer and editor apps"""
+       @app.callback(...)
+       def auto_screenshot_on_dashboard_view(...):
+           pass
+
+   # Register in viewer app
+   # File: depictio/dash/pages/dashboard_viewer.py
+   register_auto_screenshot_callback(app)
+
+   # Register in editor app
+   # File: depictio/dash/pages/dashboard_editor.py
+   register_auto_screenshot_callback(app)
+   ```
+
+2. **Editor App Only**: Features specific to editing
+   ```python
+   # Example: Save button callback
+   # File: depictio/dash/layouts/save.py
+   def register_callbacks_save_lite(app):
+       """Register ONLY in editor app"""
+       @app.callback(
+           Output("notification-container", "sendNotifications"),
+           Input("save-button-dashboard", "n_clicks"),
+           ...
+       )
+       def save_dashboard_minimal(...):
+           pass
+   ```
+
+3. **Management App Only**: Features for dashboard listing/management
+   ```python
+   # Example: Dashboard card rendering
+   # File: depictio/dash/layouts/dashboards_management.py
+   def register_callbacks_dashboards_management(app):
+       """Register ONLY in management app"""
+       pass
+   ```
+
+#### Common Pitfalls to Avoid
+
+❌ **WRONG**: Registering a callback only in Editor app when it should work in Viewer app too
+```python
+# This will NOT trigger when viewing dashboards (only when editing)
+# File: depictio/dash/pages/dashboard_editor.py
+register_auto_screenshot_callback(app)  # Missing from viewer app!
+```
+
+✅ **CORRECT**: Register in both apps when feature should work in both modes
+```python
+# File: depictio/dash/pages/dashboard_viewer.py
+register_auto_screenshot_callback(app)
+
+# File: depictio/dash/pages/dashboard_editor.py
+register_auto_screenshot_callback(app)
+```
+
+❌ **WRONG**: Defining a store in one app's layout
+```python
+# File: depictio/dash/layouts/app_layout.py (Management app only)
+dcc.Store(id="screenshot-debounce-store", ...)  # Won't exist in viewer/editor!
+```
+
+✅ **CORRECT**: Define shared stores in `create_shared_stores()`
+```python
+# File: depictio/dash/layouts/shared_app_shell.py
+def create_shared_stores():
+    return [
+        dcc.Store(id="screenshot-debounce-store", ...),  # Available in all apps
+        ...
+    ]
+```
+
+#### Testing Checklist for New Features
+
+When adding dashboard-related features, test in **all relevant apps**:
+
+- [ ] **View mode** (`/dashboard/{id}`): Does the feature work when viewing?
+- [ ] **Edit mode** (`/dashboard/{id}/edit`): Does the feature work when editing?
+- [ ] **Management** (`/dashboards`): Does the feature integrate with dashboard listing?
+- [ ] **Theme switching**: Does the feature work in both light and dark themes?
+- [ ] **Page navigation**: Does the feature handle URL changes correctly?
+
+#### Architecture Diagram
+
+```
+Management App (/dashboards)
+    ↓ Navigates to ↓
+Viewer App (/dashboard/{id}) ←→ Editor App (/dashboard/{id}/edit)
+    ↑                                           ↑
+    └─────────── Shared Stores ─────────────────┘
+         (theme, auth, screenshot-debounce, etc.)
+```
+
+**Key Takeaway**: Always ask yourself: "Should this feature work in view mode, edit mode, or both?" Then register callbacks accordingly in the appropriate app(s).
+
 ### Data Architecture
 
 #### Database Layer
