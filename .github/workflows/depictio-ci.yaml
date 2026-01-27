@@ -562,6 +562,48 @@ jobs:
 
           echo "✅ Iris integration verified: Project=$IRIS_PROJECT, DT=$IRIS_DT, Dashboard=$IRIS_DASH"
 
+      - name: Verify Penguins integration from system initialization
+        run: |
+          # Verify project
+          PENGUIN_PROJECT=$(docker compose exec -T mongo mongosh localhost:27018/depictioDB --eval "JSON.stringify(db.projects.find().toArray())" --quiet 2>&1 | grep '^[\[{]' | jq -r '.[] | select(.name == "Palmer Penguins Species Comparison") | .name')
+          [ -z "$PENGUIN_PROJECT" ] && echo "❌ Penguins project not found" && exit 1
+
+          # Verify deltatables (should have 2 data collections with joins)
+          PENGUIN_PID=$(docker compose exec -T mongo mongosh localhost:27018/depictioDB --eval "JSON.stringify(db.projects.find().toArray())" --quiet 2>&1 | grep '^[\[{]' | jq -r '.[] | select(.name == "Palmer Penguins Species Comparison") | ._id')
+          PENGUIN_DC_COUNT=$(docker compose exec -T mongo mongosh localhost:27018/depictioDB --eval "JSON.stringify(db.projects.find({\"_id\": ObjectId(\"$PENGUIN_PID\")}).toArray())" --quiet 2>&1 | grep '^[\[{]' | jq -r '.[].workflows[0].data_collections | length')
+          [ "$PENGUIN_DC_COUNT" -lt 2 ] && echo "❌ Penguins data collections not found (expected >=2, got $PENGUIN_DC_COUNT)" && exit 1
+
+          # Verify dashboard
+          PENGUIN_DASH=$(docker compose exec -T mongo mongosh localhost:27018/depictioDB --eval "JSON.stringify(db.dashboards.find({\"project_id\": ObjectId(\"$PENGUIN_PID\")}).toArray())" --quiet 2>&1 | grep '^[\[{]' | jq -r '.[]._id // empty')
+          [ -z "$PENGUIN_DASH" ] && echo "❌ Penguins dashboard not found" && exit 1
+
+          echo "✅ Penguins integration verified: Project=$PENGUIN_PROJECT, DCs=$PENGUIN_DC_COUNT, Dashboard=$PENGUIN_DASH"
+
+      - name: Verify Ampliseq integration from system initialization
+        run: |
+          # Verify project
+          AMPLISEQ_PROJECT=$(docker compose exec -T mongo mongosh localhost:27018/depictioDB --eval "JSON.stringify(db.projects.find().toArray())" --quiet 2>&1 | grep '^[\[{]' | jq -r '.[] | select(.name == "Ampliseq Reference Dataset") | .name')
+          [ -z "$AMPLISEQ_PROJECT" ] && echo "❌ Ampliseq project not found" && exit 1
+
+          # Verify deltatables (should have 5 data collections: metadata, multiqc_data, alpha_rarefaction, taxonomy_composition, ancom_volcano)
+          AMPLISEQ_PID=$(docker compose exec -T mongo mongosh localhost:27018/depictioDB --eval "JSON.stringify(db.projects.find().toArray())" --quiet 2>&1 | grep '^[\[{]' | jq -r '.[] | select(.name == "Ampliseq Reference Dataset") | ._id')
+          AMPLISEQ_DC_COUNT=$(docker compose exec -T mongo mongosh localhost:27018/depictioDB --eval "JSON.stringify(db.projects.find({\"_id\": ObjectId(\"$AMPLISEQ_PID\")}).toArray())" --quiet 2>&1 | grep '^[\[{]' | jq -r '.[].workflows[0].data_collections | length')
+          [ "$AMPLISEQ_DC_COUNT" -lt 5 ] && echo "❌ Ampliseq data collections not found (expected >=5, got $AMPLISEQ_DC_COUNT)" && exit 1
+
+          # Verify dashboards (should have 2: MultiQC main tab + Analysis child tab)
+          AMPLISEQ_DASH_COUNT=$(docker compose exec -T mongo mongosh localhost:27018/depictioDB --eval "JSON.stringify(db.dashboards.find({\"project_id\": ObjectId(\"$AMPLISEQ_PID\")}).toArray())" --quiet 2>&1 | grep '^[\[{]' | jq -r 'length')
+          [ "$AMPLISEQ_DASH_COUNT" -lt 2 ] && echo "❌ Ampliseq dashboards not found (expected >=2, got $AMPLISEQ_DASH_COUNT)" && exit 1
+
+          # Verify main tab dashboard
+          AMPLISEQ_MAIN_DASH=$(docker compose exec -T mongo mongosh localhost:27018/depictioDB --eval "JSON.stringify(db.dashboards.find({\"project_id\": ObjectId(\"$AMPLISEQ_PID\"), \"is_main_tab\": true}).toArray())" --quiet 2>&1 | grep '^[\[{]' | jq -r '.[]._id // empty')
+          [ -z "$AMPLISEQ_MAIN_DASH" ] && echo "❌ Ampliseq main dashboard not found" && exit 1
+
+          # Verify child tab dashboard
+          AMPLISEQ_CHILD_DASH=$(docker compose exec -T mongo mongosh localhost:27018/depictioDB --eval "JSON.stringify(db.dashboards.find({\"project_id\": ObjectId(\"$AMPLISEQ_PID\"), \"is_main_tab\": false}).toArray())" --quiet 2>&1 | grep '^[\[{]' | jq -r '.[]._id // empty')
+          [ -z "$AMPLISEQ_CHILD_DASH" ] && echo "❌ Ampliseq child dashboard not found" && exit 1
+
+          echo "✅ Ampliseq integration verified: Project=$AMPLISEQ_PROJECT, DCs=$AMPLISEQ_DC_COUNT, Dashboards=$AMPLISEQ_DASH_COUNT (Main=$AMPLISEQ_MAIN_DASH, Child=$AMPLISEQ_CHILD_DASH)"
+
       - name: Test Screenshot Generation - screenshot-dash-fixed
         run: |
           echo "📸 Testing screenshot generation functionality..."

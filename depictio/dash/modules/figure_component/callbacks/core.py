@@ -858,8 +858,6 @@ def _create_figure_from_data(
             # Parse JSON string parameters into dicts/lists (UI mode stores these as JSON strings)
             if k in json_parseable_params and isinstance(v, str) and v.strip():
                 try:
-                    import json
-
                     v = json.loads(v)
                 except (json.JSONDecodeError, ValueError):
                     logger.warning(f"Failed to parse {k} as JSON: {v}, skipping")
