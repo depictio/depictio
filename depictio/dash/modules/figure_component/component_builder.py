@@ -410,6 +410,499 @@ class AccordionBuilder:
             value=title.lower().replace(" ", "_"),
         )
 
+    def build_highlights_ui(self, state: Optional[FigureComponentState] = None) -> html.Div:
+        """Build UI for highlight configuration.
+
+        Args:
+            state: Current component state
+
+        Returns:
+            Highlights configuration UI
+        """
+        highlights = []
+        if state:
+            highlights = state.get_parameter_value("highlights", [])
+            if not isinstance(highlights, list):
+                highlights = []
+
+        # Build UI for each highlight
+        highlight_items = []
+        for idx, highlight in enumerate(highlights):
+            highlight_items.append(
+                dmc.Paper(
+                    [
+                        dmc.Stack(
+                            [
+                                dmc.Group(
+                                    [
+                                        dmc.Text(f"Highlight {idx + 1}", size="sm", fw=500),
+                                        dmc.ActionIcon(
+                                            DashIconify(icon="mdi:delete"),
+                                            id={
+                                                "type": "btn-delete-highlight",
+                                                "index": self.component_builder.component_index,
+                                                "hl_idx": idx,
+                                            },
+                                            color="red",
+                                            variant="subtle",
+                                            size="sm",
+                                        ),
+                                    ],
+                                    justify="space-between",
+                                ),
+                                dmc.Select(
+                                    label="Column to Highlight",
+                                    data=self.component_builder.columns,
+                                    value=highlight.get("column", ""),
+                                    id={
+                                        "type": "highlight-column",
+                                        "index": self.component_builder.component_index,
+                                        "hl_idx": idx,
+                                    },
+                                    size="xs",
+                                ),
+                                dmc.Grid(
+                                    [
+                                        dmc.GridCol(
+                                            dmc.Select(
+                                                label="Condition",
+                                                data=[
+                                                    "equals",
+                                                    "greater than",
+                                                    "less than",
+                                                    "contains",
+                                                ],
+                                                value=highlight.get("condition", "equals"),
+                                                id={
+                                                    "type": "highlight-condition",
+                                                    "index": self.component_builder.component_index,
+                                                    "hl_idx": idx,
+                                                },
+                                                size="xs",
+                                            ),
+                                            span=6,
+                                        ),
+                                        dmc.GridCol(
+                                            dmc.TextInput(
+                                                label="Value",
+                                                value=str(highlight.get("value", "")),
+                                                id={
+                                                    "type": "highlight-value",
+                                                    "index": self.component_builder.component_index,
+                                                    "hl_idx": idx,
+                                                },
+                                                size="xs",
+                                            ),
+                                            span=6,
+                                        ),
+                                    ],
+                                    gutter="xs",
+                                ),
+                                dmc.Text("Highlight Style", size="xs", fw=500, mt="xs"),
+                                dmc.Grid(
+                                    [
+                                        dmc.GridCol(
+                                            dmc.ColorInput(
+                                                label="Color",
+                                                value=highlight.get("color", "red"),
+                                                id={
+                                                    "type": "highlight-color",
+                                                    "index": self.component_builder.component_index,
+                                                    "hl_idx": idx,
+                                                },
+                                                size="xs",
+                                            ),
+                                            span=4,
+                                        ),
+                                        dmc.GridCol(
+                                            dmc.NumberInput(
+                                                label="Size",
+                                                value=highlight.get("size", 12),
+                                                id={
+                                                    "type": "highlight-size",
+                                                    "index": self.component_builder.component_index,
+                                                    "hl_idx": idx,
+                                                },
+                                                size="xs",
+                                                min=1,
+                                                max=50,
+                                            ),
+                                            span=4,
+                                        ),
+                                        dmc.GridCol(
+                                            dmc.ColorInput(
+                                                label="Outline",
+                                                value=highlight.get("outline", ""),
+                                                id={
+                                                    "type": "highlight-outline",
+                                                    "index": self.component_builder.component_index,
+                                                    "hl_idx": idx,
+                                                },
+                                                size="xs",
+                                            ),
+                                            span=4,
+                                        ),
+                                    ],
+                                    gutter="xs",
+                                ),
+                            ],
+                            gap="xs",
+                        )
+                    ],
+                    p="sm",
+                    withBorder=True,
+                    mb="xs",
+                )
+            )
+
+        return html.Div(
+            [
+                dmc.Group(
+                    [
+                        dmc.Text("Highlight Points", size="sm", fw=500),
+                        dmc.Button(
+                            "Add Highlight",
+                            id={
+                                "type": "btn-add-highlight",
+                                "index": self.component_builder.component_index,
+                            },
+                            size="xs",
+                            leftSection=DashIconify(icon="mdi:plus"),
+                            variant="light",
+                        ),
+                    ],
+                    justify="space-between",
+                    mb="xs",
+                ),
+                html.Div(
+                    highlight_items
+                    if highlight_items
+                    else dmc.Text("No highlights", size="sm", c="dimmed"),
+                    id={
+                        "type": "highlights-container",
+                        "index": self.component_builder.component_index,
+                    },
+                ),
+                # NOTE: highlights-store is now created at page level (stepper_page.py)
+                # to prevent callback registration errors. Don't create duplicate here.
+            ]
+        )
+
+    def build_reference_lines_ui(self, state: Optional[FigureComponentState] = None) -> html.Div:
+        """Build custom UI for reference lines configuration.
+
+        Args:
+            state: Current component state
+
+        Returns:
+            Reference lines configuration UI
+        """
+        reference_lines = []
+        if state:
+            reference_lines = state.get_parameter_value("reference_lines", [])
+            if not isinstance(reference_lines, list):
+                reference_lines = []
+
+        # Build UI for each existing line
+        line_items = []
+        for idx, line in enumerate(reference_lines):
+            line_items.append(
+                dmc.Paper(
+                    [
+                        dmc.Stack(
+                            [
+                                dmc.Group(
+                                    [
+                                        dmc.Text(
+                                            f"Line {idx + 1}",
+                                            size="sm",
+                                            fw=500,
+                                        ),
+                                        dmc.ActionIcon(
+                                            DashIconify(icon="mdi:delete"),
+                                            id={
+                                                "type": "btn-delete-refline",
+                                                "index": self.component_builder.component_index,
+                                                "line_idx": idx,
+                                            },
+                                            color="red",
+                                            variant="subtle",
+                                            size="sm",
+                                        ),
+                                    ],
+                                    justify="space-between",
+                                ),
+                                dmc.Grid(
+                                    [
+                                        dmc.GridCol(
+                                            dmc.Select(
+                                                label="Type",
+                                                data=["hline", "vline"],
+                                                value=line.get("type", "hline"),
+                                                id={
+                                                    "type": "refline-type",
+                                                    "index": self.component_builder.component_index,
+                                                    "line_idx": idx,
+                                                },
+                                                size="xs",
+                                            ),
+                                            span=6,
+                                        ),
+                                        dmc.GridCol(
+                                            dmc.NumberInput(
+                                                label="Position",
+                                                value=line.get("position", 0),
+                                                id={
+                                                    "type": "refline-position",
+                                                    "index": self.component_builder.component_index,
+                                                    "line_idx": idx,
+                                                },
+                                                size="xs",
+                                                step=0.01,
+                                            ),
+                                            span=6,
+                                        ),
+                                    ],
+                                    gutter="xs",
+                                ),
+                                dmc.Grid(
+                                    [
+                                        dmc.GridCol(
+                                            dmc.ColorInput(
+                                                label="Color",
+                                                value=line.get("color", "red"),
+                                                id={
+                                                    "type": "refline-color",
+                                                    "index": self.component_builder.component_index,
+                                                    "line_idx": idx,
+                                                },
+                                                size="xs",
+                                            ),
+                                            span=4,
+                                        ),
+                                        dmc.GridCol(
+                                            dmc.Select(
+                                                label="Line Style",
+                                                data=["solid", "dash", "dot", "dashdot"],
+                                                value=line.get("dash", "dash"),
+                                                id={
+                                                    "type": "refline-dash",
+                                                    "index": self.component_builder.component_index,
+                                                    "line_idx": idx,
+                                                },
+                                                size="xs",
+                                            ),
+                                            span=4,
+                                        ),
+                                        dmc.GridCol(
+                                            dmc.NumberInput(
+                                                label="Line Width",
+                                                value=line.get("width", 2),
+                                                min=1,
+                                                max=10,
+                                                id={
+                                                    "type": "refline-width",
+                                                    "index": self.component_builder.component_index,
+                                                    "line_idx": idx,
+                                                },
+                                                size="xs",
+                                            ),
+                                            span=4,
+                                        ),
+                                    ],
+                                    gutter="xs",
+                                ),
+                                dmc.TextInput(
+                                    label="Annotation (optional)",
+                                    value=line.get("annotation", ""),
+                                    id={
+                                        "type": "refline-annotation",
+                                        "index": self.component_builder.component_index,
+                                        "line_idx": idx,
+                                    },
+                                    size="xs",
+                                ),
+                                dmc.Checkbox(
+                                    label="Show slider in view mode",
+                                    checked=line.get("show_slider", False),
+                                    id={
+                                        "type": "refline-show-slider",
+                                        "index": self.component_builder.component_index,
+                                        "line_idx": idx,
+                                    },
+                                    size="xs",
+                                ),
+                            ],
+                            gap="xs",
+                        )
+                    ],
+                    p="sm",
+                    withBorder=True,
+                    mb="xs",
+                )
+            )
+
+        return html.Div(
+            [
+                dmc.Group(
+                    [
+                        dmc.Text("Reference Lines", size="sm", fw=500),
+                        dmc.Button(
+                            "Add Line",
+                            id={
+                                "type": "btn-add-refline",
+                                "index": self.component_builder.component_index,
+                            },
+                            size="xs",
+                            leftSection=DashIconify(icon="mdi:plus"),
+                            variant="light",
+                        ),
+                    ],
+                    justify="space-between",
+                    mb="xs",
+                ),
+                html.Div(
+                    line_items
+                    if line_items
+                    else dmc.Text("No reference lines", size="sm", c="dimmed"),
+                    id={
+                        "type": "reflines-container",
+                        "index": self.component_builder.component_index,
+                    },
+                ),
+                # NOTE: reflines-store is now created at page level (stepper_page.py)
+                # to prevent callback registration errors. Don't create duplicate here.
+            ]
+        )
+
+    def build_customizations_section(
+        self, state: Optional[FigureComponentState] = None
+    ) -> Optional[dmc.AccordionItem]:
+        """Build customizations accordion section.
+
+        Args:
+            state: Current component state
+
+        Returns:
+            DMC accordion item for customizations
+        """
+        from .models import CUSTOMIZATION_PARAMETERS
+
+        # Build standard parameter inputs
+        parameter_inputs = []
+        for param in CUSTOMIZATION_PARAMETERS:
+            current_value = state.get_parameter_value(param.name) if state else None
+            input_component = self.component_builder.build_parameter_input(
+                param, value=current_value
+            )
+
+            label_text = param.label
+            if param.required:
+                label_text += " *"
+
+            if param.description:
+                label_component = dmc.Tooltip(
+                    label=param.description,
+                    position="top",
+                    multiline=True,
+                    withArrow=True,
+                    withinPortal=False,
+                    children=[
+                        dmc.Text(
+                            label_text,
+                            size="sm",
+                            fw="bold",
+                            style={
+                                "cursor": "help",
+                                "textDecoration": "underline dotted",
+                                "minWidth": "120px",
+                                "display": "flex",
+                                "alignItems": "center",
+                            },
+                        )
+                    ],
+                )
+            else:
+                label_component = dmc.Text(
+                    label_text,
+                    size="sm",
+                    fw="bold",
+                    style={
+                        "minWidth": "120px",
+                        "display": "flex",
+                        "alignItems": "center",
+                    },
+                )
+
+            parameter_row = dmc.Group(
+                [
+                    html.Div(label_component, style={"width": "30%", "minWidth": "120px"}),
+                    html.Div(input_component, style={"width": "70%", "flex": "1"}),
+                ],
+                gap="md",
+                align="center",
+                style={"width": "100%"},
+            )
+
+            parameter_inputs.append(parameter_row)
+
+        # Add axis scale controls for preview testing
+        parameter_inputs.append(
+            html.Div(
+                [
+                    dmc.Divider(my="md"),
+                    dmc.Text("Axis Scale (Preview)", size="sm", fw="bold", mb="xs"),
+                    dmc.Group(
+                        [
+                            dmc.Select(
+                                label="X Axis",
+                                data=["linear", "log"],
+                                value="linear",
+                                id={
+                                    "type": "axis-scale-x",
+                                    "index": self.component_builder.component_index,
+                                },
+                                size="xs",
+                                style={"width": "150px"},
+                            ),
+                            dmc.Select(
+                                label="Y Axis",
+                                data=["linear", "log"],
+                                value="linear",
+                                id={
+                                    "type": "axis-scale-y",
+                                    "index": self.component_builder.component_index,
+                                },
+                                size="xs",
+                                style={"width": "150px"},
+                            ),
+                        ],
+                        gap="md",
+                    ),
+                ]
+            )
+        )
+
+        # Add reference lines custom UI
+        parameter_inputs.append(
+            html.Div([dmc.Divider(my="md"), self.build_reference_lines_ui(state)])
+        )
+
+        # Add highlights custom UI
+        parameter_inputs.append(html.Div([dmc.Divider(my="md"), self.build_highlights_ui(state)]))
+
+        content = dmc.Stack(parameter_inputs, gap="md")
+
+        return dmc.AccordionItem(
+            children=[
+                dmc.AccordionControl(
+                    "Customizations (beta)", icon=DashIconify(icon="mdi:tune-variant", width=20)
+                ),
+                dmc.AccordionPanel(content),
+            ],
+            value="customizations",
+        )
+
     def build_full_accordion(
         self, visualization_def, state: Optional[FigureComponentState] = None
     ) -> dmc.Accordion:
@@ -471,6 +964,11 @@ class AccordionBuilder:
             )
             if advanced_item:
                 accordion_items.append(advanced_item)
+
+        # Customizations section
+        customizations_item = self.build_customizations_section(state)
+        if customizations_item:
+            accordion_items.append(customizations_item)
 
         return dmc.Accordion(
             children=accordion_items,

@@ -26,9 +26,18 @@ def register_callbacks_figure_component(app):
     Args:
         app: Dash application instance
     """
-    from .core import register_core_callbacks
+    from depictio.models.logging import logger
 
+    logger.warning("🚀 REGISTERING FIGURE COMPONENT CALLBACKS")
+
+    from .core import register_core_callbacks
+    from .view_controls import register_view_control_callbacks
+
+    logger.warning("🚀 Calling register_core_callbacks...")
     register_core_callbacks(app)
+    logger.warning("🚀 Calling register_view_control_callbacks...")
+    register_view_control_callbacks(app)
+    logger.warning("🚀 FIGURE COMPONENT CALLBACKS REGISTRATION COMPLETE")
 
 
 def load_design_callbacks(app):
