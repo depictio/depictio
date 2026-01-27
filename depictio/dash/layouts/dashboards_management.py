@@ -88,6 +88,67 @@ def load_dashboards_from_db(token: str) -> dict:
         return {"dashboards": []}
 
 
+def get_child_tabs_info(dashboard_id: str, token: str) -> dict:
+    """
+    Get information about child tabs for a dashboard.
+
+    Args:
+        dashboard_id: Parent dashboard ID to query child tabs for.
+        token: Authentication token for API access.
+
+    Returns:
+        dict: Dictionary with 'count' (number of tabs) and 'tabs' (list of tab info).
+    """
+    if not token:
+        logger.debug(f"No token provided for dashboard {dashboard_id}")
+        return {"count": 0, "tabs": []}
+
+    try:
+        # Query all dashboards with include_child_tabs=True to get all tabs
+        response = httpx.get(
+            f"{API_BASE_URL}/depictio/api/v1/dashboards/list",
+            headers={"Authorization": f"Bearer {token}"},
+            params={"include_child_tabs": True},
+        )
+
+        if response.status_code == 200:
+            all_dashboards = response.json()
+            logger.debug(f"Fetched {len(all_dashboards)} total dashboards for tab filtering")
+
+            # Filter child tabs that belong to this parent dashboard
+            child_tabs = [
+                d
+                for d in all_dashboards
+                if str(d.get("parent_dashboard_id")) == str(dashboard_id)
+                and not d.get("is_main_tab", True)
+            ]
+
+            logger.debug(f"Found {len(child_tabs)} child tabs for parent dashboard {dashboard_id}")
+
+            # Sort by tab_order
+            child_tabs.sort(key=lambda x: x.get("tab_order", 0))
+
+            return {
+                "count": len(child_tabs),
+                "tabs": [
+                    {
+                        "_id": tab.get("_id"),
+                        "dashboard_id": tab.get("dashboard_id"),
+                        "title": tab.get("title", "Untitled Tab"),
+                        "tab_order": tab.get("tab_order", 0),
+                    }
+                    for tab in child_tabs
+                ],
+            }
+        else:
+            logger.warning(f"Failed to fetch child tabs: {response.status_code}")
+            return {"count": 0, "tabs": []}
+
+    except Exception as e:
+        logger.error(f"Error getting child tabs info: {e}")
+        return {"count": 0, "tabs": []}
+
+
 def insert_dashboard(dashboard_id: str | PyObjectId, dashboard_data: dict, token: str) -> None:
     """
     Insert or update a dashboard in the database via API.
@@ -551,11 +612,21 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
                 color_badge_ownership = "gray"
             badge_icon = "material-symbols:public" if public else "material-symbols:lock"
 
-            badge_owner = dmc.Badge(
-                f"Owner: {dashboard['permissions']['owners'][0]['email']}",
-                # f"Owner: {dashboard['permissions']['owners'][0]['email']} - {str(dashboard['permissions']['owners'][0]['_id'])}",
-                color=color_badge_ownership,
-                leftSection=DashIconify(icon="mdi:account", width=16, color="white"),
+            # Owner badge with tooltip
+            owner_email = dashboard["permissions"]["owners"][0]["email"]
+            badge_owner = dmc.Tooltip(
+                label=f"Owner: {owner_email}",
+                children=dmc.Badge(
+                    f"Owner: {owner_email}",
+                    color=color_badge_ownership,
+                    leftSection=DashIconify(icon="mdi:account", width=16, color="white"),
+                    style={
+                        "maxWidth": "100%",
+                        "overflow": "hidden",
+                        "textOverflow": "ellipsis",
+                        "whiteSpace": "nowrap",
+                    },
+                ),
             )
 
             # Use project cache to avoid redundant API calls
@@ -573,22 +644,76 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
                     project_name = "Unknown"
                     project_cache[project_id_str] = project_name  # Cache the failure too
 
-            badge_project = dmc.Badge(
-                f"Project: {project_name}",
-                color=colors["teal"],  # Use Depictio teal instead of green
-                leftSection=DashIconify(icon="mdi:jira", width=16, color="white"),
-                style={
-                    "maxWidth": "100%",
-                    "overflow": "visible",
-                    "whiteSpace": "normal",
-                    "wordWrap": "break-word",
-                },  # Allow text wrapping for long project names
+            # Project badge with tooltip
+            badge_project = dmc.Tooltip(
+                label=f"Project: {project_name}",
+                children=dmc.Badge(
+                    f"Project: {project_name}",
+                    color=colors["teal"],  # Use Depictio teal instead of green
+                    leftSection=DashIconify(icon="mdi:jira", width=16, color="white"),
+                    style={
+                        "maxWidth": "100%",
+                        "overflow": "hidden",
+                        "textOverflow": "ellipsis",
+                        "whiteSpace": "nowrap",
+                    },
+                ),
             )
-            badge_status = dmc.Badge(
-                "Public" if public else "Private",
-                color=colors["green"] if public else colors["purple"],  # Use Depictio colors
-                leftSection=DashIconify(icon=badge_icon, width=16, color="white"),
+
+            # Status badge with tooltip
+            status_text = "Public" if public else "Private"
+            badge_status = dmc.Tooltip(
+                label=f"Visibility: {status_text}",
+                children=dmc.Badge(
+                    status_text,
+                    color=colors["green"] if public else colors["purple"],  # Use Depictio colors
+                    leftSection=DashIconify(icon=badge_icon, width=16, color="white"),
+                ),
             )
+
+            # Create last modified badge with tooltip
+            last_modified = "Never"
+            if dashboard.get("last_saved_ts"):
+                try:
+                    # Parse ISO format timestamp
+                    dt = datetime.fromisoformat(dashboard["last_saved_ts"].replace("Z", "+00:00"))
+                    last_modified = dt.strftime("%Y-%m-%d %H:%M")
+                except Exception as e:
+                    logger.warning(f"Failed to parse last_saved_ts: {e}")
+                    last_modified = dashboard["last_saved_ts"]
+
+            badge_last_modified = dmc.Tooltip(
+                label=f"Last modified: {last_modified}",
+                children=dmc.Badge(
+                    f"Modified: {last_modified}",
+                    color="gray",
+                    variant="light",
+                    leftSection=DashIconify(icon="mdi:clock-outline", width=16),
+                ),
+            )
+
+            # Tab count badge (only show when > 1 total tab)
+            tabs_info = get_child_tabs_info(str(dashboard["dashboard_id"]), token)
+            child_tab_count = tabs_info["count"]  # Number of child tabs only
+
+            # Total tabs = 1 (main) + child tabs count
+            total_tab_count = 1 + child_tab_count
+
+            logger.debug(
+                f"Dashboard {dashboard['dashboard_id']}: "
+                f"Found {child_tab_count} child tabs, total {total_tab_count} tabs"
+            )
+
+            # Only show badge when total > 1 (i.e., when there are child tabs)
+            if total_tab_count > 1:
+                badge_tab_count = dmc.Badge(
+                    f"{total_tab_count} Tab{'s' if total_tab_count > 1 else ''}",
+                    color=colors["orange"],
+                    variant="light",
+                    leftSection=DashIconify(icon="mdi:tab", width=16),
+                )
+            else:
+                badge_tab_count = None
 
             # badge_tooltip_additional_info = dmc.HoverCard(
             #     [
@@ -695,15 +820,21 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
                     ),
                     dmc.Space(h=10),
                     dmc.Stack(
-                        [
-                            badge_project,
-                            badge_owner,
-                            badge_status,
-                            # badge_tooltip_additional_info,
+                        children=[
+                            item
+                            for item in [
+                                badge_project,
+                                badge_owner,
+                                badge_status,
+                                badge_last_modified,
+                                badge_tab_count,
+                                # badge_tooltip_additional_info,
+                            ]
+                            if item is not None
                         ],
                         justify="center",
                         align="flex-start",
-                        gap="xs",  # Reduced gap between badges
+                        gap=4,  # Minimal gap between badges (4px instead of xs=10px)
                     ),
                     dmc.Space(h=10),
                 ]
@@ -772,10 +903,8 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
                                     },
                                     variant="outline",
                                     color=colors["blue"],  # Use Depictio blue
-                                    size="sm",
-                                    # style={"fontFamily": "Virgil"},
-                                    # leftIcon=DashIconify(icon="mdi:eye", width=12, color="black"),
-                                    style={"padding": "2px 6px", "fontSize": "12px"},
+                                    size="xs",
+                                    style={"padding": "2px 4px", "fontSize": "11px"},
                                 ),
                                 href=f"/dashboard/{dashboard['dashboard_id']}",
                             ),
@@ -787,10 +916,9 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
                                 },
                                 variant="outline",
                                 color=colors["teal"],  # Use Depictio teal
-                                # style={"fontFamily": "Virgil"},
                                 disabled=disabled,
-                                size="sm",
-                                style={"padding": "2px 6px", "fontSize": "12px"},
+                                size="xs",
+                                style={"padding": "2px 4px", "fontSize": "11px"},
                             ),
                             dmc.Button(
                                 "Duplicate",
@@ -800,9 +928,8 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
                                 },
                                 variant="outline",
                                 color=colors["pink"],  # Use Depictio gray
-                                # style={"fontFamily": "Virgil"},
-                                size="sm",
-                                style={"padding": "2px 6px", "fontSize": "12px"},
+                                size="xs",
+                                style={"padding": "2px 4px", "fontSize": "11px"},
                                 disabled=duplicate_disabled,
                             ),
                             dmc.Button(
@@ -813,10 +940,9 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
                                 },
                                 variant="outline",
                                 color=colors["red"],  # Use Depictio red
-                                # style={"fontFamily": "Virgil"},
                                 disabled=disabled,
-                                size="sm",
-                                style={"padding": "2px 6px", "fontSize": "12px"},
+                                size="xs",
+                                style={"padding": "2px 4px", "fontSize": "11px"},
                             ),
                             dmc.Button(
                                 privacy_button_title,
@@ -826,23 +952,18 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
                                 },
                                 variant="outline",
                                 color=color_privacy_button,
-                                # style={"fontFamily": "Virgil"},
                                 disabled=disabled,
-                                size="sm",
-                                style={"padding": "2px 6px", "fontSize": "12px", "display": "none"},
+                                size="xs",
+                                style={"padding": "2px 4px", "fontSize": "11px", "display": "none"},
                             ),
-                        ]
-                        # align="center",
-                        # position="apart",
-                        # grow=False,
-                        # noWrap=False,
-                        # style={"width": "100%"},
+                        ],
+                        gap="xs",
                     ),
                 ]
             )
             return group
 
-        def return_thumbnail(user_id, dashboard):
+        def return_thumbnail(user_id, dashboard, total_tab_count=1, child_tabs=None):
             """
             Generate the thumbnail image section for a dashboard card.
 
@@ -851,6 +972,9 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
             with proper sizing and object-fit for 16:9 aspect ratio images.
             Otherwise, displays a default placeholder image with "No thumbnail
             available" text.
+
+            When total_tab_count > 1, creates a Carousel with all tab thumbnails
+            instead of a single image.
 
             The thumbnail is wrapped in a link to the dashboard view page,
             allowing users to click the image to open the dashboard.
@@ -862,40 +986,286 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
                     - _id: MongoDB ObjectId used for thumbnail filename
                     - dashboard_id: Used for the navigation link URL
                     - title: Used for image alt text
+                total_tab_count: Total number of tabs (main + children). Default 1.
+                child_tabs: List of child tab dictionaries. Default None.
 
             Returns:
-                html.Div or html.A: Clickable thumbnail component:
-                    - If thumbnail exists: html.A wrapping dmc.CardSection
-                      with the dashboard screenshot image
+                html.Div or html.A or dmc.CardSection: Thumbnail component:
+                    - If total_tab_count > 1: dmc.CardSection with Carousel of all tabs
+                    - If single tab with screenshot: html.A with single image
                     - If no thumbnail: html.Div with default placeholder
-                      image and "No thumbnail available" message
-                    Both link to /dashboard/{dashboard_id} on click.
             """
             import os
 
-            # Define the output folder where screenshots are saved
-            output_folder = (
-                "/app/depictio/dash/static/screenshots"  # Directly set to the desired path
-            )
-            # output_folder = os.path.join(os.path.dirname(__file__), 'static', 'screenshots')
+            # If multiple tabs, create a carousel with all tab thumbnails
+            if total_tab_count > 1 and child_tabs:
+                output_folder = "/app/depictio/dash/static/screenshots"
+                default_thumbnail = dash.get_asset_url("images/backgrounds/default_thumbnail.png")
 
-            # Define the filename and paths
-            filename = f"{dashboard['_id']}.png"
-            # Filesystem path to check existence
-            thumbnail_fs_path = os.path.join(output_folder, filename)
-            # URL path for the Image src
-            thumbnail_url = f"/static/screenshots/{filename}"
+                # Store slide data for both small and large carousels
+                slide_data = []
 
-            # Simple responsive thumbnail styling for 1920x1080 images
-            # Using fixed height with proper object-fit to avoid crushing
+                # Add main dashboard thumbnail as first slide (use dashboard_id for URL consistency)
+                main_id = dashboard["_id"]
+                main_dashboard_id = dashboard["dashboard_id"]
 
-            # Check if the thumbnail exists in the static/screenshots folder
-            if not os.path.exists(thumbnail_fs_path):
-                logger.warning(f"Thumbnail not found at path: {thumbnail_fs_path}")
-                # Use the default thumbnail from static/
-                default_thumbnail_url = dash.get_asset_url(
-                    "images/backgrounds/default_thumbnail.png"
+                # Check for theme-specific screenshots (use dashboard_id to match URL identifier)
+                main_light_filename = f"{main_dashboard_id}_light.png"
+                main_dark_filename = f"{main_dashboard_id}_dark.png"
+                main_legacy_filename = f"{main_dashboard_id}.png"
+
+                main_light_path = os.path.join(output_folder, main_light_filename)
+                main_dark_path = os.path.join(output_folder, main_dark_filename)
+                main_legacy_path = os.path.join(output_folder, main_legacy_filename)
+
+                # Determine URLs for both themes
+                main_light_url = (
+                    f"/static/screenshots/{main_light_filename}"
+                    if os.path.exists(main_light_path)
+                    else None
                 )
+                main_dark_url = (
+                    f"/static/screenshots/{main_dark_filename}"
+                    if os.path.exists(main_dark_path)
+                    else None
+                )
+
+                # Fallback logic
+                if not main_light_url and not main_dark_url:
+                    if os.path.exists(main_legacy_path):
+                        main_light_url = main_dark_url = (
+                            f"/static/screenshots/{main_legacy_filename}"
+                        )
+                    else:
+                        main_light_url = main_dark_url = default_thumbnail
+
+                # Use light theme as default initial display
+                main_thumbnail_url = main_light_url
+
+                # Store main dashboard data
+                slide_data.append(
+                    {
+                        "id": main_id,
+                        "dashboard_id": main_dashboard_id,
+                        "title": f"Main: {dashboard['title']}",
+                        "thumbnail_url": main_thumbnail_url,
+                        "light_url": main_light_url,
+                        "dark_url": main_dark_url,
+                        "href": f"/dashboard/{dashboard['dashboard_id']}",
+                    }
+                )
+
+                # Add child tab thumbnails
+                for tab in child_tabs:
+                    tab_id = tab.get("_id", tab.get("dashboard_id"))
+                    tab_title = tab.get("title", "Untitled Tab")
+                    tab_dashboard_id = tab.get("dashboard_id")
+
+                    # Check for theme-specific screenshots (use dashboard_id for URL consistency)
+                    tab_light_filename = f"{tab_dashboard_id}_light.png"
+                    tab_dark_filename = f"{tab_dashboard_id}_dark.png"
+                    tab_legacy_filename = f"{tab_dashboard_id}.png"
+
+                    tab_light_path = os.path.join(output_folder, tab_light_filename)
+                    tab_dark_path = os.path.join(output_folder, tab_dark_filename)
+                    tab_legacy_path = os.path.join(output_folder, tab_legacy_filename)
+
+                    # Determine URLs for both themes
+                    tab_light_url = (
+                        f"/static/screenshots/{tab_light_filename}"
+                        if os.path.exists(tab_light_path)
+                        else None
+                    )
+                    tab_dark_url = (
+                        f"/static/screenshots/{tab_dark_filename}"
+                        if os.path.exists(tab_dark_path)
+                        else None
+                    )
+
+                    # Fallback logic
+                    if not tab_light_url and not tab_dark_url:
+                        if os.path.exists(tab_legacy_path):
+                            tab_light_url = tab_dark_url = (
+                                f"/static/screenshots/{tab_legacy_filename}"
+                            )
+                        else:
+                            tab_light_url = tab_dark_url = default_thumbnail
+
+                    # Use light theme as default initial display
+                    tab_thumbnail_url = tab_light_url
+
+                    # Store tab data
+                    slide_data.append(
+                        {
+                            "id": tab_id,
+                            "dashboard_id": tab_dashboard_id,
+                            "title": f"Tab: {tab_title}",
+                            "thumbnail_url": tab_thumbnail_url,
+                            "light_url": tab_light_url,
+                            "dark_url": tab_dark_url,
+                            "href": f"/dashboard/{tab_dashboard_id}",
+                        }
+                    )
+
+                # Build small carousel slides for card display
+                carousel_slides = []
+                for data in slide_data:
+                    carousel_slides.append(
+                        dmc.CarouselSlide(
+                            html.A(
+                                html.Div(
+                                    dmc.Image(
+                                        src=data["thumbnail_url"],
+                                        style={
+                                            "width": "100%",
+                                            "height": "210px",
+                                            "objectFit": "cover",
+                                            "objectPosition": "center center",
+                                        },
+                                        alt=data["title"],
+                                    ),
+                                    **{
+                                        "data-dashboard-id": data["id"],
+                                        "data-light-src": data["light_url"],
+                                        "data-dark-src": data["dark_url"],
+                                    },
+                                ),
+                                href=data["href"],
+                                style={"textDecoration": "none"},
+                            )
+                        )
+                    )
+
+                # Build large carousel slides for tooltip (same data, bigger dimensions)
+                large_carousel_slides = []
+                for data in slide_data:
+                    large_carousel_slides.append(
+                        dmc.CarouselSlide(
+                            html.Div(
+                                [
+                                    dmc.Image(
+                                        src=data["thumbnail_url"],
+                                        style={
+                                            "width": "600px",
+                                            "height": "400px",
+                                            "objectFit": "cover",
+                                            "objectPosition": "center center",
+                                        },
+                                        alt=data["title"],
+                                    ),
+                                    # Text overlay with tab name (bottom left to avoid carousel indicators)
+                                    html.Div(
+                                        data["title"],
+                                        style={
+                                            "position": "absolute",
+                                            "bottom": "12px",
+                                            "left": "12px",
+                                            "backgroundColor": "rgba(0, 0, 0, 0.75)",
+                                            "color": "white",
+                                            "padding": "8px 12px",
+                                            "fontSize": "14px",
+                                            "fontWeight": "500",
+                                            "borderRadius": "6px",
+                                            "backdropFilter": "blur(8px)",
+                                            "maxWidth": "calc(100% - 120px)",  # Leave space for indicators
+                                            "overflow": "hidden",
+                                            "textOverflow": "ellipsis",
+                                            "whiteSpace": "nowrap",
+                                        },
+                                    ),
+                                ],
+                                **{
+                                    "data-dashboard-id": data["id"],
+                                    "data-light-src": data["light_url"],
+                                    "data-dark-src": data["dark_url"],
+                                },
+                                style={"position": "relative"},
+                            )
+                        )
+                    )
+
+                # Return carousel wrapped in HoverCard with larger carousel, then CardSection
+                return dmc.CardSection(
+                    dmc.HoverCard(
+                        withArrow=True,
+                        position="right",
+                        offset=10,
+                        shadow="md",
+                        openDelay=300,
+                        closeDelay=200,
+                        children=[
+                            dmc.HoverCardTarget(
+                                dmc.Carousel(
+                                    children=carousel_slides,
+                                    withIndicators=True,
+                                    withControls=True,
+                                    height=210,
+                                    style={"borderRadius": "8px 8px 0 0", "cursor": "pointer"},
+                                )
+                            ),
+                            dmc.HoverCardDropdown(
+                                dmc.Carousel(
+                                    children=large_carousel_slides,
+                                    withIndicators=True,
+                                    withControls=True,
+                                    height=400,
+                                    style={
+                                        "width": "600px",
+                                        "borderRadius": "8px",
+                                    },
+                                ),
+                                style={"padding": 0},
+                            ),
+                        ],
+                    ),
+                    withBorder=True,
+                )
+
+            # Define the output folder where screenshots are saved
+            output_folder = "/app/depictio/dash/static/screenshots"
+            dashboard_id_str = dashboard["dashboard_id"]  # Use dashboard_id to match URL identifier
+
+            # Check for theme-specific screenshots (use dashboard_id for URL consistency)
+            light_filename = f"{dashboard_id_str}_light.png"
+            dark_filename = f"{dashboard_id_str}_dark.png"
+            legacy_filename = f"{dashboard_id_str}.png"
+
+            light_path = os.path.join(output_folder, light_filename)
+            dark_path = os.path.join(output_folder, dark_filename)
+            legacy_path = os.path.join(output_folder, legacy_filename)
+
+            # Determine URLs for both themes
+            light_url = (
+                f"/static/screenshots/{light_filename}" if os.path.exists(light_path) else None
+            )
+            dark_url = f"/static/screenshots/{dark_filename}" if os.path.exists(dark_path) else None
+
+            # Fallback logic
+            if not light_url and not dark_url:
+                # Try legacy single screenshot
+                if os.path.exists(legacy_path):
+                    light_url = dark_url = f"/static/screenshots/{legacy_filename}"
+                else:
+                    # Use default placeholder
+                    default_url = dash.get_asset_url("images/backgrounds/default_thumbnail.png")
+                    light_url = dark_url = default_url
+
+            # Use light theme as default initial display
+            thumbnail_url = light_url
+
+            # Check if we have a valid thumbnail (not default placeholder)
+            has_thumbnail = (
+                os.path.exists(light_path)
+                or os.path.exists(dark_path)
+                or os.path.exists(legacy_path)
+            )
+
+            if not has_thumbnail:
+                logger.warning(
+                    f"Thumbnail not found for dashboard {dashboard_id_str} "
+                    f"(checked: {light_filename}, {dark_filename}, {legacy_filename})"
+                )
+                default_thumbnail_url = light_url  # Already set to default in fallback logic
 
                 thumbnail = html.Div(
                     [
@@ -922,7 +1292,7 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
                                     ],
                                     style={
                                         "width": "100%",
-                                        "height": "280px",  # Match optimized thumbnail height
+                                        "height": "210px",  # Adjusted for 4-column layout (maintains 16:9 proportions)
                                         "display": "flex",
                                         "flexDirection": "column",
                                         "alignItems": "center",
@@ -938,21 +1308,27 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
                     ]
                 )
             else:
-                # Better thumbnail display for 1920x1080 (16:9) aspect ratio
-                # Use object-fit: cover to fill the container and crop if needed
+                # Theme-aware thumbnail display with data attributes for clientside theme switching
                 thumbnail = html.A(
                     dmc.CardSection(
-                        dmc.Image(
-                            src=thumbnail_url,
-                            style={
-                                "width": "100%",
-                                "height": "280px",  # Optimized height for 3-column layout
-                                "objectFit": "cover",  # Fill container completely
-                                "objectPosition": "center center",  # Center the image content
-                                "borderRadius": "8px 8px 0 0",
-                                "display": "block",  # Ensure proper display
+                        html.Div(
+                            dmc.Image(
+                                src=thumbnail_url,
+                                style={
+                                    "width": "100%",
+                                    "height": "210px",
+                                    "objectFit": "cover",
+                                    "objectPosition": "center center",
+                                    "borderRadius": "8px 8px 0 0",
+                                    "display": "block",
+                                },
+                                alt=f"Thumbnail for {dashboard['title']}",
+                            ),
+                            **{
+                                "data-dashboard-id": dashboard_id_str,
+                                "data-light-src": light_url,
+                                "data-dark-src": dark_url,
                             },
-                            alt=f"Thumbnail for {dashboard['title']}",
                         ),
                         withBorder=True,
                     ),
@@ -999,6 +1375,12 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
                 edit_name_modal = modal_edit_name_dashboard(dashboard)
                 buttons = create_buttons(dashboard, user_id, current_user)
                 dashboard_header = create_dashboad_view_header(dashboard, user_id, token)
+
+                # Get tab info for thumbnail carousel
+                tabs_info = get_child_tabs_info(str(dashboard["dashboard_id"]), token)
+                child_tab_count = tabs_info["count"]
+                child_tabs = tabs_info["tabs"]
+                total_tab_count = 1 + child_tab_count
 
                 buttons = dmc.Accordion(
                     [
@@ -1049,7 +1431,7 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
                     # chevronPosition="right",
                 )
 
-                thumbnail = return_thumbnail(user_id, dashboard)
+                thumbnail = return_thumbnail(user_id, dashboard, total_tab_count, child_tabs)
                 view.append(
                     dmc.Card(
                         withBorder=True,
@@ -1075,75 +1457,341 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
                 )
             return view
 
-        # Categorize dashboards based on ownership and access
-        owned_dashboards = [
-            d
-            for d in dashboards
-            if str(user_id) in [str(owner["_id"]) for owner in d["permissions"]["owners"]]
-        ]
+        def create_empty_state_card(icon: str, title: str, description: str) -> list[dmc.Center]:
+            """
+            Create an empty state card similar to projects.py.
+
+            Args:
+                icon: Iconify icon name
+                title: Main title text
+                description: Description text
+
+            Returns:
+                List containing a centered empty state card
+            """
+            return [
+                dmc.Center(
+                    dmc.Paper(
+                        children=[
+                            dmc.Stack(
+                                children=[
+                                    dmc.Center(
+                                        DashIconify(
+                                            icon=icon,
+                                            width=64,
+                                            height=64,
+                                            color="#6c757d",
+                                        )
+                                    ),
+                                    dmc.Text(
+                                        title,
+                                        ta="center",
+                                        fw="bold",
+                                        size="xl",
+                                    ),
+                                    dmc.Text(
+                                        description,
+                                        ta="center",
+                                        c="gray",
+                                        size="sm",
+                                    ),
+                                ],
+                                align="center",
+                                gap="sm",
+                            )
+                        ],
+                        shadow="sm",
+                        radius="md",
+                        p="xl",
+                        withBorder=True,
+                        style={"width": "100%", "maxWidth": "500px"},
+                    ),
+                    style={"minHeight": "300px", "height": "auto"},
+                )
+            ]
+
+        # Categorize dashboards with precedence: Example > Public > Accessed > Owned
+        # Example dashboards are ONLY those explicitly marked OR owned by example/demo users
+        # If current user owns a dashboard, it goes to Owned (not Example) unless explicitly marked
+
         # Check if current user is anonymous
         is_anonymous = hasattr(current_user, "is_anonymous") and current_user.is_anonymous
 
+        # Example dashboards: explicitly marked by ID OR owned by example/demo users (but NOT current user)
+        example_dashboard_ids = ["6824cb3b89d2b72169309737"]  # Specific example dashboards
+        example_dashboards = [
+            d
+            for d in dashboards
+            if (
+                # Explicitly marked as example by ID
+                str(d.get("dashboard_id", "")) in example_dashboard_ids
+                # OR owned by example/demo user (but not by current user - duplicates go to Owned)
+                or (
+                    str(user_id) not in [str(owner["_id"]) for owner in d["permissions"]["owners"]]
+                    and (
+                        any(
+                            "example" in owner.get("email", "").lower()
+                            or "demo" in owner.get("email", "").lower()
+                            for owner in d["permissions"]["owners"]
+                        )
+                        or d.get("title", "").lower().startswith("example:")
+                    )
+                )
+            )
+        ]
+        example_ids = {str(d.get("dashboard_id", "")) for d in example_dashboards}
+
+        # Public dashboards: public but not in examples
+        public_dashboards = [
+            d
+            for d in dashboards
+            if d.get("is_public", False)
+            and str(d.get("dashboard_id", "")) not in example_ids
+            and str(user_id) not in [str(owner["_id"]) for owner in d["permissions"]["owners"]]
+        ]
+
+        # Accessed dashboards: shared with user but not owned, not public, not examples
         accessed_dashboards = [
             d
             for d in dashboards
             if str(user_id) not in [str(owner["_id"]) for owner in d["permissions"]["owners"]]
-            and (
-                not is_anonymous or d.get("is_public", False)
-            )  # Anonymous users only see public dashboards
+            and not d.get("is_public", False)
+            and str(d.get("dashboard_id", "")) not in example_ids
+            and (not is_anonymous or d.get("is_public", False))
         ]
 
-        owned_dashboards_section_header = dmc.Title(
-            [
-                DashIconify(icon="mdi:account-check", width=18, color="#1c7ed6"),
-                " Owned Dashboards",
-            ],
-            order=3,
+        # Owned dashboards: owned by user but not in examples (lowest precedence)
+        owned_dashboards = [
+            d
+            for d in dashboards
+            if str(user_id) in [str(owner["_id"]) for owner in d["permissions"]["owners"]]
+            and str(d.get("dashboard_id", "")) not in example_ids
+        ]
+
+        # Create views for each category (using same icons as accordion headers)
+        owned_dashboards_content = (
+            loop_over_dashboards(user_id, owned_dashboards, token, current_user)
+            if owned_dashboards
+            else create_empty_state_card(
+                icon="mdi:account-check",
+                title="No owned dashboards",
+                description="Create your first dashboard to get started.",
+            )
         )
+
+        accessed_dashboards_content = (
+            loop_over_dashboards(user_id, accessed_dashboards, token, current_user)
+            if accessed_dashboards
+            else create_empty_state_card(
+                icon="material-symbols:share-outline",
+                title="No accessed dashboards",
+                description="Dashboards shared with you will appear here.",
+            )
+        )
+
+        public_dashboards_content = (
+            loop_over_dashboards(user_id, public_dashboards, token, current_user)
+            if public_dashboards
+            else create_empty_state_card(
+                icon="mdi:earth",
+                title="No public dashboards",
+                description="Public dashboards will appear here.",
+            )
+        )
+
+        example_dashboards_content = (
+            loop_over_dashboards(user_id, example_dashboards, token, current_user)
+            if example_dashboards
+            else create_empty_state_card(
+                icon="mdi:school-outline",
+                title="No example dashboards",
+                description="Example and demo dashboards will appear here.",
+            )
+        )
+
         owned_dashboards_view = dmc.SimpleGrid(
-            loop_over_dashboards(user_id, owned_dashboards, token, current_user),
+            owned_dashboards_content,
             cols={
                 "base": 1,
                 "sm": 2,
-                "lg": 3,  # Back to 3 columns as requested
-            },  # Responsive columns: 1 on mobile, 2 on small, 3 on large
+                "lg": 4,
+            },
             spacing="xl",
             verticalSpacing="xl",
             style={"width": "100%"},
-        )
-        accessed_dashboards_section_header = dmc.Title(
-            [
-                DashIconify(icon="mdi:eye", width=18, color="#54ca74"),
-                " Accessed Dashboards",
-            ],
-            order=3,
         )
 
         accessed_dashboards_view = dmc.SimpleGrid(
-            loop_over_dashboards(user_id, accessed_dashboards, token, current_user),
+            accessed_dashboards_content,
             cols={
                 "base": 1,
                 "sm": 2,
-                "lg": 3,
-            },  # Responsive columns: 1 on mobile, 2 on small, 3 on large, 4 on xl
+                "lg": 4,
+            },
             spacing="xl",
             verticalSpacing="xl",
             style={"width": "100%"},
         )
 
-        # Optional: Add padding to the parent div for better spacing on smaller screens
+        public_dashboards_view = dmc.SimpleGrid(
+            public_dashboards_content,
+            cols={
+                "base": 1,
+                "sm": 2,
+                "lg": 4,
+            },
+            spacing="xl",
+            verticalSpacing="xl",
+            style={"width": "100%"},
+        )
+
+        example_dashboards_view = dmc.SimpleGrid(
+            example_dashboards_content,
+            cols={
+                "base": 1,
+                "sm": 2,
+                "lg": 4,
+            },
+            spacing="xl",
+            verticalSpacing="xl",
+            style={"width": "100%"},
+        )
+
+        # Determine which sections to expand based on content
+        # All non-empty sections should be opened
+        default_expanded = []
+        if owned_dashboards:
+            default_expanded.append("owned")
+        if accessed_dashboards:
+            default_expanded.append("accessed")
+        if public_dashboards:
+            default_expanded.append("public")
+        if example_dashboards:
+            default_expanded.append("example")
+
+        # Collapsible sections using Accordion
+        # Order of appearance: Owned / Accessed / Public / Example
         return html.Div(
             [
-                # Show owned dashboards section
-                owned_dashboards_section_header,
-                dmc.Space(h=10),
-                owned_dashboards_view,
-                dmc.Space(h=20),
-                html.Hr(),
-                # Show accessed dashboards section
-                accessed_dashboards_section_header,
-                dmc.Space(h=10),
-                accessed_dashboards_view,
+                dmc.Accordion(
+                    multiple=True,
+                    value=default_expanded,
+                    variant="default",
+                    chevronPosition="left",
+                    chevronSize=30,
+                    children=[
+                        # Owned Dashboards Section
+                        dmc.AccordionItem(
+                            [
+                                dmc.AccordionControl(
+                                    dmc.Group(
+                                        [
+                                            DashIconify(
+                                                icon="mdi:account-check", width=18, color="#1c7ed6"
+                                            ),
+                                            dmc.Text(
+                                                f"Owned Dashboards ({len(owned_dashboards)})",
+                                                size="lg",
+                                                fw="bold",
+                                            ),
+                                        ],
+                                        gap="xs",
+                                    ),
+                                ),
+                                dmc.AccordionPanel(
+                                    [
+                                        dmc.Space(h=10),
+                                        owned_dashboards_view,
+                                    ]
+                                ),
+                            ],
+                            value="owned",
+                        ),
+                        # Accessed Dashboards Section
+                        dmc.AccordionItem(
+                            [
+                                dmc.AccordionControl(
+                                    dmc.Group(
+                                        [
+                                            DashIconify(
+                                                icon="material-symbols:share-outline",
+                                                width=18,
+                                                color="#54ca74",
+                                            ),
+                                            dmc.Text(
+                                                f"Accessed Dashboards ({len(accessed_dashboards)})",
+                                                size="lg",
+                                                fw="bold",
+                                            ),
+                                        ],
+                                        gap="xs",
+                                    ),
+                                ),
+                                dmc.AccordionPanel(
+                                    [
+                                        dmc.Space(h=10),
+                                        accessed_dashboards_view,
+                                    ]
+                                ),
+                            ],
+                            value="accessed",
+                        ),
+                        # Public Dashboards Section
+                        dmc.AccordionItem(
+                            [
+                                dmc.AccordionControl(
+                                    dmc.Group(
+                                        [
+                                            DashIconify(
+                                                icon="mdi:earth", width=18, color="#20c997"
+                                            ),
+                                            dmc.Text(
+                                                f"Public Dashboards ({len(public_dashboards)})",
+                                                size="lg",
+                                                fw="bold",
+                                            ),
+                                        ],
+                                        gap="xs",
+                                    ),
+                                ),
+                                dmc.AccordionPanel(
+                                    [
+                                        dmc.Space(h=10),
+                                        public_dashboards_view,
+                                    ]
+                                ),
+                            ],
+                            value="public",
+                        ),
+                        # Example Dashboards Section
+                        dmc.AccordionItem(
+                            [
+                                dmc.AccordionControl(
+                                    dmc.Group(
+                                        [
+                                            DashIconify(
+                                                icon="mdi:school-outline", width=18, color="#fd7e14"
+                                            ),
+                                            dmc.Text(
+                                                f"Example Dashboards ({len(example_dashboards)})",
+                                                size="lg",
+                                                fw="bold",
+                                            ),
+                                        ],
+                                        gap="xs",
+                                    ),
+                                ),
+                                dmc.AccordionPanel(
+                                    [
+                                        dmc.Space(h=10),
+                                        example_dashboards_view,
+                                    ]
+                                ),
+                            ],
+                            value="example",
+                        ),
+                    ],
+                ),
             ],
             style={"width": "100%"},
         )
@@ -1971,6 +2619,8 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
                     # dcc.Store(id={"type": "dashboard-index-store", "index": user.email}, storage_type="session", data={"next_index": 1}),  # Store for dashboard index management
                     # render_welcome_section(user.email),
                     render_dashboard_list_section(user.email),
+                    # Dummy output for clientside thumbnail theme swap callback
+                    html.Div(id="thumbnail-theme-swap-dummy", style={"display": "none"}),
                 ]
             )
 
@@ -1999,3 +2649,114 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
             return dash.no_update
 
         return dash.no_update
+
+    # =============================================================================
+    # THEME-AWARE THUMBNAIL SWAPPING (CLIENTSIDE)
+    # =============================================================================
+
+    # Clientside callback to swap thumbnails based on theme changes
+    # Listens to theme-store and updates all dashboard thumbnails to match current theme
+    app.clientside_callback(
+        """
+        function(theme_data, url) {
+            console.log('🎨 THUMBNAIL THEME SWAP: theme_data=', theme_data, 'url=', url);
+
+            // Read theme from Dash store or fallback to localStorage directly
+            let theme = theme_data;
+            if (!theme) {
+                // If theme-store hasn't loaded yet, read directly from localStorage
+                const storedTheme = localStorage.getItem('theme-store');
+                if (storedTheme) {
+                    try {
+                        theme = JSON.parse(storedTheme);
+                    } catch (e) {
+                        console.warn('Failed to parse theme from localStorage:', e);
+                        theme = 'light';
+                    }
+                } else {
+                    theme = 'light';
+                }
+            }
+            console.log('→ Current theme:', theme);
+
+            // Function to swap thumbnails
+            const swapThumbnails = () => {
+                const selector = theme === 'dark' ? 'data-dark-src' : 'data-light-src';
+                console.log('→ Using selector:', selector);
+
+                const thumbnails = document.querySelectorAll('[data-dashboard-id]');
+                console.log('→ Found', thumbnails.length, 'thumbnails');
+
+                let swapped = 0;
+                thumbnails.forEach(elem => {
+                    const newSrc = elem.getAttribute(selector);
+                    if (newSrc) {
+                        const img = elem.tagName === 'IMG' ? elem : elem.querySelector('img');
+                        if (img) {
+                            const currentPath = new URL(img.src, window.location.href).pathname;
+                            const newPath = newSrc.startsWith('http') ? new URL(newSrc).pathname : newSrc;
+
+                            if (currentPath !== newPath) {
+                                console.log('  ✓ Swapping thumbnail:', elem.getAttribute('data-dashboard-id'), currentPath, '→', newPath);
+                                const cacheBustedSrc = newSrc + '?t=' + Date.now();
+                                img.src = cacheBustedSrc;
+                                swapped++;
+                            }
+                        }
+                    }
+                });
+
+                console.log('✅ Swapped', swapped, 'thumbnails for theme:', theme);
+                return swapped;
+            };
+
+            // Immediate attempt
+            let swapped = swapThumbnails();
+
+            // Set up MutationObserver to watch for dynamically added thumbnails (e.g., HoverCard content)
+            console.log('→ Setting up MutationObserver to watch for new thumbnails...');
+
+            const observer = new MutationObserver((mutations) => {
+                // Check if any new elements with data-dashboard-id were added
+                for (let mutation of mutations) {
+                    if (mutation.addedNodes.length > 0) {
+                        const newThumbnails = [];
+                        mutation.addedNodes.forEach(node => {
+                            if (node.nodeType === 1) {  // Element node
+                                // Check if the node itself has data-dashboard-id
+                                if (node.hasAttribute && node.hasAttribute('data-dashboard-id')) {
+                                    newThumbnails.push(node);
+                                }
+                                // Check if any descendants have data-dashboard-id
+                                if (node.querySelectorAll) {
+                                    const descendants = node.querySelectorAll('[data-dashboard-id]');
+                                    newThumbnails.push(...descendants);
+                                }
+                            }
+                        });
+
+                        if (newThumbnails.length > 0) {
+                            console.log(`→ Detected ${newThumbnails.length} new thumbnails, swapping...`);
+                            swapThumbnails();  // Swap all thumbnails (including new ones)
+                        }
+                    }
+                }
+            });
+
+            // Observe the entire document body for added nodes (catches HoverCard portals)
+            observer.observe(document.body, {
+                childList: true,
+                subtree: true
+            });
+
+            // Keep observer alive for the session (no auto-disconnect)
+            // This ensures HoverCard content gets theme-swapped when it appears
+
+            return window.dash_clientside.no_update;
+        }
+        """,
+        Output("thumbnail-theme-swap-dummy", "children"),
+        Input("theme-store", "data"),
+        Input("url", "pathname"),
+        prevent_initial_call=False,  # Allow initial call to swap thumbnails on page load
+    )

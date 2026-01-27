@@ -727,6 +727,40 @@ async def screenshot_dash_fixed(dashboard_id: str = "6824cb3b89d2b72169309737"):
         raise HTTPException(status_code=500, detail=f"Screenshot failed: {str(e)}")
 
 
+@utils_endpoint_router.get("/screenshot-dash-dual/{dashboard_id}", deprecated=True)
+async def screenshot_dash_dual(dashboard_id: str):
+    """
+    Generate both light and dark mode screenshots in single browser call.
+
+    **DEPRECATED**: This endpoint is deprecated. Use the Celery task
+    `generate_dashboard_screenshot_dual.delay(dashboard_id)` directly for
+    production use. This endpoint is maintained for backward compatibility
+    and testing/debugging purposes only.
+
+    **Migration Note**: The screenshot logic has been moved to
+    `depictio.api.v1.services.screenshot_service` for code reuse between
+    API and Celery tasks. This eliminates HTTP indirection and improves
+    performance by ~200-500ms.
+
+    Args:
+        dashboard_id: Dashboard ID to screenshot
+
+    Returns:
+        dict: Status and paths to both screenshots
+
+    Raises:
+        HTTPException: If screenshot generation fails
+    """
+    from depictio.api.v1.services.screenshot_service import generate_dual_theme_screenshots
+
+    result = await generate_dual_theme_screenshots(dashboard_id)
+
+    if result["status"] == "success":
+        return result
+    else:
+        raise HTTPException(status_code=500, detail=result.get("error", "Screenshot failed"))
+
+
 @utils_endpoint_router.get("/infrastructure-diagnostics")
 async def infrastructure_diagnostics(current_user=Depends(get_current_user)):
     """

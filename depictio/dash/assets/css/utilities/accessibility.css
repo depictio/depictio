@@ -3,7 +3,11 @@
    Accessibility considerations and reduced motion support
    ============================================================================= */
 
-/* Reduce motion for accessibility */
+/* Reduce motion for accessibility
+   NOTE: Auth page triangles are kept animated as they are:
+   - Slow-moving and non-distracting
+   - Essential for brand identity on login
+   - Can be disabled via browser extensions if needed */
 @media (prefers-reduced-motion: reduce) {
     .floating-orb {
         animation: none !important;
@@ -17,22 +21,20 @@
         transition: none !important;
     }
 
-    .triangle-particle {
+    /* Disable dashboard triangle particles (not auth page) */
+    .dashboard-triangle-anim-0,
+    .dashboard-triangle-anim-1,
+    .dashboard-triangle-anim-2,
+    .dashboard-triangle-anim-3,
+    .dashboard-triangle-anim-4,
+    .dashboard-triangle-anim-5 {
         animation: none !important;
     }
 
-    /* Disable all particle animations */
-    .triangle-anim-1,
-    .triangle-anim-2,
-    .triangle-anim-3,
-    .triangle-anim-4,
-    .triangle-anim-5,
-    .triangle-anim-6 {
+    /* Auth page triangles keep their animations (slow, decorative, brand identity) */
+    /* Comment out the rules below to keep auth triangles animated
+    #auth-background .triangle-particle {
         animation: none !important;
     }
-
-    /* Disable background drift */
-    #triangle-particles {
-        animation: none !important;
-    }
+    */
 }

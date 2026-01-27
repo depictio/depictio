@@ -389,7 +389,7 @@ if __name__ == "__main__":
     # Use Flask's native run() for dev mode
     server.run(
         host=settings.dash.host,
-        port=settings.dash.external_port,
+        port=settings.dash.service_port,
         debug=dev_mode,
         use_reloader=dev_mode,
         threaded=True,

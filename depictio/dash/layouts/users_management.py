@@ -349,7 +349,7 @@ def validate_login(login_email: str, login_password: str) -> tuple:
         Tuple of (message, modal_open, session_data, token_data).
     """
     if not login_email or not login_password:
-        return "Please fill in all fields.", True, dash.no_update, dash.no_update
+        return "", True, dash.no_update, dash.no_update
 
     user = api_call_fetch_user_from_email(login_email)
     if not user:

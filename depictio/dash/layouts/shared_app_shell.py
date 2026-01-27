@@ -56,6 +56,10 @@ def create_shared_stores():
         dcc.Store(id="api-base-url-store", storage_type="memory"),
         # Edit page context (populated only on component edit pages, but needed by design callbacks)
         dcc.Store(id="edit-page-context", storage_type="memory", data=None),
+        # Screenshot debounce tracking (memory-based to reset per session)
+        dcc.Store(
+            id="screenshot-debounce-store", storage_type="memory", data={"last_screenshot": 0}
+        ),
         # URL location
         dcc.Location(id="url", refresh=False),
         # Server status check interval (30 seconds) - pure clientside implementation
