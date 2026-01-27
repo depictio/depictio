@@ -1142,21 +1142,44 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
                     large_carousel_slides.append(
                         dmc.CarouselSlide(
                             html.Div(
-                                dmc.Image(
-                                    src=data["thumbnail_url"],
-                                    style={
-                                        "width": "600px",
-                                        "height": "400px",
-                                        "objectFit": "cover",
-                                        "objectPosition": "center center",
-                                    },
-                                    alt=data["title"],
-                                ),
+                                [
+                                    dmc.Image(
+                                        src=data["thumbnail_url"],
+                                        style={
+                                            "width": "600px",
+                                            "height": "400px",
+                                            "objectFit": "cover",
+                                            "objectPosition": "center center",
+                                        },
+                                        alt=data["title"],
+                                    ),
+                                    # Text overlay with tab name (bottom left to avoid carousel indicators)
+                                    html.Div(
+                                        data["title"],
+                                        style={
+                                            "position": "absolute",
+                                            "bottom": "12px",
+                                            "left": "12px",
+                                            "backgroundColor": "rgba(0, 0, 0, 0.75)",
+                                            "color": "white",
+                                            "padding": "8px 12px",
+                                            "fontSize": "14px",
+                                            "fontWeight": "500",
+                                            "borderRadius": "6px",
+                                            "backdropFilter": "blur(8px)",
+                                            "maxWidth": "calc(100% - 120px)",  # Leave space for indicators
+                                            "overflow": "hidden",
+                                            "textOverflow": "ellipsis",
+                                            "whiteSpace": "nowrap",
+                                        },
+                                    ),
+                                ],
                                 **{
                                     "data-dashboard-id": data["id"],
                                     "data-light-src": data["light_url"],
                                     "data-dark-src": data["dark_url"],
                                 },
+                                style={"position": "relative"},
                             )
                         )
                     )
