@@ -34,12 +34,27 @@ workflows:
             s3_location: null  # Set by initialization script
             modules:
               - "cutadapt"
+              - "fastqc"
             plots:
               cutadapt:
                 - "Filtered Reads"
                 - "Trimmed Sequence Lengths (5')":
                     - "Counts"
                     - "Obs/Exp"
+              fastqc:
+                - "Sequence Counts"
+                - "Sequence Quality Histograms"
+                - "Per Sequence Quality Scores"
+                - "Per Sequence GC Content":
+                    - "Percentages"
+                    - "Counts"
+                - "Per Base N Content"
+                - "Sequence Length Distribution"
+                - "Sequence Duplication Levels"
+                - "Overrepresented sequences by sample"
+                - "Top overrepresented sequences"
+                - "Adapter Content"
+                - "Status Checks"
             samples:
               - "SRR10070130"
               - "SRR10070130 - First read: Adapter 1"

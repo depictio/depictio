@@ -191,7 +191,7 @@ async def create_initial_dashboards(admin_user: UserBeanie) -> list[dict | None]
             "static_dc_id": STATIC_IDS["penguins"]["data_collections"]["penguins_complete"],
         },
         {
-            "name": "ampliseq",
+            "name": "ampliseq_multiqc",
             "json_path": os.path.join(
                 os.path.dirname(__file__),
                 "..",
@@ -199,9 +199,23 @@ async def create_initial_dashboards(admin_user: UserBeanie) -> list[dict | None]
                 "projects",
                 "reference",
                 "ampliseq",
-                "dashboard.json",
+                "dashboard_multiqc.json",
             ),
             # Use None for multi-DC dashboards to preserve DC IDs from JSON file
+            "static_dc_id": None,
+        },
+        {
+            "name": "ampliseq_analysis",
+            "json_path": os.path.join(
+                os.path.dirname(__file__),
+                "..",
+                "..",
+                "projects",
+                "reference",
+                "ampliseq",
+                "dashboard_analysis.json",
+            ),
+            # Child tab dashboard - preserve DC IDs from JSON file
             "static_dc_id": None,
         },
     ]
