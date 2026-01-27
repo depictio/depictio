@@ -150,7 +150,7 @@ async def upsert_deltatable(
         )
     )
 
-    if payload.deltatable_size_bytes is not None:
+    if payload.deltatable_size_bytes is not None and not is_multiqc:
         projects_collection.update_one(
             {
                 "workflows.data_collections._id": data_collection_oid,
@@ -188,7 +188,7 @@ async def upsert_deltatable(
             }
         }
         # Add size to deltatable's flexible_metadata if provided
-        if payload.deltatable_size_bytes is not None:
+        if payload.deltatable_size_bytes is not None and not is_multiqc:
             update_doc["$set"]["flexible_metadata.deltatable_size_bytes"] = (
                 payload.deltatable_size_bytes
             )
@@ -214,7 +214,7 @@ async def upsert_deltatable(
         deltatables_collection.insert_one(deltatable.mongo())
 
         # Add size to deltatable's flexible_metadata if provided
-        if payload.deltatable_size_bytes is not None:
+        if payload.deltatable_size_bytes is not None and not is_multiqc:
             deltatables_collection.update_one(
                 {"data_collection_id": data_collection_oid},
                 {

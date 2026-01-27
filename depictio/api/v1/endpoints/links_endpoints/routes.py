@@ -18,7 +18,6 @@ from fastapi import APIRouter, Depends, HTTPException, Path
 
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.db import (
-    data_collections_collection,
     deltatables_collection,
     multiqc_collection,
     projects_collection,
@@ -159,7 +158,9 @@ async def _translate_filter_values(
     deltatable_doc = deltatables_collection.find_one({"data_collection_id": source_dc_id})
     if not deltatable_doc:
         # Try with ObjectId format
-        deltatable_doc = deltatables_collection.find_one({"data_collection_id": ObjectId(source_dc_id)})
+        deltatable_doc = deltatables_collection.find_one(
+            {"data_collection_id": ObjectId(source_dc_id)}
+        )
     if not deltatable_doc or "delta_table_location" not in deltatable_doc:
         logger.error(
             f"Delta table not found for DC {source_dc_id}. "

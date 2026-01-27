@@ -29,6 +29,57 @@ workflows:
             scan_parameters:
               regex_config:
                 pattern: "multiqc_data/multiqc.parquet"
+          dc_specific_properties:
+            # S3 location will be populated during initialization when file is uploaded to MinIO
+            s3_location: null  # Set by initialization script
+            modules:
+              - "cutadapt"
+            plots:
+              cutadapt:
+                - "Filtered Reads"
+                - "Trimmed Sequence Lengths (5')":
+                    - "Counts"
+                    - "Obs/Exp"
+            samples:
+              - "SRR10070130"
+              - "SRR10070130 - First read: Adapter 1"
+              - "SRR10070130 - Second read: Adapter 2"
+              - "SRR10070131"
+              - "SRR10070131 - First read: Adapter 1"
+              - "SRR10070131 - Second read: Adapter 2"
+              - "SRR10070132"
+              - "SRR10070132 - First read: Adapter 1"
+              - "SRR10070132 - Second read: Adapter 2"
+              - "SRR10070133"
+              - "SRR10070133 - First read: Adapter 1"
+              - "SRR10070133 - Second read: Adapter 2"
+              - "SRR10070134"
+              - "SRR10070134 - First read: Adapter 1"
+              - "SRR10070134 - Second read: Adapter 2"
+              - "SRR10070135"
+              - "SRR10070135 - First read: Adapter 1"
+              - "SRR10070135 - Second read: Adapter 2"
+              - "SRR10070136"
+              - "SRR10070136 - First read: Adapter 1"
+              - "SRR10070136 - Second read: Adapter 2"
+              - "SRR10070137"
+              - "SRR10070137 - First read: Adapter 1"
+              - "SRR10070137 - Second read: Adapter 2"
+              - "SRR10070138"
+              - "SRR10070138 - First read: Adapter 1"
+              - "SRR10070138 - Second read: Adapter 2"
+              - "SRR10070139"
+              - "SRR10070139 - First read: Adapter 1"
+              - "SRR10070139 - Second read: Adapter 2"
+              - "SRR10070140"
+              - "SRR10070140 - First read: Adapter 1"
+              - "SRR10070140 - Second read: Adapter 2"
+              - "SRR10070141"
+              - "SRR10070141 - First read: Adapter 1"
+              - "SRR10070141 - Second read: Adapter 2"
+              - "SRR10070142"
+              - "SRR10070142 - First read: Adapter 1"
+              - "SRR10070142 - Second read: Adapter 2"
 
       - id: "646b0f3c1e4a2d7f8e5b8ca5"
         data_collection_tag: "metadata"
