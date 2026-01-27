@@ -127,6 +127,11 @@ def register_callbacks(app):
     # 3. Header callbacks (minimal)
     register_header_callbacks(app)
 
+    # 4. Auto-screenshot callback (for generating missing screenshots on dashboard view)
+    from depictio.dash.layouts.save import register_auto_screenshot_callback
+
+    register_auto_screenshot_callback(app)
+
 
 def register_routing_callback(app):
     """

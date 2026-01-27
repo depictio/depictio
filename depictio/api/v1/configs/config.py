@@ -57,3 +57,7 @@ PRIVATE_KEY = load_private_key(
     settings.auth.keys_dir / "private_key.pem"
 )  # Load private key from file
 PUBLIC_KEY = load_public_key(settings.auth.keys_dir / "public_key.pem")  # Load public key from file
+
+# Generate/load the internal API key during startup (creates api_internal_key.pem file)
+# This ensures the key file exists before other services (frontend, celery) need it
+_INTERNAL_API_KEY = settings.auth.internal_api_key

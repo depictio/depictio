@@ -881,6 +881,7 @@ def create_app_layout():
             dcc.Store(id="layout-saved-state", data=True, storage_type="memory"),
             # Hidden button that JavaScript can trigger to mark layout as unsaved
             html.Button(id="layout-change-trigger", style={"display": "none"}, n_clicks=0),
+            # Screenshot debounce tracking store moved to shared_app_shell.py (used by all apps)
             # dcc.Interval(id="interval-component", interval=60 * 60 * 1000, n_intervals=0),
             html.Div(
                 id="dummy-plotly-output", style={"display": "none"}

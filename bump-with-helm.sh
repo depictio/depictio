@@ -13,9 +13,9 @@ done
 
 # Check if git is clean, if not add --allow-dirty
 if ! git diff-index --quiet HEAD --; then
-    bump2version --allow-dirty "$@"
+    uv run bump2version --allow-dirty "$@"
 else
-    bump2version "$@"
+    uv run bump2version "$@"
 fi
 
 # Skip helm and git operations if dry run

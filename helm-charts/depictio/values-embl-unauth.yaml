@@ -32,7 +32,7 @@ initContainerResources:
 
 ## SecurityContext
 backend:
-  replicas: 2  # Multiple replicas for high availability with anti-affinity
+  replicas: 1  # Single replica for debugging
   securityContext:
     runAsNonRoot: true
     runAsUser: 1000
@@ -65,9 +65,12 @@ backend:
     DEPICTIO_DASHBOARD_YAML_WATCHER_AUTO_START: "false"
     DEPICTIO_DASHBOARD_YAML_WATCH_LOCAL_DIR: "false"
 
+    # Explicit API URL to match ingress host (overrides computed URL)
+    DEPICTIO_FASTAPI_PUBLIC_URL: "https://dev.api.demo.depictio.embl.org"
+
 
 frontend:
-  replicas: 2  # Multiple replicas for high availability with anti-affinity
+  replicas: 1  # Single replica for debugging
   securityContext:
     runAsNonRoot: true
     runAsUser: 1000

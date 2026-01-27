@@ -5,9 +5,11 @@ name: Deploy to EMBL (Self-Hosted)
 # Only users with write access can push tags.
 
 on:
-  # Trigger after Docker build workflow completes
+  # Trigger after Docker build workflows complete
   workflow_run:
-    workflows: ["Docker Image Build (AMD64) - Beta only"]
+    workflows:
+      - "Docker Image Build (AMD64) - Beta only"  # Beta tags (v*-b*)
+      - "Docker Image Multi Arch Build"            # Stable tags (v*)
     types:
       - completed
 
@@ -15,10 +17,11 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version to deploy (e.g., 0.6.0-b8 or 0.6.1)'
+        description: 'Version tag to deploy (without v prefix, e.g., 0.6.0-b18, 0.6.0, 0.6.1)'
         required: true
+        type: string
       environment:
-        description: 'Target environment'
+        description: 'Target environment (dev for beta, demo for stable, both for dual deployment)'
         required: true
         type: choice
         options:
@@ -37,20 +40,70 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  # Dev environment - ALL tags deploy here
+  # Detect tag type (beta vs stable) for workflow_run events
+  detect-tag-type:
+    name: Detect Tag Type
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success'
+    outputs:
+      is_beta: ${{ steps.detect.outputs.is_beta }}
+      is_stable: ${{ steps.detect.outputs.is_stable }}
+      version: ${{ steps.detect.outputs.version }}
+    steps:
+      - name: Detect tag type from ref
+        id: detect
+        run: |
+          # Extract ref from workflow_run event
+          REF="${{ github.event.workflow_run.head_branch }}"
+          echo "Workflow run ref: ${REF}"
+
+          # Remove 'v' prefix if present
+          VERSION="${REF#v}"
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+
+          # Check if this is a beta tag (contains -b)
+          if [[ "${VERSION}" =~ -b[0-9]+ ]]; then
+            echo "is_beta=true" >> $GITHUB_OUTPUT
+            echo "is_stable=false" >> $GITHUB_OUTPUT
+            echo "✅ Detected BETA tag: ${VERSION}"
+          else
+            echo "is_beta=false" >> $GITHUB_OUTPUT
+            echo "is_stable=true" >> $GITHUB_OUTPUT
+            echo "✅ Detected STABLE tag: ${VERSION}"
+          fi
+
+  # Dev environment - Beta tags deploy here automatically
   deploy-dev:
     name: Deploy to Dev (dev.demo.depictio.embl.org)
     runs-on: [self-hosted, embl-deploy]
     environment: embl-demo-dev
-    # Run if Docker build succeeded OR manual dispatch targeting dev/both
+    needs: [detect-tag-type]
     if: |
-      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success') ||
-      (github.event_name == 'workflow_dispatch' && (github.event.inputs.environment == 'dev' || github.event.inputs.environment == 'both'))
+      always() &&
+      (
+        (github.event_name == 'workflow_run' && needs.detect-tag-type.result == 'success' && needs.detect-tag-type.outputs.is_beta == 'true') ||
+        (github.event_name == 'workflow_dispatch' && (github.event.inputs.environment == 'dev' || github.event.inputs.environment == 'both'))
+      )
+    # Run for:
+    # 1. Beta tags (workflow_run with is_beta=true)
+    # 2. Manual dispatch targeting dev/both
     outputs:
       version: ${{ steps.version.outputs.version }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Fetch all tags for validation
+
+      - name: Display available recent tags
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          echo "📋 Recent available tags:"
+          echo "Beta tags (for dev environment):"
+          git tag -l 'v*-b*' --sort=-version:refname | head -10 | sed 's/^v/  - /'
+          echo ""
+          echo "Stable tags (for demo environment):"
+          git tag -l 'v[0-9]*.[0-9]*.[0-9]*' --sort=-version:refname | grep -v '\-b' | head -10 | sed 's/^v/  - /'
 
       - name: Determine version
         id: version
@@ -58,12 +111,27 @@ jobs:
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             VERSION="${{ github.event.inputs.version }}"
           else
-            # Extract version from the workflow_run ref (e.g., refs/tags/v0.6.0-b10)
-            REF="${{ github.event.workflow_run.head_branch }}"
-            VERSION="${REF#v}"
+            # Use version from detect-tag-type job
+            VERSION="${{ needs.detect-tag-type.outputs.version }}"
           fi
           echo "version=${VERSION}" >> $GITHUB_OUTPUT
           echo "Deploying version: ${VERSION}"
+
+      - name: Validate tag exists
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          TAG="v${VERSION}"
+
+          echo "🔍 Validating tag: ${TAG}"
+
+          if git rev-parse "${TAG}" >/dev/null 2>&1; then
+            echo "✅ Tag ${TAG} exists"
+          else
+            echo "❌ Error: Tag ${TAG} does not exist!"
+            echo "Available recent tags:"
+            git tag -l 'v*' --sort=-version:refname | head -20
+            exit 1
+          fi
 
       - name: Wait for Docker image to be available
         run: |
@@ -101,22 +169,24 @@ jobs:
       - name: Verify deployment
         run: |
           echo "📋 Checking deployment status..."
-          kubectl get pods -n datasci-depictio-project-demo-dev -l app.kubernetes.io/instance=devdemo
+          kubectl get pods -n datasci-depictio-project-demo-dev -l release=devdemo,type=app
           kubectl get ingress -n datasci-depictio-project-demo-dev
 
       - name: Wait for services to be ready
         run: |
           echo "⏳ Waiting for backend to be ready..."
           kubectl wait --for=condition=ready pod \
-            -l app.kubernetes.io/instance=devdemo,app.kubernetes.io/component=backend \
+            -l release=devdemo,app=depictio-backend \
             -n datasci-depictio-project-demo-dev \
             --timeout=300s
 
           echo "⏳ Waiting for frontend to be ready..."
           kubectl wait --for=condition=ready pod \
-            -l app.kubernetes.io/instance=devdemo,app.kubernetes.io/component=frontend \
+            -l release=devdemo,app=depictio-frontend \
             -n datasci-depictio-project-demo-dev \
             --timeout=300s
+
+          echo "✅ All services are ready"
 
   # Register demo projects after dev deployment
   register-projects-dev:
@@ -150,7 +220,7 @@ jobs:
         run: |
           # Get admin config from backend pod
           BACKEND_POD=$(kubectl get pods -n datasci-depictio-project-demo-dev \
-            -l app.kubernetes.io/instance=devdemo,app.kubernetes.io/component=backend \
+            -l release=devdemo,app=depictio-backend \
             -o jsonpath='{.items[0].metadata.name}')
 
           echo "Getting admin config from pod: ${BACKEND_POD}"
@@ -186,22 +256,61 @@ jobs:
     name: Deploy to Demo (demo.depictio.embl.org)
     runs-on: [self-hosted, embl-deploy]
     environment: embl-demo
-    # Run only for stable tags (workflow_run won't trigger for stable, use dispatch)
-    # Or manual dispatch targeting demo/both
+    needs: [detect-tag-type]
     if: |
-      (github.event_name == 'workflow_dispatch' && (github.event.inputs.environment == 'demo' || github.event.inputs.environment == 'both'))
+      always() &&
+      (
+        (github.event_name == 'workflow_run' && needs.detect-tag-type.result == 'success' && needs.detect-tag-type.outputs.is_stable == 'true') ||
+        (github.event_name == 'workflow_dispatch' && (github.event.inputs.environment == 'demo' || github.event.inputs.environment == 'both'))
+      )
+    # Run for:
+    # 1. Stable tags (workflow_run with is_stable=true)
+    # 2. Manual dispatch targeting demo/both
     outputs:
       version: ${{ steps.version.outputs.version }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Fetch all tags for validation
+
+      - name: Display available recent tags
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          echo "📋 Recent available tags:"
+          echo "Beta tags (for dev environment):"
+          git tag -l 'v*-b*' --sort=-version:refname | head -10 | sed 's/^v/  - /'
+          echo ""
+          echo "Stable tags (for demo environment):"
+          git tag -l 'v[0-9]*.[0-9]*.[0-9]*' --sort=-version:refname | grep -v '\-b' | head -10 | sed 's/^v/  - /'
 
       - name: Determine version
         id: version
         run: |
-          VERSION="${{ github.event.inputs.version }}"
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+          else
+            # Use version from detect-tag-type job
+            VERSION="${{ needs.detect-tag-type.outputs.version }}"
+          fi
           echo "version=${VERSION}" >> $GITHUB_OUTPUT
           echo "Deploying version: ${VERSION}"
+
+      - name: Validate tag exists
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          TAG="v${VERSION}"
+
+          echo "🔍 Validating tag: ${TAG}"
+
+          if git rev-parse "${TAG}" >/dev/null 2>&1; then
+            echo "✅ Tag ${TAG} exists"
+          else
+            echo "❌ Error: Tag ${TAG} does not exist!"
+            echo "Available recent tags:"
+            git tag -l 'v*' --sort=-version:refname | head -20
+            exit 1
+          fi
 
       - name: Wait for Docker image to be available
         run: |
@@ -239,22 +348,24 @@ jobs:
       - name: Verify deployment
         run: |
           echo "📋 Checking deployment status..."
-          kubectl get pods -n datasci-depictio-project-demo -l app.kubernetes.io/instance=demo
+          kubectl get pods -n datasci-depictio-project-demo -l release=demo,type=app
           kubectl get ingress -n datasci-depictio-project-demo
 
       - name: Wait for services to be ready
         run: |
           echo "⏳ Waiting for backend to be ready..."
           kubectl wait --for=condition=ready pod \
-            -l app.kubernetes.io/instance=demo,app.kubernetes.io/component=backend \
+            -l release=demo,app=depictio-backend \
             -n datasci-depictio-project-demo \
             --timeout=300s
 
           echo "⏳ Waiting for frontend to be ready..."
           kubectl wait --for=condition=ready pod \
-            -l app.kubernetes.io/instance=demo,app.kubernetes.io/component=frontend \
+            -l release=demo,app=depictio-frontend \
             -n datasci-depictio-project-demo \
             --timeout=300s
+
+          echo "✅ All services are ready"
 
   # Register demo projects after demo deployment
   register-projects-demo:
@@ -285,7 +396,7 @@ jobs:
         id: token
         run: |
           BACKEND_POD=$(kubectl get pods -n datasci-depictio-project-demo \
-            -l app.kubernetes.io/instance=demo,app.kubernetes.io/component=backend \
+            -l release=demo,app=depictio-backend \
             -o jsonpath='{.items[0].metadata.name}')
 
           echo "Getting admin config from pod: ${BACKEND_POD}"

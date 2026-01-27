@@ -14,7 +14,7 @@ RELOAD_DIRS = [
 def main() -> None:
     """Entry point for running the Depictio API server in development mode."""
     host = settings.fastapi.host
-    port = settings.fastapi.external_port
+    port = settings.fastapi.service_port
 
     logger.info(f"Starting FastAPI server on {host}:{port} (reload mode, single worker)")
 
