@@ -4,6 +4,24 @@ set -e
 # Port allocation script for git worktree-based multi-instance setup
 # Uses branch naming convention to assign deterministic port offsets
 
+# Parse command-line arguments
+MONGODB_WIPE="false"
+while [[ $# -gt 0 ]]; do
+  case $1 in
+    -w|--wipe)
+      MONGODB_WIPE="true"
+      echo "⚠️  MongoDB wipe enabled - database will be cleared on startup"
+      shift
+      ;;
+    *)
+      echo "Unknown option: $1"
+      echo "Usage: $0 [--wipe|-w]"
+      echo "  --wipe, -w  Enable MongoDB wipe (DEPICTIO_MONGODB_WIPE=true)"
+      exit 1
+      ;;
+  esac
+done
+
 echo "🔍 Detecting instance configuration..."
 
 # Get current git branch
@@ -79,6 +97,14 @@ echo "   Dash:         ${DASH_PORT}"
 echo "   MinIO API:    ${MINIO_PORT}"
 echo "   MinIO Console: ${MINIO_CONSOLE_PORT}"
 echo ""
+echo "⚙️  Development Settings:"
+echo "   Dev Mode:     ✅ enabled"
+if [ "${MONGODB_WIPE}" = "true" ]; then
+  echo "   MongoDB Wipe: ⚠️  enabled (database will be cleared)"
+else
+  echo "   MongoDB Wipe: ❌ disabled"
+fi
+echo ""
 
 # Save configuration to .env.instance for persistence
 cat > .env.instance <<EOF
@@ -115,6 +141,10 @@ DEPICTIO_DASH_EXTERNAL_PORT=${DASH_PORT}
 DEPICTIO_MINIO_ROOT_USER=minio
 DEPICTIO_MINIO_ROOT_PASSWORD=minio123
 
+# Development settings
+DEPICTIO_DEV_MODE=true
+DEPICTIO_MONGODB_WIPE=${MONGODB_WIPE}
+
 # Data directory
 DATA_DIR=data/${COMPOSE_PROJECT_NAME}
 EOF
@@ -144,12 +174,20 @@ services:
     environment:
       - DEPICTIO_FASTAPI_EXTERNAL_PORT=${FASTAPI_PORT}
       - DEPICTIO_DASH_EXTERNAL_PORT=${DASH_PORT}
+      - DEPICTIO_DEV_MODE=true
+      - DEPICTIO_MONGODB_WIPE=${MONGODB_WIPE}
 
   depictio-backend:
     container_name: ${COMPOSE_PROJECT_NAME}-depictio-backend
+    environment:
+      - DEPICTIO_DEV_MODE=true
+      - DEPICTIO_MONGODB_WIPE=${MONGODB_WIPE}
 
   depictio-celery-worker:
     container_name: ${COMPOSE_PROJECT_NAME}-depictio-celery-worker
+    environment:
+      - DEPICTIO_DEV_MODE=true
+      - DEPICTIO_MONGODB_WIPE=${MONGODB_WIPE}
 EOF
 
 echo "✅ Generated docker-compose.override.yaml for multi-instance setup"
