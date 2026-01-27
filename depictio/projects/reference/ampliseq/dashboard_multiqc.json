@@ -570,7 +570,7 @@
   ],
   "subtitle": "MultiQC Analysis - Cutadapt & FastQC",
   "tab_order": 0,
-  "title": "Quality Control",
+  "title": "nf-core/ampliseq",
   "tmp_children_data": [],
   "version": 1,
   "workflow_system": "nf-core"
