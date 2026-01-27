@@ -47,7 +47,8 @@
         "marginal_y": "violin",
         "trendline": "lowess",
         "labels": "{\"flipper_length_mm\": \"Flipper Length (mm)\", \"body_mass_g\": \"Body Mass (g)\", \"bill_length_mm\": \"Bill Length (mm)\", \"island\": \"Island\", \"species\": \"Species\"}"
-      }
+      },
+      "panel": "right"
     },
     {
       "index": "92741cf5-bc3e-4d68-9739-e8cb47cf0192",
@@ -70,7 +71,8 @@
         "points": "all",
         "notched": true,
         "labels": "{\"bill_length_mm\": \"Bill Length (mm)\", \"species\": \"Species\", \"sex\": \"Sex\"}"
-      }
+      },
+      "panel": "right"
     },
     {
       "index": "d69527a8-3367-4d09-bd76-d9f3d85a0fed",
@@ -93,7 +95,8 @@
         "nbins": 30,
         "marginal": "rug",
         "labels": "{\"bill_depth_mm\": \"Bill Depth (mm)\", \"species\": \"Species\"}"
-      }
+      },
+      "panel": "right"
     },
     {
       "index": "a67e6d14-8c3d-429a-a26c-253ccd15cfcb",
@@ -105,7 +108,8 @@
       "dc_id": {
         "$oid": "646b0f3c1e4a2d7f8e5b8ca1"
       },
-      "code_content": "df_modified = df.to_pandas().groupby(['island','species']).agg({'body_mass_g':'mean','bill_length_mm':'count'}).reset_index().rename(columns={'bill_length_mm':'count'})\nfig = px.sunburst(df_modified,path=['island','species'],values='count',color='island',color_discrete_map={\"Biscoe\":\"#6366f1\",\"Dream\":\"#f59e0b\",\"Torgersen\":\"#10b981\"},title='Palmer Penguins: Island & Species Distribution',hover_data={'body_mass_g':':.0f'})\n"
+      "code_content": "df_modified = df.to_pandas().groupby(['island','species']).agg({'body_mass_g':'mean','bill_length_mm':'count'}).reset_index().rename(columns={'bill_length_mm':'count'})\nfig = px.sunburst(df_modified,path=['island','species'],values='count',color='island',color_discrete_map={\"Biscoe\":\"#6366f1\",\"Dream\":\"#f59e0b\",\"Torgersen\":\"#10b981\"},title='Palmer Penguins: Island & Species Distribution',hover_data={'body_mass_g':':.0f'})\n",
+      "panel": "right"
     },
     {
       "index": "5253ea1b-c289-49bb-84cf-b0311ab78ba5",
@@ -124,7 +128,8 @@
       "icon_name": "mdi:penguin",
       "icon_color": "#8BC34A",
       "title_font_size": "xl",
-      "value_font_size": "xl"
+      "value_font_size": "xl",
+      "panel": "right"
     },
     {
       "index": "6495257f-4401-4e6f-b5f6-0b8b337b2015",
@@ -143,7 +148,8 @@
       "icon_name": "mdi:weight",
       "icon_color": "#F68B33",
       "title_font_size": "xl",
-      "value_font_size": "xl"
+      "value_font_size": "xl",
+      "panel": "right"
     },
     {
       "index": "d9bacf32-c2ff-44ca-8abc-0f108a2aee5e",
@@ -162,7 +168,8 @@
       "icon_name": "mdi:counter",
       "icon_color": "#5C6BC0",
       "title_font_size": "xl",
-      "value_font_size": "xl"
+      "value_font_size": "xl",
+      "panel": "right"
     },
     {
       "index": "6074afc3-9b9b-4cfc-9b29-5bf30d672092",
@@ -181,7 +188,8 @@
       "icon_name": "mdi:ruler",
       "icon_color": "#26A69A",
       "title_font_size": "md",
-      "value_font_size": "xl"
+      "value_font_size": "xl",
+      "panel": "right"
     },
     {
       "component_type": "interactive",
@@ -213,7 +221,8 @@
           "Gentoo"
         ],
         "default_value": null
-      }
+      },
+      "panel": "left"
     },
     {
       "component_type": "interactive",
@@ -244,7 +253,8 @@
           2700,
           6300
         ]
-      }
+      },
+      "panel": "left"
     },
     {
       "component_type": "interactive",
@@ -276,7 +286,8 @@
           "Torgersen"
         ],
         "default_value": null
-      }
+      },
+      "panel": "left"
     },
     {
       "component_type": "interactive",
@@ -306,7 +317,8 @@
           "female"
         ],
         "default_value": null
-      }
+      },
+      "panel": "left"
     },
     {
       "component_type": "interactive",
@@ -337,7 +349,8 @@
           32.1,
           59.6
         ]
-      }
+      },
+      "panel": "left"
     },
     {
       "index": "0c386b67-7594-4599-8f71-99195c14a6a9",
@@ -347,110 +360,163 @@
       },
       "dc_id": {
         "$oid": "646b0f3c1e4a2d7f8e5b8ca1"
-      }
+      },
+      "panel": "right"
     }
   ],
-  "stored_layout_data": [
+  "stored_layout_data": [],
+  "is_public": true,
+  "icon": "/assets/images/icons/favicon.png",
+  "version": 1,
+  "left_panel_layout_data": [
+    {
+      "i": "box-23a83a6c-c03f-4515-a428-b53b7bc5deae",
+      "x": 0,
+      "y": 0,
+      "w": 1,
+      "h": 2,
+      "static": false
+    },
+    {
+      "i": "box-718548d3-8dd8-42e7-8aea-bdd63b1966a2",
+      "x": 0,
+      "y": 2,
+      "w": 1,
+      "h": 3,
+      "static": false
+    },
+    {
+      "i": "box-ea1e161c-ea12-4386-89a4-c40796dcc0c0",
+      "x": 0,
+      "y": 5,
+      "w": 1,
+      "h": 2,
+      "static": false
+    },
+    {
+      "i": "box-4c131970-f698-43dc-a1f1-4c08d169f104",
+      "x": 0,
+      "y": 7,
+      "w": 1,
+      "h": 2,
+      "static": false
+    },
+    {
+      "i": "box-5cf056cb-dcec-42ab-a9f9-6043b98ec780",
+      "x": 0,
+      "y": 9,
+      "w": 1,
+      "h": 3,
+      "static": false
+    }
+  ],
+  "right_panel_layout_data": [
     {
       "i": "box-9bb3858f-9b18-43a4-86ac-467b5dc5ddd6",
       "x": 0,
       "y": 0,
-      "w": 48,
-      "h": 18
+      "w": 8,
+      "h": 9,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
     },
     {
       "i": "box-92741cf5-bc3e-4d68-9739-e8cb47cf0192",
       "x": 0,
       "y": 18,
-      "w": 24,
-      "h": 14
+      "w": 4,
+      "h": 7,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
     },
     {
       "i": "box-d69527a8-3367-4d09-bd76-d9f3d85a0fed",
-      "x": 24,
+      "x": 4,
       "y": 18,
-      "w": 24,
-      "h": 14
+      "w": 4,
+      "h": 7,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
     },
     {
       "i": "box-a67e6d14-8c3d-429a-a26c-253ccd15cfcb",
       "x": 0,
       "y": 32,
-      "w": 48,
-      "h": 20
+      "w": 8,
+      "h": 10,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
     },
     {
       "i": "box-5253ea1b-c289-49bb-84cf-b0311ab78ba5",
       "x": 0,
       "y": 52,
-      "w": 8,
-      "h": 6
+      "w": 1,
+      "h": 3,
+      "static": true
     },
     {
       "i": "box-6495257f-4401-4e6f-b5f6-0b8b337b2015",
-      "x": 8,
+      "x": 1,
       "y": 52,
-      "w": 8,
-      "h": 6
+      "w": 1,
+      "h": 3,
+      "static": true
     },
     {
       "i": "box-d9bacf32-c2ff-44ca-8abc-0f108a2aee5e",
-      "x": 16,
+      "x": 3,
       "y": 52,
-      "w": 8,
-      "h": 6
+      "w": 1,
+      "h": 3,
+      "static": true
     },
     {
       "i": "box-6074afc3-9b9b-4cfc-9b29-5bf30d672092",
-      "x": 24,
+      "x": 4,
       "y": 52,
-      "w": 8,
-      "h": 6
-    },
-    {
-      "i": "box-23a83a6c-c03f-4515-a428-b53b7bc5deae",
-      "x": 32,
-      "y": 52,
-      "w": 16,
-      "h": 6
-    },
-    {
-      "i": "box-718548d3-8dd8-42e7-8aea-bdd63b1966a2",
-      "x": 0,
-      "y": 58,
-      "w": 16,
-      "h": 6
-    },
-    {
-      "i": "box-ea1e161c-ea12-4386-89a4-c40796dcc0c0",
-      "x": 16,
-      "y": 58,
-      "w": 16,
-      "h": 6
-    },
-    {
-      "i": "box-4c131970-f698-43dc-a1f1-4c08d169f104",
-      "x": 32,
-      "y": 58,
-      "w": 16,
-      "h": 6
-    },
-    {
-      "i": "box-5cf056cb-dcec-42ab-a9f9-6043b98ec780",
-      "x": 0,
-      "y": 64,
-      "w": 16,
-      "h": 6
+      "w": 1,
+      "h": 3,
+      "static": true
     },
     {
       "i": "box-0c386b67-7594-4599-8f71-99195c14a6a9",
       "x": 0,
       "y": 70,
-      "w": 48,
-      "h": 16
+      "w": 8,
+      "h": 8,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
     }
-  ],
-  "is_public": true,
-  "icon": "/assets/images/icons/favicon.png",
-  "version": 1
+  ]
 }
