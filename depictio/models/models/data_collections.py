@@ -69,7 +69,15 @@ class ScanSingle(BaseModel):
 
     @field_validator("filename")
     def validate_filename(cls, v):
-        if DEPICTIO_CONTEXT.lower() == "cli":
+        # Basic validation
+        if not v:
+            raise ValueError("Filename cannot be empty")
+
+        # Check if this is a Docker container path
+        is_docker_path = str(v).startswith("/app/depictio/")
+
+        # Only validate file existence in CLI context for non-Docker paths
+        if DEPICTIO_CONTEXT.lower() == "cli" and not is_docker_path:
             # Add debugging
             import os
 
@@ -89,14 +97,10 @@ class ScanSingle(BaseModel):
             logger.debug(f"Resolved path: {resolved_path}")
             logger.debug(f"Resolved path exists: {resolved_path.exists()}")
 
-            # validate filename & check if it exists
+            # Validate file exists for local paths
             if not Path(v).exists():
                 raise ValueError(f"File {v} does not exist")
-            return v
-        else:
-            if not v:
-                raise ValueError("Filename cannot be empty")
-            return v
+        return v
 
 
 class Scan(BaseModel):

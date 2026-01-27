@@ -1,0 +1,34 @@
+# CLI Test Project - Uses local paths for CI testing
+# Paths are relative to depictio/cli/ directory (where CLI commands run)
+name: "CLI Test Project"
+project_type: "basic"
+is_public: true
+workflows:
+  - name: "cli_test_workflow"
+    engine:
+      name: "python"
+    description: "Simple workflow for testing CLI operations in CI"
+    data_location:
+      structure: "flat"
+      locations:
+        - ../projects/test/cli-test
+    data_collections:
+      - data_collection_tag: "test_table"
+        description: "Test CSV data for CLI validation"
+        config:
+          type: "Table"
+          metatype: "Metadata"
+          scan:
+            mode: single
+            scan_parameters:
+              filename: ../projects/test/cli-test/data/test_data.csv
+          dc_specific_properties:
+            format: "CSV"
+            polars_kwargs:
+              separator: ","
+            columns_description:
+              id: "Unique identifier"
+              name: "Sample name"
+              value: "Measured value"
+              category: "Sample category"
+              timestamp: "Measurement timestamp"

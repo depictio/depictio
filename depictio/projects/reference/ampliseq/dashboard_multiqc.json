@@ -1,0 +1,577 @@
+{
+  "_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8ca2"
+  },
+  "dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8ca2"
+  },
+  "buttons_data": {
+    "unified_edit_mode": false,
+    "add_components_button": {
+      "count": 3,
+      "initialized": true
+    }
+  },
+  "description": "Quality control metrics from MultiQC analysis",
+  "flexible_metadata": null,
+  "hash": null,
+  "icon": "/assets/images/workflows/nf-core.png",
+  "icon_color": "green",
+  "icon_variant": "filled",
+  "is_main_tab": true,
+  "is_public": true,
+  "last_saved_ts": "2026-01-27 00:00:00.000000",
+  "left_panel_layout_data": [
+    {
+      "i": "box-af2d766c-4b21-4452-aae9-8043a0bd2c57",
+      "x": 0,
+      "y": 0,
+      "w": 1,
+      "h": 2,
+      "static": false
+    },
+    {
+      "i": "box-3a065ba1-bc73-4e9e-9a5a-3ed2a7cde3eb",
+      "x": 0,
+      "y": 2,
+      "w": 1,
+      "h": 3,
+      "static": false
+    }
+  ],
+  "notes_content": "<p>MultiQC quality control dashboard for ampliseq analysis</p>",
+  "parent_dashboard_id": null,
+  "permissions": {
+    "owners": [
+      {
+        "_id": {
+          "$oid": "67658ba033c8b59ad489d7c7"
+        },
+        "description": null,
+        "flexible_metadata": null,
+        "hash": null,
+        "email": "admin@example.com",
+        "is_admin": true,
+        "is_anonymous": false,
+        "is_temporary": false,
+        "expiration_time": null
+      }
+    ],
+    "editors": [],
+    "viewers": []
+  },
+  "project_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8ca2"
+  },
+  "right_panel_layout_data": [
+    {
+      "i": "box-7b638b4e-6091-4dbb-8d1b-16d98c7ef3f3",
+      "x": 0,
+      "y": 0,
+      "w": 8,
+      "h": 4,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-4fee47dc-5660-4d1b-a7bd-23e2f0cb6593",
+      "x": 0,
+      "y": 4,
+      "w": 8,
+      "h": 4,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-10637f4b-d52b-46b8-9fe3-6902e7aca61f",
+      "x": 0,
+      "y": 8,
+      "w": 4,
+      "h": 5,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-4953b644-171b-4a3f-84cf-dd53742c9379",
+      "x": 4,
+      "y": 8,
+      "w": 4,
+      "h": 5,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-f78ac70b-137f-42ef-bdc4-36d08a85dc44",
+      "x": 0,
+      "y": 13,
+      "w": 4,
+      "h": 5,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-c3298157-3d70-4998-ae45-f148a9ad4a60",
+      "x": 4,
+      "y": 13,
+      "w": 4,
+      "h": 5,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    }
+  ],
+  "stored_add_button": {
+    "count": 3,
+    "initialized": true
+  },
+  "stored_children_data": [],
+  "stored_edit_dashboard_mode_button": [],
+  "stored_layout_data": [],
+  "stored_metadata": [
+    {
+      "index": "af2d766c-4b21-4452-aae9-8043a0bd2c57",
+      "component_type": "interactive",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "habitat",
+      "column_type": "object",
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca5"
+      },
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "default_state": {
+        "type": "select",
+        "options": [
+          "Riverwater",
+          "Groundwater",
+          "Sediment",
+          "Soil"
+        ],
+        "default_value": null
+      },
+      "panel": "left",
+      "title_size": "md",
+      "custom_color": "#984EA3",
+      "icon_name": "mdi:earth"
+    },
+    {
+      "index": "3a065ba1-bc73-4e9e-9a5a-3ed2a7cde3eb",
+      "component_type": "interactive",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "sample",
+      "column_type": "object",
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca5"
+      },
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "default_state": {
+        "type": "select",
+        "options": [
+          "SRR10070130",
+          "SRR10070131",
+          "SRR10070132",
+          "SRR10070133",
+          "SRR10070134",
+          "SRR10070141",
+          "SRR10070149",
+          "SRR10070150",
+          "SRR10070151",
+          "SRR10102392",
+          "SRR10102393",
+          "SRR10102394"
+        ],
+        "default_value": null
+      },
+      "panel": "left",
+      "title_size": "md",
+      "custom_color": "#45B8AC",
+      "icon_name": "mdi:flask"
+    },
+    {
+      "index": "7b638b4e-6091-4dbb-8d1b-16d98c7ef3f3",
+      "component_type": "multiqc",
+      "workflow_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "data_collection_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca4"
+      },
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca4"
+      },
+      "selected_module": "cutadapt",
+      "selected_plot": "Filtered Reads",
+      "selected_dataset": null,
+      "s3_locations": [],
+      "metadata": {
+        "modules": [
+          "cutadapt",
+          "fastqc"
+        ],
+        "plots": {
+          "cutadapt": [
+            "Filtered Reads",
+            {
+              "Trimmed Sequence Lengths (5')": [
+                "Counts",
+                "Obs/Exp"
+              ]
+            }
+          ],
+          "fastqc": [
+            "Sequence Counts",
+            "Sequence Quality Histograms",
+            "Per Sequence Quality Scores",
+            {
+              "Per Sequence GC Content": [
+                "Percentages",
+                "Counts"
+              ]
+            },
+            "Per Base N Content",
+            "Sequence Length Distribution",
+            "Sequence Duplication Levels",
+            "Overrepresented sequences by sample",
+            "Top overrepresented sequences",
+            "Adapter Content",
+            "Status Checks"
+          ]
+        }
+      },
+      "interactive_patching_enabled": true,
+      "panel": "right"
+    },
+    {
+      "index": "4fee47dc-5660-4d1b-a7bd-23e2f0cb6593",
+      "component_type": "multiqc",
+      "workflow_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "data_collection_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca4"
+      },
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca4"
+      },
+      "selected_module": "fastqc",
+      "selected_plot": "Sequence Counts",
+      "selected_dataset": null,
+      "s3_locations": [],
+      "metadata": {
+        "modules": [
+          "cutadapt",
+          "fastqc"
+        ],
+        "plots": {
+          "cutadapt": [
+            "Filtered Reads",
+            {
+              "Trimmed Sequence Lengths (5')": [
+                "Counts",
+                "Obs/Exp"
+              ]
+            }
+          ],
+          "fastqc": [
+            "Sequence Counts",
+            "Sequence Quality Histograms",
+            "Per Sequence Quality Scores",
+            {
+              "Per Sequence GC Content": [
+                "Percentages",
+                "Counts"
+              ]
+            },
+            "Per Base N Content",
+            "Sequence Length Distribution",
+            "Sequence Duplication Levels",
+            "Overrepresented sequences by sample",
+            "Top overrepresented sequences",
+            "Adapter Content",
+            "Status Checks"
+          ]
+        }
+      },
+      "interactive_patching_enabled": true,
+      "panel": "right"
+    },
+    {
+      "index": "10637f4b-d52b-46b8-9fe3-6902e7aca61f",
+      "component_type": "multiqc",
+      "workflow_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "data_collection_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca4"
+      },
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca4"
+      },
+      "selected_module": "fastqc",
+      "selected_plot": "Sequence Quality Histograms",
+      "selected_dataset": null,
+      "s3_locations": [],
+      "metadata": {
+        "modules": [
+          "cutadapt",
+          "fastqc"
+        ],
+        "plots": {
+          "cutadapt": [
+            "Filtered Reads",
+            {
+              "Trimmed Sequence Lengths (5')": [
+                "Counts",
+                "Obs/Exp"
+              ]
+            }
+          ],
+          "fastqc": [
+            "Sequence Counts",
+            "Sequence Quality Histograms",
+            "Per Sequence Quality Scores",
+            {
+              "Per Sequence GC Content": [
+                "Percentages",
+                "Counts"
+              ]
+            },
+            "Per Base N Content",
+            "Sequence Length Distribution",
+            "Sequence Duplication Levels",
+            "Overrepresented sequences by sample",
+            "Top overrepresented sequences",
+            "Adapter Content",
+            "Status Checks"
+          ]
+        }
+      },
+      "interactive_patching_enabled": true,
+      "panel": "right"
+    },
+    {
+      "index": "4953b644-171b-4a3f-84cf-dd53742c9379",
+      "component_type": "multiqc",
+      "workflow_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "data_collection_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca4"
+      },
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca4"
+      },
+      "selected_module": "fastqc",
+      "selected_plot": "Per Sequence GC Content",
+      "selected_dataset": "Percentages",
+      "s3_locations": [],
+      "metadata": {
+        "modules": [
+          "cutadapt",
+          "fastqc"
+        ],
+        "plots": {
+          "cutadapt": [
+            "Filtered Reads",
+            {
+              "Trimmed Sequence Lengths (5')": [
+                "Counts",
+                "Obs/Exp"
+              ]
+            }
+          ],
+          "fastqc": [
+            "Sequence Counts",
+            "Sequence Quality Histograms",
+            "Per Sequence Quality Scores",
+            {
+              "Per Sequence GC Content": [
+                "Percentages",
+                "Counts"
+              ]
+            },
+            "Per Base N Content",
+            "Sequence Length Distribution",
+            "Sequence Duplication Levels",
+            "Overrepresented sequences by sample",
+            "Top overrepresented sequences",
+            "Adapter Content",
+            "Status Checks"
+          ]
+        }
+      },
+      "interactive_patching_enabled": true,
+      "panel": "right"
+    },
+    {
+      "index": "f78ac70b-137f-42ef-bdc4-36d08a85dc44",
+      "component_type": "multiqc",
+      "workflow_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "data_collection_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca4"
+      },
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca4"
+      },
+      "selected_module": "fastqc",
+      "selected_plot": "Adapter Content",
+      "selected_dataset": null,
+      "s3_locations": [],
+      "metadata": {
+        "modules": [
+          "cutadapt",
+          "fastqc"
+        ],
+        "plots": {
+          "cutadapt": [
+            "Filtered Reads",
+            {
+              "Trimmed Sequence Lengths (5')": [
+                "Counts",
+                "Obs/Exp"
+              ]
+            }
+          ],
+          "fastqc": [
+            "Sequence Counts",
+            "Sequence Quality Histograms",
+            "Per Sequence Quality Scores",
+            {
+              "Per Sequence GC Content": [
+                "Percentages",
+                "Counts"
+              ]
+            },
+            "Per Base N Content",
+            "Sequence Length Distribution",
+            "Sequence Duplication Levels",
+            "Overrepresented sequences by sample",
+            "Top overrepresented sequences",
+            "Adapter Content",
+            "Status Checks"
+          ]
+        }
+      },
+      "interactive_patching_enabled": true,
+      "panel": "right"
+    },
+    {
+      "index": "c3298157-3d70-4998-ae45-f148a9ad4a60",
+      "component_type": "multiqc",
+      "workflow_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "data_collection_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca4"
+      },
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca4"
+      },
+      "selected_module": "cutadapt",
+      "selected_plot": "Trimmed Sequence Lengths (5')",
+      "selected_dataset": "Counts",
+      "s3_locations": [],
+      "metadata": {
+        "modules": [
+          "cutadapt",
+          "fastqc"
+        ],
+        "plots": {
+          "cutadapt": [
+            "Filtered Reads",
+            {
+              "Trimmed Sequence Lengths (5')": [
+                "Counts",
+                "Obs/Exp"
+              ]
+            }
+          ],
+          "fastqc": [
+            "Sequence Counts",
+            "Sequence Quality Histograms",
+            "Per Sequence Quality Scores",
+            {
+              "Per Sequence GC Content": [
+                "Percentages",
+                "Counts"
+              ]
+            },
+            "Per Base N Content",
+            "Sequence Length Distribution",
+            "Sequence Duplication Levels",
+            "Overrepresented sequences by sample",
+            "Top overrepresented sequences",
+            "Adapter Content",
+            "Status Checks"
+          ]
+        }
+      },
+      "interactive_patching_enabled": true,
+      "panel": "right"
+    }
+  ],
+  "subtitle": "MultiQC Analysis - Cutadapt & FastQC",
+  "tab_order": 0,
+  "title": "nf-core/ampliseq",
+  "tmp_children_data": [],
+  "version": 1,
+  "workflow_system": "nf-core"
+}

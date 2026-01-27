@@ -10,7 +10,9 @@ from depictio.cli.cli.utils.api_calls import (
     api_check_duplicate_multiqc_report,
     api_create_multiqc_report,
     api_update_multiqc_report,
+    api_upsert_deltatable,
 )
+from depictio.cli.cli.utils.file_utils import compute_file_hash
 from depictio.cli.cli.utils.rich_utils import rich_print_multiqc_processing_summary
 from depictio.cli.cli_logging import logger
 
@@ -235,6 +237,7 @@ def process_multiqc_data_collection(
         # Process each MultiQC parquet file and collect individual metadata
         individual_file_metadata = []
         processed_files = 0
+        first_s3_location = None  # Track first S3 location for dc_specific_properties
 
         logger.info(f"Starting to process {len(files)} MultiQC files...")
         for i, file_obj in enumerate(files, 1):
@@ -303,8 +306,6 @@ def process_multiqc_data_collection(
         # Upload files to S3 and create individual MultiQC reports
         created_reports = []
         try:
-            from datetime import datetime
-
             import boto3
 
             from depictio.models.models.multiqc_reports import MultiQCMetadata, MultiQCReport
@@ -317,9 +318,6 @@ def process_multiqc_data_collection(
                 aws_secret_access_key=storage_options.aws_secret_access_key,
                 region_name=storage_options.region,
             )
-
-            # Generate unique timestamp for this processing run
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")[:-3]  # Include milliseconds
 
             logger.info(f"Processing {len(individual_file_metadata)} files individually...")
 
@@ -405,10 +403,9 @@ def process_multiqc_data_collection(
                             # Upload to the SAME S3 location (overwrite in S3) or create new if parsing failed
                             if not s3_key:
                                 file_name = "multiqc.parquet"
-                                s3_key = (
-                                    f"{str(data_collection.id)}/{timestamp}_{i + 1}/{file_name}"
-                                )
-                                logger.info(f"Using new S3 key: {s3_key}")
+                                content_hash = compute_file_hash(file_path, truncate=12)
+                                s3_key = f"{str(data_collection.id)}/{content_hash}/{file_name}"
+                                logger.info(f"Using new S3 key (hash-based): {s3_key}")
 
                             logger.info(f"Uploading file to S3: {file_path} -> {s3_key}")
                             s3_client.upload_file(file_path, CLI_config.s3_storage.bucket, s3_key)
@@ -502,9 +499,10 @@ def process_multiqc_data_collection(
                             continue
 
                     # Upload this specific file to S3
-                    # Use timestamp + index to create unique path, but keep filename as multiqc.parquet
+                    # Use content hash to create consistent, idempotent path
                     file_name = "multiqc.parquet"
-                    s3_key = f"{str(data_collection.id)}/{timestamp}_{i + 1}/{file_name}"
+                    content_hash = compute_file_hash(file_path, truncate=12)
+                    s3_key = f"{str(data_collection.id)}/{content_hash}/{file_name}"
 
                     logger.info(
                         f"Uploading file {i + 1}/{len(individual_file_metadata)}: {file_path}"
@@ -512,6 +510,10 @@ def process_multiqc_data_collection(
                     s3_client.upload_file(file_path, CLI_config.s3_storage.bucket, s3_key)
                     s3_location = f"s3://{CLI_config.s3_storage.bucket}/{s3_key}"
                     logger.info(f"Successfully uploaded {file_path} to {s3_location}")
+
+                    # Capture first S3 location for dc_specific_properties
+                    if first_s3_location is None:
+                        first_s3_location = s3_location
 
                     # Create individual MultiQC report for this file
                     # Extract metadata dict (removing multiqc_version for separate field)
@@ -555,6 +557,33 @@ def process_multiqc_data_collection(
                                 logger.info(
                                     f"Report {i + 1} metadata: {len(metadata.get('samples', []))} samples, {len(metadata.get('modules', []))} modules"
                                 )
+
+                                # Register the first S3 location as deltatable location
+                                # This allows dashboard components to fetch MultiQC data via standard deltatable API
+                                if i == 0:  # Only do this for the first file
+                                    logger.info(
+                                        f"Registering MultiQC S3 location as deltatable: {s3_location}"
+                                    )
+                                    upsert_response = api_upsert_deltatable(
+                                        data_collection_id=str(data_collection.id),
+                                        delta_table_location=s3_location,
+                                        CLI_config=CLI_config,
+                                        update=False,
+                                        deltatable_size_bytes=file_size_bytes,
+                                    )
+
+                                    if upsert_response.status_code != 200:
+                                        error_msg = (
+                                            f"CRITICAL: Failed to register MultiQC deltatable for DC {data_collection.id}. "
+                                            f"HTTP {upsert_response.status_code}: {upsert_response.text}"
+                                        )
+                                        logger.error(error_msg)
+                                        raise RuntimeError(error_msg)  # Fail fast!
+
+                                    logger.info(
+                                        "✅ Successfully registered MultiQC deltatable location"
+                                    )
+
                             except Exception as json_error:
                                 logger.error(
                                     f"Failed to parse API response JSON for report {i + 1}: {json_error}"
@@ -587,42 +616,46 @@ def process_multiqc_data_collection(
 
         # Update the data collection's dc_specific_properties with extracted metadata
         try:
-            # Prepare updated configuration
-            updated_dc_config = data_collection.config.model_copy()
+            from bson import ObjectId
 
-            # Update dc_specific_properties with MultiQC metadata
-            if hasattr(updated_dc_config, "dc_specific_properties"):
-                # Update existing dc_specific_properties with merged metadata
-                updated_dc_config.dc_specific_properties.samples = unique_samples
-                updated_dc_config.dc_specific_properties.modules = unique_modules
-                updated_dc_config.dc_specific_properties.plots = all_plots
+            from depictio.api.v1.db import projects_collection
 
-                # Add MultiQC-specific fields
-                updated_dc_config.dc_specific_properties.processed_files = processed_files
-                updated_dc_config.dc_specific_properties.file_size_bytes = sum(
-                    file_meta["file_size_bytes"] for file_meta in individual_file_metadata
-                )
+            dc_oid = ObjectId(str(data_collection.id))
 
-                logger.info(
-                    f"Updating data collection {data_collection.id} with extracted metadata"
-                )
-                logger.info(f"Samples: {len(unique_samples)}")
-                logger.info(f"Modules: {len(unique_modules)}")
-                logger.info(f"Individual MultiQC reports created: {len(created_reports)}")
+            logger.info(f"Updating data collection {data_collection.id} with extracted metadata")
+            logger.info(f"Samples: {len(unique_samples)}")
+            logger.info(f"Modules: {len(unique_modules)}")
+            logger.info(f"Plots: {len(all_plots)} plot groups")
+            logger.info(f"S3 location: {first_s3_location}")
+            logger.info(f"Individual MultiQC reports created: {len(created_reports)}")
 
-                # TODO: Implement actual API call to update data collection
-                # result = api_update_data_collection(
-                #     data_collection_id=str(data_collection.id),
-                #     updated_config=updated_dc_config,
-                #     CLI_config=CLI_config
-                # )
-                logger.info("Data collection metadata update prepared (API call pending)")
+            # Direct MongoDB update - simpler than API call
+            result = projects_collection.update_one(
+                {"workflows.data_collections._id": dc_oid},
+                {
+                    "$set": {
+                        "workflows.$[].data_collections.$[dc].config.dc_specific_properties.samples": unique_samples,
+                        "workflows.$[].data_collections.$[dc].config.dc_specific_properties.modules": unique_modules,
+                        "workflows.$[].data_collections.$[dc].config.dc_specific_properties.plots": all_plots,
+                        "workflows.$[].data_collections.$[dc].config.dc_specific_properties.s3_location": first_s3_location,
+                        "workflows.$[].data_collections.$[dc].config.dc_specific_properties.processed_files": processed_files,
+                        "workflows.$[].data_collections.$[dc].config.dc_specific_properties.file_size_bytes": sum(
+                            f["file_size_bytes"] for f in individual_file_metadata
+                        ),
+                    }
+                },
+                array_filters=[{"dc._id": dc_oid}],
+            )
 
+            if result.modified_count > 0:
+                logger.info("✅ Updated dc_specific_properties with MultiQC metadata")
             else:
-                logger.warning("Data collection does not have dc_specific_properties field")
+                logger.warning(
+                    "⚠️  No documents modified - data collection may not exist or no changes needed"
+                )
 
         except Exception as e:
-            logger.error(f"Failed to update data collection metadata: {e}")
+            logger.error(f"Failed to update dc_specific_properties: {e}")
 
         # Display rich summary table
         try:

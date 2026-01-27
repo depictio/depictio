@@ -350,6 +350,37 @@ def _generate_cache_keys(
     return base_cache_key, filtered_cache_key, filter_hash
 
 
+def _get_dc_type_from_db(data_collection_id: ObjectId) -> str | None:
+    """
+    Fetch data collection type from MongoDB.
+
+    Args:
+        data_collection_id: ObjectId of the data collection.
+
+    Returns:
+        Data collection type (e.g., "MultiQC", "Table") or None if not found.
+    """
+    try:
+        # Data collections are embedded in projects/workflows, not in separate collection
+        from depictio.api.v1.db import projects_collection
+
+        project = projects_collection.find_one(
+            {"workflows.data_collections._id": data_collection_id},
+            {"workflows.data_collections.$": 1},
+        )
+        if project:
+            for wf in project.get("workflows", []):
+                for dc in wf.get("data_collections", []):
+                    if dc["_id"] == data_collection_id:
+                        config = dc.get("config", {})
+                        if isinstance(config, dict):
+                            return config.get("type")
+        return None
+    except Exception as e:
+        logger.warning(f"Failed to fetch dc_type for {data_collection_id}: {e}")
+        return None
+
+
 def _get_delta_location(
     data_collection_id_str: str,
     workflow_id_str: str,
@@ -407,16 +438,36 @@ def _get_delta_location(
     return file_id
 
 
-def _create_delta_scan(file_id: str) -> pl.LazyFrame:
+def _create_delta_scan(file_id: str, dc_type: str | None = None) -> pl.LazyFrame:
     """
-    Create a Polars LazyFrame scan from Delta table location.
+    Create a Polars LazyFrame scan from Delta table location or parquet files.
 
     Args:
-        file_id: S3 path or local path to Delta table.
+        file_id: S3 path or local path to Delta table or parquet files.
+        dc_type: Data collection type (e.g., "MultiQC", "Table"). If "MultiQC", uses parquet scan.
 
     Returns:
-        Polars LazyFrame for the Delta table.
+        Polars LazyFrame for the Delta table or parquet files.
     """
+    # MultiQC data is stored as parquet, not delta tables
+    # Case-insensitive check for MultiQC type
+    if dc_type and dc_type.lower() == "multiqc":
+        # Handle both directory and file paths
+        # If file_id ends with .parquet, it's a direct file path
+        if file_id.endswith(".parquet"):
+            parquet_pattern = file_id
+        else:
+            # It's a directory, scan all parquet files
+            parquet_pattern = f"{file_id}/**/*.parquet"
+
+        if USE_LOCAL_FILES:
+            cache_path = cache_delta_table_from_s3(file_id, polars_s3_config)
+            if file_id.endswith(".parquet"):
+                return pl.scan_parquet(cache_path)
+            return pl.scan_parquet(f"{cache_path}/**/*.parquet")
+        return pl.scan_parquet(parquet_pattern, storage_options=polars_s3_config)
+
+    # Standard delta table scan
     if USE_LOCAL_FILES:
         cache_path = cache_delta_table_from_s3(file_id, polars_s3_config)
         return pl.scan_delta(cache_path)
@@ -801,7 +852,18 @@ def load_deltatable_lite(
     # CACHING DISABLED PATH - load directly from storage
     if not ENABLE_CACHING:
         file_id = _get_delta_location(data_collection_id_str, workflow_id_str, init_data, TOKEN)
-        delta_scan = _create_delta_scan(file_id)
+        # Extract dc_type for special handling (e.g., MultiQC uses parquet)
+        if init_data and data_collection_id_str in init_data:
+            dc_type = init_data[data_collection_id_str].get("dc_type")
+        else:
+            # Fallback: query database for dc_type when init_data not available
+            data_collection_id_obj = (
+                ObjectId(data_collection_id)
+                if isinstance(data_collection_id, str)
+                else data_collection_id
+            )
+            dc_type = _get_dc_type_from_db(data_collection_id_obj)
+        delta_scan = _create_delta_scan(file_id, dc_type)
         delta_scan = _apply_scan_options(delta_scan, select_columns, limit_rows)
         df = delta_scan.collect()
         return _finalize_dataframe(df, metadata, load_for_options, None)
@@ -849,6 +911,7 @@ def load_deltatable_lite(
     # Get DataFrame size for adaptive loading strategy
     if init_data and data_collection_id_str in init_data:
         size_bytes = init_data[data_collection_id_str].get("size_bytes", -1)
+        dc_type = init_data[data_collection_id_str].get("dc_type")
     else:
         data_collection_id_obj = (
             ObjectId(data_collection_id)
@@ -856,10 +919,12 @@ def load_deltatable_lite(
             else data_collection_id
         )
         size_bytes = get_deltatable_size_from_db(data_collection_id_obj)
+        # Fallback: query database for dc_type when init_data not available
+        dc_type = _get_dc_type_from_db(data_collection_id_obj)
 
     # Get delta location and create scan
     file_id = _get_delta_location(data_collection_id_str, workflow_id_str, init_data, TOKEN)
-    delta_scan = _create_delta_scan(file_id)
+    delta_scan = _create_delta_scan(file_id, dc_type)
 
     # Apply column projection at scan level
     if select_columns:
@@ -920,7 +985,7 @@ def get_deltatable_size_from_db(data_collection_id: ObjectId) -> int:
 
     try:
         dt_doc = deltatables_collection.find_one({"data_collection_id": data_collection_id})
-        if dt_doc and "flexible_metadata" in dt_doc:
+        if dt_doc and "flexible_metadata" in dt_doc and dt_doc["flexible_metadata"] is not None:
             size_bytes = dt_doc["flexible_metadata"].get("deltatable_size_bytes")
             if size_bytes and isinstance(size_bytes, (int, float)) and size_bytes > 0:
                 return int(size_bytes)

@@ -145,6 +145,8 @@ dump.rdb
 # Data Files
 ## Large/Heavy files
 *.parquet
+# Allow reference project multiqc data
+!depictio/projects/reference/ampliseq/run_1/multiqc_data/multiqc.parquet
 *.gz
 *.csv
 *.tsv
@@ -190,8 +192,21 @@ screenshot_*.png
 # Ignore all screenshots recursively
 depictio/dash/**/screenshots/**
 
-# Allow the specific file
+# Allow reference dashboard screenshots (iris, penguins, ampliseq)
+# Iris dashboard (6824cb3b89d2b72169309737)
 !depictio/dash/static/screenshots/6824cb3b89d2b72169309737.png
+!depictio/dash/static/screenshots/6824cb3b89d2b72169309737_light.png
+!depictio/dash/static/screenshots/6824cb3b89d2b72169309737_dark.png
+# Penguins dashboard (6824cb3b89d2b72169309738)
+!depictio/dash/static/screenshots/6824cb3b89d2b72169309738_light.png
+!depictio/dash/static/screenshots/6824cb3b89d2b72169309738_dark.png
+# Ampliseq MultiQC dashboard (646b0f3c1e4a2d7f8e5b8ca2)
+!depictio/dash/static/screenshots/646b0f3c1e4a2d7f8e5b8ca2.png
+!depictio/dash/static/screenshots/646b0f3c1e4a2d7f8e5b8ca2_light.png
+!depictio/dash/static/screenshots/646b0f3c1e4a2d7f8e5b8ca2_dark.png
+# Ampliseq Analysis dashboard (646b0f3c1e4a2d7f8e5b8ca6)
+!depictio/dash/static/screenshots/646b0f3c1e4a2d7f8e5b8ca6_light.png
+!depictio/dash/static/screenshots/646b0f3c1e4a2d7f8e5b8ca6_dark.png
 
 # Ensure parent directories are also un-ignored
 !depictio/
@@ -245,6 +260,7 @@ dashboards/local/
 !demographic_data.csv
 !physical_features.csv
 !sample_metadata.csv
+!test_data.csv
 
 # Cypress
 depictio/tests/e2e-tests/node_modules/

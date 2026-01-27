@@ -368,10 +368,23 @@ def execute_join(
     logger.info(f"Right DataFrame shape: {right_df.shape}")
 
     # Auto-add depictio_run_id if present in both DataFrames
+    # BUT skip if either table is a Metadata table (not aggregated data)
     join_columns = join_def.on_columns.copy()
 
+    left_metatype = left_dc.config.metatype if left_dc.config else None
+    right_metatype = right_dc.config.metatype if right_dc.config else None
+
     if "depictio_run_id" in left_df.columns and "depictio_run_id" in right_df.columns:
-        if "depictio_run_id" not in join_columns:
+        # Skip auto-add if either side is a Metadata table
+        if left_metatype == "Metadata" or right_metatype == "Metadata":
+            logger.info(
+                f"Skipping depictio_run_id auto-add (left_metatype={left_metatype}, "
+                f"right_metatype={right_metatype})"
+            )
+            console.print(
+                "  [cyan]ℹ Skipping depictio_run_id auto-add (Metadata table detected)[/cyan]"
+            )
+        elif "depictio_run_id" not in join_columns:
             join_columns.append("depictio_run_id")
             console.print("  [cyan]ℹ Auto-added depictio_run_id to join keys[/cyan]")
             logger.info("Auto-added depictio_run_id to join columns")
@@ -571,14 +584,30 @@ def persist_joined_table(
 
     storage_options = turn_S3_config_into_polars_storage_options(CLI_config.s3_storage)
 
-    # Step 1: Generate ID and S3 path for joined table
-    dc_id = PyObjectId()
+    # Step 1: Determine DC ID - prioritize YAML id, then result_dc_id, then generate new
+    if join_def.id:
+        # Use stable ID from YAML configuration (preferred)
+        dc_id = join_def.id
+        logger.info(f"Using YAML-specified DC ID for join '{join_def.name}': {dc_id}")
+        console.print(f"  [cyan]→ Using YAML-specified DataCollection ID: {dc_id}[/cyan]")
+    elif join_def.result_dc_id:
+        # Reuse existing ID from previous execution (backward compatibility)
+        dc_id = join_def.result_dc_id
+        logger.info(f"Reusing existing DC ID for join '{join_def.name}': {dc_id}")
+        console.print(f"  [cyan]→ Reusing existing DataCollection ID: {dc_id}[/cyan]")
+    else:
+        # Generate new ID (first execution without YAML id)
+        dc_id = PyObjectId()
+        logger.info(f"Generated new DC ID for join '{join_def.name}': {dc_id}")
+        console.print(f"  [yellow]⚠ Generated new DataCollection ID: {dc_id}[/yellow]")
+        console.print(
+            f"  [yellow]  Consider adding 'id: \"{dc_id}\"' to the join definition in your YAML[/yellow]"
+        )
+
     dc_tag = f"joined_{join_def.name}"
     destination_prefix = f"s3://{CLI_config.s3_storage.bucket}/{str(dc_id)}"
 
-    logger.info(f"Generated ID for join '{join_def.name}': {dc_id}")
     logger.info(f"Persisting joined table to: {destination_prefix}")
-    console.print(f"  [cyan]→ Generated DataCollection ID: {dc_id}[/cyan]")
 
     # Step 2: Check if exists
     existing_result = read_delta_table(destination_prefix, storage_options)

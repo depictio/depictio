@@ -712,13 +712,20 @@ def register_core_callbacks(app):
                 logger.warning(f"No MultiQC reports found for DC {dc_id}")
                 return {}, [], [], "No MultiQC reports found"
 
-            data_locations = [r.get("s3_location") for r in reports if r.get("s3_location")]
+            # Extract s3_location from nested report structure
+            # API wraps reports in MultiQCReportResponse: {"report": {...}, "data_collection_tag": "...", ...}
+            data_locations = [
+                r.get("report", {}).get("s3_location")
+                for r in reports
+                if r.get("report", {}).get("s3_location")
+            ]
 
             if not data_locations:
                 logger.error("No data locations found in reports")
                 return {}, [], [], "Error: No data locations found"
 
-            report_id = reports[0].get("id")
+            # Extract report ID from nested structure
+            report_id = reports[0].get("report", {}).get("id")
             if not report_id:
                 logger.error("No report ID in first report")
                 return {}, data_locations, [], "Error: Invalid report structure"
@@ -1256,11 +1263,34 @@ def register_core_callbacks(app):
             # ============================================================================
             if use_link_resolution and project_id:
                 # Collect filter values from interactive components
+                # ONLY from categorical/sample-based filters (not numeric RangeSliders)
                 filter_values = []
                 for comp_data in interactive_components_dict.values():
-                    value = comp_data.get("value", [])
-                    if value:
-                        filter_values.extend(value if isinstance(value, list) else [value])
+                    comp_metadata = comp_data.get("metadata", {})
+                    comp_type = comp_metadata.get("interactive_component_type", "")
+                    column_type = comp_metadata.get("column_type", "")
+                    column_name = comp_metadata.get("column_name", "")
+
+                    # Only collect values from categorical filters (MultiSelect or object columns)
+                    # Skip numeric range filters (RangeSlider with float/int columns)
+                    is_categorical = comp_type == "MultiSelect" or column_type == "object"
+                    is_sample_column = (
+                        column_name == join_column
+                    )  # join_column is typically "sample"
+
+                    if is_categorical or is_sample_column:
+                        value = comp_data.get("value", [])
+                        if value:
+                            filter_values.extend(value if isinstance(value, list) else [value])
+                            logger.debug(
+                                f"Including filter values from {column_name} "
+                                f"({comp_type}, {column_type}): {value}"
+                            )
+                    else:
+                        logger.debug(
+                            f"Skipping numeric filter {column_name} "
+                            f"({comp_type}, {column_type}) - not used for sample filtering"
+                        )
 
                 if not filter_values and not has_active_filters and figure_was_patched:
                     # RESET MODE: Get all samples via link resolution without filter
@@ -1291,8 +1321,41 @@ def register_core_callbacks(app):
                             f"(from {len(sample_mappings)} canonical IDs)"
                         )
                     else:
-                        logger.warning("No sample_mappings available for reset")
-                        return dash.no_update
+                        # No sample_mappings available - restore from trace metadata
+                        logger.info(
+                            "No sample_mappings available - restoring original figure from trace metadata"
+                        )
+                        if trace_metadata and trace_metadata.get("original_data"):
+                            # Reconstruct original unfiltered figure from stored trace data
+                            restored_fig = copy.deepcopy(current_figure)
+                            original_traces = trace_metadata["original_data"]
+
+                            for i, trace in enumerate(restored_fig.get("data", [])):
+                                if i < len(original_traces):
+                                    trace_info = original_traces[i]
+                                    # Restore original data
+                                    if trace_info.get("original_x"):
+                                        trace["x"] = trace_info["original_x"]
+                                    if trace_info.get("original_y"):
+                                        trace["y"] = trace_info["original_y"]
+                                    if trace_info.get("original_z"):
+                                        trace["z"] = trace_info["original_z"]
+                                    # Restore visibility for scatter/line traces
+                                    if "visible" in trace:
+                                        trace["visible"] = True
+
+                            # Mark as unfiltered
+                            if "layout" not in restored_fig:
+                                restored_fig["layout"] = {}
+                            restored_fig["layout"]["_depictio_filter_applied"] = False
+
+                            logger.info(
+                                "✅ Restored original unfiltered figure from trace metadata"
+                            )
+                            return restored_fig
+                        else:
+                            logger.warning("No trace metadata available - cannot restore")
+                            return dash.no_update
 
                 elif filter_values:
                     # FILTER MODE: Use link resolution API
@@ -1385,6 +1448,36 @@ def register_core_callbacks(app):
 
             if not selected_samples:
                 logger.warning("No samples found after expansion")
+                # If in RESET MODE and no samples found, restore from trace metadata
+                if not has_active_filters and figure_was_patched:
+                    logger.info("RESET MODE: Restoring original figure from trace metadata")
+                    if trace_metadata and trace_metadata.get("original_data"):
+                        # Reconstruct original unfiltered figure from stored trace data
+                        restored_fig = copy.deepcopy(current_figure)
+                        original_traces = trace_metadata["original_data"]
+
+                        for i, trace in enumerate(restored_fig.get("data", [])):
+                            if i < len(original_traces):
+                                trace_info = original_traces[i]
+                                # Restore original data
+                                if trace_info.get("original_x"):
+                                    trace["x"] = trace_info["original_x"]
+                                if trace_info.get("original_y"):
+                                    trace["y"] = trace_info["original_y"]
+                                if trace_info.get("original_z"):
+                                    trace["z"] = trace_info["original_z"]
+                                # Restore visibility for scatter/line traces
+                                if "visible" in trace:
+                                    trace["visible"] = True
+
+                        # Mark as unfiltered
+                        if "layout" not in restored_fig:
+                            restored_fig["layout"] = {}
+                        restored_fig["layout"]["_depictio_filter_applied"] = False
+
+                        logger.info("✅ Restored original unfiltered figure from trace metadata")
+                        return restored_fig
+
                 return dash.no_update
 
             # Check if we have a current figure to patch

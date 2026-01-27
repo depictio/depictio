@@ -49,107 +49,7 @@
   },
   "stored_children_data": [],
   "stored_edit_dashboard_mode_button": [],
-  "stored_layout_data": [
-    {
-      "w": 21,
-      "h": 14,
-      "x": 0,
-      "y": 17,
-      "i": "box-1e9febfc-e48c-4614-8f0d-5c09ba73991f",
-      "moved": false,
-      "static": false
-    },
-    {
-      "w": 21,
-      "h": 17,
-      "x": 0,
-      "y": 0,
-      "i": "box-b0b3001f-e17a-4993-a890-a9745ffdad2d",
-      "moved": false,
-      "static": false
-    },
-    {
-      "w": 8,
-      "h": 6,
-      "x": 21,
-      "y": 0,
-      "i": "box-9496c7aa-26fb-407d-83c1-6aad223af63b",
-      "moved": false,
-      "static": false
-    },
-    {
-      "w": 7,
-      "h": 6,
-      "x": 29,
-      "y": 0,
-      "i": "box-7824f8b5-f7da-4b8e-8536-f0aca0ff0f8b",
-      "moved": false,
-      "static": false
-    },
-    {
-      "w": 6,
-      "h": 6,
-      "x": 36,
-      "y": 0,
-      "i": "box-0c42aafb-6d4c-46af-8ca7-777ab4039a0a",
-      "moved": false,
-      "static": false
-    },
-    {
-      "w": 6,
-      "h": 6,
-      "x": 42,
-      "y": 0,
-      "i": "box-94784ec8-e270-4334-b9dc-2d267201fa94",
-      "moved": false,
-      "static": false
-    },
-    {
-      "w": 9,
-      "h": 6,
-      "x": 21,
-      "y": 6,
-      "i": "box-61f3284c-e1d4-48c9-a307-93e2ec3882cc",
-      "moved": false,
-      "static": false
-    },
-    {
-      "w": 8,
-      "h": 6,
-      "x": 30,
-      "y": 6,
-      "i": "box-f52ac885-f25b-4beb-adac-06af3a146f4f",
-      "moved": false,
-      "static": false
-    },
-    {
-      "w": 10,
-      "h": 6,
-      "x": 38,
-      "y": 6,
-      "i": "box-a6dfc6bf-10b8-42c8-ba6e-7f93269f331c",
-      "moved": false,
-      "static": false
-    },
-    {
-      "w": 48,
-      "h": 21,
-      "x": 0,
-      "y": 31,
-      "i": "box-7b8eed81-a0db-42a9-869b-707a9d6d2714",
-      "moved": false,
-      "static": false
-    },
-    {
-      "w": 27,
-      "h": 19,
-      "x": 21,
-      "y": 12,
-      "i": "box-0f503dac-d5a7-41f9-be07-ef694e7df4a4",
-      "moved": false,
-      "static": false
-    }
-  ],
+  "stored_layout_data": [],
   "stored_metadata": [
     {
       "index": "1e9febfc-e48c-4614-8f0d-5c09ba73991f",
@@ -174,7 +74,8 @@
         "points": "all",
         "notched": true,
         "log_x": false,
-        "log_y": false
+        "log_y": false,
+        "color_continuous_scale": ""
       },
       "visu_type": "box",
       "wf_id": {
@@ -192,7 +93,7 @@
         "scan": {
           "mode": "single",
           "scan_parameters": {
-            "filename": "../api/v1/configs/iris_dataset/iris.csv"
+            "filename": "../api/v1/configs/projects/init/iris/data/iris.csv"
           }
         },
         "dc_specific_properties": {
@@ -222,7 +123,8 @@
       "mode": "ui",
       "displayed_data_count": 300,
       "total_data_count": 300,
-      "was_sampled": false
+      "was_sampled": false,
+      "panel": "right"
     },
     {
       "index": "b0b3001f-e17a-4993-a890-a9745ffdad2d",
@@ -281,7 +183,7 @@
         "scan": {
           "mode": "single",
           "scan_parameters": {
-            "filename": "../api/v1/configs/iris_dataset/iris.csv"
+            "filename": "../api/v1/configs/projects/init/iris/data/iris.csv"
           }
         },
         "dc_specific_properties": {
@@ -311,7 +213,8 @@
       "mode": "ui",
       "displayed_data_count": 300,
       "total_data_count": 300,
-      "was_sampled": false
+      "was_sampled": false,
+      "panel": "right"
     },
     {
       "index": "9496c7aa-26fb-407d-83c1-6aad223af63b",
@@ -332,7 +235,7 @@
         "scan": {
           "mode": "single",
           "scan_parameters": {
-            "filename": "../api/v1/configs/iris_dataset/iris.csv"
+            "filename": "../api/v1/configs/projects/init/iris/data/iris.csv"
           }
         },
         "dc_specific_properties": {
@@ -363,11 +266,12 @@
       "parent_index": null,
       "metric_theme": null,
       "background_color": null,
-      "title_color": "#8BC34A",
-      "icon_name": "mdi:leaf",
-      "icon_color": "#8BC34A",
+      "title_color": "#9C27B0",
+      "icon_name": "mdi:flower-outline",
+      "icon_color": "#9C27B0",
       "title_font_size": "xl",
-      "value_font_size": "xl"
+      "value_font_size": "xl",
+      "panel": "right"
     },
     {
       "index": "7824f8b5-f7da-4b8e-8536-f0aca0ff0f8b",
@@ -388,7 +292,7 @@
         "scan": {
           "mode": "single",
           "scan_parameters": {
-            "filename": "../api/v1/configs/iris_dataset/iris.csv"
+            "filename": "../api/v1/configs/projects/init/iris/data/iris.csv"
           }
         },
         "dc_specific_properties": {
@@ -419,11 +323,12 @@
       "parent_index": "bd15d650-e0fc-4baf-ac64-805e2288ad1d",
       "metric_theme": null,
       "background_color": null,
-      "title_color": "#F68B33",
-      "icon_name": "mdi:chart-line",
-      "icon_color": "#F68B33",
+      "title_color": "#673AB7",
+      "icon_name": "mdi:ruler-square",
+      "icon_color": "#673AB7",
       "title_font_size": "xl",
-      "value_font_size": "xl"
+      "value_font_size": "xl",
+      "panel": "right"
     },
     {
       "index": "0c42aafb-6d4c-46af-8ca7-777ab4039a0a",
@@ -444,7 +349,7 @@
         "scan": {
           "mode": "single",
           "scan_parameters": {
-            "filename": "../api/v1/configs/iris_dataset/iris.csv"
+            "filename": "../api/v1/configs/projects/init/iris/data/iris.csv"
           }
         },
         "dc_specific_properties": {
@@ -475,11 +380,12 @@
       "parent_index": "d2312309-f4b7-471d-85c1-354be131c337",
       "metric_theme": null,
       "background_color": null,
-      "title_color": null,
-      "icon_name": "mdi:chart-line",
-      "icon_color": null,
+      "title_color": "#4CAF50",
+      "icon_name": "mdi:flower-tulip",
+      "icon_color": "#4CAF50",
       "title_font_size": "xl",
-      "value_font_size": "xl"
+      "value_font_size": "xl",
+      "panel": "right"
     },
     {
       "index": "94784ec8-e270-4334-b9dc-2d267201fa94",
@@ -500,7 +406,7 @@
         "scan": {
           "mode": "single",
           "scan_parameters": {
-            "filename": "../api/v1/configs/iris_dataset/iris.csv"
+            "filename": "../api/v1/configs/projects/init/iris/data/iris.csv"
           }
         },
         "dc_specific_properties": {
@@ -531,11 +437,12 @@
       "parent_index": null,
       "metric_theme": null,
       "background_color": null,
-      "title_color": null,
-      "icon_name": "mdi:flash",
-      "icon_color": null,
+      "title_color": "#4CAF50",
+      "icon_name": "mdi:flower-tulip",
+      "icon_color": "#4CAF50",
       "title_font_size": "lg",
-      "value_font_size": "xl"
+      "value_font_size": "xl",
+      "panel": "right"
     },
     {
       "component_type": "interactive",
@@ -557,7 +464,7 @@
         "scan": {
           "mode": "single",
           "scan_parameters": {
-            "filename": "../api/v1/configs/iris_dataset/iris.csv"
+            "filename": "../api/v1/configs/projects/init/iris/data/iris.csv"
           }
         },
         "dc_specific_properties": {
@@ -700,8 +607,8 @@
       "scale": "linear",
       "marks_number": 2,
       "title_size": "md",
-      "custom_color": "#F68B33",
-      "icon_name": "bx:slider-alt",
+      "custom_color": "#9C27B0",
+      "icon_name": "mdi:flower-outline",
       "original_value": 7.9,
       "default_state": {
         "type": "range",
@@ -711,7 +618,8 @@
           4.3,
           7.9
         ]
-      }
+      },
+      "panel": "left"
     },
     {
       "component_type": "interactive",
@@ -733,7 +641,7 @@
         "scan": {
           "mode": "single",
           "scan_parameters": {
-            "filename": "../api/v1/configs/iris_dataset/iris.csv"
+            "filename": "../api/v1/configs/projects/init/iris/data/iris.csv"
           }
         },
         "dc_specific_properties": {
@@ -866,18 +774,18 @@
       },
       "value": [
         1,
-        4.72
+        6.9
       ],
       "corrected_value": [
         1,
-        4.72
+        6.9
       ],
       "parent_index": null,
       "scale": "linear",
       "marks_number": 2,
       "title_size": "md",
-      "custom_color": "#45B8AC",
-      "icon_name": "mdi:flask",
+      "custom_color": "#E91E63",
+      "icon_name": "mdi:flower",
       "original_value": 6.9,
       "default_state": {
         "type": "range",
@@ -887,7 +795,8 @@
           1,
           6.9
         ]
-      }
+      },
+      "panel": "left"
     },
     {
       "component_type": "interactive",
@@ -909,7 +818,7 @@
         "scan": {
           "mode": "single",
           "scan_parameters": {
-            "filename": "../api/v1/configs/iris_dataset/iris.csv"
+            "filename": "../api/v1/configs/projects/init/iris/data/iris.csv"
           }
         },
         "dc_specific_properties": {
@@ -1040,20 +949,14 @@
           }
         }
       },
-      "value": [
-        "Setosa",
-        "Versicolor"
-      ],
-      "corrected_value": [
-        "Setosa",
-        "Versicolor"
-      ],
+      "value": null,
+      "corrected_value": null,
       "parent_index": null,
       "scale": "linear",
       "marks_number": 2,
       "title_size": "md",
-      "custom_color": "#858585",
-      "icon_name": "bx:slider-alt",
+      "custom_color": "#4CAF50",
+      "icon_name": "mdi:flower-tulip",
       "default_state": {
         "type": "select",
         "options": [
@@ -1062,7 +965,8 @@
           "Setosa"
         ],
         "default_value": null
-      }
+      },
+      "panel": "left"
     },
     {
       "index": "7b8eed81-a0db-42a9-869b-707a9d6d2714",
@@ -1082,7 +986,7 @@
         "scan": {
           "mode": "single",
           "scan_parameters": {
-            "filename": "../api/v1/configs/iris_dataset/iris.csv"
+            "filename": "../api/v1/configs/projects/init/iris/data/iris.csv"
           }
         },
         "dc_specific_properties": {
@@ -1261,7 +1165,8 @@
           "floatingFilter": true
         }
       },
-      "parent_index": null
+      "parent_index": null,
+      "panel": "right"
     },
     {
       "index": "0f503dac-d5a7-41f9-be07-ef694e7df4a4",
@@ -1283,7 +1188,7 @@
         "marginal": "",
         "barnorm": "",
         "histfunc": "",
-        "nbins": 0,
+        "nbins": 30,
         "text_auto": "",
         "subtitle": "",
         "facet_col_wrap": "",
@@ -1312,7 +1217,7 @@
         "scan": {
           "mode": "single",
           "scan_parameters": {
-            "filename": "../api/v1/configs/iris_dataset/iris.csv"
+            "filename": "../api/v1/configs/projects/init/iris/data/iris.csv"
           }
         },
         "dc_specific_properties": {
@@ -1342,12 +1247,133 @@
       "mode": "ui",
       "displayed_data_count": 300,
       "total_data_count": 300,
-      "was_sampled": false
+      "was_sampled": false,
+      "panel": "right"
     }
   ],
   "subtitle": "",
   "title": "Iris Dashboard demo",
   "tmp_children_data": [],
   "version": 1,
-  "workflow_system": "none"
+  "workflow_system": "none",
+  "left_panel_layout_data": [
+    {
+      "i": "box-61f3284c-e1d4-48c9-a307-93e2ec3882cc",
+      "x": 0,
+      "y": 0,
+      "w": 1,
+      "h": 3,
+      "static": false
+    },
+    {
+      "i": "box-f52ac885-f25b-4beb-adac-06af3a146f4f",
+      "x": 0,
+      "y": 3,
+      "w": 1,
+      "h": 3,
+      "static": false
+    },
+    {
+      "i": "box-a6dfc6bf-10b8-42c8-ba6e-7f93269f331c",
+      "x": 0,
+      "y": 6,
+      "w": 1,
+      "h": 2,
+      "static": false
+    }
+  ],
+  "right_panel_layout_data": [
+    {
+      "i": "box-9496c7aa-26fb-407d-83c1-6aad223af63b",
+      "x": 0,
+      "y": 0,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-7824f8b5-f7da-4b8e-8536-f0aca0ff0f8b",
+      "x": 2,
+      "y": 0,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-0c42aafb-6d4c-46af-8ca7-777ab4039a0a",
+      "x": 4,
+      "y": 0,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-94784ec8-e270-4334-b9dc-2d267201fa94",
+      "x": 6,
+      "y": 0,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-1e9febfc-e48c-4614-8f0d-5c09ba73991f",
+      "x": 0,
+      "y": 2,
+      "w": 4,
+      "h": 5,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-b0b3001f-e17a-4993-a890-a9745ffdad2d",
+      "x": 4,
+      "y": 2,
+      "w": 4,
+      "h": 5,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-0f503dac-d5a7-41f9-be07-ef694e7df4a4",
+      "x": 0,
+      "y": 7,
+      "w": 8,
+      "h": 5,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-7b8eed81-a0db-42a9-869b-707a9d6d2714",
+      "x": 0,
+      "y": 12,
+      "w": 8,
+      "h": 5,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    }
+  ]
 }

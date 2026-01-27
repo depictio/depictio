@@ -2,7 +2,11 @@ from dash import html
 
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
-from depictio.dash.api_calls import api_call_fetch_user_from_token, api_call_get_dashboard
+from depictio.dash.api_calls import (
+    api_call_fetch_project_by_id,
+    api_call_fetch_user_from_token,
+    api_call_get_dashboard,
+)
 from depictio.dash.component_metadata import DISPLAY_NAME_TO_TYPE_MAPPING, get_build_functions
 from depictio.models.models.dashboards import DashboardData
 from depictio.models.utils import convert_model_to_dict
@@ -35,6 +39,122 @@ def _fetch_table_columns(child_metadata: dict, token: str) -> dict:
         return cols_json
     except Exception as e:
         logger.error(f"Failed to fetch cols_json for table: {e}")
+        return {}
+
+
+def _fetch_multiqc_metadata_from_dc(
+    project_id: str, workflow_id: str, data_collection_id: str, token: str
+) -> dict:
+    """Fetch MultiQC metadata from data collection's dc_specific_properties.
+
+    Args:
+        project_id: Project ID
+        workflow_id: Workflow ID
+        data_collection_id: Data collection ID
+        token: Access token for API authentication
+
+    Returns:
+        Dict with s3_locations and metadata fields, empty dict on failure
+    """
+    if not all([project_id, workflow_id, data_collection_id]):
+        return {}
+
+    try:
+        # Fetch project data to get dc_specific_properties
+        # Use skip_enrichment=True to get simple structure without delta_location aggregation
+        project_data = api_call_fetch_project_by_id(project_id, token, skip_enrichment=True)
+        if not project_data:
+            logger.debug(f"No project data for {project_id}")
+            return {}
+
+        # Find the data collection in the project
+        workflows = project_data.get("workflows", [])
+        logger.debug(
+            f"Project workflows type: {type(workflows)}, count: {len(workflows) if isinstance(workflows, list) else 'N/A'}"
+        )
+        if workflows and len(workflows) > 0:
+            logger.debug(f"First workflow type: {type(workflows[0])}")
+
+        for workflow in workflows:
+            # Handle both dict and string workflow IDs
+            if isinstance(workflow, dict):
+                workflow_id_str = (
+                    str(workflow.get("_id", {}).get("$oid", ""))
+                    if isinstance(workflow.get("_id"), dict)
+                    else str(workflow.get("_id", ""))
+                )
+            elif isinstance(workflow, str):
+                workflow_id_str = workflow
+                logger.warning(
+                    f"Workflow is a string, not a dict. This is unexpected. Value: {workflow}"
+                )
+                continue  # Skip string workflows as they can't contain data collections
+            else:
+                logger.warning(f"Unexpected workflow type: {type(workflow)}")
+                continue
+
+            if workflow_id_str == str(workflow_id):
+                data_collections = workflow.get("data_collections", [])
+                logger.debug(
+                    f"Found matching workflow, data_collections count: {len(data_collections)}"
+                )
+
+                for dc in data_collections:
+                    # Handle both dict and string DC IDs
+                    if isinstance(dc, dict):
+                        dc_id_str = (
+                            str(dc.get("_id", {}).get("$oid", ""))
+                            if isinstance(dc.get("_id"), dict)
+                            else str(dc.get("_id", ""))
+                        )
+                    else:
+                        logger.warning(f"Unexpected DC type: {type(dc)}")
+                        continue
+
+                    if dc_id_str == str(data_collection_id):
+                        # Extract dc_specific_properties
+                        dc_specific_props = dc.get("config", {}).get("dc_specific_properties", {})
+                        if not dc_specific_props:
+                            logger.debug(f"No dc_specific_properties for DC {data_collection_id}")
+                            return {}
+
+                        # Extract MultiQC metadata
+                        result = {}
+
+                        # Get s3_location (single location) and convert to list
+                        s3_location = dc_specific_props.get("s3_location")
+                        if s3_location:
+                            result["s3_locations"] = [s3_location]
+                            logger.info(
+                                f"Found S3 location in dc_specific_properties: {s3_location}"
+                            )
+
+                        # Get metadata (modules, plots, samples)
+                        metadata = {}
+                        if dc_specific_props.get("modules"):
+                            metadata["modules"] = dc_specific_props["modules"]
+                        if dc_specific_props.get("plots"):
+                            metadata["plots"] = dc_specific_props["plots"]
+                        if dc_specific_props.get("samples"):
+                            metadata["samples"] = dc_specific_props["samples"]
+
+                        if metadata:
+                            result["metadata"] = metadata
+                            logger.info(
+                                f"Found MultiQC metadata: {len(metadata.get('modules', []))} modules, "
+                                f"{len(metadata.get('samples', []))} samples"
+                            )
+
+                        return result
+
+        logger.debug(f"Data collection {data_collection_id} not found in project {project_id}")
+        return {}
+
+    except Exception as e:
+        logger.error(
+            f"Failed to fetch MultiQC metadata from dc_specific_properties: {e}",
+            exc_info=True,
+        )
         return {}
 
 
@@ -83,6 +203,11 @@ def render_dashboard(
     if "_reset_counts" in build_functions:
         build_functions["_reset_counts"]()
 
+    # Extract delta_locations from init_data (contains dc_type for MultiQC detection)
+    delta_locations = {}
+    if init_data:
+        delta_locations = init_data.get("delta_locations", {})
+
     children = []
     for child_metadata in stored_metadata:
         # Add required fields
@@ -93,9 +218,75 @@ def render_dashboard(
         if project_id:
             child_metadata["project_id"] = str(project_id)
 
-        # Add init_data if available (API optimization)
-        if init_data:
-            child_metadata["init_data"] = init_data
+        # Add component-specific init_data (delta location with dc_type for parquet detection)
+        dc_id = child_metadata.get("dc_id")
+        if dc_id and delta_locations:
+            dc_id_str = str(dc_id)
+            component_init_data = {}
+
+            # Add delta location for this component's DC
+            if dc_id_str in delta_locations:
+                component_init_data[dc_id_str] = delta_locations[dc_id_str]
+
+            # For joined DCs, add individual DC locations
+            if isinstance(dc_id, str) and "--" in dc_id:
+                for individual_dc_id in dc_id.split("--"):
+                    if individual_dc_id in delta_locations:
+                        component_init_data[individual_dc_id] = delta_locations[individual_dc_id]
+
+            if component_init_data:
+                child_metadata["init_data"] = component_init_data
+
+        # Enrich MultiQC components with metadata from dc_specific_properties
+        # This ensures s3_locations and metadata are populated even if dashboard was saved with empty values
+        component_type = child_metadata.get("component_type")
+        if component_type == "multiqc":
+            # Check if metadata is missing or empty
+            existing_metadata = child_metadata.get("metadata", {})
+            existing_s3_locations = child_metadata.get("s3_locations", [])
+
+            # Determine if we need to fetch from dc_specific_properties
+            needs_enrichment = (
+                not existing_s3_locations
+                or not existing_metadata
+                or (
+                    isinstance(existing_metadata, dict)
+                    and not existing_metadata.get("modules")
+                    and not existing_metadata.get("samples")
+                )
+            )
+
+            if needs_enrichment:
+                workflow_id = child_metadata.get("wf_id") or child_metadata.get("workflow_id")
+                data_collection_id = child_metadata.get("dc_id") or child_metadata.get(
+                    "data_collection_id"
+                )
+
+                if project_id and workflow_id and data_collection_id:
+                    logger.info(
+                        f"Enriching MultiQC component from dc_specific_properties for DC {data_collection_id}"
+                    )
+                    enriched_data = _fetch_multiqc_metadata_from_dc(
+                        str(project_id), str(workflow_id), str(data_collection_id), TOKEN
+                    )
+
+                    if enriched_data:
+                        # Merge enriched data into child_metadata
+                        if "s3_locations" in enriched_data:
+                            child_metadata["s3_locations"] = enriched_data["s3_locations"]
+                            logger.info(
+                                f"✅ Enriched s3_locations: {len(enriched_data['s3_locations'])} locations"
+                            )
+                        if "metadata" in enriched_data:
+                            child_metadata["metadata"] = enriched_data["metadata"]
+                            logger.info(
+                                f"✅ Enriched metadata: {len(enriched_data['metadata'].get('modules', []))} modules, "
+                                f"{len(enriched_data['metadata'].get('samples', []))} samples"
+                            )
+                    else:
+                        logger.warning(
+                            f"⚠️  No enriched data found in dc_specific_properties for DC {data_collection_id}"
+                        )
 
         # Get component type
         component_type = child_metadata.get("component_type")

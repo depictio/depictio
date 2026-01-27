@@ -835,14 +835,33 @@ def _create_figure_from_data(
             "hover_data",
             "custom_data",
         }
+
+        # Parameters that should be parsed from JSON strings when stored as strings
+        json_parseable_params = {
+            "color_discrete_map",
+            "color_continuous_scale",
+            "category_orders",
+            "labels",
+            "hover_data",
+            "custom_data",
+            "line_dash_map",
+            "symbol_map",
+            "pattern_shape_map",
+            "size_map",
+        }
+
         cleaned_kwargs = {}
         for k, v in dict_kwargs.items():
             if v is None:
                 continue
 
-            # Skip *_map parameters that are strings (malformed data) - Plotly expects dicts
-            if k.endswith("_map") and isinstance(v, str):
-                continue
+            # Parse JSON string parameters into dicts/lists (UI mode stores these as JSON strings)
+            if k in json_parseable_params and isinstance(v, str) and v.strip():
+                try:
+                    v = json.loads(v)
+                except (json.JSONDecodeError, ValueError):
+                    logger.warning(f"Failed to parse {k} as JSON: {v}, skipping")
+                    continue
 
             # Keep boolean parameters (including False values)
             if isinstance(v, bool):
