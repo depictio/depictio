@@ -349,7 +349,41 @@
       "dc_id": {
         "$oid": "646b0f3c1e4a2d7f8e5b8ca1"
       },
-      "panel": "right"
+      "panel": "right",
+      "dc_config": {
+        "description": "Complete penguin dataset with physical features and demographics",
+        "type": "table",
+        "metatype": "Aggregate",
+        "scan": {
+          "mode": "join",
+          "scan_parameters": {
+            "join_type": "inner"
+          }
+        },
+        "dc_specific_properties": {
+          "format": "parquet",
+          "polars_kwargs": {},
+          "columns_description": {
+            "individual_id": "Unique individual penguin ID within species",
+            "bill_length_mm": "Bill length in millimeters",
+            "bill_depth_mm": "Bill depth in millimeters",
+            "flipper_length_mm": "Flipper length in millimeters",
+            "body_mass_g": "Body mass in grams",
+            "island": "Island location (Biscoe, Dream, Torgersen)",
+            "sex": "Penguin sex (male, female)",
+            "year": "Observation year",
+            "species": "Species name (Adelie, Chinstrap, Gentoo)"
+          }
+        },
+        "join": {
+          "left_dc": "physical_features",
+          "right_dc": "demographic_data",
+          "on_columns": [
+            "individual_id"
+          ],
+          "how": "inner"
+        }
+      }
     }
   ],
   "stored_layout_data": [],
