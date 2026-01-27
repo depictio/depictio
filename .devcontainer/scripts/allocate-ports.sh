@@ -107,6 +107,10 @@ DEPICTIO_DASH_PORT=${DASH_PORT}
 DEPICTIO_MINIO_PORT=${MINIO_PORT}
 DEPICTIO_MINIO_ENDPOINT_URL=http://minio:9000
 
+# External ports (for browser-to-service communication from host)
+DEPICTIO_FASTAPI_EXTERNAL_PORT=${FASTAPI_PORT}
+DEPICTIO_DASH_EXTERNAL_PORT=${DASH_PORT}
+
 # MinIO credentials (match docker-compose/.env)
 DEPICTIO_MINIO_ROOT_USER=minio
 DEPICTIO_MINIO_ROOT_PASSWORD=minio123
@@ -137,6 +141,9 @@ services:
 
   depictio-frontend:
     container_name: ${COMPOSE_PROJECT_NAME}-depictio-frontend
+    environment:
+      - DEPICTIO_FASTAPI_EXTERNAL_PORT=${FASTAPI_PORT}
+      - DEPICTIO_DASH_EXTERNAL_PORT=${DASH_PORT}
 
   depictio-backend:
     container_name: ${COMPOSE_PROJECT_NAME}-depictio-backend
