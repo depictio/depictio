@@ -203,11 +203,7 @@
       },
       "column_name": "species",
       "column_type": "object",
-      "value": [
-        "Adelie",
-        "Chinstrap",
-        "Gentoo"
-      ],
+      "value": null,
       "scale": "linear",
       "marks_number": 2,
       "title_size": "md",
@@ -222,7 +218,8 @@
         ],
         "default_value": null
       },
-      "panel": "left"
+      "panel": "left",
+      "corrected_value": null
     },
     {
       "component_type": "interactive",
@@ -236,10 +233,7 @@
       },
       "column_name": "body_mass_g",
       "column_type": "float64",
-      "value": [
-        2700,
-        6300
-      ],
+      "value": null,
       "scale": "linear",
       "marks_number": 2,
       "title_size": "md",
@@ -254,7 +248,8 @@
           6300
         ]
       },
-      "panel": "left"
+      "panel": "left",
+      "corrected_value": null
     },
     {
       "component_type": "interactive",
@@ -268,11 +263,7 @@
       },
       "column_name": "island",
       "column_type": "object",
-      "value": [
-        "Biscoe",
-        "Dream",
-        "Torgersen"
-      ],
+      "value": null,
       "scale": "linear",
       "marks_number": 2,
       "title_size": "md",
@@ -287,7 +278,8 @@
         ],
         "default_value": null
       },
-      "panel": "left"
+      "panel": "left",
+      "corrected_value": null
     },
     {
       "component_type": "interactive",
@@ -301,10 +293,7 @@
       },
       "column_name": "sex",
       "column_type": "object",
-      "value": [
-        "male",
-        "female"
-      ],
+      "value": null,
       "scale": "linear",
       "marks_number": 2,
       "title_size": "md",
@@ -318,7 +307,8 @@
         ],
         "default_value": null
       },
-      "panel": "left"
+      "panel": "left",
+      "corrected_value": null
     },
     {
       "component_type": "interactive",
@@ -332,10 +322,7 @@
       },
       "column_name": "bill_length_mm",
       "column_type": "float64",
-      "value": [
-        32.1,
-        59.6
-      ],
+      "value": null,
       "scale": "linear",
       "marks_number": 2,
       "title_size": "md",
@@ -350,7 +337,8 @@
           59.6
         ]
       },
-      "panel": "left"
+      "panel": "left",
+      "corrected_value": null
     },
     {
       "index": "0c386b67-7594-4599-8f71-99195c14a6a9",

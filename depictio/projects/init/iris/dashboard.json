@@ -773,11 +773,11 @@
       },
       "value": [
         1,
-        4.72
+        6.9
       ],
       "corrected_value": [
         1,
-        4.72
+        6.9
       ],
       "parent_index": null,
       "scale": "linear",
@@ -948,14 +948,8 @@
           }
         }
       },
-      "value": [
-        "Setosa",
-        "Versicolor"
-      ],
-      "corrected_value": [
-        "Setosa",
-        "Versicolor"
-      ],
+      "value": null,
+      "corrected_value": null,
       "parent_index": null,
       "scale": "linear",
       "marks_number": 2,
