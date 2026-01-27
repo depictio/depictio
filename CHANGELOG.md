@@ -6,14 +6,54 @@
 
 
 <details>
-<summary>Click to expand the changelog for 0.6.0</summary>
+<summary>Click to expand the changelog for 0.6.1-b1</summary>
 
 ### Changes 📜
 
+#### New Features ✨
+
+* feat: add auto-screenshot callback for dashboard viewer [d22d66f3]
+* feat: add dev mode and optional MongoDB wipe to allocate-ports script [f97f5d6a]
+* feat: add tab name labels to HoverCard carousel preview [274a8b5b]
+* feat: add zoom preview to multi-tab dashboard carousel with HoverCard [355027dd]
+* feat: replace tab badge tooltip with thumbnail carousel for multi-tab dashboards [4423a438]
+* feat: add dashboard counts to section headers and expand all non-empty sections [5499ca6e]
+* feat: add tab count badge and screenshot carousel tooltip [ef6208c1]
+* feat: enhance dashboards management page with new categories and improved UX [0205bf00]
+* feat: improve workflow_dispatch UX with tag validation and listing [b9838c73]
+
+#### Bug Fixes 🐛
+
+* fix: add external port environment variables to multi-instance setup [17fd0f7a]
+* fix: use dashboard_id instead of _id for screenshot filename lookups [5d36e6e8]
+* fix: hide debug menu in screenshots and swap thumbnails based on theme on page load [c352c1ab]
+* fix: correct localStorage theme serialization and navigation flow for dual screenshots [2125d7ea]
+* fix: reduce badge spacing from 10px to 4px for tighter layout [51867510]
+* fix: restore triangle animations on /auth page with reduced-motion enabled [c60b5554]
+* fix: prevent duplicated dashboards from staying in examples [18f080a2]
+* fix: improve tab count badge logic and add debug logging [c296aa41]
+* fix: correct example dashboard precedence and restore share icon [dfefb7f3]
+* fix: enable triangle animations on /auth page by adding animation-fill-mode [d611a097]
+* fix: remove premature validation error on auth modal landing [bc5ce345]
+* fix: make Back to Dashboards link theme-compatible [8b1fdef3]
+* fix: correct service port binding and avatar profile navigation [4cf5930f]
+* fix: add DEPICTIO_CELERY_ENABLED to frontend and backend ConfigMaps [d2fb460e]
+* fix: correct kubectl label selectors to match Helm chart labels [7653aab1]
+* fix: enable automatic deployment for both beta and stable tags [fdab3df9]
+
+#### Improvements 🚀
+
+* refactor: move screenshot processing from API endpoint to Celery task [b67df558]
+
+#### Chores 🧹
+
+* chore: clean up irrelevant markdown files and reorganize documentation [9cf53485]
+
 #### Other Changes 📝
 
-* Bump version: 0.6.0-b18 → 0.6.0 [7fdd448d]
-* Bump version: 0.6.0-b17 → 0.6.0-b18 [1afcd278]
+* Bump version: 0.6.0-b18 → 0.6.1-b1 [f645ec71]
+* Update CHANGELOG.md for v0.6.0 [1bcf4aa8]
+* Update CHANGELOG.md for v0.6.0-b18 [d2afe72c]
 
 
 </details>
@@ -22,17 +62,7 @@
 
 For more details, please refer to the [documentation](https://depictio.github.io/depictio-docs/)
 
-ecessary steps [a2e22184]
-* refactor: Standardize import statements across multiple files for consistency [0349df19]
-* refactor: Reorganize import statements for consistency across multiple files [abd9c70d]
-* refactor: Standardize import statements across multiple files for consistency [50c50cf6]
-* refactor: Implement robust typing commands for improved input reliability in tests [f85a98e4]
-* refactor: remove excessive logging and unused settings checks in API and layout files [ae0ac70b]
-* refactor: clean up imports and formatting in logo.py for improved readability [08418f16]
-* refactor: update ASCII art logo display with scaling and color mapping enhancements [e24e6cdc]
-* refactor: comment out password management tests for future implementation [389ed2d6]
-* refactor: simplify input handling in save and text component callbacks [8937bea3]
-* style: enhance draggable grid and edit mode layout by minimizing padding and hiding unnecessary elements [37e2b7f8]
+ecessary elements [37e2b7f8]
 * style: remove conflicting pseudo-elements from ActionIcon drag handles and ensure proper display of children [324861e8]
 * style: adjust button alignment and padding in draggable grid components [ed2d08c0]
 * refactor: update auth modal styles for improved appearance and consistency [7ed7c995]
