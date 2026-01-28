@@ -6,22 +6,25 @@
 
 
 <details>
-<summary>Click to expand the changelog for 0.6.2-b7</summary>
+<summary>Click to expand the changelog for 0.6.2</summary>
 
 ### Changes 📜
 
-#### Bug Fixes 🐛
-
-* fix: Restore pre-created screenshot files for reference dashboards [e86f2778]
-* fix: Auth redirect on stale token + screenshot cleanup bug [8085bbc8]
-
-#### Chores 🧹
-
-* chore: Update uv.lock [e3883920]
-
 #### Other Changes 📝
 
-* Bump version: 0.6.2-b6 → 0.6.2-b7 [18cdf295]
+* Bump version: 0.6.2-b7 → 0.6.2 [75f8485b]
+* Update CHANGELOG.md for v0.6.2-b7 [c7406d41]
+* Update CHANGELOG.md for v0.6.2-b7 [a3d56436]
+* Update CHANGELOG.md for v0.6.2-b7 [284b1dc1]
+* Update CHANGELOG.md for v0.6.2-b6 [b4807a9d]
+* Update CHANGELOG.md for v0.6.2-b6 [ab4958a4]
+* Update CHANGELOG.md for v0.6.2-b5 [21ec82cd]
+* Update CHANGELOG.md for v0.6.2-b4 [68f5a134]
+* Update CHANGELOG.md for v0.6.2-b3 [05f61435]
+* Update CHANGELOG.md for v0.6.2-b2 [69e26eea]
+* Update CHANGELOG.md for v0.6.2-b1 [de2e64c1]
+* Update CHANGELOG.md for v0.6.1-b2 [49ebc39e]
+* Update CHANGELOG.md for v0.6.1 [00d9a078]
 
 
 </details>
@@ -30,8 +33,7 @@
 
 For more details, please refer to the [documentation](https://depictio.github.io/depictio-docs/)
 
-ectivity tests from CI workflow [9ffe00d6]
-* fix: remove obsolete MinIO Console connectivity test from workflow [6ee1d309]
+ectivity test from workflow [6ee1d309]
 * fix: enhance inter-service connectivity tests with readiness checks and improved error handling [ea147c59]
 * fix: add netcat-openbsd to Dockerfile dependencies for improved functionality [ccdf0b66]
 * fix: improve database and storage functionality tests in CI workflow [0ef1c937]
