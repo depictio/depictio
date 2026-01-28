@@ -6,19 +6,19 @@
 
 
 <details>
-<summary>Click to expand the changelog for 0.6.2-b5</summary>
+<summary>Click to expand the changelog for 0.6.2-b6</summary>
 
 ### Changes 📜
 
 #### Bug Fixes 🐛
 
-* fix: Remove incorrect MultiQC deltatable check from S3 cleanup [c53e24c5]
+* fix: Mount screenshots PVC in celery worker + handle None user [c99c890f]
+* fix: Handle None user in route_authenticated_user [7536b030]
 
 #### Other Changes 📝
 
-* Bump version: 0.6.2-b4 → 0.6.2-b5 [d2c6584b]
-* test: Remove api_upsert_deltatable mock from MultiQC processor test [40dec85f]
-* Bump version: 0.6.2-b3 → 0.6.2-b4 [ffd47437]
+* Bump version: 0.6.2-b5 → 0.6.2-b6 [c27ec51f]
+* Bump version: 0.6.2-b4 → 0.6.2-b5 [4c4f0813]
 
 
 </details>
@@ -27,124 +27,7 @@
 
 For more details, please refer to the [documentation](https://depictio.github.io/depictio-docs/)
 
-ecessary elements [37e2b7f8]
-* style: remove conflicting pseudo-elements from ActionIcon drag handles and ensure proper display of children [324861e8]
-* style: adjust button alignment and padding in draggable grid components [ed2d08c0]
-* refactor: update auth modal styles for improved appearance and consistency [7ed7c995]
-* refactor: update beforeEach hooks to use 'this.skip()' for unauthenticated mode checks [1e4119cf]
-* refactor: Refactor Dash components to use updated props and styling conventions [8ed8f068]
-* refactor: Refactor Dash components to use updated props and styling conventions [c231f280]
-* refactor: Update dependencies and refactor layout components to be compatible with dash v3 and dash mantine 2.0 [a7a0e3bb]
-* refactor: Refactor Dash components to use updated props and styling conventions [3faff78c]
-* refactor: Refactor Dash components to use updated props and styling conventions [6ff2fc5d]
-* refactor: Update dependencies and refactor layout components to be compatible with dash v3 and dash mantine 2.0 [76826003]
-* refactor: Refactor code structure for improved readability and maintainability [3ff3e54d]
-* refactor: Refactor Dash components to use updated props and styling conventions [dff749a1]
-* refactor: Refactor Dash components to use updated props and styling conventions [43272aa3]
-* refactor: Refactor Dash components to use updated props and styling conventions [40113600]
-* refactor: Refactor Dash components to use updated props and styling conventions [49ad3b19]
-* refactor: Refactor Dash components to use updated props and styling conventions [060a8cc7]
-* refactor: Update dependencies and refactor layout components to be compatible with dash v3 and dash mantine 2.0 [923de838]
-* refactor: update CLI and user models for improved configuration handling [519038ea]
-* refactor: Refactor code structure for improved readability and maintainability [89e62ec9]
-* refactor: Refactor Dash components to use updated props and styling conventions [6231ff4d]
-* refactor: Refactor Dash components to use updated props and styling conventions [1f40554d]
-* refactor: Refactor Dash components to use updated props and styling conventions [734241e7]
-* refactor: Update dependencies and refactor layout components to be compatible with dash v3 and dash mantine 2.0 [e8452447]
-
-#### Chores 🧹
-
-* chore: add SVG format for logos ; disable E2E test for in unauth mode ; adjust logo in README according theme in GH [9a9ceb9f]
-* chore: rebase ongoing [d317ea1c]
-* chore: initial commit over pre-commit [75cb3058]
-* chore: initial commit over pre-commit [6918c128]
-
-#### Other Changes 📝
-
-* Bump version: 0.1.1 → 0.2.0 [692c93d4]
-* Update dependencies and package versions in pyproject.toml and uv.lock [57d4e602]
-* Add vertical growing CSS and refactor layout components [1cd9bfae]
-* Enhance draggable grid component styles and edit mode functionality [556d64f2]
-* Refactor inline editable text and simple markdown input components for improved structure and readability [72aefb10]
-* Add prototypes for text editing components and requirements [fe058f26]
-* Refactor component frames to always show borders for draggable delimitation; enhance loading experience with skeleton components in stepper mode across card, figure, interactive, jbrowse, table, and text components; update button colors based on metadata; implement text component with rich text editor and configuration options. [59c8fc80]
-* Refactor RangeSlider prototypes for improved readability and consistency [32e8f5dc]
-* Add tests and debug scripts for circular reference issues in DMC RichTextEditor [0917b0aa]
-* Refactor imports and clean up code across multiple files [c99be270]
-* Refactor code for improved readability and maintainability [9adb450d]
-* Update CHANGELOG.md for v0.1.1 [34c98dec]
-* Bump version: 0.1.0 → 0.1.1 [670fc233]
-* Update CHANGELOG.md for v0.1.0 [386b4423]
-
-
-</details>
-
-### Documentation 📖
-
-For more details, please refer to the [documentation](https://depictio.github.io/depictio-docs/)
-
-ection [8913f698]
-* fix: update mock CLI configuration for backup tests [58f27258]
-* fix: resolve CLI configuration field name inconsistencies [fa9481b1]
-
-#### Improvements 🚀
-
-* refactor: update beforeEach hooks to use 'this.skip()' for unauthenticated mode checks [1e4119cf]
-* refactor: Refactor Dash components to use updated props and styling conventions [8ed8f068]
-* refactor: Refactor Dash components to use updated props and styling conventions [c231f280]
-* refactor: Update dependencies and refactor layout components to be compatible with dash v3 and dash mantine 2.0 [a7a0e3bb]
-* refactor: Refactor Dash components to use updated props and styling conventions [3faff78c]
-* refactor: Refactor Dash components to use updated props and styling conventions [6ff2fc5d]
-* refactor: Update dependencies and refactor layout components to be compatible with dash v3 and dash mantine 2.0 [76826003]
-* refactor: Refactor code structure for improved readability and maintainability [3ff3e54d]
-* refactor: Refactor Dash components to use updated props and styling conventions [dff749a1]
-* refactor: Refactor Dash components to use updated props and styling conventions [43272aa3]
-* refactor: Refactor Dash components to use updated props and styling conventions [40113600]
-* refactor: Refactor Dash components to use updated props and styling conventions [49ad3b19]
-* refactor: Refactor Dash components to use updated props and styling conventions [060a8cc7]
-* refactor: Update dependencies and refactor layout components to be compatible with dash v3 and dash mantine 2.0 [923de838]
-* refactor: update CLI and user models for improved configuration handling [519038ea]
-* refactor: Refactor code structure for improved readability and maintainability [89e62ec9]
-* refactor: Refactor Dash components to use updated props and styling conventions [6231ff4d]
-* refactor: Refactor Dash components to use updated props and styling conventions [1f40554d]
-* refactor: Refactor Dash components to use updated props and styling conventions [734241e7]
-* refactor: Update dependencies and refactor layout components to be compatible with dash v3 and dash mantine 2.0 [e8452447]
-
-#### Chores 🧹
-
-* chore: initial commit over pre-commit [75cb3058]
-* chore: initial commit over pre-commit [6918c128]
-
-#### Other Changes 📝
-
-* Bump version: 0.1.0 → 0.1.1 [60114a7b]
-* Update CHANGELOG.md for v0.1.0 [386b4423]
-
-
-</details>
-
-### Documentation 📖
-
-For more details, please refer to the [documentation](https://depictio.github.io/depictio-docs/)
-
-ectivity checks [e596e6da]
-* feat: add screenshot generation test to CI workflow and update dashboard screenshot endpoint response to protect user data [ad294b3e]
-* feat: add screenshot file copy step in deployment for improved dashboard functionality [b6534f01]
-* feat: enhance changelog generation with expandable details section and add documentation reference in README [05d579a2]
-* feat: add step to push Helm chart to GHCR on push and workflow_dispatch events [5b41d05b]
-* feat: enhance release name generation to ensure DNS compliance [86d5feaf]
-* feat: consolidate CI workflows by adding test, lint, build, and publish steps for depictio-cli [83abfc65]
-* feat: add Docker Buildx setup step in CI workflow [bb90dd98]
-* feat: update CI workflows and add initial CLI structure; remove setup.py and adjust pyproject.toml for dependencies [2915d3d2]
-* feat: update CI workflows and add initial CLI structure; remove setup.py and adjust pyproject.toml for dependencies [185031ee]
-* feat: add refresh token support across token management; enhance tests for token creation, validation, and expiration [6a198be9]
-* feat: enhance token management with refresh token support; update token validity checks and add refresh token endpoint [ae25380f]
-* feat: improve authentication process by optimizing token validity checks and adding debug logging; add minimal Dash app for testing [479b0935]
-* feat: update _create_user_in_db to allow optional user ID and group parameters; enhance user existence check [66d6aec9]
-* feat: enhance token validity checks with detailed logging and add callback for clearing expired tokens [f82641ef]
-* feat: update _create_user_in_db to accept ObjectId; enhance user creation tests [1790de31]
-* feat: enhance initialization process with atomic checks and cleanup; update user creation to include ID [800be102]
-* feat: add Flask security assessment scanner for comprehensive application security checks [caa5476c]
+er for comprehensive application security checks [caa5476c]
 * feat: add blocking for debug endpoints in Flask server [db8fb6b3]
 * feat: add GitHub Actions workflow for testing, linting, and building depictio-cli and clean up pyproject.toml [46503f33]
 * feat: update environment configuration for Gitpod setup and adjust logging verbosity [6b74b5f2]
