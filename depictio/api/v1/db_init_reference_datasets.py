@@ -289,21 +289,38 @@ class ReferenceDatasetRegistry:
             created_project = payload["project"]
         except Exception as e:
             # Handle race condition: another worker created the project between check and create
+            # This can manifest as DuplicateKeyError (MongoDB) or HTTPException 400 (API layer)
+            from fastapi import HTTPException
             from pymongo.errors import DuplicateKeyError
 
-            if (
+            is_duplicate_error = (
                 isinstance(e.__cause__, DuplicateKeyError)
                 or "duplicate key error" in str(e).lower()
-            ):
+                or "already exists" in str(e).lower()
+                or (
+                    isinstance(e, HTTPException)
+                    and e.status_code == 400
+                    and "already exists" in str(e.detail).lower()
+                )
+            )
+
+            if is_duplicate_error:
                 logger.warning(
                     f"Race condition detected: project {dataset_name} was created by another worker. "
                     f"Retrieving existing project."
                 )
-                # Retrieve the project that was created by the other worker
-                existing_project = projects_collection.find_one({"_id": static_project_id})
+                # Retrieve the project that was created by the other worker (by name since ID might differ)
+                existing_project = projects_collection.find_one({"name": project_config["name"]})
+                if not existing_project:
+                    # Try by ID as fallback
+                    existing_project = projects_collection.find_one({"_id": static_project_id})
+
                 if existing_project:
                     created_project = ProjectBeanie.from_mongo(existing_project)
-                    payload = {"success": False, "project": created_project}
+                    payload = {
+                        "success": True,
+                        "project": created_project,
+                    }  # Mark as success since project exists
                 else:
                     # This shouldn't happen, but re-raise if we can't find the project
                     raise
@@ -340,8 +357,8 @@ async def create_reference_datasets(
     """
     created_projects = []
 
-    # Create all four reference datasets
-    for dataset_name in ["iris", "penguins", "ampliseq", "multiqc"]:
+    # Create reference datasets (iris, penguins, ampliseq)
+    for dataset_name in ["iris", "penguins", "ampliseq"]:
         logger.info(f"Creating reference dataset: {dataset_name}")
 
         result = await ReferenceDatasetRegistry.create_reference_project(
