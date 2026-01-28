@@ -215,6 +215,14 @@ class ReferenceDatasetRegistry:
 
             project = ProjectBeanie.from_mongo(existing_project)
 
+            # Ensure project is public for reference projects
+            if not existing_project.get("is_public", False):
+                logger.info(f"Setting existing project {dataset_name} to public")
+                projects_collection.update_one(
+                    {"_id": static_project_id},
+                    {"$set": {"is_public": True}},
+                )
+
             # Register links if not already present
             existing_links = existing_project.get("links", [])
             if not existing_links and links_config:
@@ -240,6 +248,9 @@ class ReferenceDatasetRegistry:
             editors=[],
             viewers=[],
         )
+
+        # Set reference projects as public by default for K8s demo environments
+        project_config["is_public"] = True
 
         # Extract and remove _static_dc_id from join definitions (not allowed in ProjectBeanie)
         # These will be handled during join execution in the background processor
