@@ -12,6 +12,7 @@
 
 #### Bug Fixes 🐛
 
+* fix: Restore pre-created screenshot files for reference dashboards [e86f2778]
 * fix: Auth redirect on stale token + screenshot cleanup bug [8085bbc8]
 
 #### Other Changes 📝
@@ -25,8 +26,7 @@
 
 For more details, please refer to the [documentation](https://depictio.github.io/depictio-docs/)
 
-ectivity checks [978c9af5]
-* fix: Enhance backup strategy setup with detailed logging and verification steps for S3 connectivity [13ce3ff7]
+ectivity [13ce3ff7]
 * fix: Enhance S3 backup strategy to initialize backup results and combine locations for both strategies [3522347f]
 * fix: Update backup strategy tests to improve local backup file checks and refine S3 backup file naming [0c03ed20]
 * fix: Enhance backup CLI commands with verbose logging and update MinIO endpoint [d98266d2]
