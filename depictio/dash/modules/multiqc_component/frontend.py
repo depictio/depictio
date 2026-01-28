@@ -308,6 +308,10 @@ def design_multiqc(
                 id={"type": "multiqc-s3-store", "index": component_id},
                 data=[],
             ),
+            dcc.Store(
+                id={"type": "multiqc-trace-metadata", "index": component_id},
+                data={},  # Will be populated by callbacks
+            ),
             # CRITICAL: stored-metadata-component store for save functionality
             # Follow same pattern as card component for -tmp suffix handling
             dcc.Store(
@@ -523,6 +527,10 @@ def design_multiqc_from_model(component: MultiQCDashboardComponent) -> dmc.Paper
             dcc.Store(
                 id={"type": "multiqc-s3-store", "index": component_id},
                 data=state.s3_locations,
+            ),
+            dcc.Store(
+                id={"type": "multiqc-trace-metadata", "index": component_id},
+                data={},  # Will be populated by callbacks
             ),
             # CRITICAL: stored-metadata-component store for save functionality with rich metadata
             dcc.Store(
@@ -1389,9 +1397,24 @@ def register_callbacks_multiqc_component(app):
             f"Existing metadata: {bool(existing_metadata)}, Existing S3 locations: {len(existing_s3_locations) if existing_s3_locations else 0}"
         )
 
-        # Check if we already have restored metadata and s3_locations
+        # Check if we already have restored metadata and s3_locations with meaningful data
         # This happens when a dashboard is being restored from saved state
-        if existing_metadata and existing_s3_locations:
+        # We need to verify that metadata actually contains data, not just empty structures
+        has_meaningful_metadata = (
+            existing_metadata
+            and isinstance(existing_metadata, dict)
+            and (
+                (existing_metadata.get("modules") and len(existing_metadata.get("modules", [])) > 0)
+                or (
+                    existing_metadata.get("samples")
+                    and len(existing_metadata.get("samples", [])) > 0
+                )
+                or (existing_metadata.get("plots") and len(existing_metadata.get("plots", {})) > 0)
+            )
+        )
+        has_s3_locations = existing_s3_locations and len(existing_s3_locations) > 0
+
+        if has_meaningful_metadata and has_s3_locations:
             logger.info("Using existing restored MultiQC metadata and S3 locations")
             return (
                 existing_metadata,  # Keep existing metadata

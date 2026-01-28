@@ -783,9 +783,13 @@ def register_core_callbacks(app):
                 for dc in wf.get("data_collections", []):
                     dc_id = str(dc.get("_id"))
                     if dc.get("delta_location"):
+                        # Extract dc_type from config for special handling (e.g., MultiQC uses parquet)
+                        dc_config = dc.get("config", {})
+                        dc_type = dc_config.get("type") if isinstance(dc_config, dict) else None
                         delta_locations[dc_id] = {
                             "delta_location": dc["delta_location"],
                             "size_bytes": -1,
+                            "dc_type": dc_type,
                         }
 
         # Process all cards

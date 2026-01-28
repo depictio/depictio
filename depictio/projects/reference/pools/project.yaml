@@ -11,7 +11,7 @@ workflows:
     data_location:
       structure: "flat"
       locations:
-        - ../api/v1/configs/pools_dataset
+        - /app/depictio/projects/reference/pools
     data_collections:
     # Population metadata
     - data_collection_tag: "population_metadata"
@@ -22,7 +22,7 @@ workflows:
         scan:
           mode: single
           scan_parameters:
-            filename: "../api/v1/configs/pools_dataset/population_metadata.xlsx"
+            filename: "/app/depictio/projects/reference/pools/population_metadata.xlsx"
         dc_specific_properties:
           format: "XLSX"
           columns_description:
@@ -39,19 +39,13 @@ workflows:
         scan:
           mode: "single"
           scan_parameters:
-            filename: "../api/v1/configs/pools_dataset/demuxid_results.xlsx"
+            filename: "/app/depictio/projects/reference/pools/demuxid_results.xlsx"
         dc_specific_properties:
           format: "XLSX"
           columns_description:
             pool_name: "Name of the pool from which the sample originates"
             sample_id: "Sample identifier matching population metadata"
             cell_count: "Number of cells assigned to the sample"
-        join:
-          on_columns:
-            - sample_id
-          how: "inner"
-          with_dc:
-            - "population_metadata"
     # Strand-seq QC metrics
     # - data_collection_tag: "strandseq_qc_metrics"
     #   description: "Strand-seq quality control metrics for HGSVC samples"
@@ -61,7 +55,7 @@ workflows:
     #     scan:
     #       mode: "single"
     #       scan_parameters:
-    #         filename: "../api/v1/configs/pools_dataset/pools_qc_summary.xlsx"
+    #         filename: "/app/depictio/projects/reference/pools/pools_qc_summary.xlsx"
     #     dc_specific_properties:
     #       format: "XLSX"
     #       columns_description:
@@ -77,3 +71,21 @@ workflows:
     #       how: "inner"
     #       with_dc:
     #         - "demuxid_result"
+
+# ============================================================================
+# TABLE JOINS CONFIGURATION
+# ============================================================================
+# Client-side joins executed locally with `depictio data join`
+# ============================================================================
+
+joins:
+  # Join demultiplexing results with population metadata
+  - name: "demux_with_population"
+    description: "Demultiplexing results enriched with population metadata"
+    left_dc: "demuxid_result"
+    right_dc: "population_metadata"
+    on_columns:
+      - "sample_id"
+    how: "inner"
+    persist: true
+    workflow_name: "hgsvc_pools_analysis"

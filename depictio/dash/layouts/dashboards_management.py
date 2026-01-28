@@ -1518,7 +1518,12 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
         is_anonymous = hasattr(current_user, "is_anonymous") and current_user.is_anonymous
 
         # Example dashboards: explicitly marked by ID OR owned by example/demo users (but NOT current user)
-        example_dashboard_ids = ["6824cb3b89d2b72169309737"]  # Specific example dashboards
+        # Order: ampliseq, penguins, iris
+        example_dashboard_ids = [
+            "646b0f3c1e4a2d7f8e5b8ca2",  # nf-core/ampliseq
+            "6824cb3b89d2b72169309738",  # Penguins Species Analysis
+            "6824cb3b89d2b72169309737",  # Iris Species Comparison
+        ]
         example_dashboards = [
             d
             for d in dashboards
@@ -1539,6 +1544,16 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
                 )
             )
         ]
+
+        # Sort example dashboards by the order defined in example_dashboard_ids
+        example_dashboards.sort(
+            key=lambda d: (
+                example_dashboard_ids.index(str(d.get("dashboard_id", "")))
+                if str(d.get("dashboard_id", "")) in example_dashboard_ids
+                else len(example_dashboard_ids)
+            )
+        )
+
         example_ids = {str(d.get("dashboard_id", "")) for d in example_dashboards}
 
         # Public dashboards: public but not in examples

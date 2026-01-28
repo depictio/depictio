@@ -1,0 +1,94 @@
+###############################################################################
+# DEVELOPMENT ENVIRONMENT CONFIGURATION
+###############################################################################
+# WARNING: This file is for development purposes only.
+# Do NOT use these settings in production.
+# Documentation: https://depictio.github.io/depictio/installation/configuration
+###############################################################################
+
+# ----------------------------------------------------------------------------
+# Core Settings
+# ----------------------------------------------------------------------------
+DEPICTIO_CONTEXT=server
+DEPICTIO_LOGGING_VERBOSITY_LEVEL=INFO
+
+# ----------------------------------------------------------------------------
+# Storage (MinIO/S3)
+# ----------------------------------------------------------------------------
+DEPICTIO_MINIO_ROOT_USER=minio
+DEPICTIO_MINIO_ROOT_PASSWORD=minio123
+
+# Uncomment for external MinIO/S3 instance
+# DEPICTIO_MINIO_PUBLIC_URL=http://localhost:9000
+
+# ----------------------------------------------------------------------------
+# Database (MongoDB)
+# ----------------------------------------------------------------------------
+DEPICTIO_MONGODB_WIPE=true
+# Uncomment to customize database settings
+# DEPICTIO_MONGODB_DB_NAME=depictioDB
+# DEPICTIO_MONGODB_SERVICE_PORT=27018
+
+# ----------------------------------------------------------------------------
+# API & Frontend (Optional)
+# ----------------------------------------------------------------------------
+# Uncomment to customize service ports or public URLs
+# DEPICTIO_FASTAPI_PORT=8058
+# DEPICTIO_FASTAPI_PUBLIC_URL=http://localhost:8058
+# DEPICTIO_DASH_PORT=5080
+
+# ----------------------------------------------------------------------------
+# Authentication (Optional)
+# ----------------------------------------------------------------------------
+# Uncomment to enable Google OAuth
+# DEPICTIO_AUTH_GOOGLE_OAUTH_ENABLED=true
+# DEPICTIO_AUTH_GOOGLE_OAUTH_CLIENT_ID=your-client-id.apps.googleusercontent.com
+# DEPICTIO_AUTH_GOOGLE_OAUTH_CLIENT_SECRET=your-client-secret
+# DEPICTIO_AUTH_GOOGLE_OAUTH_REDIRECT_URI=http://localhost:5080/auth
+
+# Uncomment to allow anonymous access
+# DEPICTIO_AUTH_UNAUTHENTICATED_MODE=false
+
+# ----------------------------------------------------------------------------
+# S3 File Caching (Optional)
+# ----------------------------------------------------------------------------
+# Persistent cache directory for S3 files
+# DEPICTIO_S3_CACHE_DIR=/tmp/depictio_s3_cache
+
+# S3 FUSE mount points (comma-separated)
+# DEPICTIO_S3_MOUNT_POINTS=/mnt/s3
+
+# ----------------------------------------------------------------------------
+# Performance & Background Tasks
+# ----------------------------------------------------------------------------
+# Enable background callbacks for DASHBOARD VIEW/EDIT MODE
+# NOTE: Celery worker ALWAYS runs (required for component design/editing)
+# This parameter only controls whether dashboard view mode uses background callbacks
+# - true: Dashboard view/edit uses background callbacks (better performance, requires Redis)
+# - false: Dashboard view/edit uses synchronous callbacks (simpler, no Redis dependency)
+# Component design/editing ALWAYS uses background callbacks regardless of this setting
+DEPICTIO_CELERY_ENABLED=false
+
+# ----------------------------------------------------------------------------
+# Development Flags
+# ----------------------------------------------------------------------------
+# Enable development mode with additional debugging
+DEPICTIO_DEV_MODE=true
+
+# Enable MVP YAML format for dashboards
+DEPICTIO_DASHBOARD_YAML_MVP_MODE=true
+
+# Enable Playwright development mode for E2E testing
+# DEPICTIO_PLAYWRIGHT_DEV_MODE=false
+
+# ----------------------------------------------------------------------------
+# System Configuration
+# ----------------------------------------------------------------------------
+# Container user and group IDs (uncomment if needed)
+# UID=502
+# GID=20
+
+###############################################################################
+# For production deployment, see .env.example and documentation
+###############################################################################
+DATA_DIR=.

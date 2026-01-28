@@ -7,7 +7,7 @@ with fallback to in-memory caching.
 
 import pickle
 import time
-from typing import Any, Optional
+from typing import Any, Optional, cast
 
 import polars as pl
 
@@ -137,7 +137,7 @@ def get_cache() -> SimpleCache:
     global _cache
     if _cache is None:
         _cache = SimpleCache()
-    return _cache
+    return cast(SimpleCache, _cache)
 
 
 # Simple convenience functions

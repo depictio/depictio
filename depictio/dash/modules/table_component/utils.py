@@ -105,6 +105,7 @@ def _load_dataframe(
     token: str,
     index: str,
     refresh: bool,
+    init_data: dict[str, dict] | None = None,
 ) -> pl.DataFrame:
     """Load DataFrame from delta table if needed.
 
@@ -114,6 +115,7 @@ def _load_dataframe(
         token: Authentication token.
         index: Component index for logging.
         refresh: Whether to refresh data from source.
+        init_data: Dashboard initialization data with delta locations and dc_type.
 
     Returns:
         Loaded DataFrame or empty DataFrame if loading fails.
@@ -127,9 +129,9 @@ def _load_dataframe(
 
     # Handle joined data collection IDs - don't convert to ObjectId
     if isinstance(dc_id, str) and "--" in dc_id:
-        return load_deltatable_lite(ObjectId(wf_id), dc_id, TOKEN=token)
+        return load_deltatable_lite(ObjectId(wf_id), dc_id, TOKEN=token, init_data=init_data)
 
-    return load_deltatable_lite(ObjectId(wf_id), ObjectId(dc_id), TOKEN=token)
+    return load_deltatable_lite(ObjectId(wf_id), ObjectId(dc_id), TOKEN=token, init_data=init_data)
 
 
 def _configure_column_filters(cols: dict | None) -> None:
@@ -422,7 +424,8 @@ def build_table(**kwargs) -> html.Div | dmc.Paper | dcc.Loading:
 
     # Load data if needed
     if df.is_empty():
-        df = _load_dataframe(wf_id, dc_id, token, index, kwargs.get("refresh", True))
+        init_data = kwargs.get("init_data")
+        df = _load_dataframe(wf_id, dc_id, token, index, kwargs.get("refresh", True), init_data)
     # Configure columns
     _configure_column_filters(cols)
     column_defs = _build_column_definitions(cols)

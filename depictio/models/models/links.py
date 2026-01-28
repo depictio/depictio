@@ -13,7 +13,7 @@ Key concepts:
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from depictio.models.models.base import PyObjectId
 
@@ -144,6 +144,17 @@ class DCLink(BaseModel):
     )
 
     model_config = ConfigDict(extra="forbid")
+
+    @model_validator(mode="before")
+    @classmethod
+    def convert_id_field(cls, values: dict) -> dict:
+        """Convert MongoDB _id field to id for compatibility."""
+        if not isinstance(values, dict):
+            return values
+        # Convert _id to id if present (from MongoDB documents)
+        if "_id" in values:
+            values["id"] = values.pop("_id")
+        return values
 
     @field_validator("source_dc_id", "target_dc_id")
     @classmethod

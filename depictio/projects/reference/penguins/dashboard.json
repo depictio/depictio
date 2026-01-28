@@ -1,0 +1,700 @@
+{
+  "_id": {
+    "$oid": "6824cb3b89d2b72169309738"
+  },
+  "dashboard_id": {
+    "$oid": "6824cb3b89d2b72169309738"
+  },
+  "title": "Penguins Species Analysis",
+  "project_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8c9d"
+  },
+  "permissions": {
+    "owners": [
+      {
+        "_id": {
+          "$oid": "67658ba033c8b59ad489d7c7"
+        },
+        "email": "admin@example.com",
+        "is_admin": true
+      }
+    ],
+    "editors": [],
+    "viewers": []
+  },
+  "stored_metadata": [
+    {
+      "index": "9bb3858f-9b18-43a4-86ac-467b5dc5ddd6",
+      "component_type": "figure",
+      "visu_type": "scatter",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8c9e"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca1"
+      },
+      "dict_kwargs": {
+        "x": "flipper_length_mm",
+        "y": "body_mass_g",
+        "color": "species",
+        "symbol": "island",
+        "size": "bill_length_mm",
+        "color_discrete_map": "{\"Adelie\": \"#6366f1\", \"Chinstrap\": \"#f59e0b\", \"Gentoo\": \"#10b981\"}",
+        "title": "Body Mass vs Flipper Length by Species and Island",
+        "template": "mantine_light",
+        "size_max": 15,
+        "marginal_x": "box",
+        "marginal_y": "violin",
+        "trendline": "lowess",
+        "labels": "{\"flipper_length_mm\": \"Flipper Length (mm)\", \"body_mass_g\": \"Body Mass (g)\", \"bill_length_mm\": \"Bill Length (mm)\", \"island\": \"Island\", \"species\": \"Species\"}"
+      },
+      "panel": "right"
+    },
+    {
+      "index": "92741cf5-bc3e-4d68-9739-e8cb47cf0192",
+      "component_type": "figure",
+      "visu_type": "box",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8c9e"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca1"
+      },
+      "dict_kwargs": {
+        "x": "species",
+        "y": "bill_length_mm",
+        "color": "sex",
+        "color_discrete_map": "{\"male\": \"#1976D2\", \"female\": \"#E91E63\"}",
+        "title": "Bill Length Distribution by Species and Sex",
+        "template": "mantine_light",
+        "boxmode": "group",
+        "points": "all",
+        "notched": true,
+        "labels": "{\"bill_length_mm\": \"Bill Length (mm)\", \"species\": \"Species\", \"sex\": \"Sex\"}"
+      },
+      "panel": "right"
+    },
+    {
+      "index": "d69527a8-3367-4d09-bd76-d9f3d85a0fed",
+      "component_type": "figure",
+      "visu_type": "histogram",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8c9e"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca1"
+      },
+      "dict_kwargs": {
+        "x": "bill_depth_mm",
+        "color": "species",
+        "color_discrete_map": "{\"Adelie\": \"#6366f1\", \"Chinstrap\": \"#f59e0b\", \"Gentoo\": \"#10b981\"}",
+        "title": "Bill Depth Distribution by Species",
+        "template": "mantine_light",
+        "barmode": "overlay",
+        "opacity": 0.7,
+        "nbins": 30,
+        "marginal": "rug",
+        "labels": "{\"bill_depth_mm\": \"Bill Depth (mm)\", \"species\": \"Species\"}"
+      },
+      "panel": "right"
+    },
+    {
+      "index": "a67e6d14-8c3d-429a-a26c-253ccd15cfcb",
+      "component_type": "figure",
+      "mode": "code",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8c9e"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca1"
+      },
+      "code_content": "df_modified = df.to_pandas().groupby(['island','species']).agg({'body_mass_g':'mean','bill_length_mm':'count'}).reset_index().rename(columns={'bill_length_mm':'count'})\nfig = px.sunburst(df_modified,path=['island','species'],values='count',color='island',color_discrete_map={\"Biscoe\":\"#6366f1\",\"Dream\":\"#f59e0b\",\"Torgersen\":\"#10b981\"},title='Palmer Penguins: Island & Species Distribution',hover_data={'body_mass_g':':.0f'})\n",
+      "panel": "right"
+    },
+    {
+      "index": "5253ea1b-c289-49bb-84cf-b0311ab78ba5",
+      "component_type": "card",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8c9e"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca1"
+      },
+      "aggregation": "nunique",
+      "column_type": "object",
+      "column_name": "species",
+      "title": "Species Diversity",
+      "title_color": "#8BC34A",
+      "icon_name": "mdi:penguin",
+      "icon_color": "#8BC34A",
+      "title_font_size": "xl",
+      "value_font_size": "xl",
+      "panel": "right"
+    },
+    {
+      "index": "6495257f-4401-4e6f-b5f6-0b8b337b2015",
+      "component_type": "card",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8c9e"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca1"
+      },
+      "aggregation": "average",
+      "column_type": "float64",
+      "column_name": "body_mass_g",
+      "title": "Avg Body Mass (g)",
+      "title_color": "#F68B33",
+      "icon_name": "mdi:weight",
+      "icon_color": "#F68B33",
+      "title_font_size": "xl",
+      "value_font_size": "xl",
+      "panel": "right"
+    },
+    {
+      "index": "d9bacf32-c2ff-44ca-8abc-0f108a2aee5e",
+      "component_type": "card",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8c9e"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca1"
+      },
+      "aggregation": "count",
+      "column_type": "object",
+      "column_name": "individual_id",
+      "title": "Total Individuals",
+      "title_color": "#5C6BC0",
+      "icon_name": "mdi:counter",
+      "icon_color": "#5C6BC0",
+      "title_font_size": "xl",
+      "value_font_size": "xl",
+      "panel": "right"
+    },
+    {
+      "index": "6074afc3-9b9b-4cfc-9b29-5bf30d672092",
+      "component_type": "card",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8c9e"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca1"
+      },
+      "aggregation": "average",
+      "column_type": "float64",
+      "column_name": "flipper_length_mm",
+      "title": "`avg_flipper_length_mm`",
+      "title_color": "#26A69A",
+      "icon_name": "mdi:ruler",
+      "icon_color": "#26A69A",
+      "title_font_size": "md",
+      "value_font_size": "xl",
+      "panel": "right"
+    },
+    {
+      "component_type": "interactive",
+      "interactive_component_type": "MultiSelect",
+      "index": "23a83a6c-c03f-4515-a428-b53b7bc5deae",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8c9e"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca1"
+      },
+      "column_name": "species",
+      "column_type": "object",
+      "value": null,
+      "scale": "linear",
+      "marks_number": 2,
+      "title_size": "md",
+      "custom_color": "#858585",
+      "icon_name": "mdi:filter",
+      "default_state": {
+        "type": "select",
+        "options": [
+          "Adelie",
+          "Chinstrap",
+          "Gentoo"
+        ],
+        "default_value": null
+      },
+      "panel": "left",
+      "corrected_value": null
+    },
+    {
+      "component_type": "interactive",
+      "interactive_component_type": "RangeSlider",
+      "index": "718548d3-8dd8-42e7-8aea-bdd63b1966a2",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8c9e"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca1"
+      },
+      "column_name": "body_mass_g",
+      "column_type": "float64",
+      "value": null,
+      "scale": "linear",
+      "marks_number": 2,
+      "title_size": "md",
+      "custom_color": "#45B8AC",
+      "icon_name": "bx:slider-alt",
+      "default_state": {
+        "type": "range",
+        "min_value": 2700,
+        "max_value": 6300,
+        "default_range": [
+          2700,
+          6300
+        ]
+      },
+      "panel": "left",
+      "corrected_value": null
+    },
+    {
+      "component_type": "interactive",
+      "interactive_component_type": "MultiSelect",
+      "index": "ea1e161c-ea12-4386-89a4-c40796dcc0c0",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8c9e"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca1"
+      },
+      "column_name": "island",
+      "column_type": "object",
+      "value": null,
+      "scale": "linear",
+      "marks_number": 2,
+      "title_size": "md",
+      "custom_color": "#7E57C2",
+      "icon_name": "mdi:island",
+      "default_state": {
+        "type": "select",
+        "options": [
+          "Biscoe",
+          "Dream",
+          "Torgersen"
+        ],
+        "default_value": null
+      },
+      "panel": "left",
+      "corrected_value": null
+    },
+    {
+      "component_type": "interactive",
+      "interactive_component_type": "MultiSelect",
+      "index": "4c131970-f698-43dc-a1f1-4c08d169f104",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8c9e"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca1"
+      },
+      "column_name": "sex",
+      "column_type": "object",
+      "value": null,
+      "scale": "linear",
+      "marks_number": 2,
+      "title_size": "md",
+      "custom_color": "#EC407A",
+      "icon_name": "mdi:gender-male-female",
+      "default_state": {
+        "type": "select",
+        "options": [
+          "male",
+          "female"
+        ],
+        "default_value": null
+      },
+      "panel": "left",
+      "corrected_value": null
+    },
+    {
+      "component_type": "interactive",
+      "interactive_component_type": "RangeSlider",
+      "index": "5cf056cb-dcec-42ab-a9f9-6043b98ec780",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8c9e"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca1"
+      },
+      "column_name": "bill_length_mm",
+      "column_type": "float64",
+      "value": null,
+      "scale": "linear",
+      "marks_number": 2,
+      "title_size": "md",
+      "custom_color": "#FF7043",
+      "icon_name": "bx:slider",
+      "default_state": {
+        "type": "range",
+        "min_value": 32.1,
+        "max_value": 59.6,
+        "default_range": [
+          32.1,
+          59.6
+        ]
+      },
+      "panel": "left",
+      "corrected_value": null
+    },
+    {
+      "index": "0c386b67-7594-4599-8f71-99195c14a6a9",
+      "component_type": "table",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8c9e"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca1"
+      },
+      "panel": "right",
+      "dc_config": {
+        "description": "Complete penguin dataset with physical features and demographics",
+        "type": "table",
+        "metatype": "Aggregate",
+        "scan": {
+          "mode": "join",
+          "scan_parameters": {
+            "join_type": "inner"
+          }
+        },
+        "dc_specific_properties": {
+          "format": "parquet",
+          "polars_kwargs": {},
+          "columns_description": {
+            "individual_id": "Unique individual penguin ID within species",
+            "bill_length_mm": "Bill length in millimeters",
+            "bill_depth_mm": "Bill depth in millimeters",
+            "flipper_length_mm": "Flipper length in millimeters",
+            "body_mass_g": "Body mass in grams",
+            "island": "Island location (Biscoe, Dream, Torgersen)",
+            "sex": "Penguin sex (male, female)",
+            "year": "Observation year",
+            "species": "Species name (Adelie, Chinstrap, Gentoo)"
+          }
+        },
+        "join": {
+          "left_dc": "physical_features",
+          "right_dc": "demographic_data",
+          "on_columns": [
+            "individual_id"
+          ],
+          "how": "inner"
+        }
+      },
+      "cols_json": {
+        "individual_id": {
+          "type": "object",
+          "description": "Unique individual penguin ID within species",
+          "specs": {
+            "count": 342,
+            "mode": "N1A1",
+            "nunique": 342
+          },
+          "filter": "agTextColumnFilter",
+          "floatingFilter": true
+        },
+        "bill_length_mm": {
+          "type": "float64",
+          "description": "Bill length in millimeters",
+          "specs": {
+            "count": 342,
+            "unique": 165,
+            "min": 32.1,
+            "max": 59.6,
+            "average": 43.92
+          },
+          "filter": "agNumberColumnFilter",
+          "floatingFilter": true,
+          "filterParams": {
+            "filterOptions": [
+              "equals",
+              "lessThan",
+              "greaterThan",
+              "inRange"
+            ],
+            "maxNumConditions": 2
+          }
+        },
+        "bill_depth_mm": {
+          "type": "float64",
+          "description": "Bill depth in millimeters",
+          "specs": {
+            "count": 342,
+            "unique": 81,
+            "min": 13.1,
+            "max": 21.5,
+            "average": 17.15
+          },
+          "filter": "agNumberColumnFilter",
+          "floatingFilter": true,
+          "filterParams": {
+            "filterOptions": [
+              "equals",
+              "lessThan",
+              "greaterThan",
+              "inRange"
+            ],
+            "maxNumConditions": 2
+          }
+        },
+        "flipper_length_mm": {
+          "type": "float64",
+          "description": "Flipper length in millimeters",
+          "specs": {
+            "count": 342,
+            "unique": 56,
+            "min": 172,
+            "max": 231,
+            "average": 200.92
+          },
+          "filter": "agNumberColumnFilter",
+          "floatingFilter": true,
+          "filterParams": {
+            "filterOptions": [
+              "equals",
+              "lessThan",
+              "greaterThan",
+              "inRange"
+            ],
+            "maxNumConditions": 2
+          }
+        },
+        "body_mass_g": {
+          "type": "float64",
+          "description": "Body mass in grams",
+          "specs": {
+            "count": 342,
+            "unique": 95,
+            "min": 2700,
+            "max": 6300,
+            "average": 4201.75
+          },
+          "filter": "agNumberColumnFilter",
+          "floatingFilter": true,
+          "filterParams": {
+            "filterOptions": [
+              "equals",
+              "lessThan",
+              "greaterThan",
+              "inRange"
+            ],
+            "maxNumConditions": 2
+          }
+        },
+        "island": {
+          "type": "object",
+          "description": "Island location (Biscoe, Dream, Torgersen)",
+          "specs": {
+            "count": 342,
+            "mode": "Biscoe",
+            "nunique": 3
+          },
+          "filter": "agTextColumnFilter",
+          "floatingFilter": true
+        },
+        "sex": {
+          "type": "object",
+          "description": "Penguin sex (male, female)",
+          "specs": {
+            "count": 342,
+            "mode": "male",
+            "nunique": 2
+          },
+          "filter": "agTextColumnFilter",
+          "floatingFilter": true
+        },
+        "year": {
+          "type": "int64",
+          "description": "Observation year",
+          "specs": {
+            "count": 342,
+            "unique": 3,
+            "min": 2007,
+            "max": 2009,
+            "average": 2008
+          },
+          "filter": "agNumberColumnFilter",
+          "floatingFilter": true,
+          "filterParams": {
+            "filterOptions": [
+              "equals",
+              "lessThan",
+              "greaterThan",
+              "inRange"
+            ],
+            "maxNumConditions": 2
+          }
+        },
+        "species": {
+          "type": "object",
+          "description": "Species name (Adelie, Chinstrap, Gentoo)",
+          "specs": {
+            "count": 342,
+            "mode": "Adelie",
+            "nunique": 3
+          },
+          "filter": "agTextColumnFilter",
+          "floatingFilter": true
+        }
+      }
+    }
+  ],
+  "stored_layout_data": [],
+  "is_public": true,
+  "icon": "/assets/images/icons/favicon.png",
+  "version": 1,
+  "left_panel_layout_data": [
+    {
+      "i": "box-23a83a6c-c03f-4515-a428-b53b7bc5deae",
+      "x": 0,
+      "y": 0,
+      "w": 1,
+      "h": 2,
+      "static": false
+    },
+    {
+      "i": "box-718548d3-8dd8-42e7-8aea-bdd63b1966a2",
+      "x": 0,
+      "y": 2,
+      "w": 1,
+      "h": 3,
+      "static": false
+    },
+    {
+      "i": "box-ea1e161c-ea12-4386-89a4-c40796dcc0c0",
+      "x": 0,
+      "y": 5,
+      "w": 1,
+      "h": 2,
+      "static": false
+    },
+    {
+      "i": "box-4c131970-f698-43dc-a1f1-4c08d169f104",
+      "x": 0,
+      "y": 7,
+      "w": 1,
+      "h": 2,
+      "static": false
+    },
+    {
+      "i": "box-5cf056cb-dcec-42ab-a9f9-6043b98ec780",
+      "x": 0,
+      "y": 9,
+      "w": 1,
+      "h": 3,
+      "static": false
+    }
+  ],
+  "right_panel_layout_data": [
+    {
+      "i": "box-5253ea1b-c289-49bb-84cf-b0311ab78ba5",
+      "x": 0,
+      "y": 0,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-6495257f-4401-4e6f-b5f6-0b8b337b2015",
+      "x": 2,
+      "y": 0,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-d9bacf32-c2ff-44ca-8abc-0f108a2aee5e",
+      "x": 4,
+      "y": 0,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-6074afc3-9b9b-4cfc-9b29-5bf30d672092",
+      "x": 6,
+      "y": 0,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-9bb3858f-9b18-43a4-86ac-467b5dc5ddd6",
+      "x": 0,
+      "y": 2,
+      "w": 8,
+      "h": 5,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-92741cf5-bc3e-4d68-9739-e8cb47cf0192",
+      "x": 0,
+      "y": 7,
+      "w": 4,
+      "h": 5,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-d69527a8-3367-4d09-bd76-d9f3d85a0fed",
+      "x": 4,
+      "y": 7,
+      "w": 4,
+      "h": 5,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-a67e6d14-8c3d-429a-a26c-253ccd15cfcb",
+      "x": 0,
+      "y": 12,
+      "w": 8,
+      "h": 5,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-0c386b67-7594-4599-8f71-99195c14a6a9",
+      "x": 0,
+      "y": 17,
+      "w": 8,
+      "h": 5,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    }
+  ]
+}

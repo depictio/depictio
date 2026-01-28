@@ -33,7 +33,7 @@ def download_penguins_data():
 
 def create_directory_structure():
     """Create the directory structure for Depictio"""
-    base_dir = "depictio/api/v1/configs/penguins_dataset"
+    base_dir = "depictio/projects/reference/penguins"
 
     # Create main directory
     os.makedirs(base_dir, exist_ok=True)
@@ -176,7 +176,7 @@ def main():
 
     print("\n🚀 To use with Depictio:")
     print("   Use the separate depictio_config.yaml file")
-    print("   Point it to: /app/depictio/api/v1/configs/penguins_dataset")
+    print("   Point it to: /app/depictio/projects/reference/penguins")
 
 
 if __name__ == "__main__":
