@@ -12,12 +12,14 @@
 
 #### Bug Fixes 🐛
 
-* fix: Mount screenshots PVC in celery worker + handle None user [c99c890f]
+* fix: Correct corrupted version strings in pyproject.toml files [8bb3a7a5]
+* fix: Correct corrupted Helm chart YAML from version bump [2da10216]
+* fix: Handle race condition in reference dataset init + remove multiqc [8766aefa]
+* fix: Mount screenshots PVC in celery worker for shared access [652799b4]
 * fix: Handle None user in route_authenticated_user [7536b030]
 
 #### Other Changes 📝
 
-* Bump version: 0.6.2-b5 → 0.6.2-b6 [c27ec51f]
 * Bump version: 0.6.2-b4 → 0.6.2-b5 [4c4f0813]
 
 
@@ -27,30 +29,7 @@
 
 For more details, please refer to the [documentation](https://depictio.github.io/depictio-docs/)
 
-er for comprehensive application security checks [caa5476c]
-* feat: add blocking for debug endpoints in Flask server [db8fb6b3]
-* feat: add GitHub Actions workflow for testing, linting, and building depictio-cli and clean up pyproject.toml [46503f33]
-* feat: update environment configuration for Gitpod setup and adjust logging verbosity [6b74b5f2]
-* feat: update Gitpod setup for zsh and Docker permissions [6b3bc259]
-* feat: enhance Gitpod setup with zsh and starship configuration [a1e50c03]
-* feat: enhance Gitpod setup with zsh and starship configuration [8b29d277]
-* feat: enhance Iris integration verification in CI workflow ; add checks for project, deltatable, and dashboard [9a8a6b00]
-* feat: rename docker-setup job to docker-system-init and update dependencies in CI workflow ; add fixture to set DEPICTIO_CONTEXT environment variable in test suite (test_scan_utils) [596395e6]
-* feat: refactor deploy workflow to split CI jobs, enhance logging, and streamline Docker setup and integration tests [1d605c88]
-* feat: add run and standalone commands to CLI, enhance logging, and remove installation test script [0bad4848]
-* feat: add logging step for depictio-frontend in deployment workflow [223cbcc0]
-* feat: enhance S3 configuration handling and logging in storage options conversion [54fec27c]
-* feat: add backend log retrieval steps to Iris CLI workflow [96a0630a]
-
-#### Bug Fixes 🐛
-
-* fix: Comment out unused properties for clarity and future implementation [fbdc0596]
-* fix: update user handling in API calls and adjust token generation logic [097b2a97]
-* fix: update user model references in API calls to use User instead of UserBaseUI [612cd195]
-* fix: update user model references in admin management layout [66f11e14]
-* fix: reapply CLI configuration field name fixes [fec3fb74]
-* fix: update test assertions and mock configurations for consistency [6bceb3d4]
-* fix: enhance sleep call assertions in TestEnsureMongoDBConnection [14938d2c]
+ection [14938d2c]
 * fix: update mock CLI configuration for backup tests [0801b6e7]
 * fix: make tests compliant [7b6712b2]
 * fix: Add type ignore comments for unresolved attributes in test assertions [aca7cf2c]
