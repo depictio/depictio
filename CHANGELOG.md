@@ -6,21 +6,17 @@
 
 
 <details>
-<summary>Click to expand the changelog for 0.6.2-b6</summary>
+<summary>Click to expand the changelog for 0.6.2-b7</summary>
 
 ### Changes 📜
 
 #### Bug Fixes 🐛
 
-* fix: Correct corrupted version strings in pyproject.toml files [8bb3a7a5]
-* fix: Correct corrupted Helm chart YAML from version bump [2da10216]
-* fix: Handle race condition in reference dataset init + remove multiqc [8766aefa]
-* fix: Mount screenshots PVC in celery worker for shared access [652799b4]
-* fix: Handle None user in route_authenticated_user [7536b030]
+* fix: Auth redirect on stale token + screenshot cleanup bug [8085bbc8]
 
 #### Other Changes 📝
 
-* Bump version: 0.6.2-b4 → 0.6.2-b5 [4c4f0813]
+* Bump version: 0.6.2-b6 → 0.6.2-b7 [18cdf295]
 
 
 </details>
@@ -29,17 +25,7 @@
 
 For more details, please refer to the [documentation](https://depictio.github.io/depictio-docs/)
 
-ection [14938d2c]
-* fix: update mock CLI configuration for backup tests [0801b6e7]
-* fix: make tests compliant [7b6712b2]
-* fix: Add type ignore comments for unresolved attributes in test assertions [aca7cf2c]
-* fix: Expand backup strategy options to include S3 to S3 and both configurations [12f29bd3]
-* fix: Update environment file creation process for Docker Compose and improve messaging [5eb216b4]
-* fix: Simplify backup strategy configuration to focus on local strategy and update environment file handling [f6224cc1]
-* fix: Refine Docker build conditions for local and GitHub Actions environments [ba1480de]
-* fix: Update S3 endpoint URL in backup configuration and remove quotes from access/secret keys [f6cdba70]
-* fix: Update CI configuration to improve caching strategy and streamline backup environment setup [7bed4023]
-* fix: Update backup strategy configuration to use docker-compose environment file and enhance MongoDB connectivity checks [978c9af5]
+ectivity checks [978c9af5]
 * fix: Enhance backup strategy setup with detailed logging and verification steps for S3 connectivity [13ce3ff7]
 * fix: Enhance S3 backup strategy to initialize backup results and combine locations for both strategies [3522347f]
 * fix: Update backup strategy tests to improve local backup file checks and refine S3 backup file naming [0c03ed20]
