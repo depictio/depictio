@@ -270,6 +270,13 @@ def route_authenticated_user(
     # Fetch user data (API call is cached)
     user = api_call_fetch_user_from_token(access_token)
 
+    # Handle invalid/expired token - user will be None
+    if user is None:
+        logger.warning("Token validation failed - user is None, redirecting to auth")
+        header = create_default_header("Welcome to Depictio")
+        content = create_users_management_layout()
+        return content, header
+
     # Check if user is anonymous
     is_anonymous = hasattr(user, "is_anonymous") and user.is_anonymous
 
