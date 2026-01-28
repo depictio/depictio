@@ -6,74 +6,23 @@
 
 
 <details>
-<summary>Click to expand the changelog for 0.6.2-b1</summary>
+<summary>Click to expand the changelog for 0.6.2-b2</summary>
 
 ### Changes 📜
 
-#### New Features ✨
-
-* feat: update dashboard screenshots for improved visual representation [f647f632]
-* feat: add reference dashboard screenshots and improve CI verification [357f8cc5]
-* feat: add color_continuous_scale parameter to iris box plot [fa37c856]
-* feat: update iris dashboard with relevant botanical icons [94b9bb9e]
-* feat: configure example dashboards with proper titles and ordering [5fa0313f]
-* feat: implement two-tab ampliseq dashboard system [c13acb5e]
-* feat: implement cross-DC filtering with automatic column translation [23b579b5]
-* feat: complete initialization system robustness improvements [16023689]
-* feat: apply consistent island color palette to scatter plot [7d1d38d3]
-* feat: replace scatter with sunburst chart for hierarchical island/species view [01827678]
-* feat: extend penguins dashboard with custom code-based island morphology visualization [a26a1e88]
-* feat: add CLI test project and update CI for reference datasets [79183fb5]
-* feat: add proper multiqc components to multiqc dashboard [fceface3]
-* feat: add minimal default dashboards for penguins and multiqc [bf161f9f]
-* feat: add multiqc reference dataset with complete data files [b9731ea7]
-* feat: add automatic link registration for reference datasets [d7dd77da]
-* feat: implement auto-registration for penguins and multiqc reference datasets [415d43c8]
-
 #### Bug Fixes 🐛
 
-* fix: K8s deployment CORS, Celery screenshots, and delta table errors [efe90238]
-* fix: make reference dataset deltatable checks non-fatal in CLI jobs [1934ec8d]
-* fix: use correct Ampliseq project name in CI verification [77f60ee9]
-* fix: remove redundant color parameter from box plot and increase histogram bins [eaaf61df]
-* fix: allow extra fields in JoinDefinition and add cols_json to penguins table [276f9187]
-* fix: add dc_config to penguins table component [93ca8213]
-* fix: parse JSON string styling parameters in UI mode figures [6cba22e2]
-* fix: add missing mocks for compute_file_hash and api_upsert_deltatable in test [053ba53f]
-* fix: reset interactive component values to default (no filtering) [de4d16b2]
-* fix: restore correct dashboards_management.py from main [7093856d]
-* fix: populate MultiQC metadata from dc_specific_properties across all layers [c16c9b10]
-* fix: correct MultiQC deltatable detection and prevent silent failures [a48364a2]
-* fix: populate s3_locations in ampliseq MultiQC dashboard component [5404e565]
-* fix: prevent initialization race condition by preserving lock during database wipe [dc52e201]
-* fix: register MultiQC S3 locations in deltatables collection [ec43e077]
-* fix: resolve ampliseq data registration issues and complete implementation [64f564a8]
-* fix: remove duplicate box- prefix in layout data [5734543b]
-* fix: apply nice color palette to species across all visualizations [7677cbc6]
-* fix: restructure penguins custom code to satisfy RestrictedPython validator [43e0c29f]
-* fix: correct iris project name in CI verification [4b0325e5]
-* fix: use correct relative paths for CLI test project [7188f177]
-* fix: use Docker path detection for selective validation [47504013]
-* fix: relax path validation for Docker-specific paths in CI [8a509a58]
-* fix: prevent numeric range filters from affecting MultiQC sample visibility [7816e439]
-* fix: restore original figure when multiqc filter is cleared [beffcf96]
-* fix: replace multiqc components with standard figures in multiqc dashboard [b9e01f84]
-* fix: ensure static IDs for join result data collections [1043fb10]
-* fix: update penguins dashboard to use correct join result DC ID [cdba0a44]
-* fix: update dashboards with correct data collections and comprehensive components [fe28da4a]
-* fix: skip local path validation in CLI iris test [56f823cd]
-* fix: disable YAML sync by default and fix initialization metadata race condition [b6f146b3]
-* fix: handle duplicate key race condition in project creation [509bd387]
-* fix: move STATIC_IDS to module level for proper imports [67ddad1c]
-* fix: handle duplicate key race condition in multi-worker user creation [8ac4c178]
-* fix: add multiqc-trace-metadata Store to design_multiqc() function [f2064a15]
-* fix: add missing multiqc-trace-metadata Store component [6fed0d06]
-* fix: access nested report structure in MultiQC frontend callback [90fbbc55]
-* fix: skip metadata+aggregate joins due to incompatible granularities [bee5293a]
-* fix: manually update multiqc DC metadata (TODO: implement API call) [514f05ba]
-* fix: add join dependency validation to skip joins with missing data [54ee8786]
-* fix: re-enable multiqc project registration despite missing data files [e58f282a]
-* fix: scan workflow once for all DCs instead of per-DC scanning [9912887a]
+* fix: Add missing ampliseq data files and multiqc reference project [62408ec9]
+* fix: K8s Celery background callbacks and screenshot init container [f2ec4502]
+
+
+</details>
+
+### Documentation 📖
+
+For more details, please refer to the [documentation](https://depictio.github.io/depictio-docs/)
+
+ing [9912887a]
 * fix: temporarily disable multiqc reference dataset due to missing data [fc6838e6]
 * fix: correct data_location path for penguins reference dataset [44f0405b]
 * fix: convert CLI_config to instance and use project-level helpers [94312e4b]
