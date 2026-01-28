@@ -935,6 +935,31 @@ spec:
           volumeMounts:
             - name: depictio-keys
               mountPath: /app/depictio/keys
+        # STEP 5: Wait for frontend (Dash) service - required for screenshot generation
+        - name: wait-for-frontend
+          image: busybox:1.35
+          command: ['sh', '-c']
+          args:
+            - |
+              echo "⏳ Waiting for frontend (Dash) service..."
+              echo "🎯 Target: {{ .Release.Name }}-depictio-frontend:{{ .Values.frontend.service.httpPort }}"
+              timeout=300
+              elapsed=0
+              while [ $elapsed -lt $timeout ]; do
+                if nc -z {{ .Release.Name }}-depictio-frontend {{ .Values.frontend.service.httpPort }}; then
+                  echo "✅ Frontend service is available"
+                  exit 0
+                fi
+                echo "⏳ Frontend not ready... (${elapsed}s/${timeout}s)"
+                sleep 5
+                elapsed=$((elapsed + 5))
+              done
+              echo "❌ Timeout waiting for frontend service"
+              exit 1
+          securityContext:
+            {{- toYaml .Values.celery.securityContext | nindent 12 }}
+          resources:
+            {{- toYaml .Values.initContainerResources | nindent 12 }}
       containers:
         - name: celery-worker
           image: "{{ .Values.celery.image.repository | default .Values.backend.image.repository }}:{{ .Values.celery.image.tag | default .Values.backend.image.tag }}"

@@ -207,7 +207,8 @@ data:
   DEPICTIO_FASTAPI_SERVICE_PORT: {{ .Values.backend.env.DEPICTIO_FASTAPI_SERVICE_PORT | quote }}
   DEPICTIO_FASTAPI_PUBLIC_URL: {{ .Values.backend.env.DEPICTIO_FASTAPI_PUBLIC_URL | default (include "depictio.apiUrlWithProtocol" .) | quote }}
   DEPICTIO_DASH_SERVICE_NAME: {{ printf "%s-depictio-frontend" .Release.Name | quote }}
-  DEPICTIO_DASH_SERVICE_PORT: {{ .Values.frontend.env.DEPICTIO_DASH_SERVICE_PORT | quote }}
+  # Use service port (80) not pod port (5080) - Celery connects via K8s service which routes 80 -> 5080
+  DEPICTIO_DASH_SERVICE_PORT: {{ .Values.frontend.service.httpPort | quote }}
 
   # MinIO/S3 configuration
   DEPICTIO_MINIO_ROOT_USER: {{ .Values.minio.env.DEPICTIO_MINIO_ROOT_USER | default "minio" | quote }}
