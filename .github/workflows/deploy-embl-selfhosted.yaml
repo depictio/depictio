@@ -72,7 +72,7 @@ jobs:
             echo "✅ Detected STABLE tag: ${VERSION}"
           fi
 
-  # Dev environment - Beta tags deploy here automatically
+  # Dev environment - ALL tags (beta and stable) deploy here automatically
   deploy-dev:
     name: Deploy to Dev (dev.demo.depictio.embl.org)
     runs-on: [self-hosted, embl-deploy]
@@ -81,11 +81,11 @@ jobs:
     if: |
       always() &&
       (
-        (github.event_name == 'workflow_run' && needs.detect-tag-type.result == 'success' && needs.detect-tag-type.outputs.is_beta == 'true') ||
+        (github.event_name == 'workflow_run' && needs.detect-tag-type.result == 'success') ||
         (github.event_name == 'workflow_dispatch' && (github.event.inputs.environment == 'dev' || github.event.inputs.environment == 'both'))
       )
     # Run for:
-    # 1. Beta tags (workflow_run with is_beta=true)
+    # 1. ALL tags - both beta and stable (workflow_run with any tag)
     # 2. Manual dispatch targeting dev/both
     outputs:
       version: ${{ steps.version.outputs.version }}
