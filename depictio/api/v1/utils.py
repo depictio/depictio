@@ -34,7 +34,17 @@ async def clean_screenshots() -> dict[str, bool | str]:
         if not filename.endswith(".png"):
             continue
 
-        dashboard_id = filename.split(".")[0]
+        # Filename format is {dashboard_id}_{theme}.png or {dashboard_id}.png
+        # Extract dashboard_id by removing .png and _dark/_light suffix
+        base_name = filename.rsplit(".", 1)[0]  # Remove .png extension
+        # Remove _dark or _light suffix if present
+        if base_name.endswith("_dark"):
+            dashboard_id = base_name[:-5]
+        elif base_name.endswith("_light"):
+            dashboard_id = base_name[:-6]
+        else:
+            dashboard_id = base_name
+
         if dashboard_id in dashboard_ids:
             continue
 
