@@ -42,6 +42,16 @@ STATIC_IDS = {
             # "taxonomy_enriched": "646b0f3c1e4a2d7f8e5b8cac",
         },
     },
+    "multiqc": {
+        "project": "646b0f3c1e4a2d7f8e5b8cad",
+        "workflows": {"test-workflow": "646b0f3c1e4a2d7f8e5b8cae"},
+        "data_collections": {
+            "multiqc_data": "646b0f3c1e4a2d7f8e5b8caf",
+            "sample_metadata": "646b0f3c1e4a2d7f8e5b8cb0",
+            "sample_qc_metrics": "646b0f3c1e4a2d7f8e5b8cb1",
+            "qc_with_metadata": "646b0f3c1e4a2d7f8e5b8cb2",  # Join result
+        },
+    },
 }
 
 
@@ -319,8 +329,8 @@ async def create_reference_datasets(
     """
     created_projects = []
 
-    # Create all three reference datasets
-    for dataset_name in ["iris", "penguins", "ampliseq"]:
+    # Create all four reference datasets
+    for dataset_name in ["iris", "penguins", "ampliseq", "multiqc"]:
         logger.info(f"Creating reference dataset: {dataset_name}")
 
         result = await ReferenceDatasetRegistry.create_reference_project(

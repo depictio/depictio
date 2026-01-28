@@ -65,8 +65,8 @@ backend:
     DEPICTIO_DASHBOARD_YAML_WATCHER_AUTO_START: "false"
     DEPICTIO_DASHBOARD_YAML_WATCH_LOCAL_DIR: "false"
 
-    # Explicit API URL to match ingress host (overrides computed URL)
-    DEPICTIO_FASTAPI_PUBLIC_URL: "https://dev.api.demo.depictio.embl.org"
+    # NOTE: DEPICTIO_FASTAPI_PUBLIC_URL must be set in environment-specific values files
+    # (values-embl-demo.yaml, values-embl-demo-dev.yaml) to match the ingress host
 
 
 frontend:
@@ -98,7 +98,7 @@ frontend:
     DEPICTIO_AUTH_TEMPORARY_USER_EXPIRY_HOURS: "1"
 
     # Performance - Balanced workers for multiple replicas
-    DEPICTIO_DASH_WORKERS: "4"
+    DEPICTIO_DASH_WORKERS: "1"
 
 mongo:
   replicas: 1  # Temporarily single replica to get system working

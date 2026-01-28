@@ -37,6 +37,8 @@ backend:
     DEPICTIO_MONGODB_WIPE: "true"
     DEPICTIO_GOOGLE_ANALYTICS_ENABLED: "true"
     DEPICTIO_GOOGLE_ANALYTICS_TRACKING_ID: "G-MCC33FDF2Z"
+    # Explicit API URL to match ingress host (for browser-based requests)
+    DEPICTIO_FASTAPI_PUBLIC_URL: "https://dev.api.demo.depictio.embl.org"
 
 # Frontend Dash - LIMITED TO 1 WORKER (state_manager limitation)
 frontend:
