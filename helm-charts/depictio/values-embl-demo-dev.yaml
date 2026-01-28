@@ -5,27 +5,53 @@
 #   - values.yaml (base configuration)
 #   - values-embl-unauth.yaml (EMBL infrastructure + unauthenticated mode)
 #   - values-embl-secrets.yaml (S3 credentials)
+#
+# Resource budget per namespace: ~8 CPU / 16Gi (shared 32 CPU / 64Gi across 4 namespaces)
 
-# Celery worker (enabled for background tasks)
+# Celery worker - handles background tasks (screenshots, figure rendering)
 celery:
   enabled: true
   replicas: 1
   resources:
     requests:
-      memory: "512Mi"
-      cpu: "250m"
+      memory: "1Gi"
+      cpu: "500m"
     limits:
+      memory: "3Gi"
+      cpu: "2"
+  env:
+    DEPICTIO_CELERY_WORKERS: "2"  # Celery concurrency (parallel tasks)
+
+# Backend API - can use multiple workers
+backend:
+  resources:
+    requests:
       memory: "2Gi"
       cpu: "1"
-
-# Google Analytics - Dev Tracking ID
-backend:
+    limits:
+      memory: "4Gi"
+      cpu: "2"
   env:
+    DEPICTIO_FASTAPI_WORKERS: "4"  # Gunicorn workers for API
+    DEPICTIO_DEV_MODE: "false"
+    DEPICTIO_MONGODB_WIPE: "true"
     DEPICTIO_GOOGLE_ANALYTICS_ENABLED: "true"
     DEPICTIO_GOOGLE_ANALYTICS_TRACKING_ID: "G-MCC33FDF2Z"
+    # Explicit API URL to match ingress host (for browser-based requests)
+    DEPICTIO_FASTAPI_PUBLIC_URL: "https://dev.api.demo.depictio.embl.org"
 
+# Frontend Dash - LIMITED TO 1 WORKER (state_manager limitation)
 frontend:
+  resources:
+    requests:
+      memory: "2Gi"
+      cpu: "500m"
+    limits:
+      memory: "4Gi"
+      cpu: "1"  # Single worker doesn't benefit from more CPU
   env:
+    DEPICTIO_DASH_WORKERS: "1"  # MUST be 1 until state_manager is refactored
+    DEPICTIO_DEV_MODE: "false"
     DEPICTIO_GOOGLE_ANALYTICS_ENABLED: "true"
     DEPICTIO_GOOGLE_ANALYTICS_TRACKING_ID: "G-MCC33FDF2Z"
 

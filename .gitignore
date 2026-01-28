@@ -150,6 +150,8 @@ dump.rdb
 *.gz
 *.csv
 *.tsv
+# Allow reference project ampliseq data files
+!depictio/projects/reference/ampliseq/*.tsv
 
 ## Application Data
 data_prepare.json

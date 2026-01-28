@@ -270,9 +270,17 @@ async def create_dashboard_from_json(
     if _check:
         logger.info("Dashboard already exists, verifying/fixing dc_ids...")
 
+        needs_update = False
+        update_fields: dict = {}
+
+        # Ensure dashboard is public for reference dashboards
+        if not _check.get("is_public", False):
+            logger.info("Setting existing dashboard to public")
+            update_fields["is_public"] = True
+            needs_update = True
+
         # Only force static DC ID if specified (for single-DC dashboards like Iris)
         if static_dc_id:
-            needs_update = False
             if "stored_metadata" in _check:
                 for component in _check["stored_metadata"]:
                     # Check and fix top-level dc_id
@@ -284,6 +292,7 @@ async def create_dashboard_from_json(
                                 f"{current_dc_id}, fixing to {static_dc_id}"
                             )
                             component["dc_id"] = ObjectId(static_dc_id)
+                            update_fields["stored_metadata"] = _check["stored_metadata"]
                             needs_update = True
 
                     # Check and fix nested dc_config._id
@@ -296,26 +305,27 @@ async def create_dashboard_from_json(
                                     f"{current_config_id}, fixing to {static_dc_id}"
                                 )
                                 component["dc_config"]["_id"] = ObjectId(static_dc_id)
+                                update_fields["stored_metadata"] = _check["stored_metadata"]
                                 needs_update = True
-
-            if needs_update:
-                # Update dashboard in database
-                result = dashboards_collection.update_one(
-                    {"_id": ObjectId(dashboard_data["_id"])},
-                    {"$set": {"stored_metadata": _check["stored_metadata"]}},
-                )
-                logger.info(
-                    f"Updated existing dashboard with correct dc_ids "
-                    f"(matched: {result.matched_count}, modified: {result.modified_count})"
-                )
-            else:
-                logger.info("Dashboard dc_ids are already correct")
         else:
             logger.info("Multi-DC dashboard: using DC IDs from JSON file")
 
+        if needs_update:
+            # Update dashboard in database
+            result = dashboards_collection.update_one(
+                {"_id": ObjectId(dashboard_data["_id"])},
+                {"$set": update_fields},
+            )
+            logger.info(
+                f"Updated existing dashboard "
+                f"(matched: {result.matched_count}, modified: {result.modified_count})"
+            )
+        else:
+            logger.info("Dashboard is already correct")
+
         return {
             "success": True,
-            "message": "Dashboard verified/updated with correct dc_ids",
+            "message": "Dashboard verified/updated",
         }
 
     # Only force static DC ID if specified (for single-DC dashboards like Iris)
@@ -365,6 +375,9 @@ async def create_dashboard_from_json(
         editors=[],
         viewers=[],
     )
+
+    # Set reference dashboards as public by default for K8s demo environments
+    dashboard_data.is_public = True
 
     # Create the dashboard object into the database
     response = await save_dashboard(

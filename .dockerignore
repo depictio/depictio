@@ -17,9 +17,12 @@ data/
 assets/
 docs/
 keys/
-screenshots/
 venv/
 wf_data/
+
+# Exclude screenshots except reference dashboards (needed for init container)
+screenshots/
+!depictio/dash/static/screenshots/
 
 # -----------------------------
 # Exclude Tests (not needed in production image)

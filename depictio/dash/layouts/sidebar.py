@@ -401,6 +401,13 @@ def register_sidebar_callbacks(app) -> None:
         """
         from depictio.api.v1.configs.config import settings
 
+        # Debug logging to help diagnose URL resolution in K8s deployments
+        logger.info("🔍 API URL Resolution:")
+        logger.info(f"  - public_url: {settings.fastapi.public_url}")
+        logger.info(f"  - external_url: {settings.fastapi.external_url}")
+        logger.info(f"  - internal_url: {settings.fastapi.internal_url}")
+        logger.info(f"  - Returning: {settings.fastapi.external_url}")
+
         # Use external URL for browser fetch (internal URL only works within Docker network)
         return settings.fastapi.external_url
 

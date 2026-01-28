@@ -42,6 +42,16 @@ STATIC_IDS = {
             # "taxonomy_enriched": "646b0f3c1e4a2d7f8e5b8cac",
         },
     },
+    "multiqc": {
+        "project": "646b0f3c1e4a2d7f8e5b8cad",
+        "workflows": {"test-workflow": "646b0f3c1e4a2d7f8e5b8cae"},
+        "data_collections": {
+            "multiqc_data": "646b0f3c1e4a2d7f8e5b8caf",
+            "sample_metadata": "646b0f3c1e4a2d7f8e5b8cb0",
+            "sample_qc_metrics": "646b0f3c1e4a2d7f8e5b8cb1",
+            "qc_with_metadata": "646b0f3c1e4a2d7f8e5b8cb2",  # Join result
+        },
+    },
 }
 
 
@@ -205,6 +215,14 @@ class ReferenceDatasetRegistry:
 
             project = ProjectBeanie.from_mongo(existing_project)
 
+            # Ensure project is public for reference projects
+            if not existing_project.get("is_public", False):
+                logger.info(f"Setting existing project {dataset_name} to public")
+                projects_collection.update_one(
+                    {"_id": static_project_id},
+                    {"$set": {"is_public": True}},
+                )
+
             # Register links if not already present
             existing_links = existing_project.get("links", [])
             if not existing_links and links_config:
@@ -230,6 +248,9 @@ class ReferenceDatasetRegistry:
             editors=[],
             viewers=[],
         )
+
+        # Set reference projects as public by default for K8s demo environments
+        project_config["is_public"] = True
 
         # Extract and remove _static_dc_id from join definitions (not allowed in ProjectBeanie)
         # These will be handled during join execution in the background processor
@@ -268,21 +289,38 @@ class ReferenceDatasetRegistry:
             created_project = payload["project"]
         except Exception as e:
             # Handle race condition: another worker created the project between check and create
+            # This can manifest as DuplicateKeyError (MongoDB) or HTTPException 400 (API layer)
+            from fastapi import HTTPException
             from pymongo.errors import DuplicateKeyError
 
-            if (
+            is_duplicate_error = (
                 isinstance(e.__cause__, DuplicateKeyError)
                 or "duplicate key error" in str(e).lower()
-            ):
+                or "already exists" in str(e).lower()
+                or (
+                    isinstance(e, HTTPException)
+                    and e.status_code == 400
+                    and "already exists" in str(e.detail).lower()
+                )
+            )
+
+            if is_duplicate_error:
                 logger.warning(
                     f"Race condition detected: project {dataset_name} was created by another worker. "
                     f"Retrieving existing project."
                 )
-                # Retrieve the project that was created by the other worker
-                existing_project = projects_collection.find_one({"_id": static_project_id})
+                # Retrieve the project that was created by the other worker (by name since ID might differ)
+                existing_project = projects_collection.find_one({"name": project_config["name"]})
+                if not existing_project:
+                    # Try by ID as fallback
+                    existing_project = projects_collection.find_one({"_id": static_project_id})
+
                 if existing_project:
                     created_project = ProjectBeanie.from_mongo(existing_project)
-                    payload = {"success": False, "project": created_project}
+                    payload = {
+                        "success": True,
+                        "project": created_project,
+                    }  # Mark as success since project exists
                 else:
                     # This shouldn't happen, but re-raise if we can't find the project
                     raise
@@ -319,7 +357,7 @@ async def create_reference_datasets(
     """
     created_projects = []
 
-    # Create all three reference datasets
+    # Create reference datasets (iris, penguins, ampliseq)
     for dataset_name in ["iris", "penguins", "ampliseq"]:
         logger.info(f"Creating reference dataset: {dataset_name}")
 

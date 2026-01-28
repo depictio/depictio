@@ -358,7 +358,7 @@ spec:
           resources:
             {{- toYaml .Values.initContainerResources | nindent 12 }}
         {{- end }}
-        - name: copy-screenshot-file
+        - name: copy-screenshot-files
           image: "{{ .Values.backend.image.repository }}:{{ .Values.backend.image.tag }}"
           imagePullPolicy: {{ .Values.backend.image.pullPolicy }}
           securityContext:
@@ -368,11 +368,27 @@ spec:
           command: ['sh', '-c']
           args:
             - |
-              if [ -f /app/depictio/dash/static/screenshots/6824cb3b89d2b72169309737.png ]; then
-                cp /app/depictio/dash/static/screenshots/6824cb3b89d2b72169309737.png /mounted-screenshots/
-                echo "Screenshot file copied successfully"
+              SCREENSHOT_DIR="/app/depictio/dash/static/screenshots"
+              COPIED=0
+              # Copy all light theme screenshots (id_light.png)
+              for f in "$SCREENSHOT_DIR"/*_light.png; do
+                if [ -f "$f" ]; then
+                  cp "$f" /mounted-screenshots/
+                  COPIED=$((COPIED + 1))
+                fi
+              done
+              # Copy all dark theme screenshots (id_dark.png)
+              for f in "$SCREENSHOT_DIR"/*_dark.png; do
+                if [ -f "$f" ]; then
+                  cp "$f" /mounted-screenshots/
+                  COPIED=$((COPIED + 1))
+                fi
+              done
+              if [ $COPIED -gt 0 ]; then
+                echo "Copied $COPIED screenshot files successfully"
+                ls -la /mounted-screenshots/
               else
-                echo "Screenshot file not found in image, skipping copy"
+                echo "No screenshot files found in image, skipping copy"
               fi
           volumeMounts:
             - name: depictio-screenshots
@@ -612,6 +628,42 @@ spec:
           volumeMounts:
             - name: depictio-config
               mountPath: /app/depictio/.depictio
+        # STEP 0.6: Copy screenshot files from Docker image to shared PVC
+        - name: copy-screenshot-files
+          image: "{{ .Values.frontend.image.repository }}:{{ .Values.frontend.image.tag }}"
+          imagePullPolicy: {{ .Values.frontend.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.frontend.securityContext | nindent 12 }}
+          resources:
+            {{- toYaml .Values.initContainerResources | nindent 12 }}
+          command: ['sh', '-c']
+          args:
+            - |
+              SCREENSHOT_DIR="/app/depictio/dash/static/screenshots"
+              COPIED=0
+              # Copy all light theme screenshots (id_light.png)
+              for f in "$SCREENSHOT_DIR"/*_light.png; do
+                if [ -f "$f" ]; then
+                  cp "$f" /mounted-screenshots/
+                  COPIED=$((COPIED + 1))
+                fi
+              done
+              # Copy all dark theme screenshots (id_dark.png)
+              for f in "$SCREENSHOT_DIR"/*_dark.png; do
+                if [ -f "$f" ]; then
+                  cp "$f" /mounted-screenshots/
+                  COPIED=$((COPIED + 1))
+                fi
+              done
+              if [ $COPIED -gt 0 ]; then
+                echo "Copied $COPIED screenshot files successfully"
+                ls -la /mounted-screenshots/
+              else
+                echo "No screenshot files found in image, skipping copy"
+              fi
+          volumeMounts:
+            - name: depictio-screenshots
+              mountPath: /mounted-screenshots
         # STEP 1: Wait for backend service to be available (network check)
         - name: wait-for-backend
           image: busybox:1.35
@@ -935,6 +987,36 @@ spec:
           volumeMounts:
             - name: depictio-keys
               mountPath: /app/depictio/keys
+        # STEP 5: Wait for frontend (Dash) service - required for screenshot generation
+        # Must wait for app to be FULLY ready (callbacks registered), not just port open
+        - name: wait-for-frontend
+          image: curlimages/curl:8.5.0
+          command: ['sh', '-c']
+          args:
+            - |
+              echo "⏳ Waiting for frontend (Dash) service to be fully ready..."
+              echo "🎯 Target: http://{{ .Release.Name }}-depictio-frontend:{{ .Values.frontend.service.httpPort }}/_dash-dependencies"
+              timeout=300
+              elapsed=0
+              while [ $elapsed -lt $timeout ]; do
+                # Check if Dash app is fully loaded by requesting dependencies endpoint
+                if curl -sf "http://{{ .Release.Name }}-depictio-frontend:{{ .Values.frontend.service.httpPort }}/_dash-dependencies" > /dev/null 2>&1; then
+                  echo "✅ Frontend Dash app is fully ready (callbacks registered)"
+                  # Extra wait to ensure all workers have loaded
+                  echo "⏳ Waiting 10s for all gunicorn workers to initialize..."
+                  sleep 10
+                  exit 0
+                fi
+                echo "⏳ Frontend not ready... (${elapsed}s/${timeout}s)"
+                sleep 5
+                elapsed=$((elapsed + 5))
+              done
+              echo "❌ Timeout waiting for frontend service"
+              exit 1
+          securityContext:
+            {{- toYaml .Values.celery.securityContext | nindent 12 }}
+          resources:
+            {{- toYaml .Values.initContainerResources | nindent 12 }}
       containers:
         - name: celery-worker
           image: "{{ .Values.celery.image.repository | default .Values.backend.image.repository }}:{{ .Values.celery.image.tag | default .Values.backend.image.tag }}"
@@ -970,6 +1052,8 @@ spec:
               mountPath: /app/depictio/.depictio
             - name: depictio-uploads
               mountPath: /tmp/depictio-uploads
+            - name: depictio-screenshots
+              mountPath: /app/depictio/dash/static/screenshots
             {{- if .Values.local_development }}
             - name: depictio-source
               mountPath: /app
@@ -984,6 +1068,9 @@ spec:
         - name: depictio-uploads
           persistentVolumeClaim:
             claimName: {{ .Release.Name }}-depictio-uploads-pvc
+        - name: depictio-screenshots
+          persistentVolumeClaim:
+            claimName: {{ .Release.Name }}-depictio-screenshots-pvc
         {{- if .Values.local_development }}
         - name: depictio-source
           hostPath:

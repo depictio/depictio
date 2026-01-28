@@ -21,11 +21,16 @@ celery:
 # Google Analytics - Production Tracking ID
 backend:
   env:
+    DEPICTIO_DEV_MODE: "false"
+    DEPICTIO_MONGODB_WIPE: "true"
     DEPICTIO_GOOGLE_ANALYTICS_ENABLED: "true"
     DEPICTIO_GOOGLE_ANALYTICS_TRACKING_ID: "G-GM8MYRJDHL"
+    # Explicit API URL to match ingress host (overrides computed URL)
+    DEPICTIO_FASTAPI_PUBLIC_URL: "https://api.demo.depictio.embl.org"
 
 frontend:
   env:
+    DEPICTIO_DEV_MODE: "false"
     DEPICTIO_GOOGLE_ANALYTICS_ENABLED: "true"
     DEPICTIO_GOOGLE_ANALYTICS_TRACKING_ID: "G-GM8MYRJDHL"
 

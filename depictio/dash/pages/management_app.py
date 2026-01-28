@@ -240,8 +240,21 @@ def register_routing_callback(app):
             )
 
         # Route to appropriate page
-        content, header = route_authenticated_user(pathname, updated_local_data, theme)
+        result = route_authenticated_user(pathname, updated_local_data, theme)
 
+        # Handle case where user token is invalid/expired (user is None in route_authenticated_user)
+        if result is None:
+            logger.warning("User token invalid - redirecting to auth and clearing local data")
+            header = create_default_header("Welcome to Depictio")
+            content = create_users_management_layout()
+            return (
+                content,
+                header,
+                "/auth",
+                {"logged_in": False, "access_token": None},
+            )
+
+        content, header = result
         return content, header, pathname, updated_local_data
 
 
@@ -269,6 +282,12 @@ def route_authenticated_user(
 
     # Fetch user data (API call is cached)
     user = api_call_fetch_user_from_token(access_token)
+
+    # Handle invalid/expired token - user will be None
+    # Return None to signal caller to redirect to auth
+    if user is None:
+        logger.warning("Token validation failed - user is None, signaling auth redirect")
+        return None
 
     # Check if user is anonymous
     is_anonymous = hasattr(user, "is_anonymous") and user.is_anonymous

@@ -127,11 +127,19 @@ def _load_dataframe(
         logger.warning(f"Missing workflow_id ({wf_id}) or data_collection_id ({dc_id})")
         return pl.DataFrame()
 
-    # Handle joined data collection IDs - don't convert to ObjectId
-    if isinstance(dc_id, str) and "--" in dc_id:
-        return load_deltatable_lite(ObjectId(wf_id), dc_id, TOKEN=token, init_data=init_data)
+    try:
+        # Handle joined data collection IDs - don't convert to ObjectId
+        if isinstance(dc_id, str) and "--" in dc_id:
+            return load_deltatable_lite(ObjectId(wf_id), dc_id, TOKEN=token, init_data=init_data)
 
-    return load_deltatable_lite(ObjectId(wf_id), ObjectId(dc_id), TOKEN=token, init_data=init_data)
+        return load_deltatable_lite(
+            ObjectId(wf_id), ObjectId(dc_id), TOKEN=token, init_data=init_data
+        )
+    except Exception as e:
+        # Graceful error handling for missing delta tables (e.g., "no log files" error)
+        # Returns an error DataFrame instead of crashing the dashboard viewer
+        logger.error(f"Failed to load delta table for DC {dc_id} (index={index}): {e}")
+        return pl.DataFrame({"error": [f"Data unavailable: {str(e)}"]})
 
 
 def _configure_column_filters(cols: dict | None) -> None:
