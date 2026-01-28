@@ -6,72 +6,21 @@
 
 
 <details>
-<summary>Click to expand the changelog for 0.6.2-b2</summary>
+<summary>Click to expand the changelog for 0.6.2-b3</summary>
 
 ### Changes 📜
 
 #### Bug Fixes 🐛
 
-* fix: Add missing ampliseq data files and multiqc reference project [62408ec9]
-* fix: K8s Celery background callbacks and screenshot init container [f2ec4502]
-
-
-</details>
-
-### Documentation 📖
-
-For more details, please refer to the [documentation](https://depictio.github.io/depictio-docs/)
-
-ing [9912887a]
-* fix: temporarily disable multiqc reference dataset due to missing data [fc6838e6]
-* fix: correct data_location path for penguins reference dataset [44f0405b]
-* fix: convert CLI_config to instance and use project-level helpers [94312e4b]
-* fix: correct CLI_config structure for background data processing [b74a104b]
-* fix: move delay inside background thread to avoid blocking event loop [bcd2363a]
-* fix: use access_token field instead of token in CLI config [62b66c72]
-* fix: make _already_processed synchronous and add better logging [a3ebc8fc]
-* fix: add _id to id conversion for DCLink model [a0a4b3ab]
-* fix: remove await from synchronous PyMongo collection methods [0b0511d2]
-* fix: make reference dataset creation idempotent [5e7cbc1d]
-* fix: remove _static_dc_id from join definitions before ProjectBeanie creation [be7dcda4]
-* fix: use integer indices instead of names in original_ids structure [8864b376]
-* fix: correct critical import paths in reference dataset initialization [0527fcf5]
-* fix: add symlink from repo root to depictio/projects for CI compatibility [78ae4863]
-
-#### Improvements 🚀
-
-* refactor: reorganize penguins and iris dashboard layouts for better UX [7d52389b]
-* refactor: convert penguins and iris dashboards to new layout format [dee0af34]
-* refactor: convert all component indexes to UUID format like iris [74c66f58]
-* style: format sunburst color_discrete_map to match other plots [6ce7905a]
-* refactor: simplify penguins custom code to minimal 2-line format [3983eeb9]
-* style: apply ruff formatting to reference dataset files [e65b89af]
-* refactor: modernize project configs to use project-level joins/links [42d16ef3]
-* refactor: remove old projects/ directory from api/v1/configs [f5d17751]
-* refactor: update Python code to use new projects/ path [f053377d]
+* fix: Set reference projects/dashboards as public + frontend screenshots [bcc39741]
 
 #### Chores 🧹
 
-* chore: update uv.lock metadata [8b0ed135]
-* chore: add test_data.csv to gitignore exceptions [ba7fd5f4]
-* chore: fix type safety and formatting for quality checks [555f7164]
-* ci: update workflow paths to new projects/ structure [d6b9e433]
-* ci: update workflow paths for new projects/ structure [57723322]
-
-#### Documentation Updates 📚
-
-* docs: document multiqc join empty result as expected behavior [7b914954]
+* chore: Sync all version references to 0.6.2-b2 [256c1a2c]
 
 #### Other Changes 📝
 
-* Bump version: 0.6.1-b1 → 0.6.1 [e07db1f9]
-* fix(helm): add master switch to completely disable YAML dashboard sync [0f1c0b45]
-* Update CHANGELOG.md for v0.6.1-b1 [da806519]
-* Bump version: 0.6.0 → 0.6.1-b1 [f39f17c5]
-* Update CHANGELOG.md for v0.6.1-b1 [eaecf7fd]
-* refactor(api,tests): update paths to use new projects/ structure [5149da43]
-* refactor(configs): remove old dataset directories [286b917e]
-* refactor(configs): create projects/ directory structure with init and reference [570cd9bf]
+* Bump version: 0.6.2-b2 → 0.6.2-b3 [a8572cad]
 
 
 </details>
@@ -80,133 +29,7 @@ ing [9912887a]
 
 For more details, please refer to the [documentation](https://depictio.github.io/depictio-docs/)
 
-ing [9912887a]
-* fix: temporarily disable multiqc reference dataset due to missing data [fc6838e6]
-* fix: correct data_location path for penguins reference dataset [44f0405b]
-* fix: convert CLI_config to instance and use project-level helpers [94312e4b]
-* fix: correct CLI_config structure for background data processing [b74a104b]
-* fix: move delay inside background thread to avoid blocking event loop [bcd2363a]
-* fix: use access_token field instead of token in CLI config [62b66c72]
-* fix: make _already_processed synchronous and add better logging [a3ebc8fc]
-* fix: add _id to id conversion for DCLink model [a0a4b3ab]
-* fix: remove await from synchronous PyMongo collection methods [0b0511d2]
-* fix: make reference dataset creation idempotent [5e7cbc1d]
-* fix: remove _static_dc_id from join definitions before ProjectBeanie creation [be7dcda4]
-* fix: use integer indices instead of names in original_ids structure [8864b376]
-* fix: correct critical import paths in reference dataset initialization [0527fcf5]
-* fix: add symlink from repo root to depictio/projects for CI compatibility [78ae4863]
-
-#### Improvements 🚀
-
-* refactor: reorganize penguins and iris dashboard layouts for better UX [7d52389b]
-* refactor: convert penguins and iris dashboards to new layout format [dee0af34]
-* refactor: convert all component indexes to UUID format like iris [74c66f58]
-* style: format sunburst color_discrete_map to match other plots [6ce7905a]
-* refactor: simplify penguins custom code to minimal 2-line format [3983eeb9]
-* style: apply ruff formatting to reference dataset files [e65b89af]
-* refactor: modernize project configs to use project-level joins/links [42d16ef3]
-* refactor: remove old projects/ directory from api/v1/configs [f5d17751]
-* refactor: update Python code to use new projects/ path [f053377d]
-
-#### Chores 🧹
-
-* chore: update uv.lock metadata [8b0ed135]
-* chore: add test_data.csv to gitignore exceptions [ba7fd5f4]
-* chore: fix type safety and formatting for quality checks [555f7164]
-* ci: update workflow paths to new projects/ structure [d6b9e433]
-* ci: update workflow paths for new projects/ structure [57723322]
-
-#### Documentation Updates 📚
-
-* docs: document multiqc join empty result as expected behavior [7b914954]
-
-#### Other Changes 📝
-
-* Bump version: 0.6.1-b1 → 0.6.1 [e07db1f9]
-* fix(helm): add master switch to completely disable YAML dashboard sync [0f1c0b45]
-* Update CHANGELOG.md for v0.6.1-b1 [da806519]
-* Bump version: 0.6.0 → 0.6.1-b1 [f39f17c5]
-* Update CHANGELOG.md for v0.6.1-b1 [eaecf7fd]
-* refactor(api,tests): update paths to use new projects/ structure [5149da43]
-* refactor(configs): remove old dataset directories [286b917e]
-* refactor(configs): create projects/ directory structure with init and reference [570cd9bf]
-
-
-</details>
-
-### Documentation 📖
-
-For more details, please refer to the [documentation](https://depictio.github.io/depictio-docs/)
-
-ing [9912887a]
-* fix: temporarily disable multiqc reference dataset due to missing data [fc6838e6]
-* fix: correct data_location path for penguins reference dataset [44f0405b]
-* fix: convert CLI_config to instance and use project-level helpers [94312e4b]
-* fix: correct CLI_config structure for background data processing [b74a104b]
-* fix: move delay inside background thread to avoid blocking event loop [bcd2363a]
-* fix: use access_token field instead of token in CLI config [62b66c72]
-* fix: make _already_processed synchronous and add better logging [a3ebc8fc]
-* fix: add _id to id conversion for DCLink model [a0a4b3ab]
-* fix: remove await from synchronous PyMongo collection methods [0b0511d2]
-* fix: make reference dataset creation idempotent [5e7cbc1d]
-* fix: remove _static_dc_id from join definitions before ProjectBeanie creation [be7dcda4]
-* fix: use integer indices instead of names in original_ids structure [8864b376]
-* fix: correct critical import paths in reference dataset initialization [0527fcf5]
-* fix: add symlink from repo root to depictio/projects for CI compatibility [78ae4863]
-
-#### Improvements 🚀
-
-* refactor: reorganize penguins and iris dashboard layouts for better UX [7d52389b]
-* refactor: convert penguins and iris dashboards to new layout format [dee0af34]
-* refactor: convert all component indexes to UUID format like iris [74c66f58]
-* style: format sunburst color_discrete_map to match other plots [6ce7905a]
-* refactor: simplify penguins custom code to minimal 2-line format [3983eeb9]
-* style: apply ruff formatting to reference dataset files [e65b89af]
-* refactor: modernize project configs to use project-level joins/links [42d16ef3]
-* refactor: remove old projects/ directory from api/v1/configs [f5d17751]
-* refactor: update Python code to use new projects/ path [f053377d]
-
-#### Chores 🧹
-
-* chore: add test_data.csv to gitignore exceptions [ba7fd5f4]
-* chore: fix type safety and formatting for quality checks [555f7164]
-* ci: update workflow paths to new projects/ structure [d6b9e433]
-* ci: update workflow paths for new projects/ structure [57723322]
-
-#### Documentation Updates 📚
-
-* docs: document multiqc join empty result as expected behavior [7b914954]
-
-#### Other Changes 📝
-
-* Bump version: 0.6.1-b1 → 0.6.1 [845c49ce]
-* fix(helm): add master switch to completely disable YAML dashboard sync [0f1c0b45]
-* Update CHANGELOG.md for v0.6.1-b1 [da806519]
-* Bump version: 0.6.0 → 0.6.1-b1 [f39f17c5]
-* Update CHANGELOG.md for v0.6.1-b1 [eaecf7fd]
-* refactor(api,tests): update paths to use new projects/ structure [5149da43]
-* refactor(configs): remove old dataset directories [286b917e]
-* refactor(configs): create projects/ directory structure with init and reference [570cd9bf]
-
-
-</details>
-
-### Documentation 📖
-
-For more details, please refer to the [documentation](https://depictio.github.io/depictio-docs/)
-
-ection [8913f698]
-* fix: update mock CLI configuration for backup tests [58f27258]
-* fix: resolve CLI configuration field name inconsistencies [fa9481b1]
-
-#### Improvements 🚀
-
-* refactor: remove excessive logging and unused settings checks in API and layout files [ae0ac70b]
-* refactor: clean up imports and formatting in logo.py for improved readability [08418f16]
-* refactor: update ASCII art logo display with scaling and color mapping enhancements [e24e6cdc]
-* refactor: comment out password management tests for future implementation [389ed2d6]
-* refactor: simplify input handling in save and text component callbacks [8937bea3]
-* style: enhance draggable grid and edit mode layout by minimizing padding and hiding unnecessary elements [37e2b7f8]
+ecessary elements [37e2b7f8]
 * style: remove conflicting pseudo-elements from ActionIcon drag handles and ensure proper display of children [324861e8]
 * style: adjust button alignment and padding in draggable grid components [ed2d08c0]
 * refactor: update auth modal styles for improved appearance and consistency [7ed7c995]
