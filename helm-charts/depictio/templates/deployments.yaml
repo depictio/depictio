@@ -1052,6 +1052,8 @@ spec:
               mountPath: /app/depictio/.depictio
             - name: depictio-uploads
               mountPath: /tmp/depictio-uploads
+            - name: depictio-screenshots
+              mountPath: /app/depictio/dash/static/screenshots
             {{- if .Values.local_development }}
             - name: depictio-source
               mountPath: /app
@@ -1066,6 +1068,9 @@ spec:
         - name: depictio-uploads
           persistentVolumeClaim:
             claimName: {{ .Release.Name }}-depictio-uploads-pvc
+        - name: depictio-screenshots
+          persistentVolumeClaim:
+            claimName: {{ .Release.Name }}-depictio-screenshots-pvc
         {{- if .Values.local_development }}
         - name: depictio-source
           hostPath:
