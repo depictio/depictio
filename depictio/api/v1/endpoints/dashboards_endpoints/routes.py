@@ -1104,9 +1104,10 @@ async def import_dashboard_from_yaml(
     # Insert or update in database
     is_update = existing_dashboard is not None
     if is_update:
-        result = dashboards_collection.replace_one(
-            {"dashboard_id": new_dashboard_id}, dashboard.mongo()
-        )
+        # Preserve the existing MongoDB _id to avoid immutable field error
+        update_doc = dashboard.mongo()
+        update_doc["_id"] = existing_dashboard["_id"]
+        result = dashboards_collection.replace_one({"_id": existing_dashboard["_id"]}, update_doc)
         if result.modified_count == 0 and result.matched_count == 0:
             raise HTTPException(status_code=500, detail="Failed to update dashboard.")
     else:
