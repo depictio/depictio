@@ -1,18 +1,19 @@
 """
-Dashboard validation CLI commands.
+Dashboard CLI commands.
 
-Provides commands for validating dashboard YAML files using DashboardDataLite
-Pydantic models.
+Provides commands for validating, converting, and importing dashboard YAML files
+using DashboardDataLite Pydantic models.
 """
 
 from pathlib import Path
 from typing import Annotated, Any
 
+import httpx
 import typer
 from rich.console import Console
 from rich.table import Table
 
-app = typer.Typer(help="Dashboard validation commands")
+app = typer.Typer(help="Dashboard management commands")
 console = Console()
 
 
@@ -323,4 +324,174 @@ def from_yaml(
         raise typer.Exit(1)
     except Exception as e:
         console.print(f"[red]Error: {e}[/red]")
+        raise typer.Exit(1)
+
+
+@app.command("import")
+def import_yaml(
+    yaml_file: Annotated[Path, typer.Argument(help="Path to YAML dashboard file")],
+    project_id: Annotated[str, typer.Option("--project", "-p", help="Project ID to import into")],
+    api_url: Annotated[str, typer.Option("--api", help="API base URL")] = "http://localhost:8058",
+    config_path: Annotated[
+        str, typer.Option("--config", "-c", help="Path to CLI config file")
+    ] = "~/.depictio/cli.yaml",
+    dry_run: Annotated[bool, typer.Option("--dry-run", help="Validate only, don't import")] = False,
+) -> None:
+    """Import a dashboard YAML file to the server.
+
+    This command validates the YAML file locally, then uploads it to the API
+    to create a new dashboard in the specified project.
+
+    Example:
+        depictio dashboard import dashboard.yaml --project 646b0f3c1e4a2d7f8e5b8c9a
+        depictio dashboard import dashboard.yaml -p 646b0f3c1e4a2d7f8e5b8c9a --dry-run
+    """
+    from depictio.models.models.dashboards import DashboardDataLite
+
+    if not yaml_file.exists():
+        console.print(f"[red]Error: File not found: {yaml_file}[/red]")
+        raise typer.Exit(1)
+
+    # Step 1: Validate locally
+    console.print(f"[cyan]Validating:[/cyan] {yaml_file}")
+    result = validate_yaml_with_pydantic(yaml_file)
+
+    if not result["valid"]:
+        console.print("[red]✗ Validation failed[/red]")
+        for error in result["errors"]:
+            console.print(f"  [red]- {error['message']}[/red]")
+        raise typer.Exit(1)
+
+    console.print("[green]✓ Validation passed[/green]")
+
+    # Load YAML content
+    yaml_content = yaml_file.read_text(encoding="utf-8")
+    lite = DashboardDataLite.from_yaml(yaml_content)
+
+    console.print(f"  Title: {lite.title}")
+    console.print(f"  Components: {len(lite.components)}")
+
+    if dry_run:
+        console.print("\n[yellow]Dry run mode - skipping import[/yellow]")
+        raise typer.Exit(0)
+
+    # Step 2: Load CLI config for authentication
+    console.print("\n[cyan]Loading CLI configuration...[/cyan]")
+    try:
+        from depictio.cli.cli.utils.common import generate_api_headers, load_depictio_config
+
+        cli_config = load_depictio_config(yaml_config_path=config_path)
+        headers = generate_api_headers(cli_config)
+        # Use API URL from config if not overridden
+        if api_url == "http://localhost:8058":
+            api_url = str(cli_config.api_base_url)
+        console.print("[green]✓ Configuration loaded[/green]")
+        console.print(f"  API URL: {api_url}")
+    except Exception as e:
+        console.print(f"[red]Error loading CLI config: {e}[/red]")
+        console.print("[yellow]Hint: Run 'depictio config' to set up authentication[/yellow]")
+        raise typer.Exit(1)
+
+    # Step 3: Import to API
+    console.print(f"\n[cyan]Importing dashboard to project {project_id}...[/cyan]")
+
+    url = f"{api_url}/depictio/api/v1/dashboards/import/yaml"
+
+    try:
+        with httpx.Client(timeout=60) as client:
+            response = client.post(
+                url,
+                params={"yaml_content": yaml_content, "project_id": project_id},
+                headers=headers,
+            )
+
+            if response.status_code == 200:
+                data = response.json()
+                console.print("[green]✓ Dashboard imported successfully![/green]")
+                console.print(f"  Dashboard ID: {data.get('dashboard_id')}")
+                console.print(f"  Title: {data.get('title')}")
+                console.print(f"  Project ID: {data.get('project_id')}")
+                console.print(
+                    f"\n[cyan]View at:[/cyan] {api_url.replace('/depictio/api/v1', '')}"
+                    f"/dashboard/{data.get('dashboard_id')}"
+                )
+            else:
+                console.print(f"[red]✗ Import failed: HTTP {response.status_code}[/red]")
+                try:
+                    error_detail = response.json().get("detail", response.text)
+                except Exception:
+                    error_detail = response.text
+                console.print(f"  {error_detail}")
+                raise typer.Exit(1)
+
+    except httpx.ConnectError:
+        console.print(f"[red]Error: Cannot connect to API at {api_url}[/red]")
+        console.print("[yellow]Hint: Make sure the Depictio API server is running[/yellow]")
+        raise typer.Exit(1)
+    except httpx.RequestError as e:
+        console.print(f"[red]Error: {e}[/red]")
+        raise typer.Exit(1)
+
+
+@app.command()
+def list_projects(
+    api_url: Annotated[str, typer.Option("--api", help="API base URL")] = "http://localhost:8058",
+    config_path: Annotated[
+        str, typer.Option("--config", "-c", help="Path to CLI config file")
+    ] = "~/.depictio/cli.yaml",
+) -> None:
+    """List available projects to import dashboards into.
+
+    Example:
+        depictio dashboard list-projects
+    """
+    console.print("[cyan]Loading CLI configuration...[/cyan]")
+    try:
+        from depictio.cli.cli.utils.common import generate_api_headers, load_depictio_config
+
+        cli_config = load_depictio_config(yaml_config_path=config_path)
+        headers = generate_api_headers(cli_config)
+        if api_url == "http://localhost:8058":
+            api_url = str(cli_config.api_base_url)
+    except Exception as e:
+        console.print(f"[red]Error loading CLI config: {e}[/red]")
+        raise typer.Exit(1)
+
+    console.print(f"[cyan]Fetching projects from {api_url}...[/cyan]\n")
+
+    try:
+        with httpx.Client(timeout=30) as client:
+            response = client.get(
+                f"{api_url}/depictio/api/v1/projects/list",
+                headers=headers,
+            )
+
+            if response.status_code == 200:
+                projects = response.json()
+                if not projects:
+                    console.print("[yellow]No projects found[/yellow]")
+                    raise typer.Exit(0)
+
+                table = Table(title="Available Projects")
+                table.add_column("ID", style="cyan")
+                table.add_column("Name", style="green")
+                table.add_column("Public", style="yellow")
+
+                for project in projects:
+                    project_id = project.get("_id") or project.get("id", "-")
+                    name = project.get("name", "-")
+                    is_public = "Yes" if project.get("is_public") else "No"
+                    table.add_row(str(project_id), name, is_public)
+
+                console.print(table)
+                console.print(
+                    "\n[dim]Use --project <ID> with 'depictio dashboard import' command[/dim]"
+                )
+            else:
+                console.print(f"[red]Error: HTTP {response.status_code}[/red]")
+                console.print(f"  {response.text}")
+                raise typer.Exit(1)
+
+    except httpx.ConnectError:
+        console.print(f"[red]Error: Cannot connect to API at {api_url}[/red]")
         raise typer.Exit(1)

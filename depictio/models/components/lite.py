@@ -8,11 +8,18 @@ Architecture:
     FigureLiteComponent (user-definable, YAML-friendly)
         ↓ inherits
     FigureComponent (adds runtime/rendering fields)
+
+Index vs Tag:
+    - `tag`: User-friendly identifier written in YAML (e.g., 'scatter-1', 'my-chart')
+    - `index`: Internal UUID, auto-generated if not provided
+
+    Users write `tag` in YAML, system manages `index` as UUID internally.
 """
 
+import uuid
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class BaseLiteComponent(BaseModel):
@@ -20,27 +27,44 @@ class BaseLiteComponent(BaseModel):
 
     Contains only the fields users need to define a component.
     Runtime fields (wf_id, dc_id, dc_config, etc.) are added by full components.
+
+    Users should provide `tag` for identification. The `index` (UUID) is
+    auto-generated if not provided.
     """
 
     model_config = ConfigDict(extra="allow")
 
     # Component identification
-    index: str = Field(..., description="Component identifier (e.g., 'scatter-1')")
+    tag: str | None = Field(
+        default=None, description="User-friendly identifier (e.g., 'scatter-1')"
+    )
+    index: str | None = Field(
+        default=None, description="Internal UUID (auto-generated if not provided)"
+    )
     component_type: str = Field(..., description="Component type")
 
     # Display
     title: str = Field(default="", description="Component title")
 
     # Data source references (human-readable tags)
-    workflow_tag: str = Field(..., description="Workflow tag (e.g., 'python/iris_workflow')")
-    data_collection_tag: str = Field(..., description="Data collection tag (e.g., 'iris_table')")
+    workflow_tag: str = Field(default="", description="Workflow tag (e.g., 'python/iris_workflow')")
+    data_collection_tag: str = Field(
+        default="", description="Data collection tag (e.g., 'iris_table')"
+    )
+
+    @model_validator(mode="after")
+    def ensure_index(self) -> "BaseLiteComponent":
+        """Auto-generate index UUID if not provided."""
+        if not self.index:
+            self.index = str(uuid.uuid4())
+        return self
 
 
 class FigureLiteComponent(BaseLiteComponent):
     """Lite figure component for user definition.
 
     Example YAML:
-        - index: scatter-1
+        - tag: scatter-1
           component_type: figure
           workflow_tag: python/iris_workflow
           data_collection_tag: iris_table
@@ -69,7 +93,7 @@ class CardLiteComponent(BaseLiteComponent):
     """Lite card component for user definition.
 
     Example YAML:
-        - index: card-1
+        - tag: card-1
           component_type: card
           workflow_tag: python/iris_workflow
           data_collection_tag: iris_table
@@ -97,7 +121,7 @@ class InteractiveLiteComponent(BaseLiteComponent):
     """Lite interactive component for user definition.
 
     Example YAML:
-        - index: filter-1
+        - tag: filter-1
           component_type: interactive
           workflow_tag: python/iris_workflow
           data_collection_tag: iris_table
@@ -125,7 +149,7 @@ class TableLiteComponent(BaseLiteComponent):
     """Lite table component for user definition.
 
     Example YAML:
-        - index: table-1
+        - tag: table-1
           component_type: table
           workflow_tag: python/iris_workflow
           data_collection_tag: iris_table

@@ -63,14 +63,14 @@ class LayoutItem(BaseModel):
 class DashboardDataLite(BaseModel):
     """Minimal dashboard format for YAML import/export.
 
-    Uses the same field names as the full format for clean inheritance,
-    but only includes user-definable fields.
+    Uses `tag` for user-friendly component identification, while `index` (UUID)
+    is managed internally. Users write `tag` in YAML, system generates UUIDs.
 
     Example YAML:
         dashboard_id: "6824cb3b89d2b72169309737"
         title: "Iris Dashboard demo"
         components:
-          - index: scatter-1
+          - tag: scatter-1
             component_type: figure
             workflow_tag: python/iris_workflow
             data_collection_tag: iris_table
@@ -80,7 +80,7 @@ class DashboardDataLite(BaseModel):
               y: sepal.width
               color: variety
 
-          - index: card-1
+          - tag: card-1
             component_type: card
             workflow_tag: python/iris_workflow
             data_collection_tag: iris_table
@@ -117,7 +117,8 @@ class DashboardDataLite(BaseModel):
         """Export to YAML string.
 
         Returns:
-            YAML string representation
+            YAML string representation with tag as primary identifier.
+            The UUID index is omitted from YAML output (managed internally).
         """
         data = self.model_dump(exclude_none=True, mode="json")
 
@@ -125,12 +126,40 @@ class DashboardDataLite(BaseModel):
         if not data.get("subtitle"):
             data.pop("subtitle", None)
 
-        # Clean up components - remove empty values
+        # Clean up components - remove empty values and order fields
         if "components" in data:
             cleaned_components = []
+            # Define preferred field order (tag first, then type, then data source, then config)
+            field_order = [
+                "tag",
+                "component_type",
+                "workflow_tag",
+                "data_collection_tag",
+                "title",
+                "visu_type",
+                "dict_kwargs",
+                "aggregation",
+                "column_name",
+                "column_type",
+                "interactive_component_type",
+            ]
+
             for comp in data["components"]:
-                cleaned = {}
+                cleaned: dict[str, Any] = {}
+
+                # Add fields in preferred order
+                for key in field_order:
+                    if key in comp:
+                        value = comp[key]
+                        # Skip empty values
+                        if value in ("", None, [], {}):
+                            continue
+                        cleaned[key] = value
+
+                # Add remaining fields (styling, etc.) in original order
                 for key, value in comp.items():
+                    if key in cleaned or key == "index":  # Skip index (UUID) - internal only
+                        continue
                     # Skip empty values
                     if value in ("", None, [], {}):
                         continue
@@ -143,6 +172,7 @@ class DashboardDataLite(BaseModel):
                         if key == "filterable" and value is True:
                             continue
                     cleaned[key] = value
+
                 cleaned_components.append(cleaned)
             data["components"] = cleaned_components
 
@@ -275,10 +305,23 @@ class DashboardDataLite(BaseModel):
         stored_metadata = dashboard_data.get("stored_metadata", [])
         lite_components = []
 
+        # Track tag counters for generating readable tags
+        tag_counters: dict[str, int] = {}
+
         for comp in stored_metadata:
+            comp_type = comp.get("component_type", "figure")
+
+            # Generate readable tag (e.g., figure-1, card-2)
+            tag_counters[comp_type] = tag_counters.get(comp_type, 0) + 1
+            generated_tag = f"{comp_type}-{tag_counters[comp_type]}"
+
+            # Use existing tag if present, otherwise use generated one
+            existing_tag = comp.get("tag")
+
             lite_comp: dict[str, Any] = {
-                "index": comp.get("index", ""),
-                "component_type": comp.get("component_type", "figure"),
+                "tag": existing_tag or generated_tag,
+                "index": comp.get("index", ""),  # Keep UUID for reference
+                "component_type": comp_type,
                 "workflow_tag": comp.get("workflow_tag") or comp.get("wf_tag", ""),
                 "data_collection_tag": (
                     comp.get("data_collection_tag")
