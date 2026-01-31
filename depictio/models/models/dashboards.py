@@ -67,8 +67,8 @@ class DashboardDataLite(BaseModel):
     is managed internally. Users write `tag` in YAML, system generates UUIDs.
 
     Example YAML:
-        dashboard_id: "6824cb3b89d2b72169309737"
         title: "Iris Dashboard demo"
+        project_tag: "iris"  # Project name for server-side lookup
         components:
           - tag: scatter-1
             component_type: figure
@@ -104,6 +104,13 @@ class DashboardDataLite(BaseModel):
     # Dashboard ID (optional for new dashboards)
     dashboard_id: str | None = Field(default=None, description="Dashboard ID")
 
+    # Project identification (for server-side lookup during import)
+    project_tag: str | None = Field(
+        default=None,
+        description="Project name/tag for server-side lookup. "
+        "Used during import to find the target project by name.",
+    )
+
     # Display
     title: str = Field(..., description="Dashboard title")
     subtitle: str = Field(default="", description="Dashboard subtitle")
@@ -125,6 +132,10 @@ class DashboardDataLite(BaseModel):
         # Remove empty subtitle
         if not data.get("subtitle"):
             data.pop("subtitle", None)
+
+        # Remove empty project_tag
+        if not data.get("project_tag"):
+            data.pop("project_tag", None)
 
         # Clean up components - remove empty values and order fields
         if "components" in data:
@@ -256,7 +267,8 @@ class DashboardDataLite(BaseModel):
         except ValueError as e:
             return False, [{"type": "yaml_error", "msg": str(e)}]
         except ValidationError as e:
-            return False, e.errors()
+            # e.errors() returns list of ErrorDetails which is compatible with dict[str, Any]
+            return False, list(e.errors())  # type: ignore[return-value]
 
     @classmethod
     def from_full(cls, dashboard_data: dict[str, Any]) -> "DashboardDataLite":
@@ -275,52 +287,44 @@ class DashboardDataLite(BaseModel):
             """Extract ID string from various formats (str, dict with $oid)."""
             if value is None:
                 return None
-            if isinstance(value, str):
-                return value
             if isinstance(value, dict) and "$oid" in value:
                 return value["$oid"]
             return str(value)
 
         def filter_dict_kwargs(kwargs: dict[str, Any]) -> dict[str, Any]:
             """Filter out empty/default values from dict_kwargs."""
-            filtered = {}
-            for key, value in kwargs.items():
-                # Skip empty strings, None, empty lists
-                if value in ("", None, [], {}):
-                    continue
-                # Skip common defaults
-                if key == "template" and value == "mantine_light":
-                    continue
-                if key == "orientation" and value == "v":
-                    continue
-                if key in ("log_x", "log_y") and value is False:
-                    continue
-                filtered[key] = value
-            return filtered
+            defaults = {
+                "template": "mantine_light",
+                "orientation": "v",
+                "log_x": False,
+                "log_y": False,
+            }
+            return {
+                k: v
+                for k, v in kwargs.items()
+                if v not in ("", None, [], {}) and not (k in defaults and v == defaults[k])
+            }
 
-        # Extract dashboard ID
+        def copy_optional_fields(comp: dict, lite_comp: dict, fields: list[str]) -> None:
+            """Copy non-empty optional fields from component to lite component."""
+            for field in fields:
+                if comp.get(field):
+                    lite_comp[field] = comp[field]
+
         dashboard_id = extract_id(dashboard_data.get("dashboard_id") or dashboard_data.get("_id"))
-
-        # Extract components with only lite fields
-        stored_metadata = dashboard_data.get("stored_metadata", [])
+        tag_counters: dict[str, int] = {}
         lite_components = []
 
-        # Track tag counters for generating readable tags
-        tag_counters: dict[str, int] = {}
-
-        for comp in stored_metadata:
+        for comp in dashboard_data.get("stored_metadata", []):
             comp_type = comp.get("component_type", "figure")
 
-            # Generate readable tag (e.g., figure-1, card-2)
+            # Generate or use existing tag
             tag_counters[comp_type] = tag_counters.get(comp_type, 0) + 1
-            generated_tag = f"{comp_type}-{tag_counters[comp_type]}"
-
-            # Use existing tag if present, otherwise use generated one
-            existing_tag = comp.get("tag")
+            tag = comp.get("tag") or f"{comp_type}-{tag_counters[comp_type]}"
 
             lite_comp: dict[str, Any] = {
-                "tag": existing_tag or generated_tag,
-                "index": comp.get("index", ""),  # Keep UUID for reference
+                "tag": tag,
+                "index": comp.get("index", ""),
                 "component_type": comp_type,
                 "workflow_tag": comp.get("workflow_tag") or comp.get("wf_tag", ""),
                 "data_collection_tag": (
@@ -329,16 +333,11 @@ class DashboardDataLite(BaseModel):
                 ),
             }
 
-            # Only include title if non-empty
-            title = comp.get("title")
-            if title:
-                lite_comp["title"] = title
-
-            comp_type = comp.get("component_type", "figure")
+            if comp.get("title"):
+                lite_comp["title"] = comp["title"]
 
             if comp_type == "figure":
                 lite_comp["visu_type"] = comp.get("visu_type", "scatter")
-                # Filter dict_kwargs to remove defaults
                 dict_kwargs = filter_dict_kwargs(comp.get("dict_kwargs", {}))
                 if dict_kwargs:
                     lite_comp["dict_kwargs"] = dict_kwargs
@@ -347,28 +346,25 @@ class DashboardDataLite(BaseModel):
                 lite_comp["aggregation"] = comp.get("aggregation", "")
                 lite_comp["column_name"] = comp.get("column_name", "")
                 lite_comp["column_type"] = comp.get("column_type", "float64")
-                # Optional styling
-                for field in [
-                    "icon_name",
-                    "icon_color",
-                    "title_color",
-                    "title_font_size",
-                    "value_font_size",
-                ]:
-                    if comp.get(field):
-                        lite_comp[field] = comp[field]
+                copy_optional_fields(
+                    comp,
+                    lite_comp,
+                    [
+                        "icon_name",
+                        "icon_color",
+                        "title_color",
+                        "title_font_size",
+                        "value_font_size",
+                    ],
+                )
 
             elif comp_type == "interactive":
                 lite_comp["interactive_component_type"] = comp.get("interactive_component_type", "")
                 lite_comp["column_name"] = comp.get("column_name", "")
                 lite_comp["column_type"] = comp.get("column_type", "object")
-                # Optional styling
-                for field in ["title_size", "custom_color", "icon_name"]:
-                    if comp.get(field):
-                        lite_comp[field] = comp[field]
+                copy_optional_fields(comp, lite_comp, ["title_size", "custom_color", "icon_name"])
 
             elif comp_type == "table":
-                # Table has minimal config - only include non-defaults
                 if comp.get("columns"):
                     lite_comp["columns"] = comp["columns"]
                 if comp.get("page_size") and comp["page_size"] != 10:
@@ -390,16 +386,33 @@ class DashboardDataLite(BaseModel):
     def to_full(self) -> dict[str, Any]:
         """Convert lite format back to full dashboard dict.
 
-        Resolves workflow and data collection tags to IDs from MongoDB.
-
         Returns:
             Full dashboard dictionary ready for MongoDB insertion
-
-        Raises:
-            ValueError: If required data collection not found in MongoDB
         """
         import uuid
         from datetime import datetime
+
+        def copy_optional_fields(src: dict, dest: dict, fields: list[str]) -> None:
+            """Copy non-empty optional fields from source to destination."""
+            for field in fields:
+                if src.get(field):
+                    dest[field] = src[field]
+
+        def build_base_component(comp_dict: dict[str, Any]) -> dict[str, Any]:
+            """Build base component with common fields."""
+            return {
+                "index": comp_dict.get("index") or str(uuid.uuid4()),
+                "component_type": comp_dict.get("component_type", "figure"),
+                "title": comp_dict.get("title", ""),
+                "workflow_tag": comp_dict.get("workflow_tag"),
+                "data_collection_tag": comp_dict.get("data_collection_tag"),
+                "wf_id": None,
+                "dc_id": None,
+                "dc_config": {},
+                "cols_json": {},
+                "parent_index": None,
+                "last_updated": datetime.now().isoformat(),
+            }
 
         full_dict: dict[str, Any] = {
             "title": self.title,
@@ -417,70 +430,71 @@ class DashboardDataLite(BaseModel):
         if self.dashboard_id:
             full_dict["dashboard_id"] = self.dashboard_id
 
-        # Convert lite components to full format
         full_components = []
         for comp in self.components:
             comp_dict = comp if isinstance(comp, dict) else comp.model_dump()
-
-            full_comp: dict[str, Any] = {
-                "index": comp_dict.get("index") or str(uuid.uuid4()),
-                "component_type": comp_dict.get("component_type", "figure"),
-                "title": comp_dict.get("title", ""),
-                "workflow_tag": comp_dict.get("workflow_tag"),
-                "data_collection_tag": comp_dict.get("data_collection_tag"),
-                "wf_id": None,
-                "dc_id": None,
-                "dc_config": {},
-                "cols_json": {},
-                "parent_index": None,
-                "last_updated": datetime.now().isoformat(),
-            }
-
+            full_comp = build_base_component(comp_dict)
             comp_type = comp_dict.get("component_type", "figure")
 
             if comp_type == "figure":
-                full_comp["visu_type"] = comp_dict.get("visu_type", "scatter")
-                full_comp["dict_kwargs"] = comp_dict.get("dict_kwargs", {})
-                full_comp["mode"] = "ui"
-                full_comp["displayed_data_count"] = 0
-                full_comp["total_data_count"] = 0
-                full_comp["was_sampled"] = False
-                full_comp["filter_applied"] = False
+                full_comp.update(
+                    {
+                        "visu_type": comp_dict.get("visu_type", "scatter"),
+                        "dict_kwargs": comp_dict.get("dict_kwargs", {}),
+                        "mode": "ui",
+                        "displayed_data_count": 0,
+                        "total_data_count": 0,
+                        "was_sampled": False,
+                        "filter_applied": False,
+                    }
+                )
 
             elif comp_type == "card":
-                full_comp["aggregation"] = comp_dict.get("aggregation", "")
-                full_comp["column_name"] = comp_dict.get("column_name", "")
-                full_comp["column_type"] = comp_dict.get("column_type", "float64")
-                full_comp["value"] = None
-                # Copy styling fields
-                for field in [
-                    "icon_name",
-                    "icon_color",
-                    "title_color",
-                    "title_font_size",
-                    "value_font_size",
-                ]:
-                    if comp_dict.get(field):
-                        full_comp[field] = comp_dict[field]
+                full_comp.update(
+                    {
+                        "aggregation": comp_dict.get("aggregation", ""),
+                        "column_name": comp_dict.get("column_name", ""),
+                        "column_type": comp_dict.get("column_type", "float64"),
+                        "value": None,
+                    }
+                )
+                copy_optional_fields(
+                    comp_dict,
+                    full_comp,
+                    [
+                        "icon_name",
+                        "icon_color",
+                        "title_color",
+                        "title_font_size",
+                        "value_font_size",
+                    ],
+                )
 
             elif comp_type == "interactive":
-                full_comp["interactive_component_type"] = comp_dict.get(
-                    "interactive_component_type", ""
+                full_comp.update(
+                    {
+                        "interactive_component_type": comp_dict.get(
+                            "interactive_component_type", ""
+                        ),
+                        "column_name": comp_dict.get("column_name", ""),
+                        "column_type": comp_dict.get("column_type", "object"),
+                        "value": None,
+                        "default_state": None,
+                    }
                 )
-                full_comp["column_name"] = comp_dict.get("column_name", "")
-                full_comp["column_type"] = comp_dict.get("column_type", "object")
-                full_comp["value"] = None
-                full_comp["default_state"] = None
-                # Copy styling fields
-                for field in ["title_size", "custom_color", "icon_name"]:
-                    if comp_dict.get(field):
-                        full_comp[field] = comp_dict[field]
+                copy_optional_fields(
+                    comp_dict, full_comp, ["title_size", "custom_color", "icon_name"]
+                )
 
             elif comp_type == "table":
-                full_comp["columns"] = comp_dict.get("columns", [])
-                full_comp["page_size"] = comp_dict.get("page_size", 10)
-                full_comp["sortable"] = comp_dict.get("sortable", True)
-                full_comp["filterable"] = comp_dict.get("filterable", True)
+                full_comp.update(
+                    {
+                        "columns": comp_dict.get("columns", []),
+                        "page_size": comp_dict.get("page_size", 10),
+                        "sortable": comp_dict.get("sortable", True),
+                        "filterable": comp_dict.get("filterable", True),
+                    }
+                )
 
             full_components.append(full_comp)
 
@@ -489,13 +503,13 @@ class DashboardDataLite(BaseModel):
         # Auto-generate layout
         from depictio.models.yaml_serialization.utils import auto_generate_layout
 
-        generated_layout = []
-        for idx, comp in enumerate(full_components):
-            layout = auto_generate_layout(idx, comp.get("component_type", "figure"))
-            layout["i"] = f"box-{comp['index']}"
-            generated_layout.append(layout)
-
-        full_dict["stored_layout_data"] = generated_layout
+        full_dict["stored_layout_data"] = [
+            {
+                **auto_generate_layout(idx, comp.get("component_type", "figure")),
+                "i": f"box-{comp['index']}",
+            }
+            for idx, comp in enumerate(full_components)
+        ]
         full_dict["left_panel_layout_data"] = []
         full_dict["right_panel_layout_data"] = []
         full_dict["tmp_children_data"] = []

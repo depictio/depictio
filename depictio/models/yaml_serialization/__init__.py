@@ -34,6 +34,22 @@ from depictio.models.components.lite import (
 # Re-export DashboardDataLite
 from depictio.models.models.dashboards import DashboardDataLite
 
+# Re-export loader functions
+from depictio.models.yaml_serialization.loader import (
+    delete_dashboard_yaml,
+    ensure_yaml_directory,
+    import_dashboard_from_yaml_dir,
+    list_yaml_dashboards,
+    sync_status,
+    validate_dashboard_yaml,
+    yaml_to_dashboard_dict,
+)
+
+# Re-export export functions
+from depictio.models.yaml_serialization.export import (
+    export_dashboard_to_yaml_dir,
+)
+
 # Re-export utility functions
 from depictio.models.yaml_serialization.utils import (
     DashboardYAMLDumper,
@@ -65,4 +81,14 @@ __all__ = [
     "filter_defaults",
     "generate_component_id",
     "sanitize_filename",
+    # Loader functions
+    "delete_dashboard_yaml",
+    "ensure_yaml_directory",
+    "import_dashboard_from_yaml_dir",
+    "list_yaml_dashboards",
+    "sync_status",
+    "validate_dashboard_yaml",
+    "yaml_to_dashboard_dict",
+    # Export functions
+    "export_dashboard_to_yaml_dir",
 ]

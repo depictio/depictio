@@ -1,8 +1,10 @@
 """
 Dashboard CLI commands.
 
-Provides commands for validating, converting, and importing dashboard YAML files
-using DashboardDataLite Pydantic models.
+Provides three simple commands for dashboard YAML management:
+- validate: Validate a YAML file locally
+- import: Import YAML to server (project from YAML or --project override)
+- export: Export dashboard from server to YAML
 """
 
 from pathlib import Path
@@ -11,10 +13,28 @@ from typing import Annotated, Any
 import httpx
 import typer
 from rich.console import Console
-from rich.table import Table
 
 app = typer.Typer(help="Dashboard management commands")
 console = Console()
+
+
+def _format_validation_error(error: Any) -> dict[str, str]:
+    """Format a single validation error for display."""
+    if isinstance(error, dict):
+        loc = error.get("loc", ())
+        msg = error.get("msg", str(error))
+        field = ".".join(str(x) for x in loc) if loc else "-"
+        return {"component_id": "-", "field": field, "message": msg}
+    return {"component_id": "-", "field": "-", "message": str(error)}
+
+
+def _make_error_result(message: str) -> dict[str, Any]:
+    """Create a validation result for a single error."""
+    return {
+        "valid": False,
+        "errors": [{"component_id": "-", "field": "-", "message": message}],
+        "warnings": [],
+    }
 
 
 def validate_yaml_with_pydantic(yaml_file: Path) -> dict[str, Any]:
@@ -31,51 +51,12 @@ def validate_yaml_with_pydantic(yaml_file: Path) -> dict[str, Any]:
     try:
         content = yaml_file.read_text(encoding="utf-8")
         is_valid, errors = DashboardDataLite.validate_yaml(content)
-
-        # Format errors for display
-        formatted_errors = []
-        for error in errors:
-            if isinstance(error, dict):
-                # Pydantic ValidationError format
-                loc = error.get("loc", ())
-                msg = error.get("msg", str(error))
-                field = ".".join(str(x) for x in loc) if loc else "-"
-                formatted_errors.append(
-                    {
-                        "component_id": "-",
-                        "field": field,
-                        "message": msg,
-                    }
-                )
-            else:
-                formatted_errors.append(
-                    {
-                        "component_id": "-",
-                        "field": "-",
-                        "message": str(error),
-                    }
-                )
-
-        return {
-            "valid": is_valid,
-            "errors": formatted_errors,
-            "warnings": [],
-        }
-
+        formatted_errors = [_format_validation_error(e) for e in errors]
+        return {"valid": is_valid, "errors": formatted_errors, "warnings": []}
     except FileNotFoundError:
-        return {
-            "valid": False,
-            "errors": [
-                {"component_id": "-", "field": "-", "message": f"File not found: {yaml_file}"}
-            ],
-            "warnings": [],
-        }
+        return _make_error_result(f"File not found: {yaml_file}")
     except Exception as e:
-        return {
-            "valid": False,
-            "errors": [{"component_id": "-", "field": "-", "message": str(e)}],
-            "warnings": [],
-        }
+        return _make_error_result(str(e))
 
 
 @app.command()
@@ -83,7 +64,17 @@ def validate(
     yaml_file: Annotated[Path, typer.Argument(help="Path to YAML dashboard file")],
     verbose: Annotated[bool, typer.Option("--verbose", "-v")] = False,
 ) -> None:
-    """Validate a dashboard YAML file using DashboardDataLite schema."""
+    """Validate a dashboard YAML file locally.
+
+    Uses DashboardDataLite Pydantic schema to validate the YAML structure.
+    This is a local-only operation that doesn't require server connection.
+
+    Example:
+        depictio dashboard validate dashboard.yaml
+        depictio dashboard validate dashboard.yaml --verbose
+    """
+    from rich.table import Table
+
     if not yaml_file.exists():
         console.print(f"[red]Error: File not found: {yaml_file}[/red]")
         raise typer.Exit(1)
@@ -127,224 +118,44 @@ def validate(
         raise typer.Exit(1)
 
 
-@app.command()
-def validate_dir(
-    directory: Annotated[Path, typer.Argument(help="Directory to validate")] = Path("."),
-    recursive: Annotated[bool, typer.Option("--recursive", "-r")] = True,
-) -> None:
-    """Validate all YAML files in a directory."""
-    pattern = "**/*.yaml" if recursive else "*.yaml"
-    yaml_files = list(directory.glob(pattern))
-
-    if not yaml_files:
-        console.print(f"[yellow]No YAML files found in {directory}[/yellow]")
-        raise typer.Exit(0)
-
-    console.print(f"Found {len(yaml_files)} YAML files")
-    console.print()
-
-    valid_count = 0
-    invalid_count = 0
-
-    table = Table(title="Validation Results")
-    table.add_column("File", style="cyan")
-    table.add_column("Status", style="bold")
-    table.add_column("Errors", style="red")
-
-    for yaml_file in yaml_files:
-        result = validate_yaml_with_pydantic(yaml_file)
-
-        if result["valid"]:
-            valid_count += 1
-            status = "[green]✓ Valid[/green]"
-        else:
-            invalid_count += 1
-            status = "[red]✗ Invalid[/red]"
-
-        table.add_row(yaml_file.name, status, str(len(result["errors"])))
-
-    console.print(table)
-    console.print(f"\nSummary: {valid_count} valid, {invalid_count} invalid")
-
-    if invalid_count > 0:
-        raise typer.Exit(1)
-
-
-@app.command()
-def schema(
-    output: Annotated[
-        Path | None, typer.Option("--output", "-o", help="Output file path for JSON schema")
-    ] = None,
-) -> None:
-    """Print or save the JSON schema for dashboard YAML validation."""
-    import json
-
-    from depictio.models.models.dashboards import DashboardDataLite
-
-    schema_dict = DashboardDataLite.model_json_schema()
-    schema_json = json.dumps(schema_dict, indent=2)
-
-    if output:
-        output.write_text(schema_json, encoding="utf-8")
-        console.print(f"[green]Schema written to: {output}[/green]")
-    else:
-        console.print(schema_json)
-
-
-@app.command()
-def export(
-    dashboard_id: Annotated[str, typer.Argument(help="Dashboard ID to export")],
-    output: Annotated[Path, typer.Option("--output", "-o", help="Output file path")] = Path(
-        "dashboard.yaml"
-    ),
-    api_url: Annotated[str, typer.Option("--api", help="API base URL")] = "http://localhost:8058",
-) -> None:
-    """Export a dashboard to YAML file via API."""
-    import httpx
-
-    url = f"{api_url}/depictio/api/v1/dashboards/{dashboard_id}/yaml"
-
-    try:
-        with httpx.Client(timeout=30) as client:
-            response = client.get(url)
-            response.raise_for_status()
-
-            output.write_text(response.text, encoding="utf-8")
-            console.print(f"[green]Dashboard exported to: {output}[/green]")
-
-    except httpx.HTTPStatusError as e:
-        console.print(f"[red]Error: HTTP {e.response.status_code}[/red]")
-        console.print(f"  {e.response.text}")
-        raise typer.Exit(1)
-    except httpx.RequestError as e:
-        console.print(f"[red]Error: {e}[/red]")
-        raise typer.Exit(1)
-
-
-@app.command()
-def convert(
-    json_file: Annotated[Path, typer.Argument(help="Path to JSON dashboard file")],
-    output: Annotated[
-        Path | None, typer.Option("--output", "-o", help="Output YAML file path")
-    ] = None,
-) -> None:
-    """Convert dashboard JSON to minimal YAML format (~60 lines).
-
-    This converts a full dashboard JSON export to the minimal DashboardDataLite
-    YAML format, which is human-readable and version-controllable.
-
-    Example:
-        depictio dashboard convert dashboard.json
-        depictio dashboard convert dashboard.json -o output.yaml
-    """
-    import json
-
-    from depictio.models.models.dashboards import DashboardDataLite
-
-    if not json_file.exists():
-        console.print(f"[red]Error: File not found: {json_file}[/red]")
-        raise typer.Exit(1)
-
-    try:
-        # Load JSON data
-        with json_file.open("r", encoding="utf-8") as f:
-            data = json.load(f)
-
-        # Convert to lite format
-        lite = DashboardDataLite.from_full(data)
-        yaml_content = lite.to_yaml()
-
-        # Determine output path
-        if output is None:
-            output = json_file.with_suffix(".yaml")
-
-        # Write YAML
-        output.write_text(yaml_content, encoding="utf-8")
-
-        # Show stats
-        line_count = yaml_content.count("\n") + 1
-        component_count = len(lite.components)
-
-        console.print("[green]✓ Converted to minimal YAML format[/green]")
-        console.print(f"  Output: {output}")
-        console.print(f"  Lines: {line_count}")
-        console.print(f"  Components: {component_count}")
-
-    except json.JSONDecodeError as e:
-        console.print(f"[red]Error: Invalid JSON: {e}[/red]")
-        raise typer.Exit(1)
-    except Exception as e:
-        console.print(f"[red]Error: {e}[/red]")
-        raise typer.Exit(1)
-
-
-@app.command()
-def from_yaml(
-    yaml_file: Annotated[Path, typer.Argument(help="Path to YAML dashboard file")],
-    output: Annotated[
-        Path | None, typer.Option("--output", "-o", help="Output JSON file path")
-    ] = None,
-) -> None:
-    """Convert minimal YAML format back to full dashboard JSON.
-
-    This converts a DashboardDataLite YAML file to full dashboard JSON format,
-    resolving data collection and workflow references from MongoDB.
-
-    Example:
-        depictio dashboard from-yaml dashboard.yaml
-        depictio dashboard from-yaml dashboard.yaml -o output.json
-    """
-    import json
-
-    from depictio.models.models.dashboards import DashboardDataLite
-
-    if not yaml_file.exists():
-        console.print(f"[red]Error: File not found: {yaml_file}[/red]")
-        raise typer.Exit(1)
-
-    try:
-        # Load and convert
-        lite = DashboardDataLite.from_yaml_file(yaml_file)
-        full_data = lite.to_full()
-
-        # Determine output path
-        if output is None:
-            output = yaml_file.with_suffix(".json")
-
-        # Write JSON
-        with output.open("w", encoding="utf-8") as f:
-            json.dump(full_data, f, indent=2, default=str)
-
-        console.print("[green]✓ Converted to full dashboard JSON[/green]")
-        console.print(f"  Output: {output}")
-        console.print(f"  Components: {len(full_data.get('stored_metadata', []))}")
-
-    except ValueError as e:
-        console.print(f"[red]Error: {e}[/red]")
-        raise typer.Exit(1)
-    except Exception as e:
-        console.print(f"[red]Error: {e}[/red]")
-        raise typer.Exit(1)
-
-
 @app.command("import")
 def import_yaml(
     yaml_file: Annotated[Path, typer.Argument(help="Path to YAML dashboard file")],
-    project_id: Annotated[str, typer.Option("--project", "-p", help="Project ID to import into")],
-    api_url: Annotated[str, typer.Option("--api", help="API base URL")] = "http://localhost:8058",
     config_path: Annotated[
-        str, typer.Option("--config", "-c", help="Path to CLI config file")
-    ] = "~/.depictio/cli.yaml",
+        str | None,
+        typer.Option("--config", "-c", help="Path to CLI config file (required unless --dry-run)"),
+    ] = None,
+    project: Annotated[
+        str | None,
+        typer.Option("--project", "-p", help="Project ID (overrides project_tag in YAML)"),
+    ] = None,
+    overwrite: Annotated[
+        bool,
+        typer.Option("--overwrite", help="Overwrite existing dashboard with same title in project"),
+    ] = False,
+    api_url: Annotated[str, typer.Option("--api", help="API base URL")] = "http://localhost:8058",
     dry_run: Annotated[bool, typer.Option("--dry-run", help="Validate only, don't import")] = False,
 ) -> None:
     """Import a dashboard YAML file to the server.
 
-    This command validates the YAML file locally, then uploads it to the API
-    to create a new dashboard in the specified project.
+    The project is determined in this order:
+    1. --project option (if provided)
+    2. project_tag field in the YAML file
+
+    Requires --config for server import (not needed for --dry-run validation).
 
     Example:
-        depictio dashboard import dashboard.yaml --project 646b0f3c1e4a2d7f8e5b8c9a
-        depictio dashboard import dashboard.yaml -p 646b0f3c1e4a2d7f8e5b8c9a --dry-run
+        # Validate without server (no config needed)
+        depictio dashboard import dashboard.yaml --dry-run
+
+        # Import with config file
+        depictio dashboard import dashboard.yaml --config admin_config.yaml
+
+        # Overwrite existing dashboard with same title
+        depictio dashboard import dashboard.yaml --config admin_config.yaml --overwrite
+
+        # Override with explicit project ID
+        depictio dashboard import dashboard.yaml --config admin_config.yaml --project 646b0f3c1e4a2d7f8e5b8c9a
     """
     from depictio.models.models.dashboards import DashboardDataLite
 
@@ -371,9 +182,26 @@ def import_yaml(
     console.print(f"  Title: {lite.title}")
     console.print(f"  Components: {len(lite.components)}")
 
+    # Show project source
+    if project:
+        console.print(f"  Project: {project} (from --project)")
+    elif lite.project_tag:
+        console.print(f"  Project: {lite.project_tag} (from YAML project_tag)")
+    else:
+        console.print(
+            "[yellow]  Warning: No project specified. "
+            "Use --project or add project_tag to YAML.[/yellow]"
+        )
+
     if dry_run:
         console.print("\n[yellow]Dry run mode - skipping import[/yellow]")
         raise typer.Exit(0)
+
+    # Config is required for server import
+    if not config_path:
+        console.print("[red]Error: --config is required for server import[/red]")
+        console.print("[yellow]Hint: Use --dry-run for local validation without config[/yellow]")
+        raise typer.Exit(1)
 
     # Step 2: Load CLI config for authentication
     console.print("\n[cyan]Loading CLI configuration...[/cyan]")
@@ -393,29 +221,28 @@ def import_yaml(
         raise typer.Exit(1)
 
     # Step 3: Import to API
-    console.print(f"\n[cyan]Importing dashboard to project {project_id}...[/cyan]")
+    project_display = project or lite.project_tag or "server lookup"
+    action = "Updating" if overwrite else "Importing"
+    console.print(f"\n[cyan]{action} dashboard (project: {project_display})...[/cyan]")
 
     url = f"{api_url}/depictio/api/v1/dashboards/import/yaml"
 
     try:
+        # Build params - only include project_id if explicitly provided
+        params: dict[str, str | bool] = {"yaml_content": yaml_content}
+        if project:
+            params["project_id"] = project
+        if overwrite:
+            params["overwrite"] = True
+
         with httpx.Client(timeout=60) as client:
             response = client.post(
                 url,
-                params={"yaml_content": yaml_content, "project_id": project_id},
+                params=params,
                 headers=headers,
             )
 
-            if response.status_code == 200:
-                data = response.json()
-                console.print("[green]✓ Dashboard imported successfully![/green]")
-                console.print(f"  Dashboard ID: {data.get('dashboard_id')}")
-                console.print(f"  Title: {data.get('title')}")
-                console.print(f"  Project ID: {data.get('project_id')}")
-                console.print(
-                    f"\n[cyan]View at:[/cyan] {api_url.replace('/depictio/api/v1', '')}"
-                    f"/dashboard/{data.get('dashboard_id')}"
-                )
-            else:
+            if response.status_code != 200:
                 console.print(f"[red]✗ Import failed: HTTP {response.status_code}[/red]")
                 try:
                     error_detail = response.json().get("detail", response.text)
@@ -423,6 +250,17 @@ def import_yaml(
                     error_detail = response.text
                 console.print(f"  {error_detail}")
                 raise typer.Exit(1)
+
+            data = response.json()
+            action_done = "updated" if data.get("updated") else "imported"
+            console.print(f"[green]✓ Dashboard {action_done} successfully![/green]")
+            console.print(f"  Dashboard ID: {data.get('dashboard_id')}")
+            console.print(f"  Title: {data.get('title')}")
+            console.print(f"  Project ID: {data.get('project_id')}")
+            base_url = api_url.replace("/depictio/api/v1", "")
+            console.print(
+                f"\n[cyan]View at:[/cyan] {base_url}/dashboard/{data.get('dashboard_id')}"
+            )
 
     except httpx.ConnectError:
         console.print(f"[red]Error: Cannot connect to API at {api_url}[/red]")
@@ -434,17 +272,26 @@ def import_yaml(
 
 
 @app.command()
-def list_projects(
+def export(
+    dashboard_id: Annotated[str, typer.Argument(help="Dashboard ID to export")],
+    config_path: Annotated[str, typer.Option("--config", "-c", help="Path to CLI config file")],
+    output: Annotated[Path, typer.Option("--output", "-o", help="Output file path")] = Path(
+        "dashboard.yaml"
+    ),
     api_url: Annotated[str, typer.Option("--api", help="API base URL")] = "http://localhost:8058",
-    config_path: Annotated[
-        str, typer.Option("--config", "-c", help="Path to CLI config file")
-    ] = "~/.depictio/cli.yaml",
 ) -> None:
-    """List available projects to import dashboards into.
+    """Export a dashboard from the server to a YAML file.
+
+    Downloads the dashboard configuration and saves it as a minimal YAML file
+    suitable for version control and re-import.
+
+    Requires --config for authentication.
 
     Example:
-        depictio dashboard list-projects
+        depictio dashboard export 6824cb3b89d2b72169309737 --config admin_config.yaml
+        depictio dashboard export 6824cb3b89d2b72169309737 --config admin_config.yaml -o my-dashboard.yaml
     """
+    # Load CLI config for authentication
     console.print("[cyan]Loading CLI configuration...[/cyan]")
     try:
         from depictio.cli.cli.utils.common import generate_api_headers, load_depictio_config
@@ -455,43 +302,24 @@ def list_projects(
             api_url = str(cli_config.api_base_url)
     except Exception as e:
         console.print(f"[red]Error loading CLI config: {e}[/red]")
+        console.print("[yellow]Hint: Run 'depictio config' to set up authentication[/yellow]")
         raise typer.Exit(1)
 
-    console.print(f"[cyan]Fetching projects from {api_url}...[/cyan]\n")
+    url = f"{api_url}/depictio/api/v1/dashboards/{dashboard_id}/yaml"
+    console.print(f"[cyan]Exporting dashboard {dashboard_id}...[/cyan]")
 
     try:
         with httpx.Client(timeout=30) as client:
-            response = client.get(
-                f"{api_url}/depictio/api/v1/projects/list",
-                headers=headers,
-            )
+            response = client.get(url, headers=headers)
+            response.raise_for_status()
 
-            if response.status_code == 200:
-                projects = response.json()
-                if not projects:
-                    console.print("[yellow]No projects found[/yellow]")
-                    raise typer.Exit(0)
+            output.write_text(response.text, encoding="utf-8")
+            console.print(f"[green]✓ Dashboard exported to: {output}[/green]")
 
-                table = Table(title="Available Projects")
-                table.add_column("ID", style="cyan")
-                table.add_column("Name", style="green")
-                table.add_column("Public", style="yellow")
-
-                for project in projects:
-                    project_id = project.get("_id") or project.get("id", "-")
-                    name = project.get("name", "-")
-                    is_public = "Yes" if project.get("is_public") else "No"
-                    table.add_row(str(project_id), name, is_public)
-
-                console.print(table)
-                console.print(
-                    "\n[dim]Use --project <ID> with 'depictio dashboard import' command[/dim]"
-                )
-            else:
-                console.print(f"[red]Error: HTTP {response.status_code}[/red]")
-                console.print(f"  {response.text}")
-                raise typer.Exit(1)
-
-    except httpx.ConnectError:
-        console.print(f"[red]Error: Cannot connect to API at {api_url}[/red]")
+    except httpx.HTTPStatusError as e:
+        console.print(f"[red]Error: HTTP {e.response.status_code}[/red]")
+        console.print(f"  {e.response.text}")
+        raise typer.Exit(1)
+    except httpx.RequestError as e:
+        console.print(f"[red]Error: {e}[/red]")
         raise typer.Exit(1)

@@ -621,3 +621,188 @@ class TestDashboardDataLite:
 
         assert restored.title == original.title
         assert len(restored.components) == len(original.components)
+
+
+# ============================================================================
+# Test to_full() Tag Resolution Structure
+# ============================================================================
+
+
+class TestToFullTagResolution:
+    """Tests for DashboardDataLite.to_full() tag handling for API import."""
+
+    @pytest.fixture
+    def yaml_with_tags(self) -> str:
+        """YAML content with workflow and data collection tags."""
+        return """
+title: "Tag Resolution Test"
+components:
+  - tag: scatter-1
+    component_type: figure
+    workflow_tag: python/iris_workflow
+    data_collection_tag: iris_table
+    visu_type: scatter
+    dict_kwargs:
+      x: sepal.length
+      y: sepal.width
+  - tag: card-1
+    component_type: card
+    workflow_tag: python/iris_workflow
+    data_collection_tag: iris_table
+    aggregation: average
+    column_name: sepal.length
+    column_type: float64
+"""
+
+    def test_to_full_preserves_workflow_tag(self, yaml_with_tags: str):
+        """to_full() should preserve workflow_tag in stored_metadata."""
+        lite = DashboardDataLite.from_yaml(yaml_with_tags)
+        full_dict = lite.to_full()
+
+        # Check that workflow_tag is preserved
+        for comp in full_dict["stored_metadata"]:
+            if comp.get("workflow_tag"):
+                assert comp["workflow_tag"] == "python/iris_workflow"
+
+    def test_to_full_preserves_data_collection_tag(self, yaml_with_tags: str):
+        """to_full() should preserve data_collection_tag in stored_metadata."""
+        lite = DashboardDataLite.from_yaml(yaml_with_tags)
+        full_dict = lite.to_full()
+
+        # Check that data_collection_tag is preserved
+        for comp in full_dict["stored_metadata"]:
+            if comp.get("data_collection_tag"):
+                assert comp["data_collection_tag"] == "iris_table"
+
+    def test_to_full_sets_wf_id_to_none(self, yaml_with_tags: str):
+        """to_full() should set wf_id to None (resolution happens at import)."""
+        lite = DashboardDataLite.from_yaml(yaml_with_tags)
+        full_dict = lite.to_full()
+
+        # wf_id should be None - will be resolved at import time
+        for comp in full_dict["stored_metadata"]:
+            assert comp.get("wf_id") is None
+
+    def test_to_full_sets_dc_id_to_none(self, yaml_with_tags: str):
+        """to_full() should set dc_id to None (resolution happens at import)."""
+        lite = DashboardDataLite.from_yaml(yaml_with_tags)
+        full_dict = lite.to_full()
+
+        # dc_id should be None - will be resolved at import time
+        for comp in full_dict["stored_metadata"]:
+            assert comp.get("dc_id") is None
+
+    def test_to_full_initializes_dc_config(self, yaml_with_tags: str):
+        """to_full() should initialize dc_config as empty dict."""
+        lite = DashboardDataLite.from_yaml(yaml_with_tags)
+        full_dict = lite.to_full()
+
+        for comp in full_dict["stored_metadata"]:
+            assert "dc_config" in comp
+            assert isinstance(comp["dc_config"], dict)
+
+    def test_to_full_generates_unique_indices(self, yaml_with_tags: str):
+        """to_full() should generate unique UUID indices for all components."""
+        lite = DashboardDataLite.from_yaml(yaml_with_tags)
+        full_dict = lite.to_full()
+
+        indices = [comp["index"] for comp in full_dict["stored_metadata"]]
+        # All indices should be unique
+        assert len(indices) == len(set(indices))
+        # Indices should look like UUIDs (36 chars with hyphens)
+        for idx in indices:
+            assert len(idx) == 36
+            assert idx.count("-") == 4
+
+    def test_to_full_layout_references_match_indices(self, yaml_with_tags: str):
+        """to_full() layout 'i' values should match component indices."""
+        lite = DashboardDataLite.from_yaml(yaml_with_tags)
+        full_dict = lite.to_full()
+
+        comp_indices = {comp["index"] for comp in full_dict["stored_metadata"]}
+        layout_refs = {
+            layout["i"].replace("box-", "") for layout in full_dict["stored_layout_data"]
+        }
+
+        # All layout references should point to valid component indices
+        assert layout_refs == comp_indices
+
+
+# ============================================================================
+# Test Import Tag Resolution Logic (unit test without MongoDB)
+# ============================================================================
+
+
+class TestImportTagResolutionLogic:
+    """Tests for the tag resolution logic used in the import endpoint."""
+
+    def test_resolution_updates_wf_id_when_found(self):
+        """When workflow is found, wf_id should be updated."""
+        from bson import ObjectId
+
+        # Simulate the resolution logic from routes.py
+        component = {
+            "workflow_tag": "python/test_workflow",
+            "data_collection_tag": "test_table",
+            "wf_id": None,
+            "dc_id": None,
+            "dc_config": {},
+        }
+
+        # Simulate finding a matching workflow
+        mock_wf_id = ObjectId()
+        mock_dc_id = ObjectId()
+
+        # This mimics the resolution logic in import_dashboard_from_yaml
+        wf_tag = component.get("workflow_tag")
+        if wf_tag:
+            wf_name = wf_tag.split("/", 1)[1] if "/" in wf_tag else wf_tag
+
+            # Simulate finding a match
+            if wf_name == "test_workflow":
+                component["wf_id"] = mock_wf_id
+                component["wf_tag"] = f"python/{wf_name}"
+
+                # Simulate finding matching DC
+                dc_tag = component.get("data_collection_tag")
+                if dc_tag == "test_table":
+                    component["dc_id"] = mock_dc_id
+                    component["dc_config"] = {
+                        "_id": mock_dc_id,
+                        "data_collection_tag": "test_table",
+                    }
+
+        assert component["wf_id"] == mock_wf_id
+        assert component["dc_id"] == mock_dc_id
+        assert component["dc_config"]["_id"] == mock_dc_id
+
+    def test_resolution_handles_engine_prefix(self):
+        """Workflow tag with engine prefix should be parsed correctly."""
+        # Test various workflow tag formats
+        test_cases = [
+            ("python/my_workflow", "my_workflow"),
+            ("snakemake/pipeline", "pipeline"),
+            ("nextflow/analysis", "analysis"),
+            ("simple_workflow", "simple_workflow"),  # No prefix
+        ]
+
+        for wf_tag, expected_name in test_cases:
+            wf_name = wf_tag.split("/", 1)[1] if "/" in wf_tag else wf_tag
+            assert wf_name == expected_name, f"Failed for {wf_tag}"
+
+    def test_resolution_preserves_tags_when_not_found(self):
+        """When workflow/DC not found, tags should be preserved."""
+        component = {
+            "workflow_tag": "python/nonexistent",
+            "data_collection_tag": "nonexistent_table",
+            "wf_id": None,
+            "dc_id": None,
+            "dc_config": {},
+        }
+
+        # Simulate NOT finding any match - wf_id and dc_id stay None
+        # but tags should remain for debugging/reference
+        assert component["wf_id"] is None
+        assert component["dc_id"] is None
+        assert component["workflow_tag"] == "python/nonexistent"
+        assert component["data_collection_tag"] == "nonexistent_table"

@@ -1,8 +1,9 @@
 # Minimal Iris Dashboard - DashboardDataLite format
-# This file can be converted to full dashboard format using CLI or API
+# This file can be imported directly with: depictio dashboard import dashboard_lite.yaml
 
 title: "Iris Dataset Analysis (Lite)"
 subtitle: "A minimal dashboard showcasing the Iris dataset"
+project_tag: "Iris Dataset Project Data Analysis"  # Server looks up project by name
 
 components:
   # Scatter plot of sepal dimensions by variety

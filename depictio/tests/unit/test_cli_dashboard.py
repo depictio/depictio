@@ -1,7 +1,7 @@
 """
 Unit Tests for Dashboard CLI Commands.
 
-Tests the CLI commands for YAML validation, conversion, and the full
+Tests the CLI commands for YAML validation, import, and export, as well as the full
 YAML → DashboardDataLite → DashboardData conversion pipeline.
 """
 
@@ -58,6 +58,21 @@ components:
     component_type: table
     workflow_tag: python/iris_workflow
     data_collection_tag: iris_table
+"""
+
+
+@pytest.fixture
+def valid_yaml_with_project_tag() -> str:
+    """Valid dashboard YAML content with project_tag."""
+    return """
+title: "Test Dashboard with Project"
+project_tag: "iris"
+components:
+  - tag: scatter-1
+    component_type: figure
+    workflow_tag: python/iris_workflow
+    data_collection_tag: iris_table
+    visu_type: scatter
 """
 
 
@@ -138,6 +153,14 @@ def valid_yaml_file(tmp_path: Path, valid_yaml_content: str) -> Path:
     """Create a temporary valid YAML file."""
     yaml_file = tmp_path / "dashboard.yaml"
     yaml_file.write_text(valid_yaml_content, encoding="utf-8")
+    return yaml_file
+
+
+@pytest.fixture
+def valid_yaml_file_with_project(tmp_path: Path, valid_yaml_with_project_tag: str) -> Path:
+    """Create a temporary valid YAML file with project_tag."""
+    yaml_file = tmp_path / "dashboard_with_project.yaml"
+    yaml_file.write_text(valid_yaml_with_project_tag, encoding="utf-8")
     return yaml_file
 
 
@@ -224,132 +247,135 @@ class TestCLIValidateCommand:
 
 
 # ============================================================================
-# Test CLI convert command (JSON → YAML)
+# Test CLI import command (dry-run mode only - no API required)
 # ============================================================================
 
 
-class TestCLIConvertCommand:
-    """Tests for the 'depictio dashboard convert' CLI command."""
+class TestCLIImportCommand:
+    """Tests for the 'depictio dashboard import' CLI command (dry-run mode)."""
 
-    def test_convert_json_to_yaml(self, full_json_file: Path, tmp_path: Path):
-        """Convert JSON to YAML should succeed."""
-        output_file = tmp_path / "output.yaml"
-        result = runner.invoke(app, ["convert", str(full_json_file), "-o", str(output_file)])
+    def test_import_dry_run_with_project_option(self, valid_yaml_file: Path):
+        """Import with --dry-run and --project should validate but not upload."""
+        result = runner.invoke(
+            app,
+            [
+                "import",
+                str(valid_yaml_file),
+                "--project",
+                "646b0f3c1e4a2d7f8e5b8c9a",
+                "--dry-run",
+            ],
+        )
         assert result.exit_code == 0
-        assert "Converted to minimal YAML format" in result.output
-        assert output_file.exists()
+        assert "Validation passed" in result.output
+        assert "Dry run mode" in result.output
+        assert "from --project" in result.output
 
-        # Verify output is valid YAML
-        content = output_file.read_text()
-        assert "title:" in content
-        assert "components:" in content
-
-    def test_convert_default_output(self, full_json_file: Path):
-        """Convert without -o should create .yaml with same name."""
-        result = runner.invoke(app, ["convert", str(full_json_file)])
+    def test_import_dry_run_with_project_tag(self, valid_yaml_file_with_project: Path):
+        """Import with --dry-run should detect project_tag from YAML."""
+        result = runner.invoke(
+            app,
+            [
+                "import",
+                str(valid_yaml_file_with_project),
+                "--dry-run",
+            ],
+        )
         assert result.exit_code == 0
+        assert "Validation passed" in result.output
+        assert "Dry run mode" in result.output
+        assert "from YAML project_tag" in result.output
 
-        # Check that .yaml file was created
-        expected_output = full_json_file.with_suffix(".yaml")
-        assert expected_output.exists()
+    def test_import_dry_run_no_project(self, valid_yaml_file: Path):
+        """Import without project should warn about missing project."""
+        result = runner.invoke(
+            app,
+            [
+                "import",
+                str(valid_yaml_file),
+                "--dry-run",
+            ],
+        )
+        assert result.exit_code == 0
+        assert "Validation passed" in result.output
+        assert "Warning: No project specified" in result.output
 
-        # Cleanup
-        expected_output.unlink()
-
-    def test_convert_nonexistent_file(self):
-        """Non-existent JSON file should fail."""
-        result = runner.invoke(app, ["convert", "/nonexistent/dashboard.json"])
+    def test_import_nonexistent_file(self):
+        """Import with non-existent file should fail."""
+        result = runner.invoke(
+            app,
+            [
+                "import",
+                "/nonexistent/dashboard.yaml",
+                "--dry-run",
+            ],
+        )
         assert result.exit_code == 1
         assert "File not found" in result.output
 
-    def test_convert_invalid_json(self, tmp_path: Path):
-        """Invalid JSON should fail."""
-        invalid_json = tmp_path / "invalid.json"
-        invalid_json.write_text("{ invalid json }", encoding="utf-8")
-
-        result = runner.invoke(app, ["convert", str(invalid_json)])
+    def test_import_invalid_yaml(self, invalid_yaml_file: Path):
+        """Import with invalid YAML should fail validation."""
+        result = runner.invoke(
+            app,
+            [
+                "import",
+                str(invalid_yaml_file),
+                "--dry-run",
+            ],
+        )
         assert result.exit_code == 1
-        assert "Invalid JSON" in result.output
+        assert "Validation failed" in result.output
+
+    def test_import_shows_component_count(self, valid_yaml_file: Path):
+        """Import should show component count during validation."""
+        result = runner.invoke(
+            app,
+            [
+                "import",
+                str(valid_yaml_file),
+                "--dry-run",
+            ],
+        )
+        assert result.exit_code == 0
+        assert "Components:" in result.output
 
 
 # ============================================================================
-# Test CLI from-yaml command (YAML → JSON)
+# Test DashboardDataLite project_tag field
 # ============================================================================
 
 
-class TestCLIFromYamlCommand:
-    """Tests for the 'depictio dashboard from-yaml' CLI command."""
+class TestDashboardDataLiteProjectTag:
+    """Tests for the project_tag field in DashboardDataLite."""
 
-    def test_from_yaml_to_json(self, valid_yaml_file: Path, tmp_path: Path):
-        """Convert YAML to JSON should succeed."""
-        output_file = tmp_path / "output.json"
-        result = runner.invoke(app, ["from-yaml", str(valid_yaml_file), "-o", str(output_file)])
-        assert result.exit_code == 0
-        assert "Converted to full dashboard JSON" in result.output
-        assert output_file.exists()
+    def test_project_tag_parsed_from_yaml(self, valid_yaml_with_project_tag: str):
+        """project_tag should be parsed from YAML content."""
+        lite = DashboardDataLite.from_yaml(valid_yaml_with_project_tag)
+        assert lite.project_tag == "iris"
 
-        # Verify output is valid JSON
-        with output_file.open() as f:
-            data = json.load(f)
-        assert "title" in data
-        assert "stored_metadata" in data
-        assert len(data["stored_metadata"]) == 4
+    def test_project_tag_optional(self, valid_yaml_content: str):
+        """project_tag should be optional."""
+        lite = DashboardDataLite.from_yaml(valid_yaml_content)
+        assert lite.project_tag is None
 
-    def test_from_yaml_default_output(self, valid_yaml_file: Path):
-        """from-yaml without -o should create .json with same name."""
-        result = runner.invoke(app, ["from-yaml", str(valid_yaml_file)])
-        assert result.exit_code == 0
+    def test_project_tag_in_yaml_output(self):
+        """project_tag should appear in YAML output when set."""
+        lite = DashboardDataLite(
+            title="Test",
+            project_tag="my-project",
+            components=[],
+        )
+        yaml_output = lite.to_yaml()
+        assert "project_tag: my-project" in yaml_output
 
-        # Check that .json file was created
-        expected_output = valid_yaml_file.with_suffix(".json")
-        assert expected_output.exists()
-
-        # Cleanup
-        expected_output.unlink()
-
-    def test_from_yaml_nonexistent_file(self):
-        """Non-existent YAML file should fail."""
-        result = runner.invoke(app, ["from-yaml", "/nonexistent/dashboard.yaml"])
-        assert result.exit_code == 1
-        assert "File not found" in result.output
-
-
-# ============================================================================
-# Test CLI schema command
-# ============================================================================
-
-
-class TestCLISchemaCommand:
-    """Tests for the 'depictio dashboard schema' CLI command."""
-
-    def test_schema_output(self, tmp_path: Path):
-        """Schema command should output JSON schema.
-
-        Note: We use file output to avoid Rich console escape codes in stdout.
-        """
-        output_file = tmp_path / "schema_output.json"
-        result = runner.invoke(app, ["schema", "-o", str(output_file)])
-        assert result.exit_code == 0
-        assert output_file.exists()
-
-        # Verify it's valid JSON with expected structure
-        with output_file.open() as f:
-            schema = json.load(f)
-        assert "properties" in schema
-        assert "title" in schema["properties"]
-
-    def test_schema_to_file(self, tmp_path: Path):
-        """Schema command should write to file when -o specified."""
-        output_file = tmp_path / "schema.json"
-        result = runner.invoke(app, ["schema", "-o", str(output_file)])
-        assert result.exit_code == 0
-        assert output_file.exists()
-        assert "Schema written to" in result.output
-
-        # Verify content
-        with output_file.open() as f:
-            schema = json.load(f)
-        assert "properties" in schema
+    def test_project_tag_not_in_yaml_when_empty(self):
+        """project_tag should not appear in YAML output when not set."""
+        lite = DashboardDataLite(
+            title="Test",
+            components=[],
+        )
+        yaml_output = lite.to_yaml()
+        assert "project_tag" not in yaml_output
 
 
 # ============================================================================
@@ -514,81 +540,6 @@ class TestFullConversionPipeline:
         assert card["aggregation"] == "average"
         assert card["column_name"] == "sepal.length"
         assert card["column_type"] == "float64"
-
-
-# ============================================================================
-# Test Edge Cases and Error Handling
-# ============================================================================
-
-
-# ============================================================================
-# Test CLI import command (dry-run mode only - no API required)
-# ============================================================================
-
-
-class TestCLIImportCommand:
-    """Tests for the 'depictio dashboard import' CLI command (dry-run mode)."""
-
-    def test_import_dry_run(self, valid_yaml_file: Path):
-        """Import with --dry-run should validate but not upload."""
-        result = runner.invoke(
-            app,
-            [
-                "import",
-                str(valid_yaml_file),
-                "--project",
-                "646b0f3c1e4a2d7f8e5b8c9a",
-                "--dry-run",
-            ],
-        )
-        assert result.exit_code == 0
-        assert "Validation passed" in result.output
-        assert "Dry run mode" in result.output
-
-    def test_import_nonexistent_file(self):
-        """Import with non-existent file should fail."""
-        result = runner.invoke(
-            app,
-            [
-                "import",
-                "/nonexistent/dashboard.yaml",
-                "--project",
-                "646b0f3c1e4a2d7f8e5b8c9a",
-                "--dry-run",
-            ],
-        )
-        assert result.exit_code == 1
-        assert "File not found" in result.output
-
-    def test_import_invalid_yaml(self, invalid_yaml_file: Path):
-        """Import with invalid YAML should fail validation."""
-        result = runner.invoke(
-            app,
-            [
-                "import",
-                str(invalid_yaml_file),
-                "--project",
-                "646b0f3c1e4a2d7f8e5b8c9a",
-                "--dry-run",
-            ],
-        )
-        assert result.exit_code == 1
-        assert "Validation failed" in result.output
-
-    def test_import_shows_component_count(self, valid_yaml_file: Path):
-        """Import should show component count during validation."""
-        result = runner.invoke(
-            app,
-            [
-                "import",
-                str(valid_yaml_file),
-                "--project",
-                "646b0f3c1e4a2d7f8e5b8c9a",
-                "--dry-run",
-            ],
-        )
-        assert result.exit_code == 0
-        assert "Components:" in result.output
 
 
 # ============================================================================
