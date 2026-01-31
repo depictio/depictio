@@ -1990,3 +1990,108 @@ async def sync_all_yaml_to_mongodb(
         "message": f"Synced {results['synced']} dashboards, skipped {results['skipped']}, failed {results['failed']}",
         **results,
     }
+
+
+# ============================================================================
+# NEW YAML ENDPOINTS (Simple Pydantic-based validation)
+# These endpoints use DashboardDataLite for lightweight YAML validation
+# ============================================================================
+
+
+@dashboards_endpoint_router.get("/{dashboard_id}/yaml")
+async def export_dashboard_as_yaml(
+    dashboard_id: PyObjectId,
+    current_user: User = Depends(get_user_or_anonymous),
+) -> Response:
+    """Export dashboard as YAML.
+
+    Returns a YAML representation of the dashboard suitable for
+    version control or backup.
+
+    Args:
+        dashboard_id: The dashboard ID to export
+
+    Returns:
+        YAML content with application/x-yaml content type
+    """
+    from depictio.models.models.dashboards import DashboardDataLite
+
+    # Find dashboard
+    dashboard_doc = dashboards_collection.find_one({"dashboard_id": ObjectId(dashboard_id)})
+    if not dashboard_doc:
+        raise HTTPException(status_code=404, detail="Dashboard not found")
+
+    # Check permissions (read access)
+    project_id = dashboard_doc.get("project_id")
+    if project_id:
+        project = projects_collection.find_one({"_id": ObjectId(project_id)})
+        is_public = project.get("is_public", False) if project else False
+    else:
+        is_public = dashboard_doc.get("is_public", False)
+
+    if not is_public and current_user is None:
+        raise HTTPException(status_code=401, detail="Authentication required")
+
+    # Convert to DashboardDataLite for export
+    lite = DashboardDataLite(
+        dashboard_id=str(dashboard_doc.get("dashboard_id")),
+        title=dashboard_doc.get("title", "Untitled"),
+        subtitle=dashboard_doc.get("subtitle", ""),
+        icon=dashboard_doc.get("icon", "mdi:view-dashboard"),
+        icon_color=dashboard_doc.get("icon_color", "orange"),
+        icon_variant=dashboard_doc.get("icon_variant", "filled"),
+        stored_metadata=dashboard_doc.get("stored_metadata", []),
+        stored_layout_data=dashboard_doc.get("stored_layout_data", []),
+        workflow_system=dashboard_doc.get("workflow_system", "none"),
+        notes_content=dashboard_doc.get("notes_content", ""),
+    )
+
+    yaml_content = lite.to_yaml()
+
+    return Response(
+        content=yaml_content,
+        media_type="application/x-yaml",
+        headers={
+            "Content-Disposition": f'attachment; filename="{dashboard_doc.get("title", "dashboard")}.yaml"'
+        },
+    )
+
+
+@dashboards_endpoint_router.post("/yaml/validate")
+async def validate_yaml_content(
+    yaml_content: str,
+    current_user: User = Depends(get_current_user),
+) -> dict[str, Any]:
+    """Validate YAML content against DashboardDataLite schema.
+
+    Uses Pydantic validation to check if the YAML content is valid.
+
+    Args:
+        yaml_content: YAML string to validate
+
+    Returns:
+        Validation result with is_valid flag and any errors
+    """
+    from depictio.models.models.dashboards import DashboardDataLite
+
+    is_valid, errors = DashboardDataLite.validate_yaml(yaml_content)
+
+    return {
+        "valid": is_valid,
+        "errors": errors,
+    }
+
+
+@dashboards_endpoint_router.get("/yaml/schema")
+async def get_yaml_schema() -> dict[str, Any]:
+    """Get JSON Schema for YAML validation.
+
+    Returns the JSON Schema that describes valid dashboard YAML structure.
+    Can be used for IDE autocompletion and external validation tools.
+
+    Returns:
+        JSON Schema for DashboardDataLite
+    """
+    from depictio.models.models.dashboards import DashboardDataLite
+
+    return DashboardDataLite.model_json_schema()

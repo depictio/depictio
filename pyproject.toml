@@ -109,6 +109,7 @@ cli = [
 [project.scripts]
 depictio-api = "depictio.api.run:main"
 depictio-dash = "depictio.dash.app:main"
+depictio = "depictio.cli.depictio_cli:main"
 
 
 [build-system]
