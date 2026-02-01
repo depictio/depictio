@@ -27,9 +27,12 @@ fi
 # Update helm chart version with date and quotes
 sed -i '' 's/^version: .*/version: "'"$(date +%Y%m%d)"'.1"/' helm-charts/depictio/Chart.yaml
 
+# Ensure uv.lock is up to date after pyproject.toml changes
+uv lock
+
 # Add and amend commit if bump2version created one
 if git log -1 --pretty=%B | grep -q "Bump version"; then
-    git add helm-charts/depictio/Chart.yaml
+    git add helm-charts/depictio/Chart.yaml uv.lock
     git commit --amend --no-edit
     # git push && git push --tags
 fi
