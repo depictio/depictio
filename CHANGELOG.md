@@ -1,64 +1,44 @@
 # Changelog
 
-## [Unreleased]
-
-### ⚠️ Deprecations
-
-#### YAML Dashboard System Deprecated (2026-01-26)
-
-The YAML-based dashboard serialization system has been **deprecated** in favor of a simpler JSON-based approach.
-
-**What's Deprecated:**
-- All YAML export/import API endpoints (marked with `deprecated=True` in OpenAPI)
-- YAML file watcher auto-sync functionality
-- YAML directory management endpoints
-- `depictio/models/yaml_serialization/` module (3,399 lines of code)
-
-**Why:**
-- 98% code reduction: JSON approach requires only ~158 lines vs 3,399 lines for YAML
-- Native Pydantic integration with `model_dump()` / `model_validate()`
-- MongoDB's native JSON format with `bson.json_util`
-- JSON Schema auto-generation for API/MCP programmatic access
-- Simpler maintenance: single format instead of 3 competing formats
-
-**Migration:**
-- Use JSON endpoints instead: `POST /api/v1/dashboards/import/json`, `GET /api/v1/dashboards/export/{id}/json`
-- Migration tool available: `python scripts/migrate_yaml_to_json.py`
-- See `YAML_MONGODB_ANALYSIS.md` for comprehensive migration guide
-
-**Configuration Changes:**
-```bash
-# YAML system now disabled by default
-DEPICTIO_DASHBOARD_YAML_ENABLED=false
-DEPICTIO_DASHBOARD_YAML_AUTO_EXPORT_ON_SAVE=false
-DEPICTIO_DASHBOARD_YAML_WATCHER_AUTO_START=false
-```
-
-**Timeline:**
-- 2026-01-26: YAML disabled by default, endpoints marked deprecated
-- TBD: Documentation updated to JSON examples
-- TBD: YAML endpoints removed after transition period
-
-For details, see:
-- Full analysis: `YAML_MONGODB_ANALYSIS.md`
-- Quick guide: `QUICK_DECISION_GUIDE.md`
-- POC code: `SIMPLE_JSON_POC.py`
-
----
-
 ### Docker Images 🐳
 
 
 
 
 <details>
-<summary>Click to expand the changelog for 0.6.2</summary>
+<summary>Click to expand the changelog for 0.6.3-b1</summary>
 
 ### Changes 📜
 
+#### New Features ✨
+
+* feat: improve dashboard YAML import with overwrite, tag resolution, and mandatory config [8e3eced6]
+* feat: add CLI dashboard import command and comprehensive unit tests [7c0eb23a]
+* feat: implement DashboardDataLite with CLI convert command [fdf21d18]
+* feat: unified YAML/JSON proposal with single lightweight model [368d1e73]
+* feat: comprehensive analysis for minimal JSON-based dashboard schema [ade79869]
+* feat: disable YAML system by default and mark all endpoints as deprecated [f0963578]
+* feat: comprehensive analysis of YAML system with JSON simplification proposal [3ce015b4]
+
+#### Bug Fixes 🐛
+
+* fix: include uv.lock in bump-with-helm amend commit [f0095ef9]
+* fix: preserve MongoDB _id when updating dashboard with --overwrite [1bff388a]
+* fix: sort imports in yaml_serialization __init__.py [fc289e0b]
+
+#### Chores 🧹
+
+* chore: update uv.lock metadata [905f371b]
+
+#### Documentation Updates 📚
+
+* docs: add YAML deprecation implementation summary [c5baaeef]
+
 #### Other Changes 📝
 
-* Bump version: 0.6.2-b7 → 0.6.2 [75f8485b]
+* Bump version: 0.6.2 → 0.6.3-b1 [a830921f]
+* Update CHANGELOG.md for v0.6.2 [d63ea4d4]
+* Bump version: 0.6.2-b7 → 0.6.2 [fd0dbe01]
 * Update CHANGELOG.md for v0.6.2-b7 [c7406d41]
 * Update CHANGELOG.md for v0.6.2-b7 [a3d56436]
 * Update CHANGELOG.md for v0.6.2-b7 [284b1dc1]
@@ -79,8 +59,7 @@ For details, see:
 
 For more details, please refer to the [documentation](https://depictio.github.io/depictio-docs/)
 
-ectivity test from workflow [6ee1d309]
-* fix: enhance inter-service connectivity tests with readiness checks and improved error handling [ea147c59]
+ectivity tests with readiness checks and improved error handling [ea147c59]
 * fix: add netcat-openbsd to Dockerfile dependencies for improved functionality [ccdf0b66]
 * fix: improve database and storage functionality tests in CI workflow [0ef1c937]
 * fix: update paths in workflow triggers for Dockerfile and workflow file [f1578577]
