@@ -735,7 +735,7 @@ jobs:
           echo "📊 Final container status:"
           docker compose ps
 
-  cli-iris-single-file-test:
+  cli-comprehensive-test:
     needs: [docker-build]
     if: always() && needs.docker-build.result == 'success'
     runs-on: ubuntu-22.04
@@ -750,15 +750,53 @@ jobs:
         with:
           enable-cache: true
 
-      - name: "Set up Python"
+      - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version-file: "pyproject.toml"
           cache-dependency-path: "pyproject.toml"
 
-      - name: Setup environment
+      - name: Setup CLI environment
         run: |
-          # Reuse setup from docker-system-init
+          cd depictio/cli
+          uv venv --python 3.12.9 venv
+          source venv/bin/activate
+          uv pip install -e .
+
+      # ============================================
+      # PHASE 1: Offline Tests (No Server Required)
+      # ============================================
+
+      - name: Test CLI help commands
+        run: |
+          cd depictio/cli
+          source venv/bin/activate
+          echo "📋 Testing CLI help commands..."
+
+          depictio-cli --help
+          depictio-cli backup --help
+          depictio-cli config --help
+          depictio-cli dashboard --help
+          depictio-cli data --help
+
+          echo "✅ All help commands passed"
+
+      - name: Test dashboard validate (offline)
+        run: |
+          cd depictio/cli
+          source venv/bin/activate
+          echo "📋 Testing dashboard validate (offline)..."
+
+          depictio-cli dashboard validate ../projects/init/iris/dashboard_lite.yaml
+
+          echo "✅ Dashboard validate passed"
+
+      # ============================================
+      # PHASE 2: Server-Connected Tests
+      # ============================================
+
+      - name: Setup environment and start services
+        run: |
           sudo chmod 666 /var/run/docker.sock
           echo "UID=$(id -u)" >> $GITHUB_ENV
           echo "GID=$(id -g)" >> $GITHUB_ENV
@@ -775,37 +813,46 @@ jobs:
           docker compose -f docker-compose.dev.yaml -f docker-compose/docker-compose.minio.yaml up -d
           sleep 15
 
-      - name: Setup CLI
+      - name: Setup CLI authentication
         run: |
           cd depictio/cli
-          uv venv --python 3.12.9 venv
-          source venv/bin/activate
-          uv pip install -e .
           docker cp depictio-backend:/app/depictio/.depictio/admin_config.yaml .
 
-      - name: Run Iris CLI operations
+      - name: Test config commands
         run: |
           cd depictio/cli
           source venv/bin/activate
+          echo "📋 Testing config commands..."
 
-          # NOTE: Iris is a reference dataset that's auto-initialized by the backend
-          # on startup via db_init_reference_datasets.py. The data files exist inside
-          # the Docker container at /app/depictio/projects/init/iris/, not on the host.
-          # Therefore, we skip scan/process operations and only validate the config.
+          # Validate project config
+          depictio-cli --verbose config validate-project-config \
+            --project-config-path ../projects/init/iris/project.yaml \
+            --CLI-config-path admin_config.yaml
 
-          # Sync project to server (validates against API)
+          # Sync project config (with --update for idempotency)
           depictio-cli --verbose config sync-project-config-to-server \
             --update \
             --project-config-path ../projects/init/iris/project.yaml \
             --CLI-config-path admin_config.yaml
 
-          # Skip scan/process - iris is already initialized as reference dataset
-          # The verification step below confirms the project and data exist in the database
+          echo "✅ Config commands passed"
+
+      - name: Test dashboard commands (server)
+        run: |
+          cd depictio/cli
+          source venv/bin/activate
+          echo "📋 Testing dashboard commands (server)..."
+
+          # Import with dry-run (validates without creating)
+          depictio-cli dashboard import ../projects/init/iris/dashboard_lite.yaml --dry-run
+
+          echo "✅ Dashboard commands passed"
 
       - name: Test CLI workflow with local test project
         run: |
           cd depictio/cli
           source venv/bin/activate
+          echo "📋 Testing full CLI workflow with local test project..."
 
           # Test full CLI workflow with local paths (not Docker paths)
           # This validates that CLI scan/process operations work correctly
@@ -831,6 +878,46 @@ jobs:
             --overwrite \
             --project-config-path ../projects/test/cli-test/project.yaml \
             --CLI-config-path admin_config.yaml
+
+          echo "✅ CLI workflow with local test project passed"
+
+      - name: Test Penguin CLI operations
+        run: |
+          cd depictio/cli
+          source venv/bin/activate
+          echo "📋 Testing Penguin CLI operations..."
+
+          # NOTE: Penguins is a reference dataset that's auto-initialized by the backend
+          # on startup via db_init_reference_datasets.py. The data files exist inside
+          # the Docker container at /app/depictio/projects/reference/penguins/, not on the host.
+          # Therefore, we skip CLI operations that require host filesystem access.
+
+          # Validate project config (tests validation logic with Docker path detection)
+          depictio-cli --verbose config validate-project-config \
+            --project-config-path ../projects/reference/penguins/project.yaml \
+            --CLI-config-path admin_config.yaml
+
+          # Sync project to server (validates against API)
+          depictio-cli --verbose config sync-project-config-to-server \
+            --update \
+            --project-config-path ../projects/reference/penguins/project.yaml \
+            --CLI-config-path admin_config.yaml
+
+          # Skip scan/process/run - penguins is already initialized as reference dataset
+          # The verification step below confirms the project and data exist in the database
+
+          echo "✅ Penguin CLI operations passed"
+
+      - name: Test backup commands (read-only)
+        run: |
+          cd depictio/cli
+          source venv/bin/activate
+          echo "📋 Testing backup commands (read-only)..."
+
+          # List backups (read-only, won't fail if empty)
+          depictio-cli backup list --CLI-config-path admin_config.yaml || true
+
+          echo "✅ Backup commands passed"
 
       - name: Verify CLI test project
         run: |
@@ -872,91 +959,6 @@ jobs:
 
           echo "✅ Iris reference dataset verified (project exists)"
 
-      - name: Upload logs on failure
-        if: failure()
-        run: |
-          docker compose logs > iris-logs.txt
-        continue-on-error: true
-
-      - name: Upload artifacts on failure
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: iris-integration-logs
-          path: iris-logs.txt
-          retention-days: 7
-
-  cli-penguin-multi-file-test:
-    needs: [docker-build]
-    if: always() && needs.docker-build.result == 'success'
-    runs-on: ubuntu-22.04
-    permissions:
-      contents: read
-      packages: read
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v5
-        with:
-          enable-cache: true
-
-      - name: "Set up Python"
-        uses: actions/setup-python@v5
-        with:
-          python-version-file: "pyproject.toml"
-          cache-dependency-path: "pyproject.toml"
-
-      - name: Setup environment
-        run: |
-          sudo chmod 666 /var/run/docker.sock
-          echo "UID=$(id -u)" >> $GITHUB_ENV
-          echo "GID=$(id -g)" >> $GITHUB_ENV
-          cp .env.example .env
-          mkdir -p depictioDB minio_data prof_files cache
-          chmod 777 depictioDB minio_data prof_files cache
-
-      - name: Log in and start services
-        run: |
-          echo ${{ secrets.GHCR_PAT }} | docker login ghcr.io -u ${{ github.repository_owner }} --password-stdin
-          FULL_IMAGE="${{ needs.docker-build.outputs.full-image }}"
-          docker pull "${FULL_IMAGE}"
-          export DEPICTIO_VERSION="${FULL_IMAGE}"
-          docker compose -f docker-compose.dev.yaml -f docker-compose/docker-compose.minio.yaml up -d
-          sleep 15
-
-      - name: Setup CLI
-        run: |
-          cd depictio/cli
-          uv venv --python 3.12.9 venv
-          source venv/bin/activate
-          uv pip install -e .
-          docker cp depictio-backend:/app/depictio/.depictio/admin_config.yaml .
-
-      - name: Run Penguin CLI operations
-        run: |
-          cd depictio/cli
-          source venv/bin/activate
-
-          # NOTE: Penguins is a reference dataset that's auto-initialized by the backend
-          # on startup via db_init_reference_datasets.py. The data files exist inside
-          # the Docker container at /app/depictio/projects/reference/penguins/, not on the host.
-          # Therefore, we skip CLI operations that require host filesystem access.
-
-          # Validate project config (tests validation logic with Docker path detection)
-          depictio-cli --verbose config validate-project-config \
-            --project-config-path ../projects/reference/penguins/project.yaml \
-            --CLI-config-path admin_config.yaml
-
-          # Sync project to server (validates against API)
-          depictio-cli --verbose config sync-project-config-to-server \
-            --update \
-            --project-config-path ../projects/reference/penguins/project.yaml \
-            --CLI-config-path admin_config.yaml
-
-          # Skip scan/process/run - penguins is already initialized as reference dataset
-          # The verification step below confirms the project and data exist in the database
-
       - name: Verify Penguin integration
         run: |
           # Verify project was auto-initialized
@@ -980,16 +982,15 @@ jobs:
 
       - name: Upload logs on failure
         if: failure()
-        run: |
-          docker compose logs > penguin-logs.txt
+        run: docker compose logs > cli-comprehensive-logs.txt
         continue-on-error: true
 
       - name: Upload artifacts on failure
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: penguin-integration-logs
-          path: penguin-logs.txt
+          name: cli-comprehensive-logs
+          path: cli-comprehensive-logs.txt
           retention-days: 7
 
   backup-s3-strategies-comprehensive-tests:

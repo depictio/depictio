@@ -1,0 +1,104 @@
+# Minimal Iris Dashboard - DashboardDataLite format
+# This file can be imported directly with: depictio dashboard import dashboard_lite.yaml
+
+title: "Iris Dataset Analysis (Lite)"
+subtitle: "A minimal dashboard showcasing the Iris dataset"
+project_tag: "Iris Dataset Project Data Analysis"  # Server looks up project by name
+
+components:
+  # Scatter plot of sepal dimensions by variety
+  - tag: sepal-scatter
+    component_type: figure
+    workflow_tag: python/iris_workflow
+    data_collection_tag: iris_table
+    visu_type: scatter
+    dict_kwargs:
+      x: sepal.length
+      y: sepal.width
+      color: variety
+      title: "Sepal Dimensions by Variety"
+
+  # Box plot of petal lengths
+  - tag: petal-box
+    component_type: figure
+    workflow_tag: python/iris_workflow
+    data_collection_tag: iris_table
+    visu_type: box
+    dict_kwargs:
+      x: variety
+      y: petal.length
+      title: "Petal Length Distribution"
+
+  # Histogram of sepal length
+  - tag: sepal-histogram
+    component_type: figure
+    workflow_tag: python/iris_workflow
+    data_collection_tag: iris_table
+    visu_type: histogram
+    dict_kwargs:
+      x: sepal.length
+      color: variety
+      nbins: 20
+      barmode: overlay
+
+  # Card: Average sepal length
+  - tag: avg-sepal-length
+    component_type: card
+    workflow_tag: python/iris_workflow
+    data_collection_tag: iris_table
+    aggregation: average
+    column_name: sepal.length
+    column_type: float64
+    icon_name: mdi:flower-outline
+    icon_color: "#9C27B0"
+
+  # Card: Count of samples
+  - tag: sample-count
+    component_type: card
+    workflow_tag: python/iris_workflow
+    data_collection_tag: iris_table
+    aggregation: count
+    column_name: variety
+    column_type: object
+    icon_name: mdi:counter
+    icon_color: "#4CAF50"
+
+  # Card: Unique varieties
+  - tag: unique-varieties
+    component_type: card
+    workflow_tag: python/iris_workflow
+    data_collection_tag: iris_table
+    aggregation: nunique
+    column_name: variety
+    column_type: object
+    icon_name: mdi:flower-tulip
+    icon_color: "#2196F3"
+
+  # Interactive filter: Sepal length range
+  - tag: sepal-length-filter
+    component_type: interactive
+    workflow_tag: python/iris_workflow
+    data_collection_tag: iris_table
+    interactive_component_type: RangeSlider
+    column_name: sepal.length
+    column_type: float64
+    custom_color: "#9C27B0"
+    icon_name: mdi:ruler
+
+  # Interactive filter: Variety selection
+  - tag: variety-filter
+    component_type: interactive
+    workflow_tag: python/iris_workflow
+    data_collection_tag: iris_table
+    interactive_component_type: MultiSelect
+    column_name: variety
+    column_type: object
+    custom_color: "#4CAF50"
+    icon_name: mdi:filter-variant
+
+  # Data table
+  - tag: data-table
+    component_type: table
+    workflow_tag: python/iris_workflow
+    data_collection_tag: iris_table
+    page_size: 15

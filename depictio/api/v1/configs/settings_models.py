@@ -600,7 +600,8 @@ class DashboardYAMLConfig(BaseSettings):
     """
 
     # Enable/disable YAML dashboard sync feature
-    enabled: bool = Field(default=False, description="Enable YAML-based dashboard management")
+    # DEPRECATED: YAML system is being phased out in favor of JSON-based API (see YAML_MONGODB_ANALYSIS.md)
+    enabled: bool = Field(default=False, description="Enable YAML-based dashboard management (DEPRECATED)")
 
     # Local dashboards directory (instance-specific, git-ignored, auto-synced)
     local_dir: Path = Field(
@@ -666,13 +667,13 @@ class DashboardYAMLConfig(BaseSettings):
 
     # Auto-sync settings
     auto_export_on_save: bool = Field(
-        default=True,
-        description="Automatically export to YAML when dashboard is saved",
+        default=False,
+        description="Automatically export to YAML when dashboard is saved (DEPRECATED)",
     )
 
     auto_import_on_change: bool = Field(
-        default=True,
-        description="Automatically import from YAML when files change (requires watcher)",
+        default=False,
+        description="Automatically import from YAML when files change (requires watcher) (DEPRECATED)",
     )
 
     watcher_debounce_seconds: float = Field(
@@ -681,13 +682,13 @@ class DashboardYAMLConfig(BaseSettings):
     )
 
     watcher_auto_start: bool = Field(
-        default=True,
-        description="Automatically start the file watcher on API startup",
+        default=False,
+        description="Automatically start the file watcher on API startup (DEPRECATED)",
     )
 
     watch_local_dir: bool = Field(
-        default=True,
-        description="Watch and auto-sync local dashboards directory",
+        default=False,
+        description="Watch and auto-sync local dashboards directory (DEPRECATED)",
     )
 
     watch_templates_dir: bool = Field(
