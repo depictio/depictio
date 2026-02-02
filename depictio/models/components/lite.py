@@ -164,7 +164,39 @@ class TableLiteComponent(BaseLiteComponent):
     filterable: bool = Field(default=True, description="Enable column filtering")
 
 
+class ImageLiteComponent(BaseLiteComponent):
+    """Lite image component for user definition.
+
+    Example YAML:
+        - tag: image-gallery-1
+          component_type: image
+          workflow_tag: python/image_workflow
+          data_collection_tag: image_table
+          image_column: image_path
+          thumbnail_size: 150
+          columns: 4
+          max_images: 20
+    """
+
+    component_type: Literal["image"] = "image"
+
+    # Image configuration
+    image_column: str = Field(..., description="Column containing image paths")
+    s3_base_folder: str | None = Field(
+        default=None, description="Base S3 folder for images (defaults to data collection folder)"
+    )
+
+    # Display options
+    thumbnail_size: int = Field(default=150, description="Grid thumbnail size in pixels")
+    columns: int = Field(default=4, description="Number of grid columns")
+    max_images: int = Field(default=20, description="Maximum images to display")
+
+
 # Union type for any lite component
 LiteComponent = (
-    FigureLiteComponent | CardLiteComponent | InteractiveLiteComponent | TableLiteComponent
+    FigureLiteComponent
+    | CardLiteComponent
+    | InteractiveLiteComponent
+    | TableLiteComponent
+    | ImageLiteComponent
 )

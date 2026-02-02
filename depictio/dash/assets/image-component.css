@@ -1,0 +1,39 @@
+/* Image Component Styles */
+
+/* Fix pointer-events being blocked by react-grid */
+.image-thumbnail-card img {
+    pointer-events: auto !important;
+    transition: transform 0.2s ease !important;
+    cursor: pointer !important;
+}
+
+/* Add hover effect - image will scale and appear on top */
+.image-thumbnail-card img:hover {
+    transform: scale(1.1) !important;
+    z-index: 1000 !important;
+    position: relative !important;
+}
+
+/* Card subtle hover effect */
+.image-thumbnail-card:hover {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1) !important;
+}
+
+/* Smooth scrollbar styling for image grid container */
+.image-grid-container::-webkit-scrollbar {
+    width: 8px;
+}
+
+.image-grid-container::-webkit-scrollbar-track {
+    background: var(--app-bg-color, #f1f1f1);
+    border-radius: 4px;
+}
+
+.image-grid-container::-webkit-scrollbar-thumb {
+    background: var(--app-border-color, #888);
+    border-radius: 4px;
+}
+
+.image-grid-container::-webkit-scrollbar-thumb:hover {
+    background: var(--app-text-color, #555);
+}
