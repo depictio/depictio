@@ -26,12 +26,12 @@ jobs:
         run: |
           # Hash all relevant files that affect quality checks:
           # - All Python source files (*.py)
-          # - Dependency configuration (pyproject.toml)
+          # - Dependency configuration (pyproject.toml, uv.lock)
           # - Pre-commit hooks (.pre-commit-config.yaml)
           # - Test configuration (pytest.ini)
-          # - This workflow file itself
+          # NOTE: CI workflow file is NOT included - CI changes shouldn't invalidate quality cache
           # Only hash files that actually exist (filter out deleted/missing files)
-          HASH=$(git ls-files '*.py' 'pyproject.toml' '.pre-commit-config.yaml' 'pytest.ini' '.github/workflows/depictio-ci.yaml' | \
+          HASH=$(git ls-files '*.py' 'pyproject.toml' 'uv.lock' '.pre-commit-config.yaml' 'pytest.ini' | \
             while read -r file; do
               if [ -f "$file" ]; then
                 cat "$file"
