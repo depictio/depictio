@@ -966,11 +966,29 @@ jobs:
           JWT_TOKEN=$(grep "jwt_token:" admin_config.yaml | awk '{print $2}' | tr -d '"')
 
           # Query API to verify dashboard exists
-          API_URL="http://localhost:8058/depictio/api/v1/dashboards/$DASHBOARD_ID"
-          RESPONSE=$(curl -s -H "Authorization: Bearer $JWT_TOKEN" "$API_URL")
+          API_URL="http://localhost:8058/depictio/api/v1/dashboards/get/$DASHBOARD_ID"
+          echo "  API URL: $API_URL"
+          echo "  Dashboard ID length: ${#DASHBOARD_ID}"
+
+          # Get full response with status code
+          HTTP_RESPONSE=$(curl -s -w "\n%{http_code}" -H "Authorization: Bearer $JWT_TOKEN" "$API_URL")
+          HTTP_STATUS=$(echo "$HTTP_RESPONSE" | tail -n1)
+          RESPONSE=$(echo "$HTTP_RESPONSE" | head -n-1)
+
+          echo "  HTTP Status: $HTTP_STATUS"
+          echo "  Response: $RESPONSE"
+
+          # If 404, check MongoDB directly to see if dashboard exists at all
+          if [ "$HTTP_STATUS" = "404" ]; then
+            echo ""
+            echo "🔍 Checking MongoDB directly..."
+            docker exec depictio-mongo mongosh depictioDB --quiet --eval "
+              db.dashboards.findOne({dashboard_id: ObjectId('$DASHBOARD_ID')}, {_id: 1, dashboard_id: 1, title: 1, project_id: 1})
+            " || echo "  MongoDB query failed"
+          fi
 
           # Check if response contains expected fields
-          if echo "$RESPONSE" | grep -q '"_id"'; then
+          if echo "$RESPONSE" | grep -q '"_id"' && [ "$HTTP_STATUS" = "200" ]; then
             echo "✅ Dashboard verified in database"
 
             # Extract and display dashboard details
@@ -981,7 +999,7 @@ jobs:
             echo "  Project ID: $PROJECT_ID"
             echo "  Dashboard ID: $DASHBOARD_ID"
           else
-            echo "❌ Dashboard not found in database"
+            echo "❌ Dashboard not found in database (HTTP $HTTP_STATUS)"
             echo "API Response: $RESPONSE"
             exit 1
           fi
@@ -1104,7 +1122,7 @@ jobs:
           # Verify dashboard in database
           echo "🔍 Verifying dashboard registration in database..."
           JWT_TOKEN=$(grep "jwt_token:" admin_config.yaml | awk '{print $2}' | tr -d '"')
-          API_URL="http://localhost:8058/depictio/api/v1/dashboards/$DASHBOARD_ID"
+          API_URL="http://localhost:8058/depictio/api/v1/dashboards/get/$DASHBOARD_ID"
           RESPONSE=$(curl -s -H "Authorization: Bearer $JWT_TOKEN" "$API_URL")
 
           if echo "$RESPONSE" | grep -q '"_id"'; then
