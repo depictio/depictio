@@ -419,6 +419,13 @@ def register_component_callbacks(app):
 
     register_callbacks_multiqc_component(app)
 
+    # Register image component view mode callbacks
+    from depictio.dash.modules.image_component.callbacks import (
+        register_callbacks_image_component,
+    )
+
+    register_callbacks_image_component(app)
+
     # Register fullscreen callbacks for figure components
     from depictio.dash.modules.fullscreen import register_fullscreen_callbacks
 

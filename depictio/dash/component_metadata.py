@@ -28,6 +28,7 @@ from depictio.dash.colors import colors
 # Import build functions for centralized registration
 from depictio.dash.modules.card_component.utils import build_card
 from depictio.dash.modules.figure_component.utils import build_figure
+from depictio.dash.modules.image_component.utils import build_image
 from depictio.dash.modules.interactive_component.utils import build_interactive
 from depictio.dash.modules.jbrowse_component.utils import build_jbrowse
 from depictio.dash.modules.multiqc_component.utils import build_multiqc
@@ -133,6 +134,20 @@ COMPONENT_METADATA = {
             "h": 24,
         },  # Adjusted for 48-column grid with rowHeight=20 - full-featured MultiQC reports
     },
+    "image": {
+        "icon": "mdi:image-multiple",
+        "display_name": "Image Gallery",
+        "description": "Interactive image grid with modal viewer",
+        "color": colors["teal"],
+        "supports_edit": True,
+        "supports_reset": False,
+        "enabled": True,  # ENABLED: Image gallery component
+        "build_function": build_image,
+        "default_dimensions": {
+            "w": 24,
+            "h": 20,
+        },  # Adjusted for 48-column grid - gallery needs substantial space
+    },
 }
 
 # ============================================================================
@@ -165,6 +180,10 @@ DUAL_PANEL_DIMENSIONS = {
     "table": {
         "w": 8,  # 8/8 columns = 100% width (full row)
         "h": 6,  # 6 × 100px = 600px
+    },
+    "image": {
+        "w": 8,  # 8/8 columns = 100% width (full row for image gallery)
+        "h": 7,  # 7 × 100px = 700px (allows multiple rows with scrolling)
     },
 }
 
@@ -419,6 +438,8 @@ DISPLAY_NAME_TO_TYPE_MAPPING = {
     "JBrowse": "jbrowse",  # Alternative name
     "Text": "text",
     "MultiQC": "multiqc",
+    "Image": "image",
+    "Image Gallery": "image",  # Alternative name
     "None": None,  # Default case
 }
 

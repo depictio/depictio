@@ -14,6 +14,7 @@ from depictio.dash.modules.card_component.frontend import create_stepper_card_bu
 
 # Depictio components imports - button step
 from depictio.dash.modules.figure_component.utils import create_stepper_figure_button
+from depictio.dash.modules.image_component.design_ui import create_stepper_image_button
 from depictio.dash.modules.interactive_component.frontend import create_stepper_interactive_button
 from depictio.dash.modules.multiqc_component.frontend import create_stepper_multiqc_button
 from depictio.dash.modules.table_component.frontend import create_stepper_table_button
@@ -39,8 +40,9 @@ def _create_stepper_buttons(n: str) -> tuple[list, list]:
     multiqc_btn, multiqc_store = create_stepper_multiqc_button(
         n, disabled=not is_enabled("multiqc")
     )
+    image_btn, image_store = create_stepper_image_button(n, disabled=not is_enabled("image"))
 
-    buttons = [figure_btn, card_btn, interactive_btn, table_btn, text_btn, multiqc_btn]
+    buttons = [figure_btn, card_btn, interactive_btn, table_btn, text_btn, multiqc_btn, image_btn]
     stores = [
         figure_store,
         card_store,
@@ -48,6 +50,7 @@ def _create_stepper_buttons(n: str) -> tuple[list, list]:
         table_store,
         text_store,
         multiqc_store,
+        image_store,
         dcc.Store(id={"type": "last-button", "index": n}, data="None", storage_type="session"),
     ]
     return buttons, stores

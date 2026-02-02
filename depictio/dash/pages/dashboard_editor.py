@@ -607,6 +607,17 @@ def register_component_callbacks(app):
     register_callbacks_multiqc_component(app)
     load_multiqc_design(app)  # Load design callbacks immediately (editor app always in edit mode)
 
+    # Register image component callbacks (core + design for editor app)
+    from depictio.dash.modules.image_component.callbacks import (
+        load_design_callbacks as load_image_design,
+    )
+    from depictio.dash.modules.image_component.callbacks import (
+        register_callbacks_image_component,
+    )
+
+    register_callbacks_image_component(app)
+    load_image_design(app)  # Load design callbacks immediately (editor app always in edit mode)
+
     # Register fullscreen callbacks for figure components
     from depictio.dash.modules.fullscreen import register_fullscreen_callbacks
 

@@ -172,11 +172,25 @@ def create_edit_page(
                 design_interface = design_interface_raw[0]
         else:
             design_interface = design_interface_raw
+    elif component_type == "image":
+        # Import directly from design_ui to avoid loading callbacks at import time
+        from depictio.dash.modules.image_component.design_ui import design_image
+
+        # CRITICAL: Use actual component_id, NOT tmp suffix
+        # design_image() returns a list for backward compatibility with stepper code
+        design_interface_raw = design_image(
+            id={"type": "image-component", "index": component_id}, df=df
+        )
+        design_interface = (
+            design_interface_raw[0]
+            if isinstance(design_interface_raw, list)
+            else design_interface_raw
+        )
     else:
         # Other component types not yet implemented for editing
         design_interface = html.Div(
             dmc.Alert(
-                f"Edit interface for {component_type} components is not yet implemented. Only Card, Interactive, and Figure components are currently editable.",
+                f"Edit interface for {component_type} components is not yet implemented. Only Card, Interactive, Figure, and Image components are currently editable.",
                 title="Not Implemented",
                 color="yellow",
                 icon=DashIconify(icon="mdi:alert", width=24),
