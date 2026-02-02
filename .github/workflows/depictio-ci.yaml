@@ -963,19 +963,24 @@ jobs:
           echo "🔍 Verifying dashboard registration in database..."
 
           # Get fresh access token by logging in
+          echo "  Logging in to get access token..."
           LOGIN_RESPONSE=$(curl -s -X POST "http://localhost:8058/depictio/api/v1/auth/login" \
             -H "Content-Type: application/json" \
             -d '{"email": "admin@admin.com", "password": "admin"}')
 
-          JWT_TOKEN=$(echo "$LOGIN_RESPONSE" | python3 -c "import sys, json; print(json.load(sys.stdin)['access_token'])" 2>/dev/null)
+          echo "  Login response: $LOGIN_RESPONSE"
 
-          if [ -z "$JWT_TOKEN" ]; then
+          # Extract access token - simplified version
+          JWT_TOKEN=$(echo "$LOGIN_RESPONSE" | python3 -c "import sys, json; d=json.load(sys.stdin); print(d.get('access_token', ''))" 2>&1)
+
+          # Check if token extraction succeeded
+          if [ -z "$JWT_TOKEN" ] || [[ "$JWT_TOKEN" == *"Traceback"* ]]; then
             echo "❌ Failed to get access token"
-            echo "Login response: $LOGIN_RESPONSE"
+            echo "  Error: $JWT_TOKEN"
             exit 1
           fi
 
-          echo "  Got fresh access token (length: ${#JWT_TOKEN})"
+          echo "  ✓ Got fresh access token (length: ${#JWT_TOKEN})"
 
           # Query API to verify dashboard exists
           API_URL="http://localhost:8058/depictio/api/v1/dashboards/get/$DASHBOARD_ID"
@@ -1135,17 +1140,24 @@ jobs:
           echo "🔍 Verifying dashboard registration in database..."
 
           # Get fresh access token by logging in
+          echo "  Logging in to get access token..."
           LOGIN_RESPONSE=$(curl -s -X POST "http://localhost:8058/depictio/api/v1/auth/login" \
             -H "Content-Type: application/json" \
             -d '{"email": "admin@admin.com", "password": "admin"}')
 
-          JWT_TOKEN=$(echo "$LOGIN_RESPONSE" | python3 -c "import sys, json; print(json.load(sys.stdin)['access_token'])" 2>/dev/null)
+          echo "  Login response: $LOGIN_RESPONSE"
 
-          if [ -z "$JWT_TOKEN" ]; then
+          # Extract access token - simplified version
+          JWT_TOKEN=$(echo "$LOGIN_RESPONSE" | python3 -c "import sys, json; d=json.load(sys.stdin); print(d.get('access_token', ''))" 2>&1)
+
+          # Check if token extraction succeeded
+          if [ -z "$JWT_TOKEN" ] || [[ "$JWT_TOKEN" == *"Traceback"* ]]; then
             echo "❌ Failed to get access token"
-            echo "Login response: $LOGIN_RESPONSE"
+            echo "  Error: $JWT_TOKEN"
             exit 1
           fi
+
+          echo "  ✓ Got fresh access token (length: ${#JWT_TOKEN})"
 
           API_URL="http://localhost:8058/depictio/api/v1/dashboards/get/$DASHBOARD_ID"
           RESPONSE=$(curl -s -H "Authorization: Bearer $JWT_TOKEN" "$API_URL")
