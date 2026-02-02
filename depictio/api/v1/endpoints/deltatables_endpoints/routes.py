@@ -181,6 +181,13 @@ async def upsert_deltatable(
         )
 
     if payload.update:
+        # First ensure flexible_metadata is not null (MongoDB can't set nested fields on null)
+        if payload.deltatable_size_bytes is not None and not is_multiqc:
+            deltatables_collection.update_one(
+                {"data_collection_id": data_collection_oid, "flexible_metadata": None},
+                {"$set": {"flexible_metadata": {}}},
+            )
+
         update_doc = {
             "$set": {
                 "delta_table_location": payload.delta_table_location,
@@ -215,6 +222,12 @@ async def upsert_deltatable(
 
         # Add size to deltatable's flexible_metadata if provided
         if payload.deltatable_size_bytes is not None and not is_multiqc:
+            # First ensure flexible_metadata is not null (MongoDB can't set nested fields on null)
+            deltatables_collection.update_one(
+                {"data_collection_id": data_collection_oid, "flexible_metadata": None},
+                {"$set": {"flexible_metadata": {}}},
+            )
+            # Now set the nested fields
             deltatables_collection.update_one(
                 {"data_collection_id": data_collection_oid},
                 {

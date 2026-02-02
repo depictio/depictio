@@ -17,6 +17,7 @@ from typing import Any
 # SERIALIZATION (Pydantic → JSON File)
 # ============================================================================
 
+
 def export_dashboard_to_json(dashboard: "DashboardData", filepath: Path) -> Path:
     """
     Export dashboard to JSON file.
@@ -38,6 +39,7 @@ def export_dashboard_to_json(dashboard: "DashboardData", filepath: Path) -> Path
 # DESERIALIZATION (JSON File → Pydantic)
 # ============================================================================
 
+
 def import_dashboard_from_json(filepath: Path) -> "DashboardData":
     """
     Import dashboard from JSON file.
@@ -51,6 +53,7 @@ def import_dashboard_from_json(filepath: Path) -> "DashboardData":
 
     # Validate with Pydantic
     from depictio.models.models.dashboards import DashboardData
+
     dashboard = DashboardData.model_validate(data)
 
     return dashboard
@@ -60,15 +63,14 @@ def import_dashboard_from_json(filepath: Path) -> "DashboardData":
 # USAGE EXAMPLES
 # ============================================================================
 
+
 async def example_export():
     """Example: Export dashboard to JSON"""
     from depictio.models.models.dashboards import DashboardData
     from bson import ObjectId
 
     # Get dashboard from database
-    dashboard = await DashboardData.find_one(
-        {"dashboard_id": ObjectId("6824cb3b89d2b72169309737")}
-    )
+    dashboard = await DashboardData.find_one({"dashboard_id": ObjectId("6824cb3b89d2b72169309737")})
 
     # Export to JSON file
     output_path = Path("dashboard_export.json")
@@ -209,13 +211,15 @@ def _auto_generate_layout(components: list[dict]) -> list[dict]:
             x = 0
             y += h
 
-        layout.append({
-            "i": f"box-{component['index']}",
-            "x": x,
-            "y": y,
-            "w": w,
-            "h": h,
-        })
+        layout.append(
+            {
+                "i": f"box-{component['index']}",
+                "x": x,
+                "y": y,
+                "w": w,
+                "h": h,
+            }
+        )
 
         x += w
 
@@ -225,6 +229,7 @@ def _auto_generate_layout(components: list[dict]) -> list[dict]:
 # ============================================================================
 # JSON SCHEMA GENERATION
 # ============================================================================
+
 
 def get_dashboard_json_schema() -> dict:
     """
@@ -259,6 +264,7 @@ def save_schema_for_api_docs():
 # COMPARISON: YAML vs JSON
 # ============================================================================
 
+
 def print_comparison():
     """Print complexity comparison"""
     print("=" * 80)
@@ -268,7 +274,11 @@ def print_comparison():
     comparison = {
         "Lines of Code": ("3,399 lines", "~60 lines", "98% reduction"),
         "Formats": ("3 (legacy, compact, MVP)", "1 (native JSON)", "3x simpler"),
-        "Dependencies": ("PyYAML, custom parsers", "bson.json_util (already installed)", "Built-in"),
+        "Dependencies": (
+            "PyYAML, custom parsers",
+            "bson.json_util (already installed)",
+            "Built-in",
+        ),
         "Validation": ("Custom validators", "Pydantic (built-in)", "Free"),
         "Schema": ("Manual YAML schemas", "JSON Schema from Pydantic", "Auto-generated"),
         "API Support": ("Requires conversion", "Native", "Direct"),

@@ -11,18 +11,18 @@ SRR10070151	Bacteria;Proteobacteria	25256.0	Sediment	Bacteria	Proteobacteria
 SRR10102392	Bacteria;Proteobacteria	14605.0	Soil	Bacteria	Proteobacteria
 SRR10102393	Bacteria;Proteobacteria	15595.0	Soil	Bacteria	Proteobacteria
 SRR10102394	Bacteria;Proteobacteria	14565.0	Soil	Bacteria	Proteobacteria
-SRR10070130	Bacteria;	1491.0	Riverwater	Bacteria	
-SRR10070131	Bacteria;	1797.0	Riverwater	Bacteria	
-SRR10070132	Bacteria;	1846.0	Groundwater	Bacteria	
-SRR10070133	Bacteria;	8837.0	Groundwater	Bacteria	
-SRR10070134	Bacteria;	1995.0	Riverwater	Bacteria	
-SRR10070141	Bacteria;	4204.0	Groundwater	Bacteria	
-SRR10070149	Bacteria;	10164.0	Sediment	Bacteria	
-SRR10070150	Bacteria;	10678.0	Sediment	Bacteria	
-SRR10070151	Bacteria;	10579.0	Sediment	Bacteria	
-SRR10102392	Bacteria;	1657.0	Soil	Bacteria	
-SRR10102393	Bacteria;	1757.0	Soil	Bacteria	
-SRR10102394	Bacteria;	1389.0	Soil	Bacteria	
+SRR10070130	Bacteria;	1491.0	Riverwater	Bacteria
+SRR10070131	Bacteria;	1797.0	Riverwater	Bacteria
+SRR10070132	Bacteria;	1846.0	Groundwater	Bacteria
+SRR10070133	Bacteria;	8837.0	Groundwater	Bacteria
+SRR10070134	Bacteria;	1995.0	Riverwater	Bacteria
+SRR10070141	Bacteria;	4204.0	Groundwater	Bacteria
+SRR10070149	Bacteria;	10164.0	Sediment	Bacteria
+SRR10070150	Bacteria;	10678.0	Sediment	Bacteria
+SRR10070151	Bacteria;	10579.0	Sediment	Bacteria
+SRR10102392	Bacteria;	1657.0	Soil	Bacteria
+SRR10102393	Bacteria;	1757.0	Soil	Bacteria
+SRR10102394	Bacteria;	1389.0	Soil	Bacteria
 SRR10070130	Bacteria;Bacteroidetes	14502.0	Riverwater	Bacteria	Bacteroidetes
 SRR10070131	Bacteria;Bacteroidetes	14881.0	Riverwater	Bacteria	Bacteroidetes
 SRR10070132	Bacteria;Bacteroidetes	255.0	Groundwater	Bacteria	Bacteroidetes
@@ -122,15 +122,15 @@ SRR10070151	Bacteria;candidate_division_WPS-1	20.0	Sediment	Bacteria	candidate_d
 SRR10102392	Bacteria;candidate_division_WPS-1	321.0	Soil	Bacteria	candidate_division_WPS-1
 SRR10102393	Bacteria;candidate_division_WPS-1	306.0	Soil	Bacteria	candidate_division_WPS-1
 SRR10102394	Bacteria;candidate_division_WPS-1	336.0	Soil	Bacteria	candidate_division_WPS-1
-SRR10070130	Archaea;	41.0	Riverwater	Archaea	
-SRR10070131	Archaea;	56.0	Riverwater	Archaea	
-SRR10070132	Archaea;	52.0	Groundwater	Archaea	
-SRR10070133	Archaea;	103.0	Groundwater	Archaea	
-SRR10070134	Archaea;	69.0	Riverwater	Archaea	
-SRR10070141	Archaea;	40.0	Groundwater	Archaea	
-SRR10070149	Archaea;	378.0	Sediment	Archaea	
-SRR10070150	Archaea;	480.0	Sediment	Archaea	
-SRR10070151	Archaea;	379.0	Sediment	Archaea	
+SRR10070130	Archaea;	41.0	Riverwater	Archaea
+SRR10070131	Archaea;	56.0	Riverwater	Archaea
+SRR10070132	Archaea;	52.0	Groundwater	Archaea
+SRR10070133	Archaea;	103.0	Groundwater	Archaea
+SRR10070134	Archaea;	69.0	Riverwater	Archaea
+SRR10070141	Archaea;	40.0	Groundwater	Archaea
+SRR10070149	Archaea;	378.0	Sediment	Archaea
+SRR10070150	Archaea;	480.0	Sediment	Archaea
+SRR10070151	Archaea;	379.0	Sediment	Archaea
 SRR10070130	Bacteria;Gemmatimonadetes	11.0	Riverwater	Bacteria	Gemmatimonadetes
 SRR10070131	Bacteria;Gemmatimonadetes	3.0	Riverwater	Bacteria	Gemmatimonadetes
 SRR10070132	Bacteria;Gemmatimonadetes	77.0	Groundwater	Bacteria	Gemmatimonadetes
