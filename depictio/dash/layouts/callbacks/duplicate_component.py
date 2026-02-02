@@ -21,6 +21,7 @@ from depictio.dash.component_metadata import get_dual_panel_dimensions
 from depictio.dash.layouts.edit import enable_box_edit_mode
 from depictio.dash.modules.card_component.utils import build_card
 from depictio.dash.modules.figure_component.utils import build_figure
+from depictio.dash.modules.image_component.utils import build_image
 from depictio.dash.modules.interactive_component.utils import build_interactive
 from depictio.dash.modules.table_component.utils import build_table
 
@@ -145,6 +146,9 @@ def register_duplicate_component_callback(app):
         elif component_type == "table":
             duplicated_meta["build_frame"] = True
             fresh_component = build_table(**duplicated_meta)
+        elif component_type == "image":
+            duplicated_meta["build_frame"] = True
+            fresh_component = build_image(**duplicated_meta)
         else:
             logger.error(f"❌ Unknown component type: {component_type}")
             raise PreventUpdate
