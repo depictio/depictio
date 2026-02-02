@@ -181,6 +181,13 @@ def _parse_s3_path(s3_path: str) -> tuple[str, str]:
 
 def _get_mime_type(file_path: str) -> str:
     """Get MIME type for a file based on its extension."""
+    # Explicit mapping for image types that may not be in system mimetypes
+    ext_lower = file_path.lower()
+    if ext_lower.endswith(".webp"):
+        return "image/webp"
+    if ext_lower.endswith(".avif"):
+        return "image/avif"
+
     mime_type, _ = mimetypes.guess_type(file_path)
     return mime_type or "application/octet-stream"
 
