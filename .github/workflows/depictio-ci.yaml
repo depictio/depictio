@@ -510,27 +510,66 @@ jobs:
       - name: Wait and verify services
         id: health
         run: |
-          echo "⏳ Waiting for services..."
-          sleep 15
+          echo "⏳ Waiting for services to be ready..."
+
+          # Wait for MongoDB
+          echo "Waiting for MongoDB..."
+          for i in {1..30}; do
+            if docker compose exec -T mongo mongosh localhost:27018/depictioDB --eval "db.runCommand({ ping: 1 })" --quiet &>/dev/null; then
+              echo "✅ MongoDB ready"
+              break
+            fi
+            echo "MongoDB not ready yet, attempt $i/30..."
+            sleep 2
+          done
+
+          # Wait for Redis
+          echo "Waiting for Redis..."
+          for i in {1..30}; do
+            if docker compose exec -T redis redis-cli ping &>/dev/null; then
+              echo "✅ Redis ready"
+              break
+            fi
+            echo "Redis not ready yet, attempt $i/30..."
+            sleep 2
+          done
+
+          # Wait for MinIO
+          echo "Waiting for MinIO..."
+          for i in {1..30}; do
+            if curl -f http://localhost:9000/minio/health/ready &>/dev/null; then
+              echo "✅ MinIO ready"
+              break
+            fi
+            echo "MinIO not ready yet, attempt $i/30..."
+            sleep 2
+          done
+
+          # Wait for Backend API health check
+          echo "Waiting for Backend API..."
+          for i in {1..60}; do
+            if curl -f http://localhost:8058/health &>/dev/null; then
+              echo "✅ Backend API ready"
+              break
+            fi
+            echo "Backend API not ready yet, attempt $i/60..."
+            sleep 2
+          done
+
+          # Show final status
+          echo "🔍 Verifying all services..."
           docker compose ps
 
-          # Extract token and health check
-          for i in {1..5}; do
-            if token=$(docker compose exec depictio-backend bash -c "cat /app/depictio/.depictio/admin_config.yaml" 2>/dev/null | grep 'access_token' | awk '{print $2}'); then
-              token=$(echo $token | tr -d "'\"")
-              health_check=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $token" http://localhost:8058/depictio/api/v1/utils/status)
-              if [ "$health_check" = "200" ]; then
-                echo "✅ Services ready"
-                echo "ready=true" >> $GITHUB_OUTPUT
-                exit 0
-              fi
-            fi
-            echo "⚠️ Services not ready, attempt $i/5"
-            sleep 10
-          done
-          echo "❌ Services failed to start"
-          docker compose logs
-          exit 1
+          # Test API health endpoint
+          if ! curl -f http://localhost:8058/health; then
+            echo "❌ Backend API health check failed"
+            echo "Backend logs:"
+            docker compose logs depictio-backend --tail=50
+            exit 1
+          fi
+
+          echo "✅ All services ready and healthy"
+          echo "ready=true" >> $GITHUB_OUTPUT
 
       - name: Verify users and initial data
         run: |
