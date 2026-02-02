@@ -994,12 +994,12 @@ jobs:
             " || echo "  MongoDB query failed"
           fi
 
-          # Check if response contains expected fields
-          if echo "$RESPONSE" | grep -q '"_id"' && [ "$HTTP_STATUS" = "200" ]; then
+          # Check if response contains expected fields (API returns "id" not "_id" due to serialization)
+          if echo "$RESPONSE" | grep -q '"dashboard_id"' && [ "$HTTP_STATUS" = "200" ]; then
             echo "✅ Dashboard verified in database"
 
             # Extract and display dashboard details
-            TITLE=$(echo "$RESPONSE" | python3 -c "import sys, json; print(json.load(sys.stdin).get('dashboard_name', 'N/A'))" 2>/dev/null || echo "N/A")
+            TITLE=$(echo "$RESPONSE" | python3 -c "import sys, json; print(json.load(sys.stdin).get('title', 'N/A'))" 2>/dev/null || echo "N/A")
             PROJECT_ID=$(echo "$RESPONSE" | python3 -c "import sys, json; print(json.load(sys.stdin).get('project_id', 'N/A'))" 2>/dev/null || echo "N/A")
 
             echo "  Dashboard Name: $TITLE"
@@ -1152,9 +1152,9 @@ jobs:
           API_URL="http://localhost:8058/depictio/api/v1/dashboards/get/$DASHBOARD_ID"
           RESPONSE=$(curl -s -H "Authorization: Bearer $JWT_TOKEN" "$API_URL")
 
-          if echo "$RESPONSE" | grep -q '"_id"'; then
+          if echo "$RESPONSE" | grep -q '"dashboard_id"'; then
             echo "✅ Image Demo dashboard verified in database"
-            TITLE=$(echo "$RESPONSE" | python3 -c "import sys, json; print(json.load(sys.stdin).get('dashboard_name', 'N/A'))" 2>/dev/null || echo "N/A")
+            TITLE=$(echo "$RESPONSE" | python3 -c "import sys, json; print(json.load(sys.stdin).get('title', 'N/A'))" 2>/dev/null || echo "N/A")
             echo "  Dashboard Name: $TITLE"
             echo "  Dashboard ID: $DASHBOARD_ID"
           else
