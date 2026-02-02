@@ -846,6 +846,48 @@ jobs:
           # Import with dry-run (validates without creating)
           depictio-cli dashboard import ../projects/init/iris/dashboard_lite.yaml --dry-run
 
+          # Actually import dashboard to server
+          echo "🔄 Importing dashboard to server..."
+          IMPORT_OUTPUT=$(depictio-cli dashboard import ../projects/init/iris/dashboard_lite.yaml --config admin_config.yaml 2>&1)
+          echo "$IMPORT_OUTPUT"
+
+          # Extract dashboard ID from import output
+          DASHBOARD_ID=$(echo "$IMPORT_OUTPUT" | grep "Dashboard ID:" | awk '{print $NF}')
+
+          if [ -z "$DASHBOARD_ID" ]; then
+            echo "❌ Failed to extract dashboard ID from import output"
+            exit 1
+          fi
+
+          echo "✅ Dashboard imported with ID: $DASHBOARD_ID"
+
+          # Verify dashboard exists in MongoDB via API
+          echo "🔍 Verifying dashboard registration in database..."
+
+          # Get JWT token from admin config
+          JWT_TOKEN=$(grep "jwt_token:" admin_config.yaml | awk '{print $2}' | tr -d '"')
+
+          # Query API to verify dashboard exists
+          API_URL="http://localhost:8058/depictio/api/v1/dashboards/$DASHBOARD_ID"
+          RESPONSE=$(curl -s -H "Authorization: Bearer $JWT_TOKEN" "$API_URL")
+
+          # Check if response contains expected fields
+          if echo "$RESPONSE" | grep -q '"_id"'; then
+            echo "✅ Dashboard verified in database"
+
+            # Extract and display dashboard details
+            TITLE=$(echo "$RESPONSE" | python3 -c "import sys, json; print(json.load(sys.stdin).get('dashboard_name', 'N/A'))" 2>/dev/null || echo "N/A")
+            PROJECT_ID=$(echo "$RESPONSE" | python3 -c "import sys, json; print(json.load(sys.stdin).get('project_id', 'N/A'))" 2>/dev/null || echo "N/A")
+
+            echo "  Dashboard Name: $TITLE"
+            echo "  Project ID: $PROJECT_ID"
+            echo "  Dashboard ID: $DASHBOARD_ID"
+          else
+            echo "❌ Dashboard not found in database"
+            echo "API Response: $RESPONSE"
+            exit 1
+          fi
+
           echo "✅ Dashboard commands passed"
 
       - name: Test CLI workflow with local test project
@@ -940,6 +982,44 @@ jobs:
             --CLI-config-path admin_config.yaml
 
           echo "✅ Image Demo CLI operations passed"
+
+      - name: Test Image Demo dashboard import
+        run: |
+          cd depictio/cli
+          source venv/bin/activate
+          echo "📋 Testing Image Demo dashboard import..."
+
+          # Import Image Demo dashboard
+          IMPORT_OUTPUT=$(depictio-cli dashboard import ../projects/test/image_demo/dashboard_lite.yaml --config admin_config.yaml 2>&1)
+          echo "$IMPORT_OUTPUT"
+
+          # Extract dashboard ID
+          DASHBOARD_ID=$(echo "$IMPORT_OUTPUT" | grep "Dashboard ID:" | awk '{print $NF}')
+
+          if [ -z "$DASHBOARD_ID" ]; then
+            echo "❌ Failed to extract dashboard ID from import output"
+            exit 1
+          fi
+
+          echo "✅ Image Demo dashboard imported with ID: $DASHBOARD_ID"
+
+          # Verify dashboard in database
+          echo "🔍 Verifying dashboard registration in database..."
+          JWT_TOKEN=$(grep "jwt_token:" admin_config.yaml | awk '{print $2}' | tr -d '"')
+          API_URL="http://localhost:8058/depictio/api/v1/dashboards/$DASHBOARD_ID"
+          RESPONSE=$(curl -s -H "Authorization: Bearer $JWT_TOKEN" "$API_URL")
+
+          if echo "$RESPONSE" | grep -q '"_id"'; then
+            echo "✅ Image Demo dashboard verified in database"
+            TITLE=$(echo "$RESPONSE" | python3 -c "import sys, json; print(json.load(sys.stdin).get('dashboard_name', 'N/A'))" 2>/dev/null || echo "N/A")
+            echo "  Dashboard Name: $TITLE"
+            echo "  Dashboard ID: $DASHBOARD_ID"
+          else
+            echo "❌ Image Demo dashboard not found in database"
+            exit 1
+          fi
+
+          echo "✅ Image Demo dashboard import test passed"
 
       - name: Test backup commands (read-only)
         run: |
