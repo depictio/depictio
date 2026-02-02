@@ -1,0 +1,112 @@
+# Image Component Demo Dashboard
+title: "Image Component Demo"
+subtitle: "Demonstrating the image gallery component with cross-DC filtering"
+project_tag: "Image Component Demo Project"
+
+components:
+  # Image gallery component
+  - tag: sample-gallery
+    component_type: image
+    workflow_tag: python/image_demo_workflow
+    data_collection_tag: sample_metadata
+    image_column: image_path
+    s3_base_folder: "s3://depictio-bucket/image_demo/images/"
+    thumbnail_size: 150
+    columns: 3
+    max_images: 9
+
+  # Bar chart of samples by category
+  - tag: category-distribution
+    component_type: figure
+    workflow_tag: python/image_demo_workflow
+    data_collection_tag: sample_metadata
+    visu_type: bar
+    dict_kwargs:
+      x: category
+      title: "Samples by Category"
+      color: category
+
+  # Box plot of quality scores by category
+  - tag: quality-by-category
+    component_type: figure
+    workflow_tag: python/image_demo_workflow
+    data_collection_tag: sample_metadata
+    visu_type: box
+    dict_kwargs:
+      x: category
+      y: quality_score
+      title: "Quality Score Distribution by Category"
+      color: category
+
+  # Card: Total samples
+  - tag: total-samples
+    component_type: card
+    workflow_tag: python/image_demo_workflow
+    data_collection_tag: sample_metadata
+    aggregation: count
+    column_name: sample_id
+    column_type: object
+    icon_name: mdi:image-multiple
+    icon_color: "#2196F3"
+
+  # Card: Average quality score
+  - tag: avg-quality
+    component_type: card
+    workflow_tag: python/image_demo_workflow
+    data_collection_tag: sample_metadata
+    aggregation: average
+    column_name: quality_score
+    column_type: float64
+    icon_name: mdi:star
+    icon_color: "#FF9800"
+
+  # Card: Number of categories
+  - tag: category-count
+    component_type: card
+    workflow_tag: python/image_demo_workflow
+    data_collection_tag: sample_metadata
+    aggregation: nunique
+    column_name: category
+    column_type: object
+    icon_name: mdi:shape
+    icon_color: "#4CAF50"
+
+  # Interactive filter: Sample selection
+  - tag: sample-filter
+    component_type: interactive
+    workflow_tag: python/image_demo_workflow
+    data_collection_tag: sample_metadata
+    interactive_component_type: MultiSelect
+    column_name: sample_id
+    column_type: object
+    custom_color: "#2196F3"
+    icon_name: mdi:image-filter
+
+  # Interactive filter: Category selection
+  - tag: category-filter
+    component_type: interactive
+    workflow_tag: python/image_demo_workflow
+    data_collection_tag: sample_metadata
+    interactive_component_type: MultiSelect
+    column_name: category
+    column_type: object
+    custom_color: "#9C27B0"
+    icon_name: mdi:filter-variant
+
+  # Interactive filter: Quality score range
+  - tag: quality-filter
+    component_type: interactive
+    workflow_tag: python/image_demo_workflow
+    data_collection_tag: sample_metadata
+    interactive_component_type: RangeSlider
+    column_name: quality_score
+    column_type: float64
+    custom_color: "#FF9800"
+    icon_name: mdi:tune
+
+  # Data table showing all sample information
+  - tag: samples-table
+    component_type: table
+    workflow_tag: python/image_demo_workflow
+    data_collection_tag: sample_metadata
+    page_size: 10

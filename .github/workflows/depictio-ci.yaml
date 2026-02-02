@@ -908,6 +908,39 @@ jobs:
 
           echo "✅ Penguin CLI operations passed"
 
+      - name: Test Image Demo CLI operations
+        run: |
+          cd depictio/cli
+          source venv/bin/activate
+          echo "📋 Testing Image Demo CLI operations..."
+
+          # Test Image DC workflow with delta table creation and S3 image uploads
+          # Validates that Image DCs work like Table DCs but with mandatory image_column
+
+          # Validate project config (tests Image DC model validation)
+          depictio-cli --verbose config validate-project-config \
+            --project-config-path ../projects/test/image_demo/project.yaml \
+            --CLI-config-path admin_config.yaml
+
+          # Sync project to server
+          depictio-cli --verbose config sync-project-config-to-server \
+            --project-config-path ../projects/test/image_demo/project.yaml \
+            --CLI-config-path admin_config.yaml
+
+          # Scan data files (syncs images to S3)
+          depictio-cli --verbose data scan \
+            --sync-files \
+            --project-config-path ../projects/test/image_demo/project.yaml \
+            --CLI-config-path admin_config.yaml
+
+          # Process data into deltatables (creates delta table from CSV)
+          depictio-cli --verbose data process \
+            --overwrite \
+            --project-config-path ../projects/test/image_demo/project.yaml \
+            --CLI-config-path admin_config.yaml
+
+          echo "✅ Image Demo CLI operations passed"
+
       - name: Test backup commands (read-only)
         run: |
           cd depictio/cli
@@ -918,6 +951,26 @@ jobs:
           depictio-cli backup list --CLI-config-path admin_config.yaml || true
 
           echo "✅ Backup commands passed"
+
+      - name: Verify Image Demo project
+        run: |
+          # Verify project was created
+          IMAGE_DEMO_PROJECT=$(docker compose exec -T mongo mongosh localhost:27018/depictioDB --eval "JSON.stringify(db.projects.find().toArray())" --quiet 2>&1 | grep '^[\[{]' | jq -r '.[] | select(.name == "Image Component Demo Project") | .name')
+          [ -z "$IMAGE_DEMO_PROJECT" ] && echo "❌ Image Demo project not found" && exit 1
+          echo "✅ Image Demo project found"
+
+          # Verify Image DC deltatable was created
+          IMAGE_DEMO_DC=$(docker compose exec -T mongo mongosh localhost:27018/depictioDB --eval "JSON.stringify(db.projects.find().toArray())" --quiet 2>&1 | grep '^[\[{]' | jq -r '.[] | select(.name == "Image Component Demo Project") | .workflows[0].data_collections[0]._id')
+          echo "📊 Image Demo DC ID: $IMAGE_DEMO_DC"
+
+          IMAGE_DEMO_DT=$(docker compose exec -T mongo mongosh localhost:27018/depictioDB --eval "JSON.stringify(db.deltatables.find({\"data_collection_id\": ObjectId(\"$IMAGE_DEMO_DC\")}).toArray())" --quiet 2>&1 | grep '^[\[{]' | jq -r '.[]._id // empty')
+          [ -z "$IMAGE_DEMO_DT" ] && echo "❌ Image Demo deltatable not found" && exit 1
+          echo "✅ Image Demo deltatable created successfully"
+
+          # Verify images were uploaded to S3
+          echo "📊 Checking S3 for uploaded images..."
+          IMAGE_COUNT=$(docker compose exec -T minio mc ls depictio/depictio-bucket/image_demo/ 2>&1 | grep -c "\.png" || echo "0")
+          [ "$IMAGE_COUNT" -eq "0" ] && echo "⚠️  Warning: No images found in S3, but continuing..." || echo "✅ Found $IMAGE_COUNT images in S3"
 
       - name: Verify CLI test project
         run: |
