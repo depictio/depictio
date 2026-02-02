@@ -965,8 +965,8 @@ jobs:
           # Get fresh access token by logging in
           echo "  Logging in to get access token..."
           LOGIN_RESPONSE=$(curl -s -X POST "http://localhost:8058/depictio/api/v1/auth/login" \
-            -H "Content-Type: application/json" \
-            -d '{"email": "admin@admin.com", "password": "admin"}')
+            -H "Content-Type: application/x-www-form-urlencoded" \
+            -d "username=admin@admin.com&password=admin")
 
           echo "  Login response: $LOGIN_RESPONSE"
 
@@ -1142,8 +1142,8 @@ jobs:
           # Get fresh access token by logging in
           echo "  Logging in to get access token..."
           LOGIN_RESPONSE=$(curl -s -X POST "http://localhost:8058/depictio/api/v1/auth/login" \
-            -H "Content-Type: application/json" \
-            -d '{"email": "admin@admin.com", "password": "admin"}')
+            -H "Content-Type: application/x-www-form-urlencoded" \
+            -d "username=admin@admin.com&password=admin")
 
           echo "  Login response: $LOGIN_RESPONSE"
 
