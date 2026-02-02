@@ -1,21 +1,25 @@
 /* Image Component Styles */
 
-/* Fix pointer-events being blocked by react-grid */
-.image-thumbnail-card img {
+/* Fix pointer-events being blocked by react-grid - higher specificity */
+.react-grid-item .image-thumbnail-card,
+.react-grid-item .image-thumbnail-card img {
     pointer-events: auto !important;
-    transition: transform 0.2s ease !important;
     cursor: pointer !important;
 }
 
+.react-grid-item .image-thumbnail-card img {
+    transition: transform 0.2s ease !important;
+}
+
 /* Add hover effect - image will scale and appear on top */
-.image-thumbnail-card img:hover {
+.react-grid-item .image-thumbnail-card img:hover {
     transform: scale(1.1) !important;
     z-index: 1000 !important;
     position: relative !important;
 }
 
 /* Card subtle hover effect */
-.image-thumbnail-card:hover {
+.react-grid-item .image-thumbnail-card:hover {
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1) !important;
 }
 

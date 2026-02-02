@@ -40,15 +40,3 @@ workflows:
             local_images_path: ../projects/test/image_demo/images
             supported_formats: [".png", ".jpg", ".jpeg"]
             thumbnail_size: 150
-
-# Link for cross-DC filtering (same DC, self-filtering)
-links:
-  - source_dc_id: "650a1b2c3d4e5f6a7b8c9d10"
-    source_column: "sample_id"
-    target_dc_id: "650a1b2c3d4e5f6a7b8c9d10"
-    target_type: "image"
-    link_config:
-      resolver: "direct"
-      target_field: "sample_id"
-    description: "Filter images by sample selection"
-    enabled: true

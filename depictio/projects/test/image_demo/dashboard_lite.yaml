@@ -8,7 +8,7 @@ components:
   - tag: sample-gallery
     component_type: image
     workflow_tag: python/image_demo_workflow
-    data_collection_tag: sample_metadata
+    data_collection_tag: sample_images
     image_column: image_path
     s3_base_folder: "s3://depictio-bucket/image_demo/images/"
     thumbnail_size: 150
@@ -19,7 +19,7 @@ components:
   - tag: category-distribution
     component_type: figure
     workflow_tag: python/image_demo_workflow
-    data_collection_tag: sample_metadata
+    data_collection_tag: sample_images
     visu_type: bar
     dict_kwargs:
       x: category
@@ -30,7 +30,7 @@ components:
   - tag: quality-by-category
     component_type: figure
     workflow_tag: python/image_demo_workflow
-    data_collection_tag: sample_metadata
+    data_collection_tag: sample_images
     visu_type: box
     dict_kwargs:
       x: category
@@ -42,7 +42,7 @@ components:
   - tag: total-samples
     component_type: card
     workflow_tag: python/image_demo_workflow
-    data_collection_tag: sample_metadata
+    data_collection_tag: sample_images
     aggregation: count
     column_name: sample_id
     column_type: object
@@ -53,7 +53,7 @@ components:
   - tag: avg-quality
     component_type: card
     workflow_tag: python/image_demo_workflow
-    data_collection_tag: sample_metadata
+    data_collection_tag: sample_images
     aggregation: average
     column_name: quality_score
     column_type: float64
@@ -64,7 +64,7 @@ components:
   - tag: category-count
     component_type: card
     workflow_tag: python/image_demo_workflow
-    data_collection_tag: sample_metadata
+    data_collection_tag: sample_images
     aggregation: nunique
     column_name: category
     column_type: object
@@ -75,7 +75,7 @@ components:
   - tag: sample-filter
     component_type: interactive
     workflow_tag: python/image_demo_workflow
-    data_collection_tag: sample_metadata
+    data_collection_tag: sample_images
     interactive_component_type: MultiSelect
     column_name: sample_id
     column_type: object
@@ -86,7 +86,7 @@ components:
   - tag: category-filter
     component_type: interactive
     workflow_tag: python/image_demo_workflow
-    data_collection_tag: sample_metadata
+    data_collection_tag: sample_images
     interactive_component_type: MultiSelect
     column_name: category
     column_type: object
@@ -97,7 +97,7 @@ components:
   - tag: quality-filter
     component_type: interactive
     workflow_tag: python/image_demo_workflow
-    data_collection_tag: sample_metadata
+    data_collection_tag: sample_images
     interactive_component_type: RangeSlider
     column_name: quality_score
     column_type: float64
@@ -108,5 +108,5 @@ components:
   - tag: samples-table
     component_type: table
     workflow_tag: python/image_demo_workflow
-    data_collection_tag: sample_metadata
+    data_collection_tag: sample_images
     page_size: 10
