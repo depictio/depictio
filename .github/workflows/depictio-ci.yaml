@@ -811,7 +811,66 @@ jobs:
           docker pull "${FULL_IMAGE}"
           export DEPICTIO_VERSION="${FULL_IMAGE}"
           docker compose -f docker-compose.dev.yaml -f docker-compose/docker-compose.minio.yaml up -d
-          sleep 15
+
+          echo "⏳ Waiting for services to be ready..."
+
+          # Wait for MongoDB
+          echo "Waiting for MongoDB..."
+          for i in {1..30}; do
+            if docker compose exec -T mongo mongosh localhost:27018/depictioDB --eval "db.runCommand({ ping: 1 })" --quiet &>/dev/null; then
+              echo "✅ MongoDB ready"
+              break
+            fi
+            echo "MongoDB not ready yet, attempt $i/30..."
+            sleep 2
+          done
+
+          # Wait for Redis
+          echo "Waiting for Redis..."
+          for i in {1..30}; do
+            if docker compose exec -T redis redis-cli ping &>/dev/null; then
+              echo "✅ Redis ready"
+              break
+            fi
+            echo "Redis not ready yet, attempt $i/30..."
+            sleep 2
+          done
+
+          # Wait for MinIO
+          echo "Waiting for MinIO..."
+          for i in {1..30}; do
+            if curl -f http://localhost:9000/minio/health/ready &>/dev/null; then
+              echo "✅ MinIO ready"
+              break
+            fi
+            echo "MinIO not ready yet, attempt $i/30..."
+            sleep 2
+          done
+
+          # Wait for Backend API with health check
+          echo "Waiting for Backend API..."
+          for i in {1..60}; do
+            if curl -f http://localhost:8058/health &>/dev/null; then
+              echo "✅ Backend API ready"
+              break
+            fi
+            echo "Backend API not ready yet, attempt $i/60..."
+            sleep 2
+          done
+
+          # Final verification
+          echo "🔍 Verifying all services..."
+          docker compose ps
+
+          # Test API endpoint
+          if ! curl -f http://localhost:8058/health; then
+            echo "❌ Backend API health check failed"
+            echo "Backend logs:"
+            docker compose logs depictio-backend --tail=50
+            exit 1
+          fi
+
+          echo "✅ All services ready and healthy"
 
       - name: Setup CLI authentication
         run: |
