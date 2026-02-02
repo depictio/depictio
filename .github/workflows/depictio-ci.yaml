@@ -962,8 +962,20 @@ jobs:
           # Verify dashboard exists in MongoDB via API
           echo "🔍 Verifying dashboard registration in database..."
 
-          # Get JWT token from admin config
-          JWT_TOKEN=$(grep "jwt_token:" admin_config.yaml | awk '{print $2}' | tr -d '"')
+          # Get fresh access token by logging in
+          LOGIN_RESPONSE=$(curl -s -X POST "http://localhost:8058/depictio/api/v1/auth/login" \
+            -H "Content-Type: application/json" \
+            -d '{"email": "admin@admin.com", "password": "admin"}')
+
+          JWT_TOKEN=$(echo "$LOGIN_RESPONSE" | python3 -c "import sys, json; print(json.load(sys.stdin)['access_token'])" 2>/dev/null)
+
+          if [ -z "$JWT_TOKEN" ]; then
+            echo "❌ Failed to get access token"
+            echo "Login response: $LOGIN_RESPONSE"
+            exit 1
+          fi
+
+          echo "  Got fresh access token (length: ${#JWT_TOKEN})"
 
           # Query API to verify dashboard exists
           API_URL="http://localhost:8058/depictio/api/v1/dashboards/get/$DASHBOARD_ID"
@@ -1121,7 +1133,20 @@ jobs:
 
           # Verify dashboard in database
           echo "🔍 Verifying dashboard registration in database..."
-          JWT_TOKEN=$(grep "jwt_token:" admin_config.yaml | awk '{print $2}' | tr -d '"')
+
+          # Get fresh access token by logging in
+          LOGIN_RESPONSE=$(curl -s -X POST "http://localhost:8058/depictio/api/v1/auth/login" \
+            -H "Content-Type: application/json" \
+            -d '{"email": "admin@admin.com", "password": "admin"}')
+
+          JWT_TOKEN=$(echo "$LOGIN_RESPONSE" | python3 -c "import sys, json; print(json.load(sys.stdin)['access_token'])" 2>/dev/null)
+
+          if [ -z "$JWT_TOKEN" ]; then
+            echo "❌ Failed to get access token"
+            echo "Login response: $LOGIN_RESPONSE"
+            exit 1
+          fi
+
           API_URL="http://localhost:8058/depictio/api/v1/dashboards/get/$DASHBOARD_ID"
           RESPONSE=$(curl -s -H "Authorization: Bearer $JWT_TOKEN" "$API_URL")
 
