@@ -121,11 +121,11 @@ class DCLink(BaseModel):
         description="Data collection ID for the target (receives resolved values)",
     )
 
-    target_type: Literal["table", "multiqc"] = Field(
+    target_type: Literal["table", "multiqc", "image"] = Field(
         ...,
         description="Type of the target DC. Determines which resolver strategies are valid. "
-        "Phase 1 supports: 'table', 'multiqc'. "
-        "Future: 'jbrowse2', 'images', 'geomap'",
+        "Supported: 'table', 'multiqc', 'image'. "
+        "Future: 'jbrowse2', 'geomap'",
     )
 
     link_config: LinkConfig = Field(
@@ -156,10 +156,16 @@ class DCLink(BaseModel):
             values["id"] = values.pop("_id")
         return values
 
-    @field_validator("source_dc_id", "target_dc_id")
+    @field_validator("source_dc_id", "target_dc_id", mode="before")
     @classmethod
-    def validate_dc_ids(cls, v: str) -> str:
-        """Ensure DC IDs are non-empty strings."""
+    def validate_dc_ids(cls, v: Any) -> str:
+        """Ensure DC IDs are non-empty strings, converting ObjectId if needed."""
+        # Handle ObjectId from MongoDB
+        if hasattr(v, "__str__") and type(v).__name__ == "ObjectId":
+            return str(v)
+        if not isinstance(v, str):
+            # Try to convert to string
+            v = str(v)
         if not v or not v.strip():
             raise ValueError("DC ID cannot be empty")
         return v.strip()
@@ -284,7 +290,7 @@ class LinkCreateRequest(BaseModel):
     source_dc_id: str = Field(..., description="Source data collection ID")
     source_column: str = Field(..., description="Column name in source DC")
     target_dc_id: str = Field(..., description="Target data collection ID")
-    target_type: Literal["table", "multiqc"] = Field(..., description="Target DC type")
+    target_type: Literal["table", "multiqc", "image"] = Field(..., description="Target DC type")
     link_config: LinkConfig = Field(default_factory=LinkConfig)
     description: str | None = Field(default=None)
     enabled: bool = Field(default=True)
@@ -301,7 +307,7 @@ class LinkUpdateRequest(BaseModel):
     source_dc_id: str | None = Field(default=None)
     source_column: str | None = Field(default=None)
     target_dc_id: str | None = Field(default=None)
-    target_type: Literal["table", "multiqc"] | None = Field(default=None)
+    target_type: Literal["table", "multiqc", "image"] | None = Field(default=None)
     link_config: LinkConfig | None = Field(default=None)
     description: str | None = Field(default=None)
     enabled: bool | None = Field(default=None)
