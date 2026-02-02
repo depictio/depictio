@@ -39,6 +39,73 @@ from depictio.models.models.workflows import (
     WorkflowRunScan,
 )
 
+# Supported image extensions for S3 verification
+SUPPORTED_IMAGE_EXTENSIONS = {
+    ".png",
+    ".jpg",
+    ".jpeg",
+    ".gif",
+    ".webp",
+    ".svg",
+    ".bmp",
+    ".tiff",
+    ".tif",
+}
+
+
+def _verify_s3_images(s3_base_folder: str, CLI_config: CLIConfig) -> dict:
+    """
+    Verify images exist at the specified S3 location.
+
+    Args:
+        s3_base_folder: S3 path (e.g., s3://bucket/path/to/images/)
+        CLI_config: CLI configuration with S3 credentials
+
+    Returns:
+        dict with 'count' of images found and 'sample' list of first few paths
+    """
+    import boto3
+
+    try:
+        # Parse S3 path
+        if not s3_base_folder.startswith("s3://"):
+            return {"count": 0, "sample": [], "error": "Invalid S3 path"}
+
+        s3_parts = s3_base_folder[5:].split("/", 1)
+        bucket = s3_parts[0]
+        prefix = s3_parts[1] if len(s3_parts) > 1 else ""
+
+        # Initialize S3 client
+        s3_client = boto3.client(
+            "s3",
+            aws_access_key_id=CLI_config.s3_storage.root_user,
+            aws_secret_access_key=CLI_config.s3_storage.root_password,
+            endpoint_url=CLI_config.s3_storage.url,
+        )
+
+        # List objects with the prefix
+        paginator = s3_client.get_paginator("list_objects_v2")
+        pages = paginator.paginate(Bucket=bucket, Prefix=prefix, PaginationConfig={"MaxItems": 100})
+
+        image_count = 0
+        sample_images: list[str] = []
+
+        for page in pages:
+            for obj in page.get("Contents", []):
+                key = obj["Key"]
+                # Check if it's an image file
+                ext = "." + key.rsplit(".", 1)[-1].lower() if "." in key else ""
+                if ext in SUPPORTED_IMAGE_EXTENSIONS:
+                    image_count += 1
+                    if len(sample_images) < 5:
+                        sample_images.append(key)
+
+        return {"count": image_count, "sample": sample_images}
+
+    except Exception as e:
+        logger.warning(f"Failed to verify S3 images at {s3_base_folder}: {e}")
+        return {"count": 0, "sample": [], "error": str(e)}
+
 
 def scan_single_file(
     file_location: str,
@@ -954,10 +1021,17 @@ def scan_project_files(
             for dc in data_collections_to_scan
             if dc.config.type.lower() == "multiqc" and not dc.config.scan
         ]
+        # Note: Image DCs are now processed as single/aggregate (like Table DCs)
+        # They have delta tables and scan configs, so no special handling needed
 
         if multiqc_data_collections:
+            parts = [
+                f"{len(aggregate_data_collections)} aggregate",
+                f"{len(single_data_collections)} single",
+            ]
+            parts.append(f"{len(multiqc_data_collections)} MultiQC")
             rich_print_checked_statement(
-                f"  ↪ Found {len(aggregate_data_collections)} aggregate, {len(single_data_collections)} single, and {len(multiqc_data_collections)} MultiQC data collections",
+                f"  ↪ Found {', '.join(parts)} data collections",
                 "info",
             )
         else:
@@ -1017,6 +1091,9 @@ def scan_project_files(
             )
             # MultiQC collections don't need file scanning - they work with existing parquet files
             # The actual processing happens in Step 6 (data processing)
+
+        # Note: Image DCs are now processed in single/aggregate_data_collections
+        # They have delta tables and are scanned like Table DCs
 
         rich_print_checked_statement(
             f"Workflow {workflow.workflow_tag} processed successfully", "success"

@@ -50,6 +50,10 @@ def process_project_data_collections(
 
         # Filter data collections if specific data_collection_tag is provided
         data_collections_to_process = workflow.data_collections
+
+        # Note: Image DCs are now processed like Table DCs (they have delta tables)
+        # No special skipping needed
+
         logger.info(
             f"Found {len(data_collections_to_process)} data collections in workflow '{workflow.workflow_tag}'"
         )
