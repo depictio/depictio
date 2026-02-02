@@ -244,4 +244,13 @@ async def cleanup_orphaned_s3_files(dry_run: bool = True, force: bool = False) -
 
     except Exception as e:
         logger.error(f"Error during S3 cleanup: {e}")
-        raise HTTPException(status_code=500, detail=f"S3 cleanup failed: {str(e)}")
+        # Don't raise HTTPException in background tasks - it kills the worker!
+        # Return error in result dict instead
+        return {
+            "deleted_count": 0,
+            "total_size_bytes": 0,
+            "orphaned_prefixes": [],
+            "orphaned_prefixes_count": 0,
+            "dry_run": dry_run,
+            "error": f"S3 cleanup failed: {str(e)}",
+        }
