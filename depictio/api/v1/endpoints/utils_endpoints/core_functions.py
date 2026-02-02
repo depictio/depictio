@@ -154,7 +154,11 @@ async def cleanup_orphaned_s3_files(dry_run: bool = True, force: bool = False) -
         for page in pages:
             if "CommonPrefixes" in page:
                 for prefix_obj in page["CommonPrefixes"]:
-                    s3_prefixes.add(prefix_obj["Prefix"].rstrip("/"))
+                    prefix = prefix_obj["Prefix"].rstrip("/")
+                    # Only consider prefixes that look like MongoDB ObjectIds (24 hex chars)
+                    # This excludes raw file storage folders like "image_demo", "uploads", etc.
+                    if len(prefix) == 24 and all(c in "0123456789abcdef" for c in prefix.lower()):
+                        s3_prefixes.add(prefix)
 
         # Find orphaned prefixes (in S3 but not in MongoDB)
         orphaned_prefixes = list(s3_prefixes - valid_dc_ids)
