@@ -545,12 +545,23 @@ jobs:
             sleep 2
           done
 
-          # Wait for Backend API health check
+          # Wait for Backend API health check with restart on crash
           echo "Waiting for Backend API..."
+          RESTART_COUNT=0
+          MAX_RESTARTS=2
           for i in {1..60}; do
             if curl -f http://localhost:8058/health &>/dev/null; then
               echo "✅ Backend API ready"
               break
+            fi
+            # Check if container crashed and restart if needed
+            if ! docker compose ps depictio-backend | grep -q "Up"; then
+              if [ $RESTART_COUNT -lt $MAX_RESTARTS ]; then
+                echo "⚠️  Backend container crashed, restarting (attempt $((RESTART_COUNT+1))/$MAX_RESTARTS)..."
+                docker compose up -d depictio-backend
+                RESTART_COUNT=$((RESTART_COUNT+1))
+                sleep 5
+              fi
             fi
             echo "Backend API not ready yet, attempt $i/60..."
             sleep 2
@@ -886,12 +897,23 @@ jobs:
             sleep 2
           done
 
-          # Wait for Backend API with health check
+          # Wait for Backend API with health check and restart on crash
           echo "Waiting for Backend API..."
+          RESTART_COUNT=0
+          MAX_RESTARTS=2
           for i in {1..60}; do
             if curl -f http://localhost:8058/health &>/dev/null; then
               echo "✅ Backend API ready"
               break
+            fi
+            # Check if container crashed and restart if needed
+            if ! docker compose ps depictio-backend | grep -q "Up"; then
+              if [ $RESTART_COUNT -lt $MAX_RESTARTS ]; then
+                echo "⚠️  Backend container crashed, restarting (attempt $((RESTART_COUNT+1))/$MAX_RESTARTS)..."
+                docker compose up -d depictio-backend
+                RESTART_COUNT=$((RESTART_COUNT+1))
+                sleep 5
+              fi
             fi
             echo "Backend API not ready yet, attempt $i/60..."
             sleep 2
