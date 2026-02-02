@@ -8,7 +8,7 @@ for component configuration.
 from typing import Literal
 
 # Component types
-ComponentType = Literal["card", "figure", "interactive", "table", "text", "jbrowse"]
+ComponentType = Literal["card", "figure", "interactive", "table", "text", "jbrowse", "image"]
 
 # Chart/visualization types (from figure_component/definitions.py)
 ChartType = Literal["scatter", "line", "bar", "box", "histogram"]

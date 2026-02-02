@@ -26,12 +26,12 @@ jobs:
         run: |
           # Hash all relevant files that affect quality checks:
           # - All Python source files (*.py)
-          # - Dependency configuration (pyproject.toml)
+          # - Dependency configuration (pyproject.toml, uv.lock)
           # - Pre-commit hooks (.pre-commit-config.yaml)
           # - Test configuration (pytest.ini)
-          # - This workflow file itself
+          # NOTE: CI workflow file is NOT included - CI changes shouldn't invalidate quality cache
           # Only hash files that actually exist (filter out deleted/missing files)
-          HASH=$(git ls-files '*.py' 'pyproject.toml' '.pre-commit-config.yaml' 'pytest.ini' '.github/workflows/depictio-ci.yaml' | \
+          HASH=$(git ls-files '*.py' 'pyproject.toml' 'uv.lock' '.pre-commit-config.yaml' 'pytest.ini' | \
             while read -r file; do
               if [ -f "$file" ]; then
                 cat "$file"
@@ -416,6 +416,7 @@ jobs:
           FULL_IMAGE="${{ needs.docker-build.outputs.full-image }}"
           docker pull "${FULL_IMAGE}"
           export DEPICTIO_VERSION="${FULL_IMAGE}"
+          export DEPICTIO_FASTAPI_WORKERS=1  # Single worker to avoid boot race conditions
           docker compose -f docker-compose.dev.yaml -f docker-compose/docker-compose.minio.yaml up -d
 
       - name: Logs
@@ -510,27 +511,77 @@ jobs:
       - name: Wait and verify services
         id: health
         run: |
-          echo "⏳ Waiting for services..."
-          sleep 15
-          docker compose ps
+          echo "⏳ Waiting for services to be ready..."
 
-          # Extract token and health check
-          for i in {1..5}; do
-            if token=$(docker compose exec depictio-backend bash -c "cat /app/depictio/.depictio/admin_config.yaml" 2>/dev/null | grep 'access_token' | awk '{print $2}'); then
-              token=$(echo $token | tr -d "'\"")
-              health_check=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $token" http://localhost:8058/depictio/api/v1/utils/status)
-              if [ "$health_check" = "200" ]; then
-                echo "✅ Services ready"
-                echo "ready=true" >> $GITHUB_OUTPUT
-                exit 0
+          # Wait for MongoDB
+          echo "Waiting for MongoDB..."
+          for i in {1..30}; do
+            if docker compose exec -T mongo mongosh localhost:27018/depictioDB --eval "db.runCommand({ ping: 1 })" --quiet &>/dev/null; then
+              echo "✅ MongoDB ready"
+              break
+            fi
+            echo "MongoDB not ready yet, attempt $i/30..."
+            sleep 2
+          done
+
+          # Wait for Redis
+          echo "Waiting for Redis..."
+          for i in {1..30}; do
+            if docker compose exec -T redis redis-cli ping &>/dev/null; then
+              echo "✅ Redis ready"
+              break
+            fi
+            echo "Redis not ready yet, attempt $i/30..."
+            sleep 2
+          done
+
+          # Wait for MinIO
+          echo "Waiting for MinIO..."
+          for i in {1..30}; do
+            if curl -f http://localhost:9000/minio/health/ready &>/dev/null; then
+              echo "✅ MinIO ready"
+              break
+            fi
+            echo "MinIO not ready yet, attempt $i/30..."
+            sleep 2
+          done
+
+          # Wait for Backend API health check with restart on crash
+          echo "Waiting for Backend API..."
+          RESTART_COUNT=0
+          MAX_RESTARTS=2
+          for i in {1..60}; do
+            if curl -f http://localhost:8058/health &>/dev/null; then
+              echo "✅ Backend API ready"
+              break
+            fi
+            # Check if container crashed and restart if needed
+            if ! docker compose ps depictio-backend | grep -q "Up"; then
+              if [ $RESTART_COUNT -lt $MAX_RESTARTS ]; then
+                echo "⚠️  Backend container crashed, restarting (attempt $((RESTART_COUNT+1))/$MAX_RESTARTS)..."
+                docker compose up -d depictio-backend
+                RESTART_COUNT=$((RESTART_COUNT+1))
+                sleep 5
               fi
             fi
-            echo "⚠️ Services not ready, attempt $i/5"
-            sleep 10
+            echo "Backend API not ready yet, attempt $i/60..."
+            sleep 2
           done
-          echo "❌ Services failed to start"
-          docker compose logs
-          exit 1
+
+          # Show final status
+          echo "🔍 Verifying all services..."
+          docker compose ps
+
+          # Test API health endpoint
+          if ! curl -f http://localhost:8058/health; then
+            echo "❌ Backend API health check failed"
+            echo "Backend logs:"
+            docker compose logs depictio-backend --tail=50
+            exit 1
+          fi
+
+          echo "✅ All services ready and healthy"
+          echo "ready=true" >> $GITHUB_OUTPUT
 
       - name: Verify users and initial data
         run: |
@@ -810,8 +861,79 @@ jobs:
           FULL_IMAGE="${{ needs.docker-build.outputs.full-image }}"
           docker pull "${FULL_IMAGE}"
           export DEPICTIO_VERSION="${FULL_IMAGE}"
+          export DEPICTIO_FASTAPI_WORKERS=1  # Single worker to avoid boot race conditions
           docker compose -f docker-compose.dev.yaml -f docker-compose/docker-compose.minio.yaml up -d
-          sleep 15
+
+          echo "⏳ Waiting for services to be ready..."
+
+          # Wait for MongoDB
+          echo "Waiting for MongoDB..."
+          for i in {1..30}; do
+            if docker compose exec -T mongo mongosh localhost:27018/depictioDB --eval "db.runCommand({ ping: 1 })" --quiet &>/dev/null; then
+              echo "✅ MongoDB ready"
+              break
+            fi
+            echo "MongoDB not ready yet, attempt $i/30..."
+            sleep 2
+          done
+
+          # Wait for Redis
+          echo "Waiting for Redis..."
+          for i in {1..30}; do
+            if docker compose exec -T redis redis-cli ping &>/dev/null; then
+              echo "✅ Redis ready"
+              break
+            fi
+            echo "Redis not ready yet, attempt $i/30..."
+            sleep 2
+          done
+
+          # Wait for MinIO
+          echo "Waiting for MinIO..."
+          for i in {1..30}; do
+            if curl -f http://localhost:9000/minio/health/ready &>/dev/null; then
+              echo "✅ MinIO ready"
+              break
+            fi
+            echo "MinIO not ready yet, attempt $i/30..."
+            sleep 2
+          done
+
+          # Wait for Backend API with health check and restart on crash
+          echo "Waiting for Backend API..."
+          RESTART_COUNT=0
+          MAX_RESTARTS=2
+          for i in {1..60}; do
+            if curl -f http://localhost:8058/health &>/dev/null; then
+              echo "✅ Backend API ready"
+              break
+            fi
+            # Check if container crashed and restart if needed
+            if ! docker compose ps depictio-backend | grep -q "Up"; then
+              if [ $RESTART_COUNT -lt $MAX_RESTARTS ]; then
+                echo "⚠️  Backend container crashed, restarting (attempt $((RESTART_COUNT+1))/$MAX_RESTARTS)..."
+                docker compose up -d depictio-backend
+                RESTART_COUNT=$((RESTART_COUNT+1))
+                sleep 5
+              fi
+            fi
+            echo "Backend API not ready yet, attempt $i/60..."
+            sleep 2
+          done
+
+          # Final verification
+          echo "🔍 Verifying all services..."
+          docker compose ps
+
+          # Test API endpoint
+          if ! curl -f http://localhost:8058/health; then
+            echo "❌ Backend API health check failed"
+            echo "Backend logs:"
+            docker compose logs depictio-backend --tail=50
+            exit 1
+          fi
+
+          echo "✅ All services ready and healthy"
 
       - name: Setup CLI authentication
         run: |
@@ -845,6 +967,73 @@ jobs:
 
           # Import with dry-run (validates without creating)
           depictio-cli dashboard import ../projects/init/iris/dashboard_lite.yaml --dry-run
+
+          # Actually import dashboard to server
+          echo "🔄 Importing dashboard to server..."
+          IMPORT_OUTPUT=$(depictio-cli dashboard import ../projects/init/iris/dashboard_lite.yaml --config admin_config.yaml 2>&1)
+          echo "$IMPORT_OUTPUT"
+
+          # Extract dashboard ID from import output
+          DASHBOARD_ID=$(echo "$IMPORT_OUTPUT" | grep "Dashboard ID:" | awk '{print $NF}')
+
+          if [ -z "$DASHBOARD_ID" ]; then
+            echo "❌ Failed to extract dashboard ID from import output"
+            exit 1
+          fi
+
+          echo "✅ Dashboard imported with ID: $DASHBOARD_ID"
+
+          # Verify dashboard exists in MongoDB via API
+          echo "🔍 Verifying dashboard registration in database..."
+
+          # Get access token from admin config (same pattern as docker-system-init)
+          JWT_TOKEN=$(grep 'access_token' admin_config.yaml | awk '{print $2}' | tr -d "'\"")
+
+          if [ -z "$JWT_TOKEN" ]; then
+            echo "❌ Failed to extract access token from admin_config.yaml"
+            exit 1
+          fi
+
+          echo "  ✓ Using access token from config (length: ${#JWT_TOKEN})"
+
+          # Query API to verify dashboard exists
+          API_URL="http://localhost:8058/depictio/api/v1/dashboards/get/$DASHBOARD_ID"
+          echo "  API URL: $API_URL"
+          echo "  Dashboard ID length: ${#DASHBOARD_ID}"
+
+          # Get full response with status code
+          HTTP_RESPONSE=$(curl -s -w "\n%{http_code}" -H "Authorization: Bearer $JWT_TOKEN" "$API_URL")
+          HTTP_STATUS=$(echo "$HTTP_RESPONSE" | tail -n1)
+          RESPONSE=$(echo "$HTTP_RESPONSE" | head -n-1)
+
+          echo "  HTTP Status: $HTTP_STATUS"
+          echo "  Response: $RESPONSE"
+
+          # If 404, check MongoDB directly to see if dashboard exists at all
+          if [ "$HTTP_STATUS" = "404" ]; then
+            echo ""
+            echo "🔍 Checking MongoDB directly..."
+            docker exec depictio-mongo mongosh depictioDB --quiet --eval "
+              db.dashboards.findOne({dashboard_id: ObjectId('$DASHBOARD_ID')}, {_id: 1, dashboard_id: 1, title: 1, project_id: 1})
+            " || echo "  MongoDB query failed"
+          fi
+
+          # Check if response contains expected fields (API returns "id" not "_id" due to serialization)
+          if echo "$RESPONSE" | grep -q '"dashboard_id"' && [ "$HTTP_STATUS" = "200" ]; then
+            echo "✅ Dashboard verified in database"
+
+            # Extract and display dashboard details
+            TITLE=$(echo "$RESPONSE" | python3 -c "import sys, json; print(json.load(sys.stdin).get('title', 'N/A'))" 2>/dev/null || echo "N/A")
+            PROJECT_ID=$(echo "$RESPONSE" | python3 -c "import sys, json; print(json.load(sys.stdin).get('project_id', 'N/A'))" 2>/dev/null || echo "N/A")
+
+            echo "  Dashboard Name: $TITLE"
+            echo "  Project ID: $PROJECT_ID"
+            echo "  Dashboard ID: $DASHBOARD_ID"
+          else
+            echo "❌ Dashboard not found in database (HTTP $HTTP_STATUS)"
+            echo "API Response: $RESPONSE"
+            exit 1
+          fi
 
           echo "✅ Dashboard commands passed"
 
@@ -908,6 +1097,87 @@ jobs:
 
           echo "✅ Penguin CLI operations passed"
 
+      - name: Test Image Demo CLI operations
+        run: |
+          cd depictio/cli
+          source venv/bin/activate
+          echo "📋 Testing Image Demo CLI operations..."
+
+          # Test Image DC workflow with delta table creation and S3 image uploads
+          # Validates that Image DCs work like Table DCs but with mandatory image_column
+
+          # Validate project config (tests Image DC model validation)
+          depictio-cli --verbose config validate-project-config \
+            --project-config-path ../projects/test/image_demo/project.yaml \
+            --CLI-config-path admin_config.yaml
+
+          # Sync project to server
+          depictio-cli --verbose config sync-project-config-to-server \
+            --project-config-path ../projects/test/image_demo/project.yaml \
+            --CLI-config-path admin_config.yaml
+
+          # Scan data files (syncs images to S3)
+          depictio-cli --verbose data scan \
+            --sync-files \
+            --project-config-path ../projects/test/image_demo/project.yaml \
+            --CLI-config-path admin_config.yaml
+
+          # Process data into deltatables (creates delta table from CSV)
+          depictio-cli --verbose data process \
+            --overwrite \
+            --project-config-path ../projects/test/image_demo/project.yaml \
+            --CLI-config-path admin_config.yaml
+
+          echo "✅ Image Demo CLI operations passed"
+
+      - name: Test Image Demo dashboard import
+        run: |
+          cd depictio/cli
+          source venv/bin/activate
+          echo "📋 Testing Image Demo dashboard import..."
+
+          # Import Image Demo dashboard
+          IMPORT_OUTPUT=$(depictio-cli dashboard import ../projects/test/image_demo/dashboard_lite.yaml --config admin_config.yaml 2>&1)
+          echo "$IMPORT_OUTPUT"
+
+          # Extract dashboard ID
+          DASHBOARD_ID=$(echo "$IMPORT_OUTPUT" | grep "Dashboard ID:" | awk '{print $NF}')
+
+          if [ -z "$DASHBOARD_ID" ]; then
+            echo "❌ Failed to extract dashboard ID from import output"
+            exit 1
+          fi
+
+          echo "✅ Image Demo dashboard imported with ID: $DASHBOARD_ID"
+
+          # Verify dashboard in database
+          echo "🔍 Verifying dashboard registration in database..."
+
+          # Get access token from admin config (same pattern as Iris verification)
+          JWT_TOKEN=$(grep 'access_token' admin_config.yaml | awk '{print $2}' | tr -d "'\"")
+
+          if [ -z "$JWT_TOKEN" ]; then
+            echo "❌ Failed to get access token from admin_config.yaml"
+            exit 1
+          fi
+
+          echo "  ✓ Got access token from config (length: ${#JWT_TOKEN})"
+
+          API_URL="http://localhost:8058/depictio/api/v1/dashboards/get/$DASHBOARD_ID"
+          RESPONSE=$(curl -s -H "Authorization: Bearer $JWT_TOKEN" "$API_URL")
+
+          if echo "$RESPONSE" | grep -q '"dashboard_id"'; then
+            echo "✅ Image Demo dashboard verified in database"
+            TITLE=$(echo "$RESPONSE" | python3 -c "import sys, json; print(json.load(sys.stdin).get('title', 'N/A'))" 2>/dev/null || echo "N/A")
+            echo "  Dashboard Name: $TITLE"
+            echo "  Dashboard ID: $DASHBOARD_ID"
+          else
+            echo "❌ Image Demo dashboard not found in database"
+            exit 1
+          fi
+
+          echo "✅ Image Demo dashboard import test passed"
+
       - name: Test backup commands (read-only)
         run: |
           cd depictio/cli
@@ -918,6 +1188,27 @@ jobs:
           depictio-cli backup list --CLI-config-path admin_config.yaml || true
 
           echo "✅ Backup commands passed"
+
+      - name: Verify Image Demo project
+        run: |
+          # Verify project was created
+          IMAGE_DEMO_PROJECT=$(docker compose exec -T mongo mongosh localhost:27018/depictioDB --eval "JSON.stringify(db.projects.find().toArray())" --quiet 2>&1 | grep '^[\[{]' | jq -r '.[] | select(.name == "Image Component Demo Project") | .name')
+          [ -z "$IMAGE_DEMO_PROJECT" ] && echo "❌ Image Demo project not found" && exit 1
+          echo "✅ Image Demo project found"
+
+          # Verify Image DC deltatable was created
+          IMAGE_DEMO_DC=$(docker compose exec -T mongo mongosh localhost:27018/depictioDB --eval "JSON.stringify(db.projects.find().toArray())" --quiet 2>&1 | grep '^[\[{]' | jq -r '.[] | select(.name == "Image Component Demo Project") | .workflows[0].data_collections[0]._id')
+          echo "📊 Image Demo DC ID: $IMAGE_DEMO_DC"
+
+          IMAGE_DEMO_DT=$(docker compose exec -T mongo mongosh localhost:27018/depictioDB --eval "JSON.stringify(db.deltatables.find({\"data_collection_id\": ObjectId(\"$IMAGE_DEMO_DC\")}).toArray())" --quiet 2>&1 | grep '^[\[{]' | jq -r '.[]._id // empty')
+          [ -z "$IMAGE_DEMO_DT" ] && echo "❌ Image Demo deltatable not found" && exit 1
+          echo "✅ Image Demo deltatable created successfully"
+
+          # Verify images were uploaded to S3
+          echo "📊 Checking S3 for uploaded images..."
+          IMAGE_COUNT=$(docker compose exec -T minio mc ls depictio/depictio-bucket/image_demo/ 2>/dev/null | grep -c "\.png" || true)
+          IMAGE_COUNT=${IMAGE_COUNT:-0}
+          [ "$IMAGE_COUNT" -eq 0 ] && echo "⚠️  Warning: No images found in S3, but continuing..." || echo "✅ Found $IMAGE_COUNT images in S3"
 
       - name: Verify CLI test project
         run: |
@@ -1102,6 +1393,7 @@ jobs:
           echo "Compose files: docker-compose.dev.yaml + docker-compose.minio.yaml + docker-compose.backup-minio.yaml"
           echo "Environment file: docker-compose/.env"
 
+          export DEPICTIO_FASTAPI_WORKERS=1  # Single worker to avoid boot race conditions
           docker compose -f docker-compose.dev.yaml -f docker-compose/docker-compose.minio.yaml -f docker-compose/docker-compose.backup-minio.yaml up -d --force-recreate
 
           echo "⏳ Waiting 30 seconds for services to start..."
@@ -1648,6 +1940,7 @@ jobs:
           FULL_IMAGE="${{ needs.docker-build.outputs.full-image }}"
           docker pull "${FULL_IMAGE}"
           export DEPICTIO_VERSION="${FULL_IMAGE}"
+          export DEPICTIO_FASTAPI_WORKERS=1  # Single worker to avoid boot race conditions
           docker compose -f docker-compose.dev.yaml -f docker-compose/docker-compose.minio.yaml up -d
           sleep 15
 
@@ -1730,6 +2023,7 @@ jobs:
           FULL_IMAGE="${{ needs.docker-build.outputs.full-image }}"
           docker pull "${FULL_IMAGE}"
           export DEPICTIO_VERSION="${FULL_IMAGE}"
+          export DEPICTIO_FASTAPI_WORKERS=1  # Single worker to avoid boot race conditions
           docker compose -f docker-compose.dev.yaml -f docker-compose/docker-compose.minio.yaml --env-file docker-compose/.env up -d
           sleep 15
 

@@ -138,6 +138,11 @@ async def periodic_cleanup_orphaned_s3_files(
         interval_hours, interval_minutes, interval_seconds, default_seconds=7 * 24 * 3600
     )
 
+    # Delay first run to allow workers to complete startup
+    # Running cleanup immediately can block worker readiness and cause Gunicorn to kill workers
+    logger.info("S3 cleanup task: Waiting 30s before first run to allow worker startup")
+    await asyncio.sleep(30)
+
     while True:
         try:
             # Run the cleanup

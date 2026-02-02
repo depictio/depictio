@@ -72,8 +72,17 @@ def create_s3_bucket(s3_client: S3Client, bucket_name: str) -> BucketResponse:
     try:
         s3_client.create_bucket(Bucket=bucket_name)
         return BucketResponse(message="Bucket created successfully", bucket_name=bucket_name)
+    except ClientError as e:
+        error_code = e.response.get("Error", {}).get("Code")
+        # BucketAlreadyOwnedByYou means we already own this bucket - treat as success
+        # This can happen in race conditions during initialization with multiple workers
+        if error_code == "BucketAlreadyOwnedByYou":
+            logger.info(f"Bucket '{bucket_name}' already exists and is owned by us")
+            return BucketResponse(message="Bucket already exists", bucket_name=bucket_name)
+        logger.error(f"Failed to create bucket '{bucket_name}': {error_code}")
+        raise HTTPException(status_code=500, detail=f"Bucket creation failed: {error_code}")
     except Exception as e:
-        logger.error(f"Failed to create bucket '{bucket_name}': {str(e)}")
+        logger.error(f"Unexpected error creating bucket '{bucket_name}': {str(e)}")
         raise HTTPException(status_code=500, detail=f"Bucket creation failed: {str(e)}")
 
 
@@ -154,7 +163,11 @@ async def cleanup_orphaned_s3_files(dry_run: bool = True, force: bool = False) -
         for page in pages:
             if "CommonPrefixes" in page:
                 for prefix_obj in page["CommonPrefixes"]:
-                    s3_prefixes.add(prefix_obj["Prefix"].rstrip("/"))
+                    prefix = prefix_obj["Prefix"].rstrip("/")
+                    # Only consider prefixes that look like MongoDB ObjectIds (24 hex chars)
+                    # This excludes raw file storage folders like "image_demo", "uploads", etc.
+                    if len(prefix) == 24 and all(c in "0123456789abcdef" for c in prefix.lower()):
+                        s3_prefixes.add(prefix)
 
         # Find orphaned prefixes (in S3 but not in MongoDB)
         orphaned_prefixes = list(s3_prefixes - valid_dc_ids)
@@ -240,4 +253,13 @@ async def cleanup_orphaned_s3_files(dry_run: bool = True, force: bool = False) -
 
     except Exception as e:
         logger.error(f"Error during S3 cleanup: {e}")
-        raise HTTPException(status_code=500, detail=f"S3 cleanup failed: {str(e)}")
+        # Don't raise HTTPException in background tasks - it kills the worker!
+        # Return error in result dict instead
+        return {
+            "deleted_count": 0,
+            "total_size_bytes": 0,
+            "orphaned_prefixes": [],
+            "orphaned_prefixes_count": 0,
+            "dry_run": dry_run,
+            "error": f"S3 cleanup failed: {str(e)}",
+        }

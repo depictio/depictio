@@ -601,7 +601,9 @@ class DashboardYAMLConfig(BaseSettings):
 
     # Enable/disable YAML dashboard sync feature
     # DEPRECATED: YAML system is being phased out in favor of JSON-based API (see YAML_MONGODB_ANALYSIS.md)
-    enabled: bool = Field(default=False, description="Enable YAML-based dashboard management (DEPRECATED)")
+    enabled: bool = Field(
+        default=False, description="Enable YAML-based dashboard management (DEPRECATED)"
+    )
 
     # Local dashboards directory (instance-specific, git-ignored, auto-synced)
     local_dir: Path = Field(

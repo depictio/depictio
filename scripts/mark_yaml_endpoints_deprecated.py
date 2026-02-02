@@ -9,7 +9,9 @@ and adds deprecation notices to their docstrings.
 import re
 from pathlib import Path
 
-routes_file = Path(__file__).parent.parent / "depictio/api/v1/endpoints/dashboards_endpoints/routes.py"
+routes_file = (
+    Path(__file__).parent.parent / "depictio/api/v1/endpoints/dashboards_endpoints/routes.py"
+)
 
 # Read the file
 content = routes_file.read_text()
@@ -38,7 +40,12 @@ yaml_endpoints = [
 # Pattern to find endpoint decorators
 # Matches: @dashboards_endpoint_router.{method}("/path")
 # But not: @dashboards_endpoint_router.{method}("/path", deprecated=True)
-pattern = r'@dashboards_endpoint_router\.(get|post|put|delete|patch)\(([^)]+)\)\nasync def ('+ '|'.join(yaml_endpoints) + r')\('
+pattern = (
+    r"@dashboards_endpoint_router\.(get|post|put|delete|patch)\(([^)]+)\)\nasync def ("
+    + "|".join(yaml_endpoints)
+    + r")\("
+)
+
 
 def add_deprecated_flag(match):
     """Add deprecated=True to decorator if not present"""
@@ -47,13 +54,14 @@ def add_deprecated_flag(match):
     func_name = match.group(3)
 
     # Check if already has deprecated flag
-    if 'deprecated' in path_args:
+    if "deprecated" in path_args:
         return match.group(0)  # Already has it, return unchanged
 
     # Add deprecated=True to the decorator
-    new_decorator = f'@dashboards_endpoint_router.{method}({path_args}, deprecated=True)\nasync def {func_name}('
+    new_decorator = f"@dashboards_endpoint_router.{method}({path_args}, deprecated=True)\nasync def {func_name}("
 
     return new_decorator
+
 
 # Apply the pattern
 new_content = re.sub(pattern, add_deprecated_flag, content)

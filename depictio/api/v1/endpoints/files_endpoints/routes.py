@@ -1,5 +1,9 @@
+import mimetypes
+from urllib.parse import unquote
+
 from bson import ObjectId
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from pymongo import UpdateOne
 from pymongo.errors import BulkWriteError
@@ -8,6 +12,7 @@ from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.db import db
 from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user
+from depictio.api.v1.s3 import s3_client
 from depictio.models.models.base import convert_objectid_to_str
 from depictio.models.models.files import File
 
@@ -157,3 +162,91 @@ async def delete_file(file_id: str, current_user=Depends(get_current_user)):
         )
 
     return {"message": f"Deleted file with id {file_id} successfully"}
+
+
+# Supported image extensions for serving
+SUPPORTED_IMAGE_EXTENSIONS = frozenset(
+    [".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".bmp", ".tiff"]
+)
+
+
+def _parse_s3_path(s3_path: str) -> tuple[str, str]:
+    """Parse an S3 path into bucket and key components."""
+    path = s3_path[5:] if s3_path.startswith("s3://") else s3_path
+    parts = path.split("/", 1)
+    if len(parts) < 2:
+        raise ValueError(f"Invalid S3 path format: {s3_path}")
+    return parts[0], parts[1]
+
+
+def _get_mime_type(file_path: str) -> str:
+    """Get MIME type for a file based on its extension."""
+    # Explicit mapping for image types that may not be in system mimetypes
+    ext_lower = file_path.lower()
+    if ext_lower.endswith(".webp"):
+        return "image/webp"
+    if ext_lower.endswith(".avif"):
+        return "image/avif"
+
+    mime_type, _ = mimetypes.guess_type(file_path)
+    return mime_type or "application/octet-stream"
+
+
+def _validate_image_path(key: str) -> bool:
+    """Validate path for security and supported image format."""
+    if ".." in key or key.startswith("/"):
+        return False
+    lower_key = key.lower()
+    return any(lower_key.endswith(ext) for ext in SUPPORTED_IMAGE_EXTENSIONS)
+
+
+@files_endpoint_router.get("/serve/image")
+async def serve_image(
+    s3_path: str = Query(
+        ..., description="Full S3 path to the image (e.g., s3://bucket/path/image.png)"
+    ),
+):
+    """
+    Serve images from S3/MinIO via streaming.
+
+    NOTE: Currently PUBLIC to allow HTML <img> tags to load images.
+    TODO: Implement presigned URLs for secure, time-limited access.
+    """
+    decoded_path = unquote(s3_path)
+
+    try:
+        bucket, key = _parse_s3_path(decoded_path)
+    except ValueError as e:
+        logger.error(f"Invalid S3 path: {decoded_path} - {e}")
+        raise HTTPException(status_code=400, detail=f"Invalid S3 path format: {str(e)}")
+
+    if not _validate_image_path(key):
+        logger.warning(f"Invalid image path rejected: {key}")
+        raise HTTPException(status_code=400, detail="Invalid image path or unsupported format")
+
+    try:
+        response = s3_client.get_object(Bucket=bucket, Key=key)
+        content_type = _get_mime_type(key)
+        filename = key.split("/")[-1]
+
+        def iterfile():
+            for chunk in response["Body"].iter_chunks(chunk_size=8192):
+                yield chunk
+
+        return StreamingResponse(
+            iterfile(),
+            media_type=content_type,
+            headers={
+                "Cache-Control": "public, max-age=3600",
+                "Content-Disposition": f'inline; filename="{filename}"',
+            },
+        )
+    except s3_client.exceptions.NoSuchKey:
+        logger.warning(f"Image not found: {bucket}/{key}")
+        raise HTTPException(status_code=404, detail="Image not found")
+    except s3_client.exceptions.NoSuchBucket:
+        logger.error(f"Bucket not found: {bucket}")
+        raise HTTPException(status_code=404, detail="Storage bucket not found")
+    except Exception as e:
+        logger.error(f"Error serving image {bucket}/{key}: {e}")
+        raise HTTPException(status_code=500, detail=f"Error retrieving image: {str(e)}")

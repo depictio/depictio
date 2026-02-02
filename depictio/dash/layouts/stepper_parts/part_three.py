@@ -15,6 +15,7 @@ from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.deltatables_utils import load_deltatable_lite
 from depictio.dash.modules.card_component.frontend import design_card
 from depictio.dash.modules.figure_component.utils import design_figure
+from depictio.dash.modules.image_component.design_ui import design_image
 from depictio.dash.modules.interactive_component.frontend import design_interactive
 from depictio.dash.modules.multiqc_component.frontend import design_multiqc
 from depictio.dash.modules.table_component.frontend import design_table
@@ -115,7 +116,7 @@ def _determine_component_to_render(
     Returns:
         Tuple of (component_type, component_id) or (None, None).
     """
-    supported_components = ["Figure", "Card", "Interactive", "Table", "Text", "MultiQC"]
+    supported_components = ["Figure", "Card", "Interactive", "Table", "Text", "MultiQC", "Image"]
 
     if btn_component is None or store_btn_component is None:
         return None, None
@@ -221,6 +222,11 @@ def return_design_component(
             id, workflow_id=wf_id, data_collection_id=dc_id, local_data=local_data
         )
         return html.Div(component_content, style={"width": "100%"}), btn_component
+    elif component_selected == "Image":
+        component_content = design_image(
+            id, df, workflow_id=wf_id, data_collection_id=dc_id, local_data=local_data
+        )
+        return html.Div(component_content, style={"width": "100%"}), btn_component
     elif component_selected == "JBrowse2":
         return dash.no_update, btn_component
         # return design_jbrowse(id), btn_component
@@ -291,6 +297,7 @@ def register_callbacks_stepper_part_three(app):
             "Table",
             "Text",
             "MultiQC",
+            "Image",
             "JBrowse2",
             "Graph",
             "Map",

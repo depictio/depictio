@@ -394,7 +394,10 @@ def register_callbacks_stepper(app) -> None:
         all_wf_dc = project["workflows"]
 
         mapping_component_data_collection = {
+            # Table DCs support all standard components
             "table": ["Figure", "Card", "Interactive", "Table", "Text"],
+            # Image DCs now work like Table DCs with delta tables, supporting all components
+            "image": ["Figure", "Card", "Interactive", "Table", "Text", "Image"],
             "jbrowse2": ["JBrowse2"],
             "multiqc": ["MultiQC"],
         }
@@ -495,7 +498,10 @@ def register_callbacks_stepper(app) -> None:
         selected_wf_data = selected_wf_list[0]
 
         mapping_component_data_collection = {
+            # Table DCs support all standard components
             "table": ["Figure", "Card", "Interactive", "Table", "Text"],
+            # Image DCs now work like Table DCs with delta tables, supporting all components
+            "image": ["Figure", "Card", "Interactive", "Table", "Text", "Image"],
             "jbrowse2": ["JBrowse2"],
             "multiqc": ["MultiQC"],
         }

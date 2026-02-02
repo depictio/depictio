@@ -374,6 +374,17 @@ class DashboardDataLite(BaseModel):
                 if comp.get("filterable") is False:
                     lite_comp["filterable"] = False
 
+            elif comp_type == "image":
+                lite_comp["image_column"] = comp.get("image_column", "")
+                if comp.get("s3_base_folder"):
+                    lite_comp["s3_base_folder"] = comp["s3_base_folder"]
+                if comp.get("thumbnail_size") and comp["thumbnail_size"] != 150:
+                    lite_comp["thumbnail_size"] = comp["thumbnail_size"]
+                if comp.get("columns") and comp["columns"] != 4:
+                    lite_comp["columns"] = comp["columns"]
+                if comp.get("max_images") and comp["max_images"] != 20:
+                    lite_comp["max_images"] = comp["max_images"]
+
             lite_components.append(lite_comp)
 
         return cls(
@@ -493,6 +504,17 @@ class DashboardDataLite(BaseModel):
                         "page_size": comp_dict.get("page_size", 10),
                         "sortable": comp_dict.get("sortable", True),
                         "filterable": comp_dict.get("filterable", True),
+                    }
+                )
+
+            elif comp_type == "image":
+                full_comp.update(
+                    {
+                        "image_column": comp_dict.get("image_column", ""),
+                        "s3_base_folder": comp_dict.get("s3_base_folder"),
+                        "thumbnail_size": comp_dict.get("thumbnail_size", 150),
+                        "columns": comp_dict.get("columns", 4),
+                        "max_images": comp_dict.get("max_images", 20),
                     }
                 )
 

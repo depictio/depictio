@@ -300,6 +300,10 @@ def render_dashboard(
             logger.warning(f"Unsupported component type: {component_type}")
             continue
 
+        # Fetch cols_json for table components if empty
+        if component_type == "table" and not child_metadata.get("cols_json"):
+            child_metadata["cols_json"] = _fetch_table_columns(child_metadata, TOKEN)
+
         # Build component (creates placeholder UI with callback IDs)
         build_function = build_functions[component_type]
         child = build_function(**child_metadata)

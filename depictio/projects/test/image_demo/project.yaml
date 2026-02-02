@@ -1,0 +1,42 @@
+# Simplified Image Demo Project
+# Uses a single Image DC with delta table support (like Table DC but with mandatory image_column)
+id: "650a1b2c3d4e5f6a7b8c9d0e"
+name: "Image Component Demo Project"
+is_public: true
+workflows:
+  - id: "650a1b2c3d4e5f6a7b8c9d0f"
+    name: "image_demo_workflow"
+    engine:
+      name: "python"
+    data_location:
+      structure: "flat"
+      locations:
+        - ../projects/test/image_demo
+    data_collections:
+      # Single Image DC - has delta table + mandatory image_column
+      # Supports all component types: Figure, Card, Interactive, Table, Image
+      - id: "650a1b2c3d4e5f6a7b8c9d10"
+        data_collection_tag: "sample_images"
+        description: "Sample images with metadata"
+        config:
+          type: "Image"
+          metatype: "Images"
+          scan:
+            mode: single
+            scan_parameters:
+              filename: ../projects/test/image_demo/images_data.csv
+          dc_specific_properties:
+            # Table DC fields (required for delta table creation)
+            format: "csv"
+            columns_description:
+              sample_id: "Unique sample identifier"
+              image_path: "Relative path to image file"
+              category: "Sample category (A, B, C)"
+              quality_score: "Quality score 0-1"
+            # Image-specific fields (mandatory)
+            image_column: "image_path"
+            # Image display properties (optional)
+            s3_base_folder: "s3://depictio-bucket/image_demo/"
+            local_images_path: ../projects/test/image_demo/images
+            supported_formats: [".png", ".jpg", ".jpeg"]
+            thumbnail_size: 150

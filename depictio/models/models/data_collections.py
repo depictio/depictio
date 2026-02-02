@@ -7,6 +7,7 @@ from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 from depictio.models.config import DEPICTIO_CONTEXT
 from depictio.models.logging import logger
 from depictio.models.models.base import MongoModel
+from depictio.models.models.data_collections_types.image import DCImageConfig
 from depictio.models.models.data_collections_types.jbrowse import DCJBrowse2Config
 from depictio.models.models.data_collections_types.multiqc import DCMultiQC
 from depictio.models.models.data_collections_types.table import DCTableConfig
@@ -158,7 +159,7 @@ class DataCollectionConfig(MongoModel):
     source: DataCollectionSource = DataCollectionSource.NATIVE
     metatype: str | None = None
     scan: Scan | None = None
-    dc_specific_properties: DCTableConfig | DCJBrowse2Config | DCMultiQC
+    dc_specific_properties: DCTableConfig | DCJBrowse2Config | DCMultiQC | DCImageConfig
     join: TableJoinConfig | None = None
 
     model_config = ConfigDict(extra="forbid", use_enum_values=True)
@@ -196,7 +197,7 @@ class DataCollectionConfig(MongoModel):
 
     @field_validator("type", mode="before")
     def validate_type(cls, v):
-        allowed_values = ["table", "jbrowse2", "multiqc"]
+        allowed_values = ["table", "jbrowse2", "multiqc", "image"]
         lower_v = v.lower()
         if lower_v not in allowed_values:
             raise ValueError(f"type must be one of {allowed_values}")
@@ -233,6 +234,14 @@ class DataCollectionConfig(MongoModel):
                 else:
                     # Initialize with empty DCMultiQC if not provided
                     values["dc_specific_properties"] = DCMultiQC()
+        elif type_value == "image":
+            # Image type for image gallery components
+            if not isinstance(dc_specific_properties, DCImageConfig):
+                if isinstance(dc_specific_properties, dict):
+                    values["dc_specific_properties"] = DCImageConfig(**dc_specific_properties)
+                else:
+                    # Initialize with default DCImageConfig if not provided
+                    values["dc_specific_properties"] = DCImageConfig()
 
         # Validate that scan is provided for non-MultiQC types and native sources
         source = values.get("source", "native")  # Default to string value
@@ -244,7 +253,11 @@ class DataCollectionConfig(MongoModel):
             or (isinstance(source, str) and source.endswith(".NATIVE"))
         )
 
-        if type_value != "multiqc" and is_native_source and not values.get("scan"):
+        # Skip scan validation for MultiQC type only
+        # - MultiQC: has its own data handling
+        # - Image: now requires scan config (works like Table DC with mandatory image_column)
+        skip_scan_types = ["multiqc"]
+        if type_value not in skip_scan_types and is_native_source and not values.get("scan"):
             raise ValueError(
                 "scan field is required for native data collections "
                 "(ingested from external sources). For joined/derived data collections, "

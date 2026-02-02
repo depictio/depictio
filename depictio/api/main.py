@@ -80,6 +80,12 @@ api_prefix = f"/depictio/api/{api_version}"
 app.include_router(router, prefix=api_prefix)
 
 
+@app.get("/health")
+async def health_check() -> dict[str, str]:
+    """Health check endpoint for monitoring and readiness probes."""
+    return {"status": "healthy", "version": get_version()}
+
+
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(
     _request: object, exc: RequestValidationError

@@ -743,6 +743,106 @@ def clear_link_resolution_cache():
     _link_resolution_cache.clear()
 
 
+def extend_filters_via_links(
+    target_dc_id: str,
+    filters_by_dc: dict,
+    project_metadata: dict | None,
+    access_token: str | None,
+    component_type: str = "unknown",
+) -> list:
+    """
+    Extend filters using DC links for cross-DC filtering.
+
+    When a filter is on a source DC that has a link to the target DC,
+    resolve the filter values through the link. This enables components
+    to be filtered by interactive components from linked data collections.
+
+    Args:
+        target_dc_id: The target component's data collection ID
+        filters_by_dc: Dictionary mapping DC IDs to their filters
+        project_metadata: Project metadata containing link definitions
+        access_token: Authentication token for API calls
+        component_type: Component type for logging (e.g., "figure", "image")
+
+    Returns:
+        List of filters to apply (resolved via links)
+    """
+    link_filters = []
+
+    if not project_metadata or not access_token:
+        return link_filters
+
+    project_data = project_metadata.get("project", {})
+    project_id = str(project_data.get("_id", ""))
+    project_links = project_data.get("links", [])
+
+    if not project_id or not project_links:
+        return link_filters
+
+    # Find links where target_dc_id is the target
+    for link in project_links:
+        if not link.get("enabled", True):
+            continue
+
+        link_target_dc = str(link.get("target_dc_id", ""))
+        link_source_dc = str(link.get("source_dc_id", ""))
+
+        if link_target_dc != target_dc_id:
+            continue
+
+        # Check if we have filters for the source DC
+        source_filters = filters_by_dc.get(link_source_dc, [])
+        active_source_filters = [
+            f for f in source_filters if f.get("value") not in [None, [], "", False]
+        ]
+
+        if not active_source_filters:
+            continue
+
+        # Get filter values from source DC
+        for source_filter in active_source_filters:
+            filter_value = source_filter.get("value", [])
+            source_column = source_filter.get("metadata", {}).get("column_name", "")
+
+            if not filter_value:
+                continue
+
+            filter_values = filter_value if isinstance(filter_value, list) else [filter_value]
+
+            # Resolve through link
+            resolved = resolve_link_values(
+                project_id=project_id,
+                source_dc_id=link_source_dc,
+                source_column=source_column,
+                filter_values=filter_values,
+                target_dc_id=target_dc_id,
+                token=access_token,
+            )
+
+            if resolved and resolved.get("resolved_values"):
+                resolved_values = resolved["resolved_values"]
+                target_column = link.get("link_config", {}).get("target_field", source_column)
+
+                # Create a synthetic filter for the target DC
+                # Use MultiSelect type so load_deltatable_lite applies is_in() filter
+                link_filter = {
+                    "index": f"link_{link.get('id', 'unknown')}",
+                    "value": resolved_values,
+                    "metadata": {
+                        "dc_id": target_dc_id,
+                        "column_name": target_column,
+                        "interactive_component_type": "MultiSelect",
+                    },
+                }
+                link_filters.append(link_filter)
+                logger.debug(
+                    f"[{component_type}] Link resolved: {len(filter_values)} values -> "
+                    f"{len(resolved_values)} resolved via {resolved.get('resolver_used', 'unknown')}"
+                )
+
+    return link_filters
+
+
 def enrich_interactive_components_with_metadata(
     interactive_values: Dict[str, Any] | None,
     interactive_metadata_list: list,

@@ -131,10 +131,12 @@ def migrate_directory(
                     for error in errors:
                         console.print(f"  [red]- {error}[/red]")
                     stats["failed"] += 1
-                    stats["errors"].append({
-                        "file": str(yaml_path),
-                        "errors": errors,
-                    })
+                    stats["errors"].append(
+                        {
+                            "file": str(yaml_path),
+                            "errors": errors,
+                        }
+                    )
                     continue
 
             # Determine output path (preserve directory structure)
@@ -151,10 +153,12 @@ def migrate_directory(
             console.print(f"[red]✗ Failed: {yaml_path.name}[/red]")
             console.print(f"  [red]Error: {str(e)}[/red]")
             stats["failed"] += 1
-            stats["errors"].append({
-                "file": str(yaml_path),
-                "errors": [str(e)],
-            })
+            stats["errors"].append(
+                {
+                    "file": str(yaml_path),
+                    "errors": [str(e)],
+                }
+            )
 
     return stats
 
