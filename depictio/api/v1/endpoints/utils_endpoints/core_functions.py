@@ -72,8 +72,17 @@ def create_s3_bucket(s3_client: S3Client, bucket_name: str) -> BucketResponse:
     try:
         s3_client.create_bucket(Bucket=bucket_name)
         return BucketResponse(message="Bucket created successfully", bucket_name=bucket_name)
+    except ClientError as e:
+        error_code = e.response.get("Error", {}).get("Code")
+        # BucketAlreadyOwnedByYou means we already own this bucket - treat as success
+        # This can happen in race conditions during initialization with multiple workers
+        if error_code == "BucketAlreadyOwnedByYou":
+            logger.info(f"Bucket '{bucket_name}' already exists and is owned by us")
+            return BucketResponse(message="Bucket already exists", bucket_name=bucket_name)
+        logger.error(f"Failed to create bucket '{bucket_name}': {error_code}")
+        raise HTTPException(status_code=500, detail=f"Bucket creation failed: {error_code}")
     except Exception as e:
-        logger.error(f"Failed to create bucket '{bucket_name}': {str(e)}")
+        logger.error(f"Unexpected error creating bucket '{bucket_name}': {str(e)}")
         raise HTTPException(status_code=500, detail=f"Bucket creation failed: {str(e)}")
 
 
