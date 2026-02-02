@@ -1182,8 +1182,9 @@ jobs:
 
           # Verify images were uploaded to S3
           echo "📊 Checking S3 for uploaded images..."
-          IMAGE_COUNT=$(docker compose exec -T minio mc ls depictio/depictio-bucket/image_demo/ 2>&1 | grep -c "\.png" || echo "0")
-          [ "$IMAGE_COUNT" -eq "0" ] && echo "⚠️  Warning: No images found in S3, but continuing..." || echo "✅ Found $IMAGE_COUNT images in S3"
+          IMAGE_COUNT=$(docker compose exec -T minio mc ls depictio/depictio-bucket/image_demo/ 2>/dev/null | grep -c "\.png" || true)
+          IMAGE_COUNT=${IMAGE_COUNT:-0}
+          [ "$IMAGE_COUNT" -eq 0 ] && echo "⚠️  Warning: No images found in S3, but continuing..." || echo "✅ Found $IMAGE_COUNT images in S3"
 
       - name: Verify CLI test project
         run: |
