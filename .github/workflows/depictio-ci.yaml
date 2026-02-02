@@ -962,8 +962,8 @@ jobs:
           # Verify dashboard exists in MongoDB via API
           echo "🔍 Verifying dashboard registration in database..."
 
-          # Get access token from admin config (same as used by CLI)
-          JWT_TOKEN=$(grep 'access_token:' admin_config.yaml | awk '{print $2}' | tr -d "'\"")
+          # Get access token from admin config (same pattern as docker-system-init)
+          JWT_TOKEN=$(grep 'access_token' admin_config.yaml | awk '{print $2}' | tr -d "'\"")
 
           if [ -z "$JWT_TOKEN" ]; then
             echo "❌ Failed to extract access token from admin_config.yaml"
