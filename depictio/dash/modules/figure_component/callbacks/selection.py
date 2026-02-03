@@ -141,18 +141,20 @@ def register_scatter_selection_callback(app):
         if reset_result is not None:
             return reset_result
 
+        # Debug: log trigger info
+        triggered_prop = ctx.triggered[0]["prop_id"] if ctx.triggered else ""
+        triggered_value = ctx.triggered[0]["value"] if ctx.triggered else None
+
         logger.info(
             f"Scatter selection callback: {len(figure_ids)} figures, "
             f"selectedData={[bool(s) for s in selected_data_list]}, "
-            f"clickData={[bool(c) for c in click_data_list]}"
+            f"clickData={[bool(c) for c in click_data_list]}, "
+            f"trigger={triggered_prop}"
         )
 
         # Check if this is a "clearing" trigger (figure re-render clearing selectedData)
         # When figure re-renders due to filtering, selectedData becomes None/empty
         # We should NOT clear the selection in this case - only when user explicitly deselects
-        triggered_prop = ctx.triggered[0]["prop_id"] if ctx.triggered else ""
-        triggered_value = ctx.triggered[0]["value"] if ctx.triggered else None
-
         # If triggered by selectedData becoming None/empty, preserve existing selection
         if "selectedData" in triggered_prop and not triggered_value:
             # Check if we have existing scatter selections to preserve
@@ -201,6 +203,13 @@ def register_scatter_selection_callback(app):
                 selected_data, click_data, selection_column_index
             )
 
+            # Debug: log extraction details
+            logger.info(
+                f"  Figure {fig_index[:8]}: selection_enabled={selection_enabled}, "
+                f"has_selectedData={bool(selected_data)}, "
+                f"extracted_values={values[:5] if values else []}{'...' if len(values) > 5 else ''}"
+            )
+
             if values:
                 has_any_selection = True
                 selection_values.append(
@@ -212,7 +221,12 @@ def register_scatter_selection_callback(app):
                         dc_id=metadata.get("dc_id"),
                     )
                 )
-                logger.debug(f"Scatter selection: {len(values)} values from figure {fig_index[:8]}")
+
+        # Debug: log final decision
+        logger.info(
+            f"  Result: has_any_selection={has_any_selection}, "
+            f"existing_scatter={len([v for v in current_store.get('interactive_components_values', []) if v.get('source') == SOURCE_TYPE])}"
+        )
 
         # Check if update should be prevented
         if should_prevent_update(has_any_selection, current_store, SOURCE_TYPE):
