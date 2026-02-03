@@ -6,51 +6,58 @@
 
 
 <details>
-<summary>Click to expand the changelog for 0.6.3-b1</summary>
+<summary>Click to expand the changelog for 0.7.0-b1</summary>
 
 ### Changes 📜
 
 #### New Features ✨
 
-* feat: improve dashboard YAML import with overwrite, tag resolution, and mandatory config [8e3eced6]
-* feat: add CLI dashboard import command and comprehensive unit tests [7c0eb23a]
-* feat: implement DashboardDataLite with CLI convert command [fdf21d18]
-* feat: unified YAML/JSON proposal with single lightweight model [368d1e73]
-* feat: comprehensive analysis for minimal JSON-based dashboard schema [ade79869]
-* feat: disable YAML system by default and mark all endpoints as deprecated [f0963578]
-* feat: comprehensive analysis of YAML system with JSON simplification proposal [3ce015b4]
+* feat: add image support to DC links and cross-filtering [0792482b]
+* feat: add Image component CLI registration and duplication support [38daec0f]
+* feat: integrate Image component into dashboard stepper and viewer [7eae3313]
+* feat: implement Image component with gallery and modal views [3472ca86]
+* feat: add public image serving endpoint and fix S3 cleanup [027eb127]
+* feat: enable Image DC processing in CLI workflow [a9f4bc77]
+* feat: add Image DC model with Table DC capabilities [605256a6]
 
-#### Bug Fixes 🐛
+#### Improvements 🚀
 
-* fix: include uv.lock in bump-with-helm amend commit [f0095ef9]
-* fix: preserve MongoDB _id when updating dashboard with --overwrite [1bff388a]
-* fix: sort imports in yaml_serialization __init__.py [fc289e0b]
+* refactor: move cross-DC filtering to shared utils for reuse [67219ae7]
 
 #### Chores 🧹
 
-* chore: update uv.lock metadata [905f371b]
-
-#### Documentation Updates 📚
-
-* docs: add YAML deprecation implementation summary [c5baaeef]
+* chore: code formatting and cleanup [387771e1]
 
 #### Other Changes 📝
 
-* Bump version: 0.6.2 → 0.6.3-b1 [a830921f]
-* Update CHANGELOG.md for v0.6.2 [d63ea4d4]
-* Bump version: 0.6.2-b7 → 0.6.2 [fd0dbe01]
-* Update CHANGELOG.md for v0.6.2-b7 [c7406d41]
-* Update CHANGELOG.md for v0.6.2-b7 [a3d56436]
-* Update CHANGELOG.md for v0.6.2-b7 [284b1dc1]
-* Update CHANGELOG.md for v0.6.2-b6 [b4807a9d]
-* Update CHANGELOG.md for v0.6.2-b6 [ab4958a4]
-* Update CHANGELOG.md for v0.6.2-b5 [21ec82cd]
-* Update CHANGELOG.md for v0.6.2-b4 [68f5a134]
-* Update CHANGELOG.md for v0.6.2-b3 [05f61435]
-* Update CHANGELOG.md for v0.6.2-b2 [69e26eea]
-* Update CHANGELOG.md for v0.6.2-b1 [de2e64c1]
-* Update CHANGELOG.md for v0.6.1-b2 [49ebc39e]
-* Update CHANGELOG.md for v0.6.1 [00d9a078]
+* Bump version: 0.6.3-b1 → 0.7.0-b1 [1fbce5fd]
+* fix(env): comment out DEPICTIO_MONGODB_WIPE for safety in development [90de29bb]
+* feat(image-component): add image component support in YAML dashboard import [0d0699ac]
+* fix(ci): use single worker to prevent boot race conditions [5e8822f5]
+* fix(ci): auto-restart backend on worker boot failure [6d2ad6dd]
+* fix(ci): fix S3 image count integer parsing [fd659e8c]
+* fix(ci): use token from config for Image Demo verification [c5e3de5c]
+* feat(test): add image_demo CSV test data [7c33ff4f]
+* fix(ci): exclude CI file from quality cache key calculation [bcd48683]
+* fix(ci): check for serialized field names in API response [eaca9f2c]
+* fix(api,ci): delay S3 cleanup on startup and fix token extraction [5e972a99]
+* fix(ci): use access_token from admin_config.yaml directly [9cd91a46]
+* fix(ci): use form data for OAuth2 login endpoint [32edc023]
+* fix(ci): improve login error handling and YAML syntax [35dc039e]
+* fix(ci): use fresh login token for dashboard verification [8c67eaaa]
+* fix(api): handle BucketAlreadyOwnedByYou error gracefully [0fe565c5]
+* fix(ci): correct dashboard verification API endpoint and add debugging [010d0060]
+* fix(api): prevent HTTPException from killing worker during S3 cleanup [45f6bb9a]
+* fix(ci): add health checks to docker-system-init job [147b0c40]
+* feat(api): add /health endpoint for readiness checks [bdde1a85]
+* fix(ci): add robust health checks to prevent service connection failures [b28e9bcd]
+* fix(test): add explicit WebP MIME type handling for cross-platform support [b75c49fc]
+* test(ci): extend dashboard CLI testing with DB verification [534f4ce2]
+* fix(ci): use relative paths in image_demo project config [8074a28a]
+* test: add comprehensive unit tests for Image component changes [f83553c2]
+* test: move image_demo to test section and add CI validation [8af553b9]
+* Update CHANGELOG.md for v0.6.3-b1 [476f8881]
+* Bump version: 0.6.2 → 0.6.3-b1 [8e41b8b3]
 
 
 </details>
@@ -59,26 +66,7 @@
 
 For more details, please refer to the [documentation](https://depictio.github.io/depictio-docs/)
 
-ectivity tests with readiness checks and improved error handling [ea147c59]
-* fix: add netcat-openbsd to Dockerfile dependencies for improved functionality [ccdf0b66]
-* fix: improve database and storage functionality tests in CI workflow [0ef1c937]
-* fix: update paths in workflow triggers for Dockerfile and workflow file [f1578577]
-* fix: update tag pattern in amd64-build.yaml for beta releases [45e6c03a]
-* fix: update package-dir mapping in pyproject.toml and adjust test-lint workflow [9147327f]
-* fix: gunicorn single worker issue fix ; some timeout optimisations [16d3a92d]
-* fix: set DEV_MODE environment variable to false in docker-compose for consistency [9fa61ee2]
-* fix: enable DEV_MODE environment variable in docker-compose and run_dash script [a9877390]
-* fix: uncomment DEPICTIO_DASH_SERVICE_NAME in backend ConfigMap > should fix screenshots generation due to service name issue [965ca53b]
-* fix: comment out helm chart version update and git push commands [0b758332]
-* fix: log MongoDB URL after its initialization [01b29fa3]
-* fix: update appVersion and backend/frontend image tags to 0.0.6-beta1 [812cf3c1]
-* fix: add missing API packages to the project configuration [13aeaab6]
-* fix: update license format and improve package directory mapping in pyproject.toml [af37c922]
-* fix: harmonize CLI YAML file locations [14683c2f]
-* fix: update public URLs in ConfigMaps and set DEV_MODE to false in values files [b93ee6cf]
-* fix: update service port variables and improve initContainers in Helm charts [959ee2e9]
-* fix: comment out initContainers for MongoDB, MinIO, and backend in deployments.yaml [b310ed00]
-* fix: update MongoDB connection logic and improve MinIO configuration in Helm charts [dce087f8]
+ection logic and improve MinIO configuration in Helm charts [dce087f8]
 * fix: reduce storage sizes for MongoDB, MinIO, screenshots, and keys in Helm chart [cd1de3f8]
 * fix: update Helm chart version and clean up ingress annotations for better functionality [7e0180b1]
 * fix: simplify CI workflow by removing redundant build strategy and enhancing image handling [7fd96fb2]
