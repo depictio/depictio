@@ -283,8 +283,9 @@ def _create_component_buttons(
             "orientation": "vertical",
             "edit_only": ["drag", "duplicate", "edit", "remove"],
             "view_accessible": ["fullscreen", "metadata"],
-            "scatter_edit_only": ["partial_data", "drag", "duplicate", "edit", "remove"],
-            "scatter_view_accessible": ["fullscreen", "metadata", "reset"],
+            # Selection-enabled figures get reset button
+            "selection_edit_only": ["partial_data", "drag", "duplicate", "edit", "remove"],
+            "selection_view_accessible": ["fullscreen", "metadata", "reset"],
         },
         "interactive": {
             "orientation": "horizontal",
@@ -300,6 +301,8 @@ def _create_component_buttons(
             "orientation": "horizontal",
             "edit_only": ["drag", "remove"],
             "view_accessible": ["metadata", "export"],
+            # Row selection-enabled tables get reset button
+            "selection_view_accessible": ["metadata", "export", "reset"],
         },
         "jbrowse": {
             "orientation": "horizontal",
@@ -326,12 +329,30 @@ def _create_component_buttons(
     # Get configuration for this component type
     config = button_configs.get(component_type, button_configs["default"])
 
-    # Special handling for scatter plot figures
+    # Special handling for selection-enabled components
     if component_type == "figure":
-        visu_type = component_data.get("visu_type", None) if component_data else None
-        if visu_type and visu_type.lower() == "scatter":
-            edit_only_list = config.get("scatter_edit_only", config["edit_only"])
-            view_accessible_list = config.get("scatter_view_accessible", config["view_accessible"])
+        # Check if selection is enabled for this figure
+        selection_enabled = (
+            component_data.get("selection_enabled", False) if component_data else False
+        )
+        if selection_enabled:
+            edit_only_list = config.get("selection_edit_only", config["edit_only"])
+            view_accessible_list = config.get(
+                "selection_view_accessible", config["view_accessible"]
+            )
+        else:
+            edit_only_list = config["edit_only"]
+            view_accessible_list = config["view_accessible"]
+    elif component_type == "table":
+        # Check if row selection is enabled for this table
+        row_selection_enabled = (
+            component_data.get("row_selection_enabled", False) if component_data else False
+        )
+        if row_selection_enabled:
+            edit_only_list = config["edit_only"]
+            view_accessible_list = config.get(
+                "selection_view_accessible", config["view_accessible"]
+            )
         else:
             edit_only_list = config["edit_only"]
             view_accessible_list = config["view_accessible"]
@@ -555,8 +576,14 @@ def enable_box_edit_mode(
     # )
 
     def create_reset_button():
+        # Use different button types for figure vs table selection reset
+        if component_type == "table":
+            button_type = "reset-selection-table-button"
+        else:
+            button_type = "reset-selection-graph-button"
+
         return dmc.ActionIcon(
-            id={"type": "reset-selection-graph-button", "index": f"{btn_index}"},
+            id={"type": button_type, "index": f"{btn_index}"},
             color="orange",
             variant="filled",
             size="sm",
@@ -723,6 +750,12 @@ def enable_box_edit_mode(
                 # Table component metadata
                 if "columns" in component_data:
                     metadata_dict["columns"] = component_data["columns"]
+                # Row selection filtering metadata
+                if component_data.get("row_selection_enabled"):
+                    metadata_dict["row_selection_enabled"] = True
+                    metadata_dict["row_selection_column"] = component_data.get(
+                        "row_selection_column"
+                    )
 
             # Add last updated timestamp
             if component_data.get("last_updated"):

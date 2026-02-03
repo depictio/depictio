@@ -309,6 +309,8 @@ def _create_metadata_store(
     dc_id: str | None,
     dc_config: dict | None,
     cols: dict | None,
+    row_selection_enabled: bool = False,
+    row_selection_column: str | None = None,
 ) -> dcc.Store:
     """Create the metadata store component for the table.
 
@@ -318,6 +320,8 @@ def _create_metadata_store(
         dc_id: Data collection ID.
         dc_config: Data collection configuration.
         cols: Column definitions.
+        row_selection_enabled: Whether row selection filtering is enabled.
+        row_selection_column: Column to extract from selected rows.
 
     Returns:
         dcc.Store component with table metadata.
@@ -338,6 +342,8 @@ def _create_metadata_store(
             "dc_config": dc_config,
             "cols_json": cols,
             "parent_index": None,
+            "row_selection_enabled": row_selection_enabled,
+            "row_selection_column": row_selection_column,
         },
     )
 
@@ -413,6 +419,8 @@ def build_table(**kwargs) -> html.Div | dmc.Paper | dcc.Loading:
             - access_token (str): Authentication token.
             - stepper (bool): Whether in stepper mode.
             - refresh (bool): Whether to refresh data from source.
+            - row_selection_enabled (bool): Enable row selection filtering.
+            - row_selection_column (str): Column to extract from selected rows.
 
     Returns:
         The table component, optionally wrapped in a frame and/or loading spinner.
@@ -429,6 +437,9 @@ def build_table(**kwargs) -> html.Div | dmc.Paper | dcc.Loading:
     df = kwargs.get("df", pl.DataFrame())
     token = kwargs.get("access_token")
     stepper = kwargs.get("stepper", False)
+    # Row selection filtering configuration
+    row_selection_enabled = kwargs.get("row_selection_enabled", False)
+    row_selection_column = kwargs.get("row_selection_column")
 
     # Load data if needed
     if df.is_empty():
@@ -441,7 +452,9 @@ def build_table(**kwargs) -> html.Div | dmc.Paper | dcc.Loading:
 
     # Build components
     ag_grid = _create_ag_grid_component(index, column_defs, theme)
-    store = _create_metadata_store(index, wf_id, dc_id, dc_config, cols)
+    store = _create_metadata_store(
+        index, wf_id, dc_id, dc_config, cols, row_selection_enabled, row_selection_column
+    )
     table_body = _create_table_body(index, ag_grid, store)
 
     if not build_frame:

@@ -84,6 +84,10 @@ def enrich_interactive_components(
     This function enriches each component with full metadata from the State
     callbacks, enabling proper filtering and join operations.
 
+    Handles both regular interactive components (metadata from stores) and
+    selection sources (scatter_selection, table_selection) which have metadata
+    embedded in the store entry itself.
+
     Args:
         interactive_values: Store data containing 'interactive_components_values' list,
             where each item has 'index' and 'value' fields
@@ -109,22 +113,42 @@ def enrich_interactive_components(
     for component in lightweight_components:
         index = component.get("index")
         value = component.get("value")
+        source = component.get("source")
 
         if not index:
             continue
 
-        full_metadata = metadata_by_index.get(index)
-
-        if full_metadata:
+        # Handle selection sources (scatter_selection, table_selection)
+        # These have metadata embedded directly in the store entry
+        if source in ("scatter_selection", "table_selection"):
+            selection_metadata = {
+                "dc_id": component.get("dc_id"),
+                "column_name": component.get("column_name"),
+                "interactive_component_type": "MultiSelect",
+                "source": source,
+            }
             enriched_component = {
                 "index": index,
                 "value": value,
                 "component_type": "interactive",
-                "metadata": full_metadata,
+                "metadata": selection_metadata,
+                "source": source,
             }
             interactive_components_dict[index] = enriched_component
         else:
-            logger.warning(f"Component {index} has value but no metadata - skipping")
+            # Regular interactive components need metadata lookup
+            full_metadata = metadata_by_index.get(index)
+
+            if full_metadata:
+                enriched_component = {
+                    "index": index,
+                    "value": value,
+                    "component_type": "interactive",
+                    "metadata": full_metadata,
+                }
+                interactive_components_dict[index] = enriched_component
+            else:
+                logger.warning(f"Component {index} has value but no metadata - skipping")
 
     return interactive_components_dict
 

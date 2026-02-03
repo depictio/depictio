@@ -61,6 +61,10 @@ def _enrich_filters_with_metadata(
     their full metadata (column_name, dc_id, component_type, etc.) from the
     interactive-stored-metadata stores.
 
+    Handles both regular interactive components (metadata from stores) and
+    selection sources (scatter_selection, table_selection) which have metadata
+    embedded in the store entry itself.
+
     Args:
         filters_data: Lightweight filter data containing interactive_components_values
         interactive_metadata_list: Full metadata from all interactive component stores
@@ -86,18 +90,39 @@ def _enrich_filters_with_metadata(
     for component in lightweight_components:
         index = component.get("index")
         value = component.get("value")
-        full_metadata = metadata_by_index.get(index, {})
+        source = component.get("source")
 
-        if full_metadata:
+        # Handle selection sources (scatter_selection, table_selection)
+        # These have metadata embedded directly in the store entry
+        if source in ("scatter_selection", "table_selection"):
+            selection_metadata = {
+                "dc_id": component.get("dc_id"),
+                "column_name": component.get("column_name"),
+                "interactive_component_type": "MultiSelect",
+                "source": source,
+            }
             enriched_components.append(
                 {
                     "index": index,
                     "value": value,
-                    "metadata": full_metadata,
+                    "metadata": selection_metadata,
+                    "source": source,
                 }
             )
         else:
-            logger.warning(f"No metadata found for component {index[:8]}... - skipping")
+            # Regular interactive components need metadata lookup
+            full_metadata = metadata_by_index.get(index, {})
+
+            if full_metadata:
+                enriched_components.append(
+                    {
+                        "index": index,
+                        "value": value,
+                        "metadata": full_metadata,
+                    }
+                )
+            else:
+                logger.warning(f"No metadata found for component {index[:8]}... - skipping")
 
     return enriched_components
 

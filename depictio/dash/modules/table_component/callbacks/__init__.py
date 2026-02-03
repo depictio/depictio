@@ -3,12 +3,13 @@ Table Component Callbacks - Lazy Loading Pattern
 
 This module implements a lazy loading pattern where:
 - Core rendering callbacks are always loaded at app startup (view mode)
+- Selection callbacks are loaded at startup for interactive filtering
 - Design/edit mode callbacks will be loaded on-demand when entering edit mode (Phase 2 - future PR)
 
 This follows the same pattern as card and figure components to reduce
 initial import time and improve app startup performance.
 
-Phase 1: View mode only - infinite scroll, filtering, sorting, theme support
+Phase 1: View mode only - infinite scroll, filtering, sorting, theme support, selection
 Phase 2: Edit mode - design UI, parameter selection, save functionality (future)
 """
 
@@ -27,8 +28,10 @@ def register_callbacks_table_component(app):
         app: Dash application instance
     """
     from .core import register_core_callbacks
+    from .selection import register_table_selection_callback
 
     register_core_callbacks(app)
+    register_table_selection_callback(app)
 
 
 def load_design_callbacks(app):

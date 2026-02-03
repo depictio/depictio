@@ -3,12 +3,13 @@ Figure Component Callbacks - Lazy Loading Pattern
 
 This module implements a lazy loading pattern where:
 - Core rendering callbacks are always loaded at app startup (view mode)
+- Selection callbacks are loaded at startup for interactive filtering
 - Design/edit mode callbacks are loaded on-demand when entering edit mode (Phase 2)
 
 This follows the same pattern as card and interactive components to reduce
 initial import time and improve app startup performance.
 
-Phase 1: View mode only - basic rendering, filtering, theme support
+Phase 1: View mode only - basic rendering, filtering, theme support, selection
 Phase 2: Edit mode - design UI, parameter selection, save functionality (future)
 """
 
@@ -27,8 +28,10 @@ def register_callbacks_figure_component(app):
         app: Dash application instance
     """
     from .core import register_core_callbacks
+    from .selection import register_scatter_selection_callback
 
     register_core_callbacks(app)
+    register_scatter_selection_callback(app)
 
 
 def load_design_callbacks(app):

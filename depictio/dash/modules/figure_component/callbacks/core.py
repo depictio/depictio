@@ -88,6 +88,10 @@ def _enrich_filter_components(
     """
     Enrich lightweight filter components with full metadata.
 
+    Handles both regular interactive components (metadata from stores) and
+    selection sources (scatter_selection, table_selection) which have metadata
+    embedded in the store entry itself.
+
     Args:
         lightweight_components: List of filter components with index and value
         metadata_by_index: Mapping from index to full metadata
@@ -98,12 +102,27 @@ def _enrich_filter_components(
     enriched_components = []
     for comp in lightweight_components:
         comp_index = comp.get("index")
-        if comp_index is None:
-            full_metadata: dict = {}
+        source = comp.get("source")
+
+        # Handle selection sources (scatter_selection, table_selection)
+        # These have metadata embedded directly in the store entry
+        if source in ("scatter_selection", "table_selection"):
+            selection_metadata = {
+                "dc_id": comp.get("dc_id"),
+                "column_name": comp.get("column_name"),
+                "interactive_component_type": "MultiSelect",
+                "source": source,
+            }
+            enriched_comp = {**comp, "metadata": selection_metadata}
+            enriched_components.append(enriched_comp)
         else:
-            full_metadata = metadata_by_index.get(str(comp_index), {})
-        enriched_comp = {**comp, "metadata": full_metadata}
-        enriched_components.append(enriched_comp)
+            # Regular interactive components need metadata lookup
+            if comp_index is None:
+                full_metadata: dict = {}
+            else:
+                full_metadata = metadata_by_index.get(str(comp_index), {})
+            enriched_comp = {**comp, "metadata": full_metadata}
+            enriched_components.append(enriched_comp)
     return enriched_components
 
 
@@ -457,6 +476,10 @@ def _process_single_figure(
 
         df = dc_cache[load_key]
 
+        # Extract selection configuration
+        selection_enabled = trigger_data.get("selection_enabled", False)
+        selection_column = trigger_data.get("selection_column")
+
         if mode == "code":
             success, fig, detected_visu_type = _process_code_mode_figure(
                 code_content, df, current_theme, task_id
@@ -465,12 +488,20 @@ def _process_single_figure(
                 return fig, {}
             if detected_visu_type:
                 visu_type = detected_visu_type
+            # Apply selection mode to code-generated figures if enabled
+            if selection_enabled and isinstance(fig, go.Figure):
+                fig.update_layout(
+                    clickmode="event+select",
+                    dragmode="lasso",
+                )
         else:
             fig = _create_figure_from_data(
                 df=df,
                 visu_type=visu_type,
                 dict_kwargs=dict_kwargs,
                 theme=current_theme,
+                selection_enabled=selection_enabled,
+                selection_column=selection_column,
             )
 
         if isinstance(fig, go.Figure):
@@ -706,7 +737,12 @@ def _extract_required_columns(dict_kwargs: dict, visu_type: str) -> list[str]:
 
 
 def _create_figure_from_data(
-    df: Any, visu_type: str, dict_kwargs: dict, theme: str = "light"
+    df: Any,
+    visu_type: str,
+    dict_kwargs: dict,
+    theme: str = "light",
+    selection_enabled: bool = False,
+    selection_column: str | None = None,
 ) -> go.Figure:
     """
     Create Plotly figure from DataFrame and parameters.
@@ -716,6 +752,8 @@ def _create_figure_from_data(
         visu_type: Visualization type (scatter, line, bar, box)
         dict_kwargs: Figure parameters
         theme: Theme name (light or dark)
+        selection_enabled: Whether to enable scatter selection filtering
+        selection_column: Column to include in customdata for selection extraction
 
     Returns:
         Plotly Figure object
@@ -778,6 +816,19 @@ def _create_figure_from_data(
         # Add template to parameters
         cleaned_kwargs["template"] = template
 
+        # Handle selection mode: add selection_column to custom_data if enabled
+        if selection_enabled and selection_column and selection_column in pandas_df.columns:
+            existing_custom_data = cleaned_kwargs.get("custom_data", [])
+            if isinstance(existing_custom_data, str):
+                # If it's a single column name, convert to list
+                existing_custom_data = [existing_custom_data]
+            elif not isinstance(existing_custom_data, list):
+                existing_custom_data = []
+
+            # Add selection_column at the beginning (index 0) for consistent extraction
+            if selection_column not in existing_custom_data:
+                cleaned_kwargs["custom_data"] = [selection_column] + list(existing_custom_data)
+
         # Get Plotly Express function dynamically
         if visu_type not in ["scatter", "line", "bar", "box", "histogram"]:
             logger.warning(f"Unsupported visualization type: {visu_type}, defaulting to scatter")
@@ -789,11 +840,18 @@ def _create_figure_from_data(
         fig = plot_func(pandas_df, **cleaned_kwargs)
 
         # Apply additional theme-aware styling
-        fig.update_layout(
-            paper_bgcolor="rgba(0,0,0,0)",  # Transparent background
-            plot_bgcolor="rgba(0,0,0,0)",  # Transparent plot area
-            margin={"l": 50, "r": 20, "t": 40, "b": 40},  # Reasonable margins
-        )
+        layout_updates = {
+            "paper_bgcolor": "rgba(0,0,0,0)",  # Transparent background
+            "plot_bgcolor": "rgba(0,0,0,0)",  # Transparent plot area
+            "margin": {"l": 50, "r": 20, "t": 40, "b": 40},  # Reasonable margins
+        }
+
+        # Enable selection mode if configured
+        if selection_enabled:
+            layout_updates["clickmode"] = "event+select"
+            layout_updates["dragmode"] = "lasso"
+
+        fig.update_layout(**layout_updates)
 
         return fig
 

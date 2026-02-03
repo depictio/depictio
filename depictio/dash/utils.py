@@ -855,9 +855,13 @@ def enrich_interactive_components_with_metadata(
     This function enriches them with full metadata from interactive-stored-metadata stores,
     which is needed for filtering operations that require dc_id, column_name, etc.
 
+    Selection sources (scatter_selection, table_selection) already include their
+    metadata (dc_id, column_name) in the store entry, so they are handled directly
+    without requiring metadata lookup.
+
     Args:
         interactive_values: Dict with 'interactive_components_values' key containing
-                           list of {index, value} pairs
+                           list of {index, value} pairs (or selection entries with source field)
         interactive_metadata_list: List of full metadata dicts from State callbacks
         interactive_metadata_ids: List of component IDs matching metadata_list
 
@@ -871,7 +875,7 @@ def enrich_interactive_components_with_metadata(
     if not lightweight_components:
         return []
 
-    # Build index -> metadata mapping
+    # Build index -> metadata mapping for interactive components
     metadata_by_index: Dict[str, Dict[str, Any]] = {}
     if interactive_metadata_list and interactive_metadata_ids:
         for i, meta_id in enumerate(interactive_metadata_ids):
@@ -884,16 +888,38 @@ def enrich_interactive_components_with_metadata(
     for component in lightweight_components:
         index = component.get("index")
         value = component.get("value")
-        full_metadata = metadata_by_index.get(index, {})
+        source = component.get("source")
 
-        if full_metadata:
+        # Handle selection sources (scatter_selection, table_selection)
+        # These already have metadata embedded in the store entry
+        if source in ("scatter_selection", "table_selection"):
+            # Build metadata from selection entry
+            selection_metadata = {
+                "dc_id": component.get("dc_id"),
+                "column_name": component.get("column_name"),
+                "interactive_component_type": "MultiSelect",  # Selection acts like MultiSelect filter
+                "source": source,
+            }
             enriched_components.append(
                 {
                     "index": index,
                     "value": value,
-                    "metadata": full_metadata,
+                    "metadata": selection_metadata,
+                    "source": source,
                 }
             )
+        else:
+            # Regular interactive components need metadata lookup
+            full_metadata = metadata_by_index.get(index, {})
+
+            if full_metadata:
+                enriched_components.append(
+                    {
+                        "index": index,
+                        "value": value,
+                        "metadata": full_metadata,
+                    }
+                )
 
     return enriched_components
 
