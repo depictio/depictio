@@ -147,6 +147,25 @@ def register_scatter_selection_callback(app):
             f"clickData={[bool(c) for c in click_data_list]}"
         )
 
+        # Check if this is a "clearing" trigger (figure re-render clearing selectedData)
+        # When figure re-renders due to filtering, selectedData becomes None/empty
+        # We should NOT clear the selection in this case - only when user explicitly deselects
+        triggered_prop = ctx.triggered[0]["prop_id"] if ctx.triggered else ""
+        triggered_value = ctx.triggered[0]["value"] if ctx.triggered else None
+
+        # If triggered by selectedData becoming None/empty, preserve existing selection
+        if "selectedData" in triggered_prop and not triggered_value:
+            # Check if we have existing scatter selections to preserve
+            has_existing_scatter = any(
+                v.get("source") == SOURCE_TYPE
+                for v in current_store.get("interactive_components_values", [])
+            )
+            if has_existing_scatter:
+                logger.info(
+                    "Scatter selection: Ignoring clear trigger (figure re-render), preserving selection"
+                )
+                raise dash.exceptions.PreventUpdate
+
         # Build metadata lookup
         metadata_by_index = build_metadata_lookup(metadata_list, metadata_ids)
 
