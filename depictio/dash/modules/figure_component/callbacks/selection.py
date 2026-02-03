@@ -174,6 +174,12 @@ def register_scatter_selection_callback(app):
         # Get existing values (non-scatter-selection sources)
         existing_values = filter_existing_values(current_store, SOURCE_TYPE)
 
+        # Get existing scatter selections (to preserve on re-render)
+        existing_scatter_by_index: dict[str, dict[str, Any]] = {}
+        for v in current_store.get("interactive_components_values", []):
+            if v.get("source") == SOURCE_TYPE:
+                existing_scatter_by_index[v.get("index", "")] = v
+
         # Process each figure for selection data
         selection_values: list[dict[str, Any]] = []
         has_any_selection = False
@@ -202,6 +208,19 @@ def register_scatter_selection_callback(app):
             values = extract_scatter_selection_values(
                 selected_data, click_data, selection_column_index
             )
+
+            # Handle re-render case: selectedData exists but customdata is stale/empty
+            # When figure re-renders after filtering, Plotly preserves selectedData
+            # but customdata may be invalid. Preserve existing selection in this case.
+            if not values and selected_data and fig_index in existing_scatter_by_index:
+                existing_entry = existing_scatter_by_index[fig_index]
+                logger.info(
+                    f"  Figure {fig_index[:8]}: Preserving existing selection "
+                    f"(re-render with stale customdata)"
+                )
+                selection_values.append(existing_entry)
+                has_any_selection = True
+                continue
 
             # Debug: log extraction details
             logger.info(
