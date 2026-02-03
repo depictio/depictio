@@ -7,6 +7,7 @@ and updates the interactive-values-store to enable cross-component filtering.
 The callback listens to:
 - selectedData: Triggered by lasso/rectangle selection
 - clickData: Triggered by point click
+- reset button: Clears selection from store
 
 Selection data is added to interactive-values-store with source="scatter_selection"
 to distinguish it from regular interactive components (dropdowns, sliders).
@@ -15,9 +16,22 @@ to distinguish it from regular interactive components (dropdowns, sliders).
 from typing import Any
 
 import dash
-from dash import ALL, Input, Output, State
+from dash import ALL, Input, Output, State, ctx
 
 from depictio.api.v1.configs.logging_init import logger
+from depictio.dash.modules.shared.selection_utils import (
+    build_metadata_lookup,
+    create_selection_entry,
+    filter_existing_values,
+    handle_reset_button,
+    initialize_store,
+    merge_selection_values,
+    should_prevent_update,
+)
+
+# Constants for this selection type
+BUTTON_TYPE = "reset-selection-graph-button"
+SOURCE_TYPE = "scatter_selection"
 
 
 def extract_scatter_selection_values(
@@ -99,9 +113,9 @@ def register_scatter_selection_callback(app):
         Output("interactive-values-store", "data", allow_duplicate=True),
         Input({"type": "figure-graph", "index": ALL}, "selectedData"),
         Input({"type": "figure-graph", "index": ALL}, "clickData"),
-        Input({"type": "reset-selection-graph-button", "index": ALL}, "n_clicks"),
+        Input({"type": BUTTON_TYPE, "index": ALL}, "n_clicks"),
         State({"type": "figure-graph", "index": ALL}, "id"),
-        State({"type": "reset-selection-graph-button", "index": ALL}, "id"),
+        State({"type": BUTTON_TYPE, "index": ALL}, "id"),
         State({"type": "stored-metadata-component", "index": ALL}, "data"),
         State({"type": "stored-metadata-component", "index": ALL}, "id"),
         State("interactive-values-store", "data"),
@@ -117,88 +131,27 @@ def register_scatter_selection_callback(app):
         metadata_ids: list[dict[str, str]],
         current_store: dict[str, Any] | None,
     ) -> dict[str, Any]:
-        """Update interactive-values-store with scatter selection data.
-
-        This callback merges scatter selection data into the existing store,
-        preserving values from regular interactive components while adding
-        selection-based filters.
-
-        Also handles reset button clicks to clear selections for specific components.
-
-        Args:
-            selected_data_list: List of selectedData from all figures (lasso/rect)
-            click_data_list: List of clickData from all figures (point click)
-            reset_clicks_list: List of reset button click counts
-            figure_ids: List of figure component IDs
-            reset_button_ids: List of reset button IDs
-            metadata_list: List of stored metadata for all components
-            metadata_ids: List of metadata store IDs
-            current_store: Current interactive-values-store data
-
-        Returns:
-            Updated store data with selection filters
-        """
-        from dash import ctx
-
-        # Initialize store if needed
-        if current_store is None:
-            current_store = {"interactive_components_values": [], "first_load": False}
+        """Update interactive-values-store with scatter selection data."""
+        current_store = initialize_store(current_store)
 
         # Check if this callback was triggered by a reset button
-        triggered_id = ctx.triggered_id
-        if (
-            isinstance(triggered_id, dict)
-            and triggered_id.get("type") == "reset-selection-graph-button"
-        ):
-            reset_index = triggered_id.get("index")
-            logger.info(
-                f"Scatter selection reset triggered for component {reset_index[:8] if reset_index else 'None'}"
-            )
-
-            # Remove scatter_selection entries for this component
-            filtered_values = [
-                v
-                for v in current_store.get("interactive_components_values", [])
-                if not (v.get("source") == "scatter_selection" and v.get("index") == reset_index)
-            ]
-
-            return {
-                "interactive_components_values": filtered_values,
-                "first_load": False,
-            }
+        reset_result = handle_reset_button(
+            ctx.triggered_id, BUTTON_TYPE, SOURCE_TYPE, current_store
+        )
+        if reset_result is not None:
+            return reset_result
 
         logger.info(
-            f"Scatter selection callback triggered: "
-            f"{len(figure_ids)} figures, "
+            f"Scatter selection callback: {len(figure_ids)} figures, "
             f"selectedData={[bool(s) for s in selected_data_list]}, "
             f"clickData={[bool(c) for c in click_data_list]}"
         )
 
-        # Build metadata lookup by component index
-        metadata_by_index: dict[str, dict[str, Any]] = {}
-        for i, meta_id in enumerate(metadata_ids):
-            if i < len(metadata_list) and metadata_list[i]:
-                index = meta_id.get("index") if isinstance(meta_id, dict) else str(meta_id)
-                metadata_by_index[index] = metadata_list[i]
-                # Debug: log what metadata we found
-                meta = metadata_list[i]
-                logger.debug(
-                    f"  Metadata for index {index[:8] if index else 'None'}: "
-                    f"component_type={meta.get('component_type')}, "
-                    f"selection_enabled={meta.get('selection_enabled')}, "
-                    f"selection_column={meta.get('selection_column')}"
-                )
+        # Build metadata lookup
+        metadata_by_index = build_metadata_lookup(metadata_list, metadata_ids)
 
-        # Initialize store if needed
-        if current_store is None:
-            current_store = {"interactive_components_values": [], "first_load": False}
-
-        # Get existing values (non-selection sources)
-        existing_values = [
-            v
-            for v in current_store.get("interactive_components_values", [])
-            if v.get("source") != "scatter_selection"
-        ]
+        # Get existing values (non-scatter-selection sources)
+        existing_values = filter_existing_values(current_store, SOURCE_TYPE)
 
         # Process each figure for selection data
         selection_values: list[dict[str, Any]] = []
@@ -213,25 +166,6 @@ def register_scatter_selection_callback(app):
             # Check if selection is enabled for this figure
             selection_enabled = metadata.get("selection_enabled", False)
             selection_column = metadata.get("selection_column")
-
-            # Debug: log selection check for figures with selection data
-            has_selection_data = (i < len(selected_data_list) and selected_data_list[i]) or (
-                i < len(click_data_list) and click_data_list[i]
-            )
-            if has_selection_data:
-                if not metadata:
-                    logger.warning(
-                        f"  Figure {fig_index[:8] if fig_index else 'None'}: "
-                        f"has selection data but NO METADATA FOUND! "
-                        f"Available metadata indices: {list(metadata_by_index.keys())[:5]}..."
-                    )
-                else:
-                    logger.info(
-                        f"  Figure {fig_index[:8] if fig_index else 'None'}: "
-                        f"has selection data, selection_enabled={selection_enabled}, "
-                        f"selection_column={selection_column}, "
-                        f"component_type={metadata.get('component_type')}"
-                    )
 
             if not selection_enabled or not selection_column:
                 continue
@@ -251,30 +185,18 @@ def register_scatter_selection_callback(app):
             if values:
                 has_any_selection = True
                 selection_values.append(
-                    {
-                        "index": fig_index,
-                        "value": values,
-                        "source": "scatter_selection",
-                        "column_name": selection_column,
-                        "dc_id": metadata.get("dc_id"),
-                    }
+                    create_selection_entry(
+                        component_index=fig_index,
+                        values=values,
+                        source_type=SOURCE_TYPE,
+                        column_name=selection_column,
+                        dc_id=metadata.get("dc_id"),
+                    )
                 )
                 logger.debug(f"Scatter selection: {len(values)} values from figure {fig_index[:8]}")
 
-        # If no selection data changed and we have no new selections, prevent update
-        if not has_any_selection:
-            # Check if we had previous selections that should now be cleared
-            had_previous_selections = any(
-                v.get("source") == "scatter_selection"
-                for v in current_store.get("interactive_components_values", [])
-            )
-            if not had_previous_selections:
-                raise dash.exceptions.PreventUpdate
+        # Check if update should be prevented
+        if should_prevent_update(has_any_selection, current_store, SOURCE_TYPE):
+            raise dash.exceptions.PreventUpdate
 
-        # Merge existing values with new selection values
-        merged_values = existing_values + selection_values
-
-        return {
-            "interactive_components_values": merged_values,
-            "first_load": False,
-        }
+        return merge_selection_values(existing_values, selection_values)
