@@ -6,51 +6,24 @@
 
 
 <details>
-<summary>Click to expand the changelog for 0.7.0-b1</summary>
+<summary>Click to expand the changelog for 0.7.0</summary>
 
 ### Changes 📜
 
-#### New Features ✨
-
-* feat: add image support to DC links and cross-filtering [0792482b]
-* feat: add Image component CLI registration and duplication support [38daec0f]
-* feat: integrate Image component into dashboard stepper and viewer [7eae3313]
-* feat: implement Image component with gallery and modal views [3472ca86]
-* feat: add public image serving endpoint and fix S3 cleanup [027eb127]
-* feat: enable Image DC processing in CLI workflow [a9f4bc77]
-* feat: add Image DC model with Table DC capabilities [605256a6]
-
-#### Improvements 🚀
-
-* refactor: move cross-DC filtering to shared utils for reuse [67219ae7]
-
-#### Chores 🧹
-
-* chore: code formatting and cleanup [387771e1]
-
 #### Other Changes 📝
 
-* Bump version: 0.6.3-b1 → 0.7.0-b1 [1fbce5fd]
-* fix(env): comment out DEPICTIO_MONGODB_WIPE for safety in development [90de29bb]
-* feat(image-component): add image component support in YAML dashboard import [0d0699ac]
-* fix(ci): use single worker to prevent boot race conditions [5e8822f5]
-* fix(ci): auto-restart backend on worker boot failure [6d2ad6dd]
-* fix(ci): fix S3 image count integer parsing [fd659e8c]
-* fix(ci): use token from config for Image Demo verification [c5e3de5c]
-* feat(test): add image_demo CSV test data [7c33ff4f]
-* fix(ci): exclude CI file from quality cache key calculation [bcd48683]
-* fix(ci): check for serialized field names in API response [eaca9f2c]
-* fix(api,ci): delay S3 cleanup on startup and fix token extraction [5e972a99]
-* fix(ci): use access_token from admin_config.yaml directly [9cd91a46]
-* fix(ci): use form data for OAuth2 login endpoint [32edc023]
-* fix(ci): improve login error handling and YAML syntax [35dc039e]
-* fix(ci): use fresh login token for dashboard verification [8c67eaaa]
-* fix(api): handle BucketAlreadyOwnedByYou error gracefully [0fe565c5]
-* fix(ci): correct dashboard verification API endpoint and add debugging [010d0060]
-* fix(api): prevent HTTPException from killing worker during S3 cleanup [45f6bb9a]
-* fix(ci): add health checks to docker-system-init job [147b0c40]
-* feat(api): add /health endpoint for readiness checks [bdde1a85]
-* fix(ci): add robust health checks to prevent service connection failures [b28e9bcd]
+* Bump version: 0.7.0-b1 → 0.7.0 [5570d423]
+* Update CHANGELOG.md for v0.7.0-b1 [9f644869]
+* Bump version: 0.6.3-b1 → 0.7.0-b1 [5225a069]
+
+
+</details>
+
+### Documentation 📖
+
+For more details, please refer to the [documentation](https://depictio.github.io/depictio-docs/)
+
+ection failures [b28e9bcd]
 * fix(test): add explicit WebP MIME type handling for cross-platform support [b75c49fc]
 * test(ci): extend dashboard CLI testing with DB verification [534f4ce2]
 * fix(ci): use relative paths in image_demo project config [8074a28a]
