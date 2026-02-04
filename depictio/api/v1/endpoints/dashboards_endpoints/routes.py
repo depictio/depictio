@@ -211,13 +211,11 @@ async def get_dashboard(
     if not dashboard_dict.get("is_main_tab", True) and dashboard_dict.get("parent_dashboard_id"):
         parent_dashboard = dashboards_collection.find_one(
             {"dashboard_id": ObjectId(str(dashboard_dict["parent_dashboard_id"]))},
-            {"title": 1, "main_tab_name": 1},
+            {"title": 1},
         )
         if parent_dashboard:
-            # Use main_tab_name if set, otherwise use title
-            dashboard_dict["parent_dashboard_title"] = parent_dashboard.get(
-                "main_tab_name"
-            ) or parent_dashboard.get("title", "Dashboard")
+            # Use the actual dashboard title for the header
+            dashboard_dict["parent_dashboard_title"] = parent_dashboard.get("title", "Dashboard")
 
     return convert_objectid_to_str(dashboard_dict)
 
@@ -281,13 +279,11 @@ async def init_dashboard(
     if not dashboard_dict.get("is_main_tab", True) and dashboard_dict.get("parent_dashboard_id"):
         parent_dashboard = dashboards_collection.find_one(
             {"dashboard_id": ObjectId(dashboard_dict["parent_dashboard_id"])},
-            {"title": 1, "main_tab_name": 1},
+            {"title": 1},
         )
         if parent_dashboard:
-            # Use main_tab_name if set, otherwise use title
-            dashboard_dict["parent_dashboard_title"] = parent_dashboard.get(
-                "main_tab_name"
-            ) or parent_dashboard.get("title", "Dashboard")
+            # Use the actual dashboard title for the header
+            dashboard_dict["parent_dashboard_title"] = parent_dashboard.get("title", "Dashboard")
 
     response = {
         "dashboard": dashboard_dict,
