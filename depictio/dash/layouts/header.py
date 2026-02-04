@@ -1084,6 +1084,8 @@ def _create_header_stores(data: dict, owner: bool, viewer: bool) -> list[dcc.Sto
 def _create_header_left_section(data: dict) -> dmc.Group:
     """Create the left section of the header with burger, icon, and title.
 
+    For child tabs, displays "Dashboard Name > Tab Name" format.
+
     Args:
         data: Dashboard data dictionary.
 
@@ -1119,14 +1121,46 @@ def _create_header_left_section(data: dict) -> dmc.Group:
             variant="filled",
         )
 
-    title = dmc.Title(
-        f"{data['title']}",
-        order=3,
-        id="dashboard-title",
-        fw="bold",
-        fz=20,
-        m=0,
-        style={"lineHeight": "1.2"},
+    # Build title: show "Dashboard / Tab" format for all dashboards
+    is_main_tab = data.get("is_main_tab", True)
+    dashboard_title = data["title"]
+
+    if is_main_tab:
+        # Main tab: show "Dashboard Title / Main" (or custom main_tab_name)
+        tab_name = data.get("main_tab_name") or "Main"
+    else:
+        # Child tab: show "Parent Dashboard / Tab Name"
+        dashboard_title = data.get("parent_dashboard_title", data["title"])
+        tab_name = data["title"]
+
+    title = dmc.Group(
+        [
+            dmc.Text(
+                dashboard_title,
+                fw="bold",
+                fz=20,
+                c="dimmed",
+                style={"lineHeight": "1.2"},
+            ),
+            dmc.Text(
+                "/",
+                fw="normal",
+                fz=18,
+                c="dimmed",
+                style={"lineHeight": "1.2", "margin": "0 4px"},
+            ),
+            dmc.Title(
+                tab_name,
+                order=3,
+                id="dashboard-title",
+                fw="bold",
+                fz=20,
+                m=0,
+                style={"lineHeight": "1.2"},
+            ),
+        ],
+        gap=0,
+        align="baseline",
     )
 
     return dmc.Group(

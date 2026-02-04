@@ -259,8 +259,22 @@ async def init_dashboard(
     elif current_user_id_str in editor_ids:
         user_permission_level = "editor"
 
+    dashboard_dict = dashboard.model_dump()
+
+    # For child tabs, fetch parent dashboard title for header display
+    if not dashboard_dict.get("is_main_tab", True) and dashboard_dict.get("parent_dashboard_id"):
+        parent_dashboard = dashboards_collection.find_one(
+            {"dashboard_id": ObjectId(dashboard_dict["parent_dashboard_id"])},
+            {"title": 1, "main_tab_name": 1},
+        )
+        if parent_dashboard:
+            # Use main_tab_name if set, otherwise use title
+            dashboard_dict["parent_dashboard_title"] = parent_dashboard.get(
+                "main_tab_name"
+            ) or parent_dashboard.get("title", "Dashboard")
+
     response = {
-        "dashboard": dashboard.model_dump(),
+        "dashboard": dashboard_dict,
         "project_id": str(project_id),
         "user_permissions": {
             "level": user_permission_level,
