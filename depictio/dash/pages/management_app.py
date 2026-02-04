@@ -368,9 +368,10 @@ def register_layout_callbacks(app):
     register_callbacks_header(app)
 
     # Register sidebar callbacks (admin link, server status, avatar)
+    # Note: register_tabs=False because management app uses static navbar without tabs
     from depictio.dash.layouts.sidebar import register_sidebar_callbacks
 
-    register_sidebar_callbacks(app)
+    register_sidebar_callbacks(app, register_tabs=False)
 
     # Add clientside callback for auth page body class
     app.clientside_callback(

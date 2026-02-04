@@ -422,114 +422,6 @@ def register_callbacks_header(app) -> None:
     # - edit_button_header_sync: Updated edit-status-badge-clickable-2 based on toggle
     # - edit_badge_clickable: Made edit badge clickable to toggle edit mode
 
-    # Update live interactivity badge based on toggle state
-    # @app.callback(
-    #     [
-    #         Output("live-interactivity-badge", "children"),
-    #         Output("live-interactivity-badge", "color"),
-    #         Output("live-interactivity-badge", "leftSection"),
-    #     ],
-    #     [
-    #         Input("live-interactivity-toggle", "checked"),
-    #         Input("live-interactivity-store", "data"),
-    #     ],
-    #     prevent_initial_call=False,
-    # )
-    # def update_live_interactivity_badge(toggle_checked, store_data):
-    #     """Update the live interactivity badge based on toggle state."""
-    #     # Use store data as source of truth, fall back to toggle
-    #     is_live_on = store_data if store_data is not None else toggle_checked
-    #     if is_live_on:
-    #         return (
-    #             "Live ON",
-    #             "green",
-    #             DashIconify(icon="mdi:lightning-bolt", width=8, color="white"),
-    #         )
-    #     else:
-    #         return (
-    #             "Live OFF",
-    #             "gray",
-    #             DashIconify(icon="mdi:lightning-bolt-outline", width=8, color="white"),
-    #         )
-
-    # Make live interactivity badge clickable to toggle live mode
-    # @app.callback(
-    #     [
-    #         Output("live-interactivity-toggle", "checked", allow_duplicate=True),
-    #         Output("live-interactivity-store", "data", allow_duplicate=True),
-    #     ],
-    #     Input("live-interactivity-badge-clickable", "n_clicks"),
-    #     State("live-interactivity-toggle", "checked"),
-    #     prevent_initial_call=True,
-    # )
-    # def toggle_live_interactivity_from_badge(n_clicks, current_state):
-    #     """Toggle live interactivity when clicking on live interactivity badge."""
-    #     if n_clicks:
-    #         new_state = not current_state
-    #         return new_state, new_state
-    #     return dash.no_update, dash.no_update
-
-    # # Sync toggle and store on toggle change
-    # @app.callback(
-    #     Output("live-interactivity-store", "data", allow_duplicate=True),
-    #     Input("live-interactivity-toggle", "checked"),
-    #     prevent_initial_call=True,
-    # )
-    # def sync_live_interactivity_store(toggle_checked):
-    #     """Sync the live interactivity store when toggle changes."""
-    #     return toggle_checked
-
-    # @app.callback(
-    #     [
-    #         Output("reset-all-filters-button", "color"),
-    #         Output("reset-all-filters-button", "variant"),
-    #         Output("reset-all-filters-button", "leftSection"),
-    #     ],
-    #     Input("interactive-values-store", "data"),
-    #     prevent_initial_call=False,
-    # )
-    # def update_reset_button_style(interactive_values):
-    #     """Update reset button style and icon color based on filter activity."""
-    #     # Use INFO level logging so it's visible by default
-    #     # logger.debug(f"🔍 Reset button style check - interactive_values: {interactive_values}")
-
-    #     has_active_filters = _check_filter_activity(interactive_values)
-
-    #     if has_active_filters:
-    #         # Orange filled variant with white icon when filters are active
-    #         icon = DashIconify(icon="bx:reset", width=16, color="white")
-    #         return colors["orange"], "filled", icon
-    #     else:
-    #         # Gray subtle variant with gray icon when no filters
-    #         icon = DashIconify(icon="bx:reset", width=16, color="gray")
-    #         return "gray", "light", icon
-
-    # @app.callback(
-    #     Output("stored_metadata", "data"),
-    #     Input("url", "pathname"),  # Assuming you have a URL component triggering on page load
-    #     prevent_initial_call=True
-    # )
-    # def load_stored_metadata(pathname):
-    #     """
-    #     Load stored_metadata from MongoDB and store it in the 'stored_metadata' dcc.Store.
-    #     """
-    #     try:
-    #         dashboard_id = pathname.split("/")[-1]
-
-    #         from depictio.api.v1.db import dashboards_collection
-    #         dashboard = dashboards_collection.find_one({"dashboard_id": dashboard_id})
-    #         if not dashboard:
-    #             return dash.no_update
-
-    #         stored_metadata = dashboard.get("stored_metadata", [])
-    #         if not stored_metadata:
-    #             return []
-
-    #         return stored_metadata
-
-    #     except Exception as e:
-    #         return dash.no_update
-
     # =============================================================================
     # BURGER BUTTON CALLBACKS (DMC Burger for navbar toggle) - CLIENTSIDE
     # =============================================================================
@@ -553,6 +445,15 @@ def register_callbacks_header(app) -> None:
         """
         function(burger_opened, pathname) {
             console.log('🍔 CLIENTSIDE BURGER CLICK: opened=' + burger_opened + ', pathname=' + pathname);
+
+            // Skip initial mount - only respond to actual user clicks
+            // Use a window flag to track if burger has been initialized
+            if (typeof window._burgerInitialized === 'undefined') {
+                window._burgerInitialized = true;
+                console.log('🚫 Skipping initial burger mount (not a user click)');
+                return window.dash_clientside.no_update;
+            }
+
             // Only update on dashboard pages (viewer or editor app)
             if (!pathname || !(pathname.startsWith('/dashboard/') || pathname.startsWith('/dashboard-edit/'))) {
                 console.log('🚫 Ignoring burger click on non-dashboard page');
@@ -1075,6 +976,8 @@ def _create_header_stores(data: dict, owner: bool, viewer: bool) -> list[dcc.Sto
 def _create_header_left_section(data: dict) -> dmc.Group:
     """Create the left section of the header with burger, icon, and title.
 
+    For child tabs, displays "Dashboard Name > Tab Name" format.
+
     Args:
         data: Dashboard data dictionary.
 
@@ -1083,7 +986,7 @@ def _create_header_left_section(data: dict) -> dmc.Group:
     """
     burger_button = dmc.Burger(
         id="burger-button",
-        opened=False,
+        opened=True,  # Default to opened (navbar expanded) to match sidebar-collapsed=False
         size="md",
         color="gray",
         style={"marginRight": "10px"},
@@ -1110,14 +1013,46 @@ def _create_header_left_section(data: dict) -> dmc.Group:
             variant="filled",
         )
 
-    title = dmc.Title(
-        f"{data['title']}",
-        order=3,
-        id="dashboard-title",
-        fw="bold",
-        fz=20,
-        m=0,
-        style={"lineHeight": "1.2"},
+    # Build title: show "Dashboard / Tab" format for all dashboards
+    is_main_tab = data.get("is_main_tab", True)
+    dashboard_title = data["title"]
+
+    if is_main_tab:
+        # Main tab: show "Dashboard Title / Main" (or custom main_tab_name)
+        tab_name = data.get("main_tab_name") or "Main"
+    else:
+        # Child tab: show "Parent Dashboard / Tab Name"
+        dashboard_title = data.get("parent_dashboard_title", data["title"])
+        tab_name = data["title"]
+
+    title = dmc.Group(
+        [
+            dmc.Text(
+                dashboard_title,
+                fw="bold",
+                fz=20,
+                c="dimmed",
+                style={"lineHeight": "1.2"},
+            ),
+            dmc.Text(
+                "/",
+                fw="normal",
+                fz=18,
+                c="dimmed",
+                style={"lineHeight": "1.2", "margin": "0 4px"},
+            ),
+            dmc.Title(
+                tab_name,
+                order=3,
+                id="dashboard-title",
+                fw="bold",
+                fz=20,
+                m=0,
+                style={"lineHeight": "1.2"},
+            ),
+        ],
+        gap=0,
+        align="baseline",
     )
 
     return dmc.Group(
