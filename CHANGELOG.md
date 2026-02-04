@@ -6,13 +6,22 @@
 
 
 <details>
-<summary>Click to expand the changelog for 0.7.0</summary>
+<summary>Click to expand the changelog for 0.7.1-b1</summary>
 
 ### Changes 📜
 
 #### Other Changes 📝
 
-* Bump version: 0.7.0-b1 → 0.7.0 [5570d423]
+* Bump version: 0.7.0 → 0.7.1-b1 [3e67f3ae]
+* test(tabs): add unit tests for tab management functionality [c37c8f76]
+* refactor(tabs): simplify and consolidate tab management code [281afa42]
+* fix(header): use dashboard title instead of main_tab_name for parent [8e6344c1]
+* fix(models): add parent_dashboard_title field to DashboardData [9571bda3]
+* fix(header): add parent_dashboard_title to /get endpoint for child tabs [0d23ffcf]
+* feat(header): show dashboard/tab breadcrumb in header title [0af99d43]
+* feat(tabs): implement full tab CRUD with reordering and smart sidebar [d5b1fa70]
+* Update CHANGELOG.md for v0.7.0 [887a9f6a]
+* Bump version: 0.7.0-b1 → 0.7.0 [018efe42]
 * Update CHANGELOG.md for v0.7.0-b1 [9f644869]
 * Bump version: 0.6.3-b1 → 0.7.0-b1 [5225a069]
 
@@ -23,25 +32,7 @@
 
 For more details, please refer to the [documentation](https://depictio.github.io/depictio-docs/)
 
-ection failures [b28e9bcd]
-* fix(test): add explicit WebP MIME type handling for cross-platform support [b75c49fc]
-* test(ci): extend dashboard CLI testing with DB verification [534f4ce2]
-* fix(ci): use relative paths in image_demo project config [8074a28a]
-* test: add comprehensive unit tests for Image component changes [f83553c2]
-* test: move image_demo to test section and add CI validation [8af553b9]
-* Update CHANGELOG.md for v0.6.3-b1 [476f8881]
-* Bump version: 0.6.2 → 0.6.3-b1 [8e41b8b3]
-
-
-</details>
-
-### Documentation 📖
-
-For more details, please refer to the [documentation](https://depictio.github.io/depictio-docs/)
-
-ection logic and improve MinIO configuration in Helm charts [dce087f8]
-* fix: reduce storage sizes for MongoDB, MinIO, screenshots, and keys in Helm chart [cd1de3f8]
-* fix: update Helm chart version and clean up ingress annotations for better functionality [7e0180b1]
+otations for better functionality [7e0180b1]
 * fix: simplify CI workflow by removing redundant build strategy and enhancing image handling [7fd96fb2]
 * fix: refactor CI workflow to streamline Helm chart deployment and Docker image handling [e8f1bbf2]
 * fix: update default host configurations with correct service names for frontend and backend [48e8fd63]
