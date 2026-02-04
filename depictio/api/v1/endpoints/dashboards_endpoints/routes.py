@@ -14,6 +14,7 @@ from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.db import dashboards_collection, projects_collection
 from depictio.api.v1.endpoints.dashboards_endpoints.core_functions import (
     get_child_tabs,
+    get_parent_dashboard_title,
     load_dashboards_from_db,
     reorder_child_tabs,
     sync_tab_family_permissions,
@@ -208,14 +209,9 @@ async def get_dashboard(
     dashboard_dict = dashboard.model_dump()
 
     # For child tabs, fetch parent dashboard title for header display
-    if not dashboard_dict.get("is_main_tab", True) and dashboard_dict.get("parent_dashboard_id"):
-        parent_dashboard = dashboards_collection.find_one(
-            {"dashboard_id": ObjectId(str(dashboard_dict["parent_dashboard_id"]))},
-            {"title": 1},
-        )
-        if parent_dashboard:
-            # Use the actual dashboard title for the header
-            dashboard_dict["parent_dashboard_title"] = parent_dashboard.get("title", "Dashboard")
+    parent_title = get_parent_dashboard_title(dashboard_dict)
+    if parent_title:
+        dashboard_dict["parent_dashboard_title"] = parent_title
 
     return convert_objectid_to_str(dashboard_dict)
 
@@ -276,14 +272,9 @@ async def init_dashboard(
     dashboard_dict = dashboard.model_dump()
 
     # For child tabs, fetch parent dashboard title for header display
-    if not dashboard_dict.get("is_main_tab", True) and dashboard_dict.get("parent_dashboard_id"):
-        parent_dashboard = dashboards_collection.find_one(
-            {"dashboard_id": ObjectId(dashboard_dict["parent_dashboard_id"])},
-            {"title": 1},
-        )
-        if parent_dashboard:
-            # Use the actual dashboard title for the header
-            dashboard_dict["parent_dashboard_title"] = parent_dashboard.get("title", "Dashboard")
+    parent_title = get_parent_dashboard_title(dashboard_dict)
+    if parent_title:
+        dashboard_dict["parent_dashboard_title"] = parent_title
 
     response = {
         "dashboard": dashboard_dict,

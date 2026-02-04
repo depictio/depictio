@@ -4,6 +4,42 @@ import dash_mantine_components as dmc
 from dash import Input, Output, dcc, html
 from dash_iconify import DashIconify
 
+# Icon options for tab icon selection
+TAB_ICON_OPTIONS = [
+    {"value": "mdi:view-dashboard", "label": "Dashboard"},
+    {"value": "mdi:chart-line", "label": "Line Chart"},
+    {"value": "mdi:chart-bar", "label": "Bar Chart"},
+    {"value": "mdi:chart-pie", "label": "Pie Chart"},
+    {"value": "mdi:chart-scatter-plot", "label": "Scatter Plot"},
+    {"value": "mdi:table", "label": "Table"},
+    {"value": "mdi:filter", "label": "Analysis"},
+    {"value": "mdi:cog", "label": "Settings"},
+    {"value": "mdi:download", "label": "Download"},
+    {"value": "mdi:information", "label": "Information"},
+    {"value": "mdi:file-document", "label": "Document"},
+    {"value": "mdi:database", "label": "Database"},
+    {"value": "mdi:home", "label": "Home"},
+    {"value": "mdi:map", "label": "Map"},
+    {"value": "mdi:image", "label": "Image"},
+    {"value": "mdi:star", "label": "Star"},
+]
+
+# Color options for tab icon color picker
+TAB_COLOR_OPTIONS = [
+    {"value": "orange", "label": "Orange"},
+    {"value": "blue", "label": "Blue"},
+    {"value": "green", "label": "Green"},
+    {"value": "red", "label": "Red"},
+    {"value": "violet", "label": "Violet"},
+    {"value": "yellow", "label": "Yellow"},
+    {"value": "lime", "label": "Lime"},
+    {"value": "pink", "label": "Pink"},
+    {"value": "gray", "label": "Gray"},
+    {"value": "cyan", "label": "Cyan"},
+    {"value": "teal", "label": "Teal"},
+    {"value": "indigo", "label": "Indigo"},
+]
+
 
 def register_tab_modal_callbacks(app):
     """Register clientside callback for live icon preview."""
@@ -160,44 +196,14 @@ def create_tab_modal():
                                 id="tab-icon-select",
                                 label="Icon",
                                 value="mdi:view-dashboard",
-                                data=[
-                                    {"value": "mdi:view-dashboard", "label": "Dashboard"},
-                                    {"value": "mdi:chart-line", "label": "Line Chart"},
-                                    {"value": "mdi:chart-bar", "label": "Bar Chart"},
-                                    {"value": "mdi:chart-pie", "label": "Pie Chart"},
-                                    {"value": "mdi:chart-scatter-plot", "label": "Scatter Plot"},
-                                    {"value": "mdi:table", "label": "Table"},
-                                    {"value": "mdi:filter", "label": "Analysis"},
-                                    {"value": "mdi:cog", "label": "Settings"},
-                                    {"value": "mdi:download", "label": "Download"},
-                                    {"value": "mdi:information", "label": "Information"},
-                                    {"value": "mdi:file-document", "label": "Document"},
-                                    {"value": "mdi:database", "label": "Database"},
-                                    {"value": "mdi:home", "label": "Home"},
-                                    {"value": "mdi:map", "label": "Map"},
-                                    {"value": "mdi:image", "label": "Image"},
-                                    {"value": "mdi:star", "label": "Star"},
-                                ],
+                                data=TAB_ICON_OPTIONS,
                             ),
                             # Icon color picker (simple select dropdown)
                             dmc.Select(
                                 id="tab-icon-color-picker",
                                 label="Icon Color",
-                                value="orange",  # Default color
-                                data=[
-                                    {"value": "orange", "label": "Orange"},
-                                    {"value": "blue", "label": "Blue"},
-                                    {"value": "green", "label": "Green"},
-                                    {"value": "red", "label": "Red"},
-                                    {"value": "violet", "label": "Violet"},
-                                    {"value": "yellow", "label": "Yellow"},
-                                    {"value": "lime", "label": "Lime"},
-                                    {"value": "pink", "label": "Pink"},
-                                    {"value": "gray", "label": "Gray"},
-                                    {"value": "cyan", "label": "Cyan"},
-                                    {"value": "teal", "label": "Teal"},
-                                    {"value": "indigo", "label": "Indigo"},
-                                ],
+                                value="orange",
+                                data=TAB_COLOR_OPTIONS,
                             ),
                             # Live preview of selected icon with color
                             dmc.Paper(

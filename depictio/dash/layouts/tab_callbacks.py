@@ -43,14 +43,17 @@ def _extract_dashboard_id_from_pathname(pathname: str) -> tuple[str | None, bool
     Returns:
         Tuple of (dashboard_id, is_edit_mode) or (None, False) if invalid
     """
+    if not pathname:
+        return None, False
+
     try:
         if "/dashboard-edit/" in pathname:
             dashboard_id = pathname.split("/dashboard-edit/")[1].split("/")[0]
             return dashboard_id, True
-        else:
-            dashboard_id = pathname.split("/dashboard/")[1].split("/")[0]
-            is_edit_mode = "/edit" in pathname
-            return dashboard_id, is_edit_mode
+
+        dashboard_id = pathname.split("/dashboard/")[1].split("/")[0]
+        is_edit_mode = "/edit" in pathname
+        return dashboard_id, is_edit_mode
     except (IndexError, AttributeError):
         return None, False
 
@@ -78,6 +81,25 @@ def _fetch_dashboard(dashboard_id: str, token: str) -> dict | None:
     except Exception as e:
         logger.error(f"Error fetching dashboard {dashboard_id}: {e}")
         return None
+
+
+def _get_parent_dashboard_id(dashboard: dict, current_id: str) -> str:
+    """
+    Get the parent dashboard ID from dashboard data.
+
+    For main tabs, the current dashboard is the parent.
+    For child tabs, use the parent_dashboard_id field.
+
+    Args:
+        dashboard: Dashboard data dictionary
+        current_id: Current dashboard ID (used if this is a main tab)
+
+    Returns:
+        Parent dashboard ID as string
+    """
+    if dashboard.get("is_main_tab", True):
+        return current_id
+    return str(dashboard["parent_dashboard_id"])
 
 
 def _fetch_all_tabs(parent_id: str, token: str) -> list[dict]:
@@ -123,6 +145,22 @@ def _fetch_all_tabs(parent_id: str, token: str) -> list[dict]:
         return []
 
 
+def _create_add_tab_button():
+    """Create the '+ Add Tab' button for the sidebar."""
+    import dash_mantine_components as dmc
+
+    return dmc.TabsTab(
+        "Add Tab",
+        value="__add_tab__",
+        leftSection=DashIconify(icon="mdi:plus", color="grey", width=24),
+        style={
+            "width": "100%",
+            "fontSize": "16px",
+            "padding": "16px 16px",
+        },
+    )
+
+
 def _build_tab_item(
     tab: dict, is_edit_mode: bool = False, is_owner: bool = False, all_tabs: list | None = None
 ):
@@ -149,13 +187,9 @@ def _build_tab_item(
     else:
         tab_label = tab.get("title", "Untitled")
 
-    # For child tabs, use tab_icon/tab_icon_color; for main tabs use icon/icon_color
-    if is_main_tab:
-        icon_name = tab.get("tab_icon") or tab.get("icon", "mdi:view-dashboard")
-        icon_color = tab.get("tab_icon_color") or tab.get("icon_color", "orange")
-    else:
-        icon_name = tab.get("tab_icon") or tab.get("icon", "mdi:view-dashboard")
-        icon_color = tab.get("tab_icon_color") or tab.get("icon_color", "orange")
+    # Use tab_icon/tab_icon_color for both main and child tabs
+    icon_name = tab.get("tab_icon") or tab.get("icon", "mdi:view-dashboard")
+    icon_color = tab.get("tab_icon_color") or tab.get("icon_color", "orange")
 
     tab_dashboard_id = str(tab["dashboard_id"])
 
@@ -308,7 +342,6 @@ def register_tab_callbacks(app):
         Returns:
             tuple: (tab_items list, selected tab value, sidebar_collapsed)
         """
-        import dash_mantine_components as dmc
 
         # Early exits for non-applicable pages
         if pathname and ("/component/edit/" in pathname or "/component/add/" in pathname):
@@ -336,11 +369,7 @@ def register_tab_callbacks(app):
                 raise PreventUpdate
 
             # Determine parent dashboard ID
-            parent_id = (
-                dashboard_id
-                if current_dash.get("is_main_tab", True)
-                else str(current_dash["parent_dashboard_id"])
-            )
+            parent_id = _get_parent_dashboard_id(current_dash, dashboard_id)
 
             # Fetch all tabs (main + children) using dedicated endpoint
             tabs = _fetch_all_tabs(parent_id, token)
@@ -365,18 +394,7 @@ def register_tab_callbacks(app):
 
             # Add "+ Add Tab" button in edit mode for owners
             if is_edit_mode and is_owner:
-                tab_items.append(
-                    dmc.TabsTab(
-                        "Add Tab",
-                        value="__add_tab__",
-                        leftSection=DashIconify(icon="mdi:plus", color="grey", width=24),
-                        style={
-                            "width": "100%",
-                            "fontSize": "16px",
-                            "padding": "16px 16px",
-                        },
-                    )
-                )
+                tab_items.append(_create_add_tab_button())
 
             # Set sidebar collapsed based on tab count:
             # - 1 tab (main only): collapsed (True) - no need to show sidebar
@@ -687,11 +705,7 @@ def register_tab_callbacks(app):
             raise PreventUpdate
 
         # Determine parent dashboard ID
-        parent_id = (
-            current_dashboard_id
-            if current_dash.get("is_main_tab", True)
-            else str(current_dash["parent_dashboard_id"])
-        )
+        parent_id = _get_parent_dashboard_id(current_dash, current_dashboard_id)
 
         # Fetch all tabs and filter to only child tabs (for reordering)
         all_tabs = _fetch_all_tabs(parent_id, token)
@@ -774,20 +788,7 @@ def register_tab_callbacks(app):
 
         # Add "+ Add Tab" button in edit mode for owners
         if is_edit_mode and is_owner:
-            import dash_mantine_components as dmc
-
-            tab_items.append(
-                dmc.TabsTab(
-                    "Add Tab",
-                    value="__add_tab__",
-                    leftSection=DashIconify(icon="mdi:plus", color="grey", width=24),
-                    style={
-                        "width": "100%",
-                        "fontSize": "16px",
-                        "padding": "16px 16px",
-                    },
-                )
-            )
+            tab_items.append(_create_add_tab_button())
 
         return tab_items
 
@@ -941,10 +942,7 @@ def _update_existing_tab(
 def _create_new_tab(tab_name, tab_icon, tab_icon_color, pathname, dashboard_cache, local_data):
     """Create a new child tab (original create_tab logic)."""
     logger.info(
-        f"🎨 Creating new tab:\n"
-        f"   - tab_name: {tab_name}\n"
-        f"   - tab_icon: {tab_icon}\n"
-        f"   - tab_icon_color: {tab_icon_color}"
+        f"Creating new tab: tab_name={tab_name}, tab_icon={tab_icon}, tab_icon_color={tab_icon_color}"
     )
 
     if not local_data or "access_token" not in local_data:
@@ -953,19 +951,14 @@ def _create_new_tab(tab_name, tab_icon, tab_icon_color, pathname, dashboard_cach
 
     token = local_data["access_token"]
 
-    # Extract current dashboard ID from URL
-    if "/dashboard-edit/" in pathname:
-        current_dashboard_id = pathname.split("/dashboard-edit/")[1].split("/")[0]
-        is_edit_mode = True
-    else:
-        current_dashboard_id = pathname.split("/dashboard/")[1].split("/")[0]
-        is_edit_mode = "/edit" in pathname
+    # Extract current dashboard ID and edit mode from URL using helper
+    current_dashboard_id, is_edit_mode = _extract_dashboard_id_from_pathname(pathname)
+    if not current_dashboard_id:
+        logger.error("Failed to extract dashboard ID from pathname")
+        raise PreventUpdate
 
-    # Determine parent dashboard ID
-    if dashboard_cache.get("is_main_tab", True):
-        parent_id = current_dashboard_id
-    else:
-        parent_id = str(dashboard_cache["parent_dashboard_id"])
+    # Determine parent dashboard ID using helper
+    parent_id = _get_parent_dashboard_id(dashboard_cache, current_dashboard_id)
 
     # Get next tab order (count existing child tabs)
     all_dashboards_response = httpx.get(

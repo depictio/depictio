@@ -106,6 +106,32 @@ def reorder_child_tabs(
     return updated_count
 
 
+def get_parent_dashboard_title(dashboard_dict: dict) -> str | None:
+    """Get the parent dashboard title for a child tab.
+
+    Args:
+        dashboard_dict: Dashboard data dictionary (must be a child tab)
+
+    Returns:
+        Parent dashboard title, or None if not found or not a child tab
+    """
+    if dashboard_dict.get("is_main_tab", True):
+        return None
+
+    parent_id = dashboard_dict.get("parent_dashboard_id")
+    if not parent_id:
+        return None
+
+    parent_dashboard = dashboards_collection.find_one(
+        {"dashboard_id": ObjectId(str(parent_id))},
+        {"title": 1},
+    )
+    if not parent_dashboard:
+        return None
+
+    return parent_dashboard.get("title", "Dashboard")
+
+
 def load_dashboards_from_db(owner, admin_mode=False, user=None, include_child_tabs=False):
     """Load dashboards from MongoDB with project-based permissions."""
     projection = {
