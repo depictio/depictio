@@ -179,7 +179,7 @@ def get_project_visibility(project_id: PyObjectId) -> bool:
     return project.get("is_public", False)
 
 
-@dashboards_endpoint_router.get("/get/{dashboard_id}", response_model=DashboardData)
+@dashboards_endpoint_router.get("/get/{dashboard_id}")
 async def get_dashboard(
     dashboard_id: PyObjectId,
     current_user: User = Depends(get_user_or_anonymous),
@@ -187,6 +187,7 @@ async def get_dashboard(
     """
     Fetch dashboard data related to a dashboard ID.
     Now uses project-based permissions instead of dashboard-specific permissions.
+    For child tabs, includes parent_dashboard_title for header display.
     """
     dashboard_data = dashboards_collection.find_one({"dashboard_id": dashboard_id})
     if not dashboard_data:
@@ -203,7 +204,22 @@ async def get_dashboard(
             status_code=403, detail="You don't have permission to access this dashboard."
         )
 
-    return DashboardData.from_mongo(dashboard_data)
+    dashboard = DashboardData.from_mongo(dashboard_data)
+    dashboard_dict = dashboard.model_dump()
+
+    # For child tabs, fetch parent dashboard title for header display
+    if not dashboard_dict.get("is_main_tab", True) and dashboard_dict.get("parent_dashboard_id"):
+        parent_dashboard = dashboards_collection.find_one(
+            {"dashboard_id": ObjectId(str(dashboard_dict["parent_dashboard_id"]))},
+            {"title": 1, "main_tab_name": 1},
+        )
+        if parent_dashboard:
+            # Use main_tab_name if set, otherwise use title
+            dashboard_dict["parent_dashboard_title"] = parent_dashboard.get(
+                "main_tab_name"
+            ) or parent_dashboard.get("title", "Dashboard")
+
+    return convert_objectid_to_str(dashboard_dict)
 
 
 @dashboards_endpoint_router.get("/init/{dashboard_id}")
