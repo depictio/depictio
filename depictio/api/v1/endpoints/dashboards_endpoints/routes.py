@@ -1013,7 +1013,7 @@ async def get_tabs(
     # Get child tabs
     child_tabs = get_child_tabs(parent_dashboard_id)
 
-    # Build main tab entry
+    # Build main tab entry - include icon and icon_color for main tab display
     main_tab_entry = {
         "dashboard_id": str(main_tab["dashboard_id"]),
         "title": main_tab.get("title", "Untitled"),
@@ -1022,6 +1022,12 @@ async def get_tabs(
         "main_tab_name": main_tab.get("main_tab_name"),
         "tab_icon": main_tab.get("tab_icon"),
         "tab_icon_color": main_tab.get("tab_icon_color"),
+        # Dashboard's own icon and color (for main tab to inherit)
+        "icon": main_tab.get("icon", "mdi:view-dashboard"),
+        "icon_color": main_tab.get("icon_color", "orange"),
+        # Workflow info for auto-color derivation
+        "workflow_system": main_tab.get("workflow_system"),
+        "workflow_catalog": main_tab.get("workflow_catalog"),
     }
 
     return {

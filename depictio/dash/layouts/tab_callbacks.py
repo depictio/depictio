@@ -168,6 +168,7 @@ def _build_tab_item(
     is_owner: bool = False,
     all_tabs: list | None = None,
     workflow_data: dict | None = None,
+    parent_dashboard: dict | None = None,
 ):
     """
     Build a DMC TabsTab component from tab data.
@@ -178,6 +179,7 @@ def _build_tab_item(
         is_owner: Whether current user is an owner
         all_tabs: List of all tabs (for reorder button state)
         workflow_data: Optional workflow data for automatic color selection
+        parent_dashboard: Parent dashboard data (for main tab to inherit icon/color)
 
     Returns:
         DMC TabsTab component
@@ -193,18 +195,28 @@ def _build_tab_item(
     else:
         tab_label = tab.get("title", "Untitled")
 
-    # Use tab_icon/tab_icon_color for both main and child tabs
-    icon_name = tab.get("tab_icon") or tab.get("icon", "mdi:view-dashboard")
-
-    # For icon color: use explicit tab color if set, otherwise derive from workflow
-    explicit_color = tab.get("tab_icon_color") or tab.get("icon_color")
-    if explicit_color:
-        icon_color = explicit_color
-    elif workflow_data:
-        # Auto-derive color from workflow engine/catalog
-        icon_color = get_workflow_tab_color(workflow_data)
+    # Determine icon and color
+    if is_main_tab:
+        # Main tab: ALWAYS use dashboard's own icon and icon_color
+        # The main tab IS the dashboard, so it should match the dashboard's appearance
+        icon_name = tab.get("icon", "mdi:view-dashboard")
+        icon_color = tab.get("icon_color", "orange")
     else:
-        icon_color = "orange"  # Default
+        # Child tabs: use tab_icon/tab_icon_color if set
+        icon_name = tab.get("tab_icon") or tab.get("icon", "mdi:view-dashboard")
+        explicit_tab_color = tab.get("tab_icon_color")
+        if explicit_tab_color and explicit_tab_color != "":
+            # User explicitly set a tab color
+            icon_color = explicit_tab_color
+        elif workflow_data:
+            # Auto-derive from workflow (when tab_icon_color is not set or empty)
+            icon_color = get_workflow_tab_color(workflow_data)
+        else:
+            # Fall back to parent dashboard's icon_color
+            if parent_dashboard:
+                icon_color = parent_dashboard.get("icon_color", "orange")
+            else:
+                icon_color = tab.get("icon_color", "orange")
 
     tab_dashboard_id = str(tab["dashboard_id"])
 
@@ -330,6 +342,7 @@ def register_tab_callbacks(app):
             Output("sidebar-tabs-list", "children"),
             Output("sidebar-tabs", "value"),
             Output("sidebar-collapsed", "data"),
+            Output("sidebar-tabs", "color"),
         ],
         [
             Input("url", "pathname"),
@@ -349,13 +362,15 @@ def register_tab_callbacks(app):
         - 1 tab (main only): collapsed (True)
         - 2+ tabs: expanded (False)
 
+        Updates the tabs selection color to match the dashboard's icon_color.
+
         Args:
             pathname: Current URL pathname
             dashboard_cache: Cached dashboard data
             local_data: Local storage data containing access token
 
         Returns:
-            tuple: (tab_items list, selected tab value, sidebar_collapsed)
+            tuple: (tab_items list, selected tab value, sidebar_collapsed, tabs_color)
         """
 
         # Early exits for non-applicable pages
@@ -397,21 +412,38 @@ def register_tab_callbacks(app):
 
             # Determine if user is owner for edit controls
             is_owner = False
-            workflow_data = None
             if is_edit_mode and dashboard_cache:
                 user_permissions = dashboard_cache.get("user_permissions", {})
                 is_owner = user_permissions.get("level") == "owner"
 
+            # Get parent dashboard (main tab) for workflow data and icon inheritance
+            parent_dashboard = tabs[0] if tabs else None
+
             # Try to get workflow data for automatic tab color
-            if dashboard_cache:
-                # Check for workflow info in dashboard cache
-                workflow_system = dashboard_cache.get("workflow_system")
-                if workflow_system and workflow_system != "none":
-                    # Construct workflow-like data for color lookup
-                    workflow_data = {
-                        "engine": {"name": workflow_system},
-                        "catalog": dashboard_cache.get("workflow_catalog"),
-                    }
+            # Check parent dashboard first, then fall back to dashboard_cache
+            workflow_data = None
+            workflow_system = None
+
+            if parent_dashboard:
+                workflow_system = parent_dashboard.get("workflow_system")
+
+            if not workflow_system or workflow_system == "none":
+                # Fall back to dashboard_cache
+                if dashboard_cache:
+                    workflow_system = dashboard_cache.get("workflow_system")
+
+            if workflow_system and workflow_system != "none":
+                # Construct workflow-like data for color lookup
+                workflow_catalog = None
+                if parent_dashboard:
+                    workflow_catalog = parent_dashboard.get("workflow_catalog")
+                if not workflow_catalog and dashboard_cache:
+                    workflow_catalog = dashboard_cache.get("workflow_catalog")
+
+                workflow_data = {
+                    "engine": {"name": workflow_system},
+                    "catalog": workflow_catalog,
+                }
 
             # Build tab items using helper function with edit controls in edit mode
             tab_items = [
@@ -421,6 +453,7 @@ def register_tab_callbacks(app):
                     is_owner=is_owner,
                     all_tabs=tabs,
                     workflow_data=workflow_data,
+                    parent_dashboard=parent_dashboard,
                 )
                 for tab in tabs
             ]
@@ -434,7 +467,12 @@ def register_tab_callbacks(app):
             # - 2+ tabs: expanded (False) - show tabs for navigation
             sidebar_collapsed = len(tabs) <= 1
 
-            return tab_items, dashboard_id, sidebar_collapsed
+            # Get tabs selection color from parent dashboard's icon_color
+            tabs_color = "orange"  # Default
+            if parent_dashboard:
+                tabs_color = parent_dashboard.get("icon_color", "orange")
+
+            return tab_items, dashboard_id, sidebar_collapsed, tabs_color
 
         except PreventUpdate:
             raise
@@ -807,19 +845,35 @@ def register_tab_callbacks(app):
 
         # Determine if user is owner for edit controls
         is_owner = False
-        workflow_data = None
         if is_edit_mode and dashboard_cache:
             user_permissions = dashboard_cache.get("user_permissions", {})
             is_owner = user_permissions.get("level") == "owner"
 
+        # Get parent dashboard (main tab) for workflow data and icon inheritance
+        parent_dashboard = updated_tabs[0] if updated_tabs else None
+
         # Try to get workflow data for automatic tab color
-        if dashboard_cache:
-            workflow_system = dashboard_cache.get("workflow_system")
-            if workflow_system and workflow_system != "none":
-                workflow_data = {
-                    "engine": {"name": workflow_system},
-                    "catalog": dashboard_cache.get("workflow_catalog"),
-                }
+        workflow_data = None
+        workflow_system = None
+
+        if parent_dashboard:
+            workflow_system = parent_dashboard.get("workflow_system")
+
+        if not workflow_system or workflow_system == "none":
+            if dashboard_cache:
+                workflow_system = dashboard_cache.get("workflow_system")
+
+        if workflow_system and workflow_system != "none":
+            workflow_catalog = None
+            if parent_dashboard:
+                workflow_catalog = parent_dashboard.get("workflow_catalog")
+            if not workflow_catalog and dashboard_cache:
+                workflow_catalog = dashboard_cache.get("workflow_catalog")
+
+            workflow_data = {
+                "engine": {"name": workflow_system},
+                "catalog": workflow_catalog,
+            }
 
         # Build updated tab items
         tab_items = [
@@ -829,6 +883,7 @@ def register_tab_callbacks(app):
                 is_owner=is_owner,
                 all_tabs=updated_tabs,
                 workflow_data=workflow_data,
+                parent_dashboard=parent_dashboard,
             )
             for tab in updated_tabs
         ]
