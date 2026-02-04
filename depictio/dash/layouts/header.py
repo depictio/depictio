@@ -1013,47 +1013,70 @@ def _create_header_left_section(data: dict) -> dmc.Group:
             variant="filled",
         )
 
-    # Build title: show "Dashboard / Tab" format for all dashboards
+    # Build title: show "Dashboard / Tab" format only when meaningful
+    # For main tabs with no custom name and no child tabs, just show dashboard title
     is_main_tab = data.get("is_main_tab", True)
     dashboard_title = data["title"]
+    custom_main_tab_name = data.get("main_tab_name")
 
     if is_main_tab:
-        # Main tab: show "Dashboard Title / Main" (or custom main_tab_name)
-        tab_name = data.get("main_tab_name") or "Main"
+        # Main tab: only show "/ Main" if user set a custom main_tab_name
+        # Otherwise, just show the dashboard title (cleaner for single-tab dashboards)
+        if custom_main_tab_name:
+            # User customized the main tab name, show it
+            tab_name = custom_main_tab_name
+            show_tab_separator = True
+        else:
+            # No custom name - just show dashboard title without "/ Main"
+            tab_name = None
+            show_tab_separator = False
     else:
-        # Child tab: show "Parent Dashboard / Tab Name"
+        # Child tab: always show "Parent Dashboard / Tab Name"
         dashboard_title = data.get("parent_dashboard_title", data["title"])
         tab_name = data["title"]
+        show_tab_separator = True
 
-    title = dmc.Group(
-        [
-            dmc.Text(
-                dashboard_title,
-                fw="bold",
-                fz=20,
-                c="dimmed",
-                style={"lineHeight": "1.2"},
-            ),
-            dmc.Text(
-                "/",
-                fw="normal",
-                fz=18,
-                c="dimmed",
-                style={"lineHeight": "1.2", "margin": "0 4px"},
-            ),
-            dmc.Title(
-                tab_name,
-                order=3,
-                id="dashboard-title",
-                fw="bold",
-                fz=20,
-                m=0,
-                style={"lineHeight": "1.2"},
-            ),
-        ],
-        gap=0,
-        align="baseline",
-    )
+    if show_tab_separator and tab_name:
+        title = dmc.Group(
+            [
+                dmc.Text(
+                    dashboard_title,
+                    fw="bold",
+                    fz=20,
+                    c="dimmed",
+                    style={"lineHeight": "1.2"},
+                ),
+                dmc.Text(
+                    "/",
+                    fw="normal",
+                    fz=18,
+                    c="dimmed",
+                    style={"lineHeight": "1.2", "margin": "0 4px"},
+                ),
+                dmc.Title(
+                    tab_name,
+                    order=3,
+                    id="dashboard-title",
+                    fw="bold",
+                    fz=20,
+                    m=0,
+                    style={"lineHeight": "1.2"},
+                ),
+            ],
+            gap=0,
+            align="baseline",
+        )
+    else:
+        # Just show dashboard title (no tab separator)
+        title = dmc.Title(
+            dashboard_title,
+            order=3,
+            id="dashboard-title",
+            fw="bold",
+            fz=20,
+            m=0,
+            style={"lineHeight": "1.2"},
+        )
 
     return dmc.Group(
         [burger_button, icon_component, title],

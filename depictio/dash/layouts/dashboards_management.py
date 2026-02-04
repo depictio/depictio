@@ -34,6 +34,7 @@ from depictio.dash.colors import colors  # Import Depictio color palette
 from depictio.dash.layouts.layouts_toolbox import (
     create_dashboard_modal,
     create_delete_confirmation_modal,
+    create_edit_dashboard_modal,
     get_workflow_icon_color,
     get_workflow_icon_mapping,
 )
@@ -210,46 +211,51 @@ def delete_dashboard(dashboard_id: str, token: str) -> None:
         raise ValueError(f"Failed to delete dashboard from the database. Error: {response.text}")
 
 
-def edit_dashboard_name(new_name: str, dashboard_id: str, dashboards: list, token: str) -> list:
+def edit_dashboard(
+    dashboard_id: str,
+    updates: dict,
+    dashboards: list,
+    token: str,
+) -> list:
     """
-    Edit the name of a dashboard and update in database.
+    Edit dashboard properties and update in database.
 
     Args:
-        new_name: New name for the dashboard.
-        dashboard_id: Unique identifier of the dashboard to rename.
+        dashboard_id: Unique identifier of the dashboard to edit.
+        updates: Dictionary with fields to update (title, subtitle, icon, icon_color, workflow_system).
         dashboards: List of dashboard objects to update locally.
         token: Authentication token for API access.
 
     Returns:
-        list: Updated list of dashboards with the renamed dashboard.
+        list: Updated list of dashboards with the edited dashboard.
 
     Raises:
         ValueError: If API request fails.
     """
-    logger.info(f"Editing dashboard name for dashboard ID: {dashboard_id}")
+    logger.info(f"Editing dashboard for dashboard ID: {dashboard_id}")
+    logger.debug(f"Updates: {updates}")
 
-    updated_dashboards = list()
-
-    # Iterate over the dashboards to find the dashboard with the matching ID and update the name
+    # Update local dashboard objects
+    editable_fields = ("title", "subtitle", "icon", "icon_color", "workflow_system")
     for dashboard in dashboards:
-        if dashboard.dashboard_id == dashboard_id:
+        if str(dashboard.dashboard_id) == str(dashboard_id):
             logger.debug(f"Found dashboard to edit: {dashboard}")
-            dashboard.title = new_name
-        updated_dashboards.append(dashboard)
+            for field in editable_fields:
+                if field in updates:
+                    setattr(dashboard, field, updates[field])
 
+    # Persist to database
     response = httpx.post(
-        f"{API_BASE_URL}/depictio/api/v1/dashboards/edit_name/{dashboard_id}",
+        f"{API_BASE_URL}/depictio/api/v1/dashboards/edit/{dashboard_id}",
         headers={"Authorization": f"Bearer {token}"},
-        json={"new_name": new_name},
+        json=updates,
     )
 
-    if response.status_code == 200:
-        logger.info(f"Successfully edited dashboard name: {dashboard}")
+    if response.status_code != 200:
+        raise ValueError(f"Failed to edit dashboard in the database. Error: {response.text}")
 
-    else:
-        raise ValueError(f"Failed to edit dashboard name in the database. Error: {response.text}")
-
-    return updated_dashboards
+    logger.info(f"Successfully edited dashboard: {dashboard_id}")
+    return dashboards
 
 
 def render_welcome_section(email: str, is_anonymous: bool = False) -> dmc.Grid:
@@ -452,124 +458,31 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
         # Create project cache to avoid redundant API calls
         project_cache = {}
 
-        def modal_edit_name_dashboard(dashboard):
+        def modal_edit_dashboard(dashboard):
             """
-            Create a modal dialog for editing a dashboard's name.
+            Create a modal dialog for editing a dashboard's properties.
 
-            Generates a styled modal with a text input field for entering
-            a new dashboard name, along with Cancel and Save buttons.
-            The modal includes proper styling, icons, and error message
-            placeholder for validation feedback.
+            Generates a comprehensive modal for editing all dashboard properties:
+            title, subtitle, icon, icon_color, and workflow_system.
 
             Args:
-                dashboard: Dashboard dictionary containing at minimum the
-                    'dashboard_id' key used for component ID indexing.
+                dashboard: Dashboard dictionary containing dashboard properties
+                    including dashboard_id, title, subtitle, icon, icon_color,
+                    and workflow_system.
 
             Returns:
-                dmc.Modal: A Mantine modal component with:
-                    - Header with rename icon and title
-                    - Text input field for new dashboard name
-                    - Error message text (initially hidden)
-                    - Cancel and Save action buttons
+                dmc.Modal: A Mantine modal component with full edit capabilities.
                     The modal uses pattern-matching IDs based on dashboard_id
                     for callback routing.
             """
-            modal = dmc.Modal(
-                id={"type": "edit-password-modal", "index": dashboard["dashboard_id"]},
+            modal, _ = create_edit_dashboard_modal(
+                dashboard_id=dashboard["dashboard_id"],
+                title=dashboard.get("title", ""),
+                subtitle=dashboard.get("subtitle", ""),
+                icon=dashboard.get("icon", "mdi:view-dashboard"),
+                icon_color=dashboard.get("icon_color", "orange"),
+                workflow_system=dashboard.get("workflow_system", "none"),
                 opened=False,
-                centered=True,
-                withCloseButton=False,
-                # overlayOpacity=0.55,
-                # overlayBlur=3,
-                overlayProps={
-                    "overlayOpacity": 0.55,
-                    "overlayBlur": 3,
-                },
-                shadow="xl",
-                radius="md",
-                size="md",
-                zIndex=1000,
-                styles={
-                    "modal": {
-                        "padding": "24px",
-                    }
-                },
-                children=[
-                    dmc.Stack(
-                        gap="lg",
-                        children=[
-                            # Header with icon and title
-                            dmc.Group(
-                                justify="flex-start",
-                                gap="sm",
-                                children=[
-                                    DashIconify(
-                                        icon="mdi:rename-box",
-                                        width=28,
-                                        height=28,
-                                        color="#228be6",  # Dash Mantine blue color
-                                    ),
-                                    dmc.Title(
-                                        "Edit Dashboard Name",
-                                        order=4,
-                                        style={"margin": 0},
-                                    ),
-                                ],
-                            ),
-                            # Divider
-                            dmc.Divider(),
-                            # Text input field
-                            dmc.TextInput(
-                                placeholder="Enter new dashboard name",
-                                label="Dashboard Name",
-                                id={
-                                    "type": "new-name-dashboard",
-                                    "index": dashboard["dashboard_id"],
-                                },
-                                radius="md",
-                                size="md",
-                            ),
-                            # Error message
-                            dmc.Text(
-                                id={
-                                    "type": "message-edit-name-dashboard",
-                                    "index": dashboard["dashboard_id"],
-                                },
-                                c="red",
-                                size="sm",
-                                style={"display": "none"},
-                            ),
-                            # Buttons
-                            dmc.Group(
-                                justify="flex-end",
-                                gap="md",
-                                mt="md",
-                                children=[
-                                    dmc.Button(
-                                        "Cancel",
-                                        id={
-                                            "type": "cancel-edit-name-dashboard",
-                                            "index": dashboard["dashboard_id"],
-                                        },
-                                        color="gray",
-                                        variant="outline",
-                                        radius="md",
-                                    ),
-                                    dmc.Button(
-                                        "Save",
-                                        id={
-                                            "type": "save-edit-name-dashboard",
-                                            "index": dashboard["dashboard_id"],
-                                        },
-                                        color="blue",
-                                        radius="md",
-                                        leftSection=DashIconify(icon="mdi:content-save", width=16),
-                                    ),
-                                ],
-                            ),
-                        ],
-                    ),
-                ],
             )
             return modal
 
@@ -909,7 +822,7 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
                                 href=f"/dashboard/{dashboard['dashboard_id']}",
                             ),
                             dmc.Button(
-                                "Edit name",
+                                "Edit",
                                 id={
                                     "type": "edit-dashboard-button",
                                     "index": dashboard["dashboard_id"],
@@ -1372,7 +1285,7 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
                     item_id=dashboard["dashboard_id"],
                     title=f"Delete dashboard : {dashboard['title']}",
                 )
-                edit_name_modal = modal_edit_name_dashboard(dashboard)
+                edit_modal = modal_edit_dashboard(dashboard)
                 buttons = create_buttons(dashboard, user_id, current_user)
                 dashboard_header = create_dashboad_view_header(dashboard, user_id, token)
 
@@ -1451,7 +1364,7 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
                             dashboard_header,
                             buttons,
                             delete_modal,
-                            edit_name_modal,
+                            edit_modal,
                         ],
                     )
                 )
@@ -1865,6 +1778,58 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
             logger.error(f"Exception in load_projects: {e}")
             return []
 
+    def build_icon_preview(
+        icon_name: str | None, icon_color: str | None, workflow_system: str | None
+    ) -> tuple:
+        """
+        Build icon preview component based on icon settings.
+
+        When a workflow system is selected (not "none"), automatically uses the
+        workflow-specific logo image and color. Otherwise uses custom icon settings.
+
+        Args:
+            icon_name: Icon identifier from Iconify (e.g., "mdi:chart-line") or image path.
+            icon_color: Color name for the icon (e.g., "orange", "blue").
+            workflow_system: Selected workflow system (e.g., "nextflow", "snakemake", "none").
+
+        Returns:
+            Tuple of (preview component, resolved icon name, resolved color, color_disabled).
+        """
+        allowed_colors = ("blue", "teal", "orange", "red", "purple", "pink", "green", "gray")
+        workflow_icons = get_workflow_icon_mapping()
+        workflow_colors = get_workflow_icon_color()
+
+        # Workflow system overrides custom icon settings
+        if workflow_system and workflow_system != "none":
+            icon_name = workflow_icons.get(workflow_system, "mdi:view-dashboard")
+            icon_color = workflow_colors.get(workflow_system, "orange")
+            color_disabled = True
+        else:
+            # Apply defaults for custom icon mode
+            if not icon_name or not icon_name.strip():
+                icon_name = "mdi:view-dashboard"
+            if icon_color not in allowed_colors:
+                icon_color = "orange"
+            color_disabled = False
+
+        # Build preview component based on icon type
+        if icon_name and icon_name.startswith("/assets/"):
+            preview = html.Img(
+                src=icon_name,
+                style={"width": "32px", "height": "32px", "objectFit": "contain"},
+            )
+        else:
+            preview = dmc.ActionIcon(
+                DashIconify(icon=icon_name, width=24, height=24),
+                color=icon_color,
+                radius="xl",
+                size="lg",
+                variant="filled",
+                disabled=color_disabled,
+            )
+
+        return preview, icon_name, icon_color, color_disabled
+
     @app.callback(
         [
             Output("dashboard-icon-preview", "children"),
@@ -1880,82 +1845,26 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
         prevent_initial_call=True,
     )
     def update_icon_preview(icon_name, icon_color, workflow_system):
-        """
-        Update the dashboard icon preview in real-time as users modify icon settings.
-        When a workflow system is selected, automatically set the appropriate workflow logo image.
+        """Update the dashboard creation modal icon preview."""
+        return build_icon_preview(icon_name, icon_color, workflow_system)
 
-        Args:
-            icon_name: Icon identifier from Iconify (e.g., "mdi:chart-line") or image path
-            icon_color: Color name for the icon (e.g., "orange", "blue")
-            workflow_system: Selected workflow system (e.g., "nextflow", "snakemake", "nf-core", "none")
-
-        Returns:
-            Tuple of (preview component, icon value, color value)
-        """
-        # Get workflow mappings
-        workflow_icons = get_workflow_icon_mapping()
-        workflow_colors = get_workflow_icon_color()
-
-        # Check if a workflow system is selected (not "none")
-        if workflow_system and workflow_system != "none":
-            # Override with workflow-specific logo image path and color
-            icon_name = workflow_icons.get(workflow_system, "mdi:view-dashboard")
-            icon_color = workflow_colors.get(workflow_system, "orange")
-
-            # For workflows, use html.Img instead of DashIconify
-            if icon_name and icon_name.startswith("/assets/"):
-                preview = html.Img(
-                    src=icon_name,
-                    style={
-                        "width": "32px",
-                        "height": "32px",
-                        "objectFit": "contain",
-                    },
-                )
-            else:
-                # Wrap in ActionIcon for consistent UX
-                preview = dmc.ActionIcon(
-                    DashIconify(
-                        icon=icon_name,
-                        width=24,
-                        height=24,
-                    ),
-                    color=icon_color,
-                    radius="xl",
-                    size="lg",
-                    variant="filled",
-                    disabled=True,  # Not clickable - just a preview
-                )
-            # Disable color selector when workflow is selected
-            color_disabled = True
-        else:
-            # Use custom icon/color settings
-            # Default values if inputs are empty/None
-            if not icon_name or icon_name.strip() == "":
-                icon_name = "mdi:view-dashboard"
-
-            # Validate color is in allowed list, default to orange if not
-            allowed_colors = ["blue", "teal", "orange", "red", "purple", "pink", "green", "gray"]
-            if icon_color not in allowed_colors:
-                icon_color = "orange"
-
-            # Wrap in ActionIcon for consistent UX
-            preview = dmc.ActionIcon(
-                DashIconify(
-                    icon=icon_name,
-                    width=24,
-                    height=24,
-                ),
-                color=icon_color,
-                radius="xl",
-                size="lg",
-                variant="filled",
-                disabled=False,
-            )
-            # Enable color selector when no workflow is selected
-            color_disabled = False
-
-        return preview, icon_name, icon_color, color_disabled
+    @app.callback(
+        [
+            Output({"type": "edit-dashboard-icon-preview", "index": MATCH}, "children"),
+            Output({"type": "edit-dashboard-icon", "index": MATCH}, "value"),
+            Output({"type": "edit-dashboard-icon-color", "index": MATCH}, "value"),
+            Output({"type": "edit-dashboard-icon-color", "index": MATCH}, "disabled"),
+        ],
+        [
+            Input({"type": "edit-dashboard-icon", "index": MATCH}, "value"),
+            Input({"type": "edit-dashboard-icon-color", "index": MATCH}, "value"),
+            Input({"type": "edit-dashboard-workflow", "index": MATCH}, "value"),
+        ],
+        prevent_initial_call=True,
+    )
+    def update_edit_icon_preview(icon_name, icon_color, workflow_system):
+        """Update the dashboard edit modal icon preview."""
+        return build_icon_preview(icon_name, icon_color, workflow_system)
 
     @app.callback(
         Output({"type": "dashboard-list", "index": ALL}, "children"),
@@ -1963,7 +1872,7 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
         [
             # Input({"type": "cancel-dashboard-delete-button", "index": ALL}, "n_clicks"),
             Input({"type": "confirm-dashboard-delete-button", "index": ALL}, "n_clicks"),
-            Input({"type": "save-edit-name-dashboard", "index": ALL}, "n_clicks"),
+            Input({"type": "save-edit-dashboard", "index": ALL}, "n_clicks"),
             Input({"type": "duplicate-dashboard-button", "index": ALL}, "n_clicks"),
             Input({"type": "make-public-dashboard-button", "index": ALL}, "n_clicks"),
             Input({"type": "make-public-dashboard-button", "index": ALL}, "children"),
@@ -1973,8 +1882,17 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
             State({"type": "create-dashboard-button", "index": ALL}, "id"),
             # State({"type": "dashboard-index-store", "index": ALL}, "data"),
             State({"type": "confirm-dashboard-delete-button", "index": ALL}, "index"),
-            State({"type": "new-name-dashboard", "index": ALL}, "value"),
-            State({"type": "new-name-dashboard", "index": ALL}, "id"),
+            # Edit dashboard states
+            State({"type": "edit-dashboard-title", "index": ALL}, "value"),
+            State({"type": "edit-dashboard-title", "index": ALL}, "id"),
+            State({"type": "edit-dashboard-subtitle", "index": ALL}, "value"),
+            State({"type": "edit-dashboard-subtitle", "index": ALL}, "id"),
+            State({"type": "edit-dashboard-icon", "index": ALL}, "value"),
+            State({"type": "edit-dashboard-icon", "index": ALL}, "id"),
+            State({"type": "edit-dashboard-icon-color", "index": ALL}, "value"),
+            State({"type": "edit-dashboard-icon-color", "index": ALL}, "id"),
+            State({"type": "edit-dashboard-workflow", "index": ALL}, "value"),
+            State({"type": "edit-dashboard-workflow", "index": ALL}, "id"),
             State("local-store", "data"),
             Input("dashboard-modal-store", "data"),
         ],
@@ -1990,29 +1908,46 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
         # create_ids_list,
         store_data_list,
         delete_ids_list,
-        new_name_list_values,
-        new_name_list_ids,
+        # Edit dashboard values
+        edit_title_values,
+        edit_title_ids,
+        edit_subtitle_values,
+        edit_subtitle_ids,
+        edit_icon_values,
+        edit_icon_ids,
+        edit_icon_color_values,
+        edit_icon_color_ids,
+        edit_workflow_values,
+        edit_workflow_ids,
         user_data,
         modal_data,
     ):
         """
         Main callback for dashboard list updates.
 
-        Handles all dashboard actions: creation, deletion, duplication, name editing,
+        Handles all dashboard actions: creation, deletion, duplication, editing,
         and public/private status toggling. Routes to appropriate handler based on
         which button triggered the callback.
 
         Args:
             delete_n_clicks_list: Click counts for delete confirmation buttons.
-            edit_n_clicks_list: Click counts for save name edit buttons.
+            edit_n_clicks_list: Click counts for save edit buttons.
             duplicate_n_clicks_list: Click counts for duplicate buttons.
             make_public_n_clicks_list: Click counts for public/private toggle buttons.
             make_public_children_list: Button text for public/private buttons.
             make_public_id_list: IDs for public/private buttons.
             store_data_list: Dashboard store data list.
             delete_ids_list: IDs of dashboards to delete.
-            new_name_list_values: New name input values.
-            new_name_list_ids: IDs for name input fields.
+            edit_title_values: Edit dashboard title values.
+            edit_title_ids: IDs for title input fields.
+            edit_subtitle_values: Edit dashboard subtitle values.
+            edit_subtitle_ids: IDs for subtitle input fields.
+            edit_icon_values: Edit dashboard icon values.
+            edit_icon_ids: IDs for icon input fields.
+            edit_icon_color_values: Edit dashboard icon color values.
+            edit_icon_color_ids: IDs for icon color select fields.
+            edit_workflow_values: Edit dashboard workflow values.
+            edit_workflow_ids: IDs for workflow select fields.
             user_data: User session data with access token.
             modal_data: Dashboard creation modal data.
 
@@ -2101,19 +2036,29 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
                 public_current_status,
             )
 
-        if ctx.triggered_id.get("type") == "save-edit-name-dashboard":
-            # Extract the new name from the input field
+        if ctx.triggered_id.get("type") == "save-edit-dashboard":
             index = ctx.triggered_id["index"]
 
-            # Iterate over the new_name_list to find the new name corresponding to the index
-            new_name = [
-                value
-                for value, id in zip(new_name_list_values, new_name_list_ids)
-                if id["index"] == index
-            ][0]
+            # Build lookup dict: field_name -> (values_list, ids_list)
+            field_inputs = {
+                "title": (edit_title_values, edit_title_ids),
+                "subtitle": (edit_subtitle_values, edit_subtitle_ids),
+                "icon": (edit_icon_values, edit_icon_ids),
+                "icon_color": (edit_icon_color_values, edit_icon_color_ids),
+                "workflow_system": (edit_workflow_values, edit_workflow_ids),
+            }
 
-            return handle_dashboard_edit(
-                new_name, dashboards, user_data, store_data_list, current_userbase
+            # Extract values by matching index and filter out None values
+            updates = {}
+            for field_name, (values, ids) in field_inputs.items():
+                for value, id_dict in zip(values, ids):
+                    if str(id_dict["index"]) == str(index):
+                        if value is not None:
+                            updates[field_name] = value
+                        break
+
+            return handle_dashboard_edit_full(
+                index, updates, dashboards, user_data, store_data_list, current_userbase
             )
 
         return generate_dashboard_view_response(
@@ -2183,33 +2128,23 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
         logger.info("Make public dashboard button clicked")
         ctx_triggered_dict = ctx.triggered[0]
         index_make_public = eval(ctx_triggered_dict["prop_id"].split(".")[0])["index"]
+        new_status = not public_current_status
 
-        updated_dashboards = list()
         for dashboard in dashboards:
             if str(dashboard.dashboard_id) == str(index_make_public):
                 response = httpx.post(
                     f"{API_BASE_URL}/depictio/api/v1/dashboards/toggle_public_status/{index_make_public}",
                     headers={"Authorization": f"Bearer {user_data['access_token']}"},
-                    json={"is_public": not public_current_status},
+                    json={"is_public": new_status},
                 )
                 if response.status_code != 200:
                     raise ValueError(f"Failed to update dashboard status. Error: {response.text}")
                 dashboard.is_public = response.json()["is_public"]
-                # dashboard.permissions = response.json()["permissions"]
-                updated_dashboards.append(dashboard)
-
-                if response.status_code == 200:
-                    logger.debug(
-                        f"Successfully made dashboard '{not public_current_status}': {dashboard}"
-                    )
-
-                else:
-                    raise ValueError(f"Failed to make dashboard public. Error: {response.text}")
-            else:
-                updated_dashboards.append(dashboard)
+                logger.debug(f"Successfully made dashboard '{new_status}': {dashboard}")
+                break
 
         return generate_dashboard_view_response(
-            updated_dashboards, store_data_list, current_userbase, user_data
+            dashboards, store_data_list, current_userbase, user_data
         )
 
     def handle_dashboard_duplication(dashboards, user_data, store_data_list, current_userbase):
@@ -2303,18 +2238,33 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
         )
         # return generate_dashboard_view_response(updated_dashboards, len(updated_dashboards) + 1, store_data_list, current_userbase)
 
-    def handle_dashboard_edit(new_name, dashboards, user_data, store_data_list, current_userbase):
-        logger.info("Edit dashboard button clicked")
-        ctx_triggered_dict = ctx.triggered[0]
-        index_edit = eval(ctx_triggered_dict["prop_id"].split(".")[0])["index"]
-        updated_dashboards = edit_dashboard_name(
-            new_name, index_edit, dashboards, user_data["access_token"]
+    def handle_dashboard_edit_full(
+        dashboard_id, updates, dashboards, user_data, store_data_list, current_userbase
+    ):
+        """
+        Handle editing a dashboard with all fields (title, subtitle, icon, icon_color, workflow_system).
+
+        Args:
+            dashboard_id: The dashboard ID to edit.
+            updates: Dictionary of fields to update.
+            dashboards: List of current dashboard objects.
+            user_data: User session data with access token.
+            store_data_list: Dashboard store data list.
+            current_userbase: Current user base object.
+
+        Returns:
+            list: Updated dashboard view components.
+        """
+        logger.info(f"Edit dashboard button clicked for dashboard: {dashboard_id}")
+        logger.debug(f"Updates: {updates}")
+
+        updated_dashboards = edit_dashboard(
+            dashboard_id, updates, dashboards, user_data["access_token"]
         )
 
         return generate_dashboard_view_response(
             updated_dashboards, store_data_list, current_userbase, user_data
         )
-        # return generate_dashboard_view_response(updated_dashboards, len(updated_dashboards) + 1, store_data_list, current_userbase)
 
     def generate_dashboard_view_response(dashboards, store_data_list, current_userbase, user_data):
         dashboards = [convert_objectid_to_str(dashboard.mongo()) for dashboard in dashboards]
@@ -2325,23 +2275,25 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
         return [dashboards_view] * len(store_data_list)
 
     @app.callback(
-        Output({"type": "edit-password-modal", "index": MATCH}, "opened"),
+        Output({"type": "edit-dashboard-modal", "index": MATCH}, "opened"),
         [
             Input({"type": "edit-dashboard-button", "index": MATCH}, "n_clicks"),
-            Input({"type": "cancel-edit-name-dashboard", "index": MATCH}, "n_clicks"),
+            Input({"type": "cancel-edit-dashboard", "index": MATCH}, "n_clicks"),
+            Input({"type": "save-edit-dashboard", "index": MATCH}, "n_clicks"),
         ],
-        [State({"type": "edit-password-modal", "index": MATCH}, "opened")],
+        [State({"type": "edit-dashboard-modal", "index": MATCH}, "opened")],
         prevent_initial_call=True,
     )
-    def handle_edit_name_modal(edit_clicks, cancel_clicks, opened):
+    def handle_edit_dashboard_modal(edit_clicks, cancel_clicks, save_clicks, opened):
         """
-        Handle the edit name modal open/close state.
+        Handle the edit dashboard modal open/close state.
 
-        Opens modal when edit button clicked, closes when cancel clicked.
+        Opens modal when edit button clicked, closes when cancel or save clicked.
 
         Args:
             edit_clicks: Click count for edit button.
             cancel_clicks: Click count for cancel button.
+            save_clicks: Click count for save button.
             opened: Current modal open state.
 
         Returns:
@@ -2357,8 +2309,8 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
         # If edit button was clicked, toggle modal
         if "edit-dashboard-button" in triggered_id:
             return not opened
-        # If cancel button was clicked, close modal
-        elif "cancel-edit-name-dashboard" in triggered_id:
+        # If cancel or save button was clicked, close modal
+        elif "cancel-edit-dashboard" in triggered_id or "save-edit-dashboard" in triggered_id:
             return False
 
         return opened

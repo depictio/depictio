@@ -59,6 +59,9 @@ def get_child_tabs(parent_dashboard_id: PyObjectId) -> list[dict[str, Any]]:
         "tab_icon_color": 1,
         "is_main_tab": 1,
         "parent_dashboard_id": 1,
+        # Include icon fields for fallback inheritance
+        "icon": 1,
+        "icon_color": 1,
     }
 
     children = list(
