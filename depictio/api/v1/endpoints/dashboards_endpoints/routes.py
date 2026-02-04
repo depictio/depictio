@@ -12,7 +12,12 @@ from fastapi.responses import Response
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.db import dashboards_collection, projects_collection
-from depictio.api.v1.endpoints.dashboards_endpoints.core_functions import load_dashboards_from_db
+from depictio.api.v1.endpoints.dashboards_endpoints.core_functions import (
+    get_child_tabs,
+    load_dashboards_from_db,
+    reorder_child_tabs,
+    sync_tab_family_permissions,
+)
 from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user, get_user_or_anonymous
 from depictio.models.models.base import PyObjectId, convert_objectid_to_str
 from depictio.models.models.dashboards import DashboardData, DashboardDataLite
@@ -354,11 +359,23 @@ async def make_dashboard_public(
         {"$set": {"is_public": _public_status}},
     )
 
+    # Also sync child tab permissions for any main tabs in this project
+    # This ensures tab families have consistent permissions
+    main_tabs = dashboards_collection.find(
+        {"project_id": ObjectId(project_id), "is_main_tab": {"$ne": False}}
+    )
+    child_tabs_updated = 0
+    for main_tab in main_tabs:
+        child_tabs_updated += sync_tab_family_permissions(
+            main_tab["dashboard_id"], new_is_public=_public_status
+        )
+
     return {
         "success": True,
         "message": f"Project and all its dashboards changed visibility to: {'public' if _public_status else 'private'}",
         "is_public": _public_status,
         "dashboards_updated": dashboards_update_result.modified_count,
+        "child_tabs_updated": child_tabs_updated,
     }
 
 
@@ -728,6 +745,276 @@ async def delete_dashboard(
         raise HTTPException(status_code=500, detail="Failed to delete dashboard.")
 
 
+# ============================================================================
+# Tab CRUD Endpoints
+# ============================================================================
+
+
+@dashboards_endpoint_router.patch("/tab/{dashboard_id}")
+async def update_tab(
+    dashboard_id: PyObjectId,
+    data: dict,
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Update tab properties (title, icon, icon_color, main_tab_name).
+
+    For main tabs, you can also update main_tab_name.
+    For child tabs, you can update title, tab_icon, and tab_icon_color.
+
+    Args:
+        dashboard_id: The dashboard/tab ID to update
+        data: Dictionary with fields to update:
+            - title: New tab title (for child tabs or dashboard title for main tabs)
+            - tab_icon: Icon name (e.g., "mdi:chart-bar")
+            - tab_icon_color: Color for the icon
+            - main_tab_name: Custom name for the main tab (main tabs only)
+
+    Returns:
+        Updated dashboard information
+    """
+    if hasattr(current_user, "is_anonymous") and current_user.is_anonymous:
+        raise HTTPException(
+            status_code=403,
+            detail="Anonymous users cannot modify tabs. Please login to continue.",
+        )
+
+    dashboard = dashboards_collection.find_one({"dashboard_id": dashboard_id})
+    if not dashboard:
+        raise HTTPException(
+            status_code=404, detail=f"Dashboard/tab with ID '{dashboard_id}' not found."
+        )
+
+    project_id = dashboard.get("project_id")
+    if not project_id:
+        raise HTTPException(status_code=500, detail="Dashboard is not associated with a project.")
+
+    if not check_project_permission(project_id, current_user, "editor"):
+        raise HTTPException(status_code=403, detail="You don't have permission to edit this tab.")
+
+    # Build update fields based on what was provided
+    update_fields: dict[str, Any] = {}
+
+    if "title" in data:
+        update_fields["title"] = data["title"]
+    if "tab_icon" in data:
+        update_fields["tab_icon"] = data["tab_icon"]
+    if "tab_icon_color" in data:
+        update_fields["tab_icon_color"] = data["tab_icon_color"]
+
+    # main_tab_name can only be set on main tabs
+    if "main_tab_name" in data:
+        if not dashboard.get("is_main_tab", True):
+            raise HTTPException(
+                status_code=400,
+                detail="main_tab_name can only be set on main tabs, not child tabs.",
+            )
+        update_fields["main_tab_name"] = data["main_tab_name"]
+
+    if not update_fields:
+        raise HTTPException(status_code=400, detail="No valid fields provided for update.")
+
+    result = dashboards_collection.find_one_and_update(
+        {"dashboard_id": dashboard_id},
+        {"$set": update_fields},
+        return_document=True,
+    )
+
+    if result:
+        return {
+            "success": True,
+            "message": "Tab updated successfully.",
+            "dashboard_id": str(dashboard_id),
+            "updated_fields": list(update_fields.keys()),
+        }
+    else:
+        raise HTTPException(status_code=500, detail="Failed to update tab.")
+
+
+@dashboards_endpoint_router.delete("/tab/{dashboard_id}")
+async def delete_tab(
+    dashboard_id: PyObjectId,
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Delete a child tab.
+
+    Main tabs cannot be deleted through this endpoint - use the regular
+    /delete/{dashboard_id} endpoint which also deletes all child tabs.
+
+    Args:
+        dashboard_id: The child tab's dashboard ID to delete
+
+    Returns:
+        Success message with deleted tab info
+    """
+    if hasattr(current_user, "is_anonymous") and current_user.is_anonymous:
+        raise HTTPException(
+            status_code=403,
+            detail="Anonymous users cannot delete tabs. Please login to continue.",
+        )
+
+    dashboard = dashboards_collection.find_one({"dashboard_id": dashboard_id})
+    if not dashboard:
+        raise HTTPException(status_code=404, detail=f"Tab with ID '{dashboard_id}' not found.")
+
+    # Check if this is a main tab - if so, reject the delete
+    if dashboard.get("is_main_tab", True):
+        raise HTTPException(
+            status_code=400,
+            detail="Cannot delete main tab through this endpoint. "
+            "Use /delete/{dashboard_id} to delete the entire dashboard including all tabs.",
+        )
+
+    project_id = dashboard.get("project_id")
+    if not project_id:
+        raise HTTPException(status_code=500, detail="Tab is not associated with a project.")
+
+    if not check_project_permission(project_id, current_user, "editor"):
+        raise HTTPException(status_code=403, detail="You don't have permission to delete this tab.")
+
+    # Store parent dashboard ID for navigation after delete
+    parent_dashboard_id = dashboard.get("parent_dashboard_id")
+    tab_title = dashboard.get("title", "Untitled")
+
+    result = dashboards_collection.delete_one({"dashboard_id": dashboard_id})
+
+    if result.deleted_count > 0:
+        return {
+            "success": True,
+            "message": f"Tab '{tab_title}' deleted successfully.",
+            "deleted_dashboard_id": str(dashboard_id),
+            "parent_dashboard_id": str(parent_dashboard_id) if parent_dashboard_id else None,
+        }
+    else:
+        raise HTTPException(status_code=500, detail="Failed to delete tab.")
+
+
+@dashboards_endpoint_router.post("/tabs/reorder")
+async def reorder_tabs(
+    data: dict,
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Reorder child tabs by updating their tab_order values.
+
+    Main tab always stays at position 0 and cannot be reordered.
+    Only child tabs can be reordered.
+
+    Args:
+        data: Dictionary with:
+            - parent_dashboard_id: The main tab's dashboard ID
+            - tab_orders: List of {dashboard_id, tab_order} dicts
+
+    Returns:
+        Success message with count of updated tabs
+    """
+    if hasattr(current_user, "is_anonymous") and current_user.is_anonymous:
+        raise HTTPException(
+            status_code=403,
+            detail="Anonymous users cannot reorder tabs. Please login to continue.",
+        )
+
+    parent_dashboard_id = data.get("parent_dashboard_id")
+    tab_orders = data.get("tab_orders", [])
+
+    if not parent_dashboard_id:
+        raise HTTPException(status_code=400, detail="parent_dashboard_id is required.")
+
+    if not tab_orders:
+        raise HTTPException(status_code=400, detail="tab_orders list is required.")
+
+    # Verify parent dashboard exists and is a main tab
+    parent_dashboard = dashboards_collection.find_one(
+        {"dashboard_id": ObjectId(parent_dashboard_id)}
+    )
+    if not parent_dashboard:
+        raise HTTPException(
+            status_code=404, detail=f"Parent dashboard '{parent_dashboard_id}' not found."
+        )
+
+    if not parent_dashboard.get("is_main_tab", True):
+        raise HTTPException(
+            status_code=400,
+            detail="The specified dashboard is not a main tab.",
+        )
+
+    project_id = parent_dashboard.get("project_id")
+    if not project_id:
+        raise HTTPException(status_code=500, detail="Dashboard is not associated with a project.")
+
+    if not check_project_permission(project_id, current_user, "editor"):
+        raise HTTPException(status_code=403, detail="You don't have permission to reorder tabs.")
+
+    # Perform the reorder
+    updated_count = reorder_child_tabs(PyObjectId(parent_dashboard_id), tab_orders)
+
+    return {
+        "success": True,
+        "message": f"Reordered {updated_count} tabs successfully.",
+        "updated_count": updated_count,
+    }
+
+
+@dashboards_endpoint_router.get("/tabs/{parent_dashboard_id}")
+async def get_tabs(
+    parent_dashboard_id: PyObjectId,
+    current_user: User = Depends(get_user_or_anonymous),
+):
+    """
+    Get all tabs for a dashboard (main tab + child tabs).
+
+    Returns the main tab and all child tabs sorted by tab_order.
+
+    Args:
+        parent_dashboard_id: The main tab's dashboard ID
+
+    Returns:
+        List of tabs with main tab first, then child tabs ordered by tab_order
+    """
+    # Get main tab
+    main_tab = dashboards_collection.find_one({"dashboard_id": parent_dashboard_id})
+    if not main_tab:
+        raise HTTPException(status_code=404, detail=f"Dashboard '{parent_dashboard_id}' not found.")
+
+    # Check if this is actually a main tab
+    if not main_tab.get("is_main_tab", True):
+        raise HTTPException(
+            status_code=400,
+            detail="The specified dashboard is not a main tab.",
+        )
+
+    project_id = main_tab.get("project_id")
+    if not project_id:
+        raise HTTPException(status_code=500, detail="Dashboard is not associated with a project.")
+
+    if not check_project_permission(project_id, current_user, "viewer"):
+        raise HTTPException(
+            status_code=403, detail="You don't have permission to view this dashboard's tabs."
+        )
+
+    # Get child tabs
+    child_tabs = get_child_tabs(parent_dashboard_id)
+
+    # Build main tab entry
+    main_tab_entry = {
+        "dashboard_id": str(main_tab["dashboard_id"]),
+        "title": main_tab.get("title", "Untitled"),
+        "tab_order": 0,
+        "is_main_tab": True,
+        "main_tab_name": main_tab.get("main_tab_name"),
+        "tab_icon": main_tab.get("tab_icon"),
+        "tab_icon_color": main_tab.get("tab_icon_color"),
+    }
+
+    return {
+        "success": True,
+        "main_tab": main_tab_entry,
+        "child_tabs": child_tabs,
+        "total_count": 1 + len(child_tabs),
+    }
+
+
 @dashboards_endpoint_router.get("/get_component_data/{dashboard_id}/{component_id}")
 async def get_component_data_endpoint(
     dashboard_id: PyObjectId,
@@ -1070,6 +1357,25 @@ async def import_dashboard_from_yaml(
 
     dashboard_dict = lite.to_full()
 
+    # Handle tab relationships for child tabs
+    if not lite.is_main_tab and lite.parent_dashboard_tag:
+        # Find parent dashboard by title in the same project
+        parent_dashboard = dashboards_collection.find_one(
+            {
+                "title": lite.parent_dashboard_tag,
+                "project_id": ObjectId(project_id),
+                "is_main_tab": {"$ne": False},
+            }
+        )
+        if not parent_dashboard:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Parent dashboard '{lite.parent_dashboard_tag}' not found in this project. "
+                "Import the main dashboard first, then import child tabs.",
+            )
+        dashboard_dict["parent_dashboard_id"] = parent_dashboard["dashboard_id"]
+        dashboard_dict["is_main_tab"] = False
+
     # Set dashboard ID and project
     new_dashboard_id = existing_dashboard["dashboard_id"] if existing_dashboard else ObjectId()
     dashboard_dict["dashboard_id"] = new_dashboard_id
@@ -1103,7 +1409,7 @@ async def import_dashboard_from_yaml(
 
     # Insert or update in database
     is_update = existing_dashboard is not None
-    if is_update:
+    if is_update and existing_dashboard is not None:
         # Preserve the existing MongoDB _id to avoid immutable field error
         update_doc = dashboard.mongo()
         update_doc["_id"] = existing_dashboard["_id"]
@@ -1145,7 +1451,7 @@ async def export_dashboard_as_yaml(
     """Export dashboard as YAML.
 
     Returns a YAML representation of the dashboard suitable for
-    version control or backup.
+    version control or backup. Includes tab fields for child tabs.
 
     Args:
         dashboard_id: The dashboard ID to export
@@ -1172,6 +1478,14 @@ async def export_dashboard_as_yaml(
     # Convert to DashboardDataLite for export
     lite = DashboardDataLite.from_full(dashboard_doc)
 
+    # For child tabs, resolve parent_dashboard_tag from parent's title
+    if not dashboard_doc.get("is_main_tab", True):
+        parent_id = dashboard_doc.get("parent_dashboard_id")
+        if parent_id:
+            parent_doc = dashboards_collection.find_one({"dashboard_id": ObjectId(parent_id)})
+            if parent_doc:
+                lite.parent_dashboard_tag = parent_doc.get("title", "")
+
     yaml_content = lite.to_yaml()
 
     return Response(
@@ -1180,6 +1494,89 @@ async def export_dashboard_as_yaml(
         headers={
             "Content-Disposition": f'attachment; filename="{dashboard_doc.get("title", "dashboard")}.yaml"'
         },
+    )
+
+
+@dashboards_endpoint_router.get("/{dashboard_id}/yaml/family")
+async def export_dashboard_family_as_yaml(
+    dashboard_id: PyObjectId,
+    current_user: User = Depends(get_user_or_anonymous),
+) -> Response:
+    """Export dashboard family (main tab + all child tabs) as ZIP archive.
+
+    Returns a ZIP file containing YAML files for the main dashboard and
+    all its child tabs, preserving the tab hierarchy for re-import.
+
+    Args:
+        dashboard_id: The main dashboard ID to export
+
+    Returns:
+        ZIP file containing YAML files
+    """
+    import io
+    import zipfile
+
+    # Find main dashboard
+    main_dashboard = dashboards_collection.find_one({"dashboard_id": ObjectId(dashboard_id)})
+    if not main_dashboard:
+        raise HTTPException(status_code=404, detail="Dashboard not found")
+
+    # Verify this is a main tab
+    if not main_dashboard.get("is_main_tab", True):
+        raise HTTPException(
+            status_code=400,
+            detail="The specified dashboard is a child tab. "
+            "Use the parent dashboard ID for family export.",
+        )
+
+    # Check permissions (read access)
+    project_id = main_dashboard.get("project_id")
+    if project_id:
+        project = projects_collection.find_one({"_id": ObjectId(project_id)})
+        is_public = project.get("is_public", False) if project else False
+        project_name = project.get("name", "") if project else ""
+    else:
+        is_public = main_dashboard.get("is_public", False)
+        project_name = ""
+
+    if not is_public and current_user is None:
+        raise HTTPException(status_code=401, detail="Authentication required")
+
+    # Get all child tabs
+    child_tabs = list(
+        dashboards_collection.find({"parent_dashboard_id": ObjectId(dashboard_id)}).sort(
+            "tab_order", 1
+        )
+    )
+
+    # Create ZIP file in memory
+    zip_buffer = io.BytesIO()
+    with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
+        # Export main dashboard
+        main_lite = DashboardDataLite.from_full(main_dashboard)
+        main_lite.project_tag = project_name
+        main_yaml = main_lite.to_yaml()
+
+        # Use sanitized filename
+        main_title = main_dashboard.get("title", "dashboard").replace("/", "_").replace("\\", "_")
+        zip_file.writestr(f"{main_title}.yaml", main_yaml)
+
+        # Export each child tab
+        for child in child_tabs:
+            child_lite = DashboardDataLite.from_full(child)
+            child_lite.project_tag = project_name
+            child_lite.parent_dashboard_tag = main_dashboard.get("title", "")
+            child_yaml = child_lite.to_yaml()
+
+            child_title = child.get("title", "untitled").replace("/", "_").replace("\\", "_")
+            zip_file.writestr(f"{child_title}.yaml", child_yaml)
+
+    zip_buffer.seek(0)
+
+    return Response(
+        content=zip_buffer.getvalue(),
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="{main_title}_family.zip"'},
     )
 
 

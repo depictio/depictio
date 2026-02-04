@@ -38,7 +38,9 @@ def create_shared_stores():
         # Shared across apps (localStorage)
         dcc.Store(id="local-store", storage_type="local"),  # JWT tokens, user_id, logged_in
         dcc.Store(id="theme-store", storage_type="local"),  # Light/dark theme
-        dcc.Store(id="sidebar-collapsed", storage_type="local"),  # Sidebar state
+        dcc.Store(
+            id="sidebar-collapsed", storage_type="local", data=False
+        ),  # Sidebar state (False = expanded)
         # Session storage (persists within browser session)
         dcc.Store(
             id="user-cache-store", storage_type="session"

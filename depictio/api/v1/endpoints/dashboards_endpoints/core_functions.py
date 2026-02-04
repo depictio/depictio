@@ -1,7 +1,109 @@
+from typing import Any
+
 from bson import ObjectId
 
 from depictio.api.v1.db import dashboards_collection, projects_collection
-from depictio.models.models.base import convert_objectid_to_str
+from depictio.models.models.base import PyObjectId, convert_objectid_to_str
+
+
+def sync_tab_family_permissions(
+    parent_dashboard_id: PyObjectId,
+    new_permissions: dict[str, Any] | None = None,
+    new_is_public: bool | None = None,
+) -> int:
+    """Update all child tabs with parent's permissions.
+
+    This function ensures that all child tabs of a main dashboard
+    inherit the same permissions and visibility settings.
+
+    Args:
+        parent_dashboard_id: The ID of the parent (main tab) dashboard
+        new_permissions: New permissions dict to apply (optional)
+        new_is_public: New visibility status to apply (optional)
+
+    Returns:
+        int: Number of child tabs updated
+    """
+    update_fields: dict[str, Any] = {}
+
+    if new_permissions is not None:
+        update_fields["permissions"] = new_permissions
+    if new_is_public is not None:
+        update_fields["is_public"] = new_is_public
+
+    if not update_fields:
+        return 0
+
+    result = dashboards_collection.update_many(
+        {"parent_dashboard_id": ObjectId(parent_dashboard_id)},
+        {"$set": update_fields},
+    )
+    return result.modified_count
+
+
+def get_child_tabs(parent_dashboard_id: PyObjectId) -> list[dict[str, Any]]:
+    """Get all child tabs for a parent dashboard, sorted by tab_order.
+
+    Args:
+        parent_dashboard_id: The ID of the parent (main tab) dashboard
+
+    Returns:
+        list: List of child tab documents sorted by tab_order
+    """
+    projection = {
+        "_id": 1,
+        "dashboard_id": 1,
+        "title": 1,
+        "tab_order": 1,
+        "tab_icon": 1,
+        "tab_icon_color": 1,
+        "is_main_tab": 1,
+        "parent_dashboard_id": 1,
+    }
+
+    children = list(
+        dashboards_collection.find(
+            {"parent_dashboard_id": ObjectId(parent_dashboard_id)},
+            projection,
+        ).sort("tab_order", 1)
+    )
+
+    return [convert_objectid_to_str(child) for child in children]
+
+
+def reorder_child_tabs(
+    parent_dashboard_id: PyObjectId,
+    tab_orders: list[dict[str, Any]],
+) -> int:
+    """Reorder child tabs by updating their tab_order values.
+
+    Args:
+        parent_dashboard_id: The ID of the parent (main tab) dashboard
+        tab_orders: List of {dashboard_id, tab_order} dicts
+
+    Returns:
+        int: Number of tabs updated
+    """
+    updated_count = 0
+
+    for tab_order in tab_orders:
+        dashboard_id = tab_order.get("dashboard_id")
+        new_order = tab_order.get("tab_order")
+
+        if dashboard_id is None or new_order is None:
+            continue
+
+        # Verify the tab belongs to this parent
+        result = dashboards_collection.update_one(
+            {
+                "dashboard_id": ObjectId(dashboard_id),
+                "parent_dashboard_id": ObjectId(parent_dashboard_id),
+            },
+            {"$set": {"tab_order": new_order}},
+        )
+        updated_count += result.modified_count
+
+    return updated_count
 
 
 def load_dashboards_from_db(owner, admin_mode=False, user=None, include_child_tabs=False):
@@ -23,6 +125,9 @@ def load_dashboards_from_db(owner, admin_mode=False, user=None, include_child_ta
         "is_main_tab": 1,
         "parent_dashboard_id": 1,
         "tab_order": 1,
+        "main_tab_name": 1,
+        "tab_icon": 1,
+        "tab_icon_color": 1,
     }
     if admin_mode:
         projection["stored_metadata"] = 1

@@ -115,6 +115,23 @@ class DashboardDataLite(BaseModel):
     title: str = Field(..., description="Dashboard title")
     subtitle: str = Field(default="", description="Dashboard subtitle")
 
+    # Tab support for YAML import/export
+    is_main_tab: bool = Field(
+        default=True, description="Whether this is the main tab (root dashboard)"
+    )
+    parent_dashboard_tag: Optional[str] = Field(
+        default=None,
+        description="Parent dashboard title for child tabs (resolved during import)",
+    )
+    tab_order: int = Field(default=0, description="Order of tab within parent (0 = main tab)")
+    main_tab_name: Optional[str] = Field(
+        default=None, description="Custom name for main tab (defaults to 'Main' if None)"
+    )
+    tab_icon: Optional[str] = Field(
+        default=None, description="Icon for child tabs (e.g., 'mdi:chart-bar')"
+    )
+    tab_icon_color: Optional[str] = Field(default=None, description="Color for tab icon")
+
     # Components using Lite models
     components: list[LiteComponent | dict[str, Any]] = Field(
         default_factory=list, description="List of dashboard components"
@@ -136,6 +153,20 @@ class DashboardDataLite(BaseModel):
         # Remove empty project_tag
         if not data.get("project_tag"):
             data.pop("project_tag", None)
+
+        # Clean up default tab fields (only include non-default values)
+        if data.get("is_main_tab", True) is True:
+            data.pop("is_main_tab", None)  # Default is True, don't include
+        if not data.get("parent_dashboard_tag"):
+            data.pop("parent_dashboard_tag", None)
+        if data.get("tab_order", 0) == 0:
+            data.pop("tab_order", None)  # Default is 0, don't include
+        if not data.get("main_tab_name"):
+            data.pop("main_tab_name", None)
+        if not data.get("tab_icon"):
+            data.pop("tab_icon", None)
+        if not data.get("tab_icon_color"):
+            data.pop("tab_icon_color", None)
 
         # Clean up components - remove empty values and order fields
         if "components" in data:
@@ -392,6 +423,14 @@ class DashboardDataLite(BaseModel):
             title=dashboard_data.get("title", "Untitled Dashboard"),
             subtitle=dashboard_data.get("subtitle", ""),
             components=lite_components,
+            # Tab fields
+            is_main_tab=dashboard_data.get("is_main_tab", True),
+            tab_order=dashboard_data.get("tab_order", 0),
+            main_tab_name=dashboard_data.get("main_tab_name"),
+            tab_icon=dashboard_data.get("tab_icon"),
+            tab_icon_color=dashboard_data.get("tab_icon_color"),
+            # parent_dashboard_tag is not set here - it needs to be resolved separately
+            # during export by looking up the parent dashboard title
         )
 
     def to_full(self) -> dict[str, Any]:
@@ -436,6 +475,13 @@ class DashboardDataLite(BaseModel):
             "notes_content": "",
             "is_public": False,
             "permissions": {"owners": [], "editors": [], "viewers": []},
+            # Tab support fields
+            "is_main_tab": self.is_main_tab,
+            "tab_order": self.tab_order,
+            "main_tab_name": self.main_tab_name,
+            "tab_icon": self.tab_icon,
+            "tab_icon_color": self.tab_icon_color,
+            # parent_dashboard_tag is resolved to parent_dashboard_id during import
         }
 
         if self.dashboard_id:
@@ -585,6 +631,9 @@ class DashboardData(MongoModel):
     is_main_tab: bool = True
     parent_dashboard_id: Optional[PyObjectId] = None
     tab_order: int = 0
+    main_tab_name: Optional[str] = None  # Custom name for main tab (defaults to "Main" if None)
+    tab_icon: Optional[str] = None  # Icon for child tabs (e.g., "mdi:chart-bar")
+    tab_icon_color: Optional[str] = None  # Color for tab icon
 
     model_config = ConfigDict(
         arbitrary_types_allowed=True,

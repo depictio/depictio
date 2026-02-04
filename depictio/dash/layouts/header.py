@@ -553,6 +553,15 @@ def register_callbacks_header(app) -> None:
         """
         function(burger_opened, pathname) {
             console.log('🍔 CLIENTSIDE BURGER CLICK: opened=' + burger_opened + ', pathname=' + pathname);
+
+            // Skip initial mount - only respond to actual user clicks
+            // Use a window flag to track if burger has been initialized
+            if (typeof window._burgerInitialized === 'undefined') {
+                window._burgerInitialized = true;
+                console.log('🚫 Skipping initial burger mount (not a user click)');
+                return window.dash_clientside.no_update;
+            }
+
             // Only update on dashboard pages (viewer or editor app)
             if (!pathname || !(pathname.startsWith('/dashboard/') || pathname.startsWith('/dashboard-edit/'))) {
                 console.log('🚫 Ignoring burger click on non-dashboard page');
@@ -1083,7 +1092,7 @@ def _create_header_left_section(data: dict) -> dmc.Group:
     """
     burger_button = dmc.Burger(
         id="burger-button",
-        opened=False,
+        opened=True,  # Default to opened (navbar expanded) to match sidebar-collapsed=False
         size="md",
         color="gray",
         style={"marginRight": "10px"},

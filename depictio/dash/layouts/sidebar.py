@@ -183,12 +183,12 @@ def create_static_navbar_content():
     ]
 
 
-def register_sidebar_callbacks(app) -> None:
+def register_sidebar_callbacks(app, register_tabs: bool = True) -> None:
     """
     Register all sidebar-related callbacks for the application.
 
     This includes:
-    - Tab navigation callbacks (for dashboard viewer)
+    - Tab navigation callbacks (for dashboard viewer/editor only)
     - Favicon visibility based on sidebar collapse state
     - Navbar collapse state management for dashboard pages
     - Sidebar link active state highlighting
@@ -200,13 +200,16 @@ def register_sidebar_callbacks(app) -> None:
 
     Args:
         app: The Dash application instance.
+        register_tabs: Whether to register tab callbacks (default True).
+            Set to False for apps without sidebar-tabs-list (e.g., management app).
     """
-    # Import and register tab callbacks
-    from depictio.dash.layouts.tab_callbacks import register_tab_callbacks
-    from depictio.dash.layouts.tab_modal import register_tab_modal_callbacks
+    # Import and register tab callbacks only for apps with tab sidebar
+    if register_tabs:
+        from depictio.dash.layouts.tab_callbacks import register_tab_callbacks
+        from depictio.dash.layouts.tab_modal import register_tab_modal_callbacks
 
-    register_tab_callbacks(app)
-    register_tab_modal_callbacks(app)
+        register_tab_callbacks(app)
+        register_tab_modal_callbacks(app)
 
     # Inject JavaScript to handle the resize when sidebar state changes
     # app.clientside_callback(
@@ -313,7 +316,7 @@ def register_sidebar_callbacks(app) -> None:
         Output("app-shell", "navbar"),
         [Input("sidebar-collapsed", "data")],
         [State("url", "pathname")],
-        prevent_initial_call=True,
+        prevent_initial_call=False,  # Run on initial load to sync navbar with store (default: expanded)
     )
 
     # NOTE: sidebar-button callback removed - now using DMC Burger which handles clicks via
@@ -722,24 +725,8 @@ def register_sidebar_callbacks(app) -> None:
     # Navbar content is now generated statically at app startup via create_static_navbar_content()
     # This eliminated ~2419ms delay on every page load. See git history for original implementation.
 
-    # Minimal callback to reference sidebar tabs (dashboard viewer only)
-    # NOTE: Only register this if sidebar-tabs component exists (viewer app)
-    try:
-
-        @app.callback(
-            Input("sidebar-tabs", "value"),
-            prevent_initial_call=True,
-        )
-        def sidebar_tabs_callback(tab_value):
-            """
-            Minimal callback to reference sidebar tabs component (dashboard viewer).
-            No output - Dash supports callbacks without return statements.
-            This prevents component ID errors while allowing for future expansion.
-            """
-            pass  # No return statement - Dash allows this for callbacks without outputs
-    except Exception as e:
-        # Sidebar tabs may not exist in management app, skip callback
-        logger.debug(f"Sidebar tabs callback not registered: {e}")
+    # NOTE: Sidebar tabs callbacks are now handled in tab_callbacks.py
+    # and only registered when register_tabs=True (viewer/editor apps)
 
 
 def create_dashboard_viewer_sidebar():
