@@ -51,7 +51,7 @@ describe('Unauthenticated Mode - Dashboard Access Restrictions', () => {
         cy.get('button').contains('View').should('be.visible').should('not.be.disabled')
 
         // Check that other buttons are disabled - need to check the button element, not the span
-        cy.contains('button', 'Edit name').should('be.disabled')
+        cy.contains('button', 'Edit').should('be.disabled')
         cy.contains('button', 'Duplicate').should('be.disabled')
         cy.contains('button', 'Delete').should('be.disabled')
         cy.contains('button', 'Make private').should('be.disabled')
