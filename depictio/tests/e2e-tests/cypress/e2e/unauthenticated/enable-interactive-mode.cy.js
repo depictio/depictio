@@ -164,7 +164,7 @@ describe('Unauthenticated Mode - Login as a temporary user Flow', () => {
 
         // Other buttons should still be disabled for temporary users
         cy.contains('button', 'Delete').should('be.disabled')
-        cy.contains('button', 'Edit name').should('be.disabled')
+        cy.contains('button', 'Edit').should('be.disabled')
       })
 
     cy.screenshot('duplicate_button_enabled_after_interactive_mode')
