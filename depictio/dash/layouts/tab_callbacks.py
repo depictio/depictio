@@ -28,6 +28,7 @@ from dash_iconify import DashIconify
 
 from depictio.api.v1.configs.config import API_BASE_URL
 from depictio.api.v1.configs.logging_init import logger
+from depictio.dash.layouts.tab_modal import get_workflow_tab_color
 from depictio.models.models.base import PyObjectId, convert_objectid_to_str
 from depictio.models.models.dashboards import DashboardData
 from depictio.models.models.users import Permission
@@ -162,7 +163,11 @@ def _create_add_tab_button():
 
 
 def _build_tab_item(
-    tab: dict, is_edit_mode: bool = False, is_owner: bool = False, all_tabs: list | None = None
+    tab: dict,
+    is_edit_mode: bool = False,
+    is_owner: bool = False,
+    all_tabs: list | None = None,
+    workflow_data: dict | None = None,
 ):
     """
     Build a DMC TabsTab component from tab data.
@@ -172,6 +177,7 @@ def _build_tab_item(
         is_edit_mode: Whether we're in dashboard edit mode
         is_owner: Whether current user is an owner
         all_tabs: List of all tabs (for reorder button state)
+        workflow_data: Optional workflow data for automatic color selection
 
     Returns:
         DMC TabsTab component
@@ -189,7 +195,16 @@ def _build_tab_item(
 
     # Use tab_icon/tab_icon_color for both main and child tabs
     icon_name = tab.get("tab_icon") or tab.get("icon", "mdi:view-dashboard")
-    icon_color = tab.get("tab_icon_color") or tab.get("icon_color", "orange")
+
+    # For icon color: use explicit tab color if set, otherwise derive from workflow
+    explicit_color = tab.get("tab_icon_color") or tab.get("icon_color")
+    if explicit_color:
+        icon_color = explicit_color
+    elif workflow_data:
+        # Auto-derive color from workflow engine/catalog
+        icon_color = get_workflow_tab_color(workflow_data)
+    else:
+        icon_color = "orange"  # Default
 
     tab_dashboard_id = str(tab["dashboard_id"])
 
@@ -382,13 +397,31 @@ def register_tab_callbacks(app):
 
             # Determine if user is owner for edit controls
             is_owner = False
+            workflow_data = None
             if is_edit_mode and dashboard_cache:
                 user_permissions = dashboard_cache.get("user_permissions", {})
                 is_owner = user_permissions.get("level") == "owner"
 
+            # Try to get workflow data for automatic tab color
+            if dashboard_cache:
+                # Check for workflow info in dashboard cache
+                workflow_system = dashboard_cache.get("workflow_system")
+                if workflow_system and workflow_system != "none":
+                    # Construct workflow-like data for color lookup
+                    workflow_data = {
+                        "engine": {"name": workflow_system},
+                        "catalog": dashboard_cache.get("workflow_catalog"),
+                    }
+
             # Build tab items using helper function with edit controls in edit mode
             tab_items = [
-                _build_tab_item(tab, is_edit_mode=is_edit_mode, is_owner=is_owner, all_tabs=tabs)
+                _build_tab_item(
+                    tab,
+                    is_edit_mode=is_edit_mode,
+                    is_owner=is_owner,
+                    all_tabs=tabs,
+                    workflow_data=workflow_data,
+                )
                 for tab in tabs
             ]
 
@@ -774,14 +807,28 @@ def register_tab_callbacks(app):
 
         # Determine if user is owner for edit controls
         is_owner = False
+        workflow_data = None
         if is_edit_mode and dashboard_cache:
             user_permissions = dashboard_cache.get("user_permissions", {})
             is_owner = user_permissions.get("level") == "owner"
 
+        # Try to get workflow data for automatic tab color
+        if dashboard_cache:
+            workflow_system = dashboard_cache.get("workflow_system")
+            if workflow_system and workflow_system != "none":
+                workflow_data = {
+                    "engine": {"name": workflow_system},
+                    "catalog": dashboard_cache.get("workflow_catalog"),
+                }
+
         # Build updated tab items
         tab_items = [
             _build_tab_item(
-                tab, is_edit_mode=is_edit_mode, is_owner=is_owner, all_tabs=updated_tabs
+                tab,
+                is_edit_mode=is_edit_mode,
+                is_owner=is_owner,
+                all_tabs=updated_tabs,
+                workflow_data=workflow_data,
             )
             for tab in updated_tabs
         ]

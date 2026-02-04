@@ -19,12 +19,13 @@ import dash_ag_grid as dag
 import dash_mantine_components as dmc
 import polars as pl
 from bson import ObjectId
-from dash import MATCH, Input, Output, State, ctx, dcc, html
+from dash import ALL, MATCH, Input, Output, State, ctx, dcc, html
 from dash_iconify import DashIconify
 
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.deltatables_utils import load_deltatable_lite
 from depictio.dash.api_calls import (
+    api_call_fetch_all_multiqc_reports,
     api_call_fetch_delta_table_info,
     api_call_fetch_multiqc_report,
     api_call_fetch_project_by_id,
@@ -32,7 +33,7 @@ from depictio.dash.api_calls import (
 from depictio.dash.colors import colors
 from depictio.dash.components.depictio_cytoscape_joins import (
     create_joins_visualization_section,
-    generate_sample_elements,
+    generate_elements_from_project,
     register_joins_callbacks,
 )
 from depictio.dash.layouts.layouts_toolbox import (
@@ -158,6 +159,192 @@ def get_data_collection_size_display(data_collection):
             return "Unknown"
     except Exception:
         return "N/A"
+
+
+def create_multiqc_metadata_summary(dc) -> dmc.Group | html.Div | dmc.Text:
+    """
+    Create a metadata summary row for MultiQC data collections.
+
+    Returns a placeholder with a unique ID that will be populated by a callback
+    that fetches the actual MultiQC metadata via API.
+
+    Args:
+        dc: Data collection object or dict.
+
+    Returns:
+        html.Div with placeholder for metadata (populated by callback).
+    """
+    # Get the DC ID for the callback
+    if isinstance(dc, dict):
+        dc_id = str(dc.get("_id", "") or dc.get("id", ""))
+    else:
+        dc_id = str(getattr(dc, "_id", "") or getattr(dc, "id", ""))
+
+    if not dc_id:
+        return dmc.Text(
+            "MultiQC report",
+            size="xs",
+            c="gray",
+            fs="italic",
+        )
+
+    # Return a div that will be populated by a callback
+    return html.Div(
+        id={"type": "multiqc-metadata-summary", "index": dc_id},
+        children=[
+            dmc.Group(
+                [
+                    dmc.Loader(size="xs", type="dots"),
+                    dmc.Text("Loading metadata...", size="xs", c="gray"),
+                ],
+                gap="xs",
+            )
+        ],
+    )
+
+
+def create_image_dc_preview(dc) -> html.Div:
+    """
+    Create a thumbnail preview for Image data collections.
+
+    Shows configuration info, image count badge, and a "Preview Gallery" button
+    that opens a modal with sample images.
+
+    Args:
+        dc: Data collection object or dict.
+
+    Returns:
+        html.Div with image DC preview including config info and preview button.
+    """
+    # Extract data collection info
+    if isinstance(dc, dict):
+        dc_id = str(dc.get("_id", ""))
+        config = dc.get("config", {})
+        dc_specific = config.get("dc_specific_properties", {})
+    else:
+        dc_id = str(getattr(dc, "_id", "") or getattr(dc, "id", ""))
+        config = getattr(dc, "config", None)
+        if config:
+            dc_specific = getattr(config, "dc_specific_properties", {})
+            if hasattr(dc_specific, "model_dump"):
+                dc_specific = dc_specific.model_dump()
+            elif not isinstance(dc_specific, dict):
+                dc_specific = {}
+        else:
+            dc_specific = {}
+
+    # Get image configuration
+    image_column = dc_specific.get("image_column", "Not configured")
+    s3_base_folder = dc_specific.get("s3_base_folder", "")
+    thumbnail_size = dc_specific.get("thumbnail_size", 150)
+
+    # Build configuration info
+    config_items = [
+        dmc.Group(
+            [
+                DashIconify(icon="mdi:table-column", width=14, color=colors["grey"]),
+                dmc.Text(f"Column: {image_column}", size="xs", c="gray"),
+            ],
+            gap=4,
+        ),
+    ]
+
+    if s3_base_folder:
+        # Show full S3 path with word break for long paths
+        config_items.append(
+            dmc.Group(
+                [
+                    DashIconify(icon="mdi:cloud-outline", width=14, color=colors["grey"]),
+                    dmc.Text(
+                        s3_base_folder,
+                        size="xs",
+                        c="gray",
+                        style={"wordBreak": "break-all"},
+                    ),
+                ],
+                gap=4,
+                align="flex-start",
+            )
+        )
+
+    # Build the preview component
+    preview_content = [
+        # Configuration details
+        dmc.Stack(config_items, gap=4),
+        # Preview button
+        dmc.Group(
+            [
+                dmc.Button(
+                    "Preview Gallery",
+                    id={"type": "image-dc-preview-button", "index": dc_id},
+                    size="compact-xs",
+                    variant="light",
+                    color="teal",
+                    leftSection=DashIconify(icon="mdi:image-area", width=14),
+                ),
+            ],
+            gap="xs",
+        ),
+        # Modal for image gallery preview
+        dmc.Modal(
+            id={"type": "image-dc-preview-modal", "index": dc_id},
+            title="Image Gallery Preview",
+            size="90%",
+            centered=True,
+            children=[
+                dmc.ScrollArea(
+                    html.Div(
+                        id={"type": "image-dc-preview-grid", "index": dc_id},
+                        children=[
+                            dmc.Center(
+                                dmc.Loader(type="dots", size="lg"),
+                                style={"padding": "2rem"},
+                            )
+                        ],
+                    ),
+                    h="70vh",
+                    type="auto",
+                ),
+            ],
+        ),
+        # Secondary modal for viewing individual images
+        dmc.Modal(
+            id={"type": "image-dc-viewer-modal", "index": dc_id},
+            size="xl",
+            centered=True,
+            withCloseButton=True,
+            children=[
+                html.Img(
+                    id={"type": "image-dc-viewer-img", "index": dc_id},
+                    style={
+                        "maxWidth": "100%",
+                        "maxHeight": "80vh",
+                        "objectFit": "contain",
+                        "display": "block",
+                        "margin": "0 auto",
+                    },
+                ),
+                dmc.Text(
+                    id={"type": "image-dc-viewer-title", "index": dc_id},
+                    ta="center",
+                    mt="md",
+                    c="gray",
+                ),
+            ],
+        ),
+        # Store for DC metadata needed by the callback
+        dcc.Store(
+            id={"type": "image-dc-preview-store", "index": dc_id},
+            data={
+                "dc_id": dc_id,
+                "image_column": image_column,
+                "s3_base_folder": s3_base_folder,
+                "thumbnail_size": thumbnail_size,
+            },
+        ),
+    ]
+
+    return dmc.Stack(preview_content, gap="xs")
 
 
 def create_project_type_indicator(project_type):
@@ -614,126 +801,149 @@ def create_unified_data_collections_manager_section(
     if data_collections:
         dc_items = []
         for dc in data_collections:
+            dc_type = dc.config.type.lower()
+
+            # Determine icon based on data collection type
+            if dc_type == "table":
+                dc_icon = DashIconify(
+                    icon="mdi:table",
+                    width=20,
+                    color=colors["teal"],
+                )
+            elif dc_type == "multiqc":
+                dc_icon = html.Img(
+                    src="/assets/images/logos/multiqc.png",
+                    style={"width": "20px", "height": "20px"},
+                )
+            elif dc_type == "image":
+                dc_icon = DashIconify(
+                    icon="mdi:image-area",
+                    width=20,
+                    color=colors["teal"],
+                )
+            else:
+                dc_icon = DashIconify(
+                    icon="mdi:file-document",
+                    width=20,
+                    color=colors["teal"],
+                )
+
+            # Create type-specific metadata summary row
+            if dc_type == "multiqc":
+                metadata_row = create_multiqc_metadata_summary(dc)
+            elif dc_type == "image":
+                metadata_row = create_image_dc_preview(dc)
+            else:
+                metadata_row = None
+
+            # Build card content
+            card_content = [
+                dmc.Group(
+                    [
+                        # Main data collection info
+                        dmc.Group(
+                            [
+                                dc_icon,
+                                dmc.Badge(dc.config.type, color="blue", size="xs"),
+                                # Only show metatype badge for non-MultiQC/Image types
+                                (
+                                    dmc.Badge(
+                                        dc.config.metatype or "Unknown",
+                                        color="gray",
+                                        size="xs",
+                                    )
+                                    if dc_type not in ("multiqc", "image")
+                                    else html.Div()  # Empty placeholder
+                                ),
+                                dmc.Text(dc.data_collection_tag, fw="bold", size="sm"),
+                            ],
+                            gap="sm",
+                            align="center",
+                            style={"flex": 1},
+                        ),
+                        # Action buttons
+                        dmc.Group(
+                            [
+                                dmc.Tooltip(
+                                    dmc.ActionIcon(
+                                        DashIconify(icon="mdi:database-refresh", width=16),
+                                        id={
+                                            "type": "dc-overwrite-button",
+                                            "index": dc.data_collection_tag,
+                                        },
+                                        variant="subtle",
+                                        color="orange",
+                                        size="sm",
+                                        disabled=(
+                                            dc_type in ("multiqc", "image")
+                                            or (
+                                                dc.config.metatype
+                                                and dc.config.metatype.lower() == "aggregate"
+                                            )
+                                        ),
+                                    ),
+                                    label="Overwrite data",
+                                    position="top",
+                                ),
+                                dmc.Tooltip(
+                                    dmc.ActionIcon(
+                                        DashIconify(icon="mdi:pencil", width=16),
+                                        id={
+                                            "type": "dc-edit-name-button",
+                                            "index": dc.data_collection_tag,
+                                        },
+                                        variant="subtle",
+                                        color="blue",
+                                        size="sm",
+                                        disabled=(
+                                            dc_type in ("multiqc", "image")
+                                            or (
+                                                dc.config.metatype
+                                                and dc.config.metatype.lower() == "aggregate"
+                                            )
+                                        ),
+                                    ),
+                                    label="Edit name",
+                                    position="top",
+                                ),
+                                dmc.Tooltip(
+                                    dmc.ActionIcon(
+                                        DashIconify(icon="mdi:delete", width=16),
+                                        id={
+                                            "type": "dc-delete-button",
+                                            "index": dc.data_collection_tag,
+                                        },
+                                        variant="subtle",
+                                        color="red",
+                                        size="sm",
+                                        disabled=False,
+                                    ),
+                                    label="Delete",
+                                    position="top",
+                                ),
+                            ],
+                            gap="xs",
+                            align="center",
+                        ),
+                    ],
+                    justify="space-between",
+                    align="center",
+                ),
+            ]
+
+            # Add metadata row for MultiQC and Image types
+            if metadata_row is not None:
+                card_content.append(
+                    html.Div(
+                        metadata_row,
+                        style={"marginTop": "8px", "paddingLeft": "28px"},
+                    )
+                )
+
             dc_card = html.Div(
                 [
                     dmc.Card(
-                        [
-                            dmc.Group(
-                                [
-                                    # Main data collection info
-                                    dmc.Group(
-                                        [
-                                            # Set icon based on data collection type
-                                            (
-                                                DashIconify(
-                                                    icon="mdi:table",
-                                                    width=20,
-                                                    color=colors["teal"],
-                                                )
-                                                if dc.config.type.lower() == "table"
-                                                else (
-                                                    html.Img(
-                                                        src="/assets/images/logos/multiqc.png",
-                                                        style={"width": "20px", "height": "20px"},
-                                                    )
-                                                    if dc.config.type.lower() == "multiqc"
-                                                    else DashIconify(
-                                                        icon="mdi:file-document",
-                                                        width=20,
-                                                        color=colors["teal"],
-                                                    )
-                                                )
-                                            ),
-                                            dmc.Badge(dc.config.type, color="blue", size="xs"),
-                                            # Only show metatype badge for non-MultiQC types
-                                            (
-                                                dmc.Badge(
-                                                    dc.config.metatype or "Unknown",
-                                                    color="gray",
-                                                    size="xs",
-                                                )
-                                                if dc.config.type.lower() != "multiqc"
-                                                else html.Div()  # Empty placeholder for MultiQC
-                                            ),
-                                            dmc.Text(dc.data_collection_tag, fw="bold", size="sm"),
-                                        ],
-                                        gap="sm",
-                                        align="center",
-                                        style={"flex": 1},
-                                    ),
-                                    # Action buttons
-                                    dmc.Group(
-                                        [
-                                            dmc.Tooltip(
-                                                dmc.ActionIcon(
-                                                    DashIconify(
-                                                        icon="mdi:database-refresh", width=16
-                                                    ),
-                                                    id={
-                                                        "type": "dc-overwrite-button",
-                                                        "index": dc.data_collection_tag,
-                                                    },
-                                                    variant="subtle",
-                                                    color="orange",
-                                                    size="sm",
-                                                    disabled=(
-                                                        dc.config.type.lower() == "multiqc"
-                                                        or (
-                                                            dc.config.metatype
-                                                            and dc.config.metatype.lower()
-                                                            == "aggregate"
-                                                        )
-                                                    ),  # Disable for MultiQC and aggregate collections
-                                                ),
-                                                label="Overwrite data",
-                                                position="top",
-                                            ),
-                                            dmc.Tooltip(
-                                                dmc.ActionIcon(
-                                                    DashIconify(icon="mdi:pencil", width=16),
-                                                    id={
-                                                        "type": "dc-edit-name-button",
-                                                        "index": dc.data_collection_tag,
-                                                    },
-                                                    variant="subtle",
-                                                    color="blue",
-                                                    size="sm",
-                                                    disabled=(
-                                                        dc.config.type.lower() == "multiqc"
-                                                        or (
-                                                            dc.config.metatype
-                                                            and dc.config.metatype.lower()
-                                                            == "aggregate"
-                                                        )
-                                                    ),  # Disable for MultiQC and aggregate collections
-                                                ),
-                                                label="Edit name",
-                                                position="top",
-                                            ),
-                                            dmc.Tooltip(
-                                                dmc.ActionIcon(
-                                                    DashIconify(icon="mdi:delete", width=16),
-                                                    id={
-                                                        "type": "dc-delete-button",
-                                                        "index": dc.data_collection_tag,
-                                                    },
-                                                    variant="subtle",
-                                                    color="red",
-                                                    size="sm",
-                                                    disabled=False,  # Will be controlled by callback
-                                                ),
-                                                label="Delete",
-                                                position="top",
-                                            ),
-                                        ],
-                                        gap="xs",
-                                        align="center",
-                                    ),
-                                ],
-                                justify="space-between",
-                                align="center",
-                            ),
-                        ],
+                        card_content,
                         withBorder=True,
                         shadow="xs",
                         radius="md",
@@ -1446,6 +1656,13 @@ def create_data_collections_landing_ui():
             dcc.Store(id="project-data-store", data={}),
             dcc.Store(id="selected-workflow-store", data=None),
             dcc.Store(id="selected-data-collection-store", data=None),
+            # Interval to trigger MultiQC metadata loading after page render
+            dcc.Interval(
+                id="multiqc-metadata-interval",
+                interval=2000,  # 2 second delay to ensure DC cards are rendered
+                n_intervals=0,
+                max_intervals=1,  # Fire only once
+            ),
             # Data collection creation modal
             data_collection_modal,
             # Header section
@@ -1685,6 +1902,214 @@ def register_project_data_collections_callbacks(app):
 
     # Register the joins visualization callbacks
     register_joins_callbacks(app)
+
+    # Callback to populate MultiQC metadata summaries in DC cards
+    # Triggered by interval after page renders (avoids circular dependency)
+    @app.callback(
+        Output({"type": "multiqc-metadata-summary", "index": ALL}, "children"),
+        Input("multiqc-metadata-interval", "n_intervals"),
+        State({"type": "multiqc-metadata-summary", "index": ALL}, "id"),
+        State("local-store", "data"),
+        prevent_initial_call=True,
+    )
+    def populate_multiqc_summary_cards(n_intervals, summary_ids, local_data):
+        """
+        Populate MultiQC metadata summary badges in DC cards.
+
+        Fetches metadata via API for each MultiQC DC and returns compact
+        display showing samples, modules, and plots.
+
+        Args:
+            n_intervals: Interval trigger count (fires once after 500ms).
+            summary_ids: List of pattern-matching IDs for MultiQC summaries.
+            local_data: Local storage containing access token.
+
+        Returns:
+            List of components to populate each summary div.
+        """
+        print(
+            f"🔍 populate_multiqc_summary_cards triggered: n_intervals={n_intervals}, "
+            f"summary_ids={summary_ids}",
+            flush=True,
+        )
+
+        if not summary_ids:
+            print("No summary_ids found, returning empty list", flush=True)
+            return []
+
+        print(f"Processing {len(summary_ids)} MultiQC summary IDs: {summary_ids}", flush=True)
+
+        if not local_data or not local_data.get("access_token"):
+            logger.warning("No access token, returning auth required")
+            return [dmc.Text("Auth required", size="xs", c="gray") for _ in summary_ids]
+
+        access_token = local_data["access_token"]
+        results = []
+
+        for summary_id in summary_ids:
+            dc_id = summary_id.get("index", "")
+            if not dc_id:
+                results.append(dmc.Text("Invalid DC", size="xs", c="red"))
+                continue
+
+            try:
+                # Fetch MultiQC metadata via API
+                print(f"Fetching MultiQC data for DC: {dc_id}", flush=True)
+                multiqc_data = api_call_fetch_multiqc_report(dc_id, access_token)
+                print(f"MultiQC API response: {multiqc_data is not None}", flush=True)
+
+                if not multiqc_data:
+                    print(f"No MultiQC data returned for {dc_id}", flush=True)
+                    results.append(
+                        dmc.Text(
+                            "Metadata not yet extracted",
+                            size="xs",
+                            c="gray",
+                            fs="italic",
+                        )
+                    )
+                    continue
+
+                # Extract metadata
+                metadata = multiqc_data.get("metadata", {})
+                print(
+                    f"MultiQC metadata: canonical_samples={len(metadata.get('canonical_samples', []))}, "
+                    f"modules={metadata.get('modules', [])}, plots_keys={list(metadata.get('plots', {}).keys())}",
+                    flush=True,
+                )
+                modules = metadata.get("modules", [])
+                plots = metadata.get("plots", {})
+
+                # Use canonical_samples (already filtered) or fallback to filtering
+                canonical_samples = metadata.get("canonical_samples", [])
+                if not canonical_samples:
+                    samples = metadata.get("samples", [])
+                    canonical_samples = [
+                        s
+                        for s in samples
+                        if not any(
+                            suffix in s
+                            for suffix in [
+                                "_1",
+                                "_2",
+                                "_R1",
+                                "_R2",
+                                " - First read",
+                                " - Second read",
+                                " - Adapter",
+                                " - adapter",
+                            ]
+                        )
+                    ]
+
+                # Build sample badges (show up to 12 samples)
+                max_samples_shown = 12
+                sample_badges = [
+                    dmc.Badge(sample, color="blue", size="xs", variant="light")
+                    for sample in sorted(canonical_samples)[:max_samples_shown]
+                ]
+                if len(canonical_samples) > max_samples_shown:
+                    sample_badges.append(
+                        dmc.Badge(
+                            f"+{len(canonical_samples) - max_samples_shown} more",
+                            color="blue",
+                            size="xs",
+                            variant="outline",
+                        )
+                    )
+
+                # Build module badges
+                module_badges = [
+                    dmc.Badge(module, color="green", size="xs", variant="light")
+                    for module in sorted(modules)
+                ]
+
+                # Flatten plot names from nested structure
+                plot_names = []
+                if isinstance(plots, dict):
+                    for module_plots in plots.values():
+                        if isinstance(module_plots, list):
+                            for plot in module_plots:
+                                if isinstance(plot, str):
+                                    plot_names.append(plot)
+                                elif isinstance(plot, dict):
+                                    plot_names.extend(plot.keys())
+
+                max_plots_shown = 8
+                plot_badges = [
+                    dmc.Badge(plot_name, color="orange", size="xs", variant="light")
+                    for plot_name in plot_names[:max_plots_shown]
+                ]
+                if len(plot_names) > max_plots_shown:
+                    plot_badges.append(
+                        dmc.Badge(
+                            f"+{len(plot_names) - max_plots_shown} more",
+                            color="orange",
+                            size="xs",
+                            variant="outline",
+                        )
+                    )
+
+                # Create display with sections
+                print(
+                    f"Building display: {len(canonical_samples)} samples, "
+                    f"{len(modules)} modules, {len(plot_names)} plots",
+                    flush=True,
+                )
+                results.append(
+                    dmc.Stack(
+                        [
+                            # Samples row
+                            dmc.Group(
+                                [
+                                    dmc.Text(
+                                        f"Samples ({len(canonical_samples)}):", size="xs", fw=500
+                                    ),
+                                    dmc.Group(sample_badges, gap=4, style={"flexWrap": "wrap"}),
+                                ],
+                                gap="xs",
+                                align="flex-start",
+                            )
+                            if sample_badges
+                            else None,
+                            # Modules row
+                            dmc.Group(
+                                [
+                                    dmc.Text(f"Modules ({len(modules)}):", size="xs", fw=500),
+                                    dmc.Group(module_badges, gap=4, style={"flexWrap": "wrap"}),
+                                ],
+                                gap="xs",
+                                align="flex-start",
+                            )
+                            if module_badges
+                            else None,
+                            # Plots row
+                            dmc.Group(
+                                [
+                                    dmc.Text(f"Plots ({len(plot_names)}):", size="xs", fw=500),
+                                    dmc.Group(plot_badges, gap=4, style={"flexWrap": "wrap"}),
+                                ],
+                                gap="xs",
+                                align="flex-start",
+                            )
+                            if plot_badges
+                            else None,
+                        ],
+                        gap=4,
+                    )
+                )
+
+            except Exception as e:
+                print(f"Failed to fetch MultiQC metadata for {dc_id}: {e}", flush=True)
+                results.append(
+                    dmc.Text(
+                        "Error loading metadata",
+                        size="xs",
+                        c="red",
+                    )
+                )
+
+        return results
 
     # Data collection viewer data visualization callback
     @app.callback(
@@ -1960,6 +2385,10 @@ def register_project_data_collections_callbacks(app):
                         if project.workflows
                         else [],
                         "data_collections": [dc.model_dump() for dc in all_data_collections],
+                        "joins": [j.model_dump() for j in project.joins] if project.joins else [],
+                        "links": [lnk.model_dump() for lnk in project.links]
+                        if project.links
+                        else [],
                         "permissions": project.permissions.dict() if project.permissions else {},
                     }
                     data_collections_section = create_basic_project_data_collections_section(
@@ -1974,6 +2403,10 @@ def register_project_data_collections_callbacks(app):
                         else [],
                         "data_collections": [dc.model_dump() for dc in project.data_collections]
                         if project.data_collections
+                        else [],
+                        "joins": [j.model_dump() for j in project.joins] if project.joins else [],
+                        "links": [lnk.model_dump() for lnk in project.links]
+                        if project.links
                         else [],
                         "permissions": project.permissions.dict() if project.permissions else {},
                     }
@@ -2047,6 +2480,8 @@ def register_project_data_collections_callbacks(app):
                     if project.workflows
                     else [],
                     "data_collections": [dc.model_dump() for dc in all_data_collections],
+                    "joins": [j.model_dump() for j in project.joins] if project.joins else [],
+                    "links": [lnk.model_dump() for lnk in project.links] if project.links else [],
                     "permissions": project.permissions.dict() if project.permissions else {},
                 }
             else:
@@ -2060,6 +2495,8 @@ def register_project_data_collections_callbacks(app):
                     "data_collections": [dc.model_dump() for dc in project.data_collections]
                     if project.data_collections
                     else [],
+                    "joins": [j.model_dump() for j in project.joins] if project.joins else [],
+                    "links": [lnk.model_dump() for lnk in project.links] if project.links else [],
                     "permissions": project.permissions.dict() if project.permissions else {},
                 }
 
@@ -2345,9 +2782,12 @@ def register_project_data_collections_callbacks(app):
                                 break
                         break
 
-        # Fetch delta table information if we have the data collection ID and token
+        # Fetch delta table info only for non-MultiQC types
+        # MultiQC is document-based and doesn't have deltatable data
         delta_info = None
-        if dc_id and local_data and local_data.get("access_token"):
+        dc_type = selected_dc.get("config", {}).get("type", "").lower() if selected_dc else ""
+
+        if dc_id and local_data and local_data.get("access_token") and dc_type != "multiqc":
             try:
                 delta_info = api_call_fetch_delta_table_info(str(dc_id), local_data["access_token"])
             except Exception as e:
@@ -2376,7 +2816,13 @@ def register_project_data_collections_callbacks(app):
     def populate_multiqc_metadata_content(
         selected_dc_tag, project_data, selected_workflow_id, local_data
     ):
-        """Populate MultiQC metadata content when a MultiQC data collection is selected."""
+        """Populate MultiQC metadata content when a MultiQC data collection is selected.
+
+        Features:
+        - Support for multiple reports per DC with selector dropdown
+        - Collapsible accordion for samples with scrollable area
+        - Combined modules & plots view showing hierarchy (module > plots)
+        """
         if not selected_dc_tag or not project_data or not local_data:
             return dmc.Text("No MultiQC metadata available", size="sm", c="gray", ta="center")
 
@@ -2407,30 +2853,61 @@ def register_project_data_collections_callbacks(app):
         if not selected_dc or selected_dc.get("config", {}).get("type", "").lower() != "multiqc":
             return dash.no_update
 
-        # Fetch MultiQC metadata
+        # Fetch all MultiQC reports for this DC
         if dc_id and local_data.get("access_token"):
             try:
-                multiqc_metadata = api_call_fetch_multiqc_report(
+                all_reports_data = api_call_fetch_all_multiqc_reports(
                     str(dc_id), local_data["access_token"]
                 )
 
-                if not multiqc_metadata:
+                if not all_reports_data or not all_reports_data.get("reports"):
                     return dmc.Alert(
                         "No MultiQC report metadata found for this data collection",
                         color="yellow",
                         icon=DashIconify(icon="mdi:alert"),
                     )
 
-                # Extract metadata fields
-                metadata = multiqc_metadata.get("metadata", {})
-                samples = metadata.get("samples", [])
+                reports = all_reports_data.get("reports", [])
+                total_count = all_reports_data.get("total_count", len(reports))
+
+                # Build report selector options
+                report_options = []
+                for idx, report in enumerate(reports):
+                    report_name = report.get("report_name", f"Report {idx + 1}")
+                    report_options.append({"value": str(idx), "label": report_name})
+
+                # Use first report by default (will be controlled by selector callback)
+                selected_report = reports[0] if reports else {}
+                metadata = selected_report.get("metadata", {})
                 modules = metadata.get("modules", [])
                 plots = metadata.get("plots", {})
 
-                multiqc_version = multiqc_metadata.get("multiqc_version", "N/A")
-                report_name = multiqc_metadata.get("report_name", "N/A")
-                processed_at = multiqc_metadata.get("processed_at", "N/A")
-                file_size_bytes = multiqc_metadata.get("file_size_bytes")
+                # Use canonical_samples (filtered) if available
+                canonical_samples = metadata.get("canonical_samples", [])
+                if not canonical_samples:
+                    all_samples = metadata.get("samples", [])
+                    canonical_samples = [
+                        s
+                        for s in all_samples
+                        if not any(
+                            suffix in s
+                            for suffix in [
+                                "_1",
+                                "_2",
+                                "_R1",
+                                "_R2",
+                                " - First read",
+                                " - Second read",
+                                " - Adapter",
+                                " - adapter",
+                            ]
+                        )
+                    ]
+
+                multiqc_version = selected_report.get("multiqc_version", "N/A")
+                report_name = selected_report.get("report_name", "N/A")
+                processed_at = selected_report.get("processed_at", "N/A")
+                file_size_bytes = selected_report.get("file_size_bytes")
 
                 # Format file size
                 if file_size_bytes and isinstance(file_size_bytes, (int, float)):
@@ -2439,130 +2916,232 @@ def register_project_data_collections_callbacks(app):
                 else:
                     file_size_display = "Unknown"
 
-                # Create metadata display
-                return dmc.Stack(
+                # Build samples list for ScrollArea
+                samples_list = dmc.Stack(
                     [
-                        # Report info
+                        dmc.Text(sample, size="xs", ff="monospace")
+                        for sample in sorted(canonical_samples)
+                    ],
+                    gap=2,
+                )
+
+                # Build modules & plots hierarchy (module > its plots)
+                module_plot_items = []
+                for module in sorted(modules):
+                    # Get plots for this module
+                    module_plots = plots.get(module, []) if isinstance(plots, dict) else []
+                    plot_names = []
+                    if isinstance(module_plots, list):
+                        for plot in module_plots:
+                            if isinstance(plot, str):
+                                plot_names.append(plot)
+                            elif isinstance(plot, dict):
+                                plot_names.extend(plot.keys())
+
+                    # Create accordion item for each module
+                    if plot_names:
+                        plot_list = dmc.Stack(
+                            [
+                                dmc.Group(
+                                    [
+                                        DashIconify(
+                                            icon="mdi:chart-box", width=14, color=colors["orange"]
+                                        ),
+                                        dmc.Text(plot_name, size="xs"),
+                                    ],
+                                    gap="xs",
+                                )
+                                for plot_name in plot_names
+                            ],
+                            gap=4,
+                            pl="md",
+                        )
+                    else:
+                        plot_list = dmc.Text("No plots", size="xs", c="gray", fs="italic", pl="md")
+
+                    module_plot_items.append(
+                        dmc.AccordionItem(
+                            value=module,
+                            children=[
+                                dmc.AccordionControl(
+                                    dmc.Group(
+                                        [
+                                            DashIconify(
+                                                icon="mdi:puzzle", width=16, color=colors["green"]
+                                            ),
+                                            dmc.Text(module, size="sm", fw=500),
+                                            dmc.Text(
+                                                f"({len(plot_names)} plots)", size="xs", c="gray"
+                                            ),
+                                        ],
+                                        gap="xs",
+                                    ),
+                                ),
+                                dmc.AccordionPanel(plot_list),
+                            ],
+                        )
+                    )
+
+                # Create metadata display with accordions
+                content_children = [
+                    # Report count and selector (only show if multiple reports)
+                    dmc.Group(
+                        [
+                            DashIconify(
+                                icon="mdi:file-document-multiple", width=18, color=colors["blue"]
+                            ),
+                            dmc.Text(
+                                f"{total_count} report{'s' if total_count > 1 else ''} available",
+                                size="sm",
+                                fw=500,
+                            ),
+                        ],
+                        gap="xs",
+                    ),
+                ]
+
+                # Add report selector if multiple reports
+                if total_count > 1:
+                    content_children.append(
+                        dmc.Select(
+                            data=report_options,
+                            value="0",
+                            label="Select Report",
+                            size="xs",
+                            w=250,
+                            leftSection=DashIconify(icon="mdi:file-document"),
+                        )
+                    )
+
+                # Report info row
+                content_children.extend(
+                    [
+                        dmc.Divider(my="sm"),
                         dmc.SimpleGrid(
-                            cols=2,
+                            cols={"base": 2, "sm": 4},
                             spacing="md",
                             children=[
                                 dmc.Stack(
                                     [
-                                        dmc.Text("Report Name", size="sm", fw="bold", c="gray"),
-                                        dmc.Text(report_name, size="sm", ff="monospace"),
+                                        dmc.Text("Report", size="xs", c="gray"),
+                                        dmc.Text(
+                                            report_name, size="sm", ff="monospace", truncate=True
+                                        ),
                                     ],
-                                    gap="xs",
+                                    gap=2,
                                 ),
                                 dmc.Stack(
                                     [
-                                        dmc.Text("MultiQC Version", size="sm", fw="bold", c="gray"),
+                                        dmc.Text("Version", size="xs", c="gray"),
                                         dmc.Text(multiqc_version, size="sm", ff="monospace"),
                                     ],
-                                    gap="xs",
+                                    gap=2,
                                 ),
                                 dmc.Stack(
                                     [
-                                        dmc.Text("Processed At", size="sm", fw="bold", c="gray"),
-                                        dmc.Text(processed_at, size="sm"),
+                                        dmc.Text("Processed", size="xs", c="gray"),
+                                        dmc.Text(
+                                            processed_at[:10]
+                                            if len(processed_at) > 10
+                                            else processed_at,
+                                            size="sm",
+                                        ),
                                     ],
-                                    gap="xs",
+                                    gap=2,
                                 ),
                                 dmc.Stack(
                                     [
-                                        dmc.Text("File Size", size="sm", fw="bold", c="gray"),
+                                        dmc.Text("Size", size="xs", c="gray"),
                                         dmc.Text(file_size_display, size="sm", ff="monospace"),
                                     ],
-                                    gap="xs",
+                                    gap=2,
                                 ),
                             ],
                         ),
                         dmc.Divider(my="sm"),
-                        # Samples
-                        dmc.Stack(
-                            [
-                                dmc.Group(
-                                    [
-                                        DashIconify(
-                                            icon="mdi:test-tube", width=16, color=colors["blue"]
-                                        ),
-                                        dmc.Text("Samples", size="sm", fw="bold"),
-                                        dmc.Badge(str(len(samples)), color="blue", size="xs"),
-                                    ],
-                                    gap="xs",
-                                ),
-                                dmc.Group(
-                                    [
-                                        dmc.Badge(sample, color="gray", size="xs", variant="light")
-                                        for sample in samples[:20]  # Limit to first 20 samples
-                                    ]
-                                    + (
-                                        [
-                                            dmc.Badge(
-                                                f"+{len(samples) - 20} more",
-                                                color="gray",
-                                                size="xs",
-                                            )
-                                        ]
-                                        if len(samples) > 20
-                                        else []
-                                    ),
-                                    gap="xs",
-                                    style={"flexWrap": "wrap"},
-                                ),
-                            ],
-                            gap="xs",
-                        ),
-                        dmc.Divider(my="sm"),
-                        # Modules
-                        dmc.Stack(
-                            [
-                                dmc.Group(
-                                    [
-                                        DashIconify(
-                                            icon="mdi:puzzle", width=16, color=colors["green"]
-                                        ),
-                                        dmc.Text("Modules", size="sm", fw="bold"),
-                                        dmc.Badge(str(len(modules)), color="green", size="xs"),
-                                    ],
-                                    gap="xs",
-                                ),
-                                dmc.Group(
-                                    [
-                                        dmc.Badge(module, color="green", size="xs", variant="light")
-                                        for module in modules
-                                    ],
-                                    gap="xs",
-                                    style={"flexWrap": "wrap"},
-                                ),
-                            ],
-                            gap="xs",
-                        ),
-                        dmc.Divider(my="sm"),
-                        # Plots summary
-                        dmc.Stack(
-                            [
-                                dmc.Group(
-                                    [
-                                        DashIconify(
-                                            icon="mdi:chart-box", width=16, color=colors["orange"]
-                                        ),
-                                        dmc.Text("Plots", size="sm", fw="bold"),
-                                        dmc.Badge(str(len(plots)), color="orange", size="xs"),
-                                    ],
-                                    gap="xs",
-                                ),
-                                dmc.Text(
-                                    f"This report contains {len(plots)} plot categories",
-                                    size="sm",
-                                    c="gray",
-                                ),
-                            ],
-                            gap="xs",
-                        ),
-                    ],
-                    gap="md",
+                    ]
                 )
+
+                # Main accordion with Samples and Modules & Plots
+                content_children.append(
+                    dmc.Accordion(
+                        variant="separated",
+                        chevronPosition="left",
+                        children=[
+                            # Samples accordion
+                            dmc.AccordionItem(
+                                value="samples",
+                                children=[
+                                    dmc.AccordionControl(
+                                        dmc.Group(
+                                            [
+                                                DashIconify(
+                                                    icon="mdi:test-tube",
+                                                    width=18,
+                                                    color=colors["blue"],
+                                                ),
+                                                dmc.Text("Samples", size="sm", fw=500),
+                                                dmc.Text(
+                                                    f"({len(canonical_samples)})",
+                                                    size="sm",
+                                                    c="gray",
+                                                ),
+                                            ],
+                                            gap="xs",
+                                        ),
+                                    ),
+                                    dmc.AccordionPanel(
+                                        dmc.ScrollArea(
+                                            samples_list,
+                                            h=150,
+                                            type="auto",
+                                            offsetScrollbars=True,
+                                        )
+                                        if canonical_samples
+                                        else dmc.Text(
+                                            "No samples found", size="sm", c="gray", fs="italic"
+                                        ),
+                                    ),
+                                ],
+                            ),
+                            # Modules & Plots accordion
+                            dmc.AccordionItem(
+                                value="modules-plots",
+                                children=[
+                                    dmc.AccordionControl(
+                                        dmc.Group(
+                                            [
+                                                DashIconify(
+                                                    icon="mdi:puzzle",
+                                                    width=18,
+                                                    color=colors["green"],
+                                                ),
+                                                dmc.Text("Modules & Plots", size="sm", fw=500),
+                                                dmc.Text(
+                                                    f"({len(modules)} modules)", size="sm", c="gray"
+                                                ),
+                                            ],
+                                            gap="xs",
+                                        ),
+                                    ),
+                                    dmc.AccordionPanel(
+                                        dmc.Accordion(
+                                            variant="contained",
+                                            chevronPosition="left",
+                                            children=module_plot_items,
+                                        )
+                                        if module_plot_items
+                                        else dmc.Text(
+                                            "No modules found", size="sm", c="gray", fs="italic"
+                                        ),
+                                    ),
+                                ],
+                            ),
+                        ],
+                    )
+                )
+
+                return dmc.Stack(content_children, gap="sm")
 
             except Exception as e:
                 logger.error(f"Error fetching MultiQC metadata: {e}")
@@ -2646,11 +3225,12 @@ def register_project_data_collections_callbacks(app):
         Update joins visualization based on project data.
 
         Generates cytoscape elements to visualize relationships between
-        data collections when join configurations are present. Shows
-        sample visualization if multiple data collections exist without joins.
+        data collections using project-level joins and links. Shows data
+        collections as nodes without edges when no joins/links are defined.
 
         Args:
-            project_data: Project data dictionary containing data collections.
+            project_data: Project data dictionary containing data collections,
+                joins, and links.
             selected_workflow_id: Currently selected workflow ID (for advanced projects).
 
         Returns:
@@ -2676,21 +3256,35 @@ def register_project_data_collections_callbacks(app):
                 if selected_workflow:
                     data_collections = selected_workflow.get("data_collections", [])
 
-        # Check if any data collections have joins
-        has_joins = False
+        # Check for project-level joins and links
+        has_joins = bool(project_data.get("joins"))
+        has_links = bool(project_data.get("links"))
+
+        # Also check legacy DC-level join configs
+        has_dc_level_joins = False
         for dc in data_collections:
             config = dc.get("config", {})
             if config.get("join") is not None:
-                has_joins = True
+                has_dc_level_joins = True
                 break
 
-        if has_joins and len(data_collections) > 1:
-            # Generate cytoscape elements from real Depictio data (inline)
-            elements = generate_cytoscape_elements_from_project_data(data_collections)
-            return {"display": "block"}, elements
-        elif len(data_collections) > 1:
-            # Show sample visualization for demonstration (no real joins)
-            elements = generate_sample_elements()
+        # Generate visualization if we have multiple data collections
+        if len(data_collections) > 1:
+            if has_joins or has_links:
+                # Use new function that handles project-level joins and links
+                elements = generate_elements_from_project(
+                    project_data=project_data,
+                    data_collections=data_collections,
+                )
+            elif has_dc_level_joins:
+                # Fallback to legacy DC-level join generation
+                elements = generate_cytoscape_elements_from_project_data(data_collections)
+            else:
+                # Show DCs without connections (user preference: show DCs as nodes)
+                elements = generate_elements_from_project(
+                    project_data={"joins": [], "links": []},
+                    data_collections=data_collections,
+                )
             return {"display": "block"}, elements
 
         # Hide if no data collections or only one DC
@@ -4117,6 +4711,240 @@ def register_project_data_collections_callbacks(app):
                 dmc.Text("Error", size="lg", fw="bold", c="red", ta="center"),
                 dmc.Text("calc failed", size="xs", c="gray", ta="center"),
             ]
+
+    # =========================================================================
+    # Image DC Preview Modal Callbacks
+    # =========================================================================
+
+    @app.callback(
+        Output({"type": "image-dc-preview-modal", "index": MATCH}, "opened"),
+        [Input({"type": "image-dc-preview-button", "index": MATCH}, "n_clicks")],
+        [State({"type": "image-dc-preview-modal", "index": MATCH}, "opened")],
+        prevent_initial_call=True,
+    )
+    def toggle_image_dc_preview_modal(n_clicks, is_opened):
+        """Toggle the image DC preview modal open/closed state."""
+        if n_clicks:
+            return not is_opened
+        return is_opened
+
+    @app.callback(
+        Output({"type": "image-dc-preview-grid", "index": MATCH}, "children"),
+        [Input({"type": "image-dc-preview-modal", "index": MATCH}, "opened")],
+        [
+            State({"type": "image-dc-preview-store", "index": MATCH}, "data"),
+            State("project-data-store", "data"),
+            State("local-store", "data"),
+        ],
+        prevent_initial_call=True,
+    )
+    def load_image_dc_preview_grid(is_opened, dc_store_data, project_data, local_data):
+        """
+        Load and display sample images when the preview modal is opened.
+
+        Fetches up to 6 sample images from the data collection's delta table
+        and displays them in a grid with click-to-enlarge functionality.
+        """
+        if not is_opened:
+            return dash.no_update
+
+        if not dc_store_data or not local_data:
+            return dmc.Alert("Missing configuration data", color="yellow")
+
+        dc_id = dc_store_data.get("dc_id")
+        image_column = dc_store_data.get("image_column")
+        s3_base_folder = dc_store_data.get("s3_base_folder", "")
+        thumbnail_size = dc_store_data.get("thumbnail_size", 150)
+        token = local_data.get("access_token")
+
+        if not dc_id or not image_column:
+            return dmc.Alert("Image column not configured", color="yellow")
+
+        try:
+            # Find workflow_id for this DC
+            workflow_id = None
+            if project_data:
+                project_type = project_data.get("project_type", "basic")
+                if project_type == "advanced":
+                    for workflow in project_data.get("workflows", []):
+                        for dc in workflow.get("data_collections", []):
+                            if dc.get("id") == dc_id:
+                                workflow_id = workflow.get("id")
+                                # Get s3_base_folder from DC config if not in store
+                                if not s3_base_folder:
+                                    dc_config = dc.get("config", {})
+                                    dc_specific = dc_config.get("dc_specific_properties", {})
+                                    s3_base_folder = dc_specific.get("s3_base_folder", "")
+                                break
+                        if workflow_id:
+                            break
+                else:
+                    # Basic project - DC ID is the workflow ID
+                    workflow_id = dc_id
+                    for dc in project_data.get("data_collections", []):
+                        if dc.get("id") == dc_id and not s3_base_folder:
+                            dc_config = dc.get("config", {})
+                            dc_specific = dc_config.get("dc_specific_properties", {})
+                            s3_base_folder = dc_specific.get("s3_base_folder", "")
+                            break
+
+            # Load sample data from delta table (max 6 images)
+            df, error = load_data_collection_dataframe(
+                workflow_id=workflow_id,
+                data_collection_id=dc_id,
+                token=token,
+                limit_rows=6,
+            )
+
+            if error or df is None:
+                return dmc.Alert(
+                    f"Could not load image data: {error or 'Unknown error'}",
+                    color="red",
+                )
+
+            if image_column not in df.columns:
+                return dmc.Alert(
+                    f"Image column '{image_column}' not found in data",
+                    color="yellow",
+                )
+
+            # Get image paths from the dataframe
+            image_paths = df[image_column].to_list()
+            valid_paths = [p for p in image_paths if p and isinstance(p, str)]
+
+            if not valid_paths:
+                return dmc.Alert("No valid image paths found in data", color="yellow")
+
+            # Build API base URL - use same approach as image component
+            from depictio.api.v1.configs.config import settings
+            from depictio.dash.modules.image_component.utils import build_image_url
+
+            api_base_url = f"http://localhost:{settings.fastapi.port}"
+
+            # Create image grid with clickable cards
+            image_cards = []
+            image_data_stores = []
+
+            for i, img_path in enumerate(valid_paths[:6]):
+                # Build image URL using the utility function
+                img_url = build_image_url(
+                    relative_path=str(img_path),
+                    base_s3_folder=s3_base_folder or "",
+                    api_base_url=api_base_url,
+                )
+
+                # Get filename for display
+                filename = img_path.split("/")[-1] if "/" in img_path else img_path
+
+                # Store image data for click handling
+                image_data_stores.append(
+                    dcc.Store(
+                        id={
+                            "type": "image-dc-thumb-data",
+                            "index": dc_id,
+                            "img_index": i,
+                        },
+                        data={"src": img_url, "title": filename},
+                    )
+                )
+
+                image_cards.append(
+                    html.Div(
+                        dmc.Card(
+                            [
+                                dmc.CardSection(
+                                    html.Img(
+                                        src=img_url,
+                                        style={
+                                            "width": "100%",
+                                            "height": f"{thumbnail_size}px",
+                                            "objectFit": "cover",
+                                            "display": "block",
+                                        },
+                                    ),
+                                ),
+                                dmc.Text(
+                                    filename,
+                                    size="xs",
+                                    c="gray",
+                                    ta="center",
+                                    truncate=True,
+                                    mt="xs",
+                                    px="xs",
+                                    pb="xs",
+                                ),
+                            ],
+                            withBorder=True,
+                            shadow="sm",
+                            radius="md",
+                            p=0,
+                            style={"cursor": "pointer"},
+                        ),
+                        id={
+                            "type": "image-dc-thumb-card",
+                            "index": dc_id,
+                            "img_index": i,
+                        },
+                        n_clicks=0,
+                    )
+                )
+
+            # Build grid with SimpleGrid
+            total_images = len(df)
+            grid_content = [
+                *image_data_stores,
+                dmc.SimpleGrid(
+                    children=image_cards,
+                    cols={"base": 2, "sm": 3, "md": 4},
+                    spacing="md",
+                ),
+            ]
+
+            # Add note if there are more images
+            if total_images > 6:
+                grid_content.append(
+                    dmc.Text(
+                        f"Showing 6 of {total_images}+ images. "
+                        "Add an Image component to a dashboard to view all.",
+                        size="xs",
+                        c="gray",
+                        ta="center",
+                        mt="md",
+                        fs="italic",
+                    )
+                )
+
+            return dmc.Stack(grid_content, gap="md")
+
+        except Exception as e:
+            logger.error(f"Error loading image preview for DC {dc_id}: {e}")
+            return dmc.Alert(f"Error loading images: {str(e)}", color="red")
+
+    @app.callback(
+        Output({"type": "image-dc-viewer-modal", "index": MATCH}, "opened"),
+        Output({"type": "image-dc-viewer-img", "index": MATCH}, "src"),
+        Output({"type": "image-dc-viewer-title", "index": MATCH}, "children"),
+        Input({"type": "image-dc-thumb-card", "index": MATCH, "img_index": ALL}, "n_clicks"),
+        State({"type": "image-dc-thumb-data", "index": MATCH, "img_index": ALL}, "data"),
+        State({"type": "image-dc-viewer-modal", "index": MATCH}, "opened"),
+        prevent_initial_call=True,
+    )
+    def open_image_dc_viewer(n_clicks_list, thumb_data_list, current_opened):
+        """Open the image viewer modal when a thumbnail is clicked."""
+        if not ctx.triggered or not any(n_clicks_list):
+            raise dash.exceptions.PreventUpdate
+
+        triggered_id = ctx.triggered_id
+        if not triggered_id:
+            raise dash.exceptions.PreventUpdate
+
+        clicked_idx = triggered_id.get("img_index")
+        if clicked_idx is not None and clicked_idx < len(thumb_data_list):
+            img_data = thumb_data_list[clicked_idx]
+            if img_data:
+                return True, img_data.get("src", ""), img_data.get("title", "")
+
+        raise dash.exceptions.PreventUpdate
 
 
 def generate_cytoscape_elements_from_project_data(data_collections):
