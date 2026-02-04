@@ -135,7 +135,7 @@ COMPONENT_METADATA = {
         },  # Adjusted for 48-column grid with rowHeight=20 - full-featured MultiQC reports
     },
     "image": {
-        "icon": "mdi:image-multiple",
+        "icon": "mdi:image-area",  # Gallery-style icon for image data collections
         "display_name": "Image Gallery",
         "description": "Interactive image grid with modal viewer",
         "color": colors["teal"],

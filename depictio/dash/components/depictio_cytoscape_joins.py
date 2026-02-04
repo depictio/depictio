@@ -22,6 +22,26 @@ from dash_iconify import DashIconify
 
 from depictio.dash.colors import colors
 
+# =============================================================================
+# Type Definitions
+# =============================================================================
+
+# Relationship types for visualization
+RELATIONSHIP_TYPES = {
+    "join": {
+        "label": "Join",
+        "description": "Pre-computed persistent table (stored in Delta Lake)",
+        "line_style": "solid",
+        "icon": "mdi:table-merge-cells",
+    },
+    "link": {
+        "label": "Link",
+        "description": "Runtime cross-DC filtering (resolved dynamically)",
+        "line_style": "dashed",
+        "icon": "mdi:link-variant",
+    },
+}
+
 
 def create_joins_visualization_section(
     elements: list[dict[str, Any]] | None = None, theme: str = "light"
@@ -53,7 +73,7 @@ def create_joins_visualization_section(
                     dmc.Group(
                         [
                             DashIconify(icon="mdi:graph-outline", width=24, color=colors["teal"]),
-                            dmc.Title("Data Collection Joins", order=3, c=colors["teal"]),
+                            dmc.Title("Data Collection Joins & Links", order=3, c=colors["teal"]),
                         ],
                         gap="sm",
                     ),
@@ -85,7 +105,7 @@ def create_joins_visualization_section(
                                 [
                                     "This network shows relationships between data collections. ",
                                     "Each group represents a data collection with its columns as nodes. ",
-                                    "Edges show join relationships between columns.",
+                                    "Edges show join and link relationships between columns.",
                                 ],
                                 size="sm",
                             ),
@@ -95,6 +115,61 @@ def create_joins_visualization_section(
                 color="blue",
                 variant="light",
                 mb="sm",
+            ),
+            # Legend for relationship types
+            dmc.Paper(
+                [
+                    dmc.Group(
+                        [
+                            dmc.Text("Legend:", fw="bold", size="sm"),
+                            dmc.Group(
+                                [
+                                    html.Div(
+                                        style={
+                                            "width": "30px",
+                                            "height": "3px",
+                                            "backgroundColor": colors["teal"],
+                                            "borderRadius": "2px",
+                                        }
+                                    ),
+                                    dmc.Text("Join", size="xs"),
+                                    dmc.Text(
+                                        "(pre-computed table)",
+                                        size="xs",
+                                        c="dimmed",
+                                    ),
+                                ],
+                                gap="xs",
+                            ),
+                            dmc.Group(
+                                [
+                                    html.Div(
+                                        style={
+                                            "width": "30px",
+                                            "height": "3px",
+                                            "backgroundColor": colors["pink"],
+                                            "borderRadius": "2px",
+                                            "borderTop": f"2px dashed {colors['pink']}",
+                                            "borderBottom": f"2px dashed {colors['pink']}",
+                                        }
+                                    ),
+                                    dmc.Text("Link", size="xs"),
+                                    dmc.Text(
+                                        "(runtime filtering)",
+                                        size="xs",
+                                        c="dimmed",
+                                    ),
+                                ],
+                                gap="xs",
+                            ),
+                        ],
+                        gap="lg",
+                    ),
+                ],
+                p="xs",
+                mb="sm",
+                withBorder=True,
+                radius="sm",
             ),
             # Cytoscape visualization
             # html.Div(
@@ -315,7 +390,7 @@ def get_depictio_cytoscape_stylesheet(theme: str = "light") -> list[dict[str, An
                 "text-opacity": 1.0,  # Full text opacity regardless of element opacity
             },
         },
-        # MultiQC data collection background styling (orange colored)
+        # MultiQC data collection background styling (orange colored, compact)
         {
             "selector": ".data-collection-background-multiqc",
             "style": {
@@ -324,17 +399,42 @@ def get_depictio_cytoscape_stylesheet(theme: str = "light") -> list[dict[str, An
                 "border-width": 2,
                 "border-style": "solid",
                 "label": "data(label)",
-                "text-valign": "top",  # Align text to top like regular DCs
+                "text-valign": "center",  # Center text vertically for compact box
                 "text-halign": "center",
                 "color": colors["orange"],  # Orange color for MultiQC
-                "font-size": "16px",
+                "font-size": "14px",
                 "font-weight": "bold",
                 "shape": "round-rectangle",
-                "width": "180px",
-                "height": "data(box_height)",  # Dynamic height
-                "text-margin-y": -15,  # Same top margin as regular DCs
+                "width": "140px",
+                "height": "70px",  # Fixed compact height
+                "text-margin-y": 0,  # No margin needed for centered text
                 "text-wrap": "wrap",
                 "text-max-width": "160px",
+                "z-index": 1,
+                "opacity": 0.8,
+                "text-opacity": 1.0,
+            },
+        },
+        # Image data collection background styling (teal colored, compact)
+        {
+            "selector": ".data-collection-background-image",
+            "style": {
+                "background-color": group_bg,
+                "border-color": colors["teal"],
+                "border-width": 2,
+                "border-style": "solid",
+                "label": "data(label)",
+                "text-valign": "center",
+                "text-halign": "center",
+                "color": colors["teal"],
+                "font-size": "14px",
+                "font-weight": "bold",
+                "shape": "round-rectangle",
+                "width": "140px",
+                "height": "70px",
+                "text-margin-y": 0,
+                "text-wrap": "wrap",
+                "text-max-width": "120px",
                 "z-index": 1,
                 "opacity": 0.8,
                 "text-opacity": 1.0,
@@ -532,6 +632,52 @@ def get_depictio_cytoscape_stylesheet(theme: str = "light") -> list[dict[str, An
         },
         # Edge hover
         {"selector": ".join-edge:hover", "style": {"width": 5, "opacity": 1}},
+        # =============================================================================
+        # Link edges (runtime cross-DC filtering) - dashed pink style
+        # =============================================================================
+        {
+            "selector": ".link-edge",
+            "style": {
+                "target-arrow-shape": "triangle",
+                "target-arrow-color": colors["pink"],
+                "line-color": colors["pink"],
+                "width": 6,
+                "opacity": 0.9,
+                "line-style": "dashed",
+                "line-dash-pattern": [6, 3],
+                "z-index": 45,
+                "z-compound-depth": "top",
+                "z-index-compare": "manual",
+            },
+        },
+        # Link - direct resolver (1:1 mapping)
+        {
+            "selector": ".link-direct",
+            "style": {
+                "line-style": "dashed",
+                "line-dash-pattern": [6, 3],
+                "target-arrow-shape": "triangle",
+            },
+        },
+        # Link - sample_mapping resolver (MultiQC variants)
+        {
+            "selector": ".link-sample-mapping",
+            "style": {
+                "line-style": "dashed",
+                "line-dash-pattern": [10, 5],
+                "target-arrow-shape": "diamond",
+            },
+        },
+        # Link - pattern resolver
+        {
+            "selector": ".link-pattern",
+            "style": {
+                "line-style": "dotted",
+                "target-arrow-shape": "circle",
+            },
+        },
+        # Link edge hover
+        {"selector": ".link-edge:hover", "style": {"width": 8, "opacity": 1}},
     ]
 
 
@@ -752,6 +898,274 @@ def generate_sample_elements() -> list[dict[str, Any]]:
     return elements
 
 
+def generate_elements_from_project(
+    project_data: dict[str, Any],
+    data_collections: list[dict[str, Any]] | None = None,
+) -> list[dict[str, Any]]:
+    """
+    Generate Cytoscape elements from real project data including joins and links.
+
+    Creates nodes for data collections and their columns, and edges for:
+    - Joins: Pre-computed persistent tables (solid lines)
+    - Links: Runtime cross-DC filtering (dashed lines)
+
+    Args:
+        project_data: Project dictionary containing joins and links fields.
+        data_collections: Optional list of data collection dicts. If None,
+            extracts from project_data.
+
+    Returns:
+        List of cytoscape element dictionaries with nodes and edges.
+    """
+    elements: list[dict[str, Any]] = []
+
+    # Extract data collections if not provided
+    if data_collections is None:
+        data_collections = []
+        # Basic project: direct data_collections
+        if project_data.get("data_collections"):
+            data_collections.extend(project_data["data_collections"])
+        # Advanced project: workflow data_collections
+        for workflow in project_data.get("workflows", []):
+            if workflow.get("data_collections"):
+                data_collections.extend(workflow["data_collections"])
+
+    # If no data collections, return empty
+    if not data_collections:
+        return elements
+
+    # Build DC lookup by tag and id
+    dc_by_tag: dict[str, dict] = {}
+    dc_by_id: dict[str, dict] = {}
+    dc_columns: dict[str, list[str]] = {}
+
+    for dc in data_collections:
+        dc_tag = dc.get("data_collection_tag", f"DC_{dc.get('id', 'unknown')}")
+        dc_id = str(dc.get("id", ""))
+        dc_by_tag[dc_tag] = dc
+        dc_by_id[dc_id] = dc
+
+        # Extract columns from data collection config
+        columns = []
+        config = dc.get("config", {})
+
+        # Priority: columns from config
+        if config.get("columns"):
+            columns = config["columns"]
+        # Or from dc_specific_properties
+        elif config.get("dc_specific_properties", {}).get("columns_description"):
+            columns = list(config["dc_specific_properties"]["columns_description"].keys())
+        # Or delta_table_schema
+        elif dc.get("delta_table_schema"):
+            schema = dc["delta_table_schema"]
+            if isinstance(schema, dict):
+                columns = list(schema.keys())
+            elif isinstance(schema, list):
+                columns = [f.get("name", str(f)) for f in schema if isinstance(f, dict)]
+
+        # Limit columns to display for readability (max 8)
+        dc_columns[dc_tag] = columns[:8] if columns else ["id"]
+
+    # Create nodes for data collections and their columns
+    for i, dc in enumerate(data_collections):
+        dc_tag = dc.get("data_collection_tag", f"DC_{dc.get('id', 'unknown')}")
+        dc_id = str(dc.get("id", f"dc_{i}"))
+        dc_type = dc.get("config", {}).get("type", "table").lower()
+
+        # Skip non-visualizable types
+        if dc_type in ("jbrowse", "jbrowse2"):
+            continue
+
+        columns = dc_columns.get(dc_tag, ["id"])
+        num_columns = len(columns)
+
+        # Position calculation
+        x_offset = i * 350
+
+        # Determine DC background class and size based on type
+        bg_class = "data-collection-background"
+        if dc_type == "multiqc":
+            bg_class = "data-collection-background-multiqc"
+            # Smaller box for MultiQC (no column nodes displayed)
+            box_height = 70
+            center_y = 140
+        elif dc_type == "image":
+            bg_class = "data-collection-background-image"
+            # Smaller box for Image (no column nodes displayed)
+            box_height = 70
+            center_y = 140
+        else:
+            # Table types: size based on columns
+            box_height = max(250, num_columns * 45 + 80)
+            first_column_y = 140
+            last_column_y = 140 + ((num_columns - 1) * 50)
+            center_y = (first_column_y + last_column_y) / 2
+
+        # Create DC background node
+        elements.append(
+            {
+                "data": {
+                    "id": f"dc_bg_{dc_id}",
+                    "label": f"{dc_tag}\n[{dc_type}]",
+                    "type": "dc_background",
+                    "dc_type": dc_type,
+                    "column_count": num_columns,
+                    "box_height": box_height,
+                },
+                "position": {"x": x_offset + 100, "y": center_y},
+                "classes": f"{bg_class} dc-columns-{min(num_columns, 10)}",
+            }
+        )
+
+        # Create column nodes (only for table types)
+        if dc_type in ("table",):
+            for j, column in enumerate(columns):
+                column_id = f"{dc_tag}_{column}"
+                y_offset = 140 + (j * 50)
+
+                elements.append(
+                    {
+                        "data": {
+                            "id": column_id,
+                            "label": column,
+                            "type": "column",
+                            "dc_tag": dc_tag,
+                            "dc_id": dc_id,
+                            "is_join_column": False,  # Will be updated when processing joins
+                        },
+                        "position": {"x": x_offset + 100, "y": y_offset},
+                        "classes": "column-node",
+                    }
+                )
+
+    # Process joins (pre-computed persistent tables)
+    joins = project_data.get("joins", [])
+    edge_counter = 0
+
+    for join in joins:
+        left_dc = join.get("left_dc", "")
+        right_dc = join.get("right_dc", "")
+        on_columns = join.get("on_columns", [])
+        join_type = join.get("how", "inner")
+        join_name = join.get("name", f"join_{edge_counter}")
+
+        # Find left and right DC by tag
+        left_dc_data = dc_by_tag.get(left_dc)
+        right_dc_data = dc_by_tag.get(right_dc)
+
+        if not left_dc_data or not right_dc_data:
+            continue
+
+        # Mark join columns
+        for col in on_columns:
+            # Update column nodes to show they are join columns
+            left_col_id = f"{left_dc}_{col}"
+            right_col_id = f"{right_dc}_{col}"
+
+            for elem in elements:
+                if elem["data"].get("id") in (left_col_id, right_col_id):
+                    elem["data"]["is_join_column"] = True
+                    if "join-column" not in elem.get("classes", ""):
+                        elem["classes"] = elem.get("classes", "") + " join-column"
+
+        # Create join edge between first on_column
+        if on_columns:
+            col = on_columns[0]
+            source_node = f"{left_dc}_{col}"
+            target_node = f"{right_dc}_{col}"
+
+            # Calculate adjacency
+            try:
+                left_idx = list(dc_by_tag.keys()).index(left_dc)
+                right_idx = list(dc_by_tag.keys()).index(right_dc)
+                is_adjacent = abs(left_idx - right_idx) == 1
+            except ValueError:
+                is_adjacent = True
+
+            adjacency_class = "edge-adjacent" if is_adjacent else "edge-distant"
+
+            elements.append(
+                {
+                    "data": {
+                        "id": f"join_edge_{edge_counter}",
+                        "source": source_node,
+                        "target": target_node,
+                        "label": f"{join_type.upper()}",
+                        "join_type": join_type,
+                        "join_name": join_name,
+                        "is_adjacent": is_adjacent,
+                    },
+                    "classes": f"join-edge join-{join_type} {adjacency_class}",
+                }
+            )
+            edge_counter += 1
+
+    # Process links (runtime cross-DC filtering)
+    links = project_data.get("links", [])
+
+    for link in links:
+        source_dc_id = str(link.get("source_dc_id", ""))
+        target_dc_id = str(link.get("target_dc_id", ""))
+        source_column = link.get("source_column", "")
+        target_type = link.get("target_type", "table")
+        link_config = link.get("link_config", {})
+        resolver = link_config.get("resolver", "direct")
+
+        # Find source and target DC
+        source_dc_data = dc_by_id.get(source_dc_id)
+        target_dc_data = dc_by_id.get(target_dc_id)
+
+        if not source_dc_data or not target_dc_data:
+            continue
+
+        source_dc_tag = source_dc_data.get("data_collection_tag", f"DC_{source_dc_id}")
+        target_dc_tag = target_dc_data.get("data_collection_tag", f"DC_{target_dc_id}")
+
+        # Mark source column as linked
+        source_col_id = f"{source_dc_tag}_{source_column}"
+        for elem in elements:
+            if elem["data"].get("id") == source_col_id:
+                elem["data"]["is_link_column"] = True
+                if "join-column" not in elem.get("classes", ""):
+                    elem["classes"] = elem.get("classes", "") + " join-column"
+
+        # Create link edge - connect to DC background for non-table targets
+        if target_type in ("multiqc", "image"):
+            target_node = f"dc_bg_{target_dc_id}"
+        else:
+            target_field = link_config.get("target_field", source_column)
+            target_node = f"{target_dc_tag}_{target_field}"
+
+        # Calculate adjacency
+        try:
+            source_idx = list(dc_by_tag.keys()).index(source_dc_tag)
+            target_idx = list(dc_by_tag.keys()).index(target_dc_tag)
+            is_adjacent = abs(source_idx - target_idx) == 1
+        except ValueError:
+            is_adjacent = True
+
+        adjacency_class = "edge-adjacent" if is_adjacent else "edge-distant"
+        resolver_class = f"link-{resolver.replace('_', '-')}"
+
+        elements.append(
+            {
+                "data": {
+                    "id": f"link_edge_{edge_counter}",
+                    "source": source_col_id,
+                    "target": target_node,
+                    "label": f"Link ({resolver})",
+                    "link_type": target_type,
+                    "resolver": resolver,
+                    "is_adjacent": is_adjacent,
+                },
+                "classes": f"link-edge {resolver_class} {adjacency_class}",
+            }
+        )
+        edge_counter += 1
+
+    return elements
+
+
 def create_selection_details_content(
     selected_data: list[dict[str, Any]] | None,
 ) -> dmc.Text | dmc.Stack:
@@ -821,15 +1235,35 @@ def create_selection_details_content(
             gap="xs",
         )
 
-    elif "join_type" in data:  # Edge
+    elif "join_type" in data:  # Join edge
         return dmc.Stack(
             [
                 dmc.Group(
                     [
-                        DashIconify(icon="mdi:arrow-right-bold", width=18, color=colors["orange"]),
+                        DashIconify(icon="mdi:table-merge-cells", width=18, color=colors["teal"]),
                         dmc.Text(f"Join: {data.get('label', 'Unknown')}", fw="bold", size="sm"),
                     ]
                 ),
+                dmc.Badge("Pre-computed Table", color="teal", size="xs"),
+                dmc.Text(f"Type: {data.get('join_type', 'inner').upper()}", size="xs", c="gray"),
+                dmc.Text(f"From: {data.get('source', 'Unknown')}", size="xs", c="gray"),
+                dmc.Text(f"To: {data.get('target', 'Unknown')}", size="xs", c="gray"),
+            ],
+            gap="xs",
+        )
+
+    elif "link_type" in data:  # Link edge
+        resolver = data.get("resolver", "direct")
+        return dmc.Stack(
+            [
+                dmc.Group(
+                    [
+                        DashIconify(icon="mdi:link-variant", width=18, color=colors["pink"]),
+                        dmc.Text("Link", fw="bold", size="sm"),
+                    ]
+                ),
+                dmc.Badge("Runtime Filtering", color="pink", size="xs"),
+                dmc.Text(f"Resolver: {resolver}", size="xs", c="gray"),
                 dmc.Text(f"From: {data.get('source', 'Unknown')}", size="xs", c="gray"),
                 dmc.Text(f"To: {data.get('target', 'Unknown')}", size="xs", c="gray"),
             ],

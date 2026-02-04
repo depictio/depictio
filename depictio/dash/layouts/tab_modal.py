@@ -4,6 +4,71 @@ import dash_mantine_components as dmc
 from dash import Input, Output, dcc, html
 from dash_iconify import DashIconify
 
+# =============================================================================
+# Workflow-based Color Mapping
+# =============================================================================
+# Maps workflow engines/catalogs to DMC tab colors for visual consistency
+
+WORKFLOW_COLORS = {
+    # Nextflow ecosystem
+    "nf-core": "green",
+    "nextflow": "green",
+    # Snakemake ecosystem
+    "snakemake": "lime",
+    # Galaxy ecosystem
+    "galaxy": "yellow",
+    # Python-based
+    "python": "blue",
+    # R-based
+    "r": "violet",
+    # Shell/Bash
+    "bash": "gray",
+    # CWL
+    "cwl": "cyan",
+    # Default fallback
+    "default": "orange",
+}
+
+
+def get_workflow_tab_color(workflow_data: dict | None) -> str:
+    """
+    Get the tab color based on workflow engine/catalog.
+
+    Checks for catalog first (e.g., nf-core), then falls back to engine.
+    Returns default color if no workflow data or no matching mapping.
+
+    Args:
+        workflow_data: Workflow dict containing 'catalog' and/or 'engine' fields.
+
+    Returns:
+        DMC color name (e.g., 'green', 'yellow', 'orange').
+    """
+    if not workflow_data:
+        return WORKFLOW_COLORS["default"]
+
+    # Check catalog first (more specific)
+    catalog = workflow_data.get("catalog", {})
+    if isinstance(catalog, dict):
+        catalog_name = catalog.get("name", "").lower()
+    else:
+        catalog_name = str(catalog).lower() if catalog else ""
+
+    if catalog_name and catalog_name in WORKFLOW_COLORS:
+        return WORKFLOW_COLORS[catalog_name]
+
+    # Check engine
+    engine = workflow_data.get("engine", {})
+    if isinstance(engine, dict):
+        engine_name = engine.get("name", "").lower()
+    else:
+        engine_name = str(engine).lower() if engine else ""
+
+    if engine_name and engine_name in WORKFLOW_COLORS:
+        return WORKFLOW_COLORS[engine_name]
+
+    return WORKFLOW_COLORS["default"]
+
+
 # Icon options for tab icon selection
 TAB_ICON_OPTIONS = [
     {"value": "mdi:view-dashboard", "label": "Dashboard"},
@@ -26,6 +91,7 @@ TAB_ICON_OPTIONS = [
 
 # Color options for tab icon color picker
 TAB_COLOR_OPTIONS = [
+    {"value": "", "label": "Auto (from workflow)"},  # Empty string = auto-derive
     {"value": "orange", "label": "Orange"},
     {"value": "blue", "label": "Blue"},
     {"value": "green", "label": "Green"},

@@ -2050,19 +2050,28 @@ def api_call_fetch_multiqc_report(data_collection_id: str, token: str) -> dict[s
         token: Authentication token
 
     Returns:
-        MultiQC report metadata or None if not found
+        MultiQC report metadata (first report found) or None if not found
     """
     try:
+        # Use the correct endpoint: /multiqc/reports/data-collection/{data_collection_id}
         response = httpx.get(
-            f"{API_BASE_URL}/depictio/api/v1/multiqc/{data_collection_id}",
+            f"{API_BASE_URL}/depictio/api/v1/multiqc/reports/data-collection/{data_collection_id}",
             headers={"Authorization": f"Bearer {token}"},
             timeout=settings.performance.api_request_timeout,
         )
 
         if response.status_code == 200:
-            multiqc_data = response.json()
-            logger.debug(f"MultiQC report fetched successfully for {data_collection_id}")
-            return multiqc_data
+            response_data = response.json()
+            # Response is MultiQCReportsListResponse with reports list
+            reports = response_data.get("reports", [])
+            if reports:
+                # Return the first report's data (report field contains the actual MultiQCReport)
+                first_report = reports[0].get("report", {})
+                logger.debug(f"MultiQC report fetched successfully for {data_collection_id}")
+                return first_report
+            else:
+                logger.debug(f"No MultiQC reports found for data collection {data_collection_id}")
+                return None
         elif response.status_code == 404:
             logger.debug(f"No MultiQC report found for data collection {data_collection_id}")
             return None
@@ -2074,4 +2083,47 @@ def api_call_fetch_multiqc_report(data_collection_id: str, token: str) -> dict[s
 
     except Exception as e:
         logger.error(f"Error fetching MultiQC report for {data_collection_id}: {e}")
+        return None
+
+
+@validate_call(validate_return=True)
+def api_call_fetch_all_multiqc_reports(
+    data_collection_id: str, token: str
+) -> dict[str, Any] | None:
+    """
+    Fetch ALL MultiQC reports for a specific data collection.
+
+    Args:
+        data_collection_id: Data collection ID to fetch MultiQC reports for
+        token: Authentication token
+
+    Returns:
+        Dict with 'reports' list and 'total_count', or None if not found
+    """
+    try:
+        response = httpx.get(
+            f"{API_BASE_URL}/depictio/api/v1/multiqc/reports/data-collection/{data_collection_id}",
+            headers={"Authorization": f"Bearer {token}"},
+            timeout=settings.performance.api_request_timeout,
+        )
+
+        if response.status_code == 200:
+            response_data = response.json()
+            reports = response_data.get("reports", [])
+            # Extract just the report objects from the response
+            extracted_reports = [r.get("report", {}) for r in reports if r.get("report")]
+            return {
+                "reports": extracted_reports,
+                "total_count": response_data.get("total_count", len(extracted_reports)),
+            }
+        elif response.status_code == 404:
+            return None
+        else:
+            logger.warning(
+                f"Failed to fetch MultiQC reports for {data_collection_id}: {response.status_code}"
+            )
+            return None
+
+    except Exception as e:
+        logger.error(f"Error fetching MultiQC reports for {data_collection_id}: {e}")
         return None
