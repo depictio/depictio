@@ -405,6 +405,7 @@ async def edit_dashboard_name(
     """
     Edit the name of a dashboard with the given dashboard ID.
     Now uses project-based permissions (editor level required).
+    Deprecated: Use /edit/{dashboard_id} instead.
     """
     new_name = data.get("new_name", None)
     if not new_name:
@@ -435,6 +436,67 @@ async def edit_dashboard_name(
         return {"message": f"Dashboard name updated successfully to '{new_name}'."}
     else:
         raise HTTPException(status_code=500, detail="Failed to update dashboard name.")
+
+
+@dashboards_endpoint_router.post("/edit/{dashboard_id}")
+async def edit_dashboard(
+    dashboard_id: PyObjectId,
+    data: dict,
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Edit a dashboard's properties (title, subtitle, icon, icon_color, workflow_system).
+
+    Does NOT allow changing project_id. Uses project-based permissions (editor level required).
+
+    Args:
+        dashboard_id: The dashboard ID to edit.
+        data: Dictionary with fields to update. Allowed fields:
+            - title: Dashboard title (required if provided)
+            - subtitle: Dashboard subtitle (optional)
+            - icon: Icon identifier (optional)
+            - icon_color: Icon color (optional)
+            - workflow_system: Workflow system (optional)
+    """
+    # Allowed fields to update (project_id is explicitly NOT allowed)
+    allowed_fields = {"title", "subtitle", "icon", "icon_color", "workflow_system"}
+    update_data = {k: v for k, v in data.items() if k in allowed_fields}
+
+    if not update_data:
+        raise HTTPException(status_code=400, detail="No valid fields provided for update.")
+
+    # Validate title is not empty if provided
+    if "title" in update_data and not update_data["title"]:
+        raise HTTPException(status_code=400, detail="Dashboard title cannot be empty.")
+
+    dashboard = dashboards_collection.find_one({"dashboard_id": dashboard_id})
+    if not dashboard:
+        raise HTTPException(
+            status_code=404, detail=f"Dashboard with ID '{dashboard_id}' not found."
+        )
+
+    project_id = dashboard.get("project_id")
+    if not project_id:
+        raise HTTPException(status_code=500, detail="Dashboard is not associated with a project.")
+
+    if not check_project_permission(project_id, current_user, "editor"):
+        raise HTTPException(
+            status_code=403, detail="You don't have permission to edit this dashboard."
+        )
+
+    result = dashboards_collection.find_one_and_update(
+        {"dashboard_id": dashboard_id},
+        {"$set": update_data},
+        return_document=True,
+    )
+
+    if result:
+        return {
+            "message": "Dashboard updated successfully.",
+            "updated_fields": list(update_data.keys()),
+        }
+    else:
+        raise HTTPException(status_code=500, detail="Failed to update dashboard.")
 
 
 @dashboards_endpoint_router.post("/save/{dashboard_id}")
