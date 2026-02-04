@@ -19,6 +19,28 @@ from dash_iconify import DashIconify
 
 from depictio.dash.colors import colors
 
+# Shared options for icon color selection across create and edit modals
+ICON_COLOR_OPTIONS = [
+    {"value": "blue", "label": "Blue"},
+    {"value": "teal", "label": "Teal"},
+    {"value": "orange", "label": "Orange"},
+    {"value": "red", "label": "Red"},
+    {"value": "purple", "label": "Purple"},
+    {"value": "pink", "label": "Pink"},
+    {"value": "green", "label": "Green"},
+    {"value": "gray", "label": "Gray"},
+]
+
+# Shared options for workflow system selection
+WORKFLOW_SYSTEM_OPTIONS = [
+    {"value": "none", "label": "None (Use Custom Icon)"},
+    {"value": "nextflow", "label": "Nextflow"},
+    {"value": "snakemake", "label": "Snakemake"},
+    {"value": "nf-core", "label": "nf-core"},
+    {"value": "galaxy", "label": "Galaxy"},
+    {"value": "iwc", "label": "IWC (Intergalactic Workflow Commission)"},
+]
+
 
 def get_workflow_icon_mapping() -> dict[str, str | None]:
     """Map workflow systems to their logo image paths.
@@ -300,16 +322,7 @@ def create_dashboard_modal(
                                                     dmc.Select(
                                                         label="Icon Color",
                                                         description="Color for the dashboard icon",
-                                                        data=[
-                                                            {"value": "blue", "label": "Blue"},
-                                                            {"value": "teal", "label": "Teal"},
-                                                            {"value": "orange", "label": "Orange"},
-                                                            {"value": "red", "label": "Red"},
-                                                            {"value": "purple", "label": "Purple"},
-                                                            {"value": "pink", "label": "Pink"},
-                                                            {"value": "green", "label": "Green"},
-                                                            {"value": "gray", "label": "Gray"},
-                                                        ],
+                                                        data=ICON_COLOR_OPTIONS,
                                                         id=f"{id_prefix}-icon-color-select",
                                                         value="orange",
                                                         leftSection=DashIconify(
@@ -328,32 +341,7 @@ def create_dashboard_modal(
                                                     dmc.Select(
                                                         label="Workflow System",
                                                         description="Auto-set icon based on workflow",
-                                                        data=[
-                                                            {
-                                                                "value": "none",
-                                                                "label": "None (Use Custom Icon)",
-                                                            },
-                                                            {
-                                                                "value": "nextflow",
-                                                                "label": "Nextflow",
-                                                            },
-                                                            {
-                                                                "value": "snakemake",
-                                                                "label": "Snakemake",
-                                                            },
-                                                            {
-                                                                "value": "nf-core",
-                                                                "label": "nf-core",
-                                                            },
-                                                            {
-                                                                "value": "galaxy",
-                                                                "label": "Galaxy",
-                                                            },
-                                                            {
-                                                                "value": "iwc",
-                                                                "label": "IWC (Intergalactic Workflow Commission)",
-                                                            },
-                                                        ],
+                                                        data=WORKFLOW_SYSTEM_OPTIONS,
                                                         id=f"{id_prefix}-workflow-system-select",
                                                         value="none",
                                                         leftSection=DashIconify(
@@ -772,16 +760,7 @@ def create_edit_dashboard_modal(
                                                     dmc.Select(
                                                         label="Icon Color",
                                                         description="Color for the dashboard icon",
-                                                        data=[
-                                                            {"value": "blue", "label": "Blue"},
-                                                            {"value": "teal", "label": "Teal"},
-                                                            {"value": "orange", "label": "Orange"},
-                                                            {"value": "red", "label": "Red"},
-                                                            {"value": "purple", "label": "Purple"},
-                                                            {"value": "pink", "label": "Pink"},
-                                                            {"value": "green", "label": "Green"},
-                                                            {"value": "gray", "label": "Gray"},
-                                                        ],
+                                                        data=ICON_COLOR_OPTIONS,
                                                         id={
                                                             "type": "edit-dashboard-icon-color",
                                                             "index": dashboard_id,
@@ -803,32 +782,7 @@ def create_edit_dashboard_modal(
                                                     dmc.Select(
                                                         label="Workflow System",
                                                         description="Auto-set icon based on workflow",
-                                                        data=[
-                                                            {
-                                                                "value": "none",
-                                                                "label": "None (Use Custom Icon)",
-                                                            },
-                                                            {
-                                                                "value": "nextflow",
-                                                                "label": "Nextflow",
-                                                            },
-                                                            {
-                                                                "value": "snakemake",
-                                                                "label": "Snakemake",
-                                                            },
-                                                            {
-                                                                "value": "nf-core",
-                                                                "label": "nf-core",
-                                                            },
-                                                            {
-                                                                "value": "galaxy",
-                                                                "label": "Galaxy",
-                                                            },
-                                                            {
-                                                                "value": "iwc",
-                                                                "label": "IWC (Intergalactic Workflow Commission)",
-                                                            },
-                                                        ],
+                                                        data=WORKFLOW_SYSTEM_OPTIONS,
                                                         id={
                                                             "type": "edit-dashboard-workflow",
                                                             "index": dashboard_id,

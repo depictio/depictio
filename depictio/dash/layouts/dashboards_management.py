@@ -235,37 +235,27 @@ def edit_dashboard(
     logger.info(f"Editing dashboard for dashboard ID: {dashboard_id}")
     logger.debug(f"Updates: {updates}")
 
-    updated_dashboards = list()
-
-    # Iterate over the dashboards to find the dashboard with the matching ID and update fields
+    # Update local dashboard objects
+    editable_fields = ("title", "subtitle", "icon", "icon_color", "workflow_system")
     for dashboard in dashboards:
         if str(dashboard.dashboard_id) == str(dashboard_id):
             logger.debug(f"Found dashboard to edit: {dashboard}")
-            if "title" in updates:
-                dashboard.title = updates["title"]
-            if "subtitle" in updates:
-                dashboard.subtitle = updates["subtitle"]
-            if "icon" in updates:
-                dashboard.icon = updates["icon"]
-            if "icon_color" in updates:
-                dashboard.icon_color = updates["icon_color"]
-            if "workflow_system" in updates:
-                dashboard.workflow_system = updates["workflow_system"]
-        updated_dashboards.append(dashboard)
+            for field in editable_fields:
+                if field in updates:
+                    setattr(dashboard, field, updates[field])
 
+    # Persist to database
     response = httpx.post(
         f"{API_BASE_URL}/depictio/api/v1/dashboards/edit/{dashboard_id}",
         headers={"Authorization": f"Bearer {token}"},
         json=updates,
     )
 
-    if response.status_code == 200:
-        logger.info(f"Successfully edited dashboard: {dashboard_id}")
-
-    else:
+    if response.status_code != 200:
         raise ValueError(f"Failed to edit dashboard in the database. Error: {response.text}")
 
-    return updated_dashboards
+    logger.info(f"Successfully edited dashboard: {dashboard_id}")
+    return dashboards
 
 
 def render_welcome_section(email: str, is_anonymous: bool = False) -> dmc.Grid:
@@ -1788,6 +1778,58 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
             logger.error(f"Exception in load_projects: {e}")
             return []
 
+    def build_icon_preview(
+        icon_name: str | None, icon_color: str | None, workflow_system: str | None
+    ) -> tuple:
+        """
+        Build icon preview component based on icon settings.
+
+        When a workflow system is selected (not "none"), automatically uses the
+        workflow-specific logo image and color. Otherwise uses custom icon settings.
+
+        Args:
+            icon_name: Icon identifier from Iconify (e.g., "mdi:chart-line") or image path.
+            icon_color: Color name for the icon (e.g., "orange", "blue").
+            workflow_system: Selected workflow system (e.g., "nextflow", "snakemake", "none").
+
+        Returns:
+            Tuple of (preview component, resolved icon name, resolved color, color_disabled).
+        """
+        allowed_colors = ("blue", "teal", "orange", "red", "purple", "pink", "green", "gray")
+        workflow_icons = get_workflow_icon_mapping()
+        workflow_colors = get_workflow_icon_color()
+
+        # Workflow system overrides custom icon settings
+        if workflow_system and workflow_system != "none":
+            icon_name = workflow_icons.get(workflow_system, "mdi:view-dashboard")
+            icon_color = workflow_colors.get(workflow_system, "orange")
+            color_disabled = True
+        else:
+            # Apply defaults for custom icon mode
+            if not icon_name or not icon_name.strip():
+                icon_name = "mdi:view-dashboard"
+            if icon_color not in allowed_colors:
+                icon_color = "orange"
+            color_disabled = False
+
+        # Build preview component based on icon type
+        if icon_name and icon_name.startswith("/assets/"):
+            preview = html.Img(
+                src=icon_name,
+                style={"width": "32px", "height": "32px", "objectFit": "contain"},
+            )
+        else:
+            preview = dmc.ActionIcon(
+                DashIconify(icon=icon_name, width=24, height=24),
+                color=icon_color,
+                radius="xl",
+                size="lg",
+                variant="filled",
+                disabled=color_disabled,
+            )
+
+        return preview, icon_name, icon_color, color_disabled
+
     @app.callback(
         [
             Output("dashboard-icon-preview", "children"),
@@ -1803,82 +1845,8 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
         prevent_initial_call=True,
     )
     def update_icon_preview(icon_name, icon_color, workflow_system):
-        """
-        Update the dashboard icon preview in real-time as users modify icon settings.
-        When a workflow system is selected, automatically set the appropriate workflow logo image.
-
-        Args:
-            icon_name: Icon identifier from Iconify (e.g., "mdi:chart-line") or image path
-            icon_color: Color name for the icon (e.g., "orange", "blue")
-            workflow_system: Selected workflow system (e.g., "nextflow", "snakemake", "nf-core", "none")
-
-        Returns:
-            Tuple of (preview component, icon value, color value)
-        """
-        # Get workflow mappings
-        workflow_icons = get_workflow_icon_mapping()
-        workflow_colors = get_workflow_icon_color()
-
-        # Check if a workflow system is selected (not "none")
-        if workflow_system and workflow_system != "none":
-            # Override with workflow-specific logo image path and color
-            icon_name = workflow_icons.get(workflow_system, "mdi:view-dashboard")
-            icon_color = workflow_colors.get(workflow_system, "orange")
-
-            # For workflows, use html.Img instead of DashIconify
-            if icon_name and icon_name.startswith("/assets/"):
-                preview = html.Img(
-                    src=icon_name,
-                    style={
-                        "width": "32px",
-                        "height": "32px",
-                        "objectFit": "contain",
-                    },
-                )
-            else:
-                # Wrap in ActionIcon for consistent UX
-                preview = dmc.ActionIcon(
-                    DashIconify(
-                        icon=icon_name,
-                        width=24,
-                        height=24,
-                    ),
-                    color=icon_color,
-                    radius="xl",
-                    size="lg",
-                    variant="filled",
-                    disabled=True,  # Not clickable - just a preview
-                )
-            # Disable color selector when workflow is selected
-            color_disabled = True
-        else:
-            # Use custom icon/color settings
-            # Default values if inputs are empty/None
-            if not icon_name or icon_name.strip() == "":
-                icon_name = "mdi:view-dashboard"
-
-            # Validate color is in allowed list, default to orange if not
-            allowed_colors = ["blue", "teal", "orange", "red", "purple", "pink", "green", "gray"]
-            if icon_color not in allowed_colors:
-                icon_color = "orange"
-
-            # Wrap in ActionIcon for consistent UX
-            preview = dmc.ActionIcon(
-                DashIconify(
-                    icon=icon_name,
-                    width=24,
-                    height=24,
-                ),
-                color=icon_color,
-                radius="xl",
-                size="lg",
-                variant="filled",
-                disabled=False,
-            )
-            # Enable color selector when no workflow is selected
-            color_disabled = False
-
-        return preview, icon_name, icon_color, color_disabled
+        """Update the dashboard creation modal icon preview."""
+        return build_icon_preview(icon_name, icon_color, workflow_system)
 
     @app.callback(
         [
@@ -1895,82 +1863,8 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
         prevent_initial_call=True,
     )
     def update_edit_icon_preview(icon_name, icon_color, workflow_system):
-        """
-        Update the edit dashboard icon preview in real-time as users modify icon settings.
-        When a workflow system is selected, automatically set the appropriate workflow logo image.
-
-        Args:
-            icon_name: Icon identifier from Iconify (e.g., "mdi:chart-line") or image path
-            icon_color: Color name for the icon (e.g., "orange", "blue")
-            workflow_system: Selected workflow system (e.g., "nextflow", "snakemake", "nf-core", "none")
-
-        Returns:
-            Tuple of (preview component, icon value, color value, color_disabled)
-        """
-        # Get workflow mappings
-        workflow_icons = get_workflow_icon_mapping()
-        workflow_colors = get_workflow_icon_color()
-
-        # Check if a workflow system is selected (not "none")
-        if workflow_system and workflow_system != "none":
-            # Override with workflow-specific logo image path and color
-            icon_name = workflow_icons.get(workflow_system, "mdi:view-dashboard")
-            icon_color = workflow_colors.get(workflow_system, "orange")
-
-            # For workflows, use html.Img instead of DashIconify
-            if icon_name and icon_name.startswith("/assets/"):
-                preview = html.Img(
-                    src=icon_name,
-                    style={
-                        "width": "32px",
-                        "height": "32px",
-                        "objectFit": "contain",
-                    },
-                )
-            else:
-                # Wrap in ActionIcon for consistent UX
-                preview = dmc.ActionIcon(
-                    DashIconify(
-                        icon=icon_name,
-                        width=24,
-                        height=24,
-                    ),
-                    color=icon_color,
-                    radius="xl",
-                    size="lg",
-                    variant="filled",
-                    disabled=True,  # Not clickable - just a preview
-                )
-            # Disable color selector when workflow is selected
-            color_disabled = True
-        else:
-            # Use custom icon/color settings
-            # Default values if inputs are empty/None
-            if not icon_name or icon_name.strip() == "":
-                icon_name = "mdi:view-dashboard"
-
-            # Validate color is in allowed list, default to orange if not
-            allowed_colors = ["blue", "teal", "orange", "red", "purple", "pink", "green", "gray"]
-            if icon_color not in allowed_colors:
-                icon_color = "orange"
-
-            # Wrap in ActionIcon for consistent UX
-            preview = dmc.ActionIcon(
-                DashIconify(
-                    icon=icon_name,
-                    width=24,
-                    height=24,
-                ),
-                color=icon_color,
-                radius="xl",
-                size="lg",
-                variant="filled",
-                disabled=False,
-            )
-            # Enable color selector when no workflow is selected
-            color_disabled = False
-
-        return preview, icon_name, icon_color, color_disabled
+        """Update the dashboard edit modal icon preview."""
+        return build_icon_preview(icon_name, icon_color, workflow_system)
 
     @app.callback(
         Output({"type": "dashboard-list", "index": ALL}, "children"),
@@ -2143,35 +2037,25 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
             )
 
         if ctx.triggered_id.get("type") == "save-edit-dashboard":
-            # Extract all edit fields from the input fields
             index = ctx.triggered_id["index"]
 
-            # Helper function to get value by matching index
-            def get_value_by_index(values, ids, target_index):
-                for value, id_dict in zip(values, ids):
-                    if str(id_dict["index"]) == str(target_index):
-                        return value
-                return None
+            # Build lookup dict: field_name -> (values_list, ids_list)
+            field_inputs = {
+                "title": (edit_title_values, edit_title_ids),
+                "subtitle": (edit_subtitle_values, edit_subtitle_ids),
+                "icon": (edit_icon_values, edit_icon_ids),
+                "icon_color": (edit_icon_color_values, edit_icon_color_ids),
+                "workflow_system": (edit_workflow_values, edit_workflow_ids),
+            }
 
-            # Extract all field values
-            title = get_value_by_index(edit_title_values, edit_title_ids, index)
-            subtitle = get_value_by_index(edit_subtitle_values, edit_subtitle_ids, index)
-            icon = get_value_by_index(edit_icon_values, edit_icon_ids, index)
-            icon_color = get_value_by_index(edit_icon_color_values, edit_icon_color_ids, index)
-            workflow_system = get_value_by_index(edit_workflow_values, edit_workflow_ids, index)
-
-            # Build updates dict with non-None values
+            # Extract values by matching index and filter out None values
             updates = {}
-            if title is not None:
-                updates["title"] = title
-            if subtitle is not None:
-                updates["subtitle"] = subtitle
-            if icon is not None:
-                updates["icon"] = icon
-            if icon_color is not None:
-                updates["icon_color"] = icon_color
-            if workflow_system is not None:
-                updates["workflow_system"] = workflow_system
+            for field_name, (values, ids) in field_inputs.items():
+                for value, id_dict in zip(values, ids):
+                    if str(id_dict["index"]) == str(index):
+                        if value is not None:
+                            updates[field_name] = value
+                        break
 
             return handle_dashboard_edit_full(
                 index, updates, dashboards, user_data, store_data_list, current_userbase
@@ -2244,33 +2128,23 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
         logger.info("Make public dashboard button clicked")
         ctx_triggered_dict = ctx.triggered[0]
         index_make_public = eval(ctx_triggered_dict["prop_id"].split(".")[0])["index"]
+        new_status = not public_current_status
 
-        updated_dashboards = list()
         for dashboard in dashboards:
             if str(dashboard.dashboard_id) == str(index_make_public):
                 response = httpx.post(
                     f"{API_BASE_URL}/depictio/api/v1/dashboards/toggle_public_status/{index_make_public}",
                     headers={"Authorization": f"Bearer {user_data['access_token']}"},
-                    json={"is_public": not public_current_status},
+                    json={"is_public": new_status},
                 )
                 if response.status_code != 200:
                     raise ValueError(f"Failed to update dashboard status. Error: {response.text}")
                 dashboard.is_public = response.json()["is_public"]
-                # dashboard.permissions = response.json()["permissions"]
-                updated_dashboards.append(dashboard)
-
-                if response.status_code == 200:
-                    logger.debug(
-                        f"Successfully made dashboard '{not public_current_status}': {dashboard}"
-                    )
-
-                else:
-                    raise ValueError(f"Failed to make dashboard public. Error: {response.text}")
-            else:
-                updated_dashboards.append(dashboard)
+                logger.debug(f"Successfully made dashboard '{new_status}': {dashboard}")
+                break
 
         return generate_dashboard_view_response(
-            updated_dashboards, store_data_list, current_userbase, user_data
+            dashboards, store_data_list, current_userbase, user_data
         )
 
     def handle_dashboard_duplication(dashboards, user_data, store_data_list, current_userbase):
