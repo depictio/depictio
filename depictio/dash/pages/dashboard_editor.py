@@ -141,6 +141,11 @@ def register_callbacks(app):
     # 5. Save and layout management callbacks
     register_save_callbacks(app)
 
+    # 6. Real-time WebSocket callbacks (for data update notifications)
+    from depictio.dash.layouts.realtime_callbacks import register_realtime_callbacks
+
+    register_realtime_callbacks(app)
+
 
 def register_routing_callback(app):
     """

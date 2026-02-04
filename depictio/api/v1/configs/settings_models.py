@@ -592,6 +592,53 @@ class ProfilingConfig(BaseSettings):
         return Path(self.profile_dir).resolve()
 
 
+class EventsConfig(BaseSettings):
+    """Configuration for real-time event system (WebSocket notifications).
+
+    Enables automatic dashboard updates when backend data changes.
+    Supports MongoDB change streams for data_collection updates.
+    """
+
+    # Enable/disable real-time events
+    enabled: bool = Field(default=False, description="Enable real-time event system")
+
+    # Redis pub/sub for multi-instance WebSocket coordination
+    redis_host: str = Field(default="redis", description="Redis server hostname for pub/sub")
+    redis_port: int = Field(default=6379, description="Redis server port")
+    redis_password: Optional[str] = Field(default=None, description="Redis password")
+    redis_db: int = Field(
+        default=3, description="Redis database number (separate from cache=0, celery=1,2)"
+    )
+
+    # MongoDB change streams
+    mongodb_change_streams_enabled: bool = Field(
+        default=True, description="Enable MongoDB change streams for data_collections"
+    )
+
+    # WebSocket settings
+    ws_heartbeat_interval: int = Field(
+        default=30, description="WebSocket heartbeat/ping interval in seconds"
+    )
+    ws_connection_timeout: int = Field(
+        default=60, description="WebSocket connection timeout in seconds"
+    )
+
+    # Debouncing for rapid updates
+    debounce_ms: int = Field(
+        default=1000, description="Debounce interval in milliseconds for rapid updates"
+    )
+
+    model_config = SettingsConfigDict(env_prefix="DEPICTIO_EVENTS_")
+
+    @computed_field
+    @property
+    def redis_url(self) -> str:
+        """Construct Redis URL for pub/sub."""
+        if self.redis_password:
+            return f"redis://:{self.redis_password}@{self.redis_host}:{self.redis_port}/{self.redis_db}"
+        return f"redis://{self.redis_host}:{self.redis_port}/{self.redis_db}"
+
+
 class DashboardYAMLConfig(BaseSettings):
     """Configuration for YAML-based dashboard management.
 
@@ -760,6 +807,7 @@ class Settings(BaseSettings):
     google_analytics: GoogleAnalyticsConfig = Field(default_factory=GoogleAnalyticsConfig)
     profiling: ProfilingConfig = Field(default_factory=ProfilingConfig)
     dashboard_yaml: DashboardYAMLConfig = Field(default_factory=DashboardYAMLConfig)
+    events: EventsConfig = Field(default_factory=EventsConfig)
 
     model_config = SettingsConfigDict(
         env_prefix="DEPICTIO_",
