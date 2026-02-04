@@ -634,6 +634,9 @@ class DashboardData(MongoModel):
     main_tab_name: Optional[str] = None  # Custom name for main tab (defaults to "Main" if None)
     tab_icon: Optional[str] = None  # Icon for child tabs (e.g., "mdi:chart-bar")
     tab_icon_color: Optional[str] = None  # Color for tab icon
+    parent_dashboard_title: Optional[str] = (
+        None  # Populated at runtime for child tabs (header display)
+    )
 
     model_config = ConfigDict(
         arbitrary_types_allowed=True,
