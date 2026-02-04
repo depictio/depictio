@@ -46,11 +46,29 @@ def _enrich_filter_components(
     components: list[dict],
     metadata_by_index: dict[str, dict],
 ) -> list[dict]:
-    """Enrich filter components with full metadata."""
-    return [
-        {**comp, "metadata": metadata_by_index.get(str(comp.get("index")), {})}
-        for comp in components
-    ]
+    """Enrich filter components with full metadata.
+
+    Handles both regular interactive components (metadata from stores) and
+    selection sources (scatter_selection, table_selection) which have metadata
+    embedded in the store entry itself.
+    """
+    enriched = []
+    for comp in components:
+        source = comp.get("source")
+
+        # Handle selection sources (scatter_selection, table_selection)
+        if source in ("scatter_selection", "table_selection"):
+            selection_metadata = {
+                "dc_id": comp.get("dc_id"),
+                "column_name": comp.get("column_name"),
+                "interactive_component_type": "MultiSelect",
+                "source": source,
+            }
+            enriched.append({**comp, "metadata": selection_metadata})
+        else:
+            # Regular interactive components need metadata lookup
+            enriched.append({**comp, "metadata": metadata_by_index.get(str(comp.get("index")), {})})
+    return enriched
 
 
 def _group_filters_by_dc(components: list[dict]) -> dict[str, list[dict]]:

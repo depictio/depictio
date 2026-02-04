@@ -26,17 +26,19 @@ components:
       title: "Samples by Category"
       color: category
 
-  # Box plot of quality scores by category
-  - tag: quality-by-category
+  # Scatter plot of quality scores - with selection filtering enabled
+  - tag: quality-scatter
     component_type: figure
     workflow_tag: python/image_demo_workflow
     data_collection_tag: sample_images
-    visu_type: box
+    visu_type: scatter
     dict_kwargs:
       x: category
       y: quality_score
-      title: "Quality Score Distribution by Category"
+      title: "Quality Score by Category (click/lasso to filter)"
       color: category
+    selection_enabled: true
+    selection_column: sample_id
 
   # Card: Total samples
   - tag: total-samples
@@ -104,9 +106,11 @@ components:
     custom_color: "#FF9800"
     icon_name: mdi:tune
 
-  # Data table showing all sample information
+  # Data table showing all sample information - with row selection filtering enabled
   - tag: samples-table
     component_type: table
     workflow_tag: python/image_demo_workflow
     data_collection_tag: sample_images
     page_size: 10
+    row_selection_enabled: true
+    row_selection_column: sample_id

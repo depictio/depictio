@@ -1968,6 +1968,8 @@ def build_figure(**kwargs) -> html.Div | dcc.Loading:
             - theme: Theme (default: "light")
             - mode: Figure mode - "ui" or "code" (default: "ui")
             - code_content: Python code for code mode figures (default: "")
+            - selection_enabled: Enable scatter selection filtering (default: False)
+            - selection_column: Column to extract from selected points (default: None)
 
     Returns:
         Figure component as HTML div with skeleton loader
@@ -1981,6 +1983,9 @@ def build_figure(**kwargs) -> html.Div | dcc.Loading:
     kwargs.get("theme", "light")
     mode = kwargs.get("mode", "ui")
     code_content = kwargs.get("code_content", "")
+    # Selection filtering configuration
+    selection_enabled = kwargs.get("selection_enabled", False)
+    selection_column = kwargs.get("selection_column")
 
     # Defensive handling: ensure dict_kwargs is always a dict
     if not isinstance(dict_kwargs, dict):
@@ -2003,6 +2008,8 @@ def build_figure(**kwargs) -> html.Div | dcc.Loading:
         "dc_id": dc_id,
         "mode": mode,
         "code_content": code_content,
+        "selection_enabled": selection_enabled,
+        "selection_column": selection_column,
         "last_updated": datetime.now().isoformat(),
     }
 
@@ -2022,6 +2029,8 @@ def build_figure(**kwargs) -> html.Div | dcc.Loading:
                     "dict_kwargs": dict_kwargs,
                     "mode": mode,
                     "code_content": code_content,
+                    "selection_enabled": selection_enabled,
+                    "selection_column": selection_column,
                 },
             ),
             # Metadata store - for callback results

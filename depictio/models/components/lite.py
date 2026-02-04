@@ -73,6 +73,8 @@ class FigureLiteComponent(BaseLiteComponent):
             x: sepal.length
             y: sepal.width
             color: variety
+          selection_enabled: true
+          selection_column: sample_id
     """
 
     component_type: Literal["figure"] = "figure"
@@ -86,6 +88,12 @@ class FigureLiteComponent(BaseLiteComponent):
     dict_kwargs: dict[str, Any] = Field(
         default_factory=dict,
         description="Parameters passed to Plotly Express (x, y, color, etc.)",
+    )
+
+    # Selection filtering (enables scatter selection to filter other components)
+    selection_enabled: bool = Field(default=False, description="Enable scatter selection filtering")
+    selection_column: str | None = Field(
+        default=None, description="Column to extract from selected points"
     )
 
 
@@ -153,6 +161,8 @@ class TableLiteComponent(BaseLiteComponent):
           component_type: table
           workflow_tag: python/iris_workflow
           data_collection_tag: iris_table
+          row_selection_enabled: true
+          row_selection_column: sample_id
     """
 
     component_type: Literal["table"] = "table"
@@ -162,6 +172,12 @@ class TableLiteComponent(BaseLiteComponent):
     page_size: int = Field(default=10, description="Rows per page")
     sortable: bool = Field(default=True, description="Enable column sorting")
     filterable: bool = Field(default=True, description="Enable column filtering")
+
+    # Row selection filtering (enables table row selection to filter other components)
+    row_selection_enabled: bool = Field(default=False, description="Enable row selection filtering")
+    row_selection_column: str | None = Field(
+        default=None, description="Column to extract from selected rows"
+    )
 
 
 class ImageLiteComponent(BaseLiteComponent):

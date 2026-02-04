@@ -503,6 +503,9 @@ class DashboardDataLite(BaseModel):
                         "total_data_count": 0,
                         "was_sampled": False,
                         "filter_applied": False,
+                        # Selection filtering fields
+                        "selection_enabled": comp_dict.get("selection_enabled", False),
+                        "selection_column": comp_dict.get("selection_column"),
                     }
                 )
 
@@ -550,6 +553,9 @@ class DashboardDataLite(BaseModel):
                         "page_size": comp_dict.get("page_size", 10),
                         "sortable": comp_dict.get("sortable", True),
                         "filterable": comp_dict.get("filterable", True),
+                        # Row selection filtering fields
+                        "row_selection_enabled": comp_dict.get("row_selection_enabled", False),
+                        "row_selection_column": comp_dict.get("row_selection_column"),
                     }
                 )
 
