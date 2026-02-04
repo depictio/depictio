@@ -33,7 +33,7 @@ from depictio.models.models.dashboards import DashboardData
 from depictio.models.models.users import Permission
 
 
-def _extract_dashboard_id_from_pathname(pathname: str) -> tuple[str | None, bool]:
+def _extract_dashboard_id_from_pathname(pathname: str | None) -> tuple[str | None, bool]:
     """
     Extract dashboard ID and edit mode flag from URL pathname.
 
