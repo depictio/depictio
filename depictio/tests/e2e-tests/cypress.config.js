@@ -23,12 +23,20 @@ module.exports = defineConfig({
             pollInterval: 1000
         },
         env: {
-            UNAUTHENTICATED_MODE: false
+            UNAUTHENTICATED_MODE: false,
+            PUBLIC_MODE: false,
+            DEMO_MODE: false
         },
         setupNodeEvents(on, config) {
             // Allow setting environment variables from command line
             if (process.env.CYPRESS_UNAUTHENTICATED_MODE) {
                 config.env.UNAUTHENTICATED_MODE = process.env.CYPRESS_UNAUTHENTICATED_MODE === 'true'
+            }
+            if (process.env.CYPRESS_PUBLIC_MODE) {
+                config.env.PUBLIC_MODE = process.env.CYPRESS_PUBLIC_MODE === 'true'
+            }
+            if (process.env.CYPRESS_DEMO_MODE) {
+                config.env.DEMO_MODE = process.env.CYPRESS_DEMO_MODE === 'true'
             }
 
             // Add task for logging

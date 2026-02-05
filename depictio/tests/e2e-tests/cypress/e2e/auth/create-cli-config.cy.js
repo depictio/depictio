@@ -3,9 +3,10 @@ describe('Create CLI Config Test', () => {
   let configName; // Variable to store the dynamic config name
 
   before(() => {
-    // Skip this test suite if in unauthenticated mode
-    if (Cypress.env('UNAUTHENTICATED_MODE')) {
-      cy.log('Skipping CLI config test - running in unauthenticated mode')
+    // Skip this test suite if in unauthenticated, public, or demo mode
+    // These modes have different auth flows that may not support CLI config creation
+    if (Cypress.env('UNAUTHENTICATED_MODE') || Cypress.env('PUBLIC_MODE') || Cypress.env('DEMO_MODE')) {
+      cy.log('Skipping CLI config test - running in unauthenticated/public/demo mode')
       return
     }
 
@@ -15,8 +16,8 @@ describe('Create CLI Config Test', () => {
   });
 
   beforeEach(() => {
-    // Skip if in unauthenticated mode
-    if (Cypress.env('UNAUTHENTICATED_MODE')) {
+    // Skip if in unauthenticated, public, or demo mode
+    if (Cypress.env('UNAUTHENTICATED_MODE') || Cypress.env('PUBLIC_MODE') || Cypress.env('DEMO_MODE')) {
       cy.skip()
     }
   })
@@ -114,7 +115,10 @@ describe('Create CLI Config Test', () => {
 
     // Type "delete" in the confirmation field using robust typing
     cy.wait(1000); // Wait for dialog to fully render
-    cy.typeRobust('.mantine-Modal-content input, .mantine-TextInput-input, input[type="text"]', 'delete')
+    // Use more specific selector to avoid matching multiple inputs
+    cy.get('.mantine-Modal-content').find('input[type="text"]').first().then($input => {
+      cy.wrap($input).clear().type('delete', { delay: 50 });
+    });
 
     // Click the "Confirm Delete" button
     cy.contains('button', 'Confirm Delete').click();
