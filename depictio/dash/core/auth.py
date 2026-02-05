@@ -264,9 +264,9 @@ def process_authentication(
     theme = _extract_theme(theme_store)
     logger.info(f"AUTH CALLBACK - Theme: {theme}")
 
-    # Handle unauthenticated mode
-    if settings.auth.unauthenticated_mode:
-        logger.debug("Unauthenticated mode is enabled")
+    # Handle unauthenticated mode (includes single-user mode and public mode)
+    if settings.auth.requires_anonymous_user:
+        logger.debug("Anonymous user mode is enabled (single-user or public mode)")
         return _handle_unauthenticated_mode(
             pathname, local_data, theme, cached_project_data, dashboard_init_data
         )
