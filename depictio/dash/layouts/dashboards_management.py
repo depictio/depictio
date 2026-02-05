@@ -3028,7 +3028,7 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
     @app.callback(
         [
             Output("dashboard-modal", "opened", allow_duplicate=True),
-            Output("url", "pathname", allow_duplicate=True),
+            Output("landing-page", "children", allow_duplicate=True),
             Output("notification-container", "sendNotifications", allow_duplicate=True),
         ],
         Input("import-dashboard-submit", "n_clicks"),
@@ -3041,7 +3041,7 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
         prevent_initial_call=True,
     )
     def submit_import(n_clicks, json_data, project_id, validate_integrity, local_data):
-        """Submit the dashboard import."""
+        """Submit the dashboard import and refresh dashboard list."""
         from dash.exceptions import PreventUpdate
 
         from depictio.dash.api_calls import api_call_import_dashboard_json
@@ -3078,11 +3078,19 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
 
         logger.info(f"Dashboard imported successfully: {dashboard_id} - {dashboard_title}")
 
-        # Close modal and stay on dashboards page (will refresh list)
-        # Note: Redirecting to /dashboard/{id} causes issues as it's a different Dash app
+        # Refresh dashboard list by regenerating landing page content
+        user = api_call_fetch_user_from_token(token)
+        landing_page_content = html.Div(
+            [
+                render_dashboard_list_section(user.email),
+                html.Div(id="thumbnail-theme-swap-dummy", style={"display": "none"}),
+            ]
+        )
+
+        # Close modal and refresh dashboard list
         return (
             False,
-            dash.no_update,
+            landing_page_content,
             [
                 {
                     "id": "import-success",
