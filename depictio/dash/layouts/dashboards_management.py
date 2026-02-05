@@ -2436,14 +2436,14 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
                 is_anonymous=getattr(current_user_api, "is_anonymous", False),
             )
             # In single-user mode, anonymous users have admin access and can create dashboards
-            # In public mode, anonymous users need to upgrade to temp user first
+            # In public mode, anonymous users need to sign in first (temp user or OAuth)
             if (
                 hasattr(current_user, "is_anonymous")
                 and current_user.is_anonymous
                 and not settings.auth.is_single_user_mode
             ):
                 logger.info(
-                    "Anonymous user clicked 'Login to Create Dashboards' - redirecting to profile"
+                    "Anonymous user clicked 'Login to Create Dashboards' - redirecting to /auth"
                 )
                 return (
                     dash.no_update,
@@ -2451,7 +2451,7 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
                     dash.no_update,
                     {"display": "none"},  # Hide any warning messages
                     dash.no_update,
-                    "/profile",  # Redirect to profile page
+                    "/auth",  # Redirect to auth page with sign-in options
                 )
 
             # Toggle the modal when the create button is clicked (for authenticated users)

@@ -24,6 +24,7 @@ from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.endpoints.user_endpoints.core_functions import _verify_password
 from depictio.api.v1.endpoints.user_endpoints.utils import login_user
 from depictio.dash.api_calls import (
+    api_call_create_temporary_user,
     api_call_fetch_user_from_email,
     api_call_get_google_oauth_login_url,
     api_call_register_user,
@@ -61,6 +62,126 @@ ANIMATION_CLASSES = [
     "triangle-anim-5",
     "triangle-anim-6",
 ]
+
+
+def render_public_mode_sign_in_options() -> dmc.Stack:
+    """Render sign-in options for public mode.
+
+    Shows two options:
+    - Sign in as Temporary User (24-hour session)
+    - Sign in with Google (if OAuth is enabled)
+
+    Returns:
+        dmc.Stack: Sign-in options layout component.
+    """
+    # Calculate expiry display text
+    hours = settings.auth.temporary_user_expiry_hours
+    minutes = settings.auth.temporary_user_expiry_minutes
+    if hours == 24 and minutes == 0:
+        expiry_text = "24-hour session"
+    elif hours > 0 and minutes > 0:
+        expiry_text = f"{hours}h {minutes}m session"
+    elif hours > 0:
+        expiry_text = f"{hours}-hour session"
+    else:
+        expiry_text = f"{minutes}-minute session"
+
+    # Build sign-in options
+    sign_in_options = [
+        dmc.Text(
+            "Choose how you'd like to sign in:",
+            size="sm",
+            c="dimmed",
+            ta="center",
+            mb="md",
+        ),
+        # Temporary user option (always available in public mode)
+        dmc.Paper(
+            children=[
+                dmc.Group(
+                    [
+                        DashIconify(
+                            icon="mdi:clock-outline",
+                            height=32,
+                            color=colors["blue"],
+                        ),
+                        dmc.Stack(
+                            [
+                                dmc.Text(
+                                    "Sign in as Temporary User",
+                                    fw=500,
+                                    size="md",
+                                ),
+                                dmc.Text(
+                                    f"{expiry_text}, no account required",
+                                    size="sm",
+                                    c="dimmed",
+                                ),
+                            ],
+                            gap=2,
+                        ),
+                    ],
+                    gap="md",
+                ),
+            ],
+            id="public-temp-user-button",
+            p="md",
+            radius="md",
+            withBorder=True,
+            style={
+                "cursor": "pointer",
+                "transition": "all 0.2s ease",
+                "borderColor": "var(--app-border-color, #ddd)",
+            },
+        ),
+    ]
+
+    # Google OAuth option (only if enabled)
+    if settings.auth.google_oauth_enabled:
+        sign_in_options.append(
+            dmc.Paper(
+                children=[
+                    dmc.Group(
+                        [
+                            DashIconify(
+                                icon="devicon:google",
+                                height=32,
+                            ),
+                            dmc.Stack(
+                                [
+                                    dmc.Text(
+                                        "Sign in with Google",
+                                        fw=500,
+                                        size="md",
+                                    ),
+                                    dmc.Text(
+                                        "Persistent account",
+                                        size="sm",
+                                        c="dimmed",
+                                    ),
+                                ],
+                                gap=2,
+                            ),
+                        ],
+                        gap="md",
+                    ),
+                ],
+                id="public-google-button",
+                p="md",
+                radius="md",
+                withBorder=True,
+                style={
+                    "cursor": "pointer",
+                    "transition": "all 0.2s ease",
+                    "borderColor": "var(--app-border-color, #ddd)",
+                },
+            )
+        )
+
+    return dmc.Stack(
+        sign_in_options,
+        gap="md",
+    )
 
 
 def render_login_form() -> dmc.Stack:
@@ -731,7 +852,11 @@ def register_callbacks_users_management(app) -> None:
             prevent_initial_call=True,
         )
         def auto_open_auth_modal_on_auth_page(pathname, local_data):
-            """Automatically open the auth modal when user navigates to /auth page."""
+            """Automatically open the auth modal when user navigates to /auth page.
+
+            In public mode, shows sign-in options (temp user / Google OAuth).
+            In standard mode, shows the login form.
+            """
             logger.info(
                 f"Auto-open check: pathname={pathname}, logged_in={local_data.get('logged_in', False) if local_data else False}"
             )
@@ -744,7 +869,13 @@ def register_callbacks_users_management(app) -> None:
                 logger.info("User is already logged in, not showing auth modal")
                 return False, dash.no_update, dash.no_update, dash.no_update
 
-            # Open modal with login form
+            # In public mode, show sign-in options (temp user / Google OAuth)
+            if settings.auth.is_public_mode:
+                logger.info("Opening auth modal with public mode sign-in options")
+                content = render_public_mode_sign_in_options()
+                return True, content, "public_signin", dash.no_update
+
+            # Standard mode: show login form
             logger.info("Opening auth modal with login form")
             content = render_login_form()
             return True, content, "login", dash.no_update
@@ -940,6 +1071,70 @@ def register_callbacks_users_management(app) -> None:
                 dash.no_update,
                 dash.no_update,
             )
+
+        # Public mode sign-in callbacks (temp user and Google OAuth options)
+        if settings.auth.is_public_mode:
+
+            @app.callback(
+                [
+                    Output("local-store", "data", allow_duplicate=True),
+                    Output("auth-modal", "opened", allow_duplicate=True),
+                    Output("url", "pathname", allow_duplicate=True),
+                ],
+                Input("public-temp-user-button", "n_clicks"),
+                State("local-store", "data"),
+                prevent_initial_call=True,
+            )
+            def handle_public_temp_user_sign_in(n_clicks, local_data):
+                """Create a temporary user and sign them in from public mode auth."""
+                if not n_clicks:
+                    raise PreventUpdate
+
+                logger.info("Creating temporary user from public mode sign-in")
+
+                try:
+                    # Call API to create temporary user
+                    session_data = api_call_create_temporary_user(
+                        expiry_hours=settings.auth.temporary_user_expiry_hours,
+                        expiry_minutes=settings.auth.temporary_user_expiry_minutes,
+                    )
+
+                    if session_data:
+                        logger.info(f"Temporary user created: {session_data.get('email')}")
+                        # Close modal and redirect to dashboards
+                        return session_data, False, "/dashboards"
+                    else:
+                        logger.error("Failed to create temporary user")
+                        raise PreventUpdate
+
+                except Exception as e:
+                    logger.error(f"Error creating temporary user: {e}")
+                    raise PreventUpdate
+
+            # Public mode Google OAuth button handler (if enabled)
+            if settings.auth.google_oauth_enabled:
+
+                @app.callback(
+                    Output("google-oauth-redirect", "href", allow_duplicate=True),
+                    Input("public-google-button", "n_clicks"),
+                    prevent_initial_call=True,
+                )
+                def handle_public_google_oauth(n_clicks):
+                    """Initiate Google OAuth flow from public mode sign-in."""
+                    if not n_clicks:
+                        raise PreventUpdate
+
+                    try:
+                        oauth_data = api_call_get_google_oauth_login_url()
+                        if oauth_data and "authorization_url" in oauth_data:
+                            logger.info("Redirecting to Google OAuth from public mode sign-in")
+                            return oauth_data["authorization_url"]
+                        else:
+                            logger.error("Failed to get OAuth URL")
+                            raise PreventUpdate
+                    except Exception as e:
+                        logger.error(f"Error initiating Google OAuth: {e}")
+                        raise PreventUpdate
 
         # Google OAuth callbacks - only register if enabled in settings
         if settings.auth.google_oauth_enabled:
