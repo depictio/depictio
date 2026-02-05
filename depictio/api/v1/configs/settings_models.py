@@ -195,6 +195,11 @@ class AuthConfig(BaseSettings):
         description="Enable public mode for public Depictio instances with sign-in modal",
         validation_alias=AliasChoices("public_mode", "unauthenticated_mode"),
     )
+    demo_mode: bool = Field(
+        default=False,
+        description="Enable demo mode with guided tour tooltips for first-time users. "
+        "Extends public mode with interactive onboarding hints.",
+    )
     anonymous_user_email: str = Field(
         default="anonymous@depict.io",
         description="Default anonymous user email",
@@ -228,6 +233,15 @@ class AuthConfig(BaseSettings):
 
     @computed_field
     @property
+    def is_demo_mode(self) -> bool:
+        """Returns True if demo mode is enabled.
+
+        Demo mode extends public mode with guided tour tooltips for first-time users.
+        """
+        return self.demo_mode
+
+    @computed_field
+    @property
     def requires_anonymous_user(self) -> bool:
         """Returns True if any mode requiring anonymous user is enabled."""
         return self.is_single_user_mode or self.is_public_mode
@@ -248,14 +262,33 @@ class AuthConfig(BaseSettings):
 
     model_config = SettingsConfigDict(env_prefix="DEPICTIO_AUTH_", case_sensitive=False)
 
-    def __init__(self, **data):
+    def __init__(self, **data: object) -> None:
         super().__init__(**data)
 
-        # Manually read the environment variable if not set
-        if self.internal_api_key_env is None:
-            import os
+        import os
 
+        # Manually read environment variables if not set
+        # This is needed because Pydantic v2 nested BaseSettings don't automatically
+        # read environment variables when instantiated via default_factory
+        if self.internal_api_key_env is None:
             self.internal_api_key_env = os.getenv("DEPICTIO_AUTH_INTERNAL_API_KEY")
+
+        # Read auth mode environment variables
+        env_public_mode = os.getenv("DEPICTIO_AUTH_PUBLIC_MODE", "").lower()
+        if env_public_mode in ("true", "1", "yes"):
+            object.__setattr__(self, "public_mode", True)
+
+        env_single_user_mode = os.getenv("DEPICTIO_AUTH_SINGLE_USER_MODE", "").lower()
+        if env_single_user_mode in ("true", "1", "yes"):
+            object.__setattr__(self, "single_user_mode", True)
+
+        env_unauthenticated_mode = os.getenv("DEPICTIO_AUTH_UNAUTHENTICATED_MODE", "").lower()
+        if env_unauthenticated_mode in ("true", "1", "yes"):
+            object.__setattr__(self, "unauthenticated_mode", True)
+
+        env_demo_mode = os.getenv("DEPICTIO_AUTH_DEMO_MODE", "").lower()
+        if env_demo_mode in ("true", "1", "yes"):
+            object.__setattr__(self, "demo_mode", True)
 
     @computed_field
     @property

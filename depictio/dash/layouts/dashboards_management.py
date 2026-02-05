@@ -29,7 +29,10 @@ from dash_iconify import DashIconify
 from depictio.api.v1.configs.config import API_BASE_URL, settings
 from depictio.api.v1.configs.custom_logging import format_pydantic
 from depictio.api.v1.configs.logging_init import logger
-from depictio.dash.api_calls import api_call_fetch_user_from_token, api_get_project_from_id
+from depictio.dash.api_calls import (
+    api_call_fetch_user_from_token,
+    api_get_project_from_id,
+)
 from depictio.dash.colors import colors  # Import Depictio color palette
 from depictio.dash.layouts.layouts_toolbox import (
     create_dashboard_modal,
@@ -115,7 +118,7 @@ def get_child_tabs_info(dashboard_id: str, token: str) -> dict:
 
         if response.status_code == 200:
             all_dashboards = response.json()
-            logger.debug(f"Fetched {len(all_dashboards)} total dashboards for tab filtering")
+            # logger.debug(f"Fetched {len(all_dashboards)} total dashboards for tab filtering")
 
             # Filter child tabs that belong to this parent dashboard
             child_tabs = [
@@ -125,7 +128,7 @@ def get_child_tabs_info(dashboard_id: str, token: str) -> dict:
                 and not d.get("is_main_tab", True)
             ]
 
-            logger.debug(f"Found {len(child_tabs)} child tabs for parent dashboard {dashboard_id}")
+            # logger.debug(f"Found {len(child_tabs)} child tabs for parent dashboard {dashboard_id}")
 
             # Sort by tab_order
             child_tabs.sort(key=lambda x: x.get("tab_order", 0))
@@ -617,10 +620,10 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
             # Total tabs = 1 (main) + child tabs count
             total_tab_count = 1 + child_tab_count
 
-            logger.debug(
-                f"Dashboard {dashboard['dashboard_id']}: "
-                f"Found {child_tab_count} child tabs, total {total_tab_count} tabs"
-            )
+            # logger.debug(
+            #     f"Dashboard {dashboard['dashboard_id']}: "
+            #     f"Found {child_tab_count} child tabs, total {total_tab_count} tabs"
+            # )
 
             # Only show badge when total > 1 (i.e., when there are child tabs)
             if total_tab_count > 1:
@@ -885,7 +888,11 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
                                 color=color_privacy_button,
                                 disabled=disabled,
                                 size="xs",
-                                style={"padding": "2px 4px", "fontSize": "11px", "display": "none"},
+                                style={
+                                    "padding": "2px 4px",
+                                    "fontSize": "11px",
+                                    "display": "none",
+                                },
                             ),
                         ],
                         gap="xs",
@@ -1131,7 +1138,10 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
                                     withIndicators=True,
                                     withControls=True,
                                     height=210,
-                                    style={"borderRadius": "8px 8px 0 0", "cursor": "pointer"},
+                                    style={
+                                        "borderRadius": "8px 8px 0 0",
+                                        "cursor": "pointer",
+                                    },
                                 )
                             ),
                             dmc.HoverCardDropdown(
@@ -1218,7 +1228,10 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
                                             size="sm",
                                             ta="center",
                                             c="gray",
-                                            style={"marginTop": "12px", "fontSize": "13px"},
+                                            style={
+                                                "marginTop": "12px",
+                                                "fontSize": "13px",
+                                            },
                                         ),
                                     ],
                                     style={
@@ -1633,7 +1646,9 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
                                     dmc.Group(
                                         [
                                             DashIconify(
-                                                icon="mdi:account-check", width=18, color="#1c7ed6"
+                                                icon="mdi:account-check",
+                                                width=18,
+                                                color="#1c7ed6",
                                             ),
                                             dmc.Text(
                                                 f"Owned Dashboards ({len(owned_dashboards)})",
@@ -1689,7 +1704,9 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
                                     dmc.Group(
                                         [
                                             DashIconify(
-                                                icon="mdi:earth", width=18, color="#20c997"
+                                                icon="mdi:earth",
+                                                width=18,
+                                                color="#20c997",
                                             ),
                                             dmc.Text(
                                                 f"Public Dashboards ({len(public_dashboards)})",
@@ -1716,7 +1733,9 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
                                     dmc.Group(
                                         [
                                             DashIconify(
-                                                icon="mdi:school-outline", width=18, color="#fd7e14"
+                                                icon="mdi:school-outline",
+                                                width=18,
+                                                color="#fd7e14",
                                             ),
                                             dmc.Text(
                                                 f"Example Dashboards ({len(example_dashboards)})",
@@ -1813,7 +1832,16 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
         Returns:
             Tuple of (preview component, resolved icon name, resolved color, color_disabled).
         """
-        allowed_colors = ("blue", "teal", "orange", "red", "purple", "pink", "green", "gray")
+        allowed_colors = (
+            "blue",
+            "teal",
+            "orange",
+            "red",
+            "purple",
+            "pink",
+            "green",
+            "gray",
+        )
         workflow_icons = get_workflow_icon_mapping()
         workflow_colors = get_workflow_icon_color()
 
@@ -2426,7 +2454,14 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
             current_user_api = api_call_fetch_user_from_token(user_data["access_token"])
             if not current_user_api:
                 logger.warning("User not found in dashboard creation.")
-                return data, opened, True, dash.no_update, dash.no_update, dash.no_update
+                return (
+                    data,
+                    opened,
+                    True,
+                    dash.no_update,
+                    dash.no_update,
+                    dash.no_update,
+                )
 
             # Create UserContext from API response
             current_user = UserContext(
@@ -2537,7 +2572,14 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
             data["icon_variant"] = "filled"
             data["project_id"] = project
             data["workflow_system"] = workflow_system if workflow_system else "none"
-            return data, False, False, {"display": "none"}, dash.no_update, dash.no_update
+            return (
+                data,
+                False,
+                False,
+                {"display": "none"},
+                dash.no_update,
+                dash.no_update,
+            )
 
         logger.debug("No relevant clicks")
         # Return default values if no relevant clicks happened
@@ -2776,24 +2818,18 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
 
         from depictio.dash.api_calls import api_call_export_dashboard_json
 
-        logger.debug(f"Export callback triggered. n_clicks_list: {n_clicks_list}")
-
-        # Check if any button was clicked
+        # Silent early returns for no-op cases (pattern-matching callbacks trigger frequently)
         if not n_clicks_list or not any(n_clicks_list):
-            logger.debug("No export button clicked")
             return dash.no_update, dash.no_update
 
         # Get which button was clicked
         triggered_id = ctx.triggered_id
-        logger.debug(f"Triggered ID: {triggered_id}")
 
         if not triggered_id or not isinstance(triggered_id, dict):
-            logger.debug("Invalid triggered_id")
             return dash.no_update, dash.no_update
 
         dashboard_id = triggered_id.get("index")
         if not dashboard_id:
-            logger.debug("No dashboard_id in triggered_id")
             return dash.no_update, dash.no_update
 
         logger.info(f"Exporting dashboard: {dashboard_id}")
@@ -2915,7 +2951,11 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
                         children=[
                             dmc.Text(f"File: {filename}", size="sm", fw=500),
                             dmc.Text(f"Dashboard: {dashboard_title}", size="sm"),
-                            dmc.Text(f"Source Project: {source_project}", size="sm", c="dimmed"),
+                            dmc.Text(
+                                f"Source Project: {source_project}",
+                                size="sm",
+                                c="dimmed",
+                            ),
                             dmc.Text(f"Exported: {export_time}", size="sm", c="dimmed"),
                         ],
                     )

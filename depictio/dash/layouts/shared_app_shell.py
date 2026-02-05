@@ -82,6 +82,12 @@ def create_shared_stores():
         dcc.Store(
             id="ws-new-data-ids", storage_type="memory", data=[]
         ),  # IDs of newly arrived data
+        # Demo tour state (localStorage for persistence across sessions)
+        dcc.Store(
+            id="demo-tour-store",
+            storage_type="local",
+            data={"tour_step": 0, "tour_completed": False, "show_hints": True},
+        ),
         # URL location
         dcc.Location(id="url", refresh=False),
         # Server status check interval (30 seconds) - pure clientside implementation

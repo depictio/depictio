@@ -46,13 +46,17 @@ def _create_auth_mode_badge():
             style={"marginBottom": "12px", "marginTop": "8px"},
         )
     elif settings.auth.is_public_mode:
+        # Show "Demo Mode" badge if demo mode is enabled, otherwise "Public Mode"
+        badge_text = "Demo Mode" if settings.auth.is_demo_mode else "Public Mode"
+        badge_icon = "mdi:compass-outline" if settings.auth.is_demo_mode else "mdi:earth"
+        badge_color = "violet" if settings.auth.is_demo_mode else "teal"
         return dmc.Center(
             dmc.Badge(
-                "Public Mode",
+                badge_text,
                 variant="light",
-                color="teal",
+                color=badge_color,
                 size="lg",
-                leftSection=DashIconify(icon="mdi:earth", height=16),
+                leftSection=DashIconify(icon=badge_icon, height=16),
             ),
             style={"marginBottom": "12px", "marginTop": "8px"},
         )
@@ -120,9 +124,7 @@ def create_sidebar_footer():
         )
     else:
         # Add hidden placeholder for avatar-container to prevent callback errors
-        children.append(
-            html.Div(id="avatar-container", style={"display": "none"})
-        )
+        children.append(html.Div(id="avatar-container", style={"display": "none"}))
 
     # Add public mode sign-in button (hidden by default, shown via callback when not logged in)
     if settings.auth.is_public_mode:
@@ -712,7 +714,17 @@ def register_sidebar_callbacks(app, register_tabs: bool = True) -> None:
     def update_admin_link_visibility(local_data):
         """
         Show/hide admin link based on user's admin status.
+
+        Admin link is always hidden in demo mode or public mode to prevent
+        unauthorized access to admin functionality.
         """
+        from depictio.api.v1.configs.config import settings
+
+        # Always hide admin link in demo mode or public mode
+        if settings.auth.is_demo_mode or settings.auth.is_public_mode:
+            logger.debug("Hiding admin link in demo/public mode")
+            return {"padding": "20px", "display": "none"}
+
         if not local_data or not local_data.get("logged_in"):
             return {"padding": "20px", "display": "none"}
 
@@ -725,11 +737,11 @@ def register_sidebar_callbacks(app, register_tabs: bool = True) -> None:
                 return {"padding": "20px"}
             else:
                 logger.debug(
-                    f"🔧 Hiding admin link for non-admin user: {user.email if user else 'unknown'}"
+                    f"Hiding admin link for non-admin user: {user.email if user else 'unknown'}"
                 )
                 return {"padding": "20px", "display": "none"}
         except Exception as e:
-            logger.error(f"❌ Error checking admin status: {e}")
+            logger.error(f"Error checking admin status: {e}")
             return {"padding": "20px", "display": "none"}
 
     app.clientside_callback(

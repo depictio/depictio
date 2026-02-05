@@ -59,6 +59,7 @@ from depictio.dash.layouts.projectwise_user_management import (
 )
 from depictio.dash.layouts.shared_app_shell import create_app_shell
 from depictio.dash.layouts.sidebar import create_static_navbar_content
+from depictio.dash.layouts.users_management import create_auth_modal_components
 
 
 def _create_management_additional_stores() -> list:
@@ -67,9 +68,11 @@ def _create_management_additional_stores() -> list:
 
     Returns:
         List of Dash components for analytics tracking, notifications,
-        drawer modals, and hidden callback utility elements.
+        drawer modals, auth modal components, and hidden callback utility elements.
     """
-    return [
+    from depictio.api.v1.configs.config import settings
+
+    stores = [
         create_analytics_tracker(),
         html.Div(id="theme-detection-trigger", style={"display": "none"}),
         dmc.NotificationContainer(id="notification-container"),
@@ -86,6 +89,17 @@ def _create_management_additional_stores() -> list:
         html.Div(id="dummy-resize-output", style={"display": "none"}),
         html.Div(id="admin-password-warning-trigger", style={"display": "none"}),
     ]
+
+    # Add auth-modal components for callback support across all pages
+    stores.extend(create_auth_modal_components())
+
+    # Add floating tour guide for demo mode
+    if settings.auth.is_demo_mode:
+        from depictio.dash.components.demo_tour import create_floating_tour_guide
+
+        stores.append(create_floating_tour_guide())
+
+    return stores
 
 
 def create_management_layout():
@@ -343,6 +357,14 @@ def route_authenticated_user(
         return project_data_collections_layout, header
 
     if pathname == "/auth":
+        # In public mode, allow anonymous users to access /auth to see sign-in options
+        # (temp user, Google OAuth) for upgrading their session
+        if is_anonymous:
+            logger.info("Anonymous user accessing /auth - showing auth page with sign-in options")
+            header = create_default_header("Sign In")
+            content = create_users_management_layout()
+            return content, header
+        # Fully authenticated users don't need /auth, redirect to dashboards
         logger.info("Authenticated user accessing /auth, redirecting to /dashboards")
         return dashboards_page()
 
@@ -426,6 +448,16 @@ def register_feature_callbacks(app):
         from depictio.dash.layouts.auth_modal import register_auth_modal_callbacks
 
         register_auth_modal_callbacks(app)
+
+    # Demo mode guided tour callbacks
+    logger.info(
+        f"Demo mode check: is_demo_mode={settings.auth.is_demo_mode}, demo_mode={settings.auth.demo_mode}"
+    )
+    if settings.auth.is_demo_mode:
+        from depictio.dash.layouts.demo_tour_callbacks import register_demo_tour_callbacks
+
+        logger.info("Registering demo tour callbacks")
+        register_demo_tour_callbacks(app)
 
     # Dashboards management callbacks
     from depictio.dash.layouts.dashboards_management import (
