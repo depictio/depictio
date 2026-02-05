@@ -179,7 +179,7 @@ describe('Unauthenticated Mode - Dashboard Access Restrictions', () => {
     cy.screenshot('enabled_login_button_anonymous')
   })
 
-  it('should redirect to profile when clicking Login to Create Dashboards button', () => {
+  it('should redirect to auth when clicking Login to Create Dashboards button', () => {
     cy.visit('/dashboards')
     cy.wait(2000)
 
@@ -188,18 +188,17 @@ describe('Unauthenticated Mode - Dashboard Access Restrictions', () => {
       // Click the Login to Create Dashboards button
       cy.contains('button', 'Login to Create Dashboards').click()
 
-      // Should redirect to profile page
-      cy.url().should('include', '/profile')
+      // Should redirect to auth page with sign-in options
+      cy.url().should('include', '/auth')
       cy.url().should('not.equal', dashboardsUrl)
 
-      // Wait for profile page to load
-      cy.get('#page-content', { timeout: 10000 }).should('be.visible')
+      // Wait for auth modal to appear
+      cy.get('[role="dialog"][aria-modal="true"]', { timeout: 10000 }).should('be.visible')
 
-      // Verify we're on the profile page by checking for profile-specific content
-      cy.get('body').should('contain', 'User Profile')
-      cy.get('body').should('contain', 'Login as a temporary user')
+      // Verify auth modal shows public mode sign-in options
+      cy.get('body').should('contain', 'Welcome to Depictio')
 
-      cy.screenshot('redirected_to_profile_from_dashboard_button')
+      cy.screenshot('redirected_to_auth_from_dashboard_button')
     })
   })
 

@@ -1931,6 +1931,9 @@ jobs:
           cp .env.example .env
           # Enable dev mode
           sed -i 's/# DEPICTIO_DEV_MODE=false/DEPICTIO_DEV_MODE=true/' docker-compose/.env
+          # Disable public mode and demo mode for standard auth tests
+          sed -i 's/DEPICTIO_AUTH_PUBLIC_MODE=true/DEPICTIO_AUTH_PUBLIC_MODE=false/' docker-compose/.env
+          sed -i 's/DEPICTIO_AUTH_DEMO_MODE=true/DEPICTIO_AUTH_DEMO_MODE=false/' docker-compose/.env
           mkdir -p depictioDB minio_data prof_files cache
           chmod 777 depictioDB minio_data prof_files cache
 
@@ -2011,8 +2014,7 @@ jobs:
           echo "UID=$(id -u)" >> $GITHUB_ENV
           echo "GID=$(id -g)" >> $GITHUB_ENV
           cp .env.example .env
-          # Enable unauthenticated mode
-          sed -i 's/# DEPICTIO_AUTH_UNAUTHENTICATED_MODE=false/DEPICTIO_AUTH_UNAUTHENTICATED_MODE=true/' docker-compose/.env
+          # Public mode is already enabled in docker-compose/.env (DEPICTIO_AUTH_PUBLIC_MODE=true)
           sed -i 's/# DEPICTIO_DEV_MODE=false/DEPICTIO_DEV_MODE=true/' docker-compose/.env
           mkdir -p depictioDB minio_data prof_files cache
           chmod 777 depictioDB minio_data prof_files cache
