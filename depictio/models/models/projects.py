@@ -12,6 +12,7 @@ from depictio.models.models.base import MongoModel
 from depictio.models.models.data_collections import DataCollection, DataCollectionResponse
 from depictio.models.models.joins import JoinDefinition
 from depictio.models.models.links import DCLink
+from depictio.models.models.realtime import RealtimeConfig
 from depictio.models.models.users import Permission
 from depictio.models.models.workflows import Workflow, WorkflowResponse
 
@@ -35,6 +36,7 @@ class Project(MongoModel):
     hash: str | None = None
     registration_time: str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     project_type: Literal["basic", "advanced"] = "basic"
+    realtime: RealtimeConfig | None = None  # Optional real-time event configuration
 
     @field_validator("name")
     @classmethod

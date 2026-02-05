@@ -248,6 +248,7 @@ def register_simple_theme_system(app):
         "header-powered-by-logo",
         "auth-modal-logo-login",
         "auth-modal-logo-register",
+        "auth-modal-logo-public",  # Public mode sign-in options
     ]
 
     for logo_id in logo_outputs:

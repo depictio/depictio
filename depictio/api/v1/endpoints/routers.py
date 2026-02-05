@@ -19,6 +19,7 @@ from depictio.api.v1.endpoints.datacollections_endpoints.routes import (
     datacollections_endpoint_router,
 )
 from depictio.api.v1.endpoints.deltatables_endpoints.routes import deltatables_endpoint_router
+from depictio.api.v1.endpoints.events_endpoints.routes import events_router
 from depictio.api.v1.endpoints.files_endpoints.routes import files_endpoint_router
 from depictio.api.v1.endpoints.jbrowse_endpoints.routes import jbrowse_endpoints_router
 from depictio.api.v1.endpoints.links_endpoints.routes import links_endpoint_router
@@ -127,4 +128,12 @@ if settings.analytics.enabled:
         analytics_data_router,
         prefix="/analytics-data",
         tags=["Analytics Data"],
+    )
+
+# Include Real-time Events routes (WebSocket)
+if settings.events.enabled:
+    router.include_router(
+        events_router,
+        prefix="/events",
+        tags=["Real-time Events"],
     )

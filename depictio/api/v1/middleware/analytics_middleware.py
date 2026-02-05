@@ -26,6 +26,10 @@ class AnalyticsMiddleware(BaseHTTPMiddleware):
         )
 
     async def dispatch(self, request: Request, call_next):
+        # Skip WebSocket requests - BaseHTTPMiddleware doesn't handle them properly
+        if request.scope.get("type") == "websocket":
+            return await call_next(request)
+
         # Skip analytics for health checks and internal endpoints
         if not self.enabled or self.should_skip_path(request.url.path):
             return await call_next(request)

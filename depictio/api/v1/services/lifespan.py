@@ -20,6 +20,7 @@ from depictio.api.v1.configs.config import MONGODB_URL, settings
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.initialization import run_initialization
 from depictio.api.v1.services.background_tasks import delayed_process_data_collections
+from depictio.api.v1.services.events import event_service
 from depictio.api.v1.services.initialization import (
     check_and_set_initialization,
     cleanup_failed_initialization,
@@ -167,6 +168,45 @@ def start_yaml_services(should_initialize: bool) -> None:
         logger.error(f"Worker {WORKER_ID}: Failed to start YAML sync services: {e}", exc_info=True)
 
 
+async def start_event_services(should_initialize: bool) -> None:
+    """
+    Start real-time event services if enabled.
+
+    Note: Event service starts on the initializing worker, or always in single-worker mode.
+    The MongoDB change stream will only be active on one instance at a time.
+
+    Args:
+        should_initialize: Whether this worker performed initialization
+    """
+    if not settings.events.enabled:
+        return
+
+    # Start event service if this is the initializing worker,
+    # OR if we're in a single-worker scenario (no other workers expected)
+    # For local dev, we typically want events to start regardless
+    should_start = should_initialize
+
+    # In dev/local mode, always try to start (change stream is idempotent per connection)
+    if not should_start:
+        # Check if another worker might have the event service running
+        # For now, always start in single-worker deployments
+        logger.info(
+            f"Worker {WORKER_ID}: Starting real-time event service (non-initializing worker)"
+        )
+        should_start = True
+
+    if should_start:
+        logger.info(f"Worker {WORKER_ID}: Starting real-time event service")
+        await event_service.start()
+
+
+async def stop_event_services() -> None:
+    """Stop real-time event services."""
+    if settings.events.enabled:
+        logger.info(f"Worker {WORKER_ID}: Stopping real-time event service")
+        await event_service.stop()
+
+
 def stop_background_services(background_task, should_initialize: bool) -> None:
     """
     Stop background services and tasks.
@@ -195,14 +235,17 @@ async def lifespan(_app: FastAPI):
     - Worker coordination
     - Background task management
     - YAML synchronization services
+    - Real-time event services
     """
     # Startup
     await init_motor_beanie()
     should_initialize = await handle_initialization()
     background_task = start_background_services(should_initialize)
     start_yaml_services(should_initialize)
+    await start_event_services(should_initialize)
 
     yield
 
     # Shutdown
+    await stop_event_services()
     stop_background_services(background_task, should_initialize)

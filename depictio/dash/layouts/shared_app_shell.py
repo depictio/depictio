@@ -62,6 +62,23 @@ def create_shared_stores():
         dcc.Store(
             id="screenshot-debounce-store", storage_type="memory", data={"last_screenshot": 0}
         ),
+        # Real-time WebSocket stores
+        dcc.Store(id="ws-message-store", storage_type="memory"),  # Incoming WebSocket messages
+        dcc.Store(
+            id="ws-connection-config",
+            storage_type="memory",
+            data={
+                "enabled": True,
+                "refresh_mode": "auto-refresh",  # "notification" or "auto-refresh"
+                "paused": False,
+            },
+        ),
+        dcc.Store(
+            id="ws-pending-updates", storage_type="memory", data=False
+        ),  # Pending update flag
+        dcc.Store(
+            id="ws-new-data-ids", storage_type="memory", data=[]
+        ),  # IDs of newly arrived data
         # URL location
         dcc.Location(id="url", refresh=False),
         # Server status check interval (30 seconds) - pure clientside implementation
@@ -241,11 +258,17 @@ def create_minimal_app_shell(
         ... )
     """
     # Import dashboard viewer sidebar (tabs only, no navigation links)
+    from dash import html
+
     from depictio.dash.layouts.sidebar import create_dashboard_viewer_sidebar
     from depictio.dash.layouts.tab_modal import create_tab_modal
 
     # Create shared stores
     stores = create_shared_stores()
+
+    # Add hidden div for native WebSocket state management
+    # The WebSocket is managed via clientside callback in realtime_callbacks.py
+    stores.append(html.Div(id="ws-state", style={"display": "none"}))
 
     # Add additional app-specific stores if provided
     if additional_stores:
