@@ -1986,12 +1986,18 @@ async def import_dashboard_from_json(
     # Generate new dashboard ID (using ObjectId like other dashboard creation endpoints)
     new_dashboard_id = ObjectId()
 
-    # Build new dashboard document
+    # Build new dashboard document with all required fields
     new_dashboard = {
         "dashboard_id": new_dashboard_id,
         "project_id": ObjectId(project_id),
         "title": dashboard_data.get("title", "Imported Dashboard"),
         "subtitle": dashboard_data.get("subtitle", ""),
+        "version": 1,
+        "icon": dashboard_data.get("icon", "mdi:view-dashboard"),
+        "icon_color": dashboard_data.get("icon_color", "orange"),
+        "icon_variant": dashboard_data.get("icon_variant", "filled"),
+        "workflow_system": dashboard_data.get("workflow_system", "none"),
+        "notes_content": dashboard_data.get("notes_content", ""),
         "is_main_tab": dashboard_data.get("is_main_tab", True),
         "tab_order": dashboard_data.get("tab_order", 0),
         "main_tab_name": dashboard_data.get("main_tab_name"),
@@ -1999,13 +2005,25 @@ async def import_dashboard_from_json(
         "tab_icon_color": dashboard_data.get("tab_icon_color"),
         "stored_metadata": dashboard_data.get("stored_metadata", []),
         "stored_layout_data": dashboard_data.get("stored_layout_data", []),
+        "stored_children_data": dashboard_data.get("stored_children_data", []),
+        "tmp_children_data": [],
+        "stored_edit_dashboard_mode_button": [],
+        "left_panel_layout_data": dashboard_data.get("left_panel_layout_data", []),
+        "right_panel_layout_data": dashboard_data.get("right_panel_layout_data", []),
+        "buttons_data": dashboard_data.get(
+            "buttons_data",
+            {
+                "unified_edit_mode": True,
+                "add_components_button": {"count": 0},
+            },
+        ),
+        "stored_add_button": {"count": 0},
         "permissions": {
             "owners": [{"_id": ObjectId(str(current_user.id)), "email": current_user.email}],
             "viewers": [],
         },
         "is_public": project_doc.get("is_public", False),
-        "created_at": datetime.utcnow(),
-        "updated_at": datetime.utcnow(),
+        "last_saved_ts": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
     }
 
     # Insert dashboard
