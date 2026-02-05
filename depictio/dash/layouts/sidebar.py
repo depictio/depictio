@@ -31,12 +31,17 @@ def _create_auth_mode_badge():
 
     if settings.auth.is_single_user_mode:
         return dmc.Center(
-            dmc.Badge(
-                "Single User Mode",
-                variant="light",
-                color="violet",
-                size="lg",
-                leftSection=DashIconify(icon="mdi:account", height=16),
+            dcc.Link(
+                dmc.Badge(
+                    "Single User Mode",
+                    variant="light",
+                    color="violet",
+                    size="lg",
+                    leftSection=DashIconify(icon="mdi:account", height=16),
+                    style={"cursor": "pointer"},
+                ),
+                href="/profile",
+                style={"textDecoration": "none"},
             ),
             style={"marginBottom": "12px", "marginTop": "8px"},
         )
