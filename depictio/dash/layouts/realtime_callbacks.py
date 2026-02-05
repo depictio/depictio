@@ -2,9 +2,14 @@
 Real-time WebSocket callbacks for dashboard updates.
 
 Provides callbacks for:
-- WebSocket URL construction (clientside)
+- Native WebSocket management (clientside) - replaces dash-extensions WebSocket
 - Message parsing (clientside)
 - Notification display (serverside)
+
+Note: We use native JavaScript WebSocket instead of dash-extensions WebSocket
+because the dash-extensions component has two issues:
+1. When url="" (empty string), it falls back to a malformed URL
+2. The component doesn't support URL changes after mount
 """
 
 from dash import Dash, Input, Output, State, no_update
@@ -18,108 +23,152 @@ def register_realtime_callbacks(app: Dash) -> None:
 
     Should be called for both viewer and editor apps.
     """
-    register_websocket_url_callback(app)
-    register_websocket_message_callback(app)
+    register_native_websocket_callback(app)
     register_data_update_notification_callback(app)
 
 
-def register_websocket_url_callback(app: Dash) -> None:
+def register_native_websocket_callback(app: Dash) -> None:
     """
-    Register clientside callback to construct WebSocket URL.
+    Register clientside callback to manage native WebSocket connection.
 
-    Adapts to the current protocol (ws/wss) and includes JWT token
-    and dashboard ID as query parameters.
+    This replaces the dash-extensions WebSocket component with direct JavaScript
+    WebSocket management, giving us full control over connection lifecycle.
+
+    The callback:
+    1. Extracts dashboard ID from pathname
+    2. Constructs the proper WebSocket URL (ws://host:8058/depictio/api/v1/events/ws)
+    3. Manages WebSocket connection (creates new, closes old on URL change)
+    4. Updates ws-message-store when messages are received
     """
     app.clientside_callback(
         """
-        function(pathname, localStore) {
-            // Check if we have JWT token
-            if (!localStore || !localStore.access_token) {
-                console.log('[WebSocket] No access token, skipping connection');
-                return window.dash_clientside.no_update;
-            }
+        function(pathname, localStore, currentState) {
+            console.log('[WebSocket] Callback fired! pathname:', pathname);
 
             // Extract dashboard ID from pathname
             // Patterns: /dashboard/{id} or /dashboard/{id}/edit
             const match = pathname ? pathname.match(/\\/dashboard\\/([a-f0-9]+)/) : null;
             if (!match) {
-                console.log('[WebSocket] Not on a dashboard page, skipping');
+                console.log('[WebSocket] Not on a dashboard page, closing any existing connection');
+                // Close existing connection if navigating away from dashboard
+                if (window._depictioWs) {
+                    window._depictioWs.close();
+                    window._depictioWs = null;
+                }
                 return window.dash_clientside.no_update;
             }
 
             const dashboardId = match[1];
-            const token = localStore.access_token;
 
-            // Construct WebSocket URL
+            // Get token if available (optional for unauthenticated mode)
+            const token = (localStore && localStore.access_token) ? localStore.access_token : '';
+
+            // Construct WebSocket URL - always use port 8058 for API
             const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
             const host = window.location.hostname;
+            const port = '8058';
 
-            // Build base URL - in production (HTTPS with no port), use standard ports
-            // In development, use explicit port (8058 for API, or current port)
-            let baseUrl;
-            if (window.location.protocol === 'https:' && !window.location.port) {
-                // Production HTTPS: use standard port (443), no explicit port in URL
-                baseUrl = `${protocol}//${host}`;
-            } else if (window.location.port && window.location.port !== '5080') {
-                // Development with custom port (e.g., 8058)
-                baseUrl = `${protocol}//${host}:${window.location.port}`;
-            } else {
-                // Development on Dash port (5080): connect to API port (8058)
-                baseUrl = `${protocol}//${host}:8058`;
+            let wsUrl = `${protocol}//${host}:${port}/depictio/api/v1/events/ws?dashboard_id=${dashboardId}`;
+            if (token) {
+                wsUrl += `&token=${token}`;
             }
 
-            const wsUrl = `${baseUrl}/depictio/api/v1/events/ws?token=${token}&dashboard_id=${dashboardId}`;
-
-            console.log('[WebSocket] Connecting to:', wsUrl.replace(/token=[^&]+/, 'token=***'));
-            return wsUrl;
-        }
-        """,
-        Output("ws", "url"),
-        Input("url", "pathname"),
-        State("local-store", "data"),
-        prevent_initial_call=False,  # Allow callback to run on page load for direct dashboard navigation
-    )
-
-
-def register_websocket_message_callback(app: Dash) -> None:
-    """
-    Register clientside callback to parse WebSocket messages.
-
-    Parses incoming JSON messages and stores them in ws-message-store.
-    """
-    app.clientside_callback(
-        """
-        function(msg) {
-            if (!msg) return window.dash_clientside.no_update;
-
-            console.log('[WebSocket] Received message:', msg);
-
-            try {
-                const data = JSON.parse(msg.data);
-                console.log('[WebSocket] Parsed data:', data);
-
-                // Store the parsed message
-                const storeData = {
-                    event_type: data.event_type,
-                    timestamp: data.timestamp || new Date().toISOString(),
-                    dashboard_id: data.dashboard_id,
-                    data_collection_id: data.data_collection_id,
-                    payload: data.payload || {},
-                    received_at: Date.now()
-                };
-
-                console.log('[WebSocket] Storing message:', storeData);
-                return storeData;
-
-            } catch(e) {
-                console.error('[WebSocket] Parse error:', e);
+            // Check if we already have a connection to this exact URL
+            if (window._depictioWs &&
+                window._depictioWs.readyState === WebSocket.OPEN &&
+                window._depictioWs._url === wsUrl) {
+                console.log('[WebSocket] Already connected to this URL');
                 return window.dash_clientside.no_update;
             }
+
+            // Close existing connection if URL changed
+            if (window._depictioWs) {
+                console.log('[WebSocket] Closing existing connection for URL change');
+                window._depictioWs.close();
+                window._depictioWs = null;
+            }
+
+            console.log('[WebSocket] Connecting to:', wsUrl.replace(/token=[^&]+/, 'token=***'));
+
+            // Create new WebSocket connection
+            const ws = new WebSocket(wsUrl);
+            ws._url = wsUrl;  // Store URL for comparison
+
+            // Set up message handler that updates ws-message-store
+            ws.onmessage = function(event) {
+                console.log('[WebSocket] Received raw message:', event.data);
+
+                try {
+                    const data = JSON.parse(event.data);
+                    console.log('[WebSocket] Parsed message:', data);
+
+                    // Create store data object
+                    const storeData = {
+                        event_type: data.event_type,
+                        timestamp: data.timestamp || new Date().toISOString(),
+                        dashboard_id: data.dashboard_id,
+                        data_collection_id: data.data_collection_id,
+                        payload: data.payload || {},
+                        received_at: Date.now()
+                    };
+
+                    // Update the ws-message-store via setProps
+                    window._lastWsMessage = storeData;
+                    console.log('[WebSocket] Attempting to update store...');
+
+                    // Use Dash's setProps mechanism to trigger callback
+                    if (window.dash_clientside && window.dash_clientside.set_props) {
+                        console.log('[WebSocket] Using set_props to update ws-message-store');
+                        window.dash_clientside.set_props('ws-message-store', {data: storeData});
+                    } else {
+                        console.warn('[WebSocket] set_props not available');
+                    }
+
+                    // Also show a native browser notification as fallback for data updates
+                    if (data.event_type === 'data_collection_updated' || data.event_type === 'data_collection_created') {
+                        const tag = data.payload?.data_collection_tag || 'Data';
+                        const op = data.payload?.operation || 'updated';
+                        console.log('[WebSocket] Data update notification:', tag, op);
+
+                        // Try to use Mantine notifications if available
+                        if (window.mantineNotifications && window.mantineNotifications.show) {
+                            window.mantineNotifications.show({
+                                title: 'Data Updated',
+                                message: tag + ' has been ' + op + '. Refresh to see changes.',
+                                color: 'blue',
+                                autoClose: 8000
+                            });
+                        }
+                    }
+                } catch(e) {
+                    console.error('[WebSocket] Message parse error:', e);
+                }
+            };
+
+            ws.onopen = function() {
+                console.log('[WebSocket] Connection established');
+            };
+
+            ws.onerror = function(error) {
+                console.error('[WebSocket] Connection error:', error);
+            };
+
+            ws.onclose = function(event) {
+                console.log('[WebSocket] Connection closed:', event.code, event.reason);
+                // Don't auto-reconnect here - let the callback handle it on next trigger
+            };
+
+            // Store reference globally
+            window._depictioWs = ws;
+
+            return window.dash_clientside.no_update;
         }
         """,
-        Output("ws-message-store", "data"),
-        Input("ws", "message"),
-        prevent_initial_call=True,
+        Output("ws-state", "children"),
+        Input("url", "pathname"),
+        State("local-store", "data"),
+        State("ws-state", "children"),
+        prevent_initial_call=False,
     )
 
 

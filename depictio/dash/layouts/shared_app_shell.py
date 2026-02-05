@@ -34,10 +34,7 @@ def create_shared_stores():
     Returns:
         list: List of dcc.Store components
     """
-    from depictio.api.v1.configs.config import settings
-    from depictio.dash.layouts.auth_modal import create_auth_sign_in_modal
-
-    stores = [
+    return [
         # Shared across apps (localStorage)
         dcc.Store(id="local-store", storage_type="local"),  # JWT tokens, user_id, logged_in
         dcc.Store(id="theme-store", storage_type="local"),  # Light/dark theme
@@ -82,13 +79,6 @@ def create_shared_stores():
         dcc.Store(
             id="ws-new-data-ids", storage_type="memory", data=[]
         ),  # IDs of newly arrived data
-        # Demo tour state (localStorage for persistence across sessions)
-        # No default data - let localStorage persist tour state across page loads.
-        # The handle_tour_state callback initializes data on first visit.
-        dcc.Store(
-            id="demo-tour-store",
-            storage_type="local",
-        ),
         # URL location
         dcc.Location(id="url", refresh=False),
         # Server status check interval (30 seconds) - pure clientside implementation
@@ -98,12 +88,6 @@ def create_shared_stores():
             n_intervals=0,
         ),
     ]
-
-    # Add public auth modal if in public mode
-    if settings.auth.is_public_mode:
-        stores.append(create_auth_sign_in_modal())
-
-    return stores
 
 
 def create_default_header(app_name: str = "Depictio"):
@@ -274,15 +258,17 @@ def create_minimal_app_shell(
         ... )
     """
     # Import dashboard viewer sidebar (tabs only, no navigation links)
+    from dash import html
+
     from depictio.dash.layouts.sidebar import create_dashboard_viewer_sidebar
     from depictio.dash.layouts.tab_modal import create_tab_modal
 
     # Create shared stores
     stores = create_shared_stores()
 
-    # Add WebSocket component for real-time updates
-    # Temporarily disabled - will be re-enabled with native JS implementation from feature/realtime-events-websocket
-    # stores.append(create_websocket_component("ws"))
+    # Add hidden div for native WebSocket state management
+    # The WebSocket is managed via clientside callback in realtime_callbacks.py
+    stores.append(html.Div(id="ws-state", style={"display": "none"}))
 
     # Add additional app-specific stores if provided
     if additional_stores:

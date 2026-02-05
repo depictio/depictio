@@ -158,7 +158,7 @@ class ConnectionManager:
             client_id=client_id,
             subscriptions=[dashboard_id] if dashboard_id else [],
         )
-        await self._send_to_client(client_id, status.model_dump())
+        await self._send_to_client(client_id, status.model_dump(mode="json"))
 
         logger.info(
             f"WebSocket connected: client_id={client_id}, "
@@ -295,6 +295,10 @@ class ConnectionManager:
     def get_dashboard_connection_count(self, dashboard_id: str) -> int:
         """Get the number of connections viewing a specific dashboard."""
         return len(self._dashboard_subscriptions.get(dashboard_id, set()))
+
+    def get_all_subscribed_dashboards(self) -> set[str]:
+        """Get all dashboard IDs that have active subscriptions."""
+        return set(self._dashboard_subscriptions.keys())
 
 
 # Global singleton instance
