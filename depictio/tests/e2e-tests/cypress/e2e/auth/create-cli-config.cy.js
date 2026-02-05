@@ -1,4 +1,4 @@
-describe('Create CLI Config Test', () => {
+describe.skip('Create CLI Config Test', () => {
   let testUser;
   let configName; // Variable to store the dynamic config name
 

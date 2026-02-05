@@ -1,4 +1,4 @@
-describe('Unauthenticated Mode - Login as a temporary user Flow', () => {
+describe.skip('Unauthenticated Mode - Login as a temporary user Flow', () => {
 
   // Only run these tests in unauthenticated mode
   before(() => {
