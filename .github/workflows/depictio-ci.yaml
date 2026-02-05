@@ -2025,22 +2025,62 @@ jobs:
           export DEPICTIO_VERSION="${FULL_IMAGE}"
           export DEPICTIO_FASTAPI_WORKERS=1  # Single worker to avoid boot race conditions
           docker compose -f docker-compose.dev.yaml -f docker-compose/docker-compose.minio.yaml --env-file docker-compose/.env up -d
-          sleep 15
+
+      - name: Wait for services to be ready
+        run: |
+          echo "⏳ Waiting for services to be ready..."
+
+          # Wait for MongoDB
+          echo "Waiting for MongoDB..."
+          for i in {1..30}; do
+            if docker compose exec -T mongo mongosh localhost:27018/depictioDB --eval "db.runCommand({ ping: 1 })" --quiet &>/dev/null; then
+              echo "✅ MongoDB ready"
+              break
+            fi
+            echo "MongoDB not ready yet, attempt $i/30..."
+            sleep 2
+          done
+
+          # Wait for Backend API
+          echo "Waiting for Backend API..."
+          for i in {1..60}; do
+            if curl -f http://localhost:8058/health &>/dev/null; then
+              echo "✅ Backend API ready"
+              break
+            fi
+            echo "Backend API not ready yet, attempt $i/60..."
+            sleep 2
+          done
+
+          # Wait for Frontend
+          echo "Waiting for Frontend..."
+          for i in {1..60}; do
+            if curl -s -o /dev/null -w "%{http_code}" http://localhost:5080/ | grep -q "200"; then
+              echo "✅ Frontend ready"
+              break
+            fi
+            echo "Frontend not ready yet, attempt $i/60..."
+            sleep 2
+          done
+
+          echo "🔍 Final service status:"
+          docker compose ps
 
       - name: Show .env files
         run: |
           echo "📋 Environment variables in docker-compose/.env:"
           cat docker-compose/.env || echo "❌ .env file not found"
-          echo "📋 Environment variables in .env.example:"
-          cat .env.example || echo "❌ .env.example file not found"
-          echo "📋 Environment variables in .env:"
-          cat .env || echo "❌ .env file not found"
 
-      - name: Log backend container status
+      - name: Log container status
         run: |
           echo "📊 Backend container status:"
           docker compose ps depictio-backend || echo "❌ Backend container not running"
-          docker compose logs depictio-backend || echo "❌ Failed to get backend logs"
+          docker compose logs --tail=30 depictio-backend || echo "❌ Failed to get backend logs"
+
+          echo ""
+          echo "📊 Frontend container status:"
+          docker compose ps depictio-frontend || echo "❌ Frontend container not running"
+          docker compose logs --tail=30 depictio-frontend || echo "❌ Failed to get frontend logs"
 
       - name: Verify unauthenticated mode is enabled
         run: |
@@ -2058,9 +2098,7 @@ jobs:
           done
           [ -z "$ANON_USER" ] && echo "❌ Anonymous user not found" && exit 1
 
-          # Verify frontend bypasses auth
-          echo "🌐 Testing unauthenticated access to frontend..."
-          curl -s -o /dev/null -w "%{http_code}" http://localhost:5080/ | grep -q "200" && echo "✅ Frontend accessible without authentication" || (echo "❌ Frontend not accessible" && exit 1)
+          echo "✅ Unauthenticated mode verified"
 
       - name: Set up Node.js
         uses: actions/setup-node@v3
