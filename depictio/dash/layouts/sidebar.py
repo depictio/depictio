@@ -35,10 +35,10 @@ def _create_auth_mode_badge():
                 "Single User Mode",
                 variant="light",
                 color="violet",
-                size="sm",
-                leftSection=DashIconify(icon="mdi:account", height=12),
+                size="lg",
+                leftSection=DashIconify(icon="mdi:account", height=16),
             ),
-            style={"marginBottom": "8px"},
+            style={"marginBottom": "12px", "marginTop": "8px"},
         )
     elif settings.auth.is_public_mode:
         return dmc.Center(
@@ -46,10 +46,10 @@ def _create_auth_mode_badge():
                 "Public Mode",
                 variant="light",
                 color="teal",
-                size="sm",
-                leftSection=DashIconify(icon="mdi:earth", height=12),
+                size="lg",
+                leftSection=DashIconify(icon="mdi:earth", height=16),
             ),
-            style={"marginBottom": "8px"},
+            style={"marginBottom": "12px", "marginTop": "8px"},
         )
     return None
 
@@ -86,9 +86,10 @@ def create_sidebar_footer():
         ),
     ]
 
-    # Add auth mode badge if in special mode
+    # Add auth mode badge if in special mode (with divider)
     auth_badge = _create_auth_mode_badge()
     if auth_badge:
+        children.append(dmc.Divider(my="sm"))
         children.append(auth_badge)
 
     # In single-user mode, only show badge (no avatar needed)
