@@ -273,10 +273,13 @@ def render_welcome_section(email: str, is_anonymous: bool = False) -> dmc.Grid:
         dmc.Grid: Welcome section layout component.
     """
     # Check if user is anonymous and disable button accordingly
-    button_disabled = is_anonymous
-    button_text = "+ New Dashboard" if not is_anonymous else "Login to Create Dashboards"
-    button_variant = "gradient" if not is_anonymous else "outline"
-    button_color = {"from": "black", "to": "grey", "deg": 135} if not is_anonymous else "gray"
+    # In single-user mode, anonymous user has admin access and can create dashboards
+    # In public mode, anonymous users cannot create dashboards (they need to upgrade to temp user)
+    should_disable = is_anonymous and not settings.auth.is_single_user_mode
+    button_disabled = should_disable
+    button_text = "+ New Dashboard" if not should_disable else "Login to Create Dashboards"
+    button_variant = "gradient" if not should_disable else "outline"
+    button_color = {"from": "black", "to": "grey", "deg": 135} if not should_disable else "gray"
 
     return dmc.Grid(
         children=[
@@ -2447,7 +2450,13 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
                 is_admin=current_user_api.is_admin,
                 is_anonymous=getattr(current_user_api, "is_anonymous", False),
             )
-            if hasattr(current_user, "is_anonymous") and current_user.is_anonymous:
+            # In single-user mode, anonymous users have admin access and can create dashboards
+            # In public mode, anonymous users need to upgrade to temp user first
+            if (
+                hasattr(current_user, "is_anonymous")
+                and current_user.is_anonymous
+                and not settings.auth.is_single_user_mode
+            ):
                 logger.info(
                     "Anonymous user clicked 'Login to Create Dashboards' - redirecting to profile"
                 )
