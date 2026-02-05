@@ -1996,7 +1996,7 @@ def create_dashboard_import_modal(
                                                 DashIconify(
                                                     icon="mdi:file-upload-outline",
                                                     height=48,
-                                                    color=colors["gray"],
+                                                    color=colors["grey"],
                                                 ),
                                                 dmc.Text(
                                                     "Drag and drop or click to upload",
