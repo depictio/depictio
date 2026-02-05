@@ -81,9 +81,9 @@ def validate_and_refresh_token(local_data: Optional[Dict]) -> Tuple[Optional[Dic
             - reason: Human-readable reason for authentication status
                      ("valid", "refreshed", "anonymous", "no_session", "invalid_token", etc.)
     """
-    # Handle unauthenticated mode
-    if settings.auth.unauthenticated_mode:
-        logger.debug("SHARED_AUTH: Unauthenticated mode is enabled")
+    # Handle unauthenticated mode (includes single-user mode and public mode)
+    if settings.auth.requires_anonymous_user:
+        logger.debug("SHARED_AUTH: Anonymous user mode is enabled (single-user or public mode)")
 
         # Check if we already have valid local_data (e.g. temporary user session)
         if local_data and local_data.get("access_token") and local_data.get("logged_in"):
