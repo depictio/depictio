@@ -2760,7 +2760,7 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
     @app.callback(
         [
             Output("dashboard-export-download", "data"),
-            Output("notification-container", "children", allow_duplicate=True),
+            Output("notification-container", "sendNotifications", allow_duplicate=True),
         ],
         Input({"type": "export-dashboard-button", "index": ALL}, "n_clicks"),
         State("local-store", "data"),
@@ -2812,12 +2812,16 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
             logger.error(f"Failed to export dashboard {dashboard_id}")
             return (
                 dash.no_update,
-                dmc.Notification(
-                    title="Export Failed",
-                    message="Failed to export dashboard. Please try again.",
-                    color="red",
-                    action="show",
-                ),
+                [
+                    {
+                        "id": "export-error",
+                        "title": "Export Failed",
+                        "message": "Failed to export dashboard. Please try again.",
+                        "color": "red",
+                        "icon": DashIconify(icon="mdi:alert-circle"),
+                        "autoClose": 5000,
+                    }
+                ],
             )
 
         # Create downloadable JSON file
@@ -2830,12 +2834,16 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
 
         return (
             dict(content=json.dumps(export_data, indent=2), filename=filename),
-            dmc.Notification(
-                title="Export Successful",
-                message=f"Dashboard '{dashboard_title}' exported successfully.",
-                color="green",
-                action="show",
-            ),
+            [
+                {
+                    "id": "export-success",
+                    "title": "Export Successful",
+                    "message": f"Dashboard '{dashboard_title}' exported successfully.",
+                    "color": "green",
+                    "icon": DashIconify(icon="mdi:check-circle"),
+                    "autoClose": 3000,
+                }
+            ],
         )
 
     # ==========================================================================
@@ -3021,7 +3029,7 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
         [
             Output("dashboard-modal", "opened", allow_duplicate=True),
             Output("url", "pathname", allow_duplicate=True),
-            Output("notification-container", "children", allow_duplicate=True),
+            Output("notification-container", "sendNotifications", allow_duplicate=True),
         ],
         Input("import-dashboard-submit", "n_clicks"),
         [
@@ -3052,28 +3060,41 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
             return (
                 True,  # Keep modal open
                 dash.no_update,
-                dmc.Notification(
-                    title="Import Failed",
-                    message="Failed to import dashboard. Check validation results.",
-                    color="red",
-                    action="show",
-                ),
+                [
+                    {
+                        "id": "import-error",
+                        "title": "Import Failed",
+                        "message": "Failed to import dashboard. Check validation results.",
+                        "color": "red",
+                        "icon": DashIconify(icon="mdi:alert-circle"),
+                        "autoClose": 5000,
+                    }
+                ],
             )
 
         dashboard_id = result.get("dashboard_id")
         dashboard_title = result.get("title", "Dashboard")
         warnings = result.get("warnings", [])
 
-        notification = dmc.Notification(
-            title="Import Successful",
-            message=f"Dashboard '{dashboard_title}' imported successfully!"
-            + (f" ({len(warnings)} warnings)" if warnings else ""),
-            color="green" if not warnings else "yellow",
-            action="show",
-        )
+        logger.info(f"Dashboard imported successfully: {dashboard_id} - {dashboard_title}")
 
-        # Close modal and redirect to new dashboard
-        return False, f"/dashboard/{dashboard_id}", notification
+        # Close modal and stay on dashboards page (will refresh list)
+        # Note: Redirecting to /dashboard/{id} causes issues as it's a different Dash app
+        return (
+            False,
+            dash.no_update,
+            [
+                {
+                    "id": "import-success",
+                    "title": "Import Successful",
+                    "message": f"Dashboard '{dashboard_title}' imported successfully!"
+                    + (f" ({len(warnings)} warnings)" if warnings else ""),
+                    "color": "green" if not warnings else "yellow",
+                    "icon": DashIconify(icon="mdi:check-circle"),
+                    "autoClose": 4000,
+                }
+            ],
+        )
 
     @app.callback(
         Output("import-dashboard-project-select", "data"),
@@ -3083,27 +3104,33 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
     )
     def populate_import_projects(opened, local_data):
         """Populate project dropdown when dashboard modal opens."""
-        from dash.exceptions import PreventUpdate
+        logger.debug(f"populate_import_projects called: opened={opened}")
 
         if not opened:
-            raise PreventUpdate
+            logger.debug("Modal not opened, returning no_update")
+            return dash.no_update
 
         token = local_data.get("access_token") if local_data else None
         if not token:
+            logger.warning("No token available for fetching projects")
             return []
 
         # Fetch user's projects
         try:
+            logger.debug("Fetching projects from API")
             response = httpx.get(
-                f"{API_BASE_URL}/depictio/api/v1/projects/get_all",
+                f"{API_BASE_URL}/depictio/api/v1/projects/get/all",
                 headers={"Authorization": f"Bearer {token}"},
                 timeout=30.0,
             )
             if response.status_code == 200:
                 projects = response.json()
+                logger.info(f"Fetched {len(projects)} projects for import dropdown")
                 return [
-                    {"value": str(p["_id"]), "label": p.get("name", "Unnamed")} for p in projects
+                    {"value": str(p["id"]), "label": p.get("name", "Unnamed")} for p in projects
                 ]
+            else:
+                logger.error(f"Failed to fetch projects: {response.status_code} - {response.text}")
         except Exception as e:
             logger.error(f"Failed to fetch projects: {e}")
 

@@ -506,11 +506,13 @@ async def save_dashboard(
     current_user: User = Depends(get_current_user),
 ):
     """Check if an entry with the same dashboard_id exists, if not, insert, if yes, update."""
+    # Allow anonymous users in single-user mode (they have admin privileges)
     if hasattr(current_user, "is_anonymous") and current_user.is_anonymous:
-        raise HTTPException(
-            status_code=403,
-            detail="Anonymous users cannot create or modify dashboards. Please login to continue.",
-        )
+        if not settings.auth.is_single_user_mode:
+            raise HTTPException(
+                status_code=403,
+                detail="Anonymous users cannot create or modify dashboards. Please login to continue.",
+            )
 
     existing_dashboard = dashboards_collection.find_one({"dashboard_id": dashboard_id})
 
@@ -852,11 +854,13 @@ async def update_tab(
     Returns:
         Updated dashboard information
     """
+    # Allow anonymous users in single-user mode (they have admin privileges)
     if hasattr(current_user, "is_anonymous") and current_user.is_anonymous:
-        raise HTTPException(
-            status_code=403,
-            detail="Anonymous users cannot modify tabs. Please login to continue.",
-        )
+        if not settings.auth.is_single_user_mode:
+            raise HTTPException(
+                status_code=403,
+                detail="Anonymous users cannot modify tabs. Please login to continue.",
+            )
 
     dashboard = dashboards_collection.find_one({"dashboard_id": dashboard_id})
     if not dashboard:
@@ -927,11 +931,13 @@ async def delete_tab(
     Returns:
         Success message with deleted tab info
     """
+    # Allow anonymous users in single-user mode (they have admin privileges)
     if hasattr(current_user, "is_anonymous") and current_user.is_anonymous:
-        raise HTTPException(
-            status_code=403,
-            detail="Anonymous users cannot delete tabs. Please login to continue.",
-        )
+        if not settings.auth.is_single_user_mode:
+            raise HTTPException(
+                status_code=403,
+                detail="Anonymous users cannot delete tabs. Please login to continue.",
+            )
 
     dashboard = dashboards_collection.find_one({"dashboard_id": dashboard_id})
     if not dashboard:
@@ -988,11 +994,13 @@ async def reorder_tabs(
     Returns:
         Success message with count of updated tabs
     """
+    # Allow anonymous users in single-user mode (they have admin privileges)
     if hasattr(current_user, "is_anonymous") and current_user.is_anonymous:
-        raise HTTPException(
-            status_code=403,
-            detail="Anonymous users cannot reorder tabs. Please login to continue.",
-        )
+        if not settings.auth.is_single_user_mode:
+            raise HTTPException(
+                status_code=403,
+                detail="Anonymous users cannot reorder tabs. Please login to continue.",
+            )
 
     parent_dashboard_id = data.get("parent_dashboard_id")
     tab_orders = data.get("tab_orders", [])
@@ -1395,11 +1403,13 @@ async def import_dashboard_from_yaml(
     Returns:
         Created/updated dashboard information including dashboard_id
     """
+    # Allow anonymous users in single-user mode (they have admin privileges)
     if hasattr(current_user, "is_anonymous") and current_user.is_anonymous:
-        raise HTTPException(
-            status_code=403,
-            detail="Anonymous users cannot import dashboards. Please login to continue.",
-        )
+        if not settings.auth.is_single_user_mode:
+            raise HTTPException(
+                status_code=403,
+                detail="Anonymous users cannot import dashboards. Please login to continue.",
+            )
 
     try:
         lite = DashboardDataLite.from_yaml(yaml_content)
@@ -1925,9 +1935,9 @@ async def import_dashboard_from_json(
             expected_hash = expected_dc.get("schema_hash", "")
 
             # Find matching data collection in current project
-            from depictio.api.v1.db import data_collections_beanie_collection
+            from depictio.api.v1.db import data_collections_collection
 
-            dc_doc = data_collections_beanie_collection.find_one(
+            dc_doc = data_collections_collection.find_one(
                 {
                     "workflow_tag": workflow_tag,
                     "data_collection_tag": dc_tag,
@@ -1973,13 +1983,13 @@ async def import_dashboard_from_json(
             },
         )
 
-    # Generate new dashboard ID
-    new_dashboard_id = str(uuid.uuid4())
+    # Generate new dashboard ID (using ObjectId like other dashboard creation endpoints)
+    new_dashboard_id = ObjectId()
 
     # Build new dashboard document
     new_dashboard = {
         "dashboard_id": new_dashboard_id,
-        "project_id": project_id,
+        "project_id": ObjectId(project_id),
         "title": dashboard_data.get("title", "Imported Dashboard"),
         "subtitle": dashboard_data.get("subtitle", ""),
         "is_main_tab": dashboard_data.get("is_main_tab", True),
@@ -2009,7 +2019,7 @@ async def import_dashboard_from_json(
     return {
         "success": True,
         "message": "Dashboard imported successfully",
-        "dashboard_id": new_dashboard_id,
+        "dashboard_id": str(new_dashboard_id),
         "title": new_dashboard["title"],
         "warnings": validation_warnings if validation_warnings else None,
     }
@@ -2103,9 +2113,9 @@ async def validate_json_import(
         dc_tag = expected_dc.get("data_collection_tag", "")
         expected_hash = expected_dc.get("schema_hash", "")
 
-        from depictio.api.v1.db import data_collections_beanie_collection
+        from depictio.api.v1.db import data_collections_collection
 
-        dc_doc = data_collections_beanie_collection.find_one(
+        dc_doc = data_collections_collection.find_one(
             {
                 "workflow_tag": workflow_tag,
                 "data_collection_tag": dc_tag,

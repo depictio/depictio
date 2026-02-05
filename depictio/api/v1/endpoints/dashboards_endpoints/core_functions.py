@@ -173,16 +173,28 @@ def load_dashboards_from_db(owner, admin_mode=False, user=None, include_child_ta
         dashboards = sorted(dashboards, key=lambda x: x["title"])
     else:
         # Check if user is anonymous - if so, only show public projects
+        # Exception: in single-user mode, anonymous users have admin access to all projects
+        from depictio.api.v1.configs.config import settings
+
         user_id = ObjectId(owner)
 
         if user and hasattr(user, "is_anonymous") and user.is_anonymous:
-            # Anonymous users can only access public projects
-            accessible_projects = list(
-                projects_collection.find(
-                    {"is_public": True},
-                    {"_id": 1},
+            if settings.auth.is_single_user_mode:
+                # Single-user mode: anonymous user has admin access to all projects
+                accessible_projects = list(
+                    projects_collection.find(
+                        {},
+                        {"_id": 1},
+                    )
                 )
-            )
+            else:
+                # Anonymous users can only access public projects
+                accessible_projects = list(
+                    projects_collection.find(
+                        {"is_public": True},
+                        {"_id": 1},
+                    )
+                )
         else:
             # Regular authenticated users can access projects based on permissions
             accessible_projects = list(

@@ -327,82 +327,111 @@ def create_dashboard_modal(
         ],
     )
 
-    # Import tab content
+    # Import tab content - two column layout
     import_content = dmc.Stack(
         gap="lg",
         children=[
-            # Instructions
-            dmc.Alert(
-                "Upload a JSON file exported from Depictio to import a dashboard. "
-                "The import will validate that data collections exist in the target project.",
-                icon=DashIconify(icon="mdi:information-outline"),
-                color="blue",
-            ),
-            # File upload area
-            dmc.Paper(
-                p="lg",
-                radius="md",
-                withBorder=True,
+            # Two-column grid layout
+            dmc.Grid(
+                gutter="xl",
                 children=[
-                    dmc.Stack(
-                        gap="md",
+                    # Left column - File upload
+                    dmc.GridCol(
+                        span=6,
                         children=[
-                            dmc.Text("Upload JSON File", size="sm", fw=500),
-                            dcc.Upload(
-                                id="import-dashboard-upload",
-                                children=dmc.Stack(
-                                    gap="sm",
-                                    align="center",
-                                    children=[
-                                        DashIconify(
-                                            icon="mdi:file-upload-outline",
-                                            height=48,
-                                            color=colors["grey"],
-                                        ),
-                                        dmc.Text(
-                                            "Drag and drop or click to upload",
-                                            size="sm",
-                                            c="dimmed",
-                                        ),
-                                        dmc.Text("Accepts .json files", size="xs", c="dimmed"),
-                                    ],
-                                ),
-                                style={
-                                    "width": "100%",
-                                    "borderWidth": "2px",
-                                    "borderStyle": "dashed",
-                                    "borderRadius": "8px",
-                                    "borderColor": "var(--app-border-color, #ddd)",
-                                    "padding": "20px",
-                                    "textAlign": "center",
-                                    "cursor": "pointer",
-                                },
-                                accept=".json",
-                                multiple=False,
+                            dmc.Paper(
+                                p="lg",
+                                radius="md",
+                                withBorder=True,
+                                style={"height": "100%"},
+                                children=[
+                                    dmc.Stack(
+                                        gap="md",
+                                        children=[
+                                            dmc.Text("Upload JSON File", size="sm", fw=500),
+                                            dcc.Upload(
+                                                id="import-dashboard-upload",
+                                                children=dmc.Stack(
+                                                    gap="sm",
+                                                    align="center",
+                                                    children=[
+                                                        DashIconify(
+                                                            icon="mdi:file-upload-outline",
+                                                            height=48,
+                                                            color=colors["grey"],
+                                                        ),
+                                                        dmc.Text(
+                                                            "Drag and drop or click to upload",
+                                                            size="sm",
+                                                            c="dimmed",
+                                                        ),
+                                                        dmc.Text(
+                                                            "Accepts .json files",
+                                                            size="xs",
+                                                            c="dimmed",
+                                                        ),
+                                                    ],
+                                                ),
+                                                style={
+                                                    "width": "100%",
+                                                    "borderWidth": "2px",
+                                                    "borderStyle": "dashed",
+                                                    "borderRadius": "8px",
+                                                    "borderColor": "var(--app-border-color, #ddd)",
+                                                    "padding": "40px 20px",
+                                                    "textAlign": "center",
+                                                    "cursor": "pointer",
+                                                },
+                                                accept=".json",
+                                                multiple=False,
+                                            ),
+                                            # Uploaded file info
+                                            html.Div(id="import-dashboard-file-info"),
+                                        ],
+                                    ),
+                                ],
                             ),
-                            # Uploaded file info
-                            html.Div(id="import-dashboard-file-info"),
+                        ],
+                    ),
+                    # Right column - Instructions and options
+                    dmc.GridCol(
+                        span=6,
+                        children=[
+                            dmc.Stack(
+                                gap="md",
+                                children=[
+                                    # Instructions
+                                    dmc.Alert(
+                                        "Upload a JSON file exported from Depictio to import a "
+                                        "dashboard. The import will validate that data collections "
+                                        "exist in the target project.",
+                                        icon=DashIconify(icon="mdi:information-outline"),
+                                        color="blue",
+                                    ),
+                                    # Project selection
+                                    dmc.Select(
+                                        id="import-dashboard-project-select",
+                                        label="Target Project",
+                                        description="Select the project to import the dashboard into",
+                                        placeholder="Select a project...",
+                                        data=[],
+                                        searchable=True,
+                                        clearable=True,
+                                        comboboxProps={"withinPortal": False},
+                                    ),
+                                    # Options
+                                    dmc.Checkbox(
+                                        id="import-dashboard-validate-integrity",
+                                        label="Validate data integrity (check that data collections exist)",
+                                        checked=True,
+                                    ),
+                                    # Validation results area
+                                    html.Div(id="import-dashboard-validation-results"),
+                                ],
+                            ),
                         ],
                     ),
                 ],
-            ),
-            # Project selection
-            dmc.Select(
-                id="import-dashboard-project-select",
-                label="Target Project",
-                description="Select the project to import the dashboard into",
-                placeholder="Select a project...",
-                data=[],
-                searchable=True,
-                clearable=True,
-            ),
-            # Validation results area
-            html.Div(id="import-dashboard-validation-results"),
-            # Options
-            dmc.Checkbox(
-                id="import-dashboard-validate-integrity",
-                label="Validate data integrity (check that data collections exist)",
-                checked=True,
             ),
             # Store for JSON content
             dcc.Store(id="import-dashboard-json-store", data=None),
