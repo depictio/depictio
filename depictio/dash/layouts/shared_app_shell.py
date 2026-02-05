@@ -258,15 +258,17 @@ def create_minimal_app_shell(
         ... )
     """
     # Import dashboard viewer sidebar (tabs only, no navigation links)
-    from depictio.dash.components.realtime_websocket import create_websocket_component
+    from dash import html
+
     from depictio.dash.layouts.sidebar import create_dashboard_viewer_sidebar
     from depictio.dash.layouts.tab_modal import create_tab_modal
 
     # Create shared stores
     stores = create_shared_stores()
 
-    # Add WebSocket component for real-time updates
-    stores.append(create_websocket_component("ws"))
+    # Add hidden div for native WebSocket state management
+    # The WebSocket is managed via clientside callback in realtime_callbacks.py
+    stores.append(html.Div(id="ws-state", style={"display": "none"}))
 
     # Add additional app-specific stores if provided
     if additional_stores:
