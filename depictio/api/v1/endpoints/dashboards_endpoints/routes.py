@@ -1699,3 +1699,74 @@ async def get_yaml_schema() -> dict[str, Any]:
         JSON Schema for DashboardDataLite
     """
     return DashboardDataLite.model_json_schema()
+
+
+# =============================================================================
+# Quarto Export Endpoints
+# =============================================================================
+
+
+@dashboards_endpoint_router.get("/export/quarto/{dashboard_id}")
+async def export_dashboard_quarto(
+    dashboard_id: PyObjectId,
+    current_user: User = Depends(get_user_or_anonymous),
+) -> Response:
+    """Export a dashboard as a Quarto (.qmd) document.
+
+    Generates a self-contained ``.qmd`` file with embedded Plotly figures
+    (as Python code cells) and metric cards (as HTML blocks).  The file can
+    be rendered by Quarto to produce HTML, PDF, or other output formats.
+
+    Args:
+        dashboard_id: The dashboard ID to export.
+        current_user: Authenticated or anonymous user.
+
+    Returns:
+        A ``text/plain`` response containing the ``.qmd`` file content with
+        a ``Content-Disposition`` header for download.
+
+    Raises:
+        HTTPException: 404 if dashboard not found, 403 if insufficient permissions.
+    """
+    from depictio.dash.layouts.dashboard_export import (
+        create_quarto_document,
+        extract_charts_from_stored_metadata,
+    )
+
+    dashboard_data = dashboards_collection.find_one({"dashboard_id": dashboard_id})
+    if not dashboard_data:
+        raise HTTPException(
+            status_code=404, detail=f"Dashboard with ID '{dashboard_id}' not found."
+        )
+
+    project_id = dashboard_data.get("project_id")
+    if not project_id:
+        raise HTTPException(status_code=500, detail="Dashboard is not associated with a project.")
+
+    if not check_project_permission(project_id, current_user, "viewer"):
+        raise HTTPException(
+            status_code=403, detail="You don't have permission to export this dashboard."
+        )
+
+    dashboard = DashboardData.from_mongo(dashboard_data)
+    dashboard_dict = dashboard.model_dump()
+
+    # Extract charts and cards from stored metadata (no rendered state — uses metadata)
+    stored_metadata = dashboard_dict.get("stored_metadata", [])
+    charts_json, cards_data = extract_charts_from_stored_metadata(stored_metadata)
+
+    title = dashboard_dict.get("title", f"Dashboard {dashboard_id}")
+    qmd_content = create_quarto_document(
+        dashboard_data=dashboard_dict,
+        charts_json=charts_json,
+        cards_data=cards_data,
+        title=title,
+    )
+
+    filename = f"dashboard_{dashboard_id}_export.qmd"
+
+    return Response(
+        content=qmd_content,
+        media_type="text/plain",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )

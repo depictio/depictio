@@ -1161,7 +1161,7 @@ def _create_header_right_section(
             edit_dashboard,
             add_component,
             save_dashboard,
-            export_dashboard,  # Export dashboard as HTML
+            export_dashboard,  # Export dashboard as Quarto (.qmd)
             reset_filters,
             settings,
         ],
@@ -1257,7 +1257,7 @@ def design_header(
 
     # Create export dashboard button - always visible for all users
     export_dashboard_button = dmc.Tooltip(
-        label="Export dashboard as HTML",
+        label="Export dashboard as Quarto (.qmd)",
         position="bottom",
         withArrow=True,
         children=[
@@ -1305,7 +1305,7 @@ def design_header(
             backend_components,
             settings_drawer,
             dmc.Stack(children=stores, gap=0),
-            dashboard_export_download,  # Download component for HTML export
+            dashboard_export_download,  # Download component for Quarto export
         ],
         gap=0,
     )
