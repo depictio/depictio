@@ -2308,7 +2308,10 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
         dashboards_view = create_homepage_view(
             dashboards, current_userbase.id, user_data["access_token"], current_user
         )
-        return [dashboards_view] * len(store_data_list)
+        # Use ctx.outputs_list to get the actual number of dashboard-list components
+        # This is more reliable than depending on create-dashboard-button count
+        num_outputs = len(ctx.outputs_list) if ctx.outputs_list else max(len(store_data_list), 1)
+        return [dashboards_view] * num_outputs
 
     @app.callback(
         Output({"type": "edit-dashboard-modal", "index": MATCH}, "opened"),
@@ -2623,10 +2626,8 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
         user = api_call_fetch_user_from_token(data["access_token"])
 
         def render_landing_page(data):
-            is_anonymous = getattr(user, "is_anonymous", False)
             return html.Div(
                 [
-                    render_welcome_section(user.email, is_anonymous),
                     render_dashboard_list_section(user.email),
                     # Dummy output for clientside thumbnail theme swap callback
                     html.Div(id="thumbnail-theme-swap-dummy", style={"display": "none"}),
