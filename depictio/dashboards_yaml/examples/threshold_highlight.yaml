@@ -1,0 +1,112 @@
+# =============================================================================
+# Threshold Highlight Dashboard - Generic Example
+# =============================================================================
+#
+# Demonstrates the general pattern for:
+#   - A reference line at a threshold value
+#   - Highlighting points ABOVE/BELOW that threshold
+#   - Combining with a categorical condition (AND logic)
+#   - Linking the threshold to a slider for interactivity
+#
+# This pattern applies to many use cases beyond volcano plots:
+#   - Quality control: highlight samples below QC threshold
+#   - Performance: highlight metrics above/below target
+#   - Anomaly detection: highlight outliers beyond N std devs
+
+title: "QC Metrics Dashboard"
+project_tag: "quality_control"
+
+components:
+
+  # ── Interactive filters ───────────────────────────────────────────────
+  - tag: quality-slider
+    component_type: interactive
+    workflow_tag: python/qc_pipeline
+    data_collection_tag: qc_metrics
+    interactive_component_type: RangeSlider
+    column_name: quality_score
+    column_type: float64
+
+  - tag: batch-select
+    component_type: interactive
+    workflow_tag: python/qc_pipeline
+    data_collection_tag: qc_metrics
+    interactive_component_type: MultiSelect
+    column_name: batch
+    column_type: object
+
+  # ── Scatter plot with threshold highlighting ──────────────────────────
+  - tag: qc-scatter
+    component_type: figure
+    workflow_tag: python/qc_pipeline
+    data_collection_tag: qc_metrics
+    visu_type: scatter
+    dict_kwargs:
+      x: coverage
+      y: quality_score
+      color: sample_type
+
+    customizations:
+      reference_lines:
+        # Horizontal quality threshold
+        - type: hline
+          y: 30
+          line_color: red
+          line_dash: dash
+          annotation_text: "QC threshold = 30"
+          linked_slider: quality-slider
+
+      highlights:
+        # Highlight samples below QC threshold in a specific batch
+        - name: failing_qc
+          conditions:
+            - name: quality
+              column: quality_score
+              operator: lt
+              value: 30
+            - name: batch
+              column: batch
+              operator: eq
+              value: "batch_A"
+          logic: and
+          style:
+            marker_color: red
+            marker_size: 12
+            marker_symbol: x
+            dim_opacity: 0.3
+          label: "Failing QC (Batch A)"
+          link_type: dynamic
+
+        # Highlight high-quality samples
+        - name: passing_qc
+          conditions:
+            - name: quality
+              column: quality_score
+              operator: ge
+              value: 30
+          logic: and
+          style:
+            marker_color: green
+            marker_size: 8
+            dim_opacity: 0.3
+          label: "Passing QC"
+          link_type: dynamic
+
+  # ── Same data as histogram ───────────────────────────────────────────
+  - tag: qc-histogram
+    component_type: figure
+    workflow_tag: python/qc_pipeline
+    data_collection_tag: qc_metrics
+    visu_type: histogram
+    dict_kwargs:
+      x: quality_score
+      color: sample_type
+      nbins: 30
+
+    customizations:
+      reference_lines:
+        - type: vline
+          x: 30
+          line_color: red
+          line_dash: dash
+          annotation_text: "QC threshold"

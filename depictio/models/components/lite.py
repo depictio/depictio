@@ -16,6 +16,8 @@ Index vs Tag:
     Users write `tag` in YAML, system manages `index` as UUID internally.
 """
 
+from __future__ import annotations
+
 import uuid
 from typing import Any, Literal
 
@@ -82,6 +84,37 @@ class FigureLiteComponent(BaseLiteComponent):
             color: variety
           selection_enabled: true
           selection_column: sample_id
+          customizations:
+            preset: volcano
+            preset_params:
+              significance_threshold: 0.05
+              fold_change_threshold: 1.0
+
+        Or with inline customizations:
+          customizations:
+            reference_lines:
+              - type: hline
+                y: 0.05
+                line_color: red
+                line_dash: dash
+                linked_slider: pvalue-slider
+            highlights:
+              - name: significant
+                conditions:
+                  - name: pvalue
+                    column: pvalue
+                    operator: lt
+                    value: 0.05
+                  - name: condition
+                    column: condition
+                    operator: eq
+                    value: treated
+                logic: and
+                style:
+                  marker_color: red
+                  marker_size: 10
+                  dim_opacity: 0.3
+                link_type: dynamic
     """
 
     component_type: Literal["figure"] = "figure"
@@ -105,6 +138,13 @@ class FigureLiteComponent(BaseLiteComponent):
     selection_enabled: bool = Field(default=False, description="Enable scatter selection filtering")
     selection_column: str | None = Field(
         default=None, description="Column to extract from selected points"
+    )
+
+    # Figure customizations (reference lines, highlights, axes, etc.)
+    customizations: dict[str, Any] | None = Field(
+        default=None,
+        description="Figure customizations: reference lines, highlights, axes, presets, etc. "
+        "Accepts a FigureCustomizations-compatible dict or preset shorthand.",
     )
 
     @model_validator(mode="after")

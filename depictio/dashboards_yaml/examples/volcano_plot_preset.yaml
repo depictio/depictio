@@ -1,0 +1,36 @@
+# =============================================================================
+# Volcano Plot Dashboard - Using Preset Shorthand
+# =============================================================================
+#
+# Same result as volcano_plot_customizations.yaml but using the `preset`
+# shorthand. The preset auto-generates reference lines, highlights, and
+# axis configurations based on the provided parameters.
+#
+# Compare with volcano_plot_customizations.yaml for the fully explicit version.
+
+title: "Volcano Plot - Preset Mode"
+project_tag: "rnaseq_analysis"
+
+components:
+
+  - tag: volcano-preset
+    component_type: figure
+    workflow_tag: python/deseq2
+    data_collection_tag: deseq2_results
+    visu_type: scatter
+    dict_kwargs:
+      x: log2FoldChange
+      y: neg_log10_pvalue
+      color: gene_biotype
+      opacity: 0.7
+
+    # Preset with custom parameters
+    customizations:
+      preset: volcano
+      preset_params:
+        significance_threshold: 0.05
+        fold_change_threshold: 1.0
+        significance_column: pvalue
+        fold_change_column: log2FoldChange
+        highlight_color: red
+        dim_color: gray
