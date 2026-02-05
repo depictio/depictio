@@ -1,0 +1,188 @@
+# =============================================================================
+# Volcano Plot Dashboard - YAML Customizations Example
+# =============================================================================
+#
+# Demonstrates:
+#   - Reference lines linked to interactive sliders
+#   - Named highlights with compound AND conditions
+#   - Dynamic highlights that update when slider values change
+#   - Preset shorthand vs. inline customizations
+#
+# Use case: Differential gene expression analysis
+# X axis: log2FoldChange
+# Y axis: -log10(pvalue)
+# Conditions: Highlight genes that are significant (pvalue < threshold)
+#             AND have fold change above/below threshold
+
+title: "Volcano Plot - DESeq2 Results"
+project_tag: "rnaseq_analysis"
+
+components:
+
+  # ── Interactive sliders that control reference lines ──────────────────
+  - tag: pvalue-slider
+    component_type: interactive
+    workflow_tag: python/deseq2
+    data_collection_tag: deseq2_results
+    interactive_component_type: RangeSlider
+    column_name: pvalue
+    column_type: float64
+
+  - tag: fc-slider
+    component_type: interactive
+    workflow_tag: python/deseq2
+    data_collection_tag: deseq2_results
+    interactive_component_type: RangeSlider
+    column_name: log2FoldChange
+    column_type: float64
+
+  - tag: condition-select
+    component_type: interactive
+    workflow_tag: python/deseq2
+    data_collection_tag: deseq2_results
+    interactive_component_type: MultiSelect
+    column_name: condition
+    column_type: object
+
+  # ── Volcano plot with inline customizations ───────────────────────────
+  - tag: volcano-scatter
+    component_type: figure
+    workflow_tag: python/deseq2
+    data_collection_tag: deseq2_results
+    visu_type: scatter
+    dict_kwargs:
+      x: log2FoldChange
+      y: neg_log10_pvalue
+      color: gene_biotype
+      opacity: 0.7
+
+    customizations:
+      axes:
+        x:
+          title: "Log2 Fold Change"
+          zeroline: true
+          zerolinecolor: "rgba(0,0,0,0.3)"
+        y:
+          title: "-Log10(p-value)"
+
+      reference_lines:
+        # Significance threshold (horizontal) - linked to pvalue slider
+        - type: hline
+          y: 1.3  # -log10(0.05) ≈ 1.3
+          line_color: red
+          line_dash: dash
+          line_width: 1
+          opacity: 0.7
+          annotation_text: "p = 0.05"
+          annotation_position: "top right"
+          linked_slider: pvalue-slider
+          linked_highlights:
+            - highlight_name: upregulated
+              condition_name: pvalue
+              transform: inverse_log10
+            - highlight_name: downregulated
+              condition_name: pvalue
+              transform: inverse_log10
+
+        # Right fold change threshold (vertical) - linked to fc slider
+        - type: vline
+          x: 1.0
+          line_color: blue
+          line_dash: dash
+          line_width: 1
+          opacity: 0.7
+          linked_slider: fc-slider
+          linked_highlights:
+            - highlight_name: upregulated
+              condition_name: fold_change
+
+        # Left fold change threshold (vertical, negated)
+        - type: vline
+          x: -1.0
+          line_color: blue
+          line_dash: dash
+          line_width: 1
+          opacity: 0.7
+          linked_slider: fc-slider
+          linked_highlights:
+            - highlight_name: downregulated
+              condition_name: fold_change
+              transform: negate
+
+      highlights:
+        # Significantly upregulated genes
+        - name: upregulated
+          conditions:
+            - name: pvalue
+              column: pvalue
+              operator: lt
+              value: 0.05
+            - name: fold_change
+              column: log2FoldChange
+              operator: gt
+              value: 1.0
+            - name: condition
+              column: condition
+              operator: eq
+              value: treated
+          logic: and
+          style:
+            marker_color: red
+            marker_size: 8
+            dim_opacity: 0.3
+            dim_color: gray
+          label: "Upregulated"
+          link_type: dynamic
+
+        # Significantly downregulated genes
+        - name: downregulated
+          conditions:
+            - name: pvalue
+              column: pvalue
+              operator: lt
+              value: 0.05
+            - name: fold_change
+              column: log2FoldChange
+              operator: lt
+              value: -1.0
+            - name: condition
+              column: condition
+              operator: eq
+              value: treated
+          logic: and
+          style:
+            marker_color: blue
+            marker_size: 8
+            dim_opacity: 0.3
+            dim_color: gray
+          label: "Downregulated"
+          link_type: dynamic
+
+      legend:
+        show: true
+        orientation: v
+        x: 1.02
+        y: 1
+
+  # ── Summary cards ─────────────────────────────────────────────────────
+  - tag: total-genes
+    component_type: card
+    workflow_tag: python/deseq2
+    data_collection_tag: deseq2_results
+    aggregation: count
+    column_name: gene_id
+    column_type: object
+
+  - tag: avg-fc
+    component_type: card
+    workflow_tag: python/deseq2
+    data_collection_tag: deseq2_results
+    aggregation: average
+    column_name: log2FoldChange
+    column_type: float64
+
+  # ── Data table ────────────────────────────────────────────────────────
+  - tag: results-table
+    component_type: table
+    workflow_tag: python/deseq2
+    data_collection_tag: deseq2_results

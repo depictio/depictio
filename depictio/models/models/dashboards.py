@@ -180,6 +180,7 @@ class DashboardDataLite(BaseModel):
                 "title",
                 "visu_type",
                 "dict_kwargs",
+                "customizations",
                 "aggregation",
                 "column_name",
                 "column_type",
@@ -372,6 +373,9 @@ class DashboardDataLite(BaseModel):
                 dict_kwargs = filter_dict_kwargs(comp.get("dict_kwargs", {}))
                 if dict_kwargs:
                     lite_comp["dict_kwargs"] = dict_kwargs
+                # Preserve customizations if present
+                if comp.get("customizations"):
+                    lite_comp["customizations"] = comp["customizations"]
 
             elif comp_type == "card":
                 lite_comp["aggregation"] = comp.get("aggregation", "")
@@ -494,20 +498,22 @@ class DashboardDataLite(BaseModel):
             comp_type = comp_dict.get("component_type", "figure")
 
             if comp_type == "figure":
-                full_comp.update(
-                    {
-                        "visu_type": comp_dict.get("visu_type", "scatter"),
-                        "dict_kwargs": comp_dict.get("dict_kwargs", {}),
-                        "mode": "ui",
-                        "displayed_data_count": 0,
-                        "total_data_count": 0,
-                        "was_sampled": False,
-                        "filter_applied": False,
-                        # Selection filtering fields
-                        "selection_enabled": comp_dict.get("selection_enabled", False),
-                        "selection_column": comp_dict.get("selection_column"),
-                    }
-                )
+                figure_fields: dict[str, Any] = {
+                    "visu_type": comp_dict.get("visu_type", "scatter"),
+                    "dict_kwargs": comp_dict.get("dict_kwargs", {}),
+                    "mode": "ui",
+                    "displayed_data_count": 0,
+                    "total_data_count": 0,
+                    "was_sampled": False,
+                    "filter_applied": False,
+                    # Selection filtering fields
+                    "selection_enabled": comp_dict.get("selection_enabled", False),
+                    "selection_column": comp_dict.get("selection_column"),
+                }
+                # Pass through customizations if present
+                if comp_dict.get("customizations"):
+                    figure_fields["customizations"] = comp_dict["customizations"]
+                full_comp.update(figure_fields)
 
             elif comp_type == "card":
                 full_comp.update(
