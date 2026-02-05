@@ -81,6 +81,8 @@ def register_auto_screenshot_callback(app):
     a dashboard if screenshots don't exist yet or need upgrading from legacy
     single-theme to dual-theme.
 
+    IMPORTANT: Only dashboard owners can trigger screenshot generation.
+
     Can be registered in both Viewer and Editor apps.
     """
 
@@ -88,20 +90,23 @@ def register_auto_screenshot_callback(app):
         Output("screenshot-debounce-store", "data", allow_duplicate=True),
         Input("url", "pathname"),
         State("screenshot-debounce-store", "data"),
+        State("local-store", "data"),
         prevent_initial_call=True,
     )
-    def auto_screenshot_on_dashboard_view(pathname, debounce_data):
+    def auto_screenshot_on_dashboard_view(pathname, debounce_data, local_data):
         """
         Automatically generate dual-theme screenshots when viewing a dashboard if:
         - Screenshots don't exist yet
         - This is useful for dashboards created before the dual-theme feature
         - Or when screenshot generation previously failed
+        - AND the current user is an owner of the dashboard
 
         This callback triggers on URL changes to /dashboard/{id} pages.
 
         Args:
             pathname: Current URL pathname
             debounce_data: Debounce tracking data
+            local_data: Local store data containing user token
 
         Returns:
             dict: Updated debounce data
@@ -145,6 +150,49 @@ def register_auto_screenshot_callback(app):
         if not dashboard_id:
             logger.debug("Skipping auto-screenshot: empty dashboard_id")
             raise dash.exceptions.PreventUpdate
+
+        # Check if user is authenticated and is an owner of the dashboard
+        if not local_data or not local_data.get("access_token"):
+            logger.debug("Skipping auto-screenshot: user not authenticated")
+            raise dash.exceptions.PreventUpdate
+
+        token = local_data.get("access_token")
+
+        # Fetch user info to get user ID
+        from depictio.dash.api_calls import api_call_fetch_user_from_token
+
+        user = api_call_fetch_user_from_token(token)
+        if not user:
+            logger.debug("Skipping auto-screenshot: could not fetch user info")
+            raise dash.exceptions.PreventUpdate
+
+        # Fetch dashboard to check ownership
+        dashboard = api_call_get_dashboard(dashboard_id, token)
+        if not dashboard:
+            logger.debug(f"Skipping auto-screenshot: could not fetch dashboard {dashboard_id}")
+            raise dash.exceptions.PreventUpdate
+
+        # Check if current user is an owner of the dashboard
+        permissions = dashboard.get("permissions", {})
+        owners = permissions.get("owners", [])
+
+        # Extract owner IDs (owners can be dicts with _id or strings)
+        owner_ids = []
+        for owner in owners:
+            if isinstance(owner, dict):
+                owner_ids.append(str(owner.get("_id", "")))
+            else:
+                owner_ids.append(str(owner))
+
+        user_id = str(user.id) if hasattr(user, "id") else str(user.get("_id", ""))
+
+        if user_id not in owner_ids:
+            logger.info(
+                f"Skipping auto-screenshot: user {user_id} is not an owner of dashboard {dashboard_id}"
+            )
+            raise dash.exceptions.PreventUpdate
+
+        logger.info(f"✅ User {user_id} is an owner, proceeding with screenshot check")
 
         # Get current time for debouncing and age checks
         current_time = time.time()
@@ -200,7 +248,7 @@ def register_auto_screenshot_callback(app):
 
         # Apply debouncing to avoid spamming screenshot requests
         last_screenshot = debounce_data.get("last_screenshot", 0) if debounce_data else 0
-        debounce_seconds = 5
+        debounce_seconds = 15  # Wait 15 seconds to ensure dashboard fully loads
 
         if current_time - last_screenshot > debounce_seconds:
             logger.info(
@@ -383,7 +431,7 @@ def register_callbacks_save_lite(app):
 
         current_time = time.time()
         last_screenshot = debounce_data.get("last_screenshot", 0) if debounce_data else 0
-        debounce_seconds = 5
+        debounce_seconds = 15  # Wait 15 seconds to ensure dashboard fully loads
 
         if success:
             # Smart debouncing: only trigger screenshot if enough time has passed
