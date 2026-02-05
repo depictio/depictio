@@ -46,6 +46,7 @@ def return_create_dashboard_button(email, is_anonymous=False):
 
     For anonymous users, shows "Login to Create Dashboards" button.
     For authenticated users, shows normal "+ New Dashboard" button.
+    In single-user mode, anonymous user has admin access and gets normal button.
 
     Args:
         email: User email address for button ID.
@@ -54,9 +55,13 @@ def return_create_dashboard_button(email, is_anonymous=False):
     Returns:
         dmc.Button: Styled button component for dashboard creation.
     """
-    button_text = "+ New Dashboard" if not is_anonymous else "Login to Create Dashboards"
+    from depictio.api.v1.configs.config import settings
+
+    # In single-user mode, anonymous user has admin access
+    should_show_login = is_anonymous and not settings.auth.is_single_user_mode
+    button_text = "+ New Dashboard" if not should_show_login else "Login to Create Dashboards"
     button_color = (
-        "orange" if not is_anonymous else "blue"
+        "orange" if not should_show_login else "blue"
     )  # Use blue to match temporary user button
 
     create_button = dmc.Button(
@@ -81,6 +86,7 @@ def return_create_project_button(email, is_anonymous=False):
 
     For anonymous users, shows "Login to Create Projects" button.
     For authenticated users, shows normal "+ Create Project" button.
+    In single-user mode, anonymous user has admin access and gets normal button.
 
     Args:
         email: User email address (unused, kept for API consistency).
@@ -89,9 +95,13 @@ def return_create_project_button(email, is_anonymous=False):
     Returns:
         dmc.Button: Styled button component for project creation.
     """
-    button_text = "+ Create Project" if not is_anonymous else "Login to Create Projects"
+    from depictio.api.v1.configs.config import settings
+
+    # In single-user mode, anonymous user has admin access
+    should_show_login = is_anonymous and not settings.auth.is_single_user_mode
+    button_text = "+ Create Project" if not should_show_login else "Login to Create Projects"
     button_color = (
-        "teal" if not is_anonymous else "blue"  # Use teal color matching colors.py
+        "teal" if not should_show_login else "blue"  # Use teal color matching colors.py
     )  # Use blue to match temporary user button
 
     create_button = dmc.Button(

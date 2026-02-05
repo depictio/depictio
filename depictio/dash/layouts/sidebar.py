@@ -91,25 +91,32 @@ def create_sidebar_footer():
     if auth_badge:
         children.append(auth_badge)
 
-    # Add remaining elements
-    children.extend(
-        [
-            # Divider before avatar
-            dmc.Divider(my="sm"),
-            # User avatar or sign-in button container
-            html.Div(
-                id="avatar-container",
-                style={
-                    "textAlign": "center",
-                    "justifyContent": "center",
-                    "display": "flex",
-                    "alignItems": "center",
-                    "flexDirection": "row",
-                    "paddingBottom": "16px",
-                },
-            ),
-        ]
-    )
+    # In single-user mode, only show badge (no avatar needed)
+    # In other modes, show avatar container
+    if not settings.auth.is_single_user_mode:
+        children.extend(
+            [
+                # Divider before avatar
+                dmc.Divider(my="sm"),
+                # User avatar or sign-in button container
+                html.Div(
+                    id="avatar-container",
+                    style={
+                        "textAlign": "center",
+                        "justifyContent": "center",
+                        "display": "flex",
+                        "alignItems": "center",
+                        "flexDirection": "row",
+                        "paddingBottom": "16px",
+                    },
+                ),
+            ]
+        )
+    else:
+        # Add hidden placeholder for avatar-container to prevent callback errors
+        children.append(
+            html.Div(id="avatar-container", style={"display": "none"})
+        )
 
     # Add public mode sign-in button (hidden by default, shown via callback when not logged in)
     if settings.auth.is_public_mode:
