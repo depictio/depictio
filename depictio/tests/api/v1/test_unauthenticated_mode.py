@@ -221,7 +221,8 @@ class TestAuthenticationBypass:
         from depictio.api.v1.endpoints.user_endpoints.routes import get_user_or_anonymous
 
         mock_settings = MagicMock()
-        mock_settings.auth.unauthenticated_mode = False
+        mock_settings.auth.is_public_mode = False
+        mock_settings.auth.is_single_user_mode = False
 
         with patch("depictio.api.v1.endpoints.user_endpoints.routes.settings", mock_settings):
             with patch(
@@ -239,7 +240,7 @@ class TestAuthenticationBypass:
 
     @beanie_setup(models=[UserBeanie])
     async def test_get_user_or_anonymous_unauthenticated_mode(self):
-        """Test get_user_or_anonymous in unauthenticated mode."""
+        """Test get_user_or_anonymous in public/single-user mode."""
         from depictio.api.v1.endpoints.user_endpoints.routes import get_user_or_anonymous
 
         # Create actual anonymous user in test database
@@ -252,7 +253,8 @@ class TestAuthenticationBypass:
         await anon_user.save()
 
         mock_settings = MagicMock()
-        mock_settings.auth.unauthenticated_mode = True
+        mock_settings.auth.is_public_mode = True
+        mock_settings.auth.is_single_user_mode = False
         mock_settings.auth.anonymous_user_email = "anon@test.com"
 
         with patch("depictio.api.v1.endpoints.user_endpoints.routes.settings", mock_settings):
