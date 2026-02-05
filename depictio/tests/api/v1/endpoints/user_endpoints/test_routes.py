@@ -224,7 +224,8 @@ class TestGetUserOrAnonymous:
         self.mock_get_current_user.side_effect = HTTPException(
             status_code=401, detail="Invalid token"
         )
-        self.mock_settings.auth.unauthenticated_mode = True
+        self.mock_settings.auth.is_public_mode = True
+        self.mock_settings.auth.is_single_user_mode = False
         self.mock_settings.auth.anonymous_user_email = "anon@depictio.io"
 
         mock_anonymous_user = MagicMock(spec=UserBeanie)
@@ -242,7 +243,8 @@ class TestGetUserOrAnonymous:
     async def test_get_user_or_anonymous_no_token_authenticated_mode(self):
         """Test rejection when no token provided and authenticated mode is enabled."""
         # Arrange
-        self.mock_settings.auth.unauthenticated_mode = False
+        self.mock_settings.auth.is_public_mode = False
+        self.mock_settings.auth.is_single_user_mode = False
 
         # Act & Assert
         with pytest.raises(HTTPException) as exc_info:

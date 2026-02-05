@@ -103,6 +103,7 @@ class TestAnonymousUserCreation:
         """Test creating a new anonymous user."""
         mock_settings = MagicMock()
         mock_settings.auth.anonymous_user_email = "anon@test.com"
+        mock_settings.auth.is_single_user_mode = False  # Not in single-user mode, so is_admin=False
 
         with patch(
             "depictio.api.v1.endpoints.user_endpoints.core_functions.settings", mock_settings
@@ -142,6 +143,7 @@ class TestAnonymousUserCreation:
 
         mock_settings = MagicMock()
         mock_settings.auth.anonymous_user_email = "anon@test.com"
+        mock_settings.auth.is_single_user_mode = False  # Not in single-user mode
 
         with patch(
             "depictio.api.v1.endpoints.user_endpoints.core_functions.settings", mock_settings
