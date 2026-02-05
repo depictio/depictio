@@ -151,7 +151,8 @@ def render_login_form() -> dmc.Stack:
                             radius="md",
                             variant="outline",
                             color=colors["blue"],
-                            disabled=settings.auth.unauthenticated_mode,
+                            disabled=settings.auth.is_single_user_mode
+                            or settings.auth.is_public_mode,
                             style={"width": "120px"},
                         ),
                         id="open-register-form",
@@ -719,29 +720,38 @@ def register_callbacks_users_management(app) -> None:
             Output("auth-modal", "opened", allow_duplicate=True),
             Output("modal-content", "children", allow_duplicate=True),
             Output("modal-state-store", "data", allow_duplicate=True),
+            Output("url", "pathname", allow_duplicate=True),
         ],
         [Input("url", "pathname")],
         [State("local-store", "data")],
         prevent_initial_call=True,
     )
     def auto_open_auth_modal_on_auth_page(pathname, local_data):
-        """Automatically open the auth modal when user navigates to /auth page."""
+        """Automatically open the auth modal when user navigates to /auth page.
+
+        In single-user mode, redirects to /dashboards since no authentication is needed.
+        """
         logger.info(
             f"Auto-open check: pathname={pathname}, logged_in={local_data.get('logged_in', False) if local_data else False}"
         )
 
         if pathname != "/auth":
-            return dash.no_update, dash.no_update, dash.no_update
+            return dash.no_update, dash.no_update, dash.no_update, dash.no_update
+
+        # In single-user mode, redirect to dashboards (no auth needed)
+        if settings.auth.is_single_user_mode:
+            logger.info("Single-user mode active, redirecting /auth to /dashboards")
+            return False, dash.no_update, dash.no_update, "/dashboards"
 
         # Don't show modal for authenticated users
         if local_data and local_data.get("logged_in", False):
             logger.info("User is already logged in, not showing auth modal")
-            return False, dash.no_update, dash.no_update
+            return False, dash.no_update, dash.no_update, dash.no_update
 
         # Open modal with login form
         logger.info("Opening auth modal with login form")
         content = render_login_form()
-        return True, content, "login"
+        return True, content, "login", dash.no_update
 
     @app.callback(
         Output("login-button", "n_clicks"),
@@ -845,8 +855,8 @@ def register_callbacks_users_management(app) -> None:
 
         # Handle button clicks
         if button_id == "open-register-form":
-            # Check if registration is disabled in unauthenticated mode
-            if settings.auth.unauthenticated_mode:
+            # Check if registration is disabled in single-user or public mode
+            if settings.auth.is_single_user_mode or settings.auth.is_public_mode:
                 # Don't open register form if registration is disabled
                 return (
                     dash.no_update,
@@ -891,9 +901,9 @@ def register_callbacks_users_management(app) -> None:
             )
 
         elif button_id == "register-button":
-            # Check if registration is disabled in unauthenticated mode
-            if settings.auth.unauthenticated_mode:
-                feedback_message = "User registration is disabled in unauthenticated mode"
+            # Check if registration is disabled in single-user or public mode
+            if settings.auth.is_single_user_mode or settings.auth.is_public_mode:
+                feedback_message = "User registration is disabled in this mode"
                 modal_open_new = True
                 content = render_register_form()
 

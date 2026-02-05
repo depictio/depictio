@@ -655,6 +655,14 @@ def register_header_callbacks(app):
 
     register_sidebar_callbacks(app)
 
+    # Public mode auth modal callbacks
+    from depictio.api.v1.configs.config import settings
+
+    if settings.auth.is_public_mode:
+        from depictio.dash.layouts.auth_modal import register_auth_modal_callbacks
+
+        register_auth_modal_callbacks(app)
+
     # Add clientside callback for theme-aware body class
     app.clientside_callback(
         """

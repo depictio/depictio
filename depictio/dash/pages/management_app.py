@@ -419,6 +419,14 @@ def register_feature_callbacks(app):
 
     register_callbacks_users_management(app)
 
+    # Public mode auth modal callbacks
+    from depictio.api.v1.configs.config import settings
+
+    if settings.auth.is_public_mode:
+        from depictio.dash.layouts.auth_modal import register_auth_modal_callbacks
+
+        register_auth_modal_callbacks(app)
+
     # Dashboards management callbacks
     from depictio.dash.layouts.dashboards_management import (
         register_callbacks_dashboards_management,

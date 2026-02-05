@@ -21,6 +21,39 @@ from depictio.api.v1.configs.logging_init import logger
 from depictio.dash.simple_theme import create_theme_controls
 
 
+def _create_auth_mode_badge():
+    """Create a badge showing the current auth mode if special mode is active.
+
+    Returns:
+        dmc.Center with badge, or None if normal auth mode.
+    """
+    from depictio.api.v1.configs.config import settings
+
+    if settings.auth.is_single_user_mode:
+        return dmc.Center(
+            dmc.Badge(
+                "Single User Mode",
+                variant="light",
+                color="violet",
+                size="sm",
+                leftSection=DashIconify(icon="mdi:account", height=12),
+            ),
+            style={"marginBottom": "8px"},
+        )
+    elif settings.auth.is_public_mode:
+        return dmc.Center(
+            dmc.Badge(
+                "Public Mode",
+                variant="light",
+                color="teal",
+                size="sm",
+                leftSection=DashIconify(icon="mdi:earth", height=12),
+            ),
+            style={"marginBottom": "8px"},
+        )
+    return None
+
+
 def create_sidebar_footer():
     """
     Create standardized sidebar footer with theme controls and server status.
@@ -30,28 +63,40 @@ def create_sidebar_footer():
     - Visual separator (divider)
     - Theme toggle controls (light/dark mode)
     - Server status indicator
+    - Auth mode badge (Single User Mode / Public Mode) if applicable
     - Horizontal divider
     - User avatar container
 
     Returns:
         html.Div: Sidebar footer component with consistent styling
     """
-    return html.Div(
-        id="sidebar-footer",
-        children=[
-            # Separator above theme section
-            dmc.Divider(variant="solid", my="md"),
-            # Theme controls
-            dmc.Center(create_theme_controls()),
-            # Server status
-            dmc.Grid(
-                id="sidebar-footer-server-status",
-                align="center",
-                justify="center",
-            ),
+    from depictio.api.v1.configs.config import settings
+
+    # Build children list, conditionally including auth mode badge
+    children = [
+        # Separator above theme section
+        dmc.Divider(variant="solid", my="md"),
+        # Theme controls
+        dmc.Center(create_theme_controls()),
+        # Server status
+        dmc.Grid(
+            id="sidebar-footer-server-status",
+            align="center",
+            justify="center",
+        ),
+    ]
+
+    # Add auth mode badge if in special mode
+    auth_badge = _create_auth_mode_badge()
+    if auth_badge:
+        children.append(auth_badge)
+
+    # Add remaining elements
+    children.extend(
+        [
             # Divider before avatar
             dmc.Divider(my="sm"),
-            # User avatar
+            # User avatar or sign-in button container
             html.Div(
                 id="avatar-container",
                 style={
@@ -63,7 +108,35 @@ def create_sidebar_footer():
                     "paddingBottom": "16px",
                 },
             ),
-        ],
+        ]
+    )
+
+    # Add public mode sign-in button (hidden by default, shown via callback when not logged in)
+    if settings.auth.is_public_mode:
+        children.append(
+            html.Div(
+                id="public-sign-in-button-container",
+                children=[
+                    dmc.Button(
+                        "Sign In",
+                        id="public-sign-in-button",
+                        leftSection=DashIconify(icon="mdi:login", height=18),
+                        variant="outline",
+                        color="blue",
+                        size="sm",
+                        fullWidth=True,
+                    ),
+                ],
+                style={
+                    "display": "none",  # Hidden by default, shown via callback
+                    "padding": "0 16px 16px 16px",
+                },
+            )
+        )
+
+    return html.Div(
+        id="sidebar-footer",
+        children=children,
         style={
             "flexShrink": 0,
         },
@@ -720,6 +793,32 @@ def register_sidebar_callbacks(app, register_tabs: bool = True) -> None:
         Input("local-store", "data"),
         prevent_initial_call=False,
     )
+
+    # Public mode sign-in button visibility (show when not logged in)
+    # Only register if public-sign-in-button-container exists (in public mode)
+    from depictio.api.v1.configs.config import settings
+
+    if settings.auth.is_public_mode:
+        app.clientside_callback(
+            """
+            function(local_data) {
+                console.log('🔧 CLIENTSIDE SIGN-IN BUTTON: local_data received:', !!local_data);
+
+                // Show sign-in button when NOT logged in
+                if (!local_data || !local_data.logged_in) {
+                    console.log('✅ Not logged in - showing sign-in button');
+                    return {"display": "block", "padding": "0 16px 16px 16px"};
+                }
+
+                // Hide sign-in button when logged in
+                console.log('❌ Logged in - hiding sign-in button');
+                return {"display": "none"};
+            }
+            """,
+            Output("public-sign-in-button-container", "style"),
+            Input("local-store", "data"),
+            prevent_initial_call=False,
+        )
 
     # NOTE: Dynamic navbar callback removed (Phase 1B performance optimization)
     # Navbar content is now generated statically at app startup via create_static_navbar_content()

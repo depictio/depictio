@@ -2,7 +2,7 @@ import os
 from pathlib import Path
 from typing import Literal, Optional
 
-from pydantic import Field, computed_field
+from pydantic import AliasChoices, Field, computed_field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -185,6 +185,16 @@ class AuthConfig(BaseSettings):
     )
     internal_api_key_env: Optional[str] = Field(default=None)
     unauthenticated_mode: bool = Field(default=False, description="Enable unauthenticated mode")
+    single_user_mode: bool = Field(
+        default=False,
+        description="Enable single-user mode for personal/self-hosted instances. "
+        "Grants admin privileges to the anonymous user for full functionality without authentication.",
+    )
+    public_mode: bool = Field(
+        default=False,
+        description="Enable public mode for public Depictio instances with sign-in modal",
+        validation_alias=AliasChoices("public_mode", "unauthenticated_mode"),
+    )
     anonymous_user_email: str = Field(
         default="anonymous@depict.io",
         description="Default anonymous user email",
@@ -197,6 +207,30 @@ class AuthConfig(BaseSettings):
         default=0,
         description="Number of minutes until temporary users expire",
     )
+
+    @computed_field
+    @property
+    def is_single_user_mode(self) -> bool:
+        """Returns True if single-user mode is enabled.
+
+        Single-user mode provides full admin functionality for personal instances.
+        """
+        return self.single_user_mode
+
+    @computed_field
+    @property
+    def is_public_mode(self) -> bool:
+        """Returns True if public mode is enabled.
+
+        Public mode allows anonymous access with optional sign-in for interactive features.
+        """
+        return self.public_mode or self.unauthenticated_mode
+
+    @computed_field
+    @property
+    def requires_anonymous_user(self) -> bool:
+        """Returns True if any mode requiring anonymous user is enabled."""
+        return self.is_single_user_mode or self.is_public_mode
 
     # Google OAuth Configuration
     google_oauth_enabled: bool = Field(

@@ -67,10 +67,15 @@ async def run_initialization(
 
     initialization_collection.insert_one(init_data)
 
-    if settings.auth.unauthenticated_mode:
+    # Create anonymous user for single-user mode, public mode, or unauthenticated mode
+    if settings.auth.requires_anonymous_user:
         anon = await _create_anonymous_user()
         if anon:
             await _create_permanent_token(anon)
+            logger.info(
+                f"Anonymous user setup complete (single_user={settings.auth.is_single_user_mode}, "
+                f"public={settings.auth.is_public_mode}, admin={anon.is_admin})"
+            )
 
     logger.info("System initialization complete.")
     return init_data

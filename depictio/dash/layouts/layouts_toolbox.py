@@ -1931,3 +1931,159 @@ def create_data_collection_delete_modal(
     )
 
     return modal, modal_id
+
+
+def create_dashboard_import_modal(
+    projects: list | None = None,
+    id_prefix: str = "import-dashboard",
+) -> tuple[dmc.Modal, str]:
+    """Create a dashboard import modal with file upload and validation.
+
+    The modal includes:
+    - JSON file upload area
+    - Project selection dropdown
+    - Validation results display
+    - Import button with validation toggle
+
+    Args:
+        projects: List of project options for dropdown (populated by callback).
+        id_prefix: Prefix for component IDs.
+
+    Returns:
+        Tuple of (modal component, modal ID string).
+    """
+    modal_id = f"{id_prefix}-modal"
+
+    modal = dmc.Modal(
+        id=modal_id,
+        title=dmc.Group(
+            [
+                DashIconify(icon="mdi:import", height=24, color=colors["purple"]),
+                dmc.Text("Import Dashboard", fw=600, size="lg"),
+            ],
+            gap="sm",
+        ),
+        opened=False,
+        centered=True,
+        size="lg",
+        children=[
+            dmc.Stack(
+                gap="lg",
+                children=[
+                    # Instructions
+                    dmc.Alert(
+                        "Upload a JSON file exported from Depictio to import a dashboard. "
+                        "The import will validate that data collections exist in the target project.",
+                        icon=DashIconify(icon="mdi:information-outline"),
+                        color="blue",
+                    ),
+                    # File upload area
+                    dmc.Paper(
+                        p="lg",
+                        radius="md",
+                        withBorder=True,
+                        children=[
+                            dmc.Stack(
+                                gap="md",
+                                children=[
+                                    dmc.Text("Upload JSON File", size="sm", fw=500),
+                                    dcc.Upload(
+                                        id=f"{id_prefix}-upload",
+                                        children=dmc.Stack(
+                                            gap="sm",
+                                            align="center",
+                                            children=[
+                                                DashIconify(
+                                                    icon="mdi:file-upload-outline",
+                                                    height=48,
+                                                    color=colors["gray"],
+                                                ),
+                                                dmc.Text(
+                                                    "Drag and drop or click to upload",
+                                                    size="sm",
+                                                    c="dimmed",
+                                                ),
+                                                dmc.Text(
+                                                    "Accepts .json files",
+                                                    size="xs",
+                                                    c="dimmed",
+                                                ),
+                                            ],
+                                        ),
+                                        style={
+                                            "width": "100%",
+                                            "borderWidth": "2px",
+                                            "borderStyle": "dashed",
+                                            "borderRadius": "8px",
+                                            "borderColor": "var(--app-border-color, #ddd)",
+                                            "padding": "20px",
+                                            "textAlign": "center",
+                                            "cursor": "pointer",
+                                        },
+                                        accept=".json",
+                                        multiple=False,
+                                    ),
+                                    # Uploaded file info
+                                    html.Div(id=f"{id_prefix}-file-info"),
+                                ],
+                            ),
+                        ],
+                    ),
+                    # Project selection
+                    dmc.Select(
+                        id=f"{id_prefix}-project-select",
+                        label="Target Project",
+                        description="Select the project to import the dashboard into",
+                        placeholder="Select a project...",
+                        data=projects or [],
+                        searchable=True,
+                        clearable=True,
+                    ),
+                    # Validation results area
+                    html.Div(id=f"{id_prefix}-validation-results"),
+                    # Options
+                    dmc.Checkbox(
+                        id=f"{id_prefix}-validate-integrity",
+                        label="Validate data integrity (check that data collections exist)",
+                        checked=True,
+                    ),
+                    # Store for JSON content
+                    dcc.Store(id=f"{id_prefix}-json-store", data=None),
+                    # Buttons
+                    dmc.Group(
+                        justify="flex-end",
+                        gap="md",
+                        mt="lg",
+                        children=[
+                            dmc.Button(
+                                "Cancel",
+                                variant="outline",
+                                color="gray",
+                                radius="md",
+                                id=f"{id_prefix}-cancel",
+                            ),
+                            dmc.Button(
+                                "Validate",
+                                id=f"{id_prefix}-validate-btn",
+                                variant="outline",
+                                color="blue",
+                                radius="md",
+                                leftSection=DashIconify(icon="mdi:check-circle-outline", width=16),
+                                disabled=True,
+                            ),
+                            dmc.Button(
+                                "Import Dashboard",
+                                id=f"{id_prefix}-submit",
+                                color="violet",
+                                radius="md",
+                                leftSection=DashIconify(icon="mdi:import", width=16),
+                                disabled=True,
+                            ),
+                        ],
+                    ),
+                ],
+            ),
+        ],
+    )
+
+    return modal, modal_id

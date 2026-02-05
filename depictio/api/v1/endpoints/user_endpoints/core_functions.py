@@ -47,16 +47,42 @@ async def _create_permanent_token(user: UserBeanie) -> TokenBeanie:
 
 
 async def _create_anonymous_user() -> UserBeanie:
-    """Create the anonymous user if it does not exist."""
+    """Create the anonymous user if it does not exist.
+
+    In single-user mode, the anonymous user is granted admin privileges
+    for full functionality without authentication.
+
+    Returns:
+        The anonymous UserBeanie object (created or existing).
+    """
     user = await UserBeanie.find_one({"email": settings.auth.anonymous_user_email})
+
+    # Determine if anonymous user should have admin privileges
+    # Single-user mode grants admin access for personal/self-hosted instances
+    grant_admin = settings.auth.is_single_user_mode
+
     if user:
+        # Update existing user's admin status if single-user mode changed
+        if user.is_admin != grant_admin:
+            user.is_admin = grant_admin
+            await user.save()
+            logger.info(
+                f"Updated anonymous user admin status to {grant_admin} "
+                f"(single_user_mode={settings.auth.is_single_user_mode})"
+            )
         return user
+
     payload = await _create_user_in_db(
         email=settings.auth.anonymous_user_email,
         password="",
-        is_admin=False,
+        is_admin=grant_admin,
         is_anonymous=True,
     )
+    if payload and payload.get("user"):
+        logger.info(
+            f"Created anonymous user with admin={grant_admin} "
+            f"(single_user_mode={settings.auth.is_single_user_mode})"
+        )
     return payload["user"] if payload else None  # type: ignore[invalid-return-type]
 
 

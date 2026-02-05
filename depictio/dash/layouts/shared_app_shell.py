@@ -34,7 +34,10 @@ def create_shared_stores():
     Returns:
         list: List of dcc.Store components
     """
-    return [
+    from depictio.api.v1.configs.config import settings
+    from depictio.dash.layouts.auth_modal import create_auth_sign_in_modal
+
+    stores = [
         # Shared across apps (localStorage)
         dcc.Store(id="local-store", storage_type="local"),  # JWT tokens, user_id, logged_in
         dcc.Store(id="theme-store", storage_type="local"),  # Light/dark theme
@@ -88,6 +91,12 @@ def create_shared_stores():
             n_intervals=0,
         ),
     ]
+
+    # Add public auth modal if in public mode
+    if settings.auth.is_public_mode:
+        stores.append(create_auth_sign_in_modal())
+
+    return stores
 
 
 def create_default_header(app_name: str = "Depictio"):

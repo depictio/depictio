@@ -105,8 +105,8 @@ async def get_user_or_anonymous(
             # Token is invalid, fall through to anonymous user logic if in unauthenticated mode
             pass
 
-    # If no token provided or token is invalid, check if unauthenticated mode allows anonymous access
-    if settings.auth.unauthenticated_mode:
+    # If no token provided or token is invalid, check if public/single-user mode allows anonymous access
+    if settings.auth.is_public_mode or settings.auth.is_single_user_mode:
         anon = await UserBeanie.find_one({"email": settings.auth.anonymous_user_email})
         if anon:
             return anon
@@ -131,7 +131,7 @@ async def login(login_request: OAuth2PasswordRequestForm = Depends()) -> TokenBe
     Raises:
         HTTPException: 401 if credentials are invalid.
     """
-    if settings.auth.unauthenticated_mode:
+    if settings.auth.is_public_mode or settings.auth.is_single_user_mode:
         anon = await UserBeanie.find_one({"email": settings.auth.anonymous_user_email})
         token = await TokenBeanie.find_one({"user_id": anon.id, "token_lifetime": "permanent"})
         if not token:
@@ -343,10 +343,10 @@ async def api_get_anonymous_user_session(
             detail="Invalid API key",
         )
 
-    if not settings.auth.unauthenticated_mode:
+    if not (settings.auth.is_public_mode or settings.auth.is_single_user_mode):
         raise HTTPException(
             status_code=403,
-            detail="Anonymous user session only available in unauthenticated mode",
+            detail="Anonymous user session only available in public mode or single-user mode",
         )
 
     session_data = await _get_anonymous_user_session()
@@ -377,10 +377,10 @@ async def create_temporary_user_endpoint(
             detail="Invalid API key",
         )
 
-    if not settings.auth.unauthenticated_mode:
+    if not settings.auth.is_public_mode:
         raise HTTPException(
             status_code=403,
-            detail="Temporary users only available in unauthenticated mode",
+            detail="Temporary users only available in public mode",
         )
 
     # Create temporary user
@@ -438,10 +438,10 @@ async def upgrade_to_temporary_user_endpoint(
     """
     logger.debug(f"Upgrading user to temporary user with expiry: {expiry_hours} hours")
 
-    if not settings.auth.unauthenticated_mode:
+    if not settings.auth.is_public_mode:
         raise HTTPException(
             status_code=403,
-            detail="User upgrade only available in unauthenticated mode",
+            detail="User upgrade only available in public mode",
         )
 
     # Check if user is already temporary (no need to upgrade)
@@ -479,10 +479,12 @@ async def register(
         Dictionary with user data, success status and message
     """
     logger.info(f"Registering user with email: {request.email}")
-    if settings.auth.unauthenticated_mode:
+    # Disable registration in single-user mode (no need for accounts)
+    # and in public mode (use temporary users instead)
+    if settings.auth.is_single_user_mode or settings.auth.is_public_mode:
         raise HTTPException(
             status_code=403,
-            detail="User registration disabled in unauthenticated mode",
+            detail="User registration disabled in single-user mode and public mode",
         )
     try:
         return await _create_user_in_db(request.email, request.password, request.is_admin)
@@ -731,10 +733,11 @@ async def check_token_validity_endpoint(token: TokenBase):
 async def generate_agent_config_endpoint(
     token: TokenBeanie, current_user: UserBase = Depends(get_current_user)
 ) -> CLIConfig:
-    if settings.auth.unauthenticated_mode:
+    # CLI agent generation requires real user accounts (not anonymous/temporary users)
+    if settings.auth.is_public_mode:
         raise HTTPException(
             status_code=403,
-            detail="CLI agent generation disabled in unauthenticated mode",
+            detail="CLI agent generation disabled in public mode",
         )
     # logger.info(f"Token: {token}")
     # logger.info(f"Token: {format_pydantic(token)}")
