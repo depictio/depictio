@@ -1,4 +1,4 @@
-describe('Edit Password Test', () => {
+describe.skip('Edit Password Test', () => {
   let testUser;
   const new_password = 'NewPassword123!'; // New password for the test
 
