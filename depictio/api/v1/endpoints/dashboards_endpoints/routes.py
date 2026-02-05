@@ -1790,6 +1790,74 @@ def _extract_data_integrity_metadata(
     return data_integrity
 
 
+def _validate_data_collection_integrity(
+    expected_collections: list[dict],
+) -> tuple[list[dict], list[dict]]:
+    """Validate data collection integrity against expected schemas.
+
+    Args:
+        expected_collections: List of expected data collection entries with
+            workflow_tag, data_collection_tag, and schema_hash.
+
+    Returns:
+        Tuple of (warnings list, integrity_checks list).
+        Warnings include both errors (missing collections) and warnings (schema mismatch).
+    """
+    from depictio.api.v1.db import data_collections_collection
+
+    warnings = []
+    integrity_checks = []
+
+    for expected_dc in expected_collections:
+        workflow_tag = expected_dc.get("workflow_tag", "")
+        dc_tag = expected_dc.get("data_collection_tag", "")
+        expected_hash = expected_dc.get("schema_hash", "")
+
+        dc_doc = data_collections_collection.find_one(
+            {"workflow_tag": workflow_tag, "data_collection_tag": dc_tag}
+        )
+
+        check_result = {
+            "workflow_tag": workflow_tag,
+            "data_collection_tag": dc_tag,
+            "found": dc_doc is not None,
+            "schema_match": False,
+        }
+
+        if not dc_doc:
+            warnings.append(
+                {
+                    "type": "missing_collection",
+                    "message": f"Data collection '{workflow_tag}/{dc_tag}' not found",
+                    "severity": "error",
+                }
+            )
+        else:
+            columns_specs = dc_doc.get("config", {}).get("columns_specs", [])
+            columns = [{"name": col.get("name"), "type": col.get("dtype")} for col in columns_specs]
+            current_hash = _generate_schema_hash(columns)
+            check_result["schema_match"] = current_hash == expected_hash
+            check_result["current_hash"] = current_hash
+            check_result["expected_hash"] = expected_hash
+
+            if current_hash != expected_hash:
+                warnings.append(
+                    {
+                        "type": "schema_mismatch",
+                        "message": f"Schema mismatch for '{workflow_tag}/{dc_tag}': expected {expected_hash}, found {current_hash}",
+                        "severity": "warning",
+                        "details": {
+                            "expected_columns": expected_dc.get("schema", {}).get("columns", []),
+                            "current_columns": columns,
+                        },
+                    }
+                )
+
+        integrity_checks.append(check_result)
+
+    return warnings, integrity_checks
+
+
 @dashboards_endpoint_router.get("/{dashboard_id}/json")
 async def export_dashboard_as_json(
     dashboard_id: str,
@@ -1910,78 +1978,33 @@ async def import_dashboard_from_json(
             detail="project_id is required. Either provide it as a parameter or ensure project_tag in JSON matches an existing project.",
         )
 
-    # Validate project exists and user has access
+    # Validate project exists and user has editor access
     project_doc = projects_collection.find_one({"_id": ObjectId(project_id)})
     if not project_doc:
         raise HTTPException(status_code=404, detail="Project not found")
 
-    # Check user permissions on project
-    project_owners = project_doc.get("permissions", {}).get("owners", [])
-    owner_ids = [str(o.get("_id", o.get("id"))) for o in project_owners]
-    if str(current_user.id) not in owner_ids and not current_user.is_admin:
+    if not check_project_permission(project_id, current_user, "editor"):
         raise HTTPException(
             status_code=403, detail="You don't have permission to import dashboards to this project"
         )
 
     # Validate data integrity if requested
-    validation_warnings = []
+    validation_warnings: list[dict] = []
     if validate_integrity:
         integrity_data = json_content.get("_data_integrity", {})
         expected_collections = integrity_data.get("data_collections", [])
+        validation_warnings, _ = _validate_data_collection_integrity(expected_collections)
 
-        for expected_dc in expected_collections:
-            workflow_tag = expected_dc.get("workflow_tag", "")
-            dc_tag = expected_dc.get("data_collection_tag", "")
-            expected_hash = expected_dc.get("schema_hash", "")
-
-            # Find matching data collection in current project
-            from depictio.api.v1.db import data_collections_collection
-
-            dc_doc = data_collections_collection.find_one(
-                {
-                    "workflow_tag": workflow_tag,
-                    "data_collection_tag": dc_tag,
-                }
+        # Check for critical errors
+        critical_errors = [w for w in validation_warnings if w.get("severity") == "error"]
+        if critical_errors:
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "message": "Import failed due to missing data collections",
+                    "errors": critical_errors,
+                },
             )
-
-            if not dc_doc:
-                validation_warnings.append(
-                    {
-                        "type": "missing_collection",
-                        "message": f"Data collection '{workflow_tag}/{dc_tag}' not found",
-                        "severity": "error",
-                    }
-                )
-                continue
-
-            # Check schema hash
-            columns_specs = dc_doc.get("config", {}).get("columns_specs", [])
-            columns = [{"name": col.get("name"), "type": col.get("dtype")} for col in columns_specs]
-            current_hash = _generate_schema_hash(columns)
-
-            if current_hash != expected_hash:
-                validation_warnings.append(
-                    {
-                        "type": "schema_mismatch",
-                        "message": f"Schema mismatch for '{workflow_tag}/{dc_tag}': expected {expected_hash}, found {current_hash}",
-                        "severity": "warning",
-                        "details": {
-                            "expected_columns": expected_dc.get("schema", {}).get("columns", []),
-                            "current_columns": columns,
-                        },
-                    }
-                )
-
-    # Check for critical errors
-    critical_errors = [w for w in validation_warnings if w.get("severity") == "error"]
-    if critical_errors and validate_integrity:
-        raise HTTPException(
-            status_code=400,
-            detail={
-                "message": "Import failed due to missing data collections",
-                "errors": critical_errors,
-            },
-        )
 
     # Generate new dashboard ID (using ObjectId like other dashboard creation endpoints)
     new_dashboard_id = ObjectId()
@@ -2122,55 +2145,29 @@ async def validate_json_import(
             {"field": "project_id", "message": "Could not resolve target project"}
         )
 
-    # Check data integrity
+    # Check data integrity using shared helper
     integrity_data = json_content.get("_data_integrity", {})
     expected_collections = integrity_data.get("data_collections", [])
+    dc_warnings, integrity_checks = _validate_data_collection_integrity(expected_collections)
 
-    for expected_dc in expected_collections:
-        workflow_tag = expected_dc.get("workflow_tag", "")
-        dc_tag = expected_dc.get("data_collection_tag", "")
-        expected_hash = expected_dc.get("schema_hash", "")
+    validation_result["integrity_checks"] = integrity_checks
 
-        from depictio.api.v1.db import data_collections_collection
-
-        dc_doc = data_collections_collection.find_one(
-            {
-                "workflow_tag": workflow_tag,
-                "data_collection_tag": dc_tag,
-            }
+    # Convert warnings to validation result format
+    for warning in dc_warnings:
+        workflow_tag = (
+            warning.get("message", "").split("'")[1] if "'" in warning.get("message", "") else ""
         )
-
-        check_result = {
-            "workflow_tag": workflow_tag,
-            "data_collection_tag": dc_tag,
-            "found": dc_doc is not None,
-            "schema_match": False,
-        }
-
-        if dc_doc:
-            columns_specs = dc_doc.get("config", {}).get("columns_specs", [])
-            columns = [{"name": col.get("name"), "type": col.get("dtype")} for col in columns_specs]
-            current_hash = _generate_schema_hash(columns)
-            check_result["schema_match"] = current_hash == expected_hash
-            check_result["current_hash"] = current_hash
-            check_result["expected_hash"] = expected_hash
-
-            if not check_result["schema_match"]:
-                validation_result["warnings"].append(
-                    {
-                        "field": f"data_collection.{workflow_tag}/{dc_tag}",
-                        "message": "Schema has changed since export",
-                    }
-                )
-        else:
+        if warning.get("severity") == "error":
             validation_result["errors"].append(
-                {
-                    "field": f"data_collection.{workflow_tag}/{dc_tag}",
-                    "message": "Data collection not found",
-                }
+                {"field": f"data_collection.{workflow_tag}", "message": "Data collection not found"}
             )
             validation_result["valid"] = False
-
-        validation_result["integrity_checks"].append(check_result)
+        else:
+            validation_result["warnings"].append(
+                {
+                    "field": f"data_collection.{workflow_tag}",
+                    "message": "Schema has changed since export",
+                }
+            )
 
     return validation_result
