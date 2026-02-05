@@ -1737,7 +1737,7 @@ def _extract_data_integrity_metadata(
     Returns:
         List of data collection integrity entries
     """
-    from depictio.api.v1.db import data_collections_beanie_collection
+    from depictio.api.v1.db import data_collections_collection
 
     data_integrity = []
     seen_collections = set()
@@ -1754,7 +1754,7 @@ def _extract_data_integrity_metadata(
 
         # Fetch data collection details
         try:
-            dc_doc = data_collections_beanie_collection.find_one({"_id": ObjectId(dc_id)})
+            dc_doc = data_collections_collection.find_one({"_id": ObjectId(dc_id)})
             if not dc_doc:
                 continue
 
@@ -1799,7 +1799,7 @@ async def export_dashboard_as_json(
     Returns:
         JSON object with dashboard data and integrity metadata
     """
-    dashboard_doc = dashboards_collection.find_one({"dashboard_id": dashboard_id})
+    dashboard_doc = dashboards_collection.find_one({"dashboard_id": ObjectId(dashboard_id)})
     if not dashboard_doc:
         raise HTTPException(status_code=404, detail="Dashboard not found")
 
@@ -1839,7 +1839,10 @@ async def export_dashboard_as_json(
         },
     }
 
-    return export_data
+    # Convert all ObjectIds to strings for JSON serialization
+    from depictio.models.models.base import convert_objectid_to_str
+
+    return convert_objectid_to_str(export_data)
 
 
 @dashboards_endpoint_router.post("/import/json")

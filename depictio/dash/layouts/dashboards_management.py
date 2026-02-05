@@ -32,7 +32,6 @@ from depictio.api.v1.configs.logging_init import logger
 from depictio.dash.api_calls import api_call_fetch_user_from_token, api_get_project_from_id
 from depictio.dash.colors import colors  # Import Depictio color palette
 from depictio.dash.layouts.layouts_toolbox import (
-    create_dashboard_import_modal,
     create_dashboard_modal,
     create_delete_confirmation_modal,
     create_edit_dashboard_modal,
@@ -44,14 +43,13 @@ from depictio.models.models.dashboards import DashboardData
 from depictio.models.models.users import Permission
 
 modal, modal_id = create_dashboard_modal()
-import_modal, import_modal_id = create_dashboard_import_modal()
 
 layout = html.Div(
     [
         dcc.Store(id="dashboard-modal-store", storage_type="session", data={"title": ""}),
         dcc.Store(id="init-create-dashboard-button", storage_type="memory", data=False),
+        dcc.Download(id="dashboard-export-download"),  # For exporting dashboards as JSON
         modal,
-        import_modal,  # Dashboard import modal
         html.Div(id="landing-page"),  # Initially hidden
     ]
 )
@@ -305,32 +303,16 @@ def render_welcome_section(email: str, is_anonymous: bool = False) -> dmc.Grid:
                         f"Welcome, {email}!", order=2, ta="center"
                     ),  # align -> ta in DMC 2.0+
                     dmc.Center(
-                        dmc.Group(
-                            [
-                                dmc.Button(
-                                    button_text,
-                                    id={"type": "create-dashboard-button", "index": email},
-                                    n_clicks=0,
-                                    variant=button_variant,
-                                    gradient=button_color if not is_anonymous else None,
-                                    color="gray" if is_anonymous else None,
-                                    style={"fontFamily": "Virgil"},
-                                    size="xl",
-                                    disabled=button_disabled,
-                                ),
-                                dmc.Button(
-                                    "Import Dashboard",
-                                    id="import-dashboard-button",
-                                    n_clicks=0,
-                                    variant="outline",
-                                    color="violet",
-                                    leftSection=DashIconify(icon="mdi:import", height=20),
-                                    style={"fontFamily": "Virgil"},
-                                    size="lg",
-                                    disabled=button_disabled,
-                                ),
-                            ],
-                            gap="md",
+                        dmc.Button(
+                            button_text,
+                            id={"type": "create-dashboard-button", "index": email},
+                            n_clicks=0,
+                            variant=button_variant,
+                            gradient=button_color if not is_anonymous else None,
+                            color="gray" if is_anonymous else None,
+                            style={"fontFamily": "Virgil"},
+                            size="xl",
+                            disabled=button_disabled,
                         ),
                         style={"margin": "20px 0"},
                     ),
@@ -2776,7 +2758,10 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
     # ==========================================================================
 
     @app.callback(
-        Output("notification-container", "children", allow_duplicate=True),
+        [
+            Output("dashboard-export-download", "data"),
+            Output("notification-container", "children", allow_duplicate=True),
+        ],
         Input({"type": "export-dashboard-button", "index": ALL}, "n_clicks"),
         State("local-store", "data"),
         prevent_initial_call=True,
@@ -2787,31 +2772,36 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
         Downloads a JSON file containing the dashboard configuration
         and data integrity metadata for re-import.
         """
-        from dash.exceptions import PreventUpdate
+        import json
 
         from depictio.dash.api_calls import api_call_export_dashboard_json
 
+        logger.debug(f"Export callback triggered. n_clicks_list: {n_clicks_list}")
+
         # Check if any button was clicked
         if not n_clicks_list or not any(n_clicks_list):
-            raise PreventUpdate
+            logger.debug("No export button clicked")
+            return dash.no_update, dash.no_update
 
         # Get which button was clicked
-        ctx_triggered = ctx.triggered
-        if not ctx_triggered:
-            raise PreventUpdate
-
         triggered_id = ctx.triggered_id
+        logger.debug(f"Triggered ID: {triggered_id}")
+
         if not triggered_id or not isinstance(triggered_id, dict):
-            raise PreventUpdate
+            logger.debug("Invalid triggered_id")
+            return dash.no_update, dash.no_update
 
         dashboard_id = triggered_id.get("index")
         if not dashboard_id:
-            raise PreventUpdate
+            logger.debug("No dashboard_id in triggered_id")
+            return dash.no_update, dash.no_update
+
+        logger.info(f"Exporting dashboard: {dashboard_id}")
 
         # Check authentication
         if not local_data or not local_data.get("logged_in"):
             logger.warning("Export attempted without authentication")
-            raise PreventUpdate
+            return dash.no_update, dash.no_update
 
         token = local_data.get("access_token")
 
@@ -2820,51 +2810,45 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
 
         if not export_data:
             logger.error(f"Failed to export dashboard {dashboard_id}")
-            return dmc.Notification(
-                title="Export Failed",
-                message="Failed to export dashboard. Please try again.",
-                color="red",
-                action="show",
+            return (
+                dash.no_update,
+                dmc.Notification(
+                    title="Export Failed",
+                    message="Failed to export dashboard. Please try again.",
+                    color="red",
+                    action="show",
+                ),
             )
 
         # Create downloadable JSON file
-        # Note: For actual download, we need clientside callback or Download component
-        # For now, just show success notification
         dashboard_title = export_data.get("dashboard", {}).get("title", "dashboard")
-        logger.info(f"Successfully exported dashboard: {dashboard_title}")
+        # Sanitize filename
+        safe_title = "".join(c if c.isalnum() or c in ("-", "_") else "_" for c in dashboard_title)
+        filename = f"{safe_title}_export.json"
 
-        return dmc.Notification(
-            title="Export Ready",
-            message=f"Dashboard '{dashboard_title}' exported successfully. "
-            "Check your browser downloads.",
-            color="green",
-            action="show",
+        logger.info(f"Successfully exported dashboard: {dashboard_title}, filename: {filename}")
+
+        return (
+            dict(content=json.dumps(export_data, indent=2), filename=filename),
+            dmc.Notification(
+                title="Export Successful",
+                message=f"Dashboard '{dashboard_title}' exported successfully.",
+                color="green",
+                action="show",
+            ),
         )
 
     # ==========================================================================
-    # Dashboard Import Modal Callbacks
+    # Dashboard Import Tab Callbacks (inside main dashboard modal)
     # ==========================================================================
 
     @app.callback(
-        Output("import-dashboard-modal", "opened"),
-        Input("import-dashboard-button", "n_clicks"),
-        prevent_initial_call=True,
-    )
-    def open_import_modal(n_clicks):
-        """Open the import dashboard modal."""
-        from dash.exceptions import PreventUpdate
-
-        if not n_clicks:
-            raise PreventUpdate
-        return True
-
-    @app.callback(
-        Output("import-dashboard-modal", "opened", allow_duplicate=True),
+        Output("dashboard-modal", "opened", allow_duplicate=True),
         Input("import-dashboard-cancel", "n_clicks"),
         prevent_initial_call=True,
     )
-    def close_import_modal(n_clicks):
-        """Close the import dashboard modal."""
+    def close_modal_from_import_tab(n_clicks):
+        """Close the dashboard modal from the import tab's cancel button."""
         from dash.exceptions import PreventUpdate
 
         if not n_clicks:
@@ -3035,7 +3019,7 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
 
     @app.callback(
         [
-            Output("import-dashboard-modal", "opened", allow_duplicate=True),
+            Output("dashboard-modal", "opened", allow_duplicate=True),
             Output("url", "pathname", allow_duplicate=True),
             Output("notification-container", "children", allow_duplicate=True),
         ],
@@ -3093,12 +3077,12 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
 
     @app.callback(
         Output("import-dashboard-project-select", "data"),
-        Input("import-dashboard-modal", "opened"),
+        Input("dashboard-modal", "opened"),
         State("local-store", "data"),
         prevent_initial_call=True,
     )
     def populate_import_projects(opened, local_data):
-        """Populate project dropdown when modal opens."""
+        """Populate project dropdown when dashboard modal opens."""
         from dash.exceptions import PreventUpdate
 
         if not opened:
