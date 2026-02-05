@@ -2613,10 +2613,10 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
         user = api_call_fetch_user_from_token(data["access_token"])
 
         def render_landing_page(data):
+            is_anonymous = getattr(user, "is_anonymous", False)
             return html.Div(
                 [
-                    # dcc.Store(id={"type": "dashboard-index-store", "index": user.email}, storage_type="session", data={"next_index": 1}),  # Store for dashboard index management
-                    # render_welcome_section(user.email),
+                    render_welcome_section(user.email, is_anonymous),
                     render_dashboard_list_section(user.email),
                     # Dummy output for clientside thumbnail theme swap callback
                     html.Div(id="thumbnail-theme-swap-dummy", style={"display": "none"}),
