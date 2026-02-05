@@ -69,7 +69,7 @@ def create_shared_stores():
             storage_type="memory",
             data={
                 "enabled": True,
-                "refresh_mode": "notification",  # "notification" or "auto-refresh"
+                "refresh_mode": "auto-refresh",  # "notification" or "auto-refresh"
                 "paused": False,
             },
         ),
