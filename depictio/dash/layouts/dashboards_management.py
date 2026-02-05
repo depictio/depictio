@@ -809,9 +809,10 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
                 else False
             )
 
-            # Disable duplicate button for anonymous users in unauthenticated mode
+            # Disable duplicate button for anonymous users in public mode
+            # (In single-user mode, user has admin access and can duplicate)
             duplicate_disabled = (
-                settings.auth.unauthenticated_mode
+                settings.auth.is_public_mode
                 and hasattr(current_user, "is_anonymous")
                 and current_user.is_anonymous
                 and not getattr(current_user, "is_temporary", False)
