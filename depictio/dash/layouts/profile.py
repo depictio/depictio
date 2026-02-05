@@ -178,7 +178,8 @@ layout = dmc.Container(
                                                 variant="filled",
                                                 # color=colors["blue"],
                                                 radius=BUTTON_RADIUS,
-                                                disabled=settings.auth.is_single_user_mode or settings.auth.unauthenticated_mode,
+                                                disabled=settings.auth.is_single_user_mode
+                                                or settings.auth.unauthenticated_mode,
                                                 leftSection=DashIconify(
                                                     icon="mdi:lock-outline",
                                                     width=ICON_SIZE,

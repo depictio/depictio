@@ -197,13 +197,17 @@ def should_redirect_to_dashboards(pathname: Optional[str]) -> bool:
     """
     Check if pathname should redirect to /dashboards.
 
+    Only redirects root path "/" to /dashboards. The /auth path should NOT
+    be redirected so users can access sign-in options (temp user, OAuth)
+    even when already authenticated as anonymous users.
+
     Args:
         pathname: Current URL pathname
 
     Returns:
         bool: True if should redirect to /dashboards
     """
-    return pathname is None or pathname in ("/", "/auth")
+    return pathname is None or pathname == "/"
 
 
 def get_access_token_from_local_data(local_data: Optional[Dict]) -> Optional[str]:

@@ -11,11 +11,11 @@ from datetime import datetime
 from typing import Any
 
 from fastapi import WebSocket
+from redis.asyncio import Redis
 
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
 from depictio.models.models.realtime import ConnectionStatus, EventMessage, EventType
-from redis.asyncio import Redis
 
 
 class ConnectionManager:
