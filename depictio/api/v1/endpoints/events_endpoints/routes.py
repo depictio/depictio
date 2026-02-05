@@ -172,12 +172,13 @@ async def test_trigger_event(dc_id: str) -> dict[str, Any]:
     This bypasses MongoDB change streams - useful for testing WebSocket
     notifications without a replica set.
 
+    Broadcasts to ALL currently connected dashboards (not database query).
+
     Args:
         dc_id: The data collection ID to simulate an update for
     """
     from datetime import datetime, timezone
 
-    from depictio.api.v1.db.core import get_async_client
     from depictio.models.models.realtime import EventMessage, EventSourceType, EventType
 
     # Create a test event
@@ -193,32 +194,26 @@ async def test_trigger_event(dc_id: str) -> dict[str, Any]:
         },
     )
 
-    # Find dashboards to notify
-    client = await get_async_client()
-    db = client[settings.mongodb.db_name]
-    dashboards_collection = db[settings.mongodb.collections.dashboards_collection]
+    # Get all currently subscribed dashboards from the connection manager
+    subscribed_dashboards = connection_manager.get_all_subscribed_dashboards()
 
-    # Get all dashboards (for testing - in production would filter by DC usage)
-    cursor = dashboards_collection.find({}, {"_id": 1}).limit(10)
-    dashboard_ids = [str(doc["_id"]) async for doc in cursor]
-
-    if dashboard_ids:
-        # Broadcast to found dashboards
-        for dashboard_id in dashboard_ids:
+    if subscribed_dashboards:
+        # Broadcast to all connected dashboards
+        for dashboard_id in subscribed_dashboards:
             event_copy = event.model_copy(update={"dashboard_id": dashboard_id})
-            await event_service.connection_manager.broadcast_to_dashboard(dashboard_id, event_copy)
+            await connection_manager.broadcast_to_dashboard(dashboard_id, event_copy)
 
-        logger.info(f"Test event triggered for {len(dashboard_ids)} dashboards")
+        logger.info(f"Test event triggered for {len(subscribed_dashboards)} connected dashboards")
 
         return {
             "success": True,
-            "message": f"Event triggered for {len(dashboard_ids)} dashboards",
-            "dashboard_ids": dashboard_ids,
+            "message": f"Event triggered for {len(subscribed_dashboards)} connected dashboards",
+            "dashboard_ids": list(subscribed_dashboards),
             "connections": connection_manager.get_connection_count(),
         }
     else:
         return {
             "success": False,
-            "message": "No dashboards found to notify",
+            "message": "No connected dashboards to notify",
             "connections": connection_manager.get_connection_count(),
         }
