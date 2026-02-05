@@ -679,6 +679,19 @@ class EventsConfig(BaseSettings):
 
     model_config = SettingsConfigDict(env_prefix="DEPICTIO_EVENTS_")
 
+    def __init__(self, **data: object) -> None:
+        """Initialize EventsConfig with manual env var reading.
+
+        Pydantic-settings nested configs don't always pick up env vars correctly,
+        so we manually read the critical ones here (same pattern as AuthConfig).
+        """
+        super().__init__(**data)
+
+        # Manually read DEPICTIO_EVENTS_ENABLED env var
+        env_enabled = os.getenv("DEPICTIO_EVENTS_ENABLED", "").lower()
+        if env_enabled in ("true", "1", "yes"):
+            object.__setattr__(self, "enabled", True)
+
     @computed_field
     @property
     def redis_url(self) -> str:
