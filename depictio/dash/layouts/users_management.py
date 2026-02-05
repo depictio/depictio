@@ -715,149 +715,129 @@ def register_callbacks_users_management(app) -> None:
         app: Dash application instance.
     """
 
-    @app.callback(
-        [
-            Output("auth-modal", "opened", allow_duplicate=True),
-            Output("modal-content", "children", allow_duplicate=True),
-            Output("modal-state-store", "data", allow_duplicate=True),
-            Output("url", "pathname", allow_duplicate=True),
-        ],
-        [Input("url", "pathname")],
-        [State("local-store", "data")],
-        prevent_initial_call=True,
-    )
-    def auto_open_auth_modal_on_auth_page(pathname, local_data):
-        """Automatically open the auth modal when user navigates to /auth page.
+    # Only register auth modal callbacks if NOT in single-user mode
+    # In single-user mode, auth-modal component doesn't exist
+    if not settings.auth.is_single_user_mode:
 
-        In single-user mode, redirects to /dashboards since no authentication is needed.
-        """
-        logger.info(
-            f"Auto-open check: pathname={pathname}, logged_in={local_data.get('logged_in', False) if local_data else False}"
+        @app.callback(
+            [
+                Output("auth-modal", "opened", allow_duplicate=True),
+                Output("modal-content", "children", allow_duplicate=True),
+                Output("modal-state-store", "data", allow_duplicate=True),
+                Output("url", "pathname", allow_duplicate=True),
+            ],
+            [Input("url", "pathname")],
+            [State("local-store", "data")],
+            prevent_initial_call=True,
         )
-
-        if pathname != "/auth":
-            return dash.no_update, dash.no_update, dash.no_update, dash.no_update
-
-        # In single-user mode, redirect to dashboards (no auth needed)
-        if settings.auth.is_single_user_mode:
-            logger.info("Single-user mode active, redirecting /auth to /dashboards")
-            return False, dash.no_update, dash.no_update, "/dashboards"
-
-        # Don't show modal for authenticated users
-        if local_data and local_data.get("logged_in", False):
-            logger.info("User is already logged in, not showing auth modal")
-            return False, dash.no_update, dash.no_update, dash.no_update
-
-        # Open modal with login form
-        logger.info("Opening auth modal with login form")
-        content = render_login_form()
-        return True, content, "login", dash.no_update
-
-    @app.callback(
-        Output("login-button", "n_clicks"),
-        Input("auth-modal-listener", "n_events"),
-        State("auth-modal-listener", "event"),
-        State("login-button", "disabled"),
-    )
-    def trigger_save_on_enter(n_events, e, disabled):
-        if e is None or e["key"] != "Enter" or disabled:
-            raise PreventUpdate()
-
-        return 1  # Simulate a click on the save button
-
-    @app.callback(
-        [Output("login-button", "disabled"), Output("login-email", "error")],
-        [Input("login-email", "value")],
-    )
-    def disable_login_button(email):
-        if email:
-            valid = re.match(r"^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$", email)
-            return not valid, not valid
-        return True, False  # Initially disabled with no error
-
-    @app.callback(
-        [Output("register-button", "disabled"), Output("register-email", "error")],
-        [Input("register-email", "value")],
-    )
-    def disable_register_button(email):
-        if email:
-            valid = re.match(r"^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$", email)
-            return not valid, not valid
-        return True, False  # Initially disabled with no error
-
-    @app.callback(
-        [
-            Output("auth-modal", "opened"),
-            Output("modal-content", "children"),
-            Output("user-feedback", "children"),
-            Output("modal-state-store", "data"),
-            Output("modal-open-store", "data"),
-            Output("local-store", "data"),
-        ],
-        [
-            Input("open-register-form", "n_clicks"),
-            Input("open-login-form", "n_clicks"),
-            Input("login-button", "n_clicks"),
-            Input("register-button", "n_clicks"),
-            # Input("logout-button", "n_clicks"),
-        ],
-        [
-            State("modal-state-store", "data"),
-            State("login-email", "value"),
-            State("login-password", "value"),
-            State("register-email", "value"),
-            State("register-password", "value"),
-            State("register-confirm-password", "value"),
-            State("modal-open-store", "data"),
-            State("local-store", "data"),
-        ],
-        prevent_initial_call=True,
-    )
-    def handle_auth_and_switch_forms(
-        n_clicks_register,
-        n_clicks_login_form,
-        n_clicks_login,
-        n_clicks_register_form,
-        # n_clicks_logout,
-        current_state,
-        login_email,
-        login_password,
-        register_email,
-        register_password,
-        register_confirm_password,
-        modal_open,
-        local_data,
-    ):
-        button_id = ctx.triggered[0]["prop_id"].split(".")[0]
-
-        # If user is already logged in, do not show the login form
-        if local_data and local_data.get("logged_in", False):
-            logger.info("User is already logged in.")
-            return (
-                False,
-                dash.no_update,
-                dash.no_update,
-                dash.no_update,
-                dash.no_update,
-                dash.no_update,
+        def auto_open_auth_modal_on_auth_page(pathname, local_data):
+            """Automatically open the auth modal when user navigates to /auth page."""
+            logger.info(
+                f"Auto-open check: pathname={pathname}, logged_in={local_data.get('logged_in', False) if local_data else False}"
             )
 
-        # If no button was clicked, return the current state
-        if not ctx.triggered:
-            return (
-                dash.no_update,
-                dash.no_update,
-                dash.no_update,
-                dash.no_update,
-                dash.no_update,
-                dash.no_update,
-            )
+            if pathname != "/auth":
+                return dash.no_update, dash.no_update, dash.no_update, dash.no_update
 
-        # Handle button clicks
-        if button_id == "open-register-form":
-            # Check if registration is disabled in single-user or public mode
-            if settings.auth.is_single_user_mode or settings.auth.is_public_mode:
-                # Don't open register form if registration is disabled
+            # Don't show modal for authenticated users
+            if local_data and local_data.get("logged_in", False):
+                logger.info("User is already logged in, not showing auth modal")
+                return False, dash.no_update, dash.no_update, dash.no_update
+
+            # Open modal with login form
+            logger.info("Opening auth modal with login form")
+            content = render_login_form()
+            return True, content, "login", dash.no_update
+
+        @app.callback(
+            Output("login-button", "n_clicks"),
+            Input("auth-modal-listener", "n_events"),
+            State("auth-modal-listener", "event"),
+            State("login-button", "disabled"),
+        )
+        def trigger_save_on_enter(n_events, e, disabled):
+            if e is None or e["key"] != "Enter" or disabled:
+                raise PreventUpdate()
+
+            return 1  # Simulate a click on the save button
+
+        @app.callback(
+            [Output("login-button", "disabled"), Output("login-email", "error")],
+            [Input("login-email", "value")],
+        )
+        def disable_login_button(email):
+            if email:
+                valid = re.match(r"^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$", email)
+                return not valid, not valid
+            return True, False  # Initially disabled with no error
+
+        @app.callback(
+            [Output("register-button", "disabled"), Output("register-email", "error")],
+            [Input("register-email", "value")],
+        )
+        def disable_register_button(email):
+            if email:
+                valid = re.match(r"^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$", email)
+                return not valid, not valid
+            return True, False  # Initially disabled with no error
+
+        @app.callback(
+            [
+                Output("auth-modal", "opened"),
+                Output("modal-content", "children"),
+                Output("user-feedback", "children"),
+                Output("modal-state-store", "data"),
+                Output("modal-open-store", "data"),
+                Output("local-store", "data"),
+            ],
+            [
+                Input("open-register-form", "n_clicks"),
+                Input("open-login-form", "n_clicks"),
+                Input("login-button", "n_clicks"),
+                Input("register-button", "n_clicks"),
+            ],
+            [
+                State("modal-state-store", "data"),
+                State("login-email", "value"),
+                State("login-password", "value"),
+                State("register-email", "value"),
+                State("register-password", "value"),
+                State("register-confirm-password", "value"),
+                State("modal-open-store", "data"),
+                State("local-store", "data"),
+            ],
+            prevent_initial_call=True,
+        )
+        def handle_auth_and_switch_forms(
+            n_clicks_register,
+            n_clicks_login_form,
+            n_clicks_login,
+            n_clicks_register_form,
+            current_state,
+            login_email,
+            login_password,
+            register_email,
+            register_password,
+            register_confirm_password,
+            modal_open,
+            local_data,
+        ):
+            button_id = ctx.triggered[0]["prop_id"].split(".")[0]
+
+            # If user is already logged in, do not show the login form
+            if local_data and local_data.get("logged_in", False):
+                logger.info("User is already logged in.")
+                return (
+                    False,
+                    dash.no_update,
+                    dash.no_update,
+                    dash.no_update,
+                    dash.no_update,
+                    dash.no_update,
+                )
+
+            # If no button was clicked, return the current state
+            if not ctx.triggered:
                 return (
                     dash.no_update,
                     dash.no_update,
@@ -867,44 +847,75 @@ def register_callbacks_users_management(app) -> None:
                     dash.no_update,
                 )
 
-            logger.info("Opening register form")
-            modal_state = "register"
-            content = render_register_form()
-            return True, content, dash.no_update, modal_state, True, dash.no_update
+            # Handle button clicks
+            if button_id == "open-register-form":
+                # Check if registration is disabled in public mode
+                if settings.auth.is_public_mode:
+                    return (
+                        dash.no_update,
+                        dash.no_update,
+                        dash.no_update,
+                        dash.no_update,
+                        dash.no_update,
+                        dash.no_update,
+                    )
 
-        elif button_id == "open-login-form":
-            logger.info("Opening login form")
-            modal_state = "login"
-            content = render_login_form()
-            return True, content, dash.no_update, modal_state, True, dash.no_update
+                logger.info("Opening register form")
+                modal_state = "register"
+                content = render_register_form()
+                return True, content, dash.no_update, modal_state, True, dash.no_update
 
-        elif button_id == "login-button":
-            feedback_message, modal_open_new, session_data, local_data_new = validate_login(
-                login_email, login_password
-            )
-            if not modal_open_new:
+            elif button_id == "open-login-form":
+                logger.info("Opening login form")
+                modal_state = "login"
                 content = render_login_form()
-            else:
+                return True, content, dash.no_update, modal_state, True, dash.no_update
+
+            elif button_id == "login-button":
+                feedback_message, modal_open_new, session_data, local_data_new = validate_login(
+                    login_email, login_password
+                )
                 content = render_login_form()
 
-            return (
-                modal_open_new,
-                content,
-                dmc.Text(
-                    feedback_message,
-                    id="user-feedback-message-login",
-                    c="red" if modal_open_new else "green",
-                ),
-                current_state,
-                modal_open_new,
-                local_data_new,
-            )
+                return (
+                    modal_open_new,
+                    content,
+                    dmc.Text(
+                        feedback_message,
+                        id="user-feedback-message-login",
+                        c="red" if modal_open_new else "green",
+                    ),
+                    current_state,
+                    modal_open_new,
+                    local_data_new,
+                )
 
-        elif button_id == "register-button":
-            # Check if registration is disabled in single-user or public mode
-            if settings.auth.is_single_user_mode or settings.auth.is_public_mode:
-                feedback_message = "User registration is disabled in this mode"
-                modal_open_new = True
+            elif button_id == "register-button":
+                # Check if registration is disabled in public mode
+                if settings.auth.is_public_mode:
+                    feedback_message = "User registration is disabled in this mode"
+                    content = render_register_form()
+
+                    return (
+                        True,
+                        content,
+                        dmc.Text(
+                            feedback_message,
+                            c="red",
+                            id="user-feedback-message-register",
+                        ),
+                        dash.no_update,
+                        dash.no_update,
+                        dash.no_update,
+                    )
+
+                feedback_message, modal_open_new = handle_registration(
+                    register_email, register_password, register_confirm_password
+                )
+
+                logger.debug(f"Feedback message: {feedback_message}")
+                logger.debug(f"Modal open new: {modal_open_new}")
+
                 content = render_register_form()
 
                 return (
@@ -912,7 +923,7 @@ def register_callbacks_users_management(app) -> None:
                     content,
                     dmc.Text(
                         feedback_message,
-                        c="red",
+                        c="red" if modal_open_new else "green",
                         id="user-feedback-message-register",
                     ),
                     dash.no_update,
@@ -920,47 +931,19 @@ def register_callbacks_users_management(app) -> None:
                     dash.no_update,
                 )
 
-            feedback_message, modal_open_new = handle_registration(
-                register_email, register_password, register_confirm_password
-            )
-
-            logger.debug(f"Feedback message: {feedback_message}")
-            logger.debug(f"Modal open new: {modal_open_new}")
-
-            # if not modal_open_new:
-            #     modal_state = "login"
-            #     content = render_login_form()
-            # else:
-            #     modal_state = "register"
-            content = render_register_form()
-
+            logger.warning("No button clicked.")
             return (
-                True,
-                content,
-                dmc.Text(
-                    feedback_message,
-                    c="red" if modal_open_new else "green",
-                    id="user-feedback-message-register",
-                ),
+                dash.no_update,
+                dash.no_update,
+                dash.no_update,
                 dash.no_update,
                 dash.no_update,
                 dash.no_update,
             )
-            # return modal_open_new, content, dmc.Text(feedback_message, color="red" if modal_open_new else "green"), modal_state, modal_open_new, local_data
 
-        logger.warning("No button clicked.")
-        return (
-            dash.no_update,
-            dash.no_update,
-            dash.no_update,
-            dash.no_update,
-            dash.no_update,
-            dash.no_update,
-        )
-
-    # Google OAuth callbacks - only register if enabled in settings
-    if settings.auth.google_oauth_enabled:
-        register_google_oauth_callbacks(app)
+        # Google OAuth callbacks - only register if enabled in settings
+        if settings.auth.google_oauth_enabled:
+            register_google_oauth_callbacks(app)
 
 
 # Add Google OAuth callback handler for when user returns from Google
