@@ -46,17 +46,24 @@ def return_create_dashboard_button(email, is_anonymous=False):
 
     For anonymous users, shows "Login to Create Dashboards" button.
     For authenticated users, shows normal "+ New Dashboard" button.
+    In single-user mode, anonymous user has admin access and gets normal button.
+    In demo mode, wraps the button with a guided tour popover.
 
     Args:
         email: User email address for button ID.
         is_anonymous: Whether the user is anonymous (not fully authenticated).
 
     Returns:
-        dmc.Button: Styled button component for dashboard creation.
+        dmc.Button or dmc.Popover: Styled button component, optionally wrapped in tour popover.
     """
-    button_text = "+ New Dashboard" if not is_anonymous else "Login to Create Dashboards"
+    from depictio.api.v1.configs.config import settings
+    from depictio.dash.components.demo_tour import TOUR_STEPS, create_tour_popover
+
+    # In single-user mode, anonymous user has admin access
+    should_show_login = is_anonymous and not settings.auth.is_single_user_mode
+    button_text = "+ New Dashboard" if not should_show_login else "Login to Create Dashboards"
     button_color = (
-        "orange" if not is_anonymous else "blue"
+        "orange" if not should_show_login else "blue"
     )  # Use blue to match temporary user button
 
     create_button = dmc.Button(
@@ -72,6 +79,19 @@ def return_create_dashboard_button(email, is_anonymous=False):
         radius="md",
         disabled=False,  # Always enabled - behavior changes based on user type
     )
+
+    # Check if demo mode is enabled and wrap button with tour popover
+    # In demo mode, show tour to ALL users (including anonymous) to guide them
+    is_demo_mode = settings.auth.is_demo_mode
+
+    if is_demo_mode:
+        popover = create_tour_popover(
+            target=create_button,
+            step_id="welcome-demo",
+            total_steps=len(TOUR_STEPS),
+        )
+        return popover
+
     return create_button
 
 
@@ -81,6 +101,7 @@ def return_create_project_button(email, is_anonymous=False):
 
     For anonymous users, shows "Login to Create Projects" button.
     For authenticated users, shows normal "+ Create Project" button.
+    In single-user mode, anonymous user has admin access and gets normal button.
 
     Args:
         email: User email address (unused, kept for API consistency).
@@ -89,9 +110,13 @@ def return_create_project_button(email, is_anonymous=False):
     Returns:
         dmc.Button: Styled button component for project creation.
     """
-    button_text = "+ Create Project" if not is_anonymous else "Login to Create Projects"
+    from depictio.api.v1.configs.config import settings
+
+    # In single-user mode, anonymous user has admin access
+    should_show_login = is_anonymous and not settings.auth.is_single_user_mode
+    button_text = "+ Create Project" if not should_show_login else "Login to Create Projects"
     button_color = (
-        "teal" if not is_anonymous else "blue"  # Use teal color matching colors.py
+        "teal" if not should_show_login else "blue"  # Use teal color matching colors.py
     )  # Use blue to match temporary user button
 
     create_button = dmc.Button(

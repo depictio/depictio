@@ -29,7 +29,10 @@ from dash_iconify import DashIconify
 from depictio.api.v1.configs.config import API_BASE_URL, settings
 from depictio.api.v1.configs.custom_logging import format_pydantic
 from depictio.api.v1.configs.logging_init import logger
-from depictio.dash.api_calls import api_call_fetch_user_from_token, api_get_project_from_id
+from depictio.dash.api_calls import (
+    api_call_fetch_user_from_token,
+    api_get_project_from_id,
+)
 from depictio.dash.colors import colors  # Import Depictio color palette
 from depictio.dash.layouts.layouts_toolbox import (
     create_dashboard_modal,
@@ -48,6 +51,7 @@ layout = html.Div(
     [
         dcc.Store(id="dashboard-modal-store", storage_type="session", data={"title": ""}),
         dcc.Store(id="init-create-dashboard-button", storage_type="memory", data=False),
+        dcc.Download(id="dashboard-export-download"),  # For exporting dashboards as JSON
         modal,
         html.Div(id="landing-page"),  # Initially hidden
     ]
@@ -114,7 +118,7 @@ def get_child_tabs_info(dashboard_id: str, token: str) -> dict:
 
         if response.status_code == 200:
             all_dashboards = response.json()
-            logger.debug(f"Fetched {len(all_dashboards)} total dashboards for tab filtering")
+            # logger.debug(f"Fetched {len(all_dashboards)} total dashboards for tab filtering")
 
             # Filter child tabs that belong to this parent dashboard
             child_tabs = [
@@ -124,7 +128,7 @@ def get_child_tabs_info(dashboard_id: str, token: str) -> dict:
                 and not d.get("is_main_tab", True)
             ]
 
-            logger.debug(f"Found {len(child_tabs)} child tabs for parent dashboard {dashboard_id}")
+            # logger.debug(f"Found {len(child_tabs)} child tabs for parent dashboard {dashboard_id}")
 
             # Sort by tab_order
             child_tabs.sort(key=lambda x: x.get("tab_order", 0))
@@ -270,10 +274,13 @@ def render_welcome_section(email: str, is_anonymous: bool = False) -> dmc.Grid:
         dmc.Grid: Welcome section layout component.
     """
     # Check if user is anonymous and disable button accordingly
-    button_disabled = is_anonymous
-    button_text = "+ New Dashboard" if not is_anonymous else "Login to Create Dashboards"
-    button_variant = "gradient" if not is_anonymous else "outline"
-    button_color = {"from": "black", "to": "grey", "deg": 135} if not is_anonymous else "gray"
+    # In single-user mode, anonymous user has admin access and can create dashboards
+    # In public mode, anonymous users cannot create dashboards (they need to upgrade to temp user)
+    should_disable = is_anonymous and not settings.auth.is_single_user_mode
+    button_disabled = should_disable
+    button_text = "+ New Dashboard" if not should_disable else "Login to Create Dashboards"
+    button_variant = "gradient" if not should_disable else "outline"
+    button_color = {"from": "black", "to": "grey", "deg": 135} if not should_disable else "gray"
 
     return dmc.Grid(
         children=[
@@ -306,10 +313,11 @@ def render_welcome_section(email: str, is_anonymous: bool = False) -> dmc.Grid:
                             variant=button_variant,
                             gradient=button_color if not is_anonymous else None,
                             color="gray" if is_anonymous else None,
-                            style={"margin": "20px 0", "fontFamily": "Virgil"},
+                            style={"fontFamily": "Virgil"},
                             size="xl",
                             disabled=button_disabled,
                         ),
+                        style={"margin": "20px 0"},
                     ),
                     dmc.Divider(style={"margin": "20px 0"}),
                     dmc.Title("Your Dashboards", order=3),
@@ -612,10 +620,10 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
             # Total tabs = 1 (main) + child tabs count
             total_tab_count = 1 + child_tab_count
 
-            logger.debug(
-                f"Dashboard {dashboard['dashboard_id']}: "
-                f"Found {child_tab_count} child tabs, total {total_tab_count} tabs"
-            )
+            # logger.debug(
+            #     f"Dashboard {dashboard['dashboard_id']}: "
+            #     f"Found {child_tab_count} child tabs, total {total_tab_count} tabs"
+            # )
 
             # Only show badge when total > 1 (i.e., when there are child tabs)
             if total_tab_count > 1:
@@ -789,9 +797,10 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
                 else False
             )
 
-            # Disable duplicate button for anonymous users in unauthenticated mode
+            # Disable duplicate button for anonymous users in public mode
+            # (In single-user mode, user has admin access and can duplicate)
             duplicate_disabled = (
-                settings.auth.unauthenticated_mode
+                settings.auth.is_public_mode
                 and hasattr(current_user, "is_anonymous")
                 and current_user.is_anonymous
                 and not getattr(current_user, "is_temporary", False)
@@ -846,6 +855,18 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
                                 disabled=duplicate_disabled,
                             ),
                             dmc.Button(
+                                "Export",
+                                id={
+                                    "type": "export-dashboard-button",
+                                    "index": dashboard["dashboard_id"],
+                                },
+                                variant="outline",
+                                color=colors["purple"],
+                                size="xs",
+                                style={"padding": "2px 4px", "fontSize": "11px"},
+                                disabled=duplicate_disabled,  # Same logic as duplicate
+                            ),
+                            dmc.Button(
                                 "Delete",
                                 id={
                                     "type": "delete-dashboard-button",
@@ -867,7 +888,11 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
                                 color=color_privacy_button,
                                 disabled=disabled,
                                 size="xs",
-                                style={"padding": "2px 4px", "fontSize": "11px", "display": "none"},
+                                style={
+                                    "padding": "2px 4px",
+                                    "fontSize": "11px",
+                                    "display": "none",
+                                },
                             ),
                         ],
                         gap="xs",
@@ -1113,7 +1138,10 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
                                     withIndicators=True,
                                     withControls=True,
                                     height=210,
-                                    style={"borderRadius": "8px 8px 0 0", "cursor": "pointer"},
+                                    style={
+                                        "borderRadius": "8px 8px 0 0",
+                                        "cursor": "pointer",
+                                    },
                                 )
                             ),
                             dmc.HoverCardDropdown(
@@ -1200,7 +1228,10 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
                                             size="sm",
                                             ta="center",
                                             c="gray",
-                                            style={"marginTop": "12px", "fontSize": "13px"},
+                                            style={
+                                                "marginTop": "12px",
+                                                "fontSize": "13px",
+                                            },
                                         ),
                                     ],
                                     style={
@@ -1615,7 +1646,9 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
                                     dmc.Group(
                                         [
                                             DashIconify(
-                                                icon="mdi:account-check", width=18, color="#1c7ed6"
+                                                icon="mdi:account-check",
+                                                width=18,
+                                                color="#1c7ed6",
                                             ),
                                             dmc.Text(
                                                 f"Owned Dashboards ({len(owned_dashboards)})",
@@ -1671,7 +1704,9 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
                                     dmc.Group(
                                         [
                                             DashIconify(
-                                                icon="mdi:earth", width=18, color="#20c997"
+                                                icon="mdi:earth",
+                                                width=18,
+                                                color="#20c997",
                                             ),
                                             dmc.Text(
                                                 f"Public Dashboards ({len(public_dashboards)})",
@@ -1698,7 +1733,9 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
                                     dmc.Group(
                                         [
                                             DashIconify(
-                                                icon="mdi:school-outline", width=18, color="#fd7e14"
+                                                icon="mdi:school-outline",
+                                                width=18,
+                                                color="#fd7e14",
                                             ),
                                             dmc.Text(
                                                 f"Example Dashboards ({len(example_dashboards)})",
@@ -1795,7 +1832,16 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
         Returns:
             Tuple of (preview component, resolved icon name, resolved color, color_disabled).
         """
-        allowed_colors = ("blue", "teal", "orange", "red", "purple", "pink", "green", "gray")
+        allowed_colors = (
+            "blue",
+            "teal",
+            "orange",
+            "red",
+            "purple",
+            "pink",
+            "green",
+            "gray",
+        )
         workflow_icons = get_workflow_icon_mapping()
         workflow_colors = get_workflow_icon_color()
 
@@ -2272,7 +2318,10 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
         dashboards_view = create_homepage_view(
             dashboards, current_userbase.id, user_data["access_token"], current_user
         )
-        return [dashboards_view] * len(store_data_list)
+        # Use ctx.outputs_list to get the actual number of dashboard-list components
+        # This is more reliable than depending on create-dashboard-button count
+        num_outputs = len(ctx.outputs_list) if ctx.outputs_list else max(len(store_data_list), 1)
+        return [dashboards_view] * num_outputs
 
     @app.callback(
         Output({"type": "edit-dashboard-modal", "index": MATCH}, "opened"),
@@ -2405,7 +2454,14 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
             current_user_api = api_call_fetch_user_from_token(user_data["access_token"])
             if not current_user_api:
                 logger.warning("User not found in dashboard creation.")
-                return data, opened, True, dash.no_update, dash.no_update, dash.no_update
+                return (
+                    data,
+                    opened,
+                    True,
+                    dash.no_update,
+                    dash.no_update,
+                    dash.no_update,
+                )
 
             # Create UserContext from API response
             current_user = UserContext(
@@ -2414,9 +2470,15 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
                 is_admin=current_user_api.is_admin,
                 is_anonymous=getattr(current_user_api, "is_anonymous", False),
             )
-            if hasattr(current_user, "is_anonymous") and current_user.is_anonymous:
+            # In single-user mode, anonymous users have admin access and can create dashboards
+            # In public mode, anonymous users need to sign in first (temp user or OAuth)
+            if (
+                hasattr(current_user, "is_anonymous")
+                and current_user.is_anonymous
+                and not settings.auth.is_single_user_mode
+            ):
                 logger.info(
-                    "Anonymous user clicked 'Login to Create Dashboards' - redirecting to profile"
+                    "Anonymous user clicked 'Login to Create Dashboards' - redirecting to /auth"
                 )
                 return (
                     dash.no_update,
@@ -2424,7 +2486,7 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
                     dash.no_update,
                     {"display": "none"},  # Hide any warning messages
                     dash.no_update,
-                    "/profile",  # Redirect to profile page
+                    "/auth",  # Redirect to auth page with sign-in options
                 )
 
             # Toggle the modal when the create button is clicked (for authenticated users)
@@ -2510,7 +2572,14 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
             data["icon_variant"] = "filled"
             data["project_id"] = project
             data["workflow_system"] = workflow_system if workflow_system else "none"
-            return data, False, False, {"display": "none"}, dash.no_update, dash.no_update
+            return (
+                data,
+                False,
+                False,
+                {"display": "none"},
+                dash.no_update,
+                dash.no_update,
+            )
 
         logger.debug("No relevant clicks")
         # Return default values if no relevant clicks happened
@@ -2583,8 +2652,6 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
         def render_landing_page(data):
             return html.Div(
                 [
-                    # dcc.Store(id={"type": "dashboard-index-store", "index": user.email}, storage_type="session", data={"next_index": 1}),  # Store for dashboard index management
-                    # render_welcome_section(user.email),
                     render_dashboard_list_section(user.email),
                     # Dummy output for clientside thumbnail theme swap callback
                     html.Div(id="thumbnail-theme-swap-dummy", style={"display": "none"}),
@@ -2727,3 +2794,392 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
         Input("url", "pathname"),
         prevent_initial_call=False,  # Allow initial call to swap thumbnails on page load
     )
+
+    # ==========================================================================
+    # Dashboard Export Callback
+    # ==========================================================================
+
+    @app.callback(
+        [
+            Output("dashboard-export-download", "data"),
+            Output("notification-container", "sendNotifications", allow_duplicate=True),
+        ],
+        Input({"type": "export-dashboard-button", "index": ALL}, "n_clicks"),
+        State("local-store", "data"),
+        prevent_initial_call=True,
+    )
+    def export_dashboard_as_json(n_clicks_list, local_data):
+        """Export dashboard as JSON when export button is clicked.
+
+        Downloads a JSON file containing the dashboard configuration
+        and data integrity metadata for re-import.
+        """
+        import json
+
+        from depictio.dash.api_calls import api_call_export_dashboard_json
+
+        # Silent early returns for no-op cases (pattern-matching callbacks trigger frequently)
+        if not n_clicks_list or not any(n_clicks_list):
+            return dash.no_update, dash.no_update
+
+        # Get which button was clicked
+        triggered_id = ctx.triggered_id
+
+        if not triggered_id or not isinstance(triggered_id, dict):
+            return dash.no_update, dash.no_update
+
+        dashboard_id = triggered_id.get("index")
+        if not dashboard_id:
+            return dash.no_update, dash.no_update
+
+        logger.info(f"Exporting dashboard: {dashboard_id}")
+
+        # Check authentication
+        if not local_data or not local_data.get("logged_in"):
+            logger.warning("Export attempted without authentication")
+            return dash.no_update, dash.no_update
+
+        token = local_data.get("access_token")
+
+        # Call API to export dashboard
+        export_data = api_call_export_dashboard_json(dashboard_id, token)
+
+        if not export_data:
+            logger.error(f"Failed to export dashboard {dashboard_id}")
+            return (
+                dash.no_update,
+                [
+                    {
+                        "id": "export-error",
+                        "title": "Export Failed",
+                        "message": "Failed to export dashboard. Please try again.",
+                        "color": "red",
+                        "icon": DashIconify(icon="mdi:alert-circle"),
+                        "autoClose": 5000,
+                    }
+                ],
+            )
+
+        # Create downloadable JSON file
+        dashboard_title = export_data.get("dashboard", {}).get("title", "dashboard")
+        # Sanitize filename
+        safe_title = "".join(c if c.isalnum() or c in ("-", "_") else "_" for c in dashboard_title)
+        filename = f"{safe_title}_export.json"
+
+        logger.info(f"Successfully exported dashboard: {dashboard_title}, filename: {filename}")
+
+        return (
+            dict(content=json.dumps(export_data, indent=2), filename=filename),
+            [
+                {
+                    "id": "export-success",
+                    "title": "Export Successful",
+                    "message": f"Dashboard '{dashboard_title}' exported successfully.",
+                    "color": "green",
+                    "icon": DashIconify(icon="mdi:check-circle"),
+                    "autoClose": 3000,
+                }
+            ],
+        )
+
+    # ==========================================================================
+    # Dashboard Import Tab Callbacks (inside main dashboard modal)
+    # ==========================================================================
+
+    @app.callback(
+        Output("dashboard-modal", "opened", allow_duplicate=True),
+        Input("import-dashboard-cancel", "n_clicks"),
+        prevent_initial_call=True,
+    )
+    def close_modal_from_import_tab(n_clicks):
+        """Close the dashboard modal from the import tab's cancel button."""
+        from dash.exceptions import PreventUpdate
+
+        if not n_clicks:
+            raise PreventUpdate
+        return False
+
+    @app.callback(
+        [
+            Output("import-dashboard-json-store", "data"),
+            Output("import-dashboard-file-info", "children"),
+            Output("import-dashboard-validate-btn", "disabled"),
+            Output("import-dashboard-submit", "disabled"),
+        ],
+        Input("import-dashboard-upload", "contents"),
+        State("import-dashboard-upload", "filename"),
+        prevent_initial_call=True,
+    )
+    def handle_import_file_upload(contents, filename):
+        """Handle JSON file upload for import."""
+        import base64
+        import json
+
+        from dash.exceptions import PreventUpdate
+
+        if not contents:
+            raise PreventUpdate
+
+        # Parse the uploaded file
+        try:
+            content_type, content_string = contents.split(",")
+            decoded = base64.b64decode(content_string)
+            json_data = json.loads(decoded.decode("utf-8"))
+
+            # Basic validation
+            if "_depictio_export_version" not in json_data:
+                return (
+                    None,
+                    dmc.Alert(
+                        "Invalid file: Not a Depictio export file",
+                        color="red",
+                        icon=DashIconify(icon="mdi:alert-circle"),
+                    ),
+                    True,
+                    True,
+                )
+
+            # Show file info
+            dashboard_title = json_data.get("dashboard", {}).get("title", "Unknown")
+            export_time = json_data.get("_export_timestamp", "Unknown")
+            source_project = json_data.get("_export_source", {}).get("project_tag", "Unknown")
+
+            file_info = dmc.Alert(
+                children=[
+                    dmc.Stack(
+                        gap="xs",
+                        children=[
+                            dmc.Text(f"File: {filename}", size="sm", fw=500),
+                            dmc.Text(f"Dashboard: {dashboard_title}", size="sm"),
+                            dmc.Text(
+                                f"Source Project: {source_project}",
+                                size="sm",
+                                c="dimmed",
+                            ),
+                            dmc.Text(f"Exported: {export_time}", size="sm", c="dimmed"),
+                        ],
+                    )
+                ],
+                color="green",
+                icon=DashIconify(icon="mdi:check-circle"),
+            )
+
+            return json_data, file_info, False, False
+
+        except json.JSONDecodeError:
+            return (
+                None,
+                dmc.Alert(
+                    "Invalid JSON file. Please upload a valid JSON export.",
+                    color="red",
+                    icon=DashIconify(icon="mdi:alert-circle"),
+                ),
+                True,
+                True,
+            )
+        except Exception as e:
+            logger.error(f"Error parsing upload: {e}")
+            return (
+                None,
+                dmc.Alert(
+                    f"Error reading file: {str(e)}",
+                    color="red",
+                    icon=DashIconify(icon="mdi:alert-circle"),
+                ),
+                True,
+                True,
+            )
+
+    @app.callback(
+        Output("import-dashboard-validation-results", "children"),
+        Input("import-dashboard-validate-btn", "n_clicks"),
+        [
+            State("import-dashboard-json-store", "data"),
+            State("import-dashboard-project-select", "value"),
+            State("local-store", "data"),
+        ],
+        prevent_initial_call=True,
+    )
+    def validate_import(n_clicks, json_data, project_id, local_data):
+        """Validate import JSON against target project."""
+        from dash.exceptions import PreventUpdate
+
+        from depictio.dash.api_calls import api_call_validate_dashboard_json
+
+        if not n_clicks or not json_data:
+            raise PreventUpdate
+
+        token = local_data.get("access_token") if local_data else None
+        if not token:
+            raise PreventUpdate
+
+        # Call validation API
+        result = api_call_validate_dashboard_json(json_data, token, project_id)
+
+        if not result:
+            return dmc.Alert(
+                "Validation failed. Please try again.",
+                color="red",
+                icon=DashIconify(icon="mdi:alert-circle"),
+            )
+
+        # Build validation results display
+        if result.get("valid"):
+            return dmc.Alert(
+                children=[
+                    dmc.Stack(
+                        gap="xs",
+                        children=[
+                            dmc.Text("Validation passed!", fw=500),
+                            dmc.Text(
+                                f"Target project: {result.get('project_resolved', {}).get('name', 'N/A')}",
+                                size="sm",
+                            ),
+                            *[
+                                dmc.Text(f"- {w.get('message')}", size="sm", c="orange")
+                                for w in result.get("warnings", [])
+                            ],
+                        ],
+                    )
+                ],
+                color="green" if not result.get("warnings") else "yellow",
+                icon=DashIconify(
+                    icon="mdi:check-circle" if not result.get("warnings") else "mdi:alert"
+                ),
+            )
+        else:
+            return dmc.Alert(
+                children=[
+                    dmc.Stack(
+                        gap="xs",
+                        children=[
+                            dmc.Text("Validation failed", fw=500),
+                            *[
+                                dmc.Text(f"- {e.get('message')}", size="sm")
+                                for e in result.get("errors", [])
+                            ],
+                        ],
+                    )
+                ],
+                color="red",
+                icon=DashIconify(icon="mdi:alert-circle"),
+            )
+
+    @app.callback(
+        [
+            Output("dashboard-modal", "opened", allow_duplicate=True),
+            Output("landing-page", "children", allow_duplicate=True),
+            Output("notification-container", "sendNotifications", allow_duplicate=True),
+        ],
+        Input("import-dashboard-submit", "n_clicks"),
+        [
+            State("import-dashboard-json-store", "data"),
+            State("import-dashboard-project-select", "value"),
+            State("import-dashboard-validate-integrity", "checked"),
+            State("local-store", "data"),
+        ],
+        prevent_initial_call=True,
+    )
+    def submit_import(n_clicks, json_data, project_id, validate_integrity, local_data):
+        """Submit the dashboard import and refresh dashboard list."""
+        from dash.exceptions import PreventUpdate
+
+        from depictio.dash.api_calls import api_call_import_dashboard_json
+
+        if not n_clicks or not json_data:
+            raise PreventUpdate
+
+        token = local_data.get("access_token") if local_data else None
+        if not token:
+            raise PreventUpdate
+
+        # Call import API
+        result = api_call_import_dashboard_json(json_data, token, project_id, validate_integrity)
+
+        if not result or not result.get("success"):
+            return (
+                True,  # Keep modal open
+                dash.no_update,
+                [
+                    {
+                        "id": "import-error",
+                        "title": "Import Failed",
+                        "message": "Failed to import dashboard. Check validation results.",
+                        "color": "red",
+                        "icon": DashIconify(icon="mdi:alert-circle"),
+                        "autoClose": 5000,
+                    }
+                ],
+            )
+
+        dashboard_id = result.get("dashboard_id")
+        dashboard_title = result.get("title", "Dashboard")
+        warnings = result.get("warnings", [])
+
+        logger.info(f"Dashboard imported successfully: {dashboard_id} - {dashboard_title}")
+
+        # Refresh dashboard list by regenerating landing page content
+        user = api_call_fetch_user_from_token(token)
+        landing_page_content = html.Div(
+            [
+                render_dashboard_list_section(user.email),
+                html.Div(id="thumbnail-theme-swap-dummy", style={"display": "none"}),
+            ]
+        )
+
+        # Close modal and refresh dashboard list
+        return (
+            False,
+            landing_page_content,
+            [
+                {
+                    "id": "import-success",
+                    "title": "Import Successful",
+                    "message": f"Dashboard '{dashboard_title}' imported successfully!"
+                    + (f" ({len(warnings)} warnings)" if warnings else ""),
+                    "color": "green" if not warnings else "yellow",
+                    "icon": DashIconify(icon="mdi:check-circle"),
+                    "autoClose": 4000,
+                }
+            ],
+        )
+
+    @app.callback(
+        Output("import-dashboard-project-select", "data"),
+        Input("dashboard-modal", "opened"),
+        State("local-store", "data"),
+        prevent_initial_call=True,
+    )
+    def populate_import_projects(opened, local_data):
+        """Populate project dropdown when dashboard modal opens."""
+        logger.debug(f"populate_import_projects called: opened={opened}")
+
+        if not opened:
+            logger.debug("Modal not opened, returning no_update")
+            return dash.no_update
+
+        token = local_data.get("access_token") if local_data else None
+        if not token:
+            logger.warning("No token available for fetching projects")
+            return []
+
+        # Fetch user's projects
+        try:
+            logger.debug("Fetching projects from API")
+            response = httpx.get(
+                f"{API_BASE_URL}/depictio/api/v1/projects/get/all",
+                headers={"Authorization": f"Bearer {token}"},
+                timeout=30.0,
+            )
+            if response.status_code == 200:
+                projects = response.json()
+                logger.info(f"Fetched {len(projects)} projects for import dropdown")
+                return [
+                    {"value": str(p["id"]), "label": p.get("name", "Unnamed")} for p in projects
+                ]
+            else:
+                logger.error(f"Failed to fetch projects: {response.status_code} - {response.text}")
+        except Exception as e:
+            logger.error(f"Failed to fetch projects: {e}")
+
+        return []

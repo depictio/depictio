@@ -2,7 +2,7 @@ import os
 from pathlib import Path
 from typing import Literal, Optional
 
-from pydantic import Field, computed_field
+from pydantic import AliasChoices, Field, computed_field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -185,6 +185,21 @@ class AuthConfig(BaseSettings):
     )
     internal_api_key_env: Optional[str] = Field(default=None)
     unauthenticated_mode: bool = Field(default=False, description="Enable unauthenticated mode")
+    single_user_mode: bool = Field(
+        default=False,
+        description="Enable single-user mode for personal/self-hosted instances. "
+        "Grants admin privileges to the anonymous user for full functionality without authentication.",
+    )
+    public_mode: bool = Field(
+        default=False,
+        description="Enable public mode for public Depictio instances with sign-in modal",
+        validation_alias=AliasChoices("public_mode", "unauthenticated_mode"),
+    )
+    demo_mode: bool = Field(
+        default=False,
+        description="Enable demo mode with guided tour tooltips for first-time users. "
+        "Extends public mode with interactive onboarding hints.",
+    )
     anonymous_user_email: str = Field(
         default="anonymous@depict.io",
         description="Default anonymous user email",
@@ -197,6 +212,39 @@ class AuthConfig(BaseSettings):
         default=0,
         description="Number of minutes until temporary users expire",
     )
+
+    @computed_field
+    @property
+    def is_single_user_mode(self) -> bool:
+        """Returns True if single-user mode is enabled.
+
+        Single-user mode provides full admin functionality for personal instances.
+        """
+        return self.single_user_mode
+
+    @computed_field
+    @property
+    def is_public_mode(self) -> bool:
+        """Returns True if public mode is enabled.
+
+        Public mode allows anonymous access with optional sign-in for interactive features.
+        """
+        return self.public_mode or self.unauthenticated_mode
+
+    @computed_field
+    @property
+    def is_demo_mode(self) -> bool:
+        """Returns True if demo mode is enabled.
+
+        Demo mode extends public mode with guided tour tooltips for first-time users.
+        """
+        return self.demo_mode
+
+    @computed_field
+    @property
+    def requires_anonymous_user(self) -> bool:
+        """Returns True if any mode requiring anonymous user is enabled."""
+        return self.is_single_user_mode or self.is_public_mode
 
     # Google OAuth Configuration
     google_oauth_enabled: bool = Field(
@@ -214,14 +262,33 @@ class AuthConfig(BaseSettings):
 
     model_config = SettingsConfigDict(env_prefix="DEPICTIO_AUTH_", case_sensitive=False)
 
-    def __init__(self, **data):
+    def __init__(self, **data: object) -> None:
         super().__init__(**data)
 
-        # Manually read the environment variable if not set
-        if self.internal_api_key_env is None:
-            import os
+        import os
 
+        # Manually read environment variables if not set
+        # This is needed because Pydantic v2 nested BaseSettings don't automatically
+        # read environment variables when instantiated via default_factory
+        if self.internal_api_key_env is None:
             self.internal_api_key_env = os.getenv("DEPICTIO_AUTH_INTERNAL_API_KEY")
+
+        # Read auth mode environment variables
+        env_public_mode = os.getenv("DEPICTIO_AUTH_PUBLIC_MODE", "").lower()
+        if env_public_mode in ("true", "1", "yes"):
+            object.__setattr__(self, "public_mode", True)
+
+        env_single_user_mode = os.getenv("DEPICTIO_AUTH_SINGLE_USER_MODE", "").lower()
+        if env_single_user_mode in ("true", "1", "yes"):
+            object.__setattr__(self, "single_user_mode", True)
+
+        env_unauthenticated_mode = os.getenv("DEPICTIO_AUTH_UNAUTHENTICATED_MODE", "").lower()
+        if env_unauthenticated_mode in ("true", "1", "yes"):
+            object.__setattr__(self, "unauthenticated_mode", True)
+
+        env_demo_mode = os.getenv("DEPICTIO_AUTH_DEMO_MODE", "").lower()
+        if env_demo_mode in ("true", "1", "yes"):
+            object.__setattr__(self, "demo_mode", True)
 
     @computed_field
     @property
@@ -592,6 +659,53 @@ class ProfilingConfig(BaseSettings):
         return Path(self.profile_dir).resolve()
 
 
+class EventsConfig(BaseSettings):
+    """Configuration for real-time event system (WebSocket notifications).
+
+    Enables automatic dashboard updates when backend data changes.
+    Supports MongoDB change streams for data_collection updates.
+    """
+
+    # Enable/disable real-time events
+    enabled: bool = Field(default=False, description="Enable real-time event system")
+
+    # Redis pub/sub for multi-instance WebSocket coordination
+    redis_host: str = Field(default="redis", description="Redis server hostname for pub/sub")
+    redis_port: int = Field(default=6379, description="Redis server port")
+    redis_password: Optional[str] = Field(default=None, description="Redis password")
+    redis_db: int = Field(
+        default=3, description="Redis database number (separate from cache=0, celery=1,2)"
+    )
+
+    # MongoDB change streams
+    mongodb_change_streams_enabled: bool = Field(
+        default=True, description="Enable MongoDB change streams for data_collections"
+    )
+
+    # WebSocket settings
+    ws_heartbeat_interval: int = Field(
+        default=30, description="WebSocket heartbeat/ping interval in seconds"
+    )
+    ws_connection_timeout: int = Field(
+        default=60, description="WebSocket connection timeout in seconds"
+    )
+
+    # Debouncing for rapid updates
+    debounce_ms: int = Field(
+        default=1000, description="Debounce interval in milliseconds for rapid updates"
+    )
+
+    model_config = SettingsConfigDict(env_prefix="DEPICTIO_EVENTS_")
+
+    @computed_field
+    @property
+    def redis_url(self) -> str:
+        """Construct Redis URL for pub/sub."""
+        if self.redis_password:
+            return f"redis://:{self.redis_password}@{self.redis_host}:{self.redis_port}/{self.redis_db}"
+        return f"redis://{self.redis_host}:{self.redis_port}/{self.redis_db}"
+
+
 class DashboardYAMLConfig(BaseSettings):
     """Configuration for YAML-based dashboard management.
 
@@ -760,6 +874,7 @@ class Settings(BaseSettings):
     google_analytics: GoogleAnalyticsConfig = Field(default_factory=GoogleAnalyticsConfig)
     profiling: ProfilingConfig = Field(default_factory=ProfilingConfig)
     dashboard_yaml: DashboardYAMLConfig = Field(default_factory=DashboardYAMLConfig)
+    events: EventsConfig = Field(default_factory=EventsConfig)
 
     model_config = SettingsConfigDict(
         env_prefix="DEPICTIO_",

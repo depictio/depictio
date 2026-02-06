@@ -506,11 +506,13 @@ async def save_dashboard(
     current_user: User = Depends(get_current_user),
 ):
     """Check if an entry with the same dashboard_id exists, if not, insert, if yes, update."""
+    # Allow anonymous users in single-user mode (they have admin privileges)
     if hasattr(current_user, "is_anonymous") and current_user.is_anonymous:
-        raise HTTPException(
-            status_code=403,
-            detail="Anonymous users cannot create or modify dashboards. Please login to continue.",
-        )
+        if not settings.auth.is_single_user_mode:
+            raise HTTPException(
+                status_code=403,
+                detail="Anonymous users cannot create or modify dashboards. Please login to continue.",
+            )
 
     existing_dashboard = dashboards_collection.find_one({"dashboard_id": dashboard_id})
 
@@ -852,11 +854,13 @@ async def update_tab(
     Returns:
         Updated dashboard information
     """
+    # Allow anonymous users in single-user mode (they have admin privileges)
     if hasattr(current_user, "is_anonymous") and current_user.is_anonymous:
-        raise HTTPException(
-            status_code=403,
-            detail="Anonymous users cannot modify tabs. Please login to continue.",
-        )
+        if not settings.auth.is_single_user_mode:
+            raise HTTPException(
+                status_code=403,
+                detail="Anonymous users cannot modify tabs. Please login to continue.",
+            )
 
     dashboard = dashboards_collection.find_one({"dashboard_id": dashboard_id})
     if not dashboard:
@@ -927,11 +931,13 @@ async def delete_tab(
     Returns:
         Success message with deleted tab info
     """
+    # Allow anonymous users in single-user mode (they have admin privileges)
     if hasattr(current_user, "is_anonymous") and current_user.is_anonymous:
-        raise HTTPException(
-            status_code=403,
-            detail="Anonymous users cannot delete tabs. Please login to continue.",
-        )
+        if not settings.auth.is_single_user_mode:
+            raise HTTPException(
+                status_code=403,
+                detail="Anonymous users cannot delete tabs. Please login to continue.",
+            )
 
     dashboard = dashboards_collection.find_one({"dashboard_id": dashboard_id})
     if not dashboard:
@@ -988,11 +994,13 @@ async def reorder_tabs(
     Returns:
         Success message with count of updated tabs
     """
+    # Allow anonymous users in single-user mode (they have admin privileges)
     if hasattr(current_user, "is_anonymous") and current_user.is_anonymous:
-        raise HTTPException(
-            status_code=403,
-            detail="Anonymous users cannot reorder tabs. Please login to continue.",
-        )
+        if not settings.auth.is_single_user_mode:
+            raise HTTPException(
+                status_code=403,
+                detail="Anonymous users cannot reorder tabs. Please login to continue.",
+            )
 
     parent_dashboard_id = data.get("parent_dashboard_id")
     tab_orders = data.get("tab_orders", [])
@@ -1395,11 +1403,13 @@ async def import_dashboard_from_yaml(
     Returns:
         Created/updated dashboard information including dashboard_id
     """
+    # Allow anonymous users in single-user mode (they have admin privileges)
     if hasattr(current_user, "is_anonymous") and current_user.is_anonymous:
-        raise HTTPException(
-            status_code=403,
-            detail="Anonymous users cannot import dashboards. Please login to continue.",
-        )
+        if not settings.auth.is_single_user_mode:
+            raise HTTPException(
+                status_code=403,
+                detail="Anonymous users cannot import dashboards. Please login to continue.",
+            )
 
     try:
         lite = DashboardDataLite.from_yaml(yaml_content)
@@ -1699,3 +1709,465 @@ async def get_yaml_schema() -> dict[str, Any]:
         JSON Schema for DashboardDataLite
     """
     return DashboardDataLite.model_json_schema()
+
+
+# =============================================================================
+# JSON Import/Export Endpoints (with Data Integrity Verification)
+# =============================================================================
+
+
+def _generate_schema_hash(columns: list[dict]) -> str:
+    """Generate a hash from column specifications for integrity verification.
+
+    Args:
+        columns: List of column specs with 'name' and 'type' keys
+
+    Returns:
+        SHA-256 hash of the column schema
+    """
+    import hashlib
+
+    # Sort columns by name for consistent hashing
+    sorted_cols = sorted(columns, key=lambda x: x.get("name", ""))
+    schema_str = "|".join(f"{c.get('name', '')}:{c.get('type', '')}" for c in sorted_cols)
+    return f"sha256:{hashlib.sha256(schema_str.encode()).hexdigest()[:16]}"
+
+
+def _extract_data_integrity_metadata(
+    dashboard_doc: dict, project_doc: dict | None = None
+) -> list[dict]:
+    """Extract data integrity metadata from dashboard components.
+
+    Collects schema information from data collections referenced by the dashboard.
+
+    Args:
+        dashboard_doc: The dashboard document from MongoDB
+        project_doc: The project document (optional, fetched if not provided)
+
+    Returns:
+        List of data collection integrity entries
+    """
+    from depictio.api.v1.db import data_collections_collection
+
+    data_integrity = []
+    seen_collections = set()
+
+    # Get stored_metadata which contains component configurations
+    stored_metadata = dashboard_doc.get("stored_metadata", [])
+
+    for component in stored_metadata:
+        dc_id = component.get("data_collection_id")
+        if not dc_id or dc_id in seen_collections:
+            continue
+
+        seen_collections.add(dc_id)
+
+        # Fetch data collection details
+        try:
+            dc_doc = data_collections_collection.find_one({"_id": ObjectId(dc_id)})
+            if not dc_doc:
+                continue
+
+            # Extract column specifications
+            columns_specs = dc_doc.get("config", {}).get("columns_specs", [])
+            columns = [{"name": col.get("name"), "type": col.get("dtype")} for col in columns_specs]
+
+            integrity_entry = {
+                "workflow_tag": dc_doc.get("workflow_tag", ""),
+                "data_collection_tag": dc_doc.get("data_collection_tag", ""),
+                "schema": {
+                    "columns": columns,
+                    "row_count": dc_doc.get("config", {}).get("row_count", 0),
+                },
+                "schema_hash": _generate_schema_hash(columns),
+            }
+            data_integrity.append(integrity_entry)
+
+        except Exception as e:
+            logger.warning(f"Failed to get integrity info for DC {dc_id}: {e}")
+            continue
+
+    return data_integrity
+
+
+def _validate_data_collection_integrity(
+    expected_collections: list[dict],
+) -> tuple[list[dict], list[dict]]:
+    """Validate data collection integrity against expected schemas.
+
+    Args:
+        expected_collections: List of expected data collection entries with
+            workflow_tag, data_collection_tag, and schema_hash.
+
+    Returns:
+        Tuple of (warnings list, integrity_checks list).
+        Warnings include both errors (missing collections) and warnings (schema mismatch).
+    """
+    from depictio.api.v1.db import data_collections_collection
+
+    warnings = []
+    integrity_checks = []
+
+    for expected_dc in expected_collections:
+        workflow_tag = expected_dc.get("workflow_tag", "")
+        dc_tag = expected_dc.get("data_collection_tag", "")
+        expected_hash = expected_dc.get("schema_hash", "")
+
+        dc_doc = data_collections_collection.find_one(
+            {"workflow_tag": workflow_tag, "data_collection_tag": dc_tag}
+        )
+
+        check_result = {
+            "workflow_tag": workflow_tag,
+            "data_collection_tag": dc_tag,
+            "found": dc_doc is not None,
+            "schema_match": False,
+        }
+
+        if not dc_doc:
+            warnings.append(
+                {
+                    "type": "missing_collection",
+                    "message": f"Data collection '{workflow_tag}/{dc_tag}' not found",
+                    "severity": "error",
+                }
+            )
+        else:
+            columns_specs = dc_doc.get("config", {}).get("columns_specs", [])
+            columns = [{"name": col.get("name"), "type": col.get("dtype")} for col in columns_specs]
+            current_hash = _generate_schema_hash(columns)
+            check_result["schema_match"] = current_hash == expected_hash
+            check_result["current_hash"] = current_hash
+            check_result["expected_hash"] = expected_hash
+
+            if current_hash != expected_hash:
+                warnings.append(
+                    {
+                        "type": "schema_mismatch",
+                        "message": f"Schema mismatch for '{workflow_tag}/{dc_tag}': expected {expected_hash}, found {current_hash}",
+                        "severity": "warning",
+                        "details": {
+                            "expected_columns": expected_dc.get("schema", {}).get("columns", []),
+                            "current_columns": columns,
+                        },
+                    }
+                )
+
+        integrity_checks.append(check_result)
+
+    return warnings, integrity_checks
+
+
+@dashboards_endpoint_router.get("/{dashboard_id}/json")
+async def export_dashboard_as_json(
+    dashboard_id: str,
+    current_user: User = Depends(get_user_or_anonymous),
+) -> dict[str, Any]:
+    """Export dashboard as JSON with data integrity metadata.
+
+    Returns a JSON representation of the dashboard including:
+    - Export metadata (version, timestamp, source)
+    - Dashboard configuration (title, components, layout)
+    - Data integrity information (collection schemas and hashes)
+
+    Args:
+        dashboard_id: The dashboard ID to export
+        current_user: Current authenticated user
+
+    Returns:
+        JSON object with dashboard data and integrity metadata
+    """
+    dashboard_doc = dashboards_collection.find_one({"dashboard_id": ObjectId(dashboard_id)})
+    if not dashboard_doc:
+        raise HTTPException(status_code=404, detail="Dashboard not found")
+
+    # Get project info
+    project_id = dashboard_doc.get("project_id")
+    project_doc = None
+    project_tag = ""
+    if project_id:
+        project_doc = projects_collection.find_one({"_id": ObjectId(project_id)})
+        if project_doc:
+            project_tag = project_doc.get("name", "")
+
+    # Extract data integrity metadata
+    data_integrity = _extract_data_integrity_metadata(dashboard_doc, project_doc)
+
+    # Build export JSON structure
+    export_data = {
+        "_depictio_export_version": "1.0",
+        "_export_timestamp": datetime.utcnow().isoformat() + "Z",
+        "_export_source": {
+            "dashboard_id": dashboard_id,
+            "project_tag": project_tag,
+        },
+        "dashboard": {
+            "title": dashboard_doc.get("title", ""),
+            "subtitle": dashboard_doc.get("subtitle", ""),
+            "is_main_tab": dashboard_doc.get("is_main_tab", True),
+            "tab_order": dashboard_doc.get("tab_order", 0),
+            "main_tab_name": dashboard_doc.get("main_tab_name"),
+            "tab_icon": dashboard_doc.get("tab_icon"),
+            "tab_icon_color": dashboard_doc.get("tab_icon_color"),
+            "stored_metadata": dashboard_doc.get("stored_metadata", []),
+            "stored_layout_data": dashboard_doc.get("stored_layout_data", []),
+        },
+        "_data_integrity": {
+            "data_collections": data_integrity,
+        },
+    }
+
+    # Convert all ObjectIds to strings for JSON serialization
+    from depictio.models.models.base import convert_objectid_to_str
+
+    return convert_objectid_to_str(export_data)
+
+
+@dashboards_endpoint_router.post("/import/json")
+async def import_dashboard_from_json(
+    json_content: dict[str, Any],
+    project_id: str | None = None,
+    validate_integrity: bool = True,
+    current_user: User = Depends(get_current_user),
+) -> dict[str, Any]:
+    """Import a dashboard from JSON content with optional integrity validation.
+
+    Creates a new dashboard from the provided JSON configuration.
+    Optionally validates that data collection schemas match the export.
+
+    Args:
+        json_content: The JSON content defining the dashboard
+        project_id: Target project ID (required if not in JSON)
+        validate_integrity: Whether to validate data collection schemas (default: True)
+        current_user: Current authenticated user
+
+    Returns:
+        Import result with dashboard ID and any validation warnings
+    """
+    # Validate export version
+    export_version = json_content.get("_depictio_export_version")
+    if not export_version:
+        raise HTTPException(
+            status_code=400, detail="Invalid JSON format: missing _depictio_export_version"
+        )
+
+    if export_version != "1.0":
+        raise HTTPException(
+            status_code=400, detail=f"Unsupported export version: {export_version}. Expected 1.0"
+        )
+
+    # Get dashboard data
+    dashboard_data = json_content.get("dashboard")
+    if not dashboard_data:
+        raise HTTPException(status_code=400, detail="Invalid JSON format: missing dashboard data")
+
+    # Resolve project ID
+    if not project_id:
+        # Try to get from export source
+        export_source = json_content.get("_export_source", {})
+        project_tag = export_source.get("project_tag")
+
+        if project_tag:
+            project_doc = projects_collection.find_one({"name": project_tag})
+            if project_doc:
+                project_id = str(project_doc["_id"])
+
+    if not project_id:
+        raise HTTPException(
+            status_code=400,
+            detail="project_id is required. Either provide it as a parameter or ensure project_tag in JSON matches an existing project.",
+        )
+
+    # Validate project exists and user has editor access
+    project_doc = projects_collection.find_one({"_id": ObjectId(project_id)})
+    if not project_doc:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    if not check_project_permission(project_id, current_user, "editor"):
+        raise HTTPException(
+            status_code=403, detail="You don't have permission to import dashboards to this project"
+        )
+
+    # Validate data integrity if requested
+    validation_warnings: list[dict] = []
+    if validate_integrity:
+        integrity_data = json_content.get("_data_integrity", {})
+        expected_collections = integrity_data.get("data_collections", [])
+        validation_warnings, _ = _validate_data_collection_integrity(expected_collections)
+
+        # Check for critical errors
+        critical_errors = [w for w in validation_warnings if w.get("severity") == "error"]
+        if critical_errors:
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "message": "Import failed due to missing data collections",
+                    "errors": critical_errors,
+                },
+            )
+
+    # Generate new dashboard ID (using ObjectId like other dashboard creation endpoints)
+    new_dashboard_id = ObjectId()
+
+    # Build new dashboard document with all required fields
+    new_dashboard = {
+        "dashboard_id": new_dashboard_id,
+        "project_id": ObjectId(project_id),
+        "title": dashboard_data.get("title", "Imported Dashboard"),
+        "subtitle": dashboard_data.get("subtitle", ""),
+        "version": 1,
+        "icon": dashboard_data.get("icon", "mdi:view-dashboard"),
+        "icon_color": dashboard_data.get("icon_color", "orange"),
+        "icon_variant": dashboard_data.get("icon_variant", "filled"),
+        "workflow_system": dashboard_data.get("workflow_system", "none"),
+        "notes_content": dashboard_data.get("notes_content", ""),
+        "is_main_tab": dashboard_data.get("is_main_tab", True),
+        "tab_order": dashboard_data.get("tab_order", 0),
+        "main_tab_name": dashboard_data.get("main_tab_name"),
+        "tab_icon": dashboard_data.get("tab_icon"),
+        "tab_icon_color": dashboard_data.get("tab_icon_color"),
+        "stored_metadata": dashboard_data.get("stored_metadata", []),
+        "stored_layout_data": dashboard_data.get("stored_layout_data", []),
+        "stored_children_data": dashboard_data.get("stored_children_data", []),
+        "tmp_children_data": [],
+        "stored_edit_dashboard_mode_button": [],
+        "left_panel_layout_data": dashboard_data.get("left_panel_layout_data", []),
+        "right_panel_layout_data": dashboard_data.get("right_panel_layout_data", []),
+        "buttons_data": dashboard_data.get(
+            "buttons_data",
+            {
+                "unified_edit_mode": True,
+                "add_components_button": {"count": 0},
+            },
+        ),
+        "stored_add_button": {"count": 0},
+        "permissions": {
+            "owners": [{"_id": ObjectId(str(current_user.id)), "email": current_user.email}],
+            "viewers": [],
+        },
+        "is_public": project_doc.get("is_public", False),
+        "last_saved_ts": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+    }
+
+    # Insert dashboard
+    try:
+        dashboards_collection.insert_one(new_dashboard)
+        logger.info(f"Imported dashboard: {new_dashboard['title']} (ID: {new_dashboard_id})")
+    except Exception as e:
+        logger.error(f"Failed to import dashboard: {e}")
+        raise HTTPException(status_code=500, detail="Failed to import dashboard")
+
+    return {
+        "success": True,
+        "message": "Dashboard imported successfully",
+        "dashboard_id": str(new_dashboard_id),
+        "title": new_dashboard["title"],
+        "warnings": validation_warnings if validation_warnings else None,
+    }
+
+
+@dashboards_endpoint_router.post("/json/validate")
+async def validate_json_import(
+    json_content: dict[str, Any],
+    project_id: str | None = None,
+    current_user: User = Depends(get_current_user),
+) -> dict[str, Any]:
+    """Validate JSON import content without actually importing.
+
+    Performs all validation checks and returns detailed results including:
+    - Format validation
+    - Project resolution
+    - Data integrity checks
+
+    Args:
+        json_content: The JSON content to validate
+        project_id: Target project ID (optional)
+        current_user: Current authenticated user
+
+    Returns:
+        Validation result with is_valid flag and detailed warnings/errors
+    """
+    validation_result = {
+        "valid": True,
+        "errors": [],
+        "warnings": [],
+        "project_resolved": None,
+        "integrity_checks": [],
+    }
+
+    # Check export version
+    export_version = json_content.get("_depictio_export_version")
+    if not export_version:
+        validation_result["valid"] = False
+        validation_result["errors"].append(
+            {"field": "_depictio_export_version", "message": "Missing export version field"}
+        )
+    elif export_version != "1.0":
+        validation_result["valid"] = False
+        validation_result["errors"].append(
+            {
+                "field": "_depictio_export_version",
+                "message": f"Unsupported version: {export_version}",
+            }
+        )
+
+    # Check dashboard data
+    dashboard_data = json_content.get("dashboard")
+    if not dashboard_data:
+        validation_result["valid"] = False
+        validation_result["errors"].append(
+            {"field": "dashboard", "message": "Missing dashboard data"}
+        )
+    elif not dashboard_data.get("title"):
+        validation_result["warnings"].append(
+            {"field": "dashboard.title", "message": "Dashboard title is empty"}
+        )
+
+    # Resolve project
+    resolved_project = None
+    if project_id:
+        project_doc = projects_collection.find_one({"_id": ObjectId(project_id)})
+        if project_doc:
+            resolved_project = {"id": str(project_doc["_id"]), "name": project_doc.get("name")}
+    else:
+        export_source = json_content.get("_export_source", {})
+        project_tag = export_source.get("project_tag")
+        if project_tag:
+            project_doc = projects_collection.find_one({"name": project_tag})
+            if project_doc:
+                resolved_project = {"id": str(project_doc["_id"]), "name": project_doc.get("name")}
+
+    validation_result["project_resolved"] = resolved_project
+
+    if not resolved_project:
+        validation_result["valid"] = False
+        validation_result["errors"].append(
+            {"field": "project_id", "message": "Could not resolve target project"}
+        )
+
+    # Check data integrity using shared helper
+    integrity_data = json_content.get("_data_integrity", {})
+    expected_collections = integrity_data.get("data_collections", [])
+    dc_warnings, integrity_checks = _validate_data_collection_integrity(expected_collections)
+
+    validation_result["integrity_checks"] = integrity_checks
+
+    # Convert warnings to validation result format
+    for warning in dc_warnings:
+        workflow_tag = (
+            warning.get("message", "").split("'")[1] if "'" in warning.get("message", "") else ""
+        )
+        if warning.get("severity") == "error":
+            validation_result["errors"].append(
+                {"field": f"data_collection.{workflow_tag}", "message": "Data collection not found"}
+            )
+            validation_result["valid"] = False
+        else:
+            validation_result["warnings"].append(
+                {
+                    "field": f"data_collection.{workflow_tag}",
+                    "message": "Schema has changed since export",
+                }
+            )
+
+    return validation_result

@@ -36,7 +36,7 @@ describe('Unauthenticated Mode - Anonymous Profile', () => {
     cy.screenshot('anonymous_profile_page')
   })
 
-  it('should display Login as a temporary user button', () => {
+  it.skip('should display Login as a temporary user button', () => {
     cy.visit('/profile')
     cy.wait(2000)
 

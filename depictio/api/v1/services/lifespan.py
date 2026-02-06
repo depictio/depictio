@@ -20,6 +20,7 @@ from depictio.api.v1.configs.config import MONGODB_URL, settings
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.initialization import run_initialization
 from depictio.api.v1.services.background_tasks import delayed_process_data_collections
+from depictio.api.v1.services.events import event_service
 from depictio.api.v1.services.initialization import (
     check_and_set_initialization,
     cleanup_failed_initialization,
@@ -167,6 +168,31 @@ def start_yaml_services(should_initialize: bool) -> None:
         logger.error(f"Worker {WORKER_ID}: Failed to start YAML sync services: {e}", exc_info=True)
 
 
+async def start_event_services(should_initialize: bool) -> None:
+    """
+    Start real-time event services if enabled.
+
+    Only starts on the initializing worker to avoid duplicate MongoDB watchers.
+
+    Args:
+        should_initialize: Whether this worker performed initialization
+    """
+    if not settings.events.enabled:
+        return
+
+    # Only start on the initializing worker (similar to YAML watcher pattern)
+    if should_initialize:
+        logger.info(f"Worker {WORKER_ID}: Starting real-time event service")
+        await event_service.start()
+
+
+async def stop_event_services() -> None:
+    """Stop real-time event services."""
+    if settings.events.enabled:
+        logger.info(f"Worker {WORKER_ID}: Stopping real-time event service")
+        await event_service.stop()
+
+
 def stop_background_services(background_task, should_initialize: bool) -> None:
     """
     Stop background services and tasks.
@@ -195,14 +221,17 @@ async def lifespan(_app: FastAPI):
     - Worker coordination
     - Background task management
     - YAML synchronization services
+    - Real-time event services
     """
     # Startup
     await init_motor_beanie()
     should_initialize = await handle_initialization()
     background_task = start_background_services(should_initialize)
     start_yaml_services(should_initialize)
+    await start_event_services(should_initialize)
 
     yield
 
     # Shutdown
+    await stop_event_services()
     stop_background_services(background_task, should_initialize)
