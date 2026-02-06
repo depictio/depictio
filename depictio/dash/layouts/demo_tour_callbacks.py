@@ -61,16 +61,27 @@ def register_demo_tour_callbacks(app: dash.Dash) -> None:
         Returns:
             Updated tour_data dict.
         """
-        # Initialize tour data if None
+        # Initialize tour data if None (very first visit, empty localStorage)
         if tour_data is None:
-            tour_data = {
+            # Always persist initialization to localStorage immediately
+            return {
                 "tour_step": 0,
                 "tour_completed": False,
                 "show_hints": True,
+                "welcome_shown": False,
             }
 
         # Get triggered component
         triggered_id = ctx.triggered_id
+
+        # Handle URL-triggered changes
+        if triggered_id == "url":
+            # When navigating away from /dashboards, mark welcome as shown
+            if pathname != "/dashboards" and not tour_data.get("welcome_shown"):
+                tour_data["welcome_shown"] = True
+                return tour_data
+            # Otherwise don't write to store (prevents cascading re-open)
+            return dash.no_update
 
         # If tour is completed, return
         if tour_data.get("tour_completed", False):
@@ -89,6 +100,7 @@ def register_demo_tour_callbacks(app: dash.Dash) -> None:
 
                 # Advance to next step
                 tour_data["tour_step"] = current_step + 1
+                tour_data["welcome_shown"] = True
 
                 # Check if tour is complete (5 steps total: 0-4)
                 if tour_data["tour_step"] >= 5:
@@ -114,6 +126,7 @@ def register_demo_tour_callbacks(app: dash.Dash) -> None:
                 logger.info(f"Demo tour: Skip clicked on step '{step_id}'")
                 tour_data["tour_completed"] = True
                 tour_data["show_hints"] = False
+                tour_data["welcome_shown"] = True
                 return tour_data
 
         return tour_data
@@ -130,7 +143,8 @@ def register_demo_tour_callbacks(app: dash.Dash) -> None:
         Control the welcome tour popover visibility based on tour state and current page.
 
         The popover is created with opened=True by default. This callback closes it
-        when the user advances past step 0 or completes/skips the tour.
+        when the user advances past step 0, completes/skips the tour, or has already
+        seen the welcome (welcome_shown flag in tour store).
 
         Args:
             tour_data: Tour state from localStorage.
@@ -147,11 +161,16 @@ def register_demo_tour_callbacks(app: dash.Dash) -> None:
 
         tour_completed = tour_data and tour_data.get("tour_completed") is True
         show_hints = not tour_data or tour_data.get("show_hints") is not False
+        welcome_shown = tour_data and tour_data.get("welcome_shown", False)
         current_step = tour_data.get("tour_step", 0) if tour_data else 0
 
-        # Show welcome popover only on step 0, not completed, and hints enabled
-        should_open = current_step == 0 and not tour_completed and show_hints
-        logger.debug(f"Welcome popover: step={current_step}, should_open={should_open}")
+        # Show welcome popover only on first display (not yet shown),
+        # step 0, not completed, and hints enabled
+        should_open = current_step == 0 and not tour_completed and show_hints and not welcome_shown
+        logger.debug(
+            f"Welcome popover: step={current_step}, welcome_shown={welcome_shown}, "
+            f"should_open={should_open}"
+        )
         return should_open
 
     # Callback to control floating tour guide visibility and content

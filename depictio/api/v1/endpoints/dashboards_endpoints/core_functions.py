@@ -188,10 +188,14 @@ def load_dashboards_from_db(owner, admin_mode=False, user=None, include_child_ta
                     )
                 )
             else:
-                # Anonymous users can only access public projects
+                # Anonymous users can only access admin-owned public projects
+                # (reference/demo projects), not user-created public projects
                 accessible_projects = list(
                     projects_collection.find(
-                        {"is_public": True},
+                        {
+                            "is_public": True,
+                            "permissions.owners.is_admin": True,
+                        },
                         {"_id": 1},
                     )
                 )
@@ -214,8 +218,20 @@ def load_dashboards_from_db(owner, admin_mode=False, user=None, include_child_ta
 
         accessible_project_ids = [project["_id"] for project in accessible_projects]
 
-        # Get all dashboards belonging to accessible projects
-        query = {"project_id": {"$in": accessible_project_ids}}
+        # Get dashboards belonging to accessible projects.
+        # Non-admin users only see dashboards they own or that are public.
+        # This prevents non-public dashboards (e.g. admin test dashboards)
+        # from leaking to anonymous/temporary users via public projects.
+        if not settings.auth.is_single_user_mode and user and not getattr(user, "is_admin", False):
+            query: dict = {
+                "project_id": {"$in": accessible_project_ids},
+                "$or": [
+                    {"permissions.owners._id": user_id},
+                    {"is_public": True},
+                ],
+            }
+        else:
+            query: dict = {"project_id": {"$in": accessible_project_ids}}
         if not include_child_tabs:
             # Show only main tabs (backward compatible - default behavior)
             query["is_main_tab"] = {"$ne": False}

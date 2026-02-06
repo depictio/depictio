@@ -83,10 +83,11 @@ def create_shared_stores():
             id="ws-new-data-ids", storage_type="memory", data=[]
         ),  # IDs of newly arrived data
         # Demo tour state (localStorage for persistence across sessions)
+        # No default data - let localStorage persist tour state across page loads.
+        # The handle_tour_state callback initializes data on first visit.
         dcc.Store(
             id="demo-tour-store",
             storage_type="local",
-            data={"tour_step": 0, "tour_completed": False, "show_hints": True},
         ),
         # URL location
         dcc.Location(id="url", refresh=False),
