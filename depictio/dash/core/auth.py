@@ -215,20 +215,29 @@ def _handle_unauthenticated_mode(
             logger.error(f"Failed to handle existing session data: {e}")
             # Fall through to anonymous session
 
-    # Fetch anonymous user session
-    logger.debug("No existing session data - fetching anonymous user session")
+    # Create session based on auth mode
+    normalized_pathname = _normalize_pathname(pathname)
     try:
-        anonymous_local_data = get_anonymous_user_session()
-        normalized_pathname = _normalize_pathname(pathname)
+        if settings.auth.is_public_mode and not settings.auth.is_single_user_mode:
+            # Public/demo mode: auto-create temporary user so they can create dashboards
+            logger.debug("Public mode - creating temporary user session")
+            session_local_data = get_temporary_user_session(
+                expiry_hours=settings.auth.temporary_user_expiry_hours,
+            )
+        else:
+            # Single-user mode: use anonymous user (admin privileges)
+            logger.debug("Single-user mode - fetching anonymous user session")
+            session_local_data = get_anonymous_user_session()
+
         return handle_authenticated_user(
             normalized_pathname,
-            anonymous_local_data,
+            session_local_data,
             theme,
             cached_project_data,
             dashboard_init_data,
         )
     except Exception as e:
-        logger.error(f"Failed to fetch anonymous user session: {e}")
+        logger.error(f"Failed to create user session: {e}")
         return handle_unauthenticated_user(pathname)
 
 

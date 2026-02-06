@@ -264,7 +264,7 @@ def create_tour_popover(
         position=final_position,
         withArrow=True,
         shadow="md",
-        opened=True,
+        opened=False,
         trapFocus=False,
         closeOnClickOutside=False,
         zIndex=10000,

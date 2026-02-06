@@ -26,7 +26,11 @@ def register_demo_tour_callbacks(app: dash.Dash) -> None:
     logger.debug("Registering demo tour callbacks")
 
     @app.callback(
-        Output("demo-tour-store", "data"),
+        [
+            Output("demo-tour-store", "data"),
+            Output("tour-popover-welcome-demo", "opened"),
+            Output("tour-popover-welcome-demo", "disabled"),
+        ],
         [
             Input({"type": "tour-next-button", "index": ALL}, "n_clicks"),
             Input({"type": "tour-prev-button", "index": ALL}, "n_clicks"),
@@ -39,7 +43,7 @@ def register_demo_tour_callbacks(app: dash.Dash) -> None:
         ],
         prevent_initial_call=False,
     )
-    def handle_tour_state(
+    def handle_tour_state_and_popover(
         next_clicks: list,
         prev_clicks: list,
         skip_clicks: list,
@@ -48,7 +52,11 @@ def register_demo_tour_callbacks(app: dash.Dash) -> None:
         tour_data: dict | None,
     ):
         """
-        Handle tour state updates.
+        Handle tour state AND popover visibility in one callback.
+
+        This unified callback eliminates timing issues and dependency cascades
+        by controlling both the tour state (localStorage) and popover visibility
+        (opened property) in a single atomic operation.
 
         Args:
             next_clicks: List of click counts for "Next" buttons.
@@ -59,119 +67,139 @@ def register_demo_tour_callbacks(app: dash.Dash) -> None:
             tour_data: Current tour state from localStorage.
 
         Returns:
-            Updated tour_data dict.
+            tuple: (tour_data dict, popover_opened bool, popover_disabled bool)
         """
-        # Initialize tour data if None (very first visit, empty localStorage)
+        # Initialize on very first visit (empty localStorage)
         if tour_data is None:
-            # Always persist initialization to localStorage immediately
-            return {
+            initial_data = {
                 "tour_step": 0,
                 "tour_completed": False,
                 "show_hints": True,
                 "welcome_shown": False,
             }
+            # Open popover only if on /dashboards
+            should_open_popover = pathname == "/dashboards"
+            logger.debug(f"Tour initialization: pathname={pathname}, opening={should_open_popover}")
+            return initial_data, should_open_popover, False  # Not disabled initially
 
-        # Get triggered component
         triggered_id = ctx.triggered_id
 
-        # Handle URL-triggered changes
+        # Check if this is a real button click or just component addition
+        triggered_prop = ctx.triggered_prop_ids if hasattr(ctx, "triggered_prop_ids") else {}
+        logger.debug(
+            f"Tour callback triggered: triggered_id={triggered_id}, pathname={pathname}, "
+            f"tour_completed={tour_data.get('tour_completed', False)}, "
+            f"triggered_prop={triggered_prop}"
+        )
+
+        # CRITICAL: Check if tour is completed FIRST (before any other logic)
+        # This prevents popover from re-opening after skip/completion
+        if tour_data.get("tour_completed", False):
+            logger.debug("Tour completed - disabling popover entirely")
+            return dash.no_update, False, True  # Disabled=True prevents popover from rendering
+
+        # Refresh/initial call after localStorage loaded
+        if triggered_id is None:
+            # Popover should open if: step 0, not completed, not yet shown, on /dashboards
+            should_open_popover = (
+                pathname == "/dashboards"
+                and tour_data.get("tour_step", 0) == 0
+                and not tour_data.get("tour_completed", False)
+                and tour_data.get("show_hints", True)
+                and not tour_data.get("welcome_shown", False)
+            )
+            logger.debug(
+                f"Tour refresh: step={tour_data.get('tour_step', 0)}, "
+                f"welcome_shown={tour_data.get('welcome_shown', False)}, "
+                f"should_open={should_open_popover}"
+            )
+            return dash.no_update, should_open_popover, False  # Not disabled during tour
+
+        # URL changes
         if triggered_id == "url":
-            # When navigating away from /dashboards, mark welcome as shown
+            # Mark welcome as shown when navigating away
             if pathname != "/dashboards" and not tour_data.get("welcome_shown"):
                 tour_data["welcome_shown"] = True
-                return tour_data
-            # Otherwise don't write to store (prevents cascading re-open)
-            return dash.no_update
+                return tour_data, False, False  # Close popover, not disabled
 
-        # If tour is completed, return
-        if tour_data.get("tour_completed", False):
-            return tour_data
+            # On /dashboards: only open popover if tour not completed and all conditions met
+            if pathname == "/dashboards":
+                should_open = (
+                    tour_data.get("tour_step", 0) == 0
+                    and not tour_data.get("tour_completed", False)
+                    and tour_data.get("show_hints", True)
+                    and not tour_data.get("welcome_shown", False)
+                )
+                return dash.no_update, should_open, False  # Not disabled during tour
 
-        # Handle button clicks (pattern matching IDs)
+            # Not on /dashboards: close popover
+            return dash.no_update, False, False  # Close but not disabled
+
+        # Button clicks (pattern matching IDs)
         if triggered_id and isinstance(triggered_id, dict):
+            # Validate this is actually a tour button
+            tour_button_types = {
+                "tour-next-button",
+                "tour-prev-button",
+                "tour-skip-button",
+                "tour-skip-button-btn",
+            }
+            if triggered_id.get("type") not in tour_button_types:
+                logger.debug(f"Ignoring non-tour button: {triggered_id}")
+                return dash.no_update, dash.no_update, dash.no_update
+
+            # Validate this is an actual click (not component addition)
+            # Pattern-matching callbacks can fire when components are added with n_clicks=0
+            all_clicks = next_clicks + prev_clicks + skip_clicks + skip_btn_clicks
+            if not any(all_clicks) or all(c == 0 or c is None for c in all_clicks):
+                logger.debug("Ignoring callback - no actual button clicks detected")
+                return dash.no_update, dash.no_update, dash.no_update
+
             current_step = tour_data.get("tour_step", 0)
 
-            # Handle "Next" button clicks
+            # Next button
             if triggered_id.get("type") == "tour-next-button":
                 step_id = triggered_id.get("index")
                 logger.info(
                     f"Demo tour: Next clicked on step '{step_id}' (current_step={current_step})"
                 )
 
-                # Advance to next step
                 tour_data["tour_step"] = current_step + 1
                 tour_data["welcome_shown"] = True
 
-                # Check if tour is complete (5 steps total: 0-4)
+                # Check if tour is now completed (step 5+)
                 if tour_data["tour_step"] >= 5:
                     tour_data["tour_completed"] = True
                     logger.info("Demo tour: Tour completed!")
+                    return tour_data, False, True  # Close and DISABLE popover on completion
 
-                return tour_data
+                return tour_data, False, False  # Close popover, continue tour
 
-            # Handle "Previous" button clicks
+            # Previous button
             elif triggered_id.get("type") == "tour-prev-button":
                 step_id = triggered_id.get("index")
                 logger.info(
                     f"Demo tour: Previous clicked on step '{step_id}' (current_step={current_step})"
                 )
 
-                # Go back to previous step (minimum 0)
                 tour_data["tour_step"] = max(0, current_step - 1)
-                return tour_data
+                # Re-open popover if going back to step 0
+                should_reopen = tour_data["tour_step"] == 0 and pathname == "/dashboards"
+                if should_reopen:
+                    tour_data["welcome_shown"] = False
+                return tour_data, should_reopen, False  # Not disabled
 
-            # Handle "Skip Tour" button clicks (both icon and text button)
+            # Skip button
             elif triggered_id.get("type") in ("tour-skip-button", "tour-skip-button-btn"):
                 step_id = triggered_id.get("index")
                 logger.info(f"Demo tour: Skip clicked on step '{step_id}'")
                 tour_data["tour_completed"] = True
                 tour_data["show_hints"] = False
                 tour_data["welcome_shown"] = True
-                return tour_data
+                return tour_data, False, True  # Close and DISABLE popover permanently
 
-        return tour_data
-
-    # Server-side callback to control welcome popover visibility
-    # Popover starts OPEN by default, this callback CLOSES it when step advances or tour completes
-    @app.callback(
-        Output("tour-popover-welcome-demo", "opened"),
-        [Input("demo-tour-store", "data"), Input("url", "pathname")],
-        prevent_initial_call=False,
-    )
-    def control_welcome_popover(tour_data: dict | None, pathname: str):
-        """
-        Control the welcome tour popover visibility based on tour state and current page.
-
-        The popover is created with opened=True by default. This callback closes it
-        when the user advances past step 0, completes/skips the tour, or has already
-        seen the welcome (welcome_shown flag in tour store).
-
-        Args:
-            tour_data: Tour state from localStorage.
-            pathname: Current URL pathname.
-
-        Returns:
-            bool: Whether the popover should be opened, or no_update if not on dashboards page.
-        """
-        on_dashboards_page = pathname == "/dashboards"
-
-        # Only control popover when on dashboards page (where it exists)
-        if not on_dashboards_page:
-            return dash.no_update
-
-        tour_completed = tour_data and tour_data.get("tour_completed") is True
-        show_hints = not tour_data or tour_data.get("show_hints") is not False
-        welcome_shown = tour_data and tour_data.get("welcome_shown", False)
-        current_step = tour_data.get("tour_step", 0) if tour_data else 0
-
-        # Show welcome popover only on first display (not yet shown),
-        # step 0, not completed, and hints enabled
-        should_open = current_step == 0 and not tour_completed and show_hints and not welcome_shown
-        logger.debug(
-            f"Welcome popover: step={current_step}, welcome_shown={welcome_shown}, "
-            f"should_open={should_open}"
-        )
-        return should_open
+        # Fall-through: unknown trigger, don't change anything
+        return dash.no_update, dash.no_update, dash.no_update
 
     # Callback to control floating tour guide visibility and content
     @app.callback(
