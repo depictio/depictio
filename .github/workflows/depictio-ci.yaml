@@ -2151,7 +2151,7 @@ jobs:
             --browser chrome \
             --headless \
             --config screenshotsFolder=cypress/screenshots-unauthenticated,videosFolder=cypress/videos-unauthenticated,trashAssetsBeforeRuns=false,video=true,screenshotOnRunFailure=true,viewportWidth=1920,viewportHeight=1080,chromeWebSecurity=false \
-            --spec "cypress/e2e/unauthenticated/**/*.cy.js"
+            --spec "cypress/e2e/auth/public/**/*.cy.js"
 
       - name: Upload screenshots
         uses: actions/upload-artifact@v4
@@ -2287,7 +2287,7 @@ jobs:
             --browser chrome \
             --headless \
             --config screenshotsFolder=cypress/screenshots-demo-mode,videosFolder=cypress/videos-demo-mode,trashAssetsBeforeRuns=false,video=true,screenshotOnRunFailure=true,viewportWidth=1920,viewportHeight=1080,chromeWebSecurity=false \
-            --spec "cypress/e2e/auth-modes/demo-mode.cy.js"
+            --spec "cypress/e2e/auth/demo/**/*.cy.js"
 
       - name: Upload screenshots
         uses: actions/upload-artifact@v4
@@ -2439,7 +2439,7 @@ jobs:
             --browser chrome \
             --headless \
             --config screenshotsFolder=cypress/screenshots-single-user-mode,videosFolder=cypress/videos-single-user-mode,trashAssetsBeforeRuns=false,video=true,screenshotOnRunFailure=true,viewportWidth=1920,viewportHeight=1080,chromeWebSecurity=false \
-            --spec "cypress/e2e/auth-modes/single-user-mode.cy.js"
+            --spec "cypress/e2e/auth/single-user/**/*.cy.js"
 
       - name: Upload screenshots
         uses: actions/upload-artifact@v4

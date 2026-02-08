@@ -38,6 +38,7 @@ npm run test:headed         # Run with browser visible
 **Standard Auth Mode** (login required):
 ```bash
 npm run test:auth
+# Runs: cypress/e2e/auth/standard/**/*.cy.js
 ```
 
 **Public Mode** (anonymous browsing):
@@ -45,6 +46,7 @@ npm run test:auth
 # Enable PUBLIC_MODE in docker-compose/.env first:
 # DEPICTIO_AUTH_PUBLIC_MODE=true
 npm run test:public
+# Runs: cypress/e2e/auth/public/**/*.cy.js
 ```
 
 **Demo Mode** (public + guided tour):
@@ -53,6 +55,7 @@ npm run test:public
 # DEPICTIO_AUTH_PUBLIC_MODE=true
 # DEPICTIO_AUTH_DEMO_MODE=true
 npm run test:demo
+# Runs: cypress/e2e/auth/demo/**/*.cy.js
 ```
 
 **Single-User Mode** (no login, admin by default):
@@ -60,13 +63,14 @@ npm run test:demo
 # Enable SINGLE_USER_MODE in docker-compose/.env:
 # DEPICTIO_AUTH_SINGLE_USER_MODE=true
 npm run test:single-user
+# Runs: cypress/e2e/auth/single-user/**/*.cy.js
 ```
 
 ### Test by Feature
 
 ```bash
-npm run test:dashboards    # Dashboard management tests
-npm run test:ui-themes     # Theme switching tests
+npm run test:dashboards    # Dashboard CRUD tests (cypress/e2e/dashboards/**/*.cy.js)
+npm run test:ui-themes     # Theme switching tests (cypress/e2e/ui/**/*.cy.js)
 ```
 
 ## Configuration
@@ -92,14 +96,22 @@ See `cypress.config.js` for:
 
 ```
 cypress/e2e/
-├── auth/                    # Standard auth mode tests (login, registration)
-├── auth-modes/             # Auth mode-specific tests
-│   ├── demo-mode.cy.js     # Demo mode badge & tour tests
-│   └── single-user-mode.cy.js  # Single-user badge & admin tests
-├── dashboards_management/  # Dashboard CRUD tests
-├── unauthenticated/        # Public mode tests (anonymous access)
-├── ui/                     # Theme switching, dark mode
-└── pages/                  # Static pages (about, etc.)
+├── auth/                           # All authentication-related tests
+│   ├── standard/                   # Standard auth mode (login required)
+│   │   ├── login.cy.js            # Login functionality
+│   │   ├── register.cy.js         # User registration
+│   │   └── password.cy.js         # Password reset/change
+│   ├── public/                     # Public mode (anonymous browsing)
+│   │   ├── api_protection.cy.js   # API access restrictions
+│   │   └── unauthenticated_access.cy.js  # Anonymous access
+│   ├── demo/                       # Demo mode (public + tour)
+│   │   └── demo-mode.cy.js        # Demo badge & tour popover
+│   └── single-user/                # Single-user mode (no login)
+│       └── single-user-mode.cy.js # Single-user badge & admin
+├── dashboards/                     # Dashboard CRUD operations
+├── projects/                       # Project management & permissions
+├── ui/                            # UI components & theme switching
+└── pages/                         # Static pages (about, etc.)
 ```
 
 ## Troubleshooting
