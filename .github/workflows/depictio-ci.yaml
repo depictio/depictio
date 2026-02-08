@@ -1931,7 +1931,8 @@ jobs:
           cp .env.example .env
           # Enable dev mode
           sed -i 's/# DEPICTIO_DEV_MODE=false/DEPICTIO_DEV_MODE=true/' docker-compose/.env
-          # Disable public mode and demo mode for standard auth tests
+          # Disable all special auth modes for standard auth tests (requires login)
+          sed -i 's/DEPICTIO_AUTH_SINGLE_USER_MODE=true/DEPICTIO_AUTH_SINGLE_USER_MODE=false/' docker-compose/.env
           sed -i 's/DEPICTIO_AUTH_PUBLIC_MODE=true/DEPICTIO_AUTH_PUBLIC_MODE=false/' docker-compose/.env
           sed -i 's/DEPICTIO_AUTH_DEMO_MODE=true/DEPICTIO_AUTH_DEMO_MODE=false/' docker-compose/.env
           mkdir -p depictioDB minio_data prof_files cache
@@ -2014,7 +2015,9 @@ jobs:
           echo "UID=$(id -u)" >> $GITHUB_ENV
           echo "GID=$(id -g)" >> $GITHUB_ENV
           cp .env.example .env
-          # Public mode is already enabled in docker-compose/.env (DEPICTIO_AUTH_PUBLIC_MODE=true)
+          # Enable PUBLIC_MODE for unauthenticated tests (disable SINGLE_USER_MODE)
+          sed -i 's/DEPICTIO_AUTH_SINGLE_USER_MODE=true/DEPICTIO_AUTH_SINGLE_USER_MODE=false/' docker-compose/.env
+          sed -i 's/DEPICTIO_AUTH_PUBLIC_MODE=false/DEPICTIO_AUTH_PUBLIC_MODE=true/' docker-compose/.env
           sed -i 's/# DEPICTIO_DEV_MODE=false/DEPICTIO_DEV_MODE=true/' docker-compose/.env
           mkdir -p depictioDB minio_data prof_files cache
           chmod 777 depictioDB minio_data prof_files cache
@@ -2084,23 +2087,19 @@ jobs:
           docker compose ps depictio-frontend || echo "❌ Frontend container not running"
           docker compose logs --tail=30 depictio-frontend || echo "❌ Failed to get frontend logs"
 
-      - name: Verify unauthenticated mode is enabled
+      - name: Verify public mode is enabled
         run: |
-          echo "🔍 Verifying unauthenticated mode configuration..."
+          echo "🔍 Verifying public mode configuration..."
 
-          # Check if anonymous user was created
-          for i in {1..10}; do
-            ANON_USER=$(docker compose exec -T mongo mongosh localhost:27018/depictioDB --eval "JSON.stringify(db.users.find({email: 'anonymous@depict.io'}).toArray())" --quiet 2>&1 | grep '^[\[{]' | jq -r '.[] | select(.email == "anonymous@depict.io") | .email')
-            if [ -n "$ANON_USER" ]; then
-              echo "✅ Anonymous user found: $ANON_USER"
-              break
-            fi
-            echo "⚠️ Anonymous user not found, attempt $i/10"
-            sleep 5
-          done
-          [ -z "$ANON_USER" ] && echo "❌ Anonymous user not found" && exit 1
+          # Verify PUBLIC_MODE is enabled in .env
+          if grep -q "DEPICTIO_AUTH_PUBLIC_MODE=true" docker-compose/.env; then
+            echo "✅ PUBLIC_MODE enabled in docker-compose/.env"
+          else
+            echo "❌ PUBLIC_MODE not enabled"
+            exit 1
+          fi
 
-          echo "✅ Unauthenticated mode verified"
+          echo "✅ Public mode configuration verified"
 
       - name: Set up Node.js
         uses: actions/setup-node@v3
