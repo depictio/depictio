@@ -2,7 +2,7 @@ describe.skip('Unauthenticated Mode - Login as a temporary user Flow', () => {
 
   // Only run these tests in unauthenticated mode
   before(() => {
-    if (!Cypress.env('UNAUTHENTICATED_MODE')) {
+    if (!Cypress.env('PUBLIC_MODE')) {
       cy.log('Skipping unauthenticated tests - not in unauthenticated mode')
       return
     }
@@ -13,7 +13,7 @@ describe.skip('Unauthenticated Mode - Login as a temporary user Flow', () => {
 
   beforeEach(function() {
     // Skip if not in unauthenticated mode
-    if (!Cypress.env('UNAUTHENTICATED_MODE')) {
+    if (!Cypress.env('PUBLIC_MODE')) {
       this.skip()
     }
   })

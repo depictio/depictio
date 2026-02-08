@@ -2,7 +2,7 @@ describe('Unauthenticated Mode - Dashboard Access Restrictions', () => {
 
   // Only run these tests in unauthenticated mode
   before(() => {
-    if (!Cypress.env('UNAUTHENTICATED_MODE')) {
+    if (!Cypress.env('PUBLIC_MODE')) {
       cy.log('Skipping unauthenticated tests - not in unauthenticated mode')
       return
     }
@@ -10,7 +10,7 @@ describe('Unauthenticated Mode - Dashboard Access Restrictions', () => {
 
   beforeEach(function() {
     // Skip if not in unauthenticated mode
-    if (!Cypress.env('UNAUTHENTICATED_MODE')) {
+    if (!Cypress.env('PUBLIC_MODE')) {
       this.skip()
     }
   })

@@ -2143,8 +2143,8 @@ jobs:
       - name: Run Cypress unauthenticated tests
         run: |
           cd depictio/tests/e2e-tests
-          # Set environment variable for cypress to know it's unauthenticated mode
-          export CYPRESS_UNAUTHENTICATED_MODE=true
+          # Set environment variable for cypress to know it's public mode
+          export CYPRESS_PUBLIC_MODE=true
           # Set Chrome flags for better CI rendering and stability
           export CYPRESS_BROWSER_ARGS="--disable-gpu --no-sandbox --disable-dev-shm-usage --disable-extensions --disable-background-timer-throttling --disable-renderer-backgrounding --disable-backgrounding-occluded-windows"
           npx cypress run \

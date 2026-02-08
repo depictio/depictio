@@ -7,7 +7,7 @@
     "test:headed": "cypress run --headed --no-exit",
     "test:ui": "cypress open",
     "test:auth": "cypress run --spec 'cypress/e2e/auth/standard/**/*.cy.js'",
-    "test:public": "CYPRESS_UNAUTHENTICATED_MODE=true cypress run --spec 'cypress/e2e/auth/public/**/*.cy.js'",
+    "test:public": "CYPRESS_PUBLIC_MODE=true cypress run --spec 'cypress/e2e/auth/public/**/*.cy.js'",
     "test:demo": "CYPRESS_DEMO_MODE=true cypress run --spec 'cypress/e2e/auth/demo/**/*.cy.js'",
     "test:single-user": "CYPRESS_SINGLE_USER_MODE=true cypress run --spec 'cypress/e2e/auth/single-user/**/*.cy.js'",
     "test:dashboards": "cypress run --spec 'cypress/e2e/dashboards/**/*.cy.js'",

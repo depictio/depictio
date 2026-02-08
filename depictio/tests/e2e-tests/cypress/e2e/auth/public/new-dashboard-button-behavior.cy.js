@@ -2,7 +2,7 @@ describe('Unauthenticated Mode - New Dashboard Button Behavior', () => {
 
   beforeEach(function() {
     // Skip if not in unauthenticated mode
-    if (!Cypress.env('UNAUTHENTICATED_MODE')) {
+    if (!Cypress.env('PUBLIC_MODE')) {
       this.skip()
     }
 
