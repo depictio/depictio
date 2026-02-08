@@ -1,0 +1,23 @@
+/**
+ * Dash Debug Menu Customization
+ *
+ * Companion CSS for dash-debug-menu.js which collapses the menu on page load.
+ * This CSS ensures smooth transitions when toggling the menu.
+ */
+
+/* Smooth transition when expanding/collapsing */
+.dash-debug-menu__content {
+    transition: opacity 0.2s ease-in-out;
+}
+
+/* Ensure hidden state is properly styled */
+.dash-debug-menu__outer:not(.dash-debug-menu__outer--expanded) .dash-debug-menu__content {
+    display: none;
+    opacity: 0;
+}
+
+/* Ensure visible state is properly styled */
+.dash-debug-menu__outer.dash-debug-menu__outer--expanded .dash-debug-menu__content {
+    display: block;
+    opacity: 1;
+}
