@@ -1,31 +1,31 @@
-describe('Unauthenticated Mode - Anonymous Profile', () => {
+describe('Public Mode - Temporary User Profile', () => {
 
-  // Only run these tests in unauthenticated mode
+  // Only run these tests in public mode
   before(() => {
     if (!Cypress.env('PUBLIC_MODE')) {
-      cy.log('Skipping unauthenticated tests - not in unauthenticated mode')
+      cy.log('Skipping public mode tests - not in public mode')
       return
     }
   })
 
   beforeEach(function() {
-    // Skip if not in unauthenticated mode
+    // Skip if not in public mode
     if (!Cypress.env('PUBLIC_MODE')) {
       this.skip()
     }
   })
 
-  it('should show anonymous user in profile section', () => {
+  it('should show temporary user in profile section', () => {
     cy.visit('/profile')
     cy.wait(2000)
 
     // Should be able to access profile page
     cy.url().should('include', '/profile')
 
-    // Should show anonymous user email in the Email field
+    // Should show temporary user email (temp_user_*@depictio.temp pattern)
     cy.get('#user-info-placeholder').within(() => {
       cy.contains('Email').parent().within(() => {
-        cy.get('.mantine-Text-root').should('contain', 'anonymous')
+        cy.get('.mantine-Text-root').invoke('text').should('match', /temp_user_.*@depictio\.temp/)
       })
     })
 
@@ -33,7 +33,7 @@ describe('Unauthenticated Mode - Anonymous Profile', () => {
     cy.get('body').should('not.contain', 'Change Password')
     cy.get('body').should('not.contain', 'Account Settings')
 
-    cy.screenshot('anonymous_profile_page')
+    cy.screenshot('temporary_user_profile_page')
   })
 
   it.skip('should display Login as a temporary user button', () => {
@@ -59,7 +59,7 @@ describe('Unauthenticated Mode - Anonymous Profile', () => {
   //   cy.screenshot('anonymous_user_limitations')
   // })
 
-  it('should not have profile editing capabilities for anonymous user', () => {
+  it('should not have profile editing capabilities for temporary user', () => {
     cy.visit('/profile')
     cy.wait(2000)
 
@@ -72,21 +72,21 @@ describe('Unauthenticated Mode - Anonymous Profile', () => {
     cy.get('input[type="email"]').should('not.exist')
     cy.get('input[type="text"]').should('not.exist')
 
-    cy.screenshot('no_profile_editing_anonymous')
+    cy.screenshot('no_profile_editing_temporary_user')
   })
 
-  it('should show current session type as anonymous', () => {
+  it('should show temporary user email from depictio.temp domain', () => {
     cy.visit('/profile')
     cy.wait(2000)
 
-    // Should show anonymous email in the user info
+    // Should show temporary user email with @depictio.temp domain
     cy.get('#user-info-placeholder').within(() => {
       cy.contains('Email').parent().within(() => {
-        cy.get('.mantine-Text-root').should('contain', 'anonymous')
+        cy.get('.mantine-Text-root').invoke('text').should('match', /temp_user_.*@depictio\.temp/)
       })
     })
 
-    // Should not show test user emails
+    // Should not show regular test user emails
     cy.get('#user-info-placeholder').within(() => {
       cy.contains('Email').parent().within(() => {
         cy.get('.mantine-Text-root').should('not.contain', '@example.com')
@@ -95,6 +95,6 @@ describe('Unauthenticated Mode - Anonymous Profile', () => {
       })
     })
 
-    cy.screenshot('anonymous_session_indicator')
+    cy.screenshot('temporary_user_email_indicator')
   })
 })

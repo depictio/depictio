@@ -35,7 +35,7 @@ describe('Unauthenticated Mode - Dashboard Access Restrictions', () => {
     cy.screenshot('public_dashboards_visible')
   })
 
-  it('should have only View button enabled for Iris Dashboard, other buttons disabled', () => {
+  it('should have View and Duplicate buttons enabled for Iris Dashboard, but not Edit/Delete', () => {
     cy.visit('/dashboards')
     cy.wait(2000)
 
@@ -47,17 +47,17 @@ describe('Unauthenticated Mode - Dashboard Access Restrictions', () => {
         cy.get('.mantine-Accordion-control').contains('Actions').click()
         cy.wait(500)
 
-        // Now check that View button is enabled
+        // Temporary users CAN view and duplicate dashboards
         cy.get('button').contains('View').should('be.visible').should('not.be.disabled')
+        cy.contains('button', 'Duplicate').should('be.visible').should('not.be.disabled')
 
-        // Check that other buttons are disabled - need to check the button element, not the span
+        // But CANNOT edit or delete existing dashboards
         cy.contains('button', 'Edit').should('be.disabled')
-        cy.contains('button', 'Duplicate').should('be.disabled')
         cy.contains('button', 'Delete').should('be.disabled')
         cy.contains('button', 'Make private').should('be.disabled')
       })
 
-    cy.screenshot('dashboard_buttons_restricted')
+    cy.screenshot('dashboard_buttons_temporary_user')
   })
 
   it('should be able to view Iris Dashboard via image link', () => {
@@ -162,7 +162,10 @@ describe('Unauthenticated Mode - Dashboard Access Restrictions', () => {
     })
   })
 
-  it('should show enabled Login to Create Dashboards button for anonymous users', () => {
+  it.skip('should show enabled Login to Create Dashboards button for anonymous users', () => {
+    // NOTE: This test is no longer applicable in PUBLIC_MODE
+    // Temporary users are auto-created, so they see "+ New Dashboard" button
+    // Dashboard creation is blocked at API level (see api-endpoint-protection.cy.js)
     cy.visit('/dashboards')
     cy.wait(2000)
 
@@ -179,7 +182,9 @@ describe('Unauthenticated Mode - Dashboard Access Restrictions', () => {
     cy.screenshot('enabled_login_button_anonymous')
   })
 
-  it('should redirect to auth when clicking Login to Create Dashboards button', () => {
+  it.skip('should redirect to auth when clicking Login to Create Dashboards button', () => {
+    // NOTE: This test is no longer applicable in PUBLIC_MODE
+    // Temporary users are auto-created, so this button doesn't exist
     cy.visit('/dashboards')
     cy.wait(2000)
 
