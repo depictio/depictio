@@ -1082,7 +1082,7 @@ wheels = [
 
 [[package]]
 name = "depictio"
-version = "0.7.1b1"
+version = "0.7.2"
 source = { editable = "." }
 dependencies = [
     { name = "bcrypt" },
