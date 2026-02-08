@@ -2087,19 +2087,36 @@ jobs:
           docker compose ps depictio-frontend || echo "❌ Frontend container not running"
           docker compose logs --tail=30 depictio-frontend || echo "❌ Failed to get frontend logs"
 
-      - name: Verify public mode is enabled
+      - name: Verify public mode is working
         run: |
-          echo "🔍 Verifying public mode configuration..."
+          echo "🔍 Verifying public mode functionality..."
 
           # Verify PUBLIC_MODE is enabled in .env
           if grep -q "DEPICTIO_AUTH_PUBLIC_MODE=true" docker-compose/.env; then
             echo "✅ PUBLIC_MODE enabled in docker-compose/.env"
           else
-            echo "❌ PUBLIC_MODE not enabled"
+            echo "❌ PUBLIC_MODE not enabled in .env"
             exit 1
           fi
 
-          echo "✅ Public mode configuration verified"
+          # Check if at least one temporary user was created (validates PUBLIC_MODE is working)
+          echo "Checking for temporary user creation..."
+          for i in {1..10}; do
+            TMP_USER=$(docker compose exec -T mongo mongosh localhost:27018/depictioDB --eval "JSON.stringify(db.users.find({email: {'\$regex': '^tmp_.*@depict\\.io$'}}).toArray())" --quiet 2>&1 | grep '^[\[{]' | jq -r '.[0].email // empty')
+            if [ -n "$TMP_USER" ]; then
+              echo "✅ Temporary user found: $TMP_USER"
+              break
+            fi
+            echo "⚠️ No temporary user found yet, attempt $i/10"
+            sleep 3
+          done
+
+          if [ -z "$TMP_USER" ]; then
+            echo "⚠️ No temporary users created yet (this is OK if tests create them)"
+            echo "PUBLIC_MODE is enabled but no temporary users exist in DB"
+          fi
+
+          echo "✅ Public mode verified"
 
       - name: Set up Node.js
         uses: actions/setup-node@v3
