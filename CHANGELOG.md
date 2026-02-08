@@ -6,24 +6,9 @@
 
 
 <details>
-<summary>Click to expand the changelog for 0.7.1-b1</summary>
+<summary>Click to expand the changelog for 0.7.1</summary>
 
 ### Changes 📜
-
-#### Other Changes 📝
-
-* Bump version: 0.7.0 → 0.7.1-b1 [3e67f3ae]
-* test(tabs): add unit tests for tab management functionality [c37c8f76]
-* refactor(tabs): simplify and consolidate tab management code [281afa42]
-* fix(header): use dashboard title instead of main_tab_name for parent [8e6344c1]
-* fix(models): add parent_dashboard_title field to DashboardData [9571bda3]
-* fix(header): add parent_dashboard_title to /get endpoint for child tabs [0d23ffcf]
-* feat(header): show dashboard/tab breadcrumb in header title [0af99d43]
-* feat(tabs): implement full tab CRUD with reordering and smart sidebar [d5b1fa70]
-* Update CHANGELOG.md for v0.7.0 [887a9f6a]
-* Bump version: 0.7.0-b1 → 0.7.0 [018efe42]
-* Update CHANGELOG.md for v0.7.0-b1 [9f644869]
-* Bump version: 0.6.3-b1 → 0.7.0-b1 [5225a069]
 
 
 </details>
@@ -32,15 +17,7 @@
 
 For more details, please refer to the [documentation](https://depictio.github.io/depictio-docs/)
 
-otations for better functionality [7e0180b1]
-* fix: simplify CI workflow by removing redundant build strategy and enhancing image handling [7fd96fb2]
-* fix: refactor CI workflow to streamline Helm chart deployment and Docker image handling [e8f1bbf2]
-* fix: update default host configurations with correct service names for frontend and backend [48e8fd63]
-* fix: update CI workflow to build Docker image instead of pulling it [40bbded4]
-* fix: update Helm chart version and appVersion in Chart.yaml; add step to pull Depictio image in CI workflow [62e66154]
-* fix: comment out Docker image build step in CI workflow [78ca7bdc]
-* fix: update service names in ingress configuration for frontend and backend [770d8e5d]
-* fix: enhance ingress configuration with default annotations and timeout settings [4d75fb17]
+otations and timeout settings [4d75fb17]
 * fix: update ingress host for API documentation testing [2c5d6730]
 * fix: reduce storage sizes for MongoDB, MinIO, screenshots, and keys in Helm chart [8a5725f1]
 * fix: update Helm chart version and clean up ingress annotations for better functionality [4f3a50c4]
