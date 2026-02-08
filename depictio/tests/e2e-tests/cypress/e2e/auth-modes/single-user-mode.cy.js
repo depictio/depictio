@@ -72,7 +72,8 @@ describe('Single-User Mode - UI and Database Verification', () => {
     cy.wait(2000)
 
     // Should be able to create dashboards (admin privilege)
-    cy.get('[data-testid="new-dashboard-button"]', { timeout: 5000 })
+    // Look for the "+ New Dashboard" button
+    cy.contains('button', 'New Dashboard', { timeout: 5000 })
       .should('be.visible')
       .and('not.be.disabled')
 
@@ -117,13 +118,15 @@ describe('Single-User Mode - UI and Database Verification', () => {
     cy.visit('/dashboards')
     cy.wait(2000)
 
-    // Badge should be clickable and link to profile
-    cy.contains('Single User Mode')
-      .parent()
+    // Badge should be inside a link to profile
+    cy.contains('.mantine-Badge-label', 'Single User Mode')
+      .closest('a')
       .should('have.attr', 'href', '/profile')
 
-    // Click badge to navigate to profile
-    cy.contains('Single User Mode').click()
+    // Click the link containing the badge to navigate to profile
+    cy.contains('.mantine-Badge-label', 'Single User Mode')
+      .closest('a')
+      .click()
     cy.wait(1000)
 
     cy.url().should('include', '/profile')
