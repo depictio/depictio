@@ -6,9 +6,81 @@
 
 
 <details>
-<summary>Click to expand the changelog for 0.7.1</summary>
+<summary>Click to expand the changelog for 0.7.2</summary>
 
 ### Changes 📜
+
+#### New Features ✨
+
+* feat: make Single User Mode badge clickable to /profile [75feee11]
+
+#### Bug Fixes 🐛
+
+* fix: skip auth modal callbacks in single-user mode [3e11f675]
+* fix: add divider before auth mode badge and increase badge size [3e59d8ab]
+* fix: clean up single-user mode UI [6942aea5]
+* fix: revert to standard UI without welcome section [cdbbfa69]
+* fix: allow dashboard creation in single-user mode for anonymous user [4bd0dc6e]
+* fix: use is_public_mode for duplicate button disable check [5a04e455]
+* fix: use requires_anonymous_user in auth.py callback [234403a3]
+* fix: use requires_anonymous_user for auth mode check [4ed60bc2]
+* fix: restore render_welcome_section in landing page callback [42f6d33d]
+* fix: use correct color key 'grey' instead of 'gray' [5a52d44f]
+* fix: preserve scatter selection on figure re-render [1c4cb8f4]
+
+#### Chores 🧹
+
+* chore: update cypress [a2222f47]
+* chore: 'Edit name' > 'Edit' button for dashboards [76f39f0d]
+* chore: 'Edit name' > 'Edit' button for dashboards [bf064547]
+
+#### Other Changes 📝
+
+* Bump version: 0.7.1-b1 → 0.7.2 [8b92bd87]
+* fix(e2e): update public mode tests to reflect temporary user behavior [76cdabe2]
+* fix(e2e): rename UNAUTHENTICATED_MODE to PUBLIC_MODE in test files [48994f79]
+* fix(e2e): fix single-user mode test selectors [0fe51787]
+* fix(e2e): fix badge selector tests and add local testing support [13d2a68f]
+* feat(e2e): add demo mode and single-user mode E2E tests [a8acf8a2]
+* fix(ci): verify temporary user creation in public mode tests [247641b7]
+* fix(ci): update e2e test auth mode configuration [648fc46c]
+* fix(ui): restore working debug menu collapse script from bac97bf4 [c98d61cb]
+* fix(ui): ensure debug-menu-control.js loads in all modes by placing in root assets folder [40b137ad]
+* revert(ui): remove duplicate debug menu files, keep original debug-menu-control.js [63538c90]
+* fix(ui): collapse Dash debug menu by default on page load [58bf2ea1]
+* fix(tour): merge callbacks to fix popover visibility on first visit and refresh [77961c96]
+* fix(auth): harden public/demo mode dashboard visibility and tour behavior [dd59f2db]
+* fix(tests): skip e2e tests broken by auth flow changes [d09aac1f]
+* fix(tests): skip temp user and CLI config tests pending auth flow update [bbc30fb6]
+* fix(tests): skip temp user button test in anonymous profile [7b7e16ec]
+* fix(ci): align e2e tests with public mode auth flow [598a35cd]
+* fix(auth): add create_auth_modal_components and public mode auth flow [30d8f1dc]
+* fix(ci): upgrade Node.js from 16 to 20 for Cypress 14 compatibility [5c4ae2c8]
+* fix(ci): add proper health checks to e2e-tests-unauthenticated job [2ddcf68a]
+* fix(tests): update authentication bypass tests to use new property names [4aadec72]
+* fix(tests): update api_call_create_temporary_user test params [66ddda96]
+* fix(tests): update remaining tests to use new auth property names [fbe4f3d9]
+* fix(tests): update mocks to use is_public_mode and is_single_user_mode [1544f2e0]
+* fix(e2e): skip auth tests in public/demo mode [4c49eb80]
+* feat(demo): add guided tour for demo mode onboarding [ae1992dc]
+* fix(public-mode): proper auth flow with temp user and Google options [6ea49979]
+* refactor(import): simplify validation logic and use consistent permission checks [e913ad77]
+* fix(import): refresh dashboard list after successful import [461f2dda]
+* fix(import): include all required dashboard fields [0a3cabfb]
+* fix(import): use ObjectId for dashboard_id and fix single-user mode [eae05f0a]
+* feat(dashboard): integrate import into New Dashboard modal with export fixes [25297729]
+* feat(auth): add single-user mode, public mode, and dashboard import/export [925acad7]
+* feat(events): add real-time WebSocket event system for dashboard updates [9f273aa6]
+* refactor(dashboard): simplify edit modal code and reduce duplication [e74cd680]
+* feat(dashboard): enhance edit modal with full property editing [a6dd0e90]
+* fix(tabs): main tab inherits dashboard icon/color, dynamic tabs selection color [cc984dde]
+* feat(ui): improve MultiQC display, tab colors, and Cytoscape visualization [8880b640]
+* Update CHANGELOG.md for v0.7.1-b1 [471fe3af]
+* Bump version: 0.7.0 → 0.7.1-b1 [aa4c5b9e]
+* debug: add detailed logging for scatter selection troubleshooting [8e7996ca]
+* fix(dash): preserve scatter selection on figure re-render [bc5d15c6]
+* refactor(dash): extract shared selection utilities and add unit tests [35a7615c]
+* feat(dash): add interactive selection filtering for scatter plots and tables [a8f24d60]
 
 
 </details>
@@ -17,10 +89,7 @@
 
 For more details, please refer to the [documentation](https://depictio.github.io/depictio-docs/)
 
-otations and timeout settings [4d75fb17]
-* fix: update ingress host for API documentation testing [2c5d6730]
-* fix: reduce storage sizes for MongoDB, MinIO, screenshots, and keys in Helm chart [8a5725f1]
-* fix: update Helm chart version and clean up ingress annotations for better functionality [4f3a50c4]
+otations for better functionality [4f3a50c4]
 * fix: simplify CI workflow by removing redundant build strategy and enhancing image handling [a1121502]
 * fix: refactor CI workflow to streamline Helm chart deployment and Docker image handling [af508913]
 * fix: update default host configurations with correct service names for frontend and backend [ce1a6ebb]
