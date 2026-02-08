@@ -23,9 +23,10 @@ describe('Demo Mode - UI and Tour Verification', () => {
     cy.get('body').should('contain', 'Demo Mode')
 
     // Verify badge has correct styling (violet color for demo)
-    cy.contains('Demo Mode')
-      .parent()
-      .should('have.class', 'mantine-Badge-root')
+    cy.contains('.mantine-Badge-label', 'Demo Mode')
+      .closest('.mantine-Badge-root')
+      .should('exist')
+      .and('have.attr', 'data-variant', 'light')
 
     cy.screenshot('demo_mode_badge_visible')
   })
@@ -54,11 +55,19 @@ describe('Demo Mode - UI and Tour Verification', () => {
     cy.visit('/dashboards')
     cy.wait(2000)
 
-    // Verify the compass icon is present in the Demo Mode badge
-    cy.contains('Demo Mode')
-      .parent()
-      .find('[icon="mdi:compass-outline"]')
+    // Verify the compass icon SVG is present in the Demo Mode badge
+    cy.contains('.mantine-Badge-label', 'Demo Mode')
+      .closest('.mantine-Badge-root')
+      .find('.mantine-Badge-section svg')
       .should('exist')
+      .and('have.attr', 'width', '16')
+      .and('have.attr', 'height', '16')
+
+    // Verify it has the correct path (compass icon pattern)
+    cy.contains('.mantine-Badge-label', 'Demo Mode')
+      .closest('.mantine-Badge-root')
+      .find('svg path')
+      .should('have.attr', 'fill', 'currentColor')
 
     cy.screenshot('demo_mode_badge_icon')
   })

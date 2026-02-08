@@ -23,9 +23,10 @@ describe('Single-User Mode - UI and Database Verification', () => {
     cy.get('body').should('contain', 'Single User Mode')
 
     // Verify badge has correct styling (violet color)
-    cy.contains('Single User Mode')
-      .parent()
-      .should('have.class', 'mantine-Badge-root')
+    cy.contains('.mantine-Badge-label', 'Single User Mode')
+      .closest('.mantine-Badge-root')
+      .should('exist')
+      .and('have.attr', 'data-variant', 'light')
 
     cy.screenshot('single_user_mode_badge_visible')
   })
@@ -34,11 +35,19 @@ describe('Single-User Mode - UI and Database Verification', () => {
     cy.visit('/dashboards')
     cy.wait(2000)
 
-    // Verify the account icon is present in the Single User Mode badge
-    cy.contains('Single User Mode')
-      .parent()
-      .find('[icon="mdi:account"]')
+    // Verify the account icon SVG is present in the Single User Mode badge
+    cy.contains('.mantine-Badge-label', 'Single User Mode')
+      .closest('.mantine-Badge-root')
+      .find('.mantine-Badge-section svg')
       .should('exist')
+      .and('have.attr', 'width', '16')
+      .and('have.attr', 'height', '16')
+
+    // Verify it has the correct path (account icon pattern)
+    cy.contains('.mantine-Badge-label', 'Single User Mode')
+      .closest('.mantine-Badge-root')
+      .find('svg path')
+      .should('have.attr', 'fill', 'currentColor')
 
     cy.screenshot('single_user_mode_badge_icon')
   })

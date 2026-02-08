@@ -25,7 +25,8 @@ module.exports = defineConfig({
         env: {
             UNAUTHENTICATED_MODE: false,
             PUBLIC_MODE: false,
-            DEMO_MODE: false
+            DEMO_MODE: false,
+            SINGLE_USER_MODE: false
         },
         setupNodeEvents(on, config) {
             // Allow setting environment variables from command line
@@ -37,6 +38,9 @@ module.exports = defineConfig({
             }
             if (process.env.CYPRESS_DEMO_MODE) {
                 config.env.DEMO_MODE = process.env.CYPRESS_DEMO_MODE === 'true'
+            }
+            if (process.env.CYPRESS_SINGLE_USER_MODE) {
+                config.env.SINGLE_USER_MODE = process.env.CYPRESS_SINGLE_USER_MODE === 'true'
             }
 
             // Add task for logging
