@@ -103,6 +103,7 @@ class TestAnonymousUserCreation:
         """Test creating a new anonymous user."""
         mock_settings = MagicMock()
         mock_settings.auth.anonymous_user_email = "anon@test.com"
+        mock_settings.auth.is_single_user_mode = False  # Not in single-user mode, so is_admin=False
 
         with patch(
             "depictio.api.v1.endpoints.user_endpoints.core_functions.settings", mock_settings
@@ -142,6 +143,7 @@ class TestAnonymousUserCreation:
 
         mock_settings = MagicMock()
         mock_settings.auth.anonymous_user_email = "anon@test.com"
+        mock_settings.auth.is_single_user_mode = False  # Not in single-user mode
 
         with patch(
             "depictio.api.v1.endpoints.user_endpoints.core_functions.settings", mock_settings
@@ -219,7 +221,8 @@ class TestAuthenticationBypass:
         from depictio.api.v1.endpoints.user_endpoints.routes import get_user_or_anonymous
 
         mock_settings = MagicMock()
-        mock_settings.auth.unauthenticated_mode = False
+        mock_settings.auth.is_public_mode = False
+        mock_settings.auth.is_single_user_mode = False
 
         with patch("depictio.api.v1.endpoints.user_endpoints.routes.settings", mock_settings):
             with patch(
@@ -237,7 +240,7 @@ class TestAuthenticationBypass:
 
     @beanie_setup(models=[UserBeanie])
     async def test_get_user_or_anonymous_unauthenticated_mode(self):
-        """Test get_user_or_anonymous in unauthenticated mode."""
+        """Test get_user_or_anonymous in public/single-user mode."""
         from depictio.api.v1.endpoints.user_endpoints.routes import get_user_or_anonymous
 
         # Create actual anonymous user in test database
@@ -250,7 +253,8 @@ class TestAuthenticationBypass:
         await anon_user.save()
 
         mock_settings = MagicMock()
-        mock_settings.auth.unauthenticated_mode = True
+        mock_settings.auth.is_public_mode = True
+        mock_settings.auth.is_single_user_mode = False
         mock_settings.auth.anonymous_user_email = "anon@test.com"
 
         with patch("depictio.api.v1.endpoints.user_endpoints.routes.settings", mock_settings):
@@ -265,14 +269,15 @@ class TestDisabledFeatures:
 
     @pytest.mark.asyncio
     async def test_user_registration_disabled(self):
-        """Test that user registration is disabled in unauthenticated mode."""
+        """Test that user registration is disabled in public mode."""
         from fastapi import HTTPException
 
         from depictio.api.v1.endpoints.user_endpoints.routes import register
         from depictio.models.models.users import RequestUserRegistration
 
         mock_settings = MagicMock()
-        mock_settings.auth.unauthenticated_mode = True
+        mock_settings.auth.is_single_user_mode = False
+        mock_settings.auth.is_public_mode = True
 
         request = RequestUserRegistration(
             email="test@example.com", password="password123", is_admin=False
@@ -283,19 +288,19 @@ class TestDisabledFeatures:
                 await register(request)
 
             assert exc_info.value.status_code == 403  # type: ignore[unresolved-attribute]
-            assert "User registration disabled in unauthenticated mode" in str(
+            assert "User registration disabled" in str(
                 exc_info.value.detail  # type: ignore[unresolved-attribute]
             )
 
     @pytest.mark.asyncio
     async def test_cli_agent_generation_disabled(self):
-        """Test that CLI agent generation is disabled in unauthenticated mode."""
+        """Test that CLI agent generation is disabled in public mode."""
         from fastapi import HTTPException
 
         from depictio.api.v1.endpoints.user_endpoints.routes import generate_agent_config_endpoint
 
         mock_settings = MagicMock()
-        mock_settings.auth.unauthenticated_mode = True
+        mock_settings.auth.is_public_mode = True
 
         mock_token = MagicMock()
         mock_user = MagicMock()
@@ -305,7 +310,7 @@ class TestDisabledFeatures:
                 await generate_agent_config_endpoint(mock_token, mock_user)
 
             assert exc_info.value.status_code == 403  # type: ignore[unresolved-attribute]
-            assert "CLI agent generation disabled in unauthenticated mode" in str(
+            assert "CLI agent generation disabled in public mode" in str(
                 exc_info.value.detail  # type: ignore[unresolved-attribute]
             )
 
@@ -351,11 +356,13 @@ class TestInitializationProcess:
 
     @pytest.mark.asyncio
     async def test_initialization_creates_anonymous_user(self):
-        """Test that initialization creates anonymous user in unauthenticated mode."""
+        """Test that initialization creates anonymous user in public/single-user mode."""
         from depictio.api.v1.initialization import run_initialization
 
         mock_settings = MagicMock()
-        mock_settings.auth.unauthenticated_mode = True
+        mock_settings.auth.requires_anonymous_user = True  # Triggers anonymous user creation
+        mock_settings.auth.is_single_user_mode = False
+        mock_settings.auth.is_public_mode = True
         mock_settings.minio = MagicMock()
         mock_settings.mongodb = MagicMock()
         mock_settings.mongodb.wipe = False
@@ -395,7 +402,9 @@ class TestInitializationProcess:
         from depictio.api.v1.initialization import run_initialization
 
         mock_settings = MagicMock()
-        mock_settings.auth.unauthenticated_mode = False
+        mock_settings.auth.requires_anonymous_user = False  # Skips anonymous user creation
+        mock_settings.auth.is_single_user_mode = False
+        mock_settings.auth.is_public_mode = False
         mock_settings.minio = MagicMock()
         mock_settings.mongodb = MagicMock()
         mock_settings.mongodb.wipe = False

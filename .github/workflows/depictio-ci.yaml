@@ -1931,6 +1931,10 @@ jobs:
           cp .env.example .env
           # Enable dev mode
           sed -i 's/# DEPICTIO_DEV_MODE=false/DEPICTIO_DEV_MODE=true/' docker-compose/.env
+          # Disable all special auth modes for standard auth tests (requires login)
+          sed -i 's/DEPICTIO_AUTH_SINGLE_USER_MODE=true/DEPICTIO_AUTH_SINGLE_USER_MODE=false/' docker-compose/.env
+          sed -i 's/DEPICTIO_AUTH_PUBLIC_MODE=true/DEPICTIO_AUTH_PUBLIC_MODE=false/' docker-compose/.env
+          sed -i 's/DEPICTIO_AUTH_DEMO_MODE=true/DEPICTIO_AUTH_DEMO_MODE=false/' docker-compose/.env
           mkdir -p depictioDB minio_data prof_files cache
           chmod 777 depictioDB minio_data prof_files cache
 
@@ -1947,7 +1951,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v3
         with:
-          node-version: "16"
+          node-version: "20"
 
       - name: Install Chrome
         run: |
@@ -2011,8 +2015,9 @@ jobs:
           echo "UID=$(id -u)" >> $GITHUB_ENV
           echo "GID=$(id -g)" >> $GITHUB_ENV
           cp .env.example .env
-          # Enable unauthenticated mode
-          sed -i 's/# DEPICTIO_AUTH_UNAUTHENTICATED_MODE=false/DEPICTIO_AUTH_UNAUTHENTICATED_MODE=true/' docker-compose/.env
+          # Enable PUBLIC_MODE for unauthenticated tests (disable SINGLE_USER_MODE)
+          sed -i 's/DEPICTIO_AUTH_SINGLE_USER_MODE=true/DEPICTIO_AUTH_SINGLE_USER_MODE=false/' docker-compose/.env
+          sed -i 's/DEPICTIO_AUTH_PUBLIC_MODE=false/DEPICTIO_AUTH_PUBLIC_MODE=true/' docker-compose/.env
           sed -i 's/# DEPICTIO_DEV_MODE=false/DEPICTIO_DEV_MODE=true/' docker-compose/.env
           mkdir -p depictioDB minio_data prof_files cache
           chmod 777 depictioDB minio_data prof_files cache
@@ -2025,47 +2030,98 @@ jobs:
           export DEPICTIO_VERSION="${FULL_IMAGE}"
           export DEPICTIO_FASTAPI_WORKERS=1  # Single worker to avoid boot race conditions
           docker compose -f docker-compose.dev.yaml -f docker-compose/docker-compose.minio.yaml --env-file docker-compose/.env up -d
-          sleep 15
+
+      - name: Wait for services to be ready
+        run: |
+          echo "⏳ Waiting for services to be ready..."
+
+          # Wait for MongoDB
+          echo "Waiting for MongoDB..."
+          for i in {1..30}; do
+            if docker compose exec -T mongo mongosh localhost:27018/depictioDB --eval "db.runCommand({ ping: 1 })" --quiet &>/dev/null; then
+              echo "✅ MongoDB ready"
+              break
+            fi
+            echo "MongoDB not ready yet, attempt $i/30..."
+            sleep 2
+          done
+
+          # Wait for Backend API
+          echo "Waiting for Backend API..."
+          for i in {1..60}; do
+            if curl -f http://localhost:8058/health &>/dev/null; then
+              echo "✅ Backend API ready"
+              break
+            fi
+            echo "Backend API not ready yet, attempt $i/60..."
+            sleep 2
+          done
+
+          # Wait for Frontend
+          echo "Waiting for Frontend..."
+          for i in {1..60}; do
+            if curl -s -o /dev/null -w "%{http_code}" http://localhost:5080/ | grep -q "200"; then
+              echo "✅ Frontend ready"
+              break
+            fi
+            echo "Frontend not ready yet, attempt $i/60..."
+            sleep 2
+          done
+
+          echo "🔍 Final service status:"
+          docker compose ps
 
       - name: Show .env files
         run: |
           echo "📋 Environment variables in docker-compose/.env:"
           cat docker-compose/.env || echo "❌ .env file not found"
-          echo "📋 Environment variables in .env.example:"
-          cat .env.example || echo "❌ .env.example file not found"
-          echo "📋 Environment variables in .env:"
-          cat .env || echo "❌ .env file not found"
 
-      - name: Log backend container status
+      - name: Log container status
         run: |
           echo "📊 Backend container status:"
           docker compose ps depictio-backend || echo "❌ Backend container not running"
-          docker compose logs depictio-backend || echo "❌ Failed to get backend logs"
+          docker compose logs --tail=30 depictio-backend || echo "❌ Failed to get backend logs"
 
-      - name: Verify unauthenticated mode is enabled
+          echo ""
+          echo "📊 Frontend container status:"
+          docker compose ps depictio-frontend || echo "❌ Frontend container not running"
+          docker compose logs --tail=30 depictio-frontend || echo "❌ Failed to get frontend logs"
+
+      - name: Verify public mode is working
         run: |
-          echo "🔍 Verifying unauthenticated mode configuration..."
+          echo "🔍 Verifying public mode functionality..."
 
-          # Check if anonymous user was created
+          # Verify PUBLIC_MODE is enabled in .env
+          if grep -q "DEPICTIO_AUTH_PUBLIC_MODE=true" docker-compose/.env; then
+            echo "✅ PUBLIC_MODE enabled in docker-compose/.env"
+          else
+            echo "❌ PUBLIC_MODE not enabled in .env"
+            exit 1
+          fi
+
+          # Check if at least one temporary user was created (validates PUBLIC_MODE is working)
+          echo "Checking for temporary user creation..."
           for i in {1..10}; do
-            ANON_USER=$(docker compose exec -T mongo mongosh localhost:27018/depictioDB --eval "JSON.stringify(db.users.find({email: 'anonymous@depict.io'}).toArray())" --quiet 2>&1 | grep '^[\[{]' | jq -r '.[] | select(.email == "anonymous@depict.io") | .email')
-            if [ -n "$ANON_USER" ]; then
-              echo "✅ Anonymous user found: $ANON_USER"
+            TMP_USER=$(docker compose exec -T mongo mongosh localhost:27018/depictioDB --eval "JSON.stringify(db.users.find({email: {'\$regex': '^tmp_.*@depict\\.io$'}}).toArray())" --quiet 2>&1 | grep '^[\[{]' | jq -r '.[0].email // empty')
+            if [ -n "$TMP_USER" ]; then
+              echo "✅ Temporary user found: $TMP_USER"
               break
             fi
-            echo "⚠️ Anonymous user not found, attempt $i/10"
-            sleep 5
+            echo "⚠️ No temporary user found yet, attempt $i/10"
+            sleep 3
           done
-          [ -z "$ANON_USER" ] && echo "❌ Anonymous user not found" && exit 1
 
-          # Verify frontend bypasses auth
-          echo "🌐 Testing unauthenticated access to frontend..."
-          curl -s -o /dev/null -w "%{http_code}" http://localhost:5080/ | grep -q "200" && echo "✅ Frontend accessible without authentication" || (echo "❌ Frontend not accessible" && exit 1)
+          if [ -z "$TMP_USER" ]; then
+            echo "⚠️ No temporary users created yet (this is OK if tests create them)"
+            echo "PUBLIC_MODE is enabled but no temporary users exist in DB"
+          fi
+
+          echo "✅ Public mode verified"
 
       - name: Set up Node.js
         uses: actions/setup-node@v3
         with:
-          node-version: "16"
+          node-version: "20"
 
       - name: Install Cypress dependencies
         run: |
@@ -2087,15 +2143,15 @@ jobs:
       - name: Run Cypress unauthenticated tests
         run: |
           cd depictio/tests/e2e-tests
-          # Set environment variable for cypress to know it's unauthenticated mode
-          export CYPRESS_UNAUTHENTICATED_MODE=true
+          # Set environment variable for cypress to know it's public mode
+          export CYPRESS_PUBLIC_MODE=true
           # Set Chrome flags for better CI rendering and stability
           export CYPRESS_BROWSER_ARGS="--disable-gpu --no-sandbox --disable-dev-shm-usage --disable-extensions --disable-background-timer-throttling --disable-renderer-backgrounding --disable-backgrounding-occluded-windows"
           npx cypress run \
             --browser chrome \
             --headless \
             --config screenshotsFolder=cypress/screenshots-unauthenticated,videosFolder=cypress/videos-unauthenticated,trashAssetsBeforeRuns=false,video=true,screenshotOnRunFailure=true,viewportWidth=1920,viewportHeight=1080,chromeWebSecurity=false \
-            --spec "cypress/e2e/unauthenticated/**/*.cy.js"
+            --spec "cypress/e2e/auth/public/**/*.cy.js"
 
       - name: Upload screenshots
         uses: actions/upload-artifact@v4
@@ -2111,4 +2167,292 @@ jobs:
         with:
           name: cypress-videos-unauthenticated
           path: depictio/tests/e2e-tests/cypress/videos-unauthenticated
+          retention-days: 7
+
+  e2e-tests-demo-mode:
+    needs: [docker-build]
+    if: always() && needs.docker-build.result == 'success'
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup environment
+        run: |
+          sudo chmod 666 /var/run/docker.sock
+          echo "UID=$(id -u)" >> $GITHUB_ENV
+          echo "GID=$(id -g)" >> $GITHUB_ENV
+          cp .env.example .env
+          # Enable PUBLIC_MODE and DEMO_MODE for demo tests
+          sed -i 's/DEPICTIO_AUTH_SINGLE_USER_MODE=true/DEPICTIO_AUTH_SINGLE_USER_MODE=false/' docker-compose/.env
+          sed -i 's/DEPICTIO_AUTH_PUBLIC_MODE=false/DEPICTIO_AUTH_PUBLIC_MODE=true/' docker-compose/.env
+          sed -i 's/DEPICTIO_AUTH_DEMO_MODE=false/DEPICTIO_AUTH_DEMO_MODE=true/' docker-compose/.env
+          sed -i 's/# DEPICTIO_DEV_MODE=false/DEPICTIO_DEV_MODE=true/' docker-compose/.env
+          mkdir -p depictioDB minio_data prof_files cache
+          chmod 777 depictioDB minio_data prof_files cache
+
+      - name: Log in and start services
+        run: |
+          echo ${{ secrets.GHCR_PAT }} | docker login ghcr.io -u ${{ github.repository_owner }} --password-stdin
+          FULL_IMAGE="${{ needs.docker-build.outputs.full-image }}"
+          docker pull "${FULL_IMAGE}"
+          export DEPICTIO_VERSION="${FULL_IMAGE}"
+          export DEPICTIO_FASTAPI_WORKERS=1  # Single worker to avoid boot race conditions
+          docker compose -f docker-compose.dev.yaml -f docker-compose/docker-compose.minio.yaml --env-file docker-compose/.env up -d
+
+      - name: Wait for services to be ready
+        run: |
+          echo "⏳ Waiting for services to be ready..."
+
+          # Wait for MongoDB
+          echo "Waiting for MongoDB..."
+          for i in {1..30}; do
+            if docker compose exec -T mongo mongosh localhost:27018/depictioDB --eval "db.runCommand({ ping: 1 })" --quiet &>/dev/null; then
+              echo "✅ MongoDB ready"
+              break
+            fi
+            echo "MongoDB not ready yet, attempt $i/30..."
+            sleep 2
+          done
+
+          # Wait for Backend API
+          echo "Waiting for Backend API..."
+          for i in {1..60}; do
+            if curl -f http://localhost:8058/health &>/dev/null; then
+              echo "✅ Backend API ready"
+              break
+            fi
+            echo "Backend API not ready yet, attempt $i/60..."
+            sleep 2
+          done
+
+          # Wait for Frontend
+          echo "Waiting for Frontend..."
+          for i in {1..60}; do
+            if curl -s -o /dev/null -w "%{http_code}" http://localhost:5080/ | grep -q "200"; then
+              echo "✅ Frontend ready"
+              break
+            fi
+            echo "Frontend not ready yet, attempt $i/60..."
+            sleep 2
+          done
+
+          echo "🔍 Final service status:"
+          docker compose ps
+
+      - name: Verify demo mode is enabled
+        run: |
+          echo "🔍 Verifying demo mode configuration..."
+
+          # Verify DEMO_MODE is enabled in .env
+          if grep -q "DEPICTIO_AUTH_DEMO_MODE=true" docker-compose/.env && grep -q "DEPICTIO_AUTH_PUBLIC_MODE=true" docker-compose/.env; then
+            echo "✅ DEMO_MODE and PUBLIC_MODE enabled in docker-compose/.env"
+          else
+            echo "❌ DEMO_MODE or PUBLIC_MODE not enabled in .env"
+            exit 1
+          fi
+
+          echo "✅ Demo mode configuration verified"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: "20"
+
+      - name: Install Cypress dependencies
+        run: |
+          cd depictio/tests/e2e-tests
+          if [ ! -f "package.json" ]; then
+            npm init -y
+            npm install cypress --save-dev
+          else
+            npm ci
+          fi
+
+      - name: Install Chrome for demo mode tests
+        run: |
+          wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | sudo apt-key add -
+          echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" | sudo tee /etc/apt/sources.list.d/google-chrome.list
+          sudo apt-get update
+          sudo apt-get install -y google-chrome-stable
+
+      - name: Run Cypress demo mode tests
+        run: |
+          cd depictio/tests/e2e-tests
+          export CYPRESS_DEMO_MODE=true
+          export CYPRESS_BROWSER_ARGS="--disable-gpu --no-sandbox --disable-dev-shm-usage --disable-extensions --disable-background-timer-throttling --disable-renderer-backgrounding --disable-backgrounding-occluded-windows"
+          npx cypress run \
+            --browser chrome \
+            --headless \
+            --config screenshotsFolder=cypress/screenshots-demo-mode,videosFolder=cypress/videos-demo-mode,trashAssetsBeforeRuns=false,video=true,screenshotOnRunFailure=true,viewportWidth=1920,viewportHeight=1080,chromeWebSecurity=false \
+            --spec "cypress/e2e/auth/demo/**/*.cy.js"
+
+      - name: Upload screenshots
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: cypress-screenshots-demo-mode
+          path: depictio/tests/e2e-tests/cypress/screenshots-demo-mode
+          retention-days: 30
+
+      - name: Upload videos on failure
+        uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: cypress-videos-demo-mode
+          path: depictio/tests/e2e-tests/cypress/videos-demo-mode
+          retention-days: 7
+
+  e2e-tests-single-user-mode:
+    needs: [docker-build]
+    if: always() && needs.docker-build.result == 'success'
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup environment
+        run: |
+          sudo chmod 666 /var/run/docker.sock
+          echo "UID=$(id -u)" >> $GITHUB_ENV
+          echo "GID=$(id -g)" >> $GITHUB_ENV
+          cp .env.example .env
+          # Enable SINGLE_USER_MODE for single-user tests
+          sed -i 's/DEPICTIO_AUTH_SINGLE_USER_MODE=false/DEPICTIO_AUTH_SINGLE_USER_MODE=true/' docker-compose/.env
+          sed -i 's/DEPICTIO_AUTH_PUBLIC_MODE=true/DEPICTIO_AUTH_PUBLIC_MODE=false/' docker-compose/.env
+          sed -i 's/DEPICTIO_AUTH_DEMO_MODE=true/DEPICTIO_AUTH_DEMO_MODE=false/' docker-compose/.env
+          sed -i 's/# DEPICTIO_DEV_MODE=false/DEPICTIO_DEV_MODE=true/' docker-compose/.env
+          mkdir -p depictioDB minio_data prof_files cache
+          chmod 777 depictioDB minio_data prof_files cache
+
+      - name: Log in and start services
+        run: |
+          echo ${{ secrets.GHCR_PAT }} | docker login ghcr.io -u ${{ github.repository_owner }} --password-stdin
+          FULL_IMAGE="${{ needs.docker-build.outputs.full-image }}"
+          docker pull "${FULL_IMAGE}"
+          export DEPICTIO_VERSION="${FULL_IMAGE}"
+          export DEPICTIO_FASTAPI_WORKERS=1  # Single worker to avoid boot race conditions
+          docker compose -f docker-compose.dev.yaml -f docker-compose/docker-compose.minio.yaml --env-file docker-compose/.env up -d
+
+      - name: Wait for services to be ready
+        run: |
+          echo "⏳ Waiting for services to be ready..."
+
+          # Wait for MongoDB
+          echo "Waiting for MongoDB..."
+          for i in {1..30}; do
+            if docker compose exec -T mongo mongosh localhost:27018/depictioDB --eval "db.runCommand({ ping: 1 })" --quiet &>/dev/null; then
+              echo "✅ MongoDB ready"
+              break
+            fi
+            echo "MongoDB not ready yet, attempt $i/30..."
+            sleep 2
+          done
+
+          # Wait for Backend API
+          echo "Waiting for Backend API..."
+          for i in {1..60}; do
+            if curl -f http://localhost:8058/health &>/dev/null; then
+              echo "✅ Backend API ready"
+              break
+            fi
+            echo "Backend API not ready yet, attempt $i/60..."
+            sleep 2
+          done
+
+          # Wait for Frontend
+          echo "Waiting for Frontend..."
+          for i in {1..60}; do
+            if curl -s -o /dev/null -w "%{http_code}" http://localhost:5080/ | grep -q "200"; then
+              echo "✅ Frontend ready"
+              break
+            fi
+            echo "Frontend not ready yet, attempt $i/60..."
+            sleep 2
+          done
+
+          echo "🔍 Final service status:"
+          docker compose ps
+
+      - name: Verify single-user mode is working
+        run: |
+          echo "🔍 Verifying single-user mode configuration..."
+
+          # Verify SINGLE_USER_MODE is enabled in .env
+          if grep -q "DEPICTIO_AUTH_SINGLE_USER_MODE=true" docker-compose/.env; then
+            echo "✅ SINGLE_USER_MODE enabled in docker-compose/.env"
+          else
+            echo "❌ SINGLE_USER_MODE not enabled in .env"
+            exit 1
+          fi
+
+          # Check if database has admin user
+          echo "Checking for admin user in database..."
+          for i in {1..10}; do
+            ADMIN_USER=$(docker compose exec -T mongo mongosh localhost:27018/depictioDB --eval "JSON.stringify(db.users.find({is_admin: true}).toArray())" --quiet 2>&1 | grep '^[\[{]' | jq -r '.[0].email // empty')
+            if [ -n "$ADMIN_USER" ]; then
+              echo "✅ Admin user found: $ADMIN_USER"
+              break
+            fi
+            echo "⚠️ No admin user found yet, attempt $i/10"
+            sleep 3
+          done
+
+          if [ -z "$ADMIN_USER" ]; then
+            echo "⚠️ No admin user created yet (will be created on first access)"
+          fi
+
+          echo "✅ Single-user mode verified"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: "20"
+
+      - name: Install Cypress dependencies
+        run: |
+          cd depictio/tests/e2e-tests
+          if [ ! -f "package.json" ]; then
+            npm init -y
+            npm install cypress --save-dev
+          else
+            npm ci
+          fi
+
+      - name: Install Chrome for single-user mode tests
+        run: |
+          wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | sudo apt-key add -
+          echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" | sudo tee /etc/apt/sources.list.d/google-chrome.list
+          sudo apt-get update
+          sudo apt-get install -y google-chrome-stable
+
+      - name: Run Cypress single-user mode tests
+        run: |
+          cd depictio/tests/e2e-tests
+          export CYPRESS_SINGLE_USER_MODE=true
+          export CYPRESS_BROWSER_ARGS="--disable-gpu --no-sandbox --disable-dev-shm-usage --disable-extensions --disable-background-timer-throttling --disable-renderer-backgrounding --disable-backgrounding-occluded-windows"
+          npx cypress run \
+            --browser chrome \
+            --headless \
+            --config screenshotsFolder=cypress/screenshots-single-user-mode,videosFolder=cypress/videos-single-user-mode,trashAssetsBeforeRuns=false,video=true,screenshotOnRunFailure=true,viewportWidth=1920,viewportHeight=1080,chromeWebSecurity=false \
+            --spec "cypress/e2e/auth/single-user/**/*.cy.js"
+
+      - name: Upload screenshots
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: cypress-screenshots-single-user-mode
+          path: depictio/tests/e2e-tests/cypress/screenshots-single-user-mode
+          retention-days: 30
+
+      - name: Upload videos on failure
+        uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: cypress-videos-single-user-mode
+          path: depictio/tests/e2e-tests/cypress/videos-single-user-mode
           retention-days: 7

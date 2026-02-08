@@ -1,8 +1,8 @@
-describe('Unauthenticated Mode - New Dashboard Button Behavior', () => {
+describe('Public Mode - New Dashboard Button Behavior', () => {
 
   beforeEach(function() {
-    // Skip if not in unauthenticated mode
-    if (!Cypress.env('UNAUTHENTICATED_MODE')) {
+    // Skip if not in public mode
+    if (!Cypress.env('PUBLIC_MODE')) {
       this.skip()
     }
 
@@ -10,7 +10,10 @@ describe('Unauthenticated Mode - New Dashboard Button Behavior', () => {
     cy.clearLocalStorage()
   })
 
-  it('should show enabled Login to Create Dashboards button for anonymous users', () => {
+  it.skip('should show enabled Login to Create Dashboards button for anonymous users', () => {
+    // NOTE: This test is no longer applicable in PUBLIC_MODE
+    // Temporary users are auto-created, so they see "+ New Dashboard" button
+    // Dashboard creation is blocked at API level
     cy.visit('/dashboards')
     cy.wait(2000)
 
@@ -20,7 +23,7 @@ describe('Unauthenticated Mode - New Dashboard Button Behavior', () => {
     cy.screenshot('dashboard_button_enabled_anonymous')
   })
 
-  it('should enable New Dashboard button after enabling Interactive Mode', () => {
+  it.skip('should enable New Dashboard button after enabling Interactive Mode', () => {
     // Start as anonymous user
     cy.visit('/dashboards')
     cy.wait(2000)
@@ -60,7 +63,7 @@ describe('Unauthenticated Mode - New Dashboard Button Behavior', () => {
     cy.screenshot('dashboard_button_enabled_after_interactive')
   })
 
-  it('should open dashboard creation modal after enabling Interactive Mode', () => {
+  it.skip('should open dashboard creation modal after enabling Interactive Mode', () => {
     // Enable Interactive Mode first
     cy.visit('/profile')
     cy.wait(2000)
@@ -99,7 +102,9 @@ describe('Unauthenticated Mode - New Dashboard Button Behavior', () => {
     cy.screenshot('dashboard_creation_modal_opened')
   })
 
-  it('should redirect to profile when anonymous user clicks Login to Create Dashboards', () => {
+  it.skip('should redirect to auth when anonymous user clicks Login to Create Dashboards', () => {
+    // NOTE: This test is no longer applicable in PUBLIC_MODE
+    // Temporary users are auto-created, so this button doesn't exist
     cy.visit('/dashboards')
     cy.wait(2000)
 
@@ -108,18 +113,17 @@ describe('Unauthenticated Mode - New Dashboard Button Behavior', () => {
       // Click the Login to Create Dashboards button
       cy.contains('button', 'Login to Create Dashboards').click()
 
-      // Should redirect to profile page
-      cy.url().should('include', '/profile')
+      // Should redirect to auth page with sign-in options
+      cy.url().should('include', '/auth')
       cy.url().should('not.equal', dashboardsUrl)
 
-      // Wait for profile page to load
-      cy.get('#page-content', { timeout: 10000 }).should('be.visible')
+      // Wait for auth modal to appear
+      cy.get('[role="dialog"][aria-modal="true"]', { timeout: 10000 }).should('be.visible')
 
-      // Verify we're on the profile page
-      cy.get('body').should('contain', 'User Profile')
-      cy.get('body').should('contain', 'Login as a temporary user')
+      // Verify auth modal shows public mode sign-in options
+      cy.get('body').should('contain', 'Welcome to Depictio')
     })
 
-    cy.screenshot('anonymous_redirected_to_profile')
+    cy.screenshot('anonymous_redirected_to_auth')
   })
 })

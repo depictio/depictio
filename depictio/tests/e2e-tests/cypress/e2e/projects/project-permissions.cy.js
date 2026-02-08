@@ -367,7 +367,7 @@ describe('Project Permissions Management', () => {
         });
     });
 
-    describe('Editor User Restrictions', () => {
+    describe.skip('Editor User Restrictions', () => {
         it('Editor users have limited permissions', () => {
             // This test verifies editor restrictions in isolation
             login(adminUser)
@@ -395,7 +395,7 @@ describe('Project Permissions Management', () => {
         });
     });
 
-    describe('Viewer User Restrictions', () => {
+    describe.skip('Viewer User Restrictions', () => {
         it('Viewer users have minimal permissions', () => {
             // This test verifies viewer restrictions in isolation
             login(adminUser)

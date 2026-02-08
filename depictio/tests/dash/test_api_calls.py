@@ -152,7 +152,7 @@ class TestApiCallCreateTemporaryUser:
         # Verify HTTP call was made correctly
         self.mock_httpx_post.assert_called_once_with(
             "http://test-api/depictio/api/v1/auth/create_temporary_user",
-            params={"expiry_hours": 48},
+            params={"expiry_hours": 48, "expiry_minutes": 0},
             headers={"api-key": "test_api_key"},
             timeout=30.0,
         )
@@ -174,7 +174,7 @@ class TestApiCallCreateTemporaryUser:
         # Verify default expiry_hours parameter
         self.mock_httpx_post.assert_called_once_with(
             "http://test-api/depictio/api/v1/auth/create_temporary_user",
-            params={"expiry_hours": 24},
+            params={"expiry_hours": 24, "expiry_minutes": 0},
             headers={"api-key": "test_api_key"},
             timeout=30.0,
         )

@@ -130,7 +130,7 @@ layout = dmc.Container(
                                             variant="filled",
                                             # color=colors["pink"],
                                             radius=BUTTON_RADIUS,
-                                            disabled=False,  # Enable logout button even in unauthenticated mode
+                                            disabled=settings.auth.is_single_user_mode,  # Disable in single-user mode
                                             leftSection=DashIconify(
                                                 icon="mdi:logout", width=ICON_SIZE
                                             ),
@@ -178,7 +178,9 @@ layout = dmc.Container(
                                                 variant="filled",
                                                 # color=colors["blue"],
                                                 radius=BUTTON_RADIUS,
-                                                disabled=settings.auth.unauthenticated_mode,
+                                                disabled=settings.auth.is_single_user_mode
+                                                or settings.auth.is_public_mode
+                                                or settings.auth.is_demo_mode,
                                                 leftSection=DashIconify(
                                                     icon="mdi:lock-outline",
                                                     width=ICON_SIZE,

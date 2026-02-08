@@ -304,22 +304,25 @@ def api_call_get_anonymous_user_session() -> dict | None:
         return None
 
 
-def api_call_create_temporary_user(expiry_hours: int = 24) -> dict[str, Any] | None:
+def api_call_create_temporary_user(
+    expiry_hours: int = 24, expiry_minutes: int = 0
+) -> dict[str, Any] | None:
     """
     Create a temporary user with automatic expiration.
 
     Args:
         expiry_hours: Number of hours until the user expires (default: 24)
+        expiry_minutes: Additional minutes until the user expires (default: 0)
 
     Returns:
         Session data for the temporary user or None if failed
     """
     try:
-        logger.debug(f"Creating temporary user with expiry: {expiry_hours} hours")
+        logger.debug(f"Creating temporary user with expiry: {expiry_hours}h {expiry_minutes}m")
 
         response = httpx.post(
             f"{API_BASE_URL}/depictio/api/v1/auth/create_temporary_user",
-            params={"expiry_hours": expiry_hours},
+            params={"expiry_hours": expiry_hours, "expiry_minutes": expiry_minutes},
             headers={"api-key": settings.auth.internal_api_key},
             timeout=30.0,
         )
@@ -872,6 +875,129 @@ def api_call_screenshot_dashboard(dashboard_id: str) -> bool:
     except Exception as e:
         logger.error(f"Failed to save dashboard screenshot: {str(e)}")
         return False
+
+
+@validate_call(validate_return=True)
+def api_call_export_dashboard_json(dashboard_id: str, token: str) -> dict[str, Any] | None:
+    """Export dashboard as JSON with data integrity metadata.
+
+    Args:
+        dashboard_id: The dashboard ID to export
+        token: Access token for authentication
+
+    Returns:
+        JSON export data or None if failed
+    """
+    try:
+        logger.debug(f"Exporting dashboard {dashboard_id} as JSON")
+
+        response = httpx.get(
+            f"{API_BASE_URL}/depictio/api/v1/dashboards/{dashboard_id}/json",
+            headers={"Authorization": f"Bearer {token}"},
+            timeout=30.0,
+        )
+
+        if response.status_code == 200:
+            export_data = response.json()
+            logger.info(f"Successfully exported dashboard {dashboard_id}")
+            return export_data
+        else:
+            logger.error(f"Failed to export dashboard: {response.status_code} - {response.text}")
+            return None
+
+    except Exception as e:
+        logger.error(f"Error exporting dashboard: {e}")
+        return None
+
+
+@validate_call(validate_return=True)
+def api_call_import_dashboard_json(
+    json_content: dict[str, Any],
+    token: str,
+    project_id: str | None = None,
+    validate_integrity: bool = True,
+) -> dict[str, Any] | None:
+    """Import dashboard from JSON content.
+
+    Args:
+        json_content: The JSON export data
+        token: Access token for authentication
+        project_id: Target project ID (optional if in JSON)
+        validate_integrity: Whether to validate data integrity (default: True)
+
+    Returns:
+        Import result with dashboard_id and warnings, or None if failed
+    """
+    try:
+        logger.debug("Importing dashboard from JSON")
+
+        params = {"validate_integrity": validate_integrity}
+        if project_id:
+            params["project_id"] = project_id
+
+        response = httpx.post(
+            f"{API_BASE_URL}/depictio/api/v1/dashboards/import/json",
+            json=json_content,
+            params=params,
+            headers={"Authorization": f"Bearer {token}"},
+            timeout=60.0,
+        )
+
+        if response.status_code == 200:
+            result = response.json()
+            logger.info(f"Successfully imported dashboard: {result.get('dashboard_id')}")
+            return result
+        else:
+            logger.error(f"Failed to import dashboard: {response.status_code} - {response.text}")
+            return None
+
+    except Exception as e:
+        logger.error(f"Error importing dashboard: {e}")
+        return None
+
+
+@validate_call(validate_return=True)
+def api_call_validate_dashboard_json(
+    json_content: dict[str, Any],
+    token: str,
+    project_id: str | None = None,
+) -> dict[str, Any] | None:
+    """Validate JSON import content without importing.
+
+    Args:
+        json_content: The JSON export data to validate
+        token: Access token for authentication
+        project_id: Target project ID (optional)
+
+    Returns:
+        Validation result with errors and warnings, or None if failed
+    """
+    try:
+        logger.debug("Validating dashboard JSON import")
+
+        params = {}
+        if project_id:
+            params["project_id"] = project_id
+
+        response = httpx.post(
+            f"{API_BASE_URL}/depictio/api/v1/dashboards/json/validate",
+            json=json_content,
+            params=params,
+            headers={"Authorization": f"Bearer {token}"},
+            timeout=30.0,
+        )
+
+        if response.status_code == 200:
+            result = response.json()
+            logger.info(f"Validation complete: valid={result.get('valid')}")
+            return result
+        else:
+            logger.error(f"Failed to validate JSON: {response.status_code} - {response.text}")
+            return None
+
+    except Exception as e:
+        logger.error(f"Error validating dashboard JSON: {e}")
+        return None
 
 
 def api_call_get_google_oauth_login_url() -> dict[str, Any] | None:

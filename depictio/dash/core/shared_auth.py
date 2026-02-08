@@ -81,22 +81,31 @@ def validate_and_refresh_token(local_data: Optional[Dict]) -> Tuple[Optional[Dic
             - reason: Human-readable reason for authentication status
                      ("valid", "refreshed", "anonymous", "no_session", "invalid_token", etc.)
     """
-    # Handle unauthenticated mode
-    if settings.auth.unauthenticated_mode:
-        logger.debug("SHARED_AUTH: Unauthenticated mode is enabled")
+    # Handle unauthenticated mode (includes single-user mode and public mode)
+    if settings.auth.requires_anonymous_user:
+        logger.debug("SHARED_AUTH: Anonymous user mode is enabled (single-user or public mode)")
 
         # Check if we already have valid local_data (e.g. temporary user session)
         if local_data and local_data.get("access_token") and local_data.get("logged_in"):
             return local_data, True, "existing_session"
 
-        # Fetch anonymous user session
+        # Create session based on auth mode
         try:
-            logger.debug("SHARED_AUTH: No existing session - fetching anonymous user")
-            anonymous_local_data = get_anonymous_user_session()
-            return anonymous_local_data, True, "anonymous"
+            if settings.auth.is_public_mode and not settings.auth.is_single_user_mode:
+                # Public/demo mode: auto-create temporary user
+                logger.debug("SHARED_AUTH: Public mode - creating temporary user session")
+                session_data = get_temporary_user_session(
+                    expiry_hours=settings.auth.temporary_user_expiry_hours,
+                )
+                return session_data, True, "temporary"
+            else:
+                # Single-user mode: use anonymous user (admin privileges)
+                logger.debug("SHARED_AUTH: Single-user mode - fetching anonymous user")
+                anonymous_local_data = get_anonymous_user_session()
+                return anonymous_local_data, True, "anonymous"
         except Exception as e:
-            logger.error(f"SHARED_AUTH: Failed to fetch anonymous user session: {e}")
-            return None, False, "anonymous_fetch_failed"
+            logger.error(f"SHARED_AUTH: Failed to create user session: {e}")
+            return None, False, "session_create_failed"
 
     # Authenticated mode validation
     if not local_data or not local_data.get("logged_in"):
@@ -197,13 +206,17 @@ def should_redirect_to_dashboards(pathname: Optional[str]) -> bool:
     """
     Check if pathname should redirect to /dashboards.
 
+    Only redirects root path "/" to /dashboards. The /auth path should NOT
+    be redirected so users can access sign-in options (temp user, OAuth)
+    even when already authenticated as anonymous users.
+
     Args:
         pathname: Current URL pathname
 
     Returns:
         bool: True if should redirect to /dashboards
     """
-    return pathname is None or pathname in ("/", "/auth")
+    return pathname is None or pathname == "/"
 
 
 def get_access_token_from_local_data(local_data: Optional[Dict]) -> Optional[str]:

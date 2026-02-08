@@ -21,6 +21,48 @@ from depictio.api.v1.configs.logging_init import logger
 from depictio.dash.simple_theme import create_theme_controls
 
 
+def _create_auth_mode_badge():
+    """Create a badge showing the current auth mode if special mode is active.
+
+    Returns:
+        dmc.Center with badge, or None if normal auth mode.
+    """
+    from depictio.api.v1.configs.config import settings
+
+    if settings.auth.is_single_user_mode:
+        return dmc.Center(
+            dcc.Link(
+                dmc.Badge(
+                    "Single User Mode",
+                    variant="light",
+                    color="violet",
+                    size="lg",
+                    leftSection=DashIconify(icon="mdi:account", height=16),
+                    style={"cursor": "pointer"},
+                ),
+                href="/profile",
+                style={"textDecoration": "none"},
+            ),
+            style={"marginBottom": "12px", "marginTop": "8px"},
+        )
+    elif settings.auth.is_public_mode:
+        # Show "Demo Mode" badge if demo mode is enabled, otherwise "Public Mode"
+        badge_text = "Demo Mode" if settings.auth.is_demo_mode else "Public Mode"
+        badge_icon = "mdi:compass-outline" if settings.auth.is_demo_mode else "mdi:earth"
+        badge_color = "violet" if settings.auth.is_demo_mode else "teal"
+        return dmc.Center(
+            dmc.Badge(
+                badge_text,
+                variant="light",
+                color=badge_color,
+                size="lg",
+                leftSection=DashIconify(icon=badge_icon, height=16),
+            ),
+            style={"marginBottom": "12px", "marginTop": "8px"},
+        )
+    return None
+
+
 def create_sidebar_footer():
     """
     Create standardized sidebar footer with theme controls and server status.
@@ -30,40 +72,86 @@ def create_sidebar_footer():
     - Visual separator (divider)
     - Theme toggle controls (light/dark mode)
     - Server status indicator
+    - Auth mode badge (Single User Mode / Public Mode) if applicable
     - Horizontal divider
     - User avatar container
 
     Returns:
         html.Div: Sidebar footer component with consistent styling
     """
+    from depictio.api.v1.configs.config import settings
+
+    # Build children list, conditionally including auth mode badge
+    children = [
+        # Separator above theme section
+        dmc.Divider(variant="solid", my="md"),
+        # Theme controls
+        dmc.Center(create_theme_controls()),
+        # Server status
+        dmc.Grid(
+            id="sidebar-footer-server-status",
+            align="center",
+            justify="center",
+        ),
+    ]
+
+    # Add auth mode badge if in special mode (with divider)
+    auth_badge = _create_auth_mode_badge()
+    if auth_badge:
+        children.append(dmc.Divider(my="sm"))
+        children.append(auth_badge)
+
+    # In single-user mode, only show badge (no avatar needed)
+    # In other modes, show avatar container
+    if not settings.auth.is_single_user_mode:
+        children.extend(
+            [
+                # Divider before avatar
+                dmc.Divider(my="sm"),
+                # User avatar or sign-in button container
+                html.Div(
+                    id="avatar-container",
+                    style={
+                        "textAlign": "center",
+                        "justifyContent": "center",
+                        "display": "flex",
+                        "alignItems": "center",
+                        "flexDirection": "row",
+                        "paddingBottom": "16px",
+                    },
+                ),
+            ]
+        )
+    else:
+        # Add hidden placeholder for avatar-container to prevent callback errors
+        children.append(html.Div(id="avatar-container", style={"display": "none"}))
+
+    # Add public mode sign-in button (hidden by default, shown via callback when not logged in)
+    if settings.auth.is_public_mode:
+        children.append(
+            html.Div(
+                id="public-sign-in-button-container",
+                children=[
+                    dmc.Button(
+                        "Sign In",
+                        id="public-sign-in-button",
+                        leftSection=DashIconify(icon="mdi:login", height=18),
+                        variant="outline",
+                        color="blue",
+                        size="sm",
+                        fullWidth=True,
+                    ),
+                ],
+                style={
+                    "display": "none",  # Hidden by default, shown via callback
+                    "padding": "0 16px 16px 16px",
+                },
+            )
+        )
+
     return html.Div(
         id="sidebar-footer",
-        children=[
-            # Separator above theme section
-            dmc.Divider(variant="solid", my="md"),
-            # Theme controls
-            dmc.Center(create_theme_controls()),
-            # Server status
-            dmc.Grid(
-                id="sidebar-footer-server-status",
-                align="center",
-                justify="center",
-            ),
-            # Divider before avatar
-            dmc.Divider(my="sm"),
-            # User avatar
-            html.Div(
-                id="avatar-container",
-                style={
-                    "textAlign": "center",
-                    "justifyContent": "center",
-                    "display": "flex",
-                    "alignItems": "center",
-                    "flexDirection": "row",
-                    "paddingBottom": "16px",
-                },
-            ),
-        ],
+        children=children,
         style={
             "flexShrink": 0,
         },
@@ -626,7 +714,17 @@ def register_sidebar_callbacks(app, register_tabs: bool = True) -> None:
     def update_admin_link_visibility(local_data):
         """
         Show/hide admin link based on user's admin status.
+
+        Admin link is always hidden in demo mode or public mode to prevent
+        unauthorized access to admin functionality.
         """
+        from depictio.api.v1.configs.config import settings
+
+        # Always hide admin link in demo mode or public mode
+        if settings.auth.is_demo_mode or settings.auth.is_public_mode:
+            logger.debug("Hiding admin link in demo/public mode")
+            return {"padding": "20px", "display": "none"}
+
         if not local_data or not local_data.get("logged_in"):
             return {"padding": "20px", "display": "none"}
 
@@ -639,11 +737,11 @@ def register_sidebar_callbacks(app, register_tabs: bool = True) -> None:
                 return {"padding": "20px"}
             else:
                 logger.debug(
-                    f"🔧 Hiding admin link for non-admin user: {user.email if user else 'unknown'}"
+                    f"Hiding admin link for non-admin user: {user.email if user else 'unknown'}"
                 )
                 return {"padding": "20px", "display": "none"}
         except Exception as e:
-            logger.error(f"❌ Error checking admin status: {e}")
+            logger.error(f"Error checking admin status: {e}")
             return {"padding": "20px", "display": "none"}
 
     app.clientside_callback(
@@ -720,6 +818,32 @@ def register_sidebar_callbacks(app, register_tabs: bool = True) -> None:
         Input("local-store", "data"),
         prevent_initial_call=False,
     )
+
+    # Public mode sign-in button visibility (show when not logged in)
+    # Only register if public-sign-in-button-container exists (in public mode)
+    from depictio.api.v1.configs.config import settings
+
+    if settings.auth.is_public_mode:
+        app.clientside_callback(
+            """
+            function(local_data) {
+                console.log('🔧 CLIENTSIDE SIGN-IN BUTTON: local_data received:', !!local_data);
+
+                // Show sign-in button when NOT logged in
+                if (!local_data || !local_data.logged_in) {
+                    console.log('✅ Not logged in - showing sign-in button');
+                    return {"display": "block", "padding": "0 16px 16px 16px"};
+                }
+
+                // Hide sign-in button when logged in
+                console.log('❌ Logged in - hiding sign-in button');
+                return {"display": "none"};
+            }
+            """,
+            Output("public-sign-in-button-container", "style"),
+            Input("local-store", "data"),
+            prevent_initial_call=False,
+        )
 
     # NOTE: Dynamic navbar callback removed (Phase 1B performance optimization)
     # Navbar content is now generated statically at app startup via create_static_navbar_content()

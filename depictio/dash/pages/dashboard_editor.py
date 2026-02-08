@@ -141,6 +141,11 @@ def register_callbacks(app):
     # 5. Save and layout management callbacks
     register_save_callbacks(app)
 
+    # 6. Real-time WebSocket callbacks (for data update notifications)
+    from depictio.dash.layouts.realtime_callbacks import register_realtime_callbacks
+
+    register_realtime_callbacks(app)
+
 
 def register_routing_callback(app):
     """
@@ -649,6 +654,14 @@ def register_header_callbacks(app):
     from depictio.dash.layouts.sidebar import register_sidebar_callbacks
 
     register_sidebar_callbacks(app)
+
+    # Public mode auth modal callbacks
+    from depictio.api.v1.configs.config import settings
+
+    if settings.auth.is_public_mode:
+        from depictio.dash.layouts.auth_modal import register_auth_modal_callbacks
+
+        register_auth_modal_callbacks(app)
 
     # Add clientside callback for theme-aware body class
     app.clientside_callback(
