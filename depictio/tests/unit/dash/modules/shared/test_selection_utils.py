@@ -11,7 +11,6 @@ Tests cover:
 - Value merging
 """
 
-
 from depictio.dash.modules.shared.selection_utils import (
     build_metadata_lookup,
     create_selection_entry,

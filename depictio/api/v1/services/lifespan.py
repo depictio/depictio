@@ -42,8 +42,20 @@ WORKER_ID = os.getpid()
 
 
 async def init_motor_beanie() -> None:
-    """Initialize Motor (async MongoDB client) and Beanie ODM."""
-    client = AsyncIOMotorClient(MONGODB_URL)
+    """Initialize Motor (async MongoDB client) and Beanie ODM.
+
+    Connection pool sizing:
+    - maxPoolSize: 25 per worker (4 workers = ~100 total connections)
+    - minPoolSize: 5 per worker (maintains 20 baseline connections)
+    - Prevents connection exhaustion under load in K8s environment
+    """
+    client = AsyncIOMotorClient(
+        MONGODB_URL,
+        maxPoolSize=25,  # Limit per worker to prevent exhaustion
+        minPoolSize=5,  # Maintain baseline connections
+        maxIdleTimeMS=45000,  # Close idle connections after 45s
+        waitQueueTimeoutMS=5000,  # Fail fast if pool exhausted
+    )
     await init_beanie(
         database=cast(AsyncDatabase, client[settings.mongodb.db_name]),
         document_models=[

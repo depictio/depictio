@@ -348,8 +348,12 @@ class PerformanceConfig(BaseSettings):
 
     # DNS and network performance settings
     dns_cache_ttl: int = Field(default=300)  # 5 minutes
-    connection_pool_size: int = Field(default=10)
-    max_keepalive_connections: int = Field(default=5)
+    connection_pool_size: int = Field(
+        default=25, description="HTTP connection pool size for multi-worker environments"
+    )
+    max_keepalive_connections: int = Field(
+        default=20, description="Max persistent HTTP connections (increased for 4 workers)"
+    )
 
     # Loading spinner optimization settings
     disable_loading_spinners: bool = Field(
