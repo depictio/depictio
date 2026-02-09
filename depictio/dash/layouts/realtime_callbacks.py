@@ -77,7 +77,7 @@ def register_websocket_url_callback(app: Dash) -> None:
         Output("ws", "url"),
         Input("url", "pathname"),
         State("local-store", "data"),
-        prevent_initial_call=True,
+        prevent_initial_call=False,  # Allow callback to run on page load for direct dashboard navigation
     )
 
 
