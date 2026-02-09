@@ -428,6 +428,20 @@ async def initialize_db(wipe: bool = False) -> UserBeanie | None:
             initialization_collection.insert_one(init_lock)
             logger.info("Restored initialization lock after database wipe")
 
+        # Wipe orphaned S3 files after MongoDB wipe
+        from depictio.api.v1.endpoints.utils_endpoints.core_functions import (
+            cleanup_orphaned_s3_files,
+        )
+
+        logger.info("Cleaning up S3 after MongoDB wipe")
+        try:
+            result = await cleanup_orphaned_s3_files(dry_run=False, force=True)
+            logger.info(f"S3 cleanup: {result['deleted_count']} objects deleted")
+        except Exception as e:
+            logger.error(f"S3 cleanup failed: {e}")
+            # Don't fail initialization if S3 cleanup fails
+            logger.warning("Continuing with initialization despite S3 cleanup failure")
+
     # Load and validate configuration for initial users and groups
     config_path = os.path.join(os.path.dirname(__file__), "configs", "initial_users.yaml")
     initial_config = get_config(config_path)

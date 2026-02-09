@@ -122,19 +122,21 @@ class ReferenceDatasetProcessor:
         return dc_tag in join_names
 
     def _already_processed(self, dc_id: str) -> bool:
-        """Check if DC already processed (MongoDB + S3)."""
+        """Check if DC registered in MongoDB (source of truth).
+
+        MongoDB is the only source of truth for data collection registration.
+        S3 delta tables may persist from previous deployments after wipe operations.
+        """
         from depictio.api.v1.db import deltatables_collection
-        from depictio.api.v1.services.background_tasks import check_s3_delta_table_exists
 
-        # Check local MongoDB
-        if deltatables_collection.find_one({"data_collection_id": dc_id}):
-            return True
+        exists = (
+            deltatables_collection.find_one({"data_collection_id": ObjectId(dc_id)}) is not None
+        )
 
-        # Check S3
-        if check_s3_delta_table_exists(settings.minio.bucket, dc_id):
-            return True
+        if exists:
+            logger.info(f"DC {dc_id} already registered in MongoDB")
 
-        return False
+        return exists
 
     async def _execute_joins(
         self, project: Any, dataset_metadata: dict[str, Any]
@@ -317,12 +319,12 @@ async def process_all_reference_datasets() -> None:
                 },
             },
             "api_base_url": settings.fastapi.url,
-            # Use settings.minio directly - it's already an S3DepictioCLIConfig instance
-            "s3_storage": settings.minio,
+            # Convert settings.minio to dict for CLIConfig
+            "s3_storage": settings.minio.model_dump(),
         }
 
         # Convert dict to CLIConfig instance (some functions don't have @validate_call)
-        cli_config = CLIConfig(**cli_config_dict)
+        cli_config = CLIConfig.model_validate(cli_config_dict)
         processor = ReferenceDatasetProcessor(cli_config)
 
         # Process each dataset
