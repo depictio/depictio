@@ -6,14 +6,26 @@
 
 
 <details>
-<summary>Click to expand the changelog for 0.7.3-b3</summary>
+<summary>Click to expand the changelog for 0.7.3-b4</summary>
 
 ### Changes 📜
 
 #### Other Changes 📝
 
-* Bump version: 0.7.3-b2 → 0.7.3-b3 [343a9234]
-* perf(k8s): optimize dashboard interactivity and fix websocket connection [3a97e214]
+* Bump version: 0.7.3-b3 → 0.7.3-b4 [c46531cd]
+* fix(dash): enhance debug menu auto-collapse for Dash 3.x compatibility [638d769a]
+* fix(demo-tour): make tour popover globally available to prevent callback errors [64f9af5b]
+* Update CHANGELOG.md for v0.7.3-b3 [39ce77f8]
+* Bump version: 0.7.3-b2 → 0.7.3-b3 [97ea7058]
+
+
+</details>
+
+### Documentation 📖
+
+For more details, please refer to the [documentation](https://depictio.github.io/depictio-docs/)
+
+ection [3a97e214]
 * Update CHANGELOG.md for v0.7.3-b2 [590346f1]
 * Bump version: 0.7.3-b1 → 0.7.3-b2 [3861f17d]
 
