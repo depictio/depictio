@@ -58,7 +58,7 @@ DASH_INDEX_STRING = """
             {%config%}
             {%scripts%}
             {%renderer%}
-            <script src="/assets/js/debug-menu-control.js"></script>
+            <script src="/assets/debug-menu-control.js"></script>
         </footer>
     </body>
 </html>
