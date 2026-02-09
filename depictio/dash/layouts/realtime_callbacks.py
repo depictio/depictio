@@ -54,13 +54,21 @@ def register_websocket_url_callback(app: Dash) -> None:
             const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
             const host = window.location.hostname;
 
-            // Use same port as API (default 8058) unless in production
-            let port = '8058';
-            if (window.location.port && window.location.port !== '5080') {
-                port = window.location.port;
+            // Build base URL - in production (HTTPS with no port), use standard ports
+            // In development, use explicit port (8058 for API, or current port)
+            let baseUrl;
+            if (window.location.protocol === 'https:' && !window.location.port) {
+                // Production HTTPS: use standard port (443), no explicit port in URL
+                baseUrl = `${protocol}//${host}`;
+            } else if (window.location.port && window.location.port !== '5080') {
+                // Development with custom port (e.g., 8058)
+                baseUrl = `${protocol}//${host}:${window.location.port}`;
+            } else {
+                // Development on Dash port (5080): connect to API port (8058)
+                baseUrl = `${protocol}//${host}:8058`;
             }
 
-            const wsUrl = `${protocol}//${host}:${port}/depictio/api/v1/events/ws?token=${token}&dashboard_id=${dashboardId}`;
+            const wsUrl = `${baseUrl}/depictio/api/v1/events/ws?token=${token}&dashboard_id=${dashboardId}`;
 
             console.log('[WebSocket] Connecting to:', wsUrl.replace(/token=[^&]+/, 'token=***'));
             return wsUrl;

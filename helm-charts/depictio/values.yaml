@@ -46,6 +46,10 @@ secrets:
 
 local_development: false # Set to true for local development
 
+# Demo environment configuration
+demo:
+  autoWipeOnUpgrade: false  # Set to true to automatically delete PVCs before upgrades (for demo environments)
+
 # MongoDB settings
 mongo:
   image:
@@ -180,9 +184,6 @@ backend:
     DEPICTIO_CELERY_RESULT_BACKEND_HOST: "redis"
     DEPICTIO_CELERY_RESULT_BACKEND_PORT: "6379"
     DEPICTIO_CELERY_RESULT_BACKEND_DB: "2"
-
-    # Enable unauthenticated mode (allows anonymous access)
-    DEPICTIO_AUTH_UNAUTHENTICATED_MODE: "false"
 
     # Anonymous user configuration
     DEPICTIO_AUTH_ANONYMOUS_USER_EMAIL: "anonymous@depict.io"

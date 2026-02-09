@@ -36,7 +36,9 @@ data:
   {{- end }}
 
   # Authentication mode (defaults to authenticated mode)
-  DEPICTIO_AUTH_UNAUTHENTICATED_MODE: {{ .Values.backend.env.DEPICTIO_AUTH_UNAUTHENTICATED_MODE | default "false" | quote }}
+  DEPICTIO_AUTH_PUBLIC_MODE: {{ .Values.backend.env.DEPICTIO_AUTH_PUBLIC_MODE | default "false" | quote }}
+  DEPICTIO_AUTH_DEMO_MODE: {{ .Values.backend.env.DEPICTIO_AUTH_DEMO_MODE | default "false" | quote }}
+  DEPICTIO_AUTH_SINGLE_USER_MODE: {{ .Values.backend.env.DEPICTIO_AUTH_SINGLE_USER_MODE | default "false" | quote }}
   DEPICTIO_AUTH_ANONYMOUS_USER_EMAIL: {{ .Values.backend.env.DEPICTIO_AUTH_ANONYMOUS_USER_EMAIL | default "anonymous@example.com" | quote }}
   DEPICTIO_AUTH_TEMPORARY_USER_EXPIRY_HOURS: {{ .Values.backend.env.DEPICTIO_AUTH_TEMPORARY_USER_EXPIRY_HOURS | default "24" | quote }}
 
@@ -123,9 +125,11 @@ data:
   {{- end }}
 
   # Authentication mode (defaults to authenticated mode)
-  DEPICTIO_AUTH_UNAUTHENTICATED_MODE: {{ .Values.backend.env.DEPICTIO_AUTH_UNAUTHENTICATED_MODE | default "false" | quote }}
-  DEPICTIO_AUTH_ANONYMOUS_USER_EMAIL: {{ .Values.backend.env.DEPICTIO_AUTH_ANONYMOUS_USER_EMAIL | default "anonymous@example.com" | quote }}
-  DEPICTIO_AUTH_TEMPORARY_USER_EXPIRY_HOURS: {{ .Values.backend.env.DEPICTIO_AUTH_TEMPORARY_USER_EXPIRY_HOURS | default "24" | quote }}
+  DEPICTIO_AUTH_PUBLIC_MODE: {{ .Values.frontend.env.DEPICTIO_AUTH_PUBLIC_MODE | default "false" | quote }}
+  DEPICTIO_AUTH_DEMO_MODE: {{ .Values.frontend.env.DEPICTIO_AUTH_DEMO_MODE | default "false" | quote }}
+  DEPICTIO_AUTH_SINGLE_USER_MODE: {{ .Values.frontend.env.DEPICTIO_AUTH_SINGLE_USER_MODE | default "false" | quote }}
+  DEPICTIO_AUTH_ANONYMOUS_USER_EMAIL: {{ .Values.frontend.env.DEPICTIO_AUTH_ANONYMOUS_USER_EMAIL | default "anonymous@example.com" | quote }}
+  DEPICTIO_AUTH_TEMPORARY_USER_EXPIRY_HOURS: {{ .Values.frontend.env.DEPICTIO_AUTH_TEMPORARY_USER_EXPIRY_HOURS | default "24" | quote }}
 
   # Google OAuth Configuration (Frontend only)
   DEPICTIO_AUTH_GOOGLE_OAUTH_ENABLED: {{ .Values.frontend.env.DEPICTIO_AUTH_GOOGLE_OAUTH_ENABLED | default "false" | quote }}

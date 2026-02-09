@@ -1,4 +1,5 @@
-# EMBL specific values with no authentication (values-embl-unauth.yaml)
+# EMBL Demo Mode Configuration (values-embl-demo-base.yaml)
+# Enables demo mode with guided tour tooltips for public Depictio demo instances
 ## Storage
 storageClass: basic-csi
 persistence:
@@ -51,8 +52,9 @@ backend:
       cpu: "2"          # Balanced CPU limit
 
   env:
-    # Enable unauthenticated mode (allows anonymous access)
-    DEPICTIO_AUTH_UNAUTHENTICATED_MODE: "true"
+    # Enable demo mode (public access with guided tour tooltips)
+    DEPICTIO_AUTH_DEMO_MODE: "true"
+    DEPICTIO_AUTH_PUBLIC_MODE: "true"
 
     # Anonymous user configuration
     DEPICTIO_AUTH_ANONYMOUS_USER_EMAIL: "anonymous@depict.io"
@@ -90,8 +92,9 @@ frontend:
       cpu: "2"          # Balanced CPU limit
 
   env:
-    # Enable unauthenticated mode (allows anonymous access)
-    DEPICTIO_AUTH_UNAUTHENTICATED_MODE: "true"
+    # Enable demo mode (public access with guided tour tooltips)
+    DEPICTIO_AUTH_DEMO_MODE: "true"
+    DEPICTIO_AUTH_PUBLIC_MODE: "true"
 
     # Anonymous user configuration
     DEPICTIO_AUTH_ANONYMOUS_USER_EMAIL: "anonymous@depict.io"
@@ -177,6 +180,13 @@ ingress:
   # EMBL specific annotations
   annotations:
     cert-manager.io/cluster-issuer: harica-issuer
+    # WebSocket support for Dash real-time updates over HTTPS
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    nginx.ingress.kubernetes.io/websocket-services: "depictio-frontend"
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      proxy_set_header Upgrade $http_upgrade;
+      proxy_set_header Connection "upgrade";
 
   # Host configuration for split frontend/backend setup
   # NOTE: Two approaches are available:
@@ -235,6 +245,7 @@ global:
 # IMPORTANT: You must also load the secrets file (values-embl-secrets.yaml)
 # helm upgrade --install demo ./helm-charts/depictio \
 #   -f ./helm-charts/depictio/values.yaml \
-#   -f ./helm-charts/depictio/values-embl-unauth.yaml \
+#   -f ./helm-charts/depictio/values-embl-demo-base.yaml \
+#   -f ./helm-charts/depictio/values-embl-demo.yaml \
 #   -f ./helm-charts/depictio/values-embl-secrets.yaml \
 #   -n datasci-depictio-project-demo
