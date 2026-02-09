@@ -51,9 +51,6 @@ backend:
       cpu: "2"          # Balanced CPU limit
 
   env:
-    # Enable unauthenticated mode (allows anonymous access)
-    DEPICTIO_AUTH_UNAUTHENTICATED_MODE: "false"
-
     # Anonymous user configuration
     DEPICTIO_AUTH_ANONYMOUS_USER_EMAIL: "anonymous@depict.io"
     DEPICTIO_AUTH_TEMPORARY_USER_EXPIRY_HOURS: "1"
@@ -93,9 +90,6 @@ frontend:
       cpu: "2"          # Balanced CPU limit
 
   env:
-    # Enable unauthenticated mode (allows anonymous access)
-    DEPICTIO_AUTH_UNAUTHENTICATED_MODE: "false"
-
     # Anonymous user configuration
     DEPICTIO_AUTH_ANONYMOUS_USER_EMAIL: "anonymous@depict.io"
     DEPICTIO_AUTH_TEMPORARY_USER_EXPIRY_HOURS: "1"
