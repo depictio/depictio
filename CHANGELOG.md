@@ -6,17 +6,16 @@
 
 
 <details>
-<summary>Click to expand the changelog for 0.7.3-b4</summary>
+<summary>Click to expand the changelog for 0.7.3-b5</summary>
 
 ### Changes 📜
 
 #### Other Changes 📝
 
-* Bump version: 0.7.3-b3 → 0.7.3-b4 [c46531cd]
-* fix(dash): enhance debug menu auto-collapse for Dash 3.x compatibility [638d769a]
-* fix(demo-tour): make tour popover globally available to prevent callback errors [64f9af5b]
-* Update CHANGELOG.md for v0.7.3-b3 [39ce77f8]
-* Bump version: 0.7.3-b2 → 0.7.3-b3 [97ea7058]
+* Bump version: 0.7.3-b4 → 0.7.3-b5 [baa6ea07]
+* fix(dash): correct debug-menu-control.js path in HTML templates [f9eb2e49]
+* Update CHANGELOG.md for v0.7.3-b4 [8cb1281c]
+* Bump version: 0.7.3-b3 → 0.7.3-b4 [c9742223]
 
 
 </details>
@@ -25,32 +24,7 @@
 
 For more details, please refer to the [documentation](https://depictio.github.io/depictio-docs/)
 
-ection [3a97e214]
-* Update CHANGELOG.md for v0.7.3-b2 [590346f1]
-* Bump version: 0.7.3-b1 → 0.7.3-b2 [3861f17d]
-
-
-</details>
-
-### Documentation 📖
-
-For more details, please refer to the [documentation](https://depictio.github.io/depictio-docs/)
-
-otations [6ce94a2b]
-* Update CHANGELOG.md for v0.7.3-b1 [001b0103]
-* Bump version: 0.7.2 → 0.7.3-b1 [dbe73f51]
-
-
-</details>
-
-### Documentation 📖
-
-For more details, please refer to the [documentation](https://depictio.github.io/depictio-docs/)
-
-ecessary integration jobs ; add fixture to set DEPICTIO_CONTEXT for test modules [cb64d183]
-* fix: update e2e-tests job dependencies to include docker-system-init ; refactor test fixture for DEPICTIO_CONTEXT environment variable [2c5ac43f]
-* fix: add missing files for CI [84f84bd7]
-* fix: remove unnecessary blank line in deploy workflow [9542c00e]
+ecessary blank line in deploy workflow [9542c00e]
 
 #### Improvements 🚀
 
