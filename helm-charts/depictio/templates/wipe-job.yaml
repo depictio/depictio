@@ -1,0 +1,128 @@
+{{- if .Values.demo.autoWipeOnUpgrade }}
+---
+# ServiceAccount for wipe job
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ .Release.Name }}-wipe-sa
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    "helm.sh/hook": pre-upgrade,pre-install
+    "helm.sh/hook-weight": "-10"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+---
+# Role for PVC and deployment management
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ .Release.Name }}-wipe-role
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    "helm.sh/hook": pre-upgrade,pre-install
+    "helm.sh/hook-weight": "-10"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+rules:
+- apiGroups: ["apps"]
+  resources: ["deployments", "statefulsets"]
+  verbs: ["get", "patch", "list"]
+- apiGroups: [""]
+  resources: ["persistentvolumeclaims"]
+  verbs: ["delete", "list", "get"]
+- apiGroups: [""]
+  resources: ["pods"]
+  verbs: ["list", "get", "delete"]
+---
+# RoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ .Release.Name }}-wipe-rolebinding
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    "helm.sh/hook": pre-upgrade,pre-install
+    "helm.sh/hook-weight": "-10"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ .Release.Name }}-wipe-role
+subjects:
+- kind: ServiceAccount
+  name: {{ .Release.Name }}-wipe-sa
+  namespace: {{ .Release.Namespace }}
+---
+# Wipe job
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ .Release.Name }}-wipe-data
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    "helm.sh/hook": pre-upgrade,pre-install
+    "helm.sh/hook-weight": "-5"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  ttlSecondsAfterFinished: 60
+  template:
+    metadata:
+      name: wipe-data
+    spec:
+      restartPolicy: Never
+      serviceAccountName: {{ .Release.Name }}-wipe-sa
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: wipe
+        image: bitnami/kubectl:latest
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          runAsNonRoot: true
+          runAsUser: 1000
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "100m"
+          limits:
+            memory: "128Mi"
+            cpu: "200m"
+        command:
+          - /bin/bash
+          - -c
+          - |
+            set -e
+            echo "🗑️ Demo auto-wipe: Cleaning data before upgrade..."
+
+            # Scale down services
+            echo "📉 Scaling down services..."
+            kubectl scale statefulset/{{ .Release.Name }}-mongo -n {{ .Release.Namespace }} --replicas=0 || true
+            kubectl scale statefulset/{{ .Release.Name }}-redis -n {{ .Release.Namespace }} --replicas=0 || true
+            kubectl scale deployment/{{ .Release.Name }}-depictio-backend -n {{ .Release.Namespace }} --replicas=0 || true
+            kubectl scale deployment/{{ .Release.Name }}-depictio-frontend -n {{ .Release.Namespace }} --replicas=0 || true
+
+            # Wait for pods to terminate
+            echo "⏳ Waiting for pods to terminate..."
+            sleep 15
+
+            # Delete MongoDB PVC
+            echo "🗑️ Deleting MongoDB PVC..."
+            kubectl delete pvc mongo-storage-{{ .Release.Name }}-mongo-0 -n {{ .Release.Namespace }} --wait=false || echo "MongoDB PVC not found or already deleted"
+
+            # Delete config PVC
+            echo "🗑️ Deleting config PVC (.depictio)..."
+            kubectl delete pvc {{ .Release.Name }}-depictio-config-pvc -n {{ .Release.Namespace }} --wait=false || echo "Config PVC not found or already deleted"
+
+            # Delete keys PVC
+            echo "🗑️ Deleting keys PVC..."
+            kubectl delete pvc {{ .Release.Name }}-depictio-keys-pvc -n {{ .Release.Namespace }} --wait=false || echo "Keys PVC not found or already deleted"
+
+            echo "✅ Demo auto-wipe complete! Fresh PVCs will be created on upgrade."
+            echo "Note: S3 will be wiped by backend initialization (wipe: true)"
+{{- end }}

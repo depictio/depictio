@@ -3,10 +3,14 @@
 #
 # Layered on top of:
 #   - values.yaml (base configuration)
-#   - values-embl-unauth.yaml (EMBL infrastructure + unauthenticated mode)
+#   - values-embl-demo-base.yaml (EMBL infrastructure + demo mode)
 #   - values-embl-secrets.yaml (S3 credentials)
 #
 # Resource budget per namespace: ~8 CPU / 16Gi (shared 32 CPU / 64Gi across 4 namespaces)
+
+# Demo environment configuration - auto-wipe on upgrades
+demo:
+  autoWipeOnUpgrade: true  # Delete PVCs before each upgrade for fresh demo state
 
 # Celery worker - handles background tasks (screenshots, figure rendering)
 celery:
@@ -32,6 +36,13 @@ backend:
       memory: "4Gi"
       cpu: "2"
   env:
+    # Demo mode with guided tour tooltips
+    DEPICTIO_AUTH_DEMO_MODE: "true"
+    DEPICTIO_AUTH_PUBLIC_MODE: "true"
+    # Anonymous user configuration
+    DEPICTIO_AUTH_ANONYMOUS_USER_EMAIL: "anonymous@depict.io"
+    DEPICTIO_AUTH_TEMPORARY_USER_EXPIRY_HOURS: "1"
+    # Performance
     DEPICTIO_FASTAPI_WORKERS: "4"  # Gunicorn workers for API
     DEPICTIO_DEV_MODE: "false"
     DEPICTIO_MONGODB_WIPE: "true"
@@ -50,6 +61,13 @@ frontend:
       memory: "4Gi"
       cpu: "1"  # Single worker doesn't benefit from more CPU
   env:
+    # Demo mode with guided tour tooltips
+    DEPICTIO_AUTH_DEMO_MODE: "true"
+    DEPICTIO_AUTH_PUBLIC_MODE: "true"
+    # Anonymous user configuration
+    DEPICTIO_AUTH_ANONYMOUS_USER_EMAIL: "anonymous@depict.io"
+    DEPICTIO_AUTH_TEMPORARY_USER_EXPIRY_HOURS: "1"
+    # Performance
     DEPICTIO_DASH_WORKERS: "1"  # MUST be 1 until state_manager is refactored
     DEPICTIO_DEV_MODE: "false"
     DEPICTIO_GOOGLE_ANALYTICS_ENABLED: "true"
@@ -62,6 +80,13 @@ ingress:
 
   annotations:
     cert-manager.io/cluster-issuer: harica-issuer
+    # WebSocket support for Dash real-time updates over HTTPS
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    nginx.ingress.kubernetes.io/websocket-services: "devdemo-depictio-frontend"
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      proxy_set_header Upgrade $http_upgrade;
+      proxy_set_header Connection "upgrade";
 
   hosts:
     - host: "dev.demo.depictio.embl.org"

@@ -3,8 +3,12 @@
 #
 # Layered on top of:
 #   - values.yaml (base configuration)
-#   - values-embl-unauth.yaml (EMBL infrastructure + unauthenticated mode)
+#   - values-embl-demo-base.yaml (EMBL infrastructure + demo mode)
 #   - values-embl-secrets.yaml (S3 credentials)
+
+# Demo environment configuration - auto-wipe on upgrades
+demo:
+  autoWipeOnUpgrade: true  # Delete PVCs before each upgrade for fresh demo state
 
 # Celery worker (enabled for background tasks)
 celery:
@@ -21,6 +25,13 @@ celery:
 # Google Analytics - Production Tracking ID
 backend:
   env:
+    # Demo mode with guided tour tooltips
+    DEPICTIO_AUTH_DEMO_MODE: "true"
+    DEPICTIO_AUTH_PUBLIC_MODE: "true"
+    # Anonymous user configuration
+    DEPICTIO_AUTH_ANONYMOUS_USER_EMAIL: "anonymous@depict.io"
+    DEPICTIO_AUTH_TEMPORARY_USER_EXPIRY_HOURS: "1"
+    # Configuration
     DEPICTIO_DEV_MODE: "false"
     DEPICTIO_MONGODB_WIPE: "true"
     DEPICTIO_GOOGLE_ANALYTICS_ENABLED: "true"
@@ -30,6 +41,13 @@ backend:
 
 frontend:
   env:
+    # Demo mode with guided tour tooltips
+    DEPICTIO_AUTH_DEMO_MODE: "true"
+    DEPICTIO_AUTH_PUBLIC_MODE: "true"
+    # Anonymous user configuration
+    DEPICTIO_AUTH_ANONYMOUS_USER_EMAIL: "anonymous@depict.io"
+    DEPICTIO_AUTH_TEMPORARY_USER_EXPIRY_HOURS: "1"
+    # Configuration
     DEPICTIO_DEV_MODE: "false"
     DEPICTIO_GOOGLE_ANALYTICS_ENABLED: "true"
     DEPICTIO_GOOGLE_ANALYTICS_TRACKING_ID: "G-GM8MYRJDHL"
@@ -41,6 +59,13 @@ ingress:
 
   annotations:
     cert-manager.io/cluster-issuer: harica-issuer
+    # WebSocket support for Dash real-time updates over HTTPS
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    nginx.ingress.kubernetes.io/websocket-services: "demo-depictio-frontend"
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      proxy_set_header Upgrade $http_upgrade;
+      proxy_set_header Connection "upgrade";
 
   hosts:
     - host: "demo.depictio.embl.org"
