@@ -20,7 +20,7 @@ storageClass: "standard"
 persistence:
   mongo:
     size: 1Gi
-    accessMode: ReadWriteMany
+    accessMode: ReadWriteOnce  # Fixed: Use ReadWriteOnce for better performance with single-pod MongoDB
   minio:
     size: 1Gi
     accessMode: ReadWriteMany
@@ -84,10 +84,10 @@ redis:
   replicas: 1
   resources:
     requests:
-      memory: "256Mi"
+      memory: "512Mi"  # Increased for 8 concurrent workers (4 FastAPI + 4 Dash)
       cpu: "100m"
     limits:
-      memory: "512Mi"
+      memory: "1Gi"    # Doubled to prevent cache evictions under load
       cpu: "500m"
   service:
     type: ClusterIP

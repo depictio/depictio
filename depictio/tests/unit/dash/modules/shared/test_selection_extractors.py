@@ -6,7 +6,6 @@ Tests cover:
 - Table row selection extraction (selectedRows)
 """
 
-
 from depictio.dash.modules.figure_component.callbacks.selection import (
     extract_scatter_selection_values,
 )
