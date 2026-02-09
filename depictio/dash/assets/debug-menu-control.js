@@ -1,70 +1,75 @@
-// Auto-collapse Dash debug menu on page load with better debugging
+// Auto-collapse Dash debug menu - Enhanced for Dash 3.x
 (function() {
     let hasBeenCollapsed = false;
     let attempts = 0;
-    const maxAttempts = 20;
+    const maxAttempts = 50; // Increased for slower page loads
+    let observer = null;
+    let recheckInterval = null;
 
-    function logDebugInfo() {
-        console.log('=== DASH DEBUG MENU CONTROL ===');
-        console.log('Looking for debug menu...');
+    function logDebugInfo(level) {
+        if (level === 'verbose') {
+            console.log('=== DASH DEBUG MENU CONTROL ===');
+            console.log('Looking for debug menu...');
 
-        const debugMenu = document.querySelector('.dash-debug-menu__outer');
-        console.log('Debug menu found:', !!debugMenu);
+            const debugMenu = document.querySelector('.dash-debug-menu__outer');
+            console.log('Debug menu found:', !!debugMenu);
 
-        if (debugMenu) {
-            console.log('Debug menu classes:', debugMenu.className);
+            if (debugMenu) {
+                console.log('Debug menu classes:', debugMenu.className);
 
-            const toggleButton = debugMenu.querySelector('.dash-debug-menu__toggle');
-            console.log('Toggle button found:', !!toggleButton);
+                const toggleButton = debugMenu.querySelector('.dash-debug-menu__toggle');
+                console.log('Toggle button found:', !!toggleButton);
 
-            if (toggleButton) {
-                console.log('Toggle button classes:', toggleButton.className);
+                if (toggleButton) {
+                    console.log('Toggle button classes:', toggleButton.className);
+                }
+
+                const isExpanded = debugMenu.classList.contains('dash-debug-menu__outer--expanded');
+                console.log('Is expanded:', isExpanded);
             }
-
-            const isExpanded = debugMenu.classList.contains('dash-debug-menu__outer--expanded');
-            console.log('Is expanded:', isExpanded);
         }
+    }
 
-        // Also try alternative selectors
-        const alternativeSelectors = [
-            '[class*="dash-debug-menu"]',
-            '[class*="debug-menu"]',
-            '[class*="dash-debug"]'
-        ];
-
-        alternativeSelectors.forEach(selector => {
-            const elements = document.querySelectorAll(selector);
-            if (elements.length > 0) {
-                console.log(`Found ${elements.length} elements with selector:`, selector);
-                elements.forEach((el, i) => {
-                    console.log(`  Element ${i}:`, el.className);
-                });
-            }
-        });
+    function collapseByClassRemoval(debugMenu) {
+        // Try direct class manipulation as fallback
+        try {
+            debugMenu.classList.remove('dash-debug-menu__outer--expanded');
+            console.log('✓ Debug menu collapsed via class removal');
+            return true;
+        } catch (e) {
+            console.log('✗ Class removal failed:', e.message);
+            return false;
+        }
     }
 
     function tryCollapseDebugMenu() {
         attempts++;
-        console.log(`Attempt ${attempts}/${maxAttempts} to collapse debug menu`);
 
         if (hasBeenCollapsed || attempts > maxAttempts) {
+            if (attempts > maxAttempts) {
+                console.log('⚠️  Debug menu auto-collapse: max attempts reached');
+            }
             return;
         }
 
-        logDebugInfo();
+        // Only log every 5 attempts to reduce console noise
+        if (attempts % 5 === 1 || attempts === 1) {
+            console.log(`🔍 Attempt ${attempts}/${maxAttempts} to collapse debug menu`);
+        }
 
-        // Try multiple selectors
+        // Try multiple selectors for Dash 3.x compatibility
         const selectors = [
             '.dash-debug-menu__outer',
             '[class*="dash-debug-menu__outer"]',
-            'div[class*="debug-menu"]'
+            'div[class*="debug-menu"]',
+            // Dash 3.x might use different structure
+            'div[class*="dash-debug"]'
         ];
 
         let debugMenu = null;
         for (const selector of selectors) {
             debugMenu = document.querySelector(selector);
             if (debugMenu) {
-                console.log('Found debug menu with selector:', selector);
                 break;
             }
         }
@@ -73,91 +78,163 @@
             const isExpanded = debugMenu.classList.contains('dash-debug-menu__outer--expanded') ||
                              debugMenu.className.includes('expanded');
 
-            console.log('Debug menu expanded state:', isExpanded);
-
             if (isExpanded) {
-                // Try multiple toggle button selectors
+                // Method 1: Try clicking the toggle button (preferred)
                 const toggleSelectors = [
                     '.dash-debug-menu__toggle',
                     '[class*="dash-debug-menu__toggle"]',
-                    'button[class*="toggle"]'
+                    'button[class*="toggle"]',
+                    'button[class*="debug-menu"]' // Dash 3.x alternative
                 ];
 
                 let toggleButton = null;
                 for (const selector of toggleSelectors) {
                     toggleButton = debugMenu.querySelector(selector);
                     if (toggleButton) {
-                        console.log('Found toggle button with selector:', selector);
                         break;
                     }
                 }
 
                 if (toggleButton) {
-                    console.log('Clicking toggle button to collapse menu');
+                    console.log('✓ Debug menu found - collapsing via toggle button');
                     toggleButton.click();
                     hasBeenCollapsed = true;
-                    console.log('Debug menu collapse attempted');
+
+                    // Verify collapse after click
+                    setTimeout(() => {
+                        const stillExpanded = debugMenu.classList.contains('dash-debug-menu__outer--expanded');
+                        if (stillExpanded) {
+                            console.log('⚠️  Menu still expanded after toggle, trying class removal');
+                            collapseByClassRemoval(debugMenu);
+                        } else {
+                            console.log('✓ Debug menu successfully collapsed');
+                        }
+                        cleanup();
+                    }, 100);
                     return;
-                } else {
-                    console.log('No toggle button found');
+                }
+
+                // Method 2: Try direct class manipulation if toggle button not found
+                console.log('⚠️  Toggle button not found, trying direct class removal');
+                if (collapseByClassRemoval(debugMenu)) {
+                    hasBeenCollapsed = true;
+                    cleanup();
+                    return;
                 }
             } else {
-                console.log('Debug menu already collapsed or not expanded');
+                // Menu exists but already collapsed
+                if (attempts === 1) {
+                    console.log('✓ Debug menu already collapsed');
+                }
                 hasBeenCollapsed = true;
+                cleanup();
                 return;
             }
-        } else {
-            console.log('Debug menu not found yet');
         }
 
         // Continue trying if we haven't succeeded
         if (!hasBeenCollapsed && attempts < maxAttempts) {
-            setTimeout(tryCollapseDebugMenu, 250);
+            setTimeout(tryCollapseDebugMenu, 200); // Reduced delay for faster response
         }
     }
 
-    // Start trying when DOM is ready
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', function() {
+    function cleanup() {
+        // Stop observer and interval once collapsed
+        if (observer) {
+            observer.disconnect();
+            observer = null;
+        }
+        if (recheckInterval) {
+            clearInterval(recheckInterval);
+            recheckInterval = null;
+        }
+    }
+
+    function init() {
+        // Start trying immediately
+        tryCollapseDebugMenu();
+
+        // Also try when DOM is ready
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', function() {
+                setTimeout(tryCollapseDebugMenu, 50);
+            });
+        }
+
+        // Also try when window loads
+        window.addEventListener('load', function() {
             setTimeout(tryCollapseDebugMenu, 100);
         });
-    } else {
-        setTimeout(tryCollapseDebugMenu, 100);
-    }
 
-    // Also try when window loads
-    window.addEventListener('load', function() {
-        setTimeout(tryCollapseDebugMenu, 200);
-    });
-
-    // Try with MutationObserver to catch dynamic loading
-    if (typeof MutationObserver !== 'undefined') {
-        const observer = new MutationObserver(function(mutations) {
-            mutations.forEach(function(mutation) {
-                if (mutation.type === 'childList') {
-                    const addedNodes = Array.from(mutation.addedNodes);
-                    const hasDebugMenu = addedNodes.some(node =>
-                        node.nodeType === 1 &&
-                        (node.className && typeof node.className === 'string' && node.className.includes('dash-debug-menu') ||
-                         node.querySelector && node.querySelector('[class*="dash-debug-menu"]'))
-                    );
-
-                    if (hasDebugMenu && !hasBeenCollapsed) {
-                        console.log('Debug menu detected via MutationObserver');
-                        setTimeout(tryCollapseDebugMenu, 100);
+        // Persistent MutationObserver to catch dynamic loading
+        if (typeof MutationObserver !== 'undefined') {
+            observer = new MutationObserver(function(mutations) {
+                if (hasBeenCollapsed) {
+                    // Check if menu expanded again (shouldn't happen, but just in case)
+                    const debugMenu = document.querySelector('.dash-debug-menu__outer--expanded');
+                    if (debugMenu) {
+                        console.log('⚠️  Debug menu expanded again, re-collapsing');
+                        hasBeenCollapsed = false;
+                        tryCollapseDebugMenu();
                     }
+                    return;
                 }
+
+                mutations.forEach(function(mutation) {
+                    if (mutation.type === 'childList' && !hasBeenCollapsed) {
+                        const addedNodes = Array.from(mutation.addedNodes);
+                        const hasDebugMenu = addedNodes.some(node =>
+                            node.nodeType === 1 &&
+                            (node.className && typeof node.className === 'string' &&
+                             node.className.includes('dash-debug-menu'))
+                        );
+
+                        if (hasDebugMenu) {
+                            setTimeout(tryCollapseDebugMenu, 50);
+                        }
+                    }
+
+                    // Also check for class changes on the debug menu itself
+                    if (mutation.type === 'attributes' &&
+                        mutation.attributeName === 'class' &&
+                        mutation.target.className &&
+                        mutation.target.className.includes('dash-debug-menu__outer--expanded') &&
+                        hasBeenCollapsed) {
+                        // Menu was collapsed but expanded again
+                        console.log('⚠️  Debug menu re-expanded, collapsing again');
+                        hasBeenCollapsed = false;
+                        tryCollapseDebugMenu();
+                    }
+                });
             });
-        });
 
-        observer.observe(document.body, {
-            childList: true,
-            subtree: true
-        });
+            observer.observe(document.body, {
+                childList: true,
+                subtree: true,
+                attributes: true,
+                attributeFilter: ['class']
+            });
+        }
 
-        // Stop observing after 10 seconds
+        // Periodic recheck for first 15 seconds (covers slow page loads)
+        recheckInterval = setInterval(function() {
+            if (!hasBeenCollapsed && attempts < maxAttempts) {
+                tryCollapseDebugMenu();
+            } else if (hasBeenCollapsed) {
+                clearInterval(recheckInterval);
+                recheckInterval = null;
+            }
+        }, 500);
+
+        // Stop periodic recheck after 15 seconds
         setTimeout(() => {
-            observer.disconnect();
-        }, 10000);
+            if (recheckInterval) {
+                clearInterval(recheckInterval);
+                recheckInterval = null;
+            }
+        }, 15000);
     }
+
+    // Start immediately
+    init();
 })();
