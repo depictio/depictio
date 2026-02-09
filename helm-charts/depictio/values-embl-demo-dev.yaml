@@ -80,13 +80,7 @@ ingress:
 
   annotations:
     cert-manager.io/cluster-issuer: harica-issuer
-    # WebSocket support for Dash real-time updates over HTTPS
-    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
-    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
-    nginx.ingress.kubernetes.io/websocket-services: "devdemo-depictio-frontend"
-    nginx.ingress.kubernetes.io/configuration-snippet: |
-      proxy_set_header Upgrade $http_upgrade;
-      proxy_set_header Connection "upgrade";
+    # Traefik automatically handles WebSocket upgrades
 
   hosts:
     - host: "dev.demo.depictio.embl.org"
