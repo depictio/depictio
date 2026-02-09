@@ -95,9 +95,16 @@ def _create_management_additional_stores() -> list:
 
     # Add floating tour guide for demo mode
     if settings.auth.is_demo_mode:
-        from depictio.dash.components.demo_tour import create_floating_tour_guide
+        from depictio.dash.components.demo_tour import (
+            create_floating_tour_guide,
+            create_tour_welcome_popover,
+        )
 
+        # Floating guide for steps 1-4
         stores.append(create_floating_tour_guide())
+
+        # Welcome popover for step 0 (now globally available)
+        stores.append(create_tour_welcome_popover())
 
     return stores
 

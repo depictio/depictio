@@ -9,7 +9,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from dash import MATCH, Input, Output, State
+import dash
+from dash import MATCH, Input, Output, State, ctx
 
 from depictio.dash.modules.image_component.utils import build_image
 
@@ -36,6 +37,14 @@ def register_design_callbacks(app):
         component_id: dict[str, str],
     ) -> Any:
         """Update the image preview when design form values change."""
+        # Early return if no component triggered (switching to non-image component)
+        if not ctx.triggered_id:
+            raise dash.exceptions.PreventUpdate
+
+        # Validate that image component exists (title is required field)
+        if title is None:
+            raise dash.exceptions.PreventUpdate
+
         return build_image(
             index=component_id.get("index", ""),
             title=title or "Image Gallery",

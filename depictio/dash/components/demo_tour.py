@@ -389,6 +389,56 @@ def create_tour_step_content(step: int, total_steps: int = 5) -> list:
     return [content]
 
 
+def create_tour_welcome_popover() -> html.Div:
+    """
+    Create the welcome tour popover as a floating positioned element.
+
+    This creates a floating popover-style element that will be positioned
+    near the Create Dashboard button via JavaScript. It's styled like a popover
+    but uses absolute positioning instead of DMC Popover component.
+
+    Returns:
+        html.Div: Floating popover-style element.
+    """
+    step_config = TOUR_STEPS.get("welcome-demo", {})
+    step_number = step_config.get("step", 0)
+    total_steps = len(TOUR_STEPS)
+
+    popover_content = _create_tour_content(
+        step_id="welcome-demo",
+        title=step_config.get("title", "Welcome to Depictio Demo!"),
+        description=step_config.get(
+            "description",
+            "This is a demo instance. Dashboards you create will be automatically removed after 24 hours.",
+        ),
+        step_number=step_number,
+        total_steps=total_steps,
+    )
+
+    return html.Div(
+        id="tour-popover-welcome-demo",
+        children=[
+            dmc.Paper(
+                popover_content,
+                shadow="lg",
+                radius="md",
+                p="md",
+                style={
+                    "backgroundColor": "var(--app-surface-color, #fff)",
+                    "border": "2px solid var(--mantine-color-blue-5)",
+                    "minWidth": "300px",
+                    "maxWidth": "400px",
+                },
+            ),
+        ],
+        style={
+            "position": "fixed",
+            "zIndex": 10000,
+            "display": "none",  # Hidden by default, shown by callback
+        },
+    )
+
+
 def create_tour_welcome_modal() -> dmc.Modal:
     """
     Create a welcome modal for first-time demo users.
