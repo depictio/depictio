@@ -6,20 +6,16 @@
 
 
 <details>
-<summary>Click to expand the changelog for 0.7.3-b1</summary>
+<summary>Click to expand the changelog for 0.7.3-b2</summary>
 
 ### Changes 📜
 
 #### Other Changes 📝
 
-* Bump version: 0.7.2 → 0.7.3-b1 [8e780036]
-* refactor(helm): migrate from unauthenticated to demo+public mode [a0e2aefb]
-* feat(helm): add auto-wipe pre-upgrade hook for demo environments [4add83d0]
-* fix(dash): WebSocket URL construction for HTTPS production environments [a214e880]
-* fix(api): prevent orphaned S3 delta tables after MongoDB wipe [d4f3193e]
-* Update CHANGELOG.md for v0.7.2 [25ac905c]
-* Bump version: 0.7.1-b1 → 0.7.2 [43f0642f]
-* Update CHANGELOG.md for v0.7.1 [c42c29b4]
+* Bump version: 0.7.3-b1 → 0.7.3-b2 [2a643245]
+* fix(websocket): enable callback on initial page load and remove NGINX annotations [6ce94a2b]
+* Update CHANGELOG.md for v0.7.3-b1 [001b0103]
+* Bump version: 0.7.2 → 0.7.3-b1 [dbe73f51]
 
 
 </details>
@@ -28,24 +24,7 @@
 
 For more details, please refer to the [documentation](https://depictio.github.io/depictio-docs/)
 
-otations and timeout settings [59b9f921]
-* fix: update ingress host for API documentation testing [d856c8a6]
-* fix: refine package inclusion pattern in pyproject.toml for improved module discovery [e9d4ff87]
-* fix: update package inclusion pattern in pyproject.toml for broader API coverage [65e3fede]
-* fix: update run command documentation and remove unused status command [b3d6a8a9]
-* fix: adjust column spans and wrapping in design_header for responsive layout [85bd2c54]
-* fix: update .env.example with MinIO credentials and adjust docker-compose for script paths and DEV_MODE variable [3feb886f]
-* fix: add logging step for depictio-backend in deployment workflow [71a6916d]
-* fix: add visibility to backend and MinIO ports in Gitpod configuration [d091cfc6]
-* fix: uncomment .env file copy command in deployment workflow to ensure environment variables are set correctly [fd2849d8]
-* fix: update URL handling logic in ServiceConfig to use internal URL for server context and add debug print statement [e6ff7058]
-* fix: comment out .env file copy command in deployment workflow to prevent overwriting [55a273f1]
-* fix: clean up Gitpod environment script by removing hardcoded URL and adjusting formatting [f206a100]
-* fix: update service configuration to include external_service flag and adjust URL handling logic ; solve scenario where public url needs to be defined when using internal service (e.g: gitpod) [4aac1bd5]
-* fix: correct version format in bumpversion configuration and update push command in bump script [815214af]
-* fix: update Iris integration verification in CI workflow to reflect project name change [f89f2b5f]
-* fix: update e2e-tests job dependencies to remove docker-system-init requirement [de58bbb4]
-* fix: update e2e-tests job dependencies to remove unnecessary integration jobs ; add fixture to set DEPICTIO_CONTEXT for test modules [cb64d183]
+ecessary integration jobs ; add fixture to set DEPICTIO_CONTEXT for test modules [cb64d183]
 * fix: update e2e-tests job dependencies to include docker-system-init ; refactor test fixture for DEPICTIO_CONTEXT environment variable [2c5ac43f]
 * fix: add missing files for CI [84f84bd7]
 * fix: remove unnecessary blank line in deploy workflow [9542c00e]
