@@ -47,17 +47,16 @@ def return_create_dashboard_button(email, is_anonymous=False):
     For anonymous users, shows "Login to Create Dashboards" button.
     For authenticated users, shows normal "+ New Dashboard" button.
     In single-user mode, anonymous user has admin access and gets normal button.
-    In demo mode, wraps the button with a guided tour popover.
+    In demo mode, the global tour popover (created in management_app.py) handles the tour.
 
     Args:
         email: User email address for button ID.
         is_anonymous: Whether the user is anonymous (not fully authenticated).
 
     Returns:
-        dmc.Button or dmc.Popover: Styled button component, optionally wrapped in tour popover.
+        dmc.Button: Styled button component for dashboard creation.
     """
     from depictio.api.v1.configs.config import settings
-    from depictio.dash.components.demo_tour import TOUR_STEPS, create_tour_popover
 
     # In single-user mode, anonymous user has admin access
     should_show_login = is_anonymous and not settings.auth.is_single_user_mode
@@ -80,18 +79,8 @@ def return_create_dashboard_button(email, is_anonymous=False):
         disabled=False,  # Always enabled - behavior changes based on user type
     )
 
-    # Check if demo mode is enabled and wrap button with tour popover
-    # In demo mode, show tour to ALL users (including anonymous) to guide them
-    is_demo_mode = settings.auth.is_demo_mode
-
-    if is_demo_mode:
-        popover = create_tour_popover(
-            target=create_button,
-            step_id="welcome-demo",
-            total_steps=len(TOUR_STEPS),
-        )
-        return popover
-
+    # The global popover (created in management_app.py stores) will handle the tour
+    # No need to wrap the button anymore
     return create_button
 
 
