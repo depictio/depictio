@@ -741,6 +741,23 @@ def register_core_callbacks(app):
 
             logger.debug(f"Loaded {len(modules)} modules from {len(reports)} reports")
 
+            # Pre-warm in-memory cache in background so render callback finds it warm
+            if data_locations:
+                import threading
+
+                def _prewarm_cache(locations):
+                    try:
+                        from depictio.dash.modules.figure_component.multiqc_vis import (
+                            _get_or_parse_multiqc_logs,
+                        )
+
+                        _get_or_parse_multiqc_logs(locations)
+                        logger.debug("Pre-warm cache completed for MultiQC logs")
+                    except Exception as e:
+                        logger.debug(f"Pre-warm cache failed (best-effort): {e}")
+
+                threading.Thread(target=_prewarm_cache, args=(data_locations,), daemon=True).start()
+
             return metadata, data_locations, module_options, f"{len(modules)} modules available"
 
         except Exception as e:
@@ -748,46 +765,59 @@ def register_core_callbacks(app):
             return {}, [], [], f"Error: {str(e)}"
 
     # ============================================================================
-    # CALLBACK 2: Populate Plot Selector When Module Changes
+    # CALLBACK 2+3: Populate Plot and Dataset Selectors (consolidated)
     # ============================================================================
+    # Combines the former separate plot and dataset callbacks to save one
+    # client-server round-trip when the module changes.
 
     @app.callback(
         Output({"type": "multiqc-plot-select", "index": MATCH}, "data"),
         Output({"type": "multiqc-plot-select", "index": MATCH}, "value"),
+        Output({"type": "multiqc-dataset-select", "index": MATCH}, "data"),
+        Output({"type": "multiqc-dataset-select", "index": MATCH}, "value"),
         Output({"type": "multiqc-dataset-select", "index": MATCH}, "style"),
         [
             Input({"type": "multiqc-module-select", "index": MATCH}, "value"),
+            Input({"type": "multiqc-plot-select", "index": MATCH}, "value"),
         ],
         [
             State({"type": "multiqc-metadata-store", "index": MATCH}, "data"),
         ],
         prevent_initial_call=True,
     )
-    def populate_plot_selector(selected_module, metadata):
+    def populate_plot_and_dataset_selectors(selected_module, selected_plot, metadata):
         """
-        Populate plot dropdown when module is selected.
+        Populate both plot and dataset selectors in a single callback.
 
-        Also determines if dataset selector should be shown (for multi-dataset plots).
+        When module changes: compute plot options, auto-select first plot,
+        and compute datasets for that plot.
+        When plot changes: only update dataset selector.
 
         Args:
             selected_module: Selected module name
+            selected_plot: Selected plot name
             metadata: MultiQC metadata with plots structure
 
         Returns:
             - plot_options: Dropdown data for plot selector
-            - default_plot: Auto-selected first plot
-            - dataset_style: Hide dataset selector (shown later if needed)
+            - default_plot: Auto-selected plot
+            - dataset_options: Dropdown data for dataset selector
+            - default_dataset: Auto-selected first dataset
+            - dataset_style: Show or hide dataset selector
         """
-
         if not selected_module or not metadata:
-            return [], None, {"display": "none"}
+            return [], None, [], None, {"display": "none"}
 
-        # Get plots for selected module
         plots_dict = metadata.get("plots", {})
         module_plots = plots_dict.get(selected_module, [])
 
+        # Determine which input triggered this callback
+        triggered = dash.ctx.triggered_id
+        module_changed = (
+            isinstance(triggered, dict) and triggered.get("type") == "multiqc-module-select"
+        )
+
         # Extract plot names (handle both string and dict formats)
-        # Format can be: ["plot1", "plot2"] or [{"plot1": ["ds1", "ds2"]}, "plot2"]
         plot_names = []
         for plot_item in module_plots:
             if isinstance(plot_item, str):
@@ -797,61 +827,19 @@ def register_core_callbacks(app):
 
         plot_options = [{"label": plot, "value": plot} for plot in plot_names]
 
-        # Auto-select first plot
-        default_plot = plot_names[0] if plot_names else None
+        if module_changed:
+            # Module changed: auto-select first plot
+            selected_plot = plot_names[0] if plot_names else None
+            logger.debug(f"   Found {len(plot_names)} plots for {selected_module}")
+            if selected_plot:
+                logger.info(f"   Auto-selecting: {selected_plot}")
+        else:
+            # Plot changed by user: keep current plot_options unchanged
+            plot_options = dash.no_update
 
-        logger.debug(f"   Found {len(plot_names)} plots for {selected_module}")
-        if default_plot:
-            logger.info(f"   Auto-selecting: {default_plot}")
-
-        # Hide dataset selector by default (will be shown if needed by next callback)
-        return plot_options, default_plot, {"display": "none"}
-
-    # ============================================================================
-    # CALLBACK 3: Populate Dataset Selector If Plot Has Multiple Datasets
-    # ============================================================================
-
-    @app.callback(
-        Output({"type": "multiqc-dataset-select", "index": MATCH}, "data"),
-        Output({"type": "multiqc-dataset-select", "index": MATCH}, "value"),
-        Output(
-            {"type": "multiqc-dataset-select", "index": MATCH},
-            "style",
-            allow_duplicate=True,
-        ),
-        [
-            Input({"type": "multiqc-plot-select", "index": MATCH}, "value"),
-        ],
-        [
-            State({"type": "multiqc-module-select", "index": MATCH}, "value"),
-            State({"type": "multiqc-metadata-store", "index": MATCH}, "data"),
-        ],
-        prevent_initial_call=True,
-    )
-    def populate_dataset_selector(selected_plot, selected_module, metadata):
-        """
-        Show and populate dataset selector if plot has multiple datasets.
-
-        Some MultiQC plots have multiple datasets (e.g., different metrics).
-        This callback checks if current plot has datasets and shows selector.
-
-        Args:
-            selected_plot: Selected plot name
-            selected_module: Selected module name
-            metadata: MultiQC metadata with plots structure
-
-        Returns:
-            - dataset_options: Dropdown data for dataset selector
-            - default_dataset: Auto-selected first dataset
-            - dataset_style: Show or hide dataset selector
-        """
-
-        if not selected_plot or not selected_module or not metadata:
-            return [], None, {"display": "none"}
-
-        # Check if this plot has multiple datasets
-        plots_dict = metadata.get("plots", {})
-        module_plots = plots_dict.get(selected_module, [])
+        # Compute dataset options for the (auto-)selected plot
+        if not selected_plot:
+            return plot_options, selected_plot, [], None, {"display": "none"}
 
         datasets = []
         for plot_item in module_plots:
@@ -860,17 +848,14 @@ def register_core_callbacks(app):
                 break
 
         if not datasets or not isinstance(datasets, list):
-            # No datasets or single dataset - hide selector
             logger.info(f"   No multiple datasets for {selected_plot}")
-            return [], None, {"display": "none"}
+            return plot_options, selected_plot, [], None, {"display": "none"}
 
-        # Multiple datasets - show selector
         dataset_options = [{"label": ds, "value": ds} for ds in datasets]
         default_dataset = datasets[0] if datasets else None
-
         logger.debug(f"   Found {len(datasets)} datasets, auto-selecting: {default_dataset}")
 
-        return dataset_options, default_dataset, {"display": "block"}
+        return plot_options, selected_plot, dataset_options, default_dataset, {"display": "block"}
 
     # ============================================================================
     # CALLBACK 4: Render MultiQC Plot
@@ -1263,8 +1248,9 @@ def register_core_callbacks(app):
             # ============================================================================
             if use_link_resolution and project_id:
                 # Collect filter values from interactive components
-                # ONLY from categorical/sample-based filters (not numeric RangeSliders)
-                filter_values = []
+                # Separate direct sample values from indirect (need link resolution)
+                direct_sample_values = []
+                indirect_filter_values = []
                 for comp_data in interactive_components_dict.values():
                     comp_metadata = comp_data.get("metadata", {})
                     comp_type = comp_metadata.get("interactive_component_type", "")
@@ -1278,10 +1264,19 @@ def register_core_callbacks(app):
                         column_name == join_column
                     )  # join_column is typically "sample"
 
-                    if is_categorical or is_sample_column:
+                    if is_sample_column:
+                        # Direct: these ARE sample names, skip link resolution
                         value = comp_data.get("value", [])
                         if value:
-                            filter_values.extend(value if isinstance(value, list) else [value])
+                            values_list = value if isinstance(value, list) else [value]
+                            direct_sample_values.extend(values_list)
+                            logger.debug(f"Direct sample filter from {column_name}: {values_list}")
+                    elif is_categorical:
+                        # Indirect: need link resolution to map to samples
+                        value = comp_data.get("value", [])
+                        if value:
+                            values_list = value if isinstance(value, list) else [value]
+                            indirect_filter_values.extend(values_list)
                             logger.debug(
                                 f"Including filter values from {column_name} "
                                 f"({comp_type}, {column_type}): {value}"
@@ -1291,6 +1286,9 @@ def register_core_callbacks(app):
                             f"Skipping numeric filter {column_name} "
                             f"({comp_type}, {column_type}) - not used for sample filtering"
                         )
+
+                # Combine for has_active_filters check
+                filter_values = direct_sample_values + indirect_filter_values
 
                 if not filter_values and not has_active_filters and figure_was_patched:
                     # RESET MODE: Get all samples via link resolution without filter
@@ -1358,37 +1356,77 @@ def register_core_callbacks(app):
                             return dash.no_update
 
                 elif filter_values:
-                    # FILTER MODE: Use link resolution API
-                    resolved = resolve_link_values(
-                        project_id=project_id,
-                        source_dc_id=metadata_dc_id,
-                        source_column=source_column or join_column,
-                        filter_values=filter_values,
-                        target_dc_id=multiqc_dc_id,
-                        token=token,
-                    )
+                    # FILTER MODE
+                    sample_mappings = metadata.get("sample_mappings", {})
+                    if not sample_mappings and project_id:
+                        sample_mappings = get_multiqc_sample_mappings(
+                            project_id=project_id,
+                            dc_id=multiqc_dc_id,
+                            token=token,
+                        )
 
-                    if resolved and resolved.get("resolved_values"):
-                        selected_samples = resolved["resolved_values"]
-                        logger.info(
-                            f"✅ Link resolution success: {len(filter_values)} values -> "
-                            f"{len(selected_samples)} resolved samples "
-                            f"(resolver: {resolved.get('resolver_used', 'unknown')})"
-                        )
-                    else:
-                        # Link resolution failed - try fallback to local sample_mappings
-                        logger.info(
-                            "Link resolution returned no results - "
-                            "falling back to local sample_mappings"
-                        )
-                        sample_mappings = metadata.get("sample_mappings", {})
+                    if direct_sample_values:
+                        # Direct sample path: values ARE sample names, expand variants
                         selected_samples = expand_canonical_samples_to_variants(
-                            filter_values, sample_mappings
+                            direct_sample_values, sample_mappings
+                        )
+                        logger.info(
+                            f"✅ Direct sample filter: {len(direct_sample_values)} samples -> "
+                            f"{len(selected_samples)} variants"
                         )
 
-                        if not selected_samples:
-                            logger.warning("No samples resolved via link or local mappings")
-                            return dash.no_update
+                        # Also resolve indirect filters if present
+                        if indirect_filter_values:
+                            resolved = resolve_link_values(
+                                project_id=project_id,
+                                source_dc_id=metadata_dc_id,
+                                source_column=source_column or join_column,
+                                filter_values=indirect_filter_values,
+                                target_dc_id=multiqc_dc_id,
+                                token=token,
+                            )
+                            if resolved and resolved.get("resolved_values"):
+                                # Intersect: keep only samples matching both filters
+                                indirect_set = set(resolved["resolved_values"])
+                                selected_samples = [
+                                    s for s in selected_samples if s in indirect_set
+                                ]
+                                logger.info(
+                                    f"✅ Combined filters: {len(selected_samples)} samples "
+                                    "after intersection"
+                                )
+                    else:
+                        # Indirect only: use link resolution API
+                        resolved = resolve_link_values(
+                            project_id=project_id,
+                            source_dc_id=metadata_dc_id,
+                            source_column=source_column or join_column,
+                            filter_values=indirect_filter_values,
+                            target_dc_id=multiqc_dc_id,
+                            token=token,
+                        )
+
+                        if resolved and resolved.get("resolved_values"):
+                            selected_samples = resolved["resolved_values"]
+                            logger.info(
+                                f"✅ Link resolution success: "
+                                f"{len(indirect_filter_values)} values -> "
+                                f"{len(selected_samples)} resolved samples "
+                                f"(resolver: {resolved.get('resolver_used', 'unknown')})"
+                            )
+                        else:
+                            # Link resolution failed - try fallback to local sample_mappings
+                            logger.info(
+                                "Link resolution returned no results - "
+                                "falling back to local sample_mappings"
+                            )
+                            selected_samples = expand_canonical_samples_to_variants(
+                                indirect_filter_values, sample_mappings
+                            )
+
+                    if not selected_samples:
+                        logger.warning("No samples resolved via any method")
+                        return dash.no_update
 
                 else:
                     logger.debug("No filter values and no reset needed - skipping patching")

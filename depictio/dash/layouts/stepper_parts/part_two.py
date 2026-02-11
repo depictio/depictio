@@ -2,69 +2,140 @@
 
 This module provides callbacks for the second step of the dashboard component
 creation stepper. Users select which type of component they want to add
-(Figure, Card, Interactive, Table, Text, or MultiQC).
+(Figure, Card, Interactive, Table, MultiQC, or Image) via a 2x3 card grid.
 """
 
 import dash_mantine_components as dmc
 from dash import ALL, MATCH, Input, Output, State, ctx, dcc, html
 from dash.exceptions import PreventUpdate
+from dash_iconify import DashIconify
 
-from depictio.dash.component_metadata import is_enabled
-from depictio.dash.modules.card_component.frontend import create_stepper_card_button
+from depictio.dash.component_metadata import get_component_metadata, is_enabled
 
-# Depictio components imports - button step
-from depictio.dash.modules.figure_component.utils import create_stepper_figure_button
-from depictio.dash.modules.image_component.design_ui import create_stepper_image_button
-from depictio.dash.modules.interactive_component.frontend import create_stepper_interactive_button
-from depictio.dash.modules.multiqc_component.frontend import create_stepper_multiqc_button
-from depictio.dash.modules.table_component.frontend import create_stepper_table_button
-from depictio.dash.modules.text_component.frontend import create_stepper_text_button
+# Component types to show in the grid (excluding disabled Text)
+_GRID_COMPONENT_TYPES = ["figure", "card", "interactive", "table", "multiqc", "image"]
+
+# Colors matching depictio-docs design
+_GRID_ICON_COLORS = {
+    "figure": "#9966cc",
+    "card": "#45b8ac",
+    "interactive": "#8bc34a",
+    "table": "#6495ed",
+    "multiqc": "transparent",
+    "image": "#e6779f",
+}
+
+# Display names used as button values (must match existing callback patterns)
+_DISPLAY_NAMES = {
+    "figure": "Figure",
+    "card": "Card",
+    "interactive": "Interactive",
+    "table": "Table",
+    "multiqc": "MultiQC",
+    "image": "Image",
+}
 
 
-def _create_stepper_buttons(n: str) -> tuple[list, list]:
-    """Create all component type selection buttons and their stores.
+def _create_component_card(comp_type: str, n: str) -> dmc.Paper:
+    """Create a component selection card for the grid.
 
     Args:
-        n: The unique identifier for this stepper instance.
+        comp_type: Internal component type key.
+        n: Unique identifier for this stepper instance.
 
     Returns:
-        A tuple containing (list of button components, list of store components).
+        A DMC Paper card with icon, title, and description.
     """
-    figure_btn, figure_store = create_stepper_figure_button(n, disabled=not is_enabled("figure"))
-    card_btn, card_store = create_stepper_card_button(n, disabled=not is_enabled("card"))
-    interactive_btn, interactive_store = create_stepper_interactive_button(
-        n, disabled=not is_enabled("interactive")
-    )
-    table_btn, table_store = create_stepper_table_button(n, disabled=not is_enabled("table"))
-    text_btn, text_store = create_stepper_text_button(n, disabled=not is_enabled("text"))
-    multiqc_btn, multiqc_store = create_stepper_multiqc_button(
-        n, disabled=not is_enabled("multiqc")
-    )
-    image_btn, image_store = create_stepper_image_button(n, disabled=not is_enabled("image"))
+    metadata = get_component_metadata(comp_type)
+    display_name = _DISPLAY_NAMES[comp_type]
+    description = metadata.get("description", "")
+    icon_bg = _GRID_ICON_COLORS.get(comp_type, "#999")
+    disabled = not is_enabled(comp_type)
 
-    buttons = [figure_btn, card_btn, interactive_btn, table_btn, text_btn, multiqc_btn, image_btn]
-    stores = [
-        figure_store,
-        card_store,
-        interactive_store,
-        table_store,
-        text_store,
-        multiqc_store,
-        image_store,
+    # Icon: image for MultiQC, DashIconify for others
+    if comp_type == "multiqc":
+        icon_element = html.Img(
+            src="/assets/images/logos/multiqc.png",
+            style={"width": "24px", "height": "24px", "objectFit": "contain"},
+        )
+    else:
+        icon_element = DashIconify(
+            icon=metadata.get("icon", "mdi:help-circle"), color="white", width=24
+        )
+
+    icon_container = html.Div(
+        icon_element,
+        style={
+            "width": "48px",
+            "height": "48px",
+            "borderRadius": "12px",
+            "background": icon_bg,
+            "display": "flex",
+            "alignItems": "center",
+            "justifyContent": "center",
+            "margin": "0 auto 1rem auto",
+        },
+    )
+
+    return dmc.Paper(
+        children=[
+            icon_container,
+            dmc.Text(display_name, fw="bold", size="lg", ta="center"),
+            dmc.Text(description, size="sm", c="gray", ta="center", mt="xs"),
+        ],
+        id={"type": "btn-option", "index": n, "value": display_name},
+        shadow="sm",
+        radius="md",
+        p="lg",
+        n_clicks=0,
+        withBorder=True,
+        style={
+            "cursor": "not-allowed" if disabled else "pointer",
+            "textAlign": "center",
+            "transition": "transform 0.2s ease, box-shadow 0.2s ease",
+            "opacity": 0.5 if disabled else 1,
+            "pointerEvents": "auto" if not disabled else "none",
+        },
+        className="component-selection-card",
+    )
+
+
+def _create_stepper_stores(n: str) -> list:
+    """Create all stores needed for the stepper buttons.
+
+    Args:
+        n: Unique identifier for this stepper instance.
+
+    Returns:
+        List of dcc.Store components for tracking button state.
+    """
+    stores = []
+    for comp_type in _GRID_COMPONENT_TYPES:
+        display_name = _DISPLAY_NAMES[comp_type]
+        stores.append(
+            dcc.Store(
+                id={"type": "store-btn-option", "index": n, "value": display_name},
+                data=0,
+                storage_type="session",
+            )
+        )
+    stores.append(
         dcc.Store(id={"type": "last-button", "index": n}, data="None", storage_type="session"),
-    ]
-    return buttons, stores
+    )
+    return stores
 
 
-def _build_component_selection_layout(buttons: list) -> dmc.Stack:
-    """Build the component selection UI layout.
+def _build_component_selection_layout(n: str) -> dmc.Stack:
+    """Build the component selection UI layout as a 2x3 card grid.
 
     Args:
-        buttons: List of component type selection buttons.
+        n: Unique identifier for this stepper instance.
 
     Returns:
-        A DMC Stack containing the complete selection interface.
+        A DMC Stack containing the grid of component cards.
     """
+    cards = [_create_component_card(comp_type, n) for comp_type in _GRID_COMPONENT_TYPES]
+
     return dmc.Stack(
         [
             dmc.Stack(
@@ -88,27 +159,14 @@ def _build_component_selection_layout(buttons: list) -> dmc.Stack:
             ),
             dmc.Divider(variant="solid"),
             html.Div(
-                [
-                    html.Div(
-                        buttons,
-                        id="component-dock-container",
-                        style={
-                            "display": "flex",
-                            "flexDirection": "column",
-                            "alignItems": "flex-start",
-                            "justifyContent": "center",
-                            "gap": "16px",
-                            "padding": "24px 0",
-                            "marginLeft": "10%",
-                            "minHeight": "60vh",
-                        },
-                    ),
-                ],
+                cards,
                 style={
-                    "display": "flex",
-                    "justifyContent": "center",
-                    "alignItems": "center",
-                    "minHeight": "60vh",
+                    "display": "grid",
+                    "gridTemplateColumns": "repeat(3, 1fr)",
+                    "gap": "1.5rem",
+                    "maxWidth": "900px",
+                    "margin": "2rem auto",
+                    "padding": "0 1rem",
                 },
             ),
         ],
@@ -134,13 +192,13 @@ def register_callbacks_stepper_part_two(app):
         prevent_initial_call=True,
     )
     def update_button_list(stored_add_button):
-        """Update the component type selection buttons when stepper is triggered.
+        """Update the component type selection cards when stepper is triggered.
 
         Args:
             stored_add_button: Data from the add-button store containing the stepper ID.
 
         Returns:
-            Tuple of (buttons layout, store components list).
+            Tuple of (cards layout, store components list).
 
         Raises:
             PreventUpdate: If store is not yet initialized.
@@ -149,10 +207,10 @@ def register_callbacks_stepper_part_two(app):
             raise PreventUpdate
 
         n = stored_add_button["_id"]
-        buttons, stores = _create_stepper_buttons(n)
-        buttons_layout = _build_component_selection_layout(buttons)
+        stores = _create_stepper_stores(n)
+        layout = _build_component_selection_layout(n)
 
-        return buttons_layout, stores
+        return layout, stores
 
     @app.callback(
         Output({"type": "last-button", "index": MATCH}, "data"),

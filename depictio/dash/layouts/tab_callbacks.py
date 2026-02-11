@@ -196,11 +196,11 @@ def _build_tab_item(
         tab_label = tab.get("title", "Untitled")
 
     # Determine icon and color
+    # Both main and child tabs support tab_icon/tab_icon_color overrides
     if is_main_tab:
-        # Main tab: ALWAYS use dashboard's own icon and icon_color
-        # The main tab IS the dashboard, so it should match the dashboard's appearance
-        icon_name = tab.get("icon", "mdi:view-dashboard")
-        icon_color = tab.get("icon_color", "orange")
+        # Main tab: prefer tab_icon if set, fall back to dashboard icon
+        icon_name = tab.get("tab_icon") or tab.get("icon", "mdi:view-dashboard")
+        icon_color = tab.get("tab_icon_color") or tab.get("icon_color", "orange")
     else:
         # Child tabs: use tab_icon/tab_icon_color if set
         icon_name = tab.get("tab_icon") or tab.get("icon", "mdi:view-dashboard")
@@ -220,18 +220,28 @@ def _build_tab_item(
 
     tab_dashboard_id = str(tab["dashboard_id"])
 
-    # Use default icon if icon is a file path
-    if icon_name and ("/" in icon_name or icon_name.endswith((".png", ".svg", ".jpg", ".jpeg"))):
-        icon_name = "mdi:view-dashboard"
-
     # Build the tab content with optional edit controls
-    left_section = dmc.ActionIcon(
-        DashIconify(icon=icon_name, width=20),
-        color=icon_color,
-        radius="xl",
-        size="md",
-        variant="filled",
-    )
+    # Support image paths as icons (PNG/SVG) alongside DashIconify icons
+    if icon_name and (icon_name.startswith("/assets/") or icon_name.endswith((".png", ".svg"))):
+        icon_element = html.Img(
+            src=icon_name,
+            style={"width": "22px", "height": "22px", "objectFit": "contain"},
+        )
+        left_section = dmc.ActionIcon(
+            icon_element,
+            color="gray",
+            radius="xl",
+            size="md",
+            variant="default",
+        )
+    else:
+        left_section = dmc.ActionIcon(
+            DashIconify(icon=icon_name, width=20),
+            color=icon_color,
+            radius="xl",
+            size="md",
+            variant="filled",
+        )
 
     # In edit mode for owners, add a menu with edit/reorder options
     right_section = None
@@ -467,10 +477,29 @@ def register_tab_callbacks(app):
             # - 2+ tabs: expanded (False) - show tabs for navigation
             sidebar_collapsed = len(tabs) <= 1
 
-            # Get tabs selection color from parent dashboard's icon_color
-            tabs_color = "orange"  # Default
-            if parent_dashboard:
-                tabs_color = parent_dashboard.get("icon_color", "orange")
+            # Set tabs color from the active tab's icon color
+            active_tab = next((t for t in tabs if str(t.get("dashboard_id")) == dashboard_id), None)
+            if active_tab:
+                tabs_color = active_tab.get("tab_icon_color") or active_tab.get(
+                    "icon_color", "orange"
+                )
+            else:
+                tabs_color = "orange"
+
+            # Mantine Tabs color prop needs named colors, not hex
+            _hex_to_mantine = {
+                "#1d855c": "green",
+                "#6495ed": "blue",
+                "#9966cc": "violet",
+                "#45b8ac": "teal",
+                "#8bc34a": "lime",
+                "#f68b33": "orange",
+                "#e6779f": "pink",
+                "#f9cb40": "yellow",
+                "#e53935": "red",
+            }
+            if tabs_color:
+                tabs_color = _hex_to_mantine.get(tabs_color.lower(), tabs_color)
 
             return tab_items, dashboard_id, sidebar_collapsed, tabs_color
 

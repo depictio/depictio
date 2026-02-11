@@ -18,6 +18,8 @@
   "icon": "/assets/images/workflows/nf-core.png",
   "icon_color": "green",
   "icon_variant": "filled",
+  "tab_icon": "mdi:flask-outline",
+  "tab_icon_color": "blue",
   "is_main_tab": false,
   "is_public": true,
   "last_saved_ts": "2026-01-27 00:00:00.000000",
@@ -491,14 +493,10 @@
           "depth": "Rarefaction Depth",
           "faith_pd": "Faith's Phylogenetic Diversity"
         },
-        "template": "mantine_light",
-        "hover_data": {
-          "sample": true,
-          "depth": true,
-          "faith_pd": ":.2f",
-          "iter": true
-        }
+        "template": "mantine_light"
       },
+      "mode": "code",
+      "code_content": "df_modified = df.group_by([\"sample\", \"depth\"]).agg([\n    pl.col(\"faith_pd\").mean().alias(\"mean\"),\n    pl.col(\"faith_pd\").std().alias(\"std\")\n]).sort(\"depth\")\n\nfig = px.line(\n    df_modified.to_pandas(),\n    x=\"depth\", y=\"mean\", color=\"sample\",\n    error_y=\"std\", markers=True,\n    labels={\"depth\": \"Rarefaction Depth\", \"mean\": \"Faith's Phylogenetic Diversity\"},\n    title=\"Alpha Diversity Rarefaction Curves\"\n)\nfig.update_traces(mode=\"lines+markers\")",
       "wf_id": {
         "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
       },

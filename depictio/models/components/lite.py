@@ -90,6 +90,10 @@ class FigureLiteComponent(BaseLiteComponent):
         description="Parameters passed to Plotly Express (x, y, color, etc.)",
     )
 
+    # Code mode (alternative to dict_kwargs for custom transformations)
+    mode: str = Field(default="ui", description="Rendering mode: 'ui' or 'code'")
+    code_content: str | None = Field(default=None, description="Python code for code mode figures")
+
     # Selection filtering (enables scatter selection to filter other components)
     selection_enabled: bool = Field(default=False, description="Enable scatter selection filtering")
     selection_column: str | None = Field(

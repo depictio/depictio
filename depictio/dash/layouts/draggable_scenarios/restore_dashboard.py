@@ -825,11 +825,15 @@ def load_depictio_data(
                 )  # Fallback only
 
             # Check if data is available, if not set the buttons to disabled
-            # Note: current_user can be either a dict (from cache) or User object (from API)
-            # Handle both cases defensively
-            current_user_id = str(
-                current_user.get("id") if isinstance(current_user, dict) else current_user.id
-            )
+            # Note: current_user can be either a dict (from cache), User object (from API), or None
+            # Handle all cases defensively
+            if current_user is None:
+                logger.warning("current_user is None - treating as non-owner viewer")
+                current_user_id = ""
+            else:
+                current_user_id = str(
+                    current_user.get("id") if isinstance(current_user, dict) else current_user.id
+                )
 
             # Note: dashboard_data.permissions.owners can be either dicts or UserBase objects
             # Handle both cases defensively
