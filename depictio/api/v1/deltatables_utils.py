@@ -1105,8 +1105,14 @@ def apply_runtime_filters(df: pl.DataFrame, metadata: list[dict] | None) -> pl.D
     df_columns = set(df.columns)
 
     # Validate that all filter columns exist in the DataFrame
+    # Skip validation for empty-valued filters (they won't be applied anyway)
     skipped_filters = []
     for component in metadata:
+        # Skip empty-valued filters
+        filter_value = component.get("value")
+        if filter_value in [None, [], "", False]:
+            continue
+
         if "metadata" in component:
             column_name = component["metadata"].get("column_name")
             component_type = component["metadata"].get("interactive_component_type", "unknown")
@@ -1119,7 +1125,7 @@ def apply_runtime_filters(df: pl.DataFrame, metadata: list[dict] | None) -> pl.D
                 {
                     "column": column_name,
                     "type": component_type,
-                    "value": component.get("value", "N/A"),
+                    "value": filter_value,
                 }
             )
 

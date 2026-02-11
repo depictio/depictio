@@ -41,6 +41,11 @@ STATIC_IDS = {
             # "alpha_rarefaction_enriched": "646b0f3c1e4a2d7f8e5b8cab",
             # "taxonomy_enriched": "646b0f3c1e4a2d7f8e5b8cac",
         },
+        "dashboards": {
+            "ampliseq_multiqc": "646b0f3c1e4a2d7f8e5b8ca2",  # Main tab
+            "ampliseq_community": "646b0f3c1e4a2d7f8e5b8cb3",  # Community Analysis tab
+            "ampliseq_differential": "646b0f3c1e4a2d7f8e5b8cb4",  # Differential Abundance tab
+        },
     },
     "multiqc": {
         "project": "646b0f3c1e4a2d7f8e5b8cad",
