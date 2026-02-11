@@ -821,7 +821,11 @@ def extend_filters_via_links(
 
             if resolved and resolved.get("resolved_values"):
                 resolved_values = resolved["resolved_values"]
-                target_column = link.get("link_config", {}).get("target_field", source_column)
+                # Use target_column from API response (the actual resolved column)
+                # Fall back to link config, then source column
+                target_column = resolved.get("target_column") or link.get("link_config", {}).get(
+                    "target_field", source_column
+                )
 
                 # Create a synthetic filter for the target DC
                 # Use MultiSelect type so load_deltatable_lite applies is_in() filter
@@ -837,7 +841,8 @@ def extend_filters_via_links(
                 link_filters.append(link_filter)
                 logger.debug(
                     f"[{component_type}] Link resolved: {len(filter_values)} values -> "
-                    f"{len(resolved_values)} resolved via {resolved.get('resolver_used', 'unknown')}"
+                    f"{len(resolved_values)} resolved to column '{target_column}' "
+                    f"via {resolved.get('resolver_used', 'unknown')}"
                 )
 
     return link_filters
