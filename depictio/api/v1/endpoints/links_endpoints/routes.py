@@ -23,7 +23,10 @@ from depictio.api.v1.db import (
     projects_collection,
 )
 from depictio.api.v1.endpoints.links_endpoints.resolvers import get_resolver
-from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user
+from depictio.api.v1.endpoints.user_endpoints.routes import (
+    get_current_user,
+    get_user_or_anonymous,
+)
 from depictio.models.models.base import PyObjectId
 from depictio.models.models.links import (
     DCLink,
@@ -571,7 +574,7 @@ async def delete_link(
 async def resolve_link(
     request: LinkResolutionRequest,
     project_id: str = Path(..., description="Project ID"),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_user_or_anonymous),
 ) -> LinkResolutionResponse:
     """Resolve filtered values from source DC to target DC via link.
 
