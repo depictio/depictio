@@ -77,26 +77,32 @@ def _create_component_card(comp_type: str, n: str) -> dmc.Paper:
         },
     )
 
-    return dmc.Paper(
-        children=[
-            icon_container,
-            dmc.Text(display_name, fw="bold", size="lg", ta="center"),
-            dmc.Text(description, size="sm", c="gray", ta="center", mt="xs"),
-        ],
+    # Wrap Paper in clickable div (Paper doesn't accept n_clicks in DMC 2.x)
+    return html.Div(
+        children=dmc.Paper(
+            children=[
+                icon_container,
+                dmc.Text(display_name, fw="bold", size="lg", ta="center"),
+                dmc.Text(description, size="sm", c="gray", ta="center", mt="xs"),
+            ],
+            shadow="sm",
+            radius="md",
+            p="lg",
+            withBorder=True,
+            style={
+                "textAlign": "center",
+                "transition": "transform 0.2s ease, box-shadow 0.2s ease",
+                "opacity": 0.5 if disabled else 1,
+                "height": "100%",
+            },
+            className="component-selection-card",
+        ),
         id={"type": "btn-option", "index": n, "value": display_name},
-        shadow="sm",
-        radius="md",
-        p="lg",
         n_clicks=0,
-        withBorder=True,
         style={
             "cursor": "not-allowed" if disabled else "pointer",
-            "textAlign": "center",
-            "transition": "transform 0.2s ease, box-shadow 0.2s ease",
-            "opacity": 0.5 if disabled else 1,
             "pointerEvents": "auto" if not disabled else "none",
         },
-        className="component-selection-card",
     )
 
 

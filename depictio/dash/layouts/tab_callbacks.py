@@ -28,7 +28,6 @@ from dash_iconify import DashIconify
 
 from depictio.api.v1.configs.config import API_BASE_URL
 from depictio.api.v1.configs.logging_init import logger
-from depictio.dash.layouts.tab_modal import get_workflow_tab_color
 from depictio.models.models.base import PyObjectId, convert_objectid_to_str
 from depictio.models.models.dashboards import DashboardData
 from depictio.models.models.users import Permission
@@ -195,28 +194,11 @@ def _build_tab_item(
     else:
         tab_label = tab.get("title", "Untitled")
 
-    # Determine icon and color
-    # Both main and child tabs support tab_icon/tab_icon_color overrides
-    if is_main_tab:
-        # Main tab: prefer tab_icon if set, fall back to dashboard icon
-        icon_name = tab.get("tab_icon") or tab.get("icon", "mdi:view-dashboard")
-        icon_color = tab.get("tab_icon_color") or tab.get("icon_color", "orange")
-    else:
-        # Child tabs: use tab_icon/tab_icon_color if set
-        icon_name = tab.get("tab_icon") or tab.get("icon", "mdi:view-dashboard")
-        explicit_tab_color = tab.get("tab_icon_color")
-        if explicit_tab_color and explicit_tab_color != "":
-            # User explicitly set a tab color
-            icon_color = explicit_tab_color
-        elif workflow_data:
-            # Auto-derive from workflow (when tab_icon_color is not set or empty)
-            icon_color = get_workflow_tab_color(workflow_data)
-        else:
-            # Fall back to parent dashboard's icon_color
-            if parent_dashboard:
-                icon_color = parent_dashboard.get("icon_color", "orange")
-            else:
-                icon_color = tab.get("icon_color", "orange")
+    # Determine icon (color will be set client-side for instant updates)
+    icon_name = tab.get("tab_icon") or tab.get("icon", "mdi:view-dashboard")
+
+    # Use neutral default color - clientside callback will apply smart colors instantly
+    icon_color = "gray"
 
     tab_dashboard_id = str(tab["dashboard_id"])
 
@@ -227,20 +209,26 @@ def _build_tab_item(
             src=icon_name,
             style={"width": "22px", "height": "22px", "objectFit": "contain"},
         )
+        # Auto-detect color from image path (clientside)
+        # Add data attribute for clientside color detection
         left_section = dmc.ActionIcon(
             icon_element,
-            color="gray",
+            id={"type": "tab-icon", "index": tab_dashboard_id},
+            color="gray",  # Will be overridden clientside
             radius="xl",
             size="md",
             variant="default",
+            **{"data-icon-src": icon_name},  # For clientside detection
         )
     else:
         left_section = dmc.ActionIcon(
             DashIconify(icon=icon_name, width=20),
+            id={"type": "tab-icon", "index": tab_dashboard_id},
             color=icon_color,
             radius="xl",
             size="md",
             variant="filled",
+            **{"data-icon-name": icon_name},  # For clientside detection
         )
 
     # In edit mode for owners, add a menu with edit/reorder options
@@ -1019,6 +1007,79 @@ def register_tab_callbacks(app):
                 dashboard_cache,
                 local_data,
             )
+
+    # Clientside callback: Auto-color tabs based on icon type
+    # This runs on the client for instant response (no server round-trip)
+    app.clientside_callback(
+        """
+        function(pathname) {
+            if (!pathname) return window.dash_clientside.no_update;
+
+            // Run after DOM updates
+            setTimeout(() => {
+                const tabIcons = document.querySelectorAll('[data-icon-src], [data-icon-name]');
+
+                tabIcons.forEach(icon => {
+                    const iconSrc = icon.getAttribute('data-icon-src');
+                    const iconName = icon.getAttribute('data-icon-name');
+                    let color = null;
+
+                    // Image icon: Map path to color
+                    if (iconSrc) {
+                        if (iconSrc.includes('multiqc')) {
+                            color = 'orange';
+                        } else if (iconSrc.includes('nf-core') || iconSrc.includes('nextflow')) {
+                            color = 'green';
+                        } else if (iconSrc.includes('galaxy')) {
+                            color = 'yellow';
+                        } else if (iconSrc.includes('snakemake')) {
+                            color = 'red';
+                        } else {
+                            color = 'gray';
+                        }
+
+                        // Apply color
+                        icon.setAttribute('data-variant', 'filled');
+                        icon.setAttribute('data-color', color);
+                        const button = icon.querySelector('button');
+                        if (button) {
+                            button.setAttribute('data-variant', 'filled');
+                            button.setAttribute('data-color', color);
+                        }
+                    }
+                    // DashIconify icon: Smart color from icon name
+                    else if (iconName) {
+                        if (iconName.includes('bacteria') || iconName.includes('microbe')) {
+                            color = 'teal';
+                        } else if (iconName.includes('chart') || iconName.includes('scatter')) {
+                            color = 'red';
+                        } else if (iconName.includes('dna') || iconName.includes('genome')) {
+                            color = 'purple';
+                        } else if (iconName.includes('table') || iconName.includes('database')) {
+                            color = 'blue';
+                        } else if (iconName.includes('flask') || iconName.includes('test-tube')) {
+                            color = 'cyan';
+                        }
+
+                        // Apply detected color if different
+                        if (color && color !== icon.getAttribute('data-color')) {
+                            icon.setAttribute('data-color', color);
+                            const button = icon.querySelector('button');
+                            if (button) {
+                                button.setAttribute('data-color', color);
+                            }
+                        }
+                    }
+                });
+            }, 100);
+
+            return window.dash_clientside.no_update;
+        }
+        """,
+        Output("url", "search"),  # Dummy output
+        Input("url", "pathname"),  # Trigger on page navigation
+        prevent_initial_call=False,
+    )
 
 
 def _update_existing_tab(
