@@ -194,11 +194,9 @@ def _build_tab_item(
     else:
         tab_label = tab.get("title", "Untitled")
 
-    # Determine icon (color will be set client-side for instant updates)
+    # Determine icon and color from tab data
     icon_name = tab.get("tab_icon") or tab.get("icon", "mdi:view-dashboard")
-
-    # Use neutral default color - clientside callback will apply smart colors instantly
-    icon_color = "gray"
+    icon_color = tab.get("tab_icon_color") or tab.get("icon_color", "gray")
 
     tab_dashboard_id = str(tab["dashboard_id"])
 
@@ -209,16 +207,13 @@ def _build_tab_item(
             src=icon_name,
             style={"width": "22px", "height": "22px", "objectFit": "contain"},
         )
-        # Auto-detect color from image path (clientside)
-        # Add data attribute for clientside color detection
         left_section = dmc.ActionIcon(
             icon_element,
             id={"type": "tab-icon", "index": tab_dashboard_id},
-            color="gray",  # Will be overridden clientside
+            color=icon_color,
             radius="xl",
             size="md",
-            variant="default",
-            **{"data-icon-src": icon_name},  # For clientside detection
+            variant="filled",
         )
     else:
         left_section = dmc.ActionIcon(
@@ -228,7 +223,6 @@ def _build_tab_item(
             radius="xl",
             size="md",
             variant="filled",
-            **{"data-icon-name": icon_name},  # For clientside detection
         )
 
     # In edit mode for owners, add a menu with edit/reorder options
@@ -1007,60 +1001,6 @@ def register_tab_callbacks(app):
                 dashboard_cache,
                 local_data,
             )
-
-    # Server-side callback to update tab icon colors based on icon type
-    # Runs after tab list is rendered to apply smart colors
-    @app.callback(
-        Output({"type": "tab-icon", "index": ALL}, "color"),
-        Output({"type": "tab-icon", "index": ALL}, "variant"),
-        Input({"type": "tab-icon", "index": ALL}, "id"),
-        State({"type": "tab-icon", "index": ALL}, "data-icon-src"),
-        State({"type": "tab-icon", "index": ALL}, "data-icon-name"),
-        prevent_initial_call=True,
-    )
-    def update_tab_icon_colors(icon_ids, icon_srcs, icon_names):
-        """Apply smart colors to tab icons based on icon type."""
-        if not icon_ids:
-            raise PreventUpdate
-
-        colors = []
-        variants = []
-
-        for i, icon_id in enumerate(icon_ids):
-            icon_src = icon_srcs[i] if i < len(icon_srcs) else None
-            icon_name = icon_names[i] if i < len(icon_names) else None
-            color = "gray"
-            variant = "filled"
-
-            # Image icon: Map path to color
-            if icon_src:
-                variant = "filled"
-                if "multiqc" in icon_src.lower():
-                    color = "orange"
-                elif "nf-core" in icon_src.lower() or "nextflow" in icon_src.lower():
-                    color = "green"
-                elif "galaxy" in icon_src.lower():
-                    color = "yellow"
-                elif "snakemake" in icon_src.lower():
-                    color = "red"
-
-            # DashIconify icon: Smart color from icon name
-            elif icon_name:
-                if "bacteria" in icon_name or "microbe" in icon_name:
-                    color = "teal"
-                elif "chart" in icon_name or "scatter" in icon_name:
-                    color = "red"
-                elif "dna" in icon_name or "genome" in icon_name:
-                    color = "purple"
-                elif "table" in icon_name or "database" in icon_name:
-                    color = "blue"
-                elif "flask" in icon_name or "test-tube" in icon_name:
-                    color = "cyan"
-
-            colors.append(color)
-            variants.append(variant)
-
-        return colors, variants
 
 
 def _update_existing_tab(

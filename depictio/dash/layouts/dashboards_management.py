@@ -2252,6 +2252,13 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
                     dashboard_data_response = dashboard_data_response.json()
 
                 # deep copy the dashboard object
+                # Preserve extra fields (icon, icon_color, icon_variant, etc.)
+                extra_fields = {
+                    k: v
+                    for k, v in dashboard_data_response.items()
+                    if k in ("icon", "icon_color", "icon_variant", "workflow_system")
+                }
+
                 new_dashboard = DashboardData.from_mongo(dashboard_data_response)
                 new_dashboard.id = ObjectId()
                 new_dashboard.title = f"{dashboard.title} (copy)"
@@ -2263,6 +2270,10 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
                 # CRITICAL: Ensure this is marked as main tab with no parent
                 new_dashboard.is_main_tab = True
                 new_dashboard.parent_dashboard_id = None
+
+                # Restore preserved extra fields
+                for key, value in extra_fields.items():
+                    setattr(new_dashboard, key, value)
 
                 logger.info(f"New dashboard: {format_pydantic(new_dashboard)}")
                 # new_dashboard.dashboard_id = generate_unique_index()
@@ -2322,6 +2333,14 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
                                 child_data = child_data_response.json()
 
                                 # Create deep copy of child tab
+                                # Preserve extra fields (icon, icon_color, icon_variant, etc.)
+                                child_extra_fields = {
+                                    k: v
+                                    for k, v in child_data.items()
+                                    if k
+                                    in ("icon", "icon_color", "icon_variant", "workflow_system")
+                                }
+
                                 new_child = DashboardData.from_mongo(child_data)
                                 original_child_id = new_child.id  # Save for thumbnail copy
                                 new_child.id = ObjectId()
@@ -2340,6 +2359,10 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
 
                                 # Keep same tab_order
                                 new_child.tab_order = child_tab.get("tab_order", 0)
+
+                                # Restore preserved extra fields
+                                for key, value in child_extra_fields.items():
+                                    setattr(new_child, key, value)
 
                                 logger.info(
                                     f"Duplicating child tab: {new_child.title} (order: {new_child.tab_order})"
