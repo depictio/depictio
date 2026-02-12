@@ -1008,78 +1008,59 @@ def register_tab_callbacks(app):
                 local_data,
             )
 
-    # Clientside callback: Auto-color tabs based on icon type
-    # This runs on the client for instant response (no server round-trip)
-    app.clientside_callback(
-        """
-        function(pathname) {
-            if (!pathname) return window.dash_clientside.no_update;
-
-            // Run after DOM updates
-            setTimeout(() => {
-                const tabIcons = document.querySelectorAll('[data-icon-src], [data-icon-name]');
-
-                tabIcons.forEach(icon => {
-                    const iconSrc = icon.getAttribute('data-icon-src');
-                    const iconName = icon.getAttribute('data-icon-name');
-                    let color = null;
-
-                    // Image icon: Map path to color
-                    if (iconSrc) {
-                        if (iconSrc.includes('multiqc')) {
-                            color = 'orange';
-                        } else if (iconSrc.includes('nf-core') || iconSrc.includes('nextflow')) {
-                            color = 'green';
-                        } else if (iconSrc.includes('galaxy')) {
-                            color = 'yellow';
-                        } else if (iconSrc.includes('snakemake')) {
-                            color = 'red';
-                        } else {
-                            color = 'gray';
-                        }
-
-                        // Apply color
-                        icon.setAttribute('data-variant', 'filled');
-                        icon.setAttribute('data-color', color);
-                        const button = icon.querySelector('button');
-                        if (button) {
-                            button.setAttribute('data-variant', 'filled');
-                            button.setAttribute('data-color', color);
-                        }
-                    }
-                    // DashIconify icon: Smart color from icon name
-                    else if (iconName) {
-                        if (iconName.includes('bacteria') || iconName.includes('microbe')) {
-                            color = 'teal';
-                        } else if (iconName.includes('chart') || iconName.includes('scatter')) {
-                            color = 'red';
-                        } else if (iconName.includes('dna') || iconName.includes('genome')) {
-                            color = 'purple';
-                        } else if (iconName.includes('table') || iconName.includes('database')) {
-                            color = 'blue';
-                        } else if (iconName.includes('flask') || iconName.includes('test-tube')) {
-                            color = 'cyan';
-                        }
-
-                        // Apply detected color if different
-                        if (color && color !== icon.getAttribute('data-color')) {
-                            icon.setAttribute('data-color', color);
-                            const button = icon.querySelector('button');
-                            if (button) {
-                                button.setAttribute('data-color', color);
-                            }
-                        }
-                    }
-                });
-            }, 100);
-
-            return window.dash_clientside.no_update;
-        }
-        """,
-        Output("url", "search"),  # Dummy output
-        Input("url", "pathname"),  # Trigger on page navigation
-        prevent_initial_call=False,
+    # Server-side callback to update tab icon colors based on icon type
+    # Runs after tab list is rendered to apply smart colors
+    @app.callback(
+        Output({"type": "tab-icon", "index": ALL}, "color"),
+        Output({"type": "tab-icon", "index": ALL}, "variant"),
+        Input({"type": "tab-icon", "index": ALL}, "id"),
+        State({"type": "tab-icon", "index": ALL}, "data-icon-src"),
+        State({"type": "tab-icon", "index": ALL}, "data-icon-name"),
+        prevent_initial_call=True,
     )
+    def update_tab_icon_colors(icon_ids, icon_srcs, icon_names):
+        """Apply smart colors to tab icons based on icon type."""
+        if not icon_ids:
+            raise PreventUpdate
+
+        colors = []
+        variants = []
+
+        for i, icon_id in enumerate(icon_ids):
+            icon_src = icon_srcs[i] if i < len(icon_srcs) else None
+            icon_name = icon_names[i] if i < len(icon_names) else None
+            color = "gray"
+            variant = "filled"
+
+            # Image icon: Map path to color
+            if icon_src:
+                variant = "filled"
+                if "multiqc" in icon_src.lower():
+                    color = "orange"
+                elif "nf-core" in icon_src.lower() or "nextflow" in icon_src.lower():
+                    color = "green"
+                elif "galaxy" in icon_src.lower():
+                    color = "yellow"
+                elif "snakemake" in icon_src.lower():
+                    color = "red"
+
+            # DashIconify icon: Smart color from icon name
+            elif icon_name:
+                if "bacteria" in icon_name or "microbe" in icon_name:
+                    color = "teal"
+                elif "chart" in icon_name or "scatter" in icon_name:
+                    color = "red"
+                elif "dna" in icon_name or "genome" in icon_name:
+                    color = "purple"
+                elif "table" in icon_name or "database" in icon_name:
+                    color = "blue"
+                elif "flask" in icon_name or "test-tube" in icon_name:
+                    color = "cyan"
+
+            colors.append(color)
+            variants.append(variant)
+
+        return colors, variants
 
 
 def _update_existing_tab(
