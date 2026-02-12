@@ -1487,6 +1487,7 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
                     )
                 )
             )
+            and d.get("is_main_tab", True)  # Filter out child tabs
         ]
 
         # Sort example dashboards by the order defined in example_dashboard_ids
@@ -1500,16 +1501,17 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
 
         example_ids = {str(d.get("dashboard_id", "")) for d in example_dashboards}
 
-        # Public dashboards: public but not in examples
+        # Public dashboards: public but not in examples (only main tabs)
         public_dashboards = [
             d
             for d in dashboards
             if d.get("is_public", False)
             and str(d.get("dashboard_id", "")) not in example_ids
             and str(user_id) not in [str(owner["_id"]) for owner in d["permissions"]["owners"]]
+            and d.get("is_main_tab", True)  # Filter out child tabs
         ]
 
-        # Accessed dashboards: shared with user but not owned, not public, not examples
+        # Accessed dashboards: shared with user but not owned, not public, not examples (only main tabs)
         accessed_dashboards = [
             d
             for d in dashboards
@@ -1517,14 +1519,16 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
             and not d.get("is_public", False)
             and str(d.get("dashboard_id", "")) not in example_ids
             and (not is_anonymous or d.get("is_public", False))
+            and d.get("is_main_tab", True)  # Filter out child tabs
         ]
 
-        # Owned dashboards: owned by user but not in examples (lowest precedence)
+        # Owned dashboards: owned by user but not in examples (lowest precedence, only main tabs)
         owned_dashboards = [
             d
             for d in dashboards
             if str(user_id) in [str(owner["_id"]) for owner in d["permissions"]["owners"]]
             and str(d.get("dashboard_id", "")) not in example_ids
+            and d.get("is_main_tab", True)  # Filter out child tabs
         ]
 
         # Create views for each category (using same icons as accordion headers)
@@ -2316,6 +2320,7 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
 
                                 # Create deep copy of child tab
                                 new_child = DashboardData.from_mongo(child_data)
+                                original_child_id = new_child.id  # Save for thumbnail copy
                                 new_child.id = ObjectId()
                                 new_child.dashboard_id = str(new_child.id)
                                 new_child.title = f"{child_tab.get('title', 'Tab')} (copy)"
@@ -2345,8 +2350,8 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
                                     user_data["access_token"],
                                 )
 
-                                # Copy child tab thumbnail if exists
-                                child_thumbnail_path = f"/app/depictio/dash/static/screenshots/{child_dashboard_id}.png"
+                                # Copy child tab thumbnail if exists (use original ObjectId)
+                                child_thumbnail_path = f"/app/depictio/dash/static/screenshots/{str(original_child_id)}.png"
                                 if os.path.exists(child_thumbnail_path):
                                     new_child_thumbnail_path = f"/app/depictio/dash/static/screenshots/{str(new_child.id)}.png"
                                     shutil.copy(child_thumbnail_path, new_child_thumbnail_path)
