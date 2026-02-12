@@ -213,7 +213,7 @@ def _build_tab_item(
             color=icon_color,
             radius="xl",
             size="md",
-            variant="transparent",  # Transparent for image icons
+            variant="outline",  # Outline border for image icons
         )
     else:
         left_section = dmc.ActionIcon(
