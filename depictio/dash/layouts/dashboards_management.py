@@ -2274,19 +2274,22 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
                     user_data["access_token"],
                 )
 
-                # Copy thumbnail
-                thumbnail_filename = f"{str(dashboard.id)}.png"
-                # thumbnail_filename = f"{str(current_userbase.id)}_{str(dashboard.id)}.png"
-                thumbnail_fs_path = f"/app/depictio/dash/static/screenshots/{thumbnail_filename}"
-
-                if not os.path.exists(thumbnail_fs_path):
-                    logger.warning(f"Thumbnail not found at path: {thumbnail_fs_path}")
-                else:
-                    # Copy the thumbnail to the new dashboard ID
-                    new_thumbnail_fs_path = (
-                        f"/app/depictio/dash/static/screenshots/{str(new_dashboard.id)}.png"
+                # Copy thumbnails (all theme variants)
+                thumbnail_variants = ["", "_dark", "_light"]
+                for variant in thumbnail_variants:
+                    thumbnail_fs_path = (
+                        f"/app/depictio/dash/static/screenshots/{str(dashboard.id)}{variant}.png"
                     )
-                    shutil.copy(thumbnail_fs_path, new_thumbnail_fs_path)
+                    if os.path.exists(thumbnail_fs_path):
+                        new_thumbnail_fs_path = f"/app/depictio/dash/static/screenshots/{str(new_dashboard.id)}{variant}.png"
+                        shutil.copy(thumbnail_fs_path, new_thumbnail_fs_path)
+                        logger.info(
+                            f"✓ Copied main dashboard thumbnail{variant}: {new_thumbnail_fs_path}"
+                        )
+                    else:
+                        logger.debug(
+                            f"Main dashboard thumbnail variant not found: {thumbnail_fs_path}"
+                        )
 
                 # CRITICAL: Duplicate child tabs (sub-tabs) if they exist
                 logger.info(f"Checking for child tabs of dashboard {index_duplicate}")
@@ -2350,21 +2353,20 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
                                     user_data["access_token"],
                                 )
 
-                                # Copy child tab thumbnail if exists (use original ObjectId)
-                                child_thumbnail_path = f"/app/depictio/dash/static/screenshots/{str(original_child_id)}.png"
-                                logger.info(
-                                    f"Looking for child tab thumbnail at: {child_thumbnail_path}"
-                                )
-                                if os.path.exists(child_thumbnail_path):
-                                    new_child_thumbnail_path = f"/app/depictio/dash/static/screenshots/{str(new_child.id)}.png"
-                                    shutil.copy(child_thumbnail_path, new_child_thumbnail_path)
-                                    logger.info(
-                                        f"✓ Copied child tab thumbnail: {child_thumbnail_path} -> {new_child_thumbnail_path}"
-                                    )
-                                else:
-                                    logger.warning(
-                                        f"✗ Child tab thumbnail not found at: {child_thumbnail_path}"
-                                    )
+                                # Copy child tab thumbnails (all theme variants)
+                                thumbnail_variants = ["", "_dark", "_light"]
+                                for variant in thumbnail_variants:
+                                    child_thumbnail_path = f"/app/depictio/dash/static/screenshots/{str(original_child_id)}{variant}.png"
+                                    if os.path.exists(child_thumbnail_path):
+                                        new_child_thumbnail_path = f"/app/depictio/dash/static/screenshots/{str(new_child.id)}{variant}.png"
+                                        shutil.copy(child_thumbnail_path, new_child_thumbnail_path)
+                                        logger.info(
+                                            f"✓ Copied child tab thumbnail{variant}: {child_thumbnail_path} -> {new_child_thumbnail_path}"
+                                        )
+                                    else:
+                                        logger.debug(
+                                            f"Child tab thumbnail variant not found: {child_thumbnail_path}"
+                                        )
                             else:
                                 logger.error(
                                     f"Failed to fetch child tab data: {child_data_response.text}"
