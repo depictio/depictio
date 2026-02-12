@@ -2352,11 +2352,18 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
 
                                 # Copy child tab thumbnail if exists (use original ObjectId)
                                 child_thumbnail_path = f"/app/depictio/dash/static/screenshots/{str(original_child_id)}.png"
+                                logger.info(
+                                    f"Looking for child tab thumbnail at: {child_thumbnail_path}"
+                                )
                                 if os.path.exists(child_thumbnail_path):
                                     new_child_thumbnail_path = f"/app/depictio/dash/static/screenshots/{str(new_child.id)}.png"
                                     shutil.copy(child_thumbnail_path, new_child_thumbnail_path)
-                                    logger.debug(
-                                        f"Copied child tab thumbnail: {new_child_thumbnail_path}"
+                                    logger.info(
+                                        f"✓ Copied child tab thumbnail: {child_thumbnail_path} -> {new_child_thumbnail_path}"
+                                    )
+                                else:
+                                    logger.warning(
+                                        f"✗ Child tab thumbnail not found at: {child_thumbnail_path}"
                                     )
                             else:
                                 logger.error(
