@@ -345,7 +345,7 @@ def register_interactive_design_callbacks(app) -> None:
             State({"type": "input-dropdown-method", "index": MATCH}, "id"),
             State("local-store", "data"),
         ],
-        prevent_initial_call=True,
+        prevent_initial_call=False,  # Allow initial call, guards handle it
     )
     def update_aggregation_options(
         column_value, edit_context, workflow_id, data_collection_id, id, local_data
@@ -368,6 +368,10 @@ def register_interactive_design_callbacks(app) -> None:
             List of options for the method dropdown.
         """
         import dash
+
+        # Guard: Prevent update if column_value is None
+        if column_value is None:
+            raise dash.exceptions.PreventUpdate
 
         # Skip if all inputs are None during component initialization
         if column_value is None and workflow_id is None and data_collection_id is None:
@@ -464,7 +468,7 @@ def register_interactive_design_callbacks(app) -> None:
             State({"type": "input-dropdown-method", "index": MATCH}, "id"),
             State("local-store", "data"),
         ],
-        prevent_initial_call=True,
+        prevent_initial_call=False,  # Allow initial call, guards handle it
     )
     def update_preview_component(
         input_value,
@@ -501,6 +505,12 @@ def register_interactive_design_callbacks(app) -> None:
         Returns:
             Tuple of (preview_component, description_element, columns_table).
         """
+        import dash
+
+        # Guard: Prevent update if required values are None
+        if column_value is None or aggregation_value is None:
+            raise dash.exceptions.PreventUpdate
+
         if not local_data:
             logger.error("No local_data available for preview component")
             return [], None, None
@@ -606,7 +616,7 @@ def register_interactive_design_callbacks(app) -> None:
             Input({"type": "input-title-size", "index": MATCH}, "value"),
         ],
         State({"type": "stored-metadata-component", "index": MATCH}, "data"),
-        prevent_initial_call=True,
+        prevent_initial_call="initial_duplicate",  # Required for allow_duplicate=True
     )
     def update_stored_metadata(
         workflow_id, dc_id, column, method, title, color, icon, title_size, current_metadata
@@ -632,6 +642,12 @@ def register_interactive_design_callbacks(app) -> None:
         Returns:
             Updated metadata dict with all current selections.
         """
+        import dash
+
+        # Guard: Prevent update if required values are None
+        if column is None or method is None:
+            raise dash.exceptions.PreventUpdate
+
         if not current_metadata:
             current_metadata = {}
 
