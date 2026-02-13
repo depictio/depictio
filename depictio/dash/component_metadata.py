@@ -43,7 +43,7 @@ COMPONENT_METADATA = {
         "icon": "mdi:graph-box",
         "display_name": "Figure",
         "description": "Interactive data visualizations",
-        "color": colors["blue"],
+        "color": colors["purple"],  # Purple #9966cc matches stepper grid
         "supports_edit": True,  # Phase 2A: Edit mode enabled (design UI, save, pre-populate)
         "supports_reset": False,  # Phase 1: No reset functionality yet
         "enabled": True,  # ENABLED: Phase 2A with edit mode support
@@ -54,7 +54,7 @@ COMPONENT_METADATA = {
         "icon": "formkit:number",
         "display_name": "Card",
         "description": "Statistical summary cards",
-        "color": colors["violet"],  # Use same color for skeleton loader
+        "color": colors["teal"],  # Teal #45b8ac matches stepper grid
         "supports_edit": True,
         "supports_reset": False,
         "enabled": True,  # ENABLED: Card component available
@@ -68,7 +68,7 @@ COMPONENT_METADATA = {
         "icon": "bx:slider-alt",
         "display_name": "Interactive",
         "description": "Interactive data controls",
-        "color": colors["teal"],  # Use blue for interactive components
+        "color": colors["green"],  # Green #8bc34a matches stepper grid
         "supports_edit": True,
         "supports_reset": False,
         "enabled": True,  # ENABLED: Interactive component available
@@ -82,7 +82,7 @@ COMPONENT_METADATA = {
         "icon": "octicon:table-24",
         "display_name": "Table",
         "description": "Data tables and grids",
-        "color": colors["yellow"],
+        "color": colors["blue"],  # Blue #6495ed matches stepper grid
         "supports_edit": False,  # Table edit/design functionality restored
         "supports_reset": False,
         "enabled": True,  # ENABLED: Table component with design/edit support
@@ -138,7 +138,7 @@ COMPONENT_METADATA = {
         "icon": "mdi:image-area",  # Gallery-style icon for image data collections
         "display_name": "Image Gallery",
         "description": "Interactive image grid with modal viewer",
-        "color": colors["teal"],
+        "color": colors["pink"],  # Pink #e6779f matches stepper grid
         "supports_edit": True,
         "supports_reset": False,
         "enabled": True,  # ENABLED: Image gallery component
@@ -534,15 +534,20 @@ def get_dmc_button_color(
         "teal": "teal",
         "gray": "gray",
         "dark": "dark",
-        # Hex value mappings from colors.py
-        "#9966CC": "violet",  # purple
+        # Hex value mappings from colors.py (case-insensitive)
+        "#9966CC": "violet",  # purple (Figure component)
+        "#9966cc": "violet",  # purple (lowercase)
         "#7A5DC7": "violet",  # violet
-        "#6495ED": "blue",  # blue
-        "#45B8AC": "teal",  # teal
-        "#8BC34A": "green",  # green
+        "#6495ED": "blue",  # blue (Table component)
+        "#6495ed": "blue",  # blue (lowercase)
+        "#45B8AC": "teal",  # teal (Card component)
+        "#45b8ac": "teal",  # teal (lowercase)
+        "#8BC34A": "green",  # green (Interactive component)
+        "#8bc34a": "green",  # green (lowercase)
         "#F9CB40": "yellow",  # yellow
         "#F68B33": "orange",  # orange
-        "#E6779F": "pink",  # pink
+        "#E6779F": "pink",  # pink (Image component)
+        "#e6779f": "pink",  # pink (lowercase)
         "#E53935": "red",  # red
         "#000000": "dark",  # black
         "#B0BEC5": "gray",  # grey

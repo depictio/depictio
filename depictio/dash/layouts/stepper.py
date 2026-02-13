@@ -35,6 +35,7 @@ from depictio.dash.layouts.stepper_parts.part_two import register_callbacks_step
 from depictio.dash.modules.card_component.frontend import design_card
 from depictio.dash.modules.figure_component.utils import design_figure
 from depictio.dash.modules.interactive_component.frontend import design_interactive
+from depictio.models.components.validation import DC_COMPONENT_TYPE_MAPPING
 from depictio.models.models.projects import ProjectResponse
 
 # Stepper step bounds
@@ -69,6 +70,7 @@ def register_callbacks_stepper(app) -> None:
     - Workflow and data collection selection
     - Stepper step navigation
     - Data preview rendering
+    - Component design callbacks (for pattern-matching IDs in design UIs)
 
     Args:
         app: Dash application instance.
@@ -393,14 +395,8 @@ def register_callbacks_stepper(app) -> None:
 
         all_wf_dc = project["workflows"]
 
-        mapping_component_data_collection = {
-            # Table DCs support all standard components
-            "table": ["Figure", "Card", "Interactive", "Table", "Text"],
-            # Image DCs now work like Table DCs with delta tables, supporting all components
-            "image": ["Figure", "Card", "Interactive", "Table", "Text", "Image"],
-            "jbrowse2": ["JBrowse2"],
-            "multiqc": ["MultiQC"],
-        }
+        # Use shared validation mapping (single source of truth for UI + API)
+        mapping_component_data_collection = DC_COMPONENT_TYPE_MAPPING
 
         # Use a dictionary to track unique workflows efficiently
         valid_wfs = []
@@ -497,14 +493,8 @@ def register_callbacks_stepper(app) -> None:
 
         selected_wf_data = selected_wf_list[0]
 
-        mapping_component_data_collection = {
-            # Table DCs support all standard components
-            "table": ["Figure", "Card", "Interactive", "Table", "Text"],
-            # Image DCs now work like Table DCs with delta tables, supporting all components
-            "image": ["Figure", "Card", "Interactive", "Table", "Text", "Image"],
-            "jbrowse2": ["JBrowse2"],
-            "multiqc": ["MultiQC"],
-        }
+        # Use shared validation mapping (single source of truth for UI + API)
+        mapping_component_data_collection = DC_COMPONENT_TYPE_MAPPING
 
         # Build lookup dicts for data collections
         data_collections = selected_wf_data["data_collections"]
@@ -1601,13 +1591,14 @@ def create_stepper_content(n: str, active: int) -> dmc.Stack:
             # Footer - sticky at bottom
             dmc.Paper(
                 stepper_footer,
-                withBorder=True,
+                withBorder=False,
                 p="md",
                 style={
                     "position": "sticky",
                     "bottom": 0,
                     "zIndex": 100,
                     "flexShrink": 0,
+                    "backgroundColor": "var(--app-bg-color, #ffffff)",
                 },
             ),
         ],

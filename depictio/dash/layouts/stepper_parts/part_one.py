@@ -32,7 +32,6 @@ from dash_iconify import DashIconify
 from depictio.api.v1.configs.config import API_BASE_URL
 from depictio.api.v1.configs.logging_init import logger
 from depictio.dash.component_metadata import (
-    get_component_color,
     get_component_metadata_by_display_name,
 )
 
@@ -68,18 +67,16 @@ def register_callbacks_stepper_part_one(app: dash.Dash) -> None:
                 if selected_component == "Text":
                     # For Text components, show selection immediately since no data selection is needed
                     component_metadata = get_component_metadata_by_display_name(selected_component)
-                    hex_color = get_component_color("text")  # Get hex color from colors.py
                     return dmc.Badge(
                         selected_component,
-                        size="xl",
-                        radius="xl",
-                        variant="outline",
-                        style={"fontFamily": "Virgil", "fontSize": "16px"},
+                        size="lg",
+                        radius="md",
+                        variant="filled",
+                        style={"fontWeight": "bold"},
                         color=component_metadata["color"],
                         leftSection=DashIconify(
                             icon=component_metadata["icon"],
-                            width=15,
-                            color=hex_color,
+                            width=16,
                         ),
                     )
         return dash.no_update
@@ -588,19 +585,17 @@ def register_callbacks_stepper_part_one(app: dash.Dash) -> None:
 
         # Get metadata for the selected component
         component_metadata = get_component_metadata_by_display_name(component_selected)
-        hex_color = get_component_color(component_selected.lower())  # Get hex color from colors.py
 
         return layout, dmc.Badge(
             component_selected,
-            size="xl",
-            radius="xl",
-            variant="outline",
-            style={"fontFamily": "Virgil", "fontSize": "16px"},
+            size="lg",
+            radius="md",
+            variant="filled",
+            style={"fontWeight": "bold"},
             color=component_metadata["color"],
             leftSection=DashIconify(
                 icon=component_metadata["icon"],
-                width=15,
-                color=hex_color,
+                width=16,
             ),
         )
 

@@ -291,13 +291,13 @@ def register_callbacks_stepper_part_three(app):
         logger.debug(f"Step 3 - workflow: {workflow_selection}, dc: {data_collection_selection}")
 
         components_list = [
-            "Figure",
-            "Card",
-            "Interactive",
-            "Table",
-            "Text",
-            "MultiQC",
-            "Image",
+            "Figure",  # 0 - matches part_two index 0
+            "Card",  # 1 - matches part_two index 1
+            "Interactive",  # 2 - matches part_two index 2
+            "Table",  # 3 - matches part_two index 3
+            "MultiQC",  # 4 - matches part_two index 4
+            "Image",  # 5 - matches part_two index 5
+            # Text component handled separately (doesn't need DC selection)
             "JBrowse2",
             "Graph",
             "Map",
