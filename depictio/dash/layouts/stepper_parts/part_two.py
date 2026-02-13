@@ -36,7 +36,7 @@ _DISPLAY_NAMES = {
 }
 
 
-def _create_component_card(comp_type: str, n: str) -> dmc.Paper:
+def _create_component_card(comp_type: str, n: str) -> html.Div:
     """Create a component selection card for the grid.
 
     Args:
@@ -56,7 +56,7 @@ def _create_component_card(comp_type: str, n: str) -> dmc.Paper:
     if comp_type == "multiqc":
         icon_element = html.Img(
             src="/assets/images/logos/multiqc.png",
-            style={"width": "24px", "height": "24px", "objectFit": "contain"},
+            style={"width": "44px", "height": "44px", "objectFit": "contain"},
         )
     else:
         icon_element = DashIconify(

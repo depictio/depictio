@@ -59,6 +59,58 @@ def _get_ag_grid_theme_class(theme: str) -> str:
     return "ag-theme-alpine-dark" if effective_theme == "dark" else "ag-theme-alpine"
 
 
+def _create_empty_state_card(icon: str, title: str, description: str) -> dmc.Center:
+    """
+    Create an empty state card for stepper (similar to dashboards_management.py).
+
+    Args:
+        icon: Iconify icon name
+        title: Main title text
+        description: Description text
+
+    Returns:
+        Centered empty state card
+    """
+    return dmc.Center(
+        dmc.Paper(
+            children=[
+                dmc.Stack(
+                    children=[
+                        dmc.Center(
+                            DashIconify(
+                                icon=icon,
+                                width=64,
+                                height=64,
+                                color="#6c757d",
+                            )
+                        ),
+                        dmc.Text(
+                            title,
+                            ta="center",
+                            fw="bold",
+                            size="xl",
+                        ),
+                        dmc.Text(
+                            description,
+                            ta="center",
+                            c="gray",
+                            size="sm",
+                        ),
+                    ],
+                    align="center",
+                    gap="sm",
+                )
+            ],
+            shadow="sm",
+            radius="md",
+            p="xl",
+            withBorder=True,
+            style={"width": "100%", "maxWidth": "500px"},
+        ),
+        style={"minHeight": "200px", "height": "auto", "marginTop": "1rem"},
+    )
+
+
 def register_callbacks_stepper(app) -> None:
     """Register all stepper-related callbacks for the Dash application.
 
@@ -360,8 +412,12 @@ def register_callbacks_stepper(app) -> None:
         if isinstance(ctx.triggered_id, dict):
             if ctx.triggered_id["type"] == "btn-option":
                 component_selected = ctx.triggered_id["value"]
+                logger.info(
+                    f"🔧 STEPPER WORKFLOW FILTER: Component selected = {component_selected}"
+                )
         else:
             component_selected = "None"
+            logger.warning("🔧 STEPPER WORKFLOW FILTER: No button clicked, component = None")
 
         # Extract dashboard_id from pathname
         # URL format: /dashboard/{dashboard_id}/component/add/{component_id}
@@ -404,9 +460,11 @@ def register_callbacks_stepper(app) -> None:
 
         for wf in all_wf_dc:
             # Check if the workflow has any matching data collection
+            # Use .get() to safely handle unknown DC types (returns empty list = no match)
             if (
                 any(
-                    component_selected in mapping_component_data_collection[dc["config"]["type"]]
+                    component_selected
+                    in mapping_component_data_collection.get(dc["config"]["type"], [])
                     for dc in wf["data_collections"]
                 )
                 and wf["id"] not in seen_workflow_ids
@@ -421,14 +479,63 @@ def register_callbacks_stepper(app) -> None:
 
         # Return the data and the first value if the data is not empty
         if valid_wfs:
+            logger.info(
+                f"🔧 STEPPER WORKFLOW FILTER: Found {len(valid_wfs)} workflows for {component_selected}"
+            )
             return valid_wfs, valid_wfs[0]["value"]
         else:
-            return dash.no_update, dash.no_update
+            # No compatible workflows found - return empty list to clear dropdown
+            # This will trigger the empty state UI
+            logger.warning(
+                f"🔧 STEPPER WORKFLOW FILTER: No workflows found for {component_selected} - returning empty list"
+            )
+            return [], None
+
+    @app.callback(
+        Output({"type": "workflow-empty-state", "index": MATCH}, "children"),
+        Output({"type": "workflow-dc-dropdowns", "index": MATCH}, "style"),
+        Output({"type": "dropdown-output", "index": MATCH}, "style"),
+        Output({"type": "stepper-data-preview", "index": MATCH}, "style"),
+        Input({"type": "workflow-selection-label", "index": MATCH}, "data"),
+        Input({"type": "btn-option", "index": MATCH, "value": ALL}, "n_clicks"),
+        State({"type": "last-button", "index": MATCH}, "data"),
+        State("project-metadata-store", "data"),
+        prevent_initial_call=True,
+    )
+    def show_workflow_empty_state(workflow_data, btn_clicks, component_selected, project_metadata):
+        """Show empty state message when no compatible workflows/DCs found, and hide dropdowns."""
+        # Get the actual component name from the triggered button if available
+        if ctx.triggered_id and isinstance(ctx.triggered_id, dict):
+            if ctx.triggered_id.get("type") == "btn-option":
+                component_name = ctx.triggered_id.get(
+                    "value", component_selected or "this component"
+                )
+            else:
+                component_name = component_selected or "this component"
+        else:
+            component_name = component_selected or "this component"
+
+        # Check if workflow dropdown is empty (no compatible workflows)
+        if not workflow_data or len(workflow_data) == 0:
+            # Show empty state and hide dropdowns + data collection info + preview
+            empty_state = _create_empty_state_card(
+                icon="mdi:database-off",
+                title=f"No {component_name} Data Collections",
+                description=(
+                    f"This project has no workflows with {component_name} data collections registered. "
+                    f"Please create a workflow with {component_name.lower()}-type data collections first, "
+                    "or select a different component type."
+                ),
+            )
+            return empty_state, {"display": "none"}, {"display": "none"}, {"display": "none"}
+
+        # No empty state - show dropdowns and hide empty state
+        return [], {}, {}, {}
 
     @app.callback(
         Output({"type": "datacollection-selection-label", "index": MATCH}, "data"),
         Output({"type": "datacollection-selection-label", "index": MATCH}, "value"),
-        State({"type": "workflow-selection-label", "index": MATCH}, "value"),
+        Input({"type": "workflow-selection-label", "index": MATCH}, "value"),
         State({"type": "workflow-selection-label", "index": MATCH}, "id"),
         Input({"type": "btn-option", "index": MATCH, "value": ALL}, "n_clicks"),
         State("local-store", "data"),
@@ -502,12 +609,18 @@ def register_callbacks_stepper(app) -> None:
         dc_id_to_type = {dc["id"]: dc["config"]["type"] for dc in data_collections}
 
         # Get regular data collections (exclude joined DCs - they'll be added separately)
+        # Use .get() to safely handle unknown DC types (returns empty list = no match)
         valid_dcs = [
             {"label": dc["data_collection_tag"], "value": dc["id"]}
             for dc in data_collections
-            if component_selected in mapping_component_data_collection[dc["config"]["type"]]
+            if component_selected in mapping_component_data_collection.get(dc["config"]["type"], [])
             and dc.get("config", {}).get("source") != "joined"
         ]
+
+        logger.info(
+            f"🔧 DC DROPDOWN: Found {len(valid_dcs)} regular DCs for {component_selected} "
+            f"from {len(data_collections)} total DCs in workflow"
+        )
 
         # Add joined data collection options only for Figure and Table components
         allowed_components_for_joined = ["Figure", "Table"]
@@ -623,8 +736,8 @@ def register_callbacks_stepper(app) -> None:
             # Check if Text component was selected
             if isinstance(triggered_id, dict) and triggered_id.get("type") == "btn-option":
                 component_selected = triggered_id.get("value")
-                if component_selected in ["Text", "MultiQC"]:
-                    # Text and MultiQC components don't need data selection, skip to design step
+                if component_selected == "Text":
+                    # Only Text components don't need data selection, skip to design step
                     next_step = 2  # Move directly to component design step
                     return next_step, False  # Return immediately to avoid further processing
                 else:
@@ -1072,39 +1185,45 @@ def create_stepper_output(n: str, active: int) -> html.Div:
                     #     size="md",
                     #     mb="sm",
                     # ),
-                    dmc.SimpleGrid(
-                        cols=2,
-                        spacing="lg",
-                        children=[
-                            dmc.Select(
-                                id={"type": "workflow-selection-label", "index": n},
-                                label=dmc.Group(
-                                    [
-                                        DashIconify(icon="flat-color-icons:workflow", width=20),
-                                        dmc.Text("Workflow", fw="bold", size="md"),
-                                    ],
-                                    gap="xs",
+                    # Workflow and Data Collection dropdowns (hidden when no compatible DCs)
+                    html.Div(
+                        id={"type": "workflow-dc-dropdowns", "index": n},
+                        children=dmc.SimpleGrid(
+                            cols=2,
+                            spacing="lg",
+                            children=[
+                                dmc.Select(
+                                    id={"type": "workflow-selection-label", "index": n},
+                                    label=dmc.Group(
+                                        [
+                                            DashIconify(icon="flat-color-icons:workflow", width=20),
+                                            dmc.Text("Workflow", fw="bold", size="md"),
+                                        ],
+                                        gap="xs",
+                                    ),
+                                    placeholder="Select workflow...",
+                                    size="md",
                                 ),
-                                placeholder="Select workflow...",
-                                size="md",
-                            ),
-                            dmc.Select(
-                                id={
-                                    "type": "datacollection-selection-label",
-                                    "index": n,
-                                },
-                                label=dmc.Group(
-                                    [
-                                        DashIconify(icon="bxs:data", width=20),
-                                        dmc.Text("Data Collection", fw="bold", size="md"),
-                                    ],
-                                    gap="xs",
+                                dmc.Select(
+                                    id={
+                                        "type": "datacollection-selection-label",
+                                        "index": n,
+                                    },
+                                    label=dmc.Group(
+                                        [
+                                            DashIconify(icon="bxs:data", width=20),
+                                            dmc.Text("Data Collection", fw="bold", size="md"),
+                                        ],
+                                        gap="xs",
+                                    ),
+                                    placeholder="Select data collection...",
+                                    size="md",
                                 ),
-                                placeholder="Select data collection...",
-                                size="md",
-                            ),
-                        ],
+                            ],
+                        ),
                     ),
+                    # Empty state message when no compatible workflows/DCs found
+                    html.Div(id={"type": "workflow-empty-state", "index": n}),
                 ],
                 gap="sm",
             ),
@@ -1381,39 +1500,45 @@ def create_stepper_content(n: str, active: int) -> dmc.Stack:
             # Data Selection
             dmc.Stack(
                 [
-                    dmc.SimpleGrid(
-                        cols=2,
-                        spacing="lg",
-                        children=[
-                            dmc.Select(
-                                id={"type": "workflow-selection-label", "index": n},
-                                label=dmc.Group(
-                                    [
-                                        DashIconify(icon="flat-color-icons:workflow", width=20),
-                                        dmc.Text("Workflow", fw="bold", size="md"),
-                                    ],
-                                    gap="xs",
+                    # Workflow and Data Collection dropdowns (hidden when no compatible DCs)
+                    html.Div(
+                        id={"type": "workflow-dc-dropdowns", "index": n},
+                        children=dmc.SimpleGrid(
+                            cols=2,
+                            spacing="lg",
+                            children=[
+                                dmc.Select(
+                                    id={"type": "workflow-selection-label", "index": n},
+                                    label=dmc.Group(
+                                        [
+                                            DashIconify(icon="flat-color-icons:workflow", width=20),
+                                            dmc.Text("Workflow", fw="bold", size="md"),
+                                        ],
+                                        gap="xs",
+                                    ),
+                                    placeholder="Select workflow...",
+                                    size="md",
                                 ),
-                                placeholder="Select workflow...",
-                                size="md",
-                            ),
-                            dmc.Select(
-                                id={
-                                    "type": "datacollection-selection-label",
-                                    "index": n,
-                                },
-                                label=dmc.Group(
-                                    [
-                                        DashIconify(icon="bxs:data", width=20),
-                                        dmc.Text("Data Collection", fw="bold", size="md"),
-                                    ],
-                                    gap="xs",
+                                dmc.Select(
+                                    id={
+                                        "type": "datacollection-selection-label",
+                                        "index": n,
+                                    },
+                                    label=dmc.Group(
+                                        [
+                                            DashIconify(icon="bxs:data", width=20),
+                                            dmc.Text("Data Collection", fw="bold", size="md"),
+                                        ],
+                                        gap="xs",
+                                    ),
+                                    placeholder="Select data collection...",
+                                    size="md",
                                 ),
-                                placeholder="Select data collection...",
-                                size="md",
-                            ),
-                        ],
+                            ],
+                        ),
                     ),
+                    # Empty State Container (shows when no compatible workflows/DCs)
+                    html.Div(id={"type": "workflow-empty-state", "index": n}),
                 ],
                 gap="sm",
             ),

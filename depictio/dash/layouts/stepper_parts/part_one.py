@@ -12,8 +12,8 @@ The step displays:
 - Data collection information panel showing metadata, shape, and type
 
 Callbacks:
-    - update_component_selected_display: Updates the component type badge for Text
-      components (which don't require data selection)
+    - update_component_selected_badge: Updates the component type badge immediately
+      for all component types when clicked
     - update_step_1: Main callback that handles workflow/data collection selection
       and displays the data collection information panel
 
@@ -41,7 +41,7 @@ def register_callbacks_stepper_part_one(app: dash.Dash) -> None:
     Register callbacks for stepper part one (component type and data selection).
 
     Registers:
-    - update_component_selected_display: Badge update for Text components
+    - update_component_selected_badge: Badge update for all components (immediate)
     - update_step_1: Main workflow/data collection selection handler
 
     Args:
@@ -54,37 +54,34 @@ def register_callbacks_stepper_part_one(app: dash.Dash) -> None:
         State({"type": "last-button", "index": MATCH}, "data"),
         prevent_initial_call=True,
     )
-    def update_component_selected_display(n_clicks, component_selected):
+    def update_component_selected_badge(n_clicks, component_selected):
         """
-        Update component-selected badge for components that don't need data selection.
+        Update component badge immediately when any component button is clicked.
 
-        Text components can be created without selecting a data source, so their
-        badge is displayed immediately upon selection.
+        This callback fires immediately upon component selection, providing instant
+        visual feedback to the user by displaying the component name, color, and icon.
         """
         if ctx.triggered_id and isinstance(ctx.triggered_id, dict):
             if ctx.triggered_id["type"] == "btn-option":
                 selected_component = ctx.triggered_id["value"]
-                if selected_component == "Text":
-                    # For Text components, show selection immediately since no data selection is needed
-                    component_metadata = get_component_metadata_by_display_name(selected_component)
-                    return dmc.Badge(
-                        selected_component,
-                        size="lg",
-                        radius="md",
-                        variant="filled",
-                        style={"fontWeight": "bold"},
-                        color=component_metadata["color"],
-                        leftSection=DashIconify(
-                            icon=component_metadata["icon"],
-                            width=16,
-                        ),
-                    )
+                # Handle ALL components - not just Text
+                component_metadata = get_component_metadata_by_display_name(selected_component)
+                return dmc.Badge(
+                    selected_component,
+                    size="lg",
+                    radius="md",
+                    variant="filled",
+                    style={"fontWeight": "bold"},
+                    color=component_metadata["color"],
+                    leftSection=DashIconify(
+                        icon=component_metadata["icon"],
+                        width=16,
+                    ),
+                )
         return dash.no_update
 
     @app.callback(
         Output({"type": "dropdown-output", "index": MATCH}, "children"),
-        Output({"type": "component-selected", "index": MATCH}, "children"),
-        # Output({"type": "component-selected", "index": MATCH}, "color"),
         Input({"type": "workflow-selection-label", "index": MATCH}, "value"),
         Input({"type": "datacollection-selection-label", "index": MATCH}, "value"),
         Input({"type": "btn-option", "index": MATCH, "value": ALL}, "n_clicks"),
@@ -109,7 +106,7 @@ def register_callbacks_stepper_part_one(app: dash.Dash) -> None:
         Supports both regular and joined data collections.
 
         Returns:
-            Tuple of (layout component, component badge).
+            Layout component for the data collection information panel.
         """
         if not local_store:
             raise dash.exceptions.PreventUpdate
@@ -119,10 +116,6 @@ def register_callbacks_stepper_part_one(app: dash.Dash) -> None:
             raise dash.exceptions.PreventUpdate
 
         TOKEN = local_store["access_token"]
-
-        # Determine current component selection from trigger
-        if (isinstance(ctx.triggered_id, dict)) and (ctx.triggered_id["type"] == "btn-option"):
-            component_selected = ctx.triggered_id["value"]
 
         # Component metadata is now handled by centralized functions
 
@@ -583,21 +576,7 @@ def register_callbacks_stepper_part_one(app: dash.Dash) -> None:
         else:
             layout = html.Div("No data to display")
 
-        # Get metadata for the selected component
-        component_metadata = get_component_metadata_by_display_name(component_selected)
-
-        return layout, dmc.Badge(
-            component_selected,
-            size="lg",
-            radius="md",
-            variant="filled",
-            style={"fontWeight": "bold"},
-            color=component_metadata["color"],
-            leftSection=DashIconify(
-                icon=component_metadata["icon"],
-                width=16,
-            ),
-        )
+        return layout
 
     # @app.callback(
     #     Output({"type": "get-started-example-basic", "index": MATCH}, "getRowsResponse"),

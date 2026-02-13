@@ -284,7 +284,7 @@ def register_interactive_design_callbacks(app) -> None:
         # Output({"type": "input-number-marks", "index": MATCH}, "value"),
         Input("edit-page-context", "data"),
         State({"type": "input-title", "index": MATCH}, "id"),
-        prevent_initial_call="initial_duplicate",
+        prevent_initial_call=True,
     )
     def pre_populate_interactive_settings_for_edit(edit_context, input_id):
         """
@@ -345,7 +345,7 @@ def register_interactive_design_callbacks(app) -> None:
             State({"type": "input-dropdown-method", "index": MATCH}, "id"),
             State("local-store", "data"),
         ],
-        prevent_initial_call=False,  # Allow initial call, guards handle it
+        prevent_initial_call=True,  # Prevent errors when components don't exist (stepper page)
     )
     def update_aggregation_options(
         column_value, edit_context, workflow_id, data_collection_id, id, local_data
@@ -468,7 +468,7 @@ def register_interactive_design_callbacks(app) -> None:
             State({"type": "input-dropdown-method", "index": MATCH}, "id"),
             State("local-store", "data"),
         ],
-        prevent_initial_call=False,  # Allow initial call, guards handle it
+        prevent_initial_call=True,  # Prevent errors when components don't exist (stepper page)
     )
     def update_preview_component(
         input_value,
@@ -606,8 +606,6 @@ def register_interactive_design_callbacks(app) -> None:
     @app.callback(
         Output({"type": "stored-metadata-component", "index": MATCH}, "data", allow_duplicate=True),
         [
-            Input({"type": "workflow-selection-label", "index": MATCH}, "value"),
-            Input({"type": "datacollection-selection-label", "index": MATCH}, "value"),
             Input({"type": "input-dropdown-column", "index": MATCH}, "value"),
             Input({"type": "input-dropdown-method", "index": MATCH}, "value"),
             Input({"type": "input-title", "index": MATCH}, "value"),
@@ -615,11 +613,15 @@ def register_interactive_design_callbacks(app) -> None:
             Input({"type": "input-icon-selector", "index": MATCH}, "value"),
             Input({"type": "input-title-size", "index": MATCH}, "value"),
         ],
-        State({"type": "stored-metadata-component", "index": MATCH}, "data"),
-        prevent_initial_call="initial_duplicate",  # Required for allow_duplicate=True
+        [
+            State({"type": "workflow-selection-label", "index": MATCH}, "value"),
+            State({"type": "datacollection-selection-label", "index": MATCH}, "value"),
+            State({"type": "stored-metadata-component", "index": MATCH}, "data"),
+        ],
+        prevent_initial_call=True,
     )
     def update_stored_metadata(
-        workflow_id, dc_id, column, method, title, color, icon, title_size, current_metadata
+        column, method, title, color, icon, title_size, workflow_id, dc_id, current_metadata
     ):
         """
         Update stored metadata as user configures the interactive component.
@@ -628,15 +630,18 @@ def register_interactive_design_callbacks(app) -> None:
         the component configuration. Field names must match those expected
         by the batch callback in core_async.py.
 
+        Note: workflow_id and dc_id are States (not Inputs) to prevent premature
+        callback firing on the stepper page before interactive components exist.
+
         Args:
-            workflow_id: Selected workflow ID.
-            dc_id: Selected data collection ID.
             column: Selected column name.
             method: Selected aggregation method.
             title: Component title.
             color: Custom icon color.
             icon: Icon name.
             title_size: Title text size.
+            workflow_id: Selected workflow ID (State).
+            dc_id: Selected data collection ID (State).
             current_metadata: Existing metadata dict to update.
 
         Returns:

@@ -303,8 +303,8 @@ def register_callbacks_stepper_part_three(app):
             "Map",
         ]
 
-        # Text and MultiQC can proceed without workflow/data collection selection
-        if last_button not in ["Text", "MultiQC"] and (
+        # Only Text can proceed without workflow/data collection selection
+        if last_button != "Text" and (
             workflow_selection is None or data_collection_selection is None
         ):
             raise dash.exceptions.PreventUpdate
