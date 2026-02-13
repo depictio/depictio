@@ -27,8 +27,10 @@ def register_callbacks_multiqc_component(app):
         app: Dash application instance
     """
     from .core import register_core_callbacks
+    from .theme import register_theme_callbacks
 
     register_core_callbacks(app)
+    register_theme_callbacks(app)
 
 
 def load_design_callbacks(app):
