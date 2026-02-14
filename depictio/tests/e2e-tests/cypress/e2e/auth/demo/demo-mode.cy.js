@@ -79,10 +79,10 @@ describe('Demo Mode - UI and Tour Verification', () => {
     cy.visit('/dashboards')
     cy.wait(2000)
 
-    // Step 1: Welcome popover (should show "Step 1 of 5")
+    // Step 1: Welcome popover (should show "Step 1 of 4")
     cy.get('#tour-popover-welcome-demo').should('be.visible')
     cy.get('#tour-popover-welcome-demo').within(() => {
-      cy.contains('Step 1 of 5')
+      cy.contains('Step 1 of 4')
       cy.contains('Welcome to Depictio Demo!')
     })
 
@@ -95,7 +95,7 @@ describe('Demo Mode - UI and Tour Verification', () => {
     cy.get('#demo-tour-floating-guide', { timeout: 3000 })
       .should('be.visible')
       .within(() => {
-        cy.contains('Step 2 of 5')
+        cy.contains('Step 2 of 4')
         cy.contains('Explore Example Dashboards')
       })
 
