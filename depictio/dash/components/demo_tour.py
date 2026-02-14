@@ -55,20 +55,20 @@ TOUR_STEPS = {
         "description": "Browse and interact with example dashboards to see what's possible. As an anonymous user, you can view but not edit them.",
         "position": "bottom",
     },
-    "login-options": {
-        "step": 2,
-        "title": "Sign In for Full Access",
-        "description": "Login as a temporary user (24h session) or via Google to unlock editing features. You can then duplicate any dashboard to make it your own.",
-        "position": "top-end",
-    },
+    # "login-options": {
+    #     "step": 2,
+    #     "title": "Sign In for Full Access",
+    #     "description": "Login as a temporary user (24h session) or via Google to unlock editing features. You can then duplicate any dashboard to make it your own.",
+    #     "position": "top-end",
+    # },
     "duplicate-dashboard": {
-        "step": 3,
+        "step": 2,
         "title": "Duplicate to Edit",
         "description": "Click on 'Actions', then use the 'Duplicate' action to create your own copy of any dashboard. You'll have full editing rights on your copy.",
         "position": "bottom-start",
     },
     "projects-sidebar": {
-        "step": 4,
+        "step": 3,
         "title": "Explore Projects",
         "description": "Click 'Projects' to register a temporary project and upload your own data (CSV, Parquet, or DataFrame).",
         "position": "left",
@@ -253,9 +253,6 @@ def create_tour_popover(
             dmc.PopoverDropdown(
                 popover_content,
                 style={
-                    "backgroundColor": "var(--app-surface-color, #fff)",
-                    "border": "1px solid var(--app-border-color, #e0e0e0)",
-                    "boxShadow": "0 4px 12px rgba(0, 0, 0, 0.15)",
                     "zIndex": 10000,
                 },
             ),
@@ -343,7 +340,6 @@ def create_floating_tour_guide() -> html.Div:
                 style={
                     "minWidth": "300px",
                     "maxWidth": "400px",
-                    "backgroundColor": "var(--app-surface-color, #fff)",
                     "border": "2px solid var(--mantine-color-blue-5)",
                 },
             ),
@@ -424,7 +420,6 @@ def create_tour_welcome_popover() -> html.Div:
                 radius="md",
                 p="md",
                 style={
-                    "backgroundColor": "var(--app-surface-color, #fff)",
                     "border": "2px solid var(--mantine-color-blue-5)",
                     "minWidth": "300px",
                     "maxWidth": "400px",

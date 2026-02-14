@@ -1723,7 +1723,6 @@ def create_stepper_content(n: str, active: int) -> dmc.Stack:
                     "bottom": 0,
                     "zIndex": 100,
                     "flexShrink": 0,
-                    "backgroundColor": "var(--app-bg-color, #ffffff)",
                 },
             ),
         ],

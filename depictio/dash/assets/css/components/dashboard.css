@@ -91,15 +91,15 @@
 
 /* Active/selected state for grid items - DMC will handle theming */
 .react-grid-item.react-grid-item-dragging {
-    border-color: #666 !important;
+    border-color: var(--app-border-color, #666) !important;
     border-width: 3px !important;
     box-shadow: 0 4px 16px rgba(102, 102, 102, 0.3) !important;
-    background-color: #ffffff !important;
+    background-color: var(--app-surface-color, #ffffff) !important;
 }
 
 .react-grid-item.react-grid-item-resizing {
-    border-color: #666 !important;
+    border-color: var(--app-border-color, #666) !important;
     border-width: 3px !important;
     box-shadow: 0 4px 16px rgba(102, 102, 102, 0.3) !important;
-    background-color: #ffffff !important;
+    background-color: var(--app-surface-color, #ffffff) !important;
 }

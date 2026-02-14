@@ -166,7 +166,7 @@ def register_demo_tour_callbacks(app: dash.Dash) -> None:
             }
             if triggered_id.get("type") not in tour_button_types:
                 logger.debug(f"Ignoring non-tour button: {triggered_id}")
-                return dash.no_update, dash.no_update, dash.no_update
+                return dash.no_update, dash.no_update
 
             # Validate this is an actual click (not component addition)
             # Pattern-matching callbacks can fire when components are added with n_clicks=0
