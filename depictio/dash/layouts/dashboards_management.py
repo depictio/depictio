@@ -1487,6 +1487,7 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
                     )
                 )
             )
+            and d.get("is_main_tab", True)  # Filter out child tabs
         ]
 
         # Sort example dashboards by the order defined in example_dashboard_ids
@@ -1500,16 +1501,17 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
 
         example_ids = {str(d.get("dashboard_id", "")) for d in example_dashboards}
 
-        # Public dashboards: public but not in examples
+        # Public dashboards: public but not in examples (only main tabs)
         public_dashboards = [
             d
             for d in dashboards
             if d.get("is_public", False)
             and str(d.get("dashboard_id", "")) not in example_ids
             and str(user_id) not in [str(owner["_id"]) for owner in d["permissions"]["owners"]]
+            and d.get("is_main_tab", True)  # Filter out child tabs
         ]
 
-        # Accessed dashboards: shared with user but not owned, not public, not examples
+        # Accessed dashboards: shared with user but not owned, not public, not examples (only main tabs)
         accessed_dashboards = [
             d
             for d in dashboards
@@ -1517,14 +1519,16 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
             and not d.get("is_public", False)
             and str(d.get("dashboard_id", "")) not in example_ids
             and (not is_anonymous or d.get("is_public", False))
+            and d.get("is_main_tab", True)  # Filter out child tabs
         ]
 
-        # Owned dashboards: owned by user but not in examples (lowest precedence)
+        # Owned dashboards: owned by user but not in examples (lowest precedence, only main tabs)
         owned_dashboards = [
             d
             for d in dashboards
             if str(user_id) in [str(owner["_id"]) for owner in d["permissions"]["owners"]]
             and str(d.get("dashboard_id", "")) not in example_ids
+            and d.get("is_main_tab", True)  # Filter out child tabs
         ]
 
         # Create views for each category (using same icons as accordion headers)
@@ -2248,6 +2252,13 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
                     dashboard_data_response = dashboard_data_response.json()
 
                 # deep copy the dashboard object
+                # Preserve extra fields (icon, icon_color, icon_variant, etc.)
+                extra_fields = {
+                    k: v
+                    for k, v in dashboard_data_response.items()
+                    if k in ("icon", "icon_color", "icon_variant", "workflow_system")
+                }
+
                 new_dashboard = DashboardData.from_mongo(dashboard_data_response)
                 new_dashboard.id = ObjectId()
                 new_dashboard.title = f"{dashboard.title} (copy)"
@@ -2255,6 +2266,15 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
                 new_dashboard.permissions.owners = [current_userbase]
                 new_dashboard.permissions.viewers = []
                 new_dashboard.is_public = False  # Always make duplicated dashboards private
+
+                # CRITICAL: Ensure this is marked as main tab with no parent
+                new_dashboard.is_main_tab = True
+                new_dashboard.parent_dashboard_id = None
+
+                # Restore preserved extra fields
+                for key, value in extra_fields.items():
+                    setattr(new_dashboard, key, value)
+
                 logger.info(f"New dashboard: {format_pydantic(new_dashboard)}")
                 # new_dashboard.dashboard_id = generate_unique_index()
                 # new_dashboard.dashboard_id = str(len(dashboards) + 1)
@@ -2265,19 +2285,119 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
                     user_data["access_token"],
                 )
 
-                # Copy thumbnail
-                thumbnail_filename = f"{str(dashboard.id)}.png"
-                # thumbnail_filename = f"{str(current_userbase.id)}_{str(dashboard.id)}.png"
-                thumbnail_fs_path = f"/app/depictio/dash/static/screenshots/{thumbnail_filename}"
-
-                if not os.path.exists(thumbnail_fs_path):
-                    logger.warning(f"Thumbnail not found at path: {thumbnail_fs_path}")
-                else:
-                    # Copy the thumbnail to the new dashboard ID
-                    new_thumbnail_fs_path = (
-                        f"/app/depictio/dash/static/screenshots/{str(new_dashboard.id)}.png"
+                # Copy thumbnails (all theme variants)
+                thumbnail_variants = ["", "_dark", "_light"]
+                for variant in thumbnail_variants:
+                    thumbnail_fs_path = (
+                        f"/app/depictio/dash/static/screenshots/{str(dashboard.id)}{variant}.png"
                     )
-                    shutil.copy(thumbnail_fs_path, new_thumbnail_fs_path)
+                    if os.path.exists(thumbnail_fs_path):
+                        new_thumbnail_fs_path = f"/app/depictio/dash/static/screenshots/{str(new_dashboard.id)}{variant}.png"
+                        shutil.copy(thumbnail_fs_path, new_thumbnail_fs_path)
+                        logger.info(
+                            f"✓ Copied main dashboard thumbnail{variant}: {new_thumbnail_fs_path}"
+                        )
+                    else:
+                        logger.debug(
+                            f"Main dashboard thumbnail variant not found: {thumbnail_fs_path}"
+                        )
+
+                # CRITICAL: Duplicate child tabs (sub-tabs) if they exist
+                logger.info(f"Checking for child tabs of dashboard {index_duplicate}")
+                child_tabs_response = httpx.get(
+                    f"{API_BASE_URL}/depictio/api/v1/dashboards/tabs/{index_duplicate}",
+                    headers={"Authorization": f"Bearer {user_data['access_token']}"},
+                )
+
+                if child_tabs_response.status_code == 200:
+                    tabs_data = child_tabs_response.json()
+                    # API returns {"child_tabs": [...], "main_tab": {...}}
+                    child_tabs = tabs_data.get("child_tabs", [])
+                    logger.info(
+                        f"API returned {len(child_tabs)} child tabs for dashboard {index_duplicate}"
+                    )
+
+                    if child_tabs:
+                        logger.info(f"Found {len(child_tabs)} child tabs to duplicate")
+
+                        for child_tab in child_tabs:
+                            child_dashboard_id = child_tab["dashboard_id"]
+
+                            # Fetch full child dashboard data
+                            child_data_response = httpx.get(
+                                f"{API_BASE_URL}/depictio/api/v1/dashboards/get/{child_dashboard_id}",
+                                headers={"Authorization": f"Bearer {user_data['access_token']}"},
+                            )
+
+                            if child_data_response.status_code == 200:
+                                child_data = child_data_response.json()
+
+                                # Create deep copy of child tab
+                                # Preserve extra fields (icon, icon_color, icon_variant, etc.)
+                                child_extra_fields = {
+                                    k: v
+                                    for k, v in child_data.items()
+                                    if k
+                                    in ("icon", "icon_color", "icon_variant", "workflow_system")
+                                }
+
+                                new_child = DashboardData.from_mongo(child_data)
+                                original_child_id = new_child.id  # Save for thumbnail copy
+                                new_child.id = ObjectId()
+                                new_child.dashboard_id = str(new_child.id)
+                                new_child.title = f"{child_tab.get('title', 'Tab')} (copy)"
+
+                                # CRITICAL: Update parent_dashboard_id to point to NEW main dashboard
+                                new_child.parent_dashboard_id = new_dashboard.id
+                                # CRITICAL: Mark as child tab (not main tab)
+                                new_child.is_main_tab = False
+
+                                # Transfer ownership and set privacy
+                                new_child.permissions.owners = [current_userbase]
+                                new_child.permissions.viewers = []
+                                new_child.is_public = False
+
+                                # Keep same tab_order
+                                new_child.tab_order = child_tab.get("tab_order", 0)
+
+                                # Restore preserved extra fields
+                                for key, value in child_extra_fields.items():
+                                    setattr(new_child, key, value)
+
+                                logger.info(
+                                    f"Duplicating child tab: {new_child.title} (order: {new_child.tab_order})"
+                                )
+
+                                # Insert duplicated child tab
+                                updated_dashboards.append(new_child)
+                                insert_dashboard(
+                                    new_child.dashboard_id,
+                                    new_child.mongo(),
+                                    user_data["access_token"],
+                                )
+
+                                # Copy child tab thumbnails (all theme variants)
+                                thumbnail_variants = ["", "_dark", "_light"]
+                                for variant in thumbnail_variants:
+                                    child_thumbnail_path = f"/app/depictio/dash/static/screenshots/{str(original_child_id)}{variant}.png"
+                                    if os.path.exists(child_thumbnail_path):
+                                        new_child_thumbnail_path = f"/app/depictio/dash/static/screenshots/{str(new_child.id)}{variant}.png"
+                                        shutil.copy(child_thumbnail_path, new_child_thumbnail_path)
+                                        logger.info(
+                                            f"✓ Copied child tab thumbnail{variant}: {child_thumbnail_path} -> {new_child_thumbnail_path}"
+                                        )
+                                    else:
+                                        logger.debug(
+                                            f"Child tab thumbnail variant not found: {child_thumbnail_path}"
+                                        )
+                            else:
+                                logger.error(
+                                    f"Failed to fetch child tab data: {child_data_response.text}"
+                                )
+                    else:
+                        logger.info("No child tabs found to duplicate")
+                else:
+                    logger.warning(f"Failed to fetch child tabs: {child_tabs_response.text}")
 
         return generate_dashboard_view_response(
             updated_dashboards, store_data_list, current_userbase, user_data

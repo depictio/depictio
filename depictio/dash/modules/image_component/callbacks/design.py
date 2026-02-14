@@ -23,8 +23,8 @@ def register_design_callbacks(app):
         Input({"type": "image-input", "index": MATCH}, "value"),
         Input({"type": "image-dropdown-column", "index": MATCH}, "value"),
         Input({"type": "image-s3-base-folder", "index": MATCH}, "value"),
-        Input({"type": "workflow-selection-label", "index": MATCH}, "value"),
-        Input({"type": "datacollection-selection-label", "index": MATCH}, "value"),
+        State({"type": "workflow-selection-label", "index": MATCH}, "value"),
+        State({"type": "datacollection-selection-label", "index": MATCH}, "value"),
         State({"type": "image-input", "index": MATCH}, "id"),
         prevent_initial_call=False,
     )

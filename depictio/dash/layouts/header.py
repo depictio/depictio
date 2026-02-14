@@ -137,12 +137,18 @@ def _get_user_permissions(current_user, data: dict) -> tuple[bool, bool]:
     """Extract user permissions for the dashboard.
 
     Args:
-        current_user: User model with id attribute.
+        current_user: User model with id attribute, or None.
         data: Dashboard data with permissions structure.
 
     Returns:
         Tuple of (is_owner, is_viewer) booleans.
     """
+    if current_user is None:
+        # No authenticated user - check if dashboard is public
+        has_wildcard = "*" in data["permissions"]["viewers"]
+        is_public = data.get("is_public", False)
+        return False, has_wildcard or is_public
+
     owner = str(current_user.id) in [str(e["id"]) for e in data["permissions"]["owners"]]
 
     viewer_ids = [str(e["id"]) for e in data["permissions"]["viewers"] if e != "*"]

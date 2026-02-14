@@ -1,0 +1,40 @@
+/**
+ * Theme CSS Variables for Depictio Dashboard
+ *
+ * These variables provide consistent theming across light and dark modes.
+ * They are used throughout the application for colors, backgrounds, shadows, etc.
+ */
+
+/* Light mode (default) */
+:root {
+    /* Background colors */
+    --app-bg-color: #ffffff;
+    --app-bg-secondary: rgba(0, 0, 0, 0.01);
+    --app-surface-color: #ffffff;
+
+    /* Text colors */
+    --app-text-color: #000000;
+
+    /* Border colors */
+    --app-border-color: #e0e0e0;
+
+    /* Shadow effects */
+    --app-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+/* Dark mode */
+[data-mantine-color-scheme="dark"] {
+    /* Background colors */
+    --app-bg-color: #1a1b1e;
+    --app-bg-secondary: rgba(255, 255, 255, 0.03);
+    --app-surface-color: #25262b;
+
+    /* Text colors */
+    --app-text-color: #c1c2c5;
+
+    /* Border colors */
+    --app-border-color: #373a40;
+
+    /* Shadow effects - stronger shadow for dark mode */
+    --app-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+}

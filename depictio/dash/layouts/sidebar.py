@@ -375,26 +375,38 @@ def register_sidebar_callbacks(app, register_tabs: bool = True) -> None:
     )
 
     # NOTE: Navbar is now always visible via static config in app_layout.py
-    # Only update collapse state for dashboard pages
+    # Only update collapse state for dashboard pages and component stepper
     app.clientside_callback(
         """
         function(is_collapsed, pathname) {
             console.log('🔧 CLIENTSIDE NAVBAR COLLAPSED: collapsed=' + is_collapsed + ', pathname=' + pathname);
 
-            // Only allow collapse on dashboard pages
-            if (!pathname || !(pathname.startsWith('/dashboard/') || pathname.startsWith('/dashboard-edit/'))) {
-                console.log('❌ Not a dashboard page - keeping navbar expanded');
+            // Only allow collapse on dashboard pages and component stepper
+            if (!pathname || !(
+                pathname.startsWith('/dashboard/') ||
+                pathname.startsWith('/dashboard-edit/') ||
+                pathname.includes('/component/add') ||
+                pathname.includes('/component/edit')
+            )) {
+                console.log('❌ Not a dashboard or stepper page - keeping navbar expanded');
                 return window.dash_clientside.no_update;
             }
 
-            // Update navbar collapse state for dashboard pages
-            console.log('✅ Updating navbar collapse state for dashboard');
+            // Force collapse on component stepper pages
+            var shouldCollapse = is_collapsed;
+            if (pathname.includes('/component/add') || pathname.includes('/component/edit')) {
+                console.log('🔧 Stepper page detected - forcing navbar collapse');
+                shouldCollapse = true;
+            }
+
+            // Update navbar collapse state for dashboard pages and stepper
+            console.log('✅ Updating navbar collapse state for dashboard/stepper');
             var navbar_config = {
                 "width": 220,
                 "breakpoint": "sm",
                 "collapsed": {
                     "mobile": true,
-                    "desktop": is_collapsed ? true : false
+                    "desktop": shouldCollapse ? true : false
                 }
             };
 
@@ -402,8 +414,7 @@ def register_sidebar_callbacks(app, register_tabs: bool = True) -> None:
         }
         """,
         Output("app-shell", "navbar"),
-        [Input("sidebar-collapsed", "data")],
-        [State("url", "pathname")],
+        [Input("sidebar-collapsed", "data"), Input("url", "pathname")],
         prevent_initial_call=False,  # Run on initial load to sync navbar with store (default: expanded)
     )
 

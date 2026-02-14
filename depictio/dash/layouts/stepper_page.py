@@ -161,12 +161,8 @@ def create_stepper_page(
         },
     )
 
-    # Add edit-page-context store (empty in stepper, but needed by design callbacks)
-    # Design callbacks check this store to determine if they should pre-populate
-    edit_page_context_store = dcc.Store(
-        id="edit-page-context",
-        data=None,  # Empty in stepper mode - callbacks will ignore
-    )
+    # Note: edit-page-context store is provided by shared_app_shell.py
+    # It's initialized to None, so design callbacks won't pre-populate in stepper mode
 
     # CRITICAL: Add Store components that stepper callbacks depend on
     # These normally come from the header, but the stepper page doesn't have a header
@@ -208,7 +204,6 @@ def create_stepper_page(
     page_layout = html.Div(
         [
             component_context_store,
-            edit_page_context_store,
             *required_stores,  # Unpack the required Store components
             dmc.AppShell(
                 [

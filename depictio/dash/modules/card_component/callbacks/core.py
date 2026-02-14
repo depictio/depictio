@@ -36,6 +36,7 @@ from depictio.dash.modules.card_component.utils import (
     get_adaptive_trend_colors,
 )
 from depictio.dash.utils import (
+    extend_filters_via_links,
     get_columns_from_data_collection,
     get_component_data,
     get_result_dc_for_workflow,
@@ -1015,6 +1016,7 @@ def register_core_callbacks(app):
         State({"type": "interactive-stored-metadata", "index": dash.ALL}, "data"),
         State({"type": "interactive-stored-metadata", "index": dash.ALL}, "id"),
         State("dashboard-init-data", "data"),  # REFACTORING: Access centralized dc_configs
+        State("project-metadata-store", "data"),  # Project metadata with links
         State("local-store", "data"),  # SECURITY: Access token from centralized store
         prevent_initial_call=True,
         background=USE_BACKGROUND_CALLBACKS,  # Use centralized background callback config
@@ -1029,6 +1031,7 @@ def register_core_callbacks(app):
         interactive_metadata_list,
         interactive_metadata_ids,
         dashboard_init_data,
+        project_metadata,
         local_data,
     ):
         """
@@ -1117,6 +1120,7 @@ def register_core_callbacks(app):
                 enriched_components=enriched_components,
                 filters_data=filters_data,
                 dashboard_init_data=dashboard_init_data,
+                project_metadata=project_metadata,
                 card_to_load_key=card_to_load_key,
                 dc_cache=dc_cache,
                 access_token=access_token,
@@ -1141,6 +1145,7 @@ def _process_single_card(
     enriched_components: list[dict[str, Any]],
     filters_data: dict[str, Any],
     dashboard_init_data: dict[str, Any] | None,
+    project_metadata: dict[str, Any] | None,
     card_to_load_key: dict[int, tuple[str, str, str]],
     dc_cache: dict[tuple[str, str, str], Any],
     access_token: str,
@@ -1165,6 +1170,7 @@ def _process_single_card(
         enriched_components: List of enriched filter components
         filters_data: Dict with interactive_components_values
         dashboard_init_data: Dashboard initialization data
+        project_metadata: Project metadata with links for cross-DC filtering
         card_to_load_key: Map of card index to load key
         dc_cache: Pre-loaded data cache
         access_token: Authentication token
@@ -1229,6 +1235,20 @@ def _process_single_card(
         # Group filters by DC and filter to table-only
         metadata_list = filters_data.get("interactive_components_values")
         filters_by_dc = _group_filters_by_dc(metadata_list, dc_configs_map)
+
+        # Extend with link-resolved filters (cross-DC filtering)
+        link_resolved_filters = extend_filters_via_links(
+            target_dc_id=dc_id_str,
+            filters_by_dc=filters_by_dc,
+            project_metadata=project_metadata,
+            access_token=access_token,
+            component_type="card",
+        )
+        if link_resolved_filters:
+            # Add link-resolved filters to the card's DC filters
+            if dc_id_str not in filters_by_dc:
+                filters_by_dc[dc_id_str] = []
+            filters_by_dc[dc_id_str].extend(link_resolved_filters)
 
         # Check for active filters
         has_active_filters = _has_active_filter_values(metadata_list)

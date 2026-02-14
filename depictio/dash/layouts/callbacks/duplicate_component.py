@@ -61,6 +61,10 @@ def register_duplicate_component_callback(app):
     ):
         """Duplicate component by appending to itemLayout."""
 
+        logger.info("=" * 80)
+        logger.info("🚀 DUPLICATE COMPONENT CALLBACK FIRED")
+        logger.info("=" * 80)
+
         # 1. Validate trigger
         if not ctx.triggered:
             raise PreventUpdate
@@ -72,11 +76,41 @@ def register_duplicate_component_callback(app):
         trigger_id = ctx.triggered_id
         source_component_id = trigger_id["index"]
 
+        # DEBUG: Log pattern matching results
+        logger.info(
+            f"🔍 Duplicate callback fired for component {source_component_id}. "
+            f"ALL pattern results - left_layout: {len(left_layout)} items, "
+            f"right_layout: {len(right_layout)} items, "
+            f"left_items: {len(left_items)} items, "
+            f"right_items: {len(right_items)} items"
+        )
+
+        # DEFENSIVE CHECK: If ALL pattern matched 0 grids, raise PreventUpdate
+        # This happens when grids are created dynamically by route callback after callback registration
+        # CHECK BEFORE EXTRACTION - we need to check the original list length
+        if len(left_layout) == 0 and len(right_layout) == 0:
+            logger.warning(
+                f"⚠️ Pattern matching found no grids for duplicate operation. "
+                f"Grids may not be rendered yet or pattern matching failed. "
+                f"Component {source_component_id} duplication requires page refresh."
+            )
+            raise PreventUpdate
+
+        # Store original counts BEFORE extraction (needed for proper return value wrapping)
+        original_left_count = len(left_layout)
+        original_right_count = len(right_layout)
+
         # Extract layouts and items from ALL pattern (returns list with one grid each)
         left_layout = left_layout[0] if left_layout else []
         right_layout = right_layout[0] if right_layout else []
         left_items = left_items[0] if left_items else []
         right_items = right_items[0] if right_items else []
+
+        # DEBUG: Log extracted values
+        logger.info(
+            f"📦 After extraction - left_layout: {len(left_layout) if isinstance(left_layout, list) else 'not a list'}, "
+            f"right_layout: {len(right_layout) if isinstance(right_layout, list) else 'not a list'}"
+        )
 
         # 2. PERMISSION CHECK (from old implementation)
         TOKEN = local_data.get("access_token")
@@ -174,9 +208,10 @@ def register_duplicate_component_callback(app):
             }
 
             updated_left_layout = [current_layouts + [new_layout_entry]]
-            updated_right_layout = [no_update]
+            # ALL pattern always expects list - return empty list if grid doesn't exist, list with no_update if it does
+            updated_right_layout = [] if original_right_count == 0 else [no_update]
             updated_left_items = [left_items + [wrapped_component]]
-            updated_right_items = [no_update]
+            updated_right_items = [] if original_right_count == 0 else [no_update]
             panel_name = "left"
         else:
             # Stack in right panel
@@ -191,9 +226,10 @@ def register_duplicate_component_callback(app):
                 "static": False,
             }
 
-            updated_left_layout = [no_update]
+            # ALL pattern always expects list - return empty list if grid doesn't exist, list with no_update if it does
+            updated_left_layout = [] if original_left_count == 0 else [no_update]
             updated_right_layout = [current_layouts + [new_layout_entry]]
-            updated_left_items = [no_update]
+            updated_left_items = [] if original_left_count == 0 else [no_update]
             updated_right_items = [right_items + [wrapped_component]]
             panel_name = "right"
 
@@ -220,6 +256,16 @@ def register_duplicate_component_callback(app):
 
         logger.info(
             f"✅ Successfully duplicated component {source_component_id} → {new_component_id} and saved to database"
+        )
+
+        # DEBUG: Log return values
+        logger.info(
+            f"🔙 Returning - updated_left_layout: {type(updated_left_layout).__name__} "
+            f"(len={len(updated_left_layout) if isinstance(updated_left_layout, list) else 'N/A'}), "
+            f"updated_right_layout: {type(updated_right_layout).__name__} "
+            f"(len={len(updated_right_layout) if isinstance(updated_right_layout, list) else 'N/A'}), "
+            f"updated_left_items: {type(updated_left_items).__name__}, "
+            f"updated_right_items: {type(updated_right_items).__name__}"
         )
 
         # Return updated layouts AND items (4 outputs total)

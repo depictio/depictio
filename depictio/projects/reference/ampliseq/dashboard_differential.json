@@ -1,0 +1,394 @@
+{
+  "_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8cb4"
+  },
+  "dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8cb4"
+  },
+  "buttons_data": {
+    "unified_edit_mode": false,
+    "add_components_button": {
+      "count": 3,
+      "initialized": true
+    }
+  },
+  "description": "Analysis of microbial diversity and taxonomic composition",
+  "flexible_metadata": null,
+  "hash": null,
+  "icon": "/assets/images/workflows/nf-core.png",
+  "icon_color": "green",
+  "icon_variant": "filled",
+  "tab_icon": "mdi:chart-scatter-plot",
+  "tab_icon_color": "red",
+  "is_main_tab": false,
+  "is_public": true,
+  "last_saved_ts": "2026-01-27 00:00:00.000000",
+  "left_panel_layout_data": [
+    {
+      "i": "box-diff-filter-phylum",
+      "x": 0,
+      "y": 0,
+      "w": 1,
+      "h": 3,
+      "static": false
+    }
+  ],
+  "notes_content": "<p>Diversity and taxonomy analysis dashboard for ampliseq</p>",
+  "parent_dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8ca2"
+  },
+  "permissions": {
+    "owners": [
+      {
+        "_id": {
+          "$oid": "67658ba033c8b59ad489d7c7"
+        },
+        "description": null,
+        "flexible_metadata": null,
+        "hash": null,
+        "email": "admin@example.com",
+        "is_admin": true,
+        "is_anonymous": false,
+        "is_temporary": false,
+        "expiration_time": null
+      }
+    ],
+    "editors": [],
+    "viewers": []
+  },
+  "project_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8ca2"
+  },
+  "right_panel_layout_data": [
+    {
+      "i": "box-diff-card-total-taxa",
+      "x": 0,
+      "y": 0,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-diff-card-significant",
+      "x": 2,
+      "y": 0,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-diff-card-phyla",
+      "x": 4,
+      "y": 0,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-diff-card-max-effect",
+      "x": 6,
+      "y": 0,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-0717dd38-1eb1-46d6-834b-b8a146f074d9",
+      "x": 0,
+      "y": 2,
+      "w": 8,
+      "h": 10,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-diff-bar-top-taxa",
+      "x": 0,
+      "y": 12,
+      "w": 8,
+      "h": 8,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-diff-table-results",
+      "x": 0,
+      "y": 20,
+      "w": 8,
+      "h": 8,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    }
+  ],
+  "stored_add_button": {
+    "count": 3,
+    "initialized": true
+  },
+  "stored_children_data": [],
+  "stored_edit_dashboard_mode_button": [],
+  "stored_layout_data": [],
+  "stored_metadata": [
+    {
+      "index": "diff-filter-phylum",
+      "component_type": "interactive",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "Phylum",
+      "column_type": "object",
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8caa"
+      },
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "default_state": {
+        "type": "select",
+        "options": [
+          "Acidobacteria",
+          "Actinobacteria",
+          "Aminicenantes",
+          "Armatimonadetes",
+          "Bacteroidetes",
+          "BRC1",
+          "Campilobacterota",
+          "candidate_division_WPS-1",
+          "Candidatus_Saccharibacteria",
+          "Chloroflexi",
+          "Crenarchaeota",
+          "Deferribacteres",
+          "Diapherotrites",
+          "Euryarchaeota",
+          "Firmicutes",
+          "Fusobacteria",
+          "Gemmatimonadetes",
+          "Hydrogenedentes",
+          "Ignavibacteriae",
+          "Latescibacteria",
+          "Lentisphaerae",
+          "Nitrospirae",
+          "Pacearchaeota",
+          "Parcubacteria",
+          "Planctomycetes",
+          "Proteobacteria",
+          "Spirochaetes",
+          "Thaumarchaeota",
+          "Verrucomicrobia",
+          "Woesearchaeota"
+        ],
+        "default_value": null
+      },
+      "panel": "left",
+      "title_size": "md",
+      "custom_color": "#8BC34A",
+      "icon_name": "mdi:bacteria-outline"
+    },
+    {
+      "index": "diff-card-total-taxa",
+      "component_type": "card",
+      "aggregation": "count",
+      "column_name": "id",
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8caa"
+      },
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "title": "Total Taxa Analyzed",
+      "panel": "right",
+      "title_color": "#45B8AC",
+      "icon_name": "mdi:bacteria",
+      "icon_color": "#45B8AC",
+      "title_font_size": "xl",
+      "value_font_size": "xl",
+      "column_type": "object"
+    },
+    {
+      "index": "diff-card-significant",
+      "component_type": "card",
+      "aggregation": "count",
+      "column_name": "id",
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8caa"
+      },
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "title": "Significant Taxa (W>100)",
+      "panel": "right",
+      "title_color": "#E74C3C",
+      "icon_name": "mdi:alert-circle",
+      "icon_color": "#E74C3C",
+      "title_font_size": "xl",
+      "value_font_size": "xl",
+      "column_type": "object",
+      "filter_condition": "W > 100"
+    },
+    {
+      "index": "diff-card-phyla",
+      "component_type": "card",
+      "aggregation": "nunique",
+      "column_name": "Phylum",
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8caa"
+      },
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "title": "Unique Phyla",
+      "panel": "right",
+      "title_color": "#8BC34A",
+      "icon_name": "mdi:bacteria-outline",
+      "icon_color": "#8BC34A",
+      "title_font_size": "xl",
+      "value_font_size": "xl",
+      "column_type": "object"
+    },
+    {
+      "index": "diff-card-max-effect",
+      "component_type": "card",
+      "aggregation": "max",
+      "column_name": "clr",
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8caa"
+      },
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "title": "Max Effect Size (CLR)",
+      "panel": "right",
+      "title_color": "#F68B33",
+      "icon_name": "mdi:chart-line-variant",
+      "icon_color": "#F68B33",
+      "title_font_size": "xl",
+      "value_font_size": "xl",
+      "column_type": "float64"
+    },
+    {
+      "index": "0717dd38-1eb1-46d6-834b-b8a146f074d9",
+      "component_type": "figure",
+      "visu_type": "scatter",
+      "dict_kwargs": {
+        "x": "clr",
+        "y": "W",
+        "color": "Phylum",
+        "hover_data": [
+          "id",
+          "taxonomy"
+        ],
+        "title": "ANCOM Differential Abundance",
+        "labels": {
+          "clr": "Centered Log-Ratio (Effect Size)",
+          "W": "ANCOM W-Statistic",
+          "Phylum": "Phylum"
+        },
+        "template": "mantine_light"
+      },
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8caa"
+      },
+      "last_updated": "2026-01-27T00:00:00.000000",
+      "panel": "right"
+    },
+    {
+      "index": "diff-bar-top-taxa",
+      "component_type": "figure",
+      "visu_type": "bar",
+      "dict_kwargs": {
+        "x": "taxonomy",
+        "y": "W",
+        "color": "Phylum",
+        "title": "Top 20 Most Significant Taxa (by W-statistic)",
+        "labels": {
+          "taxonomy": "Taxonomy",
+          "W": "ANCOM W-Statistic",
+          "Phylum": "Phylum"
+        },
+        "template": "mantine_light"
+      },
+      "mode": "code",
+      "code_content": "df_modified = df.sort('W', descending=True).head(20)\nfig = px.bar(\n    df_modified.to_pandas(),\n    x='taxonomy', y='W', color='Phylum',\n    title='Top 20 Most Significant Taxa (by W-statistic)',\n    labels={'taxonomy': 'Taxonomy', 'W': 'ANCOM W-Statistic', 'Phylum': 'Phylum'}\n)\nfig.update_layout(xaxis={'tickangle': -45, 'tickfont': {'size': 10}})",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8caa"
+      },
+      "last_updated": "2026-02-11T00:00:00.000000",
+      "panel": "right"
+    },
+    {
+      "index": "diff-table-results",
+      "component_type": "table",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8caa"
+      },
+      "dc_config": {
+        "type": "table",
+        "metatype": "Results"
+      },
+      "cols_json": {
+        "taxonomy": {
+          "type": "object",
+          "description": "Taxonomic classification",
+          "filter": "agTextColumnFilter",
+          "floatingFilter": true
+        },
+        "Kingdom": {
+          "type": "object",
+          "description": "Kingdom",
+          "filter": "agTextColumnFilter",
+          "floatingFilter": true
+        },
+        "Phylum": {
+          "type": "object",
+          "description": "Phylum",
+          "filter": "agTextColumnFilter",
+          "floatingFilter": true
+        },
+        "W": {
+          "type": "int64",
+          "description": "ANCOM W-statistic (higher = more significant)",
+          "filter": "agNumberColumnFilter",
+          "floatingFilter": true
+        },
+        "clr": {
+          "type": "float64",
+          "description": "Centered log-ratio (effect size)",
+          "filter": "agNumberColumnFilter",
+          "floatingFilter": true
+        }
+      },
+      "parent_index": null,
+      "panel": "right"
+    }
+  ],
+  "subtitle": "ANCOM Volcano Plot",
+  "tab_order": 2,
+  "title": "Diff. Abundance",
+  "tmp_children_data": [],
+  "version": 1,
+  "workflow_system": "nf-core"
+}

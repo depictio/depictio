@@ -39,11 +39,11 @@ describe('Demo Mode - UI and Tour Verification', () => {
     cy.wait(2000)
 
     // Should show the welcome tour popover (step 0: welcome-demo)
-    cy.get('#tour-popover-welcome-demo-dropdown', { timeout: 5000 })
+    cy.get('#tour-popover-welcome-demo', { timeout: 5000 })
       .should('be.visible')
 
     // Verify popover contains expected content
-    cy.get('#tour-popover-welcome-demo-dropdown').within(() => {
+    cy.get('#tour-popover-welcome-demo').within(() => {
       cy.contains('Welcome to Depictio Demo!')
       cy.contains('24 hours') // Mentions 24h retention
     })
@@ -79,15 +79,15 @@ describe('Demo Mode - UI and Tour Verification', () => {
     cy.visit('/dashboards')
     cy.wait(2000)
 
-    // Step 1: Welcome popover (should show "Step 1 of 5")
-    cy.get('#tour-popover-welcome-demo-dropdown').should('be.visible')
-    cy.get('#tour-popover-welcome-demo-dropdown').within(() => {
-      cy.contains('Step 1 of 5')
+    // Step 1: Welcome popover (should show "Step 1 of 4")
+    cy.get('#tour-popover-welcome-demo').should('be.visible')
+    cy.get('#tour-popover-welcome-demo').within(() => {
+      cy.contains('Step 1 of 4')
       cy.contains('Welcome to Depictio Demo!')
     })
 
     // Click Next to go to step 2
-    cy.get('#tour-popover-welcome-demo-dropdown').within(() => {
+    cy.get('#tour-popover-welcome-demo').within(() => {
       cy.contains('button', 'Next').click()
     })
 
@@ -95,7 +95,7 @@ describe('Demo Mode - UI and Tour Verification', () => {
     cy.get('#demo-tour-floating-guide', { timeout: 3000 })
       .should('be.visible')
       .within(() => {
-        cy.contains('Step 2 of 5')
+        cy.contains('Step 2 of 4')
         cy.contains('Explore Example Dashboards')
       })
 

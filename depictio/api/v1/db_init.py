@@ -205,7 +205,7 @@ async def create_initial_dashboards(admin_user: UserBeanie) -> list[dict | None]
             "static_dc_id": None,
         },
         {
-            "name": "ampliseq_analysis",
+            "name": "ampliseq_community",
             "json_path": os.path.join(
                 os.path.dirname(__file__),
                 "..",
@@ -213,7 +213,21 @@ async def create_initial_dashboards(admin_user: UserBeanie) -> list[dict | None]
                 "projects",
                 "reference",
                 "ampliseq",
-                "dashboard_analysis.json",
+                "dashboard_community.json",
+            ),
+            # Child tab dashboard - preserve DC IDs from JSON file
+            "static_dc_id": None,
+        },
+        {
+            "name": "ampliseq_differential",
+            "json_path": os.path.join(
+                os.path.dirname(__file__),
+                "..",
+                "..",
+                "projects",
+                "reference",
+                "ampliseq",
+                "dashboard_differential.json",
             ),
             # Child tab dashboard - preserve DC IDs from JSON file
             "static_dc_id": None,

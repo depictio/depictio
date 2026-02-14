@@ -1319,14 +1319,7 @@ def register_callbacks_multiqc_component(app):
                 style={"height": "400px"},
             )
 
-        theme = "light"
-        # Extract theme from theme_data
-        if isinstance(theme_data, dict):
-            theme = "dark" if theme_data.get("colorScheme") == "dark" else "light"
-        elif isinstance(theme_data, str):
-            theme = theme_data
-        else:
-            theme = "light"
+        theme = theme_data if theme_data in ("light", "dark") else "light"
 
         # Create the plot with theme (Celery worker will cache this automatically)
         try:
@@ -1467,33 +1460,7 @@ def register_callbacks_multiqc_component(app):
     # NOTE: Debug callback and patching callback removed - they are now in callbacks/core.py
     # The core.py version has proper metadata enrichment from interactive-stored-metadata stores
 
-    # Callback to update MultiQC figures when theme changes (matches figure component pattern)
-    @app.callback(
-        Output({"type": "multiqc-graph", "index": MATCH}, "figure", allow_duplicate=True),
-        Input("theme-store", "data"),
-        prevent_initial_call=True,
-    )
-    def update_multiqc_theme(theme_data):
-        """Update MultiQC figure theme using Patch - matches figure component pattern."""
-        import plotly.io as pio
-        from dash import Patch
-
-        # Handle different theme_data formats
-        if isinstance(theme_data, dict):
-            is_dark = theme_data.get("colorScheme") == "dark"
-        elif isinstance(theme_data, str):
-            is_dark = theme_data == "dark"
-        else:
-            is_dark = False
-
-        # Use mantine templates for consistency
-        template_name = "mantine_dark" if is_dark else "mantine_light"
-        template = pio.templates[template_name]
-
-        patch = Patch()
-        patch.layout.template = template
-
-        return patch
+    # NOTE: Theme callback moved to callbacks/theme.py and registered via callbacks/__init__.py
 
     # NOTE: VIEW MODE rendering callback (render_multiqc_from_trigger) has been moved to
     # callbacks/core.py to ensure it's always registered via register_core_callbacks().
