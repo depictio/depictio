@@ -573,19 +573,19 @@ def _create_comparison_components(
         if ref_val != 0:
             change_pct = ((current_val - ref_val) / ref_val) * 100
             if change_pct > 0:
-                comparison_text = f"+{change_pct:.1f}% vs unfiltered ({ref_val})"
+                comparison_text = f"+{change_pct:.2f}% vs unfiltered ({ref_val:.2f})"
                 comparison_color = trend_colors["positive"]
                 comparison_icon = "mdi:trending-up"
             elif change_pct < 0:
-                comparison_text = f"{change_pct:.1f}% vs unfiltered ({ref_val})"
+                comparison_text = f"{change_pct:.2f}% vs unfiltered ({ref_val:.2f})"
                 comparison_color = trend_colors["negative"]
                 comparison_icon = "mdi:trending-down"
             else:
-                comparison_text = f"Same as unfiltered ({ref_val})"
+                comparison_text = f"Same as unfiltered ({ref_val:.2f})"
                 comparison_color = trend_colors["neutral"]
                 comparison_icon = "mdi:trending-neutral"
         else:
-            comparison_text = f"Reference: {ref_val}"
+            comparison_text = f"Reference: {ref_val:.2f}"
             comparison_color = trend_colors["neutral"]
             comparison_icon = "mdi:information-outline"
 
