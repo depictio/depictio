@@ -199,7 +199,35 @@ async def _translate_filter_values(
             )
 
         # Filter and extract link column values
-        filtered_df = df.filter(pl.col(filter_column).is_in(filter_values))
+        # Check if this is a DateRangePicker filter (2-element list + date/datetime column)
+        is_date_range = (
+            isinstance(filter_values, list)
+            and len(filter_values) == 2
+            and df[filter_column].dtype in [pl.Date, pl.Datetime]
+        )
+
+        if is_date_range:
+            # DateRangePicker: Use date range filtering
+            logger.info(
+                f"Detected DateRangePicker filter for column '{filter_column}' "
+                f"with range {filter_values}"
+            )
+            start_date = filter_values[0]
+            end_date = filter_values[1]
+
+            # Convert string dates to appropriate type
+            if isinstance(start_date, str):
+                start_date = pl.lit(start_date).str.strptime(pl.Datetime, "%Y-%m-%d")
+            if isinstance(end_date, str):
+                end_date = pl.lit(end_date).str.strptime(pl.Datetime, "%Y-%m-%d")
+
+            # Apply date range filter
+            date_col = pl.col(filter_column).cast(pl.Datetime)
+            filtered_df = df.filter((date_col >= start_date) & (date_col <= end_date))
+        else:
+            # Standard MultiSelect/Select: Use is_in() filtering
+            filtered_df = df.filter(pl.col(filter_column).is_in(filter_values))
+
         link_values = filtered_df[link_column].unique().to_list()
 
         logger.info(
