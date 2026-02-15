@@ -1,32 +1,37 @@
 /* =============================================================================
-   FIGURE COMPONENT FULLSCREEN MODE
+   FIGURE COMPONENT FULLSCREEN MODE v3 - Native Fullscreen API
    ============================================================================= */
 
-/* Fullscreen grid item - covers entire viewport */
-.react-grid-item.chart-fullscreen-active {
-    position: fixed !important;
-    top: 0 !important;
-    left: 0 !important;
+/* Style for element in native fullscreen mode */
+.react-grid-item:fullscreen,
+.react-grid-item:-webkit-full-screen,
+.react-grid-item:-moz-full-screen,
+.react-grid-item:-ms-fullscreen {
     width: 100vw !important;
     height: 100vh !important;
-    z-index: 10000 !important;
     background-color: var(--app-bg-color, #ffffff) !important;
     padding: 20px !important;
     margin: 0 !important;
-    transform: none !important; /* Override grid transform */
     box-sizing: border-box !important;
+    display: flex !important;
+    flex-direction: column !important;
 }
 
 /* Make all child containers fill the fullscreen grid item */
-.chart-fullscreen-active .responsive-wrapper,
-.chart-fullscreen-active .figure-container,
-.chart-fullscreen-active .dashboard-component-hover {
+.react-grid-item:fullscreen .responsive-wrapper,
+.react-grid-item:fullscreen .figure-container,
+.react-grid-item:fullscreen .dashboard-component-hover,
+.react-grid-item:-webkit-full-screen .responsive-wrapper,
+.react-grid-item:-webkit-full-screen .figure-container,
+.react-grid-item:-webkit-full-screen .dashboard-component-hover {
     width: 100% !important;
     height: 100% !important;
+    flex: 1 !important;
 }
 
 /* Make Plotly chart fill the container */
-.chart-fullscreen-active .js-plotly-plot {
+.react-grid-item:fullscreen .js-plotly-plot,
+.react-grid-item:-webkit-full-screen .js-plotly-plot {
     width: 100% !important;
     height: 100% !important;
 }
@@ -42,6 +47,7 @@ body.fullscreen-mode .mantine-AppShell-navbar {
 }
 
 /* Dark mode support */
-[data-mantine-color-scheme="dark"] .chart-fullscreen-active {
+[data-mantine-color-scheme="dark"] .react-grid-item:fullscreen,
+[data-mantine-color-scheme="dark"] .react-grid-item:-webkit-full-screen {
     background-color: var(--mantine-color-dark-7, #1a1b1e) !important;
 }

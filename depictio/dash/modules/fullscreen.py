@@ -25,13 +25,17 @@ def register_fullscreen_callbacks(app: Any) -> None:
     app.clientside_callback(
         """
         function(n_clicks, button_id) {
+            console.log('🖥️ FULLSCREEN CALLBACK FIRED - n_clicks:', n_clicks, 'button_id:', button_id);
+
             if (!n_clicks || n_clicks === 0) {
+                console.log('🖥️ No clicks, returning no_update');
                 return window.dash_clientside.no_update;
             }
 
             // Find the clicked button by matching its parsed id index
             const componentIndex = button_id.index;
             const allButtons = document.querySelectorAll('button[id*="chart-fullscreen-btn"]');
+            console.log('🖥️ Found', allButtons.length, 'fullscreen buttons, looking for index:', componentIndex);
 
             let button = null;
             for (const btn of allButtons) {
@@ -46,16 +50,47 @@ def register_fullscreen_callbacks(app: Any) -> None:
                 }
             }
 
-            if (!button) return window.dash_clientside.no_update;
+            if (!button) {
+                console.error('🖥️ Button not found for index:', componentIndex);
+                return window.dash_clientside.no_update;
+            }
+            console.log('🖥️ Button found:', button);
 
             // Apply fullscreen to the grid item (not a child) because grid items
             // have CSS transforms that break position:fixed behavior.
             const gridItem = button.closest('.react-grid-item');
-            if (!gridItem) return window.dash_clientside.no_update;
+            if (!gridItem) {
+                console.error('🖥️ Grid item not found');
+                return window.dash_clientside.no_update;
+            }
+            console.log('🖥️ Grid item found:', gridItem);
 
-            // Toggle fullscreen class and body overflow lock
-            gridItem.classList.toggle('chart-fullscreen-active');
-            document.body.classList.toggle('fullscreen-mode');
+            // Use native Fullscreen API for true fullscreen
+            if (document.fullscreenElement) {
+                // Exit fullscreen
+                console.log('🖥️ Exiting native fullscreen');
+                document.exitFullscreen();
+                gridItem.classList.remove('chart-fullscreen-active');
+            } else {
+                // Enter fullscreen
+                console.log('🖥️ Entering native fullscreen');
+                gridItem.classList.add('chart-fullscreen-active');
+
+                // Request fullscreen on the grid item
+                if (gridItem.requestFullscreen) {
+                    gridItem.requestFullscreen().catch(err => {
+                        console.error('🖥️ Fullscreen request failed:', err);
+                    });
+                } else if (gridItem.webkitRequestFullscreen) {
+                    gridItem.webkitRequestFullscreen();
+                } else if (gridItem.mozRequestFullScreen) {
+                    gridItem.mozRequestFullScreen();
+                } else if (gridItem.msRequestFullscreen) {
+                    gridItem.msRequestFullscreen();
+                }
+            }
+
+            console.log('🖥️ Fullscreen toggled');
 
             // Resize Plotly chart after the layout change settles
             """
