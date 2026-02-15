@@ -117,6 +117,7 @@ workflows:
               "habitat": "Sample habitat type"
               "Riv_vs_Gro": "Habitat comparison group 1"
               "Sed_vs_Soil": "Habitat comparison group 2"
+              "sampling_date": "Sample collection date (YYYY-MM-DD)"
 
       - id: "646b0f3c1e4a2d7f8e5b8ca8"
         data_collection_tag: "alpha_rarefaction"

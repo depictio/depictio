@@ -25,9 +25,17 @@
   "last_saved_ts": "2026-01-27 00:00:00.000000",
   "left_panel_layout_data": [
     {
-      "i": "box-dd4f7ab6-9eca-4e21-9653-e2132f321752",
+      "i": "box-f2a8c9d5-3b1e-4f7a-9c6d-8e4f5a2b7c3d",
       "x": 0,
       "y": 0,
+      "w": 1,
+      "h": 3,
+      "static": false
+    },
+    {
+      "i": "box-dd4f7ab6-9eca-4e21-9653-e2132f321752",
+      "x": 0,
+      "y": 3,
       "w": 1,
       "h": 2,
       "static": false
@@ -35,7 +43,7 @@
     {
       "i": "box-809b4712-e4c7-49fd-bb0f-b3b6d524bf67",
       "x": 0,
-      "y": 2,
+      "y": 5,
       "w": 1,
       "h": 3,
       "static": false
@@ -43,7 +51,7 @@
     {
       "i": "box-7caf2156-359f-4684-a633-ef6a8b298a41",
       "x": 0,
-      "y": 5,
+      "y": 8,
       "w": 1,
       "h": 2,
       "static": false
@@ -51,7 +59,23 @@
     {
       "i": "box-d9c9ea4f-5fd5-4c9a-97b7-c02a776c830c",
       "x": 0,
-      "y": 7,
+      "y": 10,
+      "w": 1,
+      "h": 3,
+      "static": false
+    },
+    {
+      "i": "box-range-faith-pd-slider",
+      "x": 0,
+      "y": 13,
+      "w": 1,
+      "h": 3,
+      "static": false
+    },
+    {
+      "i": "box-range-count-slider",
+      "x": 0,
+      "y": 16,
       "w": 1,
       "h": 3,
       "static": false
@@ -147,24 +171,9 @@
       ]
     },
     {
-      "i": "box-682393fb-95cc-4348-891f-563b0fe27db9",
-      "x": 0,
-      "y": 12,
-      "w": 8,
-      "h": 5,
-      "static": false,
-      "resizeHandles": [
-        "se",
-        "s",
-        "e",
-        "sw",
-        "w"
-      ]
-    },
-    {
       "i": "box-62601050-2b2e-4838-8a64-3d5f6718a00a",
       "x": 0,
-      "y": 17,
+      "y": 12,
       "w": 4,
       "h": 6,
       "static": false,
@@ -179,7 +188,7 @@
     {
       "i": "box-41fe34a8-20fc-475e-9b87-b537d67f22f7",
       "x": 4,
-      "y": 17,
+      "y": 12,
       "w": 4,
       "h": 6,
       "static": false,
@@ -194,7 +203,7 @@
     {
       "i": "box-2f6d7db7-a8a1-4794-b714-b71442c38124",
       "x": 0,
-      "y": 23,
+      "y": 18,
       "w": 8,
       "h": 6,
       "static": false,
@@ -209,7 +218,7 @@
     {
       "i": "box-71222ab6-f5b3-42be-9a10-fb0416c9c57e",
       "x": 0,
-      "y": 29,
+      "y": 24,
       "w": 8,
       "h": 6,
       "static": false,
@@ -224,7 +233,7 @@
     {
       "i": "box-4d9ec1db-6783-4dfe-b754-3e923e61712c",
       "x": 0,
-      "y": 35,
+      "y": 30,
       "w": 8,
       "h": 6,
       "static": false,
@@ -381,34 +390,6 @@
       "panel": "right"
     },
     {
-      "index": "682393fb-95cc-4348-891f-563b0fe27db9",
-      "component_type": "figure",
-      "visu_type": "histogram",
-      "wf_id": {
-        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
-      },
-      "dc_id": {
-        "$oid": "646b0f3c1e4a2d7f8e5b8ca8"
-      },
-      "last_updated": "2026-01-27T00:00:00.000000",
-      "panel": "right",
-      "dict_kwargs": {
-        "x": "faith_pd",
-        "color": "sample",
-        "hover_data": {
-          "sample": true,
-          "faith_pd": ":.2f"
-        },
-        "title": "Faith PD Distribution",
-        "labels": {
-          "faith_pd": "Faith's Phylogenetic Diversity",
-          "sample": "Sample"
-        },
-        "nbins": 30,
-        "template": "mantine_light"
-      }
-    },
-    {
       "index": "62601050-2b2e-4838-8a64-3d5f6718a00a",
       "component_type": "figure",
       "visu_type": "sunburst",
@@ -526,6 +507,12 @@
           "description": "Sample habitat (Riverwater, Groundwater, Sediment, Soil)",
           "filter": "agTextColumnFilter",
           "floatingFilter": true
+        },
+        "sampling_date": {
+          "type": "datetime64[ns]",
+          "description": "Sample collection date (YYYY-MM-DD)",
+          "filter": "agDateColumnFilter",
+          "floatingFilter": true
         }
       },
       "parent_index": null,
@@ -610,7 +597,8 @@
       "panel": "left",
       "title_size": "md",
       "custom_color": "#984EA3",
-      "icon_name": "mdi:earth"
+      "icon_name": "mdi:earth",
+      "title": "Habitat Type"
     },
     {
       "index": "809b4712-e4c7-49fd-bb0f-b3b6d524bf67",
@@ -645,7 +633,8 @@
       "panel": "left",
       "title_size": "md",
       "custom_color": "#45B8AC",
-      "icon_name": "mdi:flask"
+      "icon_name": "mdi:flask",
+      "title": "Sample ID"
     },
     {
       "index": "7caf2156-359f-4684-a633-ef6a8b298a41",
@@ -670,7 +659,8 @@
       "panel": "left",
       "title_size": "md",
       "custom_color": "#377EB8",
-      "icon_name": "mdi:bacteria"
+      "icon_name": "mdi:bacteria",
+      "title": "Kingdom"
     },
     {
       "index": "d9c9ea4f-5fd5-4c9a-97b7-c02a776c830c",
@@ -723,7 +713,87 @@
       "panel": "left",
       "title_size": "md",
       "custom_color": "#8BC34A",
-      "icon_name": "mdi:bacteria-outline"
+      "icon_name": "mdi:bacteria-outline",
+      "title": "Phylum"
+    },
+    {
+      "index": "f2a8c9d5-3b1e-4f7a-9c6d-8e4f5a2b7c3d",
+      "component_type": "interactive",
+      "interactive_component_type": "DateRangePicker",
+      "column_name": "sampling_date",
+      "column_type": "datetime64[ns]",
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca5"
+      },
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "default_state": {
+        "type": "date_range",
+        "min_date": "2023-01-01",
+        "max_date": "2023-01-23",
+        "default_value": null
+      },
+      "panel": "left",
+      "title_size": "md",
+      "custom_color": "#45B8AC",
+      "icon_name": "mdi:calendar-range",
+      "title": "Sampling Period",
+      "filter_propagation_column": "sample"
+    },
+    {
+      "index": "range-faith-pd-slider",
+      "component_type": "interactive",
+      "interactive_component_type": "RangeSlider",
+      "column_name": "faith_pd",
+      "column_type": "float64",
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca8"
+      },
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "default_state": {
+        "type": "range",
+        "min": 0.15,
+        "max": 62.75,
+        "step": 0.1,
+        "default_value": null
+      },
+      "panel": "left",
+      "title_size": "md",
+      "custom_color": "#9C27B0",
+      "icon_name": "mdi:chart-box-outline",
+      "scale": "linear",
+      "marks_number": 5,
+      "title": "Faith PD Range"
+    },
+    {
+      "index": "range-count-slider",
+      "component_type": "interactive",
+      "interactive_component_type": "RangeSlider",
+      "column_name": "count",
+      "column_type": "float64",
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca9"
+      },
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "default_state": {
+        "type": "range",
+        "min": 2,
+        "max": 50473,
+        "step": 10,
+        "default_value": null
+      },
+      "panel": "left",
+      "title_size": "md",
+      "custom_color": "#FF9800",
+      "icon_name": "mdi:counter",
+      "scale": "log10",
+      "marks_number": 5,
+      "title": "Taxon Count"
     }
   ],
   "subtitle": "Alpha Diversity & Taxonomic Composition",

@@ -31,6 +31,30 @@
       "w": 1,
       "h": 3,
       "static": false
+    },
+    {
+      "i": "box-a7f3e9c2-5d4b-4a8f-9e1c-7b6d8f3a2c5e",
+      "x": 0,
+      "y": 3,
+      "w": 1,
+      "h": 2,
+      "static": false
+    },
+    {
+      "i": "box-b8d4f1a3-6e5c-4b9f-0d2e-8c7e9a4b3d6f",
+      "x": 0,
+      "y": 5,
+      "w": 1,
+      "h": 3,
+      "static": false
+    },
+    {
+      "i": "box-c9e5a2b4-7f6d-4c0a-1e3f-9d8f0b5c4e7a",
+      "x": 0,
+      "y": 8,
+      "w": 1,
+      "h": 3,
+      "static": false
     }
   ],
   "notes_content": "<p>Diversity and taxonomy analysis dashboard for ampliseq</p>",
@@ -198,6 +222,83 @@
       "title_size": "md",
       "custom_color": "#8BC34A",
       "icon_name": "mdi:bacteria-outline"
+    },
+    {
+      "index": "a7f3e9c2-5d4b-4a8f-9e1c-7b6d8f3a2c5e",
+      "component_type": "interactive",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "Kingdom",
+      "column_type": "object",
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8caa"
+      },
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "default_state": {
+        "type": "select",
+        "options": [
+          "Archaea",
+          "Bacteria"
+        ],
+        "default_value": null
+      },
+      "panel": "left",
+      "title_size": "md",
+      "custom_color": "#377EB8",
+      "icon_name": "mdi:bacteria"
+    },
+    {
+      "index": "b8d4f1a3-6e5c-4b9f-0d2e-8c7e9a4b3d6f",
+      "component_type": "interactive",
+      "interactive_component_type": "RangeSlider",
+      "column_name": "W",
+      "column_type": "int64",
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8caa"
+      },
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "default_state": {
+        "type": "range",
+        "min": 0,
+        "max": 2678,
+        "step": 10,
+        "default_value": null
+      },
+      "panel": "left",
+      "title_size": "md",
+      "custom_color": "#E74C3C",
+      "icon_name": "mdi:chart-line",
+      "scale": "linear",
+      "marks_number": 5
+    },
+    {
+      "index": "c9e5a2b4-7f6d-4c0a-1e3f-9d8f0b5c4e7a",
+      "component_type": "interactive",
+      "interactive_component_type": "RangeSlider",
+      "column_name": "clr",
+      "column_type": "float64",
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8caa"
+      },
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "default_state": {
+        "type": "range",
+        "min": 0.09,
+        "max": 29747.39,
+        "step": 0.01,
+        "default_value": null
+      },
+      "panel": "left",
+      "title_size": "md",
+      "custom_color": "#F68B33",
+      "icon_name": "mdi:chart-bell-curve",
+      "scale": "log10",
+      "marks_number": 5
     },
     {
       "index": "diff-card-total-taxa",
