@@ -121,6 +121,32 @@ def _enrich_filter_components(
                 full_metadata: dict = {}
             else:
                 full_metadata = metadata_by_index.get(str(comp_index), {})
+
+            # Special handling for DateRangePicker values
+            if full_metadata.get("interactive_component_type") == "DateRangePicker":
+                value = comp.get("value")
+                # Ensure value is a list of 2 string dates
+                if value and not isinstance(value, list):
+                    value = [value]
+                if value and len(value) == 2:
+                    # Skip if either value is None (incomplete selection)
+                    if value[0] is None or value[1] is None:
+                        logger.info(f"[DEBUG] DateRangePicker has None value, skipping: {value}")
+                        # Keep original value to mark as inactive later
+                    else:
+                        # Normalize to strings in YYYY-MM-DD format
+                        normalized_value = []
+                        for v in value:
+                            # Handle ISO datetime strings (e.g., "2023-01-01T00:00:00")
+                            if isinstance(v, str) and "T" in v:
+                                normalized_value.append(v.split("T")[0])
+                            else:
+                                normalized_value.append(str(v))
+                        comp = {**comp, "value": normalized_value}
+                        logger.info(
+                            f"[DEBUG] DateRangePicker value normalized: {value} -> {normalized_value}"
+                        )
+
             enriched_comp = {**comp, "metadata": full_metadata}
             enriched_components.append(enriched_comp)
     return enriched_components
@@ -156,7 +182,27 @@ def _filter_active_components(components: list[dict]) -> list[dict]:
     Returns:
         List of components with active (non-empty) values
     """
-    return [c for c in components if c.get("value") not in [None, [], "", False]]
+    active = []
+    for c in components:
+        value = c.get("value")
+        metadata = c.get("metadata", {})
+
+        # Special case: DateRangePicker with valid date range is active
+        if metadata.get("interactive_component_type") == "DateRangePicker":
+            # DateRangePicker is active if value exists and is a valid list of 2 non-None dates
+            if (
+                value
+                and isinstance(value, list)
+                and len(value) == 2
+                and value[0] is not None
+                and value[1] is not None
+            ):
+                active.append(c)
+        # Generic case for other components
+        elif value not in [None, [], "", False]:
+            active.append(c)
+
+    return active
 
 
 def _extract_filters_for_figure(
@@ -196,11 +242,33 @@ def _extract_filters_for_figure(
     metadata_by_index = _build_metadata_index(interactive_metadata_list, interactive_metadata_ids)
 
     lightweight_components = filters_data.get("interactive_components_values", [])
+
+    # DEBUG: Log all components including DateRangePicker
+    logger.info(f"[DEBUG] Figure DC {dc_id[:8]} lightweight components: {lightweight_components}")
+
     enriched_components = _enrich_filter_components(lightweight_components, metadata_by_index)
+
+    # DEBUG: Check if DateRangePicker metadata was enriched
+    for comp in enriched_components:
+        if comp.get("metadata", {}).get("interactive_component_type") == "DateRangePicker":
+            logger.info(
+                f"[DEBUG] DateRangePicker enriched: value={comp.get('value')}, metadata={comp.get('metadata')}"
+            )
+
     filters_by_dc = _group_filters_by_dc(enriched_components)
 
     card_dc_str = str(dc_id)
     relevant_filters = filters_by_dc.get(card_dc_str, [])
+
+    # DEBUG: Check if DateRangePicker is in relevant filters
+    date_filters = [
+        f
+        for f in relevant_filters
+        if f.get("metadata", {}).get("interactive_component_type") == "DateRangePicker"
+    ]
+    logger.info(
+        f"[DEBUG] DateRangePicker in relevant_filters for {card_dc_str[:8]}: {len(date_filters)} found"
+    )
 
     # Include filters from source DCs if this figure uses a joined DC
     relevant_filters = _extend_filters_for_joined_dc(
@@ -212,6 +280,12 @@ def _extract_filters_for_figure(
     )
 
     # Include filters resolved via DC links (cross-DC filtering without joins)
+    logger.info(
+        f"[DEBUG] Calling extend_filters_via_links for DC {card_dc_str[:8]}, "
+        f"filters_by_dc_keys={list(filters_by_dc.keys())}, "
+        f"has_project_metadata={project_metadata is not None}, "
+        f"has_access_token={access_token is not None}"
+    )
     link_resolved_filters = extend_filters_via_links(
         target_dc_id=card_dc_str,
         filters_by_dc=filters_by_dc,
@@ -219,10 +293,31 @@ def _extract_filters_for_figure(
         access_token=access_token,
         component_type="figure",
     )
+    logger.info(f"[DEBUG] extend_filters_via_links returned {len(link_resolved_filters)} filter(s)")
     if link_resolved_filters:
+        logger.info(
+            f"[DEBUG] Extending relevant_filters with {len(link_resolved_filters)} link-resolved filter(s)"
+        )
         relevant_filters.extend(link_resolved_filters)
 
-    return _filter_active_components(relevant_filters)
+    active_filters = _filter_active_components(relevant_filters)
+
+    # DEBUG: Check if DateRangePicker passed activation check
+    active_date_filters = [
+        f
+        for f in active_filters
+        if f.get("metadata", {}).get("interactive_component_type") == "DateRangePicker"
+    ]
+    logger.info(
+        f"[DEBUG] Active DateRangePicker filters for {dc_id[:8]}: {len(active_date_filters)}"
+    )
+    if active_date_filters:
+        for f in active_date_filters:
+            logger.info(
+                f"[DEBUG] Active DateRangePicker: value={f.get('value')}, column={f.get('metadata', {}).get('column_name')}"
+            )
+
+    return active_filters
 
 
 # =============================================================================
