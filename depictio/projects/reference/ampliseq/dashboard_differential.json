@@ -33,7 +33,7 @@
       "static": false
     },
     {
-      "i": "box-a7f3e9c2-5d4b-4a8f-9e1c-7b6d8f3a2c5e",
+      "i": "box-diff-kingdom-filter",
       "x": 0,
       "y": 3,
       "w": 1,
@@ -41,7 +41,7 @@
       "static": false
     },
     {
-      "i": "box-b8d4f1a3-6e5c-4b9f-0d2e-8c7e9a4b3d6f",
+      "i": "box-diff-w-slider",
       "x": 0,
       "y": 5,
       "w": 1,
@@ -49,7 +49,7 @@
       "static": false
     },
     {
-      "i": "box-c9e5a2b4-7f6d-4c0a-1e3f-9d8f0b5c4e7a",
+      "i": "box-diff-clr-slider",
       "x": 0,
       "y": 8,
       "w": 1,
@@ -224,7 +224,7 @@
       "icon_name": "mdi:bacteria-outline"
     },
     {
-      "index": "a7f3e9c2-5d4b-4a8f-9e1c-7b6d8f3a2c5e",
+      "index": "diff-kingdom-filter",
       "component_type": "interactive",
       "interactive_component_type": "MultiSelect",
       "column_name": "Kingdom",
@@ -249,7 +249,7 @@
       "icon_name": "mdi:bacteria"
     },
     {
-      "index": "b8d4f1a3-6e5c-4b9f-0d2e-8c7e9a4b3d6f",
+      "index": "diff-w-slider",
       "component_type": "interactive",
       "interactive_component_type": "RangeSlider",
       "column_name": "W",
@@ -275,7 +275,7 @@
       "marks_number": 5
     },
     {
-      "index": "c9e5a2b4-7f6d-4c0a-1e3f-9d8f0b5c4e7a",
+      "index": "diff-clr-slider",
       "component_type": "interactive",
       "interactive_component_type": "RangeSlider",
       "column_name": "clr",
