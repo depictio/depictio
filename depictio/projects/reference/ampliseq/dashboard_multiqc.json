@@ -195,7 +195,8 @@
       "panel": "left",
       "title_size": "md",
       "custom_color": "#FF6B6B",
-      "icon_name": "mdi:calendar-range"
+      "icon_name": "mdi:calendar-range",
+      "title": "Sampling Period"
     },
     {
       "index": "multiqc-habitat-filter",
@@ -222,7 +223,8 @@
       "panel": "left",
       "title_size": "md",
       "custom_color": "#984EA3",
-      "icon_name": "mdi:earth"
+      "icon_name": "mdi:earth",
+      "title": "Habitat Type"
     },
     {
       "index": "multiqc-sample-filter",
@@ -257,7 +259,8 @@
       "panel": "left",
       "title_size": "md",
       "custom_color": "#45B8AC",
-      "icon_name": "mdi:flask"
+      "icon_name": "mdi:flask",
+      "title": "Sample ID"
     },
     {
       "index": "7b638b4e-6091-4dbb-8d1b-16d98c7ef3f3",

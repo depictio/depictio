@@ -221,7 +221,8 @@
       "panel": "left",
       "title_size": "md",
       "custom_color": "#8BC34A",
-      "icon_name": "mdi:bacteria-outline"
+      "icon_name": "mdi:bacteria-outline",
+      "title": "Phylum"
     },
     {
       "index": "diff-kingdom-filter",
@@ -246,7 +247,8 @@
       "panel": "left",
       "title_size": "md",
       "custom_color": "#377EB8",
-      "icon_name": "mdi:bacteria"
+      "icon_name": "mdi:bacteria",
+      "title": "Kingdom"
     },
     {
       "index": "diff-w-slider",
@@ -272,7 +274,8 @@
       "custom_color": "#E74C3C",
       "icon_name": "mdi:chart-line",
       "scale": "linear",
-      "marks_number": 5
+      "marks_number": 5,
+      "title": "W Statistic Range"
     },
     {
       "index": "diff-clr-slider",
@@ -298,7 +301,8 @@
       "custom_color": "#F68B33",
       "icon_name": "mdi:chart-bell-curve",
       "scale": "log10",
-      "marks_number": 5
+      "marks_number": 5,
+      "title": "CLR Effect Size Range"
     },
     {
       "index": "diff-card-total-taxa",
