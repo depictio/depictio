@@ -38,21 +38,10 @@ from depictio.dash.utils import (
     extend_filters_via_links,
 )
 
-# Use centralized background callback configuration
 USE_BACKGROUND_CALLBACKS = should_use_background_for_component("figure")
-
-
-# =============================================================================
-# Data Loading Registry Types
-# =============================================================================
 
 LoadKey = tuple[str, str, str]  # (wf_id, dc_id, filters_hash)
 LoadKeyExtended = tuple[str, str, str, str]  # (wf_id, dc_id, filters_hash, columns_hash)
-
-
-# =============================================================================
-# Filter Extraction Helpers
-# =============================================================================
 
 
 def _build_metadata_index(
@@ -131,8 +120,8 @@ def _enrich_filter_components(
                 if value and len(value) == 2:
                     # Skip if either value is None (incomplete selection)
                     if value[0] is None or value[1] is None:
-                        logger.info(f"[DEBUG] DateRangePicker has None value, skipping: {value}")
                         # Keep original value to mark as inactive later
+                        pass
                     else:
                         # Normalize to strings in YYYY-MM-DD format
                         normalized_value = []
@@ -143,9 +132,6 @@ def _enrich_filter_components(
                             else:
                                 normalized_value.append(str(v))
                         comp = {**comp, "value": normalized_value}
-                        logger.info(
-                            f"[DEBUG] DateRangePicker value normalized: {value} -> {normalized_value}"
-                        )
 
             enriched_comp = {**comp, "metadata": full_metadata}
             enriched_components.append(enriched_comp)
@@ -243,32 +229,12 @@ def _extract_filters_for_figure(
 
     lightweight_components = filters_data.get("interactive_components_values", [])
 
-    # DEBUG: Log all components including DateRangePicker
-    logger.info(f"[DEBUG] Figure DC {dc_id[:8]} lightweight components: {lightweight_components}")
-
     enriched_components = _enrich_filter_components(lightweight_components, metadata_by_index)
-
-    # DEBUG: Check if DateRangePicker metadata was enriched
-    for comp in enriched_components:
-        if comp.get("metadata", {}).get("interactive_component_type") == "DateRangePicker":
-            logger.info(
-                f"[DEBUG] DateRangePicker enriched: value={comp.get('value')}, metadata={comp.get('metadata')}"
-            )
 
     filters_by_dc = _group_filters_by_dc(enriched_components)
 
     card_dc_str = str(dc_id)
     relevant_filters = filters_by_dc.get(card_dc_str, [])
-
-    # DEBUG: Check if DateRangePicker is in relevant filters
-    date_filters = [
-        f
-        for f in relevant_filters
-        if f.get("metadata", {}).get("interactive_component_type") == "DateRangePicker"
-    ]
-    logger.info(
-        f"[DEBUG] DateRangePicker in relevant_filters for {card_dc_str[:8]}: {len(date_filters)} found"
-    )
 
     # Include filters from source DCs if this figure uses a joined DC
     relevant_filters = _extend_filters_for_joined_dc(
@@ -280,12 +246,6 @@ def _extract_filters_for_figure(
     )
 
     # Include filters resolved via DC links (cross-DC filtering without joins)
-    logger.info(
-        f"[DEBUG] Calling extend_filters_via_links for DC {card_dc_str[:8]}, "
-        f"filters_by_dc_keys={list(filters_by_dc.keys())}, "
-        f"has_project_metadata={project_metadata is not None}, "
-        f"has_access_token={access_token is not None}"
-    )
     link_resolved_filters = extend_filters_via_links(
         target_dc_id=card_dc_str,
         filters_by_dc=filters_by_dc,
@@ -293,36 +253,12 @@ def _extract_filters_for_figure(
         access_token=access_token,
         component_type="figure",
     )
-    logger.info(f"[DEBUG] extend_filters_via_links returned {len(link_resolved_filters)} filter(s)")
     if link_resolved_filters:
-        logger.info(
-            f"[DEBUG] Extending relevant_filters with {len(link_resolved_filters)} link-resolved filter(s)"
-        )
         relevant_filters.extend(link_resolved_filters)
 
     active_filters = _filter_active_components(relevant_filters)
 
-    # DEBUG: Check if DateRangePicker passed activation check
-    active_date_filters = [
-        f
-        for f in active_filters
-        if f.get("metadata", {}).get("interactive_component_type") == "DateRangePicker"
-    ]
-    logger.info(
-        f"[DEBUG] Active DateRangePicker filters for {dc_id[:8]}: {len(active_date_filters)}"
-    )
-    if active_date_filters:
-        for f in active_date_filters:
-            logger.info(
-                f"[DEBUG] Active DateRangePicker: value={f.get('value')}, column={f.get('metadata', {}).get('column_name')}"
-            )
-
     return active_filters
-
-
-# =============================================================================
-# DC Load Registry Building
-# =============================================================================
 
 
 def _compute_filters_hash(metadata_to_pass: list[dict]) -> str:
@@ -416,11 +352,6 @@ def _build_dc_load_registry(
     return dc_load_registry, figure_to_load_key
 
 
-# =============================================================================
-# Parallel Data Loading
-# =============================================================================
-
-
 def _load_dcs_parallel(
     dc_load_registry: dict[LoadKey, tuple[list[dict], list[str]]],
     access_token: str,
@@ -471,11 +402,6 @@ def _load_dcs_parallel(
                 dc_cache[load_key] = data
 
     return dc_cache
-
-
-# =============================================================================
-# Figure Processing
-# =============================================================================
 
 
 def _process_code_mode_figure(
@@ -675,12 +601,8 @@ def _extend_filters_for_joined_dc(
 def register_core_callbacks(app):
     """Register core rendering callbacks for figure component."""
 
-    # Log background callback status for figure component
     log_background_callback_status("figure", "render_figures_batch")
 
-    # ============================================================================
-    # UNIFIED CALLBACK: Handles both initial render AND filter updates
-    # ============================================================================
     @app.callback(
         Output({"type": "figure-graph", "index": ALL}, "figure"),
         Output({"type": "figure-metadata", "index": ALL}, "data"),
@@ -854,17 +776,13 @@ def _create_figure_from_data(
         Plotly Figure object
     """
     try:
-        # Convert Polars to Pandas for Plotly Express compatibility
         if hasattr(df, "to_pandas"):
             pandas_df = df.to_pandas()
         else:
             pandas_df = df
 
-        # Get theme template
         template = _get_theme_template(theme)
 
-        # Prepare parameters (clean None values, validate types)
-        # Keep certain parameters that can legitimately be empty strings
         keep_empty_string_params = {
             "parents",
             "names",
@@ -874,7 +792,6 @@ def _create_figure_from_data(
             "custom_data",
         }
 
-        # Parameters that should be parsed from JSON strings when stored as strings
         json_parseable_params = {
             "color_discrete_map",
             "color_continuous_scale",
@@ -893,7 +810,6 @@ def _create_figure_from_data(
             if v is None:
                 continue
 
-            # Parse JSON string parameters into dicts/lists (UI mode stores these as JSON strings)
             if k in json_parseable_params and isinstance(v, str) and v.strip():
                 try:
                     v = json.loads(v)
@@ -901,17 +817,13 @@ def _create_figure_from_data(
                     logger.warning(f"Failed to parse {k} as JSON: {v}, skipping")
                     continue
 
-            # Keep boolean parameters (including False values)
             if isinstance(v, bool):
                 cleaned_kwargs[k] = v
-            # Keep the parameter if it's not empty, or if it's in the allowed empty string list
             elif v != "" and v != [] or (k in keep_empty_string_params and v == ""):
                 cleaned_kwargs[k] = v
 
-        # Add template to parameters
         cleaned_kwargs["template"] = template
 
-        # Handle selection mode: add selection_column to custom_data if enabled
         if selection_enabled and selection_column and selection_column in pandas_df.columns:
             existing_custom_data = cleaned_kwargs.get("custom_data", [])
             if isinstance(existing_custom_data, str):
@@ -920,28 +832,22 @@ def _create_figure_from_data(
             elif not isinstance(existing_custom_data, list):
                 existing_custom_data = []
 
-            # Add selection_column at the beginning (index 0) for consistent extraction
             if selection_column not in existing_custom_data:
                 cleaned_kwargs["custom_data"] = [selection_column] + list(existing_custom_data)
 
-        # Get Plotly Express function dynamically
         if visu_type not in ["scatter", "line", "bar", "box", "histogram"]:
             logger.warning(f"Unsupported visualization type: {visu_type}, defaulting to scatter")
             visu_type = "scatter"
 
         plot_func = getattr(px, visu_type)
-
-        # Create figure
         fig = plot_func(pandas_df, **cleaned_kwargs)
 
-        # Apply additional theme-aware styling
         layout_updates = {
-            "paper_bgcolor": "rgba(0,0,0,0)",  # Transparent background
-            "plot_bgcolor": "rgba(0,0,0,0)",  # Transparent plot area
-            "margin": {"l": 50, "r": 20, "t": 40, "b": 40},  # Reasonable margins
+            "paper_bgcolor": "rgba(0,0,0,0)",
+            "plot_bgcolor": "rgba(0,0,0,0)",
+            "margin": {"l": 50, "r": 20, "t": 40, "b": 40},
         }
 
-        # Enable selection mode if configured
         if selection_enabled:
             layout_updates["clickmode"] = "event+select"
             layout_updates["dragmode"] = "lasso"
@@ -969,8 +875,6 @@ def _create_error_figure(error_message: str, theme: str = "light") -> go.Figure:
     template = _get_theme_template(theme)
 
     fig = px.scatter(template=template, title="")
-
-    # Add error annotation
     fig.add_annotation(
         text=f"⚠️ {error_message}",
         xref="paper",
@@ -987,11 +891,8 @@ def _create_error_figure(error_message: str, theme: str = "light") -> go.Figure:
         borderpad=10,
     )
 
-    # Remove axes
     fig.update_xaxes(visible=False)
     fig.update_yaxes(visible=False)
-
-    # Transparent background
     fig.update_layout(
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",

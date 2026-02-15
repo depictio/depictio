@@ -112,26 +112,15 @@ def _normalize_multiqc_paths(locations: List[str]) -> List[str]:
             continue
 
         if location.startswith("s3://"):
-            # S3 path - keep for backward compatibility
-            # Production should use local FS instead
-            logger.warning(f"S3 path detected (not recommended for production): {location}")
-            logger.info("For production, use shared local FS (PersistentVolume) instead of S3")
+            logger.warning(f"S3 path detected (use local FS for production): {location}")
             normalized.append(location)
-
         elif location.startswith("/"):
-            # Absolute local path - verify it exists
-            if os.path.exists(location):
-                logger.info(f"Using local file path: {location}")
-                normalized.append(location)
-            else:
+            if not os.path.exists(location):
                 logger.error(f"Local file path does not exist: {location}")
-                # Keep it anyway - will fail later with better error context
-                normalized.append(location)
-
+            normalized.append(location)
         else:
-            # Relative path - resolve to absolute
             abs_path = os.path.abspath(location)
-            logger.info(f"Resolved relative path: {location} -> {abs_path}")
+            logger.debug(f"Resolved relative path: {location} -> {abs_path}")
             normalized.append(abs_path)
 
     return normalized
@@ -166,7 +155,6 @@ def _extract_sample_filters(
         logger.debug("No DC ID in MultiQC component metadata")
         return None
 
-    # Find interactive components targeting same DC
     filtered_samples = None
 
     for interactive_meta in interactive_metadata_list:
@@ -177,20 +165,18 @@ def _extract_sample_filters(
             "data_collection_id"
         )
 
-        if str(interactive_dc_id) == str(multiqc_dc_id):
-            # Found matching DC - extract selected samples
-            interactive_id = interactive_meta.get("index")
+        if str(interactive_dc_id) != str(multiqc_dc_id):
+            continue
 
-            if interactive_id and interactive_id in filter_values:
-                selected_samples = filter_values[interactive_id]
-
-                if isinstance(selected_samples, list) and selected_samples:
-                    logger.info(
-                        f"Applying sample filter from interactive component {interactive_id}: "
-                        f"{len(selected_samples)} samples"
-                    )
-                    filtered_samples = selected_samples
-                    break
+        interactive_id = interactive_meta.get("index")
+        if interactive_id and interactive_id in filter_values:
+            selected_samples = filter_values[interactive_id]
+            if isinstance(selected_samples, list) and selected_samples:
+                logger.debug(
+                    f"Sample filter from {interactive_id}: {len(selected_samples)} samples"
+                )
+                filtered_samples = selected_samples
+                break
 
     return filtered_samples
 
@@ -215,20 +201,13 @@ def expand_canonical_samples_to_variants(
 
     expanded_samples = []
     for canonical_id in canonical_samples:
-        # Get all variants for this canonical ID
         variants = sample_mappings.get(canonical_id, [])
-
         if variants:
             expanded_samples.extend(variants)
-            logger.debug(
-                f"Expanded '{canonical_id}' to {len(variants)} variants: {variants[:3]}..."
-            )
         else:
-            # If no mapping found, include the canonical ID itself
             expanded_samples.append(canonical_id)
-            logger.debug(f"No variants found for '{canonical_id}' - using as-is")
 
-    logger.info(
+    logger.debug(
         f"Expanded {len(canonical_samples)} canonical IDs to {len(expanded_samples)} MultiQC variants"
     )
     return expanded_samples
@@ -258,8 +237,6 @@ def get_samples_from_metadata_filter(
 
     from depictio.api.v1.deltatables_utils import load_deltatable_lite
 
-    # Load metadata table
-    logger.debug(f"Loading metadata table {metadata_dc_id}")
     df = load_deltatable_lite(
         workflow_id=ObjectId(workflow_id),
         data_collection_id=ObjectId(metadata_dc_id),
@@ -271,8 +248,7 @@ def get_samples_from_metadata_filter(
         logger.warning("Metadata table is empty")
         return []
 
-    logger.debug(f"Loaded metadata table with columns: {df.columns}")
-    logger.info(f"Metadata table shape: {df.shape}")
+    logger.debug(f"Metadata table: {df.shape[0]} rows, {len(df.columns)} columns")
 
     # Apply filters from interactive components
     for comp_data in interactive_components_dict.values():
@@ -281,77 +257,43 @@ def get_samples_from_metadata_filter(
         filter_values = comp_data.get("value", [])
 
         if column_name and filter_values and column_name in df.columns:
-            logger.info(f"Filtering {column_name} = {filter_values}")
-
-            # Get column dtype to handle type-specific filtering
             column_dtype = df[column_name].dtype
+            default_state = comp_metadata.get("default_state", {})
+            default_range = default_state.get("default_range")
 
-            # Strategy 1: Handle Date/Datetime columns by parsing filter values as dates
             if column_dtype in (pl.Date, pl.Datetime):
-                # Check if this is the default range (no actual filtering needed)
-                default_state = comp_metadata.get("default_state", {})
-                default_range = default_state.get("default_range")
-
-                # If filter_values equals default_range, skip filtering
                 if default_range and filter_values == default_range:
-                    logger.debug(
-                        f"Date filter '{column_name}' at default range {default_range} - "
-                        "skipping (not an active filter)"
-                    )
-                    continue  # Skip to next component - no filtering for this column
+                    continue
 
-                # Otherwise, apply the date filter (user has changed from default)
                 try:
-                    # Parse string filter values as Python date objects (format: YYYY-MM-DD)
                     parsed_dates = [
                         datetime.strptime(str(v), "%Y-%m-%d").date() for v in filter_values
                     ]
                     df = df.filter(pl.col(column_name).is_in(parsed_dates))
-                    logger.debug(f"After filtering: {df.shape[0]} rows remaining (Date parsing)")
-                except Exception as e:
-                    logger.warning(
-                        f"Failed to filter Date column '{column_name}' with date parsing: {e}"
-                    )
-                    # Fallback to string casting
+                except Exception:
                     try:
                         string_values = [str(v) for v in filter_values]
                         df = df.filter(
                             pl.col(column_name).dt.strftime("%Y-%m-%d").is_in(string_values)
                         )
-                        logger.info(
-                            f"After filtering: {df.shape[0]} rows remaining (Date as formatted string)"
-                        )
                     except Exception as e2:
                         logger.error(f"Failed to filter Date column '{column_name}': {e2}")
-            # Strategy 2: Handle numeric range filters (from RangeSlider)
+
             elif isinstance(filter_values, (list, tuple)) and len(filter_values) == 2:
-                # Check if all values look like numbers (could be a range)
                 try:
                     min_val, max_val = float(filter_values[0]), float(filter_values[1])
-                    # Check if this is the default range
-                    default_state = comp_metadata.get("default_state", {})
-                    default_range = default_state.get("default_range")
-
                     if default_range and filter_values == default_range:
-                        logger.debug(
-                            f"Numeric filter '{column_name}' at default range {default_range} - "
-                            "skipping (not an active filter)"
-                        )
                         continue
 
-                    # Apply range filter
                     df = df.filter(
                         (pl.col(column_name) >= min_val) & (pl.col(column_name) <= max_val)
                     )
-                    logger.info(f"After range filtering: {df.shape[0]} rows remaining")
                 except (ValueError, TypeError):
-                    # Not a numeric range, treat as categorical
                     df = df.filter(pl.col(column_name).is_in(filter_values))
-                    logger.info(f"After filtering: {df.shape[0]} rows remaining")
             else:
-                # Standard categorical filtering
                 df = df.filter(pl.col(column_name).is_in(filter_values))
-                logger.info(f"After filtering: {df.shape[0]} rows remaining")
+
+            logger.debug(f"Filtered '{column_name}': {df.shape[0]} rows remaining")
 
     # Extract sample names from filtered DataFrame
     if join_column not in df.columns:
@@ -384,33 +326,15 @@ def patch_multiqc_figures(
     if not figures or not selected_samples:
         return figures
 
-    logger.info(f"Patching MultiQC figures with {len(selected_samples)} selected samples")
+    logger.debug(f"Patching {len(figures)} figures with {len(selected_samples)} selected samples")
     patched_figures = []
 
     for fig_idx, fig in enumerate(figures):
-        logger.debug(f"Processing figure {fig_idx}")
         patched_fig = copy.deepcopy(fig)
 
-        # Get all samples from metadata if available
-        all_samples = metadata.get("samples", []) if metadata else []
-        if not all_samples:
-            # Fallback: try to extract samples from figure data
-            all_samples = []
-            for trace in fig.get("data", []):
-                if "x" in trace and isinstance(trace["x"], (list, tuple)):
-                    all_samples.extend(trace["x"])
-                if "y" in trace and isinstance(trace["y"], (list, tuple)):
-                    all_samples.extend(trace["y"])
-            all_samples = list(set(all_samples))
-
-        logger.info(f"  Figure has {len(all_samples)} total samples")
-        logger.info(f"  Selected samples: {len(selected_samples)} samples")
-
-        # Get original trace data from metadata (critical for proper patching)
         original_traces = []
         if trace_metadata and "original_data" in trace_metadata:
             original_traces = trace_metadata["original_data"]
-            logger.debug(f"  Using stored trace metadata with {len(original_traces)} traces")
 
         for i, trace in enumerate(patched_fig.get("data", [])):
             trace_type = trace.get("type", "").lower()
@@ -453,72 +377,31 @@ def patch_multiqc_figures(
 
                 trace[sample_key] = filtered_samples
                 trace[value_key] = filtered_values
-                logger.debug(
-                    f"    Trace {i} ({trace_type}): {len(filtered_samples)} samples after filtering"
-                )
 
             elif trace_type == "heatmap":
-                # For heatmaps, samples can be on either x-axis (columns) or y-axis (rows)
-                # Check both axes to determine where samples are located
                 if original_x and original_z:
-                    # First, check if samples are on x-axis (columns)
                     x_indices = [j for j, x in enumerate(original_x) if str(x) in selected_samples]
-                    # Also check y-axis (rows) for samples
                     y_indices = (
                         [j for j, y in enumerate(original_y) if str(y) in selected_samples]
                         if original_y
                         else []
                     )
 
-                    logger.debug(
-                        f"    Heatmap trace {i}: x has {len(x_indices)}/{len(original_x)} matches, "
-                        f"y has {len(y_indices)}/{len(original_y) if original_y else 0} matches"
-                    )
-
-                    # Determine which axis contains samples (use the one with more matches)
                     if y_indices and len(y_indices) >= len(x_indices):
-                        # Samples are on y-axis (rows) - filter rows
-                        logger.debug("    Filtering heatmap ROWS (y-axis) for samples")
                         trace["y"] = [original_y[j] for j in y_indices]
-                        # Filter z-values (filter rows, keep all columns)
                         if isinstance(original_z, list) and original_z:
                             trace["z"] = [original_z[j] for j in y_indices if j < len(original_z)]
-                        logger.debug(
-                            f"    Trace {i} (heatmap): filtered to {len(y_indices)} samples (rows)"
-                        )
                     elif x_indices:
-                        # Samples are on x-axis (columns) - filter columns
-                        logger.debug("    Filtering heatmap COLUMNS (x-axis) for samples")
                         trace["x"] = [original_x[j] for j in x_indices]
-                        # Filter z-values (each row needs same column indices filtered)
                         if isinstance(original_z, list) and original_z:
                             trace["z"] = [
                                 [row[j] for j in x_indices if j < len(row)] for row in original_z
                             ]
-                        logger.debug(
-                            f"    Trace {i} (heatmap): filtered to {len(x_indices)} samples (columns)"
-                        )
-                    else:
-                        logger.debug(
-                            f"    Trace {i} (heatmap): no sample matches found in x or y axis"
-                        )
 
             elif trace_type in ["scatter", "scattergl"]:
-                # For scatter/line plots, check if this trace represents a sample
-                # In MultiQC line plots, each trace.name is typically a sample name
                 if trace_name:
-                    # Check if this trace's name matches any selected sample
-                    if trace_name in selected_samples:
-                        trace["visible"] = True
-                        logger.debug(
-                            f"    Trace {i} ({trace_type}): '{trace_name}' matches - visible"
-                        )
-                    else:
-                        trace["visible"] = False
-                        logger.debug(f"    Trace {i} ({trace_type}): '{trace_name}' hidden")
+                    trace["visible"] = trace_name in selected_samples
                 else:
-                    # Trace has no name - try to filter data points
-                    # Check if samples are in the data
                     filtered_x = []
                     filtered_y = []
                     for j, x_val in enumerate(original_x):
@@ -532,25 +415,52 @@ def patch_multiqc_figures(
                     if filtered_x:
                         trace["x"] = filtered_x
                         trace["y"] = filtered_y
-                        logger.debug(
-                            f"    Trace {i} ({trace_type}): filtered to {len(filtered_x)} data points"
-                        )
 
         patched_figures.append(patched_fig)
 
-    logger.info(f"Returning {len(patched_figures)} patched figures")
     return patched_figures
+
+
+def _restore_figure_from_trace_metadata(
+    current_figure: Dict, trace_metadata: Dict
+) -> Optional[Dict]:
+    """Restore an unfiltered figure from stored trace metadata.
+
+    Args:
+        current_figure: The currently displayed (filtered) figure.
+        trace_metadata: Stored original trace data.
+
+    Returns:
+        Restored figure dict with filter marker cleared, or None if restoration fails.
+    """
+    if not trace_metadata or not trace_metadata.get("original_data"):
+        return None
+
+    restored_fig = copy.deepcopy(current_figure)
+    original_traces = trace_metadata["original_data"]
+
+    for i, trace in enumerate(restored_fig.get("data", [])):
+        if i < len(original_traces):
+            trace_info = original_traces[i]
+            if trace_info.get("original_x"):
+                trace["x"] = trace_info["original_x"]
+            if trace_info.get("original_y"):
+                trace["y"] = trace_info["original_y"]
+            if trace_info.get("original_z"):
+                trace["z"] = trace_info["original_z"]
+            if "visible" in trace:
+                trace["visible"] = True
+
+    if "layout" not in restored_fig:
+        restored_fig["layout"] = {}
+    restored_fig["layout"]["_depictio_filter_applied"] = False
+
+    logger.info("Restored original unfiltered figure from trace metadata")
+    return restored_fig
 
 
 def register_core_callbacks(app):
     """Register core rendering callbacks for MultiQC component."""
-
-    # ============================================================================
-    # CALLBACK 0: Render MultiQC Plot from Trigger (VIEW MODE)
-    # ============================================================================
-    # This callback handles view mode rendering where build_multiqc creates
-    # a multiqc-trigger store with all the data needed to render the plot.
-    # This is for EXISTING dashboard components, not design/edit mode.
 
     @app.callback(
         Output({"type": "multiqc-graph", "index": MATCH}, "figure"),
@@ -575,38 +485,26 @@ def register_core_callbacks(app):
             Tuple of (Plotly Figure object, trace_metadata dict for interactive patching)
         """
         task_id = str(uuid.uuid4())[:8]
-        logger.info("=" * 80)
-        logger.info(f"[{task_id}] RENDER MULTIQC (VIEW MODE)")
-        logger.info(f"Trigger data received: {trigger_data}")
 
-        # Skip if already rendered (prevents spurious re-renders during Patch operations)
         if existing_trace_metadata and existing_trace_metadata.get("summary"):
-            logger.info(
-                "RENDER CALLBACK: Already rendered, skipping re-render "
-                "(Patch operation or spurious Store update detected)"
-            )
             return dash.no_update, dash.no_update
 
         if not trigger_data:
-            logger.warning("No trigger_data - returning no_update")
             return dash.no_update, dash.no_update
 
-        # Extract parameters from trigger
         s3_locations = trigger_data.get("s3_locations", [])
         selected_module = trigger_data.get("module")
         selected_plot = trigger_data.get("plot")
         selected_dataset = trigger_data.get("dataset_id")
         theme = trigger_data.get("theme", "light")
 
-        logger.info(f"   Module: {selected_module}")
-        logger.info(f"   Plot: {selected_plot}")
-        logger.info(f"   Dataset: {selected_dataset}")
-        logger.info(f"   Data locations: {len(s3_locations)}")
-        logger.info(f"   Theme: {theme}")
+        logger.info(
+            f"[{task_id}] Render MultiQC view: {selected_module}/{selected_plot} "
+            f"(dataset={selected_dataset}, locations={len(s3_locations)})"
+        )
 
-        # Validate inputs
         if not selected_module or not selected_plot or not s3_locations:
-            logger.error("   Missing required parameters")
+            logger.error(f"[{task_id}] Missing required parameters")
             return {
                 "data": [],
                 "layout": {"title": "Error: Missing parameters"},
@@ -630,14 +528,10 @@ def register_core_callbacks(app):
                     "layout": {"title": "Error generating plot"},
                 }, {}
 
-            # Analyze plot structure and store trace metadata for interactive patching
             trace_metadata = analyze_multiqc_plot_structure(fig)
-            logger.info(
-                f"   Trace metadata: {len(trace_metadata.get('original_data', []))} traces stored"
+            logger.debug(
+                f"[{task_id}] Rendered with {len(trace_metadata.get('original_data', []))} traces"
             )
-
-            logger.debug(f"[{task_id}] MULTIQC VIEW MODE PLOT RENDERED")
-            logger.info("=" * 80)
 
             return fig, trace_metadata
 
@@ -659,10 +553,6 @@ def register_core_callbacks(app):
                     ],
                 },
             }, {}
-
-    # ============================================================================
-    # CALLBACK 1: Load MultiQC Metadata and Populate Module Selector (DESIGN MODE)
-    # ============================================================================
 
     @app.callback(
         Output({"type": "multiqc-metadata-store", "index": MATCH}, "data"),
@@ -764,12 +654,6 @@ def register_core_callbacks(app):
             logger.error(f"Failed to load MultiQC metadata: {e}", exc_info=True)
             return {}, [], [], f"Error: {str(e)}"
 
-    # ============================================================================
-    # CALLBACK 2+3: Populate Plot and Dataset Selectors (consolidated)
-    # ============================================================================
-    # Combines the former separate plot and dataset callbacks to save one
-    # client-server round-trip when the module changes.
-
     @app.callback(
         Output({"type": "multiqc-plot-select", "index": MATCH}, "data"),
         Output({"type": "multiqc-plot-select", "index": MATCH}, "value"),
@@ -828,13 +712,11 @@ def register_core_callbacks(app):
         plot_options = [{"label": plot, "value": plot} for plot in plot_names]
 
         if module_changed:
-            # Module changed: auto-select first plot
             selected_plot = plot_names[0] if plot_names else None
-            logger.debug(f"   Found {len(plot_names)} plots for {selected_module}")
-            if selected_plot:
-                logger.info(f"   Auto-selecting: {selected_plot}")
+            logger.debug(
+                f"Module {selected_module}: {len(plot_names)} plots, auto-select={selected_plot}"
+            )
         else:
-            # Plot changed by user: keep current plot_options unchanged
             plot_options = dash.no_update
 
         # Compute dataset options for the (auto-)selected plot
@@ -848,18 +730,12 @@ def register_core_callbacks(app):
                 break
 
         if not datasets or not isinstance(datasets, list):
-            logger.info(f"   No multiple datasets for {selected_plot}")
             return plot_options, selected_plot, [], None, {"display": "none"}
 
         dataset_options = [{"label": ds, "value": ds} for ds in datasets]
         default_dataset = datasets[0] if datasets else None
-        logger.debug(f"   Found {len(datasets)} datasets, auto-selecting: {default_dataset}")
 
         return plot_options, selected_plot, dataset_options, default_dataset, {"display": "block"}
-
-    # ============================================================================
-    # CALLBACK 4: Render MultiQC Plot
-    # ============================================================================
 
     @app.callback(
         Output({"type": "multiqc-plot-container", "index": MATCH}, "children"),
@@ -913,15 +789,12 @@ def register_core_callbacks(app):
             - trace_metadata: Analysis of plot structure for filtering
         """
         task_id = str(uuid.uuid4())[:8]
-        logger.info("=" * 80)
-        logger.info(f"   Module: {selected_module}")
-        logger.info(f"   Plot: {selected_plot}")
-        logger.info(f"   Dataset: {selected_dataset}")
-        logger.info(f"   Filters: {filter_values is not None}")
+        logger.info(
+            f"[{task_id}] Render MultiQC: {selected_module}/{selected_plot} "
+            f"(dataset={selected_dataset}, has_filters={filter_values is not None})"
+        )
 
-        # GUARD: Check required selections
         if not selected_module or not selected_plot:
-            logger.info("   Waiting for module/plot selection")
             raise PreventUpdate
 
         if not data_locations:
@@ -983,13 +856,6 @@ def register_core_callbacks(app):
                 )
             ), {}
 
-    # ============================================================================
-    # CALLBACK 5: Patch MultiQC Plot with Interactive Filtering (VIEW MODE)
-    # ============================================================================
-    # This callback handles interactive filtering of MultiQC plots on dashboards.
-    # It listens to the interactive-values-store and patches the MultiQC figure
-    # when interactive components (filters) change their values.
-
     @app.callback(
         Output({"type": "multiqc-graph", "index": MATCH}, "figure", allow_duplicate=True),
         Input("interactive-values-store", "data"),
@@ -1016,56 +882,12 @@ def register_core_callbacks(app):
 
         RESET SUPPORT: Empty interactive_values reloads unfiltered data.
         """
-        # ===========================================================================
-        # DEBUG LOGGING: Trace callback execution for troubleshooting
-        # ===========================================================================
-        logger.info("=" * 80)
-        logger.info("-" * 40)
-
-        # Log callback inputs for debugging
-        logger.debug(
-            f"  interactive_values: {type(interactive_values)} - {bool(interactive_values)}"
-        )
-        logger.debug(f"  stored_metadata: {type(stored_metadata)} - {bool(stored_metadata)}")
-        logger.debug(f"  current_figure: {type(current_figure)} - {bool(current_figure)}")
-        logger.debug(f"  trace_metadata: {type(trace_metadata)} - {bool(trace_metadata)}")
-        logger.debug(f"  local_data: {type(local_data)} - {bool(local_data)}")
-        logger.debug(
-            f"  interactive_metadata_list: {len(interactive_metadata_list) if interactive_metadata_list else 0} items"
-        )
-        logger.debug(
-            f"  interactive_metadata_ids: {len(interactive_metadata_ids) if interactive_metadata_ids else 0} items"
-        )
-
-        # Log key stored_metadata fields if available
-        if stored_metadata:
-            logger.info(f"  📌 Component type: {stored_metadata.get('component_type', 'unknown')}")
-            logger.info(
-                f"  📌 interactive_patching_enabled: {stored_metadata.get('interactive_patching_enabled', False)}"
-            )
-            logger.info(
-                f"  📌 workflow_id: {stored_metadata.get('workflow_id') or stored_metadata.get('wf_id')}"
-            )
-            logger.info(
-                f"  📌 dc_id: {stored_metadata.get('dc_id') or stored_metadata.get('data_collection_id')}"
-            )
-            logger.info(f"  📌 selected_module: {stored_metadata.get('selected_module')}")
-            logger.info(f"  📌 selected_plot: {stored_metadata.get('selected_plot')}")
-        else:
-            logger.warning("  ⚠️ No stored_metadata available!")
-
-        logger.info("-" * 40)
-
         # Early exit if no stored metadata (interactive_values can be empty for reset)
         if not stored_metadata:
-            logger.debug("No stored metadata - skipping")
             return dash.no_update
 
         # RESET SUPPORT: Allow empty interactive_values to reload unfiltered data
         if not interactive_values:
-            logger.info(
-                "🔄 RESET DETECTED: Empty interactive values - reloading unfiltered MultiQC data"
-            )
             interactive_values = {"interactive_components_values": []}
 
         # Get authentication token
@@ -1092,166 +914,86 @@ def register_core_callbacks(app):
         workflow_id = stored_metadata.get("workflow_id") or stored_metadata.get("wf_id")
         interactive_patching_enabled = stored_metadata.get("interactive_patching_enabled", False)
 
-        logger.info(
-            f"Processing MultiQC component - module: {selected_module}, "
-            f"plot: {selected_plot}, s3_locations count: {len(s3_locations)}, "
-            f"patching enabled: {interactive_patching_enabled}"
-        )
-
-        # Skip if patching is not enabled or basic requirements not met
         if not interactive_patching_enabled:
-            logger.debug("Interactive patching not enabled for this component")
             return dash.no_update
 
-        if not selected_module or not selected_plot or not s3_locations:
-            logger.debug("Missing required data for MultiQC patching")
+        if not selected_module or not selected_plot or not s3_locations or not workflow_id:
             return dash.no_update
 
-        if not workflow_id:
-            logger.debug("No workflow_id for this component")
-            return dash.no_update
-
-        # Get the MultiQC data collection ID to check for joins
         multiqc_dc_id = stored_metadata.get("dc_id") or stored_metadata.get("data_collection_id")
         if not multiqc_dc_id:
             logger.warning("No dc_id found for MultiQC component")
             return dash.no_update
 
-        # MIGRATED: Check if pre-computed join exists OR use link-based resolution
+        logger.debug(f"MultiQC filtering: {selected_module}/{selected_plot}")
+
         result_dc_id = get_result_dc_for_workflow(workflow_id, token)
         use_link_resolution = False
 
         if not result_dc_id:
-            # No pre-computed join - try link-based resolution as fallback
-            logger.info(
-                f"No pre-computed joins for workflow {workflow_id} - "
-                "checking for DC links as fallback"
-            )
             use_link_resolution = True
-        else:
-            logger.info(f"Pre-computed join detected for workflow {workflow_id}: {result_dc_id}")
+            logger.debug(f"No pre-computed joins for workflow {workflow_id}, using link resolution")
 
-        # Build interactive_components_dict in the format expected by filtering
-        # Structure: {component_index: {"index": ..., "value": [...], "metadata": {...}}}
         interactive_components_dict = {}
-        has_active_filters = False  # Track if any filters have actual values
+        has_active_filters = False
 
         if "interactive_components_values" in interactive_values:
             for component_data in interactive_values["interactive_components_values"]:
                 component_index = component_data.get("index")
                 component_value = component_data.get("value", [])
 
-                # Check if this component has any active filter values
                 if component_value and len(component_value) > 0:
                     comp_metadata = component_data.get("metadata", {})
                     component_type = comp_metadata.get("interactive_component_type", "")
                     default_state = comp_metadata.get("default_state", {})
 
-                    # Normalize DateRangePicker values to YYYY-MM-DD format
                     if component_type == "DateRangePicker":
                         value = component_data.get("value")
                         if value and isinstance(value, list) and len(value) == 2:
-                            # Skip if either value is None (incomplete selection)
                             if value[0] is None or value[1] is None:
-                                logger.info(
-                                    f"[DEBUG] MultiQC DateRangePicker has None value, skipping: {value}"
-                                )
-                                continue  # Skip this component
-                            else:
-                                # Normalize to strings in YYYY-MM-DD format
-                                normalized_value = []
-                                for v in value:
-                                    # Handle ISO datetime strings (e.g., "2023-01-01T00:00:00")
-                                    if isinstance(v, str) and "T" in v:
-                                        normalized_value.append(v.split("T")[0])
-                                    else:
-                                        normalized_value.append(str(v))
-                                component_value = normalized_value
-                                logger.info(
-                                    f"[DEBUG] MultiQC DateRangePicker value normalized: {value} -> {normalized_value}"
-                                )
+                                continue
+                            component_value = [
+                                v.split("T")[0] if isinstance(v, str) and "T" in v else str(v)
+                                for v in value
+                            ]
 
-                    # For RangeSlider and DateRangePicker, check if current value equals default range
                     if component_type in ["RangeSlider", "DateRangePicker"]:
                         default_range = default_state.get("default_range")
 
-                        # Normalize default_range for DateRangePicker (same format as component_value)
                         if component_type == "DateRangePicker" and default_range:
-                            normalized_default = []
-                            for v in default_range:
-                                if isinstance(v, str) and "T" in v:
-                                    normalized_default.append(v.split("T")[0])
-                                else:
-                                    normalized_default.append(str(v))
-                            default_range = normalized_default
-                            logger.info(
-                                f"[FILTER CHECK] Normalized default_range: {default_state.get('default_range')} -> {default_range}"
-                            )
+                            default_range = [
+                                v.split("T")[0] if isinstance(v, str) and "T" in v else str(v)
+                                for v in default_range
+                            ]
 
-                        if default_range and component_value == default_range:
-                            logger.info(
-                                f"[FILTER CHECK] Component {component_index} ({component_type}) at default range "
-                                f"{default_range} - NOT counting as active filter"
-                            )
-                        else:
+                        if not (default_range and component_value == default_range):
                             has_active_filters = True
-                            logger.info(
-                                f"[FILTER CHECK] Component {component_index} ({component_type}) changed from default "
-                                f"{default_range} to {component_value} - IS active filter"
-                            )
                     else:
                         has_active_filters = True
-                        logger.info(
-                            f"[FILTER CHECK] Component {component_index} ({component_type}) has value "
-                            f"{component_value} - IS active filter"
-                        )
 
                 if component_index:
                     interactive_components_dict[component_index] = component_data
-                    comp_metadata = component_data.get("metadata", {})
-                    logger.info(
-                        f"Interactive component {component_index}: "
-                        f"dc_id={comp_metadata.get('dc_id')}, "
-                        f"column={comp_metadata.get('column_name')}, "
-                        f"value={component_data.get('value')}"
-                    )
 
-        # Early exit if no interactive components exist
         if not interactive_components_dict:
-            logger.debug("No interactive components - skipping patching")
             return dash.no_update
 
-        # Check if figure has been previously filtered
         figure_was_patched = False
         if current_figure and isinstance(current_figure, dict):
-            layout = current_figure.get("layout", {})
-            figure_was_patched = layout.get("_depictio_filter_applied", False)
+            figure_was_patched = current_figure.get("layout", {}).get(
+                "_depictio_filter_applied", False
+            )
 
-        # Log filter status for debugging
-        logger.info(
-            f"[FILTER STATUS] has_active_filters={has_active_filters}, "
-            f"figure_was_patched={figure_was_patched}"
-        )
-
-        # Early exit if no filters are active AND figure hasn't been patched before
         if not has_active_filters and not figure_was_patched:
-            logger.info("❌ No active filters on initial load - skipping patching")
             return dash.no_update
 
-        # If user is clearing filters (no active filters but was previously patched),
-        # we need to restore the original unfiltered data
         if not has_active_filters and figure_was_patched:
-            logger.info("🔄 RESET MODE: Clearing filters - restoring original unfiltered data")
+            logger.info("Clearing filters - restoring original data")
 
         try:
-            # Extract metadata DC ID and column from interactive components
             metadata_dc_id = None
             source_column = None
-            join_column = "sample"  # Default join column
+            join_column = "sample"
 
-            logger.debug(
-                "Extracting metadata DC from interactive components (pre-computed join migration)"
-            )
             for comp_data in interactive_components_dict.values():
                 comp_dc_id = comp_data.get("metadata", {}).get("dc_id")
                 comp_column = comp_data.get("metadata", {}).get("column_name")
@@ -1259,50 +1001,18 @@ def register_core_callbacks(app):
                     metadata_dc_id = comp_dc_id
                     if comp_column:
                         source_column = comp_column
-                    logger.info(
-                        f"Found metadata DC from interactive component: {metadata_dc_id}, "
-                        f"column: {source_column}"
-                    )
                     break
 
             if not metadata_dc_id:
-                logger.error(
-                    f"Could not find metadata DC from interactive components. "
-                    f"multiqc_dc_id={multiqc_dc_id}"
-                )
+                logger.error(f"No metadata DC found for MultiQC patching (dc_id={multiqc_dc_id})")
                 return dash.no_update
 
-            logger.info(
-                f"Using metadata_dc_id={metadata_dc_id}, join_column={join_column} "
-                "for MultiQC patching"
-            )
+            logger.debug(f"Patching: metadata_dc={metadata_dc_id}, join_column={join_column}")
 
-            # Get project_id from stored_metadata for link resolution
-            # project_id is passed to components during dashboard rendering
             project_id = stored_metadata.get("project_id") if stored_metadata else None
-            if project_id:
-                logger.info(f"📌 Found project_id in stored_metadata: {project_id}")
-            else:
-                logger.info("⚠️ No project_id in stored_metadata - link resolution will be skipped")
 
-            logger.info(
-                f"[FILTERING PATH] use_link_resolution={use_link_resolution}, "
-                f"project_id={'present' if project_id else 'missing'}"
-            )
-
-            # ============================================================================
-            # LINK-BASED RESOLUTION PATH (fallback when no pre-computed join)
-            # ============================================================================
+            # Link-based resolution path (fallback when no pre-computed join)
             if use_link_resolution and project_id:
-                logger.info("✅ Entering LINK RESOLUTION path")
-            elif not use_link_resolution:
-                logger.info("✅ Entering PRE-COMPUTED JOIN path")
-            else:
-                logger.info("⚠️ No valid filtering path - will try fallback")
-
-            if use_link_resolution and project_id:
-                # Collect filter values from interactive components
-                # Separate direct sample values from indirect (need link resolution)
                 direct_sample_values = []
                 indirect_filter_values = []
                 for comp_data in interactive_components_dict.values():
@@ -1311,55 +1021,27 @@ def register_core_callbacks(app):
                     column_type = comp_metadata.get("column_type", "")
                     column_name = comp_metadata.get("column_name", "")
 
-                    # Collect values from filters that need link resolution
-                    # Include: MultiSelect (categorical), DateRangePicker (date-based), object columns
-                    # Skip: RangeSlider with numeric columns (not used for sample filtering)
                     is_categorical = comp_type == "MultiSelect" or column_type == "object"
                     is_date_filter = comp_type == "DateRangePicker"
-                    is_sample_column = (
-                        column_name == join_column
-                    )  # join_column is typically "sample"
+                    is_sample_column = column_name == join_column
 
                     if is_sample_column:
-                        # Direct: these ARE sample names, skip link resolution
                         value = comp_data.get("value", [])
                         if value:
                             values_list = value if isinstance(value, list) else [value]
                             direct_sample_values.extend(values_list)
-                            logger.info(f"Direct sample filter from {column_name}: {values_list}")
                     elif is_categorical or is_date_filter:
-                        # Indirect: need link resolution to map to samples
-                        # Includes: categorical filters (MultiSelect) and date filters (DateRangePicker)
                         value = comp_data.get("value", [])
                         if value:
                             values_list = value if isinstance(value, list) else [value]
                             indirect_filter_values.extend(values_list)
-                            logger.info(
-                                f"Including filter values from {column_name} "
-                                f"({comp_type}, {column_type}): {value}"
-                            )
-                    else:
-                        logger.info(
-                            f"Skipping numeric filter {column_name} "
-                            f"({comp_type}, {column_type}) - not used for sample filtering"
-                        )
 
-                # Combine for has_active_filters check
                 filter_values = direct_sample_values + indirect_filter_values
 
                 if not filter_values and not has_active_filters and figure_was_patched:
-                    # RESET MODE: Get all samples via link resolution without filter
-
-                    # Use link to get ALL samples (no filter - resolve with all metadata values)
-                    # First try local metadata, then fetch from API as fallback
+                    # RESET MODE: restore all samples
                     sample_mappings = metadata.get("sample_mappings", {})
-
-                    # If local sample_mappings is empty/incomplete, fetch from API
-                    # (aggregates from ALL MultiQC reports for the DC)
                     if not sample_mappings and project_id:
-                        logger.info(
-                            "Local sample_mappings empty - fetching aggregated mappings from API"
-                        )
                         sample_mappings = get_multiqc_sample_mappings(
                             project_id=project_id,
                             dc_id=multiqc_dc_id,
@@ -1367,50 +1049,15 @@ def register_core_callbacks(app):
                         )
 
                     if sample_mappings:
-                        # Return all known sample variants
                         selected_samples = []
                         for variants in sample_mappings.values():
                             selected_samples.extend(variants)
-                        logger.info(
-                            f"✅ RESET via sample_mappings: {len(selected_samples)} samples "
-                            f"(from {len(sample_mappings)} canonical IDs)"
-                        )
+                        logger.info(f"Reset: {len(selected_samples)} samples from mappings")
                     else:
-                        # No sample_mappings available - restore from trace metadata
-                        logger.info(
-                            "No sample_mappings available - restoring original figure from trace metadata"
+                        restored = _restore_figure_from_trace_metadata(
+                            current_figure, trace_metadata
                         )
-                        if trace_metadata and trace_metadata.get("original_data"):
-                            # Reconstruct original unfiltered figure from stored trace data
-                            restored_fig = copy.deepcopy(current_figure)
-                            original_traces = trace_metadata["original_data"]
-
-                            for i, trace in enumerate(restored_fig.get("data", [])):
-                                if i < len(original_traces):
-                                    trace_info = original_traces[i]
-                                    # Restore original data
-                                    if trace_info.get("original_x"):
-                                        trace["x"] = trace_info["original_x"]
-                                    if trace_info.get("original_y"):
-                                        trace["y"] = trace_info["original_y"]
-                                    if trace_info.get("original_z"):
-                                        trace["z"] = trace_info["original_z"]
-                                    # Restore visibility for scatter/line traces
-                                    if "visible" in trace:
-                                        trace["visible"] = True
-
-                            # Mark as unfiltered
-                            if "layout" not in restored_fig:
-                                restored_fig["layout"] = {}
-                            restored_fig["layout"]["_depictio_filter_applied"] = False
-
-                            logger.info(
-                                "✅ Restored original unfiltered figure from trace metadata"
-                            )
-                            return restored_fig
-                        else:
-                            logger.warning("No trace metadata available - cannot restore")
-                            return dash.no_update
+                        return restored if restored else dash.no_update
 
                 elif filter_values:
                     # FILTER MODE
@@ -1423,16 +1070,10 @@ def register_core_callbacks(app):
                         )
 
                     if direct_sample_values:
-                        # Direct sample path: values ARE sample names, expand variants
                         selected_samples = expand_canonical_samples_to_variants(
                             direct_sample_values, sample_mappings
                         )
-                        logger.info(
-                            f"✅ Direct sample filter: {len(direct_sample_values)} samples -> "
-                            f"{len(selected_samples)} variants"
-                        )
 
-                        # Also resolve indirect filters if present
                         if indirect_filter_values:
                             resolved = resolve_link_values(
                                 project_id=project_id,
@@ -1443,17 +1084,11 @@ def register_core_callbacks(app):
                                 token=token,
                             )
                             if resolved and resolved.get("resolved_values"):
-                                # Intersect: keep only samples matching both filters
                                 indirect_set = set(resolved["resolved_values"])
                                 selected_samples = [
                                     s for s in selected_samples if s in indirect_set
                                 ]
-                                logger.info(
-                                    f"✅ Combined filters: {len(selected_samples)} samples "
-                                    "after intersection"
-                                )
                     else:
-                        # Indirect only: use link resolution API
                         resolved = resolve_link_values(
                             project_id=project_id,
                             source_dc_id=metadata_dc_id,
@@ -1465,18 +1100,8 @@ def register_core_callbacks(app):
 
                         if resolved and resolved.get("resolved_values"):
                             selected_samples = resolved["resolved_values"]
-                            logger.info(
-                                f"✅ Link resolution success: "
-                                f"{len(indirect_filter_values)} values -> "
-                                f"{len(selected_samples)} resolved samples "
-                                f"(resolver: {resolved.get('resolver_used', 'unknown')})"
-                            )
                         else:
-                            # Link resolution failed - try fallback to local sample_mappings
-                            logger.info(
-                                "Link resolution returned no results - "
-                                "falling back to local sample_mappings"
-                            )
+                            logger.debug("Link resolution failed, falling back to sample_mappings")
                             selected_samples = expand_canonical_samples_to_variants(
                                 indirect_filter_values, sample_mappings
                             )
@@ -1486,14 +1111,10 @@ def register_core_callbacks(app):
                         return dash.no_update
 
                 else:
-                    logger.debug("No filter values and no reset needed - skipping patching")
                     return dash.no_update
 
-            # ============================================================================
-            # PRE-COMPUTED JOIN PATH (original behavior)
-            # ============================================================================
+            # Pre-computed join path
             else:
-                # RESET HANDLING: Load ALL samples when filters are cleared
                 if not has_active_filters and figure_was_patched:
                     from bson import ObjectId
 
@@ -1511,18 +1132,12 @@ def register_core_callbacks(app):
                         return dash.no_update
 
                     if join_column not in df.columns:
-                        logger.error(
-                            f"Join column '{join_column}' not found in metadata. "
-                            f"Available columns: {df.columns}"
-                        )
+                        logger.error(f"Join column '{join_column}' not in metadata columns")
                         return dash.no_update
 
                     canonical_samples = df[join_column].unique().to_list()
-                    logger.info(
-                        f"✅ RESET: Loaded {len(canonical_samples)} total samples (unfiltered)"
-                    )
+                    logger.info(f"Reset: loaded {len(canonical_samples)} unfiltered samples")
                 else:
-                    # Normal filtering mode: Get filtered samples
                     canonical_samples = get_samples_from_metadata_filter(
                         workflow_id=workflow_id,
                         metadata_dc_id=metadata_dc_id,
@@ -1535,7 +1150,6 @@ def register_core_callbacks(app):
                         logger.warning("No canonical samples found after filtering")
                         return dash.no_update
 
-                # Expand canonical IDs to all MultiQC variants using stored mappings
                 sample_mappings = metadata.get("sample_mappings", {})
                 selected_samples = expand_canonical_samples_to_variants(
                     canonical_samples, sample_mappings
@@ -1543,73 +1157,35 @@ def register_core_callbacks(app):
 
             if not selected_samples:
                 logger.warning("No samples found after expansion")
-                # If in RESET MODE and no samples found, restore from trace metadata
                 if not has_active_filters and figure_was_patched:
-                    logger.info("RESET MODE: Restoring original figure from trace metadata")
-                    if trace_metadata and trace_metadata.get("original_data"):
-                        # Reconstruct original unfiltered figure from stored trace data
-                        restored_fig = copy.deepcopy(current_figure)
-                        original_traces = trace_metadata["original_data"]
-
-                        for i, trace in enumerate(restored_fig.get("data", [])):
-                            if i < len(original_traces):
-                                trace_info = original_traces[i]
-                                # Restore original data
-                                if trace_info.get("original_x"):
-                                    trace["x"] = trace_info["original_x"]
-                                if trace_info.get("original_y"):
-                                    trace["y"] = trace_info["original_y"]
-                                if trace_info.get("original_z"):
-                                    trace["z"] = trace_info["original_z"]
-                                # Restore visibility for scatter/line traces
-                                if "visible" in trace:
-                                    trace["visible"] = True
-
-                        # Mark as unfiltered
-                        if "layout" not in restored_fig:
-                            restored_fig["layout"] = {}
-                        restored_fig["layout"]["_depictio_filter_applied"] = False
-
-                        logger.info("✅ Restored original unfiltered figure from trace metadata")
-                        return restored_fig
-
+                    restored = _restore_figure_from_trace_metadata(current_figure, trace_metadata)
+                    if restored:
+                        return restored
                 return dash.no_update
 
-            # Check if we have a current figure to patch
             if not current_figure:
                 logger.warning("No current figure available for patching")
                 return dash.no_update
 
-            # Check if we have trace metadata for proper patching
             if not trace_metadata or not trace_metadata.get("original_data"):
-                logger.warning("No trace metadata available - cannot perform proper patching")
+                logger.warning("No trace metadata available for patching")
                 return dash.no_update
 
-            # Use existing figure and patch it directly (no regeneration)
-            logger.info(f"Patching existing figure with {len(selected_samples)} selected samples")
-            logger.debug(
-                f"Trace metadata available: {len(trace_metadata.get('original_data', []))} traces"
-            )
+            logger.info(f"Patching MultiQC figure with {len(selected_samples)} samples")
 
-            # Apply patching to filter the plot with the resolved sample names
             patched_figures = patch_multiqc_figures(
                 [current_figure], selected_samples, metadata, trace_metadata
             )
 
-            # Return the patched figure
             if patched_figures:
                 patched_fig = patched_figures[0]
-                # Mark the figure as having been patched
                 if "layout" not in patched_fig:
                     patched_fig["layout"] = {}
                 patched_fig["layout"]["_depictio_filter_applied"] = has_active_filters
-                logger.info(
-                    f"✅ Successfully patched MultiQC figure (filter_applied={has_active_filters})"
-                )
                 return patched_fig
-            else:
-                logger.warning("No data available after filtering")
-                return dash.no_update
+
+            logger.warning("No data available after filtering")
+            return dash.no_update
 
         except Exception as e:
             logger.error(f"Error patching MultiQC plot: {e}", exc_info=True)

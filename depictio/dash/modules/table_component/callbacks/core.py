@@ -27,11 +27,6 @@ OPERATORS = {
 }
 
 
-# ==============================================================================
-# Helper Functions for load_table_data_with_filters
-# ==============================================================================
-
-
 def build_interactive_metadata_mapping(
     interactive_metadata_list: list[dict[str, Any]] | None,
     interactive_metadata_ids: list[dict[str, Any]] | None,
@@ -148,9 +143,6 @@ def enrich_interactive_components(
                     if value and len(value) == 2:
                         # Skip if either value is None (incomplete selection)
                         if value[0] is None or value[1] is None:
-                            logger.info(
-                                f"[DEBUG] Table DateRangePicker has None value, skipping component entirely: {value}"
-                            )
                             continue  # Skip this component entirely - don't add to dict
                         else:
                             # Normalize to strings in YYYY-MM-DD format
@@ -162,9 +154,6 @@ def enrich_interactive_components(
                                 else:
                                     normalized_value.append(str(v))
                             value = normalized_value
-                            logger.info(
-                                f"[DEBUG] Table DateRangePicker value normalized: {component.get('value')} -> {normalized_value}"
-                            )
 
                 enriched_component = {
                     "index": index,
@@ -243,25 +232,13 @@ def load_data_with_interactive_filters(
     Note:
         Falls back to unfiltered data if filter application fails.
     """
-    # DEBUG: Log interactive components dict
-    if interactive_components_dict:
-        date_comps = {
-            k: v
-            for k, v in interactive_components_dict.items()
-            if v.get("metadata", {}).get("interactive_component_type") == "DateRangePicker"
-        }
-        if date_comps:
-            logger.info(f"[DEBUG] Table DateRangePicker components: {date_comps}")
-
     if not interactive_components_dict:
-        logger.info("[DEBUG] Table: No interactive components, loading without filters")
         return _load_data_without_interactive_filters(workflow_id, data_collection_id, TOKEN)
 
     table_dc_id = stored_metadata.get("dc_id")
 
-    # **CRITICAL FIX**: Separate interactive components by DC
-    # Components on the SAME DC as the table can be applied directly
-    # Components on DIFFERENT DCs need link resolution
+    # Separate interactive components by DC: same-DC filters apply directly,
+    # different-DC filters need link resolution
     same_dc_components = {}
     different_dc_components = {}
 
@@ -272,49 +249,13 @@ def load_data_with_interactive_filters(
         else:
             different_dc_components[idx] = comp_data
 
-    logger.info(
-        f"[DEBUG] Table DC separation: table_dc={table_dc_id[:8]}, "
-        f"same_dc_count={len(same_dc_components)}, different_dc_count={len(different_dc_components)}"
-    )
-
-    # DEBUG: Log which components are in each group
-    if same_dc_components:
-        same_dc_types = [
-            comp.get("metadata", {}).get("interactive_component_type")
-            for comp in same_dc_components.values()
-        ]
-        logger.info(f"[DEBUG] Same-DC components: {same_dc_types}")
-
-    if different_dc_components:
-        different_dc_types = [
-            (
-                comp.get("metadata", {}).get("interactive_component_type"),
-                comp.get("metadata", {}).get("dc_id", "")[:8],
-            )
-            for comp in different_dc_components.values()
-        ]
-        logger.info(f"[DEBUG] Different-DC components: {different_dc_types}")
-
-    # If all components are on the same DC, use the optimized compatible path
     if different_dc_components == {} and same_dc_components:
-        logger.info("[DEBUG] Table: All components on same DC, using compatible path")
-        # DEBUG: Log what filters are being applied
-        filter_details = [
-            (
-                comp.get("metadata", {}).get("interactive_component_type"),
-                comp.get("metadata", {}).get("column_name"),
-            )
-            for comp in same_dc_components.values()
-        ]
-        logger.info(f"[DEBUG] Applying same-DC filters: {filter_details}")
         result_dc_id = get_result_dc_for_workflow(workflow_id, TOKEN)
         return _load_compatible_dc_data(
             workflow_id, data_collection_id, result_dc_id, same_dc_components, TOKEN
         )
 
-    # If all components are on different DCs, use link resolution only
     if same_dc_components == {} and different_dc_components:
-        logger.info("[DEBUG] Table: All components on different DCs, using link resolution only")
         return _load_with_link_resolution_only(
             workflow_id,
             data_collection_id,
@@ -324,12 +265,7 @@ def load_data_with_interactive_filters(
             TOKEN,
         )
 
-    # **MIXED CASE**: Some components on same DC, some on different DCs
-    # This is the complex case that requires combining both approaches
     if same_dc_components and different_dc_components:
-        logger.info(
-            "[DEBUG] Table: MIXED DCs - combining direct filters with link-resolved filters"
-        )
         return _load_with_mixed_dc_filters(
             workflow_id,
             data_collection_id,
@@ -340,8 +276,6 @@ def load_data_with_interactive_filters(
             TOKEN,
         )
 
-    # Fallback: no active filters
-    logger.info("[DEBUG] Table: No active filters, loading without filters")
     return _load_data_without_interactive_filters(workflow_id, data_collection_id, TOKEN)
 
 
@@ -387,19 +321,12 @@ def _load_with_link_resolution_only(
             filters_by_dc[comp_dc].append(enriched_comp)
 
     # Resolve filters via links
-    logger.info(
-        f"[DEBUG] Table calling extend_filters_via_links for DC {table_dc_id[:8]}, "
-        f"filters_by_dc_keys={list(filters_by_dc.keys())}"
-    )
     link_resolved_filters = extend_filters_via_links(
         target_dc_id=table_dc_id,
         filters_by_dc=filters_by_dc,
         project_metadata=project_metadata,
         access_token=TOKEN,
         component_type="table",
-    )
-    logger.info(
-        f"[DEBUG] Table extend_filters_via_links returned {len(link_resolved_filters)} filter(s)"
     )
 
     if link_resolved_filters:
@@ -412,7 +339,6 @@ def _load_with_link_resolution_only(
             metadata=link_resolved_filters,
             TOKEN=TOKEN,
         )
-        logger.info(f"[DEBUG] Table loaded with link-resolved filters: {len(df)} rows")
     else:
         logger.warning("Link resolution failed or returned no filters. Loading unfiltered data.")
         df = load_deltatable_lite(
@@ -452,7 +378,6 @@ def _load_with_mixed_dc_filters(
         f"{len(different_dc_components)} different-DC filters"
     )
 
-    # Step 1: Get link-resolved filters for different-DC components
     filters_by_dc: dict[str, list[dict]] = {}
     for comp_data in different_dc_components.values():
         comp_dc = str(comp_data.get("metadata", {}).get("dc_id", ""))
@@ -473,28 +398,18 @@ def _load_with_mixed_dc_filters(
         component_type="table",
     )
 
-    # Step 2: Combine same-DC filters with link-resolved filters
     combined_filters = list(same_dc_components.values())
     if link_resolved_filters:
-        logger.info(
-            f"Link resolution returned {len(link_resolved_filters)} filters. "
-            f"Combining with {len(same_dc_components)} same-DC filters."
-        )
         combined_filters.extend(link_resolved_filters)
     else:
-        logger.warning(
-            "Link resolution failed for different-DC components. Applying only same-DC filters."
-        )
+        logger.warning("Link resolution failed for different-DC components, using same-DC only")
 
-    # Step 3: Load data with combined filters
-    logger.info(f"[DEBUG] Loading table with {len(combined_filters)} total filters")
     df = load_deltatable_lite(
         ObjectId(workflow_id),
         ObjectId(data_collection_id),
         metadata=combined_filters,
         TOKEN=TOKEN,
     )
-    logger.info(f"[DEBUG] Table loaded with mixed filters: {len(df)} rows")
     return df
 
 
@@ -521,22 +436,7 @@ def _load_compatible_dc_data(
         Filtered DataFrame from compatible data collection.
     """
     try:
-        # DEBUG: Log filters being passed
-        filter_metadata = [
-            {
-                "type": comp.get("metadata", {}).get("interactive_component_type"),
-                "column": comp.get("metadata", {}).get("column_name"),
-                "value_type": type(comp.get("value")).__name__,
-                "value_len": len(comp.get("value", []))
-                if isinstance(comp.get("value"), list)
-                else None,
-            }
-            for comp in interactive_components_dict.values()
-        ]
-        logger.info(f"[DEBUG] _load_compatible_dc_data filters: {filter_metadata}")
-
         if result_dc_id:
-            logger.info(f"[DEBUG] Loading from result_dc: {result_dc_id[:8]}")
             df = load_deltatable_lite(
                 ObjectId(workflow_id),
                 ObjectId(result_dc_id),
@@ -544,14 +444,12 @@ def _load_compatible_dc_data(
                 TOKEN=TOKEN,
             )
         else:
-            logger.info(f"[DEBUG] Loading from data_collection: {data_collection_id[:8]}")
             df = load_deltatable_lite(
                 ObjectId(workflow_id),
                 ObjectId(data_collection_id),
                 metadata=list(interactive_components_dict.values()),
                 TOKEN=TOKEN,
             )
-        logger.info(f"[DEBUG] _load_compatible_dc_data loaded: {len(df)} rows")
         return df
     except Exception as interactive_error:
         logger.error(f"Loading data failed: {str(interactive_error)}")
@@ -641,11 +539,6 @@ def apply_ag_grid_filters(df: pl.DataFrame, filter_model: dict[str, Any]) -> pl.
     return df
 
 
-# ==============================================================================
-# Helper Functions for infinite_scroll_component
-# ==============================================================================
-
-
 def create_synthetic_request(triggered_by_interactive: bool) -> dict[str, Any]:
     """
     Create a synthetic AG Grid request for initial data loading.
@@ -729,36 +622,6 @@ def build_aggrid_response(
     """
     row_data = partial_df.to_dicts()
     return {"rowData": row_data, "rowCount": total_rows}
-
-
-def log_interactive_filter_success(
-    interactive_values: dict[str, Any] | None,
-    actual_rows_returned: int,
-    total_rows: int,
-) -> None:
-    """Log successful interactive filtering (no-op for production)."""
-    pass
-
-
-def _log_interactive_values_debug(interactive_values: dict[str, Any] | None) -> None:
-    """Log debug information about interactive component values."""
-    pass  # Logging removed for production
-
-
-def _log_pagination_request(
-    table_index: str,
-    start_row: int,
-    end_row: int,
-    filter_model: dict[str, Any],
-    sort_model: list[dict[str, Any]],
-) -> None:
-    """Log pagination request parameters for debugging."""
-    pass  # Pagination logging removed for production
-
-
-# ==============================================================================
-# Helper Functions for export_table_to_csv
-# ==============================================================================
 
 
 def create_export_notification(
@@ -981,7 +844,6 @@ def load_table_data_with_filters(
         Filtered and sorted Polars DataFrame ready for display or export.
     """
 
-    # Step 1: Build metadata mapping and enrich interactive components
     metadata_by_index = build_interactive_metadata_mapping(
         interactive_metadata_list, interactive_metadata_ids
     )
@@ -989,10 +851,8 @@ def load_table_data_with_filters(
         interactive_values, metadata_by_index
     )
 
-    # Step 2: Prepare metadata for join (used for logging/debugging)
     prepare_metadata_for_join(stored_metadata, interactive_components_dict)
 
-    # Step 3: Load data with interactive filters
     df = load_data_with_interactive_filters(
         workflow_id,
         data_collection_id,
@@ -1002,11 +862,9 @@ def load_table_data_with_filters(
         project_metadata,
     )
 
-    # Step 4: Apply AG Grid filters
     if filter_model:
         df = apply_ag_grid_filters(df, filter_model)
 
-    # Step 5: Apply AG Grid sorting
     if sort_model:
         df = apply_ag_grid_sorting(df, sort_model)
 
@@ -1072,16 +930,6 @@ def register_core_callbacks(app):
             "interactive-values-store" in str(trigger["prop_id"]) for trigger in ctx.triggered
         )
 
-        # DEBUG: Log callback trigger
-        logger.info(
-            f"[DEBUG] Table callback triggered: table={stored_metadata.get('index', 'unknown')[:8]}, "
-            f"triggered_by_interactive={triggered_by_interactive}, "
-            f"trigger_ids={[t['prop_id'] for t in ctx.triggered] if ctx.triggered else []}, "
-            f"request_is_none={request is None}"
-        )
-
-        _log_interactive_values_debug(interactive_values)
-
         # Validate inputs
         if not local_store or not stored_metadata:
             logger.warning(
@@ -1093,10 +941,6 @@ def register_core_callbacks(app):
         # AG Grid infinite model needs getRowsResponse even when we trigger it
         if request is None:
             request = create_synthetic_request(triggered_by_interactive)
-            logger.info(
-                f"[DEBUG] Table {stored_metadata.get('index', 'unknown')[:8]}: "
-                f"Creating synthetic request (interactive={triggered_by_interactive})"
-            )
 
         # Extract parameters
         TOKEN = local_store["access_token"]
@@ -1108,8 +952,6 @@ def register_core_callbacks(app):
         end_row = request.get("endRow", 100)
         filter_model = request.get("filterModel", {})
         sort_model = request.get("sortModel", [])
-
-        _log_pagination_request(table_index, start_row, end_row, filter_model, sort_model)
 
         try:
             # Load filtered and sorted data
@@ -1131,22 +973,13 @@ def register_core_callbacks(app):
 
             # Build and return response
             response = build_aggrid_response(partial_df, total_rows, start_row, table_index)
-
-            # DEBUG: Log response being returned
-            logger.info(
-                f"[DEBUG] Table callback returning response: table={table_index[:8]}, "
-                f"rowData_length={len(response['rowData'])}, rowCount={response['rowCount']}, "
-                f"triggered_by_interactive={triggered_by_interactive}"
-            )
-
             return response
 
         except Exception as e:
-            error_msg = str(e)
             logger.error(
-                f"❌ Error in infinite scroll callback for table {table_index}: {error_msg}"
+                f"Infinite scroll error for table {table_index}: {e} "
+                f"(wf_id={workflow_id}, dc_id={data_collection_id})"
             )
-            logger.error(f"🔧 Error details - wf_id: {workflow_id}, dc_id: {data_collection_id}")
 
             # Return empty response on error
             return {"rowData": [], "rowCount": 0}
