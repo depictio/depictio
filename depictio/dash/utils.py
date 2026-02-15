@@ -770,6 +770,10 @@ def extend_filters_via_links(
     link_filters = []
 
     if not project_metadata or not access_token:
+        logger.info(
+            f"[{component_type}] Link resolution skipped: "
+            f"project_metadata={project_metadata is not None}, access_token={access_token is not None}"
+        )
         return link_filters
 
     project_data = project_metadata.get("project", {})
@@ -777,7 +781,16 @@ def extend_filters_via_links(
     project_links = project_data.get("links", [])
 
     if not project_id or not project_links:
+        logger.info(
+            f"[{component_type}] Link resolution skipped: "
+            f"project_id={bool(project_id)}, links_count={len(project_links) if project_links else 0}"
+        )
         return link_filters
+
+    logger.info(
+        f"[{component_type}] Link resolution starting: target_dc={target_dc_id[:8]}, "
+        f"filters_by_dc_keys={list(filters_by_dc.keys())}, links_count={len(project_links)}"
+    )
 
     # Find links where target_dc_id is the target
     for link in project_links:
@@ -790,13 +803,27 @@ def extend_filters_via_links(
         if link_target_dc != target_dc_id:
             continue
 
+        logger.info(
+            f"[{component_type}] Found matching link: {link_source_dc[:8]} -> {link_target_dc[:8]}"
+        )
+
         # Check if we have filters for the source DC
         source_filters = filters_by_dc.get(link_source_dc, [])
+        logger.info(
+            f"[{component_type}] Source DC {link_source_dc[:8]} has {len(source_filters)} filter(s)"
+        )
+
         active_source_filters = [
             f for f in source_filters if f.get("value") not in [None, [], "", False]
         ]
 
+        logger.info(
+            f"[{component_type}] Active source filters: {len(active_source_filters)} "
+            f"(types: {[f.get('metadata', {}).get('interactive_component_type') for f in active_source_filters]})"
+        )
+
         if not active_source_filters:
+            logger.info(f"[{component_type}] No active source filters, skipping link")
             continue
 
         # Get filter values from source DC

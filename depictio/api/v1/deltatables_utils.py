@@ -145,7 +145,12 @@ def add_filter(
             )
 
     elif interactive_component_type == "DateRangePicker":
+        logger.info(
+            f"[DEBUG] DateRangePicker filter: column={column_name}, value={value}, type={type(value)}"
+        )
+
         if value and isinstance(value, list) and len(value) == 2:
+            logger.info("[DEBUG] DateRangePicker validation passed, applying filter")
             try:
                 # Convert date strings to datetime if needed
                 start_date = value[0]
@@ -164,6 +169,10 @@ def add_filter(
 
             except Exception as e:
                 logger.warning(f"Failed to apply date range filter on column '{column_name}': {e}")
+        else:
+            logger.warning(
+                f"[DEBUG] DateRangePicker validation FAILED: value={value}, is_list={isinstance(value, list)}, len={len(value) if isinstance(value, list) else 'N/A'}"
+            )
 
 
 def process_metadata_and_filter(metadata: list) -> list:
