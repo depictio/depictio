@@ -1147,24 +1147,62 @@ def register_core_callbacks(app):
                     component_type = comp_metadata.get("interactive_component_type", "")
                     default_state = comp_metadata.get("default_state", {})
 
+                    # Normalize DateRangePicker values to YYYY-MM-DD format
+                    if component_type == "DateRangePicker":
+                        value = component_data.get("value")
+                        if value and isinstance(value, list) and len(value) == 2:
+                            # Skip if either value is None (incomplete selection)
+                            if value[0] is None or value[1] is None:
+                                logger.info(
+                                    f"[DEBUG] MultiQC DateRangePicker has None value, skipping: {value}"
+                                )
+                                continue  # Skip this component
+                            else:
+                                # Normalize to strings in YYYY-MM-DD format
+                                normalized_value = []
+                                for v in value:
+                                    # Handle ISO datetime strings (e.g., "2023-01-01T00:00:00")
+                                    if isinstance(v, str) and "T" in v:
+                                        normalized_value.append(v.split("T")[0])
+                                    else:
+                                        normalized_value.append(str(v))
+                                component_value = normalized_value
+                                logger.info(
+                                    f"[DEBUG] MultiQC DateRangePicker value normalized: {value} -> {normalized_value}"
+                                )
+
                     # For RangeSlider and DateRangePicker, check if current value equals default range
                     if component_type in ["RangeSlider", "DateRangePicker"]:
                         default_range = default_state.get("default_range")
+
+                        # Normalize default_range for DateRangePicker (same format as component_value)
+                        if component_type == "DateRangePicker" and default_range:
+                            normalized_default = []
+                            for v in default_range:
+                                if isinstance(v, str) and "T" in v:
+                                    normalized_default.append(v.split("T")[0])
+                                else:
+                                    normalized_default.append(str(v))
+                            default_range = normalized_default
+                            logger.info(
+                                f"[FILTER CHECK] Normalized default_range: {default_state.get('default_range')} -> {default_range}"
+                            )
+
                         if default_range and component_value == default_range:
-                            logger.debug(
-                                f"Component {component_index} ({component_type}) at default range "
+                            logger.info(
+                                f"[FILTER CHECK] Component {component_index} ({component_type}) at default range "
                                 f"{default_range} - NOT counting as active filter"
                             )
                         else:
                             has_active_filters = True
-                            logger.debug(
-                                f"Component {component_index} ({component_type}) changed from default "
+                            logger.info(
+                                f"[FILTER CHECK] Component {component_index} ({component_type}) changed from default "
                                 f"{default_range} to {component_value} - IS active filter"
                             )
                     else:
                         has_active_filters = True
-                        logger.debug(
-                            f"Component {component_index} ({component_type}) has value "
+                        logger.info(
+                            f"[FILTER CHECK] Component {component_index} ({component_type}) has value "
                             f"{component_value} - IS active filter"
                         )
 
@@ -1189,9 +1227,15 @@ def register_core_callbacks(app):
             layout = current_figure.get("layout", {})
             figure_was_patched = layout.get("_depictio_filter_applied", False)
 
+        # Log filter status for debugging
+        logger.info(
+            f"[FILTER STATUS] has_active_filters={has_active_filters}, "
+            f"figure_was_patched={figure_was_patched}"
+        )
+
         # Early exit if no filters are active AND figure hasn't been patched before
         if not has_active_filters and not figure_was_patched:
-            logger.debug("No active filters on initial load - skipping patching")
+            logger.info("❌ No active filters on initial load - skipping patching")
             return dash.no_update
 
         # If user is clearing filters (no active filters but was previously patched),
@@ -1237,15 +1281,25 @@ def register_core_callbacks(app):
             # project_id is passed to components during dashboard rendering
             project_id = stored_metadata.get("project_id") if stored_metadata else None
             if project_id:
-                logger.debug(f"📌 Found project_id in stored_metadata: {project_id}")
+                logger.info(f"📌 Found project_id in stored_metadata: {project_id}")
             else:
-                logger.warning(
-                    "⚠️ No project_id in stored_metadata - link resolution will be skipped"
-                )
+                logger.info("⚠️ No project_id in stored_metadata - link resolution will be skipped")
+
+            logger.info(
+                f"[FILTERING PATH] use_link_resolution={use_link_resolution}, "
+                f"project_id={'present' if project_id else 'missing'}"
+            )
 
             # ============================================================================
             # LINK-BASED RESOLUTION PATH (fallback when no pre-computed join)
             # ============================================================================
+            if use_link_resolution and project_id:
+                logger.info("✅ Entering LINK RESOLUTION path")
+            elif not use_link_resolution:
+                logger.info("✅ Entering PRE-COMPUTED JOIN path")
+            else:
+                logger.info("⚠️ No valid filtering path - will try fallback")
+
             if use_link_resolution and project_id:
                 # Collect filter values from interactive components
                 # Separate direct sample values from indirect (need link resolution)
@@ -1257,9 +1311,11 @@ def register_core_callbacks(app):
                     column_type = comp_metadata.get("column_type", "")
                     column_name = comp_metadata.get("column_name", "")
 
-                    # Only collect values from categorical filters (MultiSelect or object columns)
-                    # Skip numeric range filters (RangeSlider with float/int columns)
+                    # Collect values from filters that need link resolution
+                    # Include: MultiSelect (categorical), DateRangePicker (date-based), object columns
+                    # Skip: RangeSlider with numeric columns (not used for sample filtering)
                     is_categorical = comp_type == "MultiSelect" or column_type == "object"
+                    is_date_filter = comp_type == "DateRangePicker"
                     is_sample_column = (
                         column_name == join_column
                     )  # join_column is typically "sample"
@@ -1270,19 +1326,20 @@ def register_core_callbacks(app):
                         if value:
                             values_list = value if isinstance(value, list) else [value]
                             direct_sample_values.extend(values_list)
-                            logger.debug(f"Direct sample filter from {column_name}: {values_list}")
-                    elif is_categorical:
+                            logger.info(f"Direct sample filter from {column_name}: {values_list}")
+                    elif is_categorical or is_date_filter:
                         # Indirect: need link resolution to map to samples
+                        # Includes: categorical filters (MultiSelect) and date filters (DateRangePicker)
                         value = comp_data.get("value", [])
                         if value:
                             values_list = value if isinstance(value, list) else [value]
                             indirect_filter_values.extend(values_list)
-                            logger.debug(
+                            logger.info(
                                 f"Including filter values from {column_name} "
                                 f"({comp_type}, {column_type}): {value}"
                             )
                     else:
-                        logger.debug(
+                        logger.info(
                             f"Skipping numeric filter {column_name} "
                             f"({comp_type}, {column_type}) - not used for sample filtering"
                         )
