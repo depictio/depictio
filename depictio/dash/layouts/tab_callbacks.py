@@ -197,6 +197,7 @@ def _build_tab_item(
     # Determine icon and color from tab data
     icon_name = tab.get("tab_icon") or tab.get("icon", "mdi:view-dashboard")
     icon_color = tab.get("tab_icon_color") or tab.get("icon_color", "gray")
+    logger.debug(f"Initial icon_color from tab data: {icon_color}")
 
     tab_dashboard_id = str(tab["dashboard_id"])
 
@@ -207,10 +208,54 @@ def _build_tab_item(
             src=icon_name,
             style={"width": "22px", "height": "22px", "objectFit": "contain"},
         )
+        # Determine border color for image icons based on tool/workflow
+        # Map tool logos to their brand colors
+        icon_name_lower = icon_name.lower()
+
+        # Debug: Log the icon name to help troubleshoot
+        logger.debug(f"Tab icon path: {icon_name} (lowercase: {icon_name_lower})")
+
+        # Special handling for Depictio logos (favicon.png, logo.png, logo_hd.png, etc.)
+        is_depictio_logo = (
+            "favicon.png" in icon_name_lower
+            or "/logos/logo" in icon_name_lower
+            or "depictio" in icon_name_lower
+        )
+        logger.debug(f"Is Depictio logo: {is_depictio_logo}")
+
+        tool_color_map = {
+            "multiqc": "orange",
+            "nf-core": "green",
+            "nextflow": "green",
+            "snakemake": "green",
+            "galaxy": "yellow",
+        }
+
+        # Check if icon matches any known tool
+        image_border_color = None
+        if is_depictio_logo:
+            image_border_color = "violet"
+        else:
+            for tool, color in tool_color_map.items():
+                if tool in icon_name_lower:
+                    image_border_color = color
+                    break
+
+        # Fallback: use specified color, or orange as default
+        if image_border_color is None:
+            if icon_color and icon_color != "gray":
+                image_border_color = icon_color
+            else:
+                image_border_color = "orange"  # Default fallback
+
+        # Align tab color variant with determined border color for consistency
+        icon_color = image_border_color
+        logger.debug(f"Final colors - border: {image_border_color}, icon: {icon_color}")
+
         left_section = dmc.ActionIcon(
             icon_element,
             id={"type": "tab-icon", "index": tab_dashboard_id},
-            color=icon_color,
+            color=image_border_color,
             radius="xl",
             size="md",
             variant="outline",  # Outline border for image icons
@@ -374,6 +419,7 @@ def register_tab_callbacks(app):
 
         # Extract dashboard ID and edit mode from pathname
         dashboard_id, is_edit_mode = _extract_dashboard_id_from_pathname(pathname)
+        logger.info(f"🔍 TAB DEBUG: pathname={pathname}, is_edit_mode={is_edit_mode}")
         if not dashboard_id:
             raise PreventUpdate
 
@@ -405,8 +451,32 @@ def register_tab_callbacks(app):
             # Determine if user is owner for edit controls
             is_owner = False
             if is_edit_mode and dashboard_cache:
-                user_permissions = dashboard_cache.get("user_permissions", {})
-                is_owner = user_permissions.get("level") == "owner"
+                if not isinstance(dashboard_cache, dict):
+                    logger.error(f"❌ dashboard_cache is not a dict: {type(dashboard_cache)}")
+                else:
+                    user_permissions = dashboard_cache.get("user_permissions")
+
+                    if not user_permissions:
+                        # SINGLE USER MODE FALLBACK: If no permissions exist, assume owner in edit mode
+                        logger.warning("⚠️ user_permissions missing from dashboard-init-data")
+                        logger.warning(
+                            "   Assuming OWNER permissions (single user mode or missing backend data)"
+                        )
+                        logger.debug(f"   Available keys: {list(dashboard_cache.keys())}")
+                        is_owner = True  # Default to owner in edit mode when permissions missing
+                    elif not isinstance(user_permissions, dict):
+                        logger.error(f"❌ user_permissions is not a dict: {type(user_permissions)}")
+                        is_owner = True  # Fallback to owner
+                    else:
+                        permission_level = user_permissions.get("level", "")
+                        is_owner = permission_level == "owner"
+                        logger.debug(
+                            f"✅ Permission level: {permission_level}, is_owner: {is_owner}"
+                        )
+            else:
+                logger.warning(
+                    f"⚠️ TAB DEBUG: No dashboard_cache or not edit mode - is_edit_mode={is_edit_mode}, has_cache={bool(dashboard_cache)}"
+                )
 
             # Get parent dashboard (main tab) for workflow data and icon inheritance
             parent_dashboard = tabs[0] if tabs else None
@@ -452,7 +522,12 @@ def register_tab_callbacks(app):
 
             # Add "+ Add Tab" button in edit mode for owners
             if is_edit_mode and is_owner:
+                logger.info("✅ TAB DEBUG: Rendering Add Tab button")
                 tab_items.append(_create_add_tab_button())
+            else:
+                logger.warning(
+                    f"❌ TAB DEBUG: NOT rendering Add Tab button (edit={is_edit_mode}, owner={is_owner})"
+                )
 
             # Set sidebar collapsed based on tab count:
             # - 1 tab (main only): collapsed (True) - no need to show sidebar
@@ -857,8 +932,27 @@ def register_tab_callbacks(app):
         # Determine if user is owner for edit controls
         is_owner = False
         if is_edit_mode and dashboard_cache:
-            user_permissions = dashboard_cache.get("user_permissions", {})
-            is_owner = user_permissions.get("level") == "owner"
+            if not isinstance(dashboard_cache, dict):
+                logger.error(f"❌ dashboard_cache is not a dict: {type(dashboard_cache)}")
+            else:
+                user_permissions = dashboard_cache.get("user_permissions")
+
+                if not user_permissions:
+                    # SINGLE USER MODE FALLBACK: If no permissions exist, assume owner in edit mode
+                    logger.warning("⚠️ user_permissions missing from dashboard-init-data (reorder)")
+                    logger.warning(
+                        "   Assuming OWNER permissions (single user mode or missing backend data)"
+                    )
+                    is_owner = True  # Default to owner in edit mode when permissions missing
+                elif not isinstance(user_permissions, dict):
+                    logger.error(f"❌ user_permissions is not a dict: {type(user_permissions)}")
+                    is_owner = True  # Fallback to owner
+                else:
+                    permission_level = user_permissions.get("level", "")
+                    is_owner = permission_level == "owner"
+                    logger.debug(
+                        f"✅ Permission level (reorder): {permission_level}, is_owner: {is_owner}"
+                    )
 
         # Get parent dashboard (main tab) for workflow data and icon inheritance
         parent_dashboard = updated_tabs[0] if updated_tabs else None

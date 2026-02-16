@@ -259,15 +259,22 @@ async def init_dashboard(
     project_data = await get_project_with_delta_locations(project_id, current_user)
 
     user_permission_level = "viewer"
-    permissions = project_data.get("permissions", {})
-    owner_ids = [str(owner.get("_id", "")) for owner in permissions.get("owners", [])]
-    editor_ids = [str(editor.get("_id", "")) for editor in permissions.get("editors", [])]
-    current_user_id_str = str(current_user.id)
 
-    if current_user_id_str in owner_ids:
+    # In single user mode, always grant owner permissions
+    if settings.auth.single_user_mode:
         user_permission_level = "owner"
-    elif current_user_id_str in editor_ids:
-        user_permission_level = "editor"
+        logger.info("✅ Single user mode: Granting owner permissions")
+    else:
+        # Multi-user mode: Check actual permissions
+        permissions = project_data.get("permissions", {})
+        owner_ids = [str(owner.get("_id", "")) for owner in permissions.get("owners", [])]
+        editor_ids = [str(editor.get("_id", "")) for editor in permissions.get("editors", [])]
+        current_user_id_str = str(current_user.id)
+
+        if current_user_id_str in owner_ids:
+            user_permission_level = "owner"
+        elif current_user_id_str in editor_ids:
+            user_permission_level = "editor"
 
     dashboard_dict = dashboard.model_dump()
 

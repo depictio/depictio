@@ -3,7 +3,7 @@ import json
 from datetime import datetime
 from pathlib import Path
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException
 
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
@@ -616,25 +616,56 @@ async def navigate_with_hybrid_strategy(page, url: str, max_retries: int = 2) ->
 
 
 @utils_endpoint_router.get("/screenshot-dash-fixed/{dashboard_id}")
-async def screenshot_dash_fixed(dashboard_id: str = "6824cb3b89d2b72169309737"):
+async def screenshot_dash_fixed(
+    dashboard_id: str = "6824cb3b89d2b72169309737",
+    authorization: str | None = Header(None),
+):
     """
-    Minimal screenshot endpoint - just take a full page screenshot
+    Minimal screenshot endpoint - just take a full page screenshot.
+    Only dashboard owners can generate screenshots (except in single user mode).
     """
     from playwright.async_api import async_playwright
+
+    from depictio.api.v1.services.screenshot_service import check_dashboard_owner_permission
+
+    # In single user mode, skip all authentication and permission checks
+    if not settings.auth.single_user_mode:
+        # Multi-user mode: Require authentication and check ownership
+        if not authorization or not authorization.startswith("Bearer "):
+            raise HTTPException(
+                status_code=401, detail="Authentication required for screenshot generation"
+            )
+
+        # Get the current user from the token
+        token = authorization.replace("Bearer ", "")
+        try:
+            current_user = await get_current_user(token)
+        except HTTPException:
+            raise HTTPException(status_code=401, detail="Invalid authentication token")
+
+        # Check if user owns the dashboard
+        is_owner = await check_dashboard_owner_permission(
+            dashboard_id=dashboard_id, user_id=str(current_user.id)
+        )
+
+        if not is_owner:
+            raise HTTPException(
+                status_code=403, detail="Only dashboard owners can generate screenshots"
+            )
 
     output_folder = "/app/depictio/dash/static/screenshots"
     output_file = f"{output_folder}/{str(dashboard_id)}.png"
     Path(output_folder).mkdir(parents=True, exist_ok=True)
 
     try:
-        # Get auth token
-        current_user = await UserBeanie.find_one({"email": "admin@example.com"})
-        if not current_user:
+        # Get admin auth token for screenshot generation
+        admin_user = await UserBeanie.find_one({"email": "admin@example.com"})
+        if not admin_user:
             raise HTTPException(status_code=404, detail="Admin user not found")
 
         token = await TokenBeanie.find_one(
             {
-                "user_id": current_user.id,
+                "user_id": admin_user.id,
                 "refresh_expire_datetime": {"$gt": datetime.now()},
             }
         )
@@ -774,12 +805,13 @@ async def screenshot_dash_fixed(dashboard_id: str = "6824cb3b89d2b72169309737"):
 
 
 @utils_endpoint_router.get("/screenshot-dash-dual/{dashboard_id}", deprecated=True)
-async def screenshot_dash_dual(dashboard_id: str):
+async def screenshot_dash_dual(dashboard_id: str, current_user=Depends(get_current_user)):
     """
     Generate both light and dark mode screenshots in single browser call.
+    Only dashboard owners can generate screenshots.
 
     **DEPRECATED**: This endpoint is deprecated. Use the Celery task
-    `generate_dashboard_screenshot_dual.delay(dashboard_id)` directly for
+    `generate_dashboard_screenshot_dual.delay(dashboard_id, user_id)` directly for
     production use. This endpoint is maintained for backward compatibility
     and testing/debugging purposes only.
 
@@ -790,14 +822,28 @@ async def screenshot_dash_dual(dashboard_id: str):
 
     Args:
         dashboard_id: Dashboard ID to screenshot
+        current_user: Current authenticated user (for permission check)
 
     Returns:
         dict: Status and paths to both screenshots
 
     Raises:
-        HTTPException: If screenshot generation fails
+        HTTPException: If screenshot generation fails or user lacks permission
     """
-    from depictio.api.v1.services.screenshot_service import generate_dual_theme_screenshots
+    from depictio.api.v1.services.screenshot_service import (
+        check_dashboard_owner_permission,
+        generate_dual_theme_screenshots,
+    )
+
+    # Check if user owns the dashboard
+    is_owner = await check_dashboard_owner_permission(
+        dashboard_id=dashboard_id, user_id=str(current_user.id)
+    )
+
+    if not is_owner:
+        raise HTTPException(
+            status_code=403, detail="Only dashboard owners can generate screenshots"
+        )
 
     result = await generate_dual_theme_screenshots(dashboard_id)
 

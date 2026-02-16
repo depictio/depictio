@@ -13,10 +13,12 @@ from datetime import datetime
 from pathlib import Path
 from typing import TypedDict
 
+from bson import ObjectId
 from playwright.async_api import Page, async_playwright
 
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
+from depictio.api.v1.db import dashboards_collection, projects_collection
 from depictio.models.models.users import TokenBeanie, UserBeanie
 
 
@@ -28,6 +30,57 @@ class ScreenshotResult(TypedDict):
     light_screenshot: str | None
     dark_screenshot: str | None
     error: str | None
+
+
+def check_dashboard_owner_permission_sync(dashboard_id: str, user_id: str) -> bool:
+    """
+    Check if user is the owner of a dashboard (via project ownership).
+
+    Uses synchronous MongoDB operations (pymongo). Safe to call from both
+    sync contexts (Dash callbacks) and async contexts (via the async wrapper).
+
+    Args:
+        dashboard_id: Dashboard ObjectId as string
+        user_id: User ObjectId as string
+
+    Returns:
+        True if user owns dashboard, False otherwise
+    """
+    try:
+        # Convert dashboard_id string to ObjectId for MongoDB query
+        dashboard_oid = ObjectId(dashboard_id)
+        dashboard = dashboards_collection.find_one({"dashboard_id": dashboard_oid})
+        if not dashboard:
+            logger.warning(f"Dashboard not found: {dashboard_id}")
+            return False
+
+        project_id = dashboard.get("project_id")
+        if not project_id:
+            logger.warning(f"Dashboard {dashboard_id} has no project_id")
+            return False
+
+        project = projects_collection.find_one({"_id": ObjectId(project_id)})
+        if not project:
+            logger.warning(f"Project not found: {project_id}")
+            return False
+
+        owners = project.get("permissions", {}).get("owners", [])
+        user_obj_id = ObjectId(user_id)
+        return any(owner.get("_id") == user_obj_id for owner in owners)
+
+    except Exception as e:
+        logger.error(f"Error checking dashboard ownership: {e}")
+        return False
+
+
+async def check_dashboard_owner_permission(dashboard_id: str, user_id: str) -> bool:
+    """
+    Async wrapper around check_dashboard_owner_permission_sync.
+
+    Both functions use synchronous pymongo under the hood. This wrapper
+    exists for API compatibility in async contexts.
+    """
+    return check_dashboard_owner_permission_sync(dashboard_id, user_id)
 
 
 async def wait_for_dashboard_content(page: Page) -> None:
@@ -117,28 +170,52 @@ async def get_admin_auth_token() -> dict[str, str]:
 
 
 async def generate_dual_theme_screenshots(
-    dashboard_id: str, output_folder: str = "/app/depictio/dash/static/screenshots"
+    dashboard_id: str,
+    output_folder: str = "/app/depictio/dash/static/screenshots",
+    user_id: str | None = None,
 ) -> ScreenshotResult:
     """
-    Generate both light and dark mode screenshots in single browser call.
+    Generate both light and dark mode screenshots in single browser call with optional permission validation.
 
     This function creates dual-theme screenshots ({dashboard_id}_light.png and
     {dashboard_id}_dark.png) in a single Playwright session, reusing the browser
     context for efficiency (~40% time savings vs. two separate calls).
 
     Strategy:
-    1. Launch browser and authenticate with admin token
-    2. Navigate to dashboard in light mode, hide UI chrome, screenshot
-    3. Reload with dark mode theme, hide UI chrome, screenshot
-    4. Both screenshots saved to output_folder
+    1. Validate user ownership if user_id provided (defense in depth)
+    2. Launch browser and authenticate with admin token
+    3. Navigate to dashboard in light mode, hide UI chrome, screenshot
+    4. Reload with dark mode theme, hide UI chrome, screenshot
+    5. Both screenshots saved to output_folder
 
     Args:
         dashboard_id: Dashboard ID to screenshot
         output_folder: Directory to save screenshots (default: /app/depictio/dash/static/screenshots)
+        user_id: Optional user ID for permission validation (recommended for security)
 
     Returns:
         ScreenshotResult: Dict with status, dashboard_id, screenshot paths, and optional error
+                         Returns forbidden status if user_id provided but user is not owner
     """
+    # Validate ownership if user_id provided (defense in depth)
+    if user_id:
+        is_owner = await check_dashboard_owner_permission(
+            dashboard_id=dashboard_id, user_id=user_id
+        )
+
+        if not is_owner:
+            logger.warning(
+                f"Screenshot denied: user {user_id} is not owner of dashboard {dashboard_id}"
+            )
+            error_result: ScreenshotResult = {
+                "status": "forbidden",
+                "dashboard_id": dashboard_id,
+                "light_screenshot": None,
+                "dark_screenshot": None,
+                "error": "User is not dashboard owner",
+            }
+            return error_result
+
     Path(output_folder).mkdir(parents=True, exist_ok=True)
 
     light_path = f"{output_folder}/{dashboard_id}_light.png"
@@ -150,7 +227,7 @@ async def generate_dual_theme_screenshots(
         token_data_json = json.dumps(token_data)
         dashboard_url = f"{settings.dash.internal_url}/dashboard/{dashboard_id}"
 
-        logger.info(f"📸 Starting dual-theme screenshot for dashboard: {dashboard_id}")
+        logger.info(f"Starting dual-theme screenshot for dashboard {dashboard_id}")
 
         async with async_playwright() as p:
             browser = await p.chromium.launch(headless=True)
@@ -160,91 +237,44 @@ async def generate_dual_theme_screenshots(
             await page.goto(settings.dash.internal_url)
             await page.evaluate(f"localStorage.setItem('local-store', '{token_data_json}')")
 
-            # --- LIGHT MODE SCREENSHOT ---
-            logger.info("📸 Phase 1: Capturing light mode screenshot...")
-            # Navigate to dashboard first
-            await page.goto(dashboard_url, timeout=30000)  # wait_until defaults to "load"
+            # Capture both themes in sequence
+            for theme, output_path in [("light", light_path), ("dark", dark_path)]:
+                if theme == "light":
+                    # Navigate to dashboard first, then set theme and reload
+                    await page.goto(dashboard_url, timeout=30000)
 
-            # Set theme AFTER navigation - JSON serialized to match dcc.Store format
-            await page.evaluate("localStorage.setItem('theme-store', JSON.stringify('light'))")
-            # Reload to apply theme
-            await page.reload(timeout=30000)
-
-            # Wait for MantineProvider to apply light theme
-            try:
-                await page.wait_for_selector('[data-mantine-color-scheme="light"]', timeout=10000)
-                logger.info("✅ Light theme applied (data-mantine-color-scheme='light')")
-                # Wait for CSS transitions to complete (200ms transitions + buffer)
-                await page.wait_for_timeout(500)
-                # Verify theme applied
-                theme_value = await page.evaluate(
-                    """
-                    () => document.querySelector('[data-mantine-color-scheme]')?.getAttribute('data-mantine-color-scheme')
-                """
+                await page.evaluate(
+                    f"localStorage.setItem('theme-store', JSON.stringify('{theme}'))"
                 )
-                logger.info(f"✅ Verified light theme attribute: {theme_value}")
-            except Exception as e:
-                logger.warning(f"⚠️ Timeout waiting for light theme attribute: {e}")
-                # Fallback: wait for timeout
-                await page.wait_for_timeout(7000)
-            try:
-                await wait_for_dashboard_content(page)
-                logger.info("✅ Dashboard components rendered (light mode)")
-            except Exception as e:
-                logger.warning(f"⚠️ Timeout waiting for components (light mode): {e}")
+                await page.reload(timeout=30000)
 
-            # Hide UI chrome and take screenshot
-            await hide_ui_chrome(page)
-            main_element = await page.query_selector(".mantine-AppShell-main")
-            if main_element:
-                await main_element.screenshot(path=light_path)
-                logger.info(f"✅ Light mode screenshot saved: {light_path}")
-            else:
-                await page.screenshot(path=light_path, full_page=True)
-                logger.info(f"✅ Light mode screenshot saved (fallback): {light_path}")
+                # Wait for MantineProvider to apply theme
+                try:
+                    await page.wait_for_selector(
+                        f'[data-mantine-color-scheme="{theme}"]', timeout=10000
+                    )
+                    await page.wait_for_timeout(500)
+                except Exception:
+                    logger.warning(
+                        f"Timeout waiting for {theme} theme attribute, using fallback wait"
+                    )
+                    await page.wait_for_timeout(7000)
 
-            # --- DARK MODE SCREENSHOT ---
-            logger.info("📸 Phase 2: Capturing dark mode screenshot...")
-            # Set theme - JSON serialized to match dcc.Store format
-            await page.evaluate("localStorage.setItem('theme-store', JSON.stringify('dark'))")
-            # Reload to apply theme
-            await page.reload(timeout=30000)
+                try:
+                    await wait_for_dashboard_content(page)
+                except Exception:
+                    logger.warning(f"Timeout waiting for dashboard components ({theme} mode)")
 
-            # Wait for MantineProvider to apply dark theme
-            try:
-                await page.wait_for_selector('[data-mantine-color-scheme="dark"]', timeout=10000)
-                logger.info("✅ Dark theme applied (data-mantine-color-scheme='dark')")
-                # Wait for CSS transitions to complete (200ms transitions + buffer)
-                await page.wait_for_timeout(500)
-                # Verify theme applied
-                theme_value = await page.evaluate(
-                    """
-                    () => document.querySelector('[data-mantine-color-scheme]')?.getAttribute('data-mantine-color-scheme')
-                """
-                )
-                logger.info(f"✅ Verified dark theme attribute: {theme_value}")
-            except Exception as e:
-                logger.warning(f"⚠️ Timeout waiting for dark theme attribute: {e}")
-                # Fallback: wait for timeout
-                await page.wait_for_timeout(7000)
-            try:
-                await wait_for_dashboard_content(page)
-                logger.info("✅ Dashboard components rendered (dark mode)")
-            except Exception as e:
-                logger.warning(f"⚠️ Timeout waiting for components (dark mode): {e}")
-
-            # Hide UI chrome and take screenshot
-            await hide_ui_chrome(page)
-            main_element = await page.query_selector(".mantine-AppShell-main")
-            if main_element:
-                await main_element.screenshot(path=dark_path)
-                logger.info(f"✅ Dark mode screenshot saved: {dark_path}")
-            else:
-                await page.screenshot(path=dark_path, full_page=True)
-                logger.info(f"✅ Dark mode screenshot saved (fallback): {dark_path}")
+                # Hide UI chrome and take screenshot
+                await hide_ui_chrome(page)
+                main_element = await page.query_selector(".mantine-AppShell-main")
+                if main_element:
+                    await main_element.screenshot(path=output_path)
+                else:
+                    await page.screenshot(path=output_path, full_page=True)
 
             await browser.close()
-            logger.info(f"📸 Dual-theme screenshot completed for dashboard: {dashboard_id}")
+            logger.info(f"Dual-theme screenshots completed for dashboard {dashboard_id}")
 
         result: ScreenshotResult = {
             "status": "success",
@@ -256,7 +286,7 @@ async def generate_dual_theme_screenshots(
         return result
 
     except Exception as e:
-        logger.error(f"❌ Dual-theme screenshot error for {dashboard_id}: {str(e)}")
+        logger.error(f"Dual-theme screenshot error for {dashboard_id}: {e}")
         error_result: ScreenshotResult = {
             "status": "error",
             "dashboard_id": dashboard_id,

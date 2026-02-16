@@ -60,9 +60,7 @@ def validate_and_clean_orphaned_layouts(stored_layout_data, stored_metadata):
         else:
             # Keep entries that don't follow the 'box-{index}' pattern for safety
             cleaned_layout_data.append(layout_entry)
-            logger.warning(
-                f"⚠️ LAYOUT VALIDATION - Layout entry with unexpected ID format: {layout_id}"
-            )
+            logger.warning(f"Layout entry with unexpected ID format: {layout_id}")
 
     if orphaned_layouts:
         logger.debug(f"Removed {len(orphaned_layouts)} orphaned layout entries")
@@ -88,65 +86,42 @@ def register_auto_screenshot_callback(app):
         Output("screenshot-debounce-store", "data", allow_duplicate=True),
         Input("url", "pathname"),
         State("screenshot-debounce-store", "data"),
+        State("local-store", "data"),
         prevent_initial_call=True,
     )
-    def auto_screenshot_on_dashboard_view(pathname, debounce_data):
+    def auto_screenshot_on_dashboard_view(pathname, debounce_data, local_data):
         """
         Automatically generate dual-theme screenshots when viewing a dashboard if:
-        - Screenshots don't exist yet
-        - This is useful for dashboards created before the dual-theme feature
-        - Or when screenshot generation previously failed
+        - User is the dashboard owner
+        - Screenshots don't exist yet, are stale (>1h), or need upgrading from legacy
 
-        This callback triggers on URL changes to /dashboard/{id} pages.
-
-        Args:
-            pathname: Current URL pathname
-            debounce_data: Debounce tracking data
-
-        Returns:
-            dict: Updated debounce data
+        Triggers on URL changes to /dashboard/{id} pages.
         """
         import os
         import time
 
-        # CRITICAL: Prevent infinite loop - don't trigger screenshots during Playwright visits
-        # Playwright browser visits will trigger this callback, which would queue more screenshots
         import flask
 
+        # Prevent infinite loop from Playwright browser visits
         user_agent = flask.request.headers.get("User-Agent", "")
         if "HeadlessChrome" in user_agent or "Playwright" in user_agent:
-            logger.debug("Skipping auto-screenshot: Playwright/headless browser detected")
             raise dash.exceptions.PreventUpdate
 
-        # VERBOSE LOGGING for debugging
-        logger.info(f"🎬 AUTO-SCREENSHOT CALLBACK TRIGGERED: pathname={pathname}")
-
-        # Only process dashboard view pages
+        # Only process dashboard view pages (not stepper/edit)
         if not pathname or not pathname.startswith("/dashboard/"):
-            logger.debug(f"Skipping auto-screenshot: not a dashboard page (pathname={pathname})")
             raise dash.exceptions.PreventUpdate
-
-        # Skip stepper/edit pages
         if "/component/add/" in pathname or "/edit" in pathname:
-            logger.debug(f"Skipping auto-screenshot: stepper or edit page (pathname={pathname})")
             raise dash.exceptions.PreventUpdate
 
         # Extract dashboard ID from URL
         path_parts = pathname.split("/")
-        logger.info(f"  → Path parts: {path_parts}")
-
         if len(path_parts) < 3:
-            logger.debug(f"Skipping auto-screenshot: invalid path structure (parts={path_parts})")
             raise dash.exceptions.PreventUpdate
 
-        dashboard_id = path_parts[2]  # /dashboard/{id}
-        logger.info(f"  → Extracted dashboard_id: {dashboard_id}")
-
+        dashboard_id = path_parts[2]
         if not dashboard_id:
-            logger.debug("Skipping auto-screenshot: empty dashboard_id")
             raise dash.exceptions.PreventUpdate
 
-        # Get current time for debouncing and age checks
         current_time = time.time()
 
         # Check if dual-theme screenshots exist and if they need updating
@@ -155,71 +130,54 @@ def register_auto_screenshot_callback(app):
         dark_path = os.path.join(output_folder, f"{dashboard_id}_dark.png")
         legacy_path = os.path.join(output_folder, f"{dashboard_id}.png")
 
-        logger.info(f"  → Checking screenshots in: {output_folder}")
-        logger.info(f"     Light: {os.path.exists(light_path)}")
-        logger.info(f"     Dark: {os.path.exists(dark_path)}")
-        logger.info(f"     Legacy: {os.path.exists(legacy_path)}")
-
-        # Smart update detection: check if dashboard changed since screenshot was taken
+        # Determine if screenshots need regeneration
         needs_update = False
         if os.path.exists(light_path) and os.path.exists(dark_path):
-            # Get screenshot file modification time
-            light_mtime = os.path.getmtime(light_path)
-            dark_mtime = os.path.getmtime(dark_path)
-            screenshot_mtime = max(light_mtime, dark_mtime)
-
-            # Note: We could fetch dashboard from API to check last_modified timestamp
-            # but we don't have access to the user token in this callback
-            # So we use a simpler heuristic: check if screenshot is older than 1 hour
+            screenshot_mtime = max(os.path.getmtime(light_path), os.path.getmtime(dark_path))
             screenshot_age = current_time - screenshot_mtime
 
-            # If screenshot is recent (< 1 hour old), skip regeneration
-            # This prevents constant regeneration while allowing updates for stale screenshots
-            if screenshot_age < 3600:  # 1 hour in seconds
-                logger.info(
-                    f"✅ Recent dual-theme screenshots exist (age: {screenshot_age:.0f}s), skipping auto-generation"
-                )
+            # Skip if screenshots are recent (< 1 hour old)
+            if screenshot_age < 3600:
                 raise dash.exceptions.PreventUpdate
-            else:
-                needs_update = True
-                logger.info(
-                    f"⏰ Screenshots are stale (age: {screenshot_age:.0f}s > 1h), will regenerate"
-                )
-
-        # If only legacy screenshot exists, upgrade to dual-theme
+            needs_update = True
         elif os.path.exists(legacy_path):
             needs_update = True
-            logger.info(f"🔄 Found legacy screenshot for {dashboard_id}, upgrading to dual-theme")
+            logger.debug(f"Upgrading legacy screenshot for {dashboard_id} to dual-theme")
         else:
             needs_update = True
-            logger.info(f"🆕 No screenshots found for {dashboard_id}, will generate")
 
-        # Only proceed if screenshot needs updating
         if not needs_update:
             raise dash.exceptions.PreventUpdate
 
-        # Apply debouncing to avoid spamming screenshot requests
+        # Debounce to avoid spamming screenshot requests
         last_screenshot = debounce_data.get("last_screenshot", 0) if debounce_data else 0
         debounce_seconds = 5
 
-        if current_time - last_screenshot > debounce_seconds:
-            logger.info(
-                f"📸 QUEUEING dual-theme screenshot task for dashboard {dashboard_id} "
-                f"(triggered by page view)"
-            )
-            try:
-                generate_dashboard_screenshot_dual.delay(dashboard_id)
-                logger.info(f"✅ Successfully queued screenshot task for dashboard {dashboard_id}")
-            except Exception as e:
-                logger.error(f"❌ Failed to queue screenshot task: {e}")
-                raise dash.exceptions.PreventUpdate
-            return {"last_screenshot": current_time}
-        else:
-            logger.info(
-                f"⏱️  Auto-screenshot debounced for {dashboard_id} "
-                f"(last: {current_time - last_screenshot:.1f}s ago, threshold: {debounce_seconds}s)"
-            )
+        if current_time - last_screenshot <= debounce_seconds:
             raise dash.exceptions.PreventUpdate
+
+        # Validate user authentication and ownership
+        if not local_data or not local_data.get("user_id"):
+            raise dash.exceptions.PreventUpdate
+
+        user_id = local_data["user_id"]
+
+        from depictio.api.v1.services.screenshot_service import (
+            check_dashboard_owner_permission_sync,
+        )
+
+        if not check_dashboard_owner_permission_sync(dashboard_id=dashboard_id, user_id=user_id):
+            logger.debug("Auto-screenshot skipped: user not owner")
+            raise dash.exceptions.PreventUpdate
+
+        try:
+            generate_dashboard_screenshot_dual.delay(dashboard_id, user_id)
+            logger.info(f"📸 Screenshot queued for dashboard {dashboard_id}")
+        except Exception as e:
+            logger.error(f"Failed to queue screenshot task: {e}")
+            raise dash.exceptions.PreventUpdate
+
+        return {"last_screenshot": current_time}
 
 
 def register_callbacks_save_lite(app):
@@ -378,6 +336,11 @@ def register_callbacks_save_lite(app):
             enrich=False,  # Fast save, no enrichment needed
         )
 
+        if success:
+            logger.info(
+                f"✅ Dashboard {dashboard_id} saved successfully ({len(all_metadata)} components)"
+            )
+
         # Initialize debounce data tracking
         import time
 
@@ -388,34 +351,40 @@ def register_callbacks_save_lite(app):
         if success:
             # Smart debouncing: only trigger screenshot if enough time has passed
             if current_time - last_screenshot > debounce_seconds:
-                # Trigger dual-theme screenshot generation for main dashboard
-                generate_dashboard_screenshot_dual.delay(dashboard_id)
-                logger.debug(f"Dual-theme screenshot task queued for main dashboard {dashboard_id}")
+                # Check if user owns dashboard before generating screenshots
+                user_id = local_store.get("user_id")
 
-                # Also queue screenshot tasks for all child tabs
-                from depictio.dash.layouts.dashboards_management import get_child_tabs_info
+                if user_id:
+                    from depictio.api.v1.services.screenshot_service import (
+                        check_dashboard_owner_permission_sync,
+                    )
 
-                try:
-                    tabs_info = get_child_tabs_info(dashboard_id, TOKEN)
-                    child_tabs = tabs_info.get("tabs", [])
+                    is_owner = check_dashboard_owner_permission_sync(
+                        dashboard_id=dashboard_id, user_id=user_id
+                    )
 
-                    if child_tabs:
-                        logger.info(f"Queueing screenshot tasks for {len(child_tabs)} child tabs")
-                        for tab in child_tabs:
-                            # Use dashboard_id (URL identifier) not _id (MongoDB ObjectId)
-                            tab_id = tab.get("dashboard_id")
-                            if tab_id:
-                                generate_dashboard_screenshot_dual.delay(str(tab_id))
-                                logger.debug(f"  → Queued screenshot for child tab {tab_id}")
-                except Exception as e:
-                    logger.warning(f"Failed to queue child tab screenshots: {e}")
+                    if is_owner:
+                        generate_dashboard_screenshot_dual.delay(dashboard_id, user_id)
+                        logger.info("📸 Screenshot queued after save (dashboard + child tabs)")
+
+                        # Also queue screenshot tasks for all child tabs
+                        from depictio.dash.layouts.dashboards_management import get_child_tabs_info
+
+                        try:
+                            tabs_info = get_child_tabs_info(dashboard_id, TOKEN)
+                            child_tabs = tabs_info.get("tabs", [])
+
+                            for tab in child_tabs:
+                                tab_id = tab.get("dashboard_id")
+                                if tab_id:
+                                    generate_dashboard_screenshot_dual.delay(str(tab_id), user_id)
+                        except Exception as e:
+                            logger.warning(f"Failed to queue child tab screenshots: {e}")
+                    else:
+                        logger.debug("Screenshot skipped after save: user not owner")
 
                 debounce_data = {"last_screenshot": current_time}
             else:
-                logger.info(
-                    f"Screenshot debounced for dashboard {dashboard_id} "
-                    f"(last: {current_time - last_screenshot:.1f}s ago, threshold: {debounce_seconds}s)"
-                )
                 debounce_data = debounce_data or {"last_screenshot": last_screenshot}
         else:
             logger.error(f"Failed to save dashboard {dashboard_id}")
