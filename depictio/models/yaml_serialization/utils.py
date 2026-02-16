@@ -177,65 +177,80 @@ def generate_component_id(component: dict, index: int) -> str:
     """
     Generate meaningful human-readable component ID based on content.
 
-    Creates descriptive IDs like:
-    - "sepal-length-average" for card showing average of sepal.length
-    - "sepal-length-filter" for interactive filtering sepal.length
-    - "box-variety-sepal-length" for box plot
-    - "data-table" for table component
-    - "multiqc-fastqc-sequence-quality" for MultiQC components
-    - "image-filename-3a7b9c" for Image components
+    Format: {component_type}-{semantic_identifier}-{hash[:6]}
+
+    Examples:
+    - "interactive-sampling_date-a3f4d2" for date picker on sampling_date
+    - "card-sepal_length_average-7b2c8e" for card showing average
+    - "figure-scatter-sepal_length-petal_width-9d4e1f" for scatter plot
+    - "multiqc-fastqc_sequence_quality-2a5c3b" for MultiQC components
 
     Args:
         component: Component dictionary
         index: Component position in list
 
     Returns:
-        Human-readable ID string with hash suffix for uniqueness
+        Human-readable ID: {type}-{semantic_id}-{hash[:6]}
+        Semantic ID preserves underscores, uses hyphens as separators
     """
     comp_type = component.get("component_type", "component")
 
     def sanitize(text: str) -> str:
         if not text:
             return ""
-        return re.sub(r"[^a-z0-9]+", "-", str(text).replace(".", "-").lower()).strip("-")
+        # Preserve underscores, replace dots with underscores, other special chars with hyphens
+        text = str(text).replace(".", "_").lower()
+        return re.sub(r"[^a-z0-9_]+", "-", text).strip("-")
 
-    # Compute hash for uniqueness
+    # Compute 6-character hash for uniqueness
     comp_hash = _compute_component_hash(component)
 
-    # MultiQC component: multiqc-{module}-{plot} or multiqc-{module}-{hash}
+    # Priority 1: Use existing index field if present AND it's a semantic identifier (not a UUID)
+    existing_index = component.get("index", "")
+    if existing_index and existing_index.strip():
+        # Skip if it looks like a UUID (contains 4+ hyphens or is >30 chars)
+        is_uuid_like = existing_index.count("-") >= 4 or len(existing_index) > 30
+        if not is_uuid_like:
+            semantic_id = sanitize(existing_index)
+            return f"{comp_type}-{semantic_id}-{comp_hash}"
+
+    # Priority 2: Generate semantic ID based on component type and data
+
+    # MultiQC component
     if comp_type == "multiqc":
         module = component.get("selected_module", "")
         plot = component.get("selected_plot", "")
-
         if module and plot:
-            return f"multiqc-{sanitize(module)}-{sanitize(plot)}"
+            semantic_id = f"{sanitize(module)}_{sanitize(plot)}"
         elif module:
-            return f"multiqc-{sanitize(module)}-{comp_hash}"
+            semantic_id = sanitize(module)
         else:
-            return f"multiqc-{comp_hash}"
+            semantic_id = "multiqc"
+        return f"{comp_type}-{semantic_id}-{comp_hash}"
 
-    # Image component: image-{column}-{hash}
+    # Image component
     elif comp_type == "image":
         image_column = component.get("image_column", "")
-        if image_column:
-            return f"image-{sanitize(image_column)}-{comp_hash}"
-        else:
-            return f"image-{comp_hash}"
+        semantic_id = sanitize(image_column) if image_column else "image"
+        return f"{comp_type}-{semantic_id}-{comp_hash}"
 
     # Card component
     elif comp_type == "card":
         column = component.get("column_name", "")
         agg = component.get("aggregation", "")
         if column and agg:
-            return f"{sanitize(column)}-{sanitize(agg)}"
-        return f"card-{comp_hash}"
+            semantic_id = f"{sanitize(column)}_{sanitize(agg)}"
+        elif column:
+            semantic_id = sanitize(column)
+        else:
+            semantic_id = "card"
+        return f"{comp_type}-{semantic_id}-{comp_hash}"
 
     # Interactive component
     elif comp_type in ("InteractiveComponent", "interactive"):
         column = component.get("column_name", "")
-        if column:
-            return f"{sanitize(column)}-filter"
-        return f"filter-{comp_hash}"
+        semantic_id = sanitize(column) if column else "filter"
+        return f"{comp_type}-{semantic_id}-{comp_hash}"
 
     # Figure component
     elif comp_type == "figure":
@@ -244,23 +259,29 @@ def generate_component_id(component: dict, index: int) -> str:
         x = dict_kwargs.get("x", "")
         y = dict_kwargs.get("y", "")
 
-        if visu_type and x and y:
-            return f"{sanitize(visu_type)}-{sanitize(x)}-{sanitize(y)}"
-        elif visu_type and x:
-            return f"{sanitize(visu_type)}-{sanitize(x)}"
-        return f"figure-{comp_hash}"
+        parts = []
+        if visu_type:
+            parts.append(sanitize(visu_type))
+        if x:
+            parts.append(sanitize(x))
+        if y:
+            parts.append(sanitize(y))
+
+        semantic_id = "_".join(parts) if parts else "figure"
+        return f"{comp_type}-{semantic_id}-{comp_hash}"
 
     # Table component
     elif comp_type == "table":
-        return "data-table"
+        return f"{comp_type}-table-{comp_hash}"
 
-    # Generic fallback: {type}-{title}-{hash} instead of {type}-{index}
+    # Generic fallback: use title or generic name
     title = component.get("title", "")
     if title and title.strip():
-        base_id = sanitize(title)[:40]
-        return f"{base_id}-{comp_hash}" if base_id else f"{comp_type.lower()}-{comp_hash}"
+        semantic_id = sanitize(title)[:40]
+    else:
+        semantic_id = comp_type.lower()
 
-    return f"{comp_type.lower()}-{comp_hash}"
+    return f"{comp_type}-{semantic_id}-{comp_hash}"
 
 
 def filter_defaults(dict_kwargs: dict, component_type: str = "figure") -> dict:
@@ -368,9 +389,9 @@ def get_db_connection_for_enrichment(
 def enrich_component_dc_tag(
     comp: dict,
     dc_cache: dict[str, dict | None],
-    collection: Any,
+    projects_collection: Any,
 ) -> None:
-    """Enrich a component with data collection tag from MongoDB."""
+    """Enrich a component with data collection tag from MongoDB (nested in projects)."""
     dc_id = comp.get("dc_id")
     if not dc_id:
         return
@@ -379,13 +400,28 @@ def enrich_component_dc_tag(
 
     if dc_id_str not in dc_cache:
         try:
-            dc_cache[dc_id_str] = collection.find_one({"_id": ObjectId(dc_id)})
+            # Search nested in projects (data collections are nested in workflows)
+            dc_doc = None
+            for project in projects_collection.find():
+                if "workflows" in project:
+                    for wf in project["workflows"]:
+                        if "data_collections" in wf:
+                            for dc in wf["data_collections"]:
+                                if str(dc.get("_id")) == str(dc_id):
+                                    dc_doc = dc
+                                    break
+                        if dc_doc:
+                            break
+                if dc_doc:
+                    break
+            dc_cache[dc_id_str] = dc_doc
         except Exception as e:
             logger.debug(f"Failed to lookup data collection {dc_id}: {e}")
             dc_cache[dc_id_str] = None
 
     dc_doc = dc_cache[dc_id_str]
     if not dc_doc:
+        logger.warning(f"Data collection document not found for dc_id: {dc_id}")
         return
 
     if "dc_config" not in comp:
@@ -394,6 +430,12 @@ def enrich_component_dc_tag(
     tag = dc_doc.get("data_collection_tag") or dc_doc.get("name")
     if tag:
         comp["dc_config"]["data_collection_tag"] = tag
+        logger.debug(f"Enriched component with dc_tag: {tag}")
+    else:
+        logger.warning(
+            f"Data collection {dc_id} found but has no 'data_collection_tag' or 'name' field. "
+            f"Available fields: {list(dc_doc.keys())}"
+        )
     comp["dc_config"]["id"] = dc_id_str
     comp["dc_config"]["type"] = dc_doc.get("type", "table")
 
@@ -401,9 +443,9 @@ def enrich_component_dc_tag(
 def enrich_component_wf_tag(
     comp: dict,
     wf_cache: dict[str, dict | None],
-    collection: Any,
+    projects_collection: Any,
 ) -> None:
-    """Enrich a component with workflow tag from MongoDB."""
+    """Enrich a component with workflow tag from MongoDB (nested in projects)."""
     wf_id = comp.get("wf_id")
     if not wf_id:
         return
@@ -412,18 +454,35 @@ def enrich_component_wf_tag(
 
     if wf_id_str not in wf_cache:
         try:
-            wf_cache[wf_id_str] = collection.find_one({"_id": ObjectId(wf_id)})
+            # Search nested in projects
+            wf_doc = None
+            for project in projects_collection.find():
+                if "workflows" in project:
+                    for wf in project["workflows"]:
+                        if str(wf.get("_id")) == str(wf_id):
+                            wf_doc = wf
+                            break
+                if wf_doc:
+                    break
+            wf_cache[wf_id_str] = wf_doc
         except Exception as e:
             logger.debug(f"Failed to lookup workflow {wf_id}: {e}")
             wf_cache[wf_id_str] = None
 
     wf_doc = wf_cache[wf_id_str]
     if not wf_doc:
+        logger.warning(f"Workflow document not found for wf_id: {wf_id}")
         return
 
     wf_tag = wf_doc.get("workflow_tag") or wf_doc.get("name")
     if wf_tag:
-        comp["wf_name"] = wf_tag
+        comp["workflow_tag"] = wf_tag  # Set workflow_tag (not wf_name!)
+        logger.debug(f"Enriched component with workflow_tag: {wf_tag}")
+    else:
+        logger.warning(
+            f"Workflow {wf_id} found but has no 'workflow_tag' or 'name' field. "
+            f"Available fields: {list(wf_doc.keys())}"
+        )
 
 
 def enrich_dashboard_with_tags(
@@ -434,7 +493,7 @@ def enrich_dashboard_with_tags(
     """
     Enrich dashboard components with data_collection_tag and workflow tags from MongoDB.
 
-    Looks up dc_id and wf_id in their respective collections to get human-readable tags.
+    Looks up dc_id and wf_id nested in project workflows to get human-readable tags.
 
     Args:
         dashboard_data: Dashboard dictionary from MongoDB
@@ -449,15 +508,17 @@ def enrich_dashboard_with_tags(
         return dashboard_data
 
     db, dc_collection_name, wf_collection_name = db_connection
-    dc_collection = db[dc_collection_name]
-    wf_collection = db[wf_collection_name]
+
+    # Get projects collection (workflows and data collections are nested in projects)
+    from depictio.api.v1.configs.config import settings
+    projects_collection = db[settings.mongodb.collections.projects_collection]
 
     dc_cache: dict[str, dict | None] = {}
     wf_cache: dict[str, dict | None] = {}
 
     for comp in dashboard_data.get("stored_metadata", []):
-        enrich_component_dc_tag(comp, dc_cache, dc_collection)
-        enrich_component_wf_tag(comp, wf_cache, wf_collection)
+        enrich_component_dc_tag(comp, dc_cache, projects_collection)
+        enrich_component_wf_tag(comp, wf_cache, projects_collection)
 
     return dashboard_data
 
