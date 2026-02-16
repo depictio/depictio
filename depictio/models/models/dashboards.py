@@ -30,6 +30,7 @@ from pydantic import (
 )
 
 from depictio.models.components.lite import LiteComponent
+from depictio.models.logging import logger
 from depictio.models.models.base import MongoModel, PyObjectId, convert_objectid_to_str
 from depictio.models.models.users import Permission
 
@@ -174,10 +175,13 @@ class DashboardDataLite(BaseModel):
             # Define preferred field order (tag first, then type, then data source, then config)
             field_order = [
                 "tag",
+                "index",  # Optional semantic identifier
                 "component_type",
+                "title",
                 "workflow_tag",
                 "data_collection_tag",
-                "title",
+                "selected_module",  # MultiQC
+                "selected_plot",    # MultiQC
                 "visu_type",
                 "dict_kwargs",
                 "aggregation",
@@ -200,7 +204,7 @@ class DashboardDataLite(BaseModel):
 
                 # Add remaining fields (styling, etc.) in original order
                 for key, value in comp.items():
-                    if key in cleaned or key == "index":  # Skip index (UUID) - internal only
+                    if key in cleaned:  # Skip already processed fields
                         continue
                     # Skip empty values
                     if value in ("", None, [], {}):
@@ -226,11 +230,15 @@ class DashboardDataLite(BaseModel):
     def from_yaml(cls, content: str) -> "DashboardDataLite":
         """Parse and validate YAML content.
 
+        Supports both single-tab and multi-tab formats:
+        - Single: {dashboard_id, title, components, ...}
+        - Multi:  {main_dashboard: {...}, tabs: [...]}
+
         Args:
             content: YAML string content
 
         Returns:
-            Validated DashboardDataLite instance
+            Validated DashboardDataLite instance (main dashboard only for multi-tab)
 
         Raises:
             ValueError: If YAML is invalid
@@ -243,6 +251,12 @@ class DashboardDataLite(BaseModel):
 
         if not isinstance(data, dict):
             raise ValueError("YAML must contain a dictionary at root level")
+
+        # Check if this is multi-tab format (has main_dashboard key)
+        if "main_dashboard" in data:
+            # Multi-tab format: extract main dashboard only
+            # Note: Child tabs are ignored during validation (they're imported separately)
+            data = data["main_dashboard"]
 
         return cls.model_validate(data)
 
@@ -343,25 +357,40 @@ class DashboardDataLite(BaseModel):
                     lite_comp[field] = comp[field]
 
         dashboard_id = extract_id(dashboard_data.get("dashboard_id") or dashboard_data.get("_id"))
-        tag_counters: dict[str, int] = {}
         lite_components = []
 
-        for comp in dashboard_data.get("stored_metadata", []):
+        # Import tag generation function
+        from depictio.models.yaml_serialization.utils import generate_component_id
+
+        for idx, comp in enumerate(dashboard_data.get("stored_metadata", [])):
             comp_type = comp.get("component_type", "figure")
 
-            # Generate or use existing tag
-            tag_counters[comp_type] = tag_counters.get(comp_type, 0) + 1
-            tag = comp.get("tag") or f"{comp_type}-{tag_counters[comp_type]}"
+            # Generate semantic tag with format: {type}-{semantic_id}-{hash[:6]}
+            # Uses existing index if available, otherwise generates from component data
+            tag = comp.get("tag") or generate_component_id(comp, idx)
+
+            # Extract workflow and data collection tags (mandatory fields)
+            workflow_tag = comp.get("workflow_tag") or comp.get("wf_tag", "")
+            dc_config = comp.get("dc_config", {})
+            data_collection_tag = comp.get("data_collection_tag") or dc_config.get("data_collection_tag", "")
+
+            # Log warning if mandatory tags are missing
+            if not workflow_tag:
+                logger.warning(
+                    f"Component {tag} (type: {comp_type}) missing workflow_tag. "
+                    f"Component has wf_id: {comp.get('wf_id') is not None}"
+                )
+            if not data_collection_tag:
+                logger.warning(
+                    f"Component {tag} (type: {comp_type}) missing data_collection_tag. "
+                    f"Component has dc_id: {comp.get('dc_id') is not None}"
+                )
 
             lite_comp: dict[str, Any] = {
                 "tag": tag,
-                "index": comp.get("index", ""),
                 "component_type": comp_type,
-                "workflow_tag": comp.get("workflow_tag") or comp.get("wf_tag", ""),
-                "data_collection_tag": (
-                    comp.get("data_collection_tag")
-                    or comp.get("dc_config", {}).get("data_collection_tag", "")
-                ),
+                "workflow_tag": workflow_tag,
+                "data_collection_tag": data_collection_tag,
             }
 
             if comp.get("title"):
@@ -415,6 +444,19 @@ class DashboardDataLite(BaseModel):
                     lite_comp["columns"] = comp["columns"]
                 if comp.get("max_images") and comp["max_images"] != 20:
                     lite_comp["max_images"] = comp["max_images"]
+
+            elif comp_type == "multiqc":
+                # MultiQC parameters are MANDATORY
+                lite_comp["selected_module"] = comp.get("selected_module", "")
+                lite_comp["selected_plot"] = comp.get("selected_plot", "")
+
+            # Export index field only if it's meaningful (not a UUID)
+            comp_index = comp.get("index", "")
+            if comp_index and comp_index.strip():
+                # Skip UUID-like indices
+                is_uuid_like = comp_index.count("-") >= 4 or len(comp_index) > 30
+                if not is_uuid_like:
+                    lite_comp["index"] = comp_index
 
             lite_components.append(lite_comp)
 

@@ -1833,8 +1833,13 @@ async def export_dashboard_as_yaml(
 
     # Single dashboard export (no children or is a child tab itself)
     if not child_tabs and is_main_tab:
+        # Enrich dashboard with workflow and data collection tags from MongoDB
+        from depictio.models.yaml_serialization.utils import enrich_dashboard_with_tags
+
+        enriched_dashboard = enrich_dashboard_with_tags(dashboard_doc)
+
         # Convert to DashboardDataLite for export
-        lite = DashboardDataLite.from_full(dashboard_doc)
+        lite = DashboardDataLite.from_full(enriched_dashboard)
         lite.project_tag = project_name
         yaml_content = lite.to_yaml()
 
@@ -1849,8 +1854,13 @@ async def export_dashboard_as_yaml(
     # Multi-tab export: main dashboard + child tabs in single YAML
     multi_tab_dict: dict[str, Any] = {}
 
+    # Enrich main dashboard with workflow and data collection tags
+    from depictio.models.yaml_serialization.utils import enrich_dashboard_with_tags
+
+    enriched_main_dashboard = enrich_dashboard_with_tags(dashboard_doc)
+
     # Export main dashboard
-    main_lite = DashboardDataLite.from_full(dashboard_doc)
+    main_lite = DashboardDataLite.from_full(enriched_main_dashboard)
     main_lite.project_tag = project_name
     main_dict = main_lite.model_dump(exclude_none=True, mode="json")
 
@@ -1863,7 +1873,10 @@ async def export_dashboard_as_yaml(
     # Export child tabs
     tabs_list = []
     for child_doc in child_tabs:
-        child_lite = DashboardDataLite.from_full(child_doc)
+        # Enrich child tab with workflow and data collection tags
+        enriched_child = enrich_dashboard_with_tags(child_doc)
+
+        child_lite = DashboardDataLite.from_full(enriched_child)
         child_lite.project_tag = project_name
         child_dict = child_lite.model_dump(exclude_none=True, mode="json")
 
