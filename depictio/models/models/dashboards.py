@@ -407,8 +407,8 @@ class DashboardDataLite(BaseModel):
 
             elif comp_type == "image":
                 lite_comp["image_column"] = comp.get("image_column", "")
-                if comp.get("s3_base_folder"):
-                    lite_comp["s3_base_folder"] = comp["s3_base_folder"]
+                # NOTE: s3_base_folder is NOT exported - regenerated on import from DC config
+                # This keeps YAML minimal and ensures data collection paths are current
                 if comp.get("thumbnail_size") and comp["thumbnail_size"] != 150:
                     lite_comp["thumbnail_size"] = comp["thumbnail_size"]
                 if comp.get("columns") and comp["columns"] != 4:
@@ -560,10 +560,18 @@ class DashboardDataLite(BaseModel):
                 )
 
             elif comp_type == "image":
+                # s3_base_folder regeneration: fetch from DC config if not provided
+                s3_base_folder = comp_dict.get("s3_base_folder")
+                if not s3_base_folder:
+                    # Regenerate from dc_config if available
+                    dc_config = full_comp.get("dc_config", {})
+                    dc_specific_props = dc_config.get("dc_specific_properties", {})
+                    s3_base_folder = dc_specific_props.get("s3_base_folder")
+
                 full_comp.update(
                     {
                         "image_column": comp_dict.get("image_column", ""),
-                        "s3_base_folder": comp_dict.get("s3_base_folder"),
+                        "s3_base_folder": s3_base_folder,  # Will be None if not found
                         "thumbnail_size": comp_dict.get("thumbnail_size", 150),
                         "columns": comp_dict.get("columns", 4),
                         "max_images": comp_dict.get("max_images", 20),

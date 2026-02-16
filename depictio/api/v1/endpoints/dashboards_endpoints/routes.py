@@ -5,6 +5,7 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID
 
+import yaml
 from bson import ObjectId
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import Response
@@ -1355,6 +1356,26 @@ def _resolve_workflow_tags(component: dict) -> None:
             return
 
 
+def _regenerate_component_fields(component: dict) -> None:
+    """Regenerate component fields from dc_config after tag resolution.
+
+    For Image components: Regenerate s3_base_folder from dc_config.
+    For MultiQC components: Additional regeneration handled in MultiQC models.
+    """
+    comp_type = component.get("component_type", "")
+
+    # Image component: Regenerate s3_base_folder from DC config if not present
+    if comp_type == "image" and not component.get("s3_base_folder"):
+        dc_config = component.get("dc_config", {})
+        dc_specific_props = dc_config.get("dc_specific_properties", {})
+        s3_base_folder = dc_specific_props.get("s3_base_folder")
+        if s3_base_folder:
+            component["s3_base_folder"] = s3_base_folder
+            logger.debug(
+                f"Regenerated s3_base_folder for image component from DC config: {s3_base_folder}"
+            )
+
+
 def _regenerate_component_indices(dashboard_dict: dict) -> None:
     """Generate new UUIDs for all components and update layout references."""
     if "stored_metadata" not in dashboard_dict:
@@ -1373,6 +1394,182 @@ def _regenerate_component_indices(dashboard_dict: dict) -> None:
                     layout_item["i"] = new_index
 
 
+def _import_multi_tab_dashboard(
+    yaml_data: dict,
+    project_id: PyObjectId,
+    overwrite: bool,
+    current_user: User,
+) -> dict[str, Any]:
+    """
+    Import a multi-tab dashboard from YAML data with main_dashboard and tabs structure.
+
+    Args:
+        yaml_data: Parsed YAML dictionary with main_dashboard and tabs keys
+        project_id: Target project ID
+        overwrite: Whether to update existing dashboards with same titles
+        current_user: Current authenticated user
+
+    Returns:
+        Import result with main dashboard ID and child tab IDs
+    """
+    main_dashboard_data = yaml_data.get("main_dashboard")
+    tabs_data = yaml_data.get("tabs", [])
+
+    if not main_dashboard_data:
+        raise HTTPException(status_code=400, detail="Multi-tab YAML missing 'main_dashboard' key")
+
+    # Import main dashboard first
+    main_yaml = yaml.dump(main_dashboard_data, default_flow_style=False, allow_unicode=True)
+    main_lite = DashboardDataLite.from_yaml(main_yaml)
+
+    # Check for existing main dashboard if overwrite is requested
+    existing_main = None
+    if overwrite:
+        existing_main = dashboards_collection.find_one(
+            {"title": main_lite.title, "project_id": ObjectId(project_id)}
+        )
+
+    main_dashboard_dict = main_lite.to_full()
+    main_dashboard_dict["is_main_tab"] = True  # Ensure it's marked as main tab
+
+    # Set dashboard ID and project
+    main_dashboard_id = existing_main["dashboard_id"] if existing_main else ObjectId()
+    main_dashboard_dict["dashboard_id"] = main_dashboard_id
+    main_dashboard_dict["_id"] = (
+        main_dashboard_id  # CRITICAL: Ensure _id = dashboard_id for MongoDB
+    )
+    main_dashboard_dict["project_id"] = ObjectId(project_id)
+    main_dashboard_dict["last_saved_ts"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    # Set version and permissions
+    if existing_main:
+        main_dashboard_dict["version"] = existing_main.get("version", 1) + 1
+        main_dashboard_dict["permissions"] = existing_main.get(
+            "permissions",
+            {"owners": [{"_id": ObjectId(current_user.id), "email": current_user.email}]},
+        )
+    else:
+        main_dashboard_dict["version"] = 1
+        main_dashboard_dict["permissions"] = {
+            "owners": [{"_id": ObjectId(current_user.id), "email": current_user.email}],
+            "editors": [],
+            "viewers": [],
+        }
+
+    # Resolve tags and regenerate fields for main dashboard components
+    for component in main_dashboard_dict.get("stored_metadata", []):
+        _resolve_workflow_tags(component)
+        _regenerate_component_fields(component)
+    _regenerate_component_indices(main_dashboard_dict)
+
+    # Validate and insert/update main dashboard
+    try:
+        main_dashboard = DashboardData.from_mongo(main_dashboard_dict)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Main dashboard validation failed: {e}") from e
+
+    is_update = existing_main is not None
+    if is_update and existing_main is not None:
+        update_doc = main_dashboard.mongo()
+        update_doc["_id"] = existing_main["_id"]
+        result = dashboards_collection.replace_one({"_id": existing_main["_id"]}, update_doc)
+        if result.modified_count == 0 and result.matched_count == 0:
+            raise HTTPException(status_code=500, detail="Failed to update main dashboard.")
+    else:
+        result = dashboards_collection.insert_one(main_dashboard.mongo())
+        if not result.inserted_id:
+            raise HTTPException(status_code=500, detail="Failed to import main dashboard.")
+
+    # Import child tabs
+    imported_tabs = []
+    for idx, tab_data in enumerate(tabs_data):
+        tab_yaml = yaml.dump(tab_data, default_flow_style=False, allow_unicode=True)
+        tab_lite = DashboardDataLite.from_yaml(tab_yaml)
+
+        # Check for existing tab if overwrite is requested
+        existing_tab = None
+        if overwrite:
+            existing_tab = dashboards_collection.find_one(
+                {
+                    "title": tab_lite.title,
+                    "parent_dashboard_id": main_dashboard_id,
+                    "project_id": ObjectId(project_id),
+                }
+            )
+
+        tab_dashboard_dict = tab_lite.to_full()
+        tab_dashboard_dict["is_main_tab"] = False
+        tab_dashboard_dict["parent_dashboard_id"] = main_dashboard_id
+        tab_dashboard_dict["tab_order"] = idx + 1  # Start from 1 (main tab is 0)
+
+        # Set dashboard ID and project
+        tab_dashboard_id = existing_tab["dashboard_id"] if existing_tab else ObjectId()
+        tab_dashboard_dict["dashboard_id"] = tab_dashboard_id
+        tab_dashboard_dict["_id"] = tab_dashboard_id  # CRITICAL: Ensure _id = dashboard_id
+        tab_dashboard_dict["project_id"] = ObjectId(project_id)
+        tab_dashboard_dict["last_saved_ts"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+        # Set version and permissions
+        if existing_tab:
+            tab_dashboard_dict["version"] = existing_tab.get("version", 1) + 1
+            tab_dashboard_dict["permissions"] = existing_tab.get(
+                "permissions",
+                {"owners": [{"_id": ObjectId(current_user.id), "email": current_user.email}]},
+            )
+        else:
+            tab_dashboard_dict["version"] = 1
+            tab_dashboard_dict["permissions"] = {
+                "owners": [{"_id": ObjectId(current_user.id), "email": current_user.email}],
+                "editors": [],
+                "viewers": [],
+            }
+
+        # Resolve tags and regenerate fields for tab components
+        for component in tab_dashboard_dict.get("stored_metadata", []):
+            _resolve_workflow_tags(component)
+            _regenerate_component_fields(component)
+        _regenerate_component_indices(tab_dashboard_dict)
+
+        # Validate and insert/update tab
+        try:
+            tab_dashboard = DashboardData.from_mongo(tab_dashboard_dict)
+        except Exception as e:
+            logger.error(f"Tab validation failed for '{tab_lite.title}': {e}")
+            continue
+
+        tab_is_update = existing_tab is not None
+        if tab_is_update and existing_tab is not None:
+            update_doc = tab_dashboard.mongo()
+            update_doc["_id"] = existing_tab["_id"]
+            tab_result = dashboards_collection.replace_one({"_id": existing_tab["_id"]}, update_doc)
+            if tab_result.modified_count == 0 and tab_result.matched_count == 0:
+                logger.error(f"Failed to update tab '{tab_lite.title}'")
+                continue
+        else:
+            tab_result = dashboards_collection.insert_one(tab_dashboard.mongo())
+            if not tab_result.inserted_id:
+                logger.error(f"Failed to import tab '{tab_lite.title}'")
+                continue
+
+        imported_tabs.append({"title": tab_lite.title, "dashboard_id": str(tab_dashboard_id)})
+
+    action = "Updated" if is_update else "Imported"
+    logger.info(
+        f"{action} multi-tab dashboard: {main_dashboard.title} (ID: {main_dashboard_id}) "
+        f"with {len(imported_tabs)} tabs by user {current_user.email}"
+    )
+
+    return {
+        "success": True,
+        "updated": is_update,
+        "message": f"Multi-tab dashboard {'updated' if is_update else 'imported'} successfully",
+        "dashboard_id": str(main_dashboard_id),
+        "title": main_dashboard.title,
+        "project_id": str(project_id),
+        "tabs": imported_tabs,
+    }
+
+
 @dashboards_endpoint_router.post("/import/yaml")
 async def import_dashboard_from_yaml(
     yaml_content: str,
@@ -1383,7 +1580,10 @@ async def import_dashboard_from_yaml(
     """
     Import a dashboard from YAML content.
 
-    Creates a new dashboard from the provided YAML configuration.
+    Supports both single dashboard and multi-tab dashboard formats:
+    - Single: Standard YAML with title, components, etc.
+    - Multi-tab: YAML with main_dashboard and tabs keys
+
     A new dashboard_id will be generated, and the current user will be set as owner.
 
     If `overwrite=True` and a dashboard with the same title exists in the project,
@@ -1395,7 +1595,7 @@ async def import_dashboard_from_yaml(
       looks up the project by name
 
     Args:
-        yaml_content: The YAML content defining the dashboard
+        yaml_content: The YAML content defining the dashboard(s)
         project_id: Optional project ID (if not provided, uses project_tag from YAML)
         overwrite: If True, update existing dashboard with same title (default: False)
         current_user: The authenticated user (will be set as owner)
@@ -1411,6 +1611,43 @@ async def import_dashboard_from_yaml(
                 detail="Anonymous users cannot import dashboards. Please login to continue.",
             )
 
+    # Parse YAML to detect format
+    try:
+        yaml_data = yaml.safe_load(yaml_content)
+    except yaml.YAMLError as e:
+        raise HTTPException(status_code=400, detail=f"Invalid YAML: {e}") from e
+
+    # Detect multi-tab format
+    if isinstance(yaml_data, dict) and "main_dashboard" in yaml_data:
+        # Multi-tab format: {main_dashboard: {...}, tabs: [...]}
+
+        # Resolve project_id from main_dashboard if not provided
+        if project_id is None:
+            main_data = yaml_data.get("main_dashboard", {})
+            project_tag = main_data.get("project_tag")
+            if not project_tag:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Either project_id parameter or project_tag in main_dashboard is required",
+                )
+            project = projects_collection.find_one({"name": project_tag})
+            if not project:
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"Project '{project_tag}' not found. "
+                    "Make sure the project_tag matches an existing project name.",
+                )
+            project_id = project["_id"]
+
+        if not check_project_permission(project_id, current_user, "editor"):
+            raise HTTPException(
+                status_code=403,
+                detail="You don't have permission to create dashboards in this project.",
+            )
+
+        return _import_multi_tab_dashboard(yaml_data, project_id, overwrite, current_user)
+
+    # Single dashboard format
     try:
         lite = DashboardDataLite.from_yaml(yaml_content)
     except ValueError as e:
@@ -1492,9 +1729,12 @@ async def import_dashboard_from_yaml(
             "viewers": [],
         }
 
-    # Resolve tags to MongoDB IDs and regenerate component indices
+    # Resolve tags to MongoDB IDs, regenerate fields from DC config, and regenerate component indices
     for component in dashboard_dict.get("stored_metadata", []):
         _resolve_workflow_tags(component)
+        _regenerate_component_fields(
+            component
+        )  # Regenerate s3_base_folder, etc. after dc_config is populated
     _regenerate_component_indices(dashboard_dict)
 
     try:
@@ -1545,8 +1785,16 @@ async def export_dashboard_as_yaml(
 ) -> Response:
     """Export dashboard as YAML.
 
-    Returns a YAML representation of the dashboard suitable for
-    version control or backup. Includes tab fields for child tabs.
+    For main tabs with children: Returns a single YAML with nested structure.
+    For standalone/child dashboards: Returns a single dashboard YAML.
+
+    Multi-tab structure:
+        main_dashboard:
+            title: "Main Dashboard"
+            components: [...]
+        tabs:
+            - title: "Tab 1"
+              components: [...]
 
     Args:
         dashboard_id: The dashboard ID to export
@@ -1564,24 +1812,74 @@ async def export_dashboard_as_yaml(
     if project_id:
         project = projects_collection.find_one({"_id": ObjectId(project_id)})
         is_public = project.get("is_public", False) if project else False
+        project_name = project.get("name", "") if project else ""
     else:
         is_public = dashboard_doc.get("is_public", False)
+        project_name = ""
 
     if not is_public and current_user is None:
         raise HTTPException(status_code=401, detail="Authentication required")
 
-    # Convert to DashboardDataLite for export
-    lite = DashboardDataLite.from_full(dashboard_doc)
+    # Check if this is a main tab with child tabs
+    is_main_tab = dashboard_doc.get("is_main_tab", True)
+    child_tabs = []
+    if is_main_tab:
+        child_tabs_docs = list(
+            dashboards_collection.find({"parent_dashboard_id": ObjectId(dashboard_id)}).sort(
+                "tab_order", 1
+            )
+        )
+        child_tabs = child_tabs_docs
 
-    # For child tabs, resolve parent_dashboard_tag from parent's title
-    if not dashboard_doc.get("is_main_tab", True):
-        parent_id = dashboard_doc.get("parent_dashboard_id")
-        if parent_id:
-            parent_doc = dashboards_collection.find_one({"dashboard_id": ObjectId(parent_id)})
-            if parent_doc:
-                lite.parent_dashboard_tag = parent_doc.get("title", "")
+    # Single dashboard export (no children or is a child tab itself)
+    if not child_tabs and is_main_tab:
+        # Convert to DashboardDataLite for export
+        lite = DashboardDataLite.from_full(dashboard_doc)
+        lite.project_tag = project_name
+        yaml_content = lite.to_yaml()
 
-    yaml_content = lite.to_yaml()
+        return Response(
+            content=yaml_content,
+            media_type="application/x-yaml",
+            headers={
+                "Content-Disposition": f'attachment; filename="{dashboard_doc.get("title", "dashboard")}.yaml"'
+            },
+        )
+
+    # Multi-tab export: main dashboard + child tabs in single YAML
+    multi_tab_dict: dict[str, Any] = {}
+
+    # Export main dashboard
+    main_lite = DashboardDataLite.from_full(dashboard_doc)
+    main_lite.project_tag = project_name
+    main_dict = main_lite.model_dump(exclude_none=True, mode="json")
+
+    # Remove tab-specific fields from main dashboard for cleaner export
+    for field in ["is_main_tab", "tab_order", "parent_dashboard_tag"]:
+        main_dict.pop(field, None)
+
+    multi_tab_dict["main_dashboard"] = main_dict
+
+    # Export child tabs
+    tabs_list = []
+    for child_doc in child_tabs:
+        child_lite = DashboardDataLite.from_full(child_doc)
+        child_lite.project_tag = project_name
+        child_dict = child_lite.model_dump(exclude_none=True, mode="json")
+
+        # Remove fields that are implicit in multi-tab structure
+        for field in ["is_main_tab", "parent_dashboard_tag", "project_tag"]:
+            child_dict.pop(field, None)
+
+        tabs_list.append(child_dict)
+
+    if tabs_list:
+        multi_tab_dict["tabs"] = tabs_list
+
+    # Convert to YAML
+    yaml_content = yaml.dump(
+        multi_tab_dict, default_flow_style=False, sort_keys=False, allow_unicode=True, indent=4
+    )
 
     return Response(
         content=yaml_content,

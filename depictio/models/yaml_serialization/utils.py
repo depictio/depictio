@@ -4,6 +4,7 @@ Shared utilities for YAML serialization.
 Contains common functions used across export/import and format modules.
 """
 
+import hashlib
 import re
 import uuid
 from datetime import datetime
@@ -100,6 +101,39 @@ def sanitize_filename(name: str) -> str:
     return "".join(c if c.isalnum() or c in "-_" else "_" for c in name).strip("_")
 
 
+def _compute_component_hash(component: dict) -> str:
+    """
+    Compute a 6-character hash from component metadata for unique identification.
+
+    Args:
+        component: Component dictionary
+
+    Returns:
+        6-character hash string (first 6 chars of MD5)
+    """
+    # Include relevant fields for hash computation
+    hash_fields = {
+        "component_type": component.get("component_type", ""),
+        "title": component.get("title", ""),
+        "workflow_id": str(component.get("workflow_id", "")),
+        "data_collection_id": str(component.get("data_collection_id", "")),
+        # Add type-specific fields
+        "visu_type": component.get("visu_type", ""),
+        "aggregation": component.get("aggregation", ""),
+        "column_name": component.get("column_name", ""),
+        "interactive_component_type": component.get("interactive_component_type", ""),
+        "selected_module": component.get("selected_module", ""),
+        "selected_plot": component.get("selected_plot", ""),
+        "image_column": component.get("image_column", ""),
+    }
+
+    # Create deterministic string for hashing
+    hash_string = "|".join(f"{k}:{v}" for k, v in sorted(hash_fields.items()) if v)
+
+    # Return first 6 chars of MD5 hex digest
+    return hashlib.md5(hash_string.encode()).hexdigest()[:6]
+
+
 def auto_generate_layout(index: int, component_type: str = "figure") -> dict:
     """
     Generate default layout based on component index and type.
@@ -148,13 +182,15 @@ def generate_component_id(component: dict, index: int) -> str:
     - "sepal-length-filter" for interactive filtering sepal.length
     - "box-variety-sepal-length" for box plot
     - "data-table" for table component
+    - "multiqc-fastqc-sequence-quality" for MultiQC components
+    - "image-filename-3a7b9c" for Image components
 
     Args:
         component: Component dictionary
         index: Component position in list
 
     Returns:
-        Human-readable ID string
+        Human-readable ID string with hash suffix for uniqueness
     """
     comp_type = component.get("component_type", "component")
 
@@ -163,19 +199,45 @@ def generate_component_id(component: dict, index: int) -> str:
             return ""
         return re.sub(r"[^a-z0-9]+", "-", str(text).replace(".", "-").lower()).strip("-")
 
-    if comp_type == "card":
+    # Compute hash for uniqueness
+    comp_hash = _compute_component_hash(component)
+
+    # MultiQC component: multiqc-{module}-{plot} or multiqc-{module}-{hash}
+    if comp_type == "multiqc":
+        module = component.get("selected_module", "")
+        plot = component.get("selected_plot", "")
+
+        if module and plot:
+            return f"multiqc-{sanitize(module)}-{sanitize(plot)}"
+        elif module:
+            return f"multiqc-{sanitize(module)}-{comp_hash}"
+        else:
+            return f"multiqc-{comp_hash}"
+
+    # Image component: image-{column}-{hash}
+    elif comp_type == "image":
+        image_column = component.get("image_column", "")
+        if image_column:
+            return f"image-{sanitize(image_column)}-{comp_hash}"
+        else:
+            return f"image-{comp_hash}"
+
+    # Card component
+    elif comp_type == "card":
         column = component.get("column_name", "")
         agg = component.get("aggregation", "")
         if column and agg:
             return f"{sanitize(column)}-{sanitize(agg)}"
-        return f"card-{index + 1}"
+        return f"card-{comp_hash}"
 
+    # Interactive component
     elif comp_type in ("InteractiveComponent", "interactive"):
         column = component.get("column_name", "")
         if column:
             return f"{sanitize(column)}-filter"
-        return f"filter-{index + 1}"
+        return f"filter-{comp_hash}"
 
+    # Figure component
     elif comp_type == "figure":
         visu_type = component.get("visu_type", "")
         dict_kwargs = component.get("dict_kwargs", {})
@@ -186,17 +248,19 @@ def generate_component_id(component: dict, index: int) -> str:
             return f"{sanitize(visu_type)}-{sanitize(x)}-{sanitize(y)}"
         elif visu_type and x:
             return f"{sanitize(visu_type)}-{sanitize(x)}"
-        return f"figure-{index + 1}"
+        return f"figure-{comp_hash}"
 
+    # Table component
     elif comp_type == "table":
         return "data-table"
 
+    # Generic fallback: {type}-{title}-{hash} instead of {type}-{index}
     title = component.get("title", "")
     if title and title.strip():
         base_id = sanitize(title)[:40]
-        return base_id if base_id else f"{comp_type.lower()}-{index + 1}"
+        return f"{base_id}-{comp_hash}" if base_id else f"{comp_type.lower()}-{comp_hash}"
 
-    return f"{comp_type.lower()}-{index + 1}"
+    return f"{comp_type.lower()}-{comp_hash}"
 
 
 def filter_defaults(dict_kwargs: dict, component_type: str = "figure") -> dict:
