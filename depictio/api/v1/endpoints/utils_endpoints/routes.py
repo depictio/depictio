@@ -3,7 +3,7 @@ import json
 from datetime import datetime
 from pathlib import Path
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException
 
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
@@ -15,7 +15,7 @@ from depictio.api.v1.db import (
     runs_collection,
     workflows_collection,
 )
-from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user, get_user_or_anonymous
+from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user
 from depictio.api.v1.endpoints.utils_endpoints.core_functions import (
     cleanup_orphaned_s3_files,
     create_bucket,
@@ -618,19 +618,32 @@ async def navigate_with_hybrid_strategy(page, url: str, max_retries: int = 2) ->
 @utils_endpoint_router.get("/screenshot-dash-fixed/{dashboard_id}")
 async def screenshot_dash_fixed(
     dashboard_id: str = "6824cb3b89d2b72169309737",
-    current_user=Depends(get_user_or_anonymous),
+    authorization: str | None = Header(None),
 ):
     """
     Minimal screenshot endpoint - just take a full page screenshot.
-    Only dashboard owners can generate screenshots.
+    Only dashboard owners can generate screenshots (except in single user mode).
     """
     from playwright.async_api import async_playwright
 
     from depictio.api.v1.services.screenshot_service import check_dashboard_owner_permission
 
-    # In single user mode, skip permission check (allow all users)
+    # In single user mode, skip all authentication and permission checks
     if not settings.auth.single_user_mode:
-        # Multi-user mode: Check if user owns the dashboard
+        # Multi-user mode: Require authentication and check ownership
+        if not authorization or not authorization.startswith("Bearer "):
+            raise HTTPException(
+                status_code=401, detail="Authentication required for screenshot generation"
+            )
+
+        # Get the current user from the token
+        token = authorization.replace("Bearer ", "")
+        try:
+            current_user = await get_current_user(token)
+        except HTTPException:
+            raise HTTPException(status_code=401, detail="Invalid authentication token")
+
+        # Check if user owns the dashboard
         is_owner = await check_dashboard_owner_permission(
             dashboard_id=dashboard_id, user_id=str(current_user.id)
         )
