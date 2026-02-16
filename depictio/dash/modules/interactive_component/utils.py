@@ -580,9 +580,7 @@ def _build_select_component(
 
     # Check if column exists before processing
     if column_name not in df.columns:
-        logger.error(f"SCHEMA MISMATCH: Column '{column_name}' not found in DataFrame")
-        logger.error(f"Available columns: {df.columns}")
-        # Return empty component to prevent crash
+        logger.error(f"Column '{column_name}' not found in DataFrame. Available: {df.columns}")
         return dmc.Text(f"Error: Column '{column_name}' not found", c="red")
 
     data = sorted(df[column_name].drop_nulls().unique())
@@ -621,7 +619,7 @@ def _build_select_component(
         component_kwargs["value"] = None
 
     # Apply custom color styling
-    if color:
+    if color and color != "":
         existing_styles = component_kwargs.get("styles", {})
         color_styles = {
             "input": {"borderColor": color},
@@ -709,7 +707,7 @@ def _process_single_select_value(value, data: list, index: str, component_type: 
     return None
 
 
-def _process_multiselect_value(value, data: list, index: str) -> list | None:
+def _process_multiselect_value(value, _data: list, _index: str) -> list | None:
     """
     Process value for MultiSelect component.
 
@@ -778,8 +776,9 @@ def _build_slider_component(
 
     # Check if column exists before processing
     if column_name not in df_pandas.columns:
-        logger.error(f"SCHEMA MISMATCH: Column '{column_name}' not found in DataFrame")
-        logger.error(f"Available columns: {list(df_pandas.columns)}")
+        logger.error(
+            f"Column '{column_name}' not found in DataFrame. Available: {list(df_pandas.columns)}"
+        )
         return []
 
     # Clean data
@@ -810,7 +809,7 @@ def _build_slider_component(
         _set_slider_value(kwargs_component, value, min_value, max_value)
 
     # Apply custom color
-    if color:
+    if color and color != "":
         kwargs_component["color"] = color
 
     # Generate marks
@@ -1049,8 +1048,6 @@ def _add_slider_marks(
                             "label": dmc.Text(str(label), size="xs"),
                         }
                     )
-                else:
-                    pass
             except (ValueError, TypeError) as e:
                 logger.warning(f"Skipping invalid mark: {mark_value} -> {label}, error: {e}")
 
@@ -1098,8 +1095,9 @@ def _build_date_range_picker_component(
 
     # Check if column exists before processing
     if column_name not in df_pandas.columns:
-        logger.error(f"SCHEMA MISMATCH: Column '{column_name}' not found in DataFrame")
-        logger.error(f"Available columns: {list(df_pandas.columns)}")
+        logger.error(
+            f"Column '{column_name}' not found in DataFrame. Available: {list(df_pandas.columns)}"
+        )
         return dmc.Text(f"Error: Column '{column_name}' not found", c="red")
 
     # Ensure column is datetime type
@@ -1160,7 +1158,7 @@ def _build_date_range_picker_component(
         kwargs_component["value"] = [min_date_py, max_date_py]
 
     # Apply custom color if specified
-    if color:
+    if color and color != "":
         existing_styles = kwargs_component.get("styles", {})
         color_styles = {
             "input": {"borderColor": color},
@@ -1221,7 +1219,7 @@ def _build_boolean_component(
 
     kwargs["checked"] = value
 
-    if color:
+    if color and color != "":
         kwargs["color"] = color
 
     return func_name(
@@ -1253,17 +1251,10 @@ def _build_fallback_component(
     Returns:
         A DMC Text component displaying an error message.
     """
-    logger.warning(f"Unsupported interactive component type: {interactive_component_type}")
-    logger.warning(f"Column type: {column_type}")
-    logger.warning(f"Column name: {column_name}")
-    # Get available component types for the column type
-    column_config = agg_functions.get(column_type, {}) if column_type else {}
-    input_methods = (
-        column_config.get("input_methods", {}) if isinstance(column_config, dict) else {}
+    logger.warning(
+        f"Unsupported interactive component type: {interactive_component_type} "
+        f"for column '{column_name}' (type={column_type})"
     )
-    available_types = list(input_methods.keys()) if isinstance(input_methods, dict) else []
-    logger.warning(f"Available component types: {available_types}")
-
     return dmc.Text(
         f"Unsupported component type: {interactive_component_type} for {column_type} data",
         id={"type": value_div_type, "index": str(index)},
@@ -1387,7 +1378,7 @@ def _load_data_for_component(
     interactive_component_type,
     TOKEN,
     init_data,
-    index,
+    _index,
 ):
     """
     Load data for the interactive component.
@@ -1495,12 +1486,11 @@ def _build_component_title(
     title_style = {
         "marginBottom": "0.25rem",
     }
-    icon_color = color if color else None
+    icon_color = color if (color and color != "") else None
 
-    if color:
+    if color and color != "":
         title_style["color"] = color
-    else:
-        pass
+
     icon_props = {
         "icon": icon_name,
         "width": int(title_size) if title_size.isdigit() else 20,
@@ -1625,8 +1615,7 @@ def build_interactive(**kwargs):
     cols_json = None
     if init_data and "column_specs" in init_data and str(dc_id) in init_data["column_specs"]:
         cols_json = init_data["column_specs"][str(dc_id)]
-    else:
-        pass
+
     # Default icon mapping
     DEFAULT_ICONS = {
         "Select": "mdi:form-select",
@@ -1683,10 +1672,6 @@ def build_interactive(**kwargs):
     input_methods = column_config["input_methods"]
     if interactive_component_type not in input_methods:
         available_options = list(input_methods.keys())
-        logger.error(
-            f"INVALID COMBINATION: {interactive_component_type} not available for {column_type} columns"
-        )
-        logger.error(f"Available options: {available_options}")
         raise ValueError(
             f"Interactive component type '{interactive_component_type}' is not available for column type '{column_type}'. Available options: {available_options}"
         )
@@ -1798,10 +1783,6 @@ def build_interactive(**kwargs):
         color=color,
     )
 
-    if interactive_component_type in ["Slider", "RangeSlider"]:
-        pass
-    else:
-        pass
     # Extract unique values and generate default state
     unique_values = _extract_unique_values(df, column_name, interactive_component_type)
 
@@ -1810,8 +1791,7 @@ def build_interactive(**kwargs):
             interactive_component_type, column_name, cols_json, unique_values
         )
         store_data["default_state"] = default_state
-    else:
-        pass
+
     store_component = dcc.Store(
         id={"type": "interactive-stored-metadata", "index": str(store_index)},
         data=store_data,

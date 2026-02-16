@@ -1225,7 +1225,10 @@ def _process_single_card(
         if dashboard_init_data and "dc_configs" in dashboard_init_data:
             dc_configs_map = dashboard_init_data.get("dc_configs", {})
 
-        # Check if card's DC is non-table type (skip filtering)
+        # Skip filtering for non-table data collection types
+        # - multiqc: Pre-rendered HTML reports with embedded visualizations
+        # - jbrowse2: Embedded genomic browser with independent navigation
+        # These components display fixed artifacts, not dynamically filterable data
         dc_config = dc_configs_map.get(dc_id_str, {})
         card_dc_type = dc_config.get("type", "table")
         if card_dc_type in ["multiqc", "jbrowse2"]:

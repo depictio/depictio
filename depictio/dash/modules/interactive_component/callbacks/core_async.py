@@ -61,7 +61,7 @@ def _create_component_title(
     card_title = title if title else f"{component_type} on {column_name}"
 
     title_style = {"marginBottom": "0.25rem"}
-    if color:
+    if color and color != "":
         title_style["color"] = color
 
     icon_width = int(title_size) if str(title_size).isdigit() else 20
@@ -178,10 +178,6 @@ def register_async_rendering_callback(app):
         Returns:
             tuple: (all_components, all_metadata, all_stored_metadata) - lists for all components
         """
-        import time
-
-        batch_start = time.time()
-
         # Early validation - Wait for project_metadata
         if not project_metadata or not isinstance(project_metadata, dict):
             return (
@@ -224,7 +220,7 @@ def register_async_rendering_callback(app):
         all_stored_metadata = []
 
         # Process each interactive component
-        for i, (trigger_data, existing_meta, trigger_id) in enumerate(
+        for i, (trigger_data, existing_meta, _trigger_id) in enumerate(
             zip(trigger_data_list, existing_metadata_list, trigger_ids)
         ):
             # Idempotency check - Skip if no trigger data
@@ -309,8 +305,6 @@ def register_async_rendering_callback(app):
                 all_metadata.append({})
                 all_stored_metadata.append({})
 
-        (time.time() - batch_start) * 1000
-
         return all_components, all_metadata, all_stored_metadata
 
 
@@ -319,7 +313,7 @@ def build_select_component(
     column_name: str,
     component_type: str,
     trigger_data: dict,
-    delta_locations: dict,
+    _delta_locations: dict,
 ) -> tuple[Any, dict, dict]:
     """Build Select/MultiSelect/SegmentedControl component.
 
@@ -381,9 +375,9 @@ def build_select_component(
             w="100%",
         )
     elif component_type == "SegmentedControl":
-        default_value = (
-            preserved_value if preserved_value else (options[0]["value"] if options else None)
-        )
+        # Default to None (no selection) instead of first option
+        # This ensures filters only activate when user explicitly selects a value
+        default_value = preserved_value if preserved_value else None
         interactive_component = dmc.SegmentedControl(
             id=component_id, data=[opt["value"] for opt in options], value=default_value, w="100%"
         )
@@ -459,7 +453,7 @@ def build_slider_component(
     column_name: str,
     component_type: str,
     trigger_data: dict,
-    delta_locations: dict,
+    _delta_locations: dict,
 ) -> tuple[Any, dict, dict]:
     """Build Slider/RangeSlider component.
 
@@ -510,7 +504,7 @@ def build_slider_component(
         ],
     }
 
-    if color:
+    if color and color != "":
         kwargs_component["color"] = color
 
     # Handle value based on component type
@@ -593,7 +587,7 @@ def build_datepicker_component(
     df: pl.DataFrame,
     column_name: str,
     trigger_data: dict,
-    delta_locations: dict,
+    _delta_locations: dict,
 ) -> tuple[Any, dict, dict]:
     """Build DateRangePicker component.
 
@@ -671,7 +665,7 @@ def build_datepicker_component(
         kwargs_component["value"] = [min_date_py, max_date_py]
 
     # Apply custom color if specified
-    if color:
+    if color and color != "":
         kwargs_component["styles"] = {
             **kwargs_component.get("styles", {}),
             "input": {"borderColor": color},

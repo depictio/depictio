@@ -150,6 +150,7 @@ def _build_preview_by_type(
     aggregation_value: str,
     column_value: str,
     df: Any,
+    color: str | None = None,
 ) -> Any:
     """
     Build the preview component based on the aggregation type.
@@ -158,6 +159,7 @@ def _build_preview_by_type(
         aggregation_value: Selected aggregation method (Select, MultiSelect, etc.).
         column_value: Name of the selected column.
         df: DataFrame containing the data.
+        color: Custom color to apply to the component.
 
     Returns:
         Dash Mantine component for the preview.
@@ -174,48 +176,85 @@ def _build_preview_by_type(
         options = [str(val) for val in unique_vals_list if val is not None][:20]
 
         if aggregation_value == "Select":
-            return dmc.Select(
-                data=[{"label": opt, "value": opt} for opt in options],
-                placeholder=f"Select {column_value}",
-                style={"width": "100%"},
-            )
+            component_kwargs = {
+                "data": [{"label": opt, "value": opt} for opt in options],
+                "placeholder": f"Select {column_value}",
+                "style": {"width": "100%"},
+            }
+            if color and color != "":
+                component_kwargs["styles"] = {
+                    "input": {"borderColor": color},
+                    "dropdown": {"borderColor": color},
+                    "label": {"color": color},
+                }
+            return dmc.Select(**component_kwargs)
         elif aggregation_value == "MultiSelect":
-            return dmc.MultiSelect(
-                data=[{"label": opt, "value": opt} for opt in options],
-                placeholder=f"Select {column_value} (multiple)",
-                style={"width": "100%"},
-            )
+            component_kwargs = {
+                "data": [{"label": opt, "value": opt} for opt in options],
+                "placeholder": f"Select {column_value} (multiple)",
+                "style": {"width": "100%"},
+            }
+            if color and color != "":
+                component_kwargs["styles"] = {
+                    "input": {"borderColor": color},
+                    "dropdown": {"borderColor": color},
+                    "label": {"color": color},
+                }
+            return dmc.MultiSelect(**component_kwargs)
         else:  # SegmentedControl
-            return dmc.SegmentedControl(
-                data=options[:5],
-                fullWidth=True,
-            )
+            component_kwargs = {
+                "data": options[:5],
+                "fullWidth": True,
+            }
+            if color and color != "":
+                component_kwargs["color"] = color
+            return dmc.SegmentedControl(**component_kwargs)
 
     elif aggregation_value in ["Slider", "RangeSlider"]:
         col_min = float(df[column_value].min())
         col_max = float(df[column_value].max())
 
         if aggregation_value == "Slider":
-            return dmc.Slider(
-                min=col_min,
-                max=col_max,
-                value=col_min,
-                style={"width": "100%"},
-            )
+            component_kwargs = {
+                "min": col_min,
+                "max": col_max,
+                "value": col_min,
+                "style": {"width": "100%"},
+                "marks": [
+                    {"value": col_min, "label": str(round(col_min, 2))},
+                    {"value": col_max, "label": str(round(col_max, 2))},
+                ],
+            }
+            if color and color != "":
+                component_kwargs["color"] = color
+            return dmc.Slider(**component_kwargs)
         else:  # RangeSlider
-            return dmc.RangeSlider(
-                min=col_min,
-                max=col_max,
-                value=(col_min, col_max),
-                style={"width": "100%"},
-            )
+            component_kwargs = {
+                "min": col_min,
+                "max": col_max,
+                "value": (col_min, col_max),
+                "style": {"width": "100%"},
+                "marks": [
+                    {"value": col_min, "label": str(round(col_min, 2))},
+                    {"value": col_max, "label": str(round(col_max, 2))},
+                ],
+            }
+            if color and color != "":
+                component_kwargs["color"] = color
+            return dmc.RangeSlider(**component_kwargs)
 
     elif aggregation_value == "DateRangePicker":
-        return dmc.DatePickerInput(
-            type="range",
-            placeholder="Select date range",
-            style={"width": "100%"},
-        )
+        component_kwargs = {
+            "type": "range",
+            "placeholder": "Select date range",
+            "style": {"width": "100%"},
+        }
+        if color and color != "":
+            component_kwargs["styles"] = {
+                "input": {"borderColor": color},
+                "label": {"color": color},
+            }
+        return dmc.DatePickerInput(**component_kwargs)
 
     return dmc.Text(f"Preview for {aggregation_value}", c="gray")
 
@@ -247,9 +286,14 @@ def _wrap_preview_with_title(
                     DashIconify(
                         icon=icon_name or "bx:slider-alt",
                         width=24,
-                        color=color_value if color_value else None,
+                        color=color_value if (color_value and color_value != "") else None,
                     ),
-                    dmc.Text(title, size=title_size, fw="bold"),
+                    dmc.Text(
+                        title,
+                        size=title_size,
+                        fw="bold",
+                        c=color_value if (color_value and color_value != "") else None,
+                    ),
                 ],
                 gap="xs",
             ),
@@ -312,12 +356,6 @@ def register_interactive_design_callbacks(app) -> None:
         # Match component ID (actual ID, no -tmp)
         if str(input_id["index"]) != str(edit_context.get("component_id")):
             return no_update_tuple
-
-        logger.debug(
-            f"Pre-populating interactive settings for component {input_id['index']}: "
-            f"title={component_data.get('title')}, column={component_data.get('column_name')}, "
-            f"method={component_data.get('interactive_component_type')}"
-        )
 
         # Ensure ColorInput components get empty string instead of None to avoid trim() errors
         return (
@@ -395,7 +433,6 @@ def register_interactive_design_callbacks(app) -> None:
                 data_collection_id = data_collection_id or component_data.get("dc_id")
 
         if not workflow_id or not data_collection_id:
-            logger.debug("Missing workflow/dc parameters for aggregation options")
             return []
 
         if not column_value:
@@ -579,7 +616,9 @@ def register_interactive_design_callbacks(app) -> None:
                 TOKEN=TOKEN,
             )
 
-            preview_component = _build_preview_by_type(aggregation_value, column_value, df)
+            preview_component = _build_preview_by_type(
+                aggregation_value, column_value, df, color_value
+            )
             new_interactive_component = _wrap_preview_with_title(
                 preview_component,
                 input_value or column_value,
