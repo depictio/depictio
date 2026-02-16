@@ -15,7 +15,7 @@ from depictio.api.v1.db import (
     runs_collection,
     workflows_collection,
 )
-from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user
+from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user, get_user_or_anonymous
 from depictio.api.v1.endpoints.utils_endpoints.core_functions import (
     cleanup_orphaned_s3_files,
     create_bucket,
@@ -618,7 +618,7 @@ async def navigate_with_hybrid_strategy(page, url: str, max_retries: int = 2) ->
 @utils_endpoint_router.get("/screenshot-dash-fixed/{dashboard_id}")
 async def screenshot_dash_fixed(
     dashboard_id: str = "6824cb3b89d2b72169309737",
-    current_user=Depends(get_current_user),
+    current_user=Depends(get_user_or_anonymous),
 ):
     """
     Minimal screenshot endpoint - just take a full page screenshot.
@@ -628,15 +628,17 @@ async def screenshot_dash_fixed(
 
     from depictio.api.v1.services.screenshot_service import check_dashboard_owner_permission
 
-    # Check if user owns the dashboard
-    is_owner = await check_dashboard_owner_permission(
-        dashboard_id=dashboard_id, user_id=str(current_user.id)
-    )
-
-    if not is_owner:
-        raise HTTPException(
-            status_code=403, detail="Only dashboard owners can generate screenshots"
+    # In single user mode, skip permission check (allow all users)
+    if not settings.auth.single_user_mode:
+        # Multi-user mode: Check if user owns the dashboard
+        is_owner = await check_dashboard_owner_permission(
+            dashboard_id=dashboard_id, user_id=str(current_user.id)
         )
+
+        if not is_owner:
+            raise HTTPException(
+                status_code=403, detail="Only dashboard owners can generate screenshots"
+            )
 
     output_folder = "/app/depictio/dash/static/screenshots"
     output_file = f"{output_folder}/{str(dashboard_id)}.png"
