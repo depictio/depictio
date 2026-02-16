@@ -31,6 +31,30 @@
       "w": 1,
       "h": 3,
       "static": false
+    },
+    {
+      "i": "box-diff-kingdom-filter",
+      "x": 0,
+      "y": 3,
+      "w": 1,
+      "h": 2,
+      "static": false
+    },
+    {
+      "i": "box-diff-w-slider",
+      "x": 0,
+      "y": 5,
+      "w": 1,
+      "h": 3,
+      "static": false
+    },
+    {
+      "i": "box-diff-clr-slider",
+      "x": 0,
+      "y": 8,
+      "w": 1,
+      "h": 3,
+      "static": false
     }
   ],
   "notes_content": "<p>Diversity and taxonomy analysis dashboard for ampliseq</p>",
@@ -197,7 +221,88 @@
       "panel": "left",
       "title_size": "md",
       "custom_color": "#8BC34A",
-      "icon_name": "mdi:bacteria-outline"
+      "icon_name": "mdi:bacteria-outline",
+      "title": "Phylum"
+    },
+    {
+      "index": "diff-kingdom-filter",
+      "component_type": "interactive",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "Kingdom",
+      "column_type": "object",
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8caa"
+      },
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "default_state": {
+        "type": "select",
+        "options": [
+          "Archaea",
+          "Bacteria"
+        ],
+        "default_value": null
+      },
+      "panel": "left",
+      "title_size": "md",
+      "custom_color": "#377EB8",
+      "icon_name": "mdi:bacteria",
+      "title": "Kingdom"
+    },
+    {
+      "index": "diff-w-slider",
+      "component_type": "interactive",
+      "interactive_component_type": "RangeSlider",
+      "column_name": "W",
+      "column_type": "int64",
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8caa"
+      },
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "default_state": {
+        "type": "range",
+        "min": 0,
+        "max": 2678,
+        "step": 10,
+        "default_value": null
+      },
+      "panel": "left",
+      "title_size": "md",
+      "custom_color": "#E74C3C",
+      "icon_name": "mdi:chart-line",
+      "scale": "linear",
+      "marks_number": 5,
+      "title": "W Statistic Range"
+    },
+    {
+      "index": "diff-clr-slider",
+      "component_type": "interactive",
+      "interactive_component_type": "RangeSlider",
+      "column_name": "clr",
+      "column_type": "float64",
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8caa"
+      },
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "default_state": {
+        "type": "range",
+        "min": 0.09,
+        "max": 29747.39,
+        "step": 0.01,
+        "default_value": null
+      },
+      "panel": "left",
+      "title_size": "md",
+      "custom_color": "#F68B33",
+      "icon_name": "mdi:chart-bell-curve",
+      "scale": "log10",
+      "marks_number": 5,
+      "title": "CLR Effect Size Range"
     },
     {
       "index": "diff-card-total-taxa",

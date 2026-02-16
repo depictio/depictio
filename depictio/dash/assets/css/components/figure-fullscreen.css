@@ -1,109 +1,53 @@
 /* =============================================================================
-   FIGURE COMPONENT FULLSCREEN MODE
+   FIGURE COMPONENT FULLSCREEN MODE v3 - Native Fullscreen API
    ============================================================================= */
 
-/* Chart fullscreen button - no special styling needed, uses DMC ActionIcon styles */
-/* Button is now part of the ActionIconGroup in edit.py and inherits group styling */
-
-/* Style the active fullscreen figure component - applied to grid item */
-.react-grid-item.chart-fullscreen,
-.chart-fullscreen {
-    position: fixed !important;
-    top: 0 !important;
-    left: 0 !important;
-    right: 0 !important;
-    bottom: 0 !important;
-    z-index: 9999 !important;
-    background: var(--app-bg-color, #ffffff) !important;
-    transform: none !important;
+/* Style for element in native fullscreen mode */
+.react-grid-item:fullscreen,
+.react-grid-item:-webkit-full-screen,
+.react-grid-item:-moz-full-screen,
+.react-grid-item:-ms-fullscreen {
     width: 100vw !important;
     height: 100vh !important;
-    max-width: none !important;
-    max-height: none !important;
+    background-color: var(--app-bg-color, #ffffff) !important;
     padding: 20px !important;
     margin: 0 !important;
+    box-sizing: border-box !important;
     display: flex !important;
     flex-direction: column !important;
-    overflow: hidden !important;
 }
 
-/* Style the graph inside fullscreen */
-.chart-fullscreen .js-plotly-plot {
+/* Make all child containers fill the fullscreen grid item */
+.react-grid-item:fullscreen .responsive-wrapper,
+.react-grid-item:fullscreen .figure-container,
+.react-grid-item:fullscreen .dashboard-component-hover,
+.react-grid-item:-webkit-full-screen .responsive-wrapper,
+.react-grid-item:-webkit-full-screen .figure-container,
+.react-grid-item:-webkit-full-screen .dashboard-component-hover {
     width: 100% !important;
-    height: calc(100vh - 100px) !important; /* Account for padding and button space */
+    height: 100% !important;
     flex: 1 !important;
 }
 
-/* Fullscreen button maintains its DMC ActionIcon appearance - no special styling needed */
-/* The button inherits ActionIconGroup styles consistently in both normal and fullscreen modes */
-
-/* Hide all grid items when in fullscreen mode except the active one */
-body.fullscreen-mode .react-grid-item:not(.fullscreen-active) {
-    display: none !important;
+/* Make Plotly chart fill the container */
+.react-grid-item:fullscreen .js-plotly-plot,
+.react-grid-item:-webkit-full-screen .js-plotly-plot {
+    width: 100% !important;
+    height: 100% !important;
 }
 
-/* Style the active fullscreen item in grid layout */
-.react-grid-item.fullscreen-active {
-    position: fixed !important;
-    top: 0 !important;
-    left: 0 !important;
-    right: 0 !important;
-    bottom: 0 !important;
-    z-index: 9999 !important;
-    background: var(--app-bg-color, #ffffff) !important;
-    transform: none !important;
-    width: 100vw !important;
-    height: 100vh !important;
-    max-width: none !important;
-    max-height: none !important;
-    padding: 20px !important;
-}
-
-/* Hide dashboard elements when in fullscreen */
-body.fullscreen-mode #page-content {
+/* Hide scrollbars when in fullscreen */
+body.fullscreen-mode {
     overflow: hidden !important;
 }
 
-/* Ensure fullscreen figure takes precedence over grid positioning */
-.react-grid-layout .fullscreen-active {
-    position: fixed !important;
-    transform: none !important;
-    transition: none !important;
+/* Hide sidebar/navbar (set z-index lower than fullscreen) */
+body.fullscreen-mode .mantine-AppShell-navbar {
+    z-index: 1 !important;
 }
 
-/* Dark mode support for fullscreen */
-[data-mantine-color-scheme="dark"] .chart-fullscreen,
-[data-mantine-color-scheme="dark"] .fullscreen-active {
-    background: var(--mantine-color-dark-7, #1a1b1e) !important;
-}
-
-/* Animation for entering/exiting fullscreen */
-.fullscreen-entering {
-    animation: fullscreen-enter 0.3s ease-out forwards;
-}
-
-.fullscreen-exiting {
-    animation: fullscreen-exit 0.3s ease-in forwards;
-}
-
-@keyframes fullscreen-enter {
-    from {
-        transform: scale(0.95);
-        opacity: 0.8;
-    }
-    to {
-        transform: scale(1);
-        opacity: 1;
-    }
-}
-
-@keyframes fullscreen-exit {
-    from {
-        transform: scale(1);
-        opacity: 1;
-    }
-    to {
-        transform: scale(0.95);
-        opacity: 0.8;
-    }
+/* Dark mode support */
+[data-mantine-color-scheme="dark"] .react-grid-item:fullscreen,
+[data-mantine-color-scheme="dark"] .react-grid-item:-webkit-full-screen {
+    background-color: var(--mantine-color-dark-7, #1a1b1e) !important;
 }

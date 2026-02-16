@@ -611,7 +611,9 @@ def build_datepicker_component(
     df_pandas = df.to_pandas()
 
     if column_name not in df_pandas.columns:
-        logger.error(f"Column '{column_name}' not found in DataFrame")
+        logger.error(
+            f"Column '{column_name}' not found in DataFrame ; Available columns: {df_pandas.columns.tolist()}"
+        )
         return dmc.Text(f"Error: Column '{column_name}' not found", c="red"), {}, {}
 
     # Ensure column is datetime type

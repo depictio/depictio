@@ -14,7 +14,7 @@ from dash import ALL, MATCH, Input, Output, State, ctx, no_update
 
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.deltatables_utils import load_deltatable_lite
-from depictio.dash.utils import get_result_dc_for_workflow
+from depictio.dash.utils import extend_filters_via_links, get_result_dc_for_workflow
 
 # AG Grid filter operators mapping to Polars operations
 OPERATORS = {
@@ -25,11 +25,6 @@ OPERATORS = {
     "notEqual": "ne",
     "equals": "eq",
 }
-
-
-# ==============================================================================
-# Helper Functions for load_table_data_with_filters
-# ==============================================================================
 
 
 def build_interactive_metadata_mapping(
@@ -140,6 +135,26 @@ def enrich_interactive_components(
             full_metadata = metadata_by_index.get(index)
 
             if full_metadata:
+                # Special handling for DateRangePicker values
+                if full_metadata.get("interactive_component_type") == "DateRangePicker":
+                    # Ensure value is a list of 2 string dates
+                    if value and not isinstance(value, list):
+                        value = [value]
+                    if value and len(value) == 2:
+                        # Skip if either value is None (incomplete selection)
+                        if value[0] is None or value[1] is None:
+                            continue  # Skip this component entirely - don't add to dict
+                        else:
+                            # Normalize to strings in YYYY-MM-DD format
+                            normalized_value = []
+                            for v in value:
+                                # Handle ISO datetime strings (e.g., "2023-01-01T00:00:00")
+                                if isinstance(v, str) and "T" in v:
+                                    normalized_value.append(v.split("T")[0])
+                                else:
+                                    normalized_value.append(str(v))
+                            value = normalized_value
+
                 enriched_component = {
                     "index": index,
                     "value": value,
@@ -195,6 +210,7 @@ def load_data_with_interactive_filters(
     stored_metadata: dict[str, Any],
     interactive_components_dict: dict[str, dict[str, Any]],
     TOKEN: str | None,
+    project_metadata: dict | None = None,
 ) -> pl.DataFrame:
     """
     Load data from delta tables with interactive component filters applied.
@@ -220,28 +236,181 @@ def load_data_with_interactive_filters(
         return _load_data_without_interactive_filters(workflow_id, data_collection_id, TOKEN)
 
     table_dc_id = stored_metadata.get("dc_id")
-    table_dc_ids = {table_dc_id}
-    interactive_dc_ids = {
-        comp_data.get("metadata", {}).get("dc_id")
-        for comp_data in interactive_components_dict.values()
-    }
 
-    result_dc_id = get_result_dc_for_workflow(workflow_id, TOKEN)
+    # Separate interactive components by DC: same-DC filters apply directly,
+    # different-DC filters need link resolution
+    same_dc_components = {}
+    different_dc_components = {}
 
-    if table_dc_ids & interactive_dc_ids:
+    for idx, comp_data in interactive_components_dict.items():
+        comp_dc = comp_data.get("metadata", {}).get("dc_id")
+        if comp_dc == table_dc_id:
+            same_dc_components[idx] = comp_data
+        else:
+            different_dc_components[idx] = comp_data
+
+    if different_dc_components == {} and same_dc_components:
+        result_dc_id = get_result_dc_for_workflow(workflow_id, TOKEN)
         return _load_compatible_dc_data(
-            workflow_id, data_collection_id, result_dc_id, interactive_components_dict, TOKEN
+            workflow_id, data_collection_id, result_dc_id, same_dc_components, TOKEN
+        )
+
+    if same_dc_components == {} and different_dc_components:
+        return _load_with_link_resolution_only(
+            workflow_id,
+            data_collection_id,
+            table_dc_id,
+            different_dc_components,
+            project_metadata,
+            TOKEN,
+        )
+
+    if same_dc_components and different_dc_components:
+        return _load_with_mixed_dc_filters(
+            workflow_id,
+            data_collection_id,
+            table_dc_id,
+            same_dc_components,
+            different_dc_components,
+            project_metadata,
+            TOKEN,
+        )
+
+    return _load_data_without_interactive_filters(workflow_id, data_collection_id, TOKEN)
+
+
+def _load_with_link_resolution_only(
+    workflow_id: str,
+    data_collection_id: str,
+    table_dc_id: str,
+    different_dc_components: dict[str, dict[str, Any]],
+    project_metadata: dict | None,
+    TOKEN: str | None,
+) -> pl.DataFrame:
+    """
+    Load data when ALL interactive components are on different DCs than the table.
+
+    Uses link resolution to translate filters from source DCs to the table's DC.
+
+    Args:
+        workflow_id: Workflow identifier
+        data_collection_id: Data collection identifier
+        table_dc_id: Table's data collection ID
+        different_dc_components: Components from different DCs
+        project_metadata: Project metadata for link resolution
+        TOKEN: Authentication token
+
+    Returns:
+        DataFrame with link-resolved filters applied.
+    """
+    logger.info(
+        "DC INCOMPATIBLE: All interactive filters target different DCs. Attempting link resolution."
+    )
+
+    # Group filters by DC
+    filters_by_dc: dict[str, list[dict]] = {}
+    for comp_data in different_dc_components.values():
+        comp_dc = str(comp_data.get("metadata", {}).get("dc_id", ""))
+        if comp_dc:
+            if comp_dc not in filters_by_dc:
+                filters_by_dc[comp_dc] = []
+            enriched_comp = {
+                "value": comp_data.get("value"),
+                "metadata": comp_data.get("metadata", {}),
+            }
+            filters_by_dc[comp_dc].append(enriched_comp)
+
+    # Resolve filters via links
+    link_resolved_filters = extend_filters_via_links(
+        target_dc_id=table_dc_id,
+        filters_by_dc=filters_by_dc,
+        project_metadata=project_metadata,
+        access_token=TOKEN,
+        component_type="table",
+    )
+
+    if link_resolved_filters:
+        logger.info(
+            f"Link resolution successful: {len(link_resolved_filters)} filters resolved for table."
+        )
+        df = load_deltatable_lite(
+            ObjectId(workflow_id),
+            ObjectId(data_collection_id),
+            metadata=link_resolved_filters,
+            TOKEN=TOKEN,
         )
     else:
-        logger.warning(
-            f"DC INCOMPATIBLE: Interactive filters target different DCs ({interactive_dc_ids}) "
-            f"than table ({table_dc_id})"
-        )
-        logger.warning("Loading table data UNJOINED")
+        logger.warning("Link resolution failed or returned no filters. Loading unfiltered data.")
         df = load_deltatable_lite(
             ObjectId(workflow_id), ObjectId(data_collection_id), metadata=None, TOKEN=TOKEN
         )
-        return df
+    return df
+
+
+def _load_with_mixed_dc_filters(
+    workflow_id: str,
+    data_collection_id: str,
+    table_dc_id: str,
+    same_dc_components: dict[str, dict[str, Any]],
+    different_dc_components: dict[str, dict[str, Any]],
+    project_metadata: dict | None,
+    TOKEN: str | None,
+) -> pl.DataFrame:
+    """
+    Load data when interactive components come from BOTH same and different DCs.
+
+    Combines direct filters (same DC) with link-resolved filters (different DCs).
+
+    Args:
+        workflow_id: Workflow identifier
+        data_collection_id: Data collection identifier
+        table_dc_id: Table's data collection ID
+        same_dc_components: Components on the same DC as table
+        different_dc_components: Components on different DCs
+        project_metadata: Project metadata for link resolution
+        TOKEN: Authentication token
+
+    Returns:
+        DataFrame with combined filters applied.
+    """
+    logger.info(
+        f"MIXED DCs: {len(same_dc_components)} same-DC filters, "
+        f"{len(different_dc_components)} different-DC filters"
+    )
+
+    filters_by_dc: dict[str, list[dict]] = {}
+    for comp_data in different_dc_components.values():
+        comp_dc = str(comp_data.get("metadata", {}).get("dc_id", ""))
+        if comp_dc:
+            if comp_dc not in filters_by_dc:
+                filters_by_dc[comp_dc] = []
+            enriched_comp = {
+                "value": comp_data.get("value"),
+                "metadata": comp_data.get("metadata", {}),
+            }
+            filters_by_dc[comp_dc].append(enriched_comp)
+
+    link_resolved_filters = extend_filters_via_links(
+        target_dc_id=table_dc_id,
+        filters_by_dc=filters_by_dc,
+        project_metadata=project_metadata,
+        access_token=TOKEN,
+        component_type="table",
+    )
+
+    combined_filters = list(same_dc_components.values())
+    if link_resolved_filters:
+        combined_filters.extend(link_resolved_filters)
+    else:
+        logger.warning("Link resolution failed for different-DC components, using same-DC only")
+
+    df = load_deltatable_lite(
+        ObjectId(workflow_id),
+        ObjectId(data_collection_id),
+        metadata=combined_filters,
+        TOKEN=TOKEN,
+    )
+    return df
 
 
 def _load_compatible_dc_data(
@@ -370,11 +539,6 @@ def apply_ag_grid_filters(df: pl.DataFrame, filter_model: dict[str, Any]) -> pl.
     return df
 
 
-# ==============================================================================
-# Helper Functions for infinite_scroll_component
-# ==============================================================================
-
-
 def create_synthetic_request(triggered_by_interactive: bool) -> dict[str, Any]:
     """
     Create a synthetic AG Grid request for initial data loading.
@@ -458,36 +622,6 @@ def build_aggrid_response(
     """
     row_data = partial_df.to_dicts()
     return {"rowData": row_data, "rowCount": total_rows}
-
-
-def log_interactive_filter_success(
-    interactive_values: dict[str, Any] | None,
-    actual_rows_returned: int,
-    total_rows: int,
-) -> None:
-    """Log successful interactive filtering (no-op for production)."""
-    pass
-
-
-def _log_interactive_values_debug(interactive_values: dict[str, Any] | None) -> None:
-    """Log debug information about interactive component values."""
-    pass  # Logging removed for production
-
-
-def _log_pagination_request(
-    table_index: str,
-    start_row: int,
-    end_row: int,
-    filter_model: dict[str, Any],
-    sort_model: list[dict[str, Any]],
-) -> None:
-    """Log pagination request parameters for debugging."""
-    pass  # Pagination logging removed for production
-
-
-# ==============================================================================
-# Helper Functions for export_table_to_csv
-# ==============================================================================
 
 
 def create_export_notification(
@@ -681,6 +815,7 @@ def load_table_data_with_filters(
     filter_model: dict[str, Any] | None = None,
     sort_model: list[dict[str, Any]] | None = None,
     TOKEN: str | None = None,
+    project_metadata: dict | None = None,
 ) -> pl.DataFrame:
     """
     Load table data with interactive filters, AG Grid filters, and sorting applied.
@@ -709,7 +844,6 @@ def load_table_data_with_filters(
         Filtered and sorted Polars DataFrame ready for display or export.
     """
 
-    # Step 1: Build metadata mapping and enrich interactive components
     metadata_by_index = build_interactive_metadata_mapping(
         interactive_metadata_list, interactive_metadata_ids
     )
@@ -717,19 +851,20 @@ def load_table_data_with_filters(
         interactive_values, metadata_by_index
     )
 
-    # Step 2: Prepare metadata for join (used for logging/debugging)
     prepare_metadata_for_join(stored_metadata, interactive_components_dict)
 
-    # Step 3: Load data with interactive filters
     df = load_data_with_interactive_filters(
-        workflow_id, data_collection_id, stored_metadata, interactive_components_dict, TOKEN
+        workflow_id,
+        data_collection_id,
+        stored_metadata,
+        interactive_components_dict,
+        TOKEN,
+        project_metadata,
     )
 
-    # Step 4: Apply AG Grid filters
     if filter_model:
         df = apply_ag_grid_filters(df, filter_model)
 
-    # Step 5: Apply AG Grid sorting
     if sort_model:
         df = apply_ag_grid_sorting(df, sort_model)
 
@@ -764,6 +899,7 @@ def register_core_callbacks(app):
             State("url", "pathname"),
             State({"type": "interactive-stored-metadata", "index": ALL}, "data"),
             State({"type": "interactive-stored-metadata", "index": ALL}, "id"),
+            State("project-metadata-store", "data"),
         ],
         prevent_initial_call=False,  # Allow callback to fire on mount for initial data load
     )
@@ -775,6 +911,7 @@ def register_core_callbacks(app):
         pathname,
         interactive_metadata_list,
         interactive_metadata_ids,
+        project_metadata,
     ):
         """
         Handle infinite scroll pagination with interactive component support.
@@ -793,8 +930,6 @@ def register_core_callbacks(app):
             "interactive-values-store" in str(trigger["prop_id"]) for trigger in ctx.triggered
         )
 
-        _log_interactive_values_debug(interactive_values)
-
         # Validate inputs
         if not local_store or not stored_metadata:
             logger.warning(
@@ -802,7 +937,8 @@ def register_core_callbacks(app):
             )
             return no_update
 
-        # Handle missing request (initial load or interactive changes)
+        # Create synthetic request for both initial load and interactive changes
+        # AG Grid infinite model needs getRowsResponse even when we trigger it
         if request is None:
             request = create_synthetic_request(triggered_by_interactive)
 
@@ -817,8 +953,6 @@ def register_core_callbacks(app):
         filter_model = request.get("filterModel", {})
         sort_model = request.get("sortModel", [])
 
-        _log_pagination_request(table_index, start_row, end_row, filter_model, sort_model)
-
         try:
             # Load filtered and sorted data
             df = load_table_data_with_filters(
@@ -831,6 +965,7 @@ def register_core_callbacks(app):
                 filter_model=filter_model,
                 sort_model=sort_model,
                 TOKEN=TOKEN,
+                project_metadata=project_metadata,
             )
 
             # Prepare DataFrame slice for AG Grid
@@ -838,15 +973,13 @@ def register_core_callbacks(app):
 
             # Build and return response
             response = build_aggrid_response(partial_df, total_rows, start_row, table_index)
-
             return response
 
         except Exception as e:
-            error_msg = str(e)
             logger.error(
-                f"❌ Error in infinite scroll callback for table {table_index}: {error_msg}"
+                f"Infinite scroll error for table {table_index}: {e} "
+                f"(wf_id={workflow_id}, dc_id={data_collection_id})"
             )
-            logger.error(f"🔧 Error details - wf_id: {workflow_id}, dc_id: {data_collection_id}")
 
             # Return empty response on error
             return {"rowData": [], "rowCount": 0}
@@ -863,6 +996,7 @@ def register_core_callbacks(app):
             State({"type": "table-aggrid", "index": MATCH}, "sortModel"),
             State({"type": "interactive-stored-metadata", "index": ALL}, "data"),
             State({"type": "interactive-stored-metadata", "index": ALL}, "id"),
+            State("project-metadata-store", "data"),
         ],
         prevent_initial_call=True,
     )
@@ -875,6 +1009,7 @@ def register_core_callbacks(app):
         sort_model,
         interactive_metadata_list,
         interactive_metadata_ids,
+        project_metadata,
     ):
         """
         Export complete table data as CSV with filters and sorting applied.
@@ -918,6 +1053,7 @@ def register_core_callbacks(app):
                 filter_model=filter_model,
                 sort_model=sort_model,
                 TOKEN=TOKEN,
+                project_metadata=project_metadata,
             )
 
             row_count = df.shape[0]

@@ -26,17 +26,25 @@
   "last_saved_ts": "2026-01-27 00:00:00.000000",
   "left_panel_layout_data": [
     {
-      "i": "box-af2d766c-4b21-4452-aae9-8043a0bd2c57",
+      "i": "box-multiqc-sampling-date",
       "x": 0,
       "y": 0,
+      "w": 1,
+      "h": 3,
+      "static": false
+    },
+    {
+      "i": "box-multiqc-habitat-filter",
+      "x": 0,
+      "y": 3,
       "w": 1,
       "h": 2,
       "static": false
     },
     {
-      "i": "box-3a065ba1-bc73-4e9e-9a5a-3ed2a7cde3eb",
+      "i": "box-multiqc-sample-filter",
       "x": 0,
-      "y": 2,
+      "y": 5,
       "w": 1,
       "h": 3,
       "static": false
@@ -167,7 +175,31 @@
   "stored_layout_data": [],
   "stored_metadata": [
     {
-      "index": "af2d766c-4b21-4452-aae9-8043a0bd2c57",
+      "index": "multiqc-sampling-date",
+      "component_type": "interactive",
+      "interactive_component_type": "DateRangePicker",
+      "column_name": "sampling_date",
+      "column_type": "datetime64[ns]",
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca5"
+      },
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "default_state": {
+        "type": "date_range",
+        "min_date": "2023-01-01",
+        "max_date": "2023-01-23",
+        "default_value": null
+      },
+      "panel": "left",
+      "title_size": "md",
+      "custom_color": "#FF6B6B",
+      "icon_name": "mdi:calendar-range",
+      "title": "Sampling Period"
+    },
+    {
+      "index": "multiqc-habitat-filter",
       "component_type": "interactive",
       "interactive_component_type": "MultiSelect",
       "column_name": "habitat",
@@ -191,10 +223,11 @@
       "panel": "left",
       "title_size": "md",
       "custom_color": "#984EA3",
-      "icon_name": "mdi:earth"
+      "icon_name": "mdi:earth",
+      "title": "Habitat Type"
     },
     {
-      "index": "3a065ba1-bc73-4e9e-9a5a-3ed2a7cde3eb",
+      "index": "multiqc-sample-filter",
       "component_type": "interactive",
       "interactive_component_type": "MultiSelect",
       "column_name": "sample",
@@ -226,7 +259,8 @@
       "panel": "left",
       "title_size": "md",
       "custom_color": "#45B8AC",
-      "icon_name": "mdi:flask"
+      "icon_name": "mdi:flask",
+      "title": "Sample ID"
     },
     {
       "index": "7b638b4e-6091-4dbb-8d1b-16d98c7ef3f3",

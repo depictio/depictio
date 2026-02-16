@@ -138,6 +138,12 @@ class MultiQCDashboardComponent(BaseModel):
     # Data source
     workflow_id: str = Field(..., description="Workflow ID")
     data_collection_id: str = Field(..., description="Data collection ID")
+    project_id: Optional[str] = Field(None, description="Project ID for cross-DC link resolution")
+
+    # Interactive filtering
+    interactive_patching_enabled: bool = Field(
+        default=True, description="Enable interactive filtering/patching for this component"
+    )
 
     # Current visualization state
     state: MultiQCComponentState = Field(..., description="Component state")
@@ -180,6 +186,8 @@ class MultiQCDashboardComponent(BaseModel):
             index=stored_data.get("index", ""),
             workflow_id=workflow_id,
             data_collection_id=data_collection_id,
+            project_id=stored_data.get("project_id"),
+            interactive_patching_enabled=stored_data.get("interactive_patching_enabled", True),
             state=MultiQCComponentState(**state_data),
             access_token=stored_data.get("access_token"),
             theme=stored_data.get("theme", "light"),
@@ -197,6 +205,8 @@ class MultiQCDashboardComponent(BaseModel):
             "data_collection_id": self.data_collection_id,
             "wf_id": self.workflow_id,  # Alias for compatibility
             "dc_id": self.data_collection_id,  # Alias for compatibility
+            "project_id": self.project_id,  # For cross-DC link resolution
+            "interactive_patching_enabled": self.interactive_patching_enabled,  # Enable interactive filtering
         }
 
         # Add visualization state only if user has made selections

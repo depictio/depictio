@@ -329,6 +329,13 @@ def _create_metadata_store(
     store_index = str(index)
     clean_index = str(index).replace("-tmp", "")
 
+    # Normalize ObjectId format from MongoDB to plain strings
+    # Dashboard JSON may have {"$oid": "..."} format for MongoDB ObjectIds
+    if isinstance(wf_id, dict) and "$oid" in wf_id:
+        wf_id = wf_id["$oid"]
+    if isinstance(dc_id, dict) and "$oid" in dc_id:
+        dc_id = dc_id["$oid"]
+
     return dcc.Store(
         id={
             "type": "stored-metadata-component",
