@@ -793,7 +793,6 @@ def load_depictio_data(
         return None
 
     dashboard_data_dict = api_call_get_dashboard(dashboard_id, local_data["access_token"])
-    logger.info(f"Loading dashboard {dashboard_id}")
     if not dashboard_data_dict:
         logger.error(f"Failed to fetch dashboard data for {dashboard_id}")
         raise ValueError(f"Failed to fetch dashboard data: {dashboard_id}")

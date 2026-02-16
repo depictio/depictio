@@ -781,16 +781,7 @@ def extend_filters_via_links(
     project_links = project_data.get("links", [])
 
     if not project_id or not project_links:
-        logger.info(
-            f"[{component_type}] Link resolution skipped: "
-            f"project_id={bool(project_id)}, links_count={len(project_links) if project_links else 0}"
-        )
         return link_filters
-
-    logger.info(
-        f"[{component_type}] Link resolution starting: target_dc={target_dc_id[:8]}, "
-        f"filters_by_dc_keys={list(filters_by_dc.keys())}, links_count={len(project_links)}"
-    )
 
     # Find links where target_dc_id is the target
     for link in project_links:
