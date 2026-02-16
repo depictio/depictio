@@ -1034,7 +1034,9 @@ def register_core_callbacks(app):
                     column_type = comp_metadata.get("column_type", "")
                     column_name = comp_metadata.get("column_name", "")
 
-                    is_categorical = comp_type == "MultiSelect" or column_type == "object"
+                    is_categorical = (
+                        comp_type in ["MultiSelect", "SegmentedControl"] or column_type == "object"
+                    )
                     is_date_filter = comp_type == "DateRangePicker"
                     is_sample_column = column_name == join_column
 

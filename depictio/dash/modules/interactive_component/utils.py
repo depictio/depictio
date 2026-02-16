@@ -621,7 +621,7 @@ def _build_select_component(
         component_kwargs["value"] = None
 
     # Apply custom color styling
-    if color:
+    if color and color != "":
         existing_styles = component_kwargs.get("styles", {})
         color_styles = {
             "input": {"borderColor": color},
@@ -810,7 +810,7 @@ def _build_slider_component(
         _set_slider_value(kwargs_component, value, min_value, max_value)
 
     # Apply custom color
-    if color:
+    if color and color != "":
         kwargs_component["color"] = color
 
     # Generate marks
@@ -1160,7 +1160,7 @@ def _build_date_range_picker_component(
         kwargs_component["value"] = [min_date_py, max_date_py]
 
     # Apply custom color if specified
-    if color:
+    if color and color != "":
         existing_styles = kwargs_component.get("styles", {})
         color_styles = {
             "input": {"borderColor": color},
@@ -1221,7 +1221,7 @@ def _build_boolean_component(
 
     kwargs["checked"] = value
 
-    if color:
+    if color and color != "":
         kwargs["color"] = color
 
     return func_name(
@@ -1495,9 +1495,9 @@ def _build_component_title(
     title_style = {
         "marginBottom": "0.25rem",
     }
-    icon_color = color if color else None
+    icon_color = color if (color and color != "") else None
 
-    if color:
+    if color and color != "":
         title_style["color"] = color
     else:
         pass

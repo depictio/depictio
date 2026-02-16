@@ -61,7 +61,7 @@ def _create_component_title(
     card_title = title if title else f"{component_type} on {column_name}"
 
     title_style = {"marginBottom": "0.25rem"}
-    if color:
+    if color and color != "":
         title_style["color"] = color
 
     icon_width = int(title_size) if str(title_size).isdigit() else 20
@@ -381,9 +381,9 @@ def build_select_component(
             w="100%",
         )
     elif component_type == "SegmentedControl":
-        default_value = (
-            preserved_value if preserved_value else (options[0]["value"] if options else None)
-        )
+        # Default to None (no selection) instead of first option
+        # This ensures filters only activate when user explicitly selects a value
+        default_value = preserved_value if preserved_value else None
         interactive_component = dmc.SegmentedControl(
             id=component_id, data=[opt["value"] for opt in options], value=default_value, w="100%"
         )
@@ -510,7 +510,7 @@ def build_slider_component(
         ],
     }
 
-    if color:
+    if color and color != "":
         kwargs_component["color"] = color
 
     # Handle value based on component type
@@ -671,7 +671,7 @@ def build_datepicker_component(
         kwargs_component["value"] = [min_date_py, max_date_py]
 
     # Apply custom color if specified
-    if color:
+    if color and color != "":
         kwargs_component["styles"] = {
             **kwargs_component.get("styles", {}),
             "input": {"borderColor": color},
