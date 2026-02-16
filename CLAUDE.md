@@ -444,7 +444,38 @@ The codebase uses Astral's `ty` type checker for static type analysis and mainta
 - `docker-compose.yaml`: Local development environment
 - `docker-compose.dev.yaml`: Development compose file (uses uv-based Dockerfile)
 - `helm-charts/depictio/`: Kubernetes deployment manifests
-- `.env`: Environment variables (create from examples in dev/)
+- `.env.instance`: Instance-specific environment variables (auto-generated per worktree/branch)
+- `.env`: Symlink to `.env.instance` for automatic synchronization
+
+### Automatic .env Synchronization
+
+The project uses a symlink-based approach to automatically keep `.env` in sync with `.env.instance`:
+
+```bash
+# .env is a symlink to .env.instance
+.env → .env.instance
+```
+
+**Setup** (automatic for new worktrees):
+```bash
+# Create the symlink (if needed)
+./scripts/sync-env.sh
+
+# Or manually:
+rm -f .env && ln -sf .env.instance .env
+```
+
+**Benefits**:
+- No manual syncing required when switching worktrees
+- `.env` always reflects current `.env.instance` values
+- Port offsets and external ports stay synchronized automatically
+- Works seamlessly with docker-compose and local development
+
+**Multi-Worktree Development**:
+When using git worktrees with different `PORT_OFFSET` values:
+1. Each worktree has its own `.env.instance` with unique ports
+2. The symlink ensures `.env` always points to the correct instance config
+3. Services use the correct ports automatically (no manual editing)
 
 ## Helm Chart Maintenance
 
