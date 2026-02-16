@@ -78,6 +78,32 @@ def _is_cache_valid(
     return str(cached_key) == str(expected_key) and cache_age < ttl
 
 
+def _is_dashboard_cache_complete(cached_data: dict | None) -> bool:
+    """
+    Verify cached dashboard data has all required fields.
+
+    Args:
+        cached_data: Cached dashboard data dictionary.
+
+    Returns:
+        True if cache has complete data structure, False otherwise.
+    """
+    if not cached_data:
+        return False
+
+    # Check for user_permissions (added in recent API update)
+    if "user_permissions" not in cached_data:
+        logger.warning("⚠️ CACHE: Missing user_permissions - invalidating cache")
+        return False
+
+    # Check for dashboard data
+    if "dashboard" not in cached_data:
+        logger.warning("⚠️ CACHE: Missing dashboard - invalidating cache")
+        return False
+
+    return True
+
+
 def _extract_dashboard_id(pathname: str) -> str | None:
     """
     Extract dashboard_id from URL pathname.
@@ -264,10 +290,17 @@ def register_consolidated_api_callbacks(app):
         if not local_store or not local_store.get("access_token"):
             return no_update
 
+        # Check cache validity AND data completeness
         if _is_cache_valid(
             cached_dashboard_data, "dashboard._id", dashboard_id, DASHBOARD_CACHE_TTL
         ):
-            return no_update
+            # Additional check: ensure cache has complete data structure
+            if not _is_dashboard_cache_complete(cached_dashboard_data):
+                logger.info("🔄 CACHE: Incomplete cached data - refetching")
+                # Fall through to fetch fresh data
+            else:
+                logger.debug("✅ CACHE: Using cached dashboard data")
+                return no_update
 
         access_token = local_store["access_token"]
 
@@ -283,6 +316,13 @@ def register_consolidated_api_callbacks(app):
                     return no_update
 
                 init_data = response.json()
+                logger.info(f"🔍 DASHBOARD-INIT: Response keys={list(init_data.keys())}")
+                if "user_permissions" in init_data:
+                    logger.info(
+                        f"✅ DASHBOARD-INIT: user_permissions={init_data['user_permissions']}"
+                    )
+                else:
+                    logger.error("❌ DASHBOARD-INIT: user_permissions MISSING from API response!")
                 cached_data = {**init_data, "timestamp": time.time()}
                 return cached_data
 
