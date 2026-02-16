@@ -837,13 +837,15 @@ def api_call_save_dashboard(
 
 
 @validate_call(validate_return=True)
-def api_call_screenshot_dashboard(dashboard_id: str) -> bool:
+def api_call_screenshot_dashboard(dashboard_id: str, TOKEN: str) -> bool:
     """
     Request dashboard screenshot generation by calling the API.
     Uses generous timeout for screenshot generation to handle production complexity.
+    Requires authentication token for permission validation.
 
     Args:
         dashboard_id: The dashboard ID
+        TOKEN: User authentication token for permission check
 
     Returns:
         bool: True if successful, False otherwise
@@ -861,14 +863,21 @@ def api_call_screenshot_dashboard(dashboard_id: str) -> bool:
             f"🎯 Screenshot API timeout set to {screenshot_timeout}s for production robustness"
         )
 
+        # Add authorization header for permission check
+        headers = {"Authorization": f"Bearer {TOKEN}"}
+
         response = httpx.get(
             f"{API_BASE_URL}/depictio/api/v1/utils/screenshot-dash-fixed/{dashboard_id}",
+            headers=headers,
             timeout=screenshot_timeout,
         )
 
         if response.status_code == 200:
             logger.info("Dashboard screenshot saved successfully.")
             return True
+        elif response.status_code == 403:
+            logger.warning("Screenshot denied: User is not dashboard owner")
+            return False
         else:
             logger.warning(f"Failed to save dashboard screenshot: {response.json()}")
             return False

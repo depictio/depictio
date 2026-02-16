@@ -84,15 +84,16 @@ def generate_dashboard_screenshot(self, dashboard_id: str) -> dict:
 
 
 @celery_app.task(bind=True, name="generate_dashboard_screenshot_dual")
-def generate_dashboard_screenshot_dual(self, dashboard_id: str) -> dict:
+def generate_dashboard_screenshot_dual(self, dashboard_id: str, user_id: str) -> dict:
     """
-    Generate dual-theme dashboard screenshots asynchronously with deduplication.
+    Generate dual-theme dashboard screenshots asynchronously with deduplication and permission validation.
 
     Captures both light and dark mode screenshots in a single browser call
     for efficiency (~40% time savings vs. two separate calls).
 
-    Includes deduplication logic to prevent duplicate screenshot requests
-    for the same dashboard during concurrent saves.
+    Includes:
+    - Deduplication logic to prevent duplicate screenshot requests for the same dashboard
+    - Permission validation to ensure only dashboard owners can generate screenshots
 
     This task is fire-and-forget - the user doesn't wait for it.
     Screenshot failures are logged but don't affect the save operation.
@@ -102,9 +103,10 @@ def generate_dashboard_screenshot_dual(self, dashboard_id: str) -> dict:
 
     Args:
         dashboard_id: The dashboard ID to screenshot.
+        user_id: The user ID requesting the screenshot (for permission validation).
 
     Returns:
-        dict with status and screenshot paths.
+        dict with status and screenshot paths, or forbidden status if user is not owner.
     """
     import asyncio
 
@@ -122,73 +124,67 @@ def generate_dashboard_screenshot_dual(self, dashboard_id: str) -> dict:
         active_tasks = inspect.active()
 
         if active_tasks:
-            for worker, tasks in active_tasks.items():
+            for _worker, tasks in active_tasks.items():
                 for task in tasks:
-                    # Check if another dual-screenshot task for this dashboard is already running
                     if (
                         task["name"] == "generate_dashboard_screenshot_dual"
-                        and task["args"] == f"('{dashboard_id}',)"
+                        and task["args"] == f"('{dashboard_id}', '{user_id}')"
                         and task["id"] != self.request.id
                     ):
-                        logger.info(
-                            f"Skipping duplicate dual-screenshot request for dashboard {dashboard_id} "
-                            f"(task {task['id']} already active)"
-                        )
                         raise Ignore()
     except Ignore:
         raise
     except Exception as e:
         logger.warning(f"Failed to check for duplicate tasks: {e}, proceeding with screenshot")
 
-    async def async_screenshot_task():
-        """
-        Async wrapper for Playwright screenshot generation.
+    # Validate user owns dashboard before generating screenshot
+    from depictio.api.v1.services.screenshot_service import check_dashboard_owner_permission_sync
 
-        Initializes MongoDB connection in async context and calls the shared
-        screenshot service. Cleans up connection on completion.
-        """
-        # Initialize MongoDB connection for async context
+    if not check_dashboard_owner_permission_sync(dashboard_id, user_id):
+        logger.warning(
+            f"Screenshot denied: user {user_id} is not owner of dashboard {dashboard_id}"
+        )
+        return {
+            "status": "forbidden",
+            "dashboard_id": dashboard_id,
+            "message": "User is not dashboard owner",
+        }
+
+    async def async_screenshot_task():
+        """Async wrapper: initializes MongoDB and runs Playwright screenshot generation."""
         from depictio.api.v1.configs.config import MONGODB_URL
 
-        db_name = settings.mongodb.db_name
         client = AsyncIOMotorClient(MONGODB_URL)
-
         try:
-            # Initialize Beanie ODM for token/user models
-            await init_beanie(database=client[db_name], document_models=[TokenBeanie, UserBeanie])
-
-            # Generate screenshots using shared service (direct Playwright execution)
-            result = await generate_dual_theme_screenshots(dashboard_id)
-            return result
-
+            await init_beanie(
+                database=client[settings.mongodb.db_name],
+                document_models=[TokenBeanie, UserBeanie],
+            )
+            return await generate_dual_theme_screenshots(dashboard_id, user_id=user_id)
         finally:
-            # Clean up MongoDB connection
             client.close()
 
     try:
-        # Run async function in sync Celery task context using asyncio.run()
         result = asyncio.run(async_screenshot_task())
 
         if result["status"] == "success":
-            logger.info(f"Background dual-theme screenshots completed for dashboard {dashboard_id}")
+            logger.info(f"✅ Screenshots generated for dashboard {dashboard_id}")
             return {
                 "status": "success",
                 "dashboard_id": dashboard_id,
                 "light_screenshot": result.get("light_screenshot"),
                 "dark_screenshot": result.get("dark_screenshot"),
             }
-        else:
-            logger.warning(
-                f"Background dual-screenshot failed for {dashboard_id}: {result.get('error')}"
-            )
-            return {
-                "status": "failed",
-                "dashboard_id": dashboard_id,
-                "error": result.get("error"),
-            }
+
+        logger.warning(f"Dual-screenshot failed for {dashboard_id}: {result.get('error')}")
+        return {
+            "status": "failed",
+            "dashboard_id": dashboard_id,
+            "error": result.get("error"),
+        }
 
     except Exception as e:
-        logger.error(f"Background dual-screenshot error for {dashboard_id}: {e}")
+        logger.error(f"Dual-screenshot error for {dashboard_id}: {e}")
         return {"status": "error", "dashboard_id": dashboard_id, "error": str(e)}
 
 
