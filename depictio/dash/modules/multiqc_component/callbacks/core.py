@@ -21,7 +21,6 @@ Helper functions:
 
 import copy
 import os
-import uuid
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
@@ -152,7 +151,6 @@ def _extract_sample_filters(
     multiqc_dc_id = component_metadata.get("dc_id") or component_metadata.get("data_collection_id")
 
     if not multiqc_dc_id:
-        logger.debug("No DC ID in MultiQC component metadata")
         return None
 
     filtered_samples = None
@@ -172,9 +170,6 @@ def _extract_sample_filters(
         if interactive_id and interactive_id in filter_values:
             selected_samples = filter_values[interactive_id]
             if isinstance(selected_samples, list) and selected_samples:
-                logger.debug(
-                    f"Sample filter from {interactive_id}: {len(selected_samples)} samples"
-                )
                 filtered_samples = selected_samples
                 break
 
@@ -207,9 +202,6 @@ def expand_canonical_samples_to_variants(
         else:
             expanded_samples.append(canonical_id)
 
-    logger.debug(
-        f"Expanded {len(canonical_samples)} canonical IDs to {len(expanded_samples)} MultiQC variants"
-    )
     return expanded_samples
 
 
@@ -247,8 +239,6 @@ def get_samples_from_metadata_filter(
     if df is None or df.is_empty():
         logger.warning("Metadata table is empty")
         return []
-
-    logger.debug(f"Metadata table: {df.shape[0]} rows, {len(df.columns)} columns")
 
     # Apply filters from interactive components
     for comp_data in interactive_components_dict.values():
@@ -293,15 +283,12 @@ def get_samples_from_metadata_filter(
             else:
                 df = df.filter(pl.col(column_name).is_in(filter_values))
 
-            logger.debug(f"Filtered '{column_name}': {df.shape[0]} rows remaining")
-
     # Extract sample names from filtered DataFrame
     if join_column not in df.columns:
         logger.error(f"Join column '{join_column}' not found in metadata. Available: {df.columns}")
         return []
 
     samples = df[join_column].unique().to_list()
-    logger.debug(f"Found {len(samples)} unique samples after filtering")
     return samples
 
 
@@ -326,7 +313,6 @@ def patch_multiqc_figures(
     if not figures or not selected_samples:
         return figures
 
-    logger.debug(f"Patching {len(figures)} figures with {len(selected_samples)} selected samples")
     patched_figures = []
 
     for fig_idx, fig in enumerate(figures):
@@ -455,7 +441,6 @@ def _restore_figure_from_trace_metadata(
         restored_fig["layout"] = {}
     restored_fig["layout"]["_depictio_filter_applied"] = False
 
-    logger.info("Restored original unfiltered figure from trace metadata")
     return restored_fig
 
 
@@ -484,8 +469,6 @@ def register_core_callbacks(app):
         Returns:
             Tuple of (Plotly Figure object, trace_metadata dict for interactive patching)
         """
-        task_id = str(uuid.uuid4())[:8]
-
         if existing_trace_metadata and existing_trace_metadata.get("summary"):
             return dash.no_update, dash.no_update
 
@@ -498,13 +481,7 @@ def register_core_callbacks(app):
         selected_dataset = trigger_data.get("dataset_id")
         theme = trigger_data.get("theme", "light")
 
-        logger.info(
-            f"[{task_id}] Render MultiQC view: {selected_module}/{selected_plot} "
-            f"(dataset={selected_dataset}, locations={len(s3_locations)})"
-        )
-
         if not selected_module or not selected_plot or not s3_locations:
-            logger.error(f"[{task_id}] Missing required parameters")
             return {
                 "data": [],
                 "layout": {"title": "Error: Missing parameters"},
@@ -522,21 +499,18 @@ def register_core_callbacks(app):
             )
 
             if not fig:
-                logger.error(f"[{task_id}] Plot generation returned None")
+                logger.error("MultiQC plot generation returned None")
                 return {
                     "data": [],
                     "layout": {"title": "Error generating plot"},
                 }, {}
 
             trace_metadata = analyze_multiqc_plot_structure(fig)
-            logger.debug(
-                f"[{task_id}] Rendered with {len(trace_metadata.get('original_data', []))} traces"
-            )
 
             return fig, trace_metadata
 
         except Exception as e:
-            logger.error(f"[{task_id}] Error rendering MultiQC plot: {e}", exc_info=True)
+            logger.error(f"Error rendering MultiQC plot: {e}", exc_info=True)
             return {
                 "data": [],
                 "layout": {
@@ -583,24 +557,17 @@ def register_core_callbacks(app):
         Returns:
             Tuple of (metadata, data_locations, module_options, status_text).
         """
-        component_index = component_id.get("index", "unknown")
-        logger.debug(f"Loading MultiQC metadata for component {component_index}")
-
         # Check for required workflow/data collection IDs
         if not wf_id or not dc_id:
-            logger.warning(
-                f"Missing WF/DC for component {component_index} (wf={wf_id}, dc={dc_id})"
-            )
             return {}, [], [], "Waiting for workflow/data collection selection"
 
         # Check for local_data and access token
         if not local_data:
-            logger.warning(f"No local-store data available for component {component_index}")
             return {}, [], [], "Waiting for authentication data"
 
         TOKEN = local_data.get("access_token")
         if not TOKEN:
-            logger.error(f"No access token in local-store for component {component_index}")
+            logger.error("No access token available for MultiQC metadata loading")
             return {}, [], [], "Error: No access token available"
 
         try:
@@ -637,8 +604,6 @@ def register_core_callbacks(app):
             modules = metadata.get("modules", [])
             module_options = [{"label": mod, "value": mod} for mod in modules]
 
-            logger.debug(f"Loaded {len(modules)} modules from {len(reports)} reports")
-
             # Pre-warm in-memory cache in background so render callback finds it warm
             if data_locations:
                 import threading
@@ -650,9 +615,8 @@ def register_core_callbacks(app):
                         )
 
                         _get_or_parse_multiqc_logs(locations)
-                        logger.debug("Pre-warm cache completed for MultiQC logs")
-                    except Exception as e:
-                        logger.debug(f"Pre-warm cache failed (best-effort): {e}")
+                    except Exception:
+                        pass  # Best-effort cache prewarm
 
                 threading.Thread(target=_prewarm_cache, args=(data_locations,), daemon=True).start()
 
@@ -721,9 +685,6 @@ def register_core_callbacks(app):
 
         if module_changed:
             selected_plot = plot_names[0] if plot_names else None
-            logger.debug(
-                f"Module {selected_module}: {len(plot_names)} plots, auto-select={selected_plot}"
-            )
         else:
             plot_options = dash.no_update
 
@@ -796,27 +757,17 @@ def register_core_callbacks(app):
             - graph: dcc.Graph component with Plotly figure
             - trace_metadata: Analysis of plot structure for filtering
         """
-        task_id = str(uuid.uuid4())[:8]
-
-        # Guard: If no module/plot selected yet, don't render (new component without selections)
+        # Guard: If no module/plot selected yet, don't render
         if not selected_module or not selected_plot:
-            logger.debug(f"[{task_id}] No module/plot selected yet, skipping render")
             raise PreventUpdate
 
         # Guard: If no data locations, can't render
         if not data_locations:
-            logger.warning(f"[{task_id}] No data locations available")
             error_fig = {
                 "data": [],
                 "layout": {"title": "Error: No data locations"},
             }
             return dcc.Graph(figure=error_fig), {}
-
-        # All guards passed - log the render operation
-        logger.info(
-            f"[{task_id}] Render MultiQC: {selected_module}/{selected_plot} "
-            f"(dataset={selected_dataset}, has_filters={filter_values is not None})"
-        )
 
         try:
             normalized_locations = _normalize_multiqc_paths(data_locations)
@@ -827,10 +778,6 @@ def register_core_callbacks(app):
                 filtered_samples = _extract_sample_filters(
                     filter_values, interactive_metadata_list, component_metadata
                 )
-                if filtered_samples:
-                    logger.info(
-                        f"[{task_id}] Applying sample filter: {len(filtered_samples)} samples"
-                    )
 
             current_theme = theme if theme else "light"
 
@@ -843,15 +790,13 @@ def register_core_callbacks(app):
             )
 
             if not fig:
-                logger.error(f"[{task_id}] Plot generation returned None")
+                logger.error("MultiQC plot generation returned None")
                 return dcc.Graph(figure=_create_error_figure("Error generating plot")), {}
 
             if filtered_samples:
                 fig = filter_samples_in_plot(fig, filtered_samples)
 
             trace_metadata = analyze_multiqc_plot_structure(fig)
-
-            logger.debug(f"[{task_id}] MultiQC plot rendered successfully")
 
             graph = dcc.Graph(
                 figure=fig,
@@ -862,7 +807,7 @@ def register_core_callbacks(app):
             return graph, trace_metadata
 
         except Exception as e:
-            logger.error(f"[{task_id}] Failed to render plot: {e}", exc_info=True)
+            logger.error(f"Failed to render MultiQC plot: {e}", exc_info=True)
             return dcc.Graph(
                 figure=_create_error_figure(
                     f"Error: {str(e)}", "Failed to generate plot. Check logs for details."
@@ -938,14 +883,11 @@ def register_core_callbacks(app):
             logger.warning("No dc_id found for MultiQC component")
             return dash.no_update
 
-        logger.debug(f"MultiQC filtering: {selected_module}/{selected_plot}")
-
         result_dc_id = get_result_dc_for_workflow(workflow_id, token)
         use_link_resolution = False
 
         if not result_dc_id:
             use_link_resolution = True
-            logger.debug(f"No pre-computed joins for workflow {workflow_id}, using link resolution")
 
         interactive_components_dict = {}
         has_active_filters = False
@@ -999,9 +941,6 @@ def register_core_callbacks(app):
         if not has_active_filters and not figure_was_patched:
             return dash.no_update
 
-        if not has_active_filters and figure_was_patched:
-            logger.info("Clearing filters - restoring original data")
-
         try:
             metadata_dc_id = None
             source_column = None
@@ -1019,8 +958,6 @@ def register_core_callbacks(app):
             if not metadata_dc_id:
                 logger.error(f"No metadata DC found for MultiQC patching (dc_id={multiqc_dc_id})")
                 return dash.no_update
-
-            logger.debug(f"Patching: metadata_dc={metadata_dc_id}, join_column={join_column}")
 
             project_id = stored_metadata.get("project_id") if stored_metadata else None
 
@@ -1067,7 +1004,6 @@ def register_core_callbacks(app):
                         selected_samples = []
                         for variants in sample_mappings.values():
                             selected_samples.extend(variants)
-                        logger.info(f"Reset: {len(selected_samples)} samples from mappings")
                     else:
                         restored = _restore_figure_from_trace_metadata(
                             current_figure, trace_metadata
@@ -1116,7 +1052,6 @@ def register_core_callbacks(app):
                         if resolved and resolved.get("resolved_values"):
                             selected_samples = resolved["resolved_values"]
                         else:
-                            logger.debug("Link resolution failed, falling back to sample_mappings")
                             selected_samples = expand_canonical_samples_to_variants(
                                 indirect_filter_values, sample_mappings
                             )
@@ -1151,7 +1086,6 @@ def register_core_callbacks(app):
                         return dash.no_update
 
                     canonical_samples = df[join_column].unique().to_list()
-                    logger.info(f"Reset: loaded {len(canonical_samples)} unfiltered samples")
                 else:
                     canonical_samples = get_samples_from_metadata_filter(
                         workflow_id=workflow_id,
@@ -1185,8 +1119,6 @@ def register_core_callbacks(app):
             if not trace_metadata or not trace_metadata.get("original_data"):
                 logger.warning("No trace metadata available for patching")
                 return dash.no_update
-
-            logger.info(f"Patching MultiQC figure with {len(selected_samples)} samples")
 
             patched_figures = patch_multiqc_figures(
                 [current_figure], selected_samples, metadata, trace_metadata

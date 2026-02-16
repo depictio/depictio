@@ -357,12 +357,6 @@ def register_interactive_design_callbacks(app) -> None:
         if str(input_id["index"]) != str(edit_context.get("component_id")):
             return no_update_tuple
 
-        logger.debug(
-            f"Pre-populating interactive settings for component {input_id['index']}: "
-            f"title={component_data.get('title')}, column={component_data.get('column_name')}, "
-            f"method={component_data.get('interactive_component_type')}"
-        )
-
         # Ensure ColorInput components get empty string instead of None to avoid trim() errors
         return (
             component_data.get("title") or "",  # TextInput needs string
@@ -439,7 +433,6 @@ def register_interactive_design_callbacks(app) -> None:
                 data_collection_id = data_collection_id or component_data.get("dc_id")
 
         if not workflow_id or not data_collection_id:
-            logger.debug("Missing workflow/dc parameters for aggregation options")
             return []
 
         if not column_value:
