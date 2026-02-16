@@ -155,11 +155,28 @@ def register_callbacks_stepper(app) -> None:
         Output("stepper-save-status", "data"),
         Input({"type": "btn-done", "index": "stepper-component"}, "n_clicks"),
         State({"type": "stored-metadata-component", "index": ALL}, "data"),
+        State({"type": "multiqc-s3-store", "index": ALL}, "data"),
+        State({"type": "multiqc-metadata-store", "index": ALL}, "data"),
+        State({"type": "multiqc-module-select", "index": ALL}, "value"),
+        State({"type": "multiqc-plot-select", "index": ALL}, "value"),
+        State({"type": "multiqc-dataset-select", "index": ALL}, "value"),
+        State({"type": "multiqc-s3-store", "index": ALL}, "id"),
         State("stepper-page-context", "data"),
         State("local-store", "data"),
         prevent_initial_call=True,
     )
-    def save_stepper_component(n_clicks, stored_metadata, stepper_context, local_store):
+    def save_stepper_component(
+        n_clicks,
+        stored_metadata,
+        multiqc_s3_data_list,
+        multiqc_metadata_list,
+        multiqc_module_values,
+        multiqc_plot_values,
+        multiqc_dataset_values,
+        multiqc_store_ids,
+        stepper_context,
+        local_store,
+    ):
         """
         Save component metadata from stepper page to dashboard before redirecting.
 
@@ -252,6 +269,48 @@ def register_callbacks_stepper(app) -> None:
         new_component_metadata["index"] = component_id
         new_component_metadata["parent_index"] = None  # Not a child component
         new_component_metadata["last_updated"] = datetime.now().isoformat()
+
+        # For MultiQC components, merge in data from MultiQC-specific stores
+        if new_component_metadata.get("component_type") == "multiqc":
+            # Find the MultiQC data matching the stepper index
+            STEPPER_INDEX = "stepper-component"
+            for i, store_id in enumerate(multiqc_store_ids):
+                store_index = str(store_id.get("index", ""))
+                if store_index == STEPPER_INDEX or store_index == f"{STEPPER_INDEX}-tmp":
+                    # Merge s3_locations
+                    if i < len(multiqc_s3_data_list) and multiqc_s3_data_list[i]:
+                        new_component_metadata["s3_locations"] = multiqc_s3_data_list[i]
+                        logger.debug(
+                            f"✓ STEPPER SAVE - Added s3_locations: {len(multiqc_s3_data_list[i])} locations"
+                        )
+
+                    # Merge metadata (modules/plots)
+                    if i < len(multiqc_metadata_list) and multiqc_metadata_list[i]:
+                        new_component_metadata["metadata"] = multiqc_metadata_list[i]
+                        logger.debug(
+                            f"✓ STEPPER SAVE - Added metadata with modules: {multiqc_metadata_list[i].get('modules', [])}"
+                        )
+
+                    # Merge selected module/plot/dataset
+                    if i < len(multiqc_module_values) and multiqc_module_values[i]:
+                        new_component_metadata["selected_module"] = multiqc_module_values[i]
+                        logger.debug(
+                            f"✓ STEPPER SAVE - Added selected_module: {multiqc_module_values[i]}"
+                        )
+
+                    if i < len(multiqc_plot_values) and multiqc_plot_values[i]:
+                        new_component_metadata["selected_plot"] = multiqc_plot_values[i]
+                        logger.debug(
+                            f"✓ STEPPER SAVE - Added selected_plot: {multiqc_plot_values[i]}"
+                        )
+
+                    if i < len(multiqc_dataset_values) and multiqc_dataset_values[i]:
+                        new_component_metadata["selected_dataset"] = multiqc_dataset_values[i]
+                        logger.debug(
+                            f"✓ STEPPER SAVE - Added selected_dataset: {multiqc_dataset_values[i]}"
+                        )
+
+                    break
 
         # Get existing metadata and layout
         existing_metadata = dashboard_data.get("stored_metadata", [])
@@ -785,6 +844,7 @@ def register_callbacks_stepper(app) -> None:
             TOKEN = local_data["access_token"]
 
             # Check data collection type to determine if preview is needed
+            dc_type = None
             try:
                 response = httpx.get(
                     f"{API_BASE_URL}/depictio/api/v1/datacollections/{data_collection_id}",
@@ -798,14 +858,20 @@ def register_callbacks_stepper(app) -> None:
                     if dc_type == "multiqc":
                         # MultiQC data collections don't have traditional tabular data for preview
                         return dmc.Alert(
-                            "MultiQC data collections don't show a data preview. Use the Figure component to visualize MultiQC reports.",
+                            "MultiQC data collections don't show a data preview. Use the MultiQC component to visualize MultiQC reports.",
                             color="blue",
                             title="MultiQC Data Collection",
                             icon=DashIconify(icon="mdi:chart-line"),
                         )
+                else:
+                    # Non-200 response - log and continue, will catch errors later
+                    logger.warning(
+                        f"Failed to fetch DC info (status {response.status_code}), "
+                        f"will attempt preview and check for MultiQC if it fails"
+                    )
             except Exception as e:
                 logger.warning(f"Error checking data collection type for preview: {e}")
-                # Continue with normal preview if check fails
+                # Continue with normal preview attempt, will catch errors later
 
             # Load data preview (first 100 rows for stepper)
             df = load_deltatable_lite(
@@ -925,15 +991,22 @@ def register_callbacks_stepper(app) -> None:
             logger.error(f"Error in stepper data preview: {e}")
             # Check if this might be a MultiQC-related error (deltatable 404)
             error_str = str(e).lower()
-            if "deltatable" in error_str or "404" in error_str:
-                # Likely a MultiQC collection without delta table - hide error
-                return html.Div()
+            if "404" in error_str or "not found" in error_str or "deltatable" in error_str:
+                # Likely a MultiQC collection or non-tabular DC without delta table
+                return dmc.Alert(
+                    "This data collection doesn't support tabular preview. "
+                    "If this is a MultiQC collection, use the MultiQC component to visualize it.",
+                    color="blue",
+                    title="Preview Not Available",
+                    icon=DashIconify(icon="mdi:information"),
+                )
             else:
                 # Show error for other types of failures
                 return dmc.Alert(
                     f"Error loading data preview: {str(e)}",
                     color="red",
                     title="Preview Error",
+                    icon=DashIconify(icon="mdi:alert-circle"),
                 )
 
 

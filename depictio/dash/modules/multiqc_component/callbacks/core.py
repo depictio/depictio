@@ -586,14 +586,22 @@ def register_core_callbacks(app):
         component_index = component_id.get("index", "unknown")
         logger.debug(f"Loading MultiQC metadata for component {component_index}")
 
-        if not wf_id or not dc_id or not local_data:
-            logger.warning("Missing WF/DC or local_data")
+        # Check for required workflow/data collection IDs
+        if not wf_id or not dc_id:
+            logger.warning(
+                f"Missing WF/DC for component {component_index} (wf={wf_id}, dc={dc_id})"
+            )
             return {}, [], [], "Waiting for workflow/data collection selection"
+
+        # Check for local_data and access token
+        if not local_data:
+            logger.warning(f"No local-store data available for component {component_index}")
+            return {}, [], [], "Waiting for authentication data"
 
         TOKEN = local_data.get("access_token")
         if not TOKEN:
-            logger.error("No access token in local-store")
-            return {}, [], [], "Error: No access token"
+            logger.error(f"No access token in local-store for component {component_index}")
+            return {}, [], [], "Error: No access token available"
 
         try:
             reports = get_multiqc_reports_for_data_collection(dc_id, TOKEN)
@@ -753,7 +761,7 @@ def register_core_callbacks(app):
             State({"type": "interactive-stored-metadata", "index": ALL}, "data"),
             State("theme-store", "data"),
         ],
-        prevent_initial_call=True,  # Required when using allow_duplicate
+        prevent_initial_call="initial_duplicate",  # Allow initial render when component is restored with selections
         background=USE_BACKGROUND_CALLBACKS,
     )
     def render_multiqc_plot(
@@ -789,21 +797,26 @@ def register_core_callbacks(app):
             - trace_metadata: Analysis of plot structure for filtering
         """
         task_id = str(uuid.uuid4())[:8]
-        logger.info(
-            f"[{task_id}] Render MultiQC: {selected_module}/{selected_plot} "
-            f"(dataset={selected_dataset}, has_filters={filter_values is not None})"
-        )
 
+        # Guard: If no module/plot selected yet, don't render (new component without selections)
         if not selected_module or not selected_plot:
+            logger.debug(f"[{task_id}] No module/plot selected yet, skipping render")
             raise PreventUpdate
 
+        # Guard: If no data locations, can't render
         if not data_locations:
-            logger.error("   No data locations available")
+            logger.warning(f"[{task_id}] No data locations available")
             error_fig = {
                 "data": [],
                 "layout": {"title": "Error: No data locations"},
             }
             return dcc.Graph(figure=error_fig), {}
+
+        # All guards passed - log the render operation
+        logger.info(
+            f"[{task_id}] Render MultiQC: {selected_module}/{selected_plot} "
+            f"(dataset={selected_dataset}, has_filters={filter_values is not None})"
+        )
 
         try:
             normalized_locations = _normalize_multiqc_paths(data_locations)
