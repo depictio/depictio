@@ -1377,14 +1377,21 @@ def _regenerate_component_fields(component: dict) -> None:
 
 
 def _regenerate_component_indices(dashboard_dict: dict) -> None:
-    """Generate new UUIDs for all components and update layout references."""
+    """Generate new UUIDs for UUID-like component indexes; preserve semantic ones."""
     if "stored_metadata" not in dashboard_dict:
         return
 
     layout_keys = ["left_panel_layout_data", "right_panel_layout_data", "stored_layout_data"]
 
     for component in dashboard_dict["stored_metadata"]:
-        old_index = component.get("index")
+        old_index = component.get("index", "")
+        # Keep semantic indexes (e.g. "multiqc-sampling-date"); only replace UUID-like ones
+        is_uuid_like = isinstance(old_index, str) and (
+            old_index.count("-") >= 4 or len(old_index) > 30
+        )
+        if not is_uuid_like:
+            continue
+
         new_index = str(uuid.uuid4())
         component["index"] = new_index
 

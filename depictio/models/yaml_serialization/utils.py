@@ -111,13 +111,19 @@ def _compute_component_hash(component: dict) -> str:
     Returns:
         6-character hash string (first 6 chars of MD5)
     """
-    # Include relevant fields for hash computation
+    # Include only stable semantic fields — NOT internal DB IDs (workflow_id,
+    # data_collection_id) which differ between import cycles and break round-trip
+    # stability.
+    # Use fallback field names to handle both old DB documents (wf_tag) and new ones
+    # (workflow_tag) — mirrors the same resolution logic used in from_full().
+    dc_config = component.get("dc_config", {})
     hash_fields = {
         "component_type": component.get("component_type", ""),
         "title": component.get("title", ""),
-        "workflow_id": str(component.get("workflow_id", "")),
-        "data_collection_id": str(component.get("data_collection_id", "")),
-        # Add type-specific fields
+        "workflow_tag": component.get("workflow_tag") or component.get("wf_tag", ""),
+        "data_collection_tag": component.get("data_collection_tag")
+        or (dc_config.get("data_collection_tag", "") if isinstance(dc_config, dict) else ""),
+        # Type-specific semantic fields
         "visu_type": component.get("visu_type", ""),
         "aggregation": component.get("aggregation", ""),
         "column_name": component.get("column_name", ""),
