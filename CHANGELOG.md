@@ -6,16 +6,78 @@
 
 
 <details>
-<summary>Click to expand the changelog for 0.7.3-b5</summary>
+<summary>Click to expand the changelog for 0.7.3-b6</summary>
 
 ### Changes 📜
 
+#### New Features ✨
+
+* feat: Add strategic logging for user-triggered actions [b20e56fd]
+* feat: Add human-readable titles to interactive components [7cd5a58d]
+* feat: Add DateRangePicker to MultiQC and standardize component naming [03345197]
+* feat: Enhance link resolution endpoint logging [9326d2dc]
+* feat: Add DateRangePicker debug logging and validation [39195c51]
+* feat: Implement theme variables for consistent theming and update dashboard styles + fix e2e for demo mode [306213ec]
+* feat: Add theme switching support for MultiQC and Figure components [c74e7535]
+* feat: Improve stepper component selection UX with empty states and visual feedback [64bcd43e]
+* feat: Add colored border around image tab icons [5e5e54b2]
+* feat: Ampliseq dashboard improvements - component grid, tabs, MultiQC fixes [29d7f18b]
+
+#### Bug Fixes 🐛
+
+* fix: Remove authentication dependency for screenshot endpoint in single user mode [7792603d]
+* fix: Allow screenshot generation in single user mode [f4cdf6e2]
+* fix: Resolve missing Add Tab and Edit Tab buttons in single user mode [9184d61f]
+* fix: Add owner-only permission checks for screenshot generation [5851ba55]
+* fix: Resolve MultiQC callback errors by separating view and design mode callbacks [e8a17024]
+* fix: Resolve interactive component design and filtering issues [9024e28c]
+* fix: Save MultiQC component metadata from GUI stepper workflow [d61525e9]
+* fix: Improve card trend subtitle readability with 2 decimal places [e46ed5e0]
+* fix: Enable MultiQC DateRangePicker filtering with proper value normalization [607929e6]
+* fix: Add DateRangePicker validation and normalization for figure components [6a4483e4]
+* fix: Skip incomplete DateRangePicker selections in table callbacks [9f023512]
+* fix: Implement native browser Fullscreen API for true fullscreen [aa72fd81]
+* fix: Fix fullscreen chart width and positioning issues [3eeaf993]
+* fix: Update tour step count in demo mode tests to reflect changes in the welcome tour [f5ee01a8]
+* fix: fix duplicate & remove components issues (layout type issue) [fce7ca93]
+* fix: Remove duplicate edit-page-context stores to fix stepper navigation [6481fd82]
+* fix: Resolve Interactive component callback JavaScript errors [b0d5eb82]
+* fix: Resolve stepper component selection bugs and color consistency [2bdc26a8]
+* fix: Use transparent variant for image tab icons to show logos [58b0d169]
+* fix: Preserve dashboard icon colors during duplication and restore tab colors [7c804040]
+* fix: Replace broken clientside tab coloring with proper server-side callback [450ab6aa]
+* fix: Copy all theme variants (_dark, _light) for dashboard thumbnails [e968e293]
+* fix: Child tab thumbnail duplication and dashboard listing filter [57610280]
+* fix: Complete dashboard duplication with child tabs and client-side tab coloring [f1f46324]
+* fix: Skip validation for empty-valued filters in apply_runtime_filters [4225387d]
+* fix: Enable cross-DC filtering for card components via link resolution [affb91e4]
+* fix: Use API-returned target column in link resolution for cross-DC filters [9d4f519c]
+* fix: Allow anonymous users to use link resolution in single-user mode [2fa41455]
+
+#### Improvements 🚀
+
+* refactor: Clean up logging and fix unused variable warnings [ede051bd]
+* refactor: Remove verbose logging and simplify interactive filtering callbacks [0867abfd]
+* refactor: Update interactive component async callback imports [48f60430]
+* refactor: Simplify fullscreen code for better maintainability [d0d64afd]
+
+#### Chores 🧹
+
+* chore: Remove verbose routine operation logs [2d418457]
+* chore: Update docker-compose environment configuration [d7866c7d]
+* chore: Update dashboard screenshots [377d3604]
+
+#### Documentation Updates 📚
+
+* docs: Update CLAUDE.md context files [779bfd99]
+
 #### Other Changes 📝
 
-* Bump version: 0.7.3-b4 → 0.7.3-b5 [baa6ea07]
-* fix(dash): correct debug-menu-control.js path in HTML templates [f9eb2e49]
-* Update CHANGELOG.md for v0.7.3-b4 [8cb1281c]
-* Bump version: 0.7.3-b3 → 0.7.3-b4 [c9742223]
+* Bump version: 0.7.3-b5 → 0.7.3-b6 [47494f72]
+* test: Update ampliseq reference project with DateRangePicker tests [14346dc7]
+* debug: Add detailed logging for child tab thumbnail copying [74168546]
+* Update CHANGELOG.md for v0.7.3-b5 [e1d9e402]
+* Bump version: 0.7.3-b4 → 0.7.3-b5 [02e784d2]
 
 
 </details>
@@ -24,34 +86,7 @@
 
 For more details, please refer to the [documentation](https://depictio.github.io/depictio-docs/)
 
-ecessary blank line in deploy workflow [9542c00e]
-
-#### Improvements 🚀
-
-* refactor: update CLI and user models for improved configuration handling [034f9d26]
-* refactor: final ty compliant code [fd610250]
-* refactor: Refactor code structure for improved readability and maintainability [3f1f1b9b]
-* refactor: final ty compliant code [7fa61071]
-* refactor: Refactor code structure for improved readability and maintainability [dfeaf1f6]
-* refactor: Refactor projectwise user management layout to support user-only permissions [e6d995fb]
-* refactor: update AuthConfig paths to use default_factory for dynamic directory resolution [80900b40]
-* refactor: update dashboard owner display and improve spacing in profile layout [dde75143]
-* perf: optimize join processing and data loading in interactive components [ca01b4b3]
-* refactor: Update CI workflow and remove unused imports and environment variable for unauthenticated mode [9a75da3a]
-* refactor: Comment out unused URL error checks in dashboard health check [18433662]
-* refactor: Improve screenshot functionality by logging token retrieval and user data [336da078]
-* perf: optimize join processing and data loading in interactive components [b95cb643]
-* refactor: Refactor initialization process and streamline internal API key management [160c9fe2]
-* refactor: update AuthConfig to rename internal_api_key to internal_api_key_env; adjust related tests and logging for clarity [303299a9]
-* refactor: update AuthConfig to remove internal_api_key_env and adjust internal_api_key handling; improve logging in user endpoints [3228cc95]
-* refactor: update logging statements to use debug level for improved log management [5303adef]
-* refactor: rename list_registered_files to get_deltatable for clarity in endpoint functionality [bd4f5a5a]
-* refactor: streamline internal API key management with computed field and environment variable support [ab426519]
-* refactor: comment out verbose logging statements across multiple modules for improved clarity [edd44b51]
-* refactor: comment out verbose logging statements in token and user management modules [0e7a9b12]
-* refactor: further reduce logging verbosity [3ae00314]
-* refactor: Refactor logging statements across multiple modules to reduce verbosity [4e408f36]
-* refactor: update Helm chart testing workflow to improve inter-service connectivity checks and streamline service verification [21cc5ee7]
+ectivity checks and streamline service verification [21cc5ee7]
 * refactor: replace add_token function with _add_token for token creation in create_default_token [82e0a946]
 * refactor: simplify token validity tests by removing logger patching [ed4d3c04]
 * refactor: clean up app.py and enhance run scripts for development mode [2e0d7899]
