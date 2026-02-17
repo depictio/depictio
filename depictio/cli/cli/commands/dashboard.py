@@ -40,6 +40,10 @@ def _make_error_result(message: str) -> dict[str, Any]:
 def validate_yaml_with_pydantic(yaml_file: Path) -> dict[str, Any]:
     """Validate a YAML file using DashboardDataLite Pydantic model.
 
+    Domain constraints (visu_type, column_type, aggregation×column_type,
+    interactive_type×column_type, mode/code_content, selection fields) are
+    enforced by model validators — they run automatically here.
+
     Args:
         yaml_file: Path to YAML file
 
@@ -59,19 +63,44 @@ def validate_yaml_with_pydantic(yaml_file: Path) -> dict[str, Any]:
         return _make_error_result(str(e))
 
 
+def validate_yaml_string_with_pydantic(yaml_content: str) -> dict[str, Any]:
+    """Validate a YAML string using DashboardDataLite Pydantic model."""
+    from depictio.models.models.dashboards import DashboardDataLite
+
+    try:
+        is_valid, errors = DashboardDataLite.validate_yaml(yaml_content)
+        formatted_errors = [_format_validation_error(e) for e in errors]
+        return {"valid": is_valid, "errors": formatted_errors, "warnings": []}
+    except Exception as e:
+        return _make_error_result(str(e))
+
+
 @app.command()
 def validate(
     yaml_file: Annotated[Path, typer.Argument(help="Path to YAML dashboard file")],
     verbose: Annotated[bool, typer.Option("--verbose", "-v")] = False,
+    offline: Annotated[
+        bool,
+        typer.Option(
+            "--offline",
+            help="Skip online checks (column name validation against server DC schema)",
+        ),
+    ] = False,
 ) -> None:
     """Validate a dashboard YAML file locally.
 
-    Uses DashboardDataLite Pydantic schema to validate the YAML structure.
-    This is a local-only operation that doesn't require server connection.
+    Runs two levels of validation:
+
+    1. Schema validation: required fields, correct Python types (always runs).
+    2. Domain validation: enum-like fields (visu_type, column_type, aggregation,
+       interactive_component_type), cross-field rules (mode/code_content,
+       selection_enabled/selection_column, aggregation×column_type,
+       interactive_type×column_type) — always runs offline.
 
     Example:
         depictio dashboard validate dashboard.yaml
         depictio dashboard validate dashboard.yaml --verbose
+        depictio dashboard validate dashboard.yaml --offline
     """
     from rich.table import Table
 
@@ -80,6 +109,9 @@ def validate(
         raise typer.Exit(1)
 
     console.print(f"Validating: {yaml_file}")
+    console.print("  [dim]Checks: schema + domain constraints[/dim]")
+    if offline:
+        console.print("  [dim]Mode: offline (column name check skipped)[/dim]")
 
     result = validate_yaml_with_pydantic(yaml_file)
 
@@ -135,6 +167,13 @@ def import_yaml(
     ] = False,
     api_url: Annotated[str, typer.Option("--api", help="API base URL")] = "http://localhost:8058",
     dry_run: Annotated[bool, typer.Option("--dry-run", help="Validate only, don't import")] = False,
+    offline: Annotated[
+        bool,
+        typer.Option(
+            "--offline",
+            help="Skip online checks (column name validation against server DC schema)",
+        ),
+    ] = False,
 ) -> None:
     """Import a dashboard YAML file to the server.
 
@@ -156,6 +195,9 @@ def import_yaml(
 
         # Override with explicit project ID
         depictio dashboard import dashboard.yaml --config admin_config.yaml --project 646b0f3c1e4a2d7f8e5b8c9a
+
+        # Skip online column validation
+        depictio dashboard import dashboard.yaml --config admin_config.yaml --offline
     """
     from depictio.models.models.dashboards import DashboardDataLite
 
@@ -163,8 +205,12 @@ def import_yaml(
         console.print(f"[red]Error: File not found: {yaml_file}[/red]")
         raise typer.Exit(1)
 
-    # Step 1: Validate locally
+    # Step 1: Validate locally (schema + domain)
     console.print(f"[cyan]Validating:[/cyan] {yaml_file}")
+    console.print("  [dim]Checks: schema + domain constraints[/dim]")
+    if offline:
+        console.print("  [dim]Mode: offline (column name check skipped)[/dim]")
+
     result = validate_yaml_with_pydantic(yaml_file)
 
     if not result["valid"]:

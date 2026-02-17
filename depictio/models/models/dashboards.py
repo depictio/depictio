@@ -27,9 +27,17 @@ from pydantic import (
     Field,
     ValidationError,
     field_serializer,
+    model_validator,
 )
 
-from depictio.models.components.lite import LiteComponent
+from depictio.models.components.lite import (
+    CardLiteComponent,
+    FigureLiteComponent,
+    ImageLiteComponent,
+    InteractiveLiteComponent,
+    LiteComponent,
+    TableLiteComponent,
+)
 from depictio.models.logging import logger
 from depictio.models.models.base import MongoModel, PyObjectId, convert_objectid_to_str
 from depictio.models.models.users import Permission
@@ -146,6 +154,46 @@ class DashboardDataLite(BaseModel):
         default_factory=list, description="List of dashboard components"
     )
 
+    # Map component_type string → typed Lite model for domain validation
+    _COMPONENT_TYPE_MAP: dict[str, type] = {
+        "figure": FigureLiteComponent,
+        "card": CardLiteComponent,
+        "interactive": InteractiveLiteComponent,
+        "table": TableLiteComponent,
+        "image": ImageLiteComponent,
+    }
+
+    @model_validator(mode="after")
+    def validate_components_domain(self) -> "DashboardDataLite":
+        """Re-validate components that fell through to dict due to union fallback.
+
+        Pydantic's union resolution tries each variant left-to-right. When a typed
+        LiteComponent variant fails (e.g., invalid visu_type), Pydantic falls back
+        to dict[str, Any] which always succeeds. This validator catches those cases.
+        """
+        errors: list[str] = []
+        for i, comp in enumerate(self.components):
+            if not isinstance(comp, dict):
+                # Already validated as a typed model — skip
+                continue
+            comp_type = comp.get("component_type")
+            model_cls = self._COMPONENT_TYPE_MAP.get(comp_type or "")
+            if model_cls is None:
+                # Unknown component_type — skip (no typed model to validate against)
+                continue
+            try:
+                model_cls.model_validate(comp)
+            except ValidationError as exc:
+                for err in exc.errors():
+                    loc = ".".join(str(x) for x in err.get("loc", ()))
+                    tag = comp.get("tag") or f"component[{i}]"
+                    errors.append(f"[{tag}] {loc}: {err['msg']}")
+
+        if errors:
+            raise ValueError("\n".join(errors))
+
+        return self
+
     def to_yaml(self) -> str:
         """Export to YAML string.
 
@@ -155,108 +203,104 @@ class DashboardDataLite(BaseModel):
         """
         data = self.model_dump(exclude_none=True, mode="json")
 
-        # Remove empty subtitle
-        if not data.get("subtitle"):
-            data.pop("subtitle", None)
+        # Strip fields that match their default values to keep YAML minimal
+        default_value_fields = {
+            "subtitle": "",
+            "project_tag": "",
+            "parent_dashboard_tag": "",
+            "main_tab_name": "",
+            "tab_icon": "",
+            "tab_icon_color": "",
+            "icon": "mdi:view-dashboard",
+            "icon_color": "orange",
+            "icon_variant": "filled",
+        }
+        for field, default in default_value_fields.items():
+            if not data.get(field) or data.get(field) == default:
+                data.pop(field, None)
 
-        # Remove empty project_tag
-        if not data.get("project_tag"):
-            data.pop("project_tag", None)
-
-        # Clean up default tab fields (only include non-default values)
+        # Strip tab fields at their defaults
         if data.get("is_main_tab", True) is True:
-            data.pop("is_main_tab", None)  # Default is True, don't include
-        if not data.get("parent_dashboard_tag"):
-            data.pop("parent_dashboard_tag", None)
+            data.pop("is_main_tab", None)
         if data.get("tab_order", 0) == 0:
-            data.pop("tab_order", None)  # Default is 0, don't include
-        if not data.get("main_tab_name"):
-            data.pop("main_tab_name", None)
-        if not data.get("tab_icon"):
-            data.pop("tab_icon", None)
-        if not data.get("tab_icon_color"):
-            data.pop("tab_icon_color", None)
-        # Clean up default icon fields (omit if default values)
-        if data.get("icon") == "mdi:view-dashboard":
-            data.pop("icon", None)
-        if data.get("icon_color") == "orange":
-            data.pop("icon_color", None)
-        if data.get("icon_variant") == "filled":
-            data.pop("icon_variant", None)
+            data.pop("tab_order", None)
+
+        # Strip workflow_system if empty or "none"
         if not data.get("workflow_system") or data.get("workflow_system") == "none":
             data.pop("workflow_system", None)
 
         # Clean up components - remove empty values and order fields
         if "components" in data:
-            cleaned_components = []
-            # Define preferred field order (tag first, then type, then layout, then data source, then config)
-            field_order = [
-                "tag",
-                "index",  # Optional semantic identifier
-                "component_type",
-                "workflow_tag",
-                "data_collection_tag",
-                "layout",  # Grouped {x, y, w, h}
-                "title",
-                "selected_module",  # MultiQC
-                "selected_plot",  # MultiQC
-                "visu_type",
-                "figure_params",  # Plotly Express params (renamed from dict_kwargs)
-                "mode",  # Figure mode (ui/code)
-                "code_content",  # Custom Python code (code mode only)
-                "selection_enabled",  # Figure selection
-                "aggregation",
-                "column_name",
-                "column_type",
-                "interactive_component_type",
-                "display",  # Grouped styling fields
+            data["components"] = [
+                self._clean_component_for_yaml(comp) for comp in data["components"]
             ]
-
-            for comp in data["components"]:
-                cleaned: dict[str, Any] = {}
-
-                # Add fields in preferred order
-                for key in field_order:
-                    if key in comp:
-                        value = comp[key]
-                        # Skip empty values
-                        if value in ("", None, [], {}):
-                            continue
-                        # Skip UUID-like index values (auto-generated, not meaningful to users)
-                        if key == "index" and isinstance(value, str):
-                            is_uuid_like = value.count("-") >= 4 or len(value) > 30
-                            if is_uuid_like:
-                                continue
-                        cleaned[key] = value
-
-                # Add remaining fields (styling, etc.) in original order
-                for key, value in comp.items():
-                    if key in cleaned:  # Skip already processed fields
-                        continue
-                    # Skip empty values
-                    if value in ("", None, [], {}):
-                        continue
-                    # Skip UUID-like index values (auto-generated, not meaningful to users)
-                    if key == "index" and isinstance(value, str):
-                        is_uuid_like = value.count("-") >= 4 or len(value) > 30
-                        if is_uuid_like:
-                            continue
-                    # Skip default values for table
-                    if comp.get("component_type") == "table":
-                        if key == "page_size" and value == 10:
-                            continue
-                        if key == "sortable" and value is True:
-                            continue
-                        if key == "filterable" and value is True:
-                            continue
-                    cleaned[key] = value
-
-                cleaned_components.append(cleaned)
-            data["components"] = cleaned_components
 
         return yaml.dump(
             data, default_flow_style=False, sort_keys=False, allow_unicode=True, indent=4
         )
+
+    @staticmethod
+    def _is_uuid_like(value: str) -> bool:
+        """Check whether a string looks like an auto-generated UUID."""
+        return value.count("-") >= 4 or len(value) > 30
+
+    @staticmethod
+    def _is_empty_value(value: Any) -> bool:
+        """Check whether a value is empty/falsy for YAML export purposes."""
+        return value in ("", None, [], {})
+
+    @staticmethod
+    def _clean_component_for_yaml(comp: dict[str, Any]) -> dict[str, Any]:
+        """Clean a single component dict for YAML export.
+
+        Applies preferred field ordering, strips empty values and auto-generated UUIDs,
+        and omits default table settings.
+        """
+        # Preferred field order: tag first, then type, layout, data source, config
+        field_order = [
+            "tag",
+            "index",
+            "component_type",
+            "workflow_tag",
+            "data_collection_tag",
+            "layout",
+            "title",
+            "selected_module",
+            "selected_plot",
+            "visu_type",
+            "figure_params",
+            "mode",
+            "code_content",
+            "selection_enabled",
+            "aggregation",
+            "column_name",
+            "column_type",
+            "interactive_component_type",
+            "display",
+        ]
+
+        # Table fields that should be omitted when at their defaults
+        table_defaults = {"page_size": 10, "sortable": True, "filterable": True}
+        is_table = comp.get("component_type") == "table"
+
+        cleaned: dict[str, Any] = {}
+
+        # Collect all keys: preferred-order first, then remainder in original order
+        all_keys = list(field_order) + [k for k in comp if k not in field_order]
+
+        for key in all_keys:
+            if key not in comp or key in cleaned:
+                continue
+            value = comp[key]
+            if DashboardDataLite._is_empty_value(value):
+                continue
+            if key == "index" and isinstance(value, str) and DashboardDataLite._is_uuid_like(value):
+                continue
+            if is_table and key in table_defaults and value == table_defaults[key]:
+                continue
+            cleaned[key] = value
+
+        return cleaned
 
     @classmethod
     def from_yaml(cls, content: str) -> "DashboardDataLite":
@@ -382,11 +426,9 @@ class DashboardDataLite(BaseModel):
                 if v not in ("", None, [], {}) and not (k in defaults and v == defaults[k])
             }
 
-        def copy_optional_fields(comp: dict, lite_comp: dict, fields: list[str]) -> None:
-            """Copy non-empty optional fields from component to lite component."""
-            for field in fields:
-                if comp.get(field):
-                    lite_comp[field] = comp[field]
+        def collect_display_fields(comp: dict, field_names: list[str]) -> dict[str, Any]:
+            """Collect non-empty display/styling fields from a component."""
+            return {f: comp[f] for f in field_names if comp.get(f)}
 
         dashboard_id = extract_id(dashboard_data.get("dashboard_id") or dashboard_data.get("_id"))
         lite_components = []
@@ -471,29 +513,26 @@ class DashboardDataLite(BaseModel):
                 lite_comp["aggregation"] = comp.get("aggregation", "")
                 lite_comp["column_name"] = comp.get("column_name", "")
                 lite_comp["column_type"] = comp.get("column_type", "float64")
-                display_fields: dict[str, Any] = {}
-                for field in [
-                    "icon_name",
-                    "icon_color",
-                    "title_color",
-                    "title_font_size",
-                    "value_font_size",
-                ]:
-                    if comp.get(field):
-                        display_fields[field] = comp[field]
-                if display_fields:
-                    lite_comp["display"] = display_fields
+                display = collect_display_fields(
+                    comp,
+                    [
+                        "icon_name",
+                        "icon_color",
+                        "title_color",
+                        "title_font_size",
+                        "value_font_size",
+                    ],
+                )
+                if display:
+                    lite_comp["display"] = display
 
             elif comp_type == "interactive":
                 lite_comp["interactive_component_type"] = comp.get("interactive_component_type", "")
                 lite_comp["column_name"] = comp.get("column_name", "")
                 lite_comp["column_type"] = comp.get("column_type", "object")
-                display_fields = {}
-                for field in ["title_size", "custom_color", "icon_name"]:
-                    if comp.get(field):
-                        display_fields[field] = comp[field]
-                if display_fields:
-                    lite_comp["display"] = display_fields
+                display = collect_display_fields(comp, ["title_size", "custom_color", "icon_name"])
+                if display:
+                    lite_comp["display"] = display
 
             elif comp_type == "table":
                 if comp.get("columns"):
@@ -523,13 +562,10 @@ class DashboardDataLite(BaseModel):
                 if comp.get("selected_plot"):
                     lite_comp["selected_plot"] = comp["selected_plot"]
 
-            # Export index field only if it's meaningful (not a UUID)
-            comp_index = comp.get("index", "")
-            if comp_index and comp_index.strip():
-                # Skip UUID-like indices
-                is_uuid_like = comp_index.count("-") >= 4 or len(comp_index) > 30
-                if not is_uuid_like:
-                    lite_comp["index"] = comp_index
+            # Export index field only if it's meaningful (not an auto-generated UUID)
+            comp_index = comp.get("index", "").strip()
+            if comp_index and not cls._is_uuid_like(comp_index):
+                lite_comp["index"] = comp_index
 
             lite_components.append(lite_comp)
 
@@ -561,12 +597,6 @@ class DashboardDataLite(BaseModel):
         """
         import uuid
         from datetime import datetime
-
-        def copy_optional_fields(src: dict, dest: dict, fields: list[str]) -> None:
-            """Copy non-empty optional fields from source to destination."""
-            for field in fields:
-                if src.get(field):
-                    dest[field] = src[field]
 
         def build_base_component(comp_dict: dict[str, Any]) -> dict[str, Any]:
             """Build base component with common fields."""
@@ -652,17 +682,15 @@ class DashboardDataLite(BaseModel):
                         "value": None,
                     }
                 )
-                copy_optional_fields(
-                    comp_dict,
-                    full_comp,
-                    [
-                        "icon_name",
-                        "icon_color",
-                        "title_color",
-                        "title_font_size",
-                        "value_font_size",
-                    ],
-                )
+                for f in [
+                    "icon_name",
+                    "icon_color",
+                    "title_color",
+                    "title_font_size",
+                    "value_font_size",
+                ]:
+                    if comp_dict.get(f):
+                        full_comp[f] = comp_dict[f]
 
             elif comp_type == "interactive":
                 full_comp.update(
@@ -676,9 +704,9 @@ class DashboardDataLite(BaseModel):
                         "default_state": None,
                     }
                 )
-                copy_optional_fields(
-                    comp_dict, full_comp, ["title_size", "custom_color", "icon_name"]
-                )
+                for f in ["title_size", "custom_color", "icon_name"]:
+                    if comp_dict.get(f):
+                        full_comp[f] = comp_dict[f]
 
             elif comp_type == "table":
                 full_comp.update(
@@ -713,13 +741,9 @@ class DashboardDataLite(BaseModel):
                 )
 
             elif comp_type == "multiqc":
-                # MultiQC parameters - only include if present in YAML
-                multiqc_fields = {}
-                if comp_dict.get("selected_module"):
-                    multiqc_fields["selected_module"] = comp_dict["selected_module"]
-                if comp_dict.get("selected_plot"):
-                    multiqc_fields["selected_plot"] = comp_dict["selected_plot"]
-                full_comp.update(multiqc_fields)
+                for f in ["selected_module", "selected_plot"]:
+                    if comp_dict.get(f):
+                        full_comp[f] = comp_dict[f]
 
             full_components.append(full_comp)
 
@@ -766,38 +790,21 @@ class DashboardDataLite(BaseModel):
                     x, y, w, h = auto["x"], right_auto_y, auto["w"], auto["h"]
                     right_auto_y += h
 
-            # Build layout item — static and resizeHandles inferred from component type
+            # Build layout item -- static and resizeHandles inferred from component type
+            layout_item: dict[str, Any] = {
+                "i": f"box-{comp['index']}",
+                "x": x,
+                "y": y,
+                "w": w,
+                "h": h,
+                "static": comp_type == "card",
+            }
+            if comp_type not in ("interactive", "card"):
+                layout_item["resizeHandles"] = ["se", "s", "e", "sw", "w"]
+
             if comp_type == "interactive":
-                layout_item: dict[str, Any] = {
-                    "i": f"box-{comp['index']}",
-                    "x": x,
-                    "y": y,
-                    "w": w,
-                    "h": h,
-                    "static": False,
-                }
                 left_panel_layout_data.append(layout_item)
-            elif comp_type == "card":
-                layout_item = {
-                    "i": f"box-{comp['index']}",
-                    "x": x,
-                    "y": y,
-                    "w": w,
-                    "h": h,
-                    "static": True,
-                }
-                right_panel_layout_data.append(layout_item)
             else:
-                # figure, table, multiqc, image — resizable
-                layout_item = {
-                    "i": f"box-{comp['index']}",
-                    "x": x,
-                    "y": y,
-                    "w": w,
-                    "h": h,
-                    "static": False,
-                    "resizeHandles": ["se", "s", "e", "sw", "w"],
-                }
                 right_panel_layout_data.append(layout_item)
 
         full_dict["stored_layout_data"] = []

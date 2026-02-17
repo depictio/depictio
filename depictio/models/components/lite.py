@@ -19,7 +19,32 @@ Index vs Tag:
 import uuid
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+from depictio.models.components.constants import (
+    AGGREGATION_COMPATIBILITY,
+    COLUMN_TYPES,
+    INTERACTIVE_COMPATIBILITY,
+    VISU_TYPES,
+)
+
+# ---------------------------------------------------------------------------
+# Type aliases — used for annotation (not enforced as Literal to keep
+# extra="allow" / YAML round-trip compatibility, but validated via validators)
+# ---------------------------------------------------------------------------
+
+ColumnType = Literal["int64", "float64", "bool", "datetime", "timedelta", "category", "object"]
+VisuType = Literal["scatter", "line", "bar", "box", "histogram"]
+InteractiveType = Literal[
+    "Slider",
+    "RangeSlider",
+    "Checkbox",
+    "Switch",
+    "DateRangePicker",
+    "Select",
+    "MultiSelect",
+    "SegmentedControl",
+]
 
 
 class BaseLiteComponent(BaseModel):
@@ -100,6 +125,26 @@ class FigureLiteComponent(BaseLiteComponent):
         default=None, description="Column to extract from selected points"
     )
 
+    @model_validator(mode="after")
+    def validate_figure_constraints(self) -> "FigureLiteComponent":
+        """Validate figure-specific cross-field constraints."""
+        if self.mode == "ui":
+            if self.visu_type not in VISU_TYPES:
+                valid = ", ".join(VISU_TYPES)
+                raise ValueError(
+                    f"Invalid visu_type '{self.visu_type}' for mode='ui'. Valid values: {valid}"
+                )
+        elif self.mode == "code":
+            if not self.code_content or not self.code_content.strip():
+                raise ValueError("code_content is required and must be non-empty when mode='code'")
+        else:
+            raise ValueError(f"Invalid mode '{self.mode}'. Valid values: 'ui', 'code'")
+
+        if self.selection_enabled and not self.selection_column:
+            raise ValueError("selection_column is required when selection_enabled=True")
+
+        return self
+
 
 class CardLiteComponent(BaseLiteComponent):
     """Lite card component for user definition.
@@ -128,6 +173,26 @@ class CardLiteComponent(BaseLiteComponent):
     title_font_size: str | None = Field(default=None, description="Title font size")
     value_font_size: str | None = Field(default=None, description="Value font size")
 
+    @field_validator("column_type")
+    @classmethod
+    def validate_column_type(cls, v: str) -> str:
+        if v not in COLUMN_TYPES:
+            valid = ", ".join(COLUMN_TYPES)
+            raise ValueError(f"Invalid column_type '{v}'. Valid values: {valid}")
+        return v
+
+    @model_validator(mode="after")
+    def validate_aggregation_for_column_type(self) -> "CardLiteComponent":
+        """Validate that aggregation is valid for the given column_type."""
+        valid_aggs = AGGREGATION_COMPATIBILITY.get(self.column_type, [])
+        if valid_aggs and self.aggregation not in valid_aggs:
+            valid = ", ".join(valid_aggs)
+            raise ValueError(
+                f"Invalid aggregation '{self.aggregation}' for column_type='{self.column_type}'. "
+                f"Valid aggregations: {valid}"
+            )
+        return self
+
 
 class InteractiveLiteComponent(BaseLiteComponent):
     """Lite interactive component for user definition.
@@ -155,6 +220,31 @@ class InteractiveLiteComponent(BaseLiteComponent):
     title_size: str | None = Field(default=None, description="Title size")
     custom_color: str | None = Field(default=None, description="Custom accent color")
     icon_name: str | None = Field(default=None, description="Iconify icon name")
+
+    @field_validator("column_type")
+    @classmethod
+    def validate_column_type(cls, v: str) -> str:
+        if v not in COLUMN_TYPES:
+            valid = ", ".join(COLUMN_TYPES)
+            raise ValueError(f"Invalid column_type '{v}'. Valid values: {valid}")
+        return v
+
+    @model_validator(mode="after")
+    def validate_interactive_type_for_column_type(self) -> "InteractiveLiteComponent":
+        """Validate that interactive_component_type is compatible with column_type."""
+        valid_types = INTERACTIVE_COMPATIBILITY.get(self.column_type, [])
+        if valid_types and self.interactive_component_type not in valid_types:
+            valid = ", ".join(valid_types)
+            raise ValueError(
+                f"Invalid interactive_component_type '{self.interactive_component_type}' "
+                f"for column_type='{self.column_type}'. "
+                f"Valid types: {valid}"
+            )
+        if not valid_types:
+            raise ValueError(
+                f"No interactive components are supported for column_type='{self.column_type}'"
+            )
+        return self
 
 
 class TableLiteComponent(BaseLiteComponent):

@@ -328,9 +328,9 @@ class TestCardLiteComponent:
         assert comp.value_font_size == "24px"
 
     def test_aggregation_types(self):
-        """Various aggregation types should be accepted."""
-        for agg in ["average", "sum", "count", "min", "max", "first", "last"]:
-            comp = CardLiteComponent(aggregation=agg, column_name="col")
+        """Various valid aggregation types for float64 should be accepted."""
+        for agg in ["average", "sum", "count", "min", "max", "variance", "std_dev"]:
+            comp = CardLiteComponent(aggregation=agg, column_name="col", column_type="float64")
             assert comp.aggregation == agg
 
 
@@ -820,3 +820,234 @@ class TestImportTagResolutionLogic:
         assert component["dc_id"] is None
         assert component["workflow_tag"] == "python/nonexistent"
         assert component["data_collection_tag"] == "nonexistent_table"
+
+
+# ============================================================================
+# TestDomainValidation — enum-like fields and cross-field constraints
+# ============================================================================
+
+
+class TestFigureDomainValidation:
+    """Tests for FigureLiteComponent domain validation."""
+
+    def test_invalid_visu_type_raises(self):
+        """Invalid visu_type in ui mode should raise ValidationError."""
+        with pytest.raises(ValidationError, match="visu_type"):
+            FigureLiteComponent(tag="test", visu_type="invalid_chart")
+
+    def test_all_valid_visu_types_pass(self):
+        """All valid visu_types should pass validation."""
+        for visu in ["scatter", "line", "bar", "box", "histogram"]:
+            comp = FigureLiteComponent(tag="test", visu_type=visu)
+            assert comp.visu_type == visu
+
+    def test_code_mode_without_code_content_raises(self):
+        """mode='code' without code_content should raise ValidationError."""
+        with pytest.raises(ValidationError, match="code_content"):
+            FigureLiteComponent(tag="test", mode="code")
+
+    def test_code_mode_with_blank_code_content_raises(self):
+        """mode='code' with blank code_content should raise ValidationError."""
+        with pytest.raises(ValidationError, match="code_content"):
+            FigureLiteComponent(tag="test", mode="code", code_content="   ")
+
+    def test_code_mode_with_code_content_passes(self):
+        """mode='code' with non-empty code_content should pass."""
+        comp = FigureLiteComponent(
+            tag="test",
+            mode="code",
+            code_content="import plotly.express as px\nfig = px.scatter(df)",
+        )
+        assert comp.mode == "code"
+
+    def test_code_mode_ignores_visu_type_constraint(self):
+        """In code mode, visu_type is not validated against allowed list."""
+        comp = FigureLiteComponent(
+            tag="test",
+            mode="code",
+            visu_type="arbitrary_type",
+            code_content="fig = go.Figure()",
+        )
+        assert comp.visu_type == "arbitrary_type"
+
+    def test_invalid_mode_raises(self):
+        """Invalid mode value should raise ValidationError."""
+        with pytest.raises(ValidationError, match="mode"):
+            FigureLiteComponent(tag="test", mode="interactive")
+
+    def test_selection_enabled_without_selection_column_raises(self):
+        """selection_enabled=True without selection_column should raise ValidationError."""
+        with pytest.raises(ValidationError, match="selection_column"):
+            FigureLiteComponent(tag="test", selection_enabled=True)
+
+    def test_selection_enabled_with_selection_column_passes(self):
+        """selection_enabled=True with selection_column should pass."""
+        comp = FigureLiteComponent(
+            tag="test",
+            selection_enabled=True,
+            selection_column="sample_id",
+        )
+        assert comp.selection_column == "sample_id"
+
+    def test_selection_disabled_without_column_passes(self):
+        """selection_enabled=False without selection_column is fine."""
+        comp = FigureLiteComponent(tag="test", selection_enabled=False)
+        assert comp.selection_column is None
+
+
+class TestCardDomainValidation:
+    """Tests for CardLiteComponent domain validation."""
+
+    def test_invalid_column_type_raises(self):
+        """Invalid column_type should raise ValidationError."""
+        with pytest.raises(ValidationError, match="column_type"):
+            CardLiteComponent(aggregation="count", column_name="col", column_type="string")
+
+    def test_all_valid_column_types_with_count_pass(self):
+        """'count' aggregation is valid for every column_type."""
+        for ct in ["int64", "float64", "bool", "datetime", "timedelta", "category", "object"]:
+            comp = CardLiteComponent(aggregation="count", column_name="col", column_type=ct)
+            assert comp.column_type == ct
+
+    def test_average_invalid_for_object_raises(self):
+        """'average' aggregation is not valid for 'object' column_type."""
+        with pytest.raises(ValidationError, match="aggregation"):
+            CardLiteComponent(aggregation="average", column_name="col", column_type="object")
+
+    def test_average_invalid_for_bool_raises(self):
+        """'average' aggregation is not valid for 'bool' column_type."""
+        with pytest.raises(ValidationError, match="aggregation"):
+            CardLiteComponent(aggregation="average", column_name="col", column_type="bool")
+
+    def test_average_valid_for_float64_passes(self):
+        """'average' aggregation is valid for 'float64'."""
+        comp = CardLiteComponent(aggregation="average", column_name="col", column_type="float64")
+        assert comp.aggregation == "average"
+
+    def test_mode_valid_for_category_passes(self):
+        """'mode' aggregation is valid for 'category'."""
+        comp = CardLiteComponent(aggregation="mode", column_name="col", column_type="category")
+        assert comp.aggregation == "mode"
+
+    def test_sum_invalid_for_category_raises(self):
+        """'sum' aggregation is not valid for 'category'."""
+        with pytest.raises(ValidationError, match="aggregation"):
+            CardLiteComponent(aggregation="sum", column_name="col", column_type="category")
+
+    def test_variance_valid_for_int64_passes(self):
+        """'variance' is valid for 'int64'."""
+        comp = CardLiteComponent(aggregation="variance", column_name="col", column_type="int64")
+        assert comp.aggregation == "variance"
+
+
+class TestInteractiveDomainValidation:
+    """Tests for InteractiveLiteComponent domain validation."""
+
+    def test_invalid_column_type_raises(self):
+        """Invalid column_type should raise ValidationError."""
+        with pytest.raises(ValidationError, match="column_type"):
+            InteractiveLiteComponent(
+                interactive_component_type="Slider",
+                column_name="col",
+                column_type="integer",
+            )
+
+    def test_slider_valid_for_float64_passes(self):
+        """Slider is valid for float64."""
+        comp = InteractiveLiteComponent(
+            interactive_component_type="Slider",
+            column_name="col",
+            column_type="float64",
+        )
+        assert comp.interactive_component_type == "Slider"
+
+    def test_slider_valid_for_int64_passes(self):
+        """Slider is valid for int64."""
+        comp = InteractiveLiteComponent(
+            interactive_component_type="Slider",
+            column_name="col",
+            column_type="int64",
+        )
+        assert comp.interactive_component_type == "Slider"
+
+    def test_slider_invalid_for_object_raises(self):
+        """Slider is not valid for object column_type."""
+        with pytest.raises(ValidationError, match="interactive_component_type"):
+            InteractiveLiteComponent(
+                interactive_component_type="Slider",
+                column_name="col",
+                column_type="object",
+            )
+
+    def test_checkbox_valid_for_bool_passes(self):
+        """Checkbox is valid for bool."""
+        comp = InteractiveLiteComponent(
+            interactive_component_type="Checkbox",
+            column_name="col",
+            column_type="bool",
+        )
+        assert comp.interactive_component_type == "Checkbox"
+
+    def test_checkbox_invalid_for_float64_raises(self):
+        """Checkbox is not valid for float64."""
+        with pytest.raises(ValidationError, match="interactive_component_type"):
+            InteractiveLiteComponent(
+                interactive_component_type="Checkbox",
+                column_name="col",
+                column_type="float64",
+            )
+
+    def test_date_range_picker_valid_for_datetime_passes(self):
+        """DateRangePicker is valid for datetime."""
+        comp = InteractiveLiteComponent(
+            interactive_component_type="DateRangePicker",
+            column_name="col",
+            column_type="datetime",
+        )
+        assert comp.interactive_component_type == "DateRangePicker"
+
+    def test_multiselect_valid_for_category_passes(self):
+        """MultiSelect is valid for category."""
+        comp = InteractiveLiteComponent(
+            interactive_component_type="MultiSelect",
+            column_name="col",
+            column_type="category",
+        )
+        assert comp.interactive_component_type == "MultiSelect"
+
+    def test_multiselect_valid_for_object_passes(self):
+        """MultiSelect is valid for object."""
+        comp = InteractiveLiteComponent(
+            interactive_component_type="MultiSelect",
+            column_name="col",
+            column_type="object",
+        )
+        assert comp.interactive_component_type == "MultiSelect"
+
+    def test_timedelta_raises_no_components(self):
+        """timedelta column_type has no interactive components — should raise."""
+        with pytest.raises(ValidationError, match="No interactive components"):
+            InteractiveLiteComponent(
+                interactive_component_type="Slider",
+                column_name="col",
+                column_type="timedelta",
+            )
+
+    def test_all_valid_interactive_types_for_object(self):
+        """All valid interactive types for 'object' column_type should pass."""
+        for it in ["Select", "MultiSelect", "SegmentedControl"]:
+            comp = InteractiveLiteComponent(
+                interactive_component_type=it,
+                column_name="col",
+                column_type="object",
+            )
+            assert comp.interactive_component_type == it
+
+    def test_range_slider_invalid_for_category_raises(self):
+        """RangeSlider is not valid for category."""
+        with pytest.raises(ValidationError, match="interactive_component_type"):
+            InteractiveLiteComponent(
+                interactive_component_type="RangeSlider",
+                column_name="col",
+                column_type="category",
+            )
