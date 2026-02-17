@@ -6,78 +6,20 @@
 
 
 <details>
-<summary>Click to expand the changelog for 0.7.3-b6</summary>
+<summary>Click to expand the changelog for 0.7.3-b7</summary>
 
 ### Changes 📜
 
-#### New Features ✨
-
-* feat: Add strategic logging for user-triggered actions [b20e56fd]
-* feat: Add human-readable titles to interactive components [7cd5a58d]
-* feat: Add DateRangePicker to MultiQC and standardize component naming [03345197]
-* feat: Enhance link resolution endpoint logging [9326d2dc]
-* feat: Add DateRangePicker debug logging and validation [39195c51]
-* feat: Implement theme variables for consistent theming and update dashboard styles + fix e2e for demo mode [306213ec]
-* feat: Add theme switching support for MultiQC and Figure components [c74e7535]
-* feat: Improve stepper component selection UX with empty states and visual feedback [64bcd43e]
-* feat: Add colored border around image tab icons [5e5e54b2]
-* feat: Ampliseq dashboard improvements - component grid, tabs, MultiQC fixes [29d7f18b]
-
 #### Bug Fixes 🐛
 
-* fix: Remove authentication dependency for screenshot endpoint in single user mode [7792603d]
-* fix: Allow screenshot generation in single user mode [f4cdf6e2]
-* fix: Resolve missing Add Tab and Edit Tab buttons in single user mode [9184d61f]
-* fix: Add owner-only permission checks for screenshot generation [5851ba55]
-* fix: Resolve MultiQC callback errors by separating view and design mode callbacks [e8a17024]
-* fix: Resolve interactive component design and filtering issues [9024e28c]
-* fix: Save MultiQC component metadata from GUI stepper workflow [d61525e9]
-* fix: Improve card trend subtitle readability with 2 decimal places [e46ed5e0]
-* fix: Enable MultiQC DateRangePicker filtering with proper value normalization [607929e6]
-* fix: Add DateRangePicker validation and normalization for figure components [6a4483e4]
-* fix: Skip incomplete DateRangePicker selections in table callbacks [9f023512]
-* fix: Implement native browser Fullscreen API for true fullscreen [aa72fd81]
-* fix: Fix fullscreen chart width and positioning issues [3eeaf993]
-* fix: Update tour step count in demo mode tests to reflect changes in the welcome tour [f5ee01a8]
-* fix: fix duplicate & remove components issues (layout type issue) [fce7ca93]
-* fix: Remove duplicate edit-page-context stores to fix stepper navigation [6481fd82]
-* fix: Resolve Interactive component callback JavaScript errors [b0d5eb82]
-* fix: Resolve stepper component selection bugs and color consistency [2bdc26a8]
-* fix: Use transparent variant for image tab icons to show logos [58b0d169]
-* fix: Preserve dashboard icon colors during duplication and restore tab colors [7c804040]
-* fix: Replace broken clientside tab coloring with proper server-side callback [450ab6aa]
-* fix: Copy all theme variants (_dark, _light) for dashboard thumbnails [e968e293]
-* fix: Child tab thumbnail duplication and dashboard listing filter [57610280]
-* fix: Complete dashboard duplication with child tabs and client-side tab coloring [f1f46324]
-* fix: Skip validation for empty-valued filters in apply_runtime_filters [4225387d]
-* fix: Enable cross-DC filtering for card components via link resolution [affb91e4]
-* fix: Use API-returned target column in link resolution for cross-DC filters [9d4f519c]
-* fix: Allow anonymous users to use link resolution in single-user mode [2fa41455]
-
-#### Improvements 🚀
-
-* refactor: Clean up logging and fix unused variable warnings [ede051bd]
-* refactor: Remove verbose logging and simplify interactive filtering callbacks [0867abfd]
-* refactor: Update interactive component async callback imports [48f60430]
-* refactor: Simplify fullscreen code for better maintainability [d0d64afd]
-
-#### Chores 🧹
-
-* chore: Remove verbose routine operation logs [2d418457]
-* chore: Update docker-compose environment configuration [d7866c7d]
-* chore: Update dashboard screenshots [377d3604]
-
-#### Documentation Updates 📚
-
-* docs: Update CLAUDE.md context files [779bfd99]
+* fix: Update CI/CD YAML files to use current naming conventions [38a09f32]
+* fix: Resolve three demo mode issues — owner edit button, tab copy naming, and MultiQC s3_location [63b30221]
 
 #### Other Changes 📝
 
-* Bump version: 0.7.3-b5 → 0.7.3-b6 [47494f72]
-* test: Update ampliseq reference project with DateRangePicker tests [14346dc7]
-* debug: Add detailed logging for child tab thumbnail copying [74168546]
-* Update CHANGELOG.md for v0.7.3-b5 [e1d9e402]
-* Bump version: 0.7.3-b4 → 0.7.3-b5 [02e784d2]
+* Bump version: 0.7.3-b6 → 0.7.3-b7 [6b71d4c2]
+* Update CHANGELOG.md for v0.7.3-b6 [5ca4d85b]
+* Bump version: 0.7.3-b5 → 0.7.3-b6 [ef172be8]
 
 
 </details>
@@ -86,71 +28,7 @@
 
 For more details, please refer to the [documentation](https://depictio.github.io/depictio-docs/)
 
-ectivity checks and streamline service verification [21cc5ee7]
-* refactor: replace add_token function with _add_token for token creation in create_default_token [82e0a946]
-* refactor: simplify token validity tests by removing logger patching [ed4d3c04]
-* refactor: clean up app.py and enhance run scripts for development mode [2e0d7899]
-* refactor: remove commented-out code and clean up MongoDB initialization [070ae108]
-* refactor: update GitHub Actions workflow for testing and linting, streamline steps and dependencies [64d7c83b]
-* refactor: update publish workflow and dependencies in pyproject.toml [300b4a3d]
-* refactor: update workflow steps and improve S3 configuration handling in tests [3e50e0a2]
-* refactor: streamline S3 configuration handling [af316dee]
-
-#### Chores 🧹
-
-* chore: changelog generation update ; CHANGELOG.md update ; fix release DNS issue in helm CI ; CODEOWNERS file [dd019370]
-* chore: remove obsolete CI workflows for testing, linting, and building depictio-cli [45541695]
-* chore: CI cleaning, helm CI refactoring and extension [636d8392]
-* chore: update screenshot functionality to use 'domcontentloaded' for page navigation [6e6c945f]
-* chore: remove conditional setup call in setup.py and clean up README.md [0ac74b5c]
-* chore: refactor scan/processing to improve logging, implement run fonction to have a full execution of the steps [c3335e41]
-
-#### Other Changes 📝
-
-* Bump version: 0.1.0-b8 → 0.1.0 [77154540]
-* Update CHANGELOG.md for v0.1.0 [af12fa17]
-* feat(auth): Implement Google OAuth authentication endpoints [a07364cb]
-* test: functional unit tests, CI to be tested [2478ea3b]
-* Update CHANGELOG.md for v0.1.0-b8 [a073088c]
-* Bump version: 0.1.0-b7 → 0.1.0-b8 [088774a7]
-* test: add comprehensive tests for convert_filter_model_to_metadata function [68c88fc8]
-* test: add pytest markers to skip database setup for specific tests [a2dad9c6]
-* test: add unit tests for deltatable_utils [538a00fc]
-* test: add tests for temporary user creation, session management, and cleanup tasks [2beadc92]
-* Update CHANGELOG.md for v0.1.0-b7 [7e2bfe38]
-* Bump version: 0.1.0-b6 → 0.1.0-b7 [17610016]
-* Update CHANGELOG.md for v0.1.0-b6 [9da89fb9]
-* Bump version: 0.1.0-b5 → 0.1.0-b6 [dfa47d06]
-* Update CHANGELOG.md for v0.1.0-b5 [45221c85]
-* Bump version: 0.1.0-b4 → 0.1.0-b5 [0791da44]
-* Update CHANGELOG.md for v0.1.0-b4 [5062406c]
-* Bump version: 0.1.0-b3 → 0.1.0-b4 [fc0dd723]
-* Update CHANGELOG.md for v0.1.0-b3 [a4cd2c66]
-* Bump version: 0.1.0-b2 → 0.1.0-b3 [f6134bf1]
-* test: add unit tests for deltatable_utils [7041731a]
-* Update CHANGELOG.md for v0.1.0-b2 [061ef4b2]
-* Bump version: 0.1.0-b1 → 0.1.0-b2 [a18d5421]
-* test: add tests for temporary user creation, session management, and cleanup tasks [12d35a2c]
-* Update values.yaml [89e6898e]
-* Update values.yaml [54c33428]
-* Update Chart.yaml [0a264e6e]
-* Update .bumpversion.cfg [6a1871db]
-* Update CHANGELOG.md for v0.1.0-b1 [4b5876ce]
-* Bump version: 0.0.6 → 0.1.0-b1 [36d26feb]
-* Clean sensitive logs and remove prints [35473648]
-* Update CHANGELOG.md for vrefs/heads/main [c912da60]
-* Update CHANGELOG.md for v0.0.6 [62ac118c]
-* Bump version: 0.0.6-b4 → 0.0.6 [9798a3fa]
-* Bump version: 0.0.6-beta3 → 0.0.6-b4 [d6dbb202]
-* Update CHANGELOG.md for v0.0.6-beta3 [7ea90b1e]
-* Bump version: 0.0.6-beta2 → 0.0.6-beta3 [e846f374]
-* Update CHANGELOG.md for v0.0.6-beta2 [8ac43f74]
-* Bump version: 0.0.6-beta1 → 0.0.6-beta2 [49c1720a]
-* Update CHANGELOG.md for v0.0.6-beta1 [196086a0]
-* Bump version: 0.0.5 → 0.0.6-beta1 [5009a561]
-* Use minikube IP for ingress checks [5f45a0f9]
-* test: check FastAPI docs endpoint [a337cc6d]
-* chore(ci): enhance ingress connectivity checks [3bbbe185]
+ectivity checks [3bbbe185]
 * Revert values updates and adjust ingress [8c2c7d2e]
 * Switch to host-based ingress [5be94a37]
 * Use minikube IP for ingress checks [72aed78b]
