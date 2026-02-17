@@ -129,6 +129,34 @@ def _fetch_multiqc_metadata_from_dc(
                                 f"Found S3 location in dc_specific_properties: {s3_location}"
                             )
 
+                        # Fallback: query multiqc reports API when s3_location is missing from project
+                        if not result.get("s3_locations"):
+                            try:
+                                import httpx
+
+                                api_base_url = settings.fastapi.internal_url
+                                reports_response = httpx.get(
+                                    f"{api_base_url}/depictio/api/v1/multiqc/reports/data-collection/{data_collection_id}",
+                                    headers={"Authorization": f"Bearer {token}"},
+                                    timeout=10,
+                                )
+                                if reports_response.status_code == 200:
+                                    reports_data = reports_response.json()
+                                    s3_locs = [
+                                        r.get("report", {}).get("s3_location")
+                                        for r in reports_data.get("reports", [])
+                                        if r.get("report", {}).get("s3_location")
+                                    ]
+                                    if s3_locs:
+                                        result["s3_locations"] = s3_locs
+                                        logger.info(
+                                            f"Found {len(s3_locs)} S3 location(s) from multiqc reports API"
+                                        )
+                            except Exception as e:
+                                logger.warning(
+                                    f"Failed to fetch MultiQC reports for DC {data_collection_id}: {e}"
+                                )
+
                         # Get metadata (modules, plots, samples)
                         metadata = {}
                         if dc_specific_props.get("modules"):

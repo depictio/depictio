@@ -2345,7 +2345,7 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
                                 original_child_id = new_child.id  # Save for thumbnail copy
                                 new_child.id = ObjectId()
                                 new_child.dashboard_id = str(new_child.id)
-                                new_child.title = f"{child_tab.get('title', 'Tab')} (copy)"
+                                new_child.title = child_tab.get("title", "Tab")
 
                                 # CRITICAL: Update parent_dashboard_id to point to NEW main dashboard
                                 new_child.parent_dashboard_id = new_dashboard.id

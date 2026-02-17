@@ -1973,7 +1973,6 @@ jobs:
       - name: Run Cypress tests
         run: |
           cd depictio/tests/e2e-tests
-          export CYPRESS_UNAUTHENTICATED_MODE=false
           # Set Chrome flags for better CI rendering and stability
           export CYPRESS_BROWSER_ARGS="--disable-gpu --no-sandbox --disable-dev-shm-usage --disable-extensions --disable-background-timer-throttling --disable-renderer-backgrounding --disable-backgrounding-occluded-windows"
           # Run Chrome in headless mode for CI with improved stability
@@ -1981,7 +1980,7 @@ jobs:
             --browser chrome \
             --headless \
             --config screenshotsFolder=cypress/screenshots,videosFolder=cypress/videos,trashAssetsBeforeRuns=false,video=true,screenshotOnRunFailure=true,viewportWidth=1920,viewportHeight=1080,chromeWebSecurity=false \
-            --spec "cypress/e2e/!(unauthenticated)/**/*.cy.js"
+            --spec "cypress/e2e/auth/standard/**/*.cy.js"
 
       - name: Upload screenshots
         uses: actions/upload-artifact@v4
@@ -1999,7 +1998,7 @@ jobs:
           path: depictio/tests/e2e-tests/cypress/videos
           retention-days: 7
 
-  e2e-tests-unauthenticated:
+  e2e-tests-public-mode:
     needs: [docker-build]
     if: always() && needs.docker-build.result == 'success'
     runs-on: ubuntu-22.04
@@ -2015,7 +2014,7 @@ jobs:
           echo "UID=$(id -u)" >> $GITHUB_ENV
           echo "GID=$(id -g)" >> $GITHUB_ENV
           cp .env.example .env
-          # Enable PUBLIC_MODE for unauthenticated tests (disable SINGLE_USER_MODE)
+          # Enable PUBLIC_MODE for public mode tests (disable SINGLE_USER_MODE)
           sed -i 's/DEPICTIO_AUTH_SINGLE_USER_MODE=true/DEPICTIO_AUTH_SINGLE_USER_MODE=false/' docker-compose/.env
           sed -i 's/DEPICTIO_AUTH_PUBLIC_MODE=false/DEPICTIO_AUTH_PUBLIC_MODE=true/' docker-compose/.env
           sed -i 's/# DEPICTIO_DEV_MODE=false/DEPICTIO_DEV_MODE=true/' docker-compose/.env
@@ -2133,14 +2132,14 @@ jobs:
             npm ci
           fi
 
-      - name: Install Chrome for unauthenticated tests
+      - name: Install Chrome for public mode tests
         run: |
           wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | sudo apt-key add -
           echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" | sudo tee /etc/apt/sources.list.d/google-chrome.list
           sudo apt-get update
           sudo apt-get install -y google-chrome-stable
 
-      - name: Run Cypress unauthenticated tests
+      - name: Run Cypress public mode tests
         run: |
           cd depictio/tests/e2e-tests
           # Set environment variable for cypress to know it's public mode
@@ -2150,23 +2149,23 @@ jobs:
           npx cypress run \
             --browser chrome \
             --headless \
-            --config screenshotsFolder=cypress/screenshots-unauthenticated,videosFolder=cypress/videos-unauthenticated,trashAssetsBeforeRuns=false,video=true,screenshotOnRunFailure=true,viewportWidth=1920,viewportHeight=1080,chromeWebSecurity=false \
+            --config screenshotsFolder=cypress/screenshots-public-mode,videosFolder=cypress/videos-public-mode,trashAssetsBeforeRuns=false,video=true,screenshotOnRunFailure=true,viewportWidth=1920,viewportHeight=1080,chromeWebSecurity=false \
             --spec "cypress/e2e/auth/public/**/*.cy.js"
 
       - name: Upload screenshots
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: cypress-screenshots-unauthenticated
-          path: depictio/tests/e2e-tests/cypress/screenshots-unauthenticated
+          name: cypress-screenshots-public-mode
+          path: depictio/tests/e2e-tests/cypress/screenshots-public-mode
           retention-days: 30
 
       - name: Upload videos on failure
         uses: actions/upload-artifact@v4
         if: failure()
         with:
-          name: cypress-videos-unauthenticated
-          path: depictio/tests/e2e-tests/cypress/videos-unauthenticated
+          name: cypress-videos-public-mode
+          path: depictio/tests/e2e-tests/cypress/videos-public-mode
           retention-days: 7
 
   e2e-tests-demo-mode:

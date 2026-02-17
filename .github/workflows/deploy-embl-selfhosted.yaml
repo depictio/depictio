@@ -156,7 +156,7 @@ jobs:
           helm upgrade --install devdemo ./helm-charts/depictio \
             --namespace datasci-depictio-project-demo-dev \
             -f helm-charts/depictio/values.yaml \
-            -f helm-charts/depictio/values-embl-unauth.yaml \
+            -f helm-charts/depictio/values-embl-demo-base.yaml \
             -f helm-charts/depictio/values-embl-demo-dev.yaml \
             -f ~/actions-runner-embl/secrets/values-embl-secrets.yaml \
             --set backend.image.tag="${VERSION}" \
@@ -335,7 +335,7 @@ jobs:
           helm upgrade --install demo ./helm-charts/depictio \
             --namespace datasci-depictio-project-demo \
             -f helm-charts/depictio/values.yaml \
-            -f helm-charts/depictio/values-embl-unauth.yaml \
+            -f helm-charts/depictio/values-embl-demo-base.yaml \
             -f helm-charts/depictio/values-embl-demo.yaml \
             -f ~/actions-runner-embl/secrets/values-embl-secrets.yaml \
             --set backend.image.tag="${VERSION}" \

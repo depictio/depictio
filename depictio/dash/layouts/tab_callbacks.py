@@ -161,6 +161,23 @@ def _create_add_tab_button():
     )
 
 
+def _create_switch_to_edit_button(dashboard_id: str):
+    """Create a 'Switch to Edit Mode' link button for owners in view mode."""
+    import dash_mantine_components as dmc
+
+    return dmc.TabsTab(
+        "Edit Dashboard",
+        value="__edit_mode__",
+        leftSection=DashIconify(icon="mdi:pencil", color="grey", width=24),
+        href=f"/dashboard-edit/{dashboard_id}",
+        style={
+            "width": "100%",
+            "fontSize": "16px",
+            "padding": "16px 16px",
+        },
+    )
+
+
 def _build_tab_item(
     tab: dict,
     is_edit_mode: bool = False,
@@ -449,21 +466,22 @@ def register_tab_callbacks(app):
             tabs.sort(key=lambda t: t.get("tab_order", 0))
 
             # Determine if user is owner for edit controls
+            # Check ownership whenever dashboard_cache is available (regardless of edit mode)
             is_owner = False
-            if is_edit_mode and dashboard_cache:
+            if dashboard_cache:
                 if not isinstance(dashboard_cache, dict):
                     logger.error(f"❌ dashboard_cache is not a dict: {type(dashboard_cache)}")
                 else:
                     user_permissions = dashboard_cache.get("user_permissions")
 
                     if not user_permissions:
-                        # SINGLE USER MODE FALLBACK: If no permissions exist, assume owner in edit mode
+                        # SINGLE USER MODE FALLBACK: If no permissions exist, assume owner only in edit mode
                         logger.warning("⚠️ user_permissions missing from dashboard-init-data")
                         logger.warning(
-                            "   Assuming OWNER permissions (single user mode or missing backend data)"
+                            "   Assuming OWNER permissions only in edit mode (single user mode or missing backend data)"
                         )
                         logger.debug(f"   Available keys: {list(dashboard_cache.keys())}")
-                        is_owner = True  # Default to owner in edit mode when permissions missing
+                        is_owner = is_edit_mode  # Only owner in single-user mode when editing
                     elif not isinstance(user_permissions, dict):
                         logger.error(f"❌ user_permissions is not a dict: {type(user_permissions)}")
                         is_owner = True  # Fallback to owner
@@ -475,7 +493,7 @@ def register_tab_callbacks(app):
                         )
             else:
                 logger.warning(
-                    f"⚠️ TAB DEBUG: No dashboard_cache or not edit mode - is_edit_mode={is_edit_mode}, has_cache={bool(dashboard_cache)}"
+                    f"⚠️ TAB DEBUG: No dashboard_cache - is_edit_mode={is_edit_mode}, has_cache={bool(dashboard_cache)}"
                 )
 
             # Get parent dashboard (main tab) for workflow data and icon inheritance
@@ -524,6 +542,9 @@ def register_tab_callbacks(app):
             if is_edit_mode and is_owner:
                 logger.info("✅ TAB DEBUG: Rendering Add Tab button")
                 tab_items.append(_create_add_tab_button())
+            elif not is_edit_mode and is_owner:
+                logger.info("✅ TAB DEBUG: Rendering Switch to Edit Mode button (view mode owner)")
+                tab_items.append(_create_switch_to_edit_button(dashboard_id))
             else:
                 logger.warning(
                     f"❌ TAB DEBUG: NOT rendering Add Tab button (edit={is_edit_mode}, owner={is_owner})"
