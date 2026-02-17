@@ -146,7 +146,11 @@ class CardLiteComponent(BaseLiteComponent):
     # Aggregation configuration
     aggregation: str = Field(..., description="Aggregation function (average, sum, count, etc.)")
     column_name: str = Field(..., description="Column to aggregate")
-    column_type: str = Field(default="float64", description="Data type of column")
+    column_type: str | None = Field(
+        default=None,
+        description="Data type of column (int64, float64, bool, datetime, timedelta, "
+        "category, object). When provided, aggregation compatibility is validated.",
+    )
 
     # Styling (optional)
     icon_name: str | None = Field(default=None, description="Iconify icon name")
@@ -157,15 +161,17 @@ class CardLiteComponent(BaseLiteComponent):
 
     @field_validator("column_type")
     @classmethod
-    def validate_column_type(cls, v: str) -> str:
-        if v not in COLUMN_TYPES:
+    def validate_column_type(cls, v: str | None) -> str | None:
+        if v is not None and v not in COLUMN_TYPES:
             valid = ", ".join(COLUMN_TYPES)
             raise ValueError(f"Invalid column_type '{v}'. Valid values: {valid}")
         return v
 
     @model_validator(mode="after")
     def validate_aggregation_for_column_type(self) -> "CardLiteComponent":
-        """Validate that aggregation is valid for the given column_type."""
+        """Validate aggregation × column_type compatibility when column_type is provided."""
+        if self.column_type is None:
+            return self
         valid_aggs = AGGREGATION_COMPATIBILITY.get(self.column_type, [])
         if valid_aggs and self.aggregation not in valid_aggs:
             valid = ", ".join(valid_aggs)
@@ -196,7 +202,11 @@ class InteractiveLiteComponent(BaseLiteComponent):
         ..., description="Filter type (RangeSlider, MultiSelect, etc.)"
     )
     column_name: str = Field(..., description="Column to filter on")
-    column_type: str = Field(default="object", description="Data type of column")
+    column_type: str | None = Field(
+        default=None,
+        description="Data type of column (int64, float64, bool, datetime, timedelta, "
+        "category, object). When provided, component type compatibility is validated.",
+    )
 
     # Styling (optional)
     title_size: str | None = Field(default=None, description="Title size")
@@ -205,26 +215,28 @@ class InteractiveLiteComponent(BaseLiteComponent):
 
     @field_validator("column_type")
     @classmethod
-    def validate_column_type(cls, v: str) -> str:
-        if v not in COLUMN_TYPES:
+    def validate_column_type(cls, v: str | None) -> str | None:
+        if v is not None and v not in COLUMN_TYPES:
             valid = ", ".join(COLUMN_TYPES)
             raise ValueError(f"Invalid column_type '{v}'. Valid values: {valid}")
         return v
 
     @model_validator(mode="after")
     def validate_interactive_type_for_column_type(self) -> "InteractiveLiteComponent":
-        """Validate that interactive_component_type is compatible with column_type."""
+        """Validate interactive_component_type × column_type when column_type is provided."""
+        if self.column_type is None:
+            return self
         valid_types = INTERACTIVE_COMPATIBILITY.get(self.column_type, [])
-        if valid_types and self.interactive_component_type not in valid_types:
+        if not valid_types:
+            raise ValueError(
+                f"No interactive components are supported for column_type='{self.column_type}'"
+            )
+        if self.interactive_component_type not in valid_types:
             valid = ", ".join(valid_types)
             raise ValueError(
                 f"Invalid interactive_component_type '{self.interactive_component_type}' "
                 f"for column_type='{self.column_type}'. "
                 f"Valid types: {valid}"
-            )
-        if not valid_types:
-            raise ValueError(
-                f"No interactive components are supported for column_type='{self.column_type}'"
             )
         return self
 

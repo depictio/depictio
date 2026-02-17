@@ -303,12 +303,12 @@ class TestCardLiteComponent:
         assert comp.component_type == "card"
 
     def test_default_column_type(self):
-        """Default column_type should be 'float64'."""
+        """Default column_type should be None (optional, not required)."""
         comp = CardLiteComponent(
             aggregation="count",
             column_name="items",
         )
-        assert comp.column_type == "float64"
+        assert comp.column_type is None
 
     def test_optional_styling(self):
         """Optional styling fields should work."""
@@ -367,12 +367,12 @@ class TestInteractiveLiteComponent:
         assert comp.column_type == "object"
 
     def test_default_column_type(self):
-        """Default column_type should be 'object'."""
+        """Default column_type should be None (optional, not required)."""
         comp = InteractiveLiteComponent(
             interactive_component_type="MultiSelect",
             column_name="col",
         )
-        assert comp.column_type == "object"
+        assert comp.column_type is None
 
     def test_optional_styling(self):
         """Optional styling fields should work."""
@@ -939,6 +939,13 @@ class TestCardDomainValidation:
         comp = CardLiteComponent(aggregation="variance", column_name="col", column_type="int64")
         assert comp.aggregation == "variance"
 
+    def test_no_column_type_skips_validation(self):
+        """When column_type is None (not provided), aggregation is not validated."""
+        # 'mode' would fail for 'float64', but with no column_type it's accepted
+        comp = CardLiteComponent(aggregation="mode", column_name="variety")
+        assert comp.column_type is None
+        assert comp.aggregation == "mode"
+
 
 class TestInteractiveDomainValidation:
     """Tests for InteractiveLiteComponent domain validation."""
@@ -1025,13 +1032,24 @@ class TestInteractiveDomainValidation:
         assert comp.interactive_component_type == "MultiSelect"
 
     def test_timedelta_raises_no_components(self):
-        """timedelta column_type has no interactive components — should raise."""
+        """timedelta column_type has no interactive components — should raise when specified."""
         with pytest.raises(ValidationError, match="No interactive components"):
             InteractiveLiteComponent(
                 interactive_component_type="Slider",
                 column_name="col",
                 column_type="timedelta",
             )
+
+    def test_no_column_type_skips_validation(self):
+        """When column_type is None (not provided), compatibility is not validated."""
+        # This would fail if column_type were "object" (Slider not valid for object)
+        # but with None it's accepted — runtime/import will resolve the type
+        comp = InteractiveLiteComponent(
+            interactive_component_type="Slider",
+            column_name="some_numeric_col",
+        )
+        assert comp.column_type is None
+        assert comp.interactive_component_type == "Slider"
 
     def test_all_valid_interactive_types_for_object(self):
         """All valid interactive types for 'object' column_type should pass."""
