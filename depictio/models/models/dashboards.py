@@ -386,6 +386,26 @@ class DashboardDataLite(BaseModel):
             cls.from_yaml(content)
             return True, []
         except ValueError as e:
+            # validate_components_domain emits "[tag] loc: msg\n..." — split into one dict per line
+            lines = [ln for ln in str(e).splitlines() if ln.strip()]
+            if len(lines) > 1:
+                import re
+
+                errors: list[dict[str, Any]] = []
+                for line in lines:
+                    m = re.match(r"\[([^\]]+)\]\s*([^:]*?):\s*(.*)", line)
+                    if m:
+                        errors.append(
+                            {
+                                "type": "component_error",
+                                "tag": m.group(1),
+                                "loc": m.group(2).strip() or None,
+                                "msg": m.group(3),
+                            }
+                        )
+                    else:
+                        errors.append({"type": "yaml_error", "msg": line})
+                return False, errors
             return False, [{"type": "yaml_error", "msg": str(e)}]
         except ValidationError as e:
             # e.errors() returns list of ErrorDetails which is compatible with dict[str, Any]

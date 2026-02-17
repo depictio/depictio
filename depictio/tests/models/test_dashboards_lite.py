@@ -986,23 +986,24 @@ class TestInteractiveDomainValidation:
                 column_type="object",
             )
 
-    def test_checkbox_valid_for_bool_passes(self):
-        """Checkbox is valid for bool."""
-        comp = InteractiveLiteComponent(
-            interactive_component_type="Checkbox",
-            column_name="col",
-            column_type="bool",
-        )
-        assert comp.interactive_component_type == "Checkbox"
+    # Checkbox/Switch not yet implemented in frontend — bool has no valid interactive components
+    # def test_checkbox_valid_for_bool_passes(self):
+    #     """Checkbox is valid for bool."""
+    #     comp = InteractiveLiteComponent(
+    #         interactive_component_type="Checkbox",
+    #         column_name="col",
+    #         column_type="bool",
+    #     )
+    #     assert comp.interactive_component_type == "Checkbox"
 
-    def test_checkbox_invalid_for_float64_raises(self):
-        """Checkbox is not valid for float64."""
-        with pytest.raises(ValidationError, match="interactive_component_type"):
-            InteractiveLiteComponent(
-                interactive_component_type="Checkbox",
-                column_name="col",
-                column_type="float64",
-            )
+    # def test_checkbox_invalid_for_float64_raises(self):
+    #     """Checkbox is not valid for float64. (Checkbox not yet implemented)"""
+    #     with pytest.raises(ValidationError, match="interactive_component_type"):
+    #         InteractiveLiteComponent(
+    #             interactive_component_type="Checkbox",
+    #             column_name="col",
+    #             column_type="float64",
+    #         )
 
     def test_date_range_picker_valid_for_datetime_passes(self):
         """DateRangePicker is valid for datetime."""

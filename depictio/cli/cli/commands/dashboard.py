@@ -49,7 +49,8 @@ def _resolve_dc_id_from_project(project_data: dict, workflow_tag: str, dc_tag: s
             continue
         for dc in wf.get("data_collections", []):
             if dc.get("data_collection_tag") == dc_tag:
-                dc_id = dc.get("_id")
+                # API serialises ObjectId as "id" (not "_id")
+                dc_id = dc.get("id") or dc.get("_id")
                 return str(dc_id) if dc_id else None
     return None
 
@@ -122,7 +123,7 @@ def validate_schema_online(
                     {
                         "component_id": comp_tag,
                         "field": "workflow_tag/data_collection_tag",
-                        "message": f"Cannot resolve '{wf_tag}/{dc_tag}' in project '{lite.project_tag}'",
+                        "message": f"workflow='{wf_tag}' dc='{dc_tag}' not found in project '{lite.project_tag}'",
                     }
                 )
                 schema_cache[cache_key] = None
@@ -219,6 +220,13 @@ def validate_schema_online(
 def _format_validation_error(error: Any) -> dict[str, str]:
     """Format a single validation error for display."""
     if isinstance(error, dict):
+        if error.get("type") == "component_error":
+            # Structured error from validate_components_domain (one per component)
+            return {
+                "component_id": error.get("tag") or "-",
+                "field": error.get("loc") or "-",
+                "message": error.get("msg") or str(error),
+            }
         loc = error.get("loc", ())
         msg = error.get("msg", str(error))
         field = ".".join(str(x) for x in loc) if loc else "-"

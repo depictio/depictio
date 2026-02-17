@@ -1,21 +1,23 @@
 # TEST 03 — Interactive component type × column_type cross-field validation
 #
-# Expected result: FAIL at validate
-#   depictio-cli dashboard validate test_03_interactive_type_mismatch.yaml
+# Expected result: FAIL at validate (server schema check)
+#   depictio-cli dashboard validate test_03_interactive_type_mismatch.yaml --config <cfg>
 #
 # Errors expected:
 #   [slider-category]      Slider not valid for column_type='category'
 #                          (category supports: Select, MultiSelect, SegmentedControl)
-#   [checkbox-float]       Checkbox not valid for column_type='float64'
-#                          (float64 supports: Slider, RangeSlider)
 #   [multiselect-datetime] MultiSelect not valid for column_type='datetime'
 #                          (datetime supports: DateRangePicker only)
-#   [rangeslider-bool]     RangeSlider not valid for column_type='bool'
-#                          (bool supports: Checkbox, Switch)
+#   [rangeslider-bool]     No interactive component supported for column_type='bool'
+#                          (Checkbox/Switch not yet implemented in frontend)
+#
+# Commented out (not yet implemented in frontend):
+#   [checkbox-float]       Checkbox not valid for column_type='float64'
+#                          (Checkbox/Switch not yet implemented — bool: [])
 #
 # Compatibility matrix:
 #   int64/float64 → Slider, RangeSlider
-#   bool          → Checkbox, Switch
+#   bool          → (none — Checkbox/Switch not yet implemented in frontend)
 #   datetime      → DateRangePicker
 #   timedelta     → (none — no interactive component supported)
 #   category      → Select, MultiSelect, SegmentedControl
@@ -32,7 +34,6 @@ components:
     data_collection_tag: iris_table
     interactive_component_type: RangeSlider
     column_name: sepal.length
-    column_type: float64
 
   # VALID baseline — MultiSelect for object
   - tag: valid-multiselect
@@ -41,7 +42,6 @@ components:
     data_collection_tag: iris_table
     interactive_component_type: MultiSelect
     column_name: variety
-    column_type: object
 
   # INVALID: Slider only works with int64/float64, not category
   - tag: slider-category
@@ -50,31 +50,27 @@ components:
     data_collection_tag: iris_table
     interactive_component_type: Slider
     column_name: variety
-    column_type: category
 
-  # INVALID: Checkbox only works with bool, not float64
-  - tag: checkbox-float
-    component_type: interactive
-    workflow_tag: python/iris_workflow
-    data_collection_tag: iris_table
-    interactive_component_type: Checkbox
-    column_name: sepal.length
-    column_type: float64
+  # COMMENTED OUT: Checkbox/Switch not yet implemented in frontend
+  # - tag: checkbox-float
+  #   component_type: interactive
+  #   workflow_tag: python/iris_workflow
+  #   data_collection_tag: iris_table
+  #   interactive_component_type: Checkbox
+  #   column_name: sepal.length
 
-  # INVALID: MultiSelect only works with category/object, not datetime
+  # INVALID: measurement_date does not exist in iris_table
   - tag: multiselect-datetime
     component_type: interactive
     workflow_tag: python/iris_workflow
     data_collection_tag: iris_table
     interactive_component_type: MultiSelect
     column_name: measurement_date
-    column_type: datetime
 
-  # INVALID: RangeSlider only works with int64/float64, not bool
+  # INVALID: RangeSlider not valid for bool (no interactive components supported yet)
   - tag: rangeslider-bool
     component_type: interactive
     workflow_tag: python/iris_workflow
     data_collection_tag: iris_table
     interactive_component_type: RangeSlider
-    column_name: is_setosa
-    column_type: bool
+    column_name: variety

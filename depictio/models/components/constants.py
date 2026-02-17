@@ -44,7 +44,8 @@ VISU_TYPES: tuple[str, ...] = (
 INTERACTIVE_COMPATIBILITY: dict[str, list[str]] = {
     "int64": ["Slider", "RangeSlider"],
     "float64": ["Slider", "RangeSlider"],
-    "bool": ["Checkbox", "Switch"],
+    # "bool": ["Checkbox", "Switch"],  # Not yet implemented in frontend
+    "bool": [],
     "datetime": ["DateRangePicker"],
     "timedelta": [],  # No interactive component supported for timedelta
     "category": ["Select", "MultiSelect", "SegmentedControl"],
