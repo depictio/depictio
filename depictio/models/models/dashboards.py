@@ -186,6 +186,7 @@ class DashboardDataLite(BaseModel):
                 "visu_type",
                 "figure_params",  # Plotly Express params (renamed from dict_kwargs)
                 "mode",  # Figure mode (ui/code)
+                "code_content",  # Custom Python code (code mode only)
                 "selection_enabled",  # Figure selection
                 "aggregation",
                 "column_name",
@@ -442,8 +443,10 @@ class DashboardDataLite(BaseModel):
                 figure_params = filter_dict_kwargs(comp.get("dict_kwargs", {}))
                 if figure_params:
                     lite_comp["figure_params"] = figure_params
-                # Export mode (ui/code) and selection_enabled
+                # Export mode (ui/code), code_content, and selection_enabled
                 lite_comp["mode"] = comp.get("mode", "ui")
+                if comp.get("code_content"):
+                    lite_comp["code_content"] = comp["code_content"]
                 if comp.get("selection_enabled") is not None:
                     lite_comp["selection_enabled"] = comp["selection_enabled"]
 
@@ -607,6 +610,7 @@ class DashboardDataLite(BaseModel):
                         "visu_type": comp_dict.get("visu_type", "scatter"),
                         "dict_kwargs": figure_params,
                         "mode": comp_dict.get("mode", "ui"),  # Use imported mode (ui/code)
+                        "code_content": comp_dict.get("code_content"),  # Preserved for code mode
                         "displayed_data_count": 0,
                         "total_data_count": 0,
                         "was_sampled": False,
