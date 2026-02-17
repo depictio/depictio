@@ -1,0 +1,63 @@
+# TEST 06 — Image and MultiQC component validation
+#
+# Image components:
+#   PASS at validate (offline):
+#     - valid-image: all required fields present (image_column, workflow_tag, dc_tag)
+#     - image-custom-display: non-default thumbnail/columns/max_images
+#
+#   FAIL at validate (offline):
+#     - image-missing-column: image_column is required — must fail schema validation
+#
+# MultiQC components:
+#   No typed lite model — MultiQC components are kept as raw dicts.
+#   Offline schema validation only checks required base fields.
+#   PASS at validate (offline):
+#     - valid-multiqc: minimal valid entry with workflow/dc tags
+#     - multiqc-with-module: with optional selected_module/selected_plot
+#
+# Notes:
+#   - MultiQC domain validation (selected_module/selected_plot existence) requires
+#     online check against server DC metadata — not yet implemented.
+#   - Image s3_base_folder is auto-resolved from the DC at import time and
+#     does not need to be specified in YAML.
+
+title: "Test 06 — Image and MultiQC component validation"
+project_tag: "Iris Dataset Project Data Analysis"
+
+components:
+  # VALID: minimal image component (only required fields)
+  - tag: valid-image
+    component_type: image
+    workflow_tag: python/iris_workflow
+    data_collection_tag: iris_table
+    image_column: image_path
+
+  # VALID: image with non-default display options
+  - tag: image-custom-display
+    component_type: image
+    workflow_tag: python/iris_workflow
+    data_collection_tag: iris_table
+    image_column: thumbnail_path
+    thumbnail_size: 200
+    columns: 6
+    max_images: 50
+
+  # INVALID: image_column is a required field — missing it must fail
+  - tag: image-missing-column
+    component_type: image
+    workflow_tag: python/iris_workflow
+    data_collection_tag: iris_table
+
+  # VALID: minimal multiqc component
+  - tag: valid-multiqc
+    component_type: multiqc
+    workflow_tag: python/iris_workflow
+    data_collection_tag: iris_table
+
+  # VALID: multiqc with optional module/plot selection
+  - tag: multiqc-with-module
+    component_type: multiqc
+    workflow_tag: python/iris_workflow
+    data_collection_tag: iris_table
+    selected_module: fastqc
+    selected_plot: per_base_sequence_quality

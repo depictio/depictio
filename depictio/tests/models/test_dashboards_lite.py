@@ -5,6 +5,7 @@ Tests the lightweight dashboard and component models used for YAML import/export
 """
 
 import uuid
+from pathlib import Path
 
 import pytest
 from pydantic import ValidationError
@@ -14,10 +15,15 @@ from depictio.models.components.lite import (
     BaseLiteComponent,
     CardLiteComponent,
     FigureLiteComponent,
+    ImageLiteComponent,
     InteractiveLiteComponent,
     TableLiteComponent,
 )
 from depictio.models.models.dashboards import DashboardDataLite
+
+_VALIDATION_TESTS_DIR = (
+    Path(__file__).parent.parent.parent / "projects" / "test" / "validation_tests"
+)
 
 # ============================================================================
 # Fixtures
@@ -1070,3 +1076,173 @@ class TestInteractiveDomainValidation:
                 column_name="col",
                 column_type="category",
             )
+
+
+# ---------------------------------------------------------------------------
+# Image component
+# ---------------------------------------------------------------------------
+
+
+class TestImageLiteComponent:
+    """Unit tests for ImageLiteComponent."""
+
+    def test_valid_minimal_image(self):
+        """Minimal valid image component with only required fields."""
+        comp = ImageLiteComponent(
+            tag="img-1",
+            workflow_tag="python/iris_workflow",
+            data_collection_tag="iris_table",
+            image_column="image_path",
+        )
+        assert comp.component_type == "image"
+        assert comp.image_column == "image_path"
+        assert comp.thumbnail_size == 150
+        assert comp.columns == 4
+        assert comp.max_images == 20
+
+    def test_valid_image_with_display_options(self):
+        """Image component with non-default display options."""
+        comp = ImageLiteComponent(
+            tag="img-2",
+            workflow_tag="python/iris_workflow",
+            data_collection_tag="iris_table",
+            image_column="thumb_path",
+            thumbnail_size=200,
+            columns=6,
+            max_images=50,
+        )
+        assert comp.thumbnail_size == 200
+        assert comp.columns == 6
+        assert comp.max_images == 50
+
+    def test_image_missing_image_column_raises(self):
+        """image_column is required — omitting it must raise ValidationError."""
+        with pytest.raises(ValidationError):
+            ImageLiteComponent(
+                tag="img-bad",
+                workflow_tag="python/iris_workflow",
+                data_collection_tag="iris_table",
+            )
+
+    def test_image_component_type_is_literal(self):
+        """component_type is always 'image'."""
+        comp = ImageLiteComponent(
+            image_column="col",
+            workflow_tag="wf",
+            data_collection_tag="dc",
+        )
+        assert comp.component_type == "image"
+
+
+# ---------------------------------------------------------------------------
+# Validation YAML files — offline behaviour
+# ---------------------------------------------------------------------------
+
+
+class TestValidationYAMLFiles:
+    """Verify that each test YAML file behaves as documented (offline only).
+
+    These tests do NOT require a running server — they only exercise
+    schema + domain validation (Pass 1 of validate_yaml).
+
+    Online checks (Pass 2, column-name / type inference against server
+    delta table schema) are not tested here.
+    """
+
+    # ------------------------------------------------------------------
+    # test_01 — invalid visu_type values: must FAIL offline
+    # ------------------------------------------------------------------
+
+    def test_01_invalid_visu_type_fails_offline(self):
+        """Pie, treemap, 3d_scatter are not valid visu_type values."""
+        content = (_VALIDATION_TESTS_DIR / "test_01_invalid_visu_type.yaml").read_text()
+        is_valid, errors = DashboardDataLite.validate_yaml(content)
+        assert not is_valid, "Expected offline validation to fail"
+        msgs = " ".join(e.get("msg", "") for e in errors)
+        assert "visu_type" in msgs or "Invalid" in msgs
+
+    # ------------------------------------------------------------------
+    # test_02 — aggregation × column_type: PASS offline (no column_type)
+    # ------------------------------------------------------------------
+
+    def test_02_agg_mismatch_passes_offline(self):
+        """Without explicit column_type the offline check is skipped — valid schema."""
+        content = (_VALIDATION_TESTS_DIR / "test_02_agg_column_type_mismatch.yaml").read_text()
+        is_valid, errors = DashboardDataLite.validate_yaml(content)
+        assert is_valid, f"Expected offline validation to pass, got: {errors}"
+
+    # ------------------------------------------------------------------
+    # test_03 — interactive type × column_type: PASS offline (no column_type)
+    # ------------------------------------------------------------------
+
+    def test_03_interactive_mismatch_passes_offline(self):
+        """Without explicit column_type the offline check is skipped — valid schema."""
+        content = (_VALIDATION_TESTS_DIR / "test_03_interactive_type_mismatch.yaml").read_text()
+        is_valid, errors = DashboardDataLite.validate_yaml(content)
+        assert is_valid, f"Expected offline validation to pass, got: {errors}"
+
+    # ------------------------------------------------------------------
+    # test_04 — wrong wf/dc tags: PASS offline (free-text, no server lookup)
+    # ------------------------------------------------------------------
+
+    def test_04_wrong_wf_dc_tags_passes_offline(self):
+        """Wrong workflow/dc tags are not caught offline — PASS."""
+        content = (_VALIDATION_TESTS_DIR / "test_04_wrong_wf_dc_tags.yaml").read_text()
+        is_valid, errors = DashboardDataLite.validate_yaml(content)
+        assert is_valid, f"Expected offline validation to pass, got: {errors}"
+
+    # ------------------------------------------------------------------
+    # test_05 — code mode / selection errors: must FAIL offline
+    # ------------------------------------------------------------------
+
+    def test_05_code_mode_errors_fails_offline(self):
+        """code_content missing and invalid mode must fail offline."""
+        content = (
+            _VALIDATION_TESTS_DIR / "test_05_code_mode_and_selection_errors.yaml"
+        ).read_text()
+        is_valid, errors = DashboardDataLite.validate_yaml(content)
+        assert not is_valid, "Expected offline validation to fail"
+        msgs = " ".join(e.get("msg", "") for e in errors)
+        assert "code_content" in msgs or "mode" in msgs or "selection_column" in msgs
+
+    def test_05_code_mode_errors_reports_all_components(self):
+        """Each failing component gets its own error entry."""
+        content = (
+            _VALIDATION_TESTS_DIR / "test_05_code_mode_and_selection_errors.yaml"
+        ).read_text()
+        _, errors = DashboardDataLite.validate_yaml(content)
+        # At least 3 failing components: code-no-content, invalid-mode, select-no-col
+        assert len(errors) >= 3
+
+    # ------------------------------------------------------------------
+    # test_06 — image and multiqc: image-missing-column must FAIL offline
+    # ------------------------------------------------------------------
+
+    def test_06_image_missing_column_fails_offline(self):
+        """image_column is required — its absence must be caught offline."""
+        content = (_VALIDATION_TESTS_DIR / "test_06_image_and_multiqc.yaml").read_text()
+        is_valid, errors = DashboardDataLite.validate_yaml(content)
+        assert not is_valid, "Expected offline validation to fail (missing image_column)"
+        tags = [e.get("tag", "") for e in errors]
+        msgs = " ".join(e.get("msg", "") for e in errors)
+        assert "image-missing-column" in tags or "image_column" in msgs
+
+    def test_06_valid_image_and_multiqc_components_parsed(self):
+        """Valid image + multiqc entries are accepted and parsed correctly."""
+        valid_yaml = """
+title: "Inline test"
+project_tag: "Test"
+components:
+  - tag: img-ok
+    component_type: image
+    workflow_tag: python/wf
+    data_collection_tag: dc
+    image_column: image_path
+  - tag: mqc-ok
+    component_type: multiqc
+    workflow_tag: python/wf
+    data_collection_tag: dc
+    selected_module: fastqc
+"""
+        is_valid, errors = DashboardDataLite.validate_yaml(valid_yaml)
+        assert is_valid, f"Expected to pass, got: {errors}"
