@@ -133,6 +133,14 @@ class DashboardDataLite(BaseModel):
     )
     tab_icon_color: Optional[str] = Field(default=None, description="Color for tab icon")
 
+    # Dashboard display icon (shown on the management page card)
+    icon: Optional[str] = Field(default=None, description="Dashboard icon identifier")
+    icon_color: Optional[str] = Field(default=None, description="Dashboard icon color")
+    icon_variant: Optional[str] = Field(default=None, description="Dashboard icon variant")
+    workflow_system: Optional[str] = Field(
+        default=None, description="Workflow system (e.g., 'nf-core', 'snakemake')"
+    )
+
     # Components using Lite models
     components: list[LiteComponent | dict[str, Any]] = Field(
         default_factory=list, description="List of dashboard components"
@@ -168,6 +176,15 @@ class DashboardDataLite(BaseModel):
             data.pop("tab_icon", None)
         if not data.get("tab_icon_color"):
             data.pop("tab_icon_color", None)
+        # Clean up default icon fields (omit if default values)
+        if data.get("icon") == "mdi:view-dashboard":
+            data.pop("icon", None)
+        if data.get("icon_color") == "orange":
+            data.pop("icon_color", None)
+        if data.get("icon_variant") == "filled":
+            data.pop("icon_variant", None)
+        if not data.get("workflow_system") or data.get("workflow_system") == "none":
+            data.pop("workflow_system", None)
 
         # Clean up components - remove empty values and order fields
         if "components" in data:
@@ -527,6 +544,11 @@ class DashboardDataLite(BaseModel):
             main_tab_name=dashboard_data.get("main_tab_name"),
             tab_icon=dashboard_data.get("tab_icon"),
             tab_icon_color=dashboard_data.get("tab_icon_color"),
+            # Dashboard display icon fields
+            icon=dashboard_data.get("icon"),
+            icon_color=dashboard_data.get("icon_color"),
+            icon_variant=dashboard_data.get("icon_variant"),
+            workflow_system=dashboard_data.get("workflow_system"),
             # parent_dashboard_tag is not set here - it needs to be resolved separately
             # during export by looking up the parent dashboard title
         )
@@ -566,10 +588,10 @@ class DashboardDataLite(BaseModel):
             "title": self.title,
             "subtitle": self.subtitle,
             "version": 1,
-            "icon": "mdi:view-dashboard",
-            "icon_color": "orange",
-            "icon_variant": "filled",
-            "workflow_system": "none",
+            "icon": self.icon or "mdi:view-dashboard",
+            "icon_color": self.icon_color or "orange",
+            "icon_variant": self.icon_variant or "filled",
+            "workflow_system": self.workflow_system or "none",
             "notes_content": "",
             "is_public": False,
             "permissions": {"owners": [], "editors": [], "viewers": []},
