@@ -1,0 +1,70 @@
+# TEST 02 — Aggregation × column_type cross-field validation
+#
+# Expected result: FAIL at validate
+#   depictio-cli dashboard validate test_02_agg_column_type_mismatch.yaml
+#
+# Errors expected:
+#   [avg-variety]    'average' is not valid for column_type='object'
+#                    (object only supports: count, mode, nunique)
+#   [variance-bool]  'variance' is not valid for column_type='bool'
+#                    (bool only supports: count, sum, min, max)
+#   [sum-category]   'sum' is not valid for column_type='category'
+#                    (category only supports: count, mode)
+#
+# Compatibility matrix:
+#   int64/float64 → count, sum, average, median, min, max, range, variance, std_dev, ...
+#   bool          → count, sum, min, max
+#   datetime      → count, min, max
+#   timedelta     → count, sum, min, max
+#   category      → count, mode
+#   object        → count, mode, nunique
+
+title: "Test 02 — Aggregation × column_type cross-field mismatch"
+project_tag: "Iris Dataset Project Data Analysis"
+
+components:
+  # VALID baseline — count is valid for any column_type
+  - tag: valid-count
+    component_type: card
+    workflow_tag: python/iris_workflow
+    data_collection_tag: iris_table
+    aggregation: count
+    column_name: variety
+    column_type: object
+
+  # VALID baseline — average is valid for float64
+  - tag: valid-average
+    component_type: card
+    workflow_tag: python/iris_workflow
+    data_collection_tag: iris_table
+    aggregation: average
+    column_name: sepal.length
+    column_type: float64
+
+  # INVALID: 'average' requires numeric type, 'object' not supported
+  - tag: avg-variety
+    component_type: card
+    workflow_tag: python/iris_workflow
+    data_collection_tag: iris_table
+    aggregation: average
+    column_name: variety
+    column_type: object
+    icon_name: mdi:chart-bar
+
+  # INVALID: 'variance' requires numeric type, 'bool' not supported
+  - tag: variance-bool
+    component_type: card
+    workflow_tag: python/iris_workflow
+    data_collection_tag: iris_table
+    aggregation: variance
+    column_name: is_setosa
+    column_type: bool
+
+  # INVALID: 'sum' requires numeric type, 'category' not supported
+  - tag: sum-category
+    component_type: card
+    workflow_tag: python/iris_workflow
+    data_collection_tag: iris_table
+    aggregation: sum
+    column_name: variety
+    column_type: category

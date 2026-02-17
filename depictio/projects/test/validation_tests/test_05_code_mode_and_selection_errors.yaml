@@ -1,0 +1,82 @@
+# TEST 05 — Code mode and selection_enabled cross-field validation
+#
+# Expected result: FAIL at validate
+#   depictio-cli dashboard validate test_05_code_mode_and_selection_errors.yaml
+#
+# Errors expected:
+#   [code-no-content]    mode='code' but code_content is missing → required
+#   [code-blank-content] mode='code' but code_content is blank/whitespace → required non-empty
+#   [invalid-mode]       mode='interactive' is not valid → must be 'ui' or 'code'
+#   [select-no-col]      selection_enabled=True but selection_column not provided → required
+#
+# Also tests edge case: valid code-mode figure (should PASS)
+# Also tests valid selection_enabled with column (should PASS)
+
+title: "Test 05 — Code mode and selection_enabled cross-field errors"
+project_tag: "Iris Dataset Project Data Analysis"
+
+components:
+  # VALID: code mode with actual code_content
+  - tag: valid-code-mode
+    component_type: figure
+    workflow_tag: python/iris_workflow
+    data_collection_tag: iris_table
+    mode: code
+    code_content: |
+      import plotly.express as px
+      fig = px.scatter_matrix(
+          df,
+          dimensions=["sepal.length", "sepal.width", "petal.length", "petal.width"],
+          color="variety",
+          title="Iris Scatter Matrix"
+      )
+
+  # VALID: selection_enabled with selection_column provided
+  - tag: valid-selection
+    component_type: figure
+    workflow_tag: python/iris_workflow
+    data_collection_tag: iris_table
+    visu_type: scatter
+    dict_kwargs:
+      x: sepal.length
+      y: sepal.width
+      color: variety
+    selection_enabled: true
+    selection_column: variety
+
+  # INVALID: mode='code' but no code_content provided
+  - tag: code-no-content
+    component_type: figure
+    workflow_tag: python/iris_workflow
+    data_collection_tag: iris_table
+    mode: code
+
+  # INVALID: mode='code' but code_content is blank (only whitespace)
+  - tag: code-blank-content
+    component_type: figure
+    workflow_tag: python/iris_workflow
+    data_collection_tag: iris_table
+    mode: code
+    code_content: "   "
+
+  # INVALID: mode value is not 'ui' or 'code'
+  - tag: invalid-mode
+    component_type: figure
+    workflow_tag: python/iris_workflow
+    data_collection_tag: iris_table
+    mode: interactive
+    visu_type: scatter
+    dict_kwargs:
+      x: sepal.length
+      y: sepal.width
+
+  # INVALID: selection_enabled=True but selection_column not provided
+  - tag: select-no-col
+    component_type: figure
+    workflow_tag: python/iris_workflow
+    data_collection_tag: iris_table
+    visu_type: scatter
+    dict_kwargs:
+      x: sepal.length
+      y: sepal.width
+    selection_enabled: true
