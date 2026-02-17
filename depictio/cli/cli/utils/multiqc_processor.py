@@ -602,25 +602,35 @@ def process_multiqc_data_collection(
             logger.info(f"S3 location: {first_s3_location}")
             logger.info(f"Individual MultiQC reports created: {len(created_reports)}")
 
-            # Direct MongoDB update - simpler than API call
-            result = projects_collection.update_one(
-                {"workflows.data_collections._id": dc_oid},
-                {
-                    "$set": {
-                        "workflows.$[].data_collections.$[dc].config.dc_specific_properties.samples": unique_samples,
-                        "workflows.$[].data_collections.$[dc].config.dc_specific_properties.modules": unique_modules,
-                        "workflows.$[].data_collections.$[dc].config.dc_specific_properties.plots": all_plots,
-                        "workflows.$[].data_collections.$[dc].config.dc_specific_properties.s3_location": first_s3_location,
-                        "workflows.$[].data_collections.$[dc].config.dc_specific_properties.processed_files": processed_files,
-                        "workflows.$[].data_collections.$[dc].config.dc_specific_properties.file_size_bytes": sum(
-                            f["file_size_bytes"] for f in individual_file_metadata
-                        ),
-                    }
-                },
-                array_filters=[{"dc._id": dc_oid}],
-            )
+            # Index-based MongoDB update: find exact array indices first, then update
+            # This avoids the silent failure of array_filters on certain MongoDB configurations
+            project_doc = projects_collection.find_one({"workflows.data_collections._id": dc_oid})
+            result = None
+            if project_doc:
+                for wf_idx, wf in enumerate(project_doc.get("workflows", [])):
+                    for dc_idx, dc in enumerate(wf.get("data_collections", [])):
+                        if dc.get("_id") == dc_oid:
+                            result = projects_collection.update_one(
+                                {"_id": project_doc["_id"]},
+                                {
+                                    "$set": {
+                                        f"workflows.{wf_idx}.data_collections.{dc_idx}.config.dc_specific_properties.samples": unique_samples,
+                                        f"workflows.{wf_idx}.data_collections.{dc_idx}.config.dc_specific_properties.modules": unique_modules,
+                                        f"workflows.{wf_idx}.data_collections.{dc_idx}.config.dc_specific_properties.plots": all_plots,
+                                        f"workflows.{wf_idx}.data_collections.{dc_idx}.config.dc_specific_properties.s3_location": first_s3_location,
+                                        f"workflows.{wf_idx}.data_collections.{dc_idx}.config.dc_specific_properties.processed_files": processed_files,
+                                        f"workflows.{wf_idx}.data_collections.{dc_idx}.config.dc_specific_properties.file_size_bytes": sum(
+                                            f["file_size_bytes"] for f in individual_file_metadata
+                                        ),
+                                    }
+                                },
+                            )
+                            break
+                    else:
+                        continue
+                    break
 
-            if result.modified_count > 0:
+            if result and result.modified_count > 0:
                 logger.info("✅ Updated dc_specific_properties with MultiQC metadata")
             else:
                 logger.warning(
