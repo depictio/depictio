@@ -169,7 +169,7 @@ class TestCLIValidateCommand:
         """Invalid YAML file should fail validation."""
         result = runner.invoke(app, ["validate", str(invalid_yaml_file)])
         assert result.exit_code == 1
-        assert "Validation failed" in result.output
+        assert "validation failed" in result.output.lower()
 
     def test_validate_nonexistent_file(self):
         """Non-existent file should fail with error."""
