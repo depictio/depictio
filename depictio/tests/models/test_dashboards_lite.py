@@ -1301,3 +1301,75 @@ class TestMultiQCLiteComponent:
             selected_plot="plot",
         )
         assert comp.component_type == "multiqc"
+
+
+# ---------------------------------------------------------------------------
+# _parse_component_lines helper
+# ---------------------------------------------------------------------------
+
+
+class TestParseComponentLines:
+    """Unit tests for the _parse_component_lines module-level helper."""
+
+    from depictio.models.models.dashboards import _parse_component_lines  # noqa: PLC0415
+
+    def _parse(self, raw: str) -> list[dict]:
+        from depictio.models.models.dashboards import _parse_component_lines
+
+        return _parse_component_lines(raw)
+
+    def test_single_line(self):
+        """One '[tag] loc: msg' line → one component_error dict."""
+        result = self._parse("[scatter-1] visu_type: Invalid visu_type 'pie'")
+        assert len(result) == 1
+        assert result[0] == {
+            "type": "component_error",
+            "tag": "scatter-1",
+            "loc": "visu_type",
+            "msg": "Invalid visu_type 'pie'",
+        }
+
+    def test_multiple_lines(self):
+        """Multiple lines → one dict per matching line."""
+        raw = "[pie-chart] visu_type: bad type\n[bar3d] visu_type: another bad type"
+        result = self._parse(raw)
+        assert len(result) == 2
+        assert result[0]["tag"] == "pie-chart"
+        assert result[1]["tag"] == "bar3d"
+
+    def test_strips_value_error_prefix_on_message(self):
+        """'Value error, ' in the message body is stripped."""
+        raw = "[comp] loc: Value error, something went wrong"
+        result = self._parse(raw)
+        assert result[0]["msg"] == "something went wrong"
+
+    def test_strips_value_error_prefix_on_whole_line(self):
+        """Pydantic v2 wraps ValueError as 'Value error, [tag] loc: msg'."""
+        raw = "Value error, [comp] visu_type: Invalid visu_type 'pie'"
+        result = self._parse(raw)
+        assert len(result) == 1
+        assert result[0]["tag"] == "comp"
+        assert result[0]["msg"] == "Invalid visu_type 'pie'"
+
+    def test_empty_loc_becomes_none(self):
+        """When there is no location part, loc is None."""
+        raw = "[comp] : Field required"
+        result = self._parse(raw)
+        assert result[0]["loc"] is None
+        assert result[0]["msg"] == "Field required"
+
+    def test_non_matching_lines_skipped(self):
+        """Lines without the [tag] pattern are silently skipped."""
+        raw = "1 validation error for DashboardDataLite\n[comp] visu_type: bad\n  [url=...]"
+        result = self._parse(raw)
+        assert len(result) == 1
+        assert result[0]["tag"] == "comp"
+
+    def test_empty_string_returns_empty_list(self):
+        result = self._parse("")
+        assert result == []
+
+    def test_whitespace_only_lines_skipped(self):
+        raw = "   \n[comp] loc: msg\n   "
+        result = self._parse(raw)
+        assert len(result) == 1
