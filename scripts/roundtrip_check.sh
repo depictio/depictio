@@ -13,6 +13,24 @@ TMP="$WORKTREE/scripts/_roundtrip_tmp"
 
 mkdir -p "$TMP"
 
+# Helper: extract a count from dashboard JSON using a jq-style Python expression.
+# Usage: json_count "$JSON_STRING" "python expression returning int"
+json_count() {
+  echo "$1" | "$PYTHON" -c "
+import sys, json
+d = json.load(sys.stdin)
+print($2)
+"
+}
+
+# Helper: assert two values are equal, exit 1 with message on mismatch.
+assert_eq() {
+  if [ "$1" != "$2" ]; then
+    echo "ERROR: $3 ($1 vs $2)"
+    exit 1
+  fi
+}
+
 echo "=== Step 1: export original dashboard ==="
 "$CLI" dashboard export "$IRIS_ID" --config "$CONFIG" --output "$TMP/yaml1.yaml"
 
@@ -55,18 +73,18 @@ JWT_TOKEN=$(grep 'access_token' "$CONFIG" | awk '{print $2}' | tr -d "'\"")
 DASH1_JSON=$(curl -sf -H "Authorization: Bearer $JWT_TOKEN" "$API_BASE/depictio/api/v1/dashboards/get/$IRIS_ID")
 DASH2_JSON=$(curl -sf -H "Authorization: Bearer $JWT_TOKEN" "$API_BASE/depictio/api/v1/dashboards/get/$NEW_ID")
 
-META1=$(echo "$DASH1_JSON" | "$PYTHON" -c "import sys,json; print(len(json.load(sys.stdin).get('stored_metadata',[])))")
-META2=$(echo "$DASH2_JSON" | "$PYTHON" -c "import sys,json; print(len(json.load(sys.stdin).get('stored_metadata',[])))")
+META1=$(json_count "$DASH1_JSON" "len(d.get('stored_metadata', []))")
+META2=$(json_count "$DASH2_JSON" "len(d.get('stored_metadata', []))")
 echo "Dashboard 1: $META1 components in DB"
 echo "Dashboard 2: $META2 components in DB"
-[ "$META1" = "$META2" ] || { echo "ERROR: component count mismatch ($META1 vs $META2)"; exit 1; }
+assert_eq "$META1" "$META2" "component count mismatch"
 
-LAYOUT1=$(echo "$DASH1_JSON" | "$PYTHON" -c "import sys,json; d=json.load(sys.stdin); print(len(d.get('left_panel_layout_data',[])) + len(d.get('right_panel_layout_data',[])))")
-LAYOUT2=$(echo "$DASH2_JSON" | "$PYTHON" -c "import sys,json; d=json.load(sys.stdin); print(len(d.get('left_panel_layout_data',[])) + len(d.get('right_panel_layout_data',[])))")
+LAYOUT1=$(json_count "$DASH1_JSON" "len(d.get('left_panel_layout_data', [])) + len(d.get('right_panel_layout_data', []))")
+LAYOUT2=$(json_count "$DASH2_JSON" "len(d.get('left_panel_layout_data', [])) + len(d.get('right_panel_layout_data', []))")
 echo "Dashboard 1: $LAYOUT1 layout items in DB"
 echo "Dashboard 2: $LAYOUT2 layout items in DB"
-[ "$LAYOUT1" = "$LAYOUT2" ] || { echo "ERROR: layout item count mismatch ($LAYOUT1 vs $LAYOUT2)"; exit 1; }
-[ "$META1" = "$LAYOUT1" ] || { echo "ERROR: Dashboard 1 — $META1 components but $LAYOUT1 layout items"; exit 1; }
-[ "$META2" = "$LAYOUT2" ] || { echo "ERROR: Dashboard 2 — $META2 components but $LAYOUT2 layout items"; exit 1; }
+assert_eq "$LAYOUT1" "$LAYOUT2" "layout item count mismatch"
+assert_eq "$META1" "$LAYOUT1" "Dashboard 1: $META1 components but $LAYOUT1 layout items"
+assert_eq "$META2" "$LAYOUT2" "Dashboard 2: $META2 components but $LAYOUT2 layout items"
 
-echo "✓ DB structure verified — $META1 components, $LAYOUT1 layout items in both dashboards"
+echo "OK: DB structure verified -- $META1 components, $LAYOUT1 layout items in both dashboards"
