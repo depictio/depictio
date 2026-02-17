@@ -28,24 +28,6 @@ from depictio.models.components.constants import (
     VISU_TYPES,
 )
 
-# ---------------------------------------------------------------------------
-# Type aliases — used for annotation (not enforced as Literal to keep
-# extra="allow" / YAML round-trip compatibility, but validated via validators)
-# ---------------------------------------------------------------------------
-
-ColumnType = Literal["int64", "float64", "bool", "datetime", "timedelta", "category", "object"]
-VisuType = Literal["scatter", "line", "bar", "box", "histogram"]
-InteractiveType = Literal[
-    "Slider",
-    "RangeSlider",
-    "Checkbox",
-    "Switch",
-    "DateRangePicker",
-    "Select",
-    "MultiSelect",
-    "SegmentedControl",
-]
-
 
 class BaseLiteComponent(BaseModel):
     """Base class for lite dashboard components.

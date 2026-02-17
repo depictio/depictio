@@ -18,7 +18,7 @@ Component Architecture:
 """
 
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, ClassVar, Optional
 
 import yaml
 from pydantic import (
@@ -128,24 +128,24 @@ class DashboardDataLite(BaseModel):
     is_main_tab: bool = Field(
         default=True, description="Whether this is the main tab (root dashboard)"
     )
-    parent_dashboard_tag: Optional[str] = Field(
+    parent_dashboard_tag: str | None = Field(
         default=None,
         description="Parent dashboard title for child tabs (resolved during import)",
     )
     tab_order: int = Field(default=0, description="Order of tab within parent (0 = main tab)")
-    main_tab_name: Optional[str] = Field(
+    main_tab_name: str | None = Field(
         default=None, description="Custom name for main tab (defaults to 'Main' if None)"
     )
-    tab_icon: Optional[str] = Field(
+    tab_icon: str | None = Field(
         default=None, description="Icon for child tabs (e.g., 'mdi:chart-bar')"
     )
-    tab_icon_color: Optional[str] = Field(default=None, description="Color for tab icon")
+    tab_icon_color: str | None = Field(default=None, description="Color for tab icon")
 
     # Dashboard display icon (shown on the management page card)
-    icon: Optional[str] = Field(default=None, description="Dashboard icon identifier")
-    icon_color: Optional[str] = Field(default=None, description="Dashboard icon color")
-    icon_variant: Optional[str] = Field(default=None, description="Dashboard icon variant")
-    workflow_system: Optional[str] = Field(
+    icon: str | None = Field(default=None, description="Dashboard icon identifier")
+    icon_color: str | None = Field(default=None, description="Dashboard icon color")
+    icon_variant: str | None = Field(default=None, description="Dashboard icon variant")
+    workflow_system: str | None = Field(
         default=None, description="Workflow system (e.g., 'nf-core', 'snakemake')"
     )
 
@@ -155,7 +155,7 @@ class DashboardDataLite(BaseModel):
     )
 
     # Map component_type string → typed Lite model for domain validation
-    _COMPONENT_TYPE_MAP: dict[str, type] = {
+    _COMPONENT_TYPE_MAP: ClassVar[dict[str, type]] = {
         "figure": FigureLiteComponent,
         "card": CardLiteComponent,
         "interactive": InteractiveLiteComponent,
