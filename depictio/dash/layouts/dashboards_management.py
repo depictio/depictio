@@ -1455,13 +1455,12 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
             ]
 
         # Categorize dashboards with precedence: Example > Public > Accessed > Owned
-        # Example dashboards are ONLY those explicitly marked OR owned by example/demo users
-        # If current user owns a dashboard, it goes to Owned (not Example) unless explicitly marked
+        # Example dashboards are ONLY those with explicitly hardcoded IDs
 
         # Check if current user is anonymous
         is_anonymous = hasattr(current_user, "is_anonymous") and current_user.is_anonymous
 
-        # Example dashboards: explicitly marked by ID OR owned by example/demo users (but NOT current user)
+        # Example dashboards: only those with explicitly hardcoded IDs
         # Order: ampliseq, penguins, iris
         example_dashboard_ids = [
             "646b0f3c1e4a2d7f8e5b8ca2",  # nf-core/ampliseq
@@ -1471,22 +1470,7 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
         example_dashboards = [
             d
             for d in dashboards
-            if (
-                # Explicitly marked as example by ID
-                str(d.get("dashboard_id", "")) in example_dashboard_ids
-                # OR owned by example/demo user (but not by current user - duplicates go to Owned)
-                or (
-                    str(user_id) not in [str(owner["_id"]) for owner in d["permissions"]["owners"]]
-                    and (
-                        any(
-                            "example" in owner.get("email", "").lower()
-                            or "demo" in owner.get("email", "").lower()
-                            for owner in d["permissions"]["owners"]
-                        )
-                        or d.get("title", "").lower().startswith("example:")
-                    )
-                )
-            )
+            if str(d.get("dashboard_id", "")) in example_dashboard_ids
             and d.get("is_main_tab", True)  # Filter out child tabs
         ]
 
