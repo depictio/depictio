@@ -511,6 +511,7 @@ def enrich_dashboard_with_tags(
 
     # Get projects collection (workflows and data collections are nested in projects)
     from depictio.api.v1.configs.config import settings
+
     projects_collection = db[settings.mongodb.collections.projects_collection]
 
     dc_cache: dict[str, dict | None] = {}

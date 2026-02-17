@@ -1390,8 +1390,8 @@ def _regenerate_component_indices(dashboard_dict: dict) -> None:
 
         for layout_key in layout_keys:
             for layout_item in dashboard_dict.get(layout_key, []):
-                if layout_item.get("i") == old_index:
-                    layout_item["i"] = new_index
+                if layout_item.get("i") == f"box-{old_index}":
+                    layout_item["i"] = f"box-{new_index}"
 
 
 def _import_multi_tab_dashboard(

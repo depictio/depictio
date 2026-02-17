@@ -172,22 +172,26 @@ class DashboardDataLite(BaseModel):
         # Clean up components - remove empty values and order fields
         if "components" in data:
             cleaned_components = []
-            # Define preferred field order (tag first, then type, then data source, then config)
+            # Define preferred field order (tag first, then type, then layout, then data source, then config)
             field_order = [
                 "tag",
                 "index",  # Optional semantic identifier
                 "component_type",
-                "title",
                 "workflow_tag",
                 "data_collection_tag",
+                "layout",  # Grouped {x, y, w, h}
+                "title",
                 "selected_module",  # MultiQC
-                "selected_plot",    # MultiQC
+                "selected_plot",  # MultiQC
                 "visu_type",
-                "dict_kwargs",
+                "figure_params",  # Plotly Express params (renamed from dict_kwargs)
+                "mode",  # Figure mode (ui/code)
+                "selection_enabled",  # Figure selection
                 "aggregation",
                 "column_name",
                 "column_type",
                 "interactive_component_type",
+                "display",  # Grouped styling fields
             ]
 
             for comp in data["components"]:
@@ -200,6 +204,11 @@ class DashboardDataLite(BaseModel):
                         # Skip empty values
                         if value in ("", None, [], {}):
                             continue
+                        # Skip UUID-like index values (auto-generated, not meaningful to users)
+                        if key == "index" and isinstance(value, str):
+                            is_uuid_like = value.count("-") >= 4 or len(value) > 30
+                            if is_uuid_like:
+                                continue
                         cleaned[key] = value
 
                 # Add remaining fields (styling, etc.) in original order
@@ -209,6 +218,11 @@ class DashboardDataLite(BaseModel):
                     # Skip empty values
                     if value in ("", None, [], {}):
                         continue
+                    # Skip UUID-like index values (auto-generated, not meaningful to users)
+                    if key == "index" and isinstance(value, str):
+                        is_uuid_like = value.count("-") >= 4 or len(value) > 30
+                        if is_uuid_like:
+                            continue
                     # Skip default values for table
                     if comp.get("component_type") == "table":
                         if key == "page_size" and value == 10:
@@ -362,6 +376,26 @@ class DashboardDataLite(BaseModel):
         # Import tag generation function
         from depictio.models.yaml_serialization.utils import generate_component_id
 
+        # Build layout lookup: component_index → {x, y, w, h}
+        # All dashboards use split-panel layout: interactives in left_panel_layout_data,
+        # all other components in right_panel_layout_data. stored_layout_data is legacy/empty.
+        layout_lookup: dict[str, dict[str, int]] = {}
+        for panel_key in [
+            "stored_layout_data",
+            "left_panel_layout_data",
+            "right_panel_layout_data",
+        ]:
+            for layout_item in dashboard_data.get(panel_key, []):
+                i_field = layout_item.get("i", "")
+                if i_field.startswith("box-"):
+                    comp_index = i_field[4:]  # Strip "box-" prefix
+                    layout_lookup[comp_index] = {
+                        "x": layout_item.get("x", 0),
+                        "y": layout_item.get("y", 0),
+                        "w": layout_item.get("w", 6),
+                        "h": layout_item.get("h", 4),
+                    }
+
         for idx, comp in enumerate(dashboard_data.get("stored_metadata", [])):
             comp_type = comp.get("component_type", "figure")
 
@@ -372,7 +406,9 @@ class DashboardDataLite(BaseModel):
             # Extract workflow and data collection tags (mandatory fields)
             workflow_tag = comp.get("workflow_tag") or comp.get("wf_tag", "")
             dc_config = comp.get("dc_config", {})
-            data_collection_tag = comp.get("data_collection_tag") or dc_config.get("data_collection_tag", "")
+            data_collection_tag = comp.get("data_collection_tag") or dc_config.get(
+                "data_collection_tag", ""
+            )
 
             # Log warning if mandatory tags are missing
             if not workflow_tag:
@@ -393,36 +429,51 @@ class DashboardDataLite(BaseModel):
                 "data_collection_tag": data_collection_tag,
             }
 
+            # Layout fields - read from stored_layout_data lookup (keyed by component index)
+            comp_index_str = str(comp.get("index", ""))
+            comp_layout = layout_lookup.get(comp_index_str, {"x": 0, "y": 0, "w": 6, "h": 4})
+            lite_comp["layout"] = comp_layout
+
             if comp.get("title"):
                 lite_comp["title"] = comp["title"]
 
             if comp_type == "figure":
                 lite_comp["visu_type"] = comp.get("visu_type", "scatter")
-                dict_kwargs = filter_dict_kwargs(comp.get("dict_kwargs", {}))
-                if dict_kwargs:
-                    lite_comp["dict_kwargs"] = dict_kwargs
+                figure_params = filter_dict_kwargs(comp.get("dict_kwargs", {}))
+                if figure_params:
+                    lite_comp["figure_params"] = figure_params
+                # Export mode (ui/code) and selection_enabled
+                lite_comp["mode"] = comp.get("mode", "ui")
+                if comp.get("selection_enabled") is not None:
+                    lite_comp["selection_enabled"] = comp["selection_enabled"]
 
             elif comp_type == "card":
                 lite_comp["aggregation"] = comp.get("aggregation", "")
                 lite_comp["column_name"] = comp.get("column_name", "")
                 lite_comp["column_type"] = comp.get("column_type", "float64")
-                copy_optional_fields(
-                    comp,
-                    lite_comp,
-                    [
-                        "icon_name",
-                        "icon_color",
-                        "title_color",
-                        "title_font_size",
-                        "value_font_size",
-                    ],
-                )
+                display_fields: dict[str, Any] = {}
+                for field in [
+                    "icon_name",
+                    "icon_color",
+                    "title_color",
+                    "title_font_size",
+                    "value_font_size",
+                ]:
+                    if comp.get(field):
+                        display_fields[field] = comp[field]
+                if display_fields:
+                    lite_comp["display"] = display_fields
 
             elif comp_type == "interactive":
                 lite_comp["interactive_component_type"] = comp.get("interactive_component_type", "")
                 lite_comp["column_name"] = comp.get("column_name", "")
                 lite_comp["column_type"] = comp.get("column_type", "object")
-                copy_optional_fields(comp, lite_comp, ["title_size", "custom_color", "icon_name"])
+                display_fields = {}
+                for field in ["title_size", "custom_color", "icon_name"]:
+                    if comp.get(field):
+                        display_fields[field] = comp[field]
+                if display_fields:
+                    lite_comp["display"] = display_fields
 
             elif comp_type == "table":
                 if comp.get("columns"):
@@ -446,9 +497,11 @@ class DashboardDataLite(BaseModel):
                     lite_comp["max_images"] = comp["max_images"]
 
             elif comp_type == "multiqc":
-                # MultiQC parameters are MANDATORY
-                lite_comp["selected_module"] = comp.get("selected_module", "")
-                lite_comp["selected_plot"] = comp.get("selected_plot", "")
+                # MultiQC parameters - export only if present in DB
+                if comp.get("selected_module"):
+                    lite_comp["selected_module"] = comp["selected_module"]
+                if comp.get("selected_plot"):
+                    lite_comp["selected_plot"] = comp["selected_plot"]
 
             # Export index field only if it's meaningful (not a UUID)
             comp_index = comp.get("index", "")
@@ -532,15 +585,28 @@ class DashboardDataLite(BaseModel):
         full_components = []
         for comp in self.components:
             comp_dict = comp if isinstance(comp, dict) else comp.model_dump()
+
+            # Unpack nested layout dict (new format) into flat comp_dict fields
+            layout_nested = comp_dict.get("layout", {})
+            if layout_nested and isinstance(layout_nested, dict):
+                comp_dict = {**comp_dict, **layout_nested}
+
+            # Unpack nested display dict (card/interactive styling) into flat comp_dict fields
+            display_nested = comp_dict.get("display", {})
+            if display_nested and isinstance(display_nested, dict):
+                comp_dict = {**comp_dict, **display_nested}
+
             full_comp = build_base_component(comp_dict)
             comp_type = comp_dict.get("component_type", "figure")
 
             if comp_type == "figure":
+                # Support figure_params (new YAML key) and dict_kwargs (legacy/internal)
+                figure_params = comp_dict.get("figure_params") or comp_dict.get("dict_kwargs", {})
                 full_comp.update(
                     {
                         "visu_type": comp_dict.get("visu_type", "scatter"),
-                        "dict_kwargs": comp_dict.get("dict_kwargs", {}),
-                        "mode": "ui",
+                        "dict_kwargs": figure_params,
+                        "mode": comp_dict.get("mode", "ui"),  # Use imported mode (ui/code)
                         "displayed_data_count": 0,
                         "total_data_count": 0,
                         "was_sampled": False,
@@ -620,22 +686,97 @@ class DashboardDataLite(BaseModel):
                     }
                 )
 
+            elif comp_type == "multiqc":
+                # MultiQC parameters - only include if present in YAML
+                multiqc_fields = {}
+                if comp_dict.get("selected_module"):
+                    multiqc_fields["selected_module"] = comp_dict["selected_module"]
+                if comp_dict.get("selected_plot"):
+                    multiqc_fields["selected_plot"] = comp_dict["selected_plot"]
+                full_comp.update(multiqc_fields)
+
             full_components.append(full_comp)
 
         full_dict["stored_metadata"] = full_components
 
-        # Auto-generate layout
+        # Generate layout using split-panel system:
+        # - interactive components → left_panel_layout_data (w=1, static=False)
+        # - all other components → right_panel_layout_data (cards static=True, others resizable)
         from depictio.models.yaml_serialization.utils import auto_generate_layout
 
-        full_dict["stored_layout_data"] = [
-            {
-                **auto_generate_layout(idx, comp.get("component_type", "figure")),
-                "i": f"box-{comp['index']}",
-            }
-            for idx, comp in enumerate(full_components)
-        ]
-        full_dict["left_panel_layout_data"] = []
-        full_dict["right_panel_layout_data"] = []
+        left_panel_layout_data: list[dict[str, Any]] = []
+        right_panel_layout_data: list[dict[str, Any]] = []
+        left_auto_y = 0
+        right_auto_y = 0
+
+        for idx, comp in enumerate(full_components):
+            comp_dict = (
+                self.components[idx]
+                if isinstance(self.components[idx], dict)
+                else self.components[idx].model_dump()
+            )
+            comp_type = comp.get("component_type", "figure")
+
+            # Extract x/y/w/h from nested layout (new format), flat fields (legacy), or auto-generate
+            layout_nested = comp_dict.get("layout", {})
+            if layout_nested and isinstance(layout_nested, dict):
+                x = layout_nested.get("x", 0)
+                y = layout_nested.get("y", 0)
+                w = layout_nested.get("w", 6)
+                h = layout_nested.get("h", 4)
+            elif all(key in comp_dict for key in ["x", "y", "w", "h"]):
+                x = comp_dict["x"]
+                y = comp_dict["y"]
+                w = comp_dict["w"]
+                h = comp_dict["h"]
+            else:
+                # Auto-generate position based on panel
+                if comp_type == "interactive":
+                    x, w, h = 0, 1, 3
+                    y = left_auto_y
+                    left_auto_y += h
+                else:
+                    auto = auto_generate_layout(idx, comp_type)
+                    x, y, w, h = auto["x"], right_auto_y, auto["w"], auto["h"]
+                    right_auto_y += h
+
+            # Build layout item — static and resizeHandles inferred from component type
+            if comp_type == "interactive":
+                layout_item: dict[str, Any] = {
+                    "i": f"box-{comp['index']}",
+                    "x": x,
+                    "y": y,
+                    "w": w,
+                    "h": h,
+                    "static": False,
+                }
+                left_panel_layout_data.append(layout_item)
+            elif comp_type == "card":
+                layout_item = {
+                    "i": f"box-{comp['index']}",
+                    "x": x,
+                    "y": y,
+                    "w": w,
+                    "h": h,
+                    "static": True,
+                }
+                right_panel_layout_data.append(layout_item)
+            else:
+                # figure, table, multiqc, image — resizable
+                layout_item = {
+                    "i": f"box-{comp['index']}",
+                    "x": x,
+                    "y": y,
+                    "w": w,
+                    "h": h,
+                    "static": False,
+                    "resizeHandles": ["se", "s", "e", "sw", "w"],
+                }
+                right_panel_layout_data.append(layout_item)
+
+        full_dict["stored_layout_data"] = []
+        full_dict["left_panel_layout_data"] = left_panel_layout_data
+        full_dict["right_panel_layout_data"] = right_panel_layout_data
         full_dict["tmp_children_data"] = []
         full_dict["stored_children_data"] = []
         full_dict["buttons_data"] = {

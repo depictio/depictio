@@ -504,14 +504,19 @@ class TestDashboardDataLite:
         assert "tag:" in yaml_str
 
     def test_from_full_generates_tags(self, sample_full_dashboard_dict: dict):
-        """from_full() should generate readable tags."""
+        """from_full() should generate readable tags with format {type}-{semantic_id}-{hash}."""
         lite = DashboardDataLite.from_full(sample_full_dashboard_dict)
         assert lite.title == "Test Dashboard"
         assert len(lite.components) == 2
-        # Check that tags were generated
+        # Check that tags were generated with correct type prefix and 6-char hash suffix
         tags = [c["tag"] if isinstance(c, dict) else c.tag for c in lite.components]
-        assert "figure-1" in tags
-        assert "card-1" in tags
+        assert any(t.startswith("figure-") for t in tags)
+        assert any(t.startswith("card-") for t in tags)
+        # Each tag should end with a 6-char hash (e.g., "figure-uuid-1-d4feb7")
+        for tag in tags:
+            parts = tag.split("-")
+            assert len(parts) >= 2, f"Tag '{tag}' should have at least type and hash parts"
+            assert len(parts[-1]) == 6, f"Tag '{tag}' should end with a 6-char hash"
 
     def test_from_full_extracts_dashboard_id(self, sample_full_dashboard_dict: dict):
         """from_full() should extract dashboard_id from $oid format."""
@@ -583,7 +588,7 @@ class TestDashboardDataLite:
         assert full["stored_metadata"][0]["visu_type"] == "scatter"
 
     def test_to_full_generates_layout(self):
-        """to_full() should auto-generate layout data."""
+        """to_full() should auto-generate layout data using split-panel system."""
         dash = DashboardDataLite(
             title="Layout Test",
             components=[
@@ -597,8 +602,10 @@ class TestDashboardDataLite:
             ],
         )
         full = dash.to_full()
-        assert "stored_layout_data" in full
-        assert len(full["stored_layout_data"]) == 2
+        # All dashboards use split-panel: figure + card → right_panel_layout_data
+        assert "right_panel_layout_data" in full
+        assert len(full["right_panel_layout_data"]) == 2
+        assert len(full["stored_layout_data"]) == 0
 
     def test_roundtrip_yaml(self):
         """Test YAML export and re-import preserves data."""
@@ -715,13 +722,20 @@ components:
             assert idx.count("-") == 4
 
     def test_to_full_layout_references_match_indices(self, yaml_with_tags: str):
-        """to_full() layout 'i' values should match component indices."""
+        """to_full() layout 'i' values should match component indices (split-panel)."""
         lite = DashboardDataLite.from_yaml(yaml_with_tags)
         full_dict = lite.to_full()
 
         comp_indices = {comp["index"] for comp in full_dict["stored_metadata"]}
+        # All dashboards use split-panel: collect refs from both left and right panels
         layout_refs = {
-            layout["i"].replace("box-", "") for layout in full_dict["stored_layout_data"]
+            layout["i"].replace("box-", "")
+            for panel_key in [
+                "stored_layout_data",
+                "left_panel_layout_data",
+                "right_panel_layout_data",
+            ]
+            for layout in full_dict.get(panel_key, [])
         }
 
         # All layout references should point to valid component indices
