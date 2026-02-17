@@ -1178,6 +1178,34 @@ jobs:
 
           echo "✅ Image Demo dashboard import test passed"
 
+      - name: Test YAML export-import roundtrip (iris dashboard)
+        run: |
+          cd depictio/cli
+          source venv/bin/activate
+          echo "📋 Testing YAML export-import roundtrip for iris dashboard..."
+
+          # Import iris YAML to get a fresh dashboard ID to seed the roundtrip
+          IMPORT_OUTPUT=$(depictio-cli dashboard import \
+            ../projects/init/iris/dashboard_lite.yaml \
+            --config admin_config.yaml 2>&1)
+          echo "$IMPORT_OUTPUT"
+
+          IRIS_ID=$(echo "$IMPORT_OUTPUT" | grep -oE '[0-9a-f]{24}' | head -1)
+          if [ -z "$IRIS_ID" ]; then
+            echo "❌ Failed to extract dashboard ID from import output"
+            exit 1
+          fi
+          echo "  ✓ Imported iris dashboard with ID: $IRIS_ID"
+
+          # Delegate to roundtrip_check.sh (export → strip → import → export → YAML compare + DB JSON compare)
+          export IRIS_ID
+          export CLI=$(which depictio-cli)
+          export PYTHON=$(which python3)
+          export CONFIG=admin_config.yaml
+          bash ../../scripts/roundtrip_check.sh
+
+          echo "✅ YAML export-import roundtrip passed!"
+
       - name: Test backup commands (read-only)
         run: |
           cd depictio/cli
