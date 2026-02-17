@@ -122,7 +122,7 @@ def validate_schema_online(
                 errors.append(
                     {
                         "component_id": comp_tag,
-                        "field": "workflow_tag/data_collection_tag",
+                        "field": "wf/dc_tag",
                         "message": f"workflow='{wf_tag}' dc='{dc_tag}' not found in project '{lite.project_tag}'",
                     }
                 )
@@ -194,7 +194,7 @@ def validate_schema_online(
                 errors.append(
                     {
                         "component_id": comp_tag,
-                        "field": "interactive_component_type",
+                        "field": "interactive_type",
                         "message": (
                             f"No interactive component supports column '{column_name}' "
                             f"(server type: '{inferred_type}')"
@@ -205,10 +205,10 @@ def validate_schema_online(
                 errors.append(
                     {
                         "component_id": comp_tag,
-                        "field": "interactive_component_type",
+                        "field": "interactive_type",
                         "message": (
-                            f"interactive_component_type='{comp.interactive_component_type}' is not valid "
-                            f"for column '{column_name}' (server type: '{inferred_type}'). "
+                            f"'{comp.interactive_component_type}' not valid "
+                            f"for column '{column_name}' (type: '{inferred_type}'). "
                             f"Valid: {', '.join(valid_types)}"
                         ),
                     }
@@ -231,6 +231,7 @@ def _format_validation_error(error: Any) -> dict[str, str]:
         msg = error.get("msg", str(error))
         field = ".".join(str(x) for x in loc) if loc else "-"
         return {"component_id": "-", "field": field, "message": msg}
+    # Fallback for unexpected types
     return {"component_id": "-", "field": "-", "message": str(error)}
 
 
@@ -340,7 +341,11 @@ def validate(
     console.print("  [green]✓ Schema + domain OK[/green]")
 
     # --- Pass 2: server schema validation ---
-    if config_path and not offline:
+    if offline:
+        console.print("  [dim]Pass 2: skipped (--offline)[/dim]")
+    elif not config_path:
+        console.print("  [dim]Pass 2: skipped (no --config provided)[/dim]")
+    else:
         console.print("  [dim]Pass 2: server schema validation[/dim]")
         try:
             from depictio.cli.cli.utils.common import generate_api_headers, load_depictio_config
@@ -361,10 +366,6 @@ def validate(
                 console.print("  [green]✓ Server schema OK[/green]")
         except Exception as e:
             console.print(f"  [yellow]⚠ Server schema check skipped: {e}[/yellow]")
-    elif not config_path and not offline:
-        console.print("  [dim]Pass 2: skipped (no --config provided)[/dim]")
-    else:
-        console.print("  [dim]Pass 2: skipped (--offline)[/dim]")
 
     if all_errors:
         console.print(f"\n[red]✗ Validation failed ({len(all_errors)} error(s))[/red]")

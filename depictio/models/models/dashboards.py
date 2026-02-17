@@ -17,6 +17,7 @@ Component Architecture:
     FigureComponent (adds runtime fields)
 """
 
+import re
 from pathlib import Path
 from typing import Any, ClassVar, Optional
 
@@ -36,6 +37,7 @@ from depictio.models.components.lite import (
     ImageLiteComponent,
     InteractiveLiteComponent,
     LiteComponent,
+    MultiQCLiteComponent,
     TableLiteComponent,
 )
 from depictio.models.logging import logger
@@ -62,6 +64,43 @@ class LayoutItem(BaseModel):
     )
 
     model_config = ConfigDict(extra="allow")
+
+
+# ============================================================================
+# Validation helpers
+# ============================================================================
+
+_VALUE_ERROR_PREFIX = re.compile(r"^Value error,\s*")
+
+
+def _strip_value_error_prefix(msg: str) -> str:
+    """Remove Pydantic v2's 'Value error, ' prefix from a message."""
+    return _VALUE_ERROR_PREFIX.sub("", msg)
+
+
+def _parse_component_lines(raw_msg: str) -> list[dict[str, Any]]:
+    """Parse '[tag] loc: msg' lines from validate_components_domain output.
+
+    Each line has format: [component_tag] field_location: error message
+    Returns a list of structured error dicts with type, tag, loc, and msg.
+    """
+    clean = _strip_value_error_prefix(raw_msg)
+    result: list[dict[str, Any]] = []
+    for line in clean.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        m = re.match(r"\[([^\]]+)\]\s*([^:]*?):\s*(.*)", line)
+        if m:
+            result.append(
+                {
+                    "type": "component_error",
+                    "tag": m.group(1),
+                    "loc": m.group(2).strip() or None,
+                    "msg": _strip_value_error_prefix(m.group(3).strip()),
+                }
+            )
+    return result
 
 
 # ============================================================================
@@ -161,6 +200,7 @@ class DashboardDataLite(BaseModel):
         "interactive": InteractiveLiteComponent,
         "table": TableLiteComponent,
         "image": ImageLiteComponent,
+        "multiqc": MultiQCLiteComponent,
     }
 
     @model_validator(mode="after")
@@ -380,36 +420,33 @@ class DashboardDataLite(BaseModel):
         Returns:
             Tuple of (is_valid, errors)
             - is_valid: True if validation passed
-            - errors: List of error dictionaries (empty if valid)
+            - errors: List of error dictionaries (empty if valid).
+              Component-level errors have: {type, tag, loc, msg}
+              Other errors have: {type, msg}
         """
         try:
             cls.from_yaml(content)
             return True, []
-        except ValueError as e:
-            # validate_components_domain emits "[tag] loc: msg\n..." — split into one dict per line
-            lines = [ln for ln in str(e).splitlines() if ln.strip()]
-            if len(lines) > 1:
-                import re
-
-                errors: list[dict[str, Any]] = []
-                for line in lines:
-                    m = re.match(r"\[([^\]]+)\]\s*([^:]*?):\s*(.*)", line)
-                    if m:
-                        errors.append(
-                            {
-                                "type": "component_error",
-                                "tag": m.group(1),
-                                "loc": m.group(2).strip() or None,
-                                "msg": m.group(3),
-                            }
-                        )
-                    else:
-                        errors.append({"type": "yaml_error", "msg": line})
-                return False, errors
-            return False, [{"type": "yaml_error", "msg": str(e)}]
         except ValidationError as e:
-            # e.errors() returns list of ErrorDetails which is compatible with dict[str, Any]
-            return False, list(e.errors())  # type: ignore[return-value]
+            # ValidationError must be caught before ValueError because
+            # Pydantic v2's ValidationError is a ValueError subclass.
+            parsed: list[dict[str, Any]] = []
+            for pydantic_err in e.errors():
+                msg = pydantic_err.get("msg", "")
+                component_errors = _parse_component_lines(msg)
+                if component_errors:
+                    parsed.extend(component_errors)
+                else:
+                    parsed.append(
+                        {
+                            "type": pydantic_err.get("type", "validation_error"),
+                            "loc": pydantic_err.get("loc", ()),
+                            "msg": _strip_value_error_prefix(msg),
+                        }
+                    )
+            return False, parsed
+        except ValueError as e:
+            return False, [{"type": "yaml_error", "msg": str(e)}]
 
     @classmethod
     def from_full(cls, dashboard_data: dict[str, Any]) -> "DashboardDataLite":

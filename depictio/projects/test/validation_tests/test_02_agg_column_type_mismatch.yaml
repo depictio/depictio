@@ -30,7 +30,6 @@ components:
     data_collection_tag: iris_table
     aggregation: count
     column_name: variety
-    column_type: object
 
   # VALID baseline — average is valid for float64
   - tag: valid-average
@@ -39,7 +38,6 @@ components:
     data_collection_tag: iris_table
     aggregation: average
     column_name: sepal.length
-    column_type: float64
 
   # INVALID: 'average' requires numeric type, 'object' not supported
   - tag: avg-variety
@@ -48,7 +46,6 @@ components:
     data_collection_tag: iris_table
     aggregation: average
     column_name: variety
-    column_type: object
     icon_name: mdi:chart-bar
 
   # INVALID: 'variance' requires numeric type, 'bool' not supported
@@ -58,7 +55,6 @@ components:
     data_collection_tag: iris_table
     aggregation: variance
     column_name: is_setosa
-    column_type: bool
 
   # INVALID: 'sum' requires numeric type, 'category' not supported
   - tag: sum-category
@@ -67,4 +63,3 @@ components:
     data_collection_tag: iris_table
     aggregation: sum
     column_name: variety
-    column_type: category

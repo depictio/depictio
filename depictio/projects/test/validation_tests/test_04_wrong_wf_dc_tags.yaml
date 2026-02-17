@@ -61,7 +61,6 @@ components:
     data_collection_tag: iris_summary_table
     aggregation: count
     column_name: variety
-    column_type: object
 
   # Completely bogus tags — neither workflow nor DC exists
   - tag: completely-bogus
@@ -70,7 +69,6 @@ components:
     data_collection_tag: nonexistent_collection
     interactive_component_type: MultiSelect
     column_name: some_column
-    column_type: object
 
   # Empty workflow_tag — no data source at all
   - tag: empty-workflow-tag

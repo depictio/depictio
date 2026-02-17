@@ -17,6 +17,7 @@ from depictio.models.components.lite import (
     FigureLiteComponent,
     ImageLiteComponent,
     InteractiveLiteComponent,
+    MultiQCLiteComponent,
     TableLiteComponent,
 )
 from depictio.models.models.dashboards import DashboardDataLite
@@ -1215,20 +1216,21 @@ class TestValidationYAMLFiles:
         assert len(errors) >= 3
 
     # ------------------------------------------------------------------
-    # test_06 — image and multiqc: image-missing-column must FAIL offline
+    # test_06 — image / multiqc required fields: must FAIL offline
     # ------------------------------------------------------------------
 
-    def test_06_image_missing_column_fails_offline(self):
-        """image_column is required — its absence must be caught offline."""
+    def test_06_required_fields_fail_offline(self):
+        """image_column, selected_module, selected_plot are all required."""
         content = (_VALIDATION_TESTS_DIR / "test_06_image_and_multiqc.yaml").read_text()
         is_valid, errors = DashboardDataLite.validate_yaml(content)
-        assert not is_valid, "Expected offline validation to fail (missing image_column)"
+        assert not is_valid, "Expected offline validation to fail"
         tags = [e.get("tag", "") for e in errors]
-        msgs = " ".join(e.get("msg", "") for e in errors)
-        assert "image-missing-column" in tags or "image_column" in msgs
+        assert "image-missing-column" in tags
+        assert "multiqc-missing-module" in tags
+        assert "multiqc-missing-plot" in tags
 
-    def test_06_valid_image_and_multiqc_components_parsed(self):
-        """Valid image + multiqc entries are accepted and parsed correctly."""
+    def test_06_valid_image_and_multiqc_pass(self):
+        """Valid image + multiqc (both required fields) are accepted."""
         valid_yaml = """
 title: "Inline test"
 project_tag: "Test"
@@ -1243,6 +1245,59 @@ components:
     workflow_tag: python/wf
     data_collection_tag: dc
     selected_module: fastqc
+    selected_plot: per_base_sequence_quality
 """
         is_valid, errors = DashboardDataLite.validate_yaml(valid_yaml)
         assert is_valid, f"Expected to pass, got: {errors}"
+
+
+# ---------------------------------------------------------------------------
+# MultiQC component
+# ---------------------------------------------------------------------------
+
+
+class TestMultiQCLiteComponent:
+    """Unit tests for MultiQCLiteComponent."""
+
+    def test_valid_multiqc(self):
+        """Both selected_module and selected_plot provided — must pass."""
+        comp = MultiQCLiteComponent(
+            tag="mqc-1",
+            workflow_tag="python/nf_workflow",
+            data_collection_tag="multiqc_report",
+            selected_module="fastqc",
+            selected_plot="per_base_sequence_quality",
+        )
+        assert comp.component_type == "multiqc"
+        assert comp.selected_module == "fastqc"
+        assert comp.selected_plot == "per_base_sequence_quality"
+
+    def test_multiqc_missing_module_raises(self):
+        """selected_module is required."""
+        with pytest.raises(ValidationError):
+            MultiQCLiteComponent(
+                tag="mqc-bad",
+                workflow_tag="python/wf",
+                data_collection_tag="dc",
+                selected_plot="some_plot",
+            )
+
+    def test_multiqc_missing_plot_raises(self):
+        """selected_plot is required."""
+        with pytest.raises(ValidationError):
+            MultiQCLiteComponent(
+                tag="mqc-bad",
+                workflow_tag="python/wf",
+                data_collection_tag="dc",
+                selected_module="fastqc",
+            )
+
+    def test_multiqc_component_type_is_literal(self):
+        """component_type is always 'multiqc'."""
+        comp = MultiQCLiteComponent(
+            workflow_tag="wf",
+            data_collection_tag="dc",
+            selected_module="mod",
+            selected_plot="plot",
+        )
+        assert comp.component_type == "multiqc"

@@ -296,6 +296,31 @@ class ImageLiteComponent(BaseLiteComponent):
     max_images: int = Field(default=20, description="Maximum images to display")
 
 
+class MultiQCLiteComponent(BaseLiteComponent):
+    """Lite MultiQC component for user definition.
+
+    Both selected_module and selected_plot are required: without them the
+    component cannot render a specific plot and the YAML would be ambiguous.
+    At runtime the Dash model allows None (auto-selects), but in user-defined
+    YAML the choice must be explicit.
+
+    Example YAML:
+        - tag: fastqc-quality
+          component_type: multiqc
+          workflow_tag: python/nf_workflow
+          data_collection_tag: multiqc_report
+          selected_module: fastqc
+          selected_plot: per_base_sequence_quality
+    """
+
+    component_type: Literal["multiqc"] = "multiqc"
+
+    selected_module: str = Field(..., description="MultiQC module to display (e.g. 'fastqc')")
+    selected_plot: str = Field(
+        ..., description="Plot within the module (e.g. 'per_base_sequence_quality')"
+    )
+
+
 # Union type for any lite component
 LiteComponent = (
     FigureLiteComponent
@@ -303,4 +328,5 @@ LiteComponent = (
     | InteractiveLiteComponent
     | TableLiteComponent
     | ImageLiteComponent
+    | MultiQCLiteComponent
 )
