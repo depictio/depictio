@@ -1,0 +1,78 @@
+# TEST 04 — Misreferenced workflow and data collection tags
+#
+# Expected result: PASS at validate, FAIL at import
+#   depictio-cli dashboard validate test_04_wrong_wf_dc_tags.yaml  → PASS
+#   depictio-cli dashboard import test_04_wrong_wf_dc_tags.yaml --config <cfg>  → components silently unresolved
+#
+# Why it passes validate:
+#   workflow_tag and data_collection_tag are free-text strings — schema validation
+#   cannot check whether they exist on the server (would require online DC lookup).
+#   Domain validation only checks enum-like fields and cross-field rules.
+#
+# What happens at import:
+#   The import endpoint looks up each workflow_tag in the project's workflows.
+#   When no match is found, wf_id and dc_id remain None. The dashboard is created
+#   but the components won't bind to data — they will render as empty.
+#
+# Edge cases covered:
+#   - Wrong workflow name (typo: 'iris_workfloww' instead of 'iris_workflow')
+#   - Wrong engine prefix (workflow exists but wrong prefix: 'snakemake/' vs 'python/')
+#   - Non-existent data collection (workflow exists but DC tag is wrong)
+#   - Completely bogus workflow/DC (neither exists)
+#   - Empty workflow_tag (component has no data source)
+
+title: "Test 04 — Wrong workflow / data collection tag references"
+project_tag: "Iris Dataset Project Data Analysis"
+
+components:
+  # VALID baseline — correct tags for reference
+  - tag: valid-baseline
+    component_type: figure
+    workflow_tag: python/iris_workflow
+    data_collection_tag: iris_table
+    visu_type: scatter
+    dict_kwargs:
+      x: sepal.length
+      y: sepal.width
+
+  # Typo in workflow name — 'iris_workfloww' doesn't exist
+  - tag: typo-workflow
+    component_type: figure
+    workflow_tag: python/iris_workfloww
+    data_collection_tag: iris_table
+    visu_type: scatter
+    dict_kwargs:
+      x: sepal.length
+      y: petal.length
+
+  # Wrong engine prefix — workflow exists as 'python/', not 'snakemake/'
+  - tag: wrong-engine-prefix
+    component_type: card
+    workflow_tag: snakemake/iris_workflow
+    data_collection_tag: iris_table
+    aggregation: average
+    column_name: sepal.length
+    column_type: float64
+
+  # Correct workflow, but non-existent data collection tag
+  - tag: wrong-dc-tag
+    component_type: card
+    workflow_tag: python/iris_workflow
+    data_collection_tag: iris_summary_table
+    aggregation: count
+    column_name: variety
+
+  # Completely bogus tags — neither workflow nor DC exists
+  - tag: completely-bogus
+    component_type: interactive
+    workflow_tag: nextflow/nonexistent_pipeline
+    data_collection_tag: nonexistent_collection
+    interactive_component_type: MultiSelect
+    column_name: some_column
+
+  # Empty workflow_tag — no data source at all
+  - tag: empty-workflow-tag
+    component_type: table
+    workflow_tag: ""
+    data_collection_tag: ""
+    page_size: 10

@@ -1,0 +1,224 @@
+title: Iris Dashboard demo
+# --- optional ---
+project_tag: Iris Dataset Project Data Analysis
+icon: /assets/images/icons/favicon.png
+# --- generated on export ---
+dashboard_id: 6824cb3b89d2b72169309737
+components:
+-   component_type: figure
+    workflow_tag: iris_workflow
+    data_collection_tag: iris_table
+    visu_type: box
+    # --- optional ---
+    figure_params:
+        x: variety
+        y: sepal.length
+        color_discrete_map: '{"Setosa": "#1f77b4", "Versicolor": "#ff7f0e", "Virginica":
+            "#2ca02c"}'
+        boxmode: group
+        points: all
+        notched: true
+    mode: ui
+    selection_enabled: false
+    # --- generated on export ---
+    tag: figure-box_variety_sepal_length-04c6c1
+    layout:
+        x: 0
+        y: 2
+        w: 4
+        h: 5
+-   component_type: figure
+    workflow_tag: iris_workflow
+    data_collection_tag: iris_table
+    visu_type: scatter
+    # --- optional ---
+    figure_params:
+        x: sepal.length
+        y: sepal.width
+        color: variety
+        color_discrete_map: '{"Setosa": "#1f77b4", "Versicolor": "#ff7f0e", "Virginica":
+            "#2ca02c"}'
+        size: petal.length
+        trendline_scope: trace
+        render_mode: auto
+        size_max: 20
+        marginal_x: histogram
+        marginal_y: rug
+        trendline: lowess
+    mode: ui
+    selection_enabled: false
+    # --- generated on export ---
+    tag: figure-scatter_sepal_length_sepal_width-8399c0
+    layout:
+        x: 4
+        y: 2
+        w: 4
+        h: 5
+-   component_type: card
+    workflow_tag: iris_workflow
+    data_collection_tag: iris_table
+    aggregation: average
+    column_name: sepal.length
+    # --- optional ---
+    column_type: float64
+    display:
+        icon_name: mdi:flower-outline
+        icon_color: '#9C27B0'
+        title_color: '#9C27B0'
+        title_font_size: xl
+        value_font_size: xl
+    # --- generated on export ---
+    tag: card-sepal_length_average-ed1ba1
+    layout:
+        x: 0
+        y: 0
+        w: 2
+        h: 2
+-   component_type: card
+    workflow_tag: iris_workflow
+    data_collection_tag: iris_table
+    aggregation: median
+    column_name: sepal.width
+    # --- optional ---
+    column_type: float64
+    display:
+        icon_name: mdi:ruler-square
+        icon_color: '#673AB7'
+        title_color: '#673AB7'
+        title_font_size: xl
+        value_font_size: xl
+    # --- generated on export ---
+    tag: card-sepal_width_median-3b1970
+    layout:
+        x: 2
+        y: 0
+        w: 2
+        h: 2
+-   component_type: card
+    workflow_tag: iris_workflow
+    data_collection_tag: iris_table
+    aggregation: nunique
+    column_name: variety
+    # --- optional ---
+    column_type: object
+    display:
+        icon_name: mdi:flower-tulip
+        icon_color: '#4CAF50'
+        title_color: '#4CAF50'
+        title_font_size: xl
+        value_font_size: xl
+    # --- generated on export ---
+    tag: card-variety_nunique-546238
+    layout:
+        x: 4
+        y: 0
+        w: 2
+        h: 2
+-   component_type: card
+    workflow_tag: iris_workflow
+    data_collection_tag: iris_table
+    aggregation: count
+    column_name: variety
+    # --- optional ---
+    column_type: object
+    display:
+        icon_name: mdi:flower-tulip
+        icon_color: '#4CAF50'
+        title_color: '#4CAF50'
+        title_font_size: lg
+        value_font_size: xl
+    # --- generated on export ---
+    tag: card-variety_count-f4f525
+    layout:
+        x: 6
+        y: 0
+        w: 2
+        h: 2
+-   component_type: interactive
+    workflow_tag: iris_workflow
+    data_collection_tag: iris_table
+    interactive_component_type: RangeSlider
+    column_name: sepal.length
+    # --- optional ---
+    column_type: float64
+    display:
+        title_size: md
+        custom_color: '#9C27B0'
+        icon_name: mdi:flower-outline
+    # --- generated on export ---
+    tag: interactive-sepal_length-2b680a
+    layout:
+        x: 0
+        y: 0
+        w: 1
+        h: 3
+-   component_type: interactive
+    workflow_tag: iris_workflow
+    data_collection_tag: iris_table
+    interactive_component_type: RangeSlider
+    column_name: petal.length
+    # --- optional ---
+    column_type: float64
+    display:
+        title_size: md
+        custom_color: '#E91E63'
+        icon_name: mdi:flower
+    # --- generated on export ---
+    tag: interactive-petal_length-a5a82f
+    layout:
+        x: 0
+        y: 3
+        w: 1
+        h: 3
+-   component_type: interactive
+    workflow_tag: iris_workflow
+    data_collection_tag: iris_table
+    interactive_component_type: MultiSelect
+    column_name: variety
+    # --- optional ---
+    column_type: object
+    display:
+        title_size: md
+        custom_color: '#4CAF50'
+        icon_name: mdi:flower-tulip
+    # --- generated on export ---
+    tag: interactive-variety-56d49c
+    layout:
+        x: 0
+        y: 6
+        w: 1
+        h: 2
+-   component_type: table
+    workflow_tag: iris_workflow
+    data_collection_tag: iris_table
+    # --- optional ---
+    row_selection_enabled: false
+    # --- generated on export ---
+    tag: table-table-467b27
+    layout:
+        x: 0
+        y: 12
+        w: 8
+        h: 5
+-   component_type: figure
+    workflow_tag: iris_workflow
+    data_collection_tag: iris_table
+    visu_type: histogram
+    # --- optional ---
+    figure_params:
+        x: sepal.length
+        color: variety
+        color_discrete_map: '{"Setosa": "#1f77b4", "Versicolor": "#ff7f0e", "Virginica":
+            "#2ca02c"}'
+        nbins: 30
+        barmode: relative
+        cumulative: true
+    mode: ui
+    selection_enabled: false
+    # --- generated on export ---
+    tag: figure-histogram_sepal_length-ef601e
+    layout:
+        x: 0
+        y: 7
+        w: 8
+        h: 5

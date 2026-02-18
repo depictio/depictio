@@ -19,7 +19,14 @@ Index vs Tag:
 import uuid
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+from depictio.models.components.constants import (
+    AGGREGATION_COMPATIBILITY,
+    COLUMN_TYPES,
+    INTERACTIVE_COMPATIBILITY,
+    VISU_TYPES,
+)
 
 
 class BaseLiteComponent(BaseModel):
@@ -100,6 +107,26 @@ class FigureLiteComponent(BaseLiteComponent):
         default=None, description="Column to extract from selected points"
     )
 
+    @model_validator(mode="after")
+    def validate_figure_constraints(self) -> "FigureLiteComponent":
+        """Validate figure-specific cross-field constraints."""
+        if self.mode == "ui":
+            if self.visu_type not in VISU_TYPES:
+                valid = ", ".join(VISU_TYPES)
+                raise ValueError(
+                    f"Invalid visu_type '{self.visu_type}' for mode='ui'. Valid values: {valid}"
+                )
+        elif self.mode == "code":
+            if not self.code_content or not self.code_content.strip():
+                raise ValueError("code_content is required and must be non-empty when mode='code'")
+        else:
+            raise ValueError(f"Invalid mode '{self.mode}'. Valid values: 'ui', 'code'")
+
+        if self.selection_enabled and not self.selection_column:
+            raise ValueError("selection_column is required when selection_enabled=True")
+
+        return self
+
 
 class CardLiteComponent(BaseLiteComponent):
     """Lite card component for user definition.
@@ -119,7 +146,11 @@ class CardLiteComponent(BaseLiteComponent):
     # Aggregation configuration
     aggregation: str = Field(..., description="Aggregation function (average, sum, count, etc.)")
     column_name: str = Field(..., description="Column to aggregate")
-    column_type: str = Field(default="float64", description="Data type of column")
+    column_type: str | None = Field(
+        default=None,
+        description="Data type of column (int64, float64, bool, datetime, timedelta, "
+        "category, object). When provided, aggregation compatibility is validated.",
+    )
 
     # Styling (optional)
     icon_name: str | None = Field(default=None, description="Iconify icon name")
@@ -127,6 +158,28 @@ class CardLiteComponent(BaseLiteComponent):
     title_color: str | None = Field(default=None, description="Title text color")
     title_font_size: str | None = Field(default=None, description="Title font size")
     value_font_size: str | None = Field(default=None, description="Value font size")
+
+    @field_validator("column_type")
+    @classmethod
+    def validate_column_type(cls, v: str | None) -> str | None:
+        if v is not None and v not in COLUMN_TYPES:
+            valid = ", ".join(COLUMN_TYPES)
+            raise ValueError(f"Invalid column_type '{v}'. Valid values: {valid}")
+        return v
+
+    @model_validator(mode="after")
+    def validate_aggregation_for_column_type(self) -> "CardLiteComponent":
+        """Validate aggregation × column_type compatibility when column_type is provided."""
+        if self.column_type is None:
+            return self
+        valid_aggs = AGGREGATION_COMPATIBILITY.get(self.column_type, [])
+        if valid_aggs and self.aggregation not in valid_aggs:
+            valid = ", ".join(valid_aggs)
+            raise ValueError(
+                f"Invalid aggregation '{self.aggregation}' for column_type='{self.column_type}'. "
+                f"Valid aggregations: {valid}"
+            )
+        return self
 
 
 class InteractiveLiteComponent(BaseLiteComponent):
@@ -149,12 +202,43 @@ class InteractiveLiteComponent(BaseLiteComponent):
         ..., description="Filter type (RangeSlider, MultiSelect, etc.)"
     )
     column_name: str = Field(..., description="Column to filter on")
-    column_type: str = Field(default="object", description="Data type of column")
+    column_type: str | None = Field(
+        default=None,
+        description="Data type of column (int64, float64, bool, datetime, timedelta, "
+        "category, object). When provided, component type compatibility is validated.",
+    )
 
     # Styling (optional)
     title_size: str | None = Field(default=None, description="Title size")
     custom_color: str | None = Field(default=None, description="Custom accent color")
     icon_name: str | None = Field(default=None, description="Iconify icon name")
+
+    @field_validator("column_type")
+    @classmethod
+    def validate_column_type(cls, v: str | None) -> str | None:
+        if v is not None and v not in COLUMN_TYPES:
+            valid = ", ".join(COLUMN_TYPES)
+            raise ValueError(f"Invalid column_type '{v}'. Valid values: {valid}")
+        return v
+
+    @model_validator(mode="after")
+    def validate_interactive_type_for_column_type(self) -> "InteractiveLiteComponent":
+        """Validate interactive_component_type × column_type when column_type is provided."""
+        if self.column_type is None:
+            return self
+        valid_types = INTERACTIVE_COMPATIBILITY.get(self.column_type, [])
+        if not valid_types:
+            raise ValueError(
+                f"No interactive components are supported for column_type='{self.column_type}'"
+            )
+        if self.interactive_component_type not in valid_types:
+            valid = ", ".join(valid_types)
+            raise ValueError(
+                f"Invalid interactive_component_type '{self.interactive_component_type}' "
+                f"for column_type='{self.column_type}'. "
+                f"Valid types: {valid}"
+            )
+        return self
 
 
 class TableLiteComponent(BaseLiteComponent):
@@ -212,6 +296,31 @@ class ImageLiteComponent(BaseLiteComponent):
     max_images: int = Field(default=20, description="Maximum images to display")
 
 
+class MultiQCLiteComponent(BaseLiteComponent):
+    """Lite MultiQC component for user definition.
+
+    Both selected_module and selected_plot are required: without them the
+    component cannot render a specific plot and the YAML would be ambiguous.
+    At runtime the Dash model allows None (auto-selects), but in user-defined
+    YAML the choice must be explicit.
+
+    Example YAML:
+        - tag: fastqc-quality
+          component_type: multiqc
+          workflow_tag: python/nf_workflow
+          data_collection_tag: multiqc_report
+          selected_module: fastqc
+          selected_plot: per_base_sequence_quality
+    """
+
+    component_type: Literal["multiqc"] = "multiqc"
+
+    selected_module: str = Field(..., description="MultiQC module to display (e.g. 'fastqc')")
+    selected_plot: str = Field(
+        ..., description="Plot within the module (e.g. 'per_base_sequence_quality')"
+    )
+
+
 # Union type for any lite component
 LiteComponent = (
     FigureLiteComponent
@@ -219,4 +328,5 @@ LiteComponent = (
     | InteractiveLiteComponent
     | TableLiteComponent
     | ImageLiteComponent
+    | MultiQCLiteComponent
 )

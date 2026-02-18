@@ -9,6 +9,109 @@ from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field
 
+from depictio.models.logging import logger
+
+
+def _fetch_s3_locations_from_dc(
+    data_collection_id: str, project_id: Optional[str] = None
+) -> List[str]:
+    """
+    Fetch S3 locations from data collection config.
+
+    Regenerates s3_locations from data collection's dc_specific_properties,
+    ensuring YAML export is minimal and data is always fresh.
+
+    Args:
+        data_collection_id: Data collection ID
+        project_id: Optional project ID for nested lookup
+
+    Returns:
+        List of S3 locations (usually single-element list)
+    """
+    try:
+        # Import here to avoid circular dependencies
+        from depictio.api.v1.db import projects_collection
+
+        # Search in projects for nested data collections
+        if project_id:
+            from bson import ObjectId
+
+            project_doc = projects_collection.find_one({"_id": ObjectId(project_id)})
+            if project_doc and "workflows" in project_doc:
+                for wf in project_doc.get("workflows", []):
+                    if "data_collections" in wf:
+                        for dc in wf["data_collections"]:
+                            if str(dc.get("_id")) == str(data_collection_id):
+                                dc_config = dc.get("config", dc)
+                                dc_specific_props = dc_config.get("dc_specific_properties", {})
+                                s3_location = dc_specific_props.get("s3_location")
+                                if s3_location:
+                                    logger.debug(
+                                        f"Regenerated s3_locations from DC config for {data_collection_id}: {s3_location}"
+                                    )
+                                    return [s3_location]
+
+        logger.warning(f"Could not regenerate s3_locations for DC {data_collection_id}")
+        return []
+
+    except Exception as e:
+        logger.error(f"Failed to fetch s3_locations from DC {data_collection_id}: {e}")
+        return []
+
+
+def _fetch_metadata_from_dc(
+    data_collection_id: str, project_id: Optional[str] = None
+) -> Dict[str, Any]:
+    """
+    Fetch MultiQC metadata (modules, plots, samples) from data collection config.
+
+    Regenerates metadata structure needed for dropdowns, ensuring YAML is minimal.
+
+    Args:
+        data_collection_id: Data collection ID
+        project_id: Optional project ID for nested lookup
+
+    Returns:
+        Dictionary with modules, plots, and samples
+    """
+    try:
+        # Import here to avoid circular dependencies
+        from depictio.api.v1.db import projects_collection
+
+        # Search in projects for nested data collections
+        if project_id:
+            from bson import ObjectId
+
+            project_doc = projects_collection.find_one({"_id": ObjectId(project_id)})
+            if project_doc and "workflows" in project_doc:
+                for wf in project_doc.get("workflows", []):
+                    if "data_collections" in wf:
+                        for dc in wf["data_collections"]:
+                            if str(dc.get("_id")) == str(data_collection_id):
+                                dc_config = dc.get("config", dc)
+                                dc_specific_props = dc_config.get("dc_specific_properties", {})
+
+                                metadata = {}
+                                if dc_specific_props.get("modules"):
+                                    metadata["modules"] = dc_specific_props["modules"]
+                                if dc_specific_props.get("plots"):
+                                    metadata["plots"] = dc_specific_props["plots"]
+                                if dc_specific_props.get("samples"):
+                                    metadata["samples"] = dc_specific_props["samples"]
+
+                                if metadata:
+                                    logger.debug(
+                                        f"Regenerated metadata from DC config for {data_collection_id}: {list(metadata.keys())}"
+                                    )
+                                    return metadata
+
+        logger.warning(f"Could not regenerate metadata for DC {data_collection_id}")
+        return {}
+
+    except Exception as e:
+        logger.error(f"Failed to fetch metadata from DC {data_collection_id}: {e}")
+        return {}
+
 
 class MultiQCComponentState(BaseModel):
     """State management for MultiQC components."""
@@ -155,10 +258,15 @@ class MultiQCDashboardComponent(BaseModel):
 
     @classmethod
     def from_stored_metadata(cls, stored_data: Dict[str, Any]) -> "MultiQCDashboardComponent":
-        """Create component from stored dashboard metadata with backward compatibility."""
+        """Create component from stored dashboard metadata with backward compatibility.
+
+        Regenerates s3_locations and metadata from data collection if not present in stored_data
+        (e.g., after YAML import with minimal metadata).
+        """
         # Extract IDs, handling both string and ObjectId formats and legacy duplicate fields
         workflow_id = stored_data.get("workflow_id") or stored_data.get("wf_id")
         data_collection_id = stored_data.get("data_collection_id") or stored_data.get("dc_id")
+        project_id = stored_data.get("project_id")
 
         # Convert ObjectId to string if needed
         if isinstance(workflow_id, dict) and "$oid" in workflow_id:
@@ -170,6 +278,19 @@ class MultiQCDashboardComponent(BaseModel):
         workflow_id = str(workflow_id) if workflow_id else ""
         data_collection_id = str(data_collection_id) if data_collection_id else ""
 
+        # Regenerate s3_locations from DC config if not present (e.g., after YAML import)
+        s3_locations = stored_data.get("s3_locations", [])
+        if not s3_locations and data_collection_id:
+            s3_locations = _fetch_s3_locations_from_dc(data_collection_id, project_id)
+
+        # Regenerate metadata from DC config if not present or incomplete
+        stored_metadata = stored_data.get("metadata", {})
+        if not stored_metadata or not stored_metadata.get("modules"):
+            if data_collection_id:
+                regenerated_metadata = _fetch_metadata_from_dc(data_collection_id, project_id)
+                # Merge stored and regenerated metadata (stored takes precedence)
+                stored_metadata = {**regenerated_metadata, **stored_metadata}
+
         # Create state from stored data
         state_data = {
             "component_id": stored_data.get("index", ""),
@@ -178,15 +299,15 @@ class MultiQCDashboardComponent(BaseModel):
             "selected_module": stored_data.get("selected_module"),
             "selected_plot": stored_data.get("selected_plot"),
             "selected_dataset": stored_data.get("selected_dataset"),
-            "s3_locations": stored_data.get("s3_locations", []),
-            "metadata": stored_data.get("metadata", {}),
+            "s3_locations": s3_locations,
+            "metadata": stored_metadata,
         }
 
         return cls(
             index=stored_data.get("index", ""),
             workflow_id=workflow_id,
             data_collection_id=data_collection_id,
-            project_id=stored_data.get("project_id"),
+            project_id=project_id,
             interactive_patching_enabled=stored_data.get("interactive_patching_enabled", True),
             state=MultiQCComponentState(**state_data),
             access_token=stored_data.get("access_token"),
@@ -194,7 +315,12 @@ class MultiQCDashboardComponent(BaseModel):
         )
 
     def to_stored_metadata(self) -> Dict[str, Any]:
-        """Convert component to storable metadata format with essential info only."""
+        """Convert component to storable metadata format with essential info only.
+
+        Excludes:
+        - s3_locations (regenerated on import from data collection)
+        - Verbose metadata (only keeps minimal dropdown structure)
+        """
         # Only store essential visualization state - no duplication
         essential_metadata = {
             "index": self.index.replace("-tmp", "")
@@ -217,9 +343,8 @@ class MultiQCDashboardComponent(BaseModel):
         if self.state.selected_dataset:
             essential_metadata["selected_dataset"] = self.state.selected_dataset
 
-        # Add s3_locations only if they exist
-        if self.state.s3_locations:
-            essential_metadata["s3_locations"] = self.state.s3_locations
+        # NOTE: s3_locations are NOT exported - regenerated on import from DC config
+        # This keeps YAML minimal and ensures data freshness
 
         # Add access token if available
         if self.access_token:
@@ -232,8 +357,7 @@ class MultiQCDashboardComponent(BaseModel):
                 minimal_metadata["modules"] = self.state.metadata["modules"]
             if "plots" in self.state.metadata:
                 minimal_metadata["plots"] = self.state.metadata["plots"]
-            if "samples" in self.state.metadata:
-                minimal_metadata["samples"] = self.state.metadata["samples"]
+            # NOTE: samples list is NOT exported - can be large and is regenerated on import
             if minimal_metadata:
                 essential_metadata["metadata"] = minimal_metadata
 

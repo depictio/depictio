@@ -1,0 +1,76 @@
+# TEST 03 — Interactive component type × column_type cross-field validation
+#
+# Expected result: FAIL at validate (server schema check)
+#   depictio-cli dashboard validate test_03_interactive_type_mismatch.yaml --config <cfg>
+#
+# Errors expected:
+#   [slider-category]      Slider not valid for column_type='category'
+#                          (category supports: Select, MultiSelect, SegmentedControl)
+#   [multiselect-datetime] MultiSelect not valid for column_type='datetime'
+#                          (datetime supports: DateRangePicker only)
+#   [rangeslider-bool]     No interactive component supported for column_type='bool'
+#                          (Checkbox/Switch not yet implemented in frontend)
+#
+# Commented out (not yet implemented in frontend):
+#   [checkbox-float]       Checkbox not valid for column_type='float64'
+#                          (Checkbox/Switch not yet implemented — bool: [])
+#
+# Compatibility matrix:
+#   int64/float64 → Slider, RangeSlider
+#   bool          → (none — Checkbox/Switch not yet implemented in frontend)
+#   datetime      → DateRangePicker
+#   timedelta     → (none — no interactive component supported)
+#   category      → Select, MultiSelect, SegmentedControl
+#   object        → Select, MultiSelect, SegmentedControl
+
+title: "Test 03 — Interactive component type × column_type mismatch"
+project_tag: "Iris Dataset Project Data Analysis"
+
+components:
+  # VALID baseline — RangeSlider for float64
+  - tag: valid-rangeslider
+    component_type: interactive
+    workflow_tag: python/iris_workflow
+    data_collection_tag: iris_table
+    interactive_component_type: RangeSlider
+    column_name: sepal.length
+
+  # VALID baseline — MultiSelect for object
+  - tag: valid-multiselect
+    component_type: interactive
+    workflow_tag: python/iris_workflow
+    data_collection_tag: iris_table
+    interactive_component_type: MultiSelect
+    column_name: variety
+
+  # INVALID: Slider only works with int64/float64, not category
+  - tag: slider-category
+    component_type: interactive
+    workflow_tag: python/iris_workflow
+    data_collection_tag: iris_table
+    interactive_component_type: Slider
+    column_name: variety
+
+  # COMMENTED OUT: Checkbox/Switch not yet implemented in frontend
+  # - tag: checkbox-float
+  #   component_type: interactive
+  #   workflow_tag: python/iris_workflow
+  #   data_collection_tag: iris_table
+  #   interactive_component_type: Checkbox
+  #   column_name: sepal.length
+
+  # INVALID: measurement_date does not exist in iris_table
+  - tag: multiselect-datetime
+    component_type: interactive
+    workflow_tag: python/iris_workflow
+    data_collection_tag: iris_table
+    interactive_component_type: MultiSelect
+    column_name: measurement_date
+
+  # INVALID: RangeSlider not valid for bool (no interactive components supported yet)
+  - tag: rangeslider-bool
+    component_type: interactive
+    workflow_tag: python/iris_workflow
+    data_collection_tag: iris_table
+    interactive_component_type: RangeSlider
+    column_name: variety

@@ -1,0 +1,56 @@
+# TEST 01 — Invalid figure visualization types
+#
+# Expected result: FAIL at validate
+#   depictio-cli dashboard validate test_01_invalid_visu_type.yaml
+#
+# Errors expected:
+#   [pie-chart]    visu_type 'pie' is not in allowed list
+#   [treemap-chart] visu_type 'treemap' is not in allowed list
+#   [bar3d-chart]   visu_type 'bar3d' is not in allowed list
+#
+# Valid visu_type values: scatter, line, bar, box, histogram
+
+title: "Test 01 — Invalid visu_type values"
+project_tag: "Iris Dataset Project Data Analysis"
+
+components:
+  # This one is VALID — baseline to confirm valid ones still work
+  - tag: valid-scatter
+    component_type: figure
+    workflow_tag: python/iris_workflow
+    data_collection_tag: iris_table
+    visu_type: scatter
+    dict_kwargs:
+      x: sepal.length
+      y: sepal.width
+
+  # INVALID: 'pie' is not a supported visu_type
+  - tag: pie-chart
+    component_type: figure
+    workflow_tag: python/iris_workflow
+    data_collection_tag: iris_table
+    visu_type: pie
+    dict_kwargs:
+      values: sepal.length
+      names: variety
+
+  # INVALID: 'treemap' is not a supported visu_type
+  - tag: treemap-chart
+    component_type: figure
+    workflow_tag: python/iris_workflow
+    data_collection_tag: iris_table
+    visu_type: treemap
+    dict_kwargs:
+      path: [variety]
+      values: sepal.length
+
+  # INVALID: '3d_scatter' is not a supported visu_type
+  - tag: bar3d-chart
+    component_type: figure
+    workflow_tag: python/iris_workflow
+    data_collection_tag: iris_table
+    visu_type: 3d_scatter
+    dict_kwargs:
+      x: sepal.length
+      y: sepal.width
+      z: petal.length
