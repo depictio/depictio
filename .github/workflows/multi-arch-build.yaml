@@ -54,6 +54,19 @@ jobs:
           driver-opts: |
             image=moby/buildkit:latest
 
+      - name: Extract metadata (tags, labels) for Docker
+        id: meta
+        if: matrix.arch == 'amd64'
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=${{ steps.build-type.outputs.VERSION }}
+            type=raw,value=stable
+            type=raw,value=latest
+            type=raw,value=dev
+            type=raw,value=edge
+
       - name: Build and push by digest
         id: build
         uses: docker/build-push-action@v5
@@ -62,6 +75,8 @@ jobs:
           file: docker-images/Dockerfile_depictio_uv.dockerfile
           platforms: ${{ matrix.platform }}
           push: true
+          # amd64: also push named tags immediately so the image is usable before arm64 finishes
+          tags: ${{ matrix.arch == 'amd64' && steps.meta.outputs.tags || '' }}
           outputs: type=image,name=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }},push-by-digest=true,name-canonical=true,push=true
           build-args: |
             VERSION=${{ steps.build-type.outputs.VERSION }}
