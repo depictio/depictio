@@ -234,17 +234,53 @@ class DashboardDataLite(BaseModel):
 
         return self
 
-    def to_yaml(self) -> str:
-        """Export to YAML string.
+    # Sentinel key names used to inject YAML comment separators between sections.
+    # After yaml.dump(), these are replaced by comment lines via _apply_section_comments().
+    SENTINEL_OPTIONAL: ClassVar[str] = "__section_optional__"
+    SENTINEL_GENERATED: ClassVar[str] = "__section_generated_on_export__"
 
-        Returns:
-            YAML string with mandatory fields first, then optional user-defined
-            fields, then export-generated metadata (dashboard_id last).
-            The UUID index is omitted from YAML output (managed internally).
+    # Dashboard-level optional user fields (non-mandatory, non-generated)
+    OPTIONAL_DASHBOARD_FIELDS: ClassVar[list[str]] = [
+        "subtitle",
+        "project_tag",
+        "main_tab_name",
+        "tab_order",
+        "tab_icon",
+        "tab_icon_color",
+        "is_main_tab",
+        "parent_dashboard_tag",
+        "icon",
+        "icon_color",
+        "icon_variant",
+        "workflow_system",
+    ]
+
+    @staticmethod
+    def _apply_section_comments(yaml_str: str) -> str:
+        """Replace sentinel keys with YAML comment separators.
+
+        Converts ``__section_optional__: null`` and
+        ``__section_generated_on_export__: null`` lines (at any indent level)
+        into human-readable comment lines preserving the original indentation.
         """
-        data = self.model_dump(exclude_none=True, mode="json")
+        import re
 
-        # Strip fields that match their default values to keep YAML minimal
+        labels = {
+            DashboardDataLite.SENTINEL_OPTIONAL: "optional",
+            DashboardDataLite.SENTINEL_GENERATED: "generated on export",
+        }
+        for sentinel, label in labels.items():
+            yaml_str = re.sub(
+                rf"^(\s*){re.escape(sentinel)}: null\n",
+                lambda m, lbl=label: f"{m.group(1)}# --- {lbl} ---\n",
+                yaml_str,
+                flags=re.MULTILINE,
+            )
+        return yaml_str
+
+    @classmethod
+    def _strip_dashboard_defaults(cls, data: dict[str, Any]) -> None:
+        """Strip dashboard-level fields that equal their defaults (in-place)."""
         default_value_fields = {
             "subtitle": "",
             "project_tag": "",
@@ -259,57 +295,79 @@ class DashboardDataLite(BaseModel):
         for field, default in default_value_fields.items():
             if not data.get(field) or data.get(field) == default:
                 data.pop(field, None)
-
-        # Strip tab fields at their defaults
         if data.get("is_main_tab", True) is True:
             data.pop("is_main_tab", None)
         if data.get("tab_order", 0) == 0:
             data.pop("tab_order", None)
-
-        # Strip workflow_system if empty or "none"
         if not data.get("workflow_system") or data.get("workflow_system") == "none":
             data.pop("workflow_system", None)
 
-        # Clean up components - remove empty values and order fields
+    @classmethod
+    def _build_ordered_dashboard_dict(cls, data: dict[str, Any]) -> dict[str, Any]:
+        """Build an ordered dashboard dict with sentinel section separators.
+
+        Sections:
+          - Mandatory  : title
+          - Optional   : user-defined metadata (subtitle, project_tag, icon …)
+          - Generated  : dashboard_id (set by the system on export)
+          - Content    : components list (last, it's large)
+
+        Sentinel keys (``__section_optional__``, ``__section_generated_on_export__``)
+        are replaced by comment lines after ``yaml.dump()`` via
+        ``_apply_section_comments()``.
+        """
+        ordered: dict[str, Any] = {}
+
+        # --- mandatory ---
+        if "title" in data:
+            ordered["title"] = data["title"]
+
+        # --- optional ---
+        optional_data = {f: data[f] for f in cls.OPTIONAL_DASHBOARD_FIELDS if f in data}
+        if optional_data:
+            ordered[cls.SENTINEL_OPTIONAL] = None
+            ordered.update(optional_data)
+
+        # --- generated on export ---
+        if "dashboard_id" in data:
+            ordered[cls.SENTINEL_GENERATED] = None
+            ordered["dashboard_id"] = data["dashboard_id"]
+
+        # --- content ---
+        if "components" in data:
+            ordered["components"] = data["components"]
+
+        # Catch-all for any unexpected fields
+        known = {"title", "dashboard_id", "components"} | set(cls.OPTIONAL_DASHBOARD_FIELDS)
+        for key, val in data.items():
+            if key not in known and key not in ordered:
+                ordered[key] = val
+
+        return ordered
+
+    def to_yaml(self) -> str:
+        """Export to YAML string with section comment separators.
+
+        Sections are separated by ``# --- optional ---`` and
+        ``# --- generated on export ---`` comment lines for clarity.
+        Mandatory fields come first, generated export metadata last.
+        """
+        data = self.model_dump(exclude_none=True, mode="json")
+
+        self._strip_dashboard_defaults(data)
+
+        # Clean and order each component
         if "components" in data:
             data["components"] = [
                 self._clean_component_for_yaml(comp) for comp in data["components"]
             ]
 
-        # Reorder dashboard-level fields: mandatory → optional user → generated → components
-        dashboard_field_order = [
-            # Mandatory
-            "title",
-            # Optional user-defined
-            "subtitle",
-            "project_tag",
-            "main_tab_name",
-            "tab_order",
-            "tab_icon",
-            "tab_icon_color",
-            "is_main_tab",
-            "parent_dashboard_tag",
-            "icon",
-            "icon_color",
-            "icon_variant",
-            "workflow_system",
-            # Generated on export (not needed for import)
-            "dashboard_id",
-            # Main content last (it's a large list)
-            "components",
-        ]
-        ordered: dict[str, Any] = {}
-        for key in dashboard_field_order:
-            if key in data:
-                ordered[key] = data[key]
-        # Append any unexpected keys not in the order list
-        for key in data:
-            if key not in ordered:
-                ordered[key] = data[key]
+        ordered = self._build_ordered_dashboard_dict(data)
 
-        return yaml.dump(
+        raw = yaml.dump(
             ordered, default_flow_style=False, sort_keys=False, allow_unicode=True, indent=4
         )
+        return self._apply_section_comments(raw)
 
     @staticmethod
     def _is_uuid_like(value: str) -> bool:
@@ -395,24 +453,45 @@ class DashboardDataLite(BaseModel):
     def _clean_component_for_yaml(comp: dict[str, Any]) -> dict[str, Any]:
         """Clean a single component dict for YAML export.
 
-        Applies per-type field ordering (mandatory → optional → generated),
-        strips empty values and auto-generated UUIDs, and omits default table
-        settings.
+        Applies per-type field ordering with sentinel section separators:
+          1. Mandatory common + type-specific required fields
+          2. ``# --- optional ---`` sentinel (if optional fields are present)
+          3. Optional user-defined fields
+          4. ``# --- generated on export ---`` sentinel (if generated fields are present)
+          5. Export-generated fields (tag, layout)
+
+        Also strips empty values, auto-generated UUIDs, and table defaults.
+        Sentinels are replaced by comment lines via ``_apply_section_comments()``.
         """
         comp_type = comp.get("component_type", "")
-        field_order = DashboardDataLite._get_component_field_order(comp_type)
 
-        # Table fields that should be omitted when at their defaults
+        # Per-type mandatory field sets
+        _MANDATORY_COMMON: set[str] = {"component_type", "workflow_tag", "data_collection_tag"}
+        _MANDATORY_BY_TYPE: dict[str, set[str]] = {
+            "figure": {"visu_type"},
+            "card": {"aggregation", "column_name"},
+            "interactive": {"interactive_component_type", "column_name"},
+            "image": {"image_column"},
+            "multiqc": {"selected_module", "selected_plot"},
+            "table": set(),
+        }
+        _GENERATED: set[str] = {"tag", "index", "layout", "title"}
+
+        mandatory_keys = _MANDATORY_COMMON | _MANDATORY_BY_TYPE.get(comp_type, set())
         table_defaults = {"page_size": 10, "sortable": True, "filterable": True}
         is_table = comp_type == "table"
 
-        cleaned: dict[str, Any] = {}
-
-        # Collect all keys: ordered fields first, then any remainder
+        field_order = DashboardDataLite._get_component_field_order(comp_type)
         all_keys = list(field_order) + [k for k in comp if k not in field_order]
 
+        mandatory: dict[str, Any] = {}
+        optional: dict[str, Any] = {}
+        generated: dict[str, Any] = {}
+
         for key in all_keys:
-            if key not in comp or key in cleaned:
+            if key in mandatory or key in optional or key in generated:
+                continue
+            if key not in comp:
                 continue
             value = comp[key]
             if DashboardDataLite._is_empty_value(value):
@@ -421,9 +500,23 @@ class DashboardDataLite(BaseModel):
                 continue
             if is_table and key in table_defaults and value == table_defaults[key]:
                 continue
-            cleaned[key] = value
+            if key in mandatory_keys:
+                mandatory[key] = value
+            elif key in _GENERATED:
+                generated[key] = value
+            else:
+                optional[key] = value
 
-        return cleaned
+        # Assemble with sentinel separators between non-empty sections
+        result: dict[str, Any] = dict(mandatory)
+        if optional:
+            result[DashboardDataLite.SENTINEL_OPTIONAL] = None
+            result.update(optional)
+        if generated:
+            result[DashboardDataLite.SENTINEL_GENERATED] = None
+            result.update(generated)
+
+        return result
 
     @classmethod
     def from_yaml(cls, content: str) -> "DashboardDataLite":

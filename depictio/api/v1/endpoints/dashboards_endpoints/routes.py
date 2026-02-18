@@ -1866,16 +1866,18 @@ async def export_dashboard_as_yaml(
 
     enriched_main_dashboard = enrich_dashboard_with_tags(dashboard_doc)
 
-    # Export main dashboard
+    # Export main dashboard — apply ordering, default stripping, and section sentinels
     main_lite = DashboardDataLite.from_full(enriched_main_dashboard)
     main_lite.project_tag = project_name
     main_dict = main_lite.model_dump(exclude_none=True, mode="json")
-
-    # Remove tab-specific fields from main dashboard for cleaner export
+    DashboardDataLite._strip_dashboard_defaults(main_dict)
     for field in ["is_main_tab", "tab_order", "parent_dashboard_tag"]:
         main_dict.pop(field, None)
-
-    multi_tab_dict["main_dashboard"] = main_dict
+    if "components" in main_dict:
+        main_dict["components"] = [
+            DashboardDataLite._clean_component_for_yaml(c) for c in main_dict["components"]
+        ]
+    multi_tab_dict["main_dashboard"] = DashboardDataLite._build_ordered_dashboard_dict(main_dict)
 
     # Export child tabs
     tabs_list = []
@@ -1886,20 +1888,23 @@ async def export_dashboard_as_yaml(
         child_lite = DashboardDataLite.from_full(enriched_child)
         child_lite.project_tag = project_name
         child_dict = child_lite.model_dump(exclude_none=True, mode="json")
-
-        # Remove fields that are implicit in multi-tab structure
+        DashboardDataLite._strip_dashboard_defaults(child_dict)
         for field in ["is_main_tab", "parent_dashboard_tag", "project_tag"]:
             child_dict.pop(field, None)
-
-        tabs_list.append(child_dict)
+        if "components" in child_dict:
+            child_dict["components"] = [
+                DashboardDataLite._clean_component_for_yaml(c) for c in child_dict["components"]
+            ]
+        tabs_list.append(DashboardDataLite._build_ordered_dashboard_dict(child_dict))
 
     if tabs_list:
         multi_tab_dict["tabs"] = tabs_list
 
-    # Convert to YAML
-    yaml_content = yaml.dump(
+    # Convert to YAML and inject section comment separators
+    raw_yaml = yaml.dump(
         multi_tab_dict, default_flow_style=False, sort_keys=False, allow_unicode=True, indent=4
     )
+    yaml_content = DashboardDataLite._apply_section_comments(raw_yaml)
 
     return Response(
         content=yaml_content,
