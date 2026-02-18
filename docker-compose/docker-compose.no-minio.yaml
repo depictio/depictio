@@ -62,10 +62,7 @@ services:
       - path: .env
         required: false
     environment:
-      DEPICTIO_CONTEXT: "server"
       DEPICTIO_AUTH_SINGLE_USER_MODE: "${DEPICTIO_AUTH_SINGLE_USER_MODE:-true}"
-      DEPICTIO_AUTH_PUBLIC_MODE: "${DEPICTIO_AUTH_PUBLIC_MODE:-false}"
-      DEPICTIO_AUTH_DEMO_MODE: "${DEPICTIO_AUTH_DEMO_MODE:-false}"
     command: ["/app/run_dash.sh"]
     healthcheck:
       test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:5080/"]
@@ -91,10 +88,7 @@ services:
       - path: .env
         required: false
     environment:
-      DEPICTIO_CONTEXT: "server"
       DEPICTIO_AUTH_SINGLE_USER_MODE: "${DEPICTIO_AUTH_SINGLE_USER_MODE:-true}"
-      DEPICTIO_AUTH_PUBLIC_MODE: "${DEPICTIO_AUTH_PUBLIC_MODE:-false}"
-      DEPICTIO_AUTH_DEMO_MODE: "${DEPICTIO_AUTH_DEMO_MODE:-false}"
     command: ["/app/run_fastapi.sh"]
     healthcheck:
       test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:8058/depictio/api/v1/docs"]
@@ -120,8 +114,6 @@ services:
     environment:
       DEPICTIO_CONTEXT: "server"
       DEPICTIO_AUTH_SINGLE_USER_MODE: "${DEPICTIO_AUTH_SINGLE_USER_MODE:-true}"
-      DEPICTIO_AUTH_PUBLIC_MODE: "${DEPICTIO_AUTH_PUBLIC_MODE:-false}"
-      DEPICTIO_AUTH_DEMO_MODE: "${DEPICTIO_AUTH_DEMO_MODE:-false}"
     command: ["/app/run_celery_worker.sh"]
     restart: unless-stopped
     depends_on:

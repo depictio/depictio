@@ -89,10 +89,7 @@ services:
       - path: .env
         required: false
     environment:
-      DEPICTIO_CONTEXT: "server"
       DEPICTIO_AUTH_SINGLE_USER_MODE: "${DEPICTIO_AUTH_SINGLE_USER_MODE:-true}"
-      DEPICTIO_AUTH_PUBLIC_MODE: "${DEPICTIO_AUTH_PUBLIC_MODE:-false}"
-      DEPICTIO_AUTH_DEMO_MODE: "${DEPICTIO_AUTH_DEMO_MODE:-false}"
       DEPICTIO_MINIO_ROOT_USER: "${DEPICTIO_MINIO_ROOT_USER:-minio}"
       DEPICTIO_MINIO_ROOT_PASSWORD: "${DEPICTIO_MINIO_ROOT_PASSWORD:-minio123}"
     command: ["/app/run_dash.sh"]
@@ -122,10 +119,7 @@ services:
       - path: .env
         required: false
     environment:
-      DEPICTIO_CONTEXT: "server"
       DEPICTIO_AUTH_SINGLE_USER_MODE: "${DEPICTIO_AUTH_SINGLE_USER_MODE:-true}"
-      DEPICTIO_AUTH_PUBLIC_MODE: "${DEPICTIO_AUTH_PUBLIC_MODE:-false}"
-      DEPICTIO_AUTH_DEMO_MODE: "${DEPICTIO_AUTH_DEMO_MODE:-false}"
       DEPICTIO_MINIO_ROOT_USER: "${DEPICTIO_MINIO_ROOT_USER:-minio}"
       DEPICTIO_MINIO_ROOT_PASSWORD: "${DEPICTIO_MINIO_ROOT_PASSWORD:-minio123}"
     command: ["/app/run_fastapi.sh"]
@@ -155,8 +149,6 @@ services:
     environment:
       DEPICTIO_CONTEXT: "server"
       DEPICTIO_AUTH_SINGLE_USER_MODE: "${DEPICTIO_AUTH_SINGLE_USER_MODE:-true}"
-      DEPICTIO_AUTH_PUBLIC_MODE: "${DEPICTIO_AUTH_PUBLIC_MODE:-false}"
-      DEPICTIO_AUTH_DEMO_MODE: "${DEPICTIO_AUTH_DEMO_MODE:-false}"
       DEPICTIO_MINIO_ROOT_USER: "${DEPICTIO_MINIO_ROOT_USER:-minio}"
       DEPICTIO_MINIO_ROOT_PASSWORD: "${DEPICTIO_MINIO_ROOT_PASSWORD:-minio123}"
     command: ["/app/run_celery_worker.sh"]
