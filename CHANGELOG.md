@@ -6,20 +6,65 @@
 
 
 <details>
-<summary>Click to expand the changelog for 0.7.3-b7</summary>
+<summary>Click to expand the changelog for 0.7.3-b8</summary>
 
 ### Changes 📜
 
+#### New Features ✨
+
+* feat: add YAML dashboard versions for iris, penguins & ampliseq reference projects [6f7dd6d6]
+* feat: clean validation error output + MultiQC/Image component support [ddafb782]
+* feat: add Image/MultiQC test YAML and offline validation unit tests [7fa6c133]
+* feat: server schema validation in validate and import commands [2b384132]
+* feat: add domain validation to YAML import (enum fields + cross-field rules) [cbe20ff3]
+* feat: Improve YAML export/import system with minimal metadata and multi-tab support [6a837307]
+
 #### Bug Fixes 🐛
 
-* fix: Update CI/CD YAML files to use current naming conventions [38a09f32]
-* fix: Resolve three demo mode issues — owner edit button, tab copy naming, and MultiQC s3_location [63b30221]
+* fix: regenerate pixi.lock for depictio 0.7.3b7 with relaxed pyyaml pin [09794824]
+* fix: resolve CI failures — ruff import format and pyyaml version conflict [ee55266d]
+* fix: Embed critical env defaults in compose files so .env is truly optional [d0ebcc03]
+* fix: remove source bind-mounts and switch mongo to named volume for zero-clone quickstart [3705b7b5]
+* fix: Resolve demo mode round-2 issues — dashboard ownership, MultiQC habitat filter, and TabsTab href crash [8efbb01b]
+* fix: update CLI test assertion to match actual validation failure message [5e4e1148]
+* fix: comment out Checkbox/Switch (not yet in frontend), fix multi-error formatting [95bf574f]
+* fix: make column_type optional in Card and Interactive lite components [5352666c]
+* fix: enhance roundtrip_check.sh with JSON count helpers and assertions [fbda7f7a]
+* fix: simplify example dashboard classification to ID-only check [4d88673d]
+* fix: preserve dashboard icon fields through YAML export/import [f1bf4a64]
+* fix: Export and import code_content for code-mode figures [15cea198]
+* fix: Stable component tags across YAML round-trips (multi-tab) [0baaacd7]
+* fix: Preserve layout positions after YAML import (round-trip bug) [2f9be5e6]
+* fix: Complete YAML export with MultiQC params and enrichment [a20c01ae]
+* fix: Improve YAML tag generation and workflow/DC enrichment [5b4a1b24]
+* fix: Add external port configuration for CLI config generation [81706472]
+
+#### Improvements 🚀
+
+* refactor: add section comment separators to YAML export [8520a1b3]
+* refactor: reorder YAML export fields — mandatory first, generated last [cc9dada6]
+* refactor: Reorganise settings_models.py into logical sections [307b12a3]
+* refactor: Clean up settings_models.py — remove dead code, add consistent docs [efb1205a]
+* refactor: clean up lite.py and dashboards.py post-validation addition [6fa2d515]
+
+#### Chores 🧹
+
+* chore: Trim compose environment blocks — keep only essential defaults [553af80f]
+* chore: streamline Docker Compose — embed MinIO by default, freeze image/package versions [9711f8cb]
+* chore: Add missing child tab screenshots for ampliseq demo dashboard [cecc4a2a]
+* ci: add YAML export-import roundtrip test to cli-comprehensive-test job [0ba8d645]
+
+#### Documentation Updates 📚
+
+* docs: Update API CLAUDE.md with recent session context [7fb8e0eb]
 
 #### Other Changes 📝
 
-* Bump version: 0.7.3-b6 → 0.7.3-b7 [6b71d4c2]
-* Update CHANGELOG.md for v0.7.3-b6 [5ca4d85b]
-* Bump version: 0.7.3-b5 → 0.7.3-b6 [ef172be8]
+* Bump version: 0.7.3-b7 → 0.7.3-b8 [f754aa28]
+* Update CHANGELOG.md for v0.7.3-b7 [6708d0fa]
+* Bump version: 0.7.3-b6 → 0.7.3-b7 [91aa33a2]
+* test: add unit tests for _parse_component_lines and _resolve_dc_id_from_project [3313eef9]
+* test: add 5 validation test YAML dashboards for CLI edge cases [374f6798]
 
 
 </details>
@@ -28,12 +73,7 @@
 
 For more details, please refer to the [documentation](https://depictio.github.io/depictio-docs/)
 
-ectivity checks [3bbbe185]
-* Revert values updates and adjust ingress [8c2c7d2e]
-* Switch to host-based ingress [5be94a37]
-* Use minikube IP for ingress checks [72aed78b]
-* test: check FastAPI docs endpoint [309427b7]
-* chore(ci): enhance ingress connectivity checks [d00b14dd]
+ectivity checks [d00b14dd]
 * Revert values updates and adjust ingress [cd793a7b]
 * Improve CLI build for Poetry [569c89dd]
 * Add Gitpod workspace setup [e47b0c27]
