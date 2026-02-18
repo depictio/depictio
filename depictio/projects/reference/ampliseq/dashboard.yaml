@@ -66,7 +66,7 @@ main_dashboard:
             custom_color: '#45B8AC'
             icon_name: mdi:flask
     -   tag: multiqc-cutadapt_filtered-reads-d421ae
-        index: e2db1471-3076-4f3e-aaf3-d2631da98167
+        index: 51f1c24c-81cf-484f-8dc6-e1746f45dccf
         component_type: multiqc
         title: ''
         workflow_tag: ampliseq
@@ -79,7 +79,7 @@ main_dashboard:
             w: 8
             h: 4
     -   tag: multiqc-fastqc_sequence-counts-52bd04
-        index: 4c53ffb5-eb66-428d-8eea-d519877c5fa0
+        index: 02c2b09e-fcc4-49d9-a0df-fdfe079d7597
         component_type: multiqc
         title: ''
         workflow_tag: ampliseq
@@ -92,7 +92,7 @@ main_dashboard:
             w: 8
             h: 4
     -   tag: multiqc-fastqc_sequence-quality-histograms-ce2a02
-        index: 90654027-0423-4abc-9026-296b6ba78bc9
+        index: 1acfa105-7334-4ca4-b904-38a74b406d44
         component_type: multiqc
         title: ''
         workflow_tag: ampliseq
@@ -105,7 +105,7 @@ main_dashboard:
             w: 4
             h: 5
     -   tag: multiqc-fastqc_per-sequence-gc-content-359f73
-        index: 09ce8e50-03f9-4285-b0d2-83d7912d8d6a
+        index: 59588a55-476f-4db2-a01e-29825551dd11
         component_type: multiqc
         title: ''
         workflow_tag: ampliseq
@@ -118,7 +118,7 @@ main_dashboard:
             w: 4
             h: 5
     -   tag: multiqc-fastqc_adapter-content-6dd1a9
-        index: af2cd16d-ce8e-40d0-8e9e-49a1fa0bc8a3
+        index: d428d6fd-a79d-4a14-b3bf-8e818a3e42a5
         component_type: multiqc
         title: ''
         workflow_tag: ampliseq
@@ -131,7 +131,7 @@ main_dashboard:
             w: 4
             h: 5
     -   tag: multiqc-cutadapt_trimmed-sequence-lengths-5-e5e50a
-        index: fdb76dba-8205-4373-b96f-b06dab9c75ad
+        index: c6d9355b-c421-4d60-a6e6-8da7a77e3fab
         component_type: multiqc
         title: ''
         workflow_tag: ampliseq
@@ -156,7 +156,7 @@ tabs:
     workflow_system: nf-core
     components:
     -   tag: card-sample_nunique-faa7e6
-        index: 778be777-e177-4dd0-858f-d0e945c3e535
+        index: 798d3f8f-aa54-486e-8c8c-7337f05817c7
         component_type: card
         title: Total Samples
         workflow_tag: ampliseq
@@ -176,7 +176,7 @@ tabs:
             title_font_size: xl
             value_font_size: xl
     -   tag: card-taxonomy_nunique-d2ba1c
-        index: e7ae0c0e-88fc-4c94-8b66-4ed4f06031ec
+        index: 01655e5a-155b-4d9b-a39a-f74764f7282e
         component_type: card
         title: Total Taxa
         workflow_tag: ampliseq
@@ -196,7 +196,7 @@ tabs:
             title_font_size: xl
             value_font_size: xl
     -   tag: card-faith_pd_average-66fb50
-        index: a386e270-1705-433c-91c2-e651a5885fb2
+        index: e9f153a8-1d30-4f42-bbc3-a86bb94b190c
         component_type: card
         title: Mean Faith PD
         workflow_tag: ampliseq
@@ -216,7 +216,7 @@ tabs:
             title_font_size: xl
             value_font_size: xl
     -   tag: card-habitat_nunique-1fc891
-        index: 3c8541b2-f741-48bb-a42c-f9f6bed0f384
+        index: 76f12e20-482b-4d4c-bae1-cb65804016d6
         component_type: card
         title: Habitat Types
         workflow_tag: ampliseq
@@ -236,7 +236,7 @@ tabs:
             title_font_size: xl
             value_font_size: xl
     -   tag: figure-line_depth_faith_pd-5d9f17
-        index: 3fa381f6-42d3-4566-ad8f-89b239ed3266
+        index: 5e3c7df0-b58b-440e-bdde-e84df0eaddfe
         component_type: figure
         title: ''
         workflow_tag: ampliseq
@@ -266,7 +266,7 @@ tabs:
                 depth: Rarefaction Depth
                 faith_pd: Faith's Phylogenetic Diversity
     -   tag: figure-box_sample_faith_pd-5b8018
-        index: 0d2f8c0d-e6c5-46c0-b769-479835cb9524
+        index: e3918bea-5fed-4d2b-ae90-be4962d93cfd
         component_type: figure
         title: ''
         workflow_tag: ampliseq
@@ -293,7 +293,7 @@ tabs:
                 sample: Sample
                 faith_pd: Faith's Phylogenetic Diversity
     -   tag: figure-sunburst-e651a9
-        index: e3b23ce8-4f93-4524-8a22-669e274b8d3e
+        index: 5ed044d5-7364-4f36-9e40-4f9098bdc6dd
         component_type: figure
         title: ''
         workflow_tag: ampliseq
@@ -319,7 +319,7 @@ tabs:
             values: count
             title: Taxonomic Composition - Hierarchical View
     -   tag: figure-bar_phylum_count-de4c39
-        index: deca7ec8-f516-444f-b784-2d36e3934176
+        index: 301f7ef7-b617-4e46-b661-263b2403b153
         component_type: figure
         title: ''
         workflow_tag: ampliseq
@@ -344,7 +344,7 @@ tabs:
                 habitat: Habitat
             barmode: stack
     -   tag: figure-bar_sample_count-de4c39
-        index: 61692fe9-e58e-4013-a3ff-472a4f0984e8
+        index: 8055c181-d8c3-483e-a179-a4c008fcb5ce
         component_type: figure
         title: ''
         workflow_tag: ampliseq
@@ -369,7 +369,7 @@ tabs:
                 Phylum: Phylum
             barmode: stack
     -   tag: table-table-df4371
-        index: a7231fa5-8654-40a9-b53c-9bb3c564a507
+        index: 6084ade7-ad17-4166-8265-15d6612a4fc8
         component_type: table
         title: ''
         workflow_tag: ampliseq
@@ -385,7 +385,7 @@ tabs:
             w: 8
             h: 6
     -   tag: table-table-02f050
-        index: 8c024af9-c766-471e-b306-e231ba8c9510
+        index: be0b13ba-0241-4086-a1f1-2953040cfb53
         component_type: table
         title: ''
         workflow_tag: ampliseq
@@ -401,7 +401,7 @@ tabs:
             w: 8
             h: 6
     -   tag: interactive-habitat-d8ca83
-        index: aa6035ff-380b-43f7-b6f5-3556acaccce7
+        index: 22665c8a-928f-4b62-a54d-c379ea1b5c9d
         component_type: interactive
         title: Habitat Type
         workflow_tag: ampliseq
@@ -419,7 +419,7 @@ tabs:
             custom_color: '#984EA3'
             icon_name: mdi:earth
     -   tag: interactive-sample-78c9c2
-        index: 289fc672-6e2d-4177-8825-e5f67aa48647
+        index: 301abd2e-2c74-439a-ac74-4b63a7021293
         component_type: interactive
         title: Sample ID
         workflow_tag: ampliseq
@@ -437,7 +437,7 @@ tabs:
             custom_color: '#45B8AC'
             icon_name: mdi:flask
     -   tag: interactive-kingdom-b112bb
-        index: e0e87f73-e79d-491d-915f-88d35e49bc4f
+        index: ed42fd5b-9d53-4493-a1cd-7bb38a335cdc
         component_type: interactive
         title: Kingdom
         workflow_tag: ampliseq
@@ -455,7 +455,7 @@ tabs:
             custom_color: '#377EB8'
             icon_name: mdi:bacteria
     -   tag: interactive-phylum-f89384
-        index: cea045f5-b3ee-47d3-9a8a-1a75c9874347
+        index: 35b843da-93f9-4f42-bc97-1a44305ce931
         component_type: interactive
         title: Phylum
         workflow_tag: ampliseq
@@ -473,7 +473,7 @@ tabs:
             custom_color: '#8BC34A'
             icon_name: mdi:bacteria-outline
     -   tag: interactive-sampling_date-b9d091
-        index: 4eaab9c4-e816-41bf-8718-e7f43a0b1263
+        index: dd4f8f9a-211f-4cea-acc6-d28d7aa54751
         component_type: interactive
         title: Sampling Period
         workflow_tag: ampliseq
@@ -690,7 +690,7 @@ tabs:
             title_font_size: xl
             value_font_size: xl
     -   tag: figure-scatter_clr_w-734503
-        index: 36269bf4-3b51-4d59-bffd-26dcdc7c9086
+        index: d07985d5-37cb-4f94-a8c3-d97d977226f1
         component_type: figure
         title: ''
         workflow_tag: ampliseq

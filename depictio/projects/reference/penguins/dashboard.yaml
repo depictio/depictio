@@ -1,17 +1,10 @@
-dashboard_id: 6824cb3b89d2b72169309738
-project_tag: Palmer Penguins Species Comparison
 title: Penguins Species Analysis
+project_tag: Palmer Penguins Species Comparison
 icon: /assets/images/icons/favicon.png
+dashboard_id: 6824cb3b89d2b72169309738
 components:
--   tag: figure-scatter_flipper_length_mm_body_mass_g-1d5516
-    component_type: figure
+-   component_type: figure
     workflow_tag: penguin_species_analysis
-    data_collection_tag: joined_penguins_complete
-    layout:
-        x: 0
-        y: 2
-        w: 8
-        h: 5
     visu_type: scatter
     figure_params:
         x: flipper_length_mm
@@ -31,15 +24,14 @@ components:
             "Species"}'
     mode: ui
     selection_enabled: false
--   tag: figure-box_species_bill_length_mm-410375
-    component_type: figure
-    workflow_tag: penguin_species_analysis
-    data_collection_tag: joined_penguins_complete
+    tag: figure-scatter_flipper_length_mm_body_mass_g-88662c
     layout:
         x: 0
-        y: 7
-        w: 4
+        y: 2
+        w: 8
         h: 5
+-   component_type: figure
+    workflow_tag: penguin_species_analysis
     visu_type: box
     figure_params:
         x: species
@@ -54,15 +46,14 @@ components:
             "Sex"}'
     mode: ui
     selection_enabled: false
--   tag: figure-histogram_bill_depth_mm-4b8718
-    component_type: figure
-    workflow_tag: penguin_species_analysis
-    data_collection_tag: joined_penguins_complete
+    tag: figure-box_species_bill_length_mm-008158
     layout:
-        x: 4
+        x: 0
         y: 7
         w: 4
         h: 5
+-   component_type: figure
+    workflow_tag: penguin_species_analysis
     visu_type: histogram
     figure_params:
         x: bill_depth_mm
@@ -77,15 +68,14 @@ components:
         labels: '{"bill_depth_mm": "Bill Depth (mm)", "species": "Species"}'
     mode: ui
     selection_enabled: false
--   tag: figure-figure-7b5ffb
-    component_type: figure
-    workflow_tag: penguin_species_analysis
-    data_collection_tag: joined_penguins_complete
+    tag: figure-histogram_bill_depth_mm-518c7e
     layout:
-        x: 0
-        y: 12
-        w: 8
+        x: 4
+        y: 7
+        w: 4
         h: 5
+-   component_type: figure
+    workflow_tag: penguin_species_analysis
     visu_type: scatter
     mode: code
     code_content: 'df_modified = df.to_pandas().groupby([''island'',''species'']).agg({''body_mass_g'':''mean'',''bill_length_mm'':''count''}).reset_index().rename(columns={''bill_length_mm'':''count''})
@@ -95,16 +85,14 @@ components:
 
         '
     selection_enabled: false
--   tag: card-species_nunique-d8c047
-    component_type: card
-    workflow_tag: penguin_species_analysis
-    data_collection_tag: joined_penguins_complete
+    tag: figure-figure-413737
     layout:
         x: 0
-        y: 0
-        w: 2
-        h: 2
-    title: Species Diversity
+        y: 12
+        w: 8
+        h: 5
+-   component_type: card
+    workflow_tag: penguin_species_analysis
     aggregation: nunique
     column_name: species
     column_type: object
@@ -114,16 +102,15 @@ components:
         title_color: '#8BC34A'
         title_font_size: xl
         value_font_size: xl
--   tag: card-body_mass_g_average-553e4a
-    component_type: card
-    workflow_tag: penguin_species_analysis
-    data_collection_tag: joined_penguins_complete
+    tag: card-species_nunique-a8ca80
     layout:
-        x: 2
+        x: 0
         y: 0
         w: 2
         h: 2
-    title: Avg Body Mass (g)
+    title: Species Diversity
+-   component_type: card
+    workflow_tag: penguin_species_analysis
     aggregation: average
     column_name: body_mass_g
     column_type: float64
@@ -133,16 +120,15 @@ components:
         title_color: '#F68B33'
         title_font_size: xl
         value_font_size: xl
--   tag: card-individual_id_count-36d79d
-    component_type: card
-    workflow_tag: penguin_species_analysis
-    data_collection_tag: joined_penguins_complete
+    tag: card-body_mass_g_average-5df5ac
     layout:
-        x: 4
+        x: 2
         y: 0
         w: 2
         h: 2
-    title: Total Individuals
+    title: Avg Body Mass (g)
+-   component_type: card
+    workflow_tag: penguin_species_analysis
     aggregation: count
     column_name: individual_id
     column_type: object
@@ -152,16 +138,15 @@ components:
         title_color: '#5C6BC0'
         title_font_size: xl
         value_font_size: xl
--   tag: card-flipper_length_mm_average-178663
-    component_type: card
-    workflow_tag: penguin_species_analysis
-    data_collection_tag: joined_penguins_complete
+    tag: card-individual_id_count-e67f3e
     layout:
-        x: 6
+        x: 4
         y: 0
         w: 2
         h: 2
-    title: '`avg_flipper_length_mm`'
+    title: Total Individuals
+-   component_type: card
+    workflow_tag: penguin_species_analysis
     aggregation: average
     column_name: flipper_length_mm
     column_type: float64
@@ -171,93 +156,94 @@ components:
         title_color: '#26A69A'
         title_font_size: md
         value_font_size: xl
--   tag: interactive-species-db9b8e
-    component_type: interactive
+    tag: card-flipper_length_mm_average-53694d
+    layout:
+        x: 6
+        y: 0
+        w: 2
+        h: 2
+    title: '`avg_flipper_length_mm`'
+-   component_type: interactive
     workflow_tag: penguin_species_analysis
-    data_collection_tag: joined_penguins_complete
+    interactive_component_type: MultiSelect
+    column_name: species
+    column_type: object
+    display:
+        title_size: md
+        custom_color: '#858585'
+        icon_name: mdi:filter
+    tag: interactive-species-902bcd
     layout:
         x: 0
         y: 0
         w: 1
         h: 2
-    column_name: species
-    column_type: object
-    interactive_component_type: MultiSelect
+-   component_type: interactive
+    workflow_tag: penguin_species_analysis
+    interactive_component_type: RangeSlider
+    column_name: body_mass_g
+    column_type: float64
     display:
         title_size: md
-        custom_color: '#858585'
-        icon_name: mdi:filter
--   tag: interactive-body_mass_g-0dfbd8
-    component_type: interactive
-    workflow_tag: penguin_species_analysis
-    data_collection_tag: joined_penguins_complete
+        custom_color: '#45B8AC'
+        icon_name: bx:slider-alt
+    tag: interactive-body_mass_g-71a978
     layout:
         x: 0
         y: 2
         w: 1
         h: 3
-    column_name: body_mass_g
-    column_type: float64
-    interactive_component_type: RangeSlider
+-   component_type: interactive
+    workflow_tag: penguin_species_analysis
+    interactive_component_type: MultiSelect
+    column_name: island
+    column_type: object
     display:
         title_size: md
-        custom_color: '#45B8AC'
-        icon_name: bx:slider-alt
--   tag: interactive-island-0c5e99
-    component_type: interactive
-    workflow_tag: penguin_species_analysis
-    data_collection_tag: joined_penguins_complete
+        custom_color: '#7E57C2'
+        icon_name: mdi:island
+    tag: interactive-island-763599
     layout:
         x: 0
         y: 5
         w: 1
         h: 2
-    column_name: island
-    column_type: object
+-   component_type: interactive
+    workflow_tag: penguin_species_analysis
     interactive_component_type: MultiSelect
+    column_name: sex
+    column_type: object
     display:
         title_size: md
-        custom_color: '#7E57C2'
-        icon_name: mdi:island
--   tag: interactive-sex-adab8a
-    component_type: interactive
-    workflow_tag: penguin_species_analysis
-    data_collection_tag: joined_penguins_complete
+        custom_color: '#EC407A'
+        icon_name: mdi:gender-male-female
+    tag: interactive-sex-3acadc
     layout:
         x: 0
         y: 7
         w: 1
         h: 2
-    column_name: sex
-    column_type: object
-    interactive_component_type: MultiSelect
+-   component_type: interactive
+    workflow_tag: penguin_species_analysis
+    interactive_component_type: RangeSlider
+    column_name: bill_length_mm
+    column_type: float64
     display:
         title_size: md
-        custom_color: '#EC407A'
-        icon_name: mdi:gender-male-female
--   tag: interactive-bill_length_mm-5fb4eb
-    component_type: interactive
-    workflow_tag: penguin_species_analysis
-    data_collection_tag: joined_penguins_complete
+        custom_color: '#FF7043'
+        icon_name: bx:slider
+    tag: interactive-bill_length_mm-5273f3
     layout:
         x: 0
         y: 9
         w: 1
         h: 3
-    column_name: bill_length_mm
-    column_type: float64
-    interactive_component_type: RangeSlider
-    display:
-        title_size: md
-        custom_color: '#FF7043'
-        icon_name: bx:slider
--   tag: table-table-82ce8c
-    component_type: table
+-   component_type: table
     workflow_tag: penguin_species_analysis
-    data_collection_tag: joined_penguins_complete
+    row_selection_enabled: false
+    tag: table-table-172246
     layout:
         x: 0
         y: 17
         w: 8
         h: 5
-    row_selection_enabled: false

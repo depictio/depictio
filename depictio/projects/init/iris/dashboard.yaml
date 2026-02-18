@@ -1,17 +1,11 @@
-dashboard_id: 6824cb3b89d2b72169309737
-project_tag: Iris Dataset Project Data Analysis
 title: Iris Dashboard demo
+project_tag: Iris Dataset Project Data Analysis
 icon: /assets/images/icons/favicon.png
+dashboard_id: 6824cb3b89d2b72169309737
 components:
--   tag: figure-box_variety_sepal_length-04c6c1
-    component_type: figure
+-   component_type: figure
     workflow_tag: iris_workflow
     data_collection_tag: iris_table
-    layout:
-        x: 0
-        y: 2
-        w: 4
-        h: 5
     visu_type: box
     figure_params:
         x: variety
@@ -23,15 +17,15 @@ components:
         notched: true
     mode: ui
     selection_enabled: false
--   tag: figure-scatter_sepal_length_sepal_width-8399c0
-    component_type: figure
-    workflow_tag: iris_workflow
-    data_collection_tag: iris_table
+    tag: figure-box_variety_sepal_length-04c6c1
     layout:
-        x: 4
+        x: 0
         y: 2
         w: 4
         h: 5
+-   component_type: figure
+    workflow_tag: iris_workflow
+    data_collection_tag: iris_table
     visu_type: scatter
     figure_params:
         x: sepal.length
@@ -48,15 +42,15 @@ components:
         trendline: lowess
     mode: ui
     selection_enabled: false
--   tag: card-sepal_length_average-ed1ba1
-    component_type: card
+    tag: figure-scatter_sepal_length_sepal_width-8399c0
+    layout:
+        x: 4
+        y: 2
+        w: 4
+        h: 5
+-   component_type: card
     workflow_tag: iris_workflow
     data_collection_tag: iris_table
-    layout:
-        x: 0
-        y: 0
-        w: 2
-        h: 2
     aggregation: average
     column_name: sepal.length
     column_type: float64
@@ -66,15 +60,15 @@ components:
         title_color: '#9C27B0'
         title_font_size: xl
         value_font_size: xl
--   tag: card-sepal_width_median-3b1970
-    component_type: card
-    workflow_tag: iris_workflow
-    data_collection_tag: iris_table
+    tag: card-sepal_length_average-ed1ba1
     layout:
-        x: 2
+        x: 0
         y: 0
         w: 2
         h: 2
+-   component_type: card
+    workflow_tag: iris_workflow
+    data_collection_tag: iris_table
     aggregation: median
     column_name: sepal.width
     column_type: float64
@@ -84,15 +78,15 @@ components:
         title_color: '#673AB7'
         title_font_size: xl
         value_font_size: xl
--   tag: card-variety_nunique-546238
-    component_type: card
-    workflow_tag: iris_workflow
-    data_collection_tag: iris_table
+    tag: card-sepal_width_median-3b1970
     layout:
-        x: 4
+        x: 2
         y: 0
         w: 2
         h: 2
+-   component_type: card
+    workflow_tag: iris_workflow
+    data_collection_tag: iris_table
     aggregation: nunique
     column_name: variety
     column_type: object
@@ -102,15 +96,15 @@ components:
         title_color: '#4CAF50'
         title_font_size: xl
         value_font_size: xl
--   tag: card-variety_count-f4f525
-    component_type: card
-    workflow_tag: iris_workflow
-    data_collection_tag: iris_table
+    tag: card-variety_nunique-546238
     layout:
-        x: 6
+        x: 4
         y: 0
         w: 2
         h: 2
+-   component_type: card
+    workflow_tag: iris_workflow
+    data_collection_tag: iris_table
     aggregation: count
     column_name: variety
     column_type: object
@@ -120,73 +114,73 @@ components:
         title_color: '#4CAF50'
         title_font_size: lg
         value_font_size: xl
--   tag: interactive-sepal_length-2b680a
-    component_type: interactive
+    tag: card-variety_count-f4f525
+    layout:
+        x: 6
+        y: 0
+        w: 2
+        h: 2
+-   component_type: interactive
     workflow_tag: iris_workflow
     data_collection_tag: iris_table
+    interactive_component_type: RangeSlider
+    column_name: sepal.length
+    column_type: float64
+    display:
+        title_size: md
+        custom_color: '#9C27B0'
+        icon_name: mdi:flower-outline
+    tag: interactive-sepal_length-2b680a
     layout:
         x: 0
         y: 0
         w: 1
         h: 3
-    column_name: sepal.length
-    column_type: float64
-    interactive_component_type: RangeSlider
-    display:
-        title_size: md
-        custom_color: '#9C27B0'
-        icon_name: mdi:flower-outline
--   tag: interactive-petal_length-a5a82f
-    component_type: interactive
+-   component_type: interactive
     workflow_tag: iris_workflow
     data_collection_tag: iris_table
+    interactive_component_type: RangeSlider
+    column_name: petal.length
+    column_type: float64
+    display:
+        title_size: md
+        custom_color: '#E91E63'
+        icon_name: mdi:flower
+    tag: interactive-petal_length-a5a82f
     layout:
         x: 0
         y: 3
         w: 1
         h: 3
-    column_name: petal.length
-    column_type: float64
-    interactive_component_type: RangeSlider
-    display:
-        title_size: md
-        custom_color: '#E91E63'
-        icon_name: mdi:flower
--   tag: interactive-variety-56d49c
-    component_type: interactive
+-   component_type: interactive
     workflow_tag: iris_workflow
     data_collection_tag: iris_table
+    interactive_component_type: MultiSelect
+    column_name: variety
+    column_type: object
+    display:
+        title_size: md
+        custom_color: '#4CAF50'
+        icon_name: mdi:flower-tulip
+    tag: interactive-variety-56d49c
     layout:
         x: 0
         y: 6
         w: 1
         h: 2
-    column_name: variety
-    column_type: object
-    interactive_component_type: MultiSelect
-    display:
-        title_size: md
-        custom_color: '#4CAF50'
-        icon_name: mdi:flower-tulip
--   tag: table-table-467b27
-    component_type: table
+-   component_type: table
     workflow_tag: iris_workflow
     data_collection_tag: iris_table
+    row_selection_enabled: false
+    tag: table-table-467b27
     layout:
         x: 0
         y: 12
         w: 8
         h: 5
-    row_selection_enabled: false
--   tag: figure-histogram_sepal_length-ef601e
-    component_type: figure
+-   component_type: figure
     workflow_tag: iris_workflow
     data_collection_tag: iris_table
-    layout:
-        x: 0
-        y: 7
-        w: 8
-        h: 5
     visu_type: histogram
     figure_params:
         x: sepal.length
@@ -198,3 +192,9 @@ components:
         cumulative: true
     mode: ui
     selection_enabled: false
+    tag: figure-histogram_sepal_length-ef601e
+    layout:
+        x: 0
+        y: 7
+        w: 8
+        h: 5

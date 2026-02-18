@@ -238,7 +238,8 @@ class DashboardDataLite(BaseModel):
         """Export to YAML string.
 
         Returns:
-            YAML string representation with tag as primary identifier.
+            YAML string with mandatory fields first, then optional user-defined
+            fields, then export-generated metadata (dashboard_id last).
             The UUID index is omitted from YAML output (managed internally).
         """
         data = self.model_dump(exclude_none=True, mode="json")
@@ -275,8 +276,39 @@ class DashboardDataLite(BaseModel):
                 self._clean_component_for_yaml(comp) for comp in data["components"]
             ]
 
+        # Reorder dashboard-level fields: mandatory → optional user → generated → components
+        dashboard_field_order = [
+            # Mandatory
+            "title",
+            # Optional user-defined
+            "subtitle",
+            "project_tag",
+            "main_tab_name",
+            "tab_order",
+            "tab_icon",
+            "tab_icon_color",
+            "is_main_tab",
+            "parent_dashboard_tag",
+            "icon",
+            "icon_color",
+            "icon_variant",
+            "workflow_system",
+            # Generated on export (not needed for import)
+            "dashboard_id",
+            # Main content last (it's a large list)
+            "components",
+        ]
+        ordered: dict[str, Any] = {}
+        for key in dashboard_field_order:
+            if key in data:
+                ordered[key] = data[key]
+        # Append any unexpected keys not in the order list
+        for key in data:
+            if key not in ordered:
+                ordered[key] = data[key]
+
         return yaml.dump(
-            data, default_flow_style=False, sort_keys=False, allow_unicode=True, indent=4
+            ordered, default_flow_style=False, sort_keys=False, allow_unicode=True, indent=4
         )
 
     @staticmethod
@@ -290,42 +322,93 @@ class DashboardDataLite(BaseModel):
         return value in ("", None, [], {})
 
     @staticmethod
+    def _get_component_field_order(comp_type: str) -> list[str]:
+        """Return field ordering for a component type.
+
+        Fields are grouped into three sections:
+          1. Mandatory common fields (required for all components)
+          2. Type-specific required + optional user-defined fields
+          3. Export-generated fields (tag, layout) — present on export but not
+             needed when writing YAML from scratch
+        """
+        mandatory_common = ["component_type", "workflow_tag", "data_collection_tag"]
+
+        type_sections: dict[str, list[str]] = {
+            "figure": [
+                # mandatory
+                "visu_type",
+                # optional user-defined
+                "dict_kwargs",
+                "figure_params",
+                "mode",
+                "code_content",
+                "selection_enabled",
+                "selection_column",
+            ],
+            "card": [
+                # mandatory
+                "aggregation",
+                "column_name",
+                # optional user-defined
+                "column_type",
+                "display",
+            ],
+            "interactive": [
+                # mandatory
+                "interactive_component_type",
+                "column_name",
+                # optional user-defined
+                "column_type",
+                "display",
+            ],
+            "table": [
+                # optional user-defined
+                "columns",
+                "page_size",
+                "sortable",
+                "filterable",
+                "row_selection_enabled",
+                "row_selection_column",
+            ],
+            "image": [
+                # mandatory
+                "image_column",
+                # optional user-defined
+                "s3_base_folder",
+                "thumbnail_size",
+                "columns",
+                "max_images",
+            ],
+            "multiqc": [
+                # mandatory
+                "selected_module",
+                "selected_plot",
+            ],
+        }
+
+        # Generated on export — placed last to separate from user-authored fields
+        generated = ["tag", "index", "layout", "title"]
+
+        return mandatory_common + type_sections.get(comp_type, []) + generated
+
+    @staticmethod
     def _clean_component_for_yaml(comp: dict[str, Any]) -> dict[str, Any]:
         """Clean a single component dict for YAML export.
 
-        Applies preferred field ordering, strips empty values and auto-generated UUIDs,
-        and omits default table settings.
+        Applies per-type field ordering (mandatory → optional → generated),
+        strips empty values and auto-generated UUIDs, and omits default table
+        settings.
         """
-        # Preferred field order: tag first, then type, layout, data source, config
-        field_order = [
-            "tag",
-            "index",
-            "component_type",
-            "workflow_tag",
-            "data_collection_tag",
-            "layout",
-            "title",
-            "selected_module",
-            "selected_plot",
-            "visu_type",
-            "figure_params",
-            "mode",
-            "code_content",
-            "selection_enabled",
-            "aggregation",
-            "column_name",
-            "column_type",
-            "interactive_component_type",
-            "display",
-        ]
+        comp_type = comp.get("component_type", "")
+        field_order = DashboardDataLite._get_component_field_order(comp_type)
 
         # Table fields that should be omitted when at their defaults
         table_defaults = {"page_size": 10, "sortable": True, "filterable": True}
-        is_table = comp.get("component_type") == "table"
+        is_table = comp_type == "table"
 
         cleaned: dict[str, Any] = {}
 
-        # Collect all keys: preferred-order first, then remainder in original order
+        # Collect all keys: ordered fields first, then any remainder
         all_keys = list(field_order) + [k for k in comp if k not in field_order]
 
         for key in all_keys:
