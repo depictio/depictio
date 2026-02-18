@@ -6,65 +6,14 @@
 
 
 <details>
-<summary>Click to expand the changelog for 0.7.3-b8</summary>
+<summary>Click to expand the changelog for 0.7.3</summary>
 
 ### Changes 📜
 
-#### New Features ✨
-
-* feat: add YAML dashboard versions for iris, penguins & ampliseq reference projects [6f7dd6d6]
-* feat: clean validation error output + MultiQC/Image component support [ddafb782]
-* feat: add Image/MultiQC test YAML and offline validation unit tests [7fa6c133]
-* feat: server schema validation in validate and import commands [2b384132]
-* feat: add domain validation to YAML import (enum fields + cross-field rules) [cbe20ff3]
-* feat: Improve YAML export/import system with minimal metadata and multi-tab support [6a837307]
-
-#### Bug Fixes 🐛
-
-* fix: regenerate pixi.lock for depictio 0.7.3b7 with relaxed pyyaml pin [09794824]
-* fix: resolve CI failures — ruff import format and pyyaml version conflict [ee55266d]
-* fix: Embed critical env defaults in compose files so .env is truly optional [d0ebcc03]
-* fix: remove source bind-mounts and switch mongo to named volume for zero-clone quickstart [3705b7b5]
-* fix: Resolve demo mode round-2 issues — dashboard ownership, MultiQC habitat filter, and TabsTab href crash [8efbb01b]
-* fix: update CLI test assertion to match actual validation failure message [5e4e1148]
-* fix: comment out Checkbox/Switch (not yet in frontend), fix multi-error formatting [95bf574f]
-* fix: make column_type optional in Card and Interactive lite components [5352666c]
-* fix: enhance roundtrip_check.sh with JSON count helpers and assertions [fbda7f7a]
-* fix: simplify example dashboard classification to ID-only check [4d88673d]
-* fix: preserve dashboard icon fields through YAML export/import [f1bf4a64]
-* fix: Export and import code_content for code-mode figures [15cea198]
-* fix: Stable component tags across YAML round-trips (multi-tab) [0baaacd7]
-* fix: Preserve layout positions after YAML import (round-trip bug) [2f9be5e6]
-* fix: Complete YAML export with MultiQC params and enrichment [a20c01ae]
-* fix: Improve YAML tag generation and workflow/DC enrichment [5b4a1b24]
-* fix: Add external port configuration for CLI config generation [81706472]
-
-#### Improvements 🚀
-
-* refactor: add section comment separators to YAML export [8520a1b3]
-* refactor: reorder YAML export fields — mandatory first, generated last [cc9dada6]
-* refactor: Reorganise settings_models.py into logical sections [307b12a3]
-* refactor: Clean up settings_models.py — remove dead code, add consistent docs [efb1205a]
-* refactor: clean up lite.py and dashboards.py post-validation addition [6fa2d515]
-
-#### Chores 🧹
-
-* chore: Trim compose environment blocks — keep only essential defaults [553af80f]
-* chore: streamline Docker Compose — embed MinIO by default, freeze image/package versions [9711f8cb]
-* chore: Add missing child tab screenshots for ampliseq demo dashboard [cecc4a2a]
-* ci: add YAML export-import roundtrip test to cli-comprehensive-test job [0ba8d645]
-
-#### Documentation Updates 📚
-
-* docs: Update API CLAUDE.md with recent session context [7fb8e0eb]
-
 #### Other Changes 📝
 
-* Bump version: 0.7.3-b7 → 0.7.3-b8 [f754aa28]
-* Update CHANGELOG.md for v0.7.3-b7 [6708d0fa]
-* Bump version: 0.7.3-b6 → 0.7.3-b7 [91aa33a2]
-* test: add unit tests for _parse_component_lines and _resolve_dc_id_from_project [3313eef9]
-* test: add 5 validation test YAML dashboards for CLI edge cases [374f6798]
+* Bump version: 0.7.3-b8 → 0.7.3 [b5f1892f]
+* Bump version: 0.7.3-b7 → 0.7.3-b8 [092facd0]
 
 
 </details>
@@ -73,43 +22,7 @@
 
 For more details, please refer to the [documentation](https://depictio.github.io/depictio-docs/)
 
-ectivity checks [d00b14dd]
-* Revert values updates and adjust ingress [cd793a7b]
-* Improve CLI build for Poetry [569c89dd]
-* Add Gitpod workspace setup [e47b0c27]
-* Add Gitpod workspace setup [e556573f]
-* Update CHANGELOG.md for v0.0.5 [ddf5db89]
-* Bump version: 0.0.5-beta2 → 0.0.5 [6c68f484]
-* Bump version: v0.0.5-beta2 → v0.0.5 [12e97411]
-* test: add test suite for File model validation, including various validation scenarios [9957daa3]
-* Update CHANGELOG.md for v0.0.5-beta2 [23744a60]
-* Switch to host-based ingress [c6747515]
-
-
-</details>
-
-### Documentation 📖
-
-For more details, please refer to the [documentation](https://depictio.github.io/depictio-docs/)
-
-ectivity checks [e596e6da]
-* feat: add screenshot generation test to CI workflow and update dashboard screenshot endpoint response to protect user data [ad294b3e]
-* feat: add screenshot file copy step in deployment for improved dashboard functionality [b6534f01]
-* feat: enhance changelog generation with expandable details section and add documentation reference in README [05d579a2]
-* feat: add step to push Helm chart to GHCR on push and workflow_dispatch events [5b41d05b]
-* feat: enhance release name generation to ensure DNS compliance [86d5feaf]
-* feat: consolidate CI workflows by adding test, lint, build, and publish steps for depictio-cli [83abfc65]
-* feat: add Docker Buildx setup step in CI workflow [bb90dd98]
-* feat: update CI workflows and add initial CLI structure; remove setup.py and adjust pyproject.toml for dependencies [2915d3d2]
-* feat: update CI workflows and add initial CLI structure; remove setup.py and adjust pyproject.toml for dependencies [185031ee]
-* feat: add refresh token support across token management; enhance tests for token creation, validation, and expiration [6a198be9]
-* feat: enhance token management with refresh token support; update token validity checks and add refresh token endpoint [ae25380f]
-* feat: improve authentication process by optimizing token validity checks and adding debug logging; add minimal Dash app for testing [479b0935]
-* feat: update _create_user_in_db to allow optional user ID and group parameters; enhance user existence check [66d6aec9]
-* feat: enhance token validity checks with detailed logging and add callback for clearing expired tokens [f82641ef]
-* feat: update _create_user_in_db to accept ObjectId; enhance user creation tests [1790de31]
-* feat: enhance initialization process with atomic checks and cleanup; update user creation to include ID [800be102]
-* feat: add Flask security assessment scanner for comprehensive application security checks [caa5476c]
+er for comprehensive application security checks [caa5476c]
 * feat: add blocking for debug endpoints in Flask server [db8fb6b3]
 * feat: add GitHub Actions workflow for testing, linting, and building depictio-cli and clean up pyproject.toml [46503f33]
 * feat: update environment configuration for Gitpod setup and adjust logging verbosity [6b74b5f2]
