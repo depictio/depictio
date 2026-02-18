@@ -5,17 +5,26 @@ from typing import Literal, Optional
 from pydantic import AliasChoices, Field, computed_field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+# ── Core Services ─────────────────────────────────────────────────────────────
+
 
 class ServiceConfig(BaseSettings):
     """Base class for service configurations with internal/external URL handling."""
 
     service_name: str
     service_port: int
-    external_host: str = Field(default="localhost")
+    external_host: str = Field(default="localhost", description="Hostname for external access")
     external_port: int
-    external_protocol: str = Field(default="http")
-    public_url: Optional[str] = Field(default=None)
-    external_service: bool = Field(default=False)
+    external_protocol: str = Field(
+        default="http", description="Protocol for external access (http/https)"
+    )
+    public_url: Optional[str] = Field(
+        default=None,
+        description="Override URL for external access (e.g. reverse-proxy or CDN endpoint)",
+    )
+    external_service: bool = Field(
+        default=False, description="True when the service is outside the Docker Compose network"
+    )
 
     @property
     def internal_url(self) -> str:
@@ -42,103 +51,36 @@ class ServiceConfig(BaseSettings):
 
         return self.external_url
 
-    # @property
-    # def url(self) -> str:
-    #     # """Returns appropriate URL based on DEPICTIO_CONTEXT."""
-    #     context = os.getenv("DEPICTIO_CONTEXT", "client")
-    #     print(f"SETTINGS DEPICTIO_CONTEXT: {context}")
-    #     # return self.internal_url if context == "server" else self.external_url
-
-    #     # If running inside the server context we normally want to use the
-    #     # internal service URL for inter-service communication.  However when a
-    #     # ``public_url`` pointing to a remote MinIO/S3 instance is provided we
-    #     # must use that instead.  This allows the same configuration object to
-    #     # be used both from inside microservices and when connecting to an
-    #     # external S3 installation.
-    #     if context == "server":
-    #         if self.public_url:
-    #             host = urlparse(self.public_url).hostname or ""
-    #             if host not in {self.service_name, "localhost", "127.0.0.1"}:
-    #                 return self.public_url
-    #         return self.internal_url
-
-    #     return self.external_url
-
     @property
     def port(self) -> int:
         return self.external_port
 
 
-class S3DepictioCLIConfig(ServiceConfig):
-    """S3 configuration inheriting service URL management."""
-
-    service_name: str = Field(default="minio")
-    service_port: int = Field(default=9000)
-    external_port: int = Field(default=9000)
-
-    # S3-specific fields
-    root_user: str = Field(default="minio")
-    root_password: str = Field(default="minio123")
-    bucket: str = Field(default="depictio-bucket")
-
-    model_config = SettingsConfigDict(env_prefix="DEPICTIO_MINIO_")
-
-    # Backwards compatibility aliases
-    # def __init__(self, **data: object) -> None:
-    #     print(f"Data received in S3DepictioCLIConfig: {data}")
-    #     data.setdefault("public_url", f"{data['external_protocol']}://{data['external_host']}:{data['external_port']}")
-    #     data.setdefault("endpoint_url", data.get("public_url"))
-    #     super().__init__(**data)
-    # if endpoint_url:
-    # parsed = urlparse(endpoint_url)
-    # if parsed.scheme:
-    #     data.setdefault("external_protocol", parsed.scheme)
-    # if parsed.hostname:
-    #     data.setdefault("external_host", parsed.hostname)
-    # if parsed.port:
-    #     data.setdefault("external_port", parsed.port)
-
-    # super().__init__(**data)
-
-    # Backwards compatibility aliases
-    @property
-    def endpoint_url(self) -> str:
-        """Returns URL for Polars and other S3 clients."""
-        return self.url
-
-    @property
-    def host(self) -> str:
-        return self.external_host
-
-    # Additional aliases for S3 compatibility
-    @property
-    def aws_access_key_id(self) -> str:
-        return self.root_user
-
-    @property
-    def aws_secret_access_key(self) -> str:
-        return self.root_password
-
-
 class FastAPIConfig(ServiceConfig):
+    """FastAPI backend server configuration."""
+
     service_name: str = Field(default="depictio-backend")
     service_port: int = Field(default=8058)
     external_port: int = Field(default=8058)
-    host: str = Field(default="0.0.0.0")
-    workers: int = Field(default=4)
-    ssl: bool = Field(default=False)
-    logging_level: str = Field(default="INFO")
+    host: str = Field(default="0.0.0.0", description="Bind address for the FastAPI server")
+    workers: int = Field(default=4, description="Number of Gunicorn worker processes")
+    ssl: bool = Field(default=False, description="Enable SSL/TLS")
+    logging_level: str = Field(
+        default="INFO", description="Logging level (DEBUG, INFO, WARNING, ERROR)"
+    )
 
     model_config = SettingsConfigDict(env_prefix="DEPICTIO_FASTAPI_")
 
 
 class DashConfig(ServiceConfig):
+    """Dash frontend server configuration."""
+
     service_name: str = Field(default="depictio-frontend")
     service_port: int = Field(default=5080)
     external_port: int = Field(default=5080)
-    host: str = Field(default="0.0.0.0")
-    workers: int = Field(default=4)
-    debug: bool = Field(default=True)
+    host: str = Field(default="0.0.0.0", description="Bind address for the Dash server")
+    workers: int = Field(default=4, description="Number of Gunicorn worker processes")
+    debug: bool = Field(default=True, description="Enable Dash debug mode with hot reload")
     auto_generate_figures: bool = Field(
         default=False, description="Enable automatic figure generation in UI mode"
     )
@@ -147,15 +89,18 @@ class DashConfig(ServiceConfig):
 
 
 class MongoDBConfig(ServiceConfig):
+    """MongoDB database connection configuration."""
+
     service_name: str = Field(default="mongo")
     service_port: int = Field(default=27018)
     external_port: int = Field(default=27018)
-    db_name: str = Field(default="depictioDB")
-    wipe: bool = Field(default=False)
+    db_name: str = Field(default="depictioDB", description="MongoDB database name")
+    wipe: bool = Field(
+        default=False, description="Wipe the database on startup (destructive — development only)"
+    )
 
     model_config = SettingsConfigDict(env_prefix="DEPICTIO_MONGODB_")
 
-    # Collections
     class Collections(BaseSettings):
         data_collection: str = Field(default="data_collections")
         workflow_collection: str = Field(default="workflows")
@@ -175,15 +120,57 @@ class MongoDBConfig(ServiceConfig):
     collections: Collections = Field(default_factory=Collections)
 
 
+class S3DepictioCLIConfig(ServiceConfig):
+    """S3/MinIO object storage configuration."""
+
+    service_name: str = Field(default="minio")
+    service_port: int = Field(default=9000)
+    external_port: int = Field(default=9000)
+    root_user: str = Field(default="minio", description="MinIO/S3 root access key")
+    root_password: str = Field(default="minio123", description="MinIO/S3 root secret key")
+    bucket: str = Field(
+        default="depictio-bucket", description="Default S3 bucket name for Depictio data"
+    )
+
+    model_config = SettingsConfigDict(env_prefix="DEPICTIO_MINIO_")
+
+    @property
+    def endpoint_url(self) -> str:
+        """Returns URL for Polars and other S3 clients."""
+        return self.url
+
+    @property
+    def host(self) -> str:
+        return self.external_host
+
+    # Aliases for S3 compatibility
+    @property
+    def aws_access_key_id(self) -> str:
+        return self.root_user
+
+    @property
+    def aws_secret_access_key(self) -> str:
+        return self.root_password
+
+
 class AuthConfig(BaseSettings):
+    """Authentication and authorisation configuration."""
+
     keys_dir: Path = Field(
-        default_factory=lambda: Path(__file__).parent.parent.parent.parent / "keys"
+        default_factory=lambda: Path(__file__).parent.parent.parent.parent / "keys",
+        description="Directory for JWT public/private key files",
     )
-    keys_algorithm: Literal["RS256", "RS512", "ES256", "SHA256"] = Field(default="RS256")
+    keys_algorithm: Literal["RS256", "RS512", "ES256", "SHA256"] = Field(
+        default="RS256", description="JWT signing algorithm"
+    )
     cli_config_dir: Path = Field(
-        default_factory=lambda: Path(__file__).parent.parent.parent.parent / ".depictio"
+        default_factory=lambda: Path(__file__).parent.parent.parent.parent / ".depictio",
+        description="Directory for CLI configuration files (admin token, etc.)",
     )
-    internal_api_key_env: Optional[str] = Field(default=None)
+    internal_api_key_env: Optional[str] = Field(
+        default=None,
+        description="Internal API key for service-to-service communication (auto-generated if unset)",
+    )
     unauthenticated_mode: bool = Field(default=False, description="Enable unauthenticated mode")
     single_user_mode: bool = Field(
         default=False,
@@ -213,40 +200,7 @@ class AuthConfig(BaseSettings):
         description="Number of minutes until temporary users expire",
     )
 
-    @computed_field
-    @property
-    def is_single_user_mode(self) -> bool:
-        """Returns True if single-user mode is enabled.
-
-        Single-user mode provides full admin functionality for personal instances.
-        """
-        return self.single_user_mode
-
-    @computed_field
-    @property
-    def is_public_mode(self) -> bool:
-        """Returns True if public mode is enabled.
-
-        Public mode allows anonymous access with optional sign-in for interactive features.
-        """
-        return self.public_mode or self.unauthenticated_mode
-
-    @computed_field
-    @property
-    def is_demo_mode(self) -> bool:
-        """Returns True if demo mode is enabled.
-
-        Demo mode extends public mode with guided tour tooltips for first-time users.
-        """
-        return self.demo_mode
-
-    @computed_field
-    @property
-    def requires_anonymous_user(self) -> bool:
-        """Returns True if any mode requiring anonymous user is enabled."""
-        return self.is_single_user_mode or self.is_public_mode
-
-    # Google OAuth Configuration
+    # Google OAuth
     google_oauth_enabled: bool = Field(
         default=False, description="Enable Google OAuth authentication"
     )
@@ -292,16 +246,47 @@ class AuthConfig(BaseSettings):
 
     @computed_field
     @property
+    def is_single_user_mode(self) -> bool:
+        """Returns True if single-user mode is enabled.
+
+        Single-user mode provides full admin functionality for personal instances.
+        """
+        return self.single_user_mode
+
+    @computed_field
+    @property
+    def is_public_mode(self) -> bool:
+        """Returns True if public mode is enabled.
+
+        Public mode allows anonymous access with optional sign-in for interactive features.
+        """
+        return self.public_mode or self.unauthenticated_mode
+
+    @computed_field
+    @property
+    def is_demo_mode(self) -> bool:
+        """Returns True if demo mode is enabled.
+
+        Demo mode extends public mode with guided tour tooltips for first-time users.
+        """
+        return self.demo_mode
+
+    @computed_field
+    @property
+    def requires_anonymous_user(self) -> bool:
+        """Returns True if any mode requiring anonymous user is enabled."""
+        return self.is_single_user_mode or self.is_public_mode
+
+    @computed_field
+    @property
     def internal_api_key(self) -> str:
         """
         Get the internal API key using the existing key_utils_base functions.
         This maintains consistency and avoids code duplication.
         """
-        # First check if environment variable is set
         if self.internal_api_key_env:
             return self.internal_api_key_env
 
-        # Otherwise use the key utils to load/generate
         from depictio.api.v1.key_utils_base import _load_or_generate_api_internal_key
 
         return _load_or_generate_api_internal_key(
@@ -310,91 +295,17 @@ class AuthConfig(BaseSettings):
         )
 
 
+# ── Infrastructure ────────────────────────────────────────────────────────────
+
+
 class LoggingConfig(BaseSettings):
-    verbosity_level: str = Field(default="ERROR")
+    """Application logging configuration."""
+
+    verbosity_level: str = Field(
+        default="ERROR", description="Log verbosity level (DEBUG, INFO, WARNING, ERROR, CRITICAL)"
+    )
 
     model_config = SettingsConfigDict(env_prefix="DEPICTIO_LOGGING_")
-
-
-class JBrowseConfig(BaseSettings):
-    enabled: bool = Field(default=False)
-
-    model_config = SettingsConfigDict(env_prefix="DEPICTIO_JBROWSE_")
-
-
-class PerformanceConfig(BaseSettings):
-    """Performance and timeout settings that can be tuned per environment."""
-
-    # HTTP client timeouts (in seconds)
-    http_client_timeout: int = Field(default=30)
-    api_request_timeout: int = Field(default=60)
-
-    # Playwright/browser timeouts (in milliseconds)
-    browser_navigation_timeout: int = Field(default=60000)  # 60s default
-    browser_page_load_timeout: int = Field(default=90000)  # 90s default
-    browser_element_timeout: int = Field(default=30000)  # 30s default
-
-    # Screenshot-specific timeouts (production typically needs longer)
-    screenshot_navigation_timeout: int = Field(default=45000)  # 45s for navigation
-    screenshot_content_wait: int = Field(default=15000)  # 15s for content
-    screenshot_stabilization_wait: int = Field(default=5000)  # 5s for stability
-    screenshot_capture_timeout: int = Field(default=90000)  # 90s for actual screenshot capture
-    screenshot_api_timeout: int = Field(default=300)  # 5 minutes for complete screenshot API call
-
-    # Service readiness check settings
-    service_readiness_retries: int = Field(default=5)
-    service_readiness_delay: int = Field(default=3)
-    service_readiness_timeout: int = Field(default=10)
-
-    # DNS and network performance settings
-    dns_cache_ttl: int = Field(default=300)  # 5 minutes
-    connection_pool_size: int = Field(
-        default=25, description="HTTP connection pool size for multi-worker environments"
-    )
-    max_keepalive_connections: int = Field(
-        default=20, description="Max persistent HTTP connections (increased for 4 workers)"
-    )
-
-    # Loading spinner optimization settings
-    disable_loading_spinners: bool = Field(
-        default=True, description="Disable all loading spinners for maximum performance"
-    )
-
-    # Animation optimization settings
-    disable_animations: bool = Field(
-        default=True, description="Disable SVG and CSS animations for maximum performance"
-    )
-
-    disable_theme_animations: bool = Field(
-        default=True, description="Disable theme CSS injection and complex theme operations"
-    )
-
-    model_config = SettingsConfigDict(env_prefix="DEPICTIO_PERFORMANCE_")
-
-
-class S3CacheConfig(BaseSettings):
-    """S3 file caching configuration for MultiQC and other S3 operations.
-
-    The cache directory stores downloaded S3 files locally to avoid repeated downloads.
-    Default location is ~/.depictio/s3_cache (persistent across restarts).
-
-    Environment variable: DEPICTIO_S3_CACHE_DIR
-    Example: export DEPICTIO_S3_CACHE_DIR=/data/depictio_s3_cache
-
-    Note: The previous default /tmp/depictio_s3_cache was ephemeral and caused
-    repeated downloads after system restarts.
-    """
-
-    # Cache directory for S3 files - persistent location
-    cache_dir: str = Field(
-        default="~/.depictio/s3_cache",
-        description="Local directory for S3 file cache. Use DEPICTIO_S3_CACHE_DIR to override.",
-    )
-
-    # FUSE mount points (optional, comma-separated)
-    mount_points: str = Field(default="", description="Comma-separated S3 FUSE mount points")
-
-    model_config = SettingsConfigDict(env_prefix="DEPICTIO_S3_")
 
 
 class CacheConfig(BaseSettings):
@@ -477,10 +388,8 @@ class CeleryConfig(BaseSettings):
     @property
     def _redis_password(self) -> str:
         """Get Redis password from environment, fallback to cache password or default."""
-        # Try Celery-specific password first
         if self.broker_password:
             return self.broker_password
-        # Fallback to REDIS_PASSWORD env var (used by docker-compose)
         import os
 
         redis_password = os.getenv("REDIS_PASSWORD", "")
@@ -490,7 +399,6 @@ class CeleryConfig(BaseSettings):
     @property
     def broker_url(self) -> str:
         """Construct Redis broker URL."""
-        # Only include auth if password is set and not empty
         password = self._redis_password
         if password and password != "":
             return f"redis://:{password}@{self.broker_host}:{self.broker_port}/{self.broker_db}"
@@ -501,7 +409,6 @@ class CeleryConfig(BaseSettings):
     def result_backend_url(self) -> str:
         """Construct Redis result backend URL."""
         result_password = self.result_backend_password or self._redis_password
-        # Only include auth if password is set and not empty
         if result_password and result_password != "":
             return f"redis://:{result_password}@{self.result_backend_host}:{self.result_backend_port}/{self.result_backend_db}"
         return f"redis://{self.result_backend_host}:{self.result_backend_port}/{self.result_backend_db}"
@@ -509,24 +416,49 @@ class CeleryConfig(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="DEPICTIO_CELERY_")
 
 
+class S3CacheConfig(BaseSettings):
+    """S3 file caching configuration for MultiQC and other S3 operations.
+
+    The cache directory stores downloaded S3 files locally to avoid repeated downloads.
+    Default location is ~/.depictio/s3_cache (persistent across restarts).
+
+    Environment variable: DEPICTIO_S3_CACHE_DIR
+    Example: export DEPICTIO_S3_CACHE_DIR=/data/depictio_s3_cache
+
+    Note: The previous default /tmp/depictio_s3_cache was ephemeral and caused
+    repeated downloads after system restarts.
+    """
+
+    cache_dir: str = Field(
+        default="~/.depictio/s3_cache",
+        description="Local directory for S3 file cache. Use DEPICTIO_S3_CACHE_DIR to override.",
+    )
+    mount_points: str = Field(default="", description="Comma-separated S3 FUSE mount points")
+
+    model_config = SettingsConfigDict(env_prefix="DEPICTIO_S3_")
+
+
+# ── Optional Features ─────────────────────────────────────────────────────────
+
+
+class JBrowseConfig(BaseSettings):
+    """JBrowse genomics viewer integration configuration."""
+
+    enabled: bool = Field(default=False, description="Enable JBrowse genomics viewer integration")
+
+    model_config = SettingsConfigDict(env_prefix="DEPICTIO_JBROWSE_")
+
+
 class BackupConfig(BaseSettings):
     """Backup and restore configuration settings."""
 
-    # Base directory for all backup-related files (similar to AuthConfig pattern)
     base_dir: Path = Field(default_factory=lambda: Path(__file__).parent.parent.parent.parent)
-    # Directory where backup files are stored on the server (relative to base_dir)
     backup_dir: str = Field(default="backups")
-
-    # S3 data backup strategy
     s3_backup_strategy: str = Field(
         default="s3_to_s3",
         description="Strategy for S3 data backup: 's3_to_s3', 'local', or 'both'",
     )
-
-    # Local S3 data backup directory (for local strategy)
     s3_local_backup_dir: str = Field(default="backups/s3_data_backups")
-
-    # Backup S3 configuration (for separate backup bucket)
     backup_s3_enabled: bool = Field(default=False, description="Enable separate backup S3 bucket")
     backup_s3_bucket: str = Field(default="depictio-backups", description="Backup S3 bucket name")
     backup_s3_endpoint_url: Optional[str] = Field(
@@ -535,8 +467,6 @@ class BackupConfig(BaseSettings):
     backup_s3_access_key: Optional[str] = Field(default=None, description="Backup S3 access key")
     backup_s3_secret_key: Optional[str] = Field(default=None, description="Backup S3 secret key")
     backup_s3_region: str = Field(default="us-east-1", description="Backup S3 region")
-
-    # Compression and optimization
     compress_local_backups: bool = Field(default=True, description="Compress local S3 data backups")
     backup_file_retention_days: int = Field(default=30, description="Days to retain backup files")
 
@@ -574,6 +504,210 @@ class BackupConfig(BaseSettings):
         return config
 
     model_config = SettingsConfigDict(env_prefix="DEPICTIO_BACKUP_")
+
+
+class EventsConfig(BaseSettings):
+    """Configuration for real-time event system (WebSocket notifications).
+
+    Enables automatic dashboard updates when backend data changes.
+    Supports MongoDB change streams for data_collection updates.
+    """
+
+    enabled: bool = Field(default=False, description="Enable real-time event system")
+    redis_host: str = Field(default="redis", description="Redis server hostname for pub/sub")
+    redis_port: int = Field(default=6379, description="Redis server port")
+    redis_password: Optional[str] = Field(default=None, description="Redis password")
+    redis_db: int = Field(
+        default=3, description="Redis database number (separate from cache=0, celery=1,2)"
+    )
+    mongodb_change_streams_enabled: bool = Field(
+        default=True, description="Enable MongoDB change streams for data_collections"
+    )
+    ws_heartbeat_interval: int = Field(
+        default=30, description="WebSocket heartbeat/ping interval in seconds"
+    )
+    ws_connection_timeout: int = Field(
+        default=60, description="WebSocket connection timeout in seconds"
+    )
+    debounce_ms: int = Field(
+        default=1000, description="Debounce interval in milliseconds for rapid updates"
+    )
+
+    model_config = SettingsConfigDict(env_prefix="DEPICTIO_EVENTS_")
+
+    @computed_field
+    @property
+    def redis_url(self) -> str:
+        """Construct Redis URL for pub/sub."""
+        if self.redis_password:
+            return f"redis://:{self.redis_password}@{self.redis_host}:{self.redis_port}/{self.redis_db}"
+        return f"redis://{self.redis_host}:{self.redis_port}/{self.redis_db}"
+
+
+class DashboardYAMLConfig(BaseSettings):
+    """Configuration for YAML-based dashboard management.
+
+    Enables file-based dashboard editing where users can read/write YAML files
+    directly from a designated directory for version control and IaC workflows.
+    """
+
+    # DEPRECATED: YAML system is being phased out in favor of JSON-based API (see YAML_MONGODB_ANALYSIS.md)
+    enabled: bool = Field(
+        default=False, description="Enable YAML-based dashboard management (DEPRECATED)"
+    )
+    local_dir: Path = Field(
+        default_factory=lambda: Path(__file__).parent.parent.parent.parent.parent
+        / "dashboards"
+        / "local",
+        description="Directory for instance-specific dashboard YAML files (auto-synced)",
+    )
+    templates_dir: Path = Field(
+        default_factory=lambda: Path(__file__).parent.parent.parent.parent.parent
+        / "dashboards"
+        / "templates",
+        description="Directory for template dashboard YAML files (version control)",
+    )
+    base_dir: Path | None = Field(
+        default=None,
+        description="DEPRECATED: Use local_dir instead. Base directory for dashboard YAML files",
+    )
+    organize_by_project: bool = Field(
+        default=True,
+        description="Organize YAML files in subdirectories by project name",
+    )
+    use_dashboard_title: bool = Field(
+        default=True,
+        description="Use dashboard title in filename (vs just ID)",
+    )
+    include_export_metadata: bool = Field(
+        default=True,
+        description="Include export timestamp and version in YAML files",
+    )
+    compact_mode: bool = Field(
+        default=True,
+        description="Use compact YAML format with references (75-80% smaller files)",
+    )
+    mvp_mode: bool = Field(
+        default=True,
+        description="Use MVP minimal YAML format (60-80 lines, human-readable IDs, no layout)",
+    )
+    regenerate_stats: bool = Field(
+        default=True,
+        description="Regenerate column statistics on import instead of storing in YAML",
+    )
+    auto_layout: bool = Field(
+        default=False,
+        description="Auto-generate component layout on import if missing",
+    )
+    auto_export_on_save: bool = Field(
+        default=False,
+        description="Automatically export to YAML when dashboard is saved (DEPRECATED)",
+    )
+    auto_import_on_change: bool = Field(
+        default=False,
+        description="Automatically import from YAML when files change (requires watcher) (DEPRECATED)",
+    )
+    watcher_debounce_seconds: float = Field(
+        default=2.0,
+        description="Seconds to wait after file change before syncing",
+    )
+    watch_local_dir: bool = Field(
+        default=False,
+        description="Watch and auto-sync local dashboards directory (DEPRECATED)",
+    )
+    watch_templates_dir: bool = Field(
+        default=False,
+        description="Watch and auto-sync templates directory (useful for template development)",
+    )
+    enable_validation: bool = Field(
+        default=True,
+        description="Enable validation gate before syncing YAML to MongoDB",
+    )
+    block_on_validation_errors: bool = Field(
+        default=True,
+        description="Block sync if validation fails (set False to only warn)",
+    )
+    validate_column_names: bool = Field(
+        default=True,
+        description="Validate that column names exist in data collection schema",
+    )
+    validate_component_types: bool = Field(
+        default=True,
+        description="Validate chart types, aggregation functions, and filter types",
+    )
+
+    model_config = SettingsConfigDict(
+        env_prefix="DEPICTIO_DASHBOARD_YAML_",
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
+
+    @computed_field
+    @property
+    def yaml_dir_path(self) -> str:
+        """Get absolute YAML directory path (defaults to local_dir)."""
+        if self.base_dir is not None:
+            return str(self.base_dir.resolve())
+        return str(self.local_dir.resolve())
+
+    @computed_field
+    @property
+    def templates_path(self) -> str:
+        """Get absolute templates directory path."""
+        return str(self.templates_dir.resolve())
+
+
+# ── Observability & Development ───────────────────────────────────────────────
+
+
+class PerformanceConfig(BaseSettings):
+    """Performance and timeout settings that can be tuned per environment."""
+
+    # HTTP client timeouts (in seconds)
+    http_client_timeout: int = Field(default=30)
+    api_request_timeout: int = Field(default=60)
+
+    # Playwright/browser timeouts (in milliseconds)
+    browser_navigation_timeout: int = Field(default=60000)  # 60s default
+    browser_page_load_timeout: int = Field(default=90000)  # 90s default
+    browser_element_timeout: int = Field(default=30000)  # 30s default
+
+    # Screenshot-specific timeouts (production typically needs longer)
+    screenshot_navigation_timeout: int = Field(default=45000)  # 45s for navigation
+    screenshot_content_wait: int = Field(default=15000)  # 15s for content
+    screenshot_stabilization_wait: int = Field(default=5000)  # 5s for stability
+    screenshot_capture_timeout: int = Field(default=90000)  # 90s for actual screenshot capture
+    screenshot_api_timeout: int = Field(default=300)  # 5 minutes for complete screenshot API call
+
+    # Service readiness check settings
+    service_readiness_retries: int = Field(default=5)
+    service_readiness_delay: int = Field(default=3)
+    service_readiness_timeout: int = Field(default=10)
+
+    # DNS and network performance settings
+    dns_cache_ttl: int = Field(default=300)  # 5 minutes
+    connection_pool_size: int = Field(
+        default=25, description="HTTP connection pool size for multi-worker environments"
+    )
+    max_keepalive_connections: int = Field(
+        default=20, description="Max persistent HTTP connections (increased for 4 workers)"
+    )
+
+    # Loading spinner optimization settings
+    disable_loading_spinners: bool = Field(
+        default=True, description="Disable all loading spinners for maximum performance"
+    )
+
+    # Animation optimization settings
+    disable_animations: bool = Field(
+        default=True, description="Disable SVG and CSS animations for maximum performance"
+    )
+    disable_theme_animations: bool = Field(
+        default=True, description="Disable theme CSS injection and complex theme operations"
+    )
+
+    model_config = SettingsConfigDict(env_prefix="DEPICTIO_PERFORMANCE_")
 
 
 class AnalyticsConfig(BaseSettings):
@@ -663,222 +797,40 @@ class ProfilingConfig(BaseSettings):
         return Path(self.profile_dir).resolve()
 
 
-class EventsConfig(BaseSettings):
-    """Configuration for real-time event system (WebSocket notifications).
-
-    Enables automatic dashboard updates when backend data changes.
-    Supports MongoDB change streams for data_collection updates.
-    """
-
-    # Enable/disable real-time events
-    enabled: bool = Field(default=False, description="Enable real-time event system")
-
-    # Redis pub/sub for multi-instance WebSocket coordination
-    redis_host: str = Field(default="redis", description="Redis server hostname for pub/sub")
-    redis_port: int = Field(default=6379, description="Redis server port")
-    redis_password: Optional[str] = Field(default=None, description="Redis password")
-    redis_db: int = Field(
-        default=3, description="Redis database number (separate from cache=0, celery=1,2)"
-    )
-
-    # MongoDB change streams
-    mongodb_change_streams_enabled: bool = Field(
-        default=True, description="Enable MongoDB change streams for data_collections"
-    )
-
-    # WebSocket settings
-    ws_heartbeat_interval: int = Field(
-        default=30, description="WebSocket heartbeat/ping interval in seconds"
-    )
-    ws_connection_timeout: int = Field(
-        default=60, description="WebSocket connection timeout in seconds"
-    )
-
-    # Debouncing for rapid updates
-    debounce_ms: int = Field(
-        default=1000, description="Debounce interval in milliseconds for rapid updates"
-    )
-
-    model_config = SettingsConfigDict(env_prefix="DEPICTIO_EVENTS_")
-
-    @computed_field
-    @property
-    def redis_url(self) -> str:
-        """Construct Redis URL for pub/sub."""
-        if self.redis_password:
-            return f"redis://:{self.redis_password}@{self.redis_host}:{self.redis_port}/{self.redis_db}"
-        return f"redis://{self.redis_host}:{self.redis_port}/{self.redis_db}"
-
-
-class DashboardYAMLConfig(BaseSettings):
-    """Configuration for YAML-based dashboard management.
-
-    Enables file-based dashboard editing where users can read/write YAML files
-    directly from a designated directory for version control and IaC workflows.
-    """
-
-    # Enable/disable YAML dashboard sync feature
-    # DEPRECATED: YAML system is being phased out in favor of JSON-based API (see YAML_MONGODB_ANALYSIS.md)
-    enabled: bool = Field(
-        default=False, description="Enable YAML-based dashboard management (DEPRECATED)"
-    )
-
-    # Local dashboards directory (instance-specific, git-ignored, auto-synced)
-    local_dir: Path = Field(
-        default_factory=lambda: Path(__file__).parent.parent.parent.parent.parent
-        / "dashboards"
-        / "local",
-        description="Directory for instance-specific dashboard YAML files (auto-synced)",
-    )
-
-    # Templates directory (version-controlled, not auto-synced by default)
-    templates_dir: Path = Field(
-        default_factory=lambda: Path(__file__).parent.parent.parent.parent.parent
-        / "dashboards"
-        / "templates",
-        description="Directory for template dashboard YAML files (version control)",
-    )
-
-    # Base directory for YAML dashboard files (backward compatibility - points to local_dir)
-    base_dir: Path | None = Field(
-        default=None,
-        description="DEPRECATED: Use local_dir instead. Base directory for dashboard YAML files",
-    )
-
-    # Organization structure
-    organize_by_project: bool = Field(
-        default=True,
-        description="Organize YAML files in subdirectories by project name",
-    )
-
-    # File naming
-    use_dashboard_title: bool = Field(
-        default=True,
-        description="Use dashboard title in filename (vs just ID)",
-    )
-
-    # Include export metadata in files
-    include_export_metadata: bool = Field(
-        default=True,
-        description="Include export timestamp and version in YAML files",
-    )
-
-    # Compact mode settings (new - 75-80% size reduction)
-    compact_mode: bool = Field(
-        default=True,
-        description="Use compact YAML format with references (75-80% smaller files)",
-    )
-
-    # MVP mode settings (new - 60-80 line minimal format for IaC)
-    mvp_mode: bool = Field(
-        default=True,  # Default to MVP for IaC-friendly dashboards
-        description="Use MVP minimal YAML format (60-80 lines, human-readable IDs, no layout)",
-    )
-
-    regenerate_stats: bool = Field(
-        default=True,
-        description="Regenerate column statistics on import instead of storing in YAML",
-    )
-
-    auto_layout: bool = Field(
-        default=False,
-        description="Auto-generate component layout on import if missing",
-    )
-
-    # Auto-sync settings
-    auto_export_on_save: bool = Field(
-        default=False,
-        description="Automatically export to YAML when dashboard is saved (DEPRECATED)",
-    )
-
-    auto_import_on_change: bool = Field(
-        default=False,
-        description="Automatically import from YAML when files change (requires watcher) (DEPRECATED)",
-    )
-
-    watcher_debounce_seconds: float = Field(
-        default=2.0,
-        description="Seconds to wait after file change before syncing",
-    )
-
-    watcher_auto_start: bool = Field(
-        default=False,
-        description="Automatically start the file watcher on API startup (DEPRECATED)",
-    )
-
-    watch_local_dir: bool = Field(
-        default=False,
-        description="Watch and auto-sync local dashboards directory (DEPRECATED)",
-    )
-
-    watch_templates_dir: bool = Field(
-        default=False,
-        description="Watch and auto-sync templates directory (useful for template development)",
-    )
-
-    # Validation settings
-    enable_validation: bool = Field(
-        default=True,
-        description="Enable validation gate before syncing YAML to MongoDB",
-    )
-
-    block_on_validation_errors: bool = Field(
-        default=True,
-        description="Block sync if validation fails (set False to only warn)",
-    )
-
-    validate_column_names: bool = Field(
-        default=True,
-        description="Validate that column names exist in data collection schema",
-    )
-
-    validate_component_types: bool = Field(
-        default=True,
-        description="Validate chart types, aggregation functions, and filter types",
-    )
-
-    model_config = SettingsConfigDict(
-        env_prefix="DEPICTIO_DASHBOARD_YAML_",
-        env_file=".env",
-        env_file_encoding="utf-8",
-        extra="ignore",
-    )
-
-    @computed_field
-    @property
-    def yaml_dir_path(self) -> str:
-        """Get absolute YAML directory path (defaults to local_dir)."""
-        # Use base_dir if explicitly set (backward compatibility)
-        if self.base_dir is not None:
-            return str(self.base_dir.resolve())
-        return str(self.local_dir.resolve())
-
-    @computed_field
-    @property
-    def templates_path(self) -> str:
-        """Get absolute templates directory path."""
-        return str(self.templates_dir.resolve())
+# ── Root ──────────────────────────────────────────────────────────────────────
 
 
 class Settings(BaseSettings):
-    context: str = Field(default="server")
+    """Root application settings, composed of all subsystem configurations."""
+
+    context: str = Field(
+        default="server", description="Runtime context: 'server' (API/worker) or 'client' (CLI)"
+    )
+
+    # Core services
     fastapi: FastAPIConfig = Field(default_factory=FastAPIConfig)
     dash: DashConfig = Field(default_factory=DashConfig)
     mongodb: MongoDBConfig = Field(default_factory=MongoDBConfig)
     minio: S3DepictioCLIConfig = Field(default_factory=S3DepictioCLIConfig)
     auth: AuthConfig = Field(default_factory=AuthConfig)
+
+    # Infrastructure
     logging: LoggingConfig = Field(default_factory=LoggingConfig)
-    jbrowse: JBrowseConfig = Field(default_factory=JBrowseConfig)
-    performance: PerformanceConfig = Field(default_factory=PerformanceConfig)
-    s3_cache: S3CacheConfig = Field(default_factory=S3CacheConfig)
     cache: CacheConfig = Field(default_factory=CacheConfig)
     celery: CeleryConfig = Field(default_factory=CeleryConfig)
+    s3_cache: S3CacheConfig = Field(default_factory=S3CacheConfig)
+
+    # Optional features
+    jbrowse: JBrowseConfig = Field(default_factory=JBrowseConfig)
     backup: BackupConfig = Field(default_factory=BackupConfig)
+    events: EventsConfig = Field(default_factory=EventsConfig)
+    dashboard_yaml: DashboardYAMLConfig = Field(default_factory=DashboardYAMLConfig)
+
+    # Observability & development
+    performance: PerformanceConfig = Field(default_factory=PerformanceConfig)
     analytics: AnalyticsConfig = Field(default_factory=AnalyticsConfig)
     google_analytics: GoogleAnalyticsConfig = Field(default_factory=GoogleAnalyticsConfig)
     profiling: ProfilingConfig = Field(default_factory=ProfilingConfig)
-    dashboard_yaml: DashboardYAMLConfig = Field(default_factory=DashboardYAMLConfig)
-    events: EventsConfig = Field(default_factory=EventsConfig)
 
     model_config = SettingsConfigDict(
         env_prefix="DEPICTIO_",

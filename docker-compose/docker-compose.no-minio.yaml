@@ -1,31 +1,24 @@
 # ============================================================================
-# DEPICTIO DOCKER COMPOSE - QUICK START
+# DEPICTIO DOCKER COMPOSE - EXTERNAL S3 / NO MINIO
 # ============================================================================
-# This is the main docker-compose file for running Depictio with pre-built images.
-# MinIO (S3-compatible object storage) is bundled by default — no extra files needed.
+# Use this file when you bring your own S3 or external MinIO instance.
+# MinIO is NOT included — configure your S3 credentials in .env instead.
 #
-# QUICK START (no git clone required):
-#   curl -LO https://raw.githubusercontent.com/depictio/depictio/main/docker-compose.yaml
-#   docker compose up -d
-#   → http://localhost:5080
-#
-# COMMANDS:
-#   Start:  docker compose up -d
-#   Stop:   docker compose down
-#   Logs:   docker compose logs -f
-#   Status: docker compose ps
-#
-# EXTERNAL S3 (advanced):
-#   Use docker-compose/docker-compose.no-minio.yaml if you bring your own S3/MinIO:
+# USAGE:
 #   docker compose -f docker-compose/docker-compose.no-minio.yaml up -d
 #
-# DEVELOPMENT:
-#   For local development with hot-reload, use docker-compose.dev.yaml instead.
+# REQUIRED .env settings for external S3:
+#   DEPICTIO_MINIO_ROOT_USER=your-access-key
+#   DEPICTIO_MINIO_ROOT_PASSWORD=your-secret-key
 #
-# CONFIGURATION:
-#   - Minimal config: .env.example (copy to .env to override credentials)
-#   - Complete reference: .env.complete.example
-#   - Documentation: https://depictio.github.io/depictio/installation/configuration
+# OPTIONAL .env settings (uncomment as needed):
+#   DEPICTIO_MINIO_PUBLIC_URL=https://your-s3-endpoint
+#   DEPICTIO_MINIO_EXTERNAL_SERVICE=true
+#   DEPICTIO_MINIO_EXTERNAL_HOST=your-s3-host
+#   DEPICTIO_MINIO_EXTERNAL_PORT=443
+#
+# For bundled MinIO (recommended for most users), use instead:
+#   docker compose up -d   (from the repo root)
 # ============================================================================
 
 services:
@@ -60,26 +53,6 @@ services:
       retries: 5
     restart: unless-stopped
 
-  minio:
-    image: minio/minio:RELEASE.2025-01-20T14-49-07Z
-    container_name: minio
-    ports:
-      - ${MINIO_PORT:-9000}:9000
-      - ${MINIO_CONSOLE_PORT:-9001}:9001
-    volumes:
-      - minio_data:/data
-    environment:
-      MINIO_ROOT_USER: ${DEPICTIO_MINIO_ROOT_USER:-minio}
-      MINIO_ROOT_PASSWORD: ${DEPICTIO_MINIO_ROOT_PASSWORD:-minio123}
-    command: server /data --console-address :9001
-    healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:9000/minio/health/live || exit 1"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 30s
-    restart: unless-stopped
-
   depictio-frontend:
     image: ghcr.io/depictio/depictio:${DEPICTIO_VERSION:-latest}
     container_name: depictio-frontend
@@ -90,8 +63,6 @@ services:
         required: false
     environment:
       DEPICTIO_AUTH_SINGLE_USER_MODE: "${DEPICTIO_AUTH_SINGLE_USER_MODE:-true}"
-      DEPICTIO_MINIO_ROOT_USER: "${DEPICTIO_MINIO_ROOT_USER:-minio}"
-      DEPICTIO_MINIO_ROOT_PASSWORD: "${DEPICTIO_MINIO_ROOT_PASSWORD:-minio123}"
     command: ["/app/run_dash.sh"]
     healthcheck:
       test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:5080/"]
@@ -107,8 +78,6 @@ services:
         condition: service_healthy
       depictio-backend:
         condition: service_healthy
-      minio:
-        condition: service_healthy
 
   depictio-backend:
     image: ghcr.io/depictio/depictio:${DEPICTIO_VERSION:-latest}
@@ -120,8 +89,6 @@ services:
         required: false
     environment:
       DEPICTIO_AUTH_SINGLE_USER_MODE: "${DEPICTIO_AUTH_SINGLE_USER_MODE:-true}"
-      DEPICTIO_MINIO_ROOT_USER: "${DEPICTIO_MINIO_ROOT_USER:-minio}"
-      DEPICTIO_MINIO_ROOT_PASSWORD: "${DEPICTIO_MINIO_ROOT_PASSWORD:-minio123}"
     command: ["/app/run_fastapi.sh"]
     healthcheck:
       test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:8058/depictio/api/v1/docs"]
@@ -135,8 +102,6 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      minio:
-        condition: service_healthy
 
   depictio-celery-worker:
     container_name: depictio-celery-worker
@@ -149,8 +114,6 @@ services:
     environment:
       DEPICTIO_CONTEXT: "server"
       DEPICTIO_AUTH_SINGLE_USER_MODE: "${DEPICTIO_AUTH_SINGLE_USER_MODE:-true}"
-      DEPICTIO_MINIO_ROOT_USER: "${DEPICTIO_MINIO_ROOT_USER:-minio}"
-      DEPICTIO_MINIO_ROOT_PASSWORD: "${DEPICTIO_MINIO_ROOT_PASSWORD:-minio123}"
     command: ["/app/run_celery_worker.sh"]
     restart: unless-stopped
     depends_on:
@@ -165,6 +128,4 @@ volumes:
   mongo_data:
     driver: local
   redis_data:
-    driver: local
-  minio_data:
     driver: local

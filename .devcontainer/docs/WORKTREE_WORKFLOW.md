@@ -269,7 +269,6 @@ docker ps | grep 8042
 
 # If it's a stale container, stop it
 docker compose -f docker-compose.dev.yaml \
-    -f docker-compose/docker-compose.minio.yaml \
     -f .devcontainer/docker-compose.devcontainer.yaml \
     down
 
@@ -365,7 +364,6 @@ source .env
 
 # Start services
 docker compose -f docker-compose.dev.yaml \
-    -f docker-compose/docker-compose.minio.yaml \
     up -d
 ```
 
@@ -384,8 +382,7 @@ docker compose -f docker-compose.dev.yaml \
 - `.devcontainer/scripts/allocate-ports.sh` - Port allocation logic
 - `.devcontainer/pre_create_setup.sh` - Instance initialization
 - `.devcontainer/post_create_setup.sh` - Service readiness checks
-- `docker-compose.dev.yaml` - Service definitions with dynamic ports
-- `docker-compose/docker-compose.minio.yaml` - MinIO with dynamic ports
+- `docker-compose.dev.yaml` - Service definitions with dynamic ports (MinIO bundled)
 - `.devcontainer/docker-compose.devcontainer.yaml` - DevContainer service
 - `.env.instance` - Generated instance configuration
 - `.env` - Combined environment for Docker Compose

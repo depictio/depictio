@@ -1,6 +1,6 @@
 services:
   mongo:
-    image: mongo:8.0
+    image: mongo:8.0.14
     container_name: mongo
     command: mongod --dbpath /data/depictioDB --port 27018 --logpath /dev/null
     user: "${UID:-1000}:${GID:-1000}"
@@ -23,6 +23,27 @@ services:
       interval: 30s
       timeout: 3s
       retries: 5
+
+  minio:
+    image: minio/minio:RELEASE.2025-01-20T14-49-07Z
+    container_name: minio
+    user: "${UID:-1000}:${GID:-1000}"
+    volumes:
+      - ./${DATA_DIR}/minio_data:/data
+    environment:
+      MINIO_ROOT_USER: ${DEPICTIO_MINIO_ROOT_USER:-minio}
+      MINIO_ROOT_PASSWORD: ${DEPICTIO_MINIO_ROOT_PASSWORD:-minio123}
+    command: server /data --console-address :9001
+    ports:
+      - "${MINIO_PORT:-9000}:9000"
+      - "${MINIO_CONSOLE_PORT:-9001}:9001"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:9000/minio/health/live || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
 
   depictio-frontend:
     container_name: depictio-frontend
@@ -56,6 +77,7 @@ services:
       - mongo
       - redis
       - depictio-backend
+      - minio
 
   depictio-backend:
     container_name: depictio-backend
@@ -85,6 +107,7 @@ services:
     depends_on:
       - mongo
       - redis
+      - minio
 
   depictio-celery-worker:
     container_name: depictio-celery-worker
@@ -111,3 +134,4 @@ services:
       - mongo
       - redis
       - depictio-backend
+      - minio

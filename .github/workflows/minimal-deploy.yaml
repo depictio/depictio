@@ -59,11 +59,6 @@ jobs:
           chown -R "$(id -u):$(id -g)" depictioDB/
           chmod -R 777 depictioDB/
 
-      - name: Create and Set Permissions for minio_data
-        run: |
-          mkdir -p minio_data/
-          chown -R "$(id -u):$(id -g)" minio_data/
-          chmod -R 775 minio_data/
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -156,7 +151,7 @@ jobs:
           # Set the DEPICTIO_VERSION environment variable for docker-compose
           export DEPICTIO_VERSION="${{ steps.image-info.outputs.full-image }}"
 
-          docker compose -f docker-compose.dev.yaml -f docker-compose/docker-compose.minio.yaml up -d
+          docker compose -f docker-compose.dev.yaml up -d
 
       - name: Wait for services to be ready
         run: |
@@ -164,11 +159,11 @@ jobs:
           sleep 10
 
           # Check if containers are running
-          docker compose -f docker-compose.dev.yaml -f docker-compose/docker-compose.minio.yaml ps
+          docker compose -f docker-compose.dev.yaml ps
 
       - name: Logs
         run: |
-          docker compose -f docker-compose.dev.yaml -f docker-compose/docker-compose.minio.yaml logs
+          docker compose -f docker-compose.dev.yaml logs
 
       # List content of depictio
       - name: List Depictio Directory
@@ -267,11 +262,6 @@ jobs:
           chown -R "$(id -u):$(id -g)" depictioDB/
           chmod -R 777 depictioDB/
 
-      - name: Create and Set Permissions for minio_data
-        run: |
-          mkdir -p minio_data/
-          chown -R "$(id -u):$(id -g)" minio_data/
-          chmod -R 775 minio_data/
 
       - name: Copy .env.example to .env
         run: |
@@ -290,7 +280,7 @@ jobs:
 
           mkdir -p depictioDB minio_data
           chmod 777 depictioDB minio_data
-          docker compose -f docker-compose.dev.yaml -f docker-compose/docker-compose.minio.yaml up -d
+          docker compose -f docker-compose.dev.yaml up -d
 
 
       - name: Wait for services to be ready
@@ -299,11 +289,11 @@ jobs:
           sleep 10
 
           # Check if containers are running
-          docker compose -f docker-compose.dev.yaml -f docker-compose/docker-compose.minio.yaml ps
+          docker compose -f docker-compose.dev.yaml ps
 
       - name: Logs
         run: |
-          docker compose -f docker-compose.dev.yaml -f docker-compose/docker-compose.minio.yaml logs
+          docker compose -f docker-compose.dev.yaml logs
 
       # List content of depictio
       - name: List Depictio Directory
@@ -383,11 +373,6 @@ jobs:
           chown -R "$(id -u):$(id -g)" depictioDB/
           chmod -R 777 depictioDB/
 
-      - name: Create and Set Permissions for minio_data
-        run: |
-          mkdir -p minio_data/
-          chown -R "$(id -u):$(id -g)" minio_data/
-          chmod -R 775 minio_data/
 
       - name: Copy .env.example to .env
         run: |
@@ -406,7 +391,7 @@ jobs:
 
           mkdir -p depictioDB minio_data
           chmod 777 depictioDB minio_data
-          docker compose -f docker-compose.dev.yaml -f docker-compose/docker-compose.minio.yaml up -d
+          docker compose -f docker-compose.dev.yaml up -d
 
       - name: Set up Node.js
         uses: actions/setup-node@v3
