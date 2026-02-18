@@ -7,6 +7,11 @@ on:
       # Beta releases are commented out as requested
       # - "v[0-9]*.[0-9]*.[0-9]*-beta*"
   workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to build (e.g. 0.7.3) — required for manual dispatch"
+        required: true
+        type: string
 
 env:
   REGISTRY: ghcr.io
@@ -37,9 +42,12 @@ jobs:
       - name: Determine build type
         id: build-type
         run: |
-          GIT_TAG=${GITHUB_REF#refs/tags/}
-          CLEAN_VERSION=${GIT_TAG#v}
-          echo "VERSION=$CLEAN_VERSION" >> $GITHUB_OUTPUT
+          if [ -n "${{ inputs.version }}" ]; then
+            echo "VERSION=${{ inputs.version }}" >> $GITHUB_OUTPUT
+          else
+            GIT_TAG=${GITHUB_REF#refs/tags/}
+            echo "VERSION=${GIT_TAG#v}" >> $GITHUB_OUTPUT
+          fi
 
       - name: Log in to the Container registry
         uses: docker/login-action@v3
@@ -109,9 +117,12 @@ jobs:
       - name: Determine build type
         id: build-type
         run: |
-          GIT_TAG=${GITHUB_REF#refs/tags/}
-          CLEAN_VERSION=${GIT_TAG#v}
-          echo "VERSION=$CLEAN_VERSION" >> $GITHUB_OUTPUT
+          if [ -n "${{ inputs.version }}" ]; then
+            echo "VERSION=${{ inputs.version }}" >> $GITHUB_OUTPUT
+          else
+            GIT_TAG=${GITHUB_REF#refs/tags/}
+            echo "VERSION=${GIT_TAG#v}" >> $GITHUB_OUTPUT
+          fi
 
       - name: Download digests
         uses: actions/download-artifact@v4
