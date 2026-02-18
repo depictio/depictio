@@ -161,23 +161,6 @@ def _create_add_tab_button():
     )
 
 
-def _create_switch_to_edit_button(dashboard_id: str):
-    """Create a 'Switch to Edit Mode' link button for owners in view mode."""
-    import dash_mantine_components as dmc
-
-    return dmc.TabsTab(
-        "Edit Dashboard",
-        value="__edit_mode__",
-        leftSection=DashIconify(icon="mdi:pencil", color="grey", width=24),
-        href=f"/dashboard-edit/{dashboard_id}",
-        style={
-            "width": "100%",
-            "fontSize": "16px",
-            "padding": "16px 16px",
-        },
-    )
-
-
 def _build_tab_item(
     tab: dict,
     is_edit_mode: bool = False,
@@ -542,9 +525,6 @@ def register_tab_callbacks(app):
             if is_edit_mode and is_owner:
                 logger.info("✅ TAB DEBUG: Rendering Add Tab button")
                 tab_items.append(_create_add_tab_button())
-            elif not is_edit_mode and is_owner:
-                logger.info("✅ TAB DEBUG: Rendering Switch to Edit Mode button (view mode owner)")
-                tab_items.append(_create_switch_to_edit_button(dashboard_id))
             else:
                 logger.warning(
                     f"❌ TAB DEBUG: NOT rendering Add Tab button (edit={is_edit_mode}, owner={is_owner})"
