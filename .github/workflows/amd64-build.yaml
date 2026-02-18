@@ -53,8 +53,9 @@ jobs:
             # Specific version tag (e.g. 0.7.3b7)
             type=raw,value=${{ steps.version.outputs.VERSION }}
 
-            # Floating beta tag — points to latest beta build
+            # Floating tags updated on every release (beta or stable)
             type=raw,value=beta
+            type=raw,value=latest
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v5

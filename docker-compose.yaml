@@ -11,6 +11,7 @@
 #
 # IMAGE TAGS:
 #   stable  — latest stable release (default, recommended)
+#   latest  — most recent release (stable or beta)
 #   beta    — latest beta/pre-release build
 #   x.y.z   — specific version (e.g. 0.7.3)
 #
