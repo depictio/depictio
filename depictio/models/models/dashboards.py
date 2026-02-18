@@ -487,6 +487,22 @@ class DashboardDataLite(BaseModel):
             """Collect non-empty display/styling fields from a component."""
             return {f: comp[f] for f in field_names if comp.get(f)}
 
+        _COLUMN_TYPE_MAP = {
+            "datetime64": "datetime",
+            "datetime64[ns]": "datetime",
+            "timedelta64": "timedelta",
+            "timedelta64[ns]": "timedelta",
+            "int32": "int64",
+            "int16": "int64",
+            "uint64": "int64",
+            "uint32": "int64",
+            "float32": "float64",
+        }
+
+        def normalize_column_type(raw: str, default: str) -> str:
+            """Normalize raw pandas/numpy dtype strings to valid ColumnType values."""
+            return _COLUMN_TYPE_MAP.get(raw, raw) if raw else default
+
         dashboard_id = extract_id(dashboard_data.get("dashboard_id") or dashboard_data.get("_id"))
         lite_components = []
 
@@ -569,7 +585,9 @@ class DashboardDataLite(BaseModel):
             elif comp_type == "card":
                 lite_comp["aggregation"] = comp.get("aggregation", "")
                 lite_comp["column_name"] = comp.get("column_name", "")
-                lite_comp["column_type"] = comp.get("column_type", "float64")
+                lite_comp["column_type"] = normalize_column_type(
+                    comp.get("column_type", ""), "float64"
+                )
                 display = collect_display_fields(
                     comp,
                     [
@@ -586,7 +604,9 @@ class DashboardDataLite(BaseModel):
             elif comp_type == "interactive":
                 lite_comp["interactive_component_type"] = comp.get("interactive_component_type", "")
                 lite_comp["column_name"] = comp.get("column_name", "")
-                lite_comp["column_type"] = comp.get("column_type", "object")
+                lite_comp["column_type"] = normalize_column_type(
+                    comp.get("column_type", ""), "object"
+                )
                 display = collect_display_fields(comp, ["title_size", "custom_color", "icon_name"])
                 if display:
                     lite_comp["display"] = display
