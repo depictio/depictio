@@ -155,3 +155,16 @@ jobs:
         run: |
           VERSION=${{ steps.build-type.outputs.VERSION }}
           docker buildx imagetools inspect ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${VERSION}
+
+      - name: Notify docs repository
+        uses: peter-evans/repository-dispatch@v3
+        with:
+          token: ${{ secrets.GHCR_PAT }}
+          repository: depictio/depictio-docs
+          event-type: new-release
+          client-payload: |
+            {
+              "version": "v${{ steps.build-type.outputs.VERSION }}",
+              "release_url": "https://github.com/${{ github.repository }}/releases/tag/v${{ steps.build-type.outputs.VERSION }}",
+              "prerelease": "false"
+            }
