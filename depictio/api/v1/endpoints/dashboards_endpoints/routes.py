@@ -276,6 +276,29 @@ async def init_dashboard(
         elif current_user_id_str in editor_ids:
             user_permission_level = "editor"
 
+        # Fallback: check dashboard-level permissions (covers demo/public mode where
+        # users own dashboards they created but are not project-level owners)
+        if user_permission_level == "viewer":
+            dashboard_permissions = dashboard_data.get("permissions", {})
+            dashboard_owner_ids = [
+                str(o.get("_id", "")) if isinstance(o, dict) else str(o)
+                for o in dashboard_permissions.get("owners", [])
+            ]
+            dashboard_editor_ids = [
+                str(e.get("_id", "")) if isinstance(e, dict) else str(e)
+                for e in dashboard_permissions.get("editors", [])
+            ]
+            if current_user_id_str in dashboard_owner_ids:
+                user_permission_level = "owner"
+                logger.info(
+                    f"✅ Granting owner via dashboard-level permissions for user {current_user_id_str}"
+                )
+            elif current_user_id_str in dashboard_editor_ids:
+                user_permission_level = "editor"
+                logger.info(
+                    f"✅ Granting editor via dashboard-level permissions for user {current_user_id_str}"
+                )
+
     dashboard_dict = dashboard.model_dump()
 
     # For child tabs, fetch parent dashboard title for header display

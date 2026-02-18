@@ -743,17 +743,38 @@ def register_core_callbacks(app):
                                     s for s in selected_samples if s in indirect_set
                                 ]
                     else:
-                        resolved = resolve_link_values(
-                            project_id=project_id,
-                            source_dc_id=metadata_dc_id,
-                            source_column=source_column or join_column,
-                            filter_values=indirect_filter_values,
-                            target_dc_id=multiqc_dc_id,
-                            token=token,
-                        )
+                        # Process each indirect filter component with its own source column,
+                        # then intersect the resolved sample sets (AND semantics across filters)
+                        resolved_set: set | None = None
+                        for comp_data_inner in interactive_components_dict.values():
+                            comp_meta = comp_data_inner.get("metadata", {})
+                            inner_column = comp_meta.get("column_name", "")
+                            if inner_column == join_column:
+                                continue  # skip direct sample filters (already handled above)
+                            inner_value = comp_data_inner.get("value", [])
+                            if not inner_value:
+                                continue
+                            inner_values_list = (
+                                inner_value if isinstance(inner_value, list) else [inner_value]
+                            )
+                            resolved = resolve_link_values(
+                                project_id=project_id,
+                                source_dc_id=metadata_dc_id,
+                                source_column=inner_column,
+                                filter_values=inner_values_list,
+                                target_dc_id=multiqc_dc_id,
+                                token=token,
+                            )
+                            if resolved and resolved.get("resolved_values"):
+                                comp_resolved = set(resolved["resolved_values"])
+                                resolved_set = (
+                                    comp_resolved
+                                    if resolved_set is None
+                                    else resolved_set & comp_resolved
+                                )
 
-                        if resolved and resolved.get("resolved_values"):
-                            selected_samples = resolved["resolved_values"]
+                        if resolved_set:
+                            selected_samples = list(resolved_set)
                         else:
                             selected_samples = expand_canonical_samples_to_variants(
                                 indirect_filter_values, sample_mappings
