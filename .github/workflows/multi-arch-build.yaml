@@ -14,7 +14,18 @@ env:
 
 jobs:
   build:
-    runs-on: ubuntu-22.04
+    name: Build (${{ matrix.platform }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux/amd64
+            runs-on: ubuntu-22.04
+            arch: amd64
+          - platform: linux/arm64
+            runs-on: ubuntu-22.04-arm
+            arch: arm64
+    runs-on: ${{ matrix.runs-on }}
     permissions:
       contents: read
       packages: write
@@ -26,15 +37,9 @@ jobs:
       - name: Determine build type
         id: build-type
         run: |
-          # Extract the git tag (v0.0.4, etc.)
           GIT_TAG=${GITHUB_REF#refs/tags/}
-
-          # Clean version number (without v prefix)
           CLEAN_VERSION=${GIT_TAG#v}
           echo "VERSION=$CLEAN_VERSION" >> $GITHUB_OUTPUT
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
 
       - name: Log in to the Container registry
         uses: docker/login-action@v3
@@ -49,35 +54,80 @@ jobs:
           driver-opts: |
             image=moby/buildkit:latest
 
-      - name: Extract metadata (tags, labels) for Docker
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          tags: |
-            # Version tag
-            type=raw,value=${{ steps.build-type.outputs.VERSION }}
-
-            # Tag as stable
-            type=raw,value=stable
-
-            # Tag as latest
-            type=raw,value=latest
-
-            # Always tag as dev and edge
-            type=raw,value=dev
-            type=raw,value=edge
-
-      - name: Build and push Docker image
+      - name: Build and push by digest
+        id: build
         uses: docker/build-push-action@v5
         with:
           context: .
           file: docker-images/Dockerfile_depictio_uv.dockerfile
+          platforms: ${{ matrix.platform }}
           push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          platforms: linux/amd64,linux/arm64
+          outputs: type=image,name=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }},push-by-digest=true,name-canonical=true,push=true
           build-args: |
             VERSION=${{ steps.build-type.outputs.VERSION }}
-          cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache
-          cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache,mode=max
+          cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache-${{ matrix.arch }}
+          cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache-${{ matrix.arch }},mode=max
+
+      - name: Export digest
+        run: |
+          mkdir -p /tmp/digests
+          digest="${{ steps.build.outputs.digest }}"
+          touch "/tmp/digests/${digest#sha256:}"
+
+      - name: Upload digest
+        uses: actions/upload-artifact@v4
+        with:
+          name: digests-${{ matrix.arch }}
+          path: /tmp/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  merge:
+    name: Merge manifests and push
+    runs-on: ubuntu-22.04
+    needs: build
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Determine build type
+        id: build-type
+        run: |
+          GIT_TAG=${GITHUB_REF#refs/tags/}
+          CLEAN_VERSION=${GIT_TAG#v}
+          echo "VERSION=$CLEAN_VERSION" >> $GITHUB_OUTPUT
+
+      - name: Download digests
+        uses: actions/download-artifact@v4
+        with:
+          path: /tmp/digests
+          pattern: digests-*
+          merge-multiple: true
+
+      - name: Log in to the Container registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GHCR_PAT }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Create and push manifest list
+        run: |
+          VERSION=${{ steps.build-type.outputs.VERSION }}
+          DIGESTS=$(ls /tmp/digests | xargs -I{} echo "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@sha256:{}")
+          docker buildx imagetools create \
+            --tag ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${VERSION} \
+            --tag ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:stable \
+            --tag ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest \
+            --tag ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:dev \
+            --tag ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:edge \
+            ${DIGESTS}
+
+      - name: Inspect final image
+        run: |
+          VERSION=${{ steps.build-type.outputs.VERSION }}
+          docker buildx imagetools inspect ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${VERSION}
