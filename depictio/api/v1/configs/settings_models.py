@@ -11,11 +11,11 @@ class ServiceConfig(BaseSettings):
 
     service_name: str
     service_port: int
-    external_host: str = Field(default="localhost")
+    external_host: str = Field(default="localhost", description="Hostname for external access")
     external_port: int
-    external_protocol: str = Field(default="http")
-    public_url: Optional[str] = Field(default=None)
-    external_service: bool = Field(default=False)
+    external_protocol: str = Field(default="http", description="Protocol for external access (http/https)")
+    public_url: Optional[str] = Field(default=None, description="Override URL for external access (e.g. reverse-proxy or CDN endpoint)")
+    external_service: bool = Field(default=False, description="True when the service is outside the Docker Compose network")
 
     @property
     def internal_url(self) -> str:
@@ -42,28 +42,6 @@ class ServiceConfig(BaseSettings):
 
         return self.external_url
 
-    # @property
-    # def url(self) -> str:
-    #     # """Returns appropriate URL based on DEPICTIO_CONTEXT."""
-    #     context = os.getenv("DEPICTIO_CONTEXT", "client")
-    #     print(f"SETTINGS DEPICTIO_CONTEXT: {context}")
-    #     # return self.internal_url if context == "server" else self.external_url
-
-    #     # If running inside the server context we normally want to use the
-    #     # internal service URL for inter-service communication.  However when a
-    #     # ``public_url`` pointing to a remote MinIO/S3 instance is provided we
-    #     # must use that instead.  This allows the same configuration object to
-    #     # be used both from inside microservices and when connecting to an
-    #     # external S3 installation.
-    #     if context == "server":
-    #         if self.public_url:
-    #             host = urlparse(self.public_url).hostname or ""
-    #             if host not in {self.service_name, "localhost", "127.0.0.1"}:
-    #                 return self.public_url
-    #         return self.internal_url
-
-    #     return self.external_url
-
     @property
     def port(self) -> int:
         return self.external_port
@@ -77,30 +55,12 @@ class S3DepictioCLIConfig(ServiceConfig):
     external_port: int = Field(default=9000)
 
     # S3-specific fields
-    root_user: str = Field(default="minio")
-    root_password: str = Field(default="minio123")
-    bucket: str = Field(default="depictio-bucket")
+    root_user: str = Field(default="minio", description="MinIO/S3 root access key")
+    root_password: str = Field(default="minio123", description="MinIO/S3 root secret key")
+    bucket: str = Field(default="depictio-bucket", description="Default S3 bucket name for Depictio data")
 
     model_config = SettingsConfigDict(env_prefix="DEPICTIO_MINIO_")
 
-    # Backwards compatibility aliases
-    # def __init__(self, **data: object) -> None:
-    #     print(f"Data received in S3DepictioCLIConfig: {data}")
-    #     data.setdefault("public_url", f"{data['external_protocol']}://{data['external_host']}:{data['external_port']}")
-    #     data.setdefault("endpoint_url", data.get("public_url"))
-    #     super().__init__(**data)
-    # if endpoint_url:
-    # parsed = urlparse(endpoint_url)
-    # if parsed.scheme:
-    #     data.setdefault("external_protocol", parsed.scheme)
-    # if parsed.hostname:
-    #     data.setdefault("external_host", parsed.hostname)
-    # if parsed.port:
-    #     data.setdefault("external_port", parsed.port)
-
-    # super().__init__(**data)
-
-    # Backwards compatibility aliases
     @property
     def endpoint_url(self) -> str:
         """Returns URL for Polars and other S3 clients."""
@@ -121,24 +81,28 @@ class S3DepictioCLIConfig(ServiceConfig):
 
 
 class FastAPIConfig(ServiceConfig):
+    """FastAPI backend server configuration."""
+
     service_name: str = Field(default="depictio-backend")
     service_port: int = Field(default=8058)
     external_port: int = Field(default=8058)
-    host: str = Field(default="0.0.0.0")
-    workers: int = Field(default=4)
-    ssl: bool = Field(default=False)
-    logging_level: str = Field(default="INFO")
+    host: str = Field(default="0.0.0.0", description="Bind address for the FastAPI server")
+    workers: int = Field(default=4, description="Number of Gunicorn worker processes")
+    ssl: bool = Field(default=False, description="Enable SSL/TLS")
+    logging_level: str = Field(default="INFO", description="Logging level (DEBUG, INFO, WARNING, ERROR)")
 
     model_config = SettingsConfigDict(env_prefix="DEPICTIO_FASTAPI_")
 
 
 class DashConfig(ServiceConfig):
+    """Dash frontend server configuration."""
+
     service_name: str = Field(default="depictio-frontend")
     service_port: int = Field(default=5080)
     external_port: int = Field(default=5080)
-    host: str = Field(default="0.0.0.0")
-    workers: int = Field(default=4)
-    debug: bool = Field(default=True)
+    host: str = Field(default="0.0.0.0", description="Bind address for the Dash server")
+    workers: int = Field(default=4, description="Number of Gunicorn worker processes")
+    debug: bool = Field(default=True, description="Enable Dash debug mode with hot reload")
     auto_generate_figures: bool = Field(
         default=False, description="Enable automatic figure generation in UI mode"
     )
@@ -147,11 +111,13 @@ class DashConfig(ServiceConfig):
 
 
 class MongoDBConfig(ServiceConfig):
+    """MongoDB database connection configuration."""
+
     service_name: str = Field(default="mongo")
     service_port: int = Field(default=27018)
     external_port: int = Field(default=27018)
-    db_name: str = Field(default="depictioDB")
-    wipe: bool = Field(default=False)
+    db_name: str = Field(default="depictioDB", description="MongoDB database name")
+    wipe: bool = Field(default=False, description="Wipe the database on startup (destructive — development only)")
 
     model_config = SettingsConfigDict(env_prefix="DEPICTIO_MONGODB_")
 
@@ -176,14 +142,22 @@ class MongoDBConfig(ServiceConfig):
 
 
 class AuthConfig(BaseSettings):
+    """Authentication and authorisation configuration."""
+
     keys_dir: Path = Field(
-        default_factory=lambda: Path(__file__).parent.parent.parent.parent / "keys"
+        default_factory=lambda: Path(__file__).parent.parent.parent.parent / "keys",
+        description="Directory for JWT public/private key files",
     )
-    keys_algorithm: Literal["RS256", "RS512", "ES256", "SHA256"] = Field(default="RS256")
+    keys_algorithm: Literal["RS256", "RS512", "ES256", "SHA256"] = Field(
+        default="RS256", description="JWT signing algorithm"
+    )
     cli_config_dir: Path = Field(
-        default_factory=lambda: Path(__file__).parent.parent.parent.parent / ".depictio"
+        default_factory=lambda: Path(__file__).parent.parent.parent.parent / ".depictio",
+        description="Directory for CLI configuration files (admin token, etc.)",
     )
-    internal_api_key_env: Optional[str] = Field(default=None)
+    internal_api_key_env: Optional[str] = Field(
+        default=None, description="Internal API key for service-to-service communication (auto-generated if unset)"
+    )
     unauthenticated_mode: bool = Field(default=False, description="Enable unauthenticated mode")
     single_user_mode: bool = Field(
         default=False,
@@ -311,13 +285,17 @@ class AuthConfig(BaseSettings):
 
 
 class LoggingConfig(BaseSettings):
-    verbosity_level: str = Field(default="ERROR")
+    """Application logging configuration."""
+
+    verbosity_level: str = Field(default="ERROR", description="Log verbosity level (DEBUG, INFO, WARNING, ERROR, CRITICAL)")
 
     model_config = SettingsConfigDict(env_prefix="DEPICTIO_LOGGING_")
 
 
 class JBrowseConfig(BaseSettings):
-    enabled: bool = Field(default=False)
+    """JBrowse genomics viewer integration configuration."""
+
+    enabled: bool = Field(default=False, description="Enable JBrowse genomics viewer integration")
 
     model_config = SettingsConfigDict(env_prefix="DEPICTIO_JBROWSE_")
 
@@ -801,11 +779,6 @@ class DashboardYAMLConfig(BaseSettings):
         description="Seconds to wait after file change before syncing",
     )
 
-    watcher_auto_start: bool = Field(
-        default=False,
-        description="Automatically start the file watcher on API startup (DEPRECATED)",
-    )
-
     watch_local_dir: bool = Field(
         default=False,
         description="Watch and auto-sync local dashboards directory (DEPRECATED)",
@@ -861,7 +834,9 @@ class DashboardYAMLConfig(BaseSettings):
 
 
 class Settings(BaseSettings):
-    context: str = Field(default="server")
+    """Root application settings, composed of all subsystem configurations."""
+
+    context: str = Field(default="server", description="Runtime context: 'server' (API/worker) or 'client' (CLI)")
     fastapi: FastAPIConfig = Field(default_factory=FastAPIConfig)
     dash: DashConfig = Field(default_factory=DashConfig)
     mongodb: MongoDBConfig = Field(default_factory=MongoDBConfig)
