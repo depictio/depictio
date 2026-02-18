@@ -4,11 +4,10 @@
 # This is the main docker-compose file for running Depictio with pre-built images.
 # MinIO (S3-compatible object storage) is bundled by default — no extra files needed.
 #
-# QUICK START:
-#   1. (Optional) Copy .env.example to .env to change MinIO credentials
-#   2. Run: docker compose up -d
-#   3. Access: http://localhost:5080 (frontend) | http://localhost:8058 (API)
-#             http://localhost:9001 (MinIO console, user: minio / minio123)
+# QUICK START (no git clone required):
+#   curl -LO https://raw.githubusercontent.com/depictio/depictio/main/docker-compose.yaml
+#   docker compose up -d
+#   → http://localhost:5080
 #
 # COMMANDS:
 #   Start:  docker compose up -d
@@ -24,7 +23,7 @@
 #   For local development with hot-reload, use docker-compose.dev.yaml instead.
 #
 # CONFIGURATION:
-#   - Minimal config: .env.example
+#   - Minimal config: .env.example (copy to .env to override credentials)
 #   - Complete reference: .env.complete.example
 #   - Documentation: https://depictio.github.io/depictio/installation/configuration
 # ============================================================================
@@ -34,11 +33,10 @@ services:
     image: mongo:8.0.14
     container_name: mongo
     command: mongod --dbpath /data/depictioDB --port 27018 --logpath /dev/null
-    user: "${UID:-1000}:${GID:-1000}"
     ports:
       - 27018:27018
     volumes:
-      - ./depictioDB:/data/depictioDB
+      - mongo_data:/data/depictioDB
     healthcheck:
       test: ["CMD-SHELL", "mongosh --port 27018 --eval 'db.adminCommand(\"ping\")'"]
       interval: 30s
@@ -87,12 +85,10 @@ services:
     container_name: depictio-frontend
     ports:
       - 5080:5080
-    volumes:
-      - ./depictio:/app/depictio
     env_file:
-      - .env
+      - path: .env
+        required: false
     command: ["/app/run_dash.sh"]
-    user: "${UID:-1000}:${GID:-1000}"
     healthcheck:
       test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:5080/"]
       interval: 30s
@@ -115,12 +111,10 @@ services:
     container_name: depictio-backend
     ports:
       - 8058:8058
-    volumes:
-      - ./depictio:/app/depictio
     env_file:
-      - .env
+      - path: .env
+        required: false
     command: ["/app/run_fastapi.sh"]
-    user: "${UID:-1000}:${GID:-1000}"
     healthcheck:
       test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:8058/depictio/api/v1/docs"]
       interval: 30s
@@ -141,14 +135,12 @@ services:
     # Always enabled - required for design mode (stepper) to work
     # Dashboard editor will fail without Celery worker running
     image: ghcr.io/depictio/depictio:${DEPICTIO_VERSION:-latest}
-    volumes:
-      - ./depictio:/app/depictio
     env_file:
-      - .env
+      - path: .env
+        required: false
     environment:
         DEPICTIO_CONTEXT: "server"
     command: ["/app/run_celery_worker.sh"]
-    user: "${UID:-1000}:${GID:-1000}"
     restart: unless-stopped
     depends_on:
       mongo:
@@ -159,6 +151,8 @@ services:
         condition: service_healthy
 
 volumes:
+  mongo_data:
+    driver: local
   redis_data:
     driver: local
   minio_data:
