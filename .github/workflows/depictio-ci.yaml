@@ -417,7 +417,7 @@ jobs:
           docker pull "${FULL_IMAGE}"
           export DEPICTIO_VERSION="${FULL_IMAGE}"
           export DEPICTIO_FASTAPI_WORKERS=1  # Single worker to avoid boot race conditions
-          docker compose -f docker-compose.dev.yaml -f docker-compose/docker-compose.minio.yaml up -d
+          docker compose -f docker-compose.dev.yaml up -d
 
       - name: Logs
         run: sleep 3 && docker compose logs
@@ -862,7 +862,7 @@ jobs:
           docker pull "${FULL_IMAGE}"
           export DEPICTIO_VERSION="${FULL_IMAGE}"
           export DEPICTIO_FASTAPI_WORKERS=1  # Single worker to avoid boot race conditions
-          docker compose -f docker-compose.dev.yaml -f docker-compose/docker-compose.minio.yaml up -d
+          docker compose -f docker-compose.dev.yaml up -d
 
           echo "⏳ Waiting for services to be ready..."
 
@@ -1390,11 +1390,11 @@ jobs:
           echo "=================================="
 
           echo "🐳 Starting Docker Compose services..."
-          echo "Compose files: docker-compose.dev.yaml + docker-compose.minio.yaml + docker-compose.backup-minio.yaml"
+          echo "Compose files: docker-compose.dev.yaml + docker-compose.backup-minio.yaml"
           echo "Environment file: docker-compose/.env"
 
           export DEPICTIO_FASTAPI_WORKERS=1  # Single worker to avoid boot race conditions
-          docker compose -f docker-compose.dev.yaml -f docker-compose/docker-compose.minio.yaml -f docker-compose/docker-compose.backup-minio.yaml up -d --force-recreate
+          docker compose -f docker-compose.dev.yaml -f docker-compose/docker-compose.backup-minio.yaml up -d --force-recreate
 
           echo "⏳ Waiting 30 seconds for services to start..."
           sleep 30
@@ -1895,7 +1895,7 @@ jobs:
           echo "- Expected S3 Files: ${{ matrix.expected_s3_files }}"
 
           # Stop services for this iteration
-          docker compose -f docker-compose.dev.yaml -f docker-compose/docker-compose.minio.yaml -f docker-compose/docker-compose.backup-minio.yaml down
+          docker compose -f docker-compose.dev.yaml -f docker-compose/docker-compose.backup-minio.yaml down
           echo "✅ ${{ matrix.strategy_name }} backup strategy test completed successfully"
 
       - name: Upload logs on failure
@@ -1945,7 +1945,7 @@ jobs:
           docker pull "${FULL_IMAGE}"
           export DEPICTIO_VERSION="${FULL_IMAGE}"
           export DEPICTIO_FASTAPI_WORKERS=1  # Single worker to avoid boot race conditions
-          docker compose -f docker-compose.dev.yaml -f docker-compose/docker-compose.minio.yaml up -d
+          docker compose -f docker-compose.dev.yaml up -d
           sleep 15
 
       - name: Set up Node.js
@@ -2028,7 +2028,7 @@ jobs:
           docker pull "${FULL_IMAGE}"
           export DEPICTIO_VERSION="${FULL_IMAGE}"
           export DEPICTIO_FASTAPI_WORKERS=1  # Single worker to avoid boot race conditions
-          docker compose -f docker-compose.dev.yaml -f docker-compose/docker-compose.minio.yaml --env-file docker-compose/.env up -d
+          docker compose -f docker-compose.dev.yaml --env-file docker-compose/.env up -d
 
       - name: Wait for services to be ready
         run: |
@@ -2199,7 +2199,7 @@ jobs:
           docker pull "${FULL_IMAGE}"
           export DEPICTIO_VERSION="${FULL_IMAGE}"
           export DEPICTIO_FASTAPI_WORKERS=1  # Single worker to avoid boot race conditions
-          docker compose -f docker-compose.dev.yaml -f docker-compose/docker-compose.minio.yaml --env-file docker-compose/.env up -d
+          docker compose -f docker-compose.dev.yaml --env-file docker-compose/.env up -d
 
       - name: Wait for services to be ready
         run: |
@@ -2335,7 +2335,7 @@ jobs:
           docker pull "${FULL_IMAGE}"
           export DEPICTIO_VERSION="${FULL_IMAGE}"
           export DEPICTIO_FASTAPI_WORKERS=1  # Single worker to avoid boot race conditions
-          docker compose -f docker-compose.dev.yaml -f docker-compose/docker-compose.minio.yaml --env-file docker-compose/.env up -d
+          docker compose -f docker-compose.dev.yaml --env-file docker-compose/.env up -d
 
       - name: Wait for services to be ready
         run: |

@@ -6,7 +6,6 @@ on:
     paths:
       - '.devcontainer/**'
       - 'docker-compose.dev.yaml'
-      - 'docker-compose/docker-compose.minio.yaml'
   workflow_dispatch:
 
 env:

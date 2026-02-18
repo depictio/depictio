@@ -143,11 +143,7 @@ Data is stored in `.pixi-data/` directory (MongoDB, Redis, MinIO data).
 
 ```bash
 # Start infrastructure services (MongoDB, Redis, MinIO) with Docker
-docker compose -f docker-compose.dev.yaml up -d mongo redis
-docker compose -f docker-compose/docker-compose.minio.yaml up -d minio
-
-# Or start all infrastructure together
-docker compose -f docker-compose.dev.yaml -f docker-compose/docker-compose.minio.yaml up -d mongo redis minio
+docker compose -f docker-compose.dev.yaml up -d mongo redis minio
 
 # Then run the application services locally
 pixi run api      # FastAPI backend on port 8058
@@ -159,7 +155,7 @@ pixi run celery   # Celery worker for background tasks
 
 ```bash
 # Start all services in development mode (uses uv-based Dockerfile)
-docker compose -f docker-compose.dev.yaml -f docker-compose/docker-compose.minio.yaml --env-file docker-compose/.env up
+docker compose -f docker-compose.dev.yaml --env-file docker-compose/.env up
 
 # Build with the simplified uv-based Dockerfile
 docker compose -f docker-compose.dev.yaml build

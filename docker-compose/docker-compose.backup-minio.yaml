@@ -1,7 +1,7 @@
 services:
   minio-backup:
     container_name: minio-backup
-    image: minio/minio:latest
+    image: minio/minio:RELEASE.2025-01-20T14-49-07Z
     user: "${UID:-1000}:${GID:-1000}"
     volumes:
       - ./minio_backup_data:/data
