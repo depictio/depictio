@@ -5,7 +5,6 @@ from typing import Literal, Optional
 from pydantic import AliasChoices, Field, computed_field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-
 # ── Core Services ─────────────────────────────────────────────────────────────
 
 
@@ -16,9 +15,16 @@ class ServiceConfig(BaseSettings):
     service_port: int
     external_host: str = Field(default="localhost", description="Hostname for external access")
     external_port: int
-    external_protocol: str = Field(default="http", description="Protocol for external access (http/https)")
-    public_url: Optional[str] = Field(default=None, description="Override URL for external access (e.g. reverse-proxy or CDN endpoint)")
-    external_service: bool = Field(default=False, description="True when the service is outside the Docker Compose network")
+    external_protocol: str = Field(
+        default="http", description="Protocol for external access (http/https)"
+    )
+    public_url: Optional[str] = Field(
+        default=None,
+        description="Override URL for external access (e.g. reverse-proxy or CDN endpoint)",
+    )
+    external_service: bool = Field(
+        default=False, description="True when the service is outside the Docker Compose network"
+    )
 
     @property
     def internal_url(self) -> str:
@@ -59,7 +65,9 @@ class FastAPIConfig(ServiceConfig):
     host: str = Field(default="0.0.0.0", description="Bind address for the FastAPI server")
     workers: int = Field(default=4, description="Number of Gunicorn worker processes")
     ssl: bool = Field(default=False, description="Enable SSL/TLS")
-    logging_level: str = Field(default="INFO", description="Logging level (DEBUG, INFO, WARNING, ERROR)")
+    logging_level: str = Field(
+        default="INFO", description="Logging level (DEBUG, INFO, WARNING, ERROR)"
+    )
 
     model_config = SettingsConfigDict(env_prefix="DEPICTIO_FASTAPI_")
 
@@ -87,7 +95,9 @@ class MongoDBConfig(ServiceConfig):
     service_port: int = Field(default=27018)
     external_port: int = Field(default=27018)
     db_name: str = Field(default="depictioDB", description="MongoDB database name")
-    wipe: bool = Field(default=False, description="Wipe the database on startup (destructive — development only)")
+    wipe: bool = Field(
+        default=False, description="Wipe the database on startup (destructive — development only)"
+    )
 
     model_config = SettingsConfigDict(env_prefix="DEPICTIO_MONGODB_")
 
@@ -118,7 +128,9 @@ class S3DepictioCLIConfig(ServiceConfig):
     external_port: int = Field(default=9000)
     root_user: str = Field(default="minio", description="MinIO/S3 root access key")
     root_password: str = Field(default="minio123", description="MinIO/S3 root secret key")
-    bucket: str = Field(default="depictio-bucket", description="Default S3 bucket name for Depictio data")
+    bucket: str = Field(
+        default="depictio-bucket", description="Default S3 bucket name for Depictio data"
+    )
 
     model_config = SettingsConfigDict(env_prefix="DEPICTIO_MINIO_")
 
@@ -156,7 +168,8 @@ class AuthConfig(BaseSettings):
         description="Directory for CLI configuration files (admin token, etc.)",
     )
     internal_api_key_env: Optional[str] = Field(
-        default=None, description="Internal API key for service-to-service communication (auto-generated if unset)"
+        default=None,
+        description="Internal API key for service-to-service communication (auto-generated if unset)",
     )
     unauthenticated_mode: bool = Field(default=False, description="Enable unauthenticated mode")
     single_user_mode: bool = Field(
@@ -288,7 +301,9 @@ class AuthConfig(BaseSettings):
 class LoggingConfig(BaseSettings):
     """Application logging configuration."""
 
-    verbosity_level: str = Field(default="ERROR", description="Log verbosity level (DEBUG, INFO, WARNING, ERROR, CRITICAL)")
+    verbosity_level: str = Field(
+        default="ERROR", description="Log verbosity level (DEBUG, INFO, WARNING, ERROR, CRITICAL)"
+    )
 
     model_config = SettingsConfigDict(env_prefix="DEPICTIO_LOGGING_")
 
@@ -788,7 +803,9 @@ class ProfilingConfig(BaseSettings):
 class Settings(BaseSettings):
     """Root application settings, composed of all subsystem configurations."""
 
-    context: str = Field(default="server", description="Runtime context: 'server' (API/worker) or 'client' (CLI)")
+    context: str = Field(
+        default="server", description="Runtime context: 'server' (API/worker) or 'client' (CLI)"
+    )
 
     # Core services
     fastapi: FastAPIConfig = Field(default_factory=FastAPIConfig)

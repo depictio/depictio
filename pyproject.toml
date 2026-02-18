@@ -59,7 +59,7 @@ dependencies = [
   "mypy-boto3-s3==1.38.0",
   "psutil==7.0.0",
   "python-dotenv==1.1.0",
-  "pyyaml==6.0.2",
+  "pyyaml>=6.0.2",
   "redis==5.2.1",
   "tomli==2.2.1",
   "types-requests==2.32.4.20250611",
