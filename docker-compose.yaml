@@ -9,6 +9,11 @@
 #   docker compose up -d
 #   → http://localhost:5080
 #
+# IMAGE TAGS:
+#   stable  — latest stable release (default, recommended)
+#   beta    — latest beta/pre-release build
+#   x.y.z   — specific version (e.g. 0.7.3)
+#
 # COMMANDS:
 #   Start:  docker compose up -d
 #   Stop:   docker compose down
@@ -81,7 +86,7 @@ services:
     restart: unless-stopped
 
   depictio-frontend:
-    image: ghcr.io/depictio/depictio:${DEPICTIO_VERSION:-latest}
+    image: ghcr.io/depictio/depictio:${DEPICTIO_VERSION:-stable}
     container_name: depictio-frontend
     ports:
       - 5080:5080
@@ -111,7 +116,7 @@ services:
         condition: service_healthy
 
   depictio-backend:
-    image: ghcr.io/depictio/depictio:${DEPICTIO_VERSION:-latest}
+    image: ghcr.io/depictio/depictio:${DEPICTIO_VERSION:-stable}
     container_name: depictio-backend
     ports:
       - 8058:8058
@@ -142,7 +147,7 @@ services:
     container_name: depictio-celery-worker
     # Always enabled - required for design mode (stepper) to work
     # Dashboard editor will fail without Celery worker running
-    image: ghcr.io/depictio/depictio:${DEPICTIO_VERSION:-latest}
+    image: ghcr.io/depictio/depictio:${DEPICTIO_VERSION:-stable}
     env_file:
       - path: .env
         required: false

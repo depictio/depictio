@@ -55,18 +55,12 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
-            # Version tag
+            # Specific version tag (e.g. 0.7.3)
             type=raw,value=${{ steps.build-type.outputs.VERSION }}
 
-            # Tag as stable
+            # Floating stable/latest tags — only updated on stable releases
             type=raw,value=stable
-
-            # Tag as latest
             type=raw,value=latest
-
-            # Always tag as dev and edge
-            type=raw,value=dev
-            type=raw,value=edge
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v5

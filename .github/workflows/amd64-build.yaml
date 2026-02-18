@@ -50,15 +50,11 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
-            # Version tag
+            # Specific version tag (e.g. 0.7.3b7)
             type=raw,value=${{ steps.version.outputs.VERSION }}
 
-            # Tag as beta
+            # Floating beta tag — points to latest beta build
             type=raw,value=beta
-
-            # Always tag as dev and edge
-            type=raw,value=dev
-            type=raw,value=edge
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
