@@ -38,9 +38,9 @@
 
 [![Documentation](https://img.shields.io/badge/docs-latest-blue?style=flat-square&logo=gitbook)](https://depictio.github.io/depictio-docs/latest/)
 
-## Gitpod quickstart
+## Try Depictio
 
-[![Open in Gitpod](https://gitpod.io/button/open-in-gitpod.svg)](https://gitpod.io/#https://github.com/depictio/depictio)
+[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/depictio/depictio)
 
 </div>
 
