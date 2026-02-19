@@ -14,6 +14,7 @@ from dash import ALL, MATCH, Input, Output, State, ctx, no_update
 
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.deltatables_utils import load_deltatable_lite
+from depictio.dash.modules.ref_line_slider_component.filter_utils import build_filter_mask
 from depictio.dash.utils import extend_filters_via_links, get_result_dc_for_workflow
 
 # AG Grid filter operators mapping to Polars operations
@@ -892,6 +893,7 @@ def register_core_callbacks(app):
         [
             Input({"type": "table-aggrid", "index": MATCH}, "getRowsRequest"),
             Input("interactive-values-store", "data"),
+            Input({"type": "ref-line-slider-value", "index": ALL}, "data"),
         ],
         [
             State({"type": "stored-metadata-component", "index": MATCH}, "data"),
@@ -906,6 +908,7 @@ def register_core_callbacks(app):
     def infinite_scroll_component(
         request,
         interactive_values,
+        slider_data_list,
         stored_metadata,
         local_store,
         pathname,
@@ -967,6 +970,27 @@ def register_core_callbacks(app):
                 TOKEN=TOKEN,
                 project_metadata=project_metadata,
             )
+
+            # Compute per-row highlight flag from slider conditions
+            highlight_filter = (stored_metadata or {}).get("highlight_filter")
+            if not df.is_empty():
+                if highlight_filter:
+                    slider_map: dict[str, float] = {
+                        d["tag"]: float(d["value"])
+                        for d in (slider_data_list or [])
+                        if d and "tag" in d and "value" in d
+                    }
+                    conditions = highlight_filter.get("conditions") or []
+                    logic = highlight_filter.get("logic", "and")
+                    mask = build_filter_mask(df, conditions, slider_map, logic)
+                    if mask is not None:
+                        df = df.with_columns(
+                            pl.when(mask).then(True).otherwise(False).alias("_is_highlighted")
+                        )
+                    else:
+                        df = df.with_columns(pl.lit(False).alias("_is_highlighted"))
+                else:
+                    df = df.with_columns(pl.lit(False).alias("_is_highlighted"))
 
             # Prepare DataFrame slice for AG Grid
             partial_df, total_rows = prepare_dataframe_for_aggrid(df, start_row, end_row)

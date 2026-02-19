@@ -197,6 +197,10 @@ def _build_column_definitions(cols: dict | None) -> list[dict]:
         return column_defs
 
     for col_name, col_config in cols.items():
+        # Skip internal columns not meant for display
+        if col_name == "_is_highlighted":
+            continue
+
         # Handle field names with dots - replace with underscores
         safe_field_name = col_name.replace(".", "_") if "." in col_name else col_name
 
@@ -289,6 +293,14 @@ def _create_ag_grid_component(
             "resetRowDataOnUpdate": True,
             "maxConcurrentDatasourceRequests": 1,
             "blockLoadDebounceMillis": 0,
+            # Row highlighting via _is_highlighted column (set by slider callbacks)
+            "getRowStyle": {
+                "function": (
+                    "params.data && params.data._is_highlighted === true"
+                    " ? {background: 'rgba(243, 156, 18, 0.18)', fontWeight: '500'}"
+                    " : null"
+                )
+            },
         },
         getRowId="params.data.ID",
         defaultColDef={
@@ -311,6 +323,7 @@ def _create_metadata_store(
     cols: dict | None,
     row_selection_enabled: bool = False,
     row_selection_column: str | None = None,
+    highlight_filter: dict | None = None,
 ) -> dcc.Store:
     """Create the metadata store component for the table.
 
@@ -336,22 +349,26 @@ def _create_metadata_store(
     if isinstance(dc_id, dict) and "$oid" in dc_id:
         dc_id = dc_id["$oid"]
 
+    store_data: dict = {
+        "index": clean_index,
+        "component_type": "table",
+        "wf_id": wf_id,
+        "dc_id": dc_id,
+        "dc_config": dc_config,
+        "cols_json": cols,
+        "parent_index": None,
+        "row_selection_enabled": row_selection_enabled,
+        "row_selection_column": row_selection_column,
+    }
+    if highlight_filter is not None:
+        store_data["highlight_filter"] = highlight_filter
+
     return dcc.Store(
         id={
             "type": "stored-metadata-component",
             "index": store_index,
         },
-        data={
-            "index": clean_index,
-            "component_type": "table",
-            "wf_id": wf_id,
-            "dc_id": dc_id,
-            "dc_config": dc_config,
-            "cols_json": cols,
-            "parent_index": None,
-            "row_selection_enabled": row_selection_enabled,
-            "row_selection_column": row_selection_column,
-        },
+        data=store_data,
     )
 
 
@@ -447,6 +464,7 @@ def build_table(**kwargs) -> html.Div | dmc.Paper | dcc.Loading:
     # Row selection filtering configuration
     row_selection_enabled = kwargs.get("row_selection_enabled", False)
     row_selection_column = kwargs.get("row_selection_column")
+    highlight_filter = kwargs.get("highlight_filter")
 
     # Load data if needed
     if df.is_empty():
@@ -460,8 +478,16 @@ def build_table(**kwargs) -> html.Div | dmc.Paper | dcc.Loading:
     # Build components
     ag_grid = _create_ag_grid_component(index, column_defs, theme)
     store = _create_metadata_store(
-        index, wf_id, dc_id, dc_config, cols, row_selection_enabled, row_selection_column
+        index,
+        wf_id,
+        dc_id,
+        dc_config,
+        cols,
+        row_selection_enabled,
+        row_selection_column,
+        highlight_filter=highlight_filter,
     )
+
     table_body = _create_table_body(index, ag_grid, store)
 
     if not build_frame:
@@ -484,7 +510,7 @@ def build_table(**kwargs) -> html.Div | dmc.Paper | dcc.Loading:
     graph_id_dict = {"type": "table-aggrid", "index": str(index)}
     target_id = stringify_id(graph_id_dict)
 
-    return dcc.Loading(
+    loading = dcc.Loading(
         children=table_body,
         custom_spinner=create_skeleton_component("table"),
         target_components={target_id: "rowData"},
@@ -492,3 +518,4 @@ def build_table(**kwargs) -> html.Div | dmc.Paper | dcc.Loading:
         delay_hide=300,
         id={"type": "table-loading", "index": index},
     )
+    return loading

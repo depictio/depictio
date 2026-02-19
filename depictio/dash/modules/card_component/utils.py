@@ -653,12 +653,14 @@ def _create_card_stores(
     title_font_size: str,
     value_font_size: str,
     project_id: str | None = None,
+    linked_table_tag: str | None = None,
 ) -> tuple:
     """
     Create the store components for card metadata and triggering.
 
     Args:
         project_id: Project ID for cross-DC link resolution
+        linked_table_tag: Table tag for highlight_count cards
 
     Returns:
         Tuple of (store_component, trigger_store, metadata_store, metadata_initial_store)
@@ -681,6 +683,7 @@ def _create_card_stores(
             "column_name": column_name,
             "value": value,
             "parent_index": parent_index,
+            "linked_table_tag": linked_table_tag,  # For highlight_count cards
             "metric_theme": styles["metric_theme"],
             "background_color": styles["background_color"],
             "title_color": styles["title_color"],
@@ -706,6 +709,7 @@ def _create_card_stores(
             "title": title,
             "color": color,
             "stepper": stepper,
+            "linked_table_tag": linked_table_tag,  # For highlight_count cards
             "metric_theme": styles["metric_theme"],
             "background_color": styles["background_color"],
             "title_color": styles["title_color"],
@@ -851,6 +855,7 @@ def _build_card_component(
     index: str,
     card_content: list,
     background_color: str | None,
+    has_slider_link: bool = False,
 ) -> dmc.Card:
     """
     Build the final DMC Card component with proper styling.
@@ -859,6 +864,7 @@ def _build_card_component(
         index: Component index
         card_content: List of card content components
         background_color: Background color (None for DMC theme)
+        has_slider_link: Whether card is linked to a ref_line_slider (adds orange accent)
 
     Returns:
         DMC Card component
@@ -886,6 +892,10 @@ def _build_card_component(
         "height": "100%",
         "minHeight": "120px",
     }
+
+    # Add orange accent border-top for cards linked to sliders
+    if has_slider_link:
+        card_style["borderTop"] = "3px solid #f39c12"
 
     return dmc.Card(
         children=[dmc.CardSection(**card_section_kwargs)],
@@ -1010,6 +1020,7 @@ def build_card(**kwargs):
     color = kwargs.get("color", None)
     parent_index = kwargs.get("parent_index", None)
     metric_theme = kwargs.get("metric_theme", None)
+    linked_table_tag = kwargs.get("linked_table_tag")  # For highlight_count cards
     kwargs.get("init_data", None)
 
     # Style parameters (convert empty strings to None for DMC compliance)
@@ -1056,14 +1067,19 @@ def build_card(**kwargs):
         title_font_size=title_font_size,
         value_font_size=value_font_size,
         project_id=kwargs.get("project_id"),
+        linked_table_tag=linked_table_tag,
     )
 
     # Create card title
-    if aggregation and hasattr(aggregation, "title"):
+    if linked_table_tag:
+        # Special title for highlight count cards
+        card_title = title if title else "Highlighted Rows"
+    elif aggregation and hasattr(aggregation, "title"):
         agg_display = aggregation.title()
+        card_title = title if title else f"{agg_display} of {column_name}"
     else:
         agg_display = str(aggregation).title() if aggregation else "Unknown"
-    card_title = title if title else f"{agg_display} of {column_name}"
+        card_title = title if title else f"{agg_display} of {column_name}"
 
     # Create display value (legacy value or loading skeleton)
     if v is not None:
@@ -1090,6 +1106,7 @@ def build_card(**kwargs):
         index=index,
         card_content=card_content,
         background_color=styles["background_color"],
+        has_slider_link=bool(linked_table_tag),  # Orange accent for highlight_count cards
     )
 
     if not build_frame:

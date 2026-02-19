@@ -307,6 +307,15 @@ class TableLiteComponent(BaseLiteComponent):
         default=None, description="Column to extract from selected rows"
     )
 
+    # Highlight filter for ref_line_slider-linked tables
+    # When set, the table shows only rows matching these conditions (driven by slider values)
+    highlight_filter: dict[str, Any] | None = Field(
+        default=None,
+        description="Filter conditions linked to ref_line_slider components. "
+        "Dict with 'conditions' (list of {column, operator, value|linked_slider}) "
+        "and 'logic' ('and'|'or').",
+    )
+
 
 class ImageLiteComponent(BaseLiteComponent):
     """Lite image component for user definition.
@@ -361,6 +370,38 @@ class MultiQCLiteComponent(BaseLiteComponent):
     )
 
 
+class RefLineLiteComponent(BaseLiteComponent):
+    """Lite ref-line slider component for user definition.
+
+    A standalone slider that controls reference line positions and dynamic
+    highlight thresholds in linked figure components. Decoupled from data
+    filtering (unlike interactive components).
+
+    Example YAML:
+        - tag: width-threshold
+          component_type: ref_line_slider
+          label: "Sepal Width Threshold"
+          min: 2.0
+          max: 4.5
+          default: 3.8
+          step: 0.1
+    """
+
+    component_type: Literal["ref_line_slider"] = "ref_line_slider"
+
+    # workflow_tag and data_collection_tag are not needed for this component type
+    # but are inherited from BaseLiteComponent with empty defaults
+
+    # Slider configuration
+    label: str = Field(default="Threshold", description="Display label for the slider")
+    min: float = Field(default=0.0, description="Minimum slider value")
+    max: float = Field(default=100.0, description="Maximum slider value")
+    default: float = Field(default=50.0, description="Initial slider value")
+    step: float | None = Field(
+        default=None, description="Step size (auto-calculated as 1% of range if None)"
+    )
+
+
 # Union type for any lite component
 LiteComponent = (
     FigureLiteComponent
@@ -369,4 +410,5 @@ LiteComponent = (
     | TableLiteComponent
     | ImageLiteComponent
     | MultiQCLiteComponent
+    | RefLineLiteComponent
 )
