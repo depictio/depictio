@@ -733,14 +733,6 @@ async def check_token_validity_endpoint(token: TokenBase):
 async def generate_agent_config_endpoint(
     token: TokenBeanie, current_user: UserBase = Depends(get_current_user)
 ) -> CLIConfig:
-    # CLI agent generation requires real user accounts (not anonymous/temporary users)
-    if settings.auth.is_public_mode:
-        raise HTTPException(
-            status_code=403,
-            detail="CLI agent generation disabled in public mode",
-        )
-    # logger.info(f"Token: {token}")
-    # logger.info(f"Token: {format_pydantic(token)}")
     depictio_agent_config = await _generate_agent_config(user=current_user, token=token)
 
     return depictio_agent_config

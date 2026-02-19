@@ -720,9 +720,20 @@ def _handle_save_token(
         current_token=local_store["access_token"], token_lifetime="long-lived"
     )
 
-    # Format as YAML
-    agent_config_yaml = yaml.dump(agent_config, default_flow_style=False)
-    div_agent_config = _create_config_display(agent_config_yaml)
+    # Format as YAML (guard against None if API call failed)
+    if not agent_config:
+        div_agent_config = html.Div(
+            dmc.Alert(
+                title="Configuration Generated — CLI Config Unavailable",
+                children="Your token was created but the CLI configuration could not be retrieved. "
+                "Please contact an administrator.",
+                color="yellow",
+                icon=DashIconify(icon="mdi:alert", width=24),
+            )
+        )
+    else:
+        agent_config_yaml = yaml.dump(agent_config, default_flow_style=False)
+        div_agent_config = _create_config_display(agent_config_yaml)
 
     return (
         False,
