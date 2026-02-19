@@ -32,11 +32,11 @@ services:
   mongo:
     image: mongo:8.0.14
     container_name: mongo
-    command: mongod --dbpath /data/depictioDB --port 27018 --logpath /dev/null
+    command: mongod --port 27018
     ports:
       - 27018:27018
     volumes:
-      - mongo_data:/data/depictioDB
+      - mongo_data:/data/db
     healthcheck:
       test: ["CMD-SHELL", "mongosh --port 27018 --eval 'db.adminCommand(\"ping\")'"]
       interval: 30s
@@ -94,7 +94,7 @@ services:
       DEPICTIO_MINIO_ROOT_PASSWORD: "${DEPICTIO_MINIO_ROOT_PASSWORD:-minio123}"
     command: ["/app/run_dash.sh"]
     healthcheck:
-      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:5080/"]
+      test: ["CMD-SHELL", "curl -sf http://localhost:5080/ > /dev/null"]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -124,7 +124,7 @@ services:
       DEPICTIO_MINIO_ROOT_PASSWORD: "${DEPICTIO_MINIO_ROOT_PASSWORD:-minio123}"
     command: ["/app/run_fastapi.sh"]
     healthcheck:
-      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:8058/depictio/api/v1/docs"]
+      test: ["CMD-SHELL", "curl -sf http://localhost:8058/health > /dev/null"]
       interval: 30s
       timeout: 10s
       retries: 5
