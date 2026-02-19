@@ -86,8 +86,12 @@ async def websocket_endpoint(
     user_info = await verify_websocket_token(token)
     user_id = user_info["user_id"] if user_info else None
 
-    if not user_info and not settings.auth.unauthenticated_mode:
-        # Require authentication if not in unauthenticated mode
+    if (
+        not user_info
+        and not settings.auth.unauthenticated_mode
+        and not settings.auth.single_user_mode
+    ):
+        # Require authentication unless in unauthenticated or single-user mode
         await websocket.close(
             code=status.WS_1008_POLICY_VIOLATION, reason="Authentication required"
         )
@@ -179,7 +183,12 @@ async def test_trigger_event(dc_id: str) -> dict[str, Any]:
     """
     from datetime import datetime, timezone
 
+    from depictio.api.v1.deltatables_utils import invalidate_dc_cache
     from depictio.models.models.realtime import EventMessage, EventSourceType, EventType
+
+    # Invalidate all caches for this DC so fresh data is served
+    cache_result = invalidate_dc_cache(dc_id)
+    logger.info(f"Cache invalidated for DC {dc_id}: {cache_result}")
 
     # Create a test event
     event = EventMessage(

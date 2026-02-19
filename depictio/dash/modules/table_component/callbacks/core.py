@@ -892,6 +892,7 @@ def register_core_callbacks(app):
         [
             Input({"type": "table-aggrid", "index": MATCH}, "getRowsRequest"),
             Input("interactive-values-store", "data"),
+            Input("ws-new-data-ids", "data"),
         ],
         [
             State({"type": "stored-metadata-component", "index": MATCH}, "data"),
@@ -906,6 +907,7 @@ def register_core_callbacks(app):
     def infinite_scroll_component(
         request,
         interactive_values,
+        ws_new_data_ids,
         stored_metadata,
         local_store,
         pathname,
@@ -929,6 +931,19 @@ def register_core_callbacks(app):
         triggered_by_interactive = ctx.triggered and any(
             "interactive-values-store" in str(trigger["prop_id"]) for trigger in ctx.triggered
         )
+
+        # Handle WebSocket-triggered refresh: only reload if this table's DC was updated
+        triggered_by_ws = ctx.triggered and any(
+            "ws-new-data-ids" in str(t["prop_id"]) for t in ctx.triggered
+        )
+        if triggered_by_ws:
+            if not ws_new_data_ids or not stored_metadata:
+                return no_update
+            dc_id = stored_metadata.get("dc_id")
+            updated_dc_ids = {e.get("dc_id") for e in ws_new_data_ids if e.get("dc_id")}
+            if dc_id not in updated_dc_ids:
+                return no_update
+            request = create_synthetic_request(False)
 
         # Validate inputs
         if not local_store or not stored_metadata:

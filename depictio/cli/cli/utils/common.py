@@ -55,6 +55,7 @@ def validate_depictio_cli_config(depictio_cli_config: dict) -> CLIConfig:
         user=depictio_cli_config["user"],
         api_base_url=depictio_cli_config.get("api_base_url", depictio_cli_config.get("base_url")),
         s3_storage=depictio_cli_config.get("s3_storage", depictio_cli_config.get("s3")),
+        frontend_base_url=depictio_cli_config.get("frontend_base_url"),
     )
     logger.info(f"Depictio CLI configuration validated: {config}")
     # config = convert_model_to_dict(config)

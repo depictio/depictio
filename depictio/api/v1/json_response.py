@@ -1,9 +1,10 @@
 """
 Custom JSON response handling for FastAPI.
 
-Provides custom serialization for MongoDB ObjectId types.
+Provides custom serialization for MongoDB ObjectId types and NaN/Inf floats.
 """
 
+import math
 from typing import Any
 
 from beanie import PydanticObjectId
@@ -16,7 +17,7 @@ from depictio.models.models.base import PyObjectId
 
 def custom_jsonable_encoder(obj: Any, **kwargs: Any) -> Any:
     """
-    Custom JSON encoder that handles ObjectId serialization recursively.
+    Custom JSON encoder that handles ObjectId serialization and NaN/Inf values recursively.
 
     Args:
         obj: Object to encode
@@ -27,6 +28,9 @@ def custom_jsonable_encoder(obj: Any, **kwargs: Any) -> Any:
     """
     if isinstance(obj, ObjectId | PydanticObjectId | PyObjectId):
         return str(obj)
+
+    if isinstance(obj, float) and (math.isnan(obj) or math.isinf(obj)):
+        return None
 
     if isinstance(obj, dict):
         return {k: custom_jsonable_encoder(v, **kwargs) for k, v in obj.items()}

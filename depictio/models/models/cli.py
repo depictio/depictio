@@ -82,6 +82,7 @@ class UserBaseCLIConfig(UserBase):
 
 class CLIConfig(BaseModel):
     api_base_url: str
+    frontend_base_url: str | None = None
     user: UserBaseCLIConfig
     s3_storage: S3DepictioCLIConfig
 
