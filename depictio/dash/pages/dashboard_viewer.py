@@ -133,9 +133,9 @@ def register_callbacks(app):
     register_auto_screenshot_callback(app)
 
     # 5. Real-time WebSocket callbacks (for data update notifications)
-    # Temporarily disabled - will be re-enabled with native JS implementation from feature/realtime-events-websocket
-    # from depictio.dash.layouts.realtime_callbacks import register_realtime_callbacks
-    # register_realtime_callbacks(app)
+    from depictio.dash.layouts.realtime_callbacks import register_realtime_callbacks
+
+    register_realtime_callbacks(app)
 
 
 def register_routing_callback(app):

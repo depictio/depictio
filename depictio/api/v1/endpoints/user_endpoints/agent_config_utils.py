@@ -45,6 +45,7 @@ async def _generate_agent_config(user: UserBeanie, token: TokenBeanie) -> CLICon
     cli_config = CLIConfig(
         user=user_cli_config,
         api_base_url=settings.fastapi.external_url,  # Always use external URL for CLI
+        frontend_base_url=settings.dash.external_url,  # Dash frontend URL for browser links
         s3_storage=settings.minio,
     )
 

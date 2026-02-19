@@ -24,10 +24,13 @@ def register_realtime_callbacks(app: Dash) -> None:
 
     Should be called for both viewer and editor apps.
     """
+    logger.info(f"Registering real-time WebSocket callbacks for app: {app.title}")
     register_native_websocket_callback(app)
     register_data_update_notification_callback(app)
     register_track_updated_data_collections_callback(app)
     register_auto_refresh_components_callback(app)
+    register_invalidate_dash_cache_callback(app)
+    logger.info("Real-time WebSocket callbacks registered successfully")
 
 
 def register_native_websocket_callback(app: Dash) -> None:
@@ -39,14 +42,14 @@ def register_native_websocket_callback(app: Dash) -> None:
 
     The callback:
     1. Extracts dashboard ID from pathname
-    2. Constructs the proper WebSocket URL (ws://host:8058/depictio/api/v1/events/ws)
+    2. Constructs the proper WebSocket URL from api-base-url-store (public URL)
     3. Manages WebSocket connection (creates new, closes old on URL change)
     4. Updates ws-message-store when messages are received
     """
     app.clientside_callback(
         """
-        function(pathname, localStore, currentState) {
-            console.log('[WebSocket] Callback fired! pathname:', pathname);
+        function(pathname, apiBaseUrl, localStore, currentState) {
+            console.log('[WebSocket] Callback fired! pathname:', pathname, 'apiBaseUrl:', apiBaseUrl);
 
             // Extract dashboard ID from pathname
             // Patterns: /dashboard/{id} or /dashboard/{id}/edit
@@ -66,12 +69,22 @@ def register_native_websocket_callback(app: Dash) -> None:
             // Get token if available (optional for unauthenticated mode)
             const token = (localStore && localStore.access_token) ? localStore.access_token : '';
 
-            // Construct WebSocket URL - always use port 8058 for API
-            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-            const host = window.location.hostname;
-            const port = '8058';
-
-            let wsUrl = `${protocol}//${host}:${port}/depictio/api/v1/events/ws?dashboard_id=${dashboardId}`;
+            // Construct WebSocket URL from api-base-url-store (public/external URL)
+            let wsUrl = '';
+            if (apiBaseUrl) {
+                try {
+                    const parsed = new URL(apiBaseUrl);
+                    const wsProtocol = parsed.protocol === 'https:' ? 'wss:' : 'ws:';
+                    wsUrl = `${wsProtocol}//${parsed.host}/depictio/api/v1/events/ws?dashboard_id=${dashboardId}`;
+                } catch(e) {
+                    console.warn('[WebSocket] Could not parse API base URL:', apiBaseUrl);
+                }
+            }
+            if (!wsUrl) {
+                // Fallback: derive from current page
+                const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+                wsUrl = `${protocol}//${window.location.hostname}:8058/depictio/api/v1/events/ws?dashboard_id=${dashboardId}`;
+            }
             if (token) {
                 wsUrl += `&token=${token}`;
             }
@@ -170,7 +183,7 @@ def register_native_websocket_callback(app: Dash) -> None:
         }
         """,
         Output("ws-state", "children"),
-        Input("url", "pathname"),
+        [Input("url", "pathname"), Input("api-base-url-store", "data")],
         State("local-store", "data"),
         State("ws-state", "children"),
         prevent_initial_call=False,
@@ -353,3 +366,30 @@ def register_auto_refresh_components_callback(app: Dash) -> None:
         State("ws-connection-config", "data"),
         prevent_initial_call=True,
     )
+
+
+def register_invalidate_dash_cache_callback(app: Dash) -> None:
+    """
+    Invalidate the Dash-process in-memory data cache when DCs are updated.
+
+    invalidate_dc_cache() in the API process clears the API's own memory cache
+    and Redis, but the Dash process has its own _dataframe_memory_cache that
+    must be cleared separately so re-renders fetch fresh data.
+    """
+
+    @app.callback(
+        Output("ws-pending-updates", "data"),
+        Input("ws-new-data-ids", "data"),
+        prevent_initial_call=True,
+    )
+    def invalidate_dash_process_cache(new_data_ids: list | None) -> bool | type[no_update]:
+        if not new_data_ids:
+            return no_update
+        from depictio.api.v1.deltatables_utils import invalidate_dc_cache
+
+        for entry in new_data_ids:
+            dc_id = entry.get("dc_id")
+            if dc_id:
+                logger.info(f"Invalidating Dash-side cache for DC: {dc_id}")
+                invalidate_dc_cache(dc_id)
+        return True
