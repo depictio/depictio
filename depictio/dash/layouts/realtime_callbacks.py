@@ -28,8 +28,11 @@ def register_realtime_callbacks(app: Dash) -> None:
     register_native_websocket_callback(app)
     register_data_update_notification_callback(app)
     register_track_updated_data_collections_callback(app)
+    register_track_new_table_rows_callback(app)
     register_auto_refresh_components_callback(app)
     register_invalidate_dash_cache_callback(app)
+    # Disabled: Flash animation replaced with persistent marker highlighting
+    # register_figure_flash_animation_callback(app)
     logger.info("Real-time WebSocket callbacks registered successfully")
 
 
@@ -302,6 +305,64 @@ def register_track_updated_data_collections_callback(app: Dash) -> None:
         return updated_ids
 
 
+def register_track_new_table_rows_callback(app: Dash) -> None:
+    """
+    Track new table row IDs for highlighting across pagination.
+
+    When data_collection_updated event fires, extract row count BEFORE update
+    and mark rows beyond that count as new. Works because data is appended.
+    """
+    app.clientside_callback(
+        """
+        function(wsData, config) {
+            if (!config || config.refresh_mode !== 'auto-refresh') {
+                return window.dash_clientside.no_update;
+            }
+            if (!wsData) {
+                return window.dash_clientside.no_update;
+            }
+
+            const eventType = wsData.event_type;
+            if (eventType !== 'data_collection_updated' && eventType !== 'data_collection_created') {
+                return window.dash_clientside.no_update;
+            }
+
+            const dcId = wsData.data_collection_id;
+            if (!dcId) {
+                return window.dash_clientside.no_update;
+            }
+
+            // Initialize tracking object
+            if (!window._depictioNewRows) {
+                window._depictioNewRows = {};
+            }
+
+            // Mark this DC as having new rows (tables will check their DC)
+            // Store timestamp - tables will use this to know highlights are active
+            window._depictioNewRows[dcId] = {
+                timestamp: Date.now(),
+                // Rows will be highlighted based on recent timestamp
+                // AG Grid will check: row timestamp > (current time - 5 seconds)
+            };
+
+            console.log('[TableHighlight] Marked DC as updated:', dcId);
+
+            // Clear after 5 seconds
+            setTimeout(function() {
+                delete window._depictioNewRows[dcId];
+                console.log('[TableHighlight] Cleared highlight for DC:', dcId);
+            }, 5000);
+
+            return window.dash_clientside.no_update;
+        }
+        """,
+        Output("ws-state", "children", allow_duplicate=True),
+        Input("ws-message-store", "data"),
+        State("ws-connection-config", "data"),
+        prevent_initial_call=True,
+    )
+
+
 def register_auto_refresh_components_callback(app: Dash) -> None:
     """
     Register clientside callback to trigger component refresh when data is updated.
@@ -362,6 +423,71 @@ def register_auto_refresh_components_callback(app: Dash) -> None:
         Output({"type": "figure-trigger", "index": dash.ALL}, "data", allow_duplicate=True),
         Input("ws-new-data-ids", "data"),
         State({"type": "figure-trigger", "index": dash.ALL}, "data"),
+        State({"type": "figure-trigger", "index": dash.ALL}, "id"),
+        State("ws-connection-config", "data"),
+        prevent_initial_call=True,
+    )
+
+
+def register_figure_flash_animation_callback(app: Dash) -> None:
+    """
+    Apply visual effects to scatter plots when they update from WebSocket.
+
+    Watches figure-trigger data for _is_realtime_update flag and:
+    1. Applies CSS animation (pulsing border) to figure wrapper for 3 seconds
+    2. Auto-scales axes via Plotly.relayout to show all new data points
+    """
+    app.clientside_callback(
+        """
+        function(triggerDataList, triggerIds, config) {
+            if (!config || config.refresh_mode !== 'auto-refresh') {
+                return window.dash_clientside.no_update;
+            }
+            if (!triggerDataList || !triggerIds || triggerDataList.length === 0) {
+                return window.dash_clientside.no_update;
+            }
+
+            // Find figures that have realtime updates
+            triggerDataList.forEach(function(trigger, idx) {
+                if (!trigger || !trigger._is_realtime_update) return;
+
+                const index = triggerIds[idx].index;
+                const wrapperId = {"type": "figure-graph-wrapper", "index": index};
+                const figureId = 'figure-graph-' + index;
+
+                // Apply flash animation class
+                window.dash_clientside.set_props(wrapperId, {
+                    className: "realtime-flash"
+                });
+
+                // Remove animation after 3 seconds
+                setTimeout(function() {
+                    window.dash_clientside.set_props(wrapperId, {
+                        className: ""
+                    });
+                }, 3000);
+
+                // Auto-scale axes after figure updates
+                setTimeout(function() {
+                    const figureDiv = document.getElementById(figureId);
+                    if (figureDiv && window.Plotly) {
+                        // Auto-scale both axes to show all data
+                        window.Plotly.relayout(figureDiv, {
+                            'xaxis.autorange': true,
+                            'yaxis.autorange': true
+                        });
+                        console.log('[AutoScale] Applied to figure:', figureId);
+                    } else {
+                        console.warn('[AutoScale] Figure not found or Plotly not loaded:', figureId);
+                    }
+                }, 100);  // Small delay to ensure figure data is rendered
+            });
+
+            return window.dash_clientside.no_update;
+        }
+        """,
+        Output("ws-state", "children", allow_duplicate=True),
+        Input({"type": "figure-trigger", "index": dash.ALL}, "data"),
         State({"type": "figure-trigger", "index": dash.ALL}, "id"),
         State("ws-connection-config", "data"),
         prevent_initial_call=True,

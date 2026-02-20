@@ -2043,11 +2043,17 @@ def build_figure(**kwargs) -> html.Div | dcc.Loading:
                 id={"type": "stored-metadata-component", "index": index},
                 data=store_component_data,
             ),
-            # Graph (populated by callback) - No Loading wrapper to allow dynamic updates
-            dcc.Graph(
-                id={"type": "figure-graph", "index": index},
-                figure={},  # Empty - populated by batch rendering callback
-                config={"displayModeBar": "hover", "responsive": True},
+            # Graph wrapper with ID for WS flash animation
+            html.Div(
+                id={"type": "figure-graph-wrapper", "index": index},
+                children=[
+                    dcc.Graph(
+                        id={"type": "figure-graph", "index": index},
+                        figure={},  # Empty - populated by batch rendering callback
+                        config={"displayModeBar": "hover", "responsive": True},
+                        style={"height": "100%", "width": "100%"},
+                    ),
+                ],
                 style={"height": "100%", "width": "100%"},
             ),
         ],

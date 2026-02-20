@@ -242,6 +242,7 @@ def _create_ag_grid_component(
     index: str,
     column_defs: list[dict],
     theme: str,
+    dc_id: str | None = None,
 ) -> dag.AgGrid:
     """Create the AG Grid component with infinite row model configuration.
 
@@ -249,6 +250,7 @@ def _create_ag_grid_component(
         index: Unique identifier for the table.
         column_defs: List of column definitions.
         theme: Theme name for styling.
+        dc_id: Data collection ID for row highlighting context (not used here, passed via metadata store).
 
     Returns:
         Configured dag.AgGrid component.
@@ -458,7 +460,7 @@ def build_table(**kwargs) -> html.Div | dmc.Paper | dcc.Loading:
     _add_description_tooltips(column_defs, cols)
 
     # Build components
-    ag_grid = _create_ag_grid_component(index, column_defs, theme)
+    ag_grid = _create_ag_grid_component(index, column_defs, theme, dc_id=dc_id)
     store = _create_metadata_store(
         index, wf_id, dc_id, dc_config, cols, row_selection_enabled, row_selection_column
     )

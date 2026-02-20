@@ -44,6 +44,7 @@ LoadKey = tuple[str, str, str]  # (wf_id, dc_id, filters_hash)
 LoadKeyExtended = tuple[str, str, str, str]  # (wf_id, dc_id, filters_hash, columns_hash)
 
 
+
 def _build_metadata_index(
     interactive_metadata_list: list | None,
     interactive_metadata_ids: list | None,
@@ -598,6 +599,8 @@ def _extend_filters_for_joined_dc(
     return relevant_filters
 
 
+
+
 def register_core_callbacks(app):
     """Register core rendering callbacks for figure component."""
 
@@ -608,6 +611,7 @@ def register_core_callbacks(app):
         Output({"type": "figure-metadata", "index": ALL}, "data"),
         Input({"type": "figure-trigger", "index": ALL}, "data"),
         Input("interactive-values-store", "data"),
+        Input("ws-new-data-ids", "data"),
         State({"type": "figure-trigger", "index": ALL}, "id"),
         State({"type": "figure-metadata", "index": ALL}, "data"),
         State({"type": "stored-metadata-component", "index": ALL}, "data"),
@@ -622,6 +626,7 @@ def register_core_callbacks(app):
     def render_figures_batch(
         trigger_data_list,
         filters_data,
+        ws_new_data_ids,
         trigger_ids,
         existing_metadata_list,
         stored_metadata_list,
