@@ -465,12 +465,64 @@ async def _list_tokens(
 @validate_call(validate_return=True)
 async def _get_anonymous_user_session() -> dict:
     """
-    Fetch the anonymous user and their permanent token for frontend session.
+    Fetch the session for auto-login depending on authentication mode.
+
+    In single-user mode, returns the real admin user session.
+    In public/demo mode, returns the anonymous user session.
 
     Returns:
         dict: Session data compatible with frontend authentication
     """
-    # Find the anonymous user
+    # In single-user mode, return the default admin user session (not anonymous)
+    if settings.auth.is_single_user_mode:
+        admin_user = await UserBeanie.find_one({"is_admin": True, "is_anonymous": {"$ne": True}})
+        if not admin_user:
+            # Admin user doesn't exist yet - auto-create from initial_users.yaml
+            # This handles race conditions during startup and database wipes
+            logger.info(
+                "Admin user not found in single-user mode - initializing from initial_users.yaml"
+            )
+            from depictio.api.v1.db_init import initialize_db
+
+            try:
+                admin_user = await initialize_db(wipe=False)
+                if not admin_user:
+                    raise HTTPException(
+                        status_code=500,
+                        detail="Failed to create admin user from initial_users.yaml",
+                    )
+                logger.info(f"Admin user auto-created: {admin_user.email}")
+            except Exception as e:
+                logger.error(f"Failed to initialize admin user: {e}")
+                raise HTTPException(
+                    status_code=500, detail=f"Failed to create admin user: {str(e)}"
+                )
+        # Look for an existing permanent token; create one if none exists
+        permanent_tokens = await _list_tokens(user_id=admin_user.id, token_lifetime="permanent")
+        if permanent_tokens:
+            permanent_token = permanent_tokens[0]
+        else:
+            logger.info(f"No permanent token for admin user {admin_user.email} — creating one")
+            permanent_token = await _create_permanent_token(admin_user)
+        return {
+            "logged_in": True,
+            "email": admin_user.email,
+            "user_id": str(admin_user.id),
+            "access_token": permanent_token.access_token,
+            "refresh_token": permanent_token.refresh_token,
+            "expire_datetime": permanent_token.expire_datetime.isoformat()
+            if permanent_token.expire_datetime
+            else "9999-12-31T23:59:59",
+            "refresh_expire_datetime": permanent_token.refresh_expire_datetime.isoformat()
+            if permanent_token.refresh_expire_datetime
+            else "9999-12-31T23:59:59",
+            "is_anonymous": False,
+            "name": permanent_token.name,
+            "token_lifetime": permanent_token.token_lifetime,
+            "token_type": permanent_token.token_type or "bearer",
+        }
+
+    # Public/demo mode: return anonymous user session
     anonymous_user = await UserBeanie.find_one({"email": settings.auth.anonymous_user_email})
     if not anonymous_user:
         raise HTTPException(
@@ -490,8 +542,7 @@ async def _get_anonymous_user_session() -> dict:
     # Use the first permanent token (there should only be one)
     permanent_token = permanent_tokens[0]
 
-    # Convert to session data format expected by frontend
-    session_data = {
+    return {
         "logged_in": True,
         "email": anonymous_user.email,
         "user_id": str(anonymous_user.id),
@@ -508,8 +559,6 @@ async def _get_anonymous_user_session() -> dict:
         "token_lifetime": permanent_token.token_lifetime,
         "token_type": permanent_token.token_type or "bearer",
     }
-
-    return session_data
 
 
 @validate_call(validate_return=True)

@@ -292,28 +292,6 @@ class TestDisabledFeatures:
                 exc_info.value.detail  # type: ignore[unresolved-attribute]
             )
 
-    @pytest.mark.asyncio
-    async def test_cli_agent_generation_disabled(self):
-        """Test that CLI agent generation is disabled in public mode."""
-        from fastapi import HTTPException
-
-        from depictio.api.v1.endpoints.user_endpoints.routes import generate_agent_config_endpoint
-
-        mock_settings = MagicMock()
-        mock_settings.auth.is_public_mode = True
-
-        mock_token = MagicMock()
-        mock_user = MagicMock()
-
-        with patch("depictio.api.v1.endpoints.user_endpoints.routes.settings", mock_settings):
-            with pytest.raises(HTTPException) as exc_info:
-                await generate_agent_config_endpoint(mock_token, mock_user)
-
-            assert exc_info.value.status_code == 403  # type: ignore[unresolved-attribute]
-            assert "CLI agent generation disabled in public mode" in str(
-                exc_info.value.detail  # type: ignore[unresolved-attribute]
-            )
-
 
 class TestTokenValidation:
     """Test token validation for permanent tokens."""

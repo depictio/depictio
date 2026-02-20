@@ -242,9 +242,12 @@ def register_routing_callback(app):
                 {"logged_in": False, "access_token": None},
             )
 
-        # Redirect root path to /dashboards
+        # Redirect root path and /auth to /dashboards
         if should_redirect_to_dashboards(pathname):
             logger.info("Redirecting / to /dashboards")
+            pathname = "/dashboards"
+        elif pathname == "/auth":
+            logger.info("Authenticated user on /auth - redirecting to /dashboards")
             pathname = "/dashboards"
 
         # Type guard: validate_and_refresh_token guarantees non-None when is_authenticated=True
@@ -364,14 +367,8 @@ def route_authenticated_user(
         return project_data_collections_layout, header
 
     if pathname == "/auth":
-        # In public mode, allow anonymous users to access /auth to see sign-in options
-        # (temp user, Google OAuth) for upgrading their session
-        if is_anonymous:
-            logger.info("Anonymous user accessing /auth - showing auth page with sign-in options")
-            header = create_default_header("Sign In")
-            content = create_users_management_layout()
-            return content, header
-        # Fully authenticated users don't need /auth, redirect to dashboards
+        # All authenticated users (single-user, public/demo, or fully authenticated)
+        # should never see the auth page — redirect to dashboards
         logger.info("Authenticated user accessing /auth, redirecting to /dashboards")
         return dashboards_page()
 

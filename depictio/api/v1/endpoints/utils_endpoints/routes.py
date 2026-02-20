@@ -629,7 +629,7 @@ async def screenshot_dash_fixed(
     from depictio.api.v1.services.screenshot_service import check_dashboard_owner_permission
 
     # In single user mode, skip all authentication and permission checks
-    if not settings.auth.single_user_mode:
+    if not settings.auth.is_single_user_mode:
         # Multi-user mode: Require authentication and check ownership
         if not authorization or not authorization.startswith("Bearer "):
             raise HTTPException(
