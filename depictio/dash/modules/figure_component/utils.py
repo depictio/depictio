@@ -2156,28 +2156,37 @@ def build_figure(**kwargs) -> html.Div | dcc.Loading:
             {"value": max_val, "label": _fmt(max_val)},
         ]
 
-        # Minimal slider (1/3 width, no badge)
-        slider_div = html.Div(
-            [
-                dmc.Text(slider_config["label"], size="xs", fw=500, mb=4),
-                dmc.Slider(
-                    id={"type": "ref-line-slider", "index": slider_index},
-                    min=min_val,
-                    max=max_val,
-                    value=default_val,
-                    step=step_val,
-                    color="orange",
-                    size="sm",
-                    updatemode="drag",
-                    marks=marks,
-                    mb=4,
-                ),
-                dcc.Store(
-                    id={"type": "ref-line-slider-value", "index": slider_index},
-                    data={"value": default_val, "tag": slider_tag},
-                ),
+        # Minimal slider (1/3 width) - wrapped in Paper for consistency
+        slider_div = dmc.Paper(
+            children=[
+                dmc.Stack(
+                    [
+                        dmc.Text(slider_config["label"], size="xs", fw=500),
+                        dmc.Slider(
+                            id={"type": "ref-line-slider", "index": slider_index},
+                            min=min_val,
+                            max=max_val,
+                            value=default_val,
+                            step=step_val,
+                            color="orange",
+                            size="sm",
+                            updatemode="drag",
+                            marks=marks,
+                            mt=8,  # Top margin for mark labels visibility
+                            mb=8,  # Bottom margin for mark labels visibility
+                        ),
+                        dcc.Store(
+                            id={"type": "ref-line-slider-value", "index": slider_index},
+                            data={"value": default_val, "tag": slider_tag},
+                        ),
+                    ],
+                    gap="xs",
+                )
             ],
-            style={"width": "33%", "paddingRight": "12px"},
+            p="xs",
+            withBorder=True,
+            radius="sm",
+            w="33%",
         )
         slider_elements.append(slider_div)
 
@@ -2253,25 +2262,45 @@ def build_figure(**kwargs) -> html.Div | dcc.Loading:
                 if highlight_info:
                     break
 
-        # Build highlight card (1/3 width, aligned to right) - will be updated by callback
-        highlight_card = dmc.Paper(
-            id={"type": "embedded-highlight-card", "index": index},
+        # Build count box with title INSIDE the frame (1/3 width, middle)
+        count_box = dmc.Paper(
             children=[
-                dmc.Text("Computing...", size="sm", c="dimmed")
+                dmc.Stack(
+                    [
+                        dmc.Text(
+                            highlight_info["label"] if highlight_info else "Highlight",
+                            size="sm",
+                            fw=700,
+                            c="orange",
+                        ),
+                        html.Div(
+                            id={"type": "embedded-highlight-count", "index": index},
+                            children=[
+                                dmc.Text("Computing...", size="sm", c="dimmed")
+                                if not highlight_info
+                                else dmc.Text("0 / 0 values", size="sm", fw=600)
+                            ],
+                        ),
+                    ],
+                    gap="xs",
+                )
+            ],
+            p="xs",
+            withBorder=True,
+            radius="sm",
+            w="33%",
+        )
+
+        # Build conditions box (1/3 width, right) - shows filter conditions
+        conditions_box = dmc.Paper(
+            id={"type": "embedded-highlight-conditions", "index": index},
+            children=[
+                dmc.Text("Loading...", size="sm", c="dimmed")
                 if not highlight_info
                 else dmc.Stack(
                     gap="xs",
                     children=[
-                        dmc.Group(
-                            gap="xs",
-                            children=[
-                                DashIconify(icon="mdi:filter-check", width=16, color="#f39c12"),
-                                dmc.Text(highlight_info["label"], size="sm", fw=700, c="orange"),
-                            ],
-                        ),
-                        dmc.Divider(),
-                        dmc.Text("0 values", size="sm", fw=600),
-                        dmc.Text("Conditions", size="xs", fw=700, c="dimmed", tt="uppercase"),
+                        dmc.Text("CONDITIONS", size="xs", fw=700, c="dimmed", tt="uppercase"),
                         dmc.Text(
                             highlight_info["conditions_text"],
                             size="xs",
@@ -2286,18 +2315,18 @@ def build_figure(**kwargs) -> html.Div | dcc.Loading:
             w="33%",
         )
 
-        # Container for side-by-side layout (slider 1/3 left + card 1/3 right)
+        # Container for 1/3 + 1/3 + 1/3 layout (slider + count with title + conditions)
         children.append(
             html.Div(
-                slider_elements + [highlight_card],
+                slider_elements + [count_box, conditions_box],
                 style={
                     "flexShrink": 0,
-                    "padding": "8px 8px 4px 8px",
+                    "padding": "12px 8px 8px 8px",  # More top padding for slider labels
                     "display": "flex",
                     "flexDirection": "row",
-                    "justifyContent": "space-between",  # Slider left, card right
-                    "minHeight": "100px",  # Increased for label visibility
-                    "alignItems": "stretch",
+                    "gap": "8px",
+                    "minHeight": "120px",  # Increased for better slider visibility
+                    "alignItems": "stretch",  # All items same height
                 },
             )
         )

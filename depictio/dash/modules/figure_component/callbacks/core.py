@@ -758,14 +758,22 @@ def register_core_callbacks(app):
         new_data["value"] = slider_value
         return new_data
 
-    # Callback for updating embedded highlight card
+    # Callback for updating embedded highlight count and conditions boxes
     @app.callback(
-        Output({"type": "embedded-highlight-card", "index": dash.dependencies.MATCH}, "children"),
+        [
+            Output(
+                {"type": "embedded-highlight-count", "index": dash.dependencies.MATCH}, "children"
+            ),
+            Output(
+                {"type": "embedded-highlight-conditions", "index": dash.dependencies.MATCH},
+                "children",
+            ),
+        ],
         Input({"type": "stored-metadata-component", "index": dash.dependencies.MATCH}, "data"),
         State("local-store", "data"),
         prevent_initial_call=False,
     )
-    def update_embedded_highlight_card(stored_metadata, local_data):
+    def update_embedded_highlight_boxes(stored_metadata, local_data):
         """
         Update the embedded highlight card with current count and conditions.
 
@@ -783,7 +791,6 @@ def register_core_callbacks(app):
             Updated card children with count and conditions
         """
         import dash_mantine_components as dmc
-        from dash_iconify import DashIconify
 
         logger.info("🔄 Embedded highlight card callback triggered")
 
@@ -794,7 +801,8 @@ def register_core_callbacks(app):
         # Extract customizations to find highlight info
         customizations = stored_metadata.get("customizations")
         if not customizations or not customizations.get("highlights"):
-            return [dmc.Text("No highlights configured", size="sm", c="dimmed")]
+            no_data = dmc.Text("No highlights configured", size="sm", c="dimmed")
+            return no_data, no_data
 
         # Build slider value map from highlight conditions (already updated by slider callback)
         slider_map = {}
@@ -816,7 +824,8 @@ def register_core_callbacks(app):
                 break
 
         if not highlight_config:
-            return [dmc.Text("No slider-linked highlights", size="sm", c="dimmed")]
+            no_slider = dmc.Text("No slider-linked highlights", size="sm", c="dimmed")
+            return no_slider, no_slider
 
         # Try to load data and count matches
         try:
@@ -825,7 +834,8 @@ def register_core_callbacks(app):
             access_token = local_data.get("access_token") if local_data else None
 
             if not wf_id or not dc_id or not access_token:
-                return [dmc.Text("Missing data configuration", size="sm", c="dimmed")]
+                missing = dmc.Text("Missing data configuration", size="sm", c="dimmed")
+                return missing, missing
 
             # Load DataFrame
             df = load_deltatable_lite(
@@ -835,26 +845,47 @@ def register_core_callbacks(app):
             )
 
             if df.is_empty():
-                return [dmc.Text("No data available", size="sm", c="dimmed")]
-
-            total_rows = len(df)
+                no_data = dmc.Text("No data available", size="sm", c="dimmed")
+                return no_data, no_data
 
             # Import filter utility
             from depictio.dash.modules.ref_line_slider_component.filter_utils import (
                 build_filter_mask,
             )
 
-            # Apply filter mask
+            # Split conditions into pre-filter (non-slider) and slider conditions
             conditions = highlight_config.get("conditions", [])
-            logic = highlight_config.get("logic", "and")
-            mask = build_filter_mask(df, conditions, slider_map, logic)
+            pre_filter_conditions = [c for c in conditions if not c.get("linked_slider")]
+            slider_conditions = [c for c in conditions if c.get("linked_slider")]
 
-            if mask is not None:
-                # Filter dataframe and count rows (Polars-safe)
-                filtered_df = df.filter(mask)
-                matched_rows = len(filtered_df)
+            # Step 1: Apply pre-filter conditions (e.g., variety = Setosa) to get the base set
+            if pre_filter_conditions:
+                logic = highlight_config.get("logic", "and")
+                pre_mask = build_filter_mask(df, pre_filter_conditions, {}, logic)
+                if pre_mask is not None:
+                    df_prefiltered = df.filter(pre_mask)
+                else:
+                    df_prefiltered = df
             else:
-                matched_rows = 0
+                df_prefiltered = df
+
+            # This is our "total" - the pre-filtered dataset
+            total_rows = len(df_prefiltered)
+
+            # Step 2: Apply slider conditions on top of pre-filtered data
+            if slider_conditions:
+                logic = highlight_config.get("logic", "and")
+                # Combine pre-filter + slider conditions for final mask
+                all_conditions = pre_filter_conditions + slider_conditions
+                final_mask = build_filter_mask(df, all_conditions, slider_map, logic)
+                if final_mask is not None:
+                    matched_df = df.filter(final_mask)
+                    matched_rows = len(matched_df)
+                else:
+                    matched_rows = 0
+            else:
+                # No slider conditions, so all pre-filtered rows are matched
+                matched_rows = total_rows
 
             # Format conditions text with current slider values
             cond_texts = []
@@ -881,44 +912,36 @@ def register_core_callbacks(app):
                 cond_texts.append(f"{col} {op_display} {val}")
 
             conditions_text = " · ".join(cond_texts)
-            label = highlight_config.get("label", "Highlighted")
 
             # Calculate percentage
             percentage = (matched_rows / total_rows * 100) if total_rows > 0 else 0
 
             logger.info(
-                f"✅ Highlight card updated: {matched_rows}/{total_rows} ({percentage:.1f}%)"
+                f"✅ Highlight boxes updated: {matched_rows}/{total_rows} ({percentage:.1f}%)"
             )
 
-            # Build card content with pure DMC
-            return dmc.Stack(
+            # Build count box content
+            count_content = dmc.Text(
+                f"{matched_rows} / {total_rows} ({percentage:.1f}%)",
+                size="sm",
+                fw=600,
+            )
+
+            # Build conditions box content
+            conditions_content = dmc.Stack(
                 gap="xs",
                 children=[
-                    dmc.Group(
-                        gap="xs",
-                        children=[
-                            DashIconify(icon="mdi:filter-check", width=16, color="#f39c12"),
-                            dmc.Text(label, size="sm", fw=700, c="orange"),
-                        ],
-                    ),
-                    dmc.Divider(),
-                    dmc.Text(
-                        f"{matched_rows} out of {total_rows} values ({percentage:.1f}%)",
-                        size="sm",
-                        fw=600,
-                    ),
-                    dmc.Text("Conditions", size="xs", fw=700, c="dimmed", tt="uppercase"),
-                    dmc.Text(
-                        conditions_text,
-                        size="xs",
-                        c="dimmed",
-                    ),
+                    dmc.Text("CONDITIONS", size="xs", fw=700, c="dimmed", tt="uppercase"),
+                    dmc.Text(conditions_text, size="xs", c="dimmed"),
                 ],
             )
 
+            return count_content, conditions_content
+
         except Exception as e:
-            logger.error(f"Error updating embedded highlight card: {e}")
-            return [dmc.Text(f"Error: {str(e)}", size="sm", c="red")]
+            logger.error(f"Error updating embedded highlight boxes: {e}")
+            error_msg = dmc.Text(f"Error: {str(e)}", size="sm", c="red")
+            return error_msg, error_msg
 
 
 def _extract_required_columns(dict_kwargs: dict, visu_type: str) -> list[str]:

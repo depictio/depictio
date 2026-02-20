@@ -38,6 +38,7 @@ from depictio.models.components.lite import (
     InteractiveLiteComponent,
     LiteComponent,
     MultiQCLiteComponent,
+    RefLineLiteComponent,
     TableLiteComponent,
 )
 from depictio.models.logging import logger
@@ -201,6 +202,7 @@ class DashboardDataLite(BaseModel):
         "table": TableLiteComponent,
         "image": ImageLiteComponent,
         "multiqc": MultiQCLiteComponent,
+        "ref_line_slider": RefLineLiteComponent,
     }
 
     @model_validator(mode="after")
@@ -978,6 +980,9 @@ class DashboardDataLite(BaseModel):
                         "row_selection_column": comp_dict.get("row_selection_column"),
                     }
                 )
+                # Highlight filter for ref-line-slider-linked tables
+                if comp_dict.get("highlight_filter"):
+                    full_comp["highlight_filter"] = comp_dict["highlight_filter"]
 
             elif comp_type == "image":
                 # s3_base_folder regeneration: fetch from DC config if not provided
@@ -1002,6 +1007,18 @@ class DashboardDataLite(BaseModel):
                 for f in ["selected_module", "selected_plot"]:
                     if comp_dict.get(f):
                         full_comp[f] = comp_dict[f]
+
+            elif comp_type == "ref_line_slider":
+                full_comp.update(
+                    {
+                        "tag": comp_dict.get("tag", ""),
+                        "label": comp_dict.get("label", "Threshold"),
+                        "min": comp_dict.get("min", 0.0),
+                        "max": comp_dict.get("max", 100.0),
+                        "default": comp_dict.get("default", 50.0),
+                        "step": comp_dict.get("step"),
+                    }
+                )
 
             full_components.append(full_comp)
 
@@ -1039,7 +1056,7 @@ class DashboardDataLite(BaseModel):
                 h = comp_dict["h"]
             else:
                 # Auto-generate position based on panel
-                if comp_type == "interactive":
+                if comp_type in ("interactive", "ref_line_slider"):
                     x, w, h = 0, 1, 3
                     y = left_auto_y
                     left_auto_y += h
@@ -1057,10 +1074,10 @@ class DashboardDataLite(BaseModel):
                 "h": h,
                 "static": comp_type == "card",
             }
-            if comp_type not in ("interactive", "card"):
+            if comp_type not in ("interactive", "ref_line_slider", "card"):
                 layout_item["resizeHandles"] = ["se", "s", "e", "sw", "w"]
 
-            if comp_type == "interactive":
+            if comp_type in ("interactive", "ref_line_slider"):
                 left_panel_layout_data.append(layout_item)
             else:
                 right_panel_layout_data.append(layout_item)

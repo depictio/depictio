@@ -295,5 +295,3 @@ def _register_highlight_table_callback(app) -> None:
                 style={"fontSize": "11px"},
             ),
         ]
-
-

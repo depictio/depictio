@@ -114,6 +114,7 @@ components:
   # ── Highlight count card ───────────────────────────────────────────────────
   # Shows how many rows match the highlight conditions.
   # Updates automatically when the embedded slider value changes.
+  # Positioned BELOW the table, left side
   - tag: highlight-count
     component_type: card
     workflow_tag: python/iris_workflow
@@ -124,11 +125,12 @@ components:
     linked_table_tag: highlighted-setosa-table
     layout:
       x: 0
-      y: 0
-      w: 2
+      y: 11
+      w: 4
       h: 2
 
   # ── Summary card ──────────────────────────────────────────────────────────
+  # Positioned BELOW the table, right side (next to highlight-count)
   - tag: avg-sepal-width
     component_type: card
     workflow_tag: python/iris_workflow
@@ -137,7 +139,7 @@ components:
     column_name: sepal.width
     column_type: float64
     layout:
-      x: 0
-      y: 2
-      w: 2
+      x: 4
+      y: 11
+      w: 4
       h: 2

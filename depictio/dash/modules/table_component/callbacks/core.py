@@ -595,10 +595,6 @@ def prepare_dataframe_for_aggrid(
         column_mapping = {col: col.replace(".", "_") for col in partial_df.columns if "." in col}
         partial_df = partial_df.rename(column_mapping)
 
-    partial_df = partial_df.with_columns(
-        pl.Series("ID", range(start_row, start_row + len(partial_df)))
-    )
-
     return partial_df, total_rows
 
 
@@ -888,6 +884,58 @@ def register_core_callbacks(app):
         else:
             return "ag-theme-alpine"
 
+    # Cache-busting mechanism for AG Grid when sliders change
+    # Step 1: When ANY slider changes, increment ALL table cache versions
+    @app.callback(
+        Output({"type": "table-cache-version", "index": ALL}, "data"),
+        Input({"type": "ref-line-slider-value", "index": ALL}, "data"),
+        State({"type": "table-cache-version", "index": ALL}, "data"),
+        prevent_initial_call=True,
+    )
+    def increment_table_cache_versions(slider_data_list, current_versions):
+        """Increment cache version for all tables when any slider changes."""
+        logger.info(
+            f"🔄 Slider changed - incrementing cache versions for {len(current_versions or [])} tables"
+        )
+        if not current_versions:
+            return no_update
+        # Increment all table cache versions to force AG Grid refresh
+        return [((v or 0) + 1) for v in current_versions]
+
+    # Step 2: When cache version changes, clear AG Grid cache
+    app.clientside_callback(
+        """
+        function(cacheVersion, gridId) {
+            if (!window.dash_ag_grid || !gridId || cacheVersion === undefined) {
+                return window.dash_clientside.no_update;
+            }
+
+            const gridApi = window.dash_ag_grid.getApi(gridId);
+            if (!gridApi) {
+                return window.dash_clientside.no_update;
+            }
+
+            console.log('🔄 Cache version changed to', cacheVersion, '- clearing AG Grid cache for', gridId);
+
+            // Clear the infinite scroll cache to force data reload
+            if (gridApi.purgeInfiniteCache) {
+                gridApi.purgeInfiniteCache();
+            }
+            if (gridApi.refreshInfiniteCache) {
+                gridApi.refreshInfiniteCache();
+            }
+
+            console.log('✅ AG Grid cache cleared and refresh requested');
+
+            return window.dash_clientside.no_update;
+        }
+        """,
+        Output({"type": "table-aggrid", "index": MATCH}, "id", allow_duplicate=True),
+        Input({"type": "table-cache-version", "index": MATCH}, "data"),
+        State({"type": "table-aggrid", "index": MATCH}, "id"),
+        prevent_initial_call=True,
+    )
+
     @app.callback(
         Output({"type": "table-aggrid", "index": MATCH}, "getRowsResponse"),
         [
@@ -928,10 +976,26 @@ def register_core_callbacks(app):
         Note: Dash AG Grid uses "infinite" rowModelType for server-side data loading with pagination.
         """
 
+        # Log trigger for debugging
+        table_index = stored_metadata.get("index", "unknown") if stored_metadata else "unknown"
+        triggered_by_slider = ctx.triggered and any(
+            "ref-line-slider-value" in str(trigger["prop_id"]) for trigger in ctx.triggered
+        )
+        if triggered_by_slider:
+            logger.info(f"🎯 Table {table_index} callback triggered by SLIDER change")
+            logger.info(f"   Slider data: {slider_data_list}")
+            logger.info(f"   Request: {request}")
+            logger.info(f"   ctx.triggered: {ctx.triggered}")
+
         # Detect if triggered by interactive component changes
         triggered_by_interactive = ctx.triggered and any(
             "interactive-values-store" in str(trigger["prop_id"]) for trigger in ctx.triggered
         )
+
+        # Always log what triggered this callback
+        if ctx.triggered:
+            trigger_info = [f"{t['prop_id']}={t['value']}" for t in ctx.triggered]
+            logger.info(f"📋 Table {table_index} callback triggered by: {', '.join(trigger_info)}")
 
         # Validate inputs
         if not local_store or not stored_metadata:
@@ -940,7 +1004,7 @@ def register_core_callbacks(app):
             )
             return no_update
 
-        # Create synthetic request for both initial load and interactive changes
+        # Create synthetic request for initial load or interactive changes
         # AG Grid infinite model needs getRowsResponse even when we trigger it
         if request is None:
             request = create_synthetic_request(triggered_by_interactive)
@@ -973,24 +1037,33 @@ def register_core_callbacks(app):
 
             # Compute per-row highlight flag from slider conditions
             highlight_filter = (stored_metadata or {}).get("highlight_filter")
-            if not df.is_empty():
-                if highlight_filter:
-                    slider_map: dict[str, float] = {
-                        d["tag"]: float(d["value"])
-                        for d in (slider_data_list or [])
-                        if d and "tag" in d and "value" in d
-                    }
-                    conditions = highlight_filter.get("conditions") or []
-                    logic = highlight_filter.get("logic", "and")
-                    mask = build_filter_mask(df, conditions, slider_map, logic)
-                    if mask is not None:
-                        df = df.with_columns(
-                            pl.when(mask).then(True).otherwise(False).alias("_is_highlighted")
-                        )
-                    else:
-                        df = df.with_columns(pl.lit(False).alias("_is_highlighted"))
+            if not df.is_empty() and highlight_filter:
+                slider_map: dict[str, float] = {
+                    d["tag"]: float(d["value"])
+                    for d in (slider_data_list or [])
+                    if d and "tag" in d and "value" in d
+                }
+                conditions = highlight_filter.get("conditions") or []
+                logic = highlight_filter.get("logic", "and")
+
+                logger.info(f"🎨 Computing highlights for table {table_index}")
+                logger.info(f"   Slider map: {slider_map}")
+                logger.info(f"   Conditions: {conditions}")
+
+                mask = build_filter_mask(df, conditions, slider_map, logic)
+                if mask is not None:
+                    df = df.with_columns(
+                        pl.when(mask).then(True).otherwise(False).alias("_is_highlighted")
+                    )
+                    highlighted_count = df.filter(pl.col("_is_highlighted")).height
+                    logger.info(f"   ✅ {highlighted_count}/{len(df)} rows highlighted")
                 else:
                     df = df.with_columns(pl.lit(False).alias("_is_highlighted"))
+                    logger.info("   ⚠️ Mask was None, all rows marked as not highlighted")
+            else:
+                df = df.with_columns(pl.lit(False).alias("_is_highlighted"))
+                if highlight_filter:
+                    logger.info("   ℹ️ DataFrame is empty, skipping highlight computation")
 
             # Prepare DataFrame slice for AG Grid
             partial_df, total_rows = prepare_dataframe_for_aggrid(df, start_row, end_row)
@@ -1103,3 +1176,6 @@ def register_core_callbacks(app):
             logger.error(f"Traceback: {traceback.format_exc()}")
 
             return no_update, create_export_notification("error", f"Error: {error_msg[:100]}")
+
+    # NOTE: Table highlight cards moved to figure component
+    # The highlight count and conditions are now shown under the figure, not the table

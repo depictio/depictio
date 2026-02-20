@@ -389,7 +389,7 @@ def separate_components_by_panel(stored_metadata):
     for metadata in stored_metadata:
         component_type = metadata.get("component_type")
 
-        if component_type == "interactive":
+        if component_type in ("interactive", "ref_line_slider"):
             metadata["panel"] = "left"
             interactive_components.append(metadata)
         else:
@@ -1051,7 +1051,7 @@ def _separate_children_by_panel(
 
         component_type = metadata.get("component_type")
 
-        if component_type == "interactive":
+        if component_type in ("interactive", "ref_line_slider"):
             interactive_children.append(child)
             interactive_ids.append(box_id)
         else:

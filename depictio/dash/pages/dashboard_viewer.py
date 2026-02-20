@@ -436,6 +436,13 @@ def register_component_callbacks(app):
 
     register_fullscreen_callbacks(app)
 
+    # Register ref_line_slider callbacks (slider → figure + highlight table)
+    from depictio.dash.modules.ref_line_slider_component.callbacks import (
+        register_ref_line_slider_callbacks,
+    )
+
+    register_ref_line_slider_callbacks(app)
+
 
 def register_header_callbacks(app):
     """

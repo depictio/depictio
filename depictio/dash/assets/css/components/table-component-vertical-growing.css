@@ -81,3 +81,20 @@
     overflow: auto !important; /* Ensure scrolling is enabled */
     position: relative !important; /* Required for infinite scroll positioning */
 }
+
+/* =============================================================================
+   AG GRID ROW HIGHLIGHTING
+   ============================================================================= */
+
+/* Highlight rows based on dynamic conditions (e.g., slider-controlled filters) */
+.ag-theme-alpine .ag-row-highlighted,
+.ag-theme-alpine-dark .ag-row-highlighted {
+    background-color: rgba(243, 156, 18, 0.18) !important;
+    font-weight: 500;
+}
+
+/* Darker highlight on hover for better visual feedback */
+.ag-theme-alpine .ag-row-highlighted:hover,
+.ag-theme-alpine-dark .ag-row-highlighted:hover {
+    background-color: rgba(243, 156, 18, 0.25) !important;
+}

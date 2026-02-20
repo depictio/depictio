@@ -32,6 +32,7 @@ from depictio.dash.modules.image_component.utils import build_image
 from depictio.dash.modules.interactive_component.utils import build_interactive
 from depictio.dash.modules.jbrowse_component.utils import build_jbrowse
 from depictio.dash.modules.multiqc_component.utils import build_multiqc
+from depictio.dash.modules.ref_line_slider_component.utils import build_ref_line_slider
 from depictio.dash.modules.table_component.utils import build_table
 from depictio.dash.modules.text_component.utils import build_text
 
@@ -147,6 +148,20 @@ COMPONENT_METADATA = {
             "w": 24,
             "h": 20,
         },  # Adjusted for 48-column grid - gallery needs substantial space
+    },
+    "ref_line_slider": {
+        "icon": "mdi:ray-vertex",
+        "display_name": "Ref Line Slider",
+        "description": "Standalone slider that controls reference line positions in linked figures",
+        "color": colors["green"],
+        "supports_edit": False,
+        "supports_reset": False,
+        "enabled": True,
+        "build_function": build_ref_line_slider,
+        "default_dimensions": {
+            "w": 16,
+            "h": 6,
+        },
     },
 }
 
