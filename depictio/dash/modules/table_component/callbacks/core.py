@@ -27,6 +27,7 @@ OPERATORS = {
 }
 
 
+
 def build_interactive_metadata_mapping(
     interactive_metadata_list: list[dict[str, Any]] | None,
     interactive_metadata_ids: list[dict[str, Any]] | None,
@@ -621,6 +622,7 @@ def build_aggrid_response(
         'rowCount' (total available rows).
     """
     row_data = partial_df.to_dicts()
+
     return {"rowData": row_data, "rowCount": total_rows}
 
 
@@ -874,6 +876,37 @@ def load_table_data_with_filters(
 def register_core_callbacks(app):
     """Register core view mode callbacks for table component."""
 
+    # Clientside callback to populate DC ID mapping for row highlighting
+    app.clientside_callback(
+        """
+        function(metadataList, metadataIds) {
+            // Initialize global mapping object
+            if (!window._depictioTableDcMapping) {
+                window._depictioTableDcMapping = {};
+            }
+
+            // Populate mapping from metadata stores
+            if (metadataList && metadataIds) {
+                for (let i = 0; i < metadataList.length; i++) {
+                    const metadata = metadataList[i];
+                    const metadataId = metadataIds[i];
+
+                    if (metadata && metadataId && metadata.index && metadata.dc_id) {
+                        window._depictioTableDcMapping[metadata.index] = metadata.dc_id;
+                        console.log('[TableDcMapping] Registered table:', metadata.index, '→ DC:', metadata.dc_id);
+                    }
+                }
+            }
+
+            return window.dash_clientside.no_update;
+        }
+        """,
+        Output("url", "pathname", allow_duplicate=True),
+        Input({"type": "stored-metadata-component", "index": ALL}, "data"),
+        State({"type": "stored-metadata-component", "index": ALL}, "id"),
+        prevent_initial_call=True,
+    )
+
     @app.callback(
         Output({"type": "table-aggrid", "index": MATCH}, "className"),
         Input("theme-store", "data"),
@@ -888,7 +921,7 @@ def register_core_callbacks(app):
             return "ag-theme-alpine"
 
     @app.callback(
-        Output({"type": "table-aggrid", "index": MATCH}, "getRowsResponse"),
+        Output({"type": "table-aggrid", "index": MATCH}, "getRowsResponse", allow_duplicate=True),
         [
             Input({"type": "table-aggrid", "index": MATCH}, "getRowsRequest"),
             Input("interactive-values-store", "data"),
@@ -902,7 +935,7 @@ def register_core_callbacks(app):
             State({"type": "interactive-stored-metadata", "index": ALL}, "id"),
             State("project-metadata-store", "data"),
         ],
-        prevent_initial_call=False,  # Allow callback to fire on mount for initial data load
+        prevent_initial_call="initial_duplicate",  # Allow both initial load and duplicate WS updates
     )
     def infinite_scroll_component(
         request,
@@ -943,6 +976,7 @@ def register_core_callbacks(app):
             updated_dc_ids = {e.get("dc_id") for e in ws_new_data_ids if e.get("dc_id")}
             if dc_id not in updated_dc_ids:
                 return no_update
+            # Create synthetic request to load first page
             request = create_synthetic_request(False)
 
         # Validate inputs
@@ -987,7 +1021,13 @@ def register_core_callbacks(app):
             partial_df, total_rows = prepare_dataframe_for_aggrid(df, start_row, end_row)
 
             # Build and return response
-            response = build_aggrid_response(partial_df, total_rows, start_row, table_index)
+            response = build_aggrid_response(
+                partial_df,
+                total_rows,
+                start_row,
+                table_index,
+            )
+
             return response
 
         except Exception as e:
