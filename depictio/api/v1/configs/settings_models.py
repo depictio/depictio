@@ -233,12 +233,8 @@ class AuthConfig(BaseSettings):
             object.__setattr__(self, "public_mode", True)
 
         env_single_user_mode = os.getenv("DEPICTIO_AUTH_SINGLE_USER_MODE", "").lower()
-        print(f"[AuthSettings.__init__] DEPICTIO_AUTH_SINGLE_USER_MODE env var: '{env_single_user_mode}'")
         if env_single_user_mode in ("true", "1", "yes"):
             object.__setattr__(self, "single_user_mode", True)
-            print(f"[AuthSettings.__init__] Set single_user_mode = True")
-        else:
-            print(f"[AuthSettings.__init__] single_user_mode remains: {self.single_user_mode}")
 
         env_unauthenticated_mode = os.getenv("DEPICTIO_AUTH_UNAUTHENTICATED_MODE", "").lower()
         if env_unauthenticated_mode in ("true", "1", "yes"):

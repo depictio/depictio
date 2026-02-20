@@ -292,6 +292,7 @@ class TestDisabledFeatures:
                 exc_info.value.detail  # type: ignore[unresolved-attribute]
             )
 
+
 class TestTokenValidation:
     """Test token validation for permanent tokens."""
 

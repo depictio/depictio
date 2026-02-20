@@ -1959,9 +1959,8 @@ jobs:
           cp .env.example .env
           # Enable dev mode
           sed -i 's/# DEPICTIO_DEV_MODE=false/DEPICTIO_DEV_MODE=true/' docker-compose/.env
-          # Enable single-user mode and disable public/demo modes for standard auth tests
-          # Single-user mode allows screenshot endpoint to work without auth headers
-          sed -i 's/DEPICTIO_AUTH_SINGLE_USER_MODE=false/DEPICTIO_AUTH_SINGLE_USER_MODE=true/' docker-compose/.env
+          # Disable all special auth modes for standard auth tests (requires login)
+          sed -i 's/DEPICTIO_AUTH_SINGLE_USER_MODE=true/DEPICTIO_AUTH_SINGLE_USER_MODE=false/' docker-compose/.env
           sed -i 's/DEPICTIO_AUTH_PUBLIC_MODE=true/DEPICTIO_AUTH_PUBLIC_MODE=false/' docker-compose/.env
           sed -i 's/DEPICTIO_AUTH_DEMO_MODE=true/DEPICTIO_AUTH_DEMO_MODE=false/' docker-compose/.env
           mkdir -p depictioDB minio_data prof_files cache
