@@ -2,45 +2,11 @@
 title: "Image Component Demo"
 subtitle: "Demonstrating the image gallery component with cross-DC filtering"
 project_tag: "Image Component Demo Project"
+dashboard_id: "699787c53b3f99adda510694"
 
 components:
-  # Image gallery component
-  - tag: sample-gallery
-    component_type: image
-    workflow_tag: python/image_demo_workflow
-    data_collection_tag: sample_images
-    image_column: image_path
-    s3_base_folder: "s3://depictio-bucket/image_demo/images/"
-    thumbnail_size: 150
-    columns: 3
-    max_images: 9
+  # ── Row 0 (y=0, h=2): 3 cards + range slider ────────────────────────────────
 
-  # Bar chart of samples by category
-  - tag: category-distribution
-    component_type: figure
-    workflow_tag: python/image_demo_workflow
-    data_collection_tag: sample_images
-    visu_type: bar
-    dict_kwargs:
-      x: category
-      title: "Samples by Category"
-      color: category
-
-  # Scatter plot of quality scores - with selection filtering enabled
-  - tag: quality-scatter
-    component_type: figure
-    workflow_tag: python/image_demo_workflow
-    data_collection_tag: sample_images
-    visu_type: scatter
-    dict_kwargs:
-      x: category
-      y: quality_score
-      title: "Quality Score by Category (click/lasso to filter)"
-      color: category
-    selection_enabled: true
-    selection_column: sample_id
-
-  # Card: Total samples
   - tag: total-samples
     component_type: card
     workflow_tag: python/image_demo_workflow
@@ -50,8 +16,12 @@ components:
     column_type: object
     icon_name: mdi:image-multiple
     icon_color: "#2196F3"
+    layout:
+      x: 0
+      y: 0
+      w: 2
+      h: 2
 
-  # Card: Average quality score
   - tag: avg-quality
     component_type: card
     workflow_tag: python/image_demo_workflow
@@ -61,8 +31,12 @@ components:
     column_type: float64
     icon_name: mdi:star
     icon_color: "#FF9800"
+    layout:
+      x: 2
+      y: 0
+      w: 2
+      h: 2
 
-  # Card: Number of categories
   - tag: category-count
     component_type: card
     workflow_tag: python/image_demo_workflow
@@ -72,30 +46,12 @@ components:
     column_type: object
     icon_name: mdi:shape
     icon_color: "#4CAF50"
+    layout:
+      x: 4
+      y: 0
+      w: 2
+      h: 2
 
-  # Interactive filter: Sample selection
-  - tag: sample-filter
-    component_type: interactive
-    workflow_tag: python/image_demo_workflow
-    data_collection_tag: sample_images
-    interactive_component_type: MultiSelect
-    column_name: sample_id
-    column_type: object
-    custom_color: "#2196F3"
-    icon_name: mdi:image-filter
-
-  # Interactive filter: Category selection
-  - tag: category-filter
-    component_type: interactive
-    workflow_tag: python/image_demo_workflow
-    data_collection_tag: sample_images
-    interactive_component_type: MultiSelect
-    column_name: category
-    column_type: object
-    custom_color: "#9C27B0"
-    icon_name: mdi:filter-variant
-
-  # Interactive filter: Quality score range
   - tag: quality-filter
     component_type: interactive
     workflow_tag: python/image_demo_workflow
@@ -105,8 +61,114 @@ components:
     column_type: float64
     custom_color: "#FF9800"
     icon_name: mdi:tune
+    layout:
+      x: 6
+      y: 0
+      w: 2
+      h: 2
 
-  # Data table showing all sample information - with row selection filtering enabled
+  # ── Row 2 (y=2, h=2): 2 multi-select filters ────────────────────────────────
+
+  - tag: sample-filter
+    component_type: interactive
+    workflow_tag: python/image_demo_workflow
+    data_collection_tag: sample_images
+    interactive_component_type: MultiSelect
+    column_name: sample_id
+    column_type: object
+    custom_color: "#2196F3"
+    icon_name: mdi:image-filter
+    layout:
+      x: 0
+      y: 2
+      w: 4
+      h: 2
+
+  - tag: category-filter
+    component_type: interactive
+    workflow_tag: python/image_demo_workflow
+    data_collection_tag: sample_images
+    interactive_component_type: MultiSelect
+    column_name: category
+    column_type: object
+    custom_color: "#9C27B0"
+    icon_name: mdi:filter-variant
+    layout:
+      x: 4
+      y: 2
+      w: 4
+      h: 2
+
+  # ── Row 4 (y=4, h=4): quality scatter + category bar ────────────────────────
+
+  - tag: quality-scatter
+    component_type: figure
+    workflow_tag: python/image_demo_workflow
+    data_collection_tag: sample_images
+    visu_type: scatter
+    dict_kwargs:
+      x: sample_id
+      y: quality_score
+      title: "Quality Score per Sample"
+      color: category
+    layout:
+      x: 0
+      y: 4
+      w: 4
+      h: 4
+
+  - tag: category-distribution
+    component_type: figure
+    workflow_tag: python/image_demo_workflow
+    data_collection_tag: sample_images
+    visu_type: bar
+    dict_kwargs:
+      x: category
+      title: "Samples by Category"
+      color: category
+    layout:
+      x: 4
+      y: 4
+      w: 4
+      h: 4
+
+  # ── Row 8 (y=8, h=4): selection scatter + image gallery ─────────────────────
+
+  - tag: quality-scatter-by-category
+    component_type: figure
+    workflow_tag: python/image_demo_workflow
+    data_collection_tag: sample_images
+    visu_type: scatter
+    dict_kwargs:
+      x: category
+      y: quality_score
+      title: "Quality by Category (select to filter)"
+      color: category
+    selection_enabled: true
+    selection_column: sample_id
+    layout:
+      x: 0
+      y: 8
+      w: 4
+      h: 4
+
+  - tag: sample-gallery
+    component_type: image
+    workflow_tag: python/image_demo_workflow
+    data_collection_tag: sample_images
+    image_column: image_path
+    s3_base_folder: "s3://depictio-bucket/image_demo/images/"
+    thumbnail_size: 150
+    columns: 3
+    max_images: 9
+    layout:
+      x: 4
+      y: 8
+      w: 4
+      h: 4
+
+  # ── Row 12 (y=12, h=4): full-width table ────────────────────────────────────
+
   - tag: samples-table
     component_type: table
     workflow_tag: python/image_demo_workflow
@@ -114,3 +176,8 @@ components:
     page_size: 10
     row_selection_enabled: true
     row_selection_column: sample_id
+    layout:
+      x: 0
+      y: 12
+      w: 8
+      h: 4

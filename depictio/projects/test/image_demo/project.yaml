@@ -3,6 +3,12 @@
 id: "650a1b2c3d4e5f6a7b8c9d0e"
 name: "Image Component Demo Project"
 is_public: true
+
+# Real-time event configuration
+realtime:
+  enabled: true
+  debounce_ms: 1000  # Batch rapid updates within 1 second
+
 workflows:
   - id: "650a1b2c3d4e5f6a7b8c9d0f"
     name: "image_demo_workflow"
@@ -11,7 +17,7 @@ workflows:
     data_location:
       structure: "flat"
       locations:
-        - ../projects/test/image_demo
+        - depictio/projects/test/image_demo
     data_collections:
       # Single Image DC - has delta table + mandatory image_column
       # Supports all component types: Figure, Card, Interactive, Table, Image
@@ -24,7 +30,7 @@ workflows:
           scan:
             mode: single
             scan_parameters:
-              filename: ../projects/test/image_demo/images_data.csv
+              filename: depictio/projects/test/image_demo/images_data.csv
           dc_specific_properties:
             # Table DC fields (required for delta table creation)
             format: "csv"
@@ -37,6 +43,6 @@ workflows:
             image_column: "image_path"
             # Image display properties (optional)
             s3_base_folder: "s3://depictio-bucket/image_demo/"
-            local_images_path: ../projects/test/image_demo/images
+            local_images_path: depictio/projects/test/image_demo/images
             supported_formats: [".png", ".jpg", ".jpeg"]
             thumbnail_size: 150

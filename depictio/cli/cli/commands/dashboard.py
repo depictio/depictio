@@ -558,9 +558,9 @@ def import_yaml(
             console.print(f"  Dashboard ID: {data.get('dashboard_id')}")
             console.print(f"  Title: {data.get('title')}")
             console.print(f"  Project ID: {data.get('project_id')}")
-            base_url = api_url.replace("/depictio/api/v1", "")
+            frontend_url = cli_config.frontend_base_url or api_url.replace("/depictio/api/v1", "")
             console.print(
-                f"\n[cyan]View at:[/cyan] {base_url}/dashboard/{data.get('dashboard_id')}"
+                f"\n[cyan]View at:[/cyan] {frontend_url}/dashboard/{data.get('dashboard_id')}"
             )
 
     except httpx.ConnectError:

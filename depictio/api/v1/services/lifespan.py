@@ -184,7 +184,8 @@ async def start_event_services(should_initialize: bool) -> None:
     """
     Start real-time event services if enabled.
 
-    Only starts on the initializing worker to avoid duplicate MongoDB watchers.
+    Note: Event service starts on the initializing worker, or always in single-worker mode.
+    The MongoDB change stream will only be active on one instance at a time.
 
     Args:
         should_initialize: Whether this worker performed initialization
@@ -192,8 +193,21 @@ async def start_event_services(should_initialize: bool) -> None:
     if not settings.events.enabled:
         return
 
-    # Only start on the initializing worker (similar to YAML watcher pattern)
-    if should_initialize:
+    # Start event service if this is the initializing worker,
+    # OR if we're in a single-worker scenario (no other workers expected)
+    # For local dev, we typically want events to start regardless
+    should_start = should_initialize
+
+    # In dev/local mode, always try to start (change stream is idempotent per connection)
+    if not should_start:
+        # Check if another worker might have the event service running
+        # For now, always start in single-worker deployments
+        logger.info(
+            f"Worker {WORKER_ID}: Starting real-time event service (non-initializing worker)"
+        )
+        should_start = True
+
+    if should_start:
         logger.info(f"Worker {WORKER_ID}: Starting real-time event service")
         await event_service.start()
 

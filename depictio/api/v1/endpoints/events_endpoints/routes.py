@@ -86,8 +86,12 @@ async def websocket_endpoint(
     user_info = await verify_websocket_token(token)
     user_id = user_info["user_id"] if user_info else None
 
-    if not user_info and not settings.auth.unauthenticated_mode:
-        # Require authentication if not in unauthenticated mode
+    if (
+        not user_info
+        and not settings.auth.unauthenticated_mode
+        and not settings.auth.single_user_mode
+    ):
+        # Require authentication unless in unauthenticated or single-user mode
         await websocket.close(
             code=status.WS_1008_POLICY_VIOLATION, reason="Authentication required"
         )
@@ -162,3 +166,63 @@ async def get_events_status() -> dict[str, Any]:
         "total_connections": connection_manager.get_connection_count(),
         "service_stats": event_service.get_stats(),
     }
+
+
+@events_router.post("/test-trigger/{dc_id}")
+async def test_trigger_event(dc_id: str) -> dict[str, Any]:
+    """
+    Manually trigger a data collection update event for testing.
+
+    This bypasses MongoDB change streams - useful for testing WebSocket
+    notifications without a replica set.
+
+    Broadcasts to ALL currently connected dashboards (not database query).
+
+    Args:
+        dc_id: The data collection ID to simulate an update for
+    """
+    from datetime import datetime, timezone
+
+    from depictio.api.v1.deltatables_utils import invalidate_dc_cache
+    from depictio.models.models.realtime import EventMessage, EventSourceType, EventType
+
+    # Invalidate all caches for this DC so fresh data is served
+    cache_result = invalidate_dc_cache(dc_id)
+    logger.info(f"Cache invalidated for DC {dc_id}: {cache_result}")
+
+    # Create a test event
+    event = EventMessage(
+        event_type=EventType.DATA_COLLECTION_UPDATED,
+        source_type=EventSourceType.MONGODB_CHANGES,
+        timestamp=datetime.now(timezone.utc),
+        data_collection_id=dc_id,
+        payload={
+            "operation": "update",
+            "data_collection_tag": "test_trigger",
+            "test_trigger": True,
+        },
+    )
+
+    # Get all currently subscribed dashboards from the connection manager
+    subscribed_dashboards = connection_manager.get_all_subscribed_dashboards()
+
+    if subscribed_dashboards:
+        # Broadcast to all connected dashboards
+        for dashboard_id in subscribed_dashboards:
+            event_copy = event.model_copy(update={"dashboard_id": dashboard_id})
+            await connection_manager.broadcast_to_dashboard(dashboard_id, event_copy)
+
+        logger.info(f"Test event triggered for {len(subscribed_dashboards)} connected dashboards")
+
+        return {
+            "success": True,
+            "message": f"Event triggered for {len(subscribed_dashboards)} connected dashboards",
+            "dashboard_ids": list(subscribed_dashboards),
+            "connections": connection_manager.get_connection_count(),
+        }
+    else:
+        return {
+            "success": False,
+            "message": "No connected dashboards to notify",
+            "connections": connection_manager.get_connection_count(),
+        }

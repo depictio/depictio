@@ -85,26 +85,33 @@ def validate_and_refresh_token(local_data: Optional[Dict]) -> Tuple[Optional[Dic
     if settings.auth.requires_anonymous_user:
         logger.debug("SHARED_AUTH: Anonymous user mode is enabled (single-user or public mode)")
 
-        # Check if we already have valid local_data (e.g. temporary user session)
+        if settings.auth.is_single_user_mode:
+            # Single-user mode: always fetch a fresh session from the backend.
+            # This discards any stale local-store token from a previous instance
+            # (e.g. after Docker restart with new JWT keys) without requiring
+            # the user to manually clear browser storage.
+            logger.debug("SHARED_AUTH: Single-user mode - fetching fresh admin session")
+            try:
+                session_data = get_anonymous_user_session()
+                return session_data, True, "anonymous"
+            except Exception as e:
+                logger.error(f"SHARED_AUTH: Failed to create admin session: {e}")
+                return None, False, "session_create_failed"
+
+        # Public/demo mode: reuse existing valid session to avoid creating new
+        # temporary users on every page navigation.
         if local_data and local_data.get("access_token") and local_data.get("logged_in"):
             return local_data, True, "existing_session"
 
-        # Create session based on auth mode
+        # No valid session yet — create a new temporary user for public mode
+        logger.debug("SHARED_AUTH: Public mode - creating temporary user session")
         try:
-            if settings.auth.is_public_mode and not settings.auth.is_single_user_mode:
-                # Public/demo mode: auto-create temporary user
-                logger.debug("SHARED_AUTH: Public mode - creating temporary user session")
-                session_data = get_temporary_user_session(
-                    expiry_hours=settings.auth.temporary_user_expiry_hours,
-                )
-                return session_data, True, "temporary"
-            else:
-                # Single-user mode: use anonymous user (admin privileges)
-                logger.debug("SHARED_AUTH: Single-user mode - fetching anonymous user")
-                anonymous_local_data = get_anonymous_user_session()
-                return anonymous_local_data, True, "anonymous"
+            session_data = get_temporary_user_session(
+                expiry_hours=settings.auth.temporary_user_expiry_hours,
+            )
+            return session_data, True, "temporary"
         except Exception as e:
-            logger.error(f"SHARED_AUTH: Failed to create user session: {e}")
+            logger.error(f"SHARED_AUTH: Failed to create temporary user session: {e}")
             return None, False, "session_create_failed"
 
     # Authenticated mode validation

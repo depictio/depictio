@@ -1219,6 +1219,59 @@ def clear_memory_cache():
     _total_memory_usage = 0
 
 
+def invalidate_dc_cache(dc_id: str) -> dict:
+    """
+    Invalidate all caches for a data collection (local file, Redis, memory).
+
+    Call this when a DC's delta table has been updated to ensure fresh data
+    is served on the next request.
+
+    Args:
+        dc_id: Data collection ID string
+
+    Returns:
+        Dict with invalidation results per cache layer.
+    """
+    import shutil
+
+    results: dict = {"dc_id": dc_id, "local_file": False, "redis": 0, "memory": 0}
+
+    # 1. Local file cache
+    cache_path = get_local_cache_path(f"s3://x/{dc_id}")
+    if os.path.exists(cache_path):
+        shutil.rmtree(cache_path)
+        results["local_file"] = True
+        logger.info(f"Invalidated local file cache for DC {dc_id}")
+
+    # 2. Memory cache — evict keys containing this DC ID
+    global _total_memory_usage
+    keys_to_remove = [k for k in _dataframe_memory_cache if dc_id in k]
+    for key in keys_to_remove:
+        if key in _cache_metadata:
+            _total_memory_usage -= _cache_metadata[key].get("size_bytes", 0)
+            del _cache_metadata[key]
+        del _dataframe_memory_cache[key]
+        results["memory"] += 1
+
+    # 3. Redis cache — delete keys matching this DC ID
+    try:
+        from depictio.api.cache import get_cache
+
+        cache = get_cache()
+        if cache._redis_available and cache._redis:
+            prefix = cache.cache_config.cache_key_prefix
+            pattern = f"{prefix}*{dc_id}*"
+            keys = cache._redis.keys(pattern)
+            if keys:
+                cache._redis.delete(*keys)
+                results["redis"] = len(keys)
+    except Exception as e:
+        logger.warning(f"Redis invalidation failed for DC {dc_id}: {e}")
+
+    logger.info(f"Cache invalidated for DC {dc_id}: {results}")
+    return results
+
+
 def join_deltatables_dev(
     wf_id: str, joins: list, metadata: dict | None = None, TOKEN: str | None = None
 ) -> pl.DataFrame:
