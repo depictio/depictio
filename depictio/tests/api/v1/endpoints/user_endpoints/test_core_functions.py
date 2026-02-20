@@ -1307,20 +1307,10 @@ class TestGetAnonymousUserSession:
         assert session_data["access_token"] == "admin_permanent_token"
         assert session_data["token_lifetime"] == "permanent"
 
-    @pytest.mark.asyncio
-    @beanie_setup(models=[UserBeanie, TokenBeanie])
-    async def test_get_anonymous_user_session_single_user_mode_no_admin(self):
-        """Test single-user mode raises 404 when no admin user exists."""
-        with patch(
-            "depictio.api.v1.endpoints.user_endpoints.core_functions.settings"
-        ) as mock_settings:
-            mock_settings.auth.is_single_user_mode = True
-
-            with pytest.raises(HTTPException) as exc_info:
-                await _get_anonymous_user_session()
-
-            assert exc_info.value.status_code == 404  # type: ignore[unresolved-attribute]
-            assert "Admin user not found" in str(exc_info.value.detail)  # type: ignore[unresolved-attribute]
+    # NOTE: Test removed - behavior changed from raising 404 to auto-creating admin user
+    # The self-healing behavior (auto-creating admin from initial_users.yaml) is tested
+    # by E2E tests in depictio/tests/e2e-tests/cypress/e2e/auth/single-user/
+    # Unit testing this would require complex mocking of MongoDB connections and file I/O
 
     @pytest.mark.asyncio
     @beanie_setup(models=[UserBeanie, TokenBeanie])

@@ -477,7 +477,26 @@ async def _get_anonymous_user_session() -> dict:
     if settings.auth.is_single_user_mode:
         admin_user = await UserBeanie.find_one({"is_admin": True, "is_anonymous": {"$ne": True}})
         if not admin_user:
-            raise HTTPException(status_code=404, detail="Admin user not found")
+            # Admin user doesn't exist yet - auto-create from initial_users.yaml
+            # This handles race conditions during startup and database wipes
+            logger.info(
+                "Admin user not found in single-user mode - initializing from initial_users.yaml"
+            )
+            from depictio.api.v1.db_init import initialize_db
+
+            try:
+                admin_user = await initialize_db(wipe=False)
+                if not admin_user:
+                    raise HTTPException(
+                        status_code=500,
+                        detail="Failed to create admin user from initial_users.yaml",
+                    )
+                logger.info(f"Admin user auto-created: {admin_user.email}")
+            except Exception as e:
+                logger.error(f"Failed to initialize admin user: {e}")
+                raise HTTPException(
+                    status_code=500, detail=f"Failed to create admin user: {str(e)}"
+                )
         # Look for an existing permanent token; create one if none exists
         permanent_tokens = await _list_tokens(user_id=admin_user.id, token_lifetime="permanent")
         if permanent_tokens:
