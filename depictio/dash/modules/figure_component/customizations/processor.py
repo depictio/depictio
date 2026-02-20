@@ -74,6 +74,22 @@ def _evaluate_condition(
 
     col_data = df[column]
 
+    # Convert value to match column dtype for numeric comparisons
+    if operator in [
+        HighlightConditionOperator.GT,
+        HighlightConditionOperator.GE,
+        HighlightConditionOperator.LT,
+        HighlightConditionOperator.LE,
+    ]:
+        try:
+            # Try to convert to numeric if column is numeric
+            if pd.api.types.is_numeric_dtype(col_data):
+                if isinstance(value, str):
+                    value = float(value) if "." in value else int(value)
+        except (ValueError, TypeError):
+            logger.warning(f"Could not convert value '{value}' to numeric for comparison")
+            return pd.Series([False] * len(df), index=df.index)
+
     if operator == HighlightConditionOperator.EQ:
         return col_data == value
     elif operator == HighlightConditionOperator.NE:
@@ -230,40 +246,56 @@ def _apply_reference_line(
         # Note: x0/x1 in config are for partial lines, but add_hline draws full-width by default
         # For partial horizontal lines, use shapes instead
 
-        fig.add_hline(
-            y=config.y,
-            line_color=config.line_color,
-            line_width=config.line_width,
-            line_dash=_line_style_to_plotly(config.line_dash),
-            opacity=config.opacity,
-            annotation_text=config.annotation_text,
-            annotation_position=config.annotation_position.value
-            if config.annotation_text
-            else None,
-            annotation_font_size=config.annotation_font_size,
-            annotation_font_color=config.annotation_font_color,
-            layer=config.layer,
-        )
+        # Build kwargs for add_hline
+        hline_kwargs = {
+            "y": config.y,
+            "line_color": config.line_color,
+            "line_width": config.line_width,
+            "line_dash": _line_style_to_plotly(config.line_dash),
+            "opacity": config.opacity,
+            "layer": config.layer,
+        }
+
+        # Only add annotation parameters if annotation_text is provided
+        if config.annotation_text:
+            hline_kwargs.update(
+                {
+                    "annotation_text": config.annotation_text,
+                    "annotation_position": config.annotation_position.value,
+                    "annotation_font_size": config.annotation_font_size,
+                    "annotation_font_color": config.annotation_font_color,
+                }
+            )
+
+        fig.add_hline(**hline_kwargs)
 
     elif config.type == ReferenceLineType.VLINE:
         if config.x is None:
             logger.warning("vline requires 'x' value")
             return
 
-        fig.add_vline(
-            x=config.x,
-            line_color=config.line_color,
-            line_width=config.line_width,
-            line_dash=_line_style_to_plotly(config.line_dash),
-            opacity=config.opacity,
-            annotation_text=config.annotation_text,
-            annotation_position=config.annotation_position.value
-            if config.annotation_text
-            else None,
-            annotation_font_size=config.annotation_font_size,
-            annotation_font_color=config.annotation_font_color,
-            layer=config.layer,
-        )
+        # Build kwargs for add_vline
+        vline_kwargs = {
+            "x": config.x,
+            "line_color": config.line_color,
+            "line_width": config.line_width,
+            "line_dash": _line_style_to_plotly(config.line_dash),
+            "opacity": config.opacity,
+            "layer": config.layer,
+        }
+
+        # Only add annotation parameters if annotation_text is provided
+        if config.annotation_text:
+            vline_kwargs.update(
+                {
+                    "annotation_text": config.annotation_text,
+                    "annotation_position": config.annotation_position.value,
+                    "annotation_font_size": config.annotation_font_size,
+                    "annotation_font_color": config.annotation_font_color,
+                }
+            )
+
+        fig.add_vline(**vline_kwargs)
 
     elif config.type == ReferenceLineType.DIAGONAL:
         # Add y=x diagonal line
@@ -385,6 +417,46 @@ def _apply_highlights(
         _apply_highlight_to_traces(fig, combined_mask, highlight_config, df)
 
 
+def _find_trace_df_indices(df: pd.DataFrame, trace) -> List[int]:
+    """Find the DataFrame row indices that correspond to each point in a trace.
+
+    When Plotly Express groups data by color/symbol, each trace contains only
+    the subset of rows matching that group. This function recovers the original
+    DataFrame indices for each trace point so that mask operations (which use
+    global df indices) can be applied correctly.
+
+    Strategy:
+    1. If trace has the same number of points as the df, it's a 1:1 mapping.
+    2. Otherwise try to match the trace group label (trace.name) against a
+       categorical df column – this is the most reliable method for px.scatter
+       with color= grouping.
+    3. Fall back to sequential indices (best-effort for unknown cases).
+    """
+    n_points = 0
+    if hasattr(trace, "x") and trace.x is not None:
+        n_points = len(trace.x)
+    elif hasattr(trace, "y") and trace.y is not None:
+        n_points = len(trace.y)
+
+    if n_points == len(df):
+        return list(range(len(df)))
+
+    # Try matching trace.name against each categorical/object column
+    trace_name = getattr(trace, "name", None)
+    if trace_name is not None:
+        for col in df.select_dtypes(include=["object", "category"]).columns:
+            row_mask = df[col] == trace_name
+            if row_mask.sum() == n_points:
+                return list(df.index[row_mask])
+
+    # Fallback: sequential (may be wrong for grouped traces, but avoids crash)
+    logger.debug(
+        f"Could not find df row mapping for trace '{trace_name}' "
+        f"({n_points} pts vs {len(df)} rows). Using sequential fallback."
+    )
+    return list(range(n_points))
+
+
 def _apply_highlight_to_traces(
     fig: go.Figure,
     mask: pd.Series,
@@ -410,13 +482,10 @@ def _apply_highlight_to_traces(
         if n_points == 0:
             continue
 
-        # Determine which points to highlight
-        # This assumes trace points correspond to DataFrame rows
-        if n_points != len(df):
-            logger.debug(
-                f"Trace has {n_points} points but DataFrame has {len(df)} rows. "
-                "Highlighting may not align correctly."
-            )
+        # Map each trace-local point index to its original DataFrame row index.
+        # This is crucial for grouped traces (color=, symbol=) where each trace
+        # only contains a subset of the DataFrame rows.
+        trace_df_indices = _find_trace_df_indices(df, trace)
 
         # Create color and size arrays for all points
         # Handle Plotly's marker object (not a dict)
@@ -443,31 +512,37 @@ def _apply_highlight_to_traces(
         else:
             current_color_list = [str(current_color)] * n_points
 
-        for i in range(n_points):
-            is_highlighted = i in highlight_indices
+        for local_i, df_idx in enumerate(trace_df_indices[:n_points]):
+            is_highlighted = df_idx in highlight_indices
 
             if is_highlighted:
                 # Apply highlight style
-                colors.append(style.marker_color or current_color_list[i])
+                colors.append(style.marker_color or current_color_list[local_i])
                 sizes.append(
                     style.marker_size
                     if style.marker_size is not None
-                    else (current_size_list[i] if i < len(current_size_list) else 8)
+                    else (current_size_list[local_i] if local_i < len(current_size_list) else 8)
                 )
                 opacities.append(style.marker_opacity or 1.0)
             else:
                 # Apply dim style
                 colors.append(
-                    style.dim_color if style.dim_color is not None else current_color_list[i]
+                    style.dim_color if style.dim_color is not None else current_color_list[local_i]
                 )
-                sizes.append(current_size_list[i] if i < len(current_size_list) else 8)
+                sizes.append(current_size_list[local_i] if local_i < len(current_size_list) else 8)
                 opacities.append(style.dim_opacity or 0.3)
 
         # Update the trace
         marker_update: Dict[str, Any] = {"opacity": opacities}
 
-        if style.marker_color is not None or style.dim_color is not None:
-            marker_update["color"] = colors
+        # Only update color if we have valid non-empty color values
+        if (style.marker_color and style.marker_color.strip()) or (
+            style.dim_color and style.dim_color.strip()
+        ):
+            # Filter out any empty strings that might have slipped through
+            colors = [c if c and str(c).strip() else None for c in colors]
+            if any(colors):  # Only set if we have at least some valid colors
+                marker_update["color"] = colors
 
         if style.marker_size is not None:
             marker_update["size"] = sizes
@@ -475,19 +550,21 @@ def _apply_highlight_to_traces(
         if style.marker_symbol is not None:
             # Only set symbol for highlighted points
             symbols = [
-                style.marker_symbol if i in highlight_indices else "circle" for i in range(n_points)
+                style.marker_symbol if df_idx in highlight_indices else "circle"
+                for df_idx in trace_df_indices[:n_points]
             ]
             marker_update["symbol"] = symbols
 
-        if style.marker_line_color is not None:
+        # Only apply line color if it's a valid non-empty string
+        if style.marker_line_color and style.marker_line_color.strip():
             # Use transparent for non-highlighted points instead of None
             line_colors = [
-                style.marker_line_color if i in highlight_indices else "rgba(0,0,0,0)"
-                for i in range(n_points)
+                style.marker_line_color if df_idx in highlight_indices else "rgba(0,0,0,0)"
+                for df_idx in trace_df_indices[:n_points]
             ]
             line_widths = [
-                style.marker_line_width or 1 if i in highlight_indices else 0
-                for i in range(n_points)
+                style.marker_line_width or 1 if df_idx in highlight_indices else 0
+                for df_idx in trace_df_indices[:n_points]
             ]
             marker_update["line"] = {
                 "color": line_colors,
@@ -499,9 +576,9 @@ def _apply_highlight_to_traces(
         # Add text labels if requested
         if config.show_labels and config.label_column:
             labels = []
-            for i in range(min(n_points, len(df))):
-                if i in highlight_indices:
-                    labels.append(str(df.iloc[i].get(config.label_column, "")))
+            for local_i, df_idx in enumerate(trace_df_indices[:n_points]):
+                if df_idx in highlight_indices:
+                    labels.append(str(df.iloc[df_idx].get(config.label_column, "")))
                 else:
                     labels.append("")
             trace.update(text=labels, textposition="top center")
@@ -780,7 +857,21 @@ def apply_customizations(
     # Convert dict to FigureCustomizations if needed
     if isinstance(customizations, dict):
         try:
+            # DEBUG: Log before validation
+            if "reference_lines" in customizations:
+                logger.warning(
+                    f"🔍 PROCESSOR: Before validation, ref_lines dict: {customizations['reference_lines']}"
+                )
+
             customizations = FigureCustomizations.model_validate(customizations)
+
+            # DEBUG: Log after validation
+            if customizations.reference_lines:
+                for idx, line in enumerate(customizations.reference_lines):
+                    logger.warning(
+                        f"🔍 PROCESSOR: After validation, line {idx}: "
+                        f"type={line.type}, annotation_text={repr(line.annotation_text)}"
+                    )
         except Exception as e:
             logger.error(f"Failed to parse customizations dict: {e}")
             return fig

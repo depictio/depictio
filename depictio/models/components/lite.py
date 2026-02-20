@@ -16,6 +16,8 @@ Index vs Tag:
     Users write `tag` in YAML, system manages `index` as UUID internally.
 """
 
+from __future__ import annotations
+
 import uuid
 from typing import Any, Literal
 
@@ -82,6 +84,37 @@ class FigureLiteComponent(BaseLiteComponent):
             color: variety
           selection_enabled: true
           selection_column: sample_id
+          customizations:
+            preset: volcano
+            preset_params:
+              significance_threshold: 0.05
+              fold_change_threshold: 1.0
+
+        Or with inline customizations:
+          customizations:
+            reference_lines:
+              - type: hline
+                y: 0.05
+                line_color: red
+                line_dash: dash
+                linked_slider: pvalue-slider
+            highlights:
+              - name: significant
+                conditions:
+                  - name: pvalue
+                    column: pvalue
+                    operator: lt
+                    value: 0.05
+                  - name: condition
+                    column: condition
+                    operator: eq
+                    value: treated
+                logic: and
+                style:
+                  marker_color: red
+                  marker_size: 10
+                  dim_opacity: 0.3
+                link_type: dynamic
     """
 
     component_type: Literal["figure"] = "figure"
@@ -105,6 +138,13 @@ class FigureLiteComponent(BaseLiteComponent):
     selection_enabled: bool = Field(default=False, description="Enable scatter selection filtering")
     selection_column: str | None = Field(
         default=None, description="Column to extract from selected points"
+    )
+
+    # Figure customizations (reference lines, highlights, axes, etc.)
+    customizations: dict[str, Any] | None = Field(
+        default=None,
+        description="Figure customizations: reference lines, highlights, axes, presets, etc. "
+        "Accepts a FigureCustomizations-compatible dict or preset shorthand.",
     )
 
     @model_validator(mode="after")
@@ -267,6 +307,15 @@ class TableLiteComponent(BaseLiteComponent):
         default=None, description="Column to extract from selected rows"
     )
 
+    # Highlight filter for ref_line_slider-linked tables
+    # When set, the table shows only rows matching these conditions (driven by slider values)
+    highlight_filter: dict[str, Any] | None = Field(
+        default=None,
+        description="Filter conditions linked to ref_line_slider components. "
+        "Dict with 'conditions' (list of {column, operator, value|linked_slider}) "
+        "and 'logic' ('and'|'or').",
+    )
+
 
 class ImageLiteComponent(BaseLiteComponent):
     """Lite image component for user definition.
@@ -321,6 +370,38 @@ class MultiQCLiteComponent(BaseLiteComponent):
     )
 
 
+class RefLineLiteComponent(BaseLiteComponent):
+    """Lite ref-line slider component for user definition.
+
+    A standalone slider that controls reference line positions and dynamic
+    highlight thresholds in linked figure components. Decoupled from data
+    filtering (unlike interactive components).
+
+    Example YAML:
+        - tag: width-threshold
+          component_type: ref_line_slider
+          label: "Sepal Width Threshold"
+          min: 2.0
+          max: 4.5
+          default: 3.8
+          step: 0.1
+    """
+
+    component_type: Literal["ref_line_slider"] = "ref_line_slider"
+
+    # workflow_tag and data_collection_tag are not needed for this component type
+    # but are inherited from BaseLiteComponent with empty defaults
+
+    # Slider configuration
+    label: str = Field(default="Threshold", description="Display label for the slider")
+    min: float = Field(default=0.0, description="Minimum slider value")
+    max: float = Field(default=100.0, description="Maximum slider value")
+    default: float = Field(default=50.0, description="Initial slider value")
+    step: float | None = Field(
+        default=None, description="Step size (auto-calculated as 1% of range if None)"
+    )
+
+
 # Union type for any lite component
 LiteComponent = (
     FigureLiteComponent
@@ -329,4 +410,5 @@ LiteComponent = (
     | TableLiteComponent
     | ImageLiteComponent
     | MultiQCLiteComponent
+    | RefLineLiteComponent
 )

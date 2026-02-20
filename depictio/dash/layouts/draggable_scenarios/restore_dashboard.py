@@ -511,7 +511,7 @@ def _add_panel_metadata(children: list) -> None:
     other_count = 0
 
     for child, component_type, child_metadata in children:
-        if component_type == "interactive":
+        if component_type in ("interactive", "ref_line_slider"):
             child_metadata["panel"] = "left"
             child_metadata["panel_position"] = interactive_count
             interactive_count += 1
@@ -588,7 +588,7 @@ def _create_two_panel_layout(children: list, processed_children: list) -> list[h
     other_components = []
 
     for i, (child, component_type, child_metadata) in enumerate(children):
-        if component_type == "interactive":
+        if component_type in ("interactive", "ref_line_slider"):
             interactive_components.append(processed_children[i])
         elif component_type == "card":
             card_components.append(processed_children[i])

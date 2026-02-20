@@ -53,6 +53,8 @@ def register_figure_edit_callback(app):
         State({"type": "param-hover_name", "index": ALL}, "value"),
         State({"type": "param-hover_data", "index": ALL}, "value"),
         State({"type": "param-labels", "index": ALL}, "value"),
+        # CRITICAL: Include stored-metadata-component to capture customizations
+        State({"type": "stored-metadata-component", "index": ALL}, "data"),
         prevent_initial_call=True,
     )
     def save_figure_from_edit(
@@ -70,6 +72,7 @@ def register_figure_edit_callback(app):
         param_hover_name,
         param_hover_data,
         param_labels,
+        stored_metadata_list,
     ):
         """
         Save edited figure component.
@@ -149,6 +152,21 @@ def register_figure_edit_callback(app):
         logger.debug(f"   Updated dict_kwargs keys: {list(dict_kwargs.keys())}")
         logger.info(f"   Parameters: {dict_kwargs}")
 
+        # Extract customizations from stored-metadata-component
+        customizations = None
+        customization_ui_state = None
+        if stored_metadata_list and len(stored_metadata_list) > idx:
+            stored_meta = stored_metadata_list[idx]
+            if stored_meta:
+                customizations = stored_meta.get("customizations")
+                customization_ui_state = stored_meta.get("customization_ui_state")
+                if customizations:
+                    logger.info(f"   Customizations found: {list(customizations.keys())}")
+                if customization_ui_state:
+                    logger.info(
+                        f"   Customization UI state found: {list(customization_ui_state.keys())}"
+                    )
+
         # Build complete component metadata
         updated_metadata = {
             **component_data,  # Preserve existing fields (wf_id, dc_id, layout, etc.)
@@ -157,6 +175,12 @@ def register_figure_edit_callback(app):
             "dict_kwargs": dict_kwargs,
             "last_updated": datetime.now().isoformat(),
         }
+
+        # CRITICAL: Include customizations if present
+        if customizations:
+            updated_metadata["customizations"] = customizations
+        if customization_ui_state:
+            updated_metadata["customization_ui_state"] = customization_ui_state
 
         logger.debug(f"   Final metadata keys: {list(updated_metadata.keys())}")
 

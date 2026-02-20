@@ -12,6 +12,7 @@ from dash_iconify import DashIconify
 
 # PERFORMANCE OPTIMIZATION: Use centralized config
 from depictio.api.v1.configs.logging_init import logger
+from depictio.api.v1.deltatables_utils import load_deltatable_lite
 
 from .clustering import get_clustering_function
 from .definitions import get_visualization_definition
@@ -1970,6 +1971,7 @@ def build_figure(**kwargs) -> html.Div | dcc.Loading:
             - code_content: Python code for code mode figures (default: "")
             - selection_enabled: Enable scatter selection filtering (default: False)
             - selection_column: Column to extract from selected points (default: None)
+            - customization_ui_state: Customization UI state for view mode controls
 
     Returns:
         Figure component as HTML div with skeleton loader
@@ -1986,6 +1988,15 @@ def build_figure(**kwargs) -> html.Div | dcc.Loading:
     # Selection filtering configuration
     selection_enabled = kwargs.get("selection_enabled", False)
     selection_column = kwargs.get("selection_column")
+    customization_ui_state = kwargs.get("customization_ui_state")
+    # Data loading parameters for slider range calculation
+    access_token = kwargs.get("access_token")
+    init_data = kwargs.get("init_data")
+
+    # CRITICAL DEBUG: Log customization_ui_state presence
+    logger.warning(
+        f"🎛️  BUILD_FIGURE DEBUG: index={index}, customization_ui_state={'PRESENT with keys: ' + str(list(customization_ui_state.keys())) if customization_ui_state else 'MISSING/NONE'}"
+    )
 
     # Defensive handling: ensure dict_kwargs is always a dict
     if not isinstance(dict_kwargs, dict):
@@ -1999,6 +2010,21 @@ def build_figure(**kwargs) -> html.Div | dcc.Loading:
     # The batch rendering callback in callbacks/core.py handles all data loading and figure generation
 
     # Component metadata for dashboard save/restore
+    customizations = kwargs.get("customizations")
+
+    # DEBUG: Log customizations to see if annotation_text is present
+    if customizations and isinstance(customizations, dict):
+        reflines = customizations.get("reference_lines", [])
+        if reflines:
+            logger.warning(f"🔍 DEBUG: Loading figure {index} with {len(reflines)} reference lines")
+            for idx, line in enumerate(reflines):
+                has_annotation = "annotation_text" in line
+                annotation_value = line.get("annotation_text") if has_annotation else None
+                logger.warning(
+                    f"🔍 DEBUG: Line {idx}: type={line.get('type')}, "
+                    f"annotation_text={'YES: ' + repr(annotation_value) if has_annotation else 'NO'}"
+                )
+
     store_component_data = {
         "index": str(index),
         "component_type": "figure",
@@ -2010,54 +2036,307 @@ def build_figure(**kwargs) -> html.Div | dcc.Loading:
         "code_content": code_content,
         "selection_enabled": selection_enabled,
         "selection_column": selection_column,
+        "customizations": kwargs.get("customizations"),  # CRITICAL: Pass through for view mode
+        "customization_ui_state": kwargs.get("customization_ui_state"),  # For view mode controls
         "last_updated": datetime.now().isoformat(),
     }
+
+    # Create graph component
+    graph_component = dcc.Graph(
+        id={"type": "figure-graph", "index": index},
+        figure={},  # Empty - populated by batch rendering callback
+        config={"displayModeBar": "hover", "responsive": True},
+        style={"height": "100%", "width": "100%"},
+    )
+
+    # ALWAYS wrap with view controls to ensure Store exists for toggle callback
+    # The toggle button is always created in edit.py, so the Store must always exist
+    from .callbacks.view_controls import wrap_figure_with_controls
+
+    # Use default axis ranges (will be updated by callbacks after figure renders)
+    default_axis_ranges = {"x": (0, 100), "y": (0, 100)}
+
+    # Always wrap - if no customization_ui_state, use empty dict
+    effective_ui_state = customization_ui_state or {}
+
+    if customization_ui_state:
+        logger.warning(
+            f"🎛️  VIEW CONTROLS: Wrapping figure {index} with controls. "
+            f"UI state keys: {list(customization_ui_state.keys())}"
+        )
+    else:
+        logger.warning(
+            f"🎛️  VIEW CONTROLS: No customization_ui_state for figure {index}, "
+            "wrapping with empty controls (Store still created for toggle callback)."
+        )
+
+    graph_component = wrap_figure_with_controls(
+        graph_component, index, effective_ui_state, default_axis_ranges
+    )
+    logger.warning(
+        f"🎛️  VIEW CONTROLS: Stores created for {index}: "
+        f"controls-panel-visible and controls-panel-container"
+    )
+
+    # Collect embedded sliders from reference lines
+    _embedded_sliders = []
+    _slider_configs = {}  # Map slider tag -> config (to avoid duplicates)
+
+    if customizations and customizations.get("reference_lines"):
+        # Load data to compute column min/max for slider ranges
+        slider_column = None
+        if customizations.get("highlights"):
+            for highlight in customizations["highlights"]:
+                for cond in highlight.get("conditions", []):
+                    if cond.get("linked_slider"):
+                        slider_column = cond.get("column")
+                        break
+                if slider_column:
+                    break
+
+        # Load DataFrame to get column range
+        col_min, col_max = None, None
+        if slider_column and wf_id and dc_id:
+            try:
+                from bson import ObjectId
+
+                temp_df = load_deltatable_lite(
+                    ObjectId(wf_id),
+                    ObjectId(dc_id) if not isinstance(dc_id, str) or "--" not in dc_id else dc_id,
+                    TOKEN=access_token,
+                    init_data=init_data,
+                )
+                if not temp_df.is_empty() and slider_column in temp_df.columns:
+                    col_min = float(temp_df[slider_column].min())
+                    col_max = float(temp_df[slider_column].max())
+            except Exception as e:
+                logger.warning(f"Failed to load data for slider range: {e}")
+
+        for ref_line in customizations.get("reference_lines", []):
+            slider_tag = ref_line.get("linked_slider")
+            if slider_tag and slider_tag not in _slider_configs:
+                default_val = ref_line.get("y", 0)
+                # Use column min/max if available, otherwise default range
+                if col_min is not None and col_max is not None:
+                    min_val = col_min
+                    max_val = col_max
+                else:
+                    min_val = default_val - 10
+                    max_val = default_val + 10
+
+                # Extract slider configuration from the reference line
+                _slider_configs[slider_tag] = {
+                    "tag": slider_tag,
+                    "label": ref_line.get("annotation_text") or slider_tag,
+                    "min": min_val,
+                    "max": max_val,
+                    "default": default_val,
+                    "step": 0.1,
+                }
+
+    # Build minimal slider components (no Paper wrapper)
+    slider_elements = []
+    for slider_tag, slider_config in _slider_configs.items():
+        slider_index = f"{index}-slider-{slider_tag}"
+        min_val = slider_config["min"]
+        max_val = slider_config["max"]
+        default_val = slider_config["default"]
+        step_val = slider_config["step"]
+
+        # Format marks compactly
+        def _fmt(v: float) -> str:
+            if v > 1e4:
+                return f"{v:.1e}"
+            if v == int(v):
+                return str(int(v))
+            return f"{v:.2g}"
+
+        marks = [
+            {"value": min_val, "label": _fmt(min_val)},
+            {"value": max_val, "label": _fmt(max_val)},
+        ]
+
+        # Minimal slider (1/3 width) - wrapped in Paper for consistency
+        slider_div = dmc.Paper(
+            children=[
+                dmc.Stack(
+                    [
+                        dmc.Text(slider_config["label"], size="xs", fw=500),
+                        dmc.Slider(
+                            id={"type": "ref-line-slider", "index": slider_index},
+                            min=min_val,
+                            max=max_val,
+                            value=default_val,
+                            step=step_val,
+                            color="orange",
+                            size="sm",
+                            updatemode="drag",
+                            marks=marks,
+                            mt=8,  # Top margin for mark labels visibility
+                            mb=8,  # Bottom margin for mark labels visibility
+                        ),
+                        dcc.Store(
+                            id={"type": "ref-line-slider-value", "index": slider_index},
+                            data={"value": default_val, "tag": slider_tag},
+                        ),
+                    ],
+                    gap="xs",
+                )
+            ],
+            p="xs",
+            withBorder=True,
+            radius="sm",
+            w="33%",
+        )
+        slider_elements.append(slider_div)
+
+    _has_slider_link = len(_embedded_sliders) > 0
+    _container_style: dict = {
+        "height": "100%",
+        "width": "100%",
+        "display": "flex",
+        "flexDirection": "column",
+        "position": "relative",  # Required for fullscreen button positioning
+    }
+
+    # Build children list: stores + graph + embedded sliders
+    children = [
+        # Trigger store - initiates batch rendering callback
+        dcc.Store(
+            id={"type": "figure-trigger", "index": index},
+            data={
+                "index": index,
+                "wf_id": wf_id,
+                "dc_id": dc_id,
+                "visu_type": visu_type,
+                "dict_kwargs": dict_kwargs,
+                "mode": mode,
+                "code_content": code_content,
+                "selection_enabled": selection_enabled,
+                "selection_column": selection_column,
+            },
+        ),
+        # Metadata store - for callback results
+        dcc.Store(
+            id={"type": "figure-metadata", "index": index},
+            data={},
+        ),
+        # Component metadata store - for dashboard save/restore
+        dcc.Store(
+            id={"type": "stored-metadata-component", "index": index},
+            data=store_component_data,
+        ),
+        # Graph wrapped with view controls (includes controls-panel-visible Store)
+        html.Div(
+            graph_component,
+            style={"flex": "1 1 auto", "minHeight": 0, "overflow": "hidden"},
+        ),
+    ]
+
+    # Add embedded controls (slider + highlight card) at the bottom
+    if slider_elements:
+        # Extract highlight info from customizations to populate the card
+        highlight_info = None
+        if customizations and customizations.get("highlights"):
+            for highlight in customizations["highlights"]:
+                # Use the first highlight with a linked_slider
+                conditions = highlight.get("conditions", [])
+                for cond in conditions:
+                    if cond.get("linked_slider"):
+                        # Format conditions text
+                        cond_texts = []
+                        for c in conditions:
+                            col = c.get("column", "?")
+                            op = c.get("operator", "?")
+                            val = c.get("value", "?")
+                            if c.get("linked_slider"):
+                                cond_texts.append(f"{col} {op} [slider]")
+                            else:
+                                cond_texts.append(f"{col} {op} {val}")
+                        highlight_info = {
+                            "name": highlight.get("name", "highlight"),
+                            "label": highlight.get("label", "Highlighted"),
+                            "conditions_text": " · ".join(cond_texts),
+                        }
+                        break
+                if highlight_info:
+                    break
+
+        # Build count box with title INSIDE the frame (1/3 width, middle)
+        count_box = dmc.Paper(
+            children=[
+                dmc.Stack(
+                    [
+                        dmc.Text(
+                            highlight_info["label"] if highlight_info else "Highlight",
+                            size="sm",
+                            fw=700,
+                            c="orange",
+                        ),
+                        html.Div(
+                            id={"type": "embedded-highlight-count", "index": index},
+                            children=[
+                                dmc.Text("Computing...", size="sm", c="dimmed")
+                                if not highlight_info
+                                else dmc.Text("0 / 0 values", size="sm", fw=600)
+                            ],
+                        ),
+                    ],
+                    gap="xs",
+                )
+            ],
+            p="xs",
+            withBorder=True,
+            radius="sm",
+            w="33%",
+        )
+
+        # Build conditions box (1/3 width, right) - shows filter conditions
+        conditions_box = dmc.Paper(
+            id={"type": "embedded-highlight-conditions", "index": index},
+            children=[
+                dmc.Text("Loading...", size="sm", c="dimmed")
+                if not highlight_info
+                else dmc.Stack(
+                    gap="xs",
+                    children=[
+                        dmc.Text("CONDITIONS", size="xs", fw=700, c="dimmed", tt="uppercase"),
+                        dmc.Text(
+                            highlight_info["conditions_text"],
+                            size="xs",
+                            c="dimmed",
+                        ),
+                    ],
+                )
+            ],
+            p="xs",
+            withBorder=True,
+            radius="sm",
+            w="33%",
+        )
+
+        # Container for 1/3 + 1/3 + 1/3 layout (slider + count with title + conditions)
+        children.append(
+            html.Div(
+                slider_elements + [count_box, conditions_box],
+                style={
+                    "flexShrink": 0,
+                    "padding": "12px 8px 8px 8px",  # More top padding for slider labels
+                    "display": "flex",
+                    "flexDirection": "row",
+                    "gap": "8px",
+                    "minHeight": "120px",  # Increased for better slider visibility
+                    "alignItems": "stretch",  # All items same height
+                },
+            )
+        )
 
     # Phase 1: Simple structure - Trigger store + Skeleton + Graph + Metadata store + Fullscreen button
     return html.Div(
         id={"type": "figure-container", "index": index},
         className="figure-container",
-        children=[
-            # Trigger store - initiates batch rendering callback
-            dcc.Store(
-                id={"type": "figure-trigger", "index": index},
-                data={
-                    "index": index,
-                    "wf_id": wf_id,
-                    "dc_id": dc_id,
-                    "visu_type": visu_type,
-                    "dict_kwargs": dict_kwargs,
-                    "mode": mode,
-                    "code_content": code_content,
-                    "selection_enabled": selection_enabled,
-                    "selection_column": selection_column,
-                },
-            ),
-            # Metadata store - for callback results
-            dcc.Store(
-                id={"type": "figure-metadata", "index": index},
-                data={},
-            ),
-            # Component metadata store - for dashboard save/restore
-            dcc.Store(
-                id={"type": "stored-metadata-component", "index": index},
-                data=store_component_data,
-            ),
-            # Graph (populated by callback) - No Loading wrapper to allow dynamic updates
-            dcc.Graph(
-                id={"type": "figure-graph", "index": index},
-                figure={},  # Empty - populated by batch rendering callback
-                config={"displayModeBar": "hover", "responsive": True},
-                style={"height": "100%", "width": "100%"},
-            ),
-        ],
-        style={
-            "height": "100%",
-            "width": "100%",
-            "display": "flex",
-            "flexDirection": "column",
-            "position": "relative",  # Required for fullscreen button positioning
-        },
+        children=children,
+        style=_container_style,
     )
 
 

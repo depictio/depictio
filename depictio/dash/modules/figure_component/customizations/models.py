@@ -141,6 +141,42 @@ class AxesConfig(BaseModel):
 # =============================================================================
 
 
+class HighlightLink(BaseModel):
+    """Link between a reference line and a highlight condition.
+
+    Supports both index-based (legacy) and name-based references.
+    Name-based example: "upregulated.pvalue" references the condition named
+    "pvalue" in the highlight named "upregulated".
+    """
+
+    # Name-based reference (preferred for YAML readability)
+    highlight_name: Optional[str] = Field(
+        None,
+        description="Name of the highlight to link to (e.g., 'upregulated'). "
+        "Preferred over highlight_idx for YAML configs.",
+    )
+    condition_name: Optional[str] = Field(
+        None,
+        description="Name of the condition within the highlight (e.g., 'pvalue'). "
+        "Preferred over condition_idx for YAML configs.",
+    )
+
+    # Index-based reference (legacy, still supported)
+    highlight_idx: Optional[int] = Field(
+        None, description="Index of the highlight in highlights list (legacy)"
+    )
+    condition_idx: Optional[int] = Field(
+        None, description="Index of the condition in highlight.conditions (legacy)"
+    )
+
+    transform: Literal["none", "inverse_log10", "negate"] = Field(
+        "none",
+        description="Transformation to apply to slider value before updating condition. "
+        "'inverse_log10': converts -log10(value) back to raw p-value. "
+        "'negate': negates the value (e.g., for left fold-change threshold).",
+    )
+
+
 class ReferenceLineConfig(BaseModel):
     """Configuration for a reference line (hline, vline, diagonal)."""
 
@@ -173,6 +209,19 @@ class ReferenceLineConfig(BaseModel):
     # Layer
     layer: Literal["above", "below"] = Field("below", description="Draw above or below traces")
 
+    # Link to an interactive slider component by tag
+    linked_slider: Optional[str] = Field(
+        None,
+        description="Tag of an interactive slider component whose value controls this ref line's "
+        "position. E.g., 'pvalue-slider' references a RangeSlider component.",
+    )
+
+    # Slider-Highlight Linkage
+    linked_highlights: Optional[List[HighlightLink]] = Field(
+        None,
+        description="Explicit links to highlight conditions that should update with this ref line",
+    )
+
     @field_validator("opacity")
     @classmethod
     def validate_opacity(cls, v: float) -> float:
@@ -188,8 +237,17 @@ class ReferenceLineConfig(BaseModel):
 
 
 class HighlightCondition(BaseModel):
-    """A single condition for highlighting points."""
+    """A single condition for highlighting points.
 
+    The optional `name` field allows reference lines to target specific conditions
+    by name (e.g., linked_highlights referencing "pvalue" condition by name).
+    """
+
+    name: Optional[str] = Field(
+        None,
+        description="Optional name for this condition, used for named references "
+        "from linked_highlights (e.g., 'pvalue', 'fold_change')",
+    )
     column: str = Field(..., description="Column to evaluate")
     operator: HighlightConditionOperator = Field(
         HighlightConditionOperator.EQ, description="Comparison operator"
@@ -225,9 +283,25 @@ class HighlightStyle(BaseModel):
     dim_color: Optional[str] = Field(None, description="Color for non-highlighted points")
 
 
-class HighlightConfig(BaseModel):
-    """Configuration for highlighting specific points based on conditions."""
+class HighlightLinkType(str, Enum):
+    """Whether a highlight should update when reference line sliders move."""
 
+    STATIC = "static"  # Fixed selection, never changes with sliders (e.g., gene list)
+    DYNAMIC = "dynamic"  # Threshold-based, updates when sliders move
+
+
+class HighlightConfig(BaseModel):
+    """Configuration for highlighting specific points based on conditions.
+
+    The `name` field provides a human-readable identifier that reference lines
+    can use to target this highlight via `linked_highlights[].highlight_name`.
+    """
+
+    name: Optional[str] = Field(
+        None,
+        description="Human-readable name for this highlight, used for named references "
+        "from linked_highlights (e.g., 'upregulated', 'significant')",
+    )
     conditions: List[HighlightCondition] = Field(
         ..., description="Conditions to match for highlighting"
     )
@@ -238,6 +312,11 @@ class HighlightConfig(BaseModel):
     label: Optional[str] = Field(None, description="Label for highlighted group in legend")
     show_labels: bool = Field(False, description="Show text labels for highlighted points")
     label_column: Optional[str] = Field(None, description="Column to use for point labels")
+    link_type: HighlightLinkType = Field(
+        HighlightLinkType.STATIC,
+        description="Whether this highlight updates with reference line sliders. "
+        "'static' = fixed selection (e.g., gene list), 'dynamic' = threshold-based",
+    )
 
 
 # =============================================================================
@@ -402,7 +481,30 @@ class FigureCustomizations(BaseModel):
 
     This is the top-level model that contains all customization options.
     It can be serialized to/from YAML as part of the dashboard configuration.
+
+    Supports a `preset` shorthand to load predefined configurations:
+        preset: volcano
+        preset: threshold
+
+    When `preset` is set, it is expanded into the full configuration at
+    resolution time. Inline fields override the preset defaults.
     """
+
+    # Preset shorthand (expanded at resolution time)
+    preset: Optional[str] = Field(
+        None,
+        description="Preset name to load default customizations. "
+        "Available: volcano, umap_highlight, umap_cluster, regression, "
+        "qq_plot, time_series, threshold, log_scale. "
+        "Inline fields override preset defaults.",
+    )
+
+    # Preset parameters (passed to preset factory functions)
+    preset_params: Optional[Dict[str, Any]] = Field(
+        None,
+        description="Parameters to pass to the preset factory function. "
+        "E.g., for volcano: {significance_threshold: 0.01, fold_change_threshold: 2}",
+    )
 
     # Axis customizations
     axes: Optional[AxesConfig] = Field(None, description="Axis configurations")
@@ -450,7 +552,7 @@ class FigureCustomizations(BaseModel):
         extra = "forbid"  # Prevent unknown fields
 
     def has_customizations(self) -> bool:
-        """Check if any customizations are defined."""
+        """Check if any customizations are defined (excluding preset metadata)."""
         return any(
             [
                 self.axes,
@@ -463,8 +565,70 @@ class FigureCustomizations(BaseModel):
                 self.hover,
                 self.layout_overrides,
                 self.trace_overrides,
+                self.preset,
             ]
         )
+
+    def resolve_preset(self) -> "FigureCustomizations":
+        """Resolve preset into full customizations, merging with inline overrides.
+
+        If `preset` is set, loads the preset configuration and merges any
+        inline field overrides on top. Returns a new FigureCustomizations
+        with the preset expanded.
+
+        Returns:
+            New FigureCustomizations with preset resolved and merged.
+
+        Raises:
+            ValueError: If preset name is not recognized.
+        """
+        if not self.preset:
+            return self
+
+        from depictio.dash.modules.figure_component.customizations.presets import (
+            log_scale_customizations,
+            merge_customizations,
+            qq_plot_customizations,
+            regression_plot_customizations,
+            threshold_customizations,
+            time_series_customizations,
+            umap_cluster_customizations,
+            umap_highlight_customizations,
+            volcano_plot_customizations,
+        )
+
+        preset_map: Dict[str, Any] = {
+            "volcano": volcano_plot_customizations,
+            "umap_highlight": umap_highlight_customizations,
+            "umap_cluster": umap_cluster_customizations,
+            "regression": regression_plot_customizations,
+            "qq_plot": qq_plot_customizations,
+            "time_series": time_series_customizations,
+            "threshold": threshold_customizations,
+            "log_scale": log_scale_customizations,
+        }
+
+        factory = preset_map.get(self.preset)
+        if factory is None:
+            raise ValueError(
+                f"Unknown preset '{self.preset}'. "
+                f"Available presets: {', '.join(sorted(preset_map.keys()))}"
+            )
+
+        params = self.preset_params or {}
+        try:
+            preset_config = factory(**params)
+        except TypeError as e:
+            raise ValueError(f"Invalid preset_params for preset '{self.preset}': {e}") from e
+
+        # Build inline overrides (everything except preset/preset_params)
+        inline_data = self.model_dump(exclude_none=True, exclude={"preset", "preset_params"})
+
+        if inline_data:
+            inline_config = FigureCustomizations.model_validate(inline_data)
+            return merge_customizations(preset_config, inline_config)
+
+        return preset_config
 
     def to_yaml_dict(self) -> Dict[str, Any]:
         """Convert to YAML-serializable dictionary, excluding None values."""

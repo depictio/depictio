@@ -190,13 +190,13 @@ def _build_column_definitions(cols: dict | None) -> list[dict]:
     Returns:
         List of AG Grid column definition dictionaries.
     """
-    # Start with ID column
-    column_defs = [{"field": "ID", "maxWidth": 100}]
+    column_defs = []
 
     if not cols:
         return column_defs
 
-    for col_name, col_config in cols.items():
+    # Build column definitions with checkboxSelection on first column
+    for idx, (col_name, col_config) in enumerate(cols.items()):
         # Handle field names with dots - replace with underscores
         safe_field_name = col_name.replace(".", "_") if "." in col_name else col_name
 
@@ -211,6 +211,12 @@ def _build_column_definitions(cols: dict | None) -> list[dict]:
             "resizable": True,
             "minWidth": 150,
         }
+
+        # Add checkbox selection to first column
+        if idx == 0:
+            column_def["checkboxSelection"] = True
+            column_def["headerCheckboxSelection"] = True
+
         column_defs.append(column_def)
 
     return column_defs
@@ -273,6 +279,7 @@ def _create_ag_grid_component(
             "paginationPageSizeSelector": [50, 100, 200, 500],
             # Selection and interaction
             "rowSelection": "multiple",
+            "suppressRowClickSelection": True,  # Only checkbox triggers selection
             "enableCellTextSelection": True,
             "ensureDomOrder": True,
             "domLayout": "normal",
@@ -290,7 +297,8 @@ def _create_ag_grid_component(
             "maxConcurrentDatasourceRequests": 1,
             "blockLoadDebounceMillis": 0,
         },
-        getRowId="params.data.ID",
+        # Visual highlighting for rows matching highlight filter
+        rowClassRules={"ag-row-highlighted": "params.data && params.data._is_highlighted === true"},
         defaultColDef={
             "flex": 1,
             "minWidth": 150,
@@ -311,6 +319,7 @@ def _create_metadata_store(
     cols: dict | None,
     row_selection_enabled: bool = False,
     row_selection_column: str | None = None,
+    highlight_filter: dict | None = None,
 ) -> dcc.Store:
     """Create the metadata store component for the table.
 
@@ -336,29 +345,49 @@ def _create_metadata_store(
     if isinstance(dc_id, dict) and "$oid" in dc_id:
         dc_id = dc_id["$oid"]
 
+    store_data: dict = {
+        "index": clean_index,
+        "component_type": "table",
+        "wf_id": wf_id,
+        "dc_id": dc_id,
+        "dc_config": dc_config,
+        "cols_json": cols,
+        "parent_index": None,
+        "row_selection_enabled": row_selection_enabled,
+        "row_selection_column": row_selection_column,
+    }
+    if highlight_filter is not None:
+        store_data["highlight_filter"] = highlight_filter
+
     return dcc.Store(
         id={
             "type": "stored-metadata-component",
             "index": store_index,
         },
-        data={
-            "index": clean_index,
-            "component_type": "table",
-            "wf_id": wf_id,
-            "dc_id": dc_id,
-            "dc_config": dc_config,
-            "cols_json": cols,
-            "parent_index": None,
-            "row_selection_enabled": row_selection_enabled,
-            "row_selection_column": row_selection_column,
-        },
+        data=store_data,
     )
+
+
+def _create_highlight_cards(index: str, highlight_filter: dict | None) -> html.Div | None:
+    """Create highlight summary cards to display under the table.
+
+    NOTE: This is currently disabled - cards are now shown under the figure component.
+
+    Args:
+        index: Component index.
+        highlight_filter: Highlight filter configuration.
+
+    Returns:
+        None (cards disabled, moved to figure component).
+    """
+    return None
 
 
 def _create_table_body(
     index: str,
     ag_grid: dag.AgGrid,
     store: dcc.Store,
+    highlight_filter: dict | None = None,
 ) -> html.Div:
     """Create the table body container with AG Grid and supporting components.
 
@@ -366,6 +395,7 @@ def _create_table_body(
         index: Component index.
         ag_grid: The AG Grid component.
         store: The metadata store component.
+        highlight_filter: Optional highlight filter configuration.
 
     Returns:
         html.Div containing the complete table body.
@@ -377,22 +407,34 @@ def _create_table_body(
 
     hidden_style = {"position": "absolute", "visibility": "hidden"}
 
-    return html.Div(
+    # Cards are now under the figure component, not the table
+    children = [
+        html.Div(
+            ag_grid,
+            style={
+                "width": "100%",
+                "height": "calc(100% - 4px)",
+                "minHeight": "0",
+                "position": "relative",
+                "overflow": "auto",
+            },
+        ),
+    ]
+
+    # Cache-busting store for forcing AG Grid refresh when slider changes
+    cache_version_store = dcc.Store(id={"type": "table-cache-version", "index": str(index)}, data=0)
+
+    children.extend(
         [
-            html.Div(
-                ag_grid,
-                style={
-                    "width": "100%",
-                    "height": "calc(100% - 4px)",
-                    "minHeight": "0",
-                    "position": "relative",
-                    "overflow": "auto",
-                },
-            ),
             html.Div(store, style=hidden_style),
             html.Div(download_component, style=hidden_style),
             html.Div(export_notification, style=hidden_style),
-        ],
+            html.Div(cache_version_store, style=hidden_style),
+        ]
+    )
+
+    return html.Div(
+        children,
         id={"type": "table-content", "index": index},
         style={
             "width": "100%",
@@ -447,6 +489,7 @@ def build_table(**kwargs) -> html.Div | dmc.Paper | dcc.Loading:
     # Row selection filtering configuration
     row_selection_enabled = kwargs.get("row_selection_enabled", False)
     row_selection_column = kwargs.get("row_selection_column")
+    highlight_filter = kwargs.get("highlight_filter")
 
     # Load data if needed
     if df.is_empty():
@@ -460,9 +503,17 @@ def build_table(**kwargs) -> html.Div | dmc.Paper | dcc.Loading:
     # Build components
     ag_grid = _create_ag_grid_component(index, column_defs, theme)
     store = _create_metadata_store(
-        index, wf_id, dc_id, dc_config, cols, row_selection_enabled, row_selection_column
+        index,
+        wf_id,
+        dc_id,
+        dc_config,
+        cols,
+        row_selection_enabled,
+        row_selection_column,
+        highlight_filter=highlight_filter,
     )
-    table_body = _create_table_body(index, ag_grid, store)
+
+    table_body = _create_table_body(index, ag_grid, store, highlight_filter)
 
     if not build_frame:
         return table_body
@@ -484,7 +535,7 @@ def build_table(**kwargs) -> html.Div | dmc.Paper | dcc.Loading:
     graph_id_dict = {"type": "table-aggrid", "index": str(index)}
     target_id = stringify_id(graph_id_dict)
 
-    return dcc.Loading(
+    loading = dcc.Loading(
         children=table_body,
         custom_spinner=create_skeleton_component("table"),
         target_components={target_id: "rowData"},
@@ -492,3 +543,4 @@ def build_table(**kwargs) -> html.Div | dmc.Paper | dcc.Loading:
         delay_hide=300,
         id={"type": "table-loading", "index": index},
     )
+    return loading

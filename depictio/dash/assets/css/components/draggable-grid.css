@@ -503,6 +503,15 @@
     pointer-events: auto !important;
 }
 
+/* EDIT MODE: Also show view-accessible button items on hover (e.g., controls, fullscreen, metadata)
+   This explicit rule ensures maximum specificity for view-accessible buttons in edit mode */
+.draggable-grid-container:not(.drag-handles-hidden) .react-grid-item:hover .component-view-buttons-item {
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    pointer-events: auto !important;
+}
+
 /* Show individual action buttons on component hover (only when edit mode is ON) */
 .draggable-grid-container:not(.drag-handles-hidden) .react-grid-item:hover .mantine-ActionIcon-root[id*="drag-handle"],
 .draggable-grid-container:not(.drag-handles-hidden) .react-grid-item:hover .mantine-ActionIcon-root[id*="remove_box_button"],

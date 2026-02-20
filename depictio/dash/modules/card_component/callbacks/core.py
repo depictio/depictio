@@ -35,6 +35,7 @@ from depictio.dash.modules.card_component.utils import (
     compute_value,
     get_adaptive_trend_colors,
 )
+from depictio.dash.modules.ref_line_slider_component.filter_utils import build_filter_mask
 from depictio.dash.utils import (
     extend_filters_via_links,
     get_columns_from_data_collection,
@@ -1131,6 +1132,96 @@ def register_core_callbacks(app):
             all_metadata.append(result[2])
 
         return all_values, all_comparisons, all_metadata
+
+    # Highlight count callback for cards with linked_table_tag
+    @app.callback(
+        Output({"type": "card-value", "index": MATCH}, "children", allow_duplicate=True),
+        Input({"type": "ref-line-slider-value", "index": ALL}, "data"),
+        Input("local-store", "data"),
+        [
+            State({"type": "card-trigger", "index": MATCH}, "data"),
+            State({"type": "stored-metadata-component", "index": ALL}, "data"),
+            State({"type": "stored-metadata-component", "index": ALL}, "id"),
+        ],
+        prevent_initial_call=True,
+    )
+    def update_highlight_count(
+        slider_data_list,
+        local_store,
+        card_trigger,
+        all_metadata,
+        all_metadata_ids,
+    ):
+        """Update highlight_count cards when slider values change.
+
+        Reads the linked table's highlight_filter and computes how many rows match.
+        """
+        # Only process cards with linked_table_tag
+        if not card_trigger:
+            raise dash.exceptions.PreventUpdate
+
+        linked_table_tag = card_trigger.get("linked_table_tag")
+        if not linked_table_tag:
+            raise dash.exceptions.PreventUpdate
+
+        token = (local_store or {}).get("access_token")
+        if not token:
+            # Token not yet loaded
+            raise dash.exceptions.PreventUpdate
+
+        # Find the linked table's metadata
+        table_metadata = None
+        for i, meta_id in enumerate(all_metadata_ids):
+            if i < len(all_metadata):
+                meta = all_metadata[i]
+                if meta and meta.get("component_type") == "table":
+                    # Match by tag (stored in index field for YAML-loaded components)
+                    if meta.get("index") == linked_table_tag:
+                        table_metadata = meta
+                        break
+
+        if not table_metadata:
+            return "Table not found"
+
+        highlight_filter = table_metadata.get("highlight_filter")
+        if not highlight_filter:
+            return "No filter"
+
+        wf_id = table_metadata.get("wf_id")
+        dc_id = table_metadata.get("dc_id")
+
+        if not wf_id or not dc_id:
+            return "Missing data"
+
+        # Build slider map
+        slider_map = {
+            d["tag"]: float(d["value"])
+            for d in (slider_data_list or [])
+            if d and "tag" in d and "value" in d
+        }
+
+        try:
+            df = load_deltatable_lite(ObjectId(wf_id), ObjectId(dc_id), TOKEN=token)
+        except Exception as e:
+            logger.error(f"Highlight count: failed to load data: {e}")
+            return "Error"
+
+        if df.is_empty():
+            return "0"
+
+        conditions = highlight_filter.get("conditions") or []
+        logic = highlight_filter.get("logic", "and")
+
+        mask = build_filter_mask(df, conditions, slider_map, logic)
+        if mask is None:
+            matched = 0
+        else:
+            matched = int(df.filter(mask).shape[0])
+
+        total_rows = len(df)
+        pct = f"{matched / total_rows * 100:.1f}%" if total_rows > 0 else "0%"
+
+        return f"{matched:,} ({pct})"
 
 
 def _process_single_card(

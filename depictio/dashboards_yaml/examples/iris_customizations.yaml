@@ -1,0 +1,145 @@
+# =============================================================================
+# Iris Dataset - Customizations Showcase (ref_line_slider prototype)
+# =============================================================================
+#
+# Demonstrates the ref_line_slider component that:
+#   - Controls a horizontal reference line on the scatter plot
+#   - Dynamically updates which Setosa points are highlighted (sepal.width > threshold)
+#   - Drives a linked table showing only the highlighted rows
+#
+# The linked_slider field references the slider's tag (not its UUID).
+
+title: "Iris - Sepal Width Threshold (Prototype)"
+project_tag: "Iris Dataset Project Data Analysis"
+
+components:
+
+  # ── Species filter (regular interactive, for data filtering) ───────────────
+  - tag: variety-select
+    component_type: interactive
+    workflow_tag: python/iris_workflow
+    data_collection_tag: iris_table
+    interactive_component_type: MultiSelect
+    column_name: variety
+    column_type: object
+    layout:
+      x: 0
+      y: 0
+      w: 1
+      h: 2
+
+  # ── Scatter with embedded slider + ref line + dynamic highlight ────────────
+  # The slider is now embedded at the bottom of the figure itself!
+  - tag: scatter-sepal
+    component_type: figure
+    workflow_tag: python/iris_workflow
+    data_collection_tag: iris_table
+    visu_type: scatter
+    dict_kwargs:
+      x: sepal.length
+      y: sepal.width
+      color: variety
+      opacity: 0.8
+
+    customizations:
+      axes:
+        x:
+          title: "Sepal Length (cm)"
+        y:
+          title: "Sepal Width (cm)"
+
+      reference_lines:
+        # Horizontal line at the threshold value - position tracks the embedded slider
+        # The slider is auto-generated from this config and embedded at bottom of figure
+        - type: hline
+          y: 3.8
+          line_color: "#e74c3c"
+          line_dash: dash
+          line_width: 1.5
+          annotation_text: "Width threshold"
+          annotation_position: "top right"
+          linked_slider: width-threshold   # triggers embedded slider creation
+
+      highlights:
+        # Highlight only Setosa points whose sepal.width exceeds the slider threshold.
+        # The condition value is dynamically updated by the slider callback.
+        - name: wide-setosa
+          conditions:
+            - name: species
+              column: variety
+              operator: eq
+              value: Setosa
+            - name: wide
+              column: sepal.width
+              operator: gt
+              value: 3.8                    # updated dynamically by width-threshold slider
+              linked_slider: width-threshold
+          logic: and
+          style:
+            marker_color: "#f39c12"
+            marker_size: 12
+            marker_symbol: star
+            dim_opacity: 0.15
+          label: "Wide Setosa"
+          link_type: dynamic
+    layout:
+      x: 0
+      y: 0
+      w: 8
+      h: 5  # Increased to accommodate embedded slider
+
+  # ── Highlighted table ──────────────────────────────────────────────────────
+  # Shows only rows matching the same conditions as the highlight above.
+  # Refreshes automatically when the embedded slider value changes.
+  - tag: highlighted-setosa-table
+    component_type: table
+    workflow_tag: python/iris_workflow
+    data_collection_tag: iris_table
+
+    highlight_filter:
+      conditions:
+        - column: variety
+          operator: eq
+          value: Setosa
+        - column: sepal.width
+          operator: gt
+          linked_slider: width-threshold   # dynamically resolved to embedded slider value
+      logic: and
+    layout:
+      x: 0
+      y: 5
+      w: 8
+      h: 6
+
+  # ── Highlight count card ───────────────────────────────────────────────────
+  # Shows how many rows match the highlight conditions.
+  # Updates automatically when the embedded slider value changes.
+  # Positioned BELOW the table, left side
+  - tag: highlight-count
+    component_type: card
+    workflow_tag: python/iris_workflow
+    data_collection_tag: iris_table
+    aggregation: count  # Use 'count' for validation, callback overrides with highlight logic
+    column_name: sepal.width
+    column_type: float64
+    linked_table_tag: highlighted-setosa-table
+    layout:
+      x: 0
+      y: 11
+      w: 4
+      h: 2
+
+  # ── Summary card ──────────────────────────────────────────────────────────
+  # Positioned BELOW the table, right side (next to highlight-count)
+  - tag: avg-sepal-width
+    component_type: card
+    workflow_tag: python/iris_workflow
+    data_collection_tag: iris_table
+    aggregation: average
+    column_name: sepal.width
+    column_type: float64
+    layout:
+      x: 4
+      y: 11
+      w: 4
+      h: 2

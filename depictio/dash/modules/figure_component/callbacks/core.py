@@ -460,6 +460,7 @@ def _process_single_figure(
     figure_to_load_key: dict[int, LoadKey | None],
     current_theme: str,
     batch_task_id: str,
+    stored_metadata: dict | None = None,
 ) -> tuple[dict | go.Figure, dict]:
     """
     Process a single figure and return the figure and metadata.
@@ -472,6 +473,7 @@ def _process_single_figure(
         figure_to_load_key: Mapping from figure index to load key
         current_theme: Current theme name
         batch_task_id: Task ID for logging
+        stored_metadata: Stored component metadata (includes customizations)
 
     Returns:
         Tuple of (figure, metadata) where figure is a Plotly figure dict
@@ -489,6 +491,25 @@ def _process_single_figure(
         visu_type = trigger_data.get("visu_type", "scatter")
         dict_kwargs = trigger_data.get("dict_kwargs", {})
         code_content = trigger_data.get("code_content", "")
+
+        # Extract customizations - PRIORITY ORDER:
+        # 1. From trigger_data (guaranteed fresh from slider callback, bypasses State race condition)
+        # 2. From stored_metadata (fallback for non-slider triggers)
+        customizations = None
+
+        # PRIORITY 1: Use customizations from trigger (guaranteed fresh from slider callback)
+        if trigger_data.get("customizations"):
+            customizations = trigger_data["customizations"]
+            logger.warning(
+                f"[{task_id}] 🔥 RENDER: Got customizations from TRIGGER "
+                f"({len(customizations.get('highlights', []))} highlights)"
+            )
+
+        # PRIORITY 2: Fall back to stored metadata
+        if not customizations and stored_metadata and isinstance(stored_metadata, dict):
+            customizations = stored_metadata.get("customizations")
+            if customizations:
+                logger.debug(f"[{task_id}] Got customizations from stored_metadata")
 
         load_key = figure_to_load_key.get(figure_index)
         if not load_key or load_key not in dc_cache:
@@ -523,6 +544,7 @@ def _process_single_figure(
                 theme=current_theme,
                 selection_enabled=selection_enabled,
                 selection_column=selection_column,
+                customizations=customizations,
             )
 
         if isinstance(fig, go.Figure):
@@ -699,6 +721,11 @@ def register_core_callbacks(app):
         all_metadata = []
 
         for i, (trigger_data, trigger_id) in enumerate(zip(trigger_data_list, trigger_ids)):
+            # Get stored metadata for this component to extract customizations
+            stored_metadata = None
+            if stored_metadata_list and i < len(stored_metadata_list):
+                stored_metadata = stored_metadata_list[i]
+
             fig_dict, metadata = _process_single_figure(
                 trigger_data,
                 trigger_id,
@@ -707,11 +734,214 @@ def register_core_callbacks(app):
                 figure_to_load_key,
                 current_theme,
                 batch_task_id,
+                stored_metadata=stored_metadata,
             )
             all_figures.append(fig_dict)
             all_metadata.append(metadata)
 
         return all_figures, all_metadata
+
+    # Callback for updating embedded slider store
+    @app.callback(
+        Output(
+            {"type": "ref-line-slider-value", "index": dash.dependencies.MATCH},
+            "data",
+            allow_duplicate=True,
+        ),
+        Input({"type": "ref-line-slider", "index": dash.dependencies.MATCH}, "value"),
+        State({"type": "ref-line-slider-value", "index": dash.dependencies.MATCH}, "data"),
+        prevent_initial_call=True,
+    )
+    def update_embedded_slider_store(slider_value, current_data):
+        """Update the slider store when embedded slider value changes."""
+        new_data = dict(current_data or {})
+        new_data["value"] = slider_value
+        return new_data
+
+    # Callback for updating embedded highlight count and conditions boxes
+    @app.callback(
+        [
+            Output(
+                {"type": "embedded-highlight-count", "index": dash.dependencies.MATCH}, "children"
+            ),
+            Output(
+                {"type": "embedded-highlight-conditions", "index": dash.dependencies.MATCH},
+                "children",
+            ),
+        ],
+        Input({"type": "stored-metadata-component", "index": dash.dependencies.MATCH}, "data"),
+        State("local-store", "data"),
+        prevent_initial_call=False,
+    )
+    def update_embedded_highlight_boxes(stored_metadata, local_data):
+        """
+        Update the embedded highlight card with current count and conditions.
+
+        This callback monitors slider value changes and updates the highlight card
+        to show:
+        - Number of matching rows (e.g., "23 out of 150 values")
+        - Highlight conditions with current slider values
+
+        Args:
+            slider_data_list: List of slider stores (tag + value)
+            stored_metadata: Component metadata (wf_id, dc_id, customizations)
+            local_data: User session data (access_token)
+
+        Returns:
+            Updated card children with count and conditions
+        """
+        import dash_mantine_components as dmc
+
+        logger.info("🔄 Embedded highlight card callback triggered")
+
+        if not stored_metadata:
+            logger.warning("No stored_metadata, preventing update")
+            raise dash.exceptions.PreventUpdate
+
+        # Extract customizations to find highlight info
+        customizations = stored_metadata.get("customizations")
+        if not customizations or not customizations.get("highlights"):
+            no_data = dmc.Text("No highlights configured", size="sm", c="dimmed")
+            return no_data, no_data
+
+        # Build slider value map from highlight conditions (already updated by slider callback)
+        slider_map = {}
+        for highlight in customizations.get("highlights", []):
+            for condition in highlight.get("conditions", []):
+                slider_tag = condition.get("linked_slider")
+                if slider_tag and "value" in condition:
+                    slider_map[slider_tag] = float(condition["value"])
+
+        # Find the first highlight with a linked_slider
+        highlight_config = None
+        for highlight in customizations["highlights"]:
+            conditions = highlight.get("conditions", [])
+            for cond in conditions:
+                if cond.get("linked_slider"):
+                    highlight_config = highlight
+                    break
+            if highlight_config:
+                break
+
+        if not highlight_config:
+            no_slider = dmc.Text("No slider-linked highlights", size="sm", c="dimmed")
+            return no_slider, no_slider
+
+        # Try to load data and count matches
+        try:
+            wf_id = stored_metadata.get("wf_id")
+            dc_id = stored_metadata.get("dc_id")
+            access_token = local_data.get("access_token") if local_data else None
+
+            if not wf_id or not dc_id or not access_token:
+                missing = dmc.Text("Missing data configuration", size="sm", c="dimmed")
+                return missing, missing
+
+            # Load DataFrame
+            df = load_deltatable_lite(
+                ObjectId(wf_id),
+                ObjectId(dc_id) if not isinstance(dc_id, str) or "--" not in dc_id else dc_id,
+                TOKEN=access_token,
+            )
+
+            if df.is_empty():
+                no_data = dmc.Text("No data available", size="sm", c="dimmed")
+                return no_data, no_data
+
+            # Import filter utility
+            from depictio.dash.modules.ref_line_slider_component.filter_utils import (
+                build_filter_mask,
+            )
+
+            # Split conditions into pre-filter (non-slider) and slider conditions
+            conditions = highlight_config.get("conditions", [])
+            pre_filter_conditions = [c for c in conditions if not c.get("linked_slider")]
+            slider_conditions = [c for c in conditions if c.get("linked_slider")]
+
+            # Step 1: Apply pre-filter conditions (e.g., variety = Setosa) to get the base set
+            if pre_filter_conditions:
+                logic = highlight_config.get("logic", "and")
+                pre_mask = build_filter_mask(df, pre_filter_conditions, {}, logic)
+                if pre_mask is not None:
+                    df_prefiltered = df.filter(pre_mask)
+                else:
+                    df_prefiltered = df
+            else:
+                df_prefiltered = df
+
+            # This is our "total" - the pre-filtered dataset
+            total_rows = len(df_prefiltered)
+
+            # Step 2: Apply slider conditions on top of pre-filtered data
+            if slider_conditions:
+                logic = highlight_config.get("logic", "and")
+                # Combine pre-filter + slider conditions for final mask
+                all_conditions = pre_filter_conditions + slider_conditions
+                final_mask = build_filter_mask(df, all_conditions, slider_map, logic)
+                if final_mask is not None:
+                    matched_df = df.filter(final_mask)
+                    matched_rows = len(matched_df)
+                else:
+                    matched_rows = 0
+            else:
+                # No slider conditions, so all pre-filtered rows are matched
+                matched_rows = total_rows
+
+            # Format conditions text with current slider values
+            cond_texts = []
+            for cond in conditions:
+                col = cond.get("column", "?")
+                op = cond.get("operator", "?")
+                slider_tag = cond.get("linked_slider")
+
+                if slider_tag and slider_tag in slider_map:
+                    val = f"{slider_map[slider_tag]:.2f}"
+                else:
+                    val = cond.get("value", "?")
+
+                # Format operator
+                op_display = {
+                    "eq": "=",
+                    "gt": ">",
+                    "lt": "<",
+                    "gte": "≥",
+                    "lte": "≤",
+                    "ne": "≠",
+                }.get(op, op)
+
+                cond_texts.append(f"{col} {op_display} {val}")
+
+            conditions_text = " · ".join(cond_texts)
+
+            # Calculate percentage
+            percentage = (matched_rows / total_rows * 100) if total_rows > 0 else 0
+
+            logger.info(
+                f"✅ Highlight boxes updated: {matched_rows}/{total_rows} ({percentage:.1f}%)"
+            )
+
+            # Build count box content
+            count_content = dmc.Text(
+                f"{matched_rows} / {total_rows} ({percentage:.1f}%)",
+                size="sm",
+                fw=600,
+            )
+
+            # Build conditions box content
+            conditions_content = dmc.Stack(
+                gap="xs",
+                children=[
+                    dmc.Text("CONDITIONS", size="xs", fw=700, c="dimmed", tt="uppercase"),
+                    dmc.Text(conditions_text, size="xs", c="dimmed"),
+                ],
+            )
+
+            return count_content, conditions_content
+
+        except Exception as e:
+            logger.error(f"Error updating embedded highlight boxes: {e}")
+            error_msg = dmc.Text(f"Error: {str(e)}", size="sm", c="red")
+            return error_msg, error_msg
 
 
 def _extract_required_columns(dict_kwargs: dict, visu_type: str) -> list[str]:
@@ -760,6 +990,7 @@ def _create_figure_from_data(
     theme: str = "light",
     selection_enabled: bool = False,
     selection_column: str | None = None,
+    customizations: dict | None = None,
 ) -> go.Figure:
     """
     Create Plotly figure from DataFrame and parameters.
@@ -771,6 +1002,7 @@ def _create_figure_from_data(
         theme: Theme name (light or dark)
         selection_enabled: Whether to enable scatter selection filtering
         selection_column: Column to include in customdata for selection extraction
+        customizations: Optional customizations dict (axes, reference_lines, highlights)
 
     Returns:
         Plotly Figure object
@@ -841,6 +1073,13 @@ def _create_figure_from_data(
 
         plot_func = getattr(px, visu_type)
         fig = plot_func(pandas_df, **cleaned_kwargs)
+
+        # Apply customizations if provided
+        if customizations:
+            from depictio.dash.modules.figure_component.customizations import apply_customizations
+
+            # Pass DataFrame to enable highlight evaluation
+            fig = apply_customizations(fig, customizations, df=pandas_df)
 
         layout_updates = {
             "paper_bgcolor": "rgba(0,0,0,0)",

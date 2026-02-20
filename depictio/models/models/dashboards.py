@@ -38,6 +38,7 @@ from depictio.models.components.lite import (
     InteractiveLiteComponent,
     LiteComponent,
     MultiQCLiteComponent,
+    RefLineLiteComponent,
     TableLiteComponent,
 )
 from depictio.models.logging import logger
@@ -201,6 +202,7 @@ class DashboardDataLite(BaseModel):
         "table": TableLiteComponent,
         "image": ImageLiteComponent,
         "multiqc": MultiQCLiteComponent,
+        "ref_line_slider": RefLineLiteComponent,
     }
 
     @model_validator(mode="after")
@@ -757,6 +759,9 @@ class DashboardDataLite(BaseModel):
                     lite_comp["code_content"] = comp["code_content"]
                 if comp.get("selection_enabled") is not None:
                     lite_comp["selection_enabled"] = comp["selection_enabled"]
+                # Preserve customizations if present
+                if comp.get("customizations"):
+                    lite_comp["customizations"] = comp["customizations"]
 
             elif comp_type == "card":
                 lite_comp["aggregation"] = comp.get("aggregation", "")
@@ -910,21 +915,23 @@ class DashboardDataLite(BaseModel):
             if comp_type == "figure":
                 # Support figure_params (new YAML key) and dict_kwargs (legacy/internal)
                 figure_params = comp_dict.get("figure_params") or comp_dict.get("dict_kwargs", {})
-                full_comp.update(
-                    {
-                        "visu_type": comp_dict.get("visu_type", "scatter"),
-                        "dict_kwargs": figure_params,
-                        "mode": comp_dict.get("mode", "ui"),  # Use imported mode (ui/code)
-                        "code_content": comp_dict.get("code_content"),  # Preserved for code mode
-                        "displayed_data_count": 0,
-                        "total_data_count": 0,
-                        "was_sampled": False,
-                        "filter_applied": False,
-                        # Selection filtering fields
-                        "selection_enabled": comp_dict.get("selection_enabled", False),
-                        "selection_column": comp_dict.get("selection_column"),
-                    }
-                )
+                figure_fields: dict[str, Any] = {
+                    "visu_type": comp_dict.get("visu_type", "scatter"),
+                    "dict_kwargs": figure_params,
+                    "mode": comp_dict.get("mode", "ui"),  # Use imported mode (ui/code)
+                    "code_content": comp_dict.get("code_content"),  # Preserved for code mode
+                    "displayed_data_count": 0,
+                    "total_data_count": 0,
+                    "was_sampled": False,
+                    "filter_applied": False,
+                    # Selection filtering fields
+                    "selection_enabled": comp_dict.get("selection_enabled", False),
+                    "selection_column": comp_dict.get("selection_column"),
+                }
+                # Pass through customizations if present
+                if comp_dict.get("customizations"):
+                    figure_fields["customizations"] = comp_dict["customizations"]
+                full_comp.update(figure_fields)
 
             elif comp_type == "card":
                 full_comp.update(
@@ -973,6 +980,9 @@ class DashboardDataLite(BaseModel):
                         "row_selection_column": comp_dict.get("row_selection_column"),
                     }
                 )
+                # Highlight filter for ref-line-slider-linked tables
+                if comp_dict.get("highlight_filter"):
+                    full_comp["highlight_filter"] = comp_dict["highlight_filter"]
 
             elif comp_type == "image":
                 # s3_base_folder regeneration: fetch from DC config if not provided
@@ -997,6 +1007,18 @@ class DashboardDataLite(BaseModel):
                 for f in ["selected_module", "selected_plot"]:
                     if comp_dict.get(f):
                         full_comp[f] = comp_dict[f]
+
+            elif comp_type == "ref_line_slider":
+                full_comp.update(
+                    {
+                        "tag": comp_dict.get("tag", ""),
+                        "label": comp_dict.get("label", "Threshold"),
+                        "min": comp_dict.get("min", 0.0),
+                        "max": comp_dict.get("max", 100.0),
+                        "default": comp_dict.get("default", 50.0),
+                        "step": comp_dict.get("step"),
+                    }
+                )
 
             full_components.append(full_comp)
 
@@ -1034,7 +1056,7 @@ class DashboardDataLite(BaseModel):
                 h = comp_dict["h"]
             else:
                 # Auto-generate position based on panel
-                if comp_type == "interactive":
+                if comp_type in ("interactive", "ref_line_slider"):
                     x, w, h = 0, 1, 3
                     y = left_auto_y
                     left_auto_y += h
@@ -1052,10 +1074,10 @@ class DashboardDataLite(BaseModel):
                 "h": h,
                 "static": comp_type == "card",
             }
-            if comp_type not in ("interactive", "card"):
+            if comp_type not in ("interactive", "ref_line_slider", "card"):
                 layout_item["resizeHandles"] = ["se", "s", "e", "sw", "w"]
 
-            if comp_type == "interactive":
+            if comp_type in ("interactive", "ref_line_slider"):
                 left_panel_layout_data.append(layout_item)
             else:
                 right_panel_layout_data.append(layout_item)
