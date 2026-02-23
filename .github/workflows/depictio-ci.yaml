@@ -417,7 +417,7 @@ jobs:
           docker pull "${FULL_IMAGE}"
           export DEPICTIO_VERSION="${FULL_IMAGE}"
           export DEPICTIO_FASTAPI_WORKERS=1  # Single worker to avoid boot race conditions
-          docker compose -f docker-compose.dev.yaml up -d
+          docker compose -f docker-compose.dev.yaml --env-file docker-compose/.env up -d
 
       - name: Logs
         run: sleep 3 && docker compose logs
@@ -862,7 +862,7 @@ jobs:
           docker pull "${FULL_IMAGE}"
           export DEPICTIO_VERSION="${FULL_IMAGE}"
           export DEPICTIO_FASTAPI_WORKERS=1  # Single worker to avoid boot race conditions
-          docker compose -f docker-compose.dev.yaml up -d
+          docker compose -f docker-compose.dev.yaml --env-file docker-compose/.env up -d
 
           echo "⏳ Waiting for services to be ready..."
 
@@ -1961,8 +1961,7 @@ jobs:
           sed -i 's/# DEPICTIO_DEV_MODE=false/DEPICTIO_DEV_MODE=true/' docker-compose/.env
           # Disable all special auth modes for standard auth tests (requires login)
           sed -i 's/DEPICTIO_AUTH_SINGLE_USER_MODE=true/DEPICTIO_AUTH_SINGLE_USER_MODE=false/' docker-compose/.env
-          sed -i 's/DEPICTIO_AUTH_PUBLIC_MODE=true/DEPICTIO_AUTH_PUBLIC_MODE=false/' docker-compose/.env
-          sed -i 's/DEPICTIO_AUTH_DEMO_MODE=true/DEPICTIO_AUTH_DEMO_MODE=false/' docker-compose/.env
+          # PUBLIC_MODE and DEMO_MODE are already false in defaults, no sed needed
           mkdir -p depictioDB minio_data prof_files cache
           chmod 777 depictioDB minio_data prof_files cache
 
@@ -1973,7 +1972,7 @@ jobs:
           docker pull "${FULL_IMAGE}"
           export DEPICTIO_VERSION="${FULL_IMAGE}"
           export DEPICTIO_FASTAPI_WORKERS=1  # Single worker to avoid boot race conditions
-          docker compose -f docker-compose.dev.yaml up -d
+          docker compose -f docker-compose.dev.yaml --env-file docker-compose/.env up -d
           sleep 15
 
       - name: Set up Node.js
@@ -2348,10 +2347,9 @@ jobs:
           echo "UID=$(id -u)" >> $GITHUB_ENV
           echo "GID=$(id -g)" >> $GITHUB_ENV
           cp .env.example .env
-          # Enable SINGLE_USER_MODE for single-user tests
-          sed -i 's/DEPICTIO_AUTH_SINGLE_USER_MODE=false/DEPICTIO_AUTH_SINGLE_USER_MODE=true/' docker-compose/.env
-          sed -i 's/DEPICTIO_AUTH_PUBLIC_MODE=true/DEPICTIO_AUTH_PUBLIC_MODE=false/' docker-compose/.env
-          sed -i 's/DEPICTIO_AUTH_DEMO_MODE=true/DEPICTIO_AUTH_DEMO_MODE=false/' docker-compose/.env
+          # SINGLE_USER_MODE is already enabled in docker-compose/.env defaults (true)
+          # PUBLIC_MODE and DEMO_MODE are already disabled in defaults (false)
+          # No sed commands needed - defaults are correct for single-user mode
           sed -i 's/# DEPICTIO_DEV_MODE=false/DEPICTIO_DEV_MODE=true/' docker-compose/.env
           mkdir -p depictioDB minio_data prof_files cache
           chmod 777 depictioDB minio_data prof_files cache
