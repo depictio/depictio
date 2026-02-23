@@ -262,7 +262,7 @@ async def init_dashboard(
     user_permission_level = "viewer"
 
     # In single user mode, always grant owner permissions
-    if settings.auth.single_user_mode:
+    if settings.auth.is_single_user_mode:
         user_permission_level = "owner"
         logger.info("✅ Single user mode: Granting owner permissions")
     else:

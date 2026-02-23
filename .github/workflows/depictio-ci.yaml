@@ -268,8 +268,8 @@ jobs:
       - name: Setup directories
         run: |
           cp .env.example .env
-          mkdir -p depictioDB minio_data
-          chmod 777 depictioDB minio_data
+          mkdir -p data/depictioDB data/minio_data
+          chmod 777 data data/depictioDB data/minio_data
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -408,8 +408,8 @@ jobs:
           echo "UID=$(id -u)" >> $GITHUB_ENV
           echo "GID=$(id -g)" >> $GITHUB_ENV
           cp .env.example .env
-          mkdir -p depictioDB minio_data prof_files cache
-          chmod 777 depictioDB minio_data prof_files cache
+          mkdir -p data/depictioDB data/minio_data data/prof_files data/cache
+          chmod 777 data data/depictioDB data/minio_data data/prof_files data/cache
 
       - name: Start services
         run: |
@@ -417,7 +417,7 @@ jobs:
           docker pull "${FULL_IMAGE}"
           export DEPICTIO_VERSION="${FULL_IMAGE}"
           export DEPICTIO_FASTAPI_WORKERS=1  # Single worker to avoid boot race conditions
-          docker compose -f docker-compose.dev.yaml up -d
+          docker compose -f docker-compose.dev.yaml --env-file docker-compose/.env up -d
 
       - name: Logs
         run: sleep 3 && docker compose logs
@@ -852,8 +852,8 @@ jobs:
           echo "UID=$(id -u)" >> $GITHUB_ENV
           echo "GID=$(id -g)" >> $GITHUB_ENV
           cp .env.example .env
-          mkdir -p depictioDB minio_data prof_files cache
-          chmod 777 depictioDB minio_data prof_files cache
+          mkdir -p data/depictioDB data/minio_data data/prof_files data/cache
+          chmod 777 data data/depictioDB data/minio_data data/prof_files data/cache
 
       - name: Log in and start services
         run: |
@@ -862,7 +862,7 @@ jobs:
           docker pull "${FULL_IMAGE}"
           export DEPICTIO_VERSION="${FULL_IMAGE}"
           export DEPICTIO_FASTAPI_WORKERS=1  # Single worker to avoid boot race conditions
-          docker compose -f docker-compose.dev.yaml up -d
+          docker compose -f docker-compose.dev.yaml --env-file docker-compose/.env up -d
 
           echo "⏳ Waiting for services to be ready..."
 
@@ -1360,6 +1360,9 @@ jobs:
           sudo chmod 666 /var/run/docker.sock
           echo "UID=$(id -u)" >> $GITHUB_ENV
           echo "GID=$(id -g)" >> $GITHUB_ENV
+          # Note: UID is a readonly bash variable, already available to subprocesses
+          # GID is also typically available, so no export needed
+          export DATA_DIR=data             # Export DATA_DIR variable
           echo "UID: $(id -u), GID: $(id -g)"
 
           echo "📁 Creating environment files..."
@@ -1370,6 +1373,12 @@ jobs:
           # Copy to docker-compose/.env for application variables
           cp .env.example docker-compose/.env
           echo "✅ docker-compose/.env file created"
+
+          # Add runtime variables to docker-compose/.env
+          echo "UID=$(id -u)" >> docker-compose/.env
+          echo "GID=$(id -g)" >> docker-compose/.env
+          echo "DATA_DIR=data" >> docker-compose/.env
+          echo "✅ Runtime variables (UID, GID, DATA_DIR) added to docker-compose/.env"
 
           echo "⚙️ Configuring backup strategy in docker-compose/.env file..."
           # Remove any existing backup configuration first
@@ -1389,11 +1398,11 @@ jobs:
           grep "DEPICTIO_BACKUP" docker-compose/.env || echo "❌ No DEPICTIO_BACKUP vars found!"
 
           echo "📂 Creating required directories..."
-          mkdir -p depictioDB minio_data minio_backup_data
-          chmod 777 depictioDB minio_data minio_backup_data
+          mkdir -p data/depictioDB data/minio_data data/minio_backup_data
+          chmod 777 data data/depictioDB data/minio_data data/minio_backup_data
           # Ensure MongoDB can create additional directories
-          chmod -R 777 depictioDB 2>/dev/null || echo "Directory permissions already set"
-          ls -la depictioDB minio_data minio_backup_data
+          chmod -R 777 data/depictioDB 2>/dev/null || echo "Directory permissions already set"
+          ls -la data/depictioDB data/minio_data data/minio_backup_data
           echo "✅ Directories created and permissions set"
 
       - name: Log in and start services for ${{ matrix.strategy_name }}
@@ -1421,8 +1430,10 @@ jobs:
           echo "Compose files: docker-compose.dev.yaml + docker-compose.backup-minio.yaml"
           echo "Environment file: docker-compose/.env"
 
+          # Note: UID and GID are readonly bash variables, already available
+          export DATA_DIR=data             # Ensure DATA_DIR exported for docker-compose
           export DEPICTIO_FASTAPI_WORKERS=1  # Single worker to avoid boot race conditions
-          docker compose -f docker-compose.dev.yaml -f docker-compose/docker-compose.backup-minio.yaml up -d --force-recreate
+          docker compose -f docker-compose.dev.yaml -f docker-compose/docker-compose.backup-minio.yaml --env-file docker-compose/.env up -d --force-recreate
 
           echo "⏳ Waiting 30 seconds for services to start..."
           sleep 30
@@ -1961,10 +1972,9 @@ jobs:
           sed -i 's/# DEPICTIO_DEV_MODE=false/DEPICTIO_DEV_MODE=true/' docker-compose/.env
           # Disable all special auth modes for standard auth tests (requires login)
           sed -i 's/DEPICTIO_AUTH_SINGLE_USER_MODE=true/DEPICTIO_AUTH_SINGLE_USER_MODE=false/' docker-compose/.env
-          sed -i 's/DEPICTIO_AUTH_PUBLIC_MODE=true/DEPICTIO_AUTH_PUBLIC_MODE=false/' docker-compose/.env
-          sed -i 's/DEPICTIO_AUTH_DEMO_MODE=true/DEPICTIO_AUTH_DEMO_MODE=false/' docker-compose/.env
-          mkdir -p depictioDB minio_data prof_files cache
-          chmod 777 depictioDB minio_data prof_files cache
+          # PUBLIC_MODE and DEMO_MODE are already false in defaults, no sed needed
+          mkdir -p data/depictioDB data/minio_data data/prof_files data/cache
+          chmod 777 data data/depictioDB data/minio_data data/prof_files data/cache
 
       - name: Log in and start services
         run: |
@@ -1973,7 +1983,7 @@ jobs:
           docker pull "${FULL_IMAGE}"
           export DEPICTIO_VERSION="${FULL_IMAGE}"
           export DEPICTIO_FASTAPI_WORKERS=1  # Single worker to avoid boot race conditions
-          docker compose -f docker-compose.dev.yaml up -d
+          docker compose -f docker-compose.dev.yaml --env-file docker-compose/.env up -d
           sleep 15
 
       - name: Set up Node.js
@@ -2046,8 +2056,8 @@ jobs:
           sed -i 's/DEPICTIO_AUTH_SINGLE_USER_MODE=true/DEPICTIO_AUTH_SINGLE_USER_MODE=false/' docker-compose/.env
           sed -i 's/DEPICTIO_AUTH_PUBLIC_MODE=false/DEPICTIO_AUTH_PUBLIC_MODE=true/' docker-compose/.env
           sed -i 's/# DEPICTIO_DEV_MODE=false/DEPICTIO_DEV_MODE=true/' docker-compose/.env
-          mkdir -p depictioDB minio_data prof_files cache
-          chmod 777 depictioDB minio_data prof_files cache
+          mkdir -p data/depictioDB data/minio_data data/prof_files data/cache
+          chmod 777 data data/depictioDB data/minio_data data/prof_files data/cache
 
       - name: Log in and start services
         run: |
@@ -2217,8 +2227,8 @@ jobs:
           sed -i 's/DEPICTIO_AUTH_PUBLIC_MODE=false/DEPICTIO_AUTH_PUBLIC_MODE=true/' docker-compose/.env
           sed -i 's/DEPICTIO_AUTH_DEMO_MODE=false/DEPICTIO_AUTH_DEMO_MODE=true/' docker-compose/.env
           sed -i 's/# DEPICTIO_DEV_MODE=false/DEPICTIO_DEV_MODE=true/' docker-compose/.env
-          mkdir -p depictioDB minio_data prof_files cache
-          chmod 777 depictioDB minio_data prof_files cache
+          mkdir -p data/depictioDB data/minio_data data/prof_files data/cache
+          chmod 777 data data/depictioDB data/minio_data data/prof_files data/cache
 
       - name: Log in and start services
         run: |
@@ -2348,13 +2358,12 @@ jobs:
           echo "UID=$(id -u)" >> $GITHUB_ENV
           echo "GID=$(id -g)" >> $GITHUB_ENV
           cp .env.example .env
-          # Enable SINGLE_USER_MODE for single-user tests
-          sed -i 's/DEPICTIO_AUTH_SINGLE_USER_MODE=false/DEPICTIO_AUTH_SINGLE_USER_MODE=true/' docker-compose/.env
-          sed -i 's/DEPICTIO_AUTH_PUBLIC_MODE=true/DEPICTIO_AUTH_PUBLIC_MODE=false/' docker-compose/.env
-          sed -i 's/DEPICTIO_AUTH_DEMO_MODE=true/DEPICTIO_AUTH_DEMO_MODE=false/' docker-compose/.env
+          # SINGLE_USER_MODE is already enabled in docker-compose/.env defaults (true)
+          # PUBLIC_MODE and DEMO_MODE are already disabled in defaults (false)
+          # No sed commands needed - defaults are correct for single-user mode
           sed -i 's/# DEPICTIO_DEV_MODE=false/DEPICTIO_DEV_MODE=true/' docker-compose/.env
-          mkdir -p depictioDB minio_data prof_files cache
-          chmod 777 depictioDB minio_data prof_files cache
+          mkdir -p data/depictioDB data/minio_data data/prof_files data/cache
+          chmod 777 data data/depictioDB data/minio_data data/prof_files data/cache
 
       - name: Log in and start services
         run: |

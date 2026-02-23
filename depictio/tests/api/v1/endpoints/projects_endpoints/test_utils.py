@@ -71,17 +71,12 @@ def get_test_config():
 @pytest.fixture
 def test_yaml_path():
     """Path to the test YAML configuration file."""
-    import os
+    from pathlib import Path
 
-    from depictio import BASE_PATH
-
-    return os.path.join(
-        BASE_PATH,
-        "projects",
-        "init",
-        "iris",
-        "project.yaml",
-    )
+    # Navigate up 5 levels from test file to reach the depictio package root:
+    # test_utils.py → projects_endpoints/ → endpoints/ → v1/ → api/ → tests/ → depictio/
+    package_root = Path(__file__).resolve().parents[5]
+    return str(package_root / "projects" / "init" / "iris" / "project.yaml")
 
 
 @pytest.fixture

@@ -2,12 +2,12 @@ services:
   mongo:
     image: mongo:8.0.14
     container_name: mongo
-    command: mongod --dbpath /data/depictioDB --port 27018 --logpath /dev/null
+    command: mongod --dbpath /data/db --port 27018
     user: "${UID:-1000}:${GID:-1000}"
     ports:
       - ${MONGO_PORT:-27018}:27018
     volumes:
-      - ./${DATA_DIR}/depictioDB:/data/depictioDB
+      - ./${DATA_DIR:-data}/depictioDB:/data/db
 
   redis:
     image: redis:8.2.1
@@ -15,7 +15,7 @@ services:
     ports:
       - ${REDIS_PORT:-6379}:6379
     volumes:
-      - ./${DATA_DIR}/redis:/data
+      - ./${DATA_DIR:-data}/redis:/data
     command: redis-server --dir /data --save 60 1
     user: "${UID:-1000}:${GID:-1000}"
     healthcheck:
@@ -29,7 +29,7 @@ services:
     container_name: minio
     user: "${UID:-1000}:${GID:-1000}"
     volumes:
-      - ./${DATA_DIR}/minio_data:/data
+      - ./${DATA_DIR:-data}/minio_data:/data
     environment:
       MINIO_ROOT_USER: ${DEPICTIO_MINIO_ROOT_USER:-minio}
       MINIO_ROOT_PASSWORD: ${DEPICTIO_MINIO_ROOT_PASSWORD:-minio123}
@@ -69,6 +69,7 @@ services:
     environment:
         DEPICTIO_DEV_MODE: "${DEPICTIO_DEV_MODE:-false}"
         DEPICTIO_LOGGING_VERBOSITY_LEVEL: "${DEPICTIO_LOGGING_VERBOSITY_LEVEL:-DEBUG}"
+        DEPICTIO_AUTH_SINGLE_USER_MODE: "${DEPICTIO_AUTH_SINGLE_USER_MODE:-false}"
         # Use mounted volume for S3 cache persistence across container restarts
         DEPICTIO_S3_CACHE_DIR: "/app/cache/s3_files"
     command: ["/app/run_dash.sh"]
@@ -101,6 +102,7 @@ services:
     environment:
         DEPICTIO_DEV_MODE: "${DEPICTIO_DEV_MODE:-false}"
         DEPICTIO_LOGGING_VERBOSITY_LEVEL: "${DEPICTIO_LOGGING_VERBOSITY_LEVEL:-DEBUG}"
+        DEPICTIO_AUTH_SINGLE_USER_MODE: "${DEPICTIO_AUTH_SINGLE_USER_MODE:-false}"
         DEPICTIO_FASTAPI_WORKERS: "${DEPICTIO_FASTAPI_WORKERS:-4}"
         DEPICTIO_FASTAPI_EXTERNAL_PORT: "${DEPICTIO_FASTAPI_EXTERNAL_PORT:-8058}"
         DEPICTIO_FASTAPI_EXTERNAL_HOST: "${DEPICTIO_FASTAPI_EXTERNAL_HOST:-localhost}"
@@ -131,6 +133,7 @@ services:
     environment:
         DEPICTIO_DEV_MODE: "${DEPICTIO_DEV_MODE:-false}"
         DEPICTIO_LOGGING_VERBOSITY_LEVEL: "${DEPICTIO_LOGGING_VERBOSITY_LEVEL:-DEBUG}"
+        DEPICTIO_AUTH_SINGLE_USER_MODE: "${DEPICTIO_AUTH_SINGLE_USER_MODE:-false}"
         DEPICTIO_CONTEXT: "server"
     command: ["/app/run_celery_worker.sh"]
     user: "${UID:-1000}:${GID:-1000}"

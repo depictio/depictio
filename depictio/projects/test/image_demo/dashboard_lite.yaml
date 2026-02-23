@@ -2,6 +2,7 @@
 title: "Image Component Demo"
 subtitle: "Demonstrating the image gallery component with cross-DC filtering"
 project_tag: "Image Component Demo Project"
+dashboard_id: "6997872a694d2122240775c6"
 
 components:
   # Image gallery component
