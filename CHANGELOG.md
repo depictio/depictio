@@ -6,13 +6,51 @@
 
 
 <details>
-<summary>Click to expand the changelog for 0.7.3</summary>
+<summary>Click to expand the changelog for 0.7.4-b1</summary>
 
 ### Changes 📜
 
+#### Bug Fixes 🐛
+
+* fix: remove readonly UID/GID export attempts in CI workflow [dcb28677]
+* fix: export UID/GID/DATA_DIR variables for backup job permission resolution [13686b05]
+* fix: set permissions on data/ parent directory for container access [af500ce5]
+* fix: add --env-file flag to backup job docker-compose command [89164615]
+* fix: use DATA_DIR variable in backup MinIO compose file [4ec078c3]
+* fix: add data/ prefix to all directory paths in CI to match DATA_DIR setting [390dc07a]
+* fix: align CI e2e test sed patterns with docker-compose/.env defaults [efdbdb9e]
+* fix: revert default auth mode and fix CI sed commands [be16b162]
+* fix: explicitly pass DEPICTIO_AUTH_SINGLE_USER_MODE to Docker containers [f69ee1b0]
+* fix: enable single-user mode in CI and standardize setting name usage [2b68c9b2]
+* fix: auto-create admin user in single-user mode to resolve E2E test race condition [55d3b83e]
+* fix: remove outdated test for CLI agent generation in public mode [c0309d37]
+* fix: resolve CI FileNotFoundError in test_yaml_path fixture [b250db8b]
+* fix: enable CLI config generation in public/demo mode [a4b81f1f]
+* fix: update tests for _get_anonymous_user_session single-user mode branch [dd5999ad]
+* fix: update documentation link in .env.example for environment reference [8851cde7]
+* fix: update .env for single-user mode configuration and clean up comments [9493c8e5]
+* fix: correct MongoDB data path and improve docker-compose healthchecks [5b04dc6b]
+* fix: discard stale local-store tokens after instance recreation in single-user mode [bad4481f]
+* fix: single-user auto-login as admin and /auth redirect to /dashboards [55dd1569]
+
+#### Chores 🧹
+
+* chore: remove leftover analysis and summary markdown files [8a6d7fcc]
+* chore: replace Gitpod with GitHub Codespaces and remove Gitpod files [43590fc6]
+* ci: add docs repo notification to stable multi-arch build merge job [18d2596e]
+* ci: fix amd64 early tag push — use imagetools create after digest push [7c0a1207]
+* ci: add version input for manual workflow_dispatch [f463b635]
+* ci: push amd64 tags immediately, upgrade to multi-arch on merge [204ba459]
+* ci: fix multi-arch build — use native arm64 runner, drop QEMU [b092a26c]
+
 #### Other Changes 📝
 
-* Bump version: 0.7.3-b8 → 0.7.3 [b5f1892f]
+* Bump version: 0.7.3 → 0.7.4-b1 [936cc021]
+* debug: add logging to AuthSettings init to trace SINGLE_USER_MODE env var [0d23eb4d]
+* debug: add logging to screenshot endpoint to diagnose single-user mode setting [ab359171]
+* Update CHANGELOG.md for v0.7.3 [19e9d79b]
+* Bump version: 0.7.3-b8 → 0.7.3 [6687cecb]
+* Update CHANGELOG.md for v0.7.3-b8 [090ab294]
 * Bump version: 0.7.3-b7 → 0.7.3-b8 [092facd0]
 
 
@@ -22,30 +60,7 @@
 
 For more details, please refer to the [documentation](https://depictio.github.io/depictio-docs/)
 
-er for comprehensive application security checks [caa5476c]
-* feat: add blocking for debug endpoints in Flask server [db8fb6b3]
-* feat: add GitHub Actions workflow for testing, linting, and building depictio-cli and clean up pyproject.toml [46503f33]
-* feat: update environment configuration for Gitpod setup and adjust logging verbosity [6b74b5f2]
-* feat: update Gitpod setup for zsh and Docker permissions [6b3bc259]
-* feat: enhance Gitpod setup with zsh and starship configuration [a1e50c03]
-* feat: enhance Gitpod setup with zsh and starship configuration [8b29d277]
-* feat: enhance Iris integration verification in CI workflow ; add checks for project, deltatable, and dashboard [9a8a6b00]
-* feat: rename docker-setup job to docker-system-init and update dependencies in CI workflow ; add fixture to set DEPICTIO_CONTEXT environment variable in test suite (test_scan_utils) [596395e6]
-* feat: refactor deploy workflow to split CI jobs, enhance logging, and streamline Docker setup and integration tests [1d605c88]
-* feat: add run and standalone commands to CLI, enhance logging, and remove installation test script [0bad4848]
-* feat: add logging step for depictio-frontend in deployment workflow [223cbcc0]
-* feat: enhance S3 configuration handling and logging in storage options conversion [54fec27c]
-* feat: add backend log retrieval steps to Iris CLI workflow [96a0630a]
-
-#### Bug Fixes 🐛
-
-* fix: Comment out unused properties for clarity and future implementation [fbdc0596]
-* fix: update user handling in API calls and adjust token generation logic [097b2a97]
-* fix: update user model references in API calls to use User instead of UserBaseUI [612cd195]
-* fix: update user model references in admin management layout [66f11e14]
-* fix: reapply CLI configuration field name fixes [fec3fb74]
-* fix: update test assertions and mock configurations for consistency [6bceb3d4]
-* fix: enhance sleep call assertions in TestEnsureMongoDBConnection [14938d2c]
+ection [14938d2c]
 * fix: update mock CLI configuration for backup tests [0801b6e7]
 * fix: make tests compliant [7b6712b2]
 * fix: Add type ignore comments for unresolved attributes in test assertions [aca7cf2c]
