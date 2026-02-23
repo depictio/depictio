@@ -1422,7 +1422,7 @@ jobs:
           echo "Environment file: docker-compose/.env"
 
           export DEPICTIO_FASTAPI_WORKERS=1  # Single worker to avoid boot race conditions
-          docker compose -f docker-compose.dev.yaml -f docker-compose/docker-compose.backup-minio.yaml up -d --force-recreate
+          docker compose -f docker-compose.dev.yaml -f docker-compose/docker-compose.backup-minio.yaml --env-file docker-compose/.env up -d --force-recreate
 
           echo "⏳ Waiting 30 seconds for services to start..."
           sleep 30
