@@ -1360,6 +1360,9 @@ jobs:
           sudo chmod 666 /var/run/docker.sock
           echo "UID=$(id -u)" >> $GITHUB_ENV
           echo "GID=$(id -g)" >> $GITHUB_ENV
+          export UID=$(id -u)              # Export for docker-compose
+          export GID=$(id -g)              # Export for docker-compose
+          export DATA_DIR=data             # Export DATA_DIR variable
           echo "UID: $(id -u), GID: $(id -g)"
 
           echo "📁 Creating environment files..."
@@ -1370,6 +1373,12 @@ jobs:
           # Copy to docker-compose/.env for application variables
           cp .env.example docker-compose/.env
           echo "✅ docker-compose/.env file created"
+
+          # Add runtime variables to docker-compose/.env
+          echo "UID=$(id -u)" >> docker-compose/.env
+          echo "GID=$(id -g)" >> docker-compose/.env
+          echo "DATA_DIR=data" >> docker-compose/.env
+          echo "✅ Runtime variables (UID, GID, DATA_DIR) added to docker-compose/.env"
 
           echo "⚙️ Configuring backup strategy in docker-compose/.env file..."
           # Remove any existing backup configuration first
@@ -1421,6 +1430,9 @@ jobs:
           echo "Compose files: docker-compose.dev.yaml + docker-compose.backup-minio.yaml"
           echo "Environment file: docker-compose/.env"
 
+          export UID=$(id -u)              # Ensure UID exported for docker-compose
+          export GID=$(id -g)              # Ensure GID exported for docker-compose
+          export DATA_DIR=data             # Ensure DATA_DIR exported for docker-compose
           export DEPICTIO_FASTAPI_WORKERS=1  # Single worker to avoid boot race conditions
           docker compose -f docker-compose.dev.yaml -f docker-compose/docker-compose.backup-minio.yaml --env-file docker-compose/.env up -d --force-recreate
 
