@@ -2,32 +2,483 @@
   "_id": {
     "$oid": "646b0f3c1e4a2d7f8e5b8cb4"
   },
+  "description": null,
+  "flexible_metadata": null,
+  "hash": null,
   "dashboard_id": {
     "$oid": "646b0f3c1e4a2d7f8e5b8cb4"
   },
-  "buttons_data": {
-    "unified_edit_mode": false,
-    "add_components_button": {
-      "count": 3,
-      "initialized": true
+  "version": 2,
+  "tmp_children_data": [],
+  "stored_layout_data": [],
+  "stored_children_data": [],
+  "stored_metadata": [
+    {
+      "index": "diff-contrast-filter",
+      "component_type": "interactive",
+      "title": "Contrast",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "ancombc_results",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8cad"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "ANCOM-BC differential abundance (habitat, Phylum level)",
+        "data_collection_tag": "ancombc_results",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8cad"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-02-24T17:50:53.630925",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "contrast",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "title_size": "md",
+      "custom_color": "#2196F3",
+      "icon_name": "mdi:compare-horizontal",
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "diff-filter-phylum",
+      "component_type": "interactive",
+      "title": "Phylum",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "ancombc_results",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8cad"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "ANCOM-BC differential abundance (habitat, Phylum level)",
+        "data_collection_tag": "ancombc_results",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8cad"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-02-24T17:50:53.630936",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "Phylum",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "title_size": "md",
+      "custom_color": "#8BC34A",
+      "icon_name": "mdi:bacteria-outline",
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "diff-kingdom-filter",
+      "component_type": "interactive",
+      "title": "Kingdom",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "ancombc_results",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8cad"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "ANCOM-BC differential abundance (habitat, Phylum level)",
+        "data_collection_tag": "ancombc_results",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8cad"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-02-24T17:50:53.630941",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "Kingdom",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "title_size": "md",
+      "custom_color": "#377EB8",
+      "icon_name": "mdi:bacteria",
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "diff-w-slider",
+      "component_type": "interactive",
+      "title": "W Statistic Range",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "ancombc_results",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8cad"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "ANCOM-BC differential abundance (habitat, Phylum level)",
+        "data_collection_tag": "ancombc_results",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8cad"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-02-24T17:50:53.630946",
+      "interactive_component_type": "RangeSlider",
+      "column_name": "w",
+      "column_type": "float64",
+      "value": null,
+      "default_state": null,
+      "title_size": "md",
+      "custom_color": "#E74C3C",
+      "icon_name": "mdi:chart-line",
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "diff-lfc-slider",
+      "component_type": "interactive",
+      "title": "Log-Fold Change Range",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "ancombc_results",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8cad"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "ANCOM-BC differential abundance (habitat, Phylum level)",
+        "data_collection_tag": "ancombc_results",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8cad"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-02-24T17:50:53.630950",
+      "interactive_component_type": "RangeSlider",
+      "column_name": "lfc",
+      "column_type": "float64",
+      "value": null,
+      "default_state": null,
+      "title_size": "md",
+      "custom_color": "#F68B33",
+      "icon_name": "mdi:chart-bell-curve",
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "diff-card-total-taxa",
+      "component_type": "card",
+      "title": "Total Taxa Analyzed",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "ancombc_results",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8cad"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "ANCOM-BC differential abundance (habitat, Phylum level)",
+        "data_collection_tag": "ancombc_results",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8cad"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-02-24T17:50:53.630957",
+      "aggregation": "count",
+      "column_name": "id",
+      "column_type": "object",
+      "value": null,
+      "icon_name": "mdi:bacteria",
+      "icon_color": "#45B8AC",
+      "title_color": "#45B8AC",
+      "title_font_size": "xl",
+      "value_font_size": "xl",
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "diff-card-significant",
+      "component_type": "card",
+      "title": "Significant Taxa (q<0.05)",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "ancombc_results",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8cad"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "ANCOM-BC differential abundance (habitat, Phylum level)",
+        "data_collection_tag": "ancombc_results",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8cad"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-02-24T17:50:53.630963",
+      "aggregation": "count",
+      "column_name": "id",
+      "column_type": "object",
+      "value": null,
+      "icon_name": "mdi:alert-circle",
+      "icon_color": "#E74C3C",
+      "title_color": "#E74C3C",
+      "title_font_size": "xl",
+      "value_font_size": "xl",
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "diff-card-phyla",
+      "component_type": "card",
+      "title": "Unique Phyla",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "ancombc_results",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8cad"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "ANCOM-BC differential abundance (habitat, Phylum level)",
+        "data_collection_tag": "ancombc_results",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8cad"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-02-24T17:50:53.630967",
+      "aggregation": "nunique",
+      "column_name": "Phylum",
+      "column_type": "object",
+      "value": null,
+      "icon_name": "mdi:bacteria-outline",
+      "icon_color": "#8BC34A",
+      "title_color": "#8BC34A",
+      "title_font_size": "xl",
+      "value_font_size": "xl",
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "diff-card-max-effect",
+      "component_type": "card",
+      "title": "Max Log-Fold Change",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "ancombc_results",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8cad"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "ANCOM-BC differential abundance (habitat, Phylum level)",
+        "data_collection_tag": "ancombc_results",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8cad"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-02-24T17:50:53.630972",
+      "aggregation": "max",
+      "column_name": "lfc",
+      "column_type": "float64",
+      "value": null,
+      "icon_name": "mdi:chart-line-variant",
+      "icon_color": "#F68B33",
+      "title_color": "#F68B33",
+      "title_font_size": "xl",
+      "value_font_size": "xl",
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "4aae0c2f-7b94-4b20-b3ee-90dcd8444b4f",
+      "component_type": "figure",
+      "title": "",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "ancombc_results",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8cad"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "ANCOM-BC differential abundance (habitat, Phylum level)",
+        "data_collection_tag": "ancombc_results",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8cad"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-02-24T17:50:53.630984",
+      "visu_type": "scatter",
+      "dict_kwargs": {
+        "color": "Phylum",
+        "facet_col": "contrast",
+        "hover_data": [
+          "id",
+          "q_val"
+        ],
+        "labels": {
+          "Phylum": "Phylum",
+          "lfc": "Log-Fold Change",
+          "neg_log10_qval": "-log10(q-value)"
+        },
+        "title": "ANCOM-BC Volcano Plot",
+        "x": "lfc",
+        "y": "neg_log10_qval"
+      },
+      "mode": "code",
+      "code_content": "fig = px.scatter(\n    df.to_pandas(),\n    x='lfc', y='neg_log10_qval', color='Phylum',\n    facet_col='contrast',\n    hover_data=['id', 'q_val'],\n    title='ANCOM-BC Volcano Plot',\n    labels={'lfc': 'Log-Fold Change', 'neg_log10_qval': '-log10(q-value)'}\n)\nfig.add_hline(y=-np.log10(0.05), line_dash='dash', line_color='red', annotation_text='q=0.05')\nfig.add_vline(x=0, line_dash='dash', line_color='gray')",
+      "displayed_data_count": 0,
+      "total_data_count": 0,
+      "was_sampled": false,
+      "filter_applied": false,
+      "selection_enabled": false,
+      "selection_column": null,
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "diff-bar-top-taxa",
+      "component_type": "figure",
+      "title": "",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "ancombc_results",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8cad"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "ANCOM-BC differential abundance (habitat, Phylum level)",
+        "data_collection_tag": "ancombc_results",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8cad"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-02-24T17:50:53.630991",
+      "visu_type": "bar",
+      "dict_kwargs": {
+        "color": "Phylum",
+        "facet_col": "contrast",
+        "labels": {
+          "Phylum": "Phylum",
+          "lfc": "Log-Fold Change"
+        },
+        "title": "Top Differential Taxa by Log-Fold Change",
+        "x": "Phylum",
+        "y": "lfc"
+      },
+      "mode": "code",
+      "code_content": "df_sig = df.filter(pl.col('significant') == True)\ndf_top = df_sig.with_columns(pl.col('lfc').abs().alias('abs_lfc')).sort('abs_lfc', descending=True).group_by('contrast').head(10)\ndf_plot = df_top.sort(['contrast', 'lfc'])\nfig = px.bar(\n    df_plot.to_pandas(),\n    x='Phylum', y='lfc', color='Phylum',\n    facet_col='contrast',\n    title='Top Significant Taxa by Log-Fold Change (per contrast)',\n    labels={'Phylum': 'Phylum', 'lfc': 'Log-Fold Change'}\n)\nfig.update_xaxes(matches=None, tickangle=-45, tickfont={'size': 9})\nfig.for_each_xaxis(lambda axis: axis.update(categoryorder='total ascending'))\nfig.add_hline(y=0, line_dash='solid', line_color='gray', line_width=0.5)",
+      "displayed_data_count": 0,
+      "total_data_count": 0,
+      "was_sampled": false,
+      "filter_applied": false,
+      "selection_enabled": false,
+      "selection_column": null,
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "diff-table-results",
+      "component_type": "table",
+      "title": "",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "ancombc_results",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8cad"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "ANCOM-BC differential abundance (habitat, Phylum level)",
+        "data_collection_tag": "ancombc_results",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8cad"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-02-24T17:50:53.630996",
+      "columns": [],
+      "page_size": 10,
+      "sortable": true,
+      "filterable": true,
+      "row_selection_enabled": false,
+      "row_selection_column": null,
+      "wf_tag": "nextflow/ampliseq"
     }
-  },
-  "description": "Analysis of microbial diversity and taxonomic composition",
-  "flexible_metadata": null,
-  "hash": null,
-  "icon": "/assets/images/workflows/nf-core.png",
-  "icon_color": "green",
-  "icon_variant": "filled",
-  "tab_icon": "mdi:chart-scatter-plot",
-  "tab_icon_color": "red",
-  "is_main_tab": false,
-  "is_public": true,
-  "last_saved_ts": "2026-01-27 00:00:00.000000",
+  ],
+  "stored_edit_dashboard_mode_button": [],
   "left_panel_layout_data": [
+    {
+      "i": "box-diff-contrast-filter",
+      "x": 0,
+      "y": 0,
+      "w": 1,
+      "h": 2,
+      "static": false
+    },
     {
       "i": "box-diff-filter-phylum",
       "x": 0,
-      "y": 0,
+      "y": 2,
       "w": 1,
       "h": 3,
       "static": false
@@ -35,7 +486,7 @@
     {
       "i": "box-diff-kingdom-filter",
       "x": 0,
-      "y": 3,
+      "y": 5,
       "w": 1,
       "h": 2,
       "static": false
@@ -43,46 +494,20 @@
     {
       "i": "box-diff-w-slider",
       "x": 0,
-      "y": 5,
+      "y": 7,
       "w": 1,
       "h": 3,
       "static": false
     },
     {
-      "i": "box-diff-clr-slider",
+      "i": "box-diff-lfc-slider",
       "x": 0,
-      "y": 8,
+      "y": 10,
       "w": 1,
       "h": 3,
       "static": false
     }
   ],
-  "notes_content": "<p>Diversity and taxonomy analysis dashboard for ampliseq</p>",
-  "parent_dashboard_id": {
-    "$oid": "646b0f3c1e4a2d7f8e5b8ca2"
-  },
-  "permissions": {
-    "owners": [
-      {
-        "_id": {
-          "$oid": "67658ba033c8b59ad489d7c7"
-        },
-        "description": null,
-        "flexible_metadata": null,
-        "hash": null,
-        "email": "admin@example.com",
-        "is_admin": true,
-        "is_anonymous": false,
-        "is_temporary": false,
-        "expiration_time": null
-      }
-    ],
-    "editors": [],
-    "viewers": []
-  },
-  "project_id": {
-    "$oid": "646b0f3c1e4a2d7f8e5b8ca2"
-  },
   "right_panel_layout_data": [
     {
       "i": "box-diff-card-total-taxa",
@@ -117,11 +542,11 @@
       "static": true
     },
     {
-      "i": "box-0717dd38-1eb1-46d6-834b-b8a146f074d9",
+      "i": "box-4aae0c2f-7b94-4b20-b3ee-90dcd8444b4f",
       "x": 0,
       "y": 2,
       "w": 8,
-      "h": 10,
+      "h": 6,
       "static": false,
       "resizeHandles": [
         "se",
@@ -134,7 +559,7 @@
     {
       "i": "box-diff-bar-top-taxa",
       "x": 0,
-      "y": 12,
+      "y": 9,
       "w": 8,
       "h": 8,
       "static": false,
@@ -149,9 +574,9 @@
     {
       "i": "box-diff-table-results",
       "x": 0,
-      "y": 20,
+      "y": 17,
       "w": 8,
-      "h": 8,
+      "h": 6,
       "static": false,
       "resizeHandles": [
         "se",
@@ -162,338 +587,53 @@
       ]
     }
   ],
-  "stored_add_button": {
-    "count": 3,
-    "initialized": true
-  },
-  "stored_children_data": [],
-  "stored_edit_dashboard_mode_button": [],
-  "stored_layout_data": [],
-  "stored_metadata": [
-    {
-      "index": "diff-filter-phylum",
-      "component_type": "interactive",
-      "interactive_component_type": "MultiSelect",
-      "column_name": "Phylum",
-      "column_type": "object",
-      "dc_id": {
-        "$oid": "646b0f3c1e4a2d7f8e5b8caa"
-      },
-      "wf_id": {
-        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
-      },
-      "default_state": {
-        "type": "select",
-        "options": [
-          "Acidobacteria",
-          "Actinobacteria",
-          "Aminicenantes",
-          "Armatimonadetes",
-          "Bacteroidetes",
-          "BRC1",
-          "Campilobacterota",
-          "candidate_division_WPS-1",
-          "Candidatus_Saccharibacteria",
-          "Chloroflexi",
-          "Crenarchaeota",
-          "Deferribacteres",
-          "Diapherotrites",
-          "Euryarchaeota",
-          "Firmicutes",
-          "Fusobacteria",
-          "Gemmatimonadetes",
-          "Hydrogenedentes",
-          "Ignavibacteriae",
-          "Latescibacteria",
-          "Lentisphaerae",
-          "Nitrospirae",
-          "Pacearchaeota",
-          "Parcubacteria",
-          "Planctomycetes",
-          "Proteobacteria",
-          "Spirochaetes",
-          "Thaumarchaeota",
-          "Verrucomicrobia",
-          "Woesearchaeota"
-        ],
-        "default_value": null
-      },
-      "panel": "left",
-      "title_size": "md",
-      "custom_color": "#8BC34A",
-      "icon_name": "mdi:bacteria-outline",
-      "title": "Phylum"
-    },
-    {
-      "index": "diff-kingdom-filter",
-      "component_type": "interactive",
-      "interactive_component_type": "MultiSelect",
-      "column_name": "Kingdom",
-      "column_type": "object",
-      "dc_id": {
-        "$oid": "646b0f3c1e4a2d7f8e5b8caa"
-      },
-      "wf_id": {
-        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
-      },
-      "default_state": {
-        "type": "select",
-        "options": [
-          "Archaea",
-          "Bacteria"
-        ],
-        "default_value": null
-      },
-      "panel": "left",
-      "title_size": "md",
-      "custom_color": "#377EB8",
-      "icon_name": "mdi:bacteria",
-      "title": "Kingdom"
-    },
-    {
-      "index": "diff-w-slider",
-      "component_type": "interactive",
-      "interactive_component_type": "RangeSlider",
-      "column_name": "W",
-      "column_type": "int64",
-      "dc_id": {
-        "$oid": "646b0f3c1e4a2d7f8e5b8caa"
-      },
-      "wf_id": {
-        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
-      },
-      "default_state": {
-        "type": "range",
-        "min": 0,
-        "max": 2678,
-        "step": 10,
-        "default_value": null
-      },
-      "panel": "left",
-      "title_size": "md",
-      "custom_color": "#E74C3C",
-      "icon_name": "mdi:chart-line",
-      "scale": "linear",
-      "marks_number": 5,
-      "title": "W Statistic Range"
-    },
-    {
-      "index": "diff-clr-slider",
-      "component_type": "interactive",
-      "interactive_component_type": "RangeSlider",
-      "column_name": "clr",
-      "column_type": "float64",
-      "dc_id": {
-        "$oid": "646b0f3c1e4a2d7f8e5b8caa"
-      },
-      "wf_id": {
-        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
-      },
-      "default_state": {
-        "type": "range",
-        "min": 0.09,
-        "max": 29747.39,
-        "step": 0.01,
-        "default_value": null
-      },
-      "panel": "left",
-      "title_size": "md",
-      "custom_color": "#F68B33",
-      "icon_name": "mdi:chart-bell-curve",
-      "scale": "log10",
-      "marks_number": 5,
-      "title": "CLR Effect Size Range"
-    },
-    {
-      "index": "diff-card-total-taxa",
-      "component_type": "card",
-      "aggregation": "count",
-      "column_name": "id",
-      "dc_id": {
-        "$oid": "646b0f3c1e4a2d7f8e5b8caa"
-      },
-      "wf_id": {
-        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
-      },
-      "title": "Total Taxa Analyzed",
-      "panel": "right",
-      "title_color": "#45B8AC",
-      "icon_name": "mdi:bacteria",
-      "icon_color": "#45B8AC",
-      "title_font_size": "xl",
-      "value_font_size": "xl",
-      "column_type": "object"
-    },
-    {
-      "index": "diff-card-significant",
-      "component_type": "card",
-      "aggregation": "count",
-      "column_name": "id",
-      "dc_id": {
-        "$oid": "646b0f3c1e4a2d7f8e5b8caa"
-      },
-      "wf_id": {
-        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
-      },
-      "title": "Significant Taxa (W>100)",
-      "panel": "right",
-      "title_color": "#E74C3C",
-      "icon_name": "mdi:alert-circle",
-      "icon_color": "#E74C3C",
-      "title_font_size": "xl",
-      "value_font_size": "xl",
-      "column_type": "object",
-      "filter_condition": "W > 100"
-    },
-    {
-      "index": "diff-card-phyla",
-      "component_type": "card",
-      "aggregation": "nunique",
-      "column_name": "Phylum",
-      "dc_id": {
-        "$oid": "646b0f3c1e4a2d7f8e5b8caa"
-      },
-      "wf_id": {
-        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
-      },
-      "title": "Unique Phyla",
-      "panel": "right",
-      "title_color": "#8BC34A",
-      "icon_name": "mdi:bacteria-outline",
-      "icon_color": "#8BC34A",
-      "title_font_size": "xl",
-      "value_font_size": "xl",
-      "column_type": "object"
-    },
-    {
-      "index": "diff-card-max-effect",
-      "component_type": "card",
-      "aggregation": "max",
-      "column_name": "clr",
-      "dc_id": {
-        "$oid": "646b0f3c1e4a2d7f8e5b8caa"
-      },
-      "wf_id": {
-        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
-      },
-      "title": "Max Effect Size (CLR)",
-      "panel": "right",
-      "title_color": "#F68B33",
-      "icon_name": "mdi:chart-line-variant",
-      "icon_color": "#F68B33",
-      "title_font_size": "xl",
-      "value_font_size": "xl",
-      "column_type": "float64"
-    },
-    {
-      "index": "0717dd38-1eb1-46d6-834b-b8a146f074d9",
-      "component_type": "figure",
-      "visu_type": "scatter",
-      "dict_kwargs": {
-        "x": "clr",
-        "y": "W",
-        "color": "Phylum",
-        "hover_data": [
-          "id",
-          "taxonomy"
-        ],
-        "title": "ANCOM Differential Abundance",
-        "labels": {
-          "clr": "Centered Log-Ratio (Effect Size)",
-          "W": "ANCOM W-Statistic",
-          "Phylum": "Phylum"
-        },
-        "template": "mantine_light"
-      },
-      "wf_id": {
-        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
-      },
-      "dc_id": {
-        "$oid": "646b0f3c1e4a2d7f8e5b8caa"
-      },
-      "last_updated": "2026-01-27T00:00:00.000000",
-      "panel": "right"
-    },
-    {
-      "index": "diff-bar-top-taxa",
-      "component_type": "figure",
-      "visu_type": "bar",
-      "dict_kwargs": {
-        "x": "taxonomy",
-        "y": "W",
-        "color": "Phylum",
-        "title": "Top 20 Most Significant Taxa (by W-statistic)",
-        "labels": {
-          "taxonomy": "Taxonomy",
-          "W": "ANCOM W-Statistic",
-          "Phylum": "Phylum"
-        },
-        "template": "mantine_light"
-      },
-      "mode": "code",
-      "code_content": "df_modified = df.sort('W', descending=True).head(20)\nfig = px.bar(\n    df_modified.to_pandas(),\n    x='taxonomy', y='W', color='Phylum',\n    title='Top 20 Most Significant Taxa (by W-statistic)',\n    labels={'taxonomy': 'Taxonomy', 'W': 'ANCOM W-Statistic', 'Phylum': 'Phylum'}\n)\nfig.update_layout(xaxis={'tickangle': -45, 'tickfont': {'size': 10}})",
-      "wf_id": {
-        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
-      },
-      "dc_id": {
-        "$oid": "646b0f3c1e4a2d7f8e5b8caa"
-      },
-      "last_updated": "2026-02-11T00:00:00.000000",
-      "panel": "right"
-    },
-    {
-      "index": "diff-table-results",
-      "component_type": "table",
-      "wf_id": {
-        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
-      },
-      "dc_id": {
-        "$oid": "646b0f3c1e4a2d7f8e5b8caa"
-      },
-      "dc_config": {
-        "type": "table",
-        "metatype": "Results"
-      },
-      "cols_json": {
-        "taxonomy": {
-          "type": "object",
-          "description": "Taxonomic classification",
-          "filter": "agTextColumnFilter",
-          "floatingFilter": true
-        },
-        "Kingdom": {
-          "type": "object",
-          "description": "Kingdom",
-          "filter": "agTextColumnFilter",
-          "floatingFilter": true
-        },
-        "Phylum": {
-          "type": "object",
-          "description": "Phylum",
-          "filter": "agTextColumnFilter",
-          "floatingFilter": true
-        },
-        "W": {
-          "type": "int64",
-          "description": "ANCOM W-statistic (higher = more significant)",
-          "filter": "agNumberColumnFilter",
-          "floatingFilter": true
-        },
-        "clr": {
-          "type": "float64",
-          "description": "Centered log-ratio (effect size)",
-          "filter": "agNumberColumnFilter",
-          "floatingFilter": true
-        }
-      },
-      "parent_index": null,
-      "panel": "right"
+  "buttons_data": {
+    "unified_edit_mode": true,
+    "add_components_button": {
+      "count": 0
     }
-  ],
-  "subtitle": "ANCOM Volcano Plot",
-  "tab_order": 2,
+  },
+  "stored_add_button": {
+    "count": 0
+  },
   "title": "Diff. Abundance",
-  "tmp_children_data": [],
-  "version": 1,
-  "workflow_system": "nf-core"
+  "subtitle": "ANCOM-BC Volcano Plot",
+  "icon": "/assets/images/workflows/nf-core.png",
+  "icon_color": "green",
+  "icon_variant": "filled",
+  "workflow_system": "nf-core",
+  "notes_content": "",
+  "permissions": {
+    "owners": [
+      {
+        "_id": {
+          "$oid": "67658ba033c8b59ad489d7c7"
+        },
+        "description": null,
+        "flexible_metadata": null,
+        "hash": null,
+        "email": "admin@example.com",
+        "is_admin": true,
+        "is_anonymous": false,
+        "is_temporary": false,
+        "expiration_time": null
+      }
+    ],
+    "editors": [],
+    "viewers": []
+  },
+  "is_public": false,
+  "last_saved_ts": "2026-02-24 17:50:53",
+  "project_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8ca2"
+  },
+  "is_main_tab": false,
+  "parent_dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8ca2"
+  },
+  "tab_order": 2,
+  "main_tab_name": null,
+  "tab_icon": "mdi:chart-scatter-plot",
+  "tab_icon_color": "red",
+  "parent_dashboard_title": null
 }

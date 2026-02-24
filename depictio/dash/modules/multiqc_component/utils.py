@@ -16,7 +16,7 @@ Key Functions:
     check_multiqc_data_availability: Validates MultiQC data presence
 """
 
-from typing import Any
+from typing import Any, Optional
 
 import httpx
 import plotly.graph_objects as go
@@ -24,6 +24,27 @@ from dash import dcc, html
 
 from depictio.api.v1.configs.config import API_BASE_URL
 from depictio.api.v1.configs.logging_init import logger
+
+
+def resolve_bson_id(value: Any) -> Optional[str]:
+    """Normalize a value that may be a BSON ObjectId, ``{"$oid": "..."}`` dict, or plain string.
+
+    Dash ``dcc.Store`` serializes data as JSON.  BSON ``ObjectId`` instances are not
+    JSON-serializable and silently become ``None``.  MongoDB extended-JSON uses
+    ``{"$oid": "..."}`` dicts.  This helper normalizes all representations into a
+    plain string (or ``None``).
+
+    Args:
+        value: Raw value from a Dash store -- may be ``str``, ``dict``, ``ObjectId``, or ``None``.
+
+    Returns:
+        Plain string ID, or ``None`` if the input is ``None``.
+    """
+    if value is None:
+        return None
+    if isinstance(value, dict) and "$oid" in value:
+        return value["$oid"]
+    return str(value)
 
 
 def analyze_multiqc_plot_structure(fig: go.Figure) -> dict:
@@ -168,15 +189,22 @@ def build_multiqc(**kwargs: Any):
         store_index = component_id.replace("-tmp", "") if component_id else "unknown"
         data_index = store_index
 
+    # Normalize ObjectId values to plain strings so dcc.Store can JSON-serialize them.
+    # Both "workflow_id"/"wf_id" and "data_collection_id"/"dc_id" key variants appear in
+    # kwargs depending on the caller; we accept either and store both for compatibility.
+    wf_id_str = resolve_bson_id(kwargs.get("workflow_id") or kwargs.get("wf_id"))
+    dc_id_str = resolve_bson_id(kwargs.get("data_collection_id") or kwargs.get("dc_id"))
+    project_id_str = resolve_bson_id(kwargs.get("project_id"))
+
     # Create comprehensive metadata for the component including interactive filtering support
     component_metadata = {
         "index": str(data_index),
         "component_type": "multiqc",
-        "workflow_id": kwargs.get("workflow_id"),
-        "data_collection_id": kwargs.get("data_collection_id"),
-        "wf_id": kwargs.get("workflow_id"),  # Alias for compatibility
-        "dc_id": kwargs.get("data_collection_id"),  # Alias for compatibility
-        "project_id": kwargs.get("project_id"),  # For cross-DC link resolution
+        "workflow_id": wf_id_str,
+        "data_collection_id": dc_id_str,
+        "wf_id": wf_id_str,  # Alias for compatibility
+        "dc_id": dc_id_str,  # Alias for compatibility
+        "project_id": project_id_str,  # For cross-DC link resolution
         "selected_module": selected_module,
         "selected_plot": selected_plot,
         "selected_dataset": selected_dataset,
@@ -288,9 +316,8 @@ def build_multiqc(**kwargs: Any):
         )
 
     logger.debug(
-        f"🔨 MULTIQC BUILD RETURNING - Component ID: {component_id}, "
-        f"Plot wrapper type: {type(plot_component).__name__}, "
-        f"Has stores: store={store_component is not None}, trace={trace_metadata_store is not None}"
+        f"build_multiqc returning component_id={component_id}, "
+        f"plot_type={type(plot_component).__name__}"
     )
 
     return html.Div(
@@ -304,7 +331,6 @@ def build_multiqc(**kwargs: Any):
             "flexDirection": "column",
             "overflow": "hidden",
             "minHeight": "300px",  # Ensure minimum height
-            "backgroundColor": "rgba(255, 0, 0, 0.1)",  # DEBUG: Red tint to see if visible
         },
     )
 

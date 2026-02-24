@@ -529,8 +529,8 @@ def import_yaml(
     url = f"{api_url}/depictio/api/v1/dashboards/import/yaml"
 
     try:
-        # Build params - only include project_id if explicitly provided
-        params: dict[str, str | bool] = {"yaml_content": yaml_content}
+        # Build query params (small values only)
+        params: dict[str, str | bool] = {}
         if project:
             params["project_id"] = project
         if overwrite:
@@ -540,7 +540,8 @@ def import_yaml(
             response = client.post(
                 url,
                 params=params,
-                headers=headers,
+                content=yaml_content,
+                headers={**headers, "Content-Type": "text/plain"},
             )
 
             if response.status_code != 200:
@@ -558,9 +559,9 @@ def import_yaml(
             console.print(f"  Dashboard ID: {data.get('dashboard_id')}")
             console.print(f"  Title: {data.get('title')}")
             console.print(f"  Project ID: {data.get('project_id')}")
-            base_url = api_url.replace("/depictio/api/v1", "")
+            dash_url = data.get("dash_url") or api_url.replace("/depictio/api/v1", "")
             console.print(
-                f"\n[cyan]View at:[/cyan] {base_url}/dashboard/{data.get('dashboard_id')}"
+                f"\n[cyan]View at:[/cyan] {dash_url}/dashboard/{data.get('dashboard_id')}"
             )
 
     except httpx.ConnectError:

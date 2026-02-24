@@ -438,7 +438,18 @@ def register_callbacks_header(app) -> None:
         function(is_collapsed) {
             console.log('🍔 CLIENTSIDE BURGER SYNC: collapsed=' + is_collapsed);
             // Burger opened = NOT collapsed
-            return (is_collapsed !== null && is_collapsed !== undefined) ? !is_collapsed : true;
+            var new_opened = (is_collapsed !== null && is_collapsed !== undefined) ? !is_collapsed : true;
+            // Guard: check DOM to avoid redundant update that would re-trigger the cycle
+            var burger = document.querySelector('#burger-button');
+            if (burger) {
+                var currentOpened = burger.getAttribute('data-opened') === 'true' ||
+                                   burger.classList.contains('mantine-Burger--opened');
+                if (currentOpened === new_opened) {
+                    console.log('🚫 Burger already in sync, skipping update');
+                    return window.dash_clientside.no_update;
+                }
+            }
+            return new_opened;
         }
         """,
         Output("burger-button", "opened", allow_duplicate=True),
@@ -468,6 +479,14 @@ def register_callbacks_header(app) -> None:
 
             // sidebar-collapsed = NOT burger_opened
             const is_collapsed = !burger_opened;
+
+            // Guard: if sidebar-collapsed already has this value, skip to break the cycle
+            if (typeof window._lastSidebarCollapsed !== 'undefined' && window._lastSidebarCollapsed === is_collapsed) {
+                console.log('🚫 sidebar-collapsed already ' + is_collapsed + ', skipping');
+                return window.dash_clientside.no_update;
+            }
+            window._lastSidebarCollapsed = is_collapsed;
+
             console.log('✅ Setting collapsed=' + is_collapsed);
             return is_collapsed;
         }

@@ -181,6 +181,72 @@ workflows:
               "W": "W statistic from ANCOM analysis"
               "clr": "Centered log-ratio transformed abundance"
 
+      - id: "646b0f3c1e4a2d7f8e5b8cab"
+        data_collection_tag: "alpha_diversity"
+        description: "Per-sample alpha diversity metrics (Faith PD)"
+        config:
+          type: "Table"
+          metatype: "Metadata"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "/app/depictio/projects/reference/ampliseq/alpha_diversity.tsv"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+            columns_description:
+              "sample": "Sample identifier"
+              "habitat": "Habitat type"
+              "faith_pd": "Faith's Phylogenetic Diversity (single value per sample)"
+
+      - id: "646b0f3c1e4a2d7f8e5b8cac"
+        data_collection_tag: "taxonomy_rel_abundance"
+        description: "Taxonomic relative abundance (Phylum level)"
+        config:
+          type: "Table"
+          metatype: "Metadata"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "/app/depictio/projects/reference/ampliseq/taxonomy_rel_abundance_long.tsv"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+            columns_description:
+              "sample": "Sample identifier"
+              "taxonomy": "Taxonomic classification (Kingdom;Phylum)"
+              "rel_abundance": "Relative abundance (0-1)"
+              "habitat": "Habitat type"
+              "Kingdom": "Kingdom level"
+              "Phylum": "Phylum level"
+
+      - id: "646b0f3c1e4a2d7f8e5b8cad"
+        data_collection_tag: "ancombc_results"
+        description: "ANCOM-BC differential abundance (habitat, Phylum level)"
+        config:
+          type: "Table"
+          metatype: "Metadata"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "/app/depictio/projects/reference/ampliseq/ancombc_habitat_level2.tsv"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+            columns_description:
+              "id": "Taxonomy identifier"
+              "contrast": "Statistical contrast (habitat comparison)"
+              "lfc": "Log-fold change"
+              "q_val": "FDR-adjusted p-value"
+              "w": "ANCOM-BC test statistic"
+              "Kingdom": "Kingdom level"
+              "Phylum": "Phylum level"
+              "neg_log10_qval": "-log10(q-value) for volcano plot"
+              "significant": "q < 0.05"
+
 # ============================================================================
 # TABLE JOINS CONFIGURATION
 # ============================================================================
@@ -231,6 +297,28 @@ links:
       resolver: "direct"
       target_field: "sample"
     description: "Filter taxonomy by metadata samples"
+    enabled: true
+
+  # Link 4: Metadata -> Alpha Diversity
+  - source_dc_id: "646b0f3c1e4a2d7f8e5b8ca5"  # metadata
+    source_column: "sample"
+    target_dc_id: "646b0f3c1e4a2d7f8e5b8cab"  # alpha_diversity
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter alpha diversity by metadata samples"
+    enabled: true
+
+  # Link 5: Metadata -> Taxonomy Rel Abundance
+  - source_dc_id: "646b0f3c1e4a2d7f8e5b8ca5"  # metadata
+    source_column: "sample"
+    target_dc_id: "646b0f3c1e4a2d7f8e5b8cac"  # taxonomy_rel_abundance
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter taxonomy rel abundance by metadata samples"
     enabled: true
 
   # Note: ANCOM volcano (646b0f3c1e4a2d7f8e5b8caa) is not linked because it shows

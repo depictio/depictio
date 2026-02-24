@@ -28,7 +28,10 @@ from dash import ALL, MATCH, Input, Output, State
 from depictio.api.v1.configs.logging_init import logger
 from depictio.dash.background_callback_helpers import should_use_background_for_component
 from depictio.dash.modules.figure_component.multiqc_vis import create_multiqc_plot
-from depictio.dash.modules.multiqc_component.utils import analyze_multiqc_plot_structure
+from depictio.dash.modules.multiqc_component.utils import (
+    analyze_multiqc_plot_structure,
+    resolve_bson_id,
+)
 from depictio.dash.utils import (
     enrich_interactive_components_with_metadata,
     get_multiqc_sample_mappings,
@@ -471,10 +474,7 @@ def register_core_callbacks(app):
         theme = trigger_data.get("theme", "light")
 
         if not selected_module or not selected_plot or not s3_locations:
-            return {
-                "data": [],
-                "layout": {"title": "Error: Missing parameters"},
-            }, {}
+            return _create_error_figure("Error: Missing parameters"), {}
 
         try:
             normalized_locations = _normalize_multiqc_paths(s3_locations)
@@ -489,10 +489,7 @@ def register_core_callbacks(app):
 
             if not fig:
                 logger.error("MultiQC plot generation returned None")
-                return {
-                    "data": [],
-                    "layout": {"title": "Error generating plot"},
-                }, {}
+                return _create_error_figure("Error generating plot"), {}
 
             trace_metadata = analyze_multiqc_plot_structure(fig)
 
@@ -500,22 +497,7 @@ def register_core_callbacks(app):
 
         except Exception as e:
             logger.error(f"Error rendering MultiQC plot: {e}", exc_info=True)
-            return {
-                "data": [],
-                "layout": {
-                    "title": f"Error: {str(e)}",
-                    "annotations": [
-                        {
-                            "text": str(e),
-                            "xref": "paper",
-                            "yref": "paper",
-                            "x": 0.5,
-                            "y": 0.5,
-                            "showarrow": False,
-                        }
-                    ],
-                },
-            }, {}
+            return _create_error_figure(f"Error: {e}", message=str(e)), {}
 
     @app.callback(
         Output({"type": "multiqc-graph", "index": MATCH}, "figure", allow_duplicate=True),
@@ -526,6 +508,7 @@ def register_core_callbacks(app):
         State("local-store", "data"),
         State({"type": "interactive-stored-metadata", "index": ALL}, "data"),
         State({"type": "interactive-stored-metadata", "index": ALL}, "id"),
+        State("project-metadata-store", "data"),
         prevent_initial_call=True,
     )
     def patch_multiqc_plot_with_interactive_filtering(
@@ -536,6 +519,7 @@ def register_core_callbacks(app):
         local_data,
         interactive_metadata_list,
         interactive_metadata_ids,
+        project_metadata,
     ):
         """Patch MultiQC plots when interactive filtering is applied (only for joined workflows).
 
@@ -554,7 +538,6 @@ def register_core_callbacks(app):
         # Get authentication token
         token = local_data.get("access_token") if local_data else None
         if not token:
-            logger.warning("No access token available for MultiQC patching")
             return dash.no_update
 
         # Enrich lightweight store data with full metadata using shared utility
@@ -572,8 +555,10 @@ def register_core_callbacks(app):
         selected_module = stored_metadata.get("selected_module")
         selected_plot = stored_metadata.get("selected_plot")
         metadata = stored_metadata.get("metadata", {})
-        workflow_id = stored_metadata.get("workflow_id") or stored_metadata.get("wf_id")
-        interactive_patching_enabled = stored_metadata.get("interactive_patching_enabled", False)
+        workflow_id = resolve_bson_id(
+            stored_metadata.get("workflow_id") or stored_metadata.get("wf_id")
+        )
+        interactive_patching_enabled = stored_metadata.get("interactive_patching_enabled", True)
 
         if not interactive_patching_enabled:
             return dash.no_update
@@ -581,16 +566,14 @@ def register_core_callbacks(app):
         if not selected_module or not selected_plot or not s3_locations or not workflow_id:
             return dash.no_update
 
-        multiqc_dc_id = stored_metadata.get("dc_id") or stored_metadata.get("data_collection_id")
+        multiqc_dc_id = resolve_bson_id(
+            stored_metadata.get("dc_id") or stored_metadata.get("data_collection_id")
+        )
         if not multiqc_dc_id:
-            logger.warning("No dc_id found for MultiQC component")
             return dash.no_update
 
         result_dc_id = get_result_dc_for_workflow(workflow_id, token)
-        use_link_resolution = False
-
-        if not result_dc_id:
-            use_link_resolution = True
+        use_link_resolution = not result_dc_id
 
         interactive_components_dict = {}
         has_active_filters = False
@@ -659,10 +642,17 @@ def register_core_callbacks(app):
                     break
 
             if not metadata_dc_id:
-                logger.error(f"No metadata DC found for MultiQC patching (dc_id={multiqc_dc_id})")
                 return dash.no_update
 
             project_id = stored_metadata.get("project_id") if stored_metadata else None
+
+            # Fallback: extract project_id from project-metadata-store
+            if not project_id and project_metadata:
+                project_data = project_metadata.get("project", {})
+                if project_data:
+                    pid = project_data.get("_id") or project_data.get("id")
+                    if pid:
+                        project_id = str(pid)
 
             # Link-based resolution path (fallback when no pre-computed join)
             if use_link_resolution and project_id:
