@@ -24,6 +24,9 @@ from dash import dcc, html
 
 from depictio.api.v1.configs.config import API_BASE_URL
 from depictio.api.v1.configs.logging_init import logger
+from depictio.dash.modules.multiqc_component.general_stats import (
+    build_empty_general_stats_elements,
+)
 
 
 def resolve_bson_id(value: Any) -> Optional[str]:
@@ -230,62 +233,118 @@ def build_multiqc(**kwargs: Any):
 
     # Check if we have the minimum required information for a plot
     if not selected_module or not selected_plot or not s3_locations:
-        plot_component = dcc.Graph(
-            id={"type": "multiqc-graph", "index": str(component_id)},
-            figure={
-                "data": [],
-                "layout": {
-                    "title": "MultiQC Component - Configure in edit mode",
-                    "xaxis": {"visible": False},
-                    "yaxis": {"visible": False},
-                    "annotations": [
-                        {
-                            "text": "No data available",
-                            "xref": "paper",
-                            "yref": "paper",
-                            "x": 0.5,
-                            "y": 0.5,
-                            "showarrow": False,
-                            "font": {"size": 16, "color": "gray"},
-                        }
-                    ],
-                },
-            },
-            style={"height": "100%", "width": "100%"},
-        )
-    else:
-        # Lazy loading: return placeholder and trigger background generation
         plot_component = html.Div(
             id={"type": "multiqc-plot-wrapper", "index": str(component_id)},
             style={
                 "position": "relative",
                 "height": "100%",
                 "width": "100%",
-                "flex": "1",  # CRITICAL: Grow to take all space in flex parent
+                "flex": "1",
                 "display": "flex",
                 "flexDirection": "column",
             },
             children=[
-                # Actual dcc.Graph component - will be populated by background callback via figure property
                 dcc.Graph(
                     id={"type": "multiqc-graph", "index": str(component_id)},
                     figure={
                         "data": [],
                         "layout": {
-                            "title": "Loading MultiQC plot...",
+                            "title": "MultiQC Component - Configure in edit mode",
                             "xaxis": {"visible": False},
                             "yaxis": {"visible": False},
+                            "annotations": [
+                                {
+                                    "text": "No data available",
+                                    "xref": "paper",
+                                    "yref": "paper",
+                                    "x": 0.5,
+                                    "y": 0.5,
+                                    "showarrow": False,
+                                    "font": {"size": 16, "color": "gray"},
+                                }
+                            ],
                         },
                     },
-                    style={
-                        "width": "100%",
-                        "height": "100%",
-                        "flex": "1",  # CRITICAL: Grow within flex parent
-                        "minHeight": "300px",  # Ensure minimum height
-                    },
-                    config={"displayModeBar": "hover", "responsive": True},
+                    style={"height": "100%", "width": "100%"},
                 ),
-                # MultiQC logo overlay - CSS positioned for consistent size across all plots
+                dcc.Store(
+                    id={"type": "multiqc-trigger", "index": str(component_id)},
+                    data=None,
+                ),
+            ],
+        )
+    else:
+        # Determine if this is a general stats instance at build time.
+        is_general_stats = selected_module == "general_stats" or selected_plot == "general_stats"
+
+        if is_general_stats:
+            # General stats: dcc.Graph must exist for MATCH callbacks that target
+            # multiqc-graph.figure, but Plotly ignores display:none and still renders
+            # an SVG canvas. Use position:absolute to remove from flow + zero size.
+            graph_style = {
+                "position": "absolute",
+                "visibility": "hidden",
+                "overflow": "hidden",
+                "height": "0",
+                "width": "0",
+                "pointerEvents": "none",
+            }
+            wrapper_style = {
+                "position": "absolute",
+                "visibility": "hidden",
+                "overflow": "hidden",
+                "height": "0",
+                "width": "0",
+            }
+        else:
+            graph_style = {
+                "width": "100%",
+                "height": "100%",
+                "flex": "1",
+                "minHeight": "300px",
+            }
+            wrapper_style = {
+                "position": "relative",
+                "height": "100%",
+                "width": "100%",
+                "flex": "1",
+                "display": "flex",
+                "flexDirection": "column",
+            }
+
+        # Build plot wrapper children — logo only for regular plots
+        wrapper_children = [
+            dcc.Graph(
+                id={"type": "multiqc-graph", "index": str(component_id)},
+                figure={
+                    "data": [],
+                    "layout": {
+                        "title": "Loading MultiQC plot..." if not is_general_stats else "",
+                        "xaxis": {"visible": False},
+                        "yaxis": {"visible": False},
+                        "height": 0 if is_general_stats else None,
+                    },
+                },
+                style=graph_style,
+                config={"displayModeBar": "hover", "responsive": True},
+            ),
+            dcc.Store(
+                id={"type": "multiqc-trigger", "index": str(component_id)},
+                data={
+                    "s3_locations": s3_locations,
+                    "module": selected_module,
+                    "plot": selected_plot,
+                    "dataset_id": selected_dataset,
+                    "theme": theme,
+                    "component_id": str(component_id),
+                },
+            ),
+        ]
+
+        # Add logo overlay only for regular plots
+        if not is_general_stats:
+            wrapper_children.insert(
+                1,
                 html.Img(
                     src="/assets/images/logos/multiqc.png",
                     style={
@@ -300,20 +359,39 @@ def build_multiqc(**kwargs: Any):
                     },
                     title="Generated with MultiQC",
                 ),
-                # Trigger store for background callback
-                dcc.Store(
-                    id={"type": "multiqc-trigger", "index": str(component_id)},
-                    data={
-                        "s3_locations": s3_locations,
-                        "module": selected_module,
-                        "plot": selected_plot,
-                        "dataset_id": selected_dataset,
-                        "theme": theme,
-                        "component_id": str(component_id),
-                    },
-                ),
-            ],
+            )
+
+        plot_component = html.Div(
+            id={"type": "multiqc-plot-wrapper", "index": str(component_id)},
+            style=wrapper_style,
+            children=wrapper_children,
         )
+
+    # General stats wrapper — always present so MATCH callbacks always find their targets.
+    is_general_stats = selected_module == "general_stats" or selected_plot == "general_stats"
+    if is_general_stats:
+        gs_initial_style = {
+            "width": "100%",
+            "height": "100%",
+            "flex": "1",
+            "display": "flex",
+            "flexDirection": "column",
+            "overflow": "auto",
+        }
+    else:
+        gs_initial_style = {
+            "position": "absolute",
+            "visibility": "hidden",
+            "overflow": "hidden",
+            "height": "0",
+            "width": "0",
+        }
+
+    general_stats_wrapper = html.Div(
+        id={"type": "general-stats-wrapper", "index": str(component_id)},
+        children=build_empty_general_stats_elements(str(component_id)),
+        style=gs_initial_style,
+    )
 
     logger.debug(
         f"build_multiqc returning component_id={component_id}, "
@@ -321,7 +399,7 @@ def build_multiqc(**kwargs: Any):
     )
 
     return html.Div(
-        [plot_component, store_component, trace_metadata_store],
+        [plot_component, general_stats_wrapper, store_component, trace_metadata_store],
         id=component_id,
         style={
             "width": "100%",

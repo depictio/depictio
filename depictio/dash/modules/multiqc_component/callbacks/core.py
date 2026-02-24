@@ -442,6 +442,9 @@ def register_core_callbacks(app):
     @app.callback(
         Output({"type": "multiqc-graph", "index": MATCH}, "figure"),
         Output({"type": "multiqc-trace-metadata", "index": MATCH}, "data", allow_duplicate=True),
+        Output({"type": "multiqc-plot-wrapper", "index": MATCH}, "style"),
+        Output({"type": "general-stats-wrapper", "index": MATCH}, "style"),
+        Output({"type": "general-stats-wrapper", "index": MATCH}, "children"),
         Input({"type": "multiqc-trigger", "index": MATCH}, "data"),
         State({"type": "multiqc-trace-metadata", "index": MATCH}, "data"),
         background=False,
@@ -454,28 +457,123 @@ def register_core_callbacks(app):
         build_multiqc(). It reads the stored module/plot/dataset selections
         and renders the plot directly.
 
+        For general_stats plots, it populates the general-stats-wrapper and
+        hides the regular plot wrapper. For regular plots, vice versa.
+
         Args:
             trigger_data: Dict with s3_locations, module, plot, dataset_id, theme
             existing_trace_metadata: Existing trace metadata (to prevent re-render)
 
         Returns:
-            Tuple of (Plotly Figure object, trace_metadata dict for interactive patching)
+            Tuple of (figure, trace_metadata, plot_wrapper_style,
+                       general_stats_wrapper_style, general_stats_children)
         """
+        no_update_all = (
+            dash.no_update,
+            dash.no_update,
+            dash.no_update,
+            dash.no_update,
+            dash.no_update,
+        )
+
         if existing_trace_metadata and existing_trace_metadata.get("summary"):
-            return dash.no_update, dash.no_update
+            return no_update_all
 
         if not trigger_data:
-            return dash.no_update, dash.no_update
+            return no_update_all
 
         s3_locations = trigger_data.get("s3_locations", [])
         selected_module = trigger_data.get("module")
         selected_plot = trigger_data.get("plot")
         selected_dataset = trigger_data.get("dataset_id")
         theme = trigger_data.get("theme", "light")
+        component_id = trigger_data.get("component_id", "unknown")
 
         if not selected_module or not selected_plot or not s3_locations:
-            return _create_error_figure("Error: Missing parameters"), {}
+            return (
+                _create_error_figure("Error: Missing parameters"),
+                {},
+                dash.no_update,
+                dash.no_update,
+                dash.no_update,
+            )
 
+        # Default styles: plot visible, general stats hidden
+        plot_wrapper_visible = {
+            "position": "relative",
+            "height": "100%",
+            "width": "100%",
+            "flex": "1",
+            "display": "flex",
+            "flexDirection": "column",
+        }
+        # Use position:absolute + visibility:hidden to truly remove from layout.
+        # Plotly/Dash ignores display:none and still renders SVG canvases.
+        plot_wrapper_hidden = {
+            "position": "absolute",
+            "visibility": "hidden",
+            "overflow": "hidden",
+            "height": "0",
+            "width": "0",
+        }
+        gs_wrapper_visible = {
+            "width": "100%",
+            "height": "100%",
+            "flex": "1",
+            "display": "flex",
+            "flexDirection": "column",
+            "overflow": "auto",
+        }
+        gs_wrapper_hidden = {
+            "position": "absolute",
+            "visibility": "hidden",
+            "overflow": "hidden",
+            "height": "0",
+            "width": "0",
+        }
+
+        # ---- General Statistics branch ----
+        if selected_module == "general_stats" or selected_plot == "general_stats":
+            try:
+                from depictio.dash.modules.figure_component.multiqc_vis import (
+                    _get_local_path_for_s3,
+                )
+                from depictio.dash.modules.multiqc_component.general_stats import (
+                    build_general_stats_content,
+                )
+
+                # Resolve first parquet path (S3 URI → local cached file)
+                normalized = _normalize_multiqc_paths(s3_locations)
+                raw_path = normalized[0] if normalized else s3_locations[0]
+                parquet_path = _get_local_path_for_s3(raw_path)
+
+                children, _store_data, _columns = build_general_stats_content(
+                    parquet_path=parquet_path,
+                    component_id=str(component_id),
+                    show_hidden=True,
+                )
+
+                # Return: empty figure (hidden), no trace metadata,
+                # hide plot wrapper, show general stats wrapper with real content
+                return (
+                    {"data": [], "layout": {}},
+                    {},
+                    plot_wrapper_hidden,
+                    gs_wrapper_visible,
+                    children,
+                )
+
+            except Exception as e:
+                logger.error(f"Error building general stats: {e}", exc_info=True)
+                return (
+                    {"data": [], "layout": {"title": f"General stats error: {e}"}},
+                    {},
+                    dash.no_update,
+                    dash.no_update,
+                    dash.no_update,
+                )
+
+        # ---- Regular plot branch ----
         try:
             normalized_locations = _normalize_multiqc_paths(s3_locations)
 
@@ -489,15 +587,33 @@ def register_core_callbacks(app):
 
             if not fig:
                 logger.error("MultiQC plot generation returned None")
-                return _create_error_figure("Error generating plot"), {}
+                return (
+                    _create_error_figure("Error generating plot"),
+                    {},
+                    plot_wrapper_visible,
+                    gs_wrapper_hidden,
+                    dash.no_update,
+                )
 
             trace_metadata = analyze_multiqc_plot_structure(fig)
 
-            return fig, trace_metadata
+            return (
+                fig,
+                trace_metadata,
+                plot_wrapper_visible,
+                gs_wrapper_hidden,
+                dash.no_update,
+            )
 
         except Exception as e:
             logger.error(f"Error rendering MultiQC plot: {e}", exc_info=True)
-            return _create_error_figure(f"Error: {e}", message=str(e)), {}
+            return (
+                _create_error_figure(f"Error: {e}", message=str(e)),
+                {},
+                plot_wrapper_visible,
+                gs_wrapper_hidden,
+                dash.no_update,
+            )
 
     @app.callback(
         Output({"type": "multiqc-graph", "index": MATCH}, "figure", allow_duplicate=True),
@@ -529,6 +645,13 @@ def register_core_callbacks(app):
         """
         # Early exit if no stored metadata (interactive_values can be empty for reset)
         if not stored_metadata:
+            return dash.no_update
+
+        # Guard: skip for general stats instances (handled by general_stats_callbacks)
+        if (
+            stored_metadata.get("selected_plot") == "general_stats"
+            or stored_metadata.get("selected_module") == "general_stats"
+        ):
             return dash.no_update
 
         # RESET SUPPORT: Allow empty interactive_values to reload unfiltered data

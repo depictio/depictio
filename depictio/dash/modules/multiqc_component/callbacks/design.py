@@ -60,7 +60,7 @@ def register_design_callbacks(app):
             State({"type": "multiqc-store-workflow", "index": MATCH}, "id"),
             State("local-store", "data"),
         ],
-        prevent_initial_call=True,
+        prevent_initial_call=False,
     )
     def load_multiqc_metadata(wf_id, dc_id, component_id, local_data):
         """Load MultiQC reports and populate module selector.
@@ -121,7 +121,10 @@ def register_design_callbacks(app):
                 return {}, data_locations, [], "Error loading metadata"
 
             modules = metadata.get("modules", [])
-            module_options = [{"label": mod, "value": mod} for mod in modules]
+            # Prepend General Statistics as a top-level module option
+            module_options = [{"label": "\u229e General Statistics", "value": "general_stats"}] + [
+                {"label": mod, "value": mod} for mod in modules
+            ]
 
             # Pre-warm in-memory cache in background so render callback finds it warm
             if data_locations:
@@ -182,6 +185,11 @@ def register_design_callbacks(app):
         """
         if not selected_module or not metadata:
             return [], None, [], None, {"display": "none"}
+
+        # General Statistics is a top-level module option — auto-select plot and hide selectors
+        if selected_module == "general_stats":
+            plot_options = [{"label": "\u229e General Statistics", "value": "general_stats"}]
+            return plot_options, "general_stats", [], None, {"display": "none"}
 
         plots_dict = metadata.get("plots", {})
         module_plots = plots_dict.get(selected_module, [])
@@ -288,6 +296,56 @@ def register_design_callbacks(app):
             }
             return dcc.Graph(figure=error_fig), {}
 
+        # ---- General Statistics branch (design mode preview) ----
+        if selected_module == "general_stats" or selected_plot == "general_stats":
+            try:
+                from depictio.dash.modules.figure_component.multiqc_vis import (
+                    _get_local_path_for_s3,
+                )
+                from depictio.dash.modules.multiqc_component.general_stats import (
+                    build_general_stats_content,
+                )
+
+                normalized_locations = _normalize_multiqc_paths(data_locations)
+                raw_path = normalized_locations[0] if normalized_locations else data_locations[0]
+                # Resolve S3 URI to local cached file
+                parquet_path = _get_local_path_for_s3(raw_path)
+
+                # Get the component index from the triggered callback context
+                triggered_id = dash.ctx.triggered_id
+                comp_idx = (
+                    triggered_id.get("index", "preview")
+                    if isinstance(triggered_id, dict)
+                    else "preview"
+                )
+
+                children, _store_data, _columns = build_general_stats_content(
+                    parquet_path=parquet_path,
+                    component_id=str(comp_idx),
+                    show_hidden=True,
+                )
+
+                from dash import html
+
+                preview = html.Div(
+                    children=children,
+                    style={"width": "100%", "overflow": "auto"},
+                )
+                return preview, {}
+
+            except Exception as e:
+                logger.error(
+                    f"Failed to build general stats preview: {e}",
+                    exc_info=True,
+                )
+                return dcc.Graph(
+                    figure=_create_error_figure(
+                        "General Stats Error",
+                        f"Failed to load general stats: {str(e)}",
+                    )
+                ), {}
+
+        # ---- Regular plot branch ----
         try:
             normalized_locations = _normalize_multiqc_paths(data_locations)
 
