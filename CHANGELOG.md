@@ -6,13 +6,31 @@
 
 
 <details>
-<summary>Click to expand the changelog for 0.7.4</summary>
+<summary>Click to expand the changelog for 0.7.5-b1</summary>
 
 ### Changes 📜
 
+#### New Features ✨
+
+* feat: update ampliseq dashboard to use relative abundance and ANCOM-BC data [53816537]
+
+#### Bug Fixes 🐛
+
+* fix: add --overwrite to CI roundtrip import to handle duplicate check [200ed94a]
+* fix: resolve dashboard YAML import HTTP 400 and improve import robustness [aa6bc9a1]
+* fix: resolve MultiQC plots not updating on interactive filter changes [0bb61461]
+* fix: enable single-user mode in Helm chart CI to fix screenshot 401 error [1395cad1]
+
+#### Improvements 🚀
+
+* refactor: update ampliseq init dashboard JSONs from YAML-imported dashboards [977aee7f]
+
 #### Other Changes 📝
 
-* Bump version: 0.7.4-b1 → 0.7.4 [97f81032]
+* Bump version: 0.7.4 → 0.7.5-b1 [90dfcbfc]
+* Update CHANGELOG.md for v0.7.4 [b852d52c]
+* Bump version: 0.7.4-b1 → 0.7.4 [98edf45a]
+* Update CHANGELOG.md for v0.7.4-b1 [e201eb98]
 * Bump version: 0.7.3 → 0.7.4-b1 [31625513]
 
 
@@ -22,36 +40,7 @@
 
 For more details, please refer to the [documentation](https://depictio.github.io/depictio-docs/)
 
-er, drop QEMU [b092a26c]
-
-#### Other Changes 📝
-
-* Bump version: 0.7.3 → 0.7.4-b1 [936cc021]
-* debug: add logging to AuthSettings init to trace SINGLE_USER_MODE env var [0d23eb4d]
-* debug: add logging to screenshot endpoint to diagnose single-user mode setting [ab359171]
-* Update CHANGELOG.md for v0.7.3 [19e9d79b]
-* Bump version: 0.7.3-b8 → 0.7.3 [6687cecb]
-* Update CHANGELOG.md for v0.7.3-b8 [090ab294]
-* Bump version: 0.7.3-b7 → 0.7.3-b8 [092facd0]
-
-
-</details>
-
-### Documentation 📖
-
-For more details, please refer to the [documentation](https://depictio.github.io/depictio-docs/)
-
-ection [14938d2c]
-* fix: update mock CLI configuration for backup tests [0801b6e7]
-* fix: make tests compliant [7b6712b2]
-* fix: Add type ignore comments for unresolved attributes in test assertions [aca7cf2c]
-* fix: Expand backup strategy options to include S3 to S3 and both configurations [12f29bd3]
-* fix: Update environment file creation process for Docker Compose and improve messaging [5eb216b4]
-* fix: Simplify backup strategy configuration to focus on local strategy and update environment file handling [f6224cc1]
-* fix: Refine Docker build conditions for local and GitHub Actions environments [ba1480de]
-* fix: Update S3 endpoint URL in backup configuration and remove quotes from access/secret keys [f6cdba70]
-* fix: Update CI configuration to improve caching strategy and streamline backup environment setup [7bed4023]
-* fix: Update backup strategy configuration to use docker-compose environment file and enhance MongoDB connectivity checks [978c9af5]
+ectivity checks [978c9af5]
 * fix: Enhance backup strategy setup with detailed logging and verification steps for S3 connectivity [13ce3ff7]
 * fix: Enhance S3 backup strategy to initialize backup results and combine locations for both strategies [3522347f]
 * fix: Update backup strategy tests to improve local backup file checks and refine S3 backup file naming [0c03ed20]
