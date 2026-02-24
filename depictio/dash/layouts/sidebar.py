@@ -399,6 +399,13 @@ def register_sidebar_callbacks(app, register_tabs: bool = True) -> None:
                 shouldCollapse = true;
             }
 
+            // Guard: skip if collapse state hasn't changed
+            if (typeof window._lastNavbarCollapse !== 'undefined' && window._lastNavbarCollapse === shouldCollapse) {
+                console.log('🚫 Navbar collapse unchanged (' + shouldCollapse + '), skipping');
+                return window.dash_clientside.no_update;
+            }
+            window._lastNavbarCollapse = shouldCollapse;
+
             // Update navbar collapse state for dashboard pages and stepper
             console.log('✅ Updating navbar collapse state for dashboard/stepper');
             var navbar_config = {
