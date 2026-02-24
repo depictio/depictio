@@ -6,42 +6,23 @@
 
 
 <details>
-<summary>Click to expand the changelog for 0.7.4-b1</summary>
+<summary>Click to expand the changelog for 0.7.4</summary>
 
 ### Changes 📜
 
-#### Bug Fixes 🐛
+#### Other Changes 📝
 
-* fix: remove readonly UID/GID export attempts in CI workflow [dcb28677]
-* fix: export UID/GID/DATA_DIR variables for backup job permission resolution [13686b05]
-* fix: set permissions on data/ parent directory for container access [af500ce5]
-* fix: add --env-file flag to backup job docker-compose command [89164615]
-* fix: use DATA_DIR variable in backup MinIO compose file [4ec078c3]
-* fix: add data/ prefix to all directory paths in CI to match DATA_DIR setting [390dc07a]
-* fix: align CI e2e test sed patterns with docker-compose/.env defaults [efdbdb9e]
-* fix: revert default auth mode and fix CI sed commands [be16b162]
-* fix: explicitly pass DEPICTIO_AUTH_SINGLE_USER_MODE to Docker containers [f69ee1b0]
-* fix: enable single-user mode in CI and standardize setting name usage [2b68c9b2]
-* fix: auto-create admin user in single-user mode to resolve E2E test race condition [55d3b83e]
-* fix: remove outdated test for CLI agent generation in public mode [c0309d37]
-* fix: resolve CI FileNotFoundError in test_yaml_path fixture [b250db8b]
-* fix: enable CLI config generation in public/demo mode [a4b81f1f]
-* fix: update tests for _get_anonymous_user_session single-user mode branch [dd5999ad]
-* fix: update documentation link in .env.example for environment reference [8851cde7]
-* fix: update .env for single-user mode configuration and clean up comments [9493c8e5]
-* fix: correct MongoDB data path and improve docker-compose healthchecks [5b04dc6b]
-* fix: discard stale local-store tokens after instance recreation in single-user mode [bad4481f]
-* fix: single-user auto-login as admin and /auth redirect to /dashboards [55dd1569]
+* Bump version: 0.7.4-b1 → 0.7.4 [97f81032]
+* Bump version: 0.7.3 → 0.7.4-b1 [31625513]
 
-#### Chores 🧹
 
-* chore: remove leftover analysis and summary markdown files [8a6d7fcc]
-* chore: replace Gitpod with GitHub Codespaces and remove Gitpod files [43590fc6]
-* ci: add docs repo notification to stable multi-arch build merge job [18d2596e]
-* ci: fix amd64 early tag push — use imagetools create after digest push [7c0a1207]
-* ci: add version input for manual workflow_dispatch [f463b635]
-* ci: push amd64 tags immediately, upgrade to multi-arch on merge [204ba459]
-* ci: fix multi-arch build — use native arm64 runner, drop QEMU [b092a26c]
+</details>
+
+### Documentation 📖
+
+For more details, please refer to the [documentation](https://depictio.github.io/depictio-docs/)
+
+er, drop QEMU [b092a26c]
 
 #### Other Changes 📝
 
