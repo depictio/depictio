@@ -146,6 +146,7 @@ DEPICTIO_MINIO_ROOT_PASSWORD=minio123
 
 # Development settings
 DEPICTIO_DEV_MODE=true
+DEPICTIO_AUTH_SINGLE_USER_MODE=true
 DEPICTIO_MONGODB_WIPE=${MONGODB_WIPE}
 
 # Data directory
@@ -179,12 +180,14 @@ services:
       - DEPICTIO_DASH_EXTERNAL_PORT=${DASH_PORT}
       - DEPICTIO_DEV_MODE=true
       - DEPICTIO_MONGODB_WIPE=${MONGODB_WIPE}
+      - DEPICTIO_AUTH_SINGLE_USER_MODE=${DEPICTIO_AUTH_SINGLE_USER_MODE}
 
   depictio-backend:
     container_name: ${COMPOSE_PROJECT_NAME}-depictio-backend
     environment:
       - DEPICTIO_DEV_MODE=true
       - DEPICTIO_MONGODB_WIPE=${MONGODB_WIPE}
+      - DEPICTIO_AUTH_SINGLE_USER_MODE=${DEPICTIO_AUTH_SINGLE_USER_MODE}
 
   depictio-celery-worker:
     container_name: ${COMPOSE_PROJECT_NAME}-depictio-celery-worker

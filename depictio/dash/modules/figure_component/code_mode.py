@@ -491,15 +491,19 @@ def analyze_constrained_code(code: str) -> dict[str, Any]:
 
     preprocessing_lines = []
     figure_line = None
+    post_figure_lines: list[str] = []
     uses_modified_df = False
 
     # Track multi-line statements
     in_figure_statement = False
     in_preprocessing_statement = False
+    in_post_figure_statement = False
     figure_parts = []
     preprocessing_parts = []
+    post_figure_parts = []
     figure_open_parens = 0
     preprocessing_open_parens = 0
+    post_figure_open_parens = 0
 
     for line in lines:
         # Check if this line starts a figure assignment
@@ -527,6 +531,23 @@ def analyze_constrained_code(code: str) -> dict[str, Any]:
                 logger.debug(
                     f"Found multi-line figure: {figure_line[:80]}... ({len(figure_parts)} lines)"
                 )
+        elif figure_line is not None and line.startswith("fig."):
+            # Post-figure customization (fig.update_*, fig.add_*, fig.for_each_*, etc.)
+            in_post_figure_statement = True
+            post_figure_parts = [line]
+            post_figure_open_parens = line.count("(") - line.count(")")
+
+            if post_figure_open_parens == 0:
+                post_figure_lines.append(line)
+                in_post_figure_statement = False
+        elif in_post_figure_statement:
+            # Continue collecting post-figure statement
+            post_figure_parts.append(line)
+            post_figure_open_parens += line.count("(") - line.count(")")
+
+            if post_figure_open_parens == 0:
+                post_figure_lines.append("\n".join(post_figure_parts))
+                in_post_figure_statement = False
         elif "df_modified" in line or line.startswith("df_"):
             # Start of preprocessing statement
             if not in_preprocessing_statement:
@@ -551,12 +572,19 @@ def analyze_constrained_code(code: str) -> dict[str, Any]:
                 preprocessing_lines.append("\n".join(preprocessing_parts))
                 in_preprocessing_statement = False
 
+    # Combine figure creation with post-figure customization (fig.update_*, fig.add_*, etc.)
+    if figure_line and post_figure_lines:
+        full_figure_code = figure_line + "\n" + "\n".join(post_figure_lines)
+        logger.debug(f"Including {len(post_figure_lines)} post-figure customization line(s)")
+    else:
+        full_figure_code = figure_line
+
     # Validation
     if not figure_line:
         return {
             "has_preprocessing": len(preprocessing_lines) > 0,
             "preprocessing_code": "\n".join(preprocessing_lines) if preprocessing_lines else None,
-            "figure_code": figure_line,
+            "figure_code": full_figure_code,
             "uses_modified_df": uses_modified_df,
             "is_valid": False,
             "error_message": 'Code must contain a line starting with "fig = px.function(...)"',
@@ -590,7 +618,7 @@ def analyze_constrained_code(code: str) -> dict[str, Any]:
             return {
                 "has_preprocessing": True,
                 "preprocessing_code": "\n".join(preprocessing_lines),
-                "figure_code": figure_line,
+                "figure_code": full_figure_code,
                 "uses_modified_df": uses_modified_df,
                 "is_valid": False,
                 "error_message": "Preprocessing creates variables, but fig line doesn't use any dataframe (df, df_modified, etc.)",
@@ -607,7 +635,7 @@ def analyze_constrained_code(code: str) -> dict[str, Any]:
         return {
             "has_preprocessing": False,
             "preprocessing_code": None,
-            "figure_code": figure_line,
+            "figure_code": full_figure_code,
             "uses_modified_df": uses_modified_df,
             "is_valid": False,
             "error_message": "df_modified is used but not defined. Add: df_modified = df.some_processing()",
@@ -616,7 +644,7 @@ def analyze_constrained_code(code: str) -> dict[str, Any]:
     return {
         "has_preprocessing": len(preprocessing_lines) > 0,
         "preprocessing_code": "\n".join(preprocessing_lines) if preprocessing_lines else None,
-        "figure_code": figure_line,
+        "figure_code": full_figure_code,
         "uses_modified_df": uses_modified_df,
         "is_valid": True,
         "error_message": None,

@@ -341,9 +341,10 @@ def build_select_component(
         else:
             unique_vals_list = list(unique_vals)
 
-        options = [
-            {"label": str(val), "value": str(val)} for val in unique_vals_list if val is not None
-        ][:100]
+        options = sorted(
+            [{"label": str(val), "value": str(val)} for val in unique_vals_list if val is not None],
+            key=lambda x: x["label"],
+        )[:100]
     except Exception as e:
         logger.error(f"Error extracting unique values: {e}")
         return dmc.Text("Error: Could not extract options", c="red"), {}, {}
@@ -426,24 +427,30 @@ def _clean_numeric_column(df_pandas, column_name: str):
     df_pandas = df_pandas[~df_pandas[column_name].isin([None, "None", "nan", "NaN"])]
     df_pandas[column_name] = df_pandas[column_name].replace([np.inf, -np.inf], np.nan)
     df_pandas[column_name] = df_pandas[column_name].astype(float)
-    df_pandas[column_name] = df_pandas[column_name].apply(
-        lambda x: round(x, 2) if x not in [float("inf"), float("-inf")] else x
-    )
     df_pandas = df_pandas.dropna(subset=[column_name])
 
     if df_pandas.empty:
         return None, None, None
 
-    min_value = float(df_pandas[column_name].min())
-    max_value = float(df_pandas[column_name].max())
+    raw_min = float(df_pandas[column_name].min())
+    raw_max = float(df_pandas[column_name].max())
 
     # Validate min/max
-    if math.isnan(min_value) or math.isinf(min_value):
-        min_value = 0.0
-    if math.isnan(max_value) or math.isinf(max_value):
-        max_value = 100.0
+    if math.isnan(raw_min) or math.isinf(raw_min):
+        raw_min = 0.0
+    if math.isnan(raw_max) or math.isinf(raw_max):
+        raw_max = 1.0
+
+    # Floor min and ceil max to 2 decimal places so the slider range
+    # fully covers all actual data values
+    min_value = math.floor(raw_min * 100) / 100
+    max_value = math.ceil(raw_max * 100) / 100
+
+    if min_value == max_value:
+        min_value = raw_min
+        max_value = raw_max
     if min_value >= max_value:
-        max_value = min_value + 1.0
+        max_value = min_value + 0.01
 
     return df_pandas, min_value, max_value
 

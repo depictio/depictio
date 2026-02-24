@@ -180,7 +180,7 @@ tabs:
         title: Total Samples
     -   component_type: card
         workflow_tag: ampliseq
-        data_collection_tag: taxonomy_composition
+        data_collection_tag: taxonomy_rel_abundance
         aggregation: nunique
         column_name: taxonomy
         # --- optional ---
@@ -201,7 +201,7 @@ tabs:
         title: Total Taxa
     -   component_type: card
         workflow_tag: ampliseq
-        data_collection_tag: alpha_rarefaction
+        data_collection_tag: alpha_diversity
         aggregation: average
         column_name: faith_pd
         # --- optional ---
@@ -272,103 +272,121 @@ tabs:
             h: 5
     -   component_type: figure
         workflow_tag: ampliseq
-        data_collection_tag: alpha_rarefaction
-        visu_type: box
+        data_collection_tag: alpha_diversity
+        visu_type: bar
         # --- optional ---
         figure_params:
             x: sample
             y: faith_pd
-            color: sample
-            hover_data:
-                sample: true
-                faith_pd: :.2f
-                depth: true
-            title: Alpha Diversity by Sample
+            color: habitat
+            title: Alpha Diversity by Sample (Faith PD)
             labels:
                 sample: Sample
-                faith_pd: Faith's Phylogenetic Diversity
-        mode: ui
+                faith_pd: "Faith's Phylogenetic Diversity"
+                habitat: Habitat
+        mode: code
+        code_content: "df_sorted = df.sort('sample')\nfig = px.bar(\n    df_sorted.to_pandas(),\n\
+            \    x='sample', y='faith_pd', color='habitat',\n    title='Alpha Diversity\
+            \ by Sample (Faith PD)',\n    labels={'sample': 'Sample', 'faith_pd':\
+            \ \"Faith's Phylogenetic Diversity\", 'habitat': 'Habitat'}\n)\nfig.update_layout(xaxis={'categoryorder':\
+            \ 'category ascending'})"
         selection_enabled: false
         # --- generated on export ---
-        tag: figure-box_sample_faith_pd-5b8018
+        tag: figure-bar_sample_faith_pd-5b8018
         layout:
             x: 0
             y: 7
-            w: 8
+            w: 4
             h: 5
     -   component_type: figure
         workflow_tag: ampliseq
-        data_collection_tag: taxonomy_composition
+        data_collection_tag: taxonomy_rel_abundance
         visu_type: sunburst
         # --- optional ---
         figure_params:
             path:
             - Kingdom
             - Phylum
-            values: count
-            title: Taxonomic Composition - Hierarchical View
+            values: rel_abundance
+            title: Taxonomic Composition - Hierarchical View (Relative Abundance)
         mode: code
-        code_content: 'df_modified = df.filter((pl.col(''Phylum'').is_not_null())
-            & (pl.col(''Phylum'') != '''')).group_by([''Kingdom'', ''Phylum'']).agg(pl.col(''count'').sum())
-
-            fig = px.sunburst(df_modified.to_dicts(), path=[''Kingdom'', ''Phylum''],
-            values=''count'', title=''Taxonomic Composition - Hierarchical View'')'
+        code_content: "df_modified = df.filter((pl.col('Phylum').is_not_null())\
+            \ & (pl.col('Phylum') != '') & (pl.col('Phylum') != 'Unclassified')).group_by(['Kingdom',\
+            \ 'Phylum']).agg(pl.col('rel_abundance').mean())\n\nfig = px.sunburst(df_modified.to_dicts(),\
+            \ path=['Kingdom', 'Phylum'],\nvalues='rel_abundance', title='Taxonomic\
+            \ Composition - Hierarchical View (Relative Abundance)')"
         selection_enabled: false
         # --- generated on export ---
         tag: figure-sunburst-e651a9
         layout:
-            x: 0
-            y: 12
+            x: 4
+            y: 7
             w: 4
-            h: 6
+            h: 5
     -   component_type: figure
         workflow_tag: ampliseq
-        data_collection_tag: taxonomy_composition
+        data_collection_tag: taxonomy_rel_abundance
         visu_type: bar
         # --- optional ---
         figure_params:
             x: Phylum
-            y: count
-            color: habitat
-            title: Taxonomic Abundance by Habitat
+            y: mean_rel_abundance
+            color: Phylum
+            facet_row: habitat
+            title: Mean Relative Abundance by Habitat
             labels:
                 Phylum: Phylum
-                count: Read Count
+                mean_rel_abundance: Mean Relative Abundance
                 habitat: Habitat
-            barmode: stack
-        mode: ui
+        mode: code
+        code_content: "df_mean = df.group_by(['habitat', 'Phylum']).agg(pl.col('rel_abundance').mean().alias('mean_rel_abundance')).sort('Phylum')\n\
+            fig = px.bar(\n    df_mean.to_pandas(),\n    x='Phylum', y='mean_rel_abundance',\
+            \ color='Phylum',\n    facet_row='habitat',\n    title='Mean Relative\
+            \ Abundance by Habitat',\n    labels={'Phylum': 'Phylum', 'mean_rel_abundance':\
+            \ 'Mean Relative Abundance'}\n)\nfig.update_layout(xaxis={'categoryorder':\
+            \ 'category ascending'})\nfig.update_xaxes(tickangle=-45, tickfont={'size':\
+            \ 9})\nfig.update_layout(showlegend=False)"
         selection_enabled: false
         # --- generated on export ---
-        tag: figure-bar_phylum_count-de4c39
+        tag: figure-bar_phylum_rel_abundance-de4c39
         layout:
-            x: 4
+            x: 0
             y: 12
-            w: 4
-            h: 6
+            w: 8
+            h: 8
     -   component_type: figure
         workflow_tag: ampliseq
-        data_collection_tag: taxonomy_composition
+        data_collection_tag: taxonomy_rel_abundance
         visu_type: bar
         # --- optional ---
         figure_params:
             x: sample
-            y: count
+            y: rel_abundance
             color: Phylum
-            title: Taxonomic Composition by Sample
+            facet_col: habitat
+            title: Taxonomic Composition by Sample (Relative Abundance)
             labels:
                 sample: Sample ID
-                count: Read Count
+                rel_abundance: Relative Abundance
                 Phylum: Phylum
             barmode: stack
-        mode: ui
+        mode: code
+        code_content: "df_sorted = df.sort('sample')\nfig = px.bar(\n    df_sorted.to_pandas(),\n\
+            \    x='sample', y='rel_abundance', color='Phylum',\n    facet_col='habitat',\n\
+            \    title='Taxonomic Composition by Sample (Relative Abundance)',\n \
+            \   labels={'sample': 'Sample ID', 'rel_abundance': 'Relative Abundance',\
+            \ 'Phylum': 'Phylum'},\n    barmode='stack',\n    category_orders={'sample':\
+            \ sorted(df_sorted['sample'].unique().to_list())}\n)\nfig.update_xaxes(matches=None,\
+            \ tickangle=-45, tickfont={'size': 9})\nfig.for_each_xaxis(lambda axis:\
+            \ axis.update(categoryorder='category ascending'))"
         selection_enabled: false
         # --- generated on export ---
-        tag: figure-bar_sample_count-de4c39
+        tag: figure-bar_sample_rel_abundance-de4c39
         layout:
             x: 0
-            y: 18
+            y: 24
             w: 8
-            h: 6
+            h: 8
     -   component_type: table
         workflow_tag: ampliseq
         data_collection_tag: metadata
@@ -383,7 +401,7 @@ tabs:
             h: 6
     -   component_type: table
         workflow_tag: ampliseq
-        data_collection_tag: taxonomy_composition
+        data_collection_tag: taxonomy_rel_abundance
         # --- optional ---
         row_selection_enabled: false
         # --- generated on export ---
@@ -433,7 +451,7 @@ tabs:
         title: Sample ID
     -   component_type: interactive
         workflow_tag: ampliseq
-        data_collection_tag: taxonomy_composition
+        data_collection_tag: taxonomy_rel_abundance
         interactive_component_type: MultiSelect
         column_name: Kingdom
         # --- optional ---
@@ -452,7 +470,7 @@ tabs:
         title: Kingdom
     -   component_type: interactive
         workflow_tag: ampliseq
-        data_collection_tag: taxonomy_composition
+        data_collection_tag: taxonomy_rel_abundance
         interactive_component_type: MultiSelect
         column_name: Phylum
         # --- optional ---
@@ -490,7 +508,7 @@ tabs:
         title: Sampling Period
     -   component_type: interactive
         workflow_tag: ampliseq
-        data_collection_tag: alpha_rarefaction
+        data_collection_tag: alpha_diversity
         interactive_component_type: RangeSlider
         column_name: faith_pd
         # --- optional ---
@@ -510,9 +528,9 @@ tabs:
         title: Faith PD Range
     -   component_type: interactive
         workflow_tag: ampliseq
-        data_collection_tag: taxonomy_composition
+        data_collection_tag: taxonomy_rel_abundance
         interactive_component_type: RangeSlider
-        column_name: count
+        column_name: rel_abundance
         # --- optional ---
         column_type: float64
         display:
@@ -520,17 +538,17 @@ tabs:
             custom_color: '#FF9800'
             icon_name: mdi:counter
         # --- generated on export ---
-        tag: interactive-range-count-slider-7e70dc
-        index: range-count-slider
+        tag: interactive-range-rel-abundance-slider-7e70dc
+        index: range-rel-abundance-slider
         layout:
             x: 0
             y: 16
             w: 1
             h: 3
-        title: Taxon Count
+        title: Relative Abundance Range
 -   title: Diff. Abundance
     # --- optional ---
-    subtitle: ANCOM Volcano Plot
+    subtitle: ANCOM-BC Volcano Plot
     tab_order: 2
     tab_icon: mdi:chart-scatter-plot
     tab_icon_color: red
@@ -542,7 +560,27 @@ tabs:
     components:
     -   component_type: interactive
         workflow_tag: ampliseq
-        data_collection_tag: ancom_volcano
+        data_collection_tag: ancombc_results
+        interactive_component_type: MultiSelect
+        column_name: contrast
+        # --- optional ---
+        column_type: object
+        display:
+            title_size: md
+            custom_color: '#2196F3'
+            icon_name: mdi:compare-horizontal
+        # --- generated on export ---
+        tag: interactive-diff-contrast-filter-a1b2c3
+        index: diff-contrast-filter
+        layout:
+            x: 0
+            y: 0
+            w: 1
+            h: 2
+        title: Contrast
+    -   component_type: interactive
+        workflow_tag: ampliseq
+        data_collection_tag: ancombc_results
         interactive_component_type: MultiSelect
         column_name: Phylum
         # --- optional ---
@@ -556,13 +594,13 @@ tabs:
         index: diff-filter-phylum
         layout:
             x: 0
-            y: 0
+            y: 2
             w: 1
             h: 3
         title: Phylum
     -   component_type: interactive
         workflow_tag: ampliseq
-        data_collection_tag: ancom_volcano
+        data_collection_tag: ancombc_results
         interactive_component_type: MultiSelect
         column_name: Kingdom
         # --- optional ---
@@ -576,17 +614,17 @@ tabs:
         index: diff-kingdom-filter
         layout:
             x: 0
-            y: 3
+            y: 5
             w: 1
             h: 2
         title: Kingdom
     -   component_type: interactive
         workflow_tag: ampliseq
-        data_collection_tag: ancom_volcano
+        data_collection_tag: ancombc_results
         interactive_component_type: RangeSlider
-        column_name: W
+        column_name: w
         # --- optional ---
-        column_type: int64
+        column_type: float64
         display:
             title_size: md
             custom_color: '#E74C3C'
@@ -596,15 +634,15 @@ tabs:
         index: diff-w-slider
         layout:
             x: 0
-            y: 5
+            y: 7
             w: 1
             h: 3
         title: W Statistic Range
     -   component_type: interactive
         workflow_tag: ampliseq
-        data_collection_tag: ancom_volcano
+        data_collection_tag: ancombc_results
         interactive_component_type: RangeSlider
-        column_name: clr
+        column_name: lfc
         # --- optional ---
         column_type: float64
         display:
@@ -612,17 +650,17 @@ tabs:
             custom_color: '#F68B33'
             icon_name: mdi:chart-bell-curve
         # --- generated on export ---
-        tag: interactive-diff-clr-slider-151c9f
-        index: diff-clr-slider
+        tag: interactive-diff-lfc-slider-151c9f
+        index: diff-lfc-slider
         layout:
             x: 0
-            y: 8
+            y: 10
             w: 1
             h: 3
-        title: CLR Effect Size Range
+        title: Log-Fold Change Range
     -   component_type: card
         workflow_tag: ampliseq
-        data_collection_tag: ancom_volcano
+        data_collection_tag: ancombc_results
         aggregation: count
         column_name: id
         # --- optional ---
@@ -644,7 +682,7 @@ tabs:
         title: Total Taxa Analyzed
     -   component_type: card
         workflow_tag: ampliseq
-        data_collection_tag: ancom_volcano
+        data_collection_tag: ancombc_results
         aggregation: count
         column_name: id
         # --- optional ---
@@ -663,10 +701,10 @@ tabs:
             y: 0
             w: 2
             h: 2
-        title: Significant Taxa (W>100)
+        title: Significant Taxa (q<0.05)
     -   component_type: card
         workflow_tag: ampliseq
-        data_collection_tag: ancom_volcano
+        data_collection_tag: ancombc_results
         aggregation: nunique
         column_name: Phylum
         # --- optional ---
@@ -688,9 +726,9 @@ tabs:
         title: Unique Phyla
     -   component_type: card
         workflow_tag: ampliseq
-        data_collection_tag: ancom_volcano
+        data_collection_tag: ancombc_results
         aggregation: max
-        column_name: clr
+        column_name: lfc
         # --- optional ---
         column_type: float64
         display:
@@ -707,65 +745,77 @@ tabs:
             y: 0
             w: 2
             h: 2
-        title: Max Effect Size (CLR)
+        title: Max Log-Fold Change
     -   component_type: figure
         workflow_tag: ampliseq
-        data_collection_tag: ancom_volcano
+        data_collection_tag: ancombc_results
         visu_type: scatter
         # --- optional ---
         figure_params:
-            x: clr
-            y: W
+            x: lfc
+            y: neg_log10_qval
             color: Phylum
+            facet_col: contrast
             hover_data:
             - id
-            - taxonomy
-            title: ANCOM Differential Abundance
+            - q_val
+            title: ANCOM-BC Volcano Plot
             labels:
-                clr: Centered Log-Ratio (Effect Size)
-                W: ANCOM W-Statistic
+                lfc: Log-Fold Change
+                neg_log10_qval: "-log10(q-value)"
                 Phylum: Phylum
-        mode: ui
+        mode: code
+        code_content: "fig = px.scatter(\n    df.to_pandas(),\n\
+            \    x='lfc', y='neg_log10_qval', color='Phylum',\n    facet_col='contrast',\n\
+            \    hover_data=['id', 'q_val'],\n    title='ANCOM-BC Volcano Plot',\n\
+            \    labels={'lfc': 'Log-Fold Change', 'neg_log10_qval': '-log10(q-value)'}\n\
+            )\nfig.add_hline(y=-np.log10(0.05), line_dash='dash', line_color='red',\
+            \ annotation_text='q=0.05')\nfig.add_vline(x=0, line_dash='dash', line_color='gray')"
         selection_enabled: false
         # --- generated on export ---
-        tag: figure-scatter_clr_w-734503
+        tag: figure-scatter_lfc_qval-734503
         layout:
             x: 0
             y: 2
             w: 8
-            h: 10
+            h: 6
     -   component_type: figure
         workflow_tag: ampliseq
-        data_collection_tag: ancom_volcano
+        data_collection_tag: ancombc_results
         visu_type: bar
         # --- optional ---
         figure_params:
-            x: taxonomy
-            y: W
+            x: Phylum
+            y: lfc
             color: Phylum
-            title: Top 20 Most Significant Taxa (by W-statistic)
+            facet_col: contrast
+            title: Top Differential Taxa by Log-Fold Change
             labels:
-                taxonomy: Taxonomy
-                W: ANCOM W-Statistic
                 Phylum: Phylum
+                lfc: Log-Fold Change
         mode: code
-        code_content: "df_modified = df.sort('W', descending=True).head(20)\nfig =\
-            \ px.bar(\n    df_modified.to_pandas(),\n    x='taxonomy', y='W', color='Phylum',\n\
-            \    title='Top 20 Most Significant Taxa (by W-statistic)',\n    labels={'taxonomy':\
-            \ 'Taxonomy', 'W': 'ANCOM W-Statistic', 'Phylum': 'Phylum'}\n)\nfig.update_layout(xaxis={'tickangle':\
-            \ -45, 'tickfont': {'size': 10}})"
+        code_content: "df_sig = df.filter(pl.col('significant') == True)\ndf_top =\
+            \ df_sig.with_columns(pl.col('lfc').abs().alias('abs_lfc')).sort('abs_lfc',\
+            \ descending=True).group_by('contrast').head(10)\ndf_plot = df_top.sort(['contrast',\
+            \ 'lfc'])\nfig = px.bar(\n    df_plot.to_pandas(),\n    x='Phylum', y='lfc',\
+            \ color='Phylum',\n    facet_col='contrast',\n    title='Top Significant\
+            \ Taxa by Log-Fold Change (per contrast)',\n    labels={'Phylum': 'Phylum',\
+            \ 'lfc': 'Log-Fold Change'}\n)\nfig.update_xaxes(matches=None, tickangle=-45,\
+            \ tickfont={'size': 9})\nfig.for_each_xaxis(lambda axis: axis.update(categoryorder='total\
+            \ ascending'))\nfig.add_hline(y=0, line_dash='solid', line_color='gray',\
+            \ line_width=0.5)"
         selection_enabled: false
         # --- generated on export ---
         tag: figure-diff-bar-top-taxa-145fd5
         index: diff-bar-top-taxa
         layout:
             x: 0
-            y: 12
+            y: 9
             w: 8
             h: 8
     -   component_type: table
         workflow_tag: ampliseq
-        data_collection_tag: ancom_volcano
+        data_collection_tag: ancombc_results
         # --- optional ---
         row_selection_enabled: false
         # --- generated on export ---
@@ -773,6 +823,6 @@ tabs:
         index: diff-table-results
         layout:
             x: 0
-            y: 20
+            y: 17
             w: 8
-            h: 8
+            h: 6
