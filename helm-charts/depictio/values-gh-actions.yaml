@@ -34,6 +34,7 @@ backend:
       cpu: "1"
   env:
     DEPICTIO_LOGGING_VERBOSITY_LEVEL: "DEBUG"
+    DEPICTIO_AUTH_SINGLE_USER_MODE: "true"
 
 frontend:
   resources:
