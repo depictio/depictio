@@ -1187,7 +1187,7 @@ jobs:
           # Import iris YAML to get a fresh dashboard ID to seed the roundtrip
           IMPORT_OUTPUT=$(depictio-cli dashboard import \
             ../projects/init/iris/dashboard_lite.yaml \
-            --config admin_config.yaml 2>&1)
+            --config admin_config.yaml --overwrite 2>&1)
           echo "$IMPORT_OUTPUT"
 
           IRIS_ID=$(echo "$IMPORT_OUTPUT" | grep -oE '[0-9a-f]{24}' | head -1)
