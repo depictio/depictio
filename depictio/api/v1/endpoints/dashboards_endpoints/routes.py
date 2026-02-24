@@ -7,7 +7,7 @@ from uuid import UUID
 
 import yaml
 from bson import ObjectId
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Body, Depends, HTTPException
 from fastapi.responses import Response
 
 from depictio.api.v1.configs.config import settings
@@ -1459,11 +1459,15 @@ def _import_multi_tab_dashboard(
     main_yaml = yaml.dump(main_dashboard_data, default_flow_style=False, allow_unicode=True)
     main_lite = DashboardDataLite.from_yaml(main_yaml)
 
-    # Check for existing main dashboard if overwrite is requested
-    existing_main = None
-    if overwrite:
-        existing_main = dashboards_collection.find_one(
-            {"title": main_lite.title, "project_id": ObjectId(project_id)}
+    # Check for existing main dashboard
+    existing_main = dashboards_collection.find_one(
+        {"title": main_lite.title, "project_id": ObjectId(project_id)}
+    )
+    if existing_main and not overwrite:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Dashboard '{main_lite.title}' already exists in this project. "
+            "Use --overwrite to update it.",
         )
 
     main_dashboard_dict = main_lite.to_full()
@@ -1604,12 +1608,13 @@ def _import_multi_tab_dashboard(
         "title": main_dashboard.title,
         "project_id": str(project_id),
         "tabs": imported_tabs,
+        "dash_url": settings.dash.external_url,
     }
 
 
 @dashboards_endpoint_router.post("/import/yaml")
 async def import_dashboard_from_yaml(
-    yaml_content: str,
+    yaml_content: str = Body(..., media_type="text/plain"),
     project_id: PyObjectId | None = None,
     overwrite: bool = False,
     current_user: User = Depends(get_current_user),
@@ -1712,17 +1717,21 @@ async def import_dashboard_from_yaml(
             detail="You don't have permission to create dashboards in this project.",
         )
 
-    # Check for existing dashboard if overwrite is requested
-    existing_dashboard = None
-    if overwrite:
-        existing_dashboard = dashboards_collection.find_one(
-            {"title": lite.title, "project_id": ObjectId(project_id)}
+    # Check for existing dashboard with same title
+    existing_dashboard = dashboards_collection.find_one(
+        {"title": lite.title, "project_id": ObjectId(project_id)}
+    )
+    if existing_dashboard and not overwrite:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Dashboard '{lite.title}' already exists in this project. "
+            "Use --overwrite to update it.",
         )
-        if existing_dashboard:
-            logger.info(
-                f"Found existing dashboard '{lite.title}' "
-                f"(ID: {existing_dashboard['dashboard_id']}) - will update"
-            )
+    if existing_dashboard:
+        logger.info(
+            f"Found existing dashboard '{lite.title}' "
+            f"(ID: {existing_dashboard['dashboard_id']}) - will update"
+        )
 
     dashboard_dict = lite.to_full()
 
@@ -1806,6 +1815,7 @@ async def import_dashboard_from_yaml(
         "dashboard_id": str(new_dashboard_id),
         "title": dashboard.title,
         "project_id": str(project_id),
+        "dash_url": settings.dash.external_url,
     }
 
 
@@ -2030,7 +2040,7 @@ async def export_dashboard_family_as_yaml(
 
 @dashboards_endpoint_router.post("/yaml/validate")
 async def validate_yaml_content(
-    yaml_content: str,
+    yaml_content: str = Body(..., media_type="text/plain"),
     current_user: User = Depends(get_current_user),
 ) -> dict[str, Any]:
     """Validate YAML content against DashboardDataLite schema.

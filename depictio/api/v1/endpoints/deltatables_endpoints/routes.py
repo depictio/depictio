@@ -362,10 +362,24 @@ async def specs(
     if not project_result:
         raise HTTPException(status_code=404, detail="Data collection not found or access denied.")
 
-    deltatable_cursor = deltatables_collection.find({"data_collection_id": data_collection_id})
-    deltatables = sanitize_for_json(list(deltatable_cursor)[0])
+    deltatable_cursor = list(
+        deltatables_collection.find({"data_collection_id": data_collection_id})
+    )
+    if not deltatable_cursor:
+        raise HTTPException(
+            status_code=404, detail=f"No DeltaTable found for data collection {data_collection_id}"
+        )
 
-    return convert_objectid_to_str(deltatables["aggregation"][-1]["aggregation_columns_specs"])
+    deltatables = sanitize_for_json(deltatable_cursor[0])
+
+    aggregation = deltatables.get("aggregation")
+    if not aggregation:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No aggregation data found for data collection {data_collection_id}",
+        )
+
+    return convert_objectid_to_str(aggregation[-1]["aggregation_columns_specs"])
 
 
 @deltatables_endpoint_router.get("/shape/{data_collection_id}")

@@ -188,6 +188,7 @@ services:
       - DEPICTIO_DEV_MODE=true
       - DEPICTIO_MONGODB_WIPE=${MONGODB_WIPE}
       - DEPICTIO_AUTH_SINGLE_USER_MODE=${DEPICTIO_AUTH_SINGLE_USER_MODE}
+      - DEPICTIO_DASH_EXTERNAL_PORT=${DASH_PORT}
 
   depictio-celery-worker:
     container_name: ${COMPOSE_PROJECT_NAME}-depictio-celery-worker
