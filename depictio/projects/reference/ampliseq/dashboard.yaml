@@ -75,13 +75,25 @@ main_dashboard:
     -   component_type: multiqc
         workflow_tag: ampliseq
         data_collection_tag: multiqc_data
+        selected_module: general_stats
+        selected_plot: general_stats
+        # --- generated on export ---
+        tag: multiqc-general_stats-table-a1c3f7
+        layout:
+            x: 0
+            y: 0
+            w: 8
+            h: 5
+    -   component_type: multiqc
+        workflow_tag: ampliseq
+        data_collection_tag: multiqc_data
         selected_module: cutadapt
         selected_plot: Filtered Reads
         # --- generated on export ---
         tag: multiqc-cutadapt_filtered-reads-d421ae
         layout:
             x: 0
-            y: 0
+            y: 5
             w: 8
             h: 4
     -   component_type: multiqc
@@ -93,7 +105,7 @@ main_dashboard:
         tag: multiqc-fastqc_sequence-counts-52bd04
         layout:
             x: 0
-            y: 4
+            y: 9
             w: 8
             h: 4
     -   component_type: multiqc
@@ -105,7 +117,7 @@ main_dashboard:
         tag: multiqc-fastqc_sequence-quality-histograms-ce2a02
         layout:
             x: 0
-            y: 8
+            y: 13
             w: 4
             h: 5
     -   component_type: multiqc
@@ -117,7 +129,7 @@ main_dashboard:
         tag: multiqc-fastqc_per-sequence-gc-content-359f73
         layout:
             x: 4
-            y: 8
+            y: 13
             w: 4
             h: 5
     -   component_type: multiqc
@@ -129,7 +141,7 @@ main_dashboard:
         tag: multiqc-fastqc_adapter-content-6dd1a9
         layout:
             x: 0
-            y: 13
+            y: 18
             w: 4
             h: 5
     -   component_type: multiqc
@@ -141,7 +153,7 @@ main_dashboard:
         tag: multiqc-cutadapt_trimmed-sequence-lengths-5-e5e50a
         layout:
             x: 4
-            y: 13
+            y: 18
             w: 4
             h: 5
 tabs:

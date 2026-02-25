@@ -361,9 +361,6 @@ def design_multiqc_from_model(component: MultiQCDashboardComponent) -> dmc.Paper
     Returns:
         DMC Paper component for MultiQC visualization
     """
-    logger.info(f"Designing MultiQC component from model: {component.index}")
-    logger.info(f"Component state: {component.state}")
-
     # Extract component data
     component_id = component.index
     workflow_id = component.workflow_id
@@ -374,11 +371,6 @@ def design_multiqc_from_model(component: MultiQCDashboardComponent) -> dmc.Paper
     initial_module_value = state.selected_module
     initial_plot_value = state.selected_plot
     initial_dataset_value = state.selected_dataset
-
-    logger.info(
-        f"Initial values - Module: {initial_module_value}, "
-        f"Plot: {initial_plot_value}, Dataset: {initial_dataset_value}"
-    )
 
     # MultiQC component with orange theme
     multiqc_content = dmc.Paper(
@@ -568,27 +560,16 @@ def expand_canonical_samples_to_variants(
         List of all sample variants to filter MultiQC plots.
     """
     if not sample_mappings:
-        logger.warning("No sample mappings available - returning canonical samples as-is")
         return canonical_samples
 
     expanded_samples = []
     for canonical_id in canonical_samples:
-        # Get all variants for this canonical ID
         variants = sample_mappings.get(canonical_id, [])
-
         if variants:
             expanded_samples.extend(variants)
-            logger.debug(
-                f"Expanded '{canonical_id}' to {len(variants)} variants: {variants[:3]}..."
-            )
         else:
-            # If no mapping found, include the canonical ID itself
             expanded_samples.append(canonical_id)
-            logger.debug(f"No variants found for '{canonical_id}' - using as-is")
 
-    logger.info(
-        f"Expanded {len(canonical_samples)} canonical IDs to {len(expanded_samples)} MultiQC variants"
-    )
     return expanded_samples
 
 
@@ -613,31 +594,20 @@ def _filter_date_column(
     default_range = default_state.get("default_range")
 
     if default_range and filter_values == default_range:
-        logger.debug(
-            f"Date filter '{column_name}' at default range {default_range} - "
-            "skipping (not an active filter)"
-        )
         return df
 
-    # Try parsing filter values as Python date objects
     try:
         parsed_dates = [datetime.strptime(str(v), "%Y-%m-%d").date() for v in filter_values]
-        df = df.filter(pl.col(column_name).is_in(parsed_dates))
-        logger.debug(f"After filtering: {df.shape[0]} rows remaining (Date parsing)")
-        return df
-    except Exception as e:
-        logger.warning(f"Failed to filter Date column '{column_name}' with date parsing: {e}")
+        return df.filter(pl.col(column_name).is_in(parsed_dates))
+    except Exception:
+        pass
 
     # Fallback to string casting with explicit date format
     try:
         string_values = [str(v) for v in filter_values]
-        df = df.filter(pl.col(column_name).dt.strftime("%Y-%m-%d").is_in(string_values))
-        logger.info(f"After filtering: {df.shape[0]} rows remaining (Date as formatted string)")
-        return df
+        return df.filter(pl.col(column_name).dt.strftime("%Y-%m-%d").is_in(string_values))
     except Exception as e2:
-        logger.error(
-            f"All Date filtering methods failed on '{column_name}': {e2}. Skipping filter."
-        )
+        logger.error(f"All Date filtering methods failed on '{column_name}': {e2}")
         return df
 
 
@@ -659,20 +629,14 @@ def _filter_range_column(
     default_range = default_state.get("default_range")
 
     if default_range and filter_values == default_range:
-        logger.debug(
-            f"Range filter '{column_name}' at default range {default_range} - "
-            "skipping (not an active filter)"
-        )
         return df
 
     min_val, max_val = filter_values[0], filter_values[1]
-    logger.debug(f"Applying range filter: {min_val} <= {column_name} <= {max_val}")
 
     try:
         df = df.filter((pl.col(column_name) >= min_val) & (pl.col(column_name) <= max_val))
-        logger.info(f"After filtering: {df.shape[0]} rows remaining (range filter)")
     except Exception as e:
-        logger.error(f"Range filtering failed on '{column_name}': {e}. Skipping filter.")
+        logger.error(f"Range filtering failed on '{column_name}': {e}")
 
     return df
 
@@ -690,23 +654,17 @@ def _filter_discrete_column(
     Returns:
         Filtered DataFrame.
     """
-    logger.debug(f"Applying discrete filter: {column_name} in {filter_values}")
-
     try:
-        df = df.filter(df[column_name].is_in(filter_values))
-        logger.info(f"After filtering: {df.shape[0]} rows remaining (discrete filter)")
-        return df
-    except Exception as e:
-        logger.warning(f"Direct filtering failed on '{column_name}': {e}")
+        return df.filter(df[column_name].is_in(filter_values))
+    except Exception:
+        pass
 
     # Fallback: try string casting for type safety
     try:
         string_values = [str(v) for v in filter_values]
-        df = df.filter(df[column_name].cast(pl.String).is_in(string_values))
-        logger.info(f"After filtering: {df.shape[0]} rows remaining (string casting fallback)")
-        return df
+        return df.filter(df[column_name].cast(pl.String).is_in(string_values))
     except Exception as e2:
-        logger.error(f"All filtering methods failed on '{column_name}': {e2}. Skipping filter.")
+        logger.error(f"All filtering methods failed on '{column_name}': {e2}")
         return df
 
 
@@ -752,7 +710,6 @@ def get_samples_from_metadata_filter(
 
     from depictio.api.v1.deltatables_utils import load_deltatable_lite
 
-    logger.debug(f"Loading metadata table {metadata_dc_id}")
     df = load_deltatable_lite(
         workflow_id=ObjectId(workflow_id),
         data_collection_id=ObjectId(metadata_dc_id),
@@ -761,11 +718,7 @@ def get_samples_from_metadata_filter(
     )
 
     if df is None or df.is_empty():
-        logger.warning("Metadata table is empty")
         return []
-
-    logger.debug(f"Loaded metadata table with columns: {df.columns}")
-    logger.info(f"Metadata table shape: {df.shape}")
 
     # Apply filters from interactive components
     for comp_data in interactive_components_dict.values():
@@ -776,7 +729,6 @@ def get_samples_from_metadata_filter(
         if not (column_name and filter_values and column_name in df.columns):
             continue
 
-        logger.info(f"Filtering {column_name} = {filter_values}")
         column_dtype = df[column_name].dtype
 
         if column_dtype in (pl.Date, pl.Datetime):
@@ -793,11 +745,7 @@ def get_samples_from_metadata_filter(
         )
         return []
 
-    canonical_samples = df[join_column].unique().to_list()
-    logger.info(
-        f"Found {len(canonical_samples)} canonical samples after filtering: {canonical_samples}"
-    )
-    return canonical_samples
+    return df[join_column].unique().to_list()
 
 
 def create_sample_filter_patch(selected_samples, metadata=None):
@@ -818,8 +766,6 @@ def create_sample_filter_patch(selected_samples, metadata=None):
 
     if not selected_samples:
         return None
-
-    logger.debug(f"Creating sample filter patch for {len(selected_samples)} selected samples")
 
     # Create a patch that will update trace visibility
     # Note: We can't determine trace types without the figure, so we need to use
@@ -923,10 +869,8 @@ def _patch_bar_trace(
                 tuple(new_x) if isinstance(original_x, tuple) else new_x
             )
             patched_fig["data"][trace_idx]["visible"] = True
-            logger.info(f"      Filtered horizontal bar chart: {len(new_y)} samples")
         else:
             patched_fig["data"][trace_idx]["visible"] = False
-            logger.debug("      No valid data after filtering - hiding trace")
     else:
         # Vertical bars: samples in X-axis
         if not (original_x and original_y):
@@ -942,10 +886,8 @@ def _patch_bar_trace(
                 tuple(new_y) if isinstance(original_y, tuple) else new_y
             )
             patched_fig["data"][trace_idx]["visible"] = True
-            logger.info(f"      Filtered vertical bar chart: {len(new_x)} samples")
         else:
             patched_fig["data"][trace_idx]["visible"] = False
-            logger.debug("      No valid data after filtering - hiding trace")
 
 
 def _patch_heatmap_trace(
@@ -970,14 +912,7 @@ def _patch_heatmap_trace(
         A new figure dict with filtered heatmap, or None if no data matches.
     """
     if not (original_y and original_z):
-        if original_y and not original_z:
-            logger.error("      Heatmap has Y data but no Z data in trace metadata - cannot filter")
         return None
-
-    logger.info(
-        f"      DEBUG: selected_samples: {list(selected_samples)[:5]}... "
-        f"(total: {len(selected_samples)})"
-    )
 
     selected_samples_set = set(selected_samples)
     filtered_indices = [
@@ -986,13 +921,7 @@ def _patch_heatmap_trace(
         if _sample_matches_fuzzy(sample, selected_samples_set)
     ]
 
-    logger.info(
-        f"      DEBUG: Matched samples after fuzzy matching: "
-        f"{len(filtered_indices)}/{len(original_y)}"
-    )
-
     if not filtered_indices:
-        logger.warning("      No valid data after filtering - hiding heatmap")
         return None
 
     # Build filtered figure
@@ -1014,9 +943,6 @@ def _patch_heatmap_trace(
         full_fig["layout"]["yaxis"].pop("ticktext", None)
         full_fig["layout"]["yaxis"]["type"] = "category"
 
-    logger.info(
-        f"      Heatmap rebuilt from trace metadata: {len(new_y)} samples, {len(new_z)} Z-rows"
-    )
     return full_fig
 
 
@@ -1037,16 +963,11 @@ def _get_trace_data(trace: dict, original_traces: list, trace_idx: int) -> tuple
         original_y = trace_info.get("original_y", [])
         original_z = trace_info.get("original_z", [])
         orientation = trace_info.get("orientation", "v")
-        logger.debug(
-            f"    Trace {trace_idx}: Using stored original data - "
-            f"x_len={len(original_x)}, y_len={len(original_y)}, orientation={orientation}"
-        )
     else:
         original_x = trace.get("x", [])
         original_y = trace.get("y", [])
         original_z = trace.get("z", [])
         orientation = trace.get("orientation", "v")
-        logger.debug(f"    Trace {trace_idx}: Using current trace data (no stored metadata)")
 
     return original_x, original_y, original_z, orientation
 
@@ -1074,23 +995,19 @@ def patch_multiqc_figures(
     if not figures or not selected_samples:
         return figures
 
-    logger.info(f"Patching MultiQC figures with {len(selected_samples)} selected samples")
     patched_figures = []
 
     original_traces = []
     if trace_metadata and "original_data" in trace_metadata:
         original_traces = trace_metadata["original_data"]
-        logger.debug(f"  Using stored trace metadata with {len(original_traces)} traces")
 
     for fig_idx, fig in enumerate(figures):
-        logger.debug(f"Processing figure {fig_idx}")
         patched_fig = copy.deepcopy(fig)
         figure_replaced = False
 
         for i, trace in enumerate(patched_fig.get("data", [])):
             trace_type = trace.get("type", "").lower()
             trace_name = trace.get("name", "")
-            logger.info(f"    Trace {i}: type='{trace_type}', name='{trace_name}'")
 
             original_x, original_y, original_z, orientation = _get_trace_data(
                 trace, original_traces, i
@@ -1102,7 +1019,6 @@ def patch_multiqc_figures(
                 )
 
             elif trace_type == "heatmap":
-                logger.debug("      Processing heatmap - using full figure replacement")
                 full_fig = _patch_heatmap_trace(
                     fig, i, original_x, original_y, original_z, selected_samples
                 )
@@ -1117,15 +1033,10 @@ def patch_multiqc_figures(
                 # Scatter, line, and other plot types
                 trace_matches_selected = any(sample in trace_name for sample in selected_samples)
                 patched_fig["data"][i]["visible"] = trace_matches_selected
-                logger.info(
-                    f"      Trace '{trace_name}': visible={trace_matches_selected} "
-                    f"(matches selected samples: {trace_matches_selected})"
-                )
 
         if not figure_replaced:
             patched_figures.append(patched_fig)
 
-    logger.info(f"Returning {len(patched_figures)} patched figures")
     return patched_figures
 
 
@@ -1179,15 +1090,7 @@ def register_callbacks_multiqc_component(app):
             component.state.s3_locations = s3_locations or []
             component.state.metadata = metadata or {}
 
-            # Convert back to storable format
-            updated_metadata = component.to_stored_metadata()
-
-            logger.info(
-                f"Updated MultiQC metadata with selections: module={selected_module}, "
-                f"plot={selected_plot}, dataset={selected_dataset}"
-            )
-
-            return updated_metadata
+            return component.to_stored_metadata()
 
         except Exception as e:
             logger.error(f"Error updating MultiQC metadata with models: {e}")
@@ -1330,9 +1233,7 @@ def register_callbacks_multiqc_component(app):
                 dataset_id=selected_dataset,
                 theme=theme,
             )
-        except ValueError as e:
-            # Plot doesn't exist for this module (transition state when switching modules)
-            logger.debug(f"Plot validation error (expected during module switch): {e}")
+        except ValueError:
             return dmc.Center(
                 [dmc.Text(f"Loading plots for {selected_module}...", c="gray")],
                 style={"height": "400px"},
@@ -1385,11 +1286,6 @@ def register_callbacks_multiqc_component(app):
         """Update MultiQC component with actual data and visualizations."""
         # Get the component ID from the callback context
 
-        logger.info(f"MultiQC callback triggered for data collection: {data_collection_id}")
-        logger.info(
-            f"Existing metadata: {bool(existing_metadata)}, Existing S3 locations: {len(existing_s3_locations) if existing_s3_locations else 0}"
-        )
-
         # Check if we already have restored metadata and s3_locations with meaningful data
         # This happens when a dashboard is being restored from saved state
         # We need to verify that metadata actually contains data, not just empty structures
@@ -1408,7 +1304,6 @@ def register_callbacks_multiqc_component(app):
         has_s3_locations = existing_s3_locations and len(existing_s3_locations) > 0
 
         if has_meaningful_metadata and has_s3_locations:
-            logger.info("Using existing restored MultiQC metadata and S3 locations")
             return (
                 existing_metadata,  # Keep existing metadata
                 existing_s3_locations,  # Keep existing s3 locations
@@ -1419,7 +1314,6 @@ def register_callbacks_multiqc_component(app):
         # Get token and reports for fresh load
         TOKEN = local_data.get("access_token") if local_data else None
         if not TOKEN:
-            logger.warning("No access token available for MultiQC component")
             return (
                 existing_metadata or {},  # Fallback to existing or empty
                 existing_s3_locations or [],  # Fallback to existing or empty
@@ -1441,7 +1335,6 @@ def register_callbacks_multiqc_component(app):
 
         # If no reports were fetched but we have existing data, keep the existing data
         if not reports and (existing_metadata or existing_s3_locations):
-            logger.info("No reports fetched from API, keeping existing data")
             return (
                 existing_metadata or {},
                 existing_s3_locations or [],

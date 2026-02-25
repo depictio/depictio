@@ -24,6 +24,9 @@ from dash import dcc, html
 
 from depictio.api.v1.configs.config import API_BASE_URL
 from depictio.api.v1.configs.logging_init import logger
+from depictio.dash.modules.multiqc_component.general_stats import (
+    build_empty_general_stats_elements,
+)
 
 
 def resolve_bson_id(value: Any) -> Optional[str]:
@@ -107,11 +110,6 @@ def analyze_multiqc_plot_structure(fig: go.Figure) -> dict:
         "sample_names": ", ".join(sample_mapping[:3]) + ("..." if len(sample_mapping) > 3 else ""),
     }
 
-    logger.debug(
-        f"Analyzed MultiQC plot: {summary['traces']} traces, "
-        f"types: {summary['types']}, samples: {summary['samples_in_traces']}"
-    )
-
     return {"original_data": original_data, "summary": summary}
 
 
@@ -146,8 +144,6 @@ def add_multiqc_logo_overlay(fig, logo_size_px=45):
             )
         )
 
-        logger.debug("Added MultiQC logo overlay using Dash assets")
-
     except Exception as e:
         logger.warning(f"Failed to add MultiQC logo overlay: {e}")
 
@@ -164,8 +160,6 @@ def build_multiqc(**kwargs: Any):
     Returns:
         Dash component with MultiQC plot and metadata store
     """
-
-    logger.debug(f"Building MultiQC plot component with kwargs keys: {list(kwargs.keys())}")
 
     # Extract required parameters
     component_id = kwargs.get("index", "multiqc-component")
@@ -230,62 +224,118 @@ def build_multiqc(**kwargs: Any):
 
     # Check if we have the minimum required information for a plot
     if not selected_module or not selected_plot or not s3_locations:
-        plot_component = dcc.Graph(
-            id={"type": "multiqc-graph", "index": str(component_id)},
-            figure={
-                "data": [],
-                "layout": {
-                    "title": "MultiQC Component - Configure in edit mode",
-                    "xaxis": {"visible": False},
-                    "yaxis": {"visible": False},
-                    "annotations": [
-                        {
-                            "text": "No data available",
-                            "xref": "paper",
-                            "yref": "paper",
-                            "x": 0.5,
-                            "y": 0.5,
-                            "showarrow": False,
-                            "font": {"size": 16, "color": "gray"},
-                        }
-                    ],
-                },
-            },
-            style={"height": "100%", "width": "100%"},
-        )
-    else:
-        # Lazy loading: return placeholder and trigger background generation
         plot_component = html.Div(
             id={"type": "multiqc-plot-wrapper", "index": str(component_id)},
             style={
                 "position": "relative",
                 "height": "100%",
                 "width": "100%",
-                "flex": "1",  # CRITICAL: Grow to take all space in flex parent
+                "flex": "1",
                 "display": "flex",
                 "flexDirection": "column",
             },
             children=[
-                # Actual dcc.Graph component - will be populated by background callback via figure property
                 dcc.Graph(
                     id={"type": "multiqc-graph", "index": str(component_id)},
                     figure={
                         "data": [],
                         "layout": {
-                            "title": "Loading MultiQC plot...",
+                            "title": "MultiQC Component - Configure in edit mode",
                             "xaxis": {"visible": False},
                             "yaxis": {"visible": False},
+                            "annotations": [
+                                {
+                                    "text": "No data available",
+                                    "xref": "paper",
+                                    "yref": "paper",
+                                    "x": 0.5,
+                                    "y": 0.5,
+                                    "showarrow": False,
+                                    "font": {"size": 16, "color": "gray"},
+                                }
+                            ],
                         },
                     },
-                    style={
-                        "width": "100%",
-                        "height": "100%",
-                        "flex": "1",  # CRITICAL: Grow within flex parent
-                        "minHeight": "300px",  # Ensure minimum height
-                    },
-                    config={"displayModeBar": "hover", "responsive": True},
+                    style={"height": "100%", "width": "100%"},
                 ),
-                # MultiQC logo overlay - CSS positioned for consistent size across all plots
+                dcc.Store(
+                    id={"type": "multiqc-trigger", "index": str(component_id)},
+                    data=None,
+                ),
+            ],
+        )
+    else:
+        # Determine if this is a general stats instance at build time.
+        is_general_stats = selected_module == "general_stats" or selected_plot == "general_stats"
+
+        if is_general_stats:
+            # General stats: dcc.Graph must exist for MATCH callbacks that target
+            # multiqc-graph.figure, but Plotly ignores display:none and still renders
+            # an SVG canvas. Use position:absolute to remove from flow + zero size.
+            graph_style = {
+                "position": "absolute",
+                "visibility": "hidden",
+                "overflow": "hidden",
+                "height": "0",
+                "width": "0",
+                "pointerEvents": "none",
+            }
+            wrapper_style = {
+                "position": "absolute",
+                "visibility": "hidden",
+                "overflow": "hidden",
+                "height": "0",
+                "width": "0",
+            }
+        else:
+            graph_style = {
+                "width": "100%",
+                "height": "100%",
+                "flex": "1",
+                "minHeight": "300px",
+            }
+            wrapper_style = {
+                "position": "relative",
+                "height": "100%",
+                "width": "100%",
+                "flex": "1",
+                "display": "flex",
+                "flexDirection": "column",
+            }
+
+        # Build plot wrapper children — logo only for regular plots
+        wrapper_children = [
+            dcc.Graph(
+                id={"type": "multiqc-graph", "index": str(component_id)},
+                figure={
+                    "data": [],
+                    "layout": {
+                        "title": "Loading MultiQC plot..." if not is_general_stats else "",
+                        "xaxis": {"visible": False},
+                        "yaxis": {"visible": False},
+                        "height": 0 if is_general_stats else None,
+                    },
+                },
+                style=graph_style,
+                config={"displayModeBar": "hover", "responsive": True},
+            ),
+            dcc.Store(
+                id={"type": "multiqc-trigger", "index": str(component_id)},
+                data={
+                    "s3_locations": s3_locations,
+                    "module": selected_module,
+                    "plot": selected_plot,
+                    "dataset_id": selected_dataset,
+                    "theme": theme,
+                    "component_id": str(component_id),
+                },
+            ),
+        ]
+
+        # Add logo overlay only for regular plots
+        if not is_general_stats:
+            wrapper_children.insert(
+                1,
                 html.Img(
                     src="/assets/images/logos/multiqc.png",
                     style={
@@ -300,28 +350,42 @@ def build_multiqc(**kwargs: Any):
                     },
                     title="Generated with MultiQC",
                 ),
-                # Trigger store for background callback
-                dcc.Store(
-                    id={"type": "multiqc-trigger", "index": str(component_id)},
-                    data={
-                        "s3_locations": s3_locations,
-                        "module": selected_module,
-                        "plot": selected_plot,
-                        "dataset_id": selected_dataset,
-                        "theme": theme,
-                        "component_id": str(component_id),
-                    },
-                ),
-            ],
+            )
+
+        plot_component = html.Div(
+            id={"type": "multiqc-plot-wrapper", "index": str(component_id)},
+            style=wrapper_style,
+            children=wrapper_children,
         )
 
-    logger.debug(
-        f"build_multiqc returning component_id={component_id}, "
-        f"plot_type={type(plot_component).__name__}"
+    # General stats wrapper — always present so MATCH callbacks always find their targets.
+    is_general_stats = selected_module == "general_stats" or selected_plot == "general_stats"
+    if is_general_stats:
+        gs_initial_style = {
+            "width": "100%",
+            "height": "100%",
+            "flex": "1",
+            "display": "flex",
+            "flexDirection": "column",
+            "overflow": "hidden",
+        }
+    else:
+        gs_initial_style = {
+            "position": "absolute",
+            "visibility": "hidden",
+            "overflow": "hidden",
+            "height": "0",
+            "width": "0",
+        }
+
+    general_stats_wrapper = html.Div(
+        id={"type": "general-stats-wrapper", "index": str(component_id)},
+        children=build_empty_general_stats_elements(str(component_id)),
+        style=gs_initial_style,
     )
 
     return html.Div(
-        [plot_component, store_component, trace_metadata_store],
+        [plot_component, general_stats_wrapper, store_component, trace_metadata_store],
         id=component_id,
         style={
             "width": "100%",
@@ -354,20 +418,13 @@ def get_multiqc_reports_for_data_collection(data_collection_id: str, token: str)
         )
 
         if response.status_code == 200:
-            data = response.json()
-            reports = data.get("reports", [])
-            logger.info(
-                f"Retrieved {len(reports)} MultiQC reports for data collection {data_collection_id}"
-            )
-            return reports
+            return response.json().get("reports", [])
         else:
-            logger.warning(
-                f"Failed to retrieve MultiQC reports: {response.status_code} - {response.text}"
-            )
+            logger.error(f"Failed to retrieve MultiQC reports: {response.status_code}")
             return []
 
     except Exception as e:
-        logger.error(f"Error retrieving MultiQC reports: {str(e)}")
+        logger.error(f"Error retrieving MultiQC reports: {e}")
         return []
 
 
@@ -390,17 +447,13 @@ def get_multiqc_report_metadata(report_id: str, token: str) -> dict:
         )
 
         if response.status_code == 200:
-            metadata = response.json()
-            logger.info(f"Retrieved metadata for MultiQC report {report_id}")
-            return metadata
+            return response.json()
         else:
-            logger.warning(
-                f"Failed to retrieve MultiQC report metadata: {response.status_code} - {response.text}"
-            )
+            logger.error(f"Failed to retrieve MultiQC report metadata: {response.status_code}")
             return {}
 
     except Exception as e:
-        logger.error(f"Error retrieving MultiQC report metadata: {str(e)}")
+        logger.error(f"Error retrieving MultiQC report metadata: {e}")
         return {}
 
 
@@ -441,7 +494,7 @@ def check_multiqc_data_availability(data_collection_id: str, token: str) -> dict
         }
 
     except Exception as e:
-        logger.error(f"Error checking MultiQC data availability: {str(e)}")
+        logger.error(f"Error checking MultiQC data availability: {e}")
         return {
             "available": False,
             "report_count": 0,
@@ -507,7 +560,7 @@ def format_multiqc_summary(reports: list, metadata: dict | None = None) -> dict:
         }
 
     except Exception as e:
-        logger.error(f"Error formatting MultiQC summary: {str(e)}")
+        logger.error(f"Error formatting MultiQC summary: {e}")
         return {
             "total_reports": len(reports),
             "total_samples": 0,
