@@ -11,10 +11,8 @@ The validation rules ensure that:
 - JBrowse2 components only work with JBrowse2 DCs
 """
 
-from typing import Dict, List
-
 # Component type to allowed DC types mapping
-COMPONENT_DC_TYPE_MAPPING: Dict[str, List[str]] = {
+COMPONENT_DC_TYPE_MAPPING: dict[str, list[str]] = {
     "Figure": ["table"],
     "Card": ["table"],
     "Interactive": ["table"],
@@ -28,7 +26,7 @@ COMPONENT_DC_TYPE_MAPPING: Dict[str, List[str]] = {
 
 # Reverse mapping: DC type to allowed component types
 # Used for UI filtering in stepper (shows which components are valid for a DC type)
-DC_COMPONENT_TYPE_MAPPING: Dict[str, List[str]] = {
+DC_COMPONENT_TYPE_MAPPING: dict[str, list[str]] = {
     "table": ["Figure", "Card", "Interactive", "Table", "Map"],
     "multiqc": ["MultiQC"],
     "image": ["Image"],

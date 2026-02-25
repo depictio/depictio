@@ -23,7 +23,7 @@ _GRID_ICON_COLORS = {
     "table": "#6495ed",
     "multiqc": "transparent",
     "image": "#e6779f",
-    "map": "#6495ed",
+    "map": "#7A5DC7",
 }
 
 # Display names used as button values (must match existing callback patterns)
@@ -143,6 +143,10 @@ def _build_component_selection_layout(n: str) -> dmc.Stack:
         A DMC Stack containing the grid of component cards.
     """
     cards = [_create_component_card(comp_type, n) for comp_type in _GRID_COMPONENT_TYPES]
+
+    # Center the last card when it's alone in its row (7 items in a 3-col grid)
+    if len(cards) % 3 == 1:
+        cards[-1].style = {**(cards[-1].style or {}), "gridColumn": "2"}
 
     return dmc.Stack(
         [

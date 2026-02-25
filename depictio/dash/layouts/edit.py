@@ -337,21 +337,8 @@ def _create_component_buttons(
     config = button_configs.get(component_type, button_configs["default"])
 
     # Special handling for selection-enabled components
-    if component_type == "figure":
-        # Check if selection is enabled for this figure
-        selection_enabled = (
-            component_data.get("selection_enabled", False) if component_data else False
-        )
-        if selection_enabled:
-            edit_only_list = config.get("selection_edit_only", config["edit_only"])
-            view_accessible_list = config.get(
-                "selection_view_accessible", config["view_accessible"]
-            )
-        else:
-            edit_only_list = config["edit_only"]
-            view_accessible_list = config["view_accessible"]
-    elif component_type == "map":
-        # Check if selection is enabled for this map
+    if component_type in ("figure", "map"):
+        # Check if selection is enabled for this figure or map
         selection_enabled = (
             component_data.get("selection_enabled", False) if component_data else False
         )

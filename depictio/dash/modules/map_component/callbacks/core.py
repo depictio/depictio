@@ -69,9 +69,7 @@ def _group_filters_by_dc(components: list[dict]) -> dict[str, list[dict]]:
     for component in components:
         dc = str(component.get("metadata", {}).get("dc_id", ""))
         if dc:
-            if dc not in filters_by_dc:
-                filters_by_dc[dc] = []
-            filters_by_dc[dc].append(component)
+            filters_by_dc.setdefault(dc, []).append(component)
     return filters_by_dc
 
 
@@ -101,7 +99,6 @@ def _extract_filters_for_map(
     interactive_metadata_list: list | None,
     interactive_metadata_ids: list | None,
     project_metadata: dict | None,
-    batch_task_id: str,
     access_token: str | None = None,
 ) -> list[dict]:
     """Extract active filters for a specific map's data collection.
@@ -185,7 +182,7 @@ def register_core_callbacks(app):
         if not trigger_data_list or not trigger_ids:
             raise dash.exceptions.PreventUpdate
 
-        current_theme = theme_data if theme_data else "light"
+        current_theme = theme_data or "light"
         access_token = local_data.get("access_token") if local_data else None
 
         if not access_token:
@@ -218,7 +215,6 @@ def register_core_callbacks(app):
                 interactive_metadata_list,
                 interactive_metadata_ids,
                 project_metadata,
-                batch_task_id,
                 access_token=access_token,
             )
 

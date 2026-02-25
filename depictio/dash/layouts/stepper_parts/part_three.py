@@ -244,7 +244,7 @@ def return_design_component(
     elif component_selected == "Graph":
         return dash.no_update, btn_component
     elif component_selected == "Map":
-        component_content = design_map(id, df)
+        component_content = design_map(id, df, wf_id=wf_id, dc_id=dc_id)
         return html.Div(component_content, style={"width": "100%"}), btn_component
     else:
         return html.Div("Not implemented yet", style={"width": "100%"}), btn_component

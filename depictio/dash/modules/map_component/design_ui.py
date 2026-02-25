@@ -15,6 +15,8 @@ from dash_iconify import DashIconify
 def design_map(
     id: dict | str,
     df: Any = None,
+    wf_id: str | None = None,
+    dc_id: str | None = None,
     **kwargs: Any,
 ) -> html.Div:
     """Create the map component design UI for the stepper.
@@ -25,6 +27,8 @@ def design_map(
     Args:
         id: Component identifier (dict with type/index or string).
         df: DataFrame for populating column selectors.
+        wf_id: Workflow ID for the component metadata.
+        dc_id: Data collection ID for the component metadata.
         **kwargs: Additional parameters.
 
     Returns:
@@ -149,7 +153,7 @@ def design_map(
             dmc.Text("Preview", fw="bold", size="lg"),
             dcc.Graph(
                 id={"type": "map-preview-graph", "index": n},
-                config={"scrollZoom": True},
+                config={"scrollZoom": True, "displayModeBar": "hover"},
                 style={"height": "500px", "width": "100%"},
             ),
         ],
@@ -162,9 +166,42 @@ def design_map(
         data={},
     )
 
+    # Component metadata store — the stepper save reads this to persist the component
+    metadata_store = dcc.Store(
+        id={"type": "stored-metadata-component", "index": n},
+        data={
+            "index": n,
+            "component_type": "map",
+            "map_type": "scatter_map",
+            "wf_id": wf_id,
+            "dc_id": dc_id,
+        },
+        storage_type="memory",
+    )
+
+    # Store the DataFrame so the preview callback can access it.
+    # Handles both Polars (to_dicts) and Pandas (to_dict(orient="records")).
+    df_records = None
+    if df is not None:
+        try:
+            if hasattr(df, "to_dicts"):
+                # Polars DataFrame
+                df_records = df.to_dicts()
+            elif hasattr(df, "to_dict"):
+                # Pandas DataFrame
+                df_records = df.to_dict(orient="records")
+        except Exception:
+            pass
+    df_store = dcc.Store(
+        id={"type": "map-df-store", "index": n},
+        data=df_records,
+    )
+
     return html.Div(
         [
             design_store,
+            df_store,
+            metadata_store,
             dmc.Paper(
                 [
                     dmc.Paper(

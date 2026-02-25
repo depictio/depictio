@@ -78,7 +78,7 @@ def build_map(**kwargs) -> html.Div:
                 id={"type": "map-graph", "index": index},
                 config={
                     "scrollZoom": True,
-                    "displayModeBar": True,
+                    "displayModeBar": "hover",
                     "modeBarButtonsToRemove": ["toImage"],
                 },
                 style={
@@ -225,9 +225,7 @@ def render_map(
     range_color = trigger_data.get("range_color")
 
     # Auto-switch map_style for dark theme
-    if theme == "dark" and map_style == "open-street-map":
-        map_style = "carto-darkmatter"
-    elif theme == "dark" and map_style == "carto-positron":
+    if theme == "dark" and map_style in ("open-street-map", "carto-positron"):
         map_style = "carto-darkmatter"
 
     # Convert Polars to pandas
@@ -393,10 +391,8 @@ def render_map(
         # selected/unselected trace properties don't work reliably on
         # scatter_map traces, so we set marker.opacity as an array directly.
         # When color encoding is used, px.scatter_map creates one trace per
-        # category — we must set opacity per-trace using each trace's
+        # category -- we must set opacity per-trace using each trace's
         # customdata to identify which points are selected.
-        # (Choropleth maps don't support selection.)
-        selection_column = trigger_data.get("selection_column")
         if (
             map_type != "choropleth_map"
             and active_selection_values
@@ -534,8 +530,7 @@ def _render_density_map(
         if v is not None:
             kwargs[k] = v
 
-    fig = px.density_map(**kwargs)
-    return fig
+    return px.density_map(**kwargs)
 
 
 def _render_choropleth_map(
@@ -609,5 +604,4 @@ def _render_choropleth_map(
         if v is not None:
             kwargs[k] = v
 
-    fig = px.choropleth_map(**kwargs)
-    return fig
+    return px.choropleth_map(**kwargs)

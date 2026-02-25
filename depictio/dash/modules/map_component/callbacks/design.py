@@ -4,6 +4,7 @@ Map Component - Design Callbacks.
 Callbacks for the map design UI in the stepper workflow:
 - Toggle selection column based on selection switch
 - Live preview update based on configuration changes
+- Sync design state to stored-metadata-component for stepper save
 """
 
 import json
@@ -33,10 +34,15 @@ def register_design_callbacks(app):
         """Enable/disable selection column selector based on switch."""
         return not checked
 
-    # Live preview callback
+    # Live preview callback — also updates stored-metadata-component for stepper save
     @app.callback(
         Output({"type": "map-preview-graph", "index": MATCH}, "figure"),
         Output({"type": "map-design-store", "index": MATCH}, "data"),
+        Output(
+            {"type": "stored-metadata-component", "index": MATCH},
+            "data",
+            allow_duplicate=True,
+        ),
         Input({"type": "map-lat-column", "index": MATCH}, "value"),
         Input({"type": "map-lon-column", "index": MATCH}, "value"),
         Input({"type": "map-color-column", "index": MATCH}, "value"),
@@ -46,7 +52,8 @@ def register_design_callbacks(app):
         Input({"type": "map-opacity", "index": MATCH}, "value"),
         Input({"type": "map-selection-enabled", "index": MATCH}, "checked"),
         Input({"type": "map-selection-column", "index": MATCH}, "value"),
-        State("stepper-df-store", "data"),
+        State({"type": "map-df-store", "index": MATCH}, "data"),
+        State({"type": "stored-metadata-component", "index": MATCH}, "data"),
         State("theme-store", "data"),
         prevent_initial_call=True,
     )
@@ -61,9 +68,10 @@ def register_design_callbacks(app):
         selection_enabled,
         selection_col,
         df_json,
+        current_metadata,
         theme_data,
     ):
-        """Update map preview based on design configuration."""
+        """Update map preview and sync metadata for stepper save."""
         if not lat_col or not lon_col:
             raise dash.exceptions.PreventUpdate
 
@@ -77,10 +85,13 @@ def register_design_callbacks(app):
             "size_column": size_col,
             "hover_columns": hover_cols or [],
             "map_style": map_style or "open-street-map",
-            "opacity": opacity or 0.8,
+            "opacity": opacity or 1.0,
             "selection_enabled": selection_enabled or False,
             "selection_column": selection_col,
         }
+
+        # Merge design fields into the stored metadata (preserves wf_id, dc_id, index)
+        updated_metadata = {**(current_metadata or {}), **design_data}
 
         # Try to render a preview if we have data
         try:
@@ -89,7 +100,6 @@ def register_design_callbacks(app):
             if df_json:
                 pandas_df = pd.DataFrame(df_json)
             else:
-                # Create empty figure with message
                 fig = px.scatter(title="")
                 fig.add_annotation(
                     text="Select lat/lon columns to preview",
@@ -102,7 +112,7 @@ def register_design_callbacks(app):
                 fig.update_xaxes(visible=False)
                 fig.update_yaxes(visible=False)
                 fig_dict = json.loads(fig.to_json())
-                return fig_dict, design_data
+                return fig_dict, design_data, updated_metadata
 
             if lat_col not in pandas_df.columns or lon_col not in pandas_df.columns:
                 raise dash.exceptions.PreventUpdate
@@ -114,7 +124,7 @@ def register_design_callbacks(app):
 
             # Auto-switch style for dark theme
             style = map_style or "open-street-map"
-            theme = theme_data if theme_data else "light"
+            theme = theme_data or "light"
             if theme == "dark" and style in ("open-street-map", "carto-positron"):
                 style = "carto-darkmatter"
 
@@ -131,7 +141,7 @@ def register_design_callbacks(app):
                 "map_style": style,
                 "zoom": zoom,
                 "center": center,
-                "opacity": opacity or 0.8,
+                "opacity": opacity or 1.0,
             }
 
             if color_col and color_col in pandas_df.columns:
@@ -147,7 +157,7 @@ def register_design_callbacks(app):
             fig.update_layout(margin={"l": 0, "r": 0, "t": 0, "b": 0})
 
             fig_dict = json.loads(fig.to_json())
-            return fig_dict, design_data
+            return fig_dict, design_data, updated_metadata
 
         except Exception as e:
             logger.warning(f"Map preview error: {e}")

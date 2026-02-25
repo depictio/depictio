@@ -29,8 +29,7 @@ def register_map_edit_callback(app):
             raise dash.exceptions.PreventUpdate
 
         # Merge design data into current metadata
-        updated = {**current_metadata}
-        for key in [
+        _DESIGN_KEYS = {
             "map_type",
             "lat_column",
             "lon_column",
@@ -48,9 +47,11 @@ def register_map_edit_callback(app):
             "choropleth_aggregation",
             "color_continuous_scale",
             "range_color",
-        ]:
-            if key in design_data:
-                updated[key] = design_data[key]
+        }
+        updated = {
+            **current_metadata,
+            **{k: v for k, v in design_data.items() if k in _DESIGN_KEYS},
+        }
 
         logger.info(
             f"Map edit saved: lat={updated.get('lat_column')}, lon={updated.get('lon_column')}"

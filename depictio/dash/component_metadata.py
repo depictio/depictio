@@ -139,7 +139,7 @@ COMPONENT_METADATA = {
         "icon": "mdi:map-marker-multiple",
         "display_name": "Map",
         "description": "Geospatial map visualization with markers",
-        "color": colors["blue"],  # Blue #6495ED
+        "color": colors["violet"],  # Violet #7A5DC7
         "supports_edit": True,
         "supports_reset": True,
         "enabled": True,
@@ -383,33 +383,14 @@ def get_build_functions() -> dict:
     """
     Get a dictionary mapping component types to their build functions.
 
-    Returns build functions wrapped with logging to track executions and
-    detect double-rendering issues. Includes a special '_reset_counts'
-    function to clear counters between dashboard loads.
-
     Returns:
-        Dictionary with component types as keys and wrapped build functions
-        as values. Also includes '_reset_counts' key with the reset function.
+        Dictionary with component types as keys and build functions as values.
     """
-    import functools
-
-    def wrap_build_function(component_type, original_func):
-        """Wrapper for build function executions"""
-
-        @functools.wraps(original_func)
-        def wrapper(**kwargs):
-            return original_func(**kwargs)
-
-        return wrapper
-
-    # Wrap each build function
-    wrapped_functions = {
-        component_type: wrap_build_function(component_type, metadata["build_function"])
+    return {
+        component_type: metadata["build_function"]
         for component_type, metadata in COMPONENT_METADATA.items()
         if "build_function" in metadata
     }
-
-    return wrapped_functions
 
 
 def get_async_build_functions() -> dict:
