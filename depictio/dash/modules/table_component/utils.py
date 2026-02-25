@@ -355,10 +355,82 @@ def _create_metadata_store(
     )
 
 
+_TITLE_SIZE_MAP: dict[str, tuple[str, str]] = {
+    # title_size -> (title font-size, description font-size)
+    "h1": ("28px", "16px"),
+    "h2": ("22px", "14px"),
+    "h3": ("18px", "13px"),
+    "sm": ("14px", "12px"),
+}
+
+
+def _build_title_header(
+    title: str = "",
+    description: str = "",
+    title_size: str = "sm",
+    title_align: str = "left",
+) -> list:
+    """Build optional title/description header elements.
+
+    Args:
+        title: Component title text.
+        description: Component description text.
+        title_size: Heading level — 'h1', 'h2', 'h3', or 'sm' (default).
+        title_align: Text alignment — 'left' (default), 'center', or 'right'.
+
+    Returns:
+        List of html components for the header, empty if no title/description.
+    """
+    t_font, d_font = _TITLE_SIZE_MAP.get(title_size, _TITLE_SIZE_MAP["sm"])
+    align = title_align if title_align in ("left", "center", "right") else "left"
+
+    items: list = []
+    if title:
+        items.append(
+            html.Div(
+                title,
+                style={
+                    "fontSize": t_font,
+                    "fontWeight": 600,
+                    "overflow": "hidden",
+                    "textOverflow": "ellipsis",
+                    "whiteSpace": "nowrap",
+                    "textAlign": align,
+                },
+            )
+        )
+    if description:
+        items.append(
+            html.Div(
+                description,
+                style={
+                    "fontSize": d_font,
+                    "color": "gray",
+                    "overflow": "hidden",
+                    "textOverflow": "ellipsis",
+                    "whiteSpace": "nowrap",
+                    "textAlign": align,
+                },
+            )
+        )
+    if not items:
+        return []
+    return [
+        html.Div(
+            items,
+            style={"padding": "8px 8px 4px 8px", "flexShrink": "0"},
+        )
+    ]
+
+
 def _create_table_body(
     index: str,
     ag_grid: dag.AgGrid,
     store: dcc.Store,
+    title: str = "",
+    description: str = "",
+    title_size: str = "sm",
+    title_align: str = "left",
 ) -> html.Div:
     """Create the table body container with AG Grid and supporting components.
 
@@ -366,6 +438,10 @@ def _create_table_body(
         index: Component index.
         ag_grid: The AG Grid component.
         store: The metadata store component.
+        title: Optional title displayed above the table.
+        description: Optional description displayed below the title.
+        title_size: Heading level — 'h1', 'h2', 'h3', or 'sm'.
+        title_align: Text alignment — 'left', 'center', or 'right'.
 
     Returns:
         html.Div containing the complete table body.
@@ -377,13 +453,27 @@ def _create_table_body(
 
     hidden_style = {"position": "absolute", "visibility": "hidden"}
 
+    header = _build_title_header(title, description, title_size, title_align)
+    # Calculate height offset for AG Grid based on header presence and size
+    _title_heights = {"h1": 38, "h2": 30, "h3": 24, "sm": 20}
+    _desc_heights = {"h1": 22, "h2": 20, "h3": 18, "sm": 18}
+    header_offset = 0
+    if title:
+        header_offset += _title_heights.get(title_size, 20)
+    if description:
+        header_offset += _desc_heights.get(title_size, 18)
+    if header_offset > 0:
+        header_offset += 12  # padding
+    grid_height = f"calc(100% - {header_offset + 4}px)"
+
     return html.Div(
         [
+            *header,
             html.Div(
                 ag_grid,
                 style={
                     "width": "100%",
-                    "height": "calc(100% - 4px)",
+                    "height": grid_height,
                     "minHeight": "0",
                     "position": "relative",
                     "overflow": "auto",
@@ -447,6 +537,15 @@ def build_table(**kwargs) -> html.Div | dmc.Paper | dcc.Loading:
     # Row selection filtering configuration
     row_selection_enabled = kwargs.get("row_selection_enabled", False)
     row_selection_column = kwargs.get("row_selection_column")
+    # Title and description
+    title = kwargs.get("title", "")
+    description = kwargs.get("description", "")
+    title_size = kwargs.get("title_size", "sm")
+    title_align = kwargs.get("title_align", "left")
+    data_collection_tag = kwargs.get("data_collection_tag", "")
+    # Auto-generate title from data_collection_tag if not set
+    if not title and data_collection_tag:
+        title = data_collection_tag.replace("_", " ").replace("-", " ").title()
 
     # Load data if needed
     if df.is_empty():
@@ -462,7 +561,15 @@ def build_table(**kwargs) -> html.Div | dmc.Paper | dcc.Loading:
     store = _create_metadata_store(
         index, wf_id, dc_id, dc_config, cols, row_selection_enabled, row_selection_column
     )
-    table_body = _create_table_body(index, ag_grid, store)
+    table_body = _create_table_body(
+        index,
+        ag_grid,
+        store,
+        title=title,
+        description=description,
+        title_size=title_size,
+        title_align=title_align,
+    )
 
     if not build_frame:
         return table_body

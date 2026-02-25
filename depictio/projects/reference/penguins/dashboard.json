@@ -343,6 +343,10 @@
     {
       "index": "0c386b67-7594-4599-8f71-99195c14a6a9",
       "component_type": "table",
+      "title": "Palmer Penguins Data",
+      "description": "Physical measurements and demographics of penguin populations",
+      "title_size": "h3",
+      "title_align": "left",
       "wf_id": {
         "$oid": "646b0f3c1e4a2d7f8e5b8c9e"
       },

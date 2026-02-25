@@ -971,6 +971,10 @@
     {
       "index": "7b8eed81-a0db-42a9-869b-707a9d6d2714",
       "component_type": "table",
+      "title": "Iris Dataset",
+      "description": "Complete iris flower measurements across three species",
+      "title_size": "h3",
+      "title_align": "left",
       "wf_id": {
         "$oid": "646b0f3c1e4a2d7f8e5b8c9b"
       },
