@@ -47,7 +47,7 @@ pre-commit run --all-files                 # mandatory after all code changes
 - Environment files:
   - Not in worktree: read `.env` and `docker-compose/.env`
   - In worktree: read `.env.instance`
-- MongoDB URL: `localhost:27018/depictioDB`
+- Default MongoDB URL (if not modified by .env and .env.instance): `localhost:27018/depictioDB`
 
 ### Docker
 - Don't run docker commands except `docker logs`
