@@ -7,9 +7,30 @@ Three MATCH callbacks:
 """
 
 import dash
+import pandas as pd
 from dash import ALL, MATCH, Input, Output, State
 
 from depictio.api.v1.configs.logging_init import logger
+from depictio.dash.modules.multiqc_component.general_stats import _create_violin_plot
+from depictio.dash.utils import enrich_interactive_components_with_metadata, resolve_link_values
+
+# Style used to truly hide a Plotly/Dash element (display:none is ignored by Plotly).
+_HIDDEN_STYLE = {
+    "position": "absolute",
+    "visibility": "hidden",
+    "overflow": "hidden",
+    "height": "0",
+    "width": "0",
+    "pointerEvents": "none",
+}
+
+_TABLE_VISIBLE_STYLE = {
+    "border": "none",
+    "borderTop": "1px solid #ddd",
+    "borderBottom": "1px solid #ddd",
+    "overflow": "auto",
+    "maxHeight": "600px",
+}
 
 
 def register_general_stats_callbacks(app):
@@ -31,26 +52,9 @@ def register_general_stats_callbacks(app):
             return dash.no_update, dash.no_update
 
         if view_value == "violin":
-            table_style = {
-                "display": "none",
-                "border": "none",
-                "borderTop": "1px solid #ddd",
-                "borderBottom": "1px solid #ddd",
-                "overflow": "auto",
-                "maxHeight": "600px",
-            }
-            violin_style = {"display": "block"}
+            return _HIDDEN_STYLE, {"display": "block"}
         else:
-            table_style = {
-                "border": "none",
-                "borderTop": "1px solid #ddd",
-                "borderBottom": "1px solid #ddd",
-                "overflow": "auto",
-                "maxHeight": "600px",
-            }
-            violin_style = {"display": "none"}
-
-        return table_style, violin_style
+            return _TABLE_VISIBLE_STYLE, _HIDDEN_STYLE
 
     # ------------------------------------------------------------------
     # 2. Read-mode toggle: Mean / R1 / R2 / All
@@ -97,6 +101,8 @@ def register_general_stats_callbacks(app):
         State({"type": "general-stats-store", "index": MATCH}, "data"),
         State({"type": "general-stats-read-toggle", "index": MATCH}, "value"),
         State({"type": "interactive-stored-metadata", "index": ALL}, "data"),
+        State({"type": "interactive-stored-metadata", "index": ALL}, "id"),
+        State("local-store", "data"),
         prevent_initial_call=True,
     )
     def filter_general_stats_by_interactive(
@@ -105,180 +111,194 @@ def register_general_stats_callbacks(app):
         store_data,
         current_read_mode,
         interactive_metadata_list,
+        interactive_metadata_ids,
+        local_data,
     ):
-        """Filter general stats table/violin when interactive components change."""
-        logger.info(
-            f"[GS-FILTER] ENTERED - stored_metadata keys: {list(stored_metadata.keys()) if stored_metadata else 'None'}"
-        )
+        """Filter general stats table/violin when interactive components change.
 
+        Uses the same enrichment + link resolution pattern as the regular
+        MultiQC plot callback in core.py to support cross-DC filtering.
+        """
         # Guard: not a general stats component
         if not stored_metadata:
-            logger.info("[GS-FILTER] EXIT: no stored_metadata")
             return dash.no_update, dash.no_update
         is_gs = (
             stored_metadata.get("selected_plot") == "general_stats"
             or stored_metadata.get("selected_module") == "general_stats"
         )
-        logger.info(
-            f"[GS-FILTER] is_gs={is_gs}, selected_plot={stored_metadata.get('selected_plot')}, "
-            f"selected_module={stored_metadata.get('selected_module')}"
-        )
         if not is_gs:
-            logger.info("[GS-FILTER] EXIT: not general_stats")
             return dash.no_update, dash.no_update
 
         # Guard: no store data
         if not store_data:
-            logger.info("[GS-FILTER] EXIT: no store_data")
             return dash.no_update, dash.no_update
 
         # Get current mode data
         mode = current_read_mode or "mean"
         if mode not in store_data:
-            logger.info(f"[GS-FILTER] EXIT: mode '{mode}' not in store_data keys: {list(store_data.keys())}")
             return dash.no_update, dash.no_update
         mode_data = store_data[mode]
         full_data = mode_data["table_data"]
+        full_violin = mode_data["violin_figure"]
 
-        # No interactive values or empty -> reset to full data
+        # No interactive values or empty -> reset to full data + violin
         if not interactive_values:
-            logger.info("[GS-FILTER] No interactive_values -> returning full data")
-            return full_data, dash.no_update
+            return full_data, full_violin
 
-        logger.info(
-            f"[GS-FILTER] interactive_values keys: {list(interactive_values.keys())}"
-        )
-
-        # Parse interactive_components_values from the store
-        # Store structure: {"interactive_components_values": [{"index": ..., "value": ...}], ...}
         components_values = interactive_values.get("interactive_components_values", [])
-        logger.info(f"[GS-FILTER] components_values count: {len(components_values)}")
         if not components_values:
-            logger.info("[GS-FILTER] No components_values -> returning full data")
-            return full_data, dash.no_update
+            return full_data, full_violin
 
-        # Build index->value lookup from the store
-        values_by_index = {}
-        for comp in components_values:
-            idx = comp.get("index")
-            val = comp.get("value")
-            if idx and val:
-                values_by_index[idx] = val
-            logger.info(f"[GS-FILTER]   comp index={idx}, value type={type(val).__name__}, value={val}")
+        # Check if any component actually has a value
+        has_any_value = any(comp.get("value") for comp in components_values)
+        if not has_any_value:
+            return full_data, full_violin
 
-        logger.info(f"[GS-FILTER] values_by_index has {len(values_by_index)} entries")
-        if not values_by_index:
-            logger.info("[GS-FILTER] No values_by_index -> returning full data")
-            return full_data, dash.no_update
-
-        # Log interactive metadata
-        logger.info(f"[GS-FILTER] interactive_metadata_list count: {len(interactive_metadata_list or [])}")
-        for i, meta in enumerate(interactive_metadata_list or []):
-            if meta:
-                logger.info(
-                    f"[GS-FILTER]   meta[{i}]: index={meta.get('index')}, "
-                    f"dc_id={meta.get('dc_id') or meta.get('data_collection_id')}"
-                )
-
-        logger.info(
-            f"[GS-FILTER] multiqc dc_id={stored_metadata.get('dc_id') or stored_metadata.get('data_collection_id')}"
-        )
-        logger.info(f"[GS-FILTER] all_samples count: {len(store_data.get('all_samples', []))}")
-        logger.info(f"[GS-FILTER] all_samples (first 5): {store_data.get('all_samples', [])[:5]}")
-
-        # Extract sample names using DC-matching + sample expansion
-        selected_samples = _extract_samples_from_interactive(
-            values_by_index,
-            stored_metadata,
-            store_data,
+        # Enrich lightweight store data with full metadata
+        enriched_components = enrich_interactive_components_with_metadata(
+            interactive_values,
             interactive_metadata_list,
+            interactive_metadata_ids,
+        )
+
+        if not enriched_components:
+            return full_data, full_violin
+
+        # Resolve filter values to sample names
+        multiqc_dc_id = stored_metadata.get("dc_id") or stored_metadata.get("data_collection_id")
+        project_id = stored_metadata.get("project_id")
+        token = local_data.get("access_token") if local_data else None
+        all_samples = set(store_data.get("all_samples", []))
+
+        selected_samples = _resolve_samples_from_enriched(
+            enriched_components=enriched_components,
+            multiqc_dc_id=multiqc_dc_id,
+            project_id=project_id,
+            token=token,
+            all_samples=all_samples,
+            full_data=full_data,
         )
 
         if selected_samples is None:
-            logger.info("[GS-FILTER] _extract returned None -> returning full data")
-            return full_data, dash.no_update
+            # No filtering could be applied — return full data
+            return full_data, full_violin
 
         # Filter table data
-        filtered_data = [
-            row for row in full_data if row.get("Sample Name") in selected_samples
-        ]
+        filtered_data = [row for row in full_data if row.get("Sample Name") in selected_samples]
 
         logger.info(
-            f"[GS-FILTER] SUCCESS: {len(filtered_data)}/{len(full_data)} rows "
-            f"({len(selected_samples)} samples: {selected_samples})"
+            f"[GS-FILTER] {len(filtered_data)}/{len(full_data)} rows "
+            f"({len(selected_samples)} matched samples)"
         )
 
-        return filtered_data, dash.no_update
+        # Rebuild violin from filtered data
+        filtered_violin = _rebuild_violin_from_filtered(filtered_data, mode_data)
+
+        return filtered_data, filtered_violin
 
 
-def _extract_samples_from_interactive(
-    values_by_index: dict[str, list],
-    stored_metadata: dict,
-    store_data: dict,
-    interactive_metadata_list: list,
+def _resolve_samples_from_enriched(
+    enriched_components: list[dict],
+    multiqc_dc_id: str | None,
+    project_id: str | None,
+    token: str | None,
+    all_samples: set[str],
+    full_data: list[dict],
 ) -> set[str] | None:
-    """Extract selected sample names from interactive component values.
+    """Resolve enriched interactive component values to sample names.
 
-    Args:
-        values_by_index: Dict mapping component index to its selected values.
-        stored_metadata: This component's stored metadata (has dc_id).
-        store_data: General stats store data (has all_samples).
-        interactive_metadata_list: All interactive component metadata (has dc_id per component).
+    For each enriched component with a value:
+    - Cross-DC (comp dc_id != multiqc dc_id): use resolve_link_values()
+    - Same-DC, values are sample names: use directly
+    - Same-DC, values are column values: scan table rows for matches
 
-    Returns:
-        Set of sample names to keep, or None if no filtering should be applied.
+    Multiple components are intersected (AND semantics).
+
+    Returns set of sample names, or None if no filtering applies.
     """
-    all_samples = set(store_data.get("all_samples", []))
-    if not all_samples:
+    if not multiqc_dc_id or not all_samples:
         return None
 
-    # Get this component's data collection ID
-    multiqc_dc_id = stored_metadata.get("dc_id") or stored_metadata.get(
-        "data_collection_id"
-    )
-    if not multiqc_dc_id:
-        return None
+    resolved_sets: list[set[str]] = []
 
-    # Find interactive components targeting the same DC
-    # Match component index from metadata to its value in the store
-    selected_values = None
-    for interactive_meta in interactive_metadata_list or []:
-        if not interactive_meta:
+    for comp in enriched_components:
+        value = comp.get("value")
+        if not value:
+            continue
+        values_list = value if isinstance(value, list) else [value]
+        if not values_list:
             continue
 
-        interactive_dc_id = interactive_meta.get("dc_id") or interactive_meta.get(
-            "data_collection_id"
-        )
-        if str(interactive_dc_id) != str(multiqc_dc_id):
-            continue
+        metadata = comp.get("metadata", {})
+        comp_dc_id = metadata.get("dc_id") or metadata.get("data_collection_id")
+        comp_column = metadata.get("column_name", "")
 
-        interactive_id = interactive_meta.get("index")
-        if interactive_id and interactive_id in values_by_index:
-            vals = values_by_index[interactive_id]
-            if isinstance(vals, list) and vals:
-                selected_values = vals
-                break
+        if comp_dc_id and str(comp_dc_id) != str(multiqc_dc_id):
+            # Cross-DC: use link resolution
+            if not project_id or not token:
+                continue
+            resolved = resolve_link_values(
+                project_id=project_id,
+                source_dc_id=comp_dc_id,
+                source_column=comp_column,
+                filter_values=values_list,
+                target_dc_id=multiqc_dc_id,
+                token=token,
+            )
+            if resolved and resolved.get("resolved_values"):
+                resolved_sets.append(set(resolved["resolved_values"]) & all_samples)
+        else:
+            # Same-DC: check if values are sample names
+            value_strs = {str(v) for v in values_list}
+            direct_match = value_strs & all_samples
 
-    if not selected_values:
+            if direct_match:
+                # Also expand paired-end variants
+                expanded = set(direct_match)
+                for val in direct_match:
+                    for suffix in ("_1", "_2"):
+                        variant = f"{val}{suffix}"
+                        if variant in all_samples:
+                            expanded.add(variant)
+                resolved_sets.append(expanded)
+            else:
+                # Values are column values — scan table rows for matches
+                matched_samples = set()
+                for row in full_data:
+                    sample = row.get("Sample Name")
+                    if not sample:
+                        continue
+                    for col_val in row.values():
+                        if str(col_val) in value_strs:
+                            matched_samples.add(sample)
+                            break
+                if matched_samples:
+                    resolved_sets.append(matched_samples)
+
+    if not resolved_sets:
         return None
 
-    # Expand canonical sample IDs to variants (e.g. SRR123 -> SRR123_1, SRR123_2)
-    expanded = set()
-    for val in selected_values:
-        val_str = str(val)
-        if val_str in all_samples:
-            expanded.add(val_str)
-        # Also check paired-end variants
-        for suffix in ("_1", "_2"):
-            variant = f"{val_str}{suffix}"
-            if variant in all_samples:
-                expanded.add(val_str)
-                expanded.add(variant)
+    # Intersect all resolved sets (AND semantics)
+    result = resolved_sets[0]
+    for s in resolved_sets[1:]:
+        result = result & s
 
-    if expanded:
-        return expanded & all_samples
+    return result if result else None
 
-    # Last resort: try direct match of values against sample names
-    value_set = {str(v) for v in selected_values}
-    overlap = value_set & all_samples
-    return overlap if overlap else None
+
+def _rebuild_violin_from_filtered(filtered_data: list[dict], mode_data: dict) -> dict:
+    """Rebuild the violin figure from filtered table data.
+
+    Uses original_to_tool and display_to_original stored in mode_data
+    to call _create_violin_plot with the filtered DataFrame.
+    """
+    if not filtered_data:
+        # Return an empty figure rather than the full violin
+        return {"data": [], "layout": {"height": 100, "title": {"text": "No data"}}}
+
+    original_to_tool = mode_data.get("original_to_tool", {})
+    display_to_original = mode_data.get("display_to_original")
+
+    df_filtered = pd.DataFrame(filtered_data)
+    fig = _create_violin_plot(df_filtered, original_to_tool, display_to_original)
+    return fig.to_dict()

@@ -759,6 +759,8 @@ def _build_mode_data(parquet_path: str, show_hidden: bool, read_mode: str) -> di
         "table_columns": columns,  # contains Format objects — NOT for dcc.Store
         "table_styles": all_styles + [active_cell_style],
         "violin_figure": violin_fig.to_dict(),  # JSON-safe
+        "original_to_tool": original_to_tool,
+        "display_to_original": display_to_original,
     }
 
 
@@ -800,6 +802,8 @@ def build_general_stats_content(
             "table_data": mdata["table_data"],
             "table_styles": mdata["table_styles"],
             "violin_figure": mdata["violin_figure"],
+            "original_to_tool": mdata["original_to_tool"],
+            "display_to_original": mdata["display_to_original"],
         }
     store_data["is_paired_end"] = is_paired_end
 
@@ -893,7 +897,14 @@ def build_general_stats_content(
             id={"type": "general-stats-violin", "index": component_id},
             figure=default_data["violin_figure"],
             config={"displayModeBar": False},
-            style={"display": "none"},
+            style={
+                "position": "absolute",
+                "visibility": "hidden",
+                "overflow": "hidden",
+                "height": "0",
+                "width": "0",
+                "pointerEvents": "none",
+            },
         ),
         dcc.Store(
             id={"type": "general-stats-store", "index": component_id},
