@@ -171,4 +171,18 @@ def register_table_selection_callback(app):
         if should_prevent_update(has_any_selection, current_store, SOURCE_TYPE):
             raise dash.exceptions.PreventUpdate
 
-        return merge_selection_values(existing_values, selection_values)
+        new_store = merge_selection_values(existing_values, selection_values)
+
+        # Final safety: prevent writing identical data to the store
+        current_values = sorted(
+            current_store.get("interactive_components_values", []),
+            key=lambda x: (x.get("index", ""), x.get("source", "")),
+        )
+        new_values = sorted(
+            new_store.get("interactive_components_values", []),
+            key=lambda x: (x.get("index", ""), x.get("source", "")),
+        )
+        if current_values == new_values:
+            raise dash.exceptions.PreventUpdate
+
+        return new_store

@@ -152,21 +152,19 @@ def register_scatter_selection_callback(app):
             f"trigger={triggered_prop}"
         )
 
-        # Check if this is a "clearing" trigger (figure re-render clearing selectedData)
-        # When figure re-renders due to filtering, selectedData becomes None/empty
-        # We should NOT clear the selection in this case - only when user explicitly deselects
-        # If triggered by selectedData becoming None/empty, preserve existing selection
-        if "selectedData" in triggered_prop and not triggered_value:
-            # Check if we have existing scatter selections to preserve
-            has_existing_scatter = any(
-                v.get("source") == SOURCE_TYPE
-                for v in current_store.get("interactive_components_values", [])
+        # Guard: When selectedData or clickData becomes None (figure re-render),
+        # ALWAYS prevent update. This is never a user action - it's Plotly clearing
+        # state after the figure was re-rendered. Allowing it to propagate creates
+        # a circular dependency: store -> figure update -> None selection -> store write -> loop.
+        is_clearing_trigger = (
+            "selectedData" in triggered_prop or "clickData" in triggered_prop
+        ) and not triggered_value
+        if is_clearing_trigger:
+            logger.info(
+                f"Scatter selection: Ignoring clearing trigger ({triggered_prop}), "
+                f"preventing circular update"
             )
-            if has_existing_scatter:
-                logger.info(
-                    "Scatter selection: Ignoring clear trigger (figure re-render), preserving selection"
-                )
-                raise dash.exceptions.PreventUpdate
+            raise dash.exceptions.PreventUpdate
 
         # Build metadata lookup
         metadata_by_index = build_metadata_lookup(metadata_list, metadata_ids)
@@ -251,4 +249,18 @@ def register_scatter_selection_callback(app):
         if should_prevent_update(has_any_selection, current_store, SOURCE_TYPE):
             raise dash.exceptions.PreventUpdate
 
-        return merge_selection_values(existing_values, selection_values)
+        new_store = merge_selection_values(existing_values, selection_values)
+
+        # Final safety: prevent writing identical data to the store
+        current_values = sorted(
+            current_store.get("interactive_components_values", []),
+            key=lambda x: (x.get("index", ""), x.get("source", "")),
+        )
+        new_values = sorted(
+            new_store.get("interactive_components_values", []),
+            key=lambda x: (x.get("index", ""), x.get("source", "")),
+        )
+        if current_values == new_values:
+            raise dash.exceptions.PreventUpdate
+
+        return new_store
