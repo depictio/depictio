@@ -6,16 +6,14 @@
 
 
 <details>
-<summary>Click to expand the changelog for 0.7.5-b2</summary>
+<summary>Click to expand the changelog for 0.7.5</summary>
 
 ### Changes 📜
 
 #### Other Changes 📝
 
-* Bump version: 0.7.5-b1 → 0.7.5-b2 [4a46f391]
-* Fix infinite React re-render loop (Maximum update depth exceeded) [d227000a]
-* Update CHANGELOG.md for v0.7.5-b1 [4528e7d7]
-* Bump version: 0.7.4 → 0.7.5-b1 [523cfa24]
+* Bump version: 0.7.5-b2 → 0.7.5 [094a1662]
+* Bump version: 0.7.5-b1 → 0.7.5-b2 [59aed97d]
 
 
 </details>
@@ -24,62 +22,7 @@
 
 For more details, please refer to the [documentation](https://depictio.github.io/depictio-docs/)
 
-ectivity [13ce3ff7]
-* fix: Enhance S3 backup strategy to initialize backup results and combine locations for both strategies [3522347f]
-* fix: Update backup strategy tests to improve local backup file checks and refine S3 backup file naming [0c03ed20]
-* fix: Enhance backup CLI commands with verbose logging and update MinIO endpoint [d98266d2]
-* fix: Update backup verification step to check for S3 local backup files [af272ef2]
-* fix: Remove Google OAuth router inclusion from authentication endpoints [9cb05440]
-* fix: Update button sizes from 'xs' to 'sm' for improved UI consistency in dashboards management [9da62f61]
-* fix: make tests compliant [f8378be7]
-* fix: Add type ignore comments for unresolved attributes in test assertions [5553e1de]
-* fix: remove redundant screenshot generation test and streamline functionality [faecb4ec]
-* fix: simplify screenshot generation tests and use a dummy dashboard ID [2a6f38f1]
-* fix: resolve screenshot endpoint authentication and CI timeout issues [98598ee5]
-* fix: enhance screenshot context creation with error handling and fallbacks [d2c70ca1]
-* fix: enhance screenshot endpoint testing with actual dashboard ID and improved debugging [3cf00ebf]
-* fix: update token query to use refresh_expire_datetime for active sessions [0b2b9d36]
-* fix: update dependency installation and improve path assertions in tests [64a928ad]
-* fix: set pythonpath in pytest.ini_options for test discovery [d70d912b]
-* fix: convert current_user.id to PyObjectId for consistency in get_dashboard function [875dedc4]
-* fix: ensure components recalculate values and handle empty DataFrames correctly [292bd2a1]
-* fix: comment out logger.info statements for debugging purposes [77cb291c]
-* fix: replace hardcoded passwords with hashed passwords in temporary user tests [81c6cba1]
-* fix: update edit permissions check for non-owner users in load_depictio_data function [c9d3253a]
-* fix: handle session data retrieval and fallback for unauthenticated users in authentication process [378aa14a]
-* fix: update test assertion for project visibility to reflect public status [8c733a9b]
-* fix: update visibility settings to make dashboard and project public [226d8a19]
-* fix: Comment out typeguard dependency and add pytest-cov to optional dev dependencies [b00168ad]
-* fix: Update pip installation command for development dependencies [365e6490]
-* fix: Update anonymous user email in CI workflow for unauthenticated mode [aa9f8e4e]
-* fix: Update screenshot API endpoint for dashboard functionality [37420894]
-* fix: Update screenshot API endpoint for dashboard functionality [6704418a]
-* fix: Enhance screenshot functionality with detailed logging of user tokens and current datetime [804626c1]
-* fix: convert current_user.id to PyObjectId for consistency in get_dashboard function [ed2d95a7]
-* fix: ensure components recalculate values and handle empty DataFrames correctly [aa1b1132]
-* fix: comment out logger.info statements for debugging purposes [5bff2ffa]
-* fix: replace hardcoded passwords with hashed passwords in temporary user tests [7f8b80ac]
-* fix: update edit permissions check for non-owner users in load_depictio_data function [71d5a121]
-* fix: Enhance backend readiness checks with improved init containers for key generation [9445935d]
-* fix: handle session data retrieval and fallback for unauthenticated users in authentication process [bbd7c985]
-* fix: update test assertion for project visibility to reflect public status [985a3007]
-* fix: update visibility settings to make dashboard and project public [266f35ad]
-* fix: update logging verbosity level to use environment variable [b2d6bf90]
-* fix: update screenshot path in save_dashboard function to use output_file variable [24f863fa]
-* fix: update resource limits for mongo, minio, backend, and frontend in Helm chart values [f682630c]
-* fix: ensure main branch is specified for push and pull_request events in workflow files [463db16c]
-* fix: add version input to workflow_dispatch for manual release triggering [2cedb8b0]
-* fix: update beta release tag pattern and change release action to softprops/action-gh-release [6c4bc507]
-* fix: update changelog generation script invocation and change GitHub token reference [8c99139a]
-* fix: allow publishing on workflow dispatch in addition to tags [691e379d]
-* fix: update dry run publish condition to include main branch [8026bb0a]
-* fix: add package installation and import verification steps in CI workflow [64288fe5]
-* fix: standardize quotes in workflow configuration and update publish conditions [cab8e4b9]
-* fix: enhance artifact upload conditions and add dry run for publishing [02fb80c1]
-* fix: update workflow triggers and artifact upload conditions [7e798974]
-* fix: update paths for artifact handling in CI workflow [b6bd7d88]
-* fix: enhance issue templates for bug reports and feature requests [a0fa5096]
-* fix: remove direct MinIO connectivity tests from CI workflow [9ffe00d6]
+ectivity tests from CI workflow [9ffe00d6]
 * fix: remove obsolete MinIO Console connectivity test from workflow [6ee1d309]
 * fix: enhance inter-service connectivity tests with readiness checks and improved error handling [ea147c59]
 * fix: add netcat-openbsd to Dockerfile dependencies for improved functionality [ccdf0b66]
