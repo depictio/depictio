@@ -376,7 +376,7 @@ def build_multiqc(**kwargs: Any):
             "flex": "1",
             "display": "flex",
             "flexDirection": "column",
-            "overflow": "auto",
+            "overflow": "hidden",
         }
     else:
         gs_initial_style = {

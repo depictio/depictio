@@ -844,66 +844,82 @@ def build_general_stats_content(
     )
 
     children = [
-        dmc.Group(controls, justify="space-between", align="center"),
-        dash_table.DataTable(
-            id={"type": "general-stats-table", "index": component_id},
-            data=default_data["table_data"],
-            columns=columns,
-            style_data_conditional=default_data["table_styles"],
-            style_cell={
-                "textAlign": "left",
-                "padding": "6px 8px",
-                "fontFamily": "Arial, Helvetica, sans-serif",
-                "fontSize": "12px",
-                "border": "none",
-                "borderBottom": "1px solid #e8e8e8",
-                "whiteSpace": "nowrap",
-                "overflow": "hidden",
-                "textOverflow": "ellipsis",
-            },
-            style_cell_conditional=[
-                {
-                    "if": {"column_id": "Sample Name"},
-                    "minWidth": "200px",
-                    "fontWeight": "bold",
-                    "backgroundColor": "white",
-                }
-            ],
-            style_header={
-                "backgroundColor": "#f5f5f5",
-                "fontWeight": "bold",
-                "borderBottom": "2px solid #ddd",
-                "borderTop": "none",
-                "borderLeft": "none",
-                "borderRight": "none",
-                "textAlign": "left",
-                "fontSize": "12px",
-                "fontFamily": "Arial, Helvetica, sans-serif",
-                "padding": "8px",
-            },
-            style_data={"border": "none", "borderBottom": "1px solid #f0f0f0"},
-            style_table={
-                "border": "none",
-                "borderTop": "1px solid #ddd",
-                "borderBottom": "1px solid #ddd",
-                "overflow": "auto",
-                "maxHeight": "600px",
-            },
-            sort_action="native",
-            filter_action="none",
-            page_size=50,
+        # Static header — never scrolls
+        html.Div(
+            dmc.Group(controls, justify="space-between", align="center"),
+            style={"flexShrink": "0", "padding": "4px 0"},
         ),
-        dcc.Graph(
-            id={"type": "general-stats-violin", "index": component_id},
-            figure=default_data["violin_figure"],
-            config={"displayModeBar": False},
+        # Scrollable content area — takes remaining height
+        html.Div(
+            [
+                dash_table.DataTable(
+                    id={"type": "general-stats-table", "index": component_id},
+                    data=default_data["table_data"],
+                    columns=columns,
+                    style_data_conditional=default_data["table_styles"],
+                    style_cell={
+                        "textAlign": "left",
+                        "padding": "6px 8px",
+                        "fontFamily": "Arial, Helvetica, sans-serif",
+                        "fontSize": "12px",
+                        "border": "none",
+                        "borderBottom": "1px solid #e8e8e8",
+                        "whiteSpace": "nowrap",
+                        "overflow": "hidden",
+                        "textOverflow": "ellipsis",
+                    },
+                    style_cell_conditional=[
+                        {
+                            "if": {"column_id": "Sample Name"},
+                            "minWidth": "200px",
+                            "fontWeight": "bold",
+                            "backgroundColor": "white",
+                        }
+                    ],
+                    style_header={
+                        "backgroundColor": "#f5f5f5",
+                        "fontWeight": "bold",
+                        "borderBottom": "2px solid #ddd",
+                        "borderTop": "none",
+                        "borderLeft": "none",
+                        "borderRight": "none",
+                        "textAlign": "left",
+                        "fontSize": "12px",
+                        "fontFamily": "Arial, Helvetica, sans-serif",
+                        "padding": "8px",
+                    },
+                    style_data={
+                        "border": "none",
+                        "borderBottom": "1px solid #f0f0f0",
+                    },
+                    style_table={
+                        "border": "none",
+                        "borderTop": "1px solid #ddd",
+                        "borderBottom": "1px solid #ddd",
+                        "overflowX": "auto",
+                    },
+                    sort_action="native",
+                    filter_action="none",
+                    page_size=50,
+                ),
+                dcc.Graph(
+                    id={"type": "general-stats-violin", "index": component_id},
+                    figure=default_data["violin_figure"],
+                    config={"displayModeBar": False},
+                    style={
+                        "position": "absolute",
+                        "visibility": "hidden",
+                        "overflow": "hidden",
+                        "height": "0",
+                        "width": "0",
+                        "pointerEvents": "none",
+                    },
+                ),
+            ],
             style={
-                "position": "absolute",
-                "visibility": "hidden",
-                "overflow": "hidden",
-                "height": "0",
-                "width": "0",
-                "pointerEvents": "none",
+                "flex": "1",
+                "minHeight": "0",
+                "overflow": "auto",
             },
         ),
         dcc.Store(

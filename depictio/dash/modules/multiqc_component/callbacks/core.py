@@ -522,7 +522,7 @@ def register_core_callbacks(app):
             "flex": "1",
             "display": "flex",
             "flexDirection": "column",
-            "overflow": "auto",
+            "overflow": "hidden",
         }
         gs_wrapper_hidden = {
             "position": "absolute",

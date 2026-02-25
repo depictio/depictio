@@ -28,8 +28,7 @@ _TABLE_VISIBLE_STYLE = {
     "border": "none",
     "borderTop": "1px solid #ddd",
     "borderBottom": "1px solid #ddd",
-    "overflow": "auto",
-    "maxHeight": "600px",
+    "overflowX": "auto",
 }
 
 
