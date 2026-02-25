@@ -449,6 +449,8 @@ def _process_code_mode_figure(
         theme_template = f"mantine_{current_theme}"
         fig.update_layout(template=theme_template)
 
+    fig.update_layout(uirevision="persistent")
+
     return True, fig, detected_visu_type
 
 
@@ -529,6 +531,10 @@ def _process_single_figure(
             fig_dict = json.loads(fig.to_json())
         else:
             fig_dict = fig
+
+        # Ensure uirevision is preserved in serialized dict
+        if isinstance(fig_dict, dict) and "layout" in fig_dict:
+            fig_dict["layout"].setdefault("uirevision", "persistent")
 
         metadata = {
             "index": component_id,
@@ -846,6 +852,7 @@ def _create_figure_from_data(
             "paper_bgcolor": "rgba(0,0,0,0)",
             "plot_bgcolor": "rgba(0,0,0,0)",
             "margin": {"l": 50, "r": 20, "t": 40, "b": 40},
+            "uirevision": "persistent",
         }
 
         if selection_enabled:

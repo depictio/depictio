@@ -899,6 +899,7 @@ def _finalize_figure(
         autosize=True,
         margin=dict(l=40, r=40, t=40, b=40),
         height=None,
+        uirevision="persistent",
     )
 
     # Highlight selected point
