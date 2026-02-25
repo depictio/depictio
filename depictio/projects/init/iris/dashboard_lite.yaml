@@ -101,4 +101,8 @@ components:
     component_type: table
     workflow_tag: python/iris_workflow
     data_collection_tag: iris_table
+    title: Iris Dataset
+    description: Complete iris flower measurements across three species
+    title_size: h3
+    title_align: left
     page_size: 15

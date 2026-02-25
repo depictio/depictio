@@ -52,6 +52,15 @@ class BaseLiteComponent(BaseModel):
 
     # Display
     title: str = Field(default="", description="Component title")
+    description: str = Field(default="", description="Component description/subtitle")
+    title_size: str = Field(
+        default="sm",
+        description="Title size: 'h1', 'h2', 'h3', or 'sm' (default)",
+    )
+    title_align: str = Field(
+        default="left",
+        description="Title alignment: 'left' (default), 'center', or 'right'",
+    )
 
     # Data source references (human-readable tags)
     workflow_tag: str = Field(default="", description="Workflow tag (e.g., 'python/iris_workflow')")

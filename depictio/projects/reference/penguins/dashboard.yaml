@@ -282,6 +282,10 @@ components:
 -   component_type: table
     workflow_tag: penguin_species_analysis
     data_collection_tag: joined_penguins_complete
+    title: Palmer Penguins Data
+    description: Physical measurements and demographics of penguin populations
+    title_size: h3
+    title_align: left
     # --- optional ---
     row_selection_enabled: false
     # --- generated on export ---
