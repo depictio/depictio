@@ -110,11 +110,6 @@ def analyze_multiqc_plot_structure(fig: go.Figure) -> dict:
         "sample_names": ", ".join(sample_mapping[:3]) + ("..." if len(sample_mapping) > 3 else ""),
     }
 
-    logger.debug(
-        f"Analyzed MultiQC plot: {summary['traces']} traces, "
-        f"types: {summary['types']}, samples: {summary['samples_in_traces']}"
-    )
-
     return {"original_data": original_data, "summary": summary}
 
 
@@ -149,8 +144,6 @@ def add_multiqc_logo_overlay(fig, logo_size_px=45):
             )
         )
 
-        logger.debug("Added MultiQC logo overlay using Dash assets")
-
     except Exception as e:
         logger.warning(f"Failed to add MultiQC logo overlay: {e}")
 
@@ -167,8 +160,6 @@ def build_multiqc(**kwargs: Any):
     Returns:
         Dash component with MultiQC plot and metadata store
     """
-
-    logger.debug(f"Building MultiQC plot component with kwargs keys: {list(kwargs.keys())}")
 
     # Extract required parameters
     component_id = kwargs.get("index", "multiqc-component")
@@ -393,11 +384,6 @@ def build_multiqc(**kwargs: Any):
         style=gs_initial_style,
     )
 
-    logger.debug(
-        f"build_multiqc returning component_id={component_id}, "
-        f"plot_type={type(plot_component).__name__}"
-    )
-
     return html.Div(
         [plot_component, general_stats_wrapper, store_component, trace_metadata_store],
         id=component_id,
@@ -432,20 +418,13 @@ def get_multiqc_reports_for_data_collection(data_collection_id: str, token: str)
         )
 
         if response.status_code == 200:
-            data = response.json()
-            reports = data.get("reports", [])
-            logger.info(
-                f"Retrieved {len(reports)} MultiQC reports for data collection {data_collection_id}"
-            )
-            return reports
+            return response.json().get("reports", [])
         else:
-            logger.warning(
-                f"Failed to retrieve MultiQC reports: {response.status_code} - {response.text}"
-            )
+            logger.error(f"Failed to retrieve MultiQC reports: {response.status_code}")
             return []
 
     except Exception as e:
-        logger.error(f"Error retrieving MultiQC reports: {str(e)}")
+        logger.error(f"Error retrieving MultiQC reports: {e}")
         return []
 
 
@@ -468,17 +447,13 @@ def get_multiqc_report_metadata(report_id: str, token: str) -> dict:
         )
 
         if response.status_code == 200:
-            metadata = response.json()
-            logger.info(f"Retrieved metadata for MultiQC report {report_id}")
-            return metadata
+            return response.json()
         else:
-            logger.warning(
-                f"Failed to retrieve MultiQC report metadata: {response.status_code} - {response.text}"
-            )
+            logger.error(f"Failed to retrieve MultiQC report metadata: {response.status_code}")
             return {}
 
     except Exception as e:
-        logger.error(f"Error retrieving MultiQC report metadata: {str(e)}")
+        logger.error(f"Error retrieving MultiQC report metadata: {e}")
         return {}
 
 
@@ -519,7 +494,7 @@ def check_multiqc_data_availability(data_collection_id: str, token: str) -> dict
         }
 
     except Exception as e:
-        logger.error(f"Error checking MultiQC data availability: {str(e)}")
+        logger.error(f"Error checking MultiQC data availability: {e}")
         return {
             "available": False,
             "report_count": 0,
@@ -585,7 +560,7 @@ def format_multiqc_summary(reports: list, metadata: dict | None = None) -> dict:
         }
 
     except Exception as e:
-        logger.error(f"Error formatting MultiQC summary: {str(e)}")
+        logger.error(f"Error formatting MultiQC summary: {e}")
         return {
             "total_reports": len(reports),
             "total_samples": 0,

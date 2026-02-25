@@ -11,8 +11,6 @@ from datetime import datetime
 from dash import ALL, Input, Output, State, ctx
 from dash.exceptions import PreventUpdate
 
-from depictio.api.v1.configs.logging_init import logger
-
 from .save_utils import save_multiqc_to_dashboard
 
 
@@ -68,27 +66,18 @@ def register_multiqc_edit_callback(app):
         Raises:
             PreventUpdate: If no valid trigger or missing data
         """
-        logger.info("=" * 80)
-        logger.info(f"   ctx.triggered_id: {ctx.triggered_id}")
-        logger.info(f"   btn_clicks: {btn_clicks}")
-
         # GUARD: Validate trigger
         if not ctx.triggered_id or not any(btn_clicks):
-            logger.warning("⚠️ MULTIQC EDIT SAVE - No trigger or clicks, preventing update")
             raise PreventUpdate
 
         # GUARD: Validate edit context
         if not edit_context:
-            logger.error("⚠️ MULTIQC EDIT SAVE - No edit context")
             raise PreventUpdate
 
         # Extract context
         dashboard_id = edit_context["dashboard_id"]
         component_id = edit_context["component_id"]
         component_data = edit_context["component_data"]
-
-        logger.info(f"   Dashboard: {dashboard_id}")
-        logger.info(f"   Component type: {component_data.get('component_type')}")
 
         # Index for accessing State arrays (should be 0 for edit page with single component)
         idx = 0
@@ -107,18 +96,11 @@ def register_multiqc_edit_callback(app):
         metadata = get_value(metadata_stores, idx, component_data.get("metadata", {}))
         s3_locations = get_value(s3_stores, idx, component_data.get("s3_locations", []))
 
-        logger.info(f"   Module: {selected_module}")
-        logger.info(f"   Plot: {selected_plot}")
-        logger.info(f"   Dataset: {selected_dataset}")
-        logger.info(f"   Data locations: {len(s3_locations) if s3_locations else 0} files")
-
         # GUARD: Validate required selections
         if not selected_module or not selected_plot:
-            logger.error("❌ MULTIQC EDIT SAVE - Missing module or plot selection")
             raise PreventUpdate
 
         if not s3_locations:
-            logger.error("❌ MULTIQC EDIT SAVE - No data locations available")
             raise PreventUpdate
 
         # Build complete component metadata
@@ -135,8 +117,6 @@ def register_multiqc_edit_callback(app):
             "last_updated": datetime.now().isoformat(),
         }
 
-        logger.debug(f"   Final metadata keys: {list(updated_metadata.keys())}")
-
         # Get access token
         TOKEN = local_store["access_token"]
 
@@ -145,14 +125,8 @@ def register_multiqc_edit_callback(app):
         if current_pathname and "/dashboard-edit/" in current_pathname:
             app_prefix = "dashboard-edit"
 
-        logger.info(f"   App prefix: {app_prefix}")
-
         # Use shared save helper
-        redirect_url = save_multiqc_to_dashboard(dashboard_id, updated_metadata, TOKEN, app_prefix)
-
-        logger.info("=" * 80)
-
-        return redirect_url
+        return save_multiqc_to_dashboard(dashboard_id, updated_metadata, TOKEN, app_prefix)
 
 
 __all__ = ["register_multiqc_edit_callback"]

@@ -46,12 +46,8 @@ def _fetch_s3_locations_from_dc(
                                 dc_specific_props = dc_config.get("dc_specific_properties", {})
                                 s3_location = dc_specific_props.get("s3_location")
                                 if s3_location:
-                                    logger.debug(
-                                        f"Regenerated s3_locations from DC config for {data_collection_id}: {s3_location}"
-                                    )
                                     return [s3_location]
 
-        logger.warning(f"Could not regenerate s3_locations for DC {data_collection_id}")
         return []
 
     except Exception as e:
@@ -100,12 +96,8 @@ def _fetch_metadata_from_dc(
                                     metadata["samples"] = dc_specific_props["samples"]
 
                                 if metadata:
-                                    logger.debug(
-                                        f"Regenerated metadata from DC config for {data_collection_id}: {list(metadata.keys())}"
-                                    )
                                     return metadata
 
-        logger.warning(f"Could not regenerate metadata for DC {data_collection_id}")
         return {}
 
     except Exception as e:

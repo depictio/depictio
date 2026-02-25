@@ -93,7 +93,6 @@ def register_design_callbacks(app):
             reports = get_multiqc_reports_for_data_collection(dc_id, TOKEN)
 
             if not reports:
-                logger.warning(f"No MultiQC reports found for DC {dc_id}")
                 return {}, [], [], "No MultiQC reports found"
 
             # Extract s3_location from nested report structure

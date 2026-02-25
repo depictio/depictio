@@ -19,7 +19,7 @@ Helper functions:
 import copy
 import os
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import dash
 import polars as pl
@@ -43,7 +43,7 @@ from depictio.dash.utils import (
 USE_BACKGROUND_CALLBACKS = should_use_background_for_component("multiqc")
 
 
-def _create_error_figure(title: str, message: Optional[str] = None) -> dict:
+def _create_error_figure(title: str, message: str | None = None) -> dict:
     """Create a Plotly figure dict displaying an error.
 
     Args:
@@ -69,7 +69,7 @@ def _create_error_figure(title: str, message: Optional[str] = None) -> dict:
     return {"data": [], "layout": layout}
 
 
-def _normalize_multiqc_paths(locations: List[str]) -> List[str]:
+def _normalize_multiqc_paths(locations: list[str]) -> list[str]:
     """
     Normalize MultiQC data paths - support both S3 and local filesystem.
 
@@ -103,25 +103,22 @@ def _normalize_multiqc_paths(locations: List[str]) -> List[str]:
             continue
 
         if location.startswith("s3://"):
-            logger.warning(f"S3 path detected (use local FS for production): {location}")
             normalized.append(location)
         elif location.startswith("/"):
             if not os.path.exists(location):
                 logger.error(f"Local file path does not exist: {location}")
             normalized.append(location)
         else:
-            abs_path = os.path.abspath(location)
-            logger.debug(f"Resolved relative path: {location} -> {abs_path}")
-            normalized.append(abs_path)
+            normalized.append(os.path.abspath(location))
 
     return normalized
 
 
 def _extract_sample_filters(
-    filter_values: Optional[Dict[str, Any]],
-    interactive_metadata_list: List[Dict],
-    component_metadata: Dict,
-) -> Optional[List[str]]:
+    filter_values: dict[str, Any] | None,
+    interactive_metadata_list: list[dict],
+    component_metadata: dict,
+) -> list[str] | None:
     """
     Extract sample filtering from interactive components.
 
@@ -169,21 +166,13 @@ def _extract_sample_filters(
 
 
 def expand_canonical_samples_to_variants(
-    canonical_samples: List[str], sample_mappings: Dict[str, List[str]]
-) -> List[str]:
-    """
-    Expand canonical sample IDs to all their MultiQC variants using stored mappings.
+    canonical_samples: list[str], sample_mappings: dict[str, list[str]]
+) -> list[str]:
+    """Expand canonical sample IDs to all their MultiQC variants using stored mappings.
 
-    Args:
-        canonical_samples: List of canonical sample IDs from external metadata (e.g., ['SRR10070130'])
-        sample_mappings: Dictionary mapping canonical IDs to variants
-                        (e.g., {'SRR10070130': ['SRR10070130', 'SRR10070130_1', ...]})
-
-    Returns:
-        List of all sample variants to filter MultiQC plots
+    When no mappings are available, returns canonical samples unchanged.
     """
     if not sample_mappings:
-        logger.warning("No sample mappings available - returning canonical samples as-is")
         return canonical_samples
 
     expanded_samples = []
@@ -201,9 +190,9 @@ def get_samples_from_metadata_filter(
     workflow_id: str,
     metadata_dc_id: str,
     join_column: str,
-    interactive_components_dict: Dict[str, Any],
+    interactive_components_dict: dict[str, Any],
     token: str,
-) -> List[str]:
+) -> list[str]:
     """
     Get sample names from filtered metadata table.
 
@@ -229,7 +218,6 @@ def get_samples_from_metadata_filter(
     )
 
     if df is None or df.is_empty():
-        logger.warning("Metadata table is empty")
         return []
 
     # Apply filters from interactive components
@@ -285,11 +273,11 @@ def get_samples_from_metadata_filter(
 
 
 def patch_multiqc_figures(
-    figures: List[Dict],
-    selected_samples: List[str],
-    metadata: Optional[Dict] = None,
-    trace_metadata: Optional[Dict] = None,
-) -> List[Dict]:
+    figures: list[dict],
+    selected_samples: list[str],
+    metadata: dict | None = None,
+    trace_metadata: dict | None = None,
+) -> list[dict]:
     """
     Apply sample filtering to MultiQC figures based on interactive selections.
 
@@ -399,9 +387,7 @@ def patch_multiqc_figures(
     return patched_figures
 
 
-def _restore_figure_from_trace_metadata(
-    current_figure: Dict, trace_metadata: Dict
-) -> Optional[Dict]:
+def _restore_figure_from_trace_metadata(current_figure: dict, trace_metadata: dict) -> dict | None:
     """Restore an unfiltered figure from stored trace metadata.
 
     Args:
@@ -894,7 +880,6 @@ def register_core_callbacks(app):
                             )
 
                     if not selected_samples:
-                        logger.warning("No samples resolved via any method")
                         return dash.no_update
 
                 else:
@@ -915,7 +900,6 @@ def register_core_callbacks(app):
                     )
 
                     if df is None or df.is_empty():
-                        logger.warning("Metadata table is empty - cannot restore")
                         return dash.no_update
 
                     if join_column not in df.columns:
@@ -933,7 +917,6 @@ def register_core_callbacks(app):
                     )
 
                     if not canonical_samples:
-                        logger.warning("No canonical samples found after filtering")
                         return dash.no_update
 
                 sample_mappings = metadata.get("sample_mappings", {})
@@ -942,19 +925,13 @@ def register_core_callbacks(app):
                 )
 
             if not selected_samples:
-                logger.warning("No samples found after expansion")
                 if not has_active_filters and figure_was_patched:
                     restored = _restore_figure_from_trace_metadata(current_figure, trace_metadata)
                     if restored:
                         return restored
                 return dash.no_update
 
-            if not current_figure:
-                logger.warning("No current figure available for patching")
-                return dash.no_update
-
-            if not trace_metadata or not trace_metadata.get("original_data"):
-                logger.warning("No trace metadata available for patching")
+            if not current_figure or not trace_metadata or not trace_metadata.get("original_data"):
                 return dash.no_update
 
             patched_figures = patch_multiqc_figures(
@@ -968,7 +945,6 @@ def register_core_callbacks(app):
                 patched_fig["layout"]["_depictio_filter_applied"] = has_active_filters
                 return patched_fig
 
-            logger.warning("No data available after filtering")
             return dash.no_update
 
         except Exception as e:

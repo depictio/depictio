@@ -10,7 +10,6 @@ import dash
 import pandas as pd
 from dash import ALL, MATCH, Input, Output, State
 
-from depictio.api.v1.configs.logging_init import logger
 from depictio.dash.modules.multiqc_component.general_stats import _create_violin_plot
 from depictio.dash.utils import enrich_interactive_components_with_metadata, resolve_link_values
 
@@ -184,11 +183,6 @@ def register_general_stats_callbacks(app):
 
         # Filter table data
         filtered_data = [row for row in full_data if row.get("Sample Name") in selected_samples]
-
-        logger.info(
-            f"[GS-FILTER] {len(filtered_data)}/{len(full_data)} rows "
-            f"({len(selected_samples)} matched samples)"
-        )
 
         # Rebuild violin from filtered data
         filtered_violin = _rebuild_violin_from_filtered(filtered_data, mode_data)

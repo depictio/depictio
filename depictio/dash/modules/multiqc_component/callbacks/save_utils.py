@@ -55,11 +55,6 @@ def save_multiqc_to_dashboard(
     """
     component_id = component_metadata["index"]
 
-    logger.info(f"   Metadata keys: {list(component_metadata.keys())}")
-    logger.info(f"   Module: {component_metadata.get('selected_module')}")
-    logger.info(f"   Plot: {component_metadata.get('selected_plot')}")
-    logger.info(f"   Dataset: {component_metadata.get('selected_dataset')}")
-
     try:
         # 1. Fetch current dashboard data
         response = httpx.get(
@@ -102,14 +97,8 @@ def save_multiqc_to_dashboard(
         )
         update_response.raise_for_status()
 
-        logger.info(f"   API Response status: {update_response.status_code}")
-
     except Exception as e:
-        logger.error(f"❌ SAVE MULTIQC FAILED - Error: {e}")
-        logger.error(f"   Error type: {type(e).__name__}")
-        import traceback
-
-        logger.error(f"   Traceback: {traceback.format_exc()}")
+        logger.error(f"Failed to save MultiQC component: {e}")
 
     # 4. Return redirect URL (preserves app context)
     redirect_url = f"/{app_prefix}/{dashboard_id}"
