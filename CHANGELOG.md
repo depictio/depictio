@@ -6,32 +6,16 @@
 
 
 <details>
-<summary>Click to expand the changelog for 0.7.5-b1</summary>
+<summary>Click to expand the changelog for 0.7.5-b2</summary>
 
 ### Changes 📜
 
-#### New Features ✨
-
-* feat: update ampliseq dashboard to use relative abundance and ANCOM-BC data [53816537]
-
-#### Bug Fixes 🐛
-
-* fix: add --overwrite to CI roundtrip import to handle duplicate check [200ed94a]
-* fix: resolve dashboard YAML import HTTP 400 and improve import robustness [aa6bc9a1]
-* fix: resolve MultiQC plots not updating on interactive filter changes [0bb61461]
-* fix: enable single-user mode in Helm chart CI to fix screenshot 401 error [1395cad1]
-
-#### Improvements 🚀
-
-* refactor: update ampliseq init dashboard JSONs from YAML-imported dashboards [977aee7f]
-
 #### Other Changes 📝
 
-* Bump version: 0.7.4 → 0.7.5-b1 [90dfcbfc]
-* Update CHANGELOG.md for v0.7.4 [b852d52c]
-* Bump version: 0.7.4-b1 → 0.7.4 [98edf45a]
-* Update CHANGELOG.md for v0.7.4-b1 [e201eb98]
-* Bump version: 0.7.3 → 0.7.4-b1 [31625513]
+* Bump version: 0.7.5-b1 → 0.7.5-b2 [4a46f391]
+* Fix infinite React re-render loop (Maximum update depth exceeded) [d227000a]
+* Update CHANGELOG.md for v0.7.5-b1 [4528e7d7]
+* Bump version: 0.7.4 → 0.7.5-b1 [523cfa24]
 
 
 </details>
@@ -40,8 +24,7 @@
 
 For more details, please refer to the [documentation](https://depictio.github.io/depictio-docs/)
 
-ectivity checks [978c9af5]
-* fix: Enhance backup strategy setup with detailed logging and verification steps for S3 connectivity [13ce3ff7]
+ectivity [13ce3ff7]
 * fix: Enhance S3 backup strategy to initialize backup results and combine locations for both strategies [3522347f]
 * fix: Update backup strategy tests to improve local backup file checks and refine S3 backup file naming [0c03ed20]
 * fix: Enhance backup CLI commands with verbose logging and update MinIO endpoint [d98266d2]
