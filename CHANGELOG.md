@@ -6,14 +6,31 @@
 
 
 <details>
-<summary>Click to expand the changelog for 0.7.5</summary>
+<summary>Click to expand the changelog for 0.7.6-b1</summary>
 
 ### Changes 📜
 
+#### New Features ✨
+
+* feat: add General Statistics table to ampliseq reference dashboards [9c021ffb]
+* feat: add MultiQC General Statistics table as selectable module option [f2123331]
+
+#### Bug Fixes 🐛
+
+* fix: make General Statistics header static with only content area scrollable [57bbae7a]
+* fix: enable cross-DC interactive filtering and fix violin visibility for General Statistics [9a75064d]
+
+#### Chores 🧹
+
+* chore: remove verbose logging from MultiQC general stats module [62585ff4]
+
 #### Other Changes 📝
 
-* Bump version: 0.7.5-b2 → 0.7.5 [094a1662]
+* Bump version: 0.7.5 → 0.7.6-b1 [6ce76948]
+* Update CHANGELOG.md for v0.7.5 [51da955f]
+* Bump version: 0.7.5-b2 → 0.7.5 [fa401fb0]
 * Bump version: 0.7.5-b1 → 0.7.5-b2 [59aed97d]
+* Update CHANGELOG.md for v0.7.5-b2 [795b4ce1]
 
 
 </details>
@@ -22,8 +39,7 @@
 
 For more details, please refer to the [documentation](https://depictio.github.io/depictio-docs/)
 
-ectivity tests from CI workflow [9ffe00d6]
-* fix: remove obsolete MinIO Console connectivity test from workflow [6ee1d309]
+ectivity test from workflow [6ee1d309]
 * fix: enhance inter-service connectivity tests with readiness checks and improved error handling [ea147c59]
 * fix: add netcat-openbsd to Dockerfile dependencies for improved functionality [ccdf0b66]
 * fix: improve database and storage functionality tests in CI workflow [0ef1c937]
