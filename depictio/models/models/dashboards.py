@@ -37,6 +37,7 @@ from depictio.models.components.lite import (
     ImageLiteComponent,
     InteractiveLiteComponent,
     LiteComponent,
+    MapLiteComponent,
     MultiQCLiteComponent,
     TableLiteComponent,
 )
@@ -201,6 +202,7 @@ class DashboardDataLite(BaseModel):
         "table": TableLiteComponent,
         "image": ImageLiteComponent,
         "multiqc": MultiQCLiteComponent,
+        "map": MapLiteComponent,
     }
 
     @model_validator(mode="after")
@@ -809,8 +811,10 @@ class DashboardDataLite(BaseModel):
                     lite_comp["max_images"] = comp["max_images"]
 
             elif comp_type == "map":
-                lite_comp["lat_column"] = comp.get("lat_column", "")
-                lite_comp["lon_column"] = comp.get("lon_column", "")
+                if comp.get("lat_column"):
+                    lite_comp["lat_column"] = comp["lat_column"]
+                if comp.get("lon_column"):
+                    lite_comp["lon_column"] = comp["lon_column"]
                 if comp.get("map_type") and comp["map_type"] != "scatter_map":
                     lite_comp["map_type"] = comp["map_type"]
                 if comp.get("color_column"):
@@ -843,6 +847,21 @@ class DashboardDataLite(BaseModel):
                     lite_comp["title"] = comp["title"]
                 if comp.get("dict_kwargs"):
                     lite_comp["dict_kwargs"] = comp["dict_kwargs"]
+                # Choropleth-specific fields
+                if comp.get("locations_column"):
+                    lite_comp["locations_column"] = comp["locations_column"]
+                if comp.get("featureidkey") and comp["featureidkey"] != "id":
+                    lite_comp["featureidkey"] = comp["featureidkey"]
+                if comp.get("geojson_data"):
+                    lite_comp["geojson_data"] = comp["geojson_data"]
+                if comp.get("geojson_url"):
+                    lite_comp["geojson_url"] = comp["geojson_url"]
+                if comp.get("choropleth_aggregation"):
+                    lite_comp["choropleth_aggregation"] = comp["choropleth_aggregation"]
+                if comp.get("color_continuous_scale"):
+                    lite_comp["color_continuous_scale"] = comp["color_continuous_scale"]
+                if comp.get("range_color"):
+                    lite_comp["range_color"] = comp["range_color"]
 
             elif comp_type == "multiqc":
                 # MultiQC parameters - export only if present in DB
@@ -1033,8 +1052,8 @@ class DashboardDataLite(BaseModel):
                 full_comp.update(
                     {
                         "map_type": comp_dict.get("map_type", "scatter_map"),
-                        "lat_column": comp_dict.get("lat_column", ""),
-                        "lon_column": comp_dict.get("lon_column", ""),
+                        "lat_column": comp_dict.get("lat_column"),
+                        "lon_column": comp_dict.get("lon_column"),
                         "color_column": comp_dict.get("color_column"),
                         "size_column": comp_dict.get("size_column"),
                         "hover_columns": comp_dict.get("hover_columns", []),
@@ -1050,6 +1069,14 @@ class DashboardDataLite(BaseModel):
                         "selection_column": comp_dict.get("selection_column"),
                         "title": comp_dict.get("title"),
                         "dict_kwargs": comp_dict.get("dict_kwargs", {}),
+                        # Choropleth-specific fields
+                        "locations_column": comp_dict.get("locations_column"),
+                        "featureidkey": comp_dict.get("featureidkey", "id"),
+                        "geojson_data": comp_dict.get("geojson_data"),
+                        "geojson_url": comp_dict.get("geojson_url"),
+                        "choropleth_aggregation": comp_dict.get("choropleth_aggregation"),
+                        "color_continuous_scale": comp_dict.get("color_continuous_scale"),
+                        "range_color": comp_dict.get("range_color"),
                         "displayed_data_count": 0,
                         "total_data_count": 0,
                         "was_sampled": False,

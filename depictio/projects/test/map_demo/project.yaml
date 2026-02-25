@@ -35,3 +35,23 @@ workflows:
               collection_date: "Date of sample collection"
               site_name: "Sampling site name"
               country: "Country of sampling"
+              country_name: "Country name matching Natural Earth GeoJSON NAME property"
+      - id: "660b2c3d4e5f6a7b8c9d1e12"
+        data_collection_tag: "regional_summary"
+        description: "Aggregated regional statistics for choropleth visualization"
+        config:
+          type: "Table"
+          metatype: "Delimited"
+          scan:
+            mode: single
+            scan_parameters:
+              filename: depictio/projects/test/map_demo/regional_summary.csv
+          dc_specific_properties:
+            format: "csv"
+            columns_description:
+              region_id: "Region identifier matching GeoJSON feature IDs"
+              region_name: "Human-readable region name"
+              sample_count: "Number of samples in the region"
+              avg_depth: "Average sampling depth in meters"
+              avg_reads: "Average sequencing read count"
+              dominant_biome: "Most common biome type in the region"

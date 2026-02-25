@@ -352,9 +352,9 @@ class MapLiteComponent(BaseLiteComponent):
         description="Map visualization type (scatter_map, density_map, choropleth_map)",
     )
 
-    # Column mappings (required for scatter_map and density_map)
-    lat_column: str = Field(..., description="Column containing latitude values")
-    lon_column: str = Field(..., description="Column containing longitude values")
+    # Column mappings (required for scatter_map and density_map, not for choropleth_map)
+    lat_column: str | None = Field(default=None, description="Column containing latitude values")
+    lon_column: str | None = Field(default=None, description="Column containing longitude values")
 
     # Optional column mappings
     color_column: str | None = Field(default=None, description="Column for marker color encoding")
@@ -381,6 +381,32 @@ class MapLiteComponent(BaseLiteComponent):
     # Density map specific
     z_column: str | None = Field(default=None, description="Weight column for density_map")
     radius: int | None = Field(default=None, description="Smoothing radius for density_map")
+
+    # Choropleth map specific
+    locations_column: str | None = Field(
+        default=None, description="Column matching GeoJSON feature IDs"
+    )
+    featureidkey: str = Field(
+        default="id", description="Property path in GeoJSON features to match locations"
+    )
+    geojson_data: dict[str, Any] | None = Field(
+        default=None, description="Inline GeoJSON FeatureCollection dict"
+    )
+    geojson_url: str | None = Field(
+        default=None,
+        description="URL to a GeoJSON file (alternative to inline geojson_data)",
+    )
+    choropleth_aggregation: str | None = Field(
+        default=None,
+        description="Aggregation function for choropleth (count, sum, mean, min, max). "
+        "Groups data by locations_column and aggregates color_column.",
+    )
+    color_continuous_scale: str | None = Field(
+        default=None, description="Named Plotly color scale (e.g., 'Viridis')"
+    )
+    range_color: list[float] | None = Field(
+        default=None, description="[min, max] for continuous color scale"
+    )
 
     # Selection filtering
     selection_enabled: bool = Field(
@@ -413,8 +439,50 @@ class MapLiteComponent(BaseLiteComponent):
         if self.selection_enabled and not self.selection_column:
             raise ValueError("selection_column is required when selection_enabled=True")
 
+        # scatter_map / density_map require lat/lon columns
+        if self.map_type in ("scatter_map", "density_map"):
+            if not self.lat_column:
+                raise ValueError(
+                    "lat_column is required when map_type is scatter_map or density_map"
+                )
+            if not self.lon_column:
+                raise ValueError(
+                    "lon_column is required when map_type is scatter_map or density_map"
+                )
+
         if self.map_type == "density_map" and not self.z_column:
             raise ValueError("z_column is required when map_type='density_map'")
+
+        # choropleth_map requires locations_column, geojson source, color_column
+        if self.map_type == "choropleth_map":
+            if not self.locations_column:
+                raise ValueError("locations_column is required when map_type='choropleth_map'")
+            if not self.geojson_data and not self.geojson_url:
+                raise ValueError(
+                    "geojson_data or geojson_url is required when map_type='choropleth_map'"
+                )
+            if not self.color_column:
+                raise ValueError("color_column is required when map_type='choropleth_map'")
+            if self.selection_enabled:
+                raise ValueError(
+                    "selection_enabled is not supported for choropleth_map "
+                    "(Plotly does not support lasso/click selection on choropleth traces)"
+                )
+
+        if self.choropleth_aggregation and self.choropleth_aggregation not in (
+            "count",
+            "sum",
+            "mean",
+            "min",
+            "max",
+        ):
+            raise ValueError(
+                f"Invalid choropleth_aggregation '{self.choropleth_aggregation}'. "
+                "Valid values: count, sum, mean, min, max"
+            )
+
+        if self.range_color is not None and len(self.range_color) != 2:
+            raise ValueError("range_color must have exactly 2 elements [min, max]")
 
         if self.default_center is not None:
             if "lat" not in self.default_center or "lon" not in self.default_center:

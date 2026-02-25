@@ -2,7 +2,7 @@
 Map Component - Build and Render Utilities.
 
 Provides build_map() for skeleton creation and render_map() for figure generation
-using Plotly Express tile-based map functions (scatter_map, density_map).
+using Plotly Express tile-based map functions (scatter_map, density_map, choropleth_map).
 """
 
 import math
@@ -50,6 +50,14 @@ def build_map(**kwargs) -> html.Div:
         "selection_column": kwargs.get("selection_column"),
         "title": kwargs.get("title"),
         "dict_kwargs": kwargs.get("dict_kwargs", {}),
+        # Choropleth-specific fields
+        "locations_column": kwargs.get("locations_column"),
+        "featureidkey": kwargs.get("featureidkey", "id"),
+        "geojson_data": kwargs.get("geojson_data"),
+        "geojson_url": kwargs.get("geojson_url"),
+        "choropleth_aggregation": kwargs.get("choropleth_aggregation"),
+        "color_continuous_scale": kwargs.get("color_continuous_scale"),
+        "range_color": kwargs.get("range_color"),
     }
 
     return html.Div(
@@ -127,6 +135,40 @@ def _compute_auto_zoom(lats: list[float], lons: list[float]) -> tuple[dict[str, 
     return center, zoom
 
 
+def _compute_geojson_center_zoom(geojson: dict) -> tuple[dict[str, float], int]:
+    """Compute center and zoom from GeoJSON FeatureCollection coordinates.
+
+    Recursively extracts all coordinate pairs from GeoJSON geometry
+    and delegates to _compute_auto_zoom().
+
+    Args:
+        geojson: GeoJSON FeatureCollection dict.
+
+    Returns:
+        Tuple of (center_dict, zoom_level).
+    """
+    lats: list[float] = []
+    lons: list[float] = []
+
+    def _extract_coords(obj: Any) -> None:
+        """Recursively extract [lon, lat] pairs from GeoJSON geometry coordinates."""
+        if isinstance(obj, list):
+            # A coordinate pair is [lon, lat] (2 or 3 floats)
+            if len(obj) >= 2 and all(isinstance(x, (int, float)) for x in obj[:2]):
+                lons.append(float(obj[0]))
+                lats.append(float(obj[1]))
+            else:
+                for item in obj:
+                    _extract_coords(item)
+
+    for feature in geojson.get("features", []):
+        geometry = feature.get("geometry", {})
+        coords = geometry.get("coordinates", [])
+        _extract_coords(coords)
+
+    return _compute_auto_zoom(lats, lons)
+
+
 def render_map(
     df: Any,
     trigger_data: dict,
@@ -136,8 +178,8 @@ def render_map(
 ) -> tuple[Any, dict]:
     """Render a Plotly map figure from DataFrame and configuration.
 
-    Supports scatter_map and density_map. Converts Polars DataFrames to pandas,
-    builds kwargs for Plotly Express, and applies theme styling.
+    Supports scatter_map, density_map, and choropleth_map. Converts Polars
+    DataFrames to pandas, builds kwargs for Plotly Express, and applies theme styling.
 
     Args:
         df: Polars or pandas DataFrame with data.
@@ -173,6 +215,14 @@ def render_map(
     selection_column = trigger_data.get("selection_column")
     title = trigger_data.get("title")
     extra_kwargs = trigger_data.get("dict_kwargs", {})
+    # Choropleth-specific
+    locations_column = trigger_data.get("locations_column")
+    featureidkey = trigger_data.get("featureidkey", "id")
+    geojson_data = trigger_data.get("geojson_data")
+    geojson_url = trigger_data.get("geojson_url")
+    choropleth_aggregation = trigger_data.get("choropleth_aggregation")
+    color_continuous_scale = trigger_data.get("color_continuous_scale")
+    range_color = trigger_data.get("range_color")
 
     # Auto-switch map_style for dark theme
     if theme == "dark" and map_style == "open-street-map":
@@ -188,16 +238,20 @@ def render_map(
 
     total_count = len(pandas_df)
 
-    # Drop rows with missing lat/lon
-    if lat_column in pandas_df.columns and lon_column in pandas_df.columns:
-        pandas_df = pandas_df.dropna(subset=[lat_column, lon_column])
+    # Drop rows with missing required columns
+    if map_type in ("scatter_map", "density_map"):
+        if lat_column in pandas_df.columns and lon_column in pandas_df.columns:
+            pandas_df = pandas_df.dropna(subset=[lat_column, lon_column])
+    elif map_type == "choropleth_map" and locations_column:
+        if locations_column in pandas_df.columns:
+            pandas_df = pandas_df.dropna(subset=[locations_column])
     displayed_count = len(pandas_df)
 
     if displayed_count == 0:
         template = _get_theme_template(theme)
         fig = px.scatter(template=template)
         fig.add_annotation(
-            text="No valid coordinates found",
+            text="No valid data found",
             xref="paper",
             yref="paper",
             x=0.5,
@@ -223,10 +277,15 @@ def render_map(
         center = stored_center
         zoom = stored_zoom
     else:
-        # First render: compute from full data extent
-        lats = pandas_df[lat_column].tolist()
-        lons = pandas_df[lon_column].tolist()
-        center, zoom = _compute_auto_zoom(lats, lons)
+        # First render: compute from data extent
+        if map_type == "choropleth_map" and geojson_data:
+            center, zoom = _compute_geojson_center_zoom(geojson_data)
+        elif lat_column in pandas_df.columns and lon_column in pandas_df.columns:
+            lats = pandas_df[lat_column].tolist()
+            lons = pandas_df[lon_column].tolist()
+            center, zoom = _compute_auto_zoom(lats, lons)
+        else:
+            center, zoom = {"lat": 0.0, "lon": 0.0}, 2
         if default_zoom is not None:
             zoom = default_zoom
         if default_center is not None:
@@ -277,6 +336,22 @@ def render_map(
                 extra_kwargs=extra_kwargs,
                 **common_kwargs,
             )
+        elif map_type == "choropleth_map":
+            fig = _render_choropleth_map(
+                pandas_df,
+                geojson_data=geojson_data,
+                geojson_url=geojson_url,
+                locations_column=locations_column or "",
+                featureidkey=featureidkey,
+                color_column=color_column,
+                hover_columns=hover_columns,
+                choropleth_aggregation=choropleth_aggregation,
+                color_continuous_scale=color_continuous_scale,
+                range_color=range_color,
+                opacity=opacity,
+                extra_kwargs=extra_kwargs,
+                **common_kwargs,
+            )
         else:
             logger.warning(f"Unsupported map_type: {map_type}, falling back to scatter_map")
             fig = _render_scatter_map(
@@ -320,8 +395,14 @@ def render_map(
         # When color encoding is used, px.scatter_map creates one trace per
         # category — we must set opacity per-trace using each trace's
         # customdata to identify which points are selected.
+        # (Choropleth maps don't support selection.)
         selection_column = trigger_data.get("selection_column")
-        if active_selection_values and selection_column and selection_column in pandas_df.columns:
+        if (
+            map_type != "choropleth_map"
+            and active_selection_values
+            and selection_column
+            and selection_column in pandas_df.columns
+        ):
             selected_set = {str(v) for v in active_selection_values}
             for trace in fig.data:
                 cd = trace.customdata
@@ -454,4 +535,79 @@ def _render_density_map(
             kwargs[k] = v
 
     fig = px.density_map(**kwargs)
+    return fig
+
+
+def _render_choropleth_map(
+    df: Any,
+    geojson_data: dict | None,
+    geojson_url: str | None,
+    locations_column: str,
+    featureidkey: str,
+    color_column: str | None,
+    hover_columns: list[str],
+    choropleth_aggregation: str | None,
+    color_continuous_scale: str | None,
+    range_color: list[float] | None,
+    opacity: float,
+    extra_kwargs: dict,
+    **common_kwargs: Any,
+) -> Any:
+    """Render a choropleth_map figure with colored polygon regions.
+
+    Supports inline GeoJSON (geojson_data) or URL-based GeoJSON (geojson_url).
+    When choropleth_aggregation is set, groups data by locations_column and
+    aggregates color_column before plotting.
+    """
+    import plotly.express as px
+
+    # Resolve GeoJSON source: inline dict or URL string
+    geojson = geojson_data or geojson_url
+
+    plot_df = df
+
+    # Aggregate data if requested (e.g., count samples per country)
+    if choropleth_aggregation and locations_column in df.columns:
+        if choropleth_aggregation == "count":
+            agg_col = color_column or locations_column
+            plot_df = (
+                df.groupby(locations_column, as_index=False)
+                .agg(**{agg_col: (agg_col, "count")})
+                .rename(columns={agg_col: agg_col})
+            )
+            # For count, the aggregated column IS the color column
+            if not color_column:
+                color_column = locations_column
+        elif color_column and color_column in df.columns:
+            agg_func = choropleth_aggregation  # sum, mean, min, max
+            plot_df = df.groupby(locations_column, as_index=False).agg(
+                **{color_column: (color_column, agg_func)}
+            )
+
+    kwargs: dict[str, Any] = {
+        "data_frame": plot_df,
+        "geojson": geojson,
+        "locations": locations_column,
+        "featureidkey": featureidkey,
+        "opacity": opacity,
+        **common_kwargs,
+    }
+
+    if color_column and color_column in plot_df.columns:
+        kwargs["color"] = color_column
+    if color_continuous_scale:
+        kwargs["color_continuous_scale"] = color_continuous_scale
+    if range_color and len(range_color) == 2:
+        kwargs["range_color"] = range_color
+    if hover_columns:
+        valid_hover = [c for c in hover_columns if c in plot_df.columns]
+        if valid_hover:
+            kwargs["hover_data"] = valid_hover
+
+    # Apply extra kwargs
+    for k, v in extra_kwargs.items():
+        if v is not None:
+            kwargs[k] = v
+
+    fig = px.choropleth_map(**kwargs)
     return fig

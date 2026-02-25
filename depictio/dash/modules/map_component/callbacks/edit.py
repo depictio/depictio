@@ -41,6 +41,13 @@ def register_map_edit_callback(app):
             "opacity",
             "selection_enabled",
             "selection_column",
+            "locations_column",
+            "featureidkey",
+            "geojson_data",
+            "geojson_url",
+            "choropleth_aggregation",
+            "color_continuous_scale",
+            "range_color",
         ]:
             if key in design_data:
                 updated[key] = design_data[key]
