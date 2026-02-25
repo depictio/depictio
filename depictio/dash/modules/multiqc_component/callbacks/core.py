@@ -1,22 +1,11 @@
 """MultiQC Component - Core Rendering Callbacks.
 
-This module contains callbacks essential for rendering MultiQC components in view mode.
-These callbacks are always loaded at app startup and work with saved dashboard components.
-
-Callbacks:
-    - render_multiqc_from_trigger: Render plot in view mode (existing dashboards)
-    - patch_multiqc_plot_with_interactive_filtering: Apply interactive filters to MultiQC plots
-
-Design-mode callbacks (module/plot/dataset selectors) are in design.py and only loaded
-when editing/creating components.
-
-Helper functions:
-    - _normalize_multiqc_paths: Support both S3 and local filesystem paths
-    - _extract_sample_filters: Extract sample filtering from interactive components
-    - _create_error_figure: Create error figure with message
+Callbacks for rendering MultiQC components in view mode, always loaded at startup.
+Design-mode callbacks (module/plot/dataset selectors) are in design.py.
 """
 
 import copy
+import hashlib
 import os
 from datetime import datetime
 from typing import Any
@@ -25,9 +14,13 @@ import dash
 import polars as pl
 from dash import ALL, MATCH, Input, Output, State
 
+from depictio.api.cache import get_cache
 from depictio.api.v1.configs.logging_init import logger
 from depictio.dash.background_callback_helpers import should_use_background_for_component
-from depictio.dash.modules.figure_component.multiqc_vis import create_multiqc_plot
+from depictio.dash.modules.figure_component.multiqc_vis import (
+    _resolve_local_cache_path,
+    create_multiqc_plot,
+)
 from depictio.dash.modules.multiqc_component.utils import (
     analyze_multiqc_plot_structure,
     resolve_bson_id,
@@ -42,17 +35,43 @@ from depictio.dash.utils import (
 # Use centralized background callback configuration
 USE_BACKGROUND_CALLBACKS = should_use_background_for_component("multiqc")
 
+# Reusable style dicts for toggling wrapper visibility.
+# position:absolute + visibility:hidden fully removes from layout flow;
+# Plotly/Dash ignores display:none and still renders SVG canvases.
+_WRAPPER_VISIBLE: dict[str, str] = {
+    "position": "relative",
+    "height": "100%",
+    "width": "100%",
+    "flex": "1",
+    "display": "flex",
+    "flexDirection": "column",
+}
+_WRAPPER_HIDDEN: dict[str, str] = {
+    "position": "absolute",
+    "visibility": "hidden",
+    "overflow": "hidden",
+    "height": "0",
+    "width": "0",
+}
+_GS_WRAPPER_VISIBLE: dict[str, str] = {
+    "width": "100%",
+    "height": "100%",
+    "flex": "1",
+    "display": "flex",
+    "flexDirection": "column",
+    "overflow": "hidden",
+}
+_GS_WRAPPER_HIDDEN: dict[str, str] = {
+    "position": "absolute",
+    "visibility": "hidden",
+    "overflow": "hidden",
+    "height": "0",
+    "width": "0",
+}
+
 
 def _create_error_figure(title: str, message: str | None = None) -> dict:
-    """Create a Plotly figure dict displaying an error.
-
-    Args:
-        title: The title to display (also used as error heading).
-        message: Optional additional error message for annotation.
-
-    Returns:
-        Plotly figure dict with error display.
-    """
+    """Create a Plotly figure dict displaying an error."""
     layout = {"title": title, "data": []}
     if message:
         layout["annotations"] = [
@@ -70,29 +89,7 @@ def _create_error_figure(title: str, message: str | None = None) -> dict:
 
 
 def _normalize_multiqc_paths(locations: list[str]) -> list[str]:
-    """
-    Normalize MultiQC data paths - support both S3 and local filesystem.
-
-    This helper provides backward compatibility during migration from S3 to local FS:
-    - Phase 1: Support both S3 and local paths (this implementation)
-    - Phase 2: CLI writes to local FS instead of MinIO
-    - Phase 3: Remove S3 support once migration complete
-
-    Args:
-        locations: List of paths (S3 URIs like 's3://bucket/key' or local paths like '/data/...')
-
-    Returns:
-        List of normalized paths ready for use
-
-    Strategy:
-    - If path starts with 's3://', keep as-is (backward compat, log warning)
-    - If path starts with '/', it's local - verify existence and use directly
-    - If relative path, resolve to absolute
-
-    Note: For production K8s deployment, use shared PersistentVolume mounted
-    at /data/depictio. CLI and Dash pods both mount same volume for direct
-    file access without S3/network overhead.
-    """
+    """Normalize MultiQC data paths, supporting both S3 URIs and local filesystem paths."""
     if not locations:
         return []
 
@@ -119,20 +116,7 @@ def _extract_sample_filters(
     interactive_metadata_list: list[dict],
     component_metadata: dict,
 ) -> list[str] | None:
-    """
-    Extract sample filtering from interactive components.
-
-    Integrates MultiQC component with interactive components for sample filtering.
-    When interactive component targets same DC as MultiQC, apply sample filter.
-
-    Args:
-        filter_values: Filter state from interactive-values-store
-        interactive_metadata_list: List of all interactive component metadata
-        component_metadata: This MultiQC component's metadata
-
-    Returns:
-        List of selected sample names to filter to, or None if no filtering
-    """
+    """Extract sample filtering from interactive components targeting the same DC."""
     if not filter_values or not interactive_metadata_list:
         return None
 
@@ -193,19 +177,7 @@ def get_samples_from_metadata_filter(
     interactive_components_dict: dict[str, Any],
     token: str,
 ) -> list[str]:
-    """
-    Get sample names from filtered metadata table.
-
-    Args:
-        workflow_id: Workflow ID
-        metadata_dc_id: Metadata data collection ID
-        join_column: Column name containing sample identifiers (e.g., 'sample')
-        interactive_components_dict: Filters to apply {component_index: {value, metadata}}
-        token: Auth token
-
-    Returns:
-        List of canonical sample names that match the filters (not expanded to variants)
-    """
+    """Get sample names from filtered metadata table."""
     from bson import ObjectId
 
     from depictio.api.v1.deltatables_utils import load_deltatable_lite
@@ -220,7 +192,6 @@ def get_samples_from_metadata_filter(
     if df is None or df.is_empty():
         return []
 
-    # Apply filters from interactive components
     for comp_data in interactive_components_dict.values():
         comp_metadata = comp_data.get("metadata", {})
         column_name = comp_metadata.get("column_name")
@@ -263,7 +234,6 @@ def get_samples_from_metadata_filter(
             else:
                 df = df.filter(pl.col(column_name).is_in(filter_values))
 
-    # Extract sample names from filtered DataFrame
     if join_column not in df.columns:
         logger.error(f"Join column '{join_column}' not found in metadata. Available: {df.columns}")
         return []
@@ -278,24 +248,13 @@ def patch_multiqc_figures(
     metadata: dict | None = None,
     trace_metadata: dict | None = None,
 ) -> list[dict]:
-    """
-    Apply sample filtering to MultiQC figures based on interactive selections.
-
-    Args:
-        figures: List of Plotly figure objects to patch
-        selected_samples: List of selected sample names for filtering
-        metadata: Optional metadata dictionary with plot information
-        trace_metadata: Original trace metadata with x, y, z arrays and orientation
-
-    Returns:
-        List of patched figure objects
-    """
+    """Apply sample filtering to MultiQC figures based on interactive selections."""
     if not figures or not selected_samples:
         return figures
 
     patched_figures = []
 
-    for fig_idx, fig in enumerate(figures):
+    for fig in figures:
         patched_fig = copy.deepcopy(fig)
 
         original_traces = []
@@ -306,7 +265,6 @@ def patch_multiqc_figures(
             trace_type = trace.get("type", "").lower()
             trace_name = trace.get("name", "")
 
-            # Get original data from trace metadata if available
             if i < len(original_traces):
                 trace_info = original_traces[i]
                 original_x = trace_info.get("original_x", [])
@@ -319,7 +277,6 @@ def patch_multiqc_figures(
                 original_z = list(trace.get("z", []))
                 orientation = trace.get("orientation", "v")
 
-            # Determine which axis contains sample names based on trace type
             if trace_type in ["bar", "box", "violin"]:
                 if orientation == "h":
                     sample_axis = original_y
@@ -332,7 +289,6 @@ def patch_multiqc_figures(
                     sample_key = "x"
                     value_key = "y"
 
-                # Filter to selected samples
                 filtered_samples = []
                 filtered_values = []
                 for j, sample in enumerate(sample_axis):
@@ -388,15 +344,7 @@ def patch_multiqc_figures(
 
 
 def _restore_figure_from_trace_metadata(current_figure: dict, trace_metadata: dict) -> dict | None:
-    """Restore an unfiltered figure from stored trace metadata.
-
-    Args:
-        current_figure: The currently displayed (filtered) figure.
-        trace_metadata: Stored original trace data.
-
-    Returns:
-        Restored figure dict with filter marker cleared, or None if restoration fails.
-    """
+    """Restore an unfiltered figure from stored trace metadata."""
     if not trace_metadata or not trace_metadata.get("original_data"):
         return None
 
@@ -437,23 +385,7 @@ def register_core_callbacks(app):
         prevent_initial_call="initial_duplicate",  # Allow duplicate + initial call
     )
     def render_multiqc_from_trigger(trigger_data, existing_trace_metadata):
-        """Render MultiQC plot for view mode (existing dashboards).
-
-        This callback is triggered by the multiqc-trigger store created by
-        build_multiqc(). It reads the stored module/plot/dataset selections
-        and renders the plot directly.
-
-        For general_stats plots, it populates the general-stats-wrapper and
-        hides the regular plot wrapper. For regular plots, vice versa.
-
-        Args:
-            trigger_data: Dict with s3_locations, module, plot, dataset_id, theme
-            existing_trace_metadata: Existing trace metadata (to prevent re-render)
-
-        Returns:
-            Tuple of (figure, trace_metadata, plot_wrapper_style,
-                       general_stats_wrapper_style, general_stats_children)
-        """
+        """Render MultiQC plot for view mode, toggling between regular plot and general stats."""
         no_update_all = (
             dash.no_update,
             dash.no_update,
@@ -484,41 +416,11 @@ def register_core_callbacks(app):
                 dash.no_update,
             )
 
-        # Default styles: plot visible, general stats hidden
-        plot_wrapper_visible = {
-            "position": "relative",
-            "height": "100%",
-            "width": "100%",
-            "flex": "1",
-            "display": "flex",
-            "flexDirection": "column",
-        }
-        # Use position:absolute + visibility:hidden to truly remove from layout.
-        # Plotly/Dash ignores display:none and still renders SVG canvases.
-        plot_wrapper_hidden = {
-            "position": "absolute",
-            "visibility": "hidden",
-            "overflow": "hidden",
-            "height": "0",
-            "width": "0",
-        }
-        gs_wrapper_visible = {
-            "width": "100%",
-            "height": "100%",
-            "flex": "1",
-            "display": "flex",
-            "flexDirection": "column",
-            "overflow": "hidden",
-        }
-        gs_wrapper_hidden = {
-            "position": "absolute",
-            "visibility": "hidden",
-            "overflow": "hidden",
-            "height": "0",
-            "width": "0",
-        }
+        plot_wrapper_visible = _WRAPPER_VISIBLE
+        plot_wrapper_hidden = _WRAPPER_HIDDEN
+        gs_wrapper_visible = _GS_WRAPPER_VISIBLE
+        gs_wrapper_hidden = _GS_WRAPPER_HIDDEN
 
-        # ---- General Statistics branch ----
         if selected_module == "general_stats" or selected_plot == "general_stats":
             try:
                 from depictio.dash.modules.figure_component.multiqc_vis import (
@@ -526,21 +428,50 @@ def register_core_callbacks(app):
                 )
                 from depictio.dash.modules.multiqc_component.general_stats import (
                     build_general_stats_content,
+                    rebuild_general_stats_from_cache,
                 )
 
-                # Resolve first parquet path (S3 URI → local cached file)
                 normalized = _normalize_multiqc_paths(s3_locations)
                 raw_path = normalized[0] if normalized else s3_locations[0]
+
+                local_cache_path = _resolve_local_cache_path(raw_path)
+                mtime = "0"
+                if local_cache_path and os.path.exists(local_cache_path):
+                    mtime = str(os.path.getmtime(local_cache_path))
+                elif not raw_path.startswith("s3://") and os.path.exists(raw_path):
+                    mtime = str(os.path.getmtime(raw_path))
+                gs_cache_key_str = f"{raw_path}::{mtime}::general_stats"
+                gs_cache_key = (
+                    f"multiqc:gs:{hashlib.sha256(gs_cache_key_str.encode()).hexdigest()[:16]}"
+                )
+
+                cache = get_cache()
+                cached_store_data = cache.get(gs_cache_key)
+                if cached_store_data is not None:
+                    children = rebuild_general_stats_from_cache(
+                        cached_store_data, str(component_id)
+                    )
+                    return (
+                        {"data": [], "layout": {}},
+                        {},
+                        plot_wrapper_hidden,
+                        gs_wrapper_visible,
+                        children,
+                    )
+
                 parquet_path = _get_local_path_for_s3(raw_path)
 
-                children, _store_data, _columns = build_general_stats_content(
+                children, store_data, _columns = build_general_stats_content(
                     parquet_path=parquet_path,
                     component_id=str(component_id),
                     show_hidden=True,
                 )
 
-                # Return: empty figure (hidden), no trace metadata,
-                # hide plot wrapper, show general stats wrapper with real content
+                try:
+                    cache.set(gs_cache_key, store_data, ttl=7200)
+                except Exception as cache_err:
+                    logger.warning(f"Failed to cache general stats: {cache_err}")
+
                 return (
                     {"data": [], "layout": {}},
                     {},
@@ -559,7 +490,6 @@ def register_core_callbacks(app):
                     dash.no_update,
                 )
 
-        # ---- Regular plot branch ----
         try:
             normalized_locations = _normalize_multiqc_paths(s3_locations)
 
@@ -581,7 +511,29 @@ def register_core_callbacks(app):
                     dash.no_update,
                 )
 
-            trace_metadata = analyze_multiqc_plot_structure(fig)
+            from depictio.dash.modules.figure_component.multiqc_vis import (
+                _generate_figure_cache_key,
+            )
+
+            fig_cache_key = _generate_figure_cache_key(
+                normalized_locations,
+                selected_module,
+                selected_plot,
+                selected_dataset,
+                theme,
+            )
+            trace_meta_cache_key = f"{fig_cache_key}:trace_meta"
+            cache = get_cache()
+
+            cached_trace_meta = cache.get(trace_meta_cache_key)
+            if cached_trace_meta is not None:
+                trace_metadata = cached_trace_meta
+            else:
+                trace_metadata = analyze_multiqc_plot_structure(fig)
+                try:
+                    cache.set(trace_meta_cache_key, trace_metadata, ttl=7200)
+                except Exception as cache_err:
+                    logger.warning(f"Failed to cache trace metadata: {cache_err}")
 
             return (
                 fig,
@@ -623,43 +575,30 @@ def register_core_callbacks(app):
         interactive_metadata_ids,
         project_metadata,
     ):
-        """Patch MultiQC plots when interactive filtering is applied (only for joined workflows).
-
-        Uses existing figure and patches it directly without regenerating from S3.
-
-        RESET SUPPORT: Empty interactive_values reloads unfiltered data.
-        """
-        # Early exit if no stored metadata (interactive_values can be empty for reset)
+        """Patch MultiQC plots when interactive filtering changes. Empty values trigger reset."""
         if not stored_metadata:
             return dash.no_update
 
-        # Guard: skip for general stats instances (handled by general_stats_callbacks)
         if (
             stored_metadata.get("selected_plot") == "general_stats"
             or stored_metadata.get("selected_module") == "general_stats"
         ):
             return dash.no_update
 
-        # RESET SUPPORT: Allow empty interactive_values to reload unfiltered data
         if not interactive_values:
             interactive_values = {"interactive_components_values": []}
 
-        # Get authentication token
         token = local_data.get("access_token") if local_data else None
         if not token:
             return dash.no_update
 
-        # Enrich lightweight store data with full metadata using shared utility
         enriched_components = enrich_interactive_components_with_metadata(
             interactive_values,
             interactive_metadata_list,
             interactive_metadata_ids,
         )
-
-        # Replace interactive_values with enriched version
         interactive_values = {"interactive_components_values": enriched_components}
 
-        # Extract MultiQC component data from stored metadata
         s3_locations = stored_metadata.get("s3_locations", [])
         selected_module = stored_metadata.get("selected_module")
         selected_plot = stored_metadata.get("selected_plot")
@@ -754,8 +693,6 @@ def register_core_callbacks(app):
                 return dash.no_update
 
             project_id = stored_metadata.get("project_id") if stored_metadata else None
-
-            # Fallback: extract project_id from project-metadata-store
             if not project_id and project_metadata:
                 project_data = project_metadata.get("project", {})
                 if project_data:
@@ -763,7 +700,6 @@ def register_core_callbacks(app):
                     if pid:
                         project_id = str(pid)
 
-            # Link-based resolution path (fallback when no pre-computed join)
             if use_link_resolution and project_id:
                 direct_sample_values = []
                 indirect_filter_values = []
@@ -793,7 +729,6 @@ def register_core_callbacks(app):
                 filter_values = direct_sample_values + indirect_filter_values
 
                 if not filter_values and not has_active_filters and figure_was_patched:
-                    # RESET MODE: restore all samples
                     sample_mappings = metadata.get("sample_mappings", {})
                     if not sample_mappings and project_id:
                         sample_mappings = get_multiqc_sample_mappings(
@@ -813,7 +748,6 @@ def register_core_callbacks(app):
                         return restored if restored else dash.no_update
 
                 elif filter_values:
-                    # FILTER MODE
                     sample_mappings = metadata.get("sample_mappings", {})
                     if not sample_mappings and project_id:
                         sample_mappings = get_multiqc_sample_mappings(
@@ -842,14 +776,13 @@ def register_core_callbacks(app):
                                     s for s in selected_samples if s in indirect_set
                                 ]
                     else:
-                        # Process each indirect filter component with its own source column,
-                        # then intersect the resolved sample sets (AND semantics across filters)
+                        # Intersect resolved sample sets across indirect filters (AND semantics)
                         resolved_set: set | None = None
                         for comp_data_inner in interactive_components_dict.values():
                             comp_meta = comp_data_inner.get("metadata", {})
                             inner_column = comp_meta.get("column_name", "")
                             if inner_column == join_column:
-                                continue  # skip direct sample filters (already handled above)
+                                continue
                             inner_value = comp_data_inner.get("value", [])
                             if not inner_value:
                                 continue
@@ -885,7 +818,6 @@ def register_core_callbacks(app):
                 else:
                     return dash.no_update
 
-            # Pre-computed join path
             else:
                 if not has_active_filters and figure_was_patched:
                     from bson import ObjectId

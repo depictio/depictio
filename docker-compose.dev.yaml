@@ -72,6 +72,7 @@ services:
         DEPICTIO_AUTH_SINGLE_USER_MODE: "${DEPICTIO_AUTH_SINGLE_USER_MODE:-false}"
         # Use mounted volume for S3 cache persistence across container restarts
         DEPICTIO_S3_CACHE_DIR: "/app/cache/s3_files"
+        DEPICTIO_DELTA_CACHE_DIR: "/app/cache/delta_cache"
     command: ["/app/run_dash.sh"]
     user: "${UID:-1000}:${GID:-1000}"
     depends_on:
