@@ -55,9 +55,6 @@ DEPICTIO_MONGODB_WIPE=true
 # Persistent cache directory for S3 files
 # DEPICTIO_S3_CACHE_DIR=/tmp/depictio_s3_cache
 
-# S3 FUSE mount points (comma-separated)
-# DEPICTIO_S3_MOUNT_POINTS=/mnt/s3
-
 # ----------------------------------------------------------------------------
 # Performance & Background Tasks
 # ----------------------------------------------------------------------------

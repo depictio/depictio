@@ -436,12 +436,10 @@ def _create_violin_plot(
 
     metric_info = []
     for metric in metrics:
-        original_metric = None
-        is_percentage = "percent" in (original_metric or metric).lower() or "%" in metric
+        is_percentage = "percent" in metric.lower() or "%" in metric
         metric_info.append(
             {
                 "display_name": metric,
-                "original_name": original_metric,
                 "is_percentage": is_percentage,
             }
         )
@@ -706,11 +704,7 @@ def _get_column_format(
 
 
 def _build_mode_data(parquet_path: str, show_hidden: bool, read_mode: str) -> dict:
-    """Build pre-computed table/violin data for a single read mode.
-
-    Returns a dict with keys: table_data, table_columns, table_styles,
-    violin_figure (as dict for JSON serialization).
-    """
+    """Build pre-computed table/violin data for a single read mode."""
     result = _process_multiqc_data(parquet_path, show_hidden=show_hidden, read_mode=read_mode)
     (
         _df_multiqc_real,
@@ -731,9 +725,7 @@ def _build_mode_data(parquet_path: str, show_hidden: bool, read_mode: str) -> di
         {v: k for k, v in internal_to_display.items()} if internal_to_display else None
     )
 
-    # Column definitions — Format objects are NOT serialisable so we store
-    # columns directly in the DataTable, NOT in the store.  The store only
-    # carries table_data (list[dict]) and table_styles (list[dict]).
+    # Format objects are not serialisable, so columns go in the DataTable, not the store
     columns = [
         {
             "name": internal_to_display.get(col, col),
@@ -765,58 +757,71 @@ def _build_mode_data(parquet_path: str, show_hidden: bool, read_mode: str) -> di
 
 
 # ---------------------------------------------------------------------------
-# Public API: build general stats content
+# Shared layout styles
+# ---------------------------------------------------------------------------
+
+_HIDDEN_STYLE: dict[str, str] = {
+    "position": "absolute",
+    "visibility": "hidden",
+    "overflow": "hidden",
+    "height": "0",
+    "width": "0",
+    "pointerEvents": "none",
+}
+
+_TABLE_CELL_STYLE: dict[str, str] = {
+    "textAlign": "left",
+    "padding": "6px 8px",
+    "fontFamily": "Arial, Helvetica, sans-serif",
+    "fontSize": "12px",
+    "border": "none",
+    "borderBottom": "1px solid #e8e8e8",
+    "whiteSpace": "nowrap",
+    "overflow": "hidden",
+    "textOverflow": "ellipsis",
+}
+
+_TABLE_HEADER_STYLE: dict[str, str] = {
+    "backgroundColor": "#f5f5f5",
+    "fontWeight": "bold",
+    "borderBottom": "2px solid #ddd",
+    "borderTop": "none",
+    "borderLeft": "none",
+    "borderRight": "none",
+    "textAlign": "left",
+    "fontSize": "12px",
+    "fontFamily": "Arial, Helvetica, sans-serif",
+    "padding": "8px",
+}
+
+_TABLE_DATA_STYLE: dict[str, str] = {
+    "border": "none",
+    "borderBottom": "1px solid #f0f0f0",
+}
+
+_TABLE_STYLE: dict[str, str] = {
+    "border": "none",
+    "borderTop": "1px solid #ddd",
+    "borderBottom": "1px solid #ddd",
+    "overflowX": "auto",
+}
+
+
+# ---------------------------------------------------------------------------
+# Shared component tree builder
 # ---------------------------------------------------------------------------
 
 
-def build_general_stats_content(
-    parquet_path: str,
+def _build_component_tree(
     component_id: str,
-    show_hidden: bool = True,
-) -> tuple[list, dict, list]:
-    """Build general stats children, store data, and column definitions.
-
-    Returns:
-        children: list of Dash components (controls, table, violin)
-        store_data: dict for general-stats-store (pre-computed mode data, JSON-safe)
-        columns: DataTable column definitions (contain Format objects, set once)
-    """
-    # Detect paired-end
-    result = _process_multiqc_data(parquet_path, show_hidden=show_hidden, read_mode="mean")
-    sample_groups = result[6]
-    is_paired_end = sample_groups is not None
-
-    read_modes = ["mean", "r1", "r2", "all"] if is_paired_end else ["mean"]
-    mode_data = {mode: _build_mode_data(parquet_path, show_hidden, mode) for mode in read_modes}
-
-    # The default mode data for initial render
-    default_data = mode_data["mean"]
-
-    # Column definitions — set once on the DataTable, never swapped
-    columns = default_data["table_columns"]
-
-    # Build serialisable store data (no Format objects!)
-    store_data: dict[str, Any] = {}
-    for mode, mdata in mode_data.items():
-        store_data[mode] = {
-            "table_data": mdata["table_data"],
-            "table_styles": mdata["table_styles"],
-            "violin_figure": mdata["violin_figure"],
-            "original_to_tool": mdata["original_to_tool"],
-            "display_to_original": mdata["display_to_original"],
-        }
-    store_data["is_paired_end"] = is_paired_end
-
-    # Collect all unique sample names across all modes for interactive filtering
-    all_samples: set[str] = set()
-    for mdata in mode_data.values():
-        for rec in mdata["table_data"]:
-            sample = rec.get("Sample Name")
-            if sample:
-                all_samples.add(sample)
-    store_data["all_samples"] = sorted(all_samples)
-
-    # Build control bar with title
+    is_paired_end: bool,
+    table_data: list[dict],
+    columns: list[dict],
+    table_styles: list[dict],
+    violin_figure: dict,
+    store_data: dict,
+) -> list:
+    """Build the Dash component tree shared by both fresh build and cache rebuild."""
     controls: list = [dmc.Title("General Statistics", order=4)]
     if is_paired_end:
         controls.append(
@@ -843,31 +848,19 @@ def build_general_stats_content(
         )
     )
 
-    children = [
-        # Static header — never scrolls
+    return [
         html.Div(
             dmc.Group(controls, justify="space-between", align="center"),
             style={"flexShrink": "0", "padding": "4px 0"},
         ),
-        # Scrollable content area — takes remaining height
         html.Div(
             [
                 dash_table.DataTable(
                     id={"type": "general-stats-table", "index": component_id},
-                    data=default_data["table_data"],
+                    data=table_data,
                     columns=columns,
-                    style_data_conditional=default_data["table_styles"],
-                    style_cell={
-                        "textAlign": "left",
-                        "padding": "6px 8px",
-                        "fontFamily": "Arial, Helvetica, sans-serif",
-                        "fontSize": "12px",
-                        "border": "none",
-                        "borderBottom": "1px solid #e8e8e8",
-                        "whiteSpace": "nowrap",
-                        "overflow": "hidden",
-                        "textOverflow": "ellipsis",
-                    },
+                    style_data_conditional=table_styles,
+                    style_cell=_TABLE_CELL_STYLE,
                     style_cell_conditional=[
                         {
                             "if": {"column_id": "Sample Name"},
@@ -876,44 +869,18 @@ def build_general_stats_content(
                             "backgroundColor": "white",
                         }
                     ],
-                    style_header={
-                        "backgroundColor": "#f5f5f5",
-                        "fontWeight": "bold",
-                        "borderBottom": "2px solid #ddd",
-                        "borderTop": "none",
-                        "borderLeft": "none",
-                        "borderRight": "none",
-                        "textAlign": "left",
-                        "fontSize": "12px",
-                        "fontFamily": "Arial, Helvetica, sans-serif",
-                        "padding": "8px",
-                    },
-                    style_data={
-                        "border": "none",
-                        "borderBottom": "1px solid #f0f0f0",
-                    },
-                    style_table={
-                        "border": "none",
-                        "borderTop": "1px solid #ddd",
-                        "borderBottom": "1px solid #ddd",
-                        "overflowX": "auto",
-                    },
+                    style_header=_TABLE_HEADER_STYLE,
+                    style_data=_TABLE_DATA_STYLE,
+                    style_table=_TABLE_STYLE,
                     sort_action="native",
                     filter_action="none",
                     page_size=50,
                 ),
                 dcc.Graph(
                     id={"type": "general-stats-violin", "index": component_id},
-                    figure=default_data["violin_figure"],
+                    figure=violin_figure,
                     config={"displayModeBar": False},
-                    style={
-                        "position": "absolute",
-                        "visibility": "hidden",
-                        "overflow": "hidden",
-                        "height": "0",
-                        "width": "0",
-                        "pointerEvents": "none",
-                    },
+                    style=_HIDDEN_STYLE,
                 ),
             ],
             style={
@@ -928,7 +895,113 @@ def build_general_stats_content(
         ),
     ]
 
+
+# ---------------------------------------------------------------------------
+# Public API: build general stats content
+# ---------------------------------------------------------------------------
+
+
+def build_general_stats_content(
+    parquet_path: str,
+    component_id: str,
+    show_hidden: bool = True,
+) -> tuple[list, dict, list]:
+    """Build general stats children, store data, and column definitions."""
+    result = _process_multiqc_data(parquet_path, show_hidden=show_hidden, read_mode="mean")
+    sample_groups = result[6]
+    is_paired_end = sample_groups is not None
+
+    read_modes = ["mean", "r1", "r2", "all"] if is_paired_end else ["mean"]
+    mode_data = {mode: _build_mode_data(parquet_path, show_hidden, mode) for mode in read_modes}
+
+    default_data = mode_data["mean"]
+    columns = default_data["table_columns"]
+
+    store_data: dict[str, Any] = {}
+    for mode, mdata in mode_data.items():
+        store_data[mode] = {
+            "table_data": mdata["table_data"],
+            "table_styles": mdata["table_styles"],
+            "violin_figure": mdata["violin_figure"],
+            "original_to_tool": mdata["original_to_tool"],
+            "display_to_original": mdata["display_to_original"],
+        }
+    store_data["is_paired_end"] = is_paired_end
+
+    all_samples: set[str] = set()
+    for mdata in mode_data.values():
+        for rec in mdata["table_data"]:
+            sample = rec.get("Sample Name")
+            if sample:
+                all_samples.add(sample)
+    store_data["all_samples"] = sorted(all_samples)
+
+    children = _build_component_tree(
+        component_id=component_id,
+        is_paired_end=is_paired_end,
+        table_data=default_data["table_data"],
+        columns=columns,
+        table_styles=default_data["table_styles"],
+        violin_figure=default_data["violin_figure"],
+        store_data=store_data,
+    )
+
     return children, store_data, columns
+
+
+# ---------------------------------------------------------------------------
+# Public API: rebuild from cached store data
+# ---------------------------------------------------------------------------
+
+
+def rebuild_general_stats_from_cache(
+    store_data: dict,
+    component_id: str,
+) -> list:
+    """Rebuild the Dash component tree from cached store_data (no parquet I/O)."""
+    is_paired_end = store_data.get("is_paired_end", False)
+    default_data = store_data.get("mean", {})
+
+    if not default_data or "table_data" not in default_data:
+        raise ValueError("Cached store_data missing 'mean' mode data")
+
+    # Rebuild column definitions with Format objects from cached data
+    percentage_columns: list[str] = []
+    column_formats: dict[str, dict] = {}
+    display_to_original = default_data.get("display_to_original", {})
+
+    for col_name in display_to_original:
+        if col_name.endswith(" (%)"):
+            percentage_columns.append(col_name)
+
+    sample_record = default_data["table_data"][0] if default_data["table_data"] else {}
+    internal_cols = list(sample_record.keys())
+
+    internal_to_display = (
+        {v: k for k, v in display_to_original.items()} if display_to_original else {}
+    )
+
+    columns = [
+        {
+            "name": internal_to_display.get(col, col),
+            "id": col,
+            "type": "numeric" if col != "Sample Name" else "text",
+            "format": _get_column_format(
+                internal_to_display.get(col, col), percentage_columns, column_formats
+            ),
+        }
+        for col in internal_cols
+    ]
+
+    return _build_component_tree(
+        component_id=component_id,
+        is_paired_end=is_paired_end,
+        table_data=default_data["table_data"],
+        columns=columns,
+        table_styles=default_data.get("table_styles", []),
+        violin_figure=default_data.get("violin_figure", {"data": [], "layout": {}}),
+        store_data=store_data,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -937,23 +1010,8 @@ def build_general_stats_content(
 
 
 def build_empty_general_stats_elements(component_id: str) -> list:
-    """Build hidden/empty general stats elements for non-general-stats instances.
-
-    Ensures all MATCH-targeted elements exist in the DOM so that callbacks
-    using MATCH never encounter a missing output.
-    """
-    # Use position:absolute + visibility:hidden to truly remove from layout flow.
-    # Plotly/Dash ignores display:none and still renders SVG canvases.
-    _hidden = {
-        "position": "absolute",
-        "visibility": "hidden",
-        "overflow": "hidden",
-        "height": "0",
-        "width": "0",
-        "pointerEvents": "none",
-    }
+    """Build hidden placeholder elements so MATCH callbacks never encounter missing outputs."""
     return [
-        # Hidden controls (need to exist for MATCH callbacks)
         html.Div(
             [
                 dmc.SegmentedControl(
@@ -968,23 +1026,20 @@ def build_empty_general_stats_elements(component_id: str) -> list:
                     data=[{"label": "Table", "value": "table"}],
                 ),
             ],
-            style=_hidden,
+            style=_HIDDEN_STYLE,
         ),
-        # Empty DataTable — out of flow so it takes no space
         dash_table.DataTable(
             id={"type": "general-stats-table", "index": component_id},
             data=[],
             columns=[],
             style_data_conditional=[],
-            style_table=_hidden,
+            style_table=_HIDDEN_STYLE,
         ),
-        # Empty violin graph — out of flow so Plotly.js SVG canvas is invisible
         dcc.Graph(
             id={"type": "general-stats-violin", "index": component_id},
             figure={"data": [], "layout": {"height": 0, "width": 0}},
-            style=_hidden,
+            style=_HIDDEN_STYLE,
         ),
-        # Empty store
         dcc.Store(
             id={"type": "general-stats-store", "index": component_id},
             data={},

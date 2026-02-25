@@ -17,7 +17,7 @@ ENABLE_CACHING = True  # Global toggle for caching system
 
 # PERFORMANCE TESTING: Toggle for local filesystem caching
 USE_LOCAL_FILES = os.getenv("DEPICTIO_USE_LOCAL_FILES", "false").lower() == "true"
-DELTA_CACHE_DIR = "/app/cache/delta_cache"
+DELTA_CACHE_DIR = os.getenv("DEPICTIO_DELTA_CACHE_DIR", "/app/cache/delta_cache")
 
 
 def get_local_cache_path(s3_path: str) -> str:
