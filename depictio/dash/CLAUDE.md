@@ -5,3 +5,123 @@
 
 *No recent activity*
 </claude-mem-context>
+
+# Dash Frontend
+
+## Multi-App Architecture
+
+**CRITICAL**: The Dash frontend uses three separate Dash applications. Understanding this is essential for callback registration.
+
+### Three Dash Applications
+
+1. **Management App** (`depictio/dash/pages/management.py`)
+   - URL: `/dashboards`, `/profile`, `/projects`
+   - Callbacks via `depictio/dash/core/callbacks.py`
+
+2. **Viewer App** (`depictio/dash/pages/dashboard_viewer.py`)
+   - URL: `/dashboard/{id}` (read-only viewing)
+   - No save button, no edit controls
+
+3. **Editor App** (`depictio/dash/pages/dashboard_editor.py`)
+   - URL: `/dashboard/{id}/edit`
+   - Includes save callback and edit mode features
+
+### Shared Stores
+
+**Location**: `depictio/dash/layouts/shared_app_shell.py` — `create_shared_stores()`
+
+Stores available to **all apps**: `local-store` (JWT), `theme-store`, `sidebar-collapsed`, `screenshot-debounce-store`, `url`, plus other session stores.
+
+**Any `dcc.Store` needed by multiple apps MUST be defined in `create_shared_stores()`.**
+
+### Callback Registration
+
+Ask: "Should this feature work in view mode, edit mode, or both?"
+
+**Both Viewer + Editor**:
+```python
+# depictio/dash/layouts/save.py
+def register_auto_screenshot_callback(app):
+    @app.callback(...)
+    def auto_screenshot_on_dashboard_view(...): ...
+
+# Register in BOTH:
+# depictio/dash/pages/dashboard_viewer.py
+register_auto_screenshot_callback(app)
+# depictio/dash/pages/dashboard_editor.py
+register_auto_screenshot_callback(app)
+```
+
+**Editor Only**:
+```python
+def register_callbacks_save_lite(app):
+    @app.callback(
+        Output("notification-container", "sendNotifications"),
+        Input("save-button-dashboard", "n_clicks"), ...
+    )
+    def save_dashboard_minimal(...): ...
+```
+
+**Management Only**:
+```python
+def register_callbacks_dashboards_management(app):
+    """Dashboard listing callbacks"""
+    ...
+```
+
+### Common Pitfalls
+
+**Wrong**: Registering callback only in Editor when it should work in Viewer too.
+**Wrong**: Defining a `dcc.Store` in one app's layout instead of `create_shared_stores()`.
+
+### Architecture Diagram
+
+```
+Management App (/dashboards)
+    ↓ Navigates to ↓
+Viewer App (/dashboard/{id}) ←→ Editor App (/dashboard/{id}/edit)
+    ↑                                           ↑
+    └─────────── Shared Stores ─────────────────┘
+         (theme, auth, screenshot-debounce, etc.)
+```
+
+### Testing Checklist
+
+- [ ] View mode (`/dashboard/{id}`)
+- [ ] Edit mode (`/dashboard/{id}/edit`)
+- [ ] Management (`/dashboards`)
+- [ ] Theme switching (light + dark)
+- [ ] Page navigation / URL changes
+
+## Frontend Development Guidelines
+
+### Component Framework
+
+**Use DMC 2.0+** (dash-mantine-components >= 2.0.0) for all new UI components.
+
+- **Primary**: DMC 2.0+ components
+- **Secondary**: Custom HTML/CSS (only when DMC is insufficient)
+- **Deprecated**: Bootstrap (dash-bootstrap-components) — maintain only, do not extend
+
+### Theme Compatibility
+
+All components MUST work with dark/light theme switching.
+
+**Prefer DMC native theming** — rely on DMC's built-in theme support first:
+1. **DMC native**: Use DMC component props and Mantine theme system (colors, variants, etc.)
+2. **theme_utils.py**: For custom theme-aware styling not covered by DMC
+3. **CSS variables (last resort)**: Only when DMC native theming is insufficient
+   - `var(--app-bg-color)`, `var(--app-text-color)`, `var(--app-surface-color)`, `var(--app-border-color)`
+
+Never hardcode colors (e.g., `#ffffff`, `#000000`).
+
+**DataTable pattern** (non-DMC component, CSS variables required):
+```python
+style_cell={
+    "backgroundColor": "var(--app-surface-color, #ffffff)",
+    "color": "var(--app-text-color, #000000)",
+}
+```
+
+### Migration
+When touching existing non-DMC components, migrate incrementally to DMC 2.0+ during feature work.
