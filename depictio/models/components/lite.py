@@ -375,7 +375,7 @@ class MapLiteComponent(BaseLiteComponent):
     default_center: dict[str, float] | None = Field(
         default=None, description="Fixed center as {lat: float, lon: float}"
     )
-    opacity: float = Field(default=0.8, description="Marker opacity (0.0 to 1.0)")
+    opacity: float = Field(default=1.0, description="Marker opacity (0.0 to 1.0)")
     size_max: int = Field(default=15, description="Maximum marker size in pixels")
 
     # Density map specific
@@ -389,6 +389,9 @@ class MapLiteComponent(BaseLiteComponent):
     selection_column: str | None = Field(
         default=None, description="Column to extract from selected points"
     )
+
+    # Display title
+    title: str | None = Field(default=None, description="Title displayed above the map")
 
     # Pass-through kwargs for extra Plotly Express parameters
     dict_kwargs: dict[str, Any] = Field(

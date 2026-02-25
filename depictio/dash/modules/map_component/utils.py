@@ -42,12 +42,13 @@ def build_map(**kwargs) -> html.Div:
         "map_style": kwargs.get("map_style", "open-street-map"),
         "default_zoom": kwargs.get("default_zoom"),
         "default_center": kwargs.get("default_center"),
-        "opacity": kwargs.get("opacity", 0.8),
+        "opacity": kwargs.get("opacity", 1.0),
         "size_max": kwargs.get("size_max", 15),
         "z_column": kwargs.get("z_column"),
         "radius": kwargs.get("radius"),
         "selection_enabled": kwargs.get("selection_enabled", False),
         "selection_column": kwargs.get("selection_column"),
+        "title": kwargs.get("title"),
         "dict_kwargs": kwargs.get("dict_kwargs", {}),
     }
 
@@ -121,7 +122,7 @@ def _compute_auto_zoom(lats: list[float], lons: list[float]) -> tuple[dict[str, 
 
     # Approximate zoom: 360 degrees at zoom 0, halving each level
     zoom = int(math.log2(360 / max(max_range, 0.001))) + 1
-    zoom = max(1, min(zoom, 18))
+    zoom = max(1, min(zoom, 14))  # Cap at 14 to avoid over-zooming on few points
 
     return center, zoom
 
@@ -130,6 +131,8 @@ def render_map(
     df: Any,
     trigger_data: dict,
     theme: str = "light",
+    existing_metadata: dict | None = None,
+    active_selection_values: list | None = None,
 ) -> tuple[Any, dict]:
     """Render a Plotly map figure from DataFrame and configuration.
 
@@ -140,6 +143,11 @@ def render_map(
         df: Polars or pandas DataFrame with data.
         trigger_data: Configuration dict from map-trigger store.
         theme: Theme name ('light' or 'dark').
+        existing_metadata: Previous render metadata with stored center/zoom
+            to preserve viewport when filters change.
+        active_selection_values: Values currently selected on the map (from
+            interactive-values-store).  When provided, ``selectedpoints`` is
+            set so Plotly renders selected/unselected styling.
 
     Returns:
         Tuple of (plotly_figure, data_info_dict).
@@ -157,12 +165,13 @@ def render_map(
     map_style = trigger_data.get("map_style", "open-street-map")
     default_zoom = trigger_data.get("default_zoom")
     default_center = trigger_data.get("default_center")
-    opacity = trigger_data.get("opacity", 0.8)
+    opacity = trigger_data.get("opacity", 1.0)
     size_max = trigger_data.get("size_max", 15)
     z_column = trigger_data.get("z_column")
     radius = trigger_data.get("radius")
     selection_enabled = trigger_data.get("selection_enabled", False)
     selection_column = trigger_data.get("selection_column")
+    title = trigger_data.get("title")
     extra_kwargs = trigger_data.get("dict_kwargs", {})
 
     # Auto-switch map_style for dark theme
@@ -201,11 +210,20 @@ def render_map(
         data_info = {"displayed_count": 0, "total_count": total_count}
         return fig, data_info
 
-    # Compute center and zoom
+    # Compute center and zoom - reuse stored values on re-renders to prevent
+    # viewport jumping when filters reduce the visible point set
+    stored_center = (existing_metadata or {}).get("center")
+    stored_zoom = (existing_metadata or {}).get("zoom")
+
     if default_center and default_zoom is not None:
         center = default_center
         zoom = default_zoom
+    elif stored_center and stored_zoom is not None:
+        # Re-render after filtering: keep the original viewport
+        center = stored_center
+        zoom = stored_zoom
     else:
+        # First render: compute from full data extent
         lats = pandas_df[lat_column].tolist()
         lons = pandas_df[lon_column].tolist()
         center, zoom = _compute_auto_zoom(lats, lons)
@@ -214,12 +232,21 @@ def render_map(
         if default_center is not None:
             center = default_center
 
+    # Lock color mapping so palette doesn't shift when data is filtered
+    color_discrete_map = (existing_metadata or {}).get("color_discrete_map")
+    if not color_discrete_map and color_column and color_column in pandas_df.columns:
+        unique_vals = sorted(pandas_df[color_column].dropna().unique().tolist(), key=str)
+        palette = px.colors.qualitative.Plotly
+        color_discrete_map = {str(v): palette[i % len(palette)] for i, v in enumerate(unique_vals)}
+
     # Build kwargs common to all map types
+    # NOTE: opacity is NOT passed here — px.scatter_map opacity interacts with
+    # size encoding and produces uneven marker transparency. Instead we force
+    # uniform marker.opacity via update_traces after figure creation.
     common_kwargs: dict[str, Any] = {
         "map_style": map_style,
         "zoom": zoom,
         "center": center,
-        "opacity": opacity,
     }
 
     try:
@@ -236,6 +263,8 @@ def render_map(
                 selection_enabled=selection_enabled,
                 selection_column=selection_column,
                 extra_kwargs=extra_kwargs,
+                opacity=opacity,
+                color_discrete_map=color_discrete_map,
                 **common_kwargs,
             )
         elif map_type == "density_map":
@@ -262,14 +291,46 @@ def render_map(
                 selection_enabled=selection_enabled,
                 selection_column=selection_column,
                 extra_kwargs=extra_kwargs,
+                opacity=opacity,
+                color_discrete_map=color_discrete_map,
                 **common_kwargs,
             )
 
         # Common layout updates
-        fig.update_layout(
-            margin={"l": 0, "r": 0, "t": 0, "b": 0},
-            paper_bgcolor="rgba(0,0,0,0)",
-        )
+        # map.uirevision preserves the user's current pan/zoom/bearing/pitch
+        # across re-renders.  This is map-viewport-specific and does NOT
+        # preserve trace selection state (we clear that with selectedpoints=None).
+        layout_kwargs: dict[str, Any] = {
+            "margin": {"l": 0, "r": 0, "t": 30 if title else 0, "b": 0},
+            "paper_bgcolor": "rgba(0,0,0,0)",
+            "map": {"uirevision": "preserve"},
+        }
+        if title:
+            layout_kwargs["title"] = {
+                "text": title,
+                "x": 0.5,
+                "xanchor": "center",
+                "font": {"size": 14},
+            }
+        fig.update_layout(**layout_kwargs)
+
+        # Apply per-point opacity to show selection state.  Plotly's
+        # selected/unselected trace properties don't work reliably on
+        # scatter_map traces, so we set marker.opacity as an array directly.
+        # When color encoding is used, px.scatter_map creates one trace per
+        # category — we must set opacity per-trace using each trace's
+        # customdata to identify which points are selected.
+        selection_column = trigger_data.get("selection_column")
+        if active_selection_values and selection_column and selection_column in pandas_df.columns:
+            selected_set = {str(v) for v in active_selection_values}
+            for trace in fig.data:
+                cd = trace.customdata
+                if cd is not None and len(cd) > 0:
+                    trace_opacity = [opacity if str(row[0]) in selected_set else 0.2 for row in cd]
+                    trace.marker.opacity = trace_opacity
+                else:
+                    # No customdata — dim entire trace
+                    trace.marker.opacity = 0.2
 
     except Exception as e:
         logger.error(f"Map rendering failed: {e}", exc_info=True)
@@ -291,6 +352,9 @@ def render_map(
     data_info = {
         "displayed_count": displayed_count,
         "total_count": total_count,
+        "center": center,
+        "zoom": zoom,
+        "color_discrete_map": color_discrete_map,
     }
 
     return fig, data_info
@@ -308,6 +372,8 @@ def _render_scatter_map(
     selection_enabled: bool,
     selection_column: str | None,
     extra_kwargs: dict,
+    opacity: float = 1.0,
+    color_discrete_map: dict[str, str] | None = None,
     **common_kwargs: Any,
 ) -> Any:
     """Render a scatter_map figure."""
@@ -323,6 +389,8 @@ def _render_scatter_map(
 
     if color_column and color_column in df.columns:
         kwargs["color"] = color_column
+        if color_discrete_map:
+            kwargs["color_discrete_map"] = color_discrete_map
     if size_column and size_column in df.columns:
         kwargs["size"] = size_column
     if text_column and text_column in df.columns:
@@ -343,11 +411,14 @@ def _render_scatter_map(
 
     fig = px.scatter_map(**kwargs)
 
-    # Enable selection mode
+    # Force uniform marker opacity (px.scatter_map varies it with size encoding)
+    fig.update_traces(marker={"opacity": opacity})
+
+    # Enable selection mode — keep pan as default drag, lasso available in toolbar
     if selection_enabled:
         fig.update_layout(
             clickmode="event+select",
-            dragmode="lasso",
+            dragmode="pan",
         )
 
     return fig

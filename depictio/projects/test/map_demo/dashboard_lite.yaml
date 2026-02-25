@@ -122,8 +122,8 @@ components:
     color_column: biome
     size_column: read_count
     hover_columns: [sample_id, site_name, country, depth_m, collection_date]
+    title: "TREC Sampling Locations"
     map_style: carto-positron
-    opacity: 0.9
     size_max: 20
     selection_enabled: true
     selection_column: sample_id

@@ -104,13 +104,24 @@ def _extract_filters_for_map(
     batch_task_id: str,
     access_token: str | None = None,
 ) -> list[dict]:
-    """Extract active filters for a specific map's data collection."""
+    """Extract active filters for a specific map's data collection.
+
+    Map components skip their own ``map_selection`` filters so the map always
+    renders all points.  Plotly's client-side selected/unselected styling
+    handles the visual feedback.  Other filter sources (interactive widgets,
+    scatter_selection, table_selection) are still applied.
+    """
     if not filters_data or not filters_data.get("interactive_components_values"):
         return []
 
     metadata_by_index = _build_metadata_index(interactive_metadata_list, interactive_metadata_ids)
     lightweight_components = filters_data.get("interactive_components_values", [])
     enriched = _enrich_filter_components(lightweight_components, metadata_by_index)
+
+    # Exclude map_selection filters — the map should not filter itself.
+    # This keeps all points visible; selection styling is handled client-side.
+    enriched = [c for c in enriched if c.get("source") != "map_selection"]
+
     filters_by_dc = _group_filters_by_dc(enriched)
 
     relevant_filters = filters_by_dc.get(dc_id, [])
@@ -246,6 +257,17 @@ def register_core_callbacks(app):
                 if data is not None:
                     dc_cache[load_key] = data
 
+        # Extract active map_selection values from the store so the map can
+        # highlight selected points without filtering them out of the data.
+        map_selection_values: list | None = None
+        if filters_data and filters_data.get("interactive_components_values"):
+            for comp in filters_data["interactive_components_values"]:
+                if comp.get("source") == "map_selection":
+                    val = comp.get("value")
+                    if val:
+                        map_selection_values = val
+                    break
+
         # Process each map
         all_figures = []
         all_metadata = []
@@ -267,7 +289,14 @@ def register_core_callbacks(app):
             df = dc_cache[load_key]
 
             try:
-                fig, data_info = render_map(df, trigger_data, current_theme)
+                prev_metadata = existing_metadata_list[i] if i < len(existing_metadata_list) else {}
+                fig, data_info = render_map(
+                    df,
+                    trigger_data,
+                    current_theme,
+                    existing_metadata=prev_metadata,
+                    active_selection_values=map_selection_values,
+                )
 
                 # Convert to dict for serialization
                 if hasattr(fig, "to_json"):

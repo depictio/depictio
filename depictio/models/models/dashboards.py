@@ -823,7 +823,7 @@ class DashboardDataLite(BaseModel):
                     lite_comp["text_column"] = comp["text_column"]
                 if comp.get("map_style") and comp["map_style"] != "open-street-map":
                     lite_comp["map_style"] = comp["map_style"]
-                if comp.get("opacity") is not None and comp["opacity"] != 0.8:
+                if comp.get("opacity") is not None and comp["opacity"] != 1.0:
                     lite_comp["opacity"] = comp["opacity"]
                 if comp.get("size_max") and comp["size_max"] != 15:
                     lite_comp["size_max"] = comp["size_max"]
@@ -839,6 +839,8 @@ class DashboardDataLite(BaseModel):
                     lite_comp["selection_enabled"] = comp["selection_enabled"]
                 if comp.get("selection_column"):
                     lite_comp["selection_column"] = comp["selection_column"]
+                if comp.get("title"):
+                    lite_comp["title"] = comp["title"]
                 if comp.get("dict_kwargs"):
                     lite_comp["dict_kwargs"] = comp["dict_kwargs"]
 
@@ -1040,12 +1042,13 @@ class DashboardDataLite(BaseModel):
                         "map_style": comp_dict.get("map_style", "open-street-map"),
                         "default_zoom": comp_dict.get("default_zoom"),
                         "default_center": comp_dict.get("default_center"),
-                        "opacity": comp_dict.get("opacity", 0.8),
+                        "opacity": comp_dict.get("opacity", 1.0),
                         "size_max": comp_dict.get("size_max", 15),
                         "z_column": comp_dict.get("z_column"),
                         "radius": comp_dict.get("radius"),
                         "selection_enabled": comp_dict.get("selection_enabled", False),
                         "selection_column": comp_dict.get("selection_column"),
+                        "title": comp_dict.get("title"),
                         "dict_kwargs": comp_dict.get("dict_kwargs", {}),
                         "displayed_data_count": 0,
                         "total_data_count": 0,

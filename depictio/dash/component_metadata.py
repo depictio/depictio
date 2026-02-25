@@ -141,7 +141,7 @@ COMPONENT_METADATA = {
         "description": "Geospatial map visualization with markers",
         "color": colors["blue"],  # Blue #6495ED
         "supports_edit": True,
-        "supports_reset": False,
+        "supports_reset": True,
         "enabled": True,
         "build_function": build_map,
         "default_dimensions": {"w": 24, "h": 20},
