@@ -1,0 +1,37 @@
+# Map Component Demo Project
+# Simulates TREC expedition metagenomics sampling locations across Europe
+id: "660b2c3d4e5f6a7b8c9d1e0f"
+name: "Map Component Demo Project"
+is_public: true
+workflows:
+  - id: "660b2c3d4e5f6a7b8c9d1e10"
+    name: "map_demo_workflow"
+    engine:
+      name: "python"
+    data_location:
+      structure: "flat"
+      locations:
+        - depictio/projects/test/map_demo
+    data_collections:
+      - id: "660b2c3d4e5f6a7b8c9d1e11"
+        data_collection_tag: "sampling_locations"
+        description: "TREC expedition sampling locations with environmental metadata"
+        config:
+          type: "Table"
+          metatype: "Delimited"
+          scan:
+            mode: single
+            scan_parameters:
+              filename: depictio/projects/test/map_demo/sampling_locations.csv
+          dc_specific_properties:
+            format: "csv"
+            columns_description:
+              sample_id: "Unique sample identifier"
+              latitude: "GPS latitude (decimal degrees)"
+              longitude: "GPS longitude (decimal degrees)"
+              biome: "Environment type (urban, marine, freshwater)"
+              depth_m: "Sampling depth in meters"
+              read_count: "Number of sequencing reads"
+              collection_date: "Date of sample collection"
+              site_name: "Sampling site name"
+              country: "Country of sampling"

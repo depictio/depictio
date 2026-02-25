@@ -22,13 +22,14 @@ COMPONENT_DC_TYPE_MAPPING: Dict[str, List[str]] = {
     "MultiQC": ["multiqc"],
     "Image": ["image"],
     "JBrowse2": ["jbrowse2"],
+    "Map": ["table"],
     # Text component doesn't use data collections (no entry needed)
 }
 
 # Reverse mapping: DC type to allowed component types
 # Used for UI filtering in stepper (shows which components are valid for a DC type)
 DC_COMPONENT_TYPE_MAPPING: Dict[str, List[str]] = {
-    "table": ["Figure", "Card", "Interactive", "Table"],
+    "table": ["Figure", "Card", "Interactive", "Table", "Map"],
     "multiqc": ["MultiQC"],
     "image": ["Image"],
     "jbrowse2": ["JBrowse2"],

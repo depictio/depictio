@@ -57,6 +57,27 @@ INTERACTIVE_COMPATIBILITY: dict[str, list[str]] = {
 # column_type → list of valid aggregation names
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# Valid map types and styles
+# ---------------------------------------------------------------------------
+
+MAP_TYPES: tuple[str, ...] = (
+    "scatter_map",
+    "density_map",
+    "choropleth_map",
+)
+
+MAP_STYLES: tuple[str, ...] = (
+    "open-street-map",
+    "carto-positron",
+    "carto-darkmatter",
+)
+
+# ---------------------------------------------------------------------------
+# Card aggregation × column_type compatibility
+# column_type → list of valid aggregation names
+# ---------------------------------------------------------------------------
+
 AGGREGATION_COMPATIBILITY: dict[str, list[str]] = {
     "int64": [
         "count",

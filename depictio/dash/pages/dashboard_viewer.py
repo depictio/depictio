@@ -431,6 +431,13 @@ def register_component_callbacks(app):
 
     register_callbacks_image_component(app)
 
+    # Register map component view mode callbacks
+    from depictio.dash.modules.map_component.callbacks import (
+        register_callbacks_map_component,
+    )
+
+    register_callbacks_map_component(app)
+
     # Register fullscreen callbacks for figure components
     from depictio.dash.modules.fullscreen import register_fullscreen_callbacks
 

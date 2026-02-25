@@ -915,7 +915,7 @@ def enrich_interactive_components_with_metadata(
 
         # Handle selection sources (scatter_selection, table_selection)
         # These already have metadata embedded in the store entry
-        if source in ("scatter_selection", "table_selection"):
+        if source in ("scatter_selection", "table_selection", "map_selection"):
             # Build metadata from selection entry
             selection_metadata = {
                 "dc_id": component.get("dc_id"),

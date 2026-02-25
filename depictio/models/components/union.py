@@ -12,11 +12,12 @@ from pydantic import Discriminator
 from depictio.models.components.card import CardComponent
 from depictio.models.components.figure import FigureComponent
 from depictio.models.components.interactive import InteractiveComponent
+from depictio.models.components.map import MapComponent
 from depictio.models.components.table import TableComponent
 
 # Discriminated union of all component types
 # The discriminator uses "component_type" field to determine the correct model
 ComponentMetadata = Annotated[
-    Union[CardComponent, FigureComponent, InteractiveComponent, TableComponent],
+    Union[CardComponent, FigureComponent, InteractiveComponent, MapComponent, TableComponent],
     Discriminator("component_type"),
 ]

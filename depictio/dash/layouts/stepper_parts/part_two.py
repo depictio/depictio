@@ -13,7 +13,7 @@ from dash_iconify import DashIconify
 from depictio.dash.component_metadata import get_component_metadata, is_enabled
 
 # Component types to show in the grid (excluding disabled Text)
-_GRID_COMPONENT_TYPES = ["figure", "card", "interactive", "table", "multiqc", "image"]
+_GRID_COMPONENT_TYPES = ["figure", "card", "interactive", "table", "multiqc", "image", "map"]
 
 # Colors matching depictio-docs design
 _GRID_ICON_COLORS = {
@@ -23,6 +23,7 @@ _GRID_ICON_COLORS = {
     "table": "#6495ed",
     "multiqc": "transparent",
     "image": "#e6779f",
+    "map": "#6495ed",
 }
 
 # Display names used as button values (must match existing callback patterns)
@@ -33,6 +34,7 @@ _DISPLAY_NAMES = {
     "table": "Table",
     "multiqc": "MultiQC",
     "image": "Image",
+    "map": "Map",
 }
 
 

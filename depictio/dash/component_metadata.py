@@ -31,6 +31,7 @@ from depictio.dash.modules.figure_component.utils import build_figure
 from depictio.dash.modules.image_component.utils import build_image
 from depictio.dash.modules.interactive_component.utils import build_interactive
 from depictio.dash.modules.jbrowse_component.utils import build_jbrowse
+from depictio.dash.modules.map_component.utils import build_map
 from depictio.dash.modules.multiqc_component.utils import build_multiqc
 from depictio.dash.modules.table_component.utils import build_table
 from depictio.dash.modules.text_component.utils import build_text
@@ -134,6 +135,17 @@ COMPONENT_METADATA = {
             "h": 24,
         },  # Adjusted for 48-column grid with rowHeight=20 - full-featured MultiQC reports
     },
+    "map": {
+        "icon": "mdi:map-marker-multiple",
+        "display_name": "Map",
+        "description": "Geospatial map visualization with markers",
+        "color": colors["blue"],  # Blue #6495ED
+        "supports_edit": True,
+        "supports_reset": False,
+        "enabled": True,
+        "build_function": build_map,
+        "default_dimensions": {"w": 24, "h": 20},
+    },
     "image": {
         "icon": "mdi:image-area",  # Gallery-style icon for image data collections
         "display_name": "Image Gallery",
@@ -179,6 +191,10 @@ DUAL_PANEL_DIMENSIONS = {
     },
     "table": {
         "w": 8,  # 8/8 columns = 100% width (full row)
+        "h": 6,  # 6 × 100px = 600px
+    },
+    "map": {
+        "w": 8,  # 8/8 columns = 100% width (full row for map)
         "h": 6,  # 6 × 100px = 600px
     },
     "image": {
@@ -440,6 +456,7 @@ DISPLAY_NAME_TO_TYPE_MAPPING = {
     "MultiQC": "multiqc",
     "Image": "image",
     "Image Gallery": "image",  # Alternative name
+    "Map": "map",
     "None": None,  # Default case
 }
 

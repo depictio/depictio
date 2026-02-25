@@ -17,6 +17,7 @@ from depictio.dash.modules.card_component.frontend import design_card
 from depictio.dash.modules.figure_component.utils import design_figure
 from depictio.dash.modules.image_component.design_ui import design_image
 from depictio.dash.modules.interactive_component.frontend import design_interactive
+from depictio.dash.modules.map_component.design_ui import design_map
 from depictio.dash.modules.multiqc_component.frontend import design_multiqc
 from depictio.dash.modules.table_component.frontend import design_table
 
@@ -116,7 +117,16 @@ def _determine_component_to_render(
     Returns:
         Tuple of (component_type, component_id) or (None, None).
     """
-    supported_components = ["Figure", "Card", "Interactive", "Table", "Text", "MultiQC", "Image"]
+    supported_components = [
+        "Figure",
+        "Card",
+        "Interactive",
+        "Table",
+        "Text",
+        "MultiQC",
+        "Image",
+        "Map",
+    ]
 
     if btn_component is None or store_btn_component is None:
         return None, None
@@ -234,7 +244,8 @@ def return_design_component(
     elif component_selected == "Graph":
         return dash.no_update, btn_component
     elif component_selected == "Map":
-        return dash.no_update, btn_component
+        component_content = design_map(id, df)
+        return html.Div(component_content, style={"width": "100%"}), btn_component
     else:
         return html.Div("Not implemented yet", style={"width": "100%"}), btn_component
 
@@ -297,10 +308,10 @@ def register_callbacks_stepper_part_three(app):
             "Table",  # 3 - matches part_two index 3
             "MultiQC",  # 4 - matches part_two index 4
             "Image",  # 5 - matches part_two index 5
+            "Map",  # 6 - matches part_two index 6
             # Text component handled separately (doesn't need DC selection)
             "JBrowse2",
             "Graph",
-            "Map",
         ]
 
         # Only Text can proceed without workflow/data collection selection

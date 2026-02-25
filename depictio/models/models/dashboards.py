@@ -808,6 +808,40 @@ class DashboardDataLite(BaseModel):
                 if comp.get("max_images") and comp["max_images"] != 20:
                     lite_comp["max_images"] = comp["max_images"]
 
+            elif comp_type == "map":
+                lite_comp["lat_column"] = comp.get("lat_column", "")
+                lite_comp["lon_column"] = comp.get("lon_column", "")
+                if comp.get("map_type") and comp["map_type"] != "scatter_map":
+                    lite_comp["map_type"] = comp["map_type"]
+                if comp.get("color_column"):
+                    lite_comp["color_column"] = comp["color_column"]
+                if comp.get("size_column"):
+                    lite_comp["size_column"] = comp["size_column"]
+                if comp.get("hover_columns"):
+                    lite_comp["hover_columns"] = comp["hover_columns"]
+                if comp.get("text_column"):
+                    lite_comp["text_column"] = comp["text_column"]
+                if comp.get("map_style") and comp["map_style"] != "open-street-map":
+                    lite_comp["map_style"] = comp["map_style"]
+                if comp.get("opacity") is not None and comp["opacity"] != 0.8:
+                    lite_comp["opacity"] = comp["opacity"]
+                if comp.get("size_max") and comp["size_max"] != 15:
+                    lite_comp["size_max"] = comp["size_max"]
+                if comp.get("default_zoom") is not None:
+                    lite_comp["default_zoom"] = comp["default_zoom"]
+                if comp.get("default_center"):
+                    lite_comp["default_center"] = comp["default_center"]
+                if comp.get("z_column"):
+                    lite_comp["z_column"] = comp["z_column"]
+                if comp.get("radius") is not None:
+                    lite_comp["radius"] = comp["radius"]
+                if comp.get("selection_enabled") is not None:
+                    lite_comp["selection_enabled"] = comp["selection_enabled"]
+                if comp.get("selection_column"):
+                    lite_comp["selection_column"] = comp["selection_column"]
+                if comp.get("dict_kwargs"):
+                    lite_comp["dict_kwargs"] = comp["dict_kwargs"]
+
             elif comp_type == "multiqc":
                 # MultiQC parameters - export only if present in DB
                 if comp.get("selected_module"):
@@ -990,6 +1024,33 @@ class DashboardDataLite(BaseModel):
                         "thumbnail_size": comp_dict.get("thumbnail_size", 150),
                         "columns": comp_dict.get("columns", 4),
                         "max_images": comp_dict.get("max_images", 20),
+                    }
+                )
+
+            elif comp_type == "map":
+                full_comp.update(
+                    {
+                        "map_type": comp_dict.get("map_type", "scatter_map"),
+                        "lat_column": comp_dict.get("lat_column", ""),
+                        "lon_column": comp_dict.get("lon_column", ""),
+                        "color_column": comp_dict.get("color_column"),
+                        "size_column": comp_dict.get("size_column"),
+                        "hover_columns": comp_dict.get("hover_columns", []),
+                        "text_column": comp_dict.get("text_column"),
+                        "map_style": comp_dict.get("map_style", "open-street-map"),
+                        "default_zoom": comp_dict.get("default_zoom"),
+                        "default_center": comp_dict.get("default_center"),
+                        "opacity": comp_dict.get("opacity", 0.8),
+                        "size_max": comp_dict.get("size_max", 15),
+                        "z_column": comp_dict.get("z_column"),
+                        "radius": comp_dict.get("radius"),
+                        "selection_enabled": comp_dict.get("selection_enabled", False),
+                        "selection_column": comp_dict.get("selection_column"),
+                        "dict_kwargs": comp_dict.get("dict_kwargs", {}),
+                        "displayed_data_count": 0,
+                        "total_data_count": 0,
+                        "was_sampled": False,
+                        "filter_applied": False,
                     }
                 )
 
