@@ -18,11 +18,9 @@ def register_callbacks_map_component(app):
     """
     from .core import register_core_callbacks
     from .selection import register_map_selection_callback
-    from .theme import register_theme_callbacks
 
     register_core_callbacks(app)
     register_map_selection_callback(app)
-    register_theme_callbacks(app)
 
 
 def load_design_callbacks(app):

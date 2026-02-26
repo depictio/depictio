@@ -154,6 +154,7 @@ def register_core_callbacks(app):
         Output({"type": "map-metadata", "index": ALL}, "data"),
         Input({"type": "map-trigger", "index": ALL}, "data"),
         Input("interactive-values-store", "data"),
+        Input("theme-store", "data"),
         State({"type": "map-trigger", "index": ALL}, "id"),
         State({"type": "map-metadata", "index": ALL}, "data"),
         State({"type": "stored-metadata-component", "index": ALL}, "data"),
@@ -161,12 +162,12 @@ def register_core_callbacks(app):
         State({"type": "interactive-stored-metadata", "index": ALL}, "id"),
         State("project-metadata-store", "data"),
         State("local-store", "data"),
-        State("theme-store", "data"),
         prevent_initial_call=False,
     )
     def render_maps_batch(
         trigger_data_list,
         filters_data,
+        theme_data,
         trigger_ids,
         existing_metadata_list,
         stored_metadata_list,
@@ -174,7 +175,6 @@ def register_core_callbacks(app):
         interactive_metadata_ids,
         project_metadata,
         local_data,
-        theme_data,
     ):
         """Batch rendering of all map components."""
         batch_task_id = str(uuid.uuid4())[:8]
