@@ -9,6 +9,29 @@ from dash import MATCH, Input, Output, State
 
 from depictio.api.v1.configs.logging_init import logger
 
+_DESIGN_KEYS = frozenset(
+    {
+        "map_type",
+        "lat_column",
+        "lon_column",
+        "color_column",
+        "size_column",
+        "hover_columns",
+        "map_style",
+        "opacity",
+        "selection_enabled",
+        "selection_column",
+        "locations_column",
+        "featureidkey",
+        "geojson_data",
+        "geojson_url",
+        "geojson_dc_id",
+        "choropleth_aggregation",
+        "color_continuous_scale",
+        "range_color",
+    }
+)
+
 
 def register_map_edit_callback(app):
     """Register edit save callback for map component.
@@ -28,27 +51,6 @@ def register_map_edit_callback(app):
         if not design_data or not current_metadata:
             raise dash.exceptions.PreventUpdate
 
-        # Merge design data into current metadata
-        _DESIGN_KEYS = {
-            "map_type",
-            "lat_column",
-            "lon_column",
-            "color_column",
-            "size_column",
-            "hover_columns",
-            "map_style",
-            "opacity",
-            "selection_enabled",
-            "selection_column",
-            "locations_column",
-            "featureidkey",
-            "geojson_data",
-            "geojson_url",
-            "geojson_dc_id",
-            "choropleth_aggregation",
-            "color_continuous_scale",
-            "range_color",
-        }
         updated = {
             **current_metadata,
             **{k: v for k, v in design_data.items() if k in _DESIGN_KEYS},

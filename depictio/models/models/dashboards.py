@@ -811,61 +811,53 @@ class DashboardDataLite(BaseModel):
                     lite_comp["max_images"] = comp["max_images"]
 
             elif comp_type == "map":
-                if comp.get("lat_column"):
-                    lite_comp["lat_column"] = comp["lat_column"]
-                if comp.get("lon_column"):
-                    lite_comp["lon_column"] = comp["lon_column"]
-                if comp.get("map_type") and comp["map_type"] != "scatter_map":
-                    lite_comp["map_type"] = comp["map_type"]
-                if comp.get("color_column"):
-                    lite_comp["color_column"] = comp["color_column"]
-                if comp.get("size_column"):
-                    lite_comp["size_column"] = comp["size_column"]
-                if comp.get("hover_columns"):
-                    lite_comp["hover_columns"] = comp["hover_columns"]
-                if comp.get("text_column"):
-                    lite_comp["text_column"] = comp["text_column"]
-                if comp.get("map_style") and comp["map_style"] != "open-street-map":
-                    lite_comp["map_style"] = comp["map_style"]
-                if comp.get("opacity") is not None and comp["opacity"] != 1.0:
-                    lite_comp["opacity"] = comp["opacity"]
-                if comp.get("size_max") and comp["size_max"] != 15:
-                    lite_comp["size_max"] = comp["size_max"]
-                if comp.get("default_zoom") is not None:
-                    lite_comp["default_zoom"] = comp["default_zoom"]
-                if comp.get("default_center"):
-                    lite_comp["default_center"] = comp["default_center"]
-                if comp.get("z_column"):
-                    lite_comp["z_column"] = comp["z_column"]
-                if comp.get("radius") is not None:
-                    lite_comp["radius"] = comp["radius"]
-                if comp.get("selection_enabled") is not None:
-                    lite_comp["selection_enabled"] = comp["selection_enabled"]
-                if comp.get("selection_column"):
-                    lite_comp["selection_column"] = comp["selection_column"]
-                if comp.get("title"):
-                    lite_comp["title"] = comp["title"]
-                if comp.get("dict_kwargs"):
-                    lite_comp["dict_kwargs"] = comp["dict_kwargs"]
-                # Choropleth-specific fields
-                if comp.get("locations_column"):
-                    lite_comp["locations_column"] = comp["locations_column"]
-                if comp.get("featureidkey") and comp["featureidkey"] != "id":
-                    lite_comp["featureidkey"] = comp["featureidkey"]
-                if comp.get("geojson_data"):
-                    lite_comp["geojson_data"] = comp["geojson_data"]
-                if comp.get("geojson_url"):
-                    lite_comp["geojson_url"] = comp["geojson_url"]
-                if comp.get("geojson_dc_id"):
-                    lite_comp["geojson_dc_id"] = comp["geojson_dc_id"]
-                if comp.get("geojson_dc_tag"):
-                    lite_comp["geojson_dc_tag"] = comp["geojson_dc_tag"]
-                if comp.get("choropleth_aggregation"):
-                    lite_comp["choropleth_aggregation"] = comp["choropleth_aggregation"]
-                if comp.get("color_continuous_scale"):
-                    lite_comp["color_continuous_scale"] = comp["color_continuous_scale"]
-                if comp.get("range_color"):
-                    lite_comp["range_color"] = comp["range_color"]
+                # Fields exported only when they differ from model defaults
+                _MAP_DEFAULT_SKIP = {
+                    "map_type": "scatter_map",
+                    "map_style": "open-street-map",
+                    "opacity": 1.0,
+                    "size_max": 15,
+                    "featureidkey": "id",
+                }
+                # Fields exported whenever truthy
+                _MAP_TRUTHY_FIELDS = [
+                    "lat_column",
+                    "lon_column",
+                    "color_column",
+                    "size_column",
+                    "hover_columns",
+                    "text_column",
+                    "default_center",
+                    "z_column",
+                    "selection_column",
+                    "title",
+                    "dict_kwargs",
+                    "locations_column",
+                    "geojson_data",
+                    "geojson_url",
+                    "geojson_dc_id",
+                    "geojson_dc_tag",
+                    "choropleth_aggregation",
+                    "color_continuous_scale",
+                    "range_color",
+                ]
+                # Fields exported when not None (even if falsy like 0 or False)
+                _MAP_NOT_NONE_FIELDS = [
+                    "default_zoom",
+                    "radius",
+                    "selection_enabled",
+                ]
+
+                for field, default in _MAP_DEFAULT_SKIP.items():
+                    val = comp.get(field)
+                    if val is not None and val != default:
+                        lite_comp[field] = val
+                for field in _MAP_TRUTHY_FIELDS:
+                    if comp.get(field):
+                        lite_comp[field] = comp[field]
+                for field in _MAP_NOT_NONE_FIELDS:
+                    if comp.get(field) is not None:
+                        lite_comp[field] = comp[field]
 
             elif comp_type == "multiqc":
                 # MultiQC parameters - export only if present in DB
@@ -1053,36 +1045,39 @@ class DashboardDataLite(BaseModel):
                 )
 
             elif comp_type == "map":
+                _MAP_FULL_DEFAULTS: dict[str, Any] = {
+                    "map_type": "scatter_map",
+                    "lat_column": None,
+                    "lon_column": None,
+                    "color_column": None,
+                    "size_column": None,
+                    "hover_columns": [],
+                    "text_column": None,
+                    "map_style": "open-street-map",
+                    "default_zoom": None,
+                    "default_center": None,
+                    "opacity": 1.0,
+                    "size_max": 15,
+                    "z_column": None,
+                    "radius": None,
+                    "selection_enabled": False,
+                    "selection_column": None,
+                    "title": None,
+                    "dict_kwargs": {},
+                    "locations_column": None,
+                    "featureidkey": "id",
+                    "geojson_data": None,
+                    "geojson_url": None,
+                    "geojson_dc_id": None,
+                    "geojson_dc_tag": None,
+                    "choropleth_aggregation": None,
+                    "color_continuous_scale": None,
+                    "range_color": None,
+                }
+                for field, default in _MAP_FULL_DEFAULTS.items():
+                    full_comp[field] = comp_dict.get(field, default)
                 full_comp.update(
                     {
-                        "map_type": comp_dict.get("map_type", "scatter_map"),
-                        "lat_column": comp_dict.get("lat_column"),
-                        "lon_column": comp_dict.get("lon_column"),
-                        "color_column": comp_dict.get("color_column"),
-                        "size_column": comp_dict.get("size_column"),
-                        "hover_columns": comp_dict.get("hover_columns", []),
-                        "text_column": comp_dict.get("text_column"),
-                        "map_style": comp_dict.get("map_style", "open-street-map"),
-                        "default_zoom": comp_dict.get("default_zoom"),
-                        "default_center": comp_dict.get("default_center"),
-                        "opacity": comp_dict.get("opacity", 1.0),
-                        "size_max": comp_dict.get("size_max", 15),
-                        "z_column": comp_dict.get("z_column"),
-                        "radius": comp_dict.get("radius"),
-                        "selection_enabled": comp_dict.get("selection_enabled", False),
-                        "selection_column": comp_dict.get("selection_column"),
-                        "title": comp_dict.get("title"),
-                        "dict_kwargs": comp_dict.get("dict_kwargs", {}),
-                        # Choropleth-specific fields
-                        "locations_column": comp_dict.get("locations_column"),
-                        "featureidkey": comp_dict.get("featureidkey", "id"),
-                        "geojson_data": comp_dict.get("geojson_data"),
-                        "geojson_url": comp_dict.get("geojson_url"),
-                        "geojson_dc_id": comp_dict.get("geojson_dc_id"),
-                        "geojson_dc_tag": comp_dict.get("geojson_dc_tag"),
-                        "choropleth_aggregation": comp_dict.get("choropleth_aggregation"),
-                        "color_continuous_scale": comp_dict.get("color_continuous_scale"),
-                        "range_color": comp_dict.get("range_color"),
                         "displayed_data_count": 0,
                         "total_data_count": 0,
                         "was_sampled": False,

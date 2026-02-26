@@ -10,7 +10,6 @@ import concurrent.futures
 import hashlib
 import json
 import time
-import uuid
 from typing import Any
 
 import dash
@@ -157,7 +156,6 @@ def register_core_callbacks(app):
         Input("theme-store", "data"),
         State({"type": "map-trigger", "index": ALL}, "id"),
         State({"type": "map-metadata", "index": ALL}, "data"),
-        State({"type": "stored-metadata-component", "index": ALL}, "data"),
         State({"type": "interactive-stored-metadata", "index": ALL}, "data"),
         State({"type": "interactive-stored-metadata", "index": ALL}, "id"),
         State("project-metadata-store", "data"),
@@ -170,15 +168,12 @@ def register_core_callbacks(app):
         theme_data,
         trigger_ids,
         existing_metadata_list,
-        stored_metadata_list,
         interactive_metadata_list,
         interactive_metadata_ids,
         project_metadata,
         local_data,
     ):
         """Batch rendering of all map components."""
-        batch_task_id = str(uuid.uuid4())[:8]
-
         if not trigger_data_list or not trigger_ids:
             raise dash.exceptions.PreventUpdate
 
@@ -312,7 +307,7 @@ def register_core_callbacks(app):
                 all_metadata.append(metadata)
 
             except Exception as e:
-                logger.error(f"[{batch_task_id}-{i}] Map render failed: {e}", exc_info=True)
+                logger.error(f"Map render failed for component {component_id}: {e}", exc_info=True)
                 all_figures.append({"data": [], "layout": {"title": f"Error: {e}"}})
                 all_metadata.append({})
 

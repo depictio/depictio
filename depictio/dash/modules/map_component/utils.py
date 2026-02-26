@@ -28,37 +28,52 @@ def build_map(**kwargs) -> html.Div:
     """
     index = kwargs.get("index", "")
 
-    # Build trigger data for the core rendering callback
+    # Build trigger data for the core rendering callback.
+    # Fields with explicit defaults; all others default to None.
+    _TRIGGER_DEFAULTS: dict[str, Any] = {
+        "map_type": "scatter_map",
+        "lat_column": "",
+        "lon_column": "",
+        "hover_columns": [],
+        "map_style": "carto-positron",
+        "opacity": 1.0,
+        "size_max": 15,
+        "selection_enabled": False,
+        "dict_kwargs": {},
+        "featureidkey": "id",
+    }
+    _TRIGGER_FIELDS = [
+        "wf_id",
+        "dc_id",
+        "map_type",
+        "lat_column",
+        "lon_column",
+        "color_column",
+        "size_column",
+        "hover_columns",
+        "text_column",
+        "map_style",
+        "default_zoom",
+        "default_center",
+        "opacity",
+        "size_max",
+        "z_column",
+        "radius",
+        "selection_enabled",
+        "selection_column",
+        "title",
+        "dict_kwargs",
+        "locations_column",
+        "featureidkey",
+        "geojson_data",
+        "geojson_url",
+        "choropleth_aggregation",
+        "color_continuous_scale",
+        "range_color",
+        "geojson_dc_id",
+    ]
     trigger_data = {
-        "wf_id": kwargs.get("wf_id"),
-        "dc_id": kwargs.get("dc_id"),
-        "map_type": kwargs.get("map_type", "scatter_map"),
-        "lat_column": kwargs.get("lat_column", ""),
-        "lon_column": kwargs.get("lon_column", ""),
-        "color_column": kwargs.get("color_column"),
-        "size_column": kwargs.get("size_column"),
-        "hover_columns": kwargs.get("hover_columns", []),
-        "text_column": kwargs.get("text_column"),
-        "map_style": kwargs.get("map_style", "carto-positron"),
-        "default_zoom": kwargs.get("default_zoom"),
-        "default_center": kwargs.get("default_center"),
-        "opacity": kwargs.get("opacity", 1.0),
-        "size_max": kwargs.get("size_max", 15),
-        "z_column": kwargs.get("z_column"),
-        "radius": kwargs.get("radius"),
-        "selection_enabled": kwargs.get("selection_enabled", False),
-        "selection_column": kwargs.get("selection_column"),
-        "title": kwargs.get("title"),
-        "dict_kwargs": kwargs.get("dict_kwargs", {}),
-        # Choropleth-specific fields
-        "locations_column": kwargs.get("locations_column"),
-        "featureidkey": kwargs.get("featureidkey", "id"),
-        "geojson_data": kwargs.get("geojson_data"),
-        "geojson_url": kwargs.get("geojson_url"),
-        "choropleth_aggregation": kwargs.get("choropleth_aggregation"),
-        "color_continuous_scale": kwargs.get("color_continuous_scale"),
-        "range_color": kwargs.get("range_color"),
-        "geojson_dc_id": kwargs.get("geojson_dc_id"),
+        field: kwargs.get(field, _TRIGGER_DEFAULTS.get(field)) for field in _TRIGGER_FIELDS
     }
 
     return html.Div(
@@ -320,24 +335,7 @@ def render_map(
     }
 
     try:
-        if map_type == "scatter_map":
-            fig = _render_scatter_map(
-                pandas_df,
-                lat_column=lat_column,
-                lon_column=lon_column,
-                color_column=color_column,
-                size_column=size_column,
-                hover_columns=hover_columns,
-                text_column=text_column,
-                size_max=size_max,
-                selection_enabled=selection_enabled,
-                selection_column=selection_column,
-                extra_kwargs=extra_kwargs,
-                opacity=opacity,
-                color_discrete_map=color_discrete_map,
-                **common_kwargs,
-            )
-        elif map_type == "density_map":
+        if map_type == "density_map":
             fig = _render_density_map(
                 pandas_df,
                 lat_column=lat_column,
@@ -364,7 +362,8 @@ def render_map(
                 **common_kwargs,
             )
         else:
-            logger.warning(f"Unsupported map_type: {map_type}, falling back to scatter_map")
+            if map_type != "scatter_map":
+                logger.warning(f"Unsupported map_type: {map_type}, falling back to scatter_map")
             fig = _render_scatter_map(
                 pandas_df,
                 lat_column=lat_column,
@@ -450,6 +449,13 @@ def render_map(
     return fig, data_info
 
 
+def _merge_extra_kwargs(kwargs: dict[str, Any], extra_kwargs: dict) -> None:
+    """Merge non-None extra kwargs into the Plotly Express kwargs dict."""
+    for k, v in extra_kwargs.items():
+        if v is not None:
+            kwargs[k] = v
+
+
 def _render_scatter_map(
     df: Any,
     lat_column: str,
@@ -494,10 +500,7 @@ def _render_scatter_map(
     if selection_enabled and selection_column and selection_column in df.columns:
         kwargs["custom_data"] = [selection_column]
 
-    # Apply extra kwargs
-    for k, v in extra_kwargs.items():
-        if v is not None:
-            kwargs[k] = v
+    _merge_extra_kwargs(kwargs, extra_kwargs)
 
     fig = px.scatter_map(**kwargs)
 
@@ -538,10 +541,7 @@ def _render_density_map(
     if radius is not None:
         kwargs["radius"] = radius
 
-    # Apply extra kwargs
-    for k, v in extra_kwargs.items():
-        if v is not None:
-            kwargs[k] = v
+    _merge_extra_kwargs(kwargs, extra_kwargs)
 
     return px.density_map(**kwargs)
 
@@ -578,10 +578,8 @@ def _render_choropleth_map(
     if choropleth_aggregation and locations_column in df.columns:
         if choropleth_aggregation == "count":
             agg_col = color_column or locations_column
-            plot_df = (
-                df.groupby(locations_column, as_index=False)
-                .agg(**{agg_col: (agg_col, "count")})
-                .rename(columns={agg_col: agg_col})
+            plot_df = df.groupby(locations_column, as_index=False).agg(
+                **{agg_col: (agg_col, "count")}
             )
             # For count, the aggregated column IS the color column
             if not color_column:
@@ -612,9 +610,6 @@ def _render_choropleth_map(
         if valid_hover:
             kwargs["hover_data"] = valid_hover
 
-    # Apply extra kwargs
-    for k, v in extra_kwargs.items():
-        if v is not None:
-            kwargs[k] = v
+    _merge_extra_kwargs(kwargs, extra_kwargs)
 
     return px.choropleth_map(**kwargs)
