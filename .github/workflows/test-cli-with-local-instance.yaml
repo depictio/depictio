@@ -96,7 +96,7 @@ jobs:
           cd depictio/cli
           source venv/bin/activate
           depictio-cli --verbose -vl ERROR config validate-project-config \
-                              --project-config-path ../projects/reference/penguins/project.yaml \
+                              --project-config-path ../projects/init/penguins/project.yaml \
                               --CLI-config-path ../.depictio/admin_config.yaml
 
       - name: Penguin - Check S3 Storage
@@ -120,7 +120,7 @@ jobs:
           source venv/bin/activate
           depictio-cli --verbose -vl ERROR config sync-project-config-to-server \
                               --update \
-                              --project-config-path ../projects/reference/penguins/project.yaml \
+                              --project-config-path ../projects/init/penguins/project.yaml \
                               --CLI-config-path ../.depictio/admin_config.yaml
 
       - name: Penguin - Scan Iris Dataset Files
@@ -129,7 +129,7 @@ jobs:
           source venv/bin/activate
           depictio-cli --verbose -vl ERROR data scan \
                               --sync-files --rescan-folders \
-                              --project-config-path ../projects/reference/penguins/project.yaml \
+                              --project-config-path ../projects/init/penguins/project.yaml \
                               --CLI-config-path ../.depictio/admin_config.yaml
 
       - name: Penguin - Process Iris Dataset
@@ -138,5 +138,5 @@ jobs:
           source venv/bin/activate
           depictio-cli --verbose -vl ERROR data process \
                               --overwrite \
-                              --project-config-path ../projects/reference/penguins/project.yaml \
+                              --project-config-path ../projects/init/penguins/project.yaml \
                               --CLI-config-path ../.depictio/admin_config.yaml

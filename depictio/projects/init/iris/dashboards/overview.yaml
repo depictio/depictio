@@ -1,7 +1,8 @@
-# Minimal Iris Dashboard - DashboardDataLite format
-# This file can be imported directly with: depictio dashboard import dashboard_lite.yaml
+# Iris Dataset Dashboard - DashboardDataLite format
+# This file can be imported directly with: depictio dashboard import overview.yaml
+version: 1
 
-title: "Iris Dataset Analysis (Lite)"
+title: "Iris Dataset Analysis"
 subtitle: "A minimal dashboard showcasing the Iris dataset"
 project_tag: "Iris Dataset Project Data Analysis"  # Server looks up project by name
 

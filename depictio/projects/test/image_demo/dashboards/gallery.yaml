@@ -1,4 +1,5 @@
 # Image Component Demo Dashboard
+version: 1
 title: "Image Component Demo"
 subtitle: "Demonstrating the image gallery component with cross-DC filtering"
 project_tag: "Image Component Demo Project"

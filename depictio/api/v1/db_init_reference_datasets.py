@@ -47,16 +47,6 @@ STATIC_IDS = {
             "ampliseq_differential": "646b0f3c1e4a2d7f8e5b8cb4",  # Differential Abundance tab
         },
     },
-    "multiqc": {
-        "project": "646b0f3c1e4a2d7f8e5b8cad",
-        "workflows": {"test-workflow": "646b0f3c1e4a2d7f8e5b8cae"},
-        "data_collections": {
-            "multiqc_data": "646b0f3c1e4a2d7f8e5b8caf",
-            "sample_metadata": "646b0f3c1e4a2d7f8e5b8cb0",
-            "sample_qc_metrics": "646b0f3c1e4a2d7f8e5b8cb1",
-            "qc_with_metadata": "646b0f3c1e4a2d7f8e5b8cb2",  # Join result
-        },
-    },
 }
 
 
@@ -183,19 +173,26 @@ class ReferenceDatasetRegistry:
             )
             logger.info(f"Registered {len(resolved_links)} links for project {project.name}")
 
+    # Dataset name → relative path under depictio/projects/
+    DATASET_PATHS: dict[str, str] = {
+        "iris": os.path.join("init", "iris"),
+        "penguins": os.path.join("init", "penguins"),
+        "ampliseq": os.path.join("nf-core", "ampliseq", "2.14.0"),
+    }
+
     @classmethod
     async def create_reference_project(
         cls, dataset_name: str, admin_user: UserBeanie, token_payload: dict[str, Any]
     ) -> dict[str, Any]:
         """Create a reference project with proper static IDs."""
         # Load project.yaml
+        rel_path = cls.DATASET_PATHS[dataset_name]
         project_yaml_path = os.path.join(
             os.path.dirname(__file__),
             "..",
             "..",
             "projects",
-            "init" if dataset_name == "iris" else "reference",
-            dataset_name,
+            rel_path,
             "project.yaml",
         )
         project_config = get_config(project_yaml_path)
@@ -353,12 +350,7 @@ async def create_reference_datasets(
     """Create all reference datasets (iris, penguins, ampliseq).
 
     Note: ampliseq dataset uses 16S rRNA microbiome data from nf-core/ampliseq.
-    Data files are included:
-    - depictio/projects/reference/ampliseq/multiqc.parquet
-    - depictio/projects/reference/ampliseq/merged_metadata.tsv
-    - depictio/projects/reference/ampliseq/faith_pd_long.tsv
-    - depictio/projects/reference/ampliseq/taxonomy_long.tsv
-    - depictio/projects/reference/ampliseq/ancom_volcano.tsv
+    Data files are included under depictio/projects/nf-core/ampliseq/2.14.0/.
     """
     created_projects = []
 

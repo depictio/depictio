@@ -2,6 +2,7 @@
 # Uses a single Image DC with delta table support (like Table DC but with mandatory image_column)
 id: "650a1b2c3d4e5f6a7b8c9d0e"
 name: "Image Component Demo Project"
+project_type: "basic"
 is_public: true
 workflows:
   - id: "650a1b2c3d4e5f6a7b8c9d0f"
@@ -24,7 +25,7 @@ workflows:
           scan:
             mode: single
             scan_parameters:
-              filename: ../projects/test/image_demo/images_data.csv
+              filename: ../projects/test/image_demo/data/images_data.csv
           dc_specific_properties:
             # Table DC fields (required for delta table creation)
             format: "csv"
