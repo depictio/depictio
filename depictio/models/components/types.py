@@ -14,7 +14,7 @@ ComponentType = Literal["card", "figure", "interactive", "table", "text", "jbrow
 MapType = Literal["scatter_map", "density_map", "choropleth_map"]
 
 # Chart/visualization types (from figure_component/definitions.py)
-ChartType = Literal["scatter", "line", "bar", "box", "histogram"]
+ChartType = Literal["scatter", "line", "bar", "box", "histogram", "heatmap"]
 
 # Aggregation functions (from card_component/utils.py AGGREGATION_MAPPING)
 AggregationFunction = Literal[

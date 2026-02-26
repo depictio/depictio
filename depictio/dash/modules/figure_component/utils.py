@@ -17,6 +17,55 @@ from .clustering import get_clustering_function
 from .definitions import get_visualization_definition
 from .models import ComponentConfig
 
+# ---------------------------------------------------------------------------
+# Heatmap parameter sets – shared with callbacks/core.py
+# ---------------------------------------------------------------------------
+
+# Parameters accepted by ComplexHeatmap.from_dataframe()
+HEATMAP_FROM_DF_PARAMS: frozenset[str] = frozenset(
+    {
+        "index_column",
+        "value_columns",
+        "row_annotations",
+        "col_annotations",
+        "row_annotation_side",
+        "col_annotation_side",
+    }
+)
+
+# Parameters accepted by ComplexHeatmap.__init__()
+HEATMAP_INIT_PARAMS: frozenset[str] = frozenset(
+    {
+        "cluster_rows",
+        "cluster_cols",
+        "colorscale",
+        "normalize",
+        "use_webgl",
+        "split_rows_by",
+        "cluster_method",
+        "cluster_metric",
+        "dendro_ratio",
+        "name",
+        "width",
+        "height",
+    }
+)
+
+# Combined set of all recognized heatmap parameters
+HEATMAP_PARAMS: frozenset[str] = HEATMAP_FROM_DF_PARAMS | HEATMAP_INIT_PARAMS
+
+# Parameters that accept comma-separated list values
+HEATMAP_LIST_PARAMS: frozenset[str] = frozenset({"value_columns", "row_annotations"})
+
+# Boolean heatmap parameters
+HEATMAP_BOOL_PARAMS: frozenset[str] = frozenset({"cluster_rows", "cluster_cols", "use_webgl"})
+
+# Integer heatmap parameters
+HEATMAP_INT_PARAMS: frozenset[str] = frozenset({"width", "height"})
+
+# Float heatmap parameters
+HEATMAP_FLOAT_PARAMS: frozenset[str] = frozenset({"dendro_ratio"})
+
 
 def stringify_id(id_dict):
     """Convert dictionary ID to string format exactly as Dash does internally.
@@ -248,8 +297,8 @@ def _get_required_parameters(visu_type: str) -> List[str]:
                 required_params = ["values"]  # Hierarchical charts need values
             elif visu_type.lower() in ["timeline"]:
                 required_params = ["x_start"]  # Timeline needs start time
-            elif visu_type.lower() in ["umap", "clustering"]:
-                # Clustering visualizations don't have required parameters
+            elif visu_type.lower() in ["umap", "clustering", "heatmap"]:
+                # Clustering/heatmap visualizations don't have required parameters
                 required_params = []
             elif visu_type.lower() in ["bar", "line", "area"]:
                 # These can work with either X or Y, but need at least one
@@ -272,7 +321,7 @@ def _get_required_parameters(visu_type: str) -> List[str]:
             return ["y"]
         elif visu_type.lower() in ["pie", "sunburst", "treemap"]:
             return ["values"]
-        elif visu_type.lower() in ["umap", "clustering"]:
+        elif visu_type.lower() in ["umap", "clustering", "heatmap"]:
             return []
         else:
             # Default: no strict requirements for unknown visualizations
@@ -875,7 +924,11 @@ def _apply_colors_to_multiple_traces(
 
 
 def _finalize_figure(
-    figure: Any, cleaned_kwargs: dict, selected_point: dict | None, df: pl.DataFrame
+    figure: Any,
+    cleaned_kwargs: dict,
+    selected_point: dict | None,
+    df: pl.DataFrame,
+    visu_type: str = "",
 ) -> Any:
     """
     Apply final configuration to the figure.
@@ -885,10 +938,16 @@ def _finalize_figure(
         cleaned_kwargs: Parameter dictionary
         selected_point: Optional point to highlight
         df: DataFrame
+        visu_type: Visualization type (used to skip layout overrides for custom types)
 
     Returns:
         Finalized figure
     """
+    # Heatmap figures have precisely computed margins/layout from ComplexHeatmap;
+    # skip the generic margin/autosize override so dendrograms render correctly.
+    if visu_type.lower() == "heatmap":
+        return figure
+
     # Fix marginal plot axis constraints
     if "marginal_x" in cleaned_kwargs or "marginal_y" in cleaned_kwargs:
         figure.update_xaxes(matches=None)
@@ -1046,7 +1105,8 @@ def render_figure(
 
     # Validate and normalize visualization type
     is_clustering = visu_type.lower() in ["umap"]
-    if not is_clustering and visu_type.lower() not in PLOTLY_FUNCTIONS:
+    is_heatmap = visu_type.lower() == "heatmap"
+    if not is_clustering and not is_heatmap and visu_type.lower() not in PLOTLY_FUNCTIONS:
         logger.warning(f"Unknown visualization type: {visu_type}, falling back to scatter")
         visu_type = "scatter"
 
@@ -1087,14 +1147,16 @@ def render_figure(
         for param, value in cleaned_kwargs.items()
         if value is not None and value != "" and param != "template"
     ]
-    if not valid_plot_params and not is_clustering:
+    if not valid_plot_params and not is_clustering and not is_heatmap:
         return _create_theme_aware_figure(
             dict_kwargs.get("template"),
             title=f"Select columns to create {visu_type} plot",
         ), data_info
 
     try:
-        if is_clustering:
+        if is_heatmap:
+            figure, data_info = _render_heatmap_figure(df, cleaned_kwargs, data_info)
+        elif is_clustering:
             figure = _render_clustering_figure(
                 df, visu_type, cleaned_kwargs, cutoff, force_full_data
             )
@@ -1104,7 +1166,7 @@ def render_figure(
             )
 
         # Finalize figure
-        figure = _finalize_figure(figure, cleaned_kwargs, selected_point, df)
+        figure = _finalize_figure(figure, cleaned_kwargs, selected_point, df, visu_type)
 
         # Apply post-rendering customizations if provided
         if customizations:
@@ -1156,6 +1218,101 @@ def _render_clustering_figure(
         return clustering_function(sampled_df, **cleaned_kwargs)
     else:
         return clustering_function(df, **cleaned_kwargs)
+
+
+def _parse_heatmap_param(key: str, val: Any) -> Any:
+    """Parse a single heatmap parameter value from YAML/JSON string forms.
+
+    Handles JSON-encoded strings, comma-separated lists, booleans, and
+    numeric types for ComplexHeatmap parameters.
+    """
+    if not isinstance(val, str):
+        return val
+
+    stripped = val.strip()
+
+    # JSON-encoded dicts/lists (row_annotations, col_annotations, value_columns)
+    if stripped.startswith(("{", "[")):
+        try:
+            return json.loads(val)
+        except (json.JSONDecodeError, ValueError):
+            pass
+
+    # Comma-separated list params (value_columns, row_annotations)
+    if key in HEATMAP_LIST_PARAMS:
+        return [s.strip() for s in val.split(",") if s.strip()]
+
+    # Boolean params
+    if key in HEATMAP_BOOL_PARAMS:
+        return stripped.lower() in ("true", "1", "yes")
+
+    # Float params
+    if key in HEATMAP_FLOAT_PARAMS:
+        try:
+            return float(val)
+        except ValueError:
+            return None
+
+    # Integer params
+    if key in HEATMAP_INT_PARAMS:
+        try:
+            return int(val)
+        except ValueError:
+            return None
+
+    return val
+
+
+def _collect_heatmap_kwargs(cleaned_kwargs: dict) -> dict[str, Any]:
+    """Filter and parse heatmap-specific parameters from the full kwargs dict.
+
+    Args:
+        cleaned_kwargs: Full parameter dictionary (may contain non-heatmap keys)
+
+    Returns:
+        Dictionary of parsed parameters suitable for ComplexHeatmap
+    """
+    heatmap_kwargs: dict[str, Any] = {}
+    for k, v in cleaned_kwargs.items():
+        if k in HEATMAP_PARAMS and v is not None and v != "":
+            parsed = _parse_heatmap_param(k, v)
+            if parsed is not None:
+                heatmap_kwargs[k] = parsed
+    return heatmap_kwargs
+
+
+def _render_heatmap_figure(
+    df: pl.DataFrame,
+    cleaned_kwargs: dict,
+    data_info: dict,
+) -> tuple[Any, dict]:
+    """Render a heatmap figure using plotly-complexheatmap.
+
+    Supports the full ``ComplexHeatmap.from_dataframe()`` API:
+      - ``row_annotations``: list of column names **or** dict mapping column
+        names to config (e.g. ``{"score": {"type": "scatter"}}``).
+      - ``col_annotations``: dict of external per-column metadata passed
+        directly to ``HeatmapAnnotation`` (not from the DataFrame).
+    """
+    from plotly_complexheatmap import ComplexHeatmap
+
+    heatmap_kwargs = _collect_heatmap_kwargs(cleaned_kwargs)
+    data_info["total_data_count"] = df.height
+
+    hm = ComplexHeatmap.from_dataframe(df, **heatmap_kwargs)
+    figure = hm.to_plotly()
+
+    # Clear fixed dimensions so the dcc.Graph responsive config takes over,
+    # and set transparent background for theme compatibility.
+    figure.update_layout(
+        autosize=True,
+        width=None,
+        height=None,
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+    )
+
+    return figure, data_info
 
 
 def _render_standard_figure(

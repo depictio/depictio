@@ -990,6 +990,7 @@ _VISUALIZATION_ICONS: Dict[str, str] = {
     "parallel_coordinates": "mdi:chart-line-variant",
     "parallel_categories": "mdi:chart-sankey",
     "umap": "mdi:scatter-plot",
+    "heatmap": "mdi:grid-large",
 }
 
 # Visualizations temporarily disabled from the UI
@@ -1019,7 +1020,7 @@ def discover_all_visualizations() -> Dict[str, VisualizationDefinition]:
         Dictionary mapping function names to visualization definitions.
     """
     functions = get_available_plotly_functions()
-    functions.extend(["umap"])  # Add custom clustering functions
+    functions.extend(["umap", "heatmap"])  # Add custom visualization functions
 
     visualizations = {}
 
@@ -1030,6 +1031,8 @@ def discover_all_visualizations() -> Dict[str, VisualizationDefinition]:
         try:
             if func_name == "umap":
                 viz_def = create_umap_visualization_definition()
+            elif func_name == "heatmap":
+                viz_def = create_heatmap_visualization_definition()
             else:
                 viz_def = parameter_inspector.create_visualization_definition(
                     func_name=func_name,
@@ -1211,6 +1214,191 @@ def create_umap_visualization_definition() -> VisualizationDefinition:
         parameters=umap_parameters,
         icon="mdi:scatter-plot",
         group=VisualizationGroup.CLUSTERING,
+    )
+
+
+def create_heatmap_visualization_definition() -> VisualizationDefinition:
+    """Create ComplexHeatmap visualization definition with custom parameters."""
+
+    heatmap_parameters = [
+        # Core parameters
+        ParameterDefinition(
+            name="index_column",
+            type=ParameterType.COLUMN,
+            category=ParameterCategory.CORE,
+            label="Index Column",
+            description="Column to use as row labels",
+            required=False,
+        ),
+        ParameterDefinition(
+            name="value_columns",
+            type=ParameterType.MULTI_SELECT,
+            category=ParameterCategory.CORE,
+            label="Value Columns",
+            description="Numeric columns for the heatmap matrix (if empty, all numeric columns are used)",
+            required=False,
+            options=[],
+        ),
+        ParameterDefinition(
+            name="row_annotations",
+            type=ParameterType.MULTI_SELECT,
+            category=ParameterCategory.CORE,
+            label="Row Annotations",
+            description="Columns to display as annotation tracks alongside the heatmap",
+            required=False,
+            options=[],
+        ),
+        # Heatmap-specific parameters
+        ParameterDefinition(
+            name="cluster_rows",
+            type=ParameterType.BOOLEAN,
+            category=ParameterCategory.SPECIFIC,
+            label="Cluster Rows",
+            description="Perform hierarchical clustering on rows",
+            default=True,
+            required=False,
+        ),
+        ParameterDefinition(
+            name="cluster_cols",
+            type=ParameterType.BOOLEAN,
+            category=ParameterCategory.SPECIFIC,
+            label="Cluster Columns",
+            description="Perform hierarchical clustering on columns",
+            default=True,
+            required=False,
+        ),
+        ParameterDefinition(
+            name="normalize",
+            type=ParameterType.SELECT,
+            category=ParameterCategory.SPECIFIC,
+            label="Normalize",
+            description="Z-score normalization method",
+            options=["none", "row", "column", "global"],
+            default="none",
+            required=False,
+        ),
+        ParameterDefinition(
+            name="colorscale",
+            type=ParameterType.SELECT,
+            category=ParameterCategory.SPECIFIC,
+            label="Colorscale",
+            description="Heatmap colorscale",
+            options=[
+                "RdBu_r",
+                "Viridis",
+                "Plasma",
+                "Inferno",
+                "Magma",
+                "Cividis",
+                "Blues",
+                "Reds",
+                "YlOrRd",
+                "YlGnBu",
+                "Picnic",
+            ],
+            default="RdBu_r",
+            required=False,
+        ),
+        ParameterDefinition(
+            name="cluster_method",
+            type=ParameterType.SELECT,
+            category=ParameterCategory.SPECIFIC,
+            label="Cluster Method",
+            description="Linkage method for hierarchical clustering",
+            options=["ward", "complete", "average", "single", "weighted", "centroid", "median"],
+            default="ward",
+            required=False,
+        ),
+        ParameterDefinition(
+            name="cluster_metric",
+            type=ParameterType.SELECT,
+            category=ParameterCategory.SPECIFIC,
+            label="Distance Metric",
+            description="Distance metric for clustering",
+            options=["euclidean", "cityblock", "cosine", "correlation", "chebyshev"],
+            default="euclidean",
+            required=False,
+        ),
+        ParameterDefinition(
+            name="split_rows_by",
+            type=ParameterType.COLUMN,
+            category=ParameterCategory.SPECIFIC,
+            label="Split Rows By",
+            description="Column or annotation track to split the heatmap into row groups",
+            required=False,
+        ),
+        ParameterDefinition(
+            name="row_annotation_side",
+            type=ParameterType.SELECT,
+            category=ParameterCategory.SPECIFIC,
+            label="Row Annotation Side",
+            description="Side for row annotations",
+            options=["right", "left"],
+            default="right",
+            required=False,
+        ),
+        ParameterDefinition(
+            name="col_annotation_side",
+            type=ParameterType.SELECT,
+            category=ParameterCategory.SPECIFIC,
+            label="Column Annotation Side",
+            description="Side for column annotations",
+            options=["top", "bottom"],
+            default="top",
+            required=False,
+        ),
+        ParameterDefinition(
+            name="dendro_ratio",
+            type=ParameterType.FLOAT,
+            category=ParameterCategory.SPECIFIC,
+            label="Dendrogram Ratio",
+            description="Fraction of figure allocated to each dendrogram",
+            default=0.08,
+            min_value=0.01,
+            max_value=0.3,
+            required=False,
+        ),
+        # Common visualization parameters
+        ParameterDefinition(
+            name="name",
+            type=ParameterType.STRING,
+            category=ParameterCategory.COMMON,
+            label="Colorbar Title",
+            description="Title for the heatmap colorbar",
+            required=False,
+        ),
+        ParameterDefinition(
+            name="width",
+            type=ParameterType.INTEGER,
+            category=ParameterCategory.COMMON,
+            label="Width",
+            description="Figure width in pixels",
+            default=900,
+            min_value=300,
+            max_value=2000,
+            required=False,
+        ),
+        ParameterDefinition(
+            name="height",
+            type=ParameterType.INTEGER,
+            category=ParameterCategory.COMMON,
+            label="Height",
+            description="Figure height in pixels",
+            default=700,
+            min_value=300,
+            max_value=2000,
+            required=False,
+        ),
+    ]
+
+    return VisualizationDefinition(
+        name="heatmap",
+        function_name="heatmap",
+        label="Heatmap",
+        description="Clustered heatmap with dendrograms and annotation tracks",
+        parameters=heatmap_parameters,
+        icon="mdi:grid-large",
+        group=VisualizationGroup.SPECIALIZED,
     )
 
 

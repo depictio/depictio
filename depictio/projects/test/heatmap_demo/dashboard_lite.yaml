@@ -1,0 +1,206 @@
+# Heatmap Demo Dashboard - Showcases plotly-complexheatmap integration
+# Demonstrates all heatmap features available via YAML dict_kwargs
+#
+# Import with: depictio dashboard import dashboard_lite.yaml
+
+title: "Gene Expression Heatmap Showcase"
+subtitle: "Demonstrates heatmap clustering, annotations, splitting, and colorscales"
+project_tag: "Heatmap Demo Project"
+
+components:
+
+  # =========================================================================
+  # 1. MINIMAL HEATMAP — auto-detected annotations from DataFrame columns
+  # =========================================================================
+  # Simplest heatmap: just specify index_column and row_annotations as a list.
+  # Numeric columns are auto-detected as the data matrix.
+  # Row annotations auto-detect type: categorical → color track, numeric → bar.
+  - tag: heatmap-minimal
+    component_type: figure
+    workflow_tag: python/heatmap_workflow
+    data_collection_tag: gene_expression
+    visu_type: heatmap
+    dict_kwargs:
+      index_column: gene
+      row_annotations: '["pathway"]'
+      cluster_rows: true
+      cluster_cols: true
+      normalize: row
+      name: z-score
+      width: 900
+      height: 700
+
+  # =========================================================================
+  # 2. MULTI-LAYER ROW ANNOTATIONS — bar + scatter + categorical tracks
+  # =========================================================================
+  # Row annotations as a dict: keys are column names, values configure the track.
+  # Empty dict {} = auto-detect type. Explicit {"type": "bar"} forces bar track.
+  - tag: heatmap-multi-annotation
+    component_type: figure
+    workflow_tag: python/heatmap_workflow
+    data_collection_tag: gene_expression
+    visu_type: heatmap
+    dict_kwargs:
+      index_column: gene
+      row_annotations: '{"pathway": {}, "gene_length_kb": {"type": "bar", "color": "#4C78A8"}, "gc_content": {"type": "scatter", "color": "#E45756"}, "mutation_score": {"type": "bar", "color": "#72B7B2"}}'
+      cluster_rows: true
+      cluster_cols: true
+      normalize: row
+      colorscale: Viridis
+      name: expression
+      width: 1100
+      height: 800
+
+  # =========================================================================
+  # 3. SPLIT HEATMAP — rows grouped by pathway with independent clustering
+  # =========================================================================
+  # split_rows_by groups rows into blocks by a categorical column.
+  # Each block is clustered independently when cluster_rows is true.
+  # value_columns explicitly selects which columns are the data matrix.
+  - tag: heatmap-split
+    component_type: figure
+    workflow_tag: python/heatmap_workflow
+    data_collection_tag: gene_expression
+    visu_type: heatmap
+    dict_kwargs:
+      index_column: gene
+      value_columns: '["sample_00", "sample_01", "sample_02", "sample_03", "sample_04", "sample_05", "sample_06", "sample_07", "sample_08", "sample_09", "sample_10", "sample_11", "sample_12", "sample_13", "sample_14", "sample_15", "sample_16", "sample_17", "sample_18", "sample_19"]'
+      row_annotations: '["pathway", "mutation_score"]'
+      split_rows_by: pathway
+      cluster_rows: true
+      cluster_cols: true
+      normalize: row
+      colorscale: RdBu_r
+      name: z-score
+      width: 1000
+      height: 900
+
+  # =========================================================================
+  # 4. CUSTOM COLORSCALE + CLUSTERING OPTIONS
+  # =========================================================================
+  # Demonstrates cluster_method and cluster_metric for fine control.
+  # Uses correlation distance with average linkage.
+  - tag: heatmap-clustering-options
+    component_type: figure
+    workflow_tag: python/heatmap_workflow
+    data_collection_tag: gene_expression
+    visu_type: heatmap
+    dict_kwargs:
+      index_column: gene
+      row_annotations: '["chromosome"]'
+      cluster_rows: true
+      cluster_cols: true
+      cluster_method: average
+      cluster_metric: correlation
+      normalize: row
+      colorscale: Picnic
+      name: correlation-clustered
+      width: 1000
+      height: 800
+
+  # =========================================================================
+  # 5. NO CLUSTERING — raw data order with annotations
+  # =========================================================================
+  # When cluster_rows/cluster_cols are false, the original data order is kept.
+  # Useful for pre-sorted data (e.g., by genomic position).
+  - tag: heatmap-no-clustering
+    component_type: figure
+    workflow_tag: python/heatmap_workflow
+    data_collection_tag: gene_expression
+    visu_type: heatmap
+    dict_kwargs:
+      index_column: gene
+      row_annotations: '{"pathway": {}, "log2fc": {"type": "bar", "color": "#F58518"}}'
+      cluster_rows: false
+      cluster_cols: false
+      normalize: none
+      colorscale: Blues
+      name: raw-expression
+      width: 900
+      height: 700
+
+  # =========================================================================
+  # 6. SMALL DATASET — quick smoke test with compact data
+  # =========================================================================
+  # Uses the 15x8 small dataset for fast rendering verification.
+  - tag: heatmap-small
+    component_type: figure
+    workflow_tag: python/heatmap_workflow
+    data_collection_tag: gene_expression_small
+    visu_type: heatmap
+    dict_kwargs:
+      index_column: gene
+      row_annotations: '["pathway"]'
+      cluster_rows: true
+      cluster_cols: true
+      normalize: row
+      colorscale: RdBu_r
+      name: z-score
+      width: 700
+      height: 500
+
+  # =========================================================================
+  # Supporting components — KPI cards and filters
+  # =========================================================================
+
+  # Card: Total genes
+  - tag: card-gene-count
+    component_type: card
+    workflow_tag: python/heatmap_workflow
+    data_collection_tag: gene_expression
+    aggregation: count
+    column_name: gene
+    column_type: object
+    icon_name: mdi:dna
+    icon_color: "#4C78A8"
+
+  # Card: Unique pathways
+  - tag: card-pathway-count
+    component_type: card
+    workflow_tag: python/heatmap_workflow
+    data_collection_tag: gene_expression
+    aggregation: nunique
+    column_name: pathway
+    column_type: object
+    icon_name: mdi:sitemap
+    icon_color: "#E45756"
+
+  # Card: Average mutation score
+  - tag: card-avg-mutation
+    component_type: card
+    workflow_tag: python/heatmap_workflow
+    data_collection_tag: gene_expression
+    aggregation: average
+    column_name: mutation_score
+    column_type: float64
+    icon_name: mdi:alert-circle
+    icon_color: "#72B7B2"
+
+  # Filter: Pathway selector
+  - tag: filter-pathway
+    component_type: interactive
+    workflow_tag: python/heatmap_workflow
+    data_collection_tag: gene_expression
+    interactive_component_type: MultiSelect
+    column_name: pathway
+    column_type: object
+    custom_color: "#4C78A8"
+    icon_name: mdi:filter-variant
+
+  # Filter: Mutation score range
+  - tag: filter-mutation-score
+    component_type: interactive
+    workflow_tag: python/heatmap_workflow
+    data_collection_tag: gene_expression
+    interactive_component_type: RangeSlider
+    column_name: mutation_score
+    column_type: float64
+    custom_color: "#E45756"
+    icon_name: mdi:tune
+
+  # Data table for exploration
+  - tag: data-table
+    component_type: table
+    workflow_tag: python/heatmap_workflow
+    data_collection_tag: gene_expression
+    page_size: 15

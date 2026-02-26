@@ -68,6 +68,7 @@ RUN groupadd -g ${GID} depictio && \
 # Copy Project Files
 # -----------------------------
 COPY --chown=depictio:depictio pyproject.toml uv.lock* VERSION ./
+COPY --chown=depictio:depictio packages ./packages/
 COPY --chown=depictio:depictio depictio ./depictio/
 
 # -----------------------------
