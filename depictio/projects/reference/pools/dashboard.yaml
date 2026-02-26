@@ -1,0 +1,505 @@
+title: HGSVC Pools Strand-seq Analysis
+# --- optional ---
+project_tag: HGSVC Pools Strand-seq Analysis
+icon: mdi:dna
+# --- generated on export ---
+dashboard_id: null
+components:
+# ============================================================================
+# CARDS (y=0, h=2, w=2 each)
+# ============================================================================
+-   component_type: card
+    workflow_tag: hgsvc_pools_analysis
+    data_collection_tag: joined_demux_with_population
+    aggregation: count
+    column_name: sample_id
+    # --- optional ---
+    column_type: object
+    display:
+        icon_name: mdi:account-group
+        icon_color: '#5C6BC0'
+        title_color: '#5C6BC0'
+        title_font_size: xl
+        value_font_size: xl
+    # --- generated on export ---
+    tag: card-sample_id_count-a1b001
+    layout:
+        x: 0
+        y: 0
+        w: 2
+        h: 2
+    title: Total Samples
+-   component_type: card
+    workflow_tag: hgsvc_pools_analysis
+    data_collection_tag: joined_demux_with_population
+    aggregation: nunique
+    column_name: pool_name
+    # --- optional ---
+    column_type: object
+    display:
+        icon_name: mdi:pool
+        icon_color: '#F68B33'
+        title_color: '#F68B33'
+        title_font_size: xl
+        value_font_size: xl
+    # --- generated on export ---
+    tag: card-pool_name_nunique-b2c002
+    layout:
+        x: 2
+        y: 0
+        w: 2
+        h: 2
+    title: Total Pools
+-   component_type: card
+    workflow_tag: hgsvc_pools_analysis
+    data_collection_tag: joined_demux_with_population
+    aggregation: average
+    column_name: cell_count
+    # --- optional ---
+    column_type: float64
+    display:
+        icon_name: mdi:microscope
+        icon_color: '#26A69A'
+        title_color: '#26A69A'
+        title_font_size: xl
+        value_font_size: xl
+    # --- generated on export ---
+    tag: card-cell_count_average-c3d003
+    layout:
+        x: 4
+        y: 0
+        w: 2
+        h: 2
+    title: Avg Cell Count
+-   component_type: card
+    workflow_tag: hgsvc_pools_analysis
+    data_collection_tag: joined_demux_with_population
+    aggregation: nunique
+    column_name: superpop
+    # --- optional ---
+    column_type: object
+    display:
+        icon_name: mdi:earth
+        icon_color: '#984EA3'
+        title_color: '#984EA3'
+        title_font_size: xl
+        value_font_size: xl
+    # --- generated on export ---
+    tag: card-superpop_nunique-d4e004
+    layout:
+        x: 6
+        y: 0
+        w: 2
+        h: 2
+    title: Superpopulations
+# ============================================================================
+# CARDS ROW 2 (y=2, h=2, w=2 each) — Additional metrics
+# ============================================================================
+-   component_type: card
+    workflow_tag: hgsvc_pools_analysis
+    data_collection_tag: joined_demux_with_population
+    aggregation: median
+    column_name: cell_count
+    # --- optional ---
+    column_type: float64
+    display:
+        icon_name: mdi:chart-median-absolute-deviation
+        icon_color: '#009688'
+        title_color: '#009688'
+        title_font_size: xl
+        value_font_size: xl
+    # --- generated on export ---
+    tag: card-cell_count_median-e5f101
+    layout:
+        x: 0
+        y: 2
+        w: 2
+        h: 2
+    title: Median Cell Count
+-   component_type: card
+    workflow_tag: hgsvc_pools_analysis
+    data_collection_tag: joined_demux_with_population
+    aggregation: std_dev
+    column_name: cell_count
+    # --- optional ---
+    column_type: float64
+    display:
+        icon_name: mdi:chart-bell-curve
+        icon_color: '#FF5722'
+        title_color: '#FF5722'
+        title_font_size: xl
+        value_font_size: xl
+    # --- generated on export ---
+    tag: card-cell_count_std-f6a202
+    layout:
+        x: 2
+        y: 2
+        w: 2
+        h: 2
+    title: Std Dev Cell Count
+-   component_type: card
+    workflow_tag: hgsvc_pools_analysis
+    data_collection_tag: joined_demux_with_population
+    aggregation: max
+    column_name: cell_count
+    # --- optional ---
+    column_type: float64
+    display:
+        icon_name: mdi:arrow-up-bold
+        icon_color: '#E91E63'
+        title_color: '#E91E63'
+        title_font_size: xl
+        value_font_size: xl
+    # --- generated on export ---
+    tag: card-cell_count_max-a7b303
+    layout:
+        x: 4
+        y: 2
+        w: 2
+        h: 2
+    title: Max Cell Count
+-   component_type: card
+    workflow_tag: hgsvc_pools_analysis
+    data_collection_tag: joined_demux_with_population
+    aggregation: nunique
+    column_name: pop
+    # --- optional ---
+    column_type: object
+    display:
+        icon_name: mdi:map-marker-multiple
+        icon_color: '#3F51B5'
+        title_color: '#3F51B5'
+        title_font_size: xl
+        value_font_size: xl
+    # --- generated on export ---
+    tag: card-pop_nunique-b8c404
+    layout:
+        x: 6
+        y: 2
+        w: 2
+        h: 2
+    title: Populations
+# ============================================================================
+# INTERACTIVE FILTERS (x=0, w=1, sidebar)
+# ============================================================================
+-   component_type: interactive
+    workflow_tag: hgsvc_pools_analysis
+    data_collection_tag: joined_demux_with_population
+    interactive_component_type: MultiSelect
+    column_name: superpop
+    # --- optional ---
+    column_type: object
+    display:
+        title_size: md
+        custom_color: '#5C6BC0'
+        icon_name: mdi:earth
+    # --- generated on export ---
+    tag: interactive-superpop-e5f005
+    layout:
+        x: 0
+        y: 4
+        w: 1
+        h: 2
+    title: Superpopulation
+-   component_type: interactive
+    workflow_tag: hgsvc_pools_analysis
+    data_collection_tag: joined_demux_with_population
+    interactive_component_type: MultiSelect
+    column_name: ANCESTRY
+    # --- optional ---
+    column_type: object
+    display:
+        title_size: md
+        custom_color: '#26A69A'
+        icon_name: mdi:family-tree
+    # --- generated on export ---
+    tag: interactive-ancestry-f6a006
+    layout:
+        x: 0
+        y: 6
+        w: 1
+        h: 2
+    title: Ancestry
+-   component_type: interactive
+    workflow_tag: hgsvc_pools_analysis
+    data_collection_tag: joined_demux_with_population
+    interactive_component_type: MultiSelect
+    column_name: pool_name
+    # --- optional ---
+    column_type: object
+    display:
+        title_size: md
+        custom_color: '#F68B33'
+        icon_name: mdi:pool
+    # --- generated on export ---
+    tag: interactive-pool_name-a7b007
+    layout:
+        x: 0
+        y: 8
+        w: 1
+        h: 2
+    title: Pool Name
+-   component_type: interactive
+    workflow_tag: hgsvc_pools_analysis
+    data_collection_tag: joined_demux_with_population
+    interactive_component_type: MultiSelect
+    column_name: sample_id
+    # --- optional ---
+    column_type: object
+    display:
+        title_size: md
+        custom_color: '#EC407A'
+        icon_name: mdi:account
+    # --- generated on export ---
+    tag: interactive-sample_id-b8c008
+    layout:
+        x: 0
+        y: 10
+        w: 1
+        h: 2
+    title: Sample ID
+-   component_type: interactive
+    workflow_tag: hgsvc_pools_analysis
+    data_collection_tag: joined_demux_with_population
+    interactive_component_type: RangeSlider
+    column_name: cell_count
+    # --- optional ---
+    column_type: float64
+    display:
+        title_size: md
+        custom_color: '#8BC34A'
+        icon_name: mdi:counter
+    # --- generated on export ---
+    tag: interactive-cell_count-c9d009
+    layout:
+        x: 0
+        y: 12
+        w: 1
+        h: 3
+    title: Cell Count Range
+# ============================================================================
+# SUNBURST — Superpopulation / Population hierarchy (code mode)
+# ============================================================================
+-   component_type: figure
+    workflow_tag: hgsvc_pools_analysis
+    data_collection_tag: joined_demux_with_population
+    visu_type: sunburst
+    # --- optional ---
+    figure_params:
+        path:
+        - superpop
+        - pop
+        values: count
+        title: Population Hierarchy
+    mode: code
+    code_content: "df_modified = df.filter(pl.col('pop').is_not_null()).group_by(['superpop', 'pop']).agg(pl.col('sample_id').n_unique().alias('count'))\n\nfig = px.sunburst(\n    df_modified.to_pandas(),\n    path=['superpop', 'pop'],\n    values='count',\n    color='superpop',\n    color_discrete_map={'AFR': '#ffd845', 'AMR': '#710027', 'EAS': '#778500', 'EUR': '#018ead', 'SAS': '#c44cfd'},\n    title='Population Hierarchy'\n)"
+    selection_enabled: false
+    # --- generated on export ---
+    tag: figure-sunburst-pop-hierarchy-d0e010
+    layout:
+        x: 0
+        y: 4
+        w: 4
+        h: 5
+# ============================================================================
+# HISTOGRAM — Cell count distribution by superpopulation (ui mode)
+# ============================================================================
+-   component_type: figure
+    workflow_tag: hgsvc_pools_analysis
+    data_collection_tag: joined_demux_with_population
+    visu_type: histogram
+    # --- optional ---
+    figure_params:
+        x: cell_count
+        color: superpop
+        color_discrete_map: '{"AFR": "#ffd845", "AMR": "#710027", "EAS": "#778500", "EUR": "#018ead", "SAS": "#c44cfd"}'
+        title: Cell Count Distribution by Superpopulation
+        barmode: overlay
+        opacity: 0.7
+        marginal: rug
+        labels: '{"cell_count": "Cell Count", "superpop": "Superpopulation"}'
+    mode: ui
+    selection_enabled: false
+    # --- generated on export ---
+    tag: figure-histogram-cell_count-e1f011
+    layout:
+        x: 4
+        y: 4
+        w: 4
+        h: 5
+# ============================================================================
+# BARPLOT — Cell count per sample colored by pool (ui mode)
+# ============================================================================
+-   component_type: figure
+    workflow_tag: hgsvc_pools_analysis
+    data_collection_tag: joined_demux_with_population
+    visu_type: bar
+    # --- optional ---
+    figure_params:
+        x: sample_id
+        y: cell_count
+        color: pool_name
+        title: Cell Count per Sample by Pool
+        labels:
+            sample_id: Sample ID
+            cell_count: Cell Count
+            pool_name: Pool
+    mode: code
+    code_content: "df_modified = df.sort(['pool_name', 'cell_count'], descending=[False, True])\n\nfig = px.bar(\n    df_modified.to_pandas(),\n    x='sample_id',\n    y='cell_count',\n    color='pool_name',\n    color_discrete_map={'embl-pilot1': '#1f77b4', 'embl-pilot2': '#ff7f0e', 'embl-pilot3': '#2ca02c', 'embl-pool-1a': '#d62728', 'embl-pool-2b': '#9467bd', 'embl-pool-3c': '#8c564b', 'embl-pool-4d': '#e377c2', 'embl-pool-5e': '#7f7f7f', 'embl-pool-6f': '#bcbd22', 'embl_7g': '#17becf', 'embl_8h': '#aec7e8', 'embl_9i': '#ffbb78', 'embl_10j': '#98df8a', 'embl_11k': '#ff9896', 'embl_12l': '#c5b0d5'},\n    title='Cell Count per Sample by Pool',\n    labels={'sample_id': 'Sample ID', 'cell_count': 'Cell Count', 'pool_name': 'Pool'}\n)\nfig.update_layout(xaxis={'categoryorder': 'array', 'categoryarray': df_modified['sample_id'].to_list()})"
+    selection_enabled: false
+    # --- generated on export ---
+    tag: figure-bar-sample-cell_count-f2a012
+    layout:
+        x: 0
+        y: 9
+        w: 8
+        h: 5
+# ============================================================================
+# BOX PLOT — Cell count distribution by superpopulation
+# ============================================================================
+-   component_type: figure
+    workflow_tag: hgsvc_pools_analysis
+    data_collection_tag: joined_demux_with_population
+    visu_type: box
+    # --- optional ---
+    figure_params:
+        x: superpop
+        y: cell_count
+        color: superpop
+        color_discrete_map: '{"AFR": "#ffd845", "AMR": "#710027", "EAS": "#778500", "EUR": "#018ead", "SAS": "#c44cfd"}'
+        title: Cell Count Distribution by Superpopulation
+        points: all
+        labels: '{"cell_count": "Cell Count", "superpop": "Superpopulation"}'
+    mode: ui
+    selection_enabled: false
+    # --- generated on export ---
+    tag: figure-box-superpop-cell_count-c9d505
+    layout:
+        x: 0
+        y: 14
+        w: 4
+        h: 5
+# ============================================================================
+# BOX PLOT — Cell count distribution by pool
+# ============================================================================
+-   component_type: figure
+    workflow_tag: hgsvc_pools_analysis
+    data_collection_tag: joined_demux_with_population
+    visu_type: box
+    # --- optional ---
+    figure_params:
+        x: pool_name
+        y: cell_count
+        color: pool_name
+        color_discrete_map: '{"embl-pilot1": "#1f77b4", "embl-pilot2": "#ff7f0e", "embl-pilot3": "#2ca02c", "embl-pool-1a": "#d62728", "embl-pool-2b": "#9467bd", "embl-pool-3c": "#8c564b", "embl-pool-4d": "#e377c2", "embl-pool-5e": "#7f7f7f", "embl-pool-6f": "#bcbd22", "embl_7g": "#17becf", "embl_8h": "#aec7e8", "embl_9i": "#ffbb78", "embl_10j": "#98df8a", "embl_11k": "#ff9896", "embl_12l": "#c5b0d5"}'
+        title: Cell Count Distribution by Pool
+        points: all
+        labels: '{"cell_count": "Cell Count", "pool_name": "Pool"}'
+    mode: ui
+    selection_enabled: false
+    # --- generated on export ---
+    tag: figure-box-pool-cell_count-d0e606
+    layout:
+        x: 4
+        y: 14
+        w: 4
+        h: 5
+# ============================================================================
+# STACKED BAR — Pool composition by superpopulation (code mode)
+# ============================================================================
+-   component_type: figure
+    workflow_tag: hgsvc_pools_analysis
+    data_collection_tag: joined_demux_with_population
+    visu_type: bar
+    # --- optional ---
+    figure_params:
+        x: pool_name
+        y: count
+        color: superpop
+        title: Pool Composition by Superpopulation
+    mode: code
+    code_content: "df_modified = df.group_by(['pool_name', 'superpop']).agg(pl.col('sample_id').count().alias('count')).sort('pool_name')\n\nfig = px.bar(\n    df_modified.to_pandas(),\n    x='pool_name',\n    y='count',\n    color='superpop',\n    color_discrete_map={'AFR': '#ffd845', 'AMR': '#710027', 'EAS': '#778500', 'EUR': '#018ead', 'SAS': '#c44cfd'},\n    title='Pool Composition by Superpopulation',\n    labels={'pool_name': 'Pool', 'count': 'Number of Samples', 'superpop': 'Superpopulation'},\n    barmode='stack'\n)\nfig.update_layout(xaxis={'categoryorder': 'category ascending'})"
+    selection_enabled: false
+    # --- generated on export ---
+    tag: figure-bar-pool-superpop-composition-e1f707
+    layout:
+        x: 0
+        y: 19
+        w: 4
+        h: 5
+# ============================================================================
+# STACKED BAR — Sample status by superpopulation (code mode)
+# ============================================================================
+-   component_type: figure
+    workflow_tag: hgsvc_pools_analysis
+    data_collection_tag: joined_demux_with_population
+    visu_type: bar
+    # --- optional ---
+    figure_params:
+        x: superpop
+        y: count
+        color: cell_category
+        title: Sample QC Status by Superpopulation
+    mode: code
+    code_content: "df_modified = df.group_by(['pool_name', 'cell_category']).agg(pl.col('sample_id').count().alias('count')).sort(['pool_name', 'cell_category'])\n\nfig = px.bar(\n    df_modified.to_pandas(),\n    x='pool_name',\n    y='count',\n    color='cell_category',\n    color_discrete_map={'5_or_more': '#4CAF50', 'less_than_5': '#FF9800', 'unassigned': '#F44336'},\n    title='Sample QC Status by Pool',\n    labels={'pool_name': 'Pool', 'count': 'Number of Samples', 'cell_category': 'Cell Category'},\n    barmode='stack'\n)\nfig.update_layout(xaxis={'categoryorder': 'category ascending'})"
+    selection_enabled: false
+    # --- generated on export ---
+    tag: figure-bar-superpop-qc-status-f2a808
+    layout:
+        x: 4
+        y: 19
+        w: 4
+        h: 5
+# ============================================================================
+# HEATMAP — Sample × Inversion Genotype Matrix (complexheatmap)
+# ============================================================================
+-   component_type: figure
+    workflow_tag: hgsvc_pools_analysis
+    data_collection_tag: sample_inversion_genotypes
+    visu_type: heatmap
+    # --- optional ---
+    dict_kwargs:
+        index_column: inversion_id
+        row_annotations: '{"size_category": {"type": "categorical"}, "size_bp": {"type": "bar", "color": "#E45756"}, "global_af": {"type": "bar", "color": "#4C78A8"}, "superpop_af": {"type": "stacked_bar", "columns": ["af_afr_prop", "af_eur_prop", "af_eas_prop", "af_sas_prop", "af_amr_prop"], "stack_names": ["AFR", "EUR", "EAS", "SAS", "AMR"], "colors": ["#ffd845", "#018ead", "#778500", "#c44cfd", "#710027"]}}'
+        col_annotations: '{"superpop":["AFR","AFR","EUR","EUR","EUR","EUR","EUR","EUR","EUR","EAS","EAS","EAS","EAS","EAS","AMR","AMR","AMR","EUR","EAS","AMR","AFR","EAS","AFR","AFR","AFR","AFR","AFR","SAS","SAS","SAS","SAS","EUR","EUR","EAS","AFR","AMR","AMR","AFR","EUR","EUR","SAS","SAS","EUR","EUR","EAS","EAS","EAS","EAS","AMR","EAS","AFR","EAS","EAS","EAS","AMR","AFR","AFR","AFR","SAS","AFR","AFR","AFR","AFR","AFR","SAS","SAS","SAS","SAS","EUR","EAS","EAS","AFR","AFR","AFR","EAS","AFR","AFR","AMR","EUR","SAS","SAS","EUR","EUR","EUR","EAS","AMR","AMR","AMR","AMR","AMR","EUR","EAS","EUR","EAS","EAS","AMR","AFR","AFR","AFR","AFR","SAS","AFR","AFR","AFR","AFR","SAS","SAS","SAS","SAS","SAS","EUR","AFR","AFR","EAS","EAS","EAS","EAS","AMR","AMR","AMR","SAS","EUR","EUR","EUR","EUR","EAS","EAS","AMR","AMR","AMR","AMR","AMR","EUR","EAS","AFR","AMR","AFR","EUR","AMR","AMR","AMR","EAS","AFR","SAS","AFR","SAS","SAS","SAS","SAS","SAS","SAS","EUR","EUR","EAS","AFR","AFR","AFR","AMR","EUR","SAS","EUR","EUR","EAS","EAS","AMR","AMR","AMR","EUR","EAS","EAS","EAS","EAS","AFR","AMR","AFR","AFR","AMR","AFR","EAS","EAS","EAS","AMR","EAS","AFR","AFR","AFR","AFR","AFR","SAS","SAS","SAS","SAS","SAS","SAS","EUR","EUR","EAS","EUR","EUR","SAS","EUR","EUR","AMR","EAS","AMR","AMR","AMR","AMR","AMR","EAS","AFR","AMR","AFR","AFR","EAS","AMR","AFR","SAS","AFR","AFR","AFR","AFR","AFR","AFR","SAS","SAS","SAS","SAS","EUR","EUR","EAS","AFR","EAS","AFR","AMR","AFR","AFR","AFR","EUR","SAS","EUR","EUR","EUR","EUR","EUR","EAS","EAS","EAS","AMR","AMR","AMR","AMR","EUR","EUR","EAS","AMR","AMR","AFR","EAS","EAS","AFR","AFR","AFR","AFR","AFR","AFR","AFR","AFR","SAS","SAS","SAS","SAS","EUR","EAS","EAS","AFR","AFR","AFR","AFR","EUR","EUR","EUR","EAS","EAS","AMR","AMR","AMR","AMR","EUR","EAS","EAS","EAS","EAS","EAS","AMR","EAS","AMR","AMR","EAS","AFR","SAS","AFR","AFR","AFR","AFR","AFR","AFR","AFR","SAS","SAS","SAS","SAS","SAS","SAS","EAS","EAS","AMR","AFR","EUR","EUR","EUR","EUR","EUR","EAS","EAS","EAS","AMR","EAS","AMR","AMR","AMR","AMR","AMR","EUR","EUR","EAS","AMR","AFR","EAS","EAS","EAS","AMR","AFR","AFR","AFR","AFR","AFR","AFR","AFR","SAS","SAS","SAS","SAS","EUR","EUR","AFR","AFR","AFR","EUR","EUR","EUR","EAS","EAS","EAS","EUR","EUR","EAS","AMR","AFR","EAS","EAS","EUR","AFR","AFR","AFR","AFR","AFR","AFR","AFR","AFR","AFR","SAS","SAS","SAS","SAS","SAS","SAS","SAS","EUR","EUR","AFR","EAS","AFR","AFR","AFR","AMR","AFR","EUR","SAS","EUR","EUR","EUR","EAS","EAS","AMR","AMR","EUR","AMR","SAS","EUR","EUR","EAS","EAS","EAS","EAS","EAS","AMR","EAS","AFR","AFR","AFR","AFR","SAS","SAS","SAS","EUR","EUR","EUR","EUR","EAS","EAS","AFR","AFR","AFR","AFR","AFR","EUR","EUR","EUR","EUR","EUR","EUR","EUR","EAS","AMR","EAS","AMR","AMR","AMR","AMR","AMR","EUR","EUR","EUR","EAS","AFR","AMR","AMR","EAS","AFR","AFR","SAS","SAS","AFR","SAS","AFR","AFR","SAS","SAS","EUR","AFR","EAS","EAS","AMR","AFR","AFR","EUR","EUR","SAS"],"pop":["ESN","MSL","GBR","GBR","FIN","FIN","FIN","FIN","FIN","CHS","CHS","CHS","CHS","CDX","PUR","PUR","CLM","IBS","CDX","PEL","ACB","CDX","ACB","GWD","GWD","GWD","ESN","BEB","BEB","ITU","BEB","CEU","CEU","CHB","YRI","MXL","MXL","ASW","TSI","TSI","GIH","GIH","GBR","FIN","CHS","CHS","CHS","CHS","PUR","CDX","ACB","CDX","CDX","CDX","PEL","ACB","GWD","GWD","PJL","ESN","ESN","ESN","ESN","ESN","STU","BEB","ITU","STU","CEU","CHB","CHB","YRI","YRI","YRI","JPT","LWK","LWK","MXL","TSI","GIH","GIH","GBR","FIN","FIN","CHS","PUR","CLM","CLM","CLM","PUR","IBS","KHV","IBS","CDX","KHV","PEL","ACB","ACB","ACB","GWD","PJL","GWD","GWD","MSL","ESN","BEB","STU","ITU","STU","ITU","CEU","YRI","YRI","JPT","JPT","JPT","JPT","MXL","MXL","MXL","GIH","GBR","GBR","GBR","FIN","CHS","CHS","PUR","PUR","PUR","PUR","CLM","IBS","KHV","ACB","PEL","ACB","IBS","PEL","PEL","PEL","CDX","GWD","PJL","ESN","STU","ITU","BEB","BEB","STU","BEB","CEU","CEU","CHB","YRI","LWK","LWK","MXL","TSI","GIH","GBR","FIN","CDX","CDX","PUR","PUR","PUR","IBS","CDX","CDX","KHV","KHV","ACB","PEL","ACB","ACB","PEL","ACB","KHV","CDX","CDX","PEL","CDX","GWD","ESN","ESN","ESN","MSL","PJL","STU","ITU","ITU","BEB","BEB","CEU","CEU","JPT","TSI","TSI","GIH","GBR","GBR","PUR","CDX","PUR","PUR","CLM","CLM","PUR","KHV","ACB","PEL","ACB","ACB","CDX","PEL","GWD","PJL","GWD","ESN","ESN","ESN","MSL","MSL","BEB","BEB","ITU","BEB","CEU","CEU","CHB","YRI","JPT","LWK","MXL","ASW","ASW","ASW","TSI","GIH","GBR","GBR","GBR","FIN","FIN","CHS","CHS","CDX","CLM","CLM","CLM","CLM","IBS","IBS","KHV","PEL","PEL","ACB","KHV","CDX","ACB","GWD","GWD","MSL","ESN","ESN","ESN","ESN","PJL","ITU","BEB","STU","CEU","CHB","CHB","YRI","YRI","LWK","ASW","TSI","GBR","FIN","CHS","CDX","CLM","PUR","CLM","CLM","IBS","CDX","CDX","CDX","KHV","KHV","PEL","CDX","PEL","PEL","CDX","ACB","PJL","GWD","GWD","ESN","ESN","MSL","ESN","MSL","STU","STU","BEB","STU","BEB","ITU","CHB","CHB","MXL","ASW","TSI","GBR","GBR","GBR","FIN","CHS","CHS","CHS","PUR","CDX","PUR","PUR","CLM","PUR","CLM","IBS","IBS","KHV","PEL","ACB","KHV","KHV","CDX","PEL","GWD","GWD","GWD","ESN","MSL","ESN","ESN","BEB","ITU","STU","ITU","CEU","CEU","YRI","ASW","ASW","TSI","GBR","GBR","CHS","CHS","KHV","IBS","IBS","KHV","PEL","ACB","KHV","KHV","IBS","ACB","ACB","GWD","GWD","GWD","ESN","ESN","MSL","MSL","PJL","STU","ITU","ITU","BEB","BEB","ITU","CEU","CEU","YRI","JPT","LWK","LWK","LWK","MXL","ASW","Unknown","GIH","GBR","GBR","GBR","CHS","CHS","PUR","CLM","IBS","CLM","PJL","IBS","GBR","CDX","CDX","KHV","KHV","KHV","PEL","CDX","ACB","GWD","ESN","ESN","BEB","STU","BEB","CEU","CEU","CEU","Unknown","CHB","JPT","LWK","LWK","ASW","ASW","ASW","TSI","TSI","TSI","GBR","GBR","GBR","FIN","CHS","PUR","CDX","PUR","PUR","PUR","CLM","PUR","IBS","IBS","IBS","CDX","ACB","PEL","PEL","CDX","ACB","GWD","PJL","PJL","GWD","PJL","ESN","ESN","BEB","ITU","CEU","YRI","JPT","JPT","MXL","ASW","ASW","TSI","TSI","GIH"],"pool_name":["embl-pilot3","embl-pilot3","embl-pool-1a","embl-pool-1a","embl-pool-1a","embl-pool-1a","embl-pool-1a","embl-pool-1a","embl-pool-1a","embl-pool-1a","embl-pool-1a","embl-pool-1a","embl-pool-1a","embl-pool-1a","embl-pool-1a","embl-pool-1a","embl-pool-1a","embl-pool-1a","embl-pool-1a","embl-pool-1a","embl-pool-1a","embl-pool-1a","embl-pool-1a","embl-pool-1a","embl-pool-1a","embl-pool-1a","embl-pool-1a","embl-pool-1a","embl-pool-1a","embl-pool-1a","embl-pool-1a","embl-pool-1a","embl-pool-1a","embl-pool-1a","embl-pool-1a","embl-pool-1a","embl-pool-1a","embl-pool-1a","embl-pool-1a","embl-pool-1a","embl-pool-1a","embl-pool-1a","embl-pool-2b","embl-pool-2b","embl-pool-2b","embl-pool-2b","embl-pool-2b","embl-pool-2b","embl-pool-2b","embl-pool-2b","embl-pool-2b","embl-pool-2b","embl-pool-2b","embl-pool-2b","embl-pool-2b","embl-pool-2b","embl-pool-2b","embl-pool-2b","embl-pool-2b","embl-pool-2b","embl-pool-2b","embl-pool-2b","embl-pool-2b","embl-pool-2b","embl-pool-2b","embl-pool-2b","embl-pool-2b","embl-pool-2b","embl-pool-2b","embl-pool-2b","embl-pool-2b","embl-pool-2b","embl-pool-2b","embl-pool-2b","embl-pool-2b","embl-pool-2b","embl-pool-2b","embl-pool-2b","embl-pool-2b","embl-pool-2b","embl-pool-2b","embl-pool-3c","embl-pool-3c","embl-pool-3c","embl-pool-3c","embl-pool-3c","embl-pool-3c","embl-pool-3c","embl-pool-3c","embl-pool-3c","embl-pool-3c","embl-pool-3c","embl-pool-3c","embl-pool-3c","embl-pool-3c","embl-pool-3c","embl-pool-3c","embl-pool-3c","embl-pool-3c","embl-pool-3c","embl-pool-3c","embl-pool-3c","embl-pool-3c","embl-pool-3c","embl-pool-3c","embl-pool-3c","embl-pool-3c","embl-pool-3c","embl-pool-3c","embl-pool-3c","embl-pool-3c","embl-pool-3c","embl-pool-3c","embl-pool-3c","embl-pool-3c","embl-pool-3c","embl-pool-3c","embl-pool-3c","embl-pool-3c","embl-pool-3c","embl-pool-3c","embl-pool-4d","embl-pool-4d","embl-pool-4d","embl-pool-4d","embl-pool-4d","embl-pool-4d","embl-pool-4d","embl-pool-4d","embl-pool-4d","embl-pool-4d","embl-pool-4d","embl-pool-4d","embl-pool-4d","embl-pool-4d","embl-pool-4d","embl-pool-4d","embl-pool-4d","embl-pool-4d","embl-pool-4d","embl-pool-4d","embl-pool-4d","embl-pool-4d","embl-pool-4d","embl-pool-4d","embl-pool-4d","embl-pool-4d","embl-pool-4d","embl-pool-4d","embl-pool-4d","embl-pool-4d","embl-pool-4d","embl-pool-4d","embl-pool-4d","embl-pool-4d","embl-pool-4d","embl-pool-4d","embl-pool-4d","embl-pool-4d","embl-pool-4d","embl-pool-5e","embl-pool-5e","embl-pool-5e","embl-pool-5e","embl-pool-5e","embl-pool-5e","embl-pool-5e","embl-pool-5e","embl-pool-5e","embl-pool-5e","embl-pool-5e","embl-pool-5e","embl-pool-5e","embl-pool-5e","embl-pool-5e","embl-pool-5e","embl-pool-5e","embl-pool-5e","embl-pool-5e","embl-pool-5e","embl-pool-5e","embl-pool-5e","embl-pool-5e","embl-pool-5e","embl-pool-5e","embl-pool-5e","embl-pool-5e","embl-pool-5e","embl-pool-5e","embl-pool-5e","embl-pool-5e","embl-pool-5e","embl-pool-5e","embl-pool-5e","embl-pool-5e","embl-pool-5e","embl-pool-5e","embl-pool-5e","embl-pool-5e","embl-pool-5e","embl-pool-6f","embl-pool-6f","embl-pool-6f","embl-pool-6f","embl-pool-6f","embl-pool-6f","embl-pool-6f","embl-pool-6f","embl-pool-6f","embl-pool-6f","embl-pool-6f","embl-pool-6f","embl-pool-6f","embl-pool-6f","embl-pool-6f","embl-pool-6f","embl-pool-6f","embl-pool-6f","embl-pool-6f","embl-pool-6f","embl-pool-6f","embl-pool-6f","embl-pool-6f","embl-pool-6f","embl-pool-6f","embl-pool-6f","embl-pool-6f","embl-pool-6f","embl-pool-6f","embl-pool-6f","embl-pool-6f","embl-pool-6f","embl-pool-6f","embl-pool-6f","embl-pool-6f","embl-pool-6f","embl-pool-6f","embl-pool-6f","embl-pool-6f","embl-pool-6f","embl_10j","embl_10j","embl_10j","embl_10j","embl_10j","embl_10j","embl_10j","embl_10j","embl_10j","embl_10j","embl_10j","embl_10j","embl_10j","embl_10j","embl_10j","embl_10j","embl_10j","embl_10j","embl_10j","embl_10j","embl_10j","embl_10j","embl_10j","embl_10j","embl_10j","embl_10j","embl_10j","embl_10j","embl_10j","embl_10j","embl_10j","embl_10j","embl_10j","embl_10j","embl_10j","embl_10j","embl_10j","embl_10j","embl_10j","embl_10j","embl_11k","embl_11k","embl_11k","embl_11k","embl_11k","embl_11k","embl_11k","embl_11k","embl_11k","embl_11k","embl_11k","embl_11k","embl_11k","embl_11k","embl_11k","embl_11k","embl_11k","embl_11k","embl_11k","embl_11k","embl_11k","embl_11k","embl_11k","embl_11k","embl_11k","embl_11k","embl_11k","embl_11k","embl_11k","embl_11k","embl_11k","embl_11k","embl_11k","embl_11k","embl_11k","embl_11k","embl_11k","embl_11k","embl_11k","embl_12l","embl_12l","embl_12l","embl_12l","embl_12l","embl_12l","embl_12l","embl_12l","embl_12l","embl_12l","embl_12l","embl_12l","embl_12l","embl_12l","embl_12l","embl_12l","embl_12l","embl_12l","embl_12l","embl_12l","embl_12l","embl_12l","embl_12l","embl_12l","embl_12l","embl_12l","embl_12l","embl_12l","embl_12l","embl_12l","embl_12l","embl_12l","embl_12l","embl_12l","embl_12l","embl_12l","embl_12l","embl_12l","embl_12l","embl_12l","embl_7g","embl_7g","embl_7g","embl_7g","embl_7g","embl_7g","embl_7g","embl_7g","embl_7g","embl_7g","embl_7g","embl_7g","embl_7g","embl_7g","embl_7g","embl_7g","embl_7g","embl_7g","embl_7g","embl_7g","embl_7g","embl_7g","embl_7g","embl_7g","embl_7g","embl_7g","embl_7g","embl_7g","embl_7g","embl_7g","embl_7g","embl_7g","embl_7g","embl_7g","embl_7g","embl_7g","embl_7g","embl_7g","embl_7g","embl_7g","embl_8h","embl_8h","embl_8h","embl_8h","embl_8h","embl_8h","embl_8h","embl_8h","embl_8h","embl_8h","embl_8h","embl_8h","embl_8h","embl_8h","embl_8h","embl_8h","embl_8h","embl_8h","embl_8h","embl_8h","embl_8h","embl_8h","embl_8h","embl_8h","embl_8h","embl_8h","embl_8h","embl_8h","embl_8h","embl_8h","embl_8h","embl_8h","embl_8h","embl_8h","embl_8h","embl_8h","embl_8h","embl_8h","embl_8h","embl_8h","embl_9i","embl_9i","embl_9i","embl_9i","embl_9i","embl_9i","embl_9i","embl_9i","embl_9i","embl_9i","embl_9i","embl_9i","embl_9i","embl_9i","embl_9i","embl_9i","embl_9i","embl_9i","embl_9i","embl_9i","embl_9i","embl_9i","embl_9i","embl_9i","embl_9i","embl_9i","embl_9i","embl_9i","embl_9i","embl_9i","embl_9i","embl_9i","embl_9i","embl_9i","embl_9i","embl_9i","embl_9i","embl_9i","embl_9i","embl_9i"]}'
+        cluster_rows: true
+        cluster_cols: true
+        normalize: none
+        colorscale: YlOrRd
+        name: Genotype
+        use_webgl: true
+        cell_gap: 0
+        annotation_line_width: 0
+    mode: ui
+    selection_enabled: false
+    # --- generated on export ---
+    tag: figure-heatmap-sample-genotypes
+    layout:
+        x: 0
+        y: 24
+        w: 8
+        h: 8
+    title: Sample Inversion Genotype Matrix
+# ============================================================================
+# TABLE — Joined demux + population data
+# ============================================================================
+-   component_type: table
+    workflow_tag: hgsvc_pools_analysis
+    data_collection_tag: joined_demux_with_population
+    title: Demultiplexing Results with Population Metadata
+    description: Joined table showing sample demux results enriched with ancestry information
+    title_size: h1
+    title_align: left
+    # --- optional ---
+    columns:
+    - sample_id
+    - cell_count
+    - ANCESTRY
+    row_selection_enabled: false
+    # --- generated on export ---
+    tag: table-demux-population-a3b013
+    layout:
+        x: 0
+        y: 32
+        w: 8
+        h: 5
