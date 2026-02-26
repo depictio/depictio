@@ -37,6 +37,7 @@ from depictio.models.components.lite import (
     ImageLiteComponent,
     InteractiveLiteComponent,
     LiteComponent,
+    MapLiteComponent,
     MultiQCLiteComponent,
     TableLiteComponent,
 )
@@ -201,6 +202,7 @@ class DashboardDataLite(BaseModel):
         "table": TableLiteComponent,
         "image": ImageLiteComponent,
         "multiqc": MultiQCLiteComponent,
+        "map": MapLiteComponent,
     }
 
     @model_validator(mode="after")
@@ -808,6 +810,55 @@ class DashboardDataLite(BaseModel):
                 if comp.get("max_images") and comp["max_images"] != 20:
                     lite_comp["max_images"] = comp["max_images"]
 
+            elif comp_type == "map":
+                # Fields exported only when they differ from model defaults
+                _MAP_DEFAULT_SKIP = {
+                    "map_type": "scatter_map",
+                    "map_style": "open-street-map",
+                    "opacity": 1.0,
+                    "size_max": 15,
+                    "featureidkey": "id",
+                }
+                # Fields exported whenever truthy
+                _MAP_TRUTHY_FIELDS = [
+                    "lat_column",
+                    "lon_column",
+                    "color_column",
+                    "size_column",
+                    "hover_columns",
+                    "text_column",
+                    "default_center",
+                    "z_column",
+                    "selection_column",
+                    "title",
+                    "dict_kwargs",
+                    "locations_column",
+                    "geojson_data",
+                    "geojson_url",
+                    "geojson_dc_id",
+                    "geojson_dc_tag",
+                    "choropleth_aggregation",
+                    "color_continuous_scale",
+                    "range_color",
+                ]
+                # Fields exported when not None (even if falsy like 0 or False)
+                _MAP_NOT_NONE_FIELDS = [
+                    "default_zoom",
+                    "radius",
+                    "selection_enabled",
+                ]
+
+                for field, default in _MAP_DEFAULT_SKIP.items():
+                    val = comp.get(field)
+                    if val is not None and val != default:
+                        lite_comp[field] = val
+                for field in _MAP_TRUTHY_FIELDS:
+                    if comp.get(field):
+                        lite_comp[field] = comp[field]
+                for field in _MAP_NOT_NONE_FIELDS:
+                    if comp.get(field) is not None:
+                        lite_comp[field] = comp[field]
+
             elif comp_type == "multiqc":
                 # MultiQC parameters - export only if present in DB
                 if comp.get("selected_module"):
@@ -990,6 +1041,47 @@ class DashboardDataLite(BaseModel):
                         "thumbnail_size": comp_dict.get("thumbnail_size", 150),
                         "columns": comp_dict.get("columns", 4),
                         "max_images": comp_dict.get("max_images", 20),
+                    }
+                )
+
+            elif comp_type == "map":
+                _MAP_FULL_DEFAULTS: dict[str, Any] = {
+                    "map_type": "scatter_map",
+                    "lat_column": None,
+                    "lon_column": None,
+                    "color_column": None,
+                    "size_column": None,
+                    "hover_columns": [],
+                    "text_column": None,
+                    "map_style": "open-street-map",
+                    "default_zoom": None,
+                    "default_center": None,
+                    "opacity": 1.0,
+                    "size_max": 15,
+                    "z_column": None,
+                    "radius": None,
+                    "selection_enabled": False,
+                    "selection_column": None,
+                    "title": None,
+                    "dict_kwargs": {},
+                    "locations_column": None,
+                    "featureidkey": "id",
+                    "geojson_data": None,
+                    "geojson_url": None,
+                    "geojson_dc_id": None,
+                    "geojson_dc_tag": None,
+                    "choropleth_aggregation": None,
+                    "color_continuous_scale": None,
+                    "range_color": None,
+                }
+                for field, default in _MAP_FULL_DEFAULTS.items():
+                    full_comp[field] = comp_dict.get(field, default)
+                full_comp.update(
+                    {
+                        "displayed_data_count": 0,
+                        "total_data_count": 0,
+                        "was_sampled": False,
+                        "filter_applied": False,
                     }
                 )
 

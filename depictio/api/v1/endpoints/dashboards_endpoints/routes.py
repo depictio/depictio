@@ -1383,6 +1383,19 @@ def _resolve_workflow_tags(component: dict) -> None:
                             "dc_specific_properties": dc.get("dc_specific_properties"),
                         }
                         break
+
+            # Resolve geojson_dc_tag to geojson_dc_id (for choropleth map components)
+            geojson_dc_tag = component.get("geojson_dc_tag")
+            if geojson_dc_tag and not component.get("geojson_dc_id"):
+                for dc in wf.get("data_collections", []):
+                    if dc.get("data_collection_tag") == geojson_dc_tag:
+                        component["geojson_dc_id"] = str(dc["_id"])
+                        logger.debug(
+                            f"Resolved geojson_dc_tag '{geojson_dc_tag}' "
+                            f"to geojson_dc_id {dc['_id']}"
+                        )
+                        break
+
             return
 
 

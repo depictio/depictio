@@ -357,6 +357,10 @@ def client_aggregate_data(
     # Handle MultiQC data collections specially - copy parquet files to S3 and extract metadata
     if data_collection.config.type.lower() == "multiqc":
         return process_multiqc_data_collection(data_collection, CLI_config, overwrite, workflow)
+
+    # Handle GeoJSON data collections - upload file to S3 and store location
+    if data_collection.config.type.lower() == "geojson":
+        return process_geojson_data_collection(data_collection, CLI_config, overwrite)
     # Generate destination prefix using the data collection id - should be a S3 path
     destination_prefix = f"s3://{CLI_config.s3_storage.bucket}/{str(data_collection.id)}"
     logger.debug(f"Destination prefix: {destination_prefix}")
@@ -507,4 +511,139 @@ def client_aggregate_data(
     return {
         "result": "success",
         "message": f"Aggregated data written to {destination_prefix}.",
+    }
+
+
+def process_geojson_data_collection(
+    data_collection: DataCollection,
+    CLI_config: CLIConfig,
+    overwrite: bool = False,
+) -> dict[str, str]:
+    """Process a GeoJSON data collection: validate, upload to S3, store location in MongoDB.
+
+    Follows the same pattern as MultiQC — the file is already uploaded to S3
+    during the scan phase. This function validates the GeoJSON, then registers
+    the S3 location as a "delta_table_location" in MongoDB.
+
+    Args:
+        data_collection: GeoJSON DataCollection object.
+        CLI_config: CLI configuration with API URL and credentials.
+        overwrite: Whether to overwrite existing data.
+
+    Returns:
+        Result dict with success/error status.
+    """
+    import json
+    from pathlib import Path
+
+    logger.info(f"Processing GeoJSON data collection: {data_collection.data_collection_tag}")
+
+    dc_id = str(data_collection.id)
+
+    # Fetch the file(s) already uploaded by the scan phase
+    try:
+        files = fetch_file_data(dc_id, CLI_config)
+    except Exception as e:
+        return {"result": "error", "message": f"No files found for GeoJSON DC: {e}"}
+
+    if not files:
+        return {"result": "error", "message": "No files found for GeoJSON data collection"}
+
+    file_obj = files[0]
+    file_path = file_obj.file_location
+    logger.info(f"GeoJSON file location: {file_path}")
+
+    # Validate the GeoJSON content
+    # If it's a local path, read and validate; if it's S3, we trust the scan
+    if not file_path.startswith("s3://"):
+        try:
+            with open(file_path) as f:
+                geojson = json.load(f)
+            if geojson.get("type") != "FeatureCollection":
+                return {
+                    "result": "error",
+                    "message": f"GeoJSON file must be a FeatureCollection, got: {geojson.get('type')}",
+                }
+            feature_count = len(geojson.get("features", []))
+            logger.info(f"Valid GeoJSON FeatureCollection with {feature_count} features")
+            file_size = Path(file_path).stat().st_size
+        except json.JSONDecodeError as e:
+            return {"result": "error", "message": f"Invalid JSON in GeoJSON file: {e}"}
+    else:
+        # File is already on S3 (uploaded by scan), estimate size
+        file_size = 0
+
+    # Check if destination already exists
+    if not overwrite:
+        storage_options = turn_S3_config_into_polars_storage_options(CLI_config.s3_storage)
+        try:
+            import s3fs
+
+            fs = s3fs.S3FileSystem(
+                endpoint_url=storage_options.endpoint_url,
+                key=storage_options.aws_access_key_id,
+                secret=storage_options.aws_secret_access_key,
+            )
+            bucket_prefix = f"{CLI_config.s3_storage.bucket}/{dc_id}"
+            existing_files = fs.ls(bucket_prefix)
+            if existing_files:
+                rich_print_checked_statement(
+                    "GeoJSON already uploaded, skipping (use --overwrite to replace)", "info"
+                )
+                # Still upsert the location metadata
+        except Exception:
+            pass  # If we can't check, proceed with upload
+
+    # Upload the GeoJSON file to S3 if it's local
+    if not file_path.startswith("s3://"):
+        try:
+            import boto3
+
+            storage_options = turn_S3_config_into_polars_storage_options(CLI_config.s3_storage)
+            s3_client = boto3.client(
+                "s3",
+                endpoint_url=storage_options.endpoint_url,
+                aws_access_key_id=storage_options.aws_access_key_id,
+                aws_secret_access_key=storage_options.aws_secret_access_key,
+                region_name=storage_options.region,
+            )
+
+            # Upload to S3 under the DC ID
+            s3_key = f"{dc_id}/geojson_data.geojson"
+            logger.info(f"Uploading GeoJSON to S3: {file_path} -> {s3_key}")
+            s3_client.upload_file(file_path, CLI_config.s3_storage.bucket, s3_key)
+            s3_location = f"s3://{CLI_config.s3_storage.bucket}/{s3_key}"
+            logger.info(f"Successfully uploaded GeoJSON to {s3_location}")
+
+        except Exception as e:
+            return {"result": "error", "message": f"Failed to upload GeoJSON to S3: {e}"}
+    else:
+        s3_location = file_path
+
+    # Register the S3 location in MongoDB via the deltatable upsert endpoint
+    api_upsert_result = api_upsert_deltatable(
+        data_collection_id=dc_id,
+        CLI_config=CLI_config,
+        delta_table_location=s3_location,
+        update=overwrite,
+        deltatable_size_bytes=file_size,
+    )
+
+    if api_upsert_result.status_code != 200:
+        return {
+            "result": "error",
+            "message": f"Failed to register GeoJSON location: {api_upsert_result.text}",
+        }
+
+    result = api_upsert_result.json()
+    if result.get("result") == "error":
+        return result
+
+    rich_print_checked_statement(
+        f"GeoJSON data collection processed: {data_collection.data_collection_tag}", "success"
+    )
+
+    return {
+        "result": "success",
+        "message": f"GeoJSON uploaded to {s3_location}",
     }

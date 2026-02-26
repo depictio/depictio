@@ -1,0 +1,232 @@
+# Map Component Demo Dashboard
+# Showcases the new map component with cross-filtering
+title: "Map Component Demo"
+subtitle: "TREC expedition sampling locations with geospatial visualization"
+project_tag: "Map Component Demo Project"
+
+components:
+  # Row 0: Cards across top
+  - tag: total-samples
+    component_type: card
+    workflow_tag: python/map_demo_workflow
+    data_collection_tag: sampling_locations
+    aggregation: count
+    column_name: sample_id
+    column_type: object
+    display:
+      icon_name: mdi:map-marker-multiple
+      icon_color: "#2196F3"
+      title_font_size: xl
+      value_font_size: xl
+    layout:
+      x: 1
+      y: 0
+      w: 2
+      h: 2
+
+  - tag: avg-reads
+    component_type: card
+    workflow_tag: python/map_demo_workflow
+    data_collection_tag: sampling_locations
+    aggregation: average
+    column_name: read_count
+    column_type: float64
+    display:
+      icon_name: mdi:dna
+      icon_color: "#4CAF50"
+      title_font_size: xl
+      value_font_size: xl
+    layout:
+      x: 3
+      y: 0
+      w: 2
+      h: 2
+
+  - tag: country-count
+    component_type: card
+    workflow_tag: python/map_demo_workflow
+    data_collection_tag: sampling_locations
+    aggregation: nunique
+    column_name: country
+    column_type: object
+    display:
+      icon_name: mdi:earth
+      icon_color: "#FF9800"
+      title_font_size: xl
+      value_font_size: xl
+    layout:
+      x: 5
+      y: 0
+      w: 2
+      h: 2
+
+  # Left sidebar: Interactive filters stacked
+  - tag: biome-filter
+    component_type: interactive
+    workflow_tag: python/map_demo_workflow
+    data_collection_tag: sampling_locations
+    interactive_component_type: MultiSelect
+    column_name: biome
+    column_type: object
+    display:
+      custom_color: "#9C27B0"
+      icon_name: mdi:forest
+      title_size: md
+    layout:
+      x: 0
+      y: 0
+      w: 1
+      h: 3
+
+  - tag: country-filter
+    component_type: interactive
+    workflow_tag: python/map_demo_workflow
+    data_collection_tag: sampling_locations
+    interactive_component_type: MultiSelect
+    column_name: country
+    column_type: object
+    display:
+      custom_color: "#2196F3"
+      icon_name: mdi:flag
+      title_size: md
+    layout:
+      x: 0
+      y: 3
+      w: 1
+      h: 3
+
+  - tag: depth-filter
+    component_type: interactive
+    workflow_tag: python/map_demo_workflow
+    data_collection_tag: sampling_locations
+    interactive_component_type: RangeSlider
+    column_name: depth_m
+    column_type: float64
+    display:
+      custom_color: "#00BCD4"
+      icon_name: mdi:waves
+      title_size: md
+    layout:
+      x: 0
+      y: 6
+      w: 1
+      h: 3
+
+  # Main area: Scatter map (left) + Choropleth map (right)
+  - tag: sampling-map
+    component_type: map
+    workflow_tag: python/map_demo_workflow
+    data_collection_tag: sampling_locations
+    lat_column: latitude
+    lon_column: longitude
+    color_column: biome
+    size_column: read_count
+    hover_columns: [sample_id, site_name, country, depth_m, collection_date]
+    title: "TREC Sampling Locations"
+    map_style: carto-positron
+    size_max: 20
+    selection_enabled: true
+    selection_column: sample_id
+    layout:
+      x: 0
+      y: 2
+      w: 4
+      h: 7
+
+  - tag: country-choropleth
+    component_type: map
+    workflow_tag: python/map_demo_workflow
+    data_collection_tag: sampling_locations
+    map_type: choropleth_map
+    locations_column: country_name
+    featureidkey: properties.NAME
+    color_column: sample_id
+    choropleth_aggregation: count
+    hover_columns: [country_name]
+    title: "Samples per Country"
+    map_style: carto-positron
+    opacity: 0.6
+    color_continuous_scale: Viridis
+    default_center: {lat: 50.0, lon: 10.0}
+    default_zoom: 3
+    geojson_url: "https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_110m_admin_0_countries.geojson"
+    layout:
+      x: 4
+      y: 2
+      w: 4
+      h: 7
+
+  # DC-based choropleth (GeoJSON loaded from data collection)
+  - tag: dc-choropleth
+    component_type: map
+    workflow_tag: python/map_demo_workflow
+    data_collection_tag: sampling_locations
+    map_type: choropleth_map
+    geojson_dc_tag: europe_geojson
+    locations_column: country_name
+    featureidkey: properties.NAME
+    color_column: sample_id
+    choropleth_aggregation: count
+    hover_columns: [country_name]
+    title: "Samples per Country (DC GeoJSON)"
+    map_style: carto-positron
+    opacity: 0.6
+    color_continuous_scale: YlOrRd
+    default_center: {lat: 50.0, lon: 10.0}
+    default_zoom: 3
+    layout:
+      x: 8
+      y: 2
+      w: 4
+      h: 7
+
+  # Figures below map
+  - tag: biome-distribution
+    component_type: figure
+    workflow_tag: python/map_demo_workflow
+    data_collection_tag: sampling_locations
+    visu_type: bar
+    figure_params:
+      x: biome
+      title: "Samples by Biome"
+      color: biome
+    mode: ui
+    selection_enabled: false
+    layout:
+      x: 0
+      y: 9
+      w: 4
+      h: 5
+
+  - tag: depth-vs-reads
+    component_type: figure
+    workflow_tag: python/map_demo_workflow
+    data_collection_tag: sampling_locations
+    visu_type: scatter
+    figure_params:
+      x: depth_m
+      y: read_count
+      color: biome
+      title: "Depth vs Read Count"
+      hover_name: site_name
+    mode: ui
+    selection_enabled: true
+    selection_column: sample_id
+    layout:
+      x: 4
+      y: 9
+      w: 4
+      h: 5
+
+  # Table at bottom
+  - tag: samples-table
+    component_type: table
+    workflow_tag: python/map_demo_workflow
+    data_collection_tag: sampling_locations
+    row_selection_enabled: true
+    row_selection_column: sample_id
+    layout:
+      x: 0
+      y: 14
+      w: 8
+      h: 5

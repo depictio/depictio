@@ -7,6 +7,7 @@ from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 from depictio.models.config import DEPICTIO_CONTEXT
 from depictio.models.logging import logger
 from depictio.models.models.base import MongoModel
+from depictio.models.models.data_collections_types.geojson import DCGeoJSONConfig
 from depictio.models.models.data_collections_types.image import DCImageConfig
 from depictio.models.models.data_collections_types.jbrowse import DCJBrowse2Config
 from depictio.models.models.data_collections_types.multiqc import DCMultiQC
@@ -159,7 +160,9 @@ class DataCollectionConfig(MongoModel):
     source: DataCollectionSource = DataCollectionSource.NATIVE
     metatype: str | None = None
     scan: Scan | None = None
-    dc_specific_properties: DCTableConfig | DCJBrowse2Config | DCMultiQC | DCImageConfig
+    dc_specific_properties: (
+        DCTableConfig | DCJBrowse2Config | DCMultiQC | DCImageConfig | DCGeoJSONConfig
+    )
     join: TableJoinConfig | None = None
 
     model_config = ConfigDict(extra="forbid", use_enum_values=True)
@@ -197,7 +200,7 @@ class DataCollectionConfig(MongoModel):
 
     @field_validator("type", mode="before")
     def validate_type(cls, v):
-        allowed_values = ["table", "jbrowse2", "multiqc", "image"]
+        allowed_values = ["table", "jbrowse2", "multiqc", "image", "geojson"]
         lower_v = v.lower()
         if lower_v not in allowed_values:
             raise ValueError(f"type must be one of {allowed_values}")
@@ -242,6 +245,12 @@ class DataCollectionConfig(MongoModel):
                 else:
                     # Initialize with default DCImageConfig if not provided
                     values["dc_specific_properties"] = DCImageConfig()
+        elif type_value == "geojson":
+            if not isinstance(dc_specific_properties, DCGeoJSONConfig):
+                if isinstance(dc_specific_properties, dict):
+                    values["dc_specific_properties"] = DCGeoJSONConfig(**dc_specific_properties)
+                else:
+                    values["dc_specific_properties"] = DCGeoJSONConfig()
 
         # Validate that scan is provided for non-MultiQC types and native sources
         source = values.get("source", "native")  # Default to string value

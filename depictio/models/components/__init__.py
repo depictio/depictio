@@ -37,8 +37,10 @@ from depictio.models.components.lite import (
     FigureLiteComponent,
     InteractiveLiteComponent,
     LiteComponent,
+    MapLiteComponent,
     TableLiteComponent,
 )
+from depictio.models.components.map import MapComponent
 from depictio.models.components.table import TableComponent
 from depictio.models.components.types import (
     AggregationFunction,
@@ -46,6 +48,7 @@ from depictio.models.components.types import (
     ColumnType,
     ComponentType,
     InteractiveType,
+    MapType,
 )
 from depictio.models.components.union import ComponentMetadata
 
@@ -56,12 +59,14 @@ __all__ = [
     "AggregationFunction",
     "InteractiveType",
     "ColumnType",
+    "MapType",
     # Lite models (for YAML/user definition)
     "BaseLiteComponent",
     "FigureLiteComponent",
     "CardLiteComponent",
     "InteractiveLiteComponent",
     "TableLiteComponent",
+    "MapLiteComponent",
     "LiteComponent",
     # Full models (for runtime/rendering)
     "BaseComponent",
@@ -69,6 +74,7 @@ __all__ = [
     "FigureComponent",
     "InteractiveComponent",
     "TableComponent",
+    "MapComponent",
     # Union
     "ComponentMetadata",
 ]

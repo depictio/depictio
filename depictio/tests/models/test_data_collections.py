@@ -14,6 +14,7 @@ from depictio.models.models.data_collections import (
     TableJoinConfig,
     WildcardRegexBase,
 )
+from depictio.models.models.data_collections_types.geojson import DCGeoJSONConfig
 from depictio.models.models.data_collections_types.jbrowse import DCJBrowse2Config
 from depictio.models.models.data_collections_types.table import DCTableConfig
 
@@ -318,6 +319,43 @@ class TestDataCollectionConfig:
         )
         assert isinstance(config.join, TableJoinConfig)
         assert config.join.on_columns == ["col1"]
+
+    def test_valid_geojson_config(self):
+        """Test creating a valid DataCollectionConfig with geojson type."""
+        scan_config = Scan(mode="single", scan_parameters=ScanSingle(filename="regions.geojson"))
+
+        config = DataCollectionConfig(
+            type="geojson",
+            scan=scan_config,
+            dc_specific_properties={},  # type: ignore[arg-type]
+        )
+        assert config.type == "geojson"
+        assert isinstance(config.dc_specific_properties, DCGeoJSONConfig)
+        assert config.dc_specific_properties.feature_id_key == "id"
+
+    def test_geojson_type_case_insensitive(self):
+        """Test that 'GEOJSON' normalizes to 'geojson'."""
+        scan_config = Scan(mode="single", scan_parameters=ScanSingle(filename="regions.geojson"))
+
+        config = DataCollectionConfig(
+            type="GEOJSON",
+            scan=scan_config,
+            dc_specific_properties={},  # type: ignore[arg-type]
+        )
+        assert config.type == "geojson"
+
+    def test_geojson_with_custom_properties(self):
+        """Test geojson DC with custom dc_specific_properties dict."""
+        scan_config = Scan(mode="single", scan_parameters=ScanSingle(filename="europe.geojson"))
+        dc_specific = {"feature_id_key": "properties.ISO_A3"}
+
+        config = DataCollectionConfig(
+            type="geojson",
+            scan=scan_config,
+            dc_specific_properties=dc_specific,  # type: ignore[arg-type]
+        )
+        assert isinstance(config.dc_specific_properties, DCGeoJSONConfig)
+        assert config.dc_specific_properties.feature_id_key == "properties.ISO_A3"
 
 
 class TestDataCollection:

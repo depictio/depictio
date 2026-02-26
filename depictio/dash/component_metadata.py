@@ -31,6 +31,7 @@ from depictio.dash.modules.figure_component.utils import build_figure
 from depictio.dash.modules.image_component.utils import build_image
 from depictio.dash.modules.interactive_component.utils import build_interactive
 from depictio.dash.modules.jbrowse_component.utils import build_jbrowse
+from depictio.dash.modules.map_component.utils import build_map
 from depictio.dash.modules.multiqc_component.utils import build_multiqc
 from depictio.dash.modules.table_component.utils import build_table
 from depictio.dash.modules.text_component.utils import build_text
@@ -134,6 +135,17 @@ COMPONENT_METADATA = {
             "h": 24,
         },  # Adjusted for 48-column grid with rowHeight=20 - full-featured MultiQC reports
     },
+    "map": {
+        "icon": "mdi:map-marker-multiple",
+        "display_name": "Map",
+        "description": "Geospatial map visualization with markers",
+        "color": colors["violet"],  # Violet #7A5DC7
+        "supports_edit": True,
+        "supports_reset": True,
+        "enabled": True,
+        "build_function": build_map,
+        "default_dimensions": {"w": 24, "h": 20},
+    },
     "image": {
         "icon": "mdi:image-area",  # Gallery-style icon for image data collections
         "display_name": "Image Gallery",
@@ -179,6 +191,10 @@ DUAL_PANEL_DIMENSIONS = {
     },
     "table": {
         "w": 8,  # 8/8 columns = 100% width (full row)
+        "h": 6,  # 6 × 100px = 600px
+    },
+    "map": {
+        "w": 8,  # 8/8 columns = 100% width (full row for map)
         "h": 6,  # 6 × 100px = 600px
     },
     "image": {
@@ -367,33 +383,14 @@ def get_build_functions() -> dict:
     """
     Get a dictionary mapping component types to their build functions.
 
-    Returns build functions wrapped with logging to track executions and
-    detect double-rendering issues. Includes a special '_reset_counts'
-    function to clear counters between dashboard loads.
-
     Returns:
-        Dictionary with component types as keys and wrapped build functions
-        as values. Also includes '_reset_counts' key with the reset function.
+        Dictionary with component types as keys and build functions as values.
     """
-    import functools
-
-    def wrap_build_function(component_type, original_func):
-        """Wrapper for build function executions"""
-
-        @functools.wraps(original_func)
-        def wrapper(**kwargs):
-            return original_func(**kwargs)
-
-        return wrapper
-
-    # Wrap each build function
-    wrapped_functions = {
-        component_type: wrap_build_function(component_type, metadata["build_function"])
+    return {
+        component_type: metadata["build_function"]
         for component_type, metadata in COMPONENT_METADATA.items()
         if "build_function" in metadata
     }
-
-    return wrapped_functions
 
 
 def get_async_build_functions() -> dict:
@@ -440,6 +437,7 @@ DISPLAY_NAME_TO_TYPE_MAPPING = {
     "MultiQC": "multiqc",
     "Image": "image",
     "Image Gallery": "image",  # Alternative name
+    "Map": "map",
     "None": None,  # Default case
 }
 

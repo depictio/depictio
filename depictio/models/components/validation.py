@@ -11,10 +11,8 @@ The validation rules ensure that:
 - JBrowse2 components only work with JBrowse2 DCs
 """
 
-from typing import Dict, List
-
 # Component type to allowed DC types mapping
-COMPONENT_DC_TYPE_MAPPING: Dict[str, List[str]] = {
+COMPONENT_DC_TYPE_MAPPING: dict[str, list[str]] = {
     "Figure": ["table"],
     "Card": ["table"],
     "Interactive": ["table"],
@@ -22,16 +20,23 @@ COMPONENT_DC_TYPE_MAPPING: Dict[str, List[str]] = {
     "MultiQC": ["multiqc"],
     "Image": ["image"],
     "JBrowse2": ["jbrowse2"],
+    "Map": ["table"],
     # Text component doesn't use data collections (no entry needed)
+    # Note: Map components also use "geojson" DCs for choropleth boundaries,
+    # but the geojson DC is referenced via geojson_dc_id, not the primary DC binding.
 }
+
+# GeoJSON DC type mapping - separate because it's a secondary reference
+GEOJSON_DC_ALLOWED_COMPONENTS: list[str] = ["Map"]
 
 # Reverse mapping: DC type to allowed component types
 # Used for UI filtering in stepper (shows which components are valid for a DC type)
-DC_COMPONENT_TYPE_MAPPING: Dict[str, List[str]] = {
-    "table": ["Figure", "Card", "Interactive", "Table"],
+DC_COMPONENT_TYPE_MAPPING: dict[str, list[str]] = {
+    "table": ["Figure", "Card", "Interactive", "Table", "Map"],
     "multiqc": ["MultiQC"],
     "image": ["Image"],
     "jbrowse2": ["JBrowse2"],
+    "geojson": ["Map"],
 }
 
 

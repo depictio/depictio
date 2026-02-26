@@ -314,6 +314,13 @@ def _create_component_buttons(
             "edit_only": ["drag", "remove"],
             "view_accessible": ["metadata"],
         },
+        "map": {
+            "orientation": "vertical",
+            "edit_only": ["drag", "duplicate", "edit", "remove"],
+            "view_accessible": ["metadata"],
+            "selection_edit_only": ["drag", "duplicate", "edit", "remove"],
+            "selection_view_accessible": ["metadata", "reset"],
+        },
         "text": {
             "orientation": "horizontal",
             "edit_only": ["drag", "duplicate", "alignment", "remove"],
@@ -330,8 +337,8 @@ def _create_component_buttons(
     config = button_configs.get(component_type, button_configs["default"])
 
     # Special handling for selection-enabled components
-    if component_type == "figure":
-        # Check if selection is enabled for this figure
+    if component_type in ("figure", "map"):
+        # Check if selection is enabled for this figure or map
         selection_enabled = (
             component_data.get("selection_enabled", False) if component_data else False
         )
@@ -576,9 +583,11 @@ def enable_box_edit_mode(
     # )
 
     def create_reset_button():
-        # Use different button types for figure vs table selection reset
+        # Use different button types for figure/table/map selection reset
         if component_type == "table":
             button_type = "reset-selection-table-button"
+        elif component_type == "map":
+            button_type = "reset-selection-map-button"
         else:
             button_type = "reset-selection-graph-button"
 

@@ -57,7 +57,7 @@ def _enrich_filter_components(
         source = comp.get("source")
 
         # Handle selection sources (scatter_selection, table_selection)
-        if source in ("scatter_selection", "table_selection"):
+        if source in ("scatter_selection", "table_selection", "map_selection"):
             selection_metadata = {
                 "dc_id": comp.get("dc_id"),
                 "column_name": comp.get("column_name"),

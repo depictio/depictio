@@ -25,6 +25,8 @@ from depictio.models.components.constants import (
     AGGREGATION_COMPATIBILITY,
     COLUMN_TYPES,
     INTERACTIVE_COMPATIBILITY,
+    MAP_STYLES,
+    MAP_TYPES,
     VISU_TYPES,
 )
 
@@ -330,6 +332,183 @@ class MultiQCLiteComponent(BaseLiteComponent):
     )
 
 
+class MapLiteComponent(BaseLiteComponent):
+    """Lite map component for user definition.
+
+    Supports scatter_map, density_map, and choropleth_map visualizations
+    using Plotly Express tile-based map functions (no API key required).
+
+    Example YAML:
+        - tag: sample-locations
+          component_type: map
+          workflow_tag: nfcore/ampliseq
+          data_collection_tag: sample_metadata
+          lat_column: latitude
+          lon_column: longitude
+          color_column: biome
+          size_column: read_count
+          hover_columns: [sample_id, collection_date, depth_m]
+          map_style: carto-positron
+          selection_enabled: true
+          selection_column: sample_id
+    """
+
+    component_type: Literal["map"] = "map"
+
+    # Map type
+    map_type: str = Field(
+        default="scatter_map",
+        description="Map visualization type (scatter_map, density_map, choropleth_map)",
+    )
+
+    # Column mappings (required for scatter_map and density_map, not for choropleth_map)
+    lat_column: str | None = Field(default=None, description="Column containing latitude values")
+    lon_column: str | None = Field(default=None, description="Column containing longitude values")
+
+    # Optional column mappings
+    color_column: str | None = Field(default=None, description="Column for marker color encoding")
+    size_column: str | None = Field(default=None, description="Column for marker size encoding")
+    hover_columns: list[str] = Field(
+        default_factory=list, description="Columns to show on hover tooltip"
+    )
+    text_column: str | None = Field(default=None, description="Column for marker text labels")
+
+    # Map styling
+    map_style: str = Field(
+        default="carto-positron",
+        description="Tile style (open-street-map, carto-positron, carto-darkmatter)",
+    )
+    default_zoom: int | None = Field(
+        default=None, description="Fixed zoom level (auto-computed if not set)"
+    )
+    default_center: dict[str, float] | None = Field(
+        default=None, description="Fixed center as {lat: float, lon: float}"
+    )
+    opacity: float = Field(default=1.0, description="Marker opacity (0.0 to 1.0)")
+    size_max: int = Field(default=15, description="Maximum marker size in pixels")
+
+    # Density map specific
+    z_column: str | None = Field(default=None, description="Weight column for density_map")
+    radius: int | None = Field(default=None, description="Smoothing radius for density_map")
+
+    # Choropleth map specific
+    locations_column: str | None = Field(
+        default=None, description="Column matching GeoJSON feature IDs"
+    )
+    featureidkey: str = Field(
+        default="id", description="Property path in GeoJSON features to match locations"
+    )
+    geojson_data: dict[str, Any] | None = Field(
+        default=None, description="Inline GeoJSON FeatureCollection dict"
+    )
+    geojson_url: str | None = Field(
+        default=None,
+        description="URL to a GeoJSON file (alternative to inline geojson_data)",
+    )
+    geojson_dc_id: str | None = Field(
+        default=None,
+        description="Data collection ID for a GeoJSON DC (alternative to geojson_data/geojson_url)",
+    )
+    geojson_dc_tag: str | None = Field(
+        default=None,
+        description="Human-readable tag for GeoJSON DC (resolved to geojson_dc_id during import)",
+    )
+    choropleth_aggregation: str | None = Field(
+        default=None,
+        description="Aggregation function for choropleth (count, sum, mean, min, max). "
+        "Groups data by locations_column and aggregates color_column.",
+    )
+    color_continuous_scale: str | None = Field(
+        default=None, description="Named Plotly color scale (e.g., 'Viridis')"
+    )
+    range_color: list[float] | None = Field(
+        default=None, description="[min, max] for continuous color scale"
+    )
+
+    # Selection filtering
+    selection_enabled: bool = Field(
+        default=False, description="Enable click/lasso selection filtering"
+    )
+    selection_column: str | None = Field(
+        default=None, description="Column to extract from selected points"
+    )
+
+    # Display title
+    title: str | None = Field(default=None, description="Title displayed above the map")
+
+    # Pass-through kwargs for extra Plotly Express parameters
+    dict_kwargs: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Additional parameters passed to Plotly Express map function",
+    )
+
+    @model_validator(mode="after")
+    def validate_map_constraints(self) -> "MapLiteComponent":
+        """Validate map-specific cross-field constraints."""
+        if self.map_type not in MAP_TYPES:
+            valid = ", ".join(MAP_TYPES)
+            raise ValueError(f"Invalid map_type '{self.map_type}'. Valid values: {valid}")
+
+        if self.map_style not in MAP_STYLES:
+            valid = ", ".join(MAP_STYLES)
+            raise ValueError(f"Invalid map_style '{self.map_style}'. Valid values: {valid}")
+
+        if self.selection_enabled and not self.selection_column:
+            raise ValueError("selection_column is required when selection_enabled=True")
+
+        # scatter_map / density_map require lat/lon columns
+        if self.map_type in ("scatter_map", "density_map"):
+            if not self.lat_column:
+                raise ValueError(
+                    "lat_column is required when map_type is scatter_map or density_map"
+                )
+            if not self.lon_column:
+                raise ValueError(
+                    "lon_column is required when map_type is scatter_map or density_map"
+                )
+
+        if self.map_type == "density_map" and not self.z_column:
+            raise ValueError("z_column is required when map_type='density_map'")
+
+        # choropleth_map requires locations_column, geojson source, color_column
+        if self.map_type == "choropleth_map":
+            if not self.locations_column:
+                raise ValueError("locations_column is required when map_type='choropleth_map'")
+            if not self.geojson_data and not self.geojson_url and not self.geojson_dc_id:
+                raise ValueError(
+                    "geojson_data, geojson_url, or geojson_dc_id is required "
+                    "when map_type='choropleth_map'"
+                )
+            if not self.color_column:
+                raise ValueError("color_column is required when map_type='choropleth_map'")
+            if self.selection_enabled:
+                raise ValueError(
+                    "selection_enabled is not supported for choropleth_map "
+                    "(Plotly does not support lasso/click selection on choropleth traces)"
+                )
+
+        if self.choropleth_aggregation and self.choropleth_aggregation not in (
+            "count",
+            "sum",
+            "mean",
+            "min",
+            "max",
+        ):
+            raise ValueError(
+                f"Invalid choropleth_aggregation '{self.choropleth_aggregation}'. "
+                "Valid values: count, sum, mean, min, max"
+            )
+
+        if self.range_color is not None and len(self.range_color) != 2:
+            raise ValueError("range_color must have exactly 2 elements [min, max]")
+
+        if self.default_center is not None:
+            if "lat" not in self.default_center or "lon" not in self.default_center:
+                raise ValueError("default_center must have 'lat' and 'lon' keys")
+
+        return self
+
+
 # Union type for any lite component
 LiteComponent = (
     FigureLiteComponent
@@ -338,4 +517,5 @@ LiteComponent = (
     | TableLiteComponent
     | ImageLiteComponent
     | MultiQCLiteComponent
+    | MapLiteComponent
 )
