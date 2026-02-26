@@ -167,25 +167,27 @@ async def create_initial_dashboards(admin_user: UserBeanie) -> list[dict | None]
     Returns:
         List of dashboard creation responses
     """
-    from depictio.api.v1.db_init_reference_datasets import STATIC_IDS
+    from depictio.api.v1.db_init_reference_datasets import STATIC_IDS, ReferenceDatasetRegistry
+
+    projects_base = os.path.join(os.path.dirname(__file__), "..", "..", "projects")
 
     dashboards_config = [
         {
             "name": "iris",
             "json_path": os.path.join(
-                os.path.dirname(__file__), "..", "..", "projects", "init", "iris", "dashboard.json"
+                projects_base,
+                ReferenceDatasetRegistry.DATASET_PATHS["iris"],
+                ".db_seeds",
+                "dashboard.json",
             ),
             "static_dc_id": STATIC_IDS["iris"]["data_collections"]["iris_table"],
         },
         {
             "name": "penguins",
             "json_path": os.path.join(
-                os.path.dirname(__file__),
-                "..",
-                "..",
-                "projects",
-                "reference",
-                "penguins",
+                projects_base,
+                ReferenceDatasetRegistry.DATASET_PATHS["penguins"],
+                ".db_seeds",
                 "dashboard.json",
             ),
             "static_dc_id": STATIC_IDS["penguins"]["data_collections"]["penguins_complete"],
@@ -193,12 +195,9 @@ async def create_initial_dashboards(admin_user: UserBeanie) -> list[dict | None]
         {
             "name": "ampliseq_multiqc",
             "json_path": os.path.join(
-                os.path.dirname(__file__),
-                "..",
-                "..",
-                "projects",
-                "reference",
-                "ampliseq",
+                projects_base,
+                ReferenceDatasetRegistry.DATASET_PATHS["ampliseq"],
+                ".db_seeds",
                 "dashboard_multiqc.json",
             ),
             # Use None for multi-DC dashboards to preserve DC IDs from JSON file
@@ -207,12 +206,9 @@ async def create_initial_dashboards(admin_user: UserBeanie) -> list[dict | None]
         {
             "name": "ampliseq_community",
             "json_path": os.path.join(
-                os.path.dirname(__file__),
-                "..",
-                "..",
-                "projects",
-                "reference",
-                "ampliseq",
+                projects_base,
+                ReferenceDatasetRegistry.DATASET_PATHS["ampliseq"],
+                ".db_seeds",
                 "dashboard_community.json",
             ),
             # Child tab dashboard - preserve DC IDs from JSON file
@@ -221,12 +217,9 @@ async def create_initial_dashboards(admin_user: UserBeanie) -> list[dict | None]
         {
             "name": "ampliseq_differential",
             "json_path": os.path.join(
-                os.path.dirname(__file__),
-                "..",
-                "..",
-                "projects",
-                "reference",
-                "ampliseq",
+                projects_base,
+                ReferenceDatasetRegistry.DATASET_PATHS["ampliseq"],
+                ".db_seeds",
                 "dashboard_differential.json",
             ),
             # Child tab dashboard - preserve DC IDs from JSON file
@@ -411,7 +404,14 @@ async def create_initial_dashboard(admin_user: UserBeanie) -> dict | None:
     from depictio.api.v1.db_init_reference_datasets import STATIC_IDS
 
     dashboard_json_path = os.path.join(
-        os.path.dirname(__file__), "..", "..", "projects", "init", "iris", "dashboard.json"
+        os.path.dirname(__file__),
+        "..",
+        "..",
+        "projects",
+        "init",
+        "iris",
+        ".db_seeds",
+        "dashboard.json",
     )
     static_dc_id = STATIC_IDS["iris"]["data_collections"]["iris_table"]
 

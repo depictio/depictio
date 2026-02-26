@@ -16,7 +16,7 @@ SOURCE_DIR = Path(
     "results-9c52c22f17179b9bd5cb2621c05ec3a931adcb02/qiime2"
 )
 OUTPUT_DIR = Path(__file__).parent
-METADATA_PATH = Path(__file__).parents[2] / "depictio/projects/reference/ampliseq/merged_metadata.tsv"
+METADATA_PATH = Path(__file__).parents[2] / "depictio/projects/nf-core/ampliseq/2.14.0/merged_metadata.tsv"
 
 
 def process_alpha_diversity() -> pl.DataFrame:

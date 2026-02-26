@@ -1078,18 +1078,18 @@ jobs:
 
           # NOTE: Penguins is a reference dataset that's auto-initialized by the backend
           # on startup via db_init_reference_datasets.py. The data files exist inside
-          # the Docker container at /app/depictio/projects/reference/penguins/, not on the host.
+          # the Docker container at /app/depictio/projects/init/penguins/, not on the host.
           # Therefore, we skip CLI operations that require host filesystem access.
 
           # Validate project config (tests validation logic with Docker path detection)
           depictio-cli --verbose config validate-project-config \
-            --project-config-path ../projects/reference/penguins/project.yaml \
+            --project-config-path ../projects/init/penguins/project.yaml \
             --CLI-config-path admin_config.yaml
 
           # Sync project to server (validates against API)
           depictio-cli --verbose config sync-project-config-to-server \
             --update \
-            --project-config-path ../projects/reference/penguins/project.yaml \
+            --project-config-path ../projects/init/penguins/project.yaml \
             --CLI-config-path admin_config.yaml
 
           # Skip scan/process/run - penguins is already initialized as reference dataset

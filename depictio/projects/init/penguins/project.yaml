@@ -14,7 +14,7 @@ workflows:
       structure: "sequencing-runs"
       runs_regex: "run_*"
       locations:
-        - /app/depictio/projects/reference/penguins/data
+        - /app/depictio/projects/init/penguins/data
     data_collections:
       # Physical features only
       - id: "646b0f3c1e4a2d7f8e5b8c9f"

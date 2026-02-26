@@ -20,7 +20,7 @@ from typing import Optional
 INPUT_DIR = Path(
     "/Users/tweber/Data/ampliseq-testdata/results-9c52c22f17179b9bd5cb2621c05ec3a931adcb02"
 )
-OUTPUT_DIR = Path("depictio/projects/reference/ampliseq")
+OUTPUT_DIR = Path("depictio/projects/nf-core/ampliseq/2.14.0")
 
 # Create output directory if it doesn't exist
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)

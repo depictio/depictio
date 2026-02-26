@@ -145,13 +145,16 @@ dump.rdb
 # Data Files
 ## Large/Heavy files
 *.parquet
-# Allow reference project multiqc data
-!depictio/projects/reference/ampliseq/run_1/multiqc_data/multiqc.parquet
+# Allow nf-core ampliseq multiqc data
+!depictio/projects/nf-core/ampliseq/2.14.0/run_1/multiqc_data/multiqc.parquet
 *.gz
 *.csv
 *.tsv
-# Allow reference project ampliseq data files
-!depictio/projects/reference/ampliseq/*.tsv
+# Allow nf-core ampliseq data files
+!depictio/projects/nf-core/ampliseq/2.14.0/*.tsv
+
+# Local-only projects (not version controlled)
+depictio/projects/reference/pools/
 
 ## Application Data
 data_prepare.json

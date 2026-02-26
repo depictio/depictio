@@ -1,3 +1,4 @@
+version: 1
 main_dashboard:
     title: nf-core/ampliseq
     # --- optional ---

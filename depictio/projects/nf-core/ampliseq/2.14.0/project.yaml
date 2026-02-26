@@ -2,6 +2,7 @@
 id: "646b0f3c1e4a2d7f8e5b8ca2"
 name: "Ampliseq Microbial Community Analysis"
 project_type: "advanced"
+is_public: true
 workflows:
   - id: "646b0f3c1e4a2d7f8e5b8ca3"
     name: "ampliseq"
@@ -17,7 +18,7 @@ workflows:
       structure: "sequencing-runs"
       runs_regex: "run_*"
       locations:
-        - /app/depictio/projects/reference/ampliseq
+        - /app/depictio/projects/nf-core/ampliseq/2.14.0
     data_collections:
       - id: "646b0f3c1e4a2d7f8e5b8ca4"
         data_collection_tag: "multiqc_data"
@@ -105,7 +106,7 @@ workflows:
           scan:
             mode: "single"
             scan_parameters:
-              filename: "/app/depictio/projects/reference/ampliseq/merged_metadata.tsv"
+              filename: "/app/depictio/projects/nf-core/ampliseq/2.14.0/merged_metadata.tsv"
           dc_specific_properties:
             format: "TSV"
             polars_kwargs:
@@ -128,7 +129,7 @@ workflows:
           scan:
             mode: "single"
             scan_parameters:
-              filename: "/app/depictio/projects/reference/ampliseq/faith_pd_long.tsv"
+              filename: "/app/depictio/projects/nf-core/ampliseq/2.14.0/faith_pd_long.tsv"
           dc_specific_properties:
             format: "TSV"
             polars_kwargs:
@@ -148,7 +149,7 @@ workflows:
           scan:
             mode: "single"
             scan_parameters:
-              filename: "/app/depictio/projects/reference/ampliseq/taxonomy_long.tsv"
+              filename: "/app/depictio/projects/nf-core/ampliseq/2.14.0/taxonomy_long.tsv"
           dc_specific_properties:
             format: "TSV"
             polars_kwargs:
@@ -168,7 +169,7 @@ workflows:
           scan:
             mode: "single"
             scan_parameters:
-              filename: "/app/depictio/projects/reference/ampliseq/ancom_volcano.tsv"
+              filename: "/app/depictio/projects/nf-core/ampliseq/2.14.0/ancom_volcano.tsv"
           dc_specific_properties:
             format: "TSV"
             polars_kwargs:
@@ -190,7 +191,7 @@ workflows:
           scan:
             mode: "single"
             scan_parameters:
-              filename: "/app/depictio/projects/reference/ampliseq/alpha_diversity.tsv"
+              filename: "/app/depictio/projects/nf-core/ampliseq/2.14.0/alpha_diversity.tsv"
           dc_specific_properties:
             format: "TSV"
             polars_kwargs:
@@ -209,7 +210,7 @@ workflows:
           scan:
             mode: "single"
             scan_parameters:
-              filename: "/app/depictio/projects/reference/ampliseq/taxonomy_rel_abundance_long.tsv"
+              filename: "/app/depictio/projects/nf-core/ampliseq/2.14.0/taxonomy_rel_abundance_long.tsv"
           dc_specific_properties:
             format: "TSV"
             polars_kwargs:
@@ -231,7 +232,7 @@ workflows:
           scan:
             mode: "single"
             scan_parameters:
-              filename: "/app/depictio/projects/reference/ampliseq/ancombc_habitat_level2.tsv"
+              filename: "/app/depictio/projects/nf-core/ampliseq/2.14.0/ancombc_habitat_level2.tsv"
           dc_specific_properties:
             format: "TSV"
             polars_kwargs:
