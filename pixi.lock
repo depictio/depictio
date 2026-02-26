@@ -2565,8 +2565,8 @@ packages:
   requires_python: '>=3.9'
 - pypi: ./
   name: depictio
-  version: 0.7.4b1
-  sha256: 41bf821e95f7f45997d1b0a29ed1285caf2368a2dc9bc7db8a84dc09aa51536c
+  version: 0.7.6b1
+  sha256: cf0252bfc723f9663ed4286a9cc8606a80b4393cc83ccc8ee96884d5119a778f
   requires_dist:
   - bcrypt==4.2.1
   - bleach==6.2.0
