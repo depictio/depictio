@@ -58,6 +58,7 @@ def build_map(**kwargs) -> html.Div:
         "choropleth_aggregation": kwargs.get("choropleth_aggregation"),
         "color_continuous_scale": kwargs.get("color_continuous_scale"),
         "range_color": kwargs.get("range_color"),
+        "geojson_dc_id": kwargs.get("geojson_dc_id"),
     }
 
     return html.Div(
@@ -175,6 +176,7 @@ def render_map(
     theme: str = "light",
     existing_metadata: dict | None = None,
     active_selection_values: list | None = None,
+    access_token: str | None = None,
 ) -> tuple[Any, dict]:
     """Render a Plotly map figure from DataFrame and configuration.
 
@@ -223,6 +225,15 @@ def render_map(
     choropleth_aggregation = trigger_data.get("choropleth_aggregation")
     color_continuous_scale = trigger_data.get("color_continuous_scale")
     range_color = trigger_data.get("range_color")
+    geojson_dc_id = trigger_data.get("geojson_dc_id")
+
+    # Resolve GeoJSON from data collection if no inline/URL source provided
+    if map_type == "choropleth_map" and not geojson_data and not geojson_url and geojson_dc_id:
+        from depictio.api.v1.deltatables_utils import load_geojson_from_s3
+
+        geojson_data = load_geojson_from_s3(geojson_dc_id, TOKEN=access_token)
+        if not geojson_data:
+            logger.warning(f"Failed to load GeoJSON from DC {geojson_dc_id}")
 
     # Auto-switch map_style for dark theme
     if theme == "dark" and map_style in ("open-street-map", "carto-positron"):

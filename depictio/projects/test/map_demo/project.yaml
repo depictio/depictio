@@ -36,6 +36,18 @@ workflows:
               site_name: "Sampling site name"
               country: "Country of sampling"
               country_name: "Country name matching Natural Earth GeoJSON NAME property"
+      - id: "660b2c3d4e5f6a7b8c9d1e13"
+        data_collection_tag: "europe_geojson"
+        description: "GeoJSON boundaries for European regions"
+        config:
+          type: "geojson"
+          metatype: "GeoJSON"
+          scan:
+            mode: single
+            scan_parameters:
+              filename: depictio/projects/test/map_demo/europe_regions.geojson
+          dc_specific_properties:
+            feature_id_key: "properties.NAME"
       - id: "660b2c3d4e5f6a7b8c9d1e12"
         data_collection_tag: "regional_summary"
         description: "Aggregated regional statistics for choropleth visualization"

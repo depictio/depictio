@@ -292,6 +292,7 @@ def register_core_callbacks(app):
                     current_theme,
                     existing_metadata=prev_metadata,
                     active_selection_values=map_selection_values,
+                    access_token=access_token,
                 )
 
                 # Convert to dict for serialization

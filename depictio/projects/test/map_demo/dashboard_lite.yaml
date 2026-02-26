@@ -156,6 +156,30 @@ components:
       w: 3
       h: 7
 
+  # DC-based choropleth (GeoJSON loaded from data collection)
+  - tag: dc-choropleth
+    component_type: map
+    workflow_tag: python/map_demo_workflow
+    data_collection_tag: sampling_locations
+    map_type: choropleth_map
+    geojson_dc_tag: europe_geojson
+    locations_column: country_name
+    featureidkey: properties.NAME
+    color_column: sample_id
+    choropleth_aggregation: count
+    hover_columns: [country_name]
+    title: "Samples per Country (DC GeoJSON)"
+    map_style: carto-positron
+    opacity: 0.6
+    color_continuous_scale: YlOrRd
+    default_center: {lat: 50.0, lon: 10.0}
+    default_zoom: 3
+    layout:
+      x: 8
+      y: 2
+      w: 4
+      h: 7
+
   # Figures below map
   - tag: biome-distribution
     component_type: figure

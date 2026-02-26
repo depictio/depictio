@@ -797,6 +797,59 @@ def _load_large_dataframe(
 
 
 # =============================================================================
+# GEOJSON LOADING
+# =============================================================================
+
+
+def load_geojson_from_s3(dc_id: str, TOKEN: str | None = None) -> dict | None:
+    """Load a GeoJSON file from S3 for a given data collection ID.
+
+    Fetches the delta_location (S3 path) from the API, then reads and parses
+    the GeoJSON file from S3.
+
+    Args:
+        dc_id: Data collection ID for the GeoJSON DC.
+        TOKEN: Access token for API authentication.
+
+    Returns:
+        Parsed GeoJSON dict, or None if loading fails.
+    """
+    try:
+        # Get the S3 location via the deltatable API
+        response = httpx.get(
+            f"{API_BASE_URL}/depictio/api/v1/deltatables/get/{dc_id}",
+            headers={"Authorization": f"Bearer {TOKEN}"} if TOKEN else {},
+            timeout=30.0,
+        )
+        if response.status_code != 200:
+            logger.error(f"Failed to get GeoJSON location for DC {dc_id}: {response.text}")
+            return None
+
+        data = response.json()
+        s3_path = data.get("delta_table_location") or data.get("delta_location")
+        if not s3_path:
+            logger.error(f"No S3 location found for GeoJSON DC {dc_id}")
+            return None
+
+        logger.info(f"Loading GeoJSON from S3: {s3_path}")
+
+        # Read the GeoJSON from S3
+        import s3fs
+
+        fs = s3fs.S3FileSystem(**polars_s3_config)
+        with fs.open(s3_path, "r") as f:
+            geojson_data = json.load(f)
+
+        feature_count = len(geojson_data.get("features", []))
+        logger.info(f"Loaded GeoJSON with {feature_count} features from {s3_path}")
+        return geojson_data
+
+    except Exception as e:
+        logger.error(f"Failed to load GeoJSON for DC {dc_id}: {e}", exc_info=True)
+        return None
+
+
+# =============================================================================
 # MAIN FUNCTION
 # =============================================================================
 

@@ -856,6 +856,10 @@ class DashboardDataLite(BaseModel):
                     lite_comp["geojson_data"] = comp["geojson_data"]
                 if comp.get("geojson_url"):
                     lite_comp["geojson_url"] = comp["geojson_url"]
+                if comp.get("geojson_dc_id"):
+                    lite_comp["geojson_dc_id"] = comp["geojson_dc_id"]
+                if comp.get("geojson_dc_tag"):
+                    lite_comp["geojson_dc_tag"] = comp["geojson_dc_tag"]
                 if comp.get("choropleth_aggregation"):
                     lite_comp["choropleth_aggregation"] = comp["choropleth_aggregation"]
                 if comp.get("color_continuous_scale"):
@@ -1074,6 +1078,8 @@ class DashboardDataLite(BaseModel):
                         "featureidkey": comp_dict.get("featureidkey", "id"),
                         "geojson_data": comp_dict.get("geojson_data"),
                         "geojson_url": comp_dict.get("geojson_url"),
+                        "geojson_dc_id": comp_dict.get("geojson_dc_id"),
+                        "geojson_dc_tag": comp_dict.get("geojson_dc_tag"),
                         "choropleth_aggregation": comp_dict.get("choropleth_aggregation"),
                         "color_continuous_scale": comp_dict.get("color_continuous_scale"),
                         "range_color": comp_dict.get("range_color"),

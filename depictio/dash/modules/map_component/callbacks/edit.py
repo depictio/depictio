@@ -44,6 +44,7 @@ def register_map_edit_callback(app):
             "featureidkey",
             "geojson_data",
             "geojson_url",
+            "geojson_dc_id",
             "choropleth_aggregation",
             "color_continuous_scale",
             "range_color",

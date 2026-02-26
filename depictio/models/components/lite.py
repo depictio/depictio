@@ -396,6 +396,14 @@ class MapLiteComponent(BaseLiteComponent):
         default=None,
         description="URL to a GeoJSON file (alternative to inline geojson_data)",
     )
+    geojson_dc_id: str | None = Field(
+        default=None,
+        description="Data collection ID for a GeoJSON DC (alternative to geojson_data/geojson_url)",
+    )
+    geojson_dc_tag: str | None = Field(
+        default=None,
+        description="Human-readable tag for GeoJSON DC (resolved to geojson_dc_id during import)",
+    )
     choropleth_aggregation: str | None = Field(
         default=None,
         description="Aggregation function for choropleth (count, sum, mean, min, max). "
@@ -457,9 +465,10 @@ class MapLiteComponent(BaseLiteComponent):
         if self.map_type == "choropleth_map":
             if not self.locations_column:
                 raise ValueError("locations_column is required when map_type='choropleth_map'")
-            if not self.geojson_data and not self.geojson_url:
+            if not self.geojson_data and not self.geojson_url and not self.geojson_dc_id:
                 raise ValueError(
-                    "geojson_data or geojson_url is required when map_type='choropleth_map'"
+                    "geojson_data, geojson_url, or geojson_dc_id is required "
+                    "when map_type='choropleth_map'"
                 )
             if not self.color_column:
                 raise ValueError("color_column is required when map_type='choropleth_map'")
