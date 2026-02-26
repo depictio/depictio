@@ -1,0 +1,475 @@
+title: HGSVC Pools Strand-seq Analysis
+# --- optional ---
+project_tag: HGSVC Pools Strand-seq Analysis
+icon: mdi:dna
+# --- generated on export ---
+dashboard_id: null
+components:
+# ============================================================================
+# CARDS (y=0, h=2, w=2 each)
+# ============================================================================
+-   component_type: card
+    workflow_tag: hgsvc_pools_analysis
+    data_collection_tag: joined_demux_with_population
+    aggregation: count
+    column_name: sample_id
+    # --- optional ---
+    column_type: object
+    display:
+        icon_name: mdi:account-group
+        icon_color: '#5C6BC0'
+        title_color: '#5C6BC0'
+        title_font_size: xl
+        value_font_size: xl
+    # --- generated on export ---
+    tag: card-sample_id_count-a1b001
+    layout:
+        x: 0
+        y: 0
+        w: 2
+        h: 2
+    title: Total Samples
+-   component_type: card
+    workflow_tag: hgsvc_pools_analysis
+    data_collection_tag: joined_demux_with_population
+    aggregation: nunique
+    column_name: pool_name
+    # --- optional ---
+    column_type: object
+    display:
+        icon_name: mdi:pool
+        icon_color: '#F68B33'
+        title_color: '#F68B33'
+        title_font_size: xl
+        value_font_size: xl
+    # --- generated on export ---
+    tag: card-pool_name_nunique-b2c002
+    layout:
+        x: 2
+        y: 0
+        w: 2
+        h: 2
+    title: Total Pools
+-   component_type: card
+    workflow_tag: hgsvc_pools_analysis
+    data_collection_tag: joined_demux_with_population
+    aggregation: average
+    column_name: cell_count
+    # --- optional ---
+    column_type: float64
+    display:
+        icon_name: mdi:microscope
+        icon_color: '#26A69A'
+        title_color: '#26A69A'
+        title_font_size: xl
+        value_font_size: xl
+    # --- generated on export ---
+    tag: card-cell_count_average-c3d003
+    layout:
+        x: 4
+        y: 0
+        w: 2
+        h: 2
+    title: Avg Cell Count
+-   component_type: card
+    workflow_tag: hgsvc_pools_analysis
+    data_collection_tag: joined_demux_with_population
+    aggregation: nunique
+    column_name: superpop
+    # --- optional ---
+    column_type: object
+    display:
+        icon_name: mdi:earth
+        icon_color: '#984EA3'
+        title_color: '#984EA3'
+        title_font_size: xl
+        value_font_size: xl
+    # --- generated on export ---
+    tag: card-superpop_nunique-d4e004
+    layout:
+        x: 6
+        y: 0
+        w: 2
+        h: 2
+    title: Superpopulations
+# ============================================================================
+# CARDS ROW 2 (y=2, h=2, w=2 each) — Additional metrics
+# ============================================================================
+-   component_type: card
+    workflow_tag: hgsvc_pools_analysis
+    data_collection_tag: joined_demux_with_population
+    aggregation: median
+    column_name: cell_count
+    # --- optional ---
+    column_type: float64
+    display:
+        icon_name: mdi:chart-median-absolute-deviation
+        icon_color: '#009688'
+        title_color: '#009688'
+        title_font_size: xl
+        value_font_size: xl
+    # --- generated on export ---
+    tag: card-cell_count_median-e5f101
+    layout:
+        x: 0
+        y: 2
+        w: 2
+        h: 2
+    title: Median Cell Count
+-   component_type: card
+    workflow_tag: hgsvc_pools_analysis
+    data_collection_tag: joined_demux_with_population
+    aggregation: std_dev
+    column_name: cell_count
+    # --- optional ---
+    column_type: float64
+    display:
+        icon_name: mdi:chart-bell-curve
+        icon_color: '#FF5722'
+        title_color: '#FF5722'
+        title_font_size: xl
+        value_font_size: xl
+    # --- generated on export ---
+    tag: card-cell_count_std-f6a202
+    layout:
+        x: 2
+        y: 2
+        w: 2
+        h: 2
+    title: Std Dev Cell Count
+-   component_type: card
+    workflow_tag: hgsvc_pools_analysis
+    data_collection_tag: joined_demux_with_population
+    aggregation: max
+    column_name: cell_count
+    # --- optional ---
+    column_type: float64
+    display:
+        icon_name: mdi:arrow-up-bold
+        icon_color: '#E91E63'
+        title_color: '#E91E63'
+        title_font_size: xl
+        value_font_size: xl
+    # --- generated on export ---
+    tag: card-cell_count_max-a7b303
+    layout:
+        x: 4
+        y: 2
+        w: 2
+        h: 2
+    title: Max Cell Count
+-   component_type: card
+    workflow_tag: hgsvc_pools_analysis
+    data_collection_tag: joined_demux_with_population
+    aggregation: nunique
+    column_name: pop
+    # --- optional ---
+    column_type: object
+    display:
+        icon_name: mdi:map-marker-multiple
+        icon_color: '#3F51B5'
+        title_color: '#3F51B5'
+        title_font_size: xl
+        value_font_size: xl
+    # --- generated on export ---
+    tag: card-pop_nunique-b8c404
+    layout:
+        x: 6
+        y: 2
+        w: 2
+        h: 2
+    title: Populations
+# ============================================================================
+# INTERACTIVE FILTERS (x=0, w=1, sidebar)
+# ============================================================================
+-   component_type: interactive
+    workflow_tag: hgsvc_pools_analysis
+    data_collection_tag: joined_demux_with_population
+    interactive_component_type: MultiSelect
+    column_name: superpop
+    # --- optional ---
+    column_type: object
+    display:
+        title_size: md
+        custom_color: '#5C6BC0'
+        icon_name: mdi:earth
+    # --- generated on export ---
+    tag: interactive-superpop-e5f005
+    layout:
+        x: 0
+        y: 4
+        w: 1
+        h: 2
+    title: Superpopulation
+-   component_type: interactive
+    workflow_tag: hgsvc_pools_analysis
+    data_collection_tag: joined_demux_with_population
+    interactive_component_type: MultiSelect
+    column_name: ANCESTRY
+    # --- optional ---
+    column_type: object
+    display:
+        title_size: md
+        custom_color: '#26A69A'
+        icon_name: mdi:family-tree
+    # --- generated on export ---
+    tag: interactive-ancestry-f6a006
+    layout:
+        x: 0
+        y: 6
+        w: 1
+        h: 2
+    title: Ancestry
+-   component_type: interactive
+    workflow_tag: hgsvc_pools_analysis
+    data_collection_tag: joined_demux_with_population
+    interactive_component_type: MultiSelect
+    column_name: pool_name
+    # --- optional ---
+    column_type: object
+    display:
+        title_size: md
+        custom_color: '#F68B33'
+        icon_name: mdi:pool
+    # --- generated on export ---
+    tag: interactive-pool_name-a7b007
+    layout:
+        x: 0
+        y: 8
+        w: 1
+        h: 2
+    title: Pool Name
+-   component_type: interactive
+    workflow_tag: hgsvc_pools_analysis
+    data_collection_tag: joined_demux_with_population
+    interactive_component_type: MultiSelect
+    column_name: sample_id
+    # --- optional ---
+    column_type: object
+    display:
+        title_size: md
+        custom_color: '#EC407A'
+        icon_name: mdi:account
+    # --- generated on export ---
+    tag: interactive-sample_id-b8c008
+    layout:
+        x: 0
+        y: 10
+        w: 1
+        h: 2
+    title: Sample ID
+-   component_type: interactive
+    workflow_tag: hgsvc_pools_analysis
+    data_collection_tag: joined_demux_with_population
+    interactive_component_type: RangeSlider
+    column_name: cell_count
+    # --- optional ---
+    column_type: float64
+    display:
+        title_size: md
+        custom_color: '#8BC34A'
+        icon_name: mdi:counter
+    # --- generated on export ---
+    tag: interactive-cell_count-c9d009
+    layout:
+        x: 0
+        y: 12
+        w: 1
+        h: 3
+    title: Cell Count Range
+# ============================================================================
+# SUNBURST — Superpopulation / Population hierarchy (code mode)
+# ============================================================================
+-   component_type: figure
+    workflow_tag: hgsvc_pools_analysis
+    data_collection_tag: joined_demux_with_population
+    visu_type: sunburst
+    # --- optional ---
+    figure_params:
+        path:
+        - superpop
+        - pop
+        values: count
+        title: Population Hierarchy
+    mode: code
+    code_content: "df_modified = df.filter(pl.col('pop').is_not_null()).group_by(['superpop', 'pop']).agg(pl.col('sample_id').n_unique().alias('count'))\n\nfig = px.sunburst(\n    df_modified.to_pandas(),\n    path=['superpop', 'pop'],\n    values='count',\n    color='superpop',\n    color_discrete_map={'AFR': '#ffd845', 'AMR': '#710027', 'EAS': '#778500', 'EUR': '#018ead', 'SAS': '#c44cfd'},\n    title='Population Hierarchy'\n)"
+    selection_enabled: false
+    # --- generated on export ---
+    tag: figure-sunburst-pop-hierarchy-d0e010
+    layout:
+        x: 0
+        y: 4
+        w: 4
+        h: 5
+# ============================================================================
+# HISTOGRAM — Cell count distribution by superpopulation (ui mode)
+# ============================================================================
+-   component_type: figure
+    workflow_tag: hgsvc_pools_analysis
+    data_collection_tag: joined_demux_with_population
+    visu_type: histogram
+    # --- optional ---
+    figure_params:
+        x: cell_count
+        color: superpop
+        color_discrete_map: '{"AFR": "#ffd845", "AMR": "#710027", "EAS": "#778500", "EUR": "#018ead", "SAS": "#c44cfd"}'
+        title: Cell Count Distribution by Superpopulation
+        barmode: overlay
+        opacity: 0.7
+        marginal: rug
+        labels: '{"cell_count": "Cell Count", "superpop": "Superpopulation"}'
+    mode: ui
+    selection_enabled: false
+    # --- generated on export ---
+    tag: figure-histogram-cell_count-e1f011
+    layout:
+        x: 4
+        y: 4
+        w: 4
+        h: 5
+# ============================================================================
+# BARPLOT — Cell count per sample colored by pool (ui mode)
+# ============================================================================
+-   component_type: figure
+    workflow_tag: hgsvc_pools_analysis
+    data_collection_tag: joined_demux_with_population
+    visu_type: bar
+    # --- optional ---
+    figure_params:
+        x: sample_id
+        y: cell_count
+        color: pool_name
+        title: Cell Count per Sample by Pool
+        labels:
+            sample_id: Sample ID
+            cell_count: Cell Count
+            pool_name: Pool
+    mode: code
+    code_content: "df_modified = df.sort(['pool_name', 'cell_count'], descending=[False, True])\n\nfig = px.bar(\n    df_modified.to_pandas(),\n    x='sample_id',\n    y='cell_count',\n    color='pool_name',\n    color_discrete_map={'embl-pilot1': '#1f77b4', 'embl-pilot2': '#ff7f0e', 'embl-pilot3': '#2ca02c', 'embl-pool-1a': '#d62728', 'embl-pool-2b': '#9467bd', 'embl-pool-3c': '#8c564b', 'embl-pool-4d': '#e377c2', 'embl-pool-5e': '#7f7f7f', 'embl-pool-6f': '#bcbd22', 'embl_7g': '#17becf', 'embl_8h': '#aec7e8', 'embl_9i': '#ffbb78', 'embl_10j': '#98df8a', 'embl_11k': '#ff9896', 'embl_12l': '#c5b0d5'},\n    title='Cell Count per Sample by Pool',\n    labels={'sample_id': 'Sample ID', 'cell_count': 'Cell Count', 'pool_name': 'Pool'}\n)\nfig.update_layout(xaxis={'categoryorder': 'array', 'categoryarray': df_modified['sample_id'].to_list()})"
+    selection_enabled: false
+    # --- generated on export ---
+    tag: figure-bar-sample-cell_count-f2a012
+    layout:
+        x: 0
+        y: 9
+        w: 8
+        h: 5
+# ============================================================================
+# BOX PLOT — Cell count distribution by superpopulation
+# ============================================================================
+-   component_type: figure
+    workflow_tag: hgsvc_pools_analysis
+    data_collection_tag: joined_demux_with_population
+    visu_type: box
+    # --- optional ---
+    figure_params:
+        x: superpop
+        y: cell_count
+        color: superpop
+        color_discrete_map: '{"AFR": "#ffd845", "AMR": "#710027", "EAS": "#778500", "EUR": "#018ead", "SAS": "#c44cfd"}'
+        title: Cell Count Distribution by Superpopulation
+        points: all
+        labels: '{"cell_count": "Cell Count", "superpop": "Superpopulation"}'
+    mode: ui
+    selection_enabled: false
+    # --- generated on export ---
+    tag: figure-box-superpop-cell_count-c9d505
+    layout:
+        x: 0
+        y: 14
+        w: 4
+        h: 5
+# ============================================================================
+# BOX PLOT — Cell count distribution by pool
+# ============================================================================
+-   component_type: figure
+    workflow_tag: hgsvc_pools_analysis
+    data_collection_tag: joined_demux_with_population
+    visu_type: box
+    # --- optional ---
+    figure_params:
+        x: pool_name
+        y: cell_count
+        color: pool_name
+        color_discrete_map: '{"embl-pilot1": "#1f77b4", "embl-pilot2": "#ff7f0e", "embl-pilot3": "#2ca02c", "embl-pool-1a": "#d62728", "embl-pool-2b": "#9467bd", "embl-pool-3c": "#8c564b", "embl-pool-4d": "#e377c2", "embl-pool-5e": "#7f7f7f", "embl-pool-6f": "#bcbd22", "embl_7g": "#17becf", "embl_8h": "#aec7e8", "embl_9i": "#ffbb78", "embl_10j": "#98df8a", "embl_11k": "#ff9896", "embl_12l": "#c5b0d5"}'
+        title: Cell Count Distribution by Pool
+        points: all
+        labels: '{"cell_count": "Cell Count", "pool_name": "Pool"}'
+    mode: ui
+    selection_enabled: false
+    # --- generated on export ---
+    tag: figure-box-pool-cell_count-d0e606
+    layout:
+        x: 4
+        y: 14
+        w: 4
+        h: 5
+# ============================================================================
+# STACKED BAR — Pool composition by superpopulation (code mode)
+# ============================================================================
+-   component_type: figure
+    workflow_tag: hgsvc_pools_analysis
+    data_collection_tag: joined_demux_with_population
+    visu_type: bar
+    # --- optional ---
+    figure_params:
+        x: pool_name
+        y: count
+        color: superpop
+        title: Pool Composition by Superpopulation
+    mode: code
+    code_content: "df_modified = df.group_by(['pool_name', 'superpop']).agg(pl.col('sample_id').count().alias('count')).sort('pool_name')\n\nfig = px.bar(\n    df_modified.to_pandas(),\n    x='pool_name',\n    y='count',\n    color='superpop',\n    color_discrete_map={'AFR': '#ffd845', 'AMR': '#710027', 'EAS': '#778500', 'EUR': '#018ead', 'SAS': '#c44cfd'},\n    title='Pool Composition by Superpopulation',\n    labels={'pool_name': 'Pool', 'count': 'Number of Samples', 'superpop': 'Superpopulation'},\n    barmode='stack'\n)\nfig.update_layout(xaxis={'categoryorder': 'category ascending'})"
+    selection_enabled: false
+    # --- generated on export ---
+    tag: figure-bar-pool-superpop-composition-e1f707
+    layout:
+        x: 0
+        y: 19
+        w: 4
+        h: 5
+# ============================================================================
+# STACKED BAR — Sample status by superpopulation (code mode)
+# ============================================================================
+-   component_type: figure
+    workflow_tag: hgsvc_pools_analysis
+    data_collection_tag: joined_demux_with_population
+    visu_type: bar
+    # --- optional ---
+    figure_params:
+        x: superpop
+        y: count
+        color: cell_category
+        title: Sample QC Status by Superpopulation
+    mode: code
+    code_content: "df_modified = df.group_by(['pool_name', 'cell_category']).agg(pl.col('sample_id').count().alias('count')).sort(['pool_name', 'cell_category'])\n\nfig = px.bar(\n    df_modified.to_pandas(),\n    x='pool_name',\n    y='count',\n    color='cell_category',\n    color_discrete_map={'5_or_more': '#4CAF50', 'less_than_5': '#FF9800', 'unassigned': '#F44336'},\n    title='Sample QC Status by Pool',\n    labels={'pool_name': 'Pool', 'count': 'Number of Samples', 'cell_category': 'Cell Category'},\n    barmode='stack'\n)\nfig.update_layout(xaxis={'categoryorder': 'category ascending'})"
+    selection_enabled: false
+    # --- generated on export ---
+    tag: figure-bar-superpop-qc-status-f2a808
+    layout:
+        x: 4
+        y: 19
+        w: 4
+        h: 5
+# ============================================================================
+# TABLE — Joined demux + population data
+# ============================================================================
+-   component_type: table
+    workflow_tag: hgsvc_pools_analysis
+    data_collection_tag: joined_demux_with_population
+    title: Demultiplexing Results with Population Metadata
+    description: Joined table showing sample demux results enriched with ancestry information
+    title_size: h1
+    title_align: left
+    # --- optional ---
+    columns:
+    - sample_id
+    - cell_count
+    - ANCESTRY
+    row_selection_enabled: false
+    # --- generated on export ---
+    tag: table-demux-population-a3b013
+    layout:
+        x: 0
+        y: 24
+        w: 8
+        h: 5
