@@ -1,0 +1,15 @@
+/* Row highlighting for AG Grid conditional highlighting prototype */
+
+.row-highlighted {
+    background-color: rgba(34, 139, 230, 0.12) !important;
+    font-weight: 500;
+}
+
+.row-dimmed {
+    opacity: 0.5;
+}
+
+/* Ensure the AppShell navbar scrolls on small screens */
+.mantine-AppShell-navbar {
+    overflow-y: auto;
+}
