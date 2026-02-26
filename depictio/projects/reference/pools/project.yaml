@@ -52,6 +52,27 @@ workflows:
             is_DM: "Flag indicating if the sample was demultiplexed"
             cell_category: "Category classification of the cell"
             status: "Processing status of the sample"
+    # Synthetic inversion genotype matrix
+    - data_collection_tag: "sample_inversion_genotypes"
+      description: "Synthetic genotype matrix: 600 inversions × 479 samples (HW-simulated from superpop AFs)"
+      config:
+        type: "Table"
+        metatype: "Metadata"
+        scan:
+          mode: "recursive"
+          scan_parameters:
+            regex_config:
+              pattern: "sample_inversion_genotypes.xlsx"
+        dc_specific_properties:
+          format: "XLSX"
+          columns_description:
+            inversion_id: "Inversion identifier (e.g. INV_0001)"
+            global_af: "Global allele frequency of the inversion"
+            af_afr_prop: "Normalized proportion of African superpopulation AF"
+            af_eur_prop: "Normalized proportion of European superpopulation AF"
+            af_eas_prop: "Normalized proportion of East Asian superpopulation AF"
+            af_sas_prop: "Normalized proportion of South Asian superpopulation AF"
+            af_amr_prop: "Normalized proportion of American superpopulation AF"
     # Strand-seq QC metrics
     # - data_collection_tag: "strandseq_qc_metrics"
     #   description: "Strand-seq quality control metrics for HGSVC samples"
