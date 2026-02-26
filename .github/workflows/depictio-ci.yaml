@@ -838,7 +838,7 @@ jobs:
           source venv/bin/activate
           echo "📋 Testing dashboard validate (offline)..."
 
-          depictio-cli dashboard validate ../projects/init/iris/dashboard_lite.yaml
+          depictio-cli dashboard validate ../projects/init/iris/dashboards/overview.yaml
 
           echo "✅ Dashboard validate passed"
 
@@ -966,11 +966,11 @@ jobs:
           echo "📋 Testing dashboard commands (server)..."
 
           # Import with dry-run (validates without creating)
-          depictio-cli dashboard import ../projects/init/iris/dashboard_lite.yaml --dry-run
+          depictio-cli dashboard import ../projects/init/iris/dashboards/overview.yaml --dry-run
 
           # Actually import dashboard to server
           echo "🔄 Importing dashboard to server..."
-          IMPORT_OUTPUT=$(depictio-cli dashboard import ../projects/init/iris/dashboard_lite.yaml --config admin_config.yaml 2>&1)
+          IMPORT_OUTPUT=$(depictio-cli dashboard import ../projects/init/iris/dashboards/overview.yaml --config admin_config.yaml 2>&1)
           echo "$IMPORT_OUTPUT"
 
           # Extract dashboard ID from import output
@@ -1137,7 +1137,7 @@ jobs:
           echo "📋 Testing Image Demo dashboard import..."
 
           # Import Image Demo dashboard
-          IMPORT_OUTPUT=$(depictio-cli dashboard import ../projects/test/image_demo/dashboard_lite.yaml --config admin_config.yaml 2>&1)
+          IMPORT_OUTPUT=$(depictio-cli dashboard import ../projects/test/image_demo/dashboards/gallery.yaml --config admin_config.yaml 2>&1)
           echo "$IMPORT_OUTPUT"
 
           # Extract dashboard ID
@@ -1186,7 +1186,7 @@ jobs:
 
           # Import iris YAML to get a fresh dashboard ID to seed the roundtrip
           IMPORT_OUTPUT=$(depictio-cli dashboard import \
-            ../projects/init/iris/dashboard_lite.yaml \
+            ../projects/init/iris/dashboards/overview.yaml \
             --config admin_config.yaml --overwrite 2>&1)
           echo "$IMPORT_OUTPUT"
 
