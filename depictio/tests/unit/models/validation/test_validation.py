@@ -214,3 +214,50 @@ class TestComponentModelIntegration:
         # Can convert to column defs
         defs = table.to_column_defs()
         assert len(defs) >= 1
+
+
+class TestComponentDCTypeValidation:
+    """Tests for component ↔ DC type mappings in validation module."""
+
+    def test_map_compatible_with_table_dc(self):
+        """Map component should be compatible with table DC type."""
+        from depictio.models.components.validation import validate_component_dc_type_compatibility
+
+        is_valid, msg = validate_component_dc_type_compatibility("Map", "table")
+        assert is_valid is True
+        assert msg == ""
+
+    def test_map_incompatible_with_image_dc(self):
+        """Map component should NOT be compatible with image DC type."""
+        from depictio.models.components.validation import validate_component_dc_type_compatibility
+
+        is_valid, msg = validate_component_dc_type_compatibility("Map", "image")
+        assert is_valid is False
+        assert "Map" in msg
+
+    def test_geojson_dc_maps_to_map_component(self):
+        """geojson DC type should map to Map component in reverse mapping."""
+        from depictio.models.components.validation import DC_COMPONENT_TYPE_MAPPING
+
+        assert "geojson" in DC_COMPONENT_TYPE_MAPPING
+        assert "Map" in DC_COMPONENT_TYPE_MAPPING["geojson"]
+
+    def test_geojson_allowed_components(self):
+        """GEOJSON_DC_ALLOWED_COMPONENTS should contain Map."""
+        from depictio.models.components.validation import GEOJSON_DC_ALLOWED_COMPONENTS
+
+        assert "Map" in GEOJSON_DC_ALLOWED_COMPONENTS
+
+    def test_existing_mappings_unchanged(self):
+        """Regression: existing Figure→table, Image→image still work."""
+        from depictio.models.components.validation import validate_component_dc_type_compatibility
+
+        is_valid, _ = validate_component_dc_type_compatibility("Figure", "table")
+        assert is_valid is True
+
+        is_valid, _ = validate_component_dc_type_compatibility("Image", "image")
+        assert is_valid is True
+
+        # Negative: Figure should not work with image DC
+        is_valid, _ = validate_component_dc_type_compatibility("Figure", "image")
+        assert is_valid is False
