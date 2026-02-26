@@ -110,7 +110,7 @@ def design_map(
                     {"value": "carto-positron", "label": "Light"},
                     {"value": "carto-darkmatter", "label": "Dark"},
                 ],
-                value="open-street-map",
+                value="carto-positron",
                 fullWidth=True,
             ),
             # Opacity slider

@@ -5,7 +5,6 @@ from pydantic import ValidationError
 
 from depictio.models.components.lite import MapLiteComponent
 
-
 # ============================================================================
 # Fixtures
 # ============================================================================

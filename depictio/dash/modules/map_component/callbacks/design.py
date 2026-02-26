@@ -84,7 +84,7 @@ def register_design_callbacks(app):
             "color_column": color_col,
             "size_column": size_col,
             "hover_columns": hover_cols or [],
-            "map_style": map_style or "open-street-map",
+            "map_style": map_style or "carto-positron",
             "opacity": opacity or 1.0,
             "selection_enabled": selection_enabled or False,
             "selection_column": selection_col,
@@ -122,11 +122,13 @@ def register_design_callbacks(app):
             if len(pandas_df) == 0:
                 raise dash.exceptions.PreventUpdate
 
-            # Auto-switch style for dark theme
-            style = map_style or "open-street-map"
+            # Auto-switch style to match current theme
+            style = map_style or "carto-positron"
             theme = theme_data or "light"
             if theme == "dark" and style in ("open-street-map", "carto-positron"):
                 style = "carto-darkmatter"
+            elif theme != "dark" and style == "carto-darkmatter":
+                style = "carto-positron"
 
             # Compute center/zoom
             lats = pandas_df[lat_col].tolist()

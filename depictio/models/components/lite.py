@@ -366,7 +366,7 @@ class MapLiteComponent(BaseLiteComponent):
 
     # Map styling
     map_style: str = Field(
-        default="open-street-map",
+        default="carto-positron",
         description="Tile style (open-street-map, carto-positron, carto-darkmatter)",
     )
     default_zoom: int | None = Field(

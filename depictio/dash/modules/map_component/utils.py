@@ -39,7 +39,7 @@ def build_map(**kwargs) -> html.Div:
         "size_column": kwargs.get("size_column"),
         "hover_columns": kwargs.get("hover_columns", []),
         "text_column": kwargs.get("text_column"),
-        "map_style": kwargs.get("map_style", "open-street-map"),
+        "map_style": kwargs.get("map_style", "carto-positron"),
         "default_zoom": kwargs.get("default_zoom"),
         "default_center": kwargs.get("default_center"),
         "opacity": kwargs.get("opacity", 1.0),
@@ -206,7 +206,7 @@ def render_map(
     size_column = trigger_data.get("size_column")
     hover_columns = trigger_data.get("hover_columns", [])
     text_column = trigger_data.get("text_column")
-    map_style = trigger_data.get("map_style", "open-street-map")
+    map_style = trigger_data.get("map_style", "carto-positron")
     default_zoom = trigger_data.get("default_zoom")
     default_center = trigger_data.get("default_center")
     opacity = trigger_data.get("opacity", 1.0)
@@ -235,9 +235,11 @@ def render_map(
         if not geojson_data:
             logger.warning(f"Failed to load GeoJSON from DC {geojson_dc_id}")
 
-    # Auto-switch map_style for dark theme
+    # Auto-switch map_style to match current theme
     if theme == "dark" and map_style in ("open-street-map", "carto-positron"):
         map_style = "carto-darkmatter"
+    elif theme != "dark" and map_style == "carto-darkmatter":
+        map_style = "carto-positron"
 
     # Convert Polars to pandas
     if hasattr(df, "to_pandas"):
