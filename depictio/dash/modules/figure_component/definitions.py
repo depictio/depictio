@@ -17,7 +17,7 @@ from .models import VisualizationDefinition
 from .parameter_discovery import discover_all_visualizations
 
 # Phase 1: Core visualization types (expanded to include histogram)
-ALLOWED_VISUALIZATIONS = {"scatter", "line", "bar", "box", "histogram"}
+ALLOWED_VISUALIZATIONS = {"scatter", "line", "bar", "box", "histogram", "heatmap"}
 
 # Cache for discovered visualizations to avoid repeated discovery
 _visualization_cache: Dict[str, VisualizationDefinition] = {}

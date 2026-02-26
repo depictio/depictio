@@ -26,6 +26,7 @@ dependencies = [
   "dash-dynamic-grid-layout==0.1.3",
   "dash-dock==0.0.1",
   "plotly-express==0.4.1",
+  "plotly-complexheatmap",
   # Data processing
   "deltalake==0.24.0",
   "fastparquet==2024.11.0",
@@ -109,6 +110,9 @@ depictio-api = "depictio.api.run:main"
 depictio-dash = "depictio.dash.app:main"
 depictio = "depictio.cli.depictio_cli:main"
 
+
+[tool.uv.sources]
+plotly-complexheatmap = { path = "packages/plotly-complexheatmap" }
 
 [build-system]
 requires = ["setuptools>=61", "wheel"]

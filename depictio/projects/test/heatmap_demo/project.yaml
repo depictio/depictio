@@ -1,0 +1,81 @@
+# Heatmap Demo Project - Showcases plotly-complexheatmap integration
+# Uses synthetic gene expression data with rich metadata annotations
+name: "Heatmap Demo Project"
+is_public: true
+workflows:
+  - name: "heatmap_workflow"
+    engine:
+      name: "python"
+    description: "Synthetic gene expression data for heatmap visualization testing"
+    data_location:
+      structure: "flat"
+      locations:
+        - ../projects/test/heatmap_demo
+    data_collections:
+      - data_collection_tag: "gene_expression"
+        description: "60 genes x 20 samples expression matrix with pathway, chromosome, and numeric annotations"
+        config:
+          type: "Table"
+          metatype: "Metadata"
+          scan:
+            mode: single
+            scan_parameters:
+              filename: ../projects/test/heatmap_demo/data/heatmap_test_data.csv
+          dc_specific_properties:
+            format: "CSV"
+            polars_kwargs:
+              separator: ","
+            columns_description:
+              gene: "Gene identifier"
+              pathway: "Biological pathway (Apoptosis, Cell_Cycle, Metabolism, Signaling, Immune)"
+              chromosome: "Chromosome location (chr1, chr2, chr3, chr7, chr17, chrX)"
+              gene_length_kb: "Gene length in kilobases"
+              gc_content: "GC content ratio (0.35-0.65)"
+              mutation_score: "Mutation burden score (exponential distribution)"
+              log2fc: "Log2 fold change"
+              sample_00: "Expression value for sample 00"
+              sample_01: "Expression value for sample 01"
+              sample_02: "Expression value for sample 02"
+              sample_03: "Expression value for sample 03"
+              sample_04: "Expression value for sample 04"
+              sample_05: "Expression value for sample 05"
+              sample_06: "Expression value for sample 06"
+              sample_07: "Expression value for sample 07"
+              sample_08: "Expression value for sample 08"
+              sample_09: "Expression value for sample 09"
+              sample_10: "Expression value for sample 10"
+              sample_11: "Expression value for sample 11"
+              sample_12: "Expression value for sample 12"
+              sample_13: "Expression value for sample 13"
+              sample_14: "Expression value for sample 14"
+              sample_15: "Expression value for sample 15"
+              sample_16: "Expression value for sample 16"
+              sample_17: "Expression value for sample 17"
+              sample_18: "Expression value for sample 18"
+              sample_19: "Expression value for sample 19"
+
+      - data_collection_tag: "gene_expression_small"
+        description: "15 genes x 8 samples compact expression matrix for quick testing"
+        config:
+          type: "Table"
+          metatype: "Metadata"
+          scan:
+            mode: single
+            scan_parameters:
+              filename: ../projects/test/heatmap_demo/data/heatmap_small.csv
+          dc_specific_properties:
+            format: "CSV"
+            polars_kwargs:
+              separator: ","
+            columns_description:
+              gene: "Gene identifier"
+              pathway: "Biological pathway"
+              score: "Numeric score"
+              sample_0: "Expression value for sample 0"
+              sample_1: "Expression value for sample 1"
+              sample_2: "Expression value for sample 2"
+              sample_3: "Expression value for sample 3"
+              sample_4: "Expression value for sample 4"
+              sample_5: "Expression value for sample 5"
+              sample_6: "Expression value for sample 6"
+              sample_7: "Expression value for sample 7"

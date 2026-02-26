@@ -11,7 +11,7 @@ from typing import Literal
 ComponentType = Literal["card", "figure", "interactive", "table", "text", "jbrowse", "image"]
 
 # Chart/visualization types (from figure_component/definitions.py)
-ChartType = Literal["scatter", "line", "bar", "box", "histogram"]
+ChartType = Literal["scatter", "line", "bar", "box", "histogram", "heatmap"]
 
 # Aggregation functions (from card_component/utils.py AGGREGATION_MAPPING)
 AggregationFunction = Literal[

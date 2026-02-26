@@ -41,6 +41,14 @@ conftest.py
 .depictio/
 
 # -----------------------------
+# Exclude Virtual Environments in Local Packages
+# -----------------------------
+packages/*/.venv/
+packages/*/.git/
+packages/*/.ruff_cache/
+packages/*/.pytest_cache/
+
+# -----------------------------
 # Exclude Python Cache and Log Files
 # -----------------------------
 __pycache__/

@@ -1,0 +1,73 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "plotly-complexheatmap"
+version = "0.1.0"
+description = "ComplexHeatmap-style visualizations with Plotly — clustered heatmaps with dendrograms, annotation tracks, and split heatmaps"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.10"
+authors = [
+    { name = "Depictio Contributors" },
+]
+keywords = [
+    "heatmap",
+    "bioinformatics",
+    "plotly",
+    "dendrogram",
+    "clustering",
+    "visualization",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Bio-Informatics",
+    "Topic :: Scientific/Engineering :: Visualization",
+]
+dependencies = [
+    "plotly>=5.5.0",
+    "scipy>=1.9.0",
+    "numpy>=1.22.0",
+    "pandas>=1.4.0",
+]
+
+[project.optional-dependencies]
+fast = ["fastcluster>=1.2.0"]
+polars = ["polars>=0.20.0"]
+notebook = [
+    "jupyterlab>=4.0",
+    "ipywidgets>=8.0",
+]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov>=4.0",
+    "fastcluster>=1.2.0",
+    "polars>=0.20.0",
+    "jupyterlab>=4.0",
+    "ipywidgets>=8.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/depictio/plotly-complexheatmap"
+Repository = "https://github.com/depictio/plotly-complexheatmap"
+Issues = "https://github.com/depictio/plotly-complexheatmap/issues"
+
+[tool.hatch.build.targets.wheel]
+packages = ["plotly_complexheatmap"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

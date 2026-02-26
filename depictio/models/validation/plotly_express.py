@@ -30,7 +30,7 @@ PX_FUNCTIONS: dict[str, Any] = {
     "box": px.box,
     "histogram": px.histogram,
     "violin": px.violin,
-    "heatmap": px.density_heatmap,
+    # "heatmap" is now handled by plotly-complexheatmap, not px.density_heatmap
     "pie": px.pie,
     "area": px.area,
     "funnel": px.funnel,
@@ -75,6 +75,10 @@ COMMON_TYPOS: dict[str, str] = {
     "animation": "animation_frame",
     "marginal_plot": "marginal_x",
 }
+
+# Visualization types that bypass standard px parameter validation
+# because they use custom rendering libraries (e.g. plotly-complexheatmap)
+CUSTOM_VISU_TYPES: frozenset[str] = frozenset({"heatmap", "umap"})
 
 # Parameter cache to avoid repeated signature inspection
 _parameter_cache: dict[str, set[str]] = {}
@@ -149,6 +153,9 @@ def validate_dict_kwargs(
     if dict_kwargs is None:
         return True, []
 
+    if visu_type in CUSTOM_VISU_TYPES:
+        return True, []
+
     errors: list[dict[str, Any]] = []
 
     # Check visu_type is valid
@@ -213,6 +220,9 @@ def validate_figure_component(
     """
     errors: list[dict[str, Any]] = []
     warnings: list[str] = []
+
+    if visu_type in CUSTOM_VISU_TYPES:
+        return True, errors, warnings
 
     # In code mode, dict_kwargs validation is less strict
     if mode == "code":

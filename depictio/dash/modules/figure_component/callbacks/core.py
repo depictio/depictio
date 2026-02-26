@@ -733,6 +733,29 @@ def _extract_required_columns(dict_kwargs: dict, visu_type: str) -> list[str]:
     Returns:
         List of column names required for the figure
     """
+    # Heatmap: if value_columns specified, use those + index + annotations;
+    # otherwise return empty list to load all columns (auto-detects numeric)
+    if visu_type.lower() == "heatmap":
+        columns: list[str] = []
+
+        # Scalar column params
+        for param in ("index_column", "split_rows_by"):
+            val = dict_kwargs.get(param)
+            if val and isinstance(val, str):
+                columns.append(val)
+
+        # List-like column params (value_columns, row_annotations)
+        for param in ("value_columns", "row_annotations"):
+            val = dict_kwargs.get(param)
+            if isinstance(val, str):
+                columns.extend(s.strip() for s in val.split(",") if s.strip())
+            elif isinstance(val, list):
+                columns.extend(v for v in val if isinstance(v, str))
+            elif isinstance(val, dict):
+                columns.extend(val.keys())
+
+        return list(set(columns)) if columns else []
+
     columns = []
 
     # Common column parameters across visualization types
@@ -840,6 +863,24 @@ def _create_figure_from_data(
 
             if selection_column not in existing_custom_data:
                 cleaned_kwargs["custom_data"] = [selection_column] + list(existing_custom_data)
+
+        # Heatmap uses plotly-complexheatmap instead of px
+        if visu_type.lower() == "heatmap":
+            from plotly_complexheatmap import ComplexHeatmap
+
+            from depictio.dash.modules.figure_component.utils import _collect_heatmap_kwargs
+
+            heatmap_kwargs = _collect_heatmap_kwargs(cleaned_kwargs)
+            hm = ComplexHeatmap.from_dataframe(pandas_df, **heatmap_kwargs)
+            fig = hm.to_plotly()
+            fig.update_layout(
+                autosize=True,
+                width=None,
+                height=None,
+                paper_bgcolor="rgba(0,0,0,0)",
+                plot_bgcolor="rgba(0,0,0,0)",
+            )
+            return fig
 
         if visu_type not in ["scatter", "line", "bar", "box", "histogram"]:
             logger.warning(f"Unsupported visualization type: {visu_type}, defaulting to scatter")
