@@ -33,6 +33,7 @@ from depictio.api.v1.endpoints.user_endpoints.routes import get_user_or_anonymou
 from depictio.dash.celery_app import celery_app
 from depictio.models.models.base import PyObjectId, convert_objectid_to_str
 from depictio.models.models.users import User
+from depictio.models.yaml_serialization.utils import generate_component_id
 
 render_endpoint_router = APIRouter()
 
@@ -45,6 +46,11 @@ def _resolve_component(
 ) -> dict[str, Any] | None:
     """Resolve a component from stored_metadata by UUID index or human-readable tag.
 
+    First tries exact match on ``index`` or ``tag`` fields.  Falls back to
+    matching against on-the-fly generated tags (via ``generate_component_id``)
+    so that components without a persisted ``tag`` can still be looked up by
+    their semantic identifier.
+
     Args:
         stored_metadata: List of component metadata dicts from the dashboard.
         identifier: Either a UUID string (index) or a tag string.
@@ -55,7 +61,57 @@ def _resolve_component(
     for component in stored_metadata:
         if component.get("index") == identifier or component.get("tag") == identifier:
             return component
+    # Fallback: match against dynamically generated tags
+    for idx, component in enumerate(stored_metadata):
+        if generate_component_id(component, idx) == identifier:
+            return component
     return None
+
+
+@render_endpoint_router.get(
+    "/{dashboard_id}/components",
+    response_model=list[dict[str, Any]],
+    responses={404: {"description": "Dashboard not found"}},
+)
+async def list_renderable_components(
+    dashboard_id: PyObjectId,
+    current_user: User = Depends(get_user_or_anonymous),
+) -> list[dict[str, Any]]:
+    """List all renderable components in a dashboard with their identifiers.
+
+    Returns each component's UUID ``index``, generated ``tag``, type, and title
+    so callers know which identifiers to use with the render endpoint.
+    """
+    dashboard_data = dashboards_collection.find_one({"dashboard_id": dashboard_id})
+    if not dashboard_data:
+        raise HTTPException(
+            status_code=404, detail=f"Dashboard with ID '{dashboard_id}' not found."
+        )
+
+    project_id = dashboard_data.get("project_id")
+    if not project_id:
+        raise HTTPException(status_code=500, detail="Dashboard is not associated with a project.")
+
+    if not check_project_permission(project_id, current_user, "viewer"):
+        raise HTTPException(
+            status_code=403, detail="You don't have permission to access this dashboard."
+        )
+
+    stored_metadata: list[dict[str, Any]] = dashboard_data.get("stored_metadata", [])
+    result = []
+    for idx, comp in enumerate(stored_metadata):
+        comp_type = comp.get("component_type", "")
+        tag = comp.get("tag") or generate_component_id(comp, idx)
+        entry: dict[str, Any] = {
+            "index": comp.get("index", ""),
+            "tag": tag,
+            "component_type": comp_type,
+            "renderable": comp_type in RENDERABLE_TYPES,
+        }
+        if comp.get("title"):
+            entry["title"] = comp["title"]
+        result.append(entry)
+    return result
 
 
 @render_endpoint_router.post(

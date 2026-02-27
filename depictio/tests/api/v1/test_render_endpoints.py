@@ -71,10 +71,71 @@ STORED_METADATA: list[dict[str, Any]] = [
     SAMPLE_INTERACTIVE_COMPONENT,
 ]
 
+# Components without tag field — simulates real-world stored_metadata from the UI
+SAMPLE_FIGURE_NO_TAG: dict[str, Any] = {
+    "index": "550e8400-e29b-41d4-a716-446655440000",
+    "component_type": "figure",
+    "wf_id": "673abc000000000000000001",
+    "dc_id": "673def000000000000000001",
+    "visu_type": "scatter",
+    "dict_kwargs": {"x": "col_a", "y": "col_b"},
+    "mode": "ui",
+}
+
+SAMPLE_CARD_NO_TAG: dict[str, Any] = {
+    "index": "650e8400-e29b-41d4-a716-446655440001",
+    "component_type": "card",
+    "wf_id": "673abc000000000000000001",
+    "dc_id": "673def000000000000000001",
+    "column_name": "col_a",
+    "aggregation": "average",
+}
+
+STORED_METADATA_NO_TAGS: list[dict[str, Any]] = [
+    SAMPLE_FIGURE_NO_TAG,
+    SAMPLE_CARD_NO_TAG,
+]
+
 
 # ---------------------------------------------------------------------------
 # Inline _resolve_component to avoid importing render.py (heavy dep chain)
 # ---------------------------------------------------------------------------
+
+
+def _generate_component_id_inline(component: dict[str, Any], index: int) -> str:
+    """Minimal inline mirror of generate_component_id for isolated testing."""
+    import hashlib
+    import re
+
+    comp_type = component.get("component_type", "component")
+
+    def sanitize(text: str) -> str:
+        if not text:
+            return ""
+        text = str(text).replace(".", "_").lower()
+        return re.sub(r"[^a-z0-9_]+", "-", text).strip("-")
+
+    comp_hash = hashlib.sha256(str(sorted(component.items())).encode()).hexdigest()[:6]
+
+    visu_type = component.get("visu_type", "")
+    kwargs = component.get("dict_kwargs", {})
+    column_name = component.get("column_name", "")
+    aggregation = component.get("aggregation", "")
+
+    if comp_type == "figure" and kwargs:
+        parts = [sanitize(kwargs.get("x", "")), sanitize(kwargs.get("y", ""))]
+        if visu_type:
+            parts = [sanitize(visu_type)] + parts
+        semantic = "-".join(p for p in parts if p)
+    elif comp_type == "card" and column_name:
+        parts = [sanitize(column_name)]
+        if aggregation:
+            parts.append(sanitize(aggregation))
+        semantic = "_".join(p for p in parts if p)
+    else:
+        semantic = f"comp{index}"
+
+    return f"{comp_type}-{semantic}-{comp_hash}" if semantic else f"{comp_type}-{comp_hash}"
 
 
 def _resolve_component(
@@ -83,6 +144,10 @@ def _resolve_component(
     """Mirror of render._resolve_component for isolated testing."""
     for component in stored_metadata:
         if component.get("index") == identifier or component.get("tag") == identifier:
+            return component
+    # Fallback: match against dynamically generated tags
+    for idx, component in enumerate(stored_metadata):
+        if _generate_component_id_inline(component, idx) == identifier:
             return component
     return None
 
@@ -121,6 +186,19 @@ class TestResolveComponent:
     def test_resolve_empty_metadata(self) -> None:
         """Return None when stored_metadata is empty."""
         result = _resolve_component([], "scatter-1")
+        assert result is None
+
+    def test_resolve_by_generated_tag_fallback(self) -> None:
+        """Resolve component without persisted tag via generated tag fallback."""
+        # Generate the tag for the first component (figure at index 0)
+        generated_tag = _generate_component_id_inline(SAMPLE_FIGURE_NO_TAG, 0)
+        result = _resolve_component(STORED_METADATA_NO_TAGS, generated_tag)
+        assert result is not None
+        assert result["index"] == "550e8400-e29b-41d4-a716-446655440000"
+
+    def test_resolve_generated_tag_not_found(self) -> None:
+        """Return None when generated tag does not match any component."""
+        result = _resolve_component(STORED_METADATA_NO_TAGS, "nonexistent-tag-abc123")
         assert result is None
 
 
