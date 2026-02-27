@@ -10,6 +10,10 @@ dependencies = [
     "pandas",
 ]
 
+# After `uv sync`, register the Jupyter kernel:
+#   .venv/bin/python -m ipykernel install --prefix .venv \
+#       --name component-export --display-name "Component Export Demo"
+
 [build-system]
 requires = ["setuptools>=68.0"]
 build-backend = "setuptools.build_meta"
