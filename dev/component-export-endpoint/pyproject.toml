@@ -1,0 +1,19 @@
+[project]
+name = "component-export-endpoint"
+version = "0.1.0"
+description = "Demo: export Depictio dashboard components via the render API"
+requires-python = ">=3.10"
+dependencies = [
+    "ipykernel",
+    "requests",
+    "plotly",
+    "pandas",
+]
+
+# After `uv sync`, register the Jupyter kernel:
+#   .venv/bin/python -m ipykernel install --prefix .venv \
+#       --name component-export --display-name "Component Export Demo"
+
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"

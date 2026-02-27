@@ -14,6 +14,7 @@ from depictio.api.v1.endpoints.analytics_endpoints.routes import router as analy
 from depictio.api.v1.endpoints.auth_endpoints.google_oauth_routes import google_oauth_router
 from depictio.api.v1.endpoints.backup_endpoints.routes import backup_endpoint_router
 from depictio.api.v1.endpoints.cli_endpoints.routes import cli_endpoint_router
+from depictio.api.v1.endpoints.dashboards_endpoints.render import render_endpoint_router
 from depictio.api.v1.endpoints.dashboards_endpoints.routes import dashboards_endpoint_router
 from depictio.api.v1.endpoints.datacollections_endpoints.routes import (
     datacollections_endpoint_router,
@@ -101,6 +102,12 @@ router.include_router(
     dashboards_endpoint_router,
     prefix="/dashboards",
     tags=["Dashboards"],
+)
+
+router.include_router(
+    render_endpoint_router,
+    prefix="/render",
+    tags=["Component Render"],
 )
 
 

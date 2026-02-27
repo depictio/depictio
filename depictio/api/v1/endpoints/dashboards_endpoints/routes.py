@@ -24,6 +24,7 @@ from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user, ge
 from depictio.models.models.base import PyObjectId, convert_objectid_to_str
 from depictio.models.models.dashboards import DashboardData, DashboardDataLite
 from depictio.models.models.users import TokenBeanie, User, UserBeanie
+from depictio.models.yaml_serialization.utils import generate_component_id
 
 dashboards_endpoint_router = APIRouter()
 
@@ -544,6 +545,11 @@ async def save_dashboard(
                 status_code=403,
                 detail="Anonymous users cannot create or modify dashboards. Please login to continue.",
             )
+
+    # Ensure every component in stored_metadata has a tag for API discoverability
+    for idx, comp in enumerate(data.stored_metadata or []):
+        if not comp.get("tag"):
+            comp["tag"] = generate_component_id(comp, idx)
 
     existing_dashboard = dashboards_collection.find_one({"dashboard_id": dashboard_id})
 
