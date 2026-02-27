@@ -101,6 +101,7 @@ def register_general_stats_callbacks(app):
         State({"type": "interactive-stored-metadata", "index": ALL}, "data"),
         State({"type": "interactive-stored-metadata", "index": ALL}, "id"),
         State("local-store", "data"),
+        State("global-filters-store", "data"),
         prevent_initial_call=True,
     )
     def filter_general_stats_by_interactive(
@@ -111,6 +112,7 @@ def register_general_stats_callbacks(app):
         interactive_metadata_list,
         interactive_metadata_ids,
         local_data,
+        global_filters_data,
     ):
         """Filter general stats table/violin when interactive components change.
 
@@ -158,6 +160,12 @@ def register_general_stats_callbacks(app):
             interactive_metadata_list,
             interactive_metadata_ids,
         )
+
+        # Merge global filters (cross-tab)
+        if global_filters_data:
+            from depictio.dash.utils import merge_global_filters
+
+            enriched_components = merge_global_filters(enriched_components, global_filters_data)
 
         if not enriched_components:
             return full_data, full_violin

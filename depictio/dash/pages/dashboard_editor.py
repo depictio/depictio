@@ -141,7 +141,18 @@ def register_callbacks(app):
     # 5. Save and layout management callbacks
     register_save_callbacks(app)
 
-    # 6. Real-time WebSocket callbacks (for data update notifications)
+    # 6. Global filter callbacks (cross-tab filtering)
+    from depictio.dash.layouts.global_filters_panel import register_global_filters_panel_callbacks
+    from depictio.dash.layouts.tab_callbacks import register_global_filter_load_callback
+    from depictio.dash.modules.interactive_component.callbacks.core_interactivity import (
+        register_global_filter_callbacks,
+    )
+
+    register_global_filter_callbacks(app)
+    register_global_filter_load_callback(app)
+    register_global_filters_panel_callbacks(app)
+
+    # 7. Real-time WebSocket callbacks (for data update notifications)
     # Temporarily disabled - will be re-enabled with native JS implementation from feature/realtime-events-websocket
     # from depictio.dash.layouts.realtime_callbacks import register_realtime_callbacks
     # register_realtime_callbacks(app)

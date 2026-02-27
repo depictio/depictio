@@ -82,6 +82,13 @@ def create_shared_stores():
         dcc.Store(
             id="ws-new-data-ids", storage_type="memory", data=[]
         ),  # IDs of newly arrived data
+        # Global filters (cross-tab filtering, session-scoped, synced to MongoDB)
+        # Populated from MongoDB on dashboard load, updated on promote/demote actions.
+        dcc.Store(
+            id="global-filters-store",
+            storage_type="session",
+            data={},
+        ),
         # Demo tour state (localStorage for persistence across sessions)
         # No default data - let localStorage persist tour state across page loads.
         # The handle_tour_state callback initializes data on first visit.

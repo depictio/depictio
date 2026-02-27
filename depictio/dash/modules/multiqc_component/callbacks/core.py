@@ -611,6 +611,7 @@ def register_core_callbacks(app):
         State({"type": "interactive-stored-metadata", "index": ALL}, "data"),
         State({"type": "interactive-stored-metadata", "index": ALL}, "id"),
         State("project-metadata-store", "data"),
+        State("global-filters-store", "data"),
         prevent_initial_call=True,
     )
     def patch_multiqc_plot_with_interactive_filtering(
@@ -622,6 +623,7 @@ def register_core_callbacks(app):
         interactive_metadata_list,
         interactive_metadata_ids,
         project_metadata,
+        global_filters_data,
     ):
         """Patch MultiQC plots when interactive filtering is applied (only for joined workflows).
 
@@ -655,6 +657,12 @@ def register_core_callbacks(app):
             interactive_metadata_list,
             interactive_metadata_ids,
         )
+
+        # Merge global filters (cross-tab)
+        if global_filters_data:
+            from depictio.dash.utils import merge_global_filters
+
+            enriched_components = merge_global_filters(enriched_components, global_filters_data)
 
         # Replace interactive_values with enriched version
         interactive_values = {"interactive_components_values": enriched_components}

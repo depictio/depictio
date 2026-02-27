@@ -1018,6 +1018,7 @@ def register_core_callbacks(app):
         State("dashboard-init-data", "data"),  # REFACTORING: Access centralized dc_configs
         State("project-metadata-store", "data"),  # Project metadata with links
         State("local-store", "data"),  # SECURITY: Access token from centralized store
+        State("global-filters-store", "data"),
         prevent_initial_call=True,
         background=USE_BACKGROUND_CALLBACKS,  # Use centralized background callback config
     )
@@ -1033,6 +1034,7 @@ def register_core_callbacks(app):
         dashboard_init_data,
         project_metadata,
         local_data,
+        global_filters_data,
     ):
         """
         BATCH FILTERING: Process all card filter updates in single callback.
@@ -1072,6 +1074,13 @@ def register_core_callbacks(app):
         enriched_components = _enrich_filters_with_metadata(
             filters_data, interactive_metadata_list, interactive_metadata_ids
         )
+
+        # Merge global filters (cross-tab)
+        if global_filters_data:
+            from depictio.dash.utils import merge_global_filters
+
+            enriched_components = merge_global_filters(enriched_components, global_filters_data)
+
         filters_data = {"interactive_components_values": enriched_components}
 
         # Extract access_token from local-store

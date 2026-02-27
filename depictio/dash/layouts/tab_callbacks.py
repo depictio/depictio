@@ -1279,3 +1279,66 @@ def _create_new_tab(tab_name, tab_icon, tab_icon_color, pathname, dashboard_cach
 
     # Close modal and navigate to new tab
     return new_pathname, False
+
+
+def register_global_filter_load_callback(app):
+    """Register callback to load global filters from MongoDB on dashboard load.
+
+    This callback fires when the URL changes (tab navigation) and populates
+    the global-filters-store from the parent dashboard's persisted state.
+
+    Args:
+        app: Dash application instance.
+    """
+    from dash import Input, Output, State
+
+    @app.callback(
+        Output("global-filters-store", "data"),
+        Input("url", "pathname"),
+        State("local-store", "data"),
+        prevent_initial_call=True,
+    )
+    def load_global_filters(pathname: str | None, local_data: dict | None) -> dict:
+        """Load global filters from MongoDB when a dashboard tab loads.
+
+        Extracts dashboard_id from the URL, calls the API to fetch
+        the parent dashboard's global_filters, and returns them.
+
+        Args:
+            pathname: Current URL pathname.
+            local_data: User auth data with access_token.
+
+        Returns:
+            Global filter dict to populate the store.
+        """
+        if not pathname or "/dashboard" not in pathname:
+            raise PreventUpdate
+
+        dashboard_id, _ = _extract_dashboard_id_from_pathname(pathname)
+        if not dashboard_id:
+            raise PreventUpdate
+
+        access_token = local_data.get("access_token") if local_data else None
+        if not access_token:
+            raise PreventUpdate
+
+        try:
+            response = httpx.get(
+                f"{API_BASE_URL}/depictio/api/v1/dashboards/global-filters/{dashboard_id}",
+                headers={"Authorization": f"Bearer {access_token}"},
+                timeout=5.0,
+            )
+            if response.status_code == 200:
+                data = response.json()
+                filters = data.get("filters", {})
+                if filters:
+                    logger.info(
+                        f"Loaded {len(filters)} global filter(s) for dashboard {dashboard_id}"
+                    )
+                return filters
+            else:
+                logger.debug(f"No global filters found for dashboard {dashboard_id}")
+                return {}
+        except Exception as e:
+            logger.debug(f"Could not load global filters: {e}")
+            return {}

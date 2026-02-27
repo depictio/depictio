@@ -9,6 +9,7 @@ from depictio.dash.utils import (
     get_component_data,
     list_workflows,
     load_depictio_data_mongo,
+    merge_global_filters,
     return_dc_tag_from_id,
     return_mongoid,
     return_user_from_token,
@@ -543,3 +544,60 @@ class TestSerializeDashComponent:
 
         # Assert
         assert result == {"component": "mock", "type": "test"}
+
+
+class TestMergeGlobalFilters:
+    """Test merge_global_filters for cross-tab filter merging."""
+
+    def test_empty_global_filters_returns_original(self):
+        """When global_filters is None/empty, return enriched_components unchanged."""
+        local = [{"index": "c1", "value": "a", "metadata": {"dc_id": "dc1", "column_name": "col1"}}]
+        assert merge_global_filters(local, None) == local
+        assert merge_global_filters(local, {}) == local
+
+    def test_global_filter_appended(self):
+        """Global filter for a different dc:col should be appended."""
+        local = [{"index": "c1", "value": "a", "metadata": {"dc_id": "dc1", "column_name": "col1"}}]
+        global_f = {
+            "dc2:col2": {
+                "values": ["x", "y"],
+                "filter_type": "MultiSelect",
+                "column_name": "col2",
+                "dc_id": "dc2",
+            }
+        }
+        result = merge_global_filters(local, global_f)
+        assert len(result) == 2
+        assert result[1]["index"] == "global_dc2:col2"
+        assert result[1]["value"] == ["x", "y"]
+        assert result[1]["metadata"]["dc_id"] == "dc2"
+        assert result[1]["source"] == "global_filter"
+
+    def test_local_takes_precedence(self):
+        """When local filter exists for same dc:col, global filter is skipped."""
+        local = [{"index": "c1", "value": "a", "metadata": {"dc_id": "dc1", "column_name": "col1"}}]
+        global_f = {
+            "dc1:col1": {
+                "values": ["overridden"],
+                "filter_type": "Select",
+                "column_name": "col1",
+                "dc_id": "dc1",
+            }
+        }
+        result = merge_global_filters(local, global_f)
+        assert len(result) == 1  # Global filter skipped
+        assert result[0]["value"] == "a"  # Local value preserved
+
+    def test_empty_local_with_global(self):
+        """Global filters should work even when local is empty."""
+        global_f = {
+            "dc1:sample": {
+                "values": ["S1", "S2"],
+                "filter_type": "MultiSelect",
+                "column_name": "sample",
+                "dc_id": "dc1",
+            }
+        }
+        result = merge_global_filters([], global_f)
+        assert len(result) == 1
+        assert result[0]["value"] == ["S1", "S2"]

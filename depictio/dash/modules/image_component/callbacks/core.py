@@ -128,14 +128,24 @@ def _extract_filters_for_image(
     interactive_metadata_ids: list | None,
     project_metadata: dict | None,
     access_token: str | None = None,
+    global_filters: dict | None = None,
 ) -> list[dict]:
     """Extract active filters for an image component including cross-DC links."""
-    if not filters_data or not filters_data.get("interactive_components_values"):
+    has_local = filters_data and filters_data.get("interactive_components_values")
+    has_global = bool(global_filters)
+
+    if not has_local and not has_global:
         return []
 
     metadata_by_index = _build_metadata_index(interactive_metadata_list, interactive_metadata_ids)
-    components = filters_data.get("interactive_components_values", [])
+    components = filters_data.get("interactive_components_values", []) if filters_data else []
     enriched = _enrich_filter_components(components, metadata_by_index)
+
+    # Merge global filters (cross-tab)
+    if global_filters:
+        from depictio.dash.utils import merge_global_filters
+
+        enriched = merge_global_filters(enriched, global_filters)
     filters_by_dc = _group_filters_by_dc(enriched)
 
     dc_id_str = str(dc_id)
@@ -233,6 +243,7 @@ def register_core_callbacks(app):
         State({"type": "interactive-stored-metadata", "index": ALL}, "id"),
         State("local-store", "data"),
         State("project-metadata-store", "data"),
+        State("global-filters-store", "data"),
         prevent_initial_call=False,
     )
     def render_image_grid(
@@ -245,6 +256,7 @@ def register_core_callbacks(app):
         interactive_metadata_ids: list[dict[str, Any]],
         local_data: dict[str, Any] | None,
         project_metadata: dict[str, Any] | None,
+        global_filters_data: dict[str, Any] | None = None,
     ) -> list[list[Any]]:
         """Render image grid from data collection with interactive filtering."""
         if not trigger_data_list or not any(trigger_data_list):
@@ -295,6 +307,7 @@ def register_core_callbacks(app):
                     interactive_metadata_ids=interactive_metadata_ids,
                     project_metadata=project_metadata,
                     access_token=access_token,
+                    global_filters=global_filters_data,
                 )
 
                 # Load data with filters

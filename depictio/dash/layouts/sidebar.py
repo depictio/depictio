@@ -930,6 +930,11 @@ def create_dashboard_viewer_sidebar():
     # Create standardized sidebar footer
     sidebar_footer = create_sidebar_footer()
 
+    # Global filters panel (cross-tab filtering)
+    from depictio.dash.layouts.global_filters_panel import create_global_filters_panel
+
+    global_filters_panel = create_global_filters_panel()
+
     # Return navigation link at top, tabs in middle, footer at bottom
     return [
         dmc.Stack(
@@ -939,6 +944,7 @@ def create_dashboard_viewer_sidebar():
                     sidebar_tabs,
                     style={"flex": "1", "overflowY": "auto"},  # Tabs grow to fill space
                 ),
+                global_filters_panel,
                 sidebar_footer,
             ],
             h="100%",

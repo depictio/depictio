@@ -199,6 +199,7 @@ def _extract_filters_for_figure(
     project_metadata: dict | None,
     batch_task_id: str,
     access_token: str | None = None,
+    global_filters: dict | None = None,
 ) -> list[dict]:
     """
     Extract active filters for a specific figure's data collection.
@@ -206,6 +207,7 @@ def _extract_filters_for_figure(
     This function handles the complete filter extraction process including:
     - Building metadata index from interactive components
     - Enriching lightweight filter data with full metadata
+    - Merging global (cross-tab) filters
     - Grouping filters by data collection
     - Including filters from source DCs for joined data collections
     - Including filters resolved via DC links (cross-DC filtering)
@@ -218,18 +220,30 @@ def _extract_filters_for_figure(
         project_metadata: Project metadata with join definitions and links
         batch_task_id: Task ID for logging
         access_token: Authentication token for link resolution API calls
+        global_filters: Global filter state from global-filters-store
 
     Returns:
         List of active filter components for this figure
     """
-    if not filters_data or not filters_data.get("interactive_components_values"):
+    has_local = filters_data and filters_data.get("interactive_components_values")
+    has_global = bool(global_filters)
+
+    if not has_local and not has_global:
         return []
 
     metadata_by_index = _build_metadata_index(interactive_metadata_list, interactive_metadata_ids)
 
-    lightweight_components = filters_data.get("interactive_components_values", [])
+    lightweight_components = (
+        filters_data.get("interactive_components_values", []) if filters_data else []
+    )
 
     enriched_components = _enrich_filter_components(lightweight_components, metadata_by_index)
+
+    # Merge global filters (cross-tab)
+    if global_filters:
+        from depictio.dash.utils import merge_global_filters
+
+        enriched_components = merge_global_filters(enriched_components, global_filters)
 
     filters_by_dc = _group_filters_by_dc(enriched_components)
 
@@ -287,6 +301,7 @@ def _build_dc_load_registry(
     project_metadata: dict | None,
     batch_task_id: str,
     access_token: str | None = None,
+    global_filters: dict | None = None,
 ) -> tuple[dict[LoadKey, tuple[list[dict], list[str]]], dict[int, LoadKey | None]]:
     """
     Build registry of unique DC loads and map figures to their load keys.
@@ -339,6 +354,7 @@ def _build_dc_load_registry(
             project_metadata,
             batch_task_id,
             access_token=access_token,
+            global_filters=global_filters,
         )
 
         filters_hash = _compute_filters_hash(metadata_to_pass)
@@ -622,6 +638,7 @@ def register_core_callbacks(app):
         State("project-metadata-store", "data"),
         State("local-store", "data"),
         State("theme-store", "data"),
+        State("global-filters-store", "data"),
         prevent_initial_call=False,
         background=USE_BACKGROUND_CALLBACKS,
     )
@@ -636,6 +653,7 @@ def register_core_callbacks(app):
         project_metadata,
         local_data,
         theme_data,
+        global_filters_data,
     ):
         """
         UNIFIED BATCH RENDERING: Process ALL figures with optional filter application.
@@ -695,6 +713,7 @@ def register_core_callbacks(app):
             project_metadata,
             batch_task_id,
             access_token=access_token,
+            global_filters=global_filters_data,
         )
 
         # Phase 2: Load DCs in parallel

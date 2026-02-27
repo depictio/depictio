@@ -1121,6 +1121,11 @@ class DashboardData(MongoModel):
         None  # Populated at runtime for child tabs (header display)
     )
 
+    # Global filters (persisted, shared across all tabs in a dashboard family)
+    # Stored on the PARENT dashboard only (main tab).
+    # Keyed by 'dc_id:column_name', each entry holds filter values, type, and source info.
+    global_filters: Optional[dict[str, Any]] = None
+
     model_config = ConfigDict(
         arbitrary_types_allowed=True,
     )

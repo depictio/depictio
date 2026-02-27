@@ -816,6 +816,7 @@ def load_table_data_with_filters(
     sort_model: list[dict[str, Any]] | None = None,
     TOKEN: str | None = None,
     project_metadata: dict | None = None,
+    global_filters: dict[str, Any] | None = None,
 ) -> pl.DataFrame:
     """
     Load table data with interactive filters, AG Grid filters, and sorting applied.
@@ -850,6 +851,14 @@ def load_table_data_with_filters(
     interactive_components_dict = enrich_interactive_components(
         interactive_values, metadata_by_index
     )
+
+    # Merge global filters (cross-tab)
+    if global_filters:
+        from depictio.dash.utils import merge_global_filters
+
+        interactive_components_dict = merge_global_filters(
+            interactive_components_dict, global_filters
+        )
 
     prepare_metadata_for_join(stored_metadata, interactive_components_dict)
 
@@ -900,6 +909,7 @@ def register_core_callbacks(app):
             State({"type": "interactive-stored-metadata", "index": ALL}, "data"),
             State({"type": "interactive-stored-metadata", "index": ALL}, "id"),
             State("project-metadata-store", "data"),
+            State("global-filters-store", "data"),
         ],
         prevent_initial_call=False,  # Allow callback to fire on mount for initial data load
     )
@@ -912,6 +922,7 @@ def register_core_callbacks(app):
         interactive_metadata_list,
         interactive_metadata_ids,
         project_metadata,
+        global_filters_data,
     ):
         """
         Handle infinite scroll pagination with interactive component support.
@@ -966,6 +977,7 @@ def register_core_callbacks(app):
                 sort_model=sort_model,
                 TOKEN=TOKEN,
                 project_metadata=project_metadata,
+                global_filters=global_filters_data,
             )
 
             # Prepare DataFrame slice for AG Grid
@@ -997,6 +1009,7 @@ def register_core_callbacks(app):
             State({"type": "interactive-stored-metadata", "index": ALL}, "data"),
             State({"type": "interactive-stored-metadata", "index": ALL}, "id"),
             State("project-metadata-store", "data"),
+            State("global-filters-store", "data"),
         ],
         prevent_initial_call=True,
     )
@@ -1010,6 +1023,7 @@ def register_core_callbacks(app):
         interactive_metadata_list,
         interactive_metadata_ids,
         project_metadata,
+        global_filters_data,
     ):
         """
         Export complete table data as CSV with filters and sorting applied.
@@ -1054,6 +1068,7 @@ def register_core_callbacks(app):
                 sort_model=sort_model,
                 TOKEN=TOKEN,
                 project_metadata=project_metadata,
+                global_filters=global_filters_data,
             )
 
             row_count = df.shape[0]

@@ -967,6 +967,74 @@ def group_filters_by_dc(enriched_components: list[Dict[str, Any]]) -> Dict[str, 
     return filters_by_dc
 
 
+def merge_global_filters(
+    enriched_components: list[Dict[str, Any]],
+    global_filters: Dict[str, Any] | None,
+) -> list[Dict[str, Any]]:
+    """Merge global filters into the enriched components list.
+
+    Global filters are keyed by 'dc_id:column_name'. For each global filter,
+    a synthetic enriched component entry is created and appended.
+
+    Deduplication: if a local filter already exists for the same dc_id:column_name,
+    the local filter takes precedence (user's current tab settings override global).
+
+    Args:
+        enriched_components: List of components with {index, value, metadata} structure
+            from enrich_interactive_components_with_metadata().
+        global_filters: Global filter dict from global-filters-store.
+            Keys are 'dc_id:column_name', values contain filter details.
+
+    Returns:
+        Merged list of enriched components (local + global, deduplicated).
+    """
+    if not global_filters:
+        return enriched_components
+
+    # Build set of dc_id:column_name already present in local filters
+    local_keys: set[str] = set()
+    for comp in enriched_components:
+        metadata = comp.get("metadata", {})
+        dc_id = str(metadata.get("dc_id", ""))
+        column_name = metadata.get("column_name", "")
+        if dc_id and column_name:
+            local_keys.add(f"{dc_id}:{column_name}")
+
+    # Append global filters that don't conflict with local ones
+    merged = list(enriched_components)
+    for filter_key, filter_data in global_filters.items():
+        if filter_key in local_keys:
+            # Local filter takes precedence — skip global
+            continue
+
+        if not isinstance(filter_data, dict):
+            continue
+
+        dc_id = filter_data.get("dc_id", "")
+        column_name = filter_data.get("column_name", "")
+        values = filter_data.get("values")
+        filter_type = filter_data.get("filter_type", "MultiSelect")
+
+        if not dc_id or not column_name or values is None:
+            continue
+
+        # Create synthetic enriched component entry
+        synthetic = {
+            "index": f"global_{filter_key}",
+            "value": values,
+            "metadata": {
+                "dc_id": dc_id,
+                "column_name": column_name,
+                "interactive_component_type": filter_type,
+                "source": "global_filter",
+            },
+            "source": "global_filter",
+        }
+        merged.append(synthetic)
+
+    return merged
+
+
 def return_mongoid(
     workflow_tag: str | None = None,
     workflow_id: ObjectId | None = None,

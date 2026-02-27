@@ -44,8 +44,9 @@ def _create_component_title(
     icon_name: str,
     title_size: str,
     color: Optional[str],
+    index: Optional[str] = None,
 ) -> dmc.Group:
-    """Create a styled title with icon for interactive components.
+    """Create a styled title with icon and global filter toggle for interactive components.
 
     Args:
         title: Custom title text, or None to auto-generate.
@@ -54,9 +55,10 @@ def _create_component_title(
         icon_name: DashIconify icon name.
         title_size: Size parameter for text and icon.
         color: Optional color for title and icon.
+        index: Component UUID for pattern-matching IDs.
 
     Returns:
-        DMC Group containing icon and title text.
+        DMC Group containing icon, title text, and globe toggle button.
     """
     card_title = title if title else f"{component_type} on {column_name}"
 
@@ -67,14 +69,31 @@ def _create_component_title(
     icon_width = int(title_size) if str(title_size).isdigit() else 20
     icon_style = {"color": color} if color else {"opacity": 0.9}
 
+    children: list[Any] = [
+        DashIconify(icon=icon_name, width=icon_width, style=icon_style),
+        dmc.Text(card_title, size=title_size, fw="bold", style={"margin": "0", "flex": "1"}),
+    ]
+
+    # Add globe toggle for promoting filter to global scope
+    if index:
+        globe_button = dmc.ActionIcon(
+            DashIconify(icon="mdi:earth", width=14),
+            id={"type": "global-filter-toggle", "index": str(index)},
+            variant="subtle",
+            size="xs",
+            color="gray",
+            radius="xl",
+            title="Promote to global filter (applies across all tabs)",
+        )
+        children.append(globe_button)
+
     return dmc.Group(
-        [
-            DashIconify(icon=icon_name, width=icon_width, style=icon_style),
-            dmc.Text(card_title, size=title_size, fw="bold", style={"margin": "0"}),
-        ],
+        children,
         gap="xs",
         align="center",
+        justify="space-between",
         style=title_style,
+        w="100%",
     )
 
 
@@ -392,7 +411,7 @@ def build_select_component(
     color = trigger_data.get("color") or trigger_data.get("custom_color")
 
     title_element = _create_component_title(
-        title, column_name, component_type, icon_name, title_size, color
+        title, column_name, component_type, icon_name, title_size, color, index=index
     )
     wrapped_component = _wrap_component_with_title(title_element, interactive_component)
 
@@ -548,7 +567,7 @@ def build_slider_component(
     title_size_param = trigger_data.get("title_size", "md")
 
     title_element = _create_component_title(
-        title, column_name, component_type, icon_name, title_size_param, color
+        title, column_name, component_type, icon_name, title_size_param, color, index=index
     )
     wrapped_component = _wrap_component_with_title(title_element, interactive_component)
 
@@ -687,7 +706,7 @@ def build_datepicker_component(
     title_size_param = trigger_data.get("title_size", "md")
 
     title_element = _create_component_title(
-        title, column_name, "DateRangePicker", icon_name, title_size_param, color
+        title, column_name, "DateRangePicker", icon_name, title_size_param, color, index=index
     )
     wrapped_component = _wrap_component_with_title(title_element, interactive_component)
 

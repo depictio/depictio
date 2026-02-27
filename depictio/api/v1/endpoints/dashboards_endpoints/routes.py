@@ -589,6 +589,127 @@ async def save_dashboard(
 
 
 # =============================================================================
+# Global Filters — Cross-tab filter persistence
+# =============================================================================
+
+
+def _resolve_parent_dashboard_id(dashboard_id: PyObjectId) -> PyObjectId:
+    """Resolve the parent dashboard ID for a given dashboard.
+
+    If the dashboard is the main tab, returns its own ID.
+    If it's a child tab, returns the parent_dashboard_id.
+
+    Args:
+        dashboard_id: The dashboard ID to resolve.
+
+    Returns:
+        The parent (main tab) dashboard ID.
+
+    Raises:
+        HTTPException: If the dashboard is not found.
+    """
+    dashboard = dashboards_collection.find_one({"dashboard_id": dashboard_id})
+    if not dashboard:
+        raise HTTPException(status_code=404, detail="Dashboard not found.")
+
+    if dashboard.get("is_main_tab", True):
+        return dashboard_id
+
+    parent_id = dashboard.get("parent_dashboard_id")
+    if not parent_id:
+        raise HTTPException(status_code=500, detail="Child tab has no parent_dashboard_id.")
+    return PyObjectId(parent_id)
+
+
+@dashboards_endpoint_router.get("/global-filters/{dashboard_id}")
+async def get_global_filters(
+    dashboard_id: PyObjectId,
+    current_user: User = Depends(get_user_or_anonymous),
+) -> dict[str, Any]:
+    """Get global filters for a dashboard family.
+
+    Resolves to the parent dashboard and returns its global_filters field.
+    Any tab in the family can be used as the dashboard_id parameter.
+
+    Args:
+        dashboard_id: Any dashboard ID in the tab family.
+        current_user: Authenticated user.
+
+    Returns:
+        Dict with 'filters' key containing the global filter state.
+    """
+    parent_id = _resolve_parent_dashboard_id(dashboard_id)
+    parent = dashboards_collection.find_one({"dashboard_id": parent_id})
+    if not parent:
+        raise HTTPException(status_code=404, detail="Parent dashboard not found.")
+
+    project_id = parent.get("project_id")
+    if not project_id:
+        raise HTTPException(status_code=500, detail="Dashboard is not associated with a project.")
+
+    if not check_project_permission(project_id, current_user, "viewer"):
+        raise HTTPException(
+            status_code=403,
+            detail="You don't have permission to view this dashboard's filters.",
+        )
+
+    return {"filters": parent.get("global_filters") or {}}
+
+
+@dashboards_endpoint_router.put("/global-filters/{dashboard_id}")
+async def update_global_filters(
+    dashboard_id: PyObjectId,
+    filters: dict[str, Any] = Body(...),
+    current_user: User = Depends(get_user_or_anonymous),
+) -> dict[str, Any]:
+    """Update global filters for a dashboard family.
+
+    Resolves to the parent dashboard and updates its global_filters field.
+    Editors and owners persist to DB. Viewers receive a 403 — viewer-only
+    global filter state is handled client-side in session storage.
+
+    Args:
+        dashboard_id: Any dashboard ID in the tab family.
+        filters: The complete global filter state dict.
+        current_user: Authenticated user.
+
+    Returns:
+        Success message with the updated filter count.
+    """
+    parent_id = _resolve_parent_dashboard_id(dashboard_id)
+    parent = dashboards_collection.find_one({"dashboard_id": parent_id})
+    if not parent:
+        raise HTTPException(status_code=404, detail="Parent dashboard not found.")
+
+    project_id = parent.get("project_id")
+    if not project_id:
+        raise HTTPException(status_code=500, detail="Dashboard is not associated with a project.")
+
+    if not check_project_permission(project_id, current_user, "editor"):
+        raise HTTPException(
+            status_code=403,
+            detail="You don't have permission to modify global filters. "
+            "Viewers can use session-only filters.",
+        )
+
+    result = dashboards_collection.find_one_and_update(
+        {"dashboard_id": parent_id},
+        {"$set": {"global_filters": filters}},
+        return_document=True,
+    )
+
+    if not result:
+        raise HTTPException(status_code=500, detail="Failed to update global filters.")
+
+    filter_count = len(filters) if filters else 0
+    logger.info(f"Global filters updated for dashboard {parent_id}: {filter_count} filter(s)")
+    return {
+        "message": "Global filters updated successfully.",
+        "filter_count": filter_count,
+    }
+
+
+# =============================================================================
 # DEPRECATED ENDPOINT - USE /utils/screenshot-dash-fixed/{dashboard_id} INSTEAD
 # =============================================================================
 # This endpoint is no longer used by production code.
