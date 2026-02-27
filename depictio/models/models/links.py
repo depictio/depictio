@@ -107,8 +107,13 @@ class DCLink(BaseModel):
     id: PyObjectId = Field(default_factory=PyObjectId)
 
     source_dc_id: str = Field(
-        ...,
+        default="",
         description="Data collection ID for the source (where filters are applied)",
+    )
+
+    source_dc_tag: str | None = Field(
+        default=None,
+        description="Data collection tag for the source (used in templates, resolved to ID at instantiation)",
     )
 
     source_column: str = Field(
@@ -117,8 +122,13 @@ class DCLink(BaseModel):
     )
 
     target_dc_id: str = Field(
-        ...,
+        default="",
         description="Data collection ID for the target (receives resolved values)",
+    )
+
+    target_dc_tag: str | None = Field(
+        default=None,
+        description="Data collection tag for the target (used in templates, resolved to ID at instantiation)",
     )
 
     target_type: Literal["table", "multiqc", "image"] = Field(
@@ -159,15 +169,17 @@ class DCLink(BaseModel):
     @field_validator("source_dc_id", "target_dc_id", mode="before")
     @classmethod
     def validate_dc_ids(cls, v: Any) -> str:
-        """Ensure DC IDs are non-empty strings, converting ObjectId if needed."""
+        """Ensure DC IDs are strings, converting ObjectId if needed.
+
+        Empty IDs are allowed when tag-based references are used (template mode).
+        The model_validator below enforces that at least one of id/tag is set.
+        """
         # Handle ObjectId from MongoDB
         if hasattr(v, "__str__") and type(v).__name__ == "ObjectId":
             return str(v)
         if not isinstance(v, str):
             # Try to convert to string
             v = str(v)
-        if not v or not v.strip():
-            raise ValueError("DC ID cannot be empty")
         return v.strip()
 
     @field_validator("source_column")
@@ -177,6 +189,15 @@ class DCLink(BaseModel):
         if not v or not v.strip():
             raise ValueError("Source column cannot be empty")
         return v.strip()
+
+    @model_validator(mode="after")
+    def validate_id_or_tag_provided(self) -> "DCLink":
+        """Ensure that for both source and target, at least one of id or tag is set."""
+        if not self.source_dc_id and not self.source_dc_tag:
+            raise ValueError("Either source_dc_id or source_dc_tag must be provided")
+        if not self.target_dc_id and not self.target_dc_tag:
+            raise ValueError("Either target_dc_id or target_dc_tag must be provided")
+        return self
 
 
 class LinkResolutionRequest(BaseModel):
