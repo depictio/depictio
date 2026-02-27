@@ -19,8 +19,8 @@ from depictio.dash.celery_app import celery_app
 def _build_init_data(dc_id_str: str, workflow_id_str: str) -> dict[str, dict[str, Any]]:
     """Build init_data dict for load_deltatable_lite from MongoDB.
 
-    Queries the data collection's delta_table_location and size directly
-    from the projects collection, avoiding the deprecated API-call path.
+    Queries the data collection metadata from the projects collection and
+    its delta_table_location from the deltatables collection.
 
     Args:
         dc_id_str: String ID of the data collection.
@@ -34,7 +34,7 @@ def _build_init_data(dc_id_str: str, workflow_id_str: str) -> dict[str, dict[str
     """
     from bson import ObjectId
 
-    from depictio.api.v1.db import projects_collection
+    from depictio.api.v1.db import deltatables_collection, projects_collection
 
     dc_oid = ObjectId(dc_id_str)
 
@@ -62,7 +62,17 @@ def _build_init_data(dc_id_str: str, workflow_id_str: str) -> dict[str, dict[str
     if not dc_config:
         raise ValueError(f"Data collection {dc_id_str} not found in project workflows")
 
-    delta_location = dc_config.get("delta_table_location")
+    # delta_table_location lives in the deltatables collection, not in the
+    # projects collection, so query it directly (latest version first).
+    deltatable = deltatables_collection.find_one(
+        {"data_collection_id": dc_oid},
+        {"delta_table_location": 1},
+        sort=[("_id", -1)],
+    )
+    if not deltatable:
+        raise ValueError(f"No deltatable found for data collection {dc_id_str}")
+
+    delta_location = deltatable.get("delta_table_location")
     if not delta_location:
         raise ValueError(f"No delta_table_location for data collection {dc_id_str}")
 
