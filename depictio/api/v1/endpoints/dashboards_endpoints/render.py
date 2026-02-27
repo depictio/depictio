@@ -31,7 +31,7 @@ from depictio.api.v1.endpoints.dashboards_endpoints.render_models import (
 from depictio.api.v1.endpoints.dashboards_endpoints.routes import check_project_permission
 from depictio.api.v1.endpoints.user_endpoints.routes import get_user_or_anonymous
 from depictio.dash.celery_app import celery_app
-from depictio.models.models.base import PyObjectId
+from depictio.models.models.base import PyObjectId, convert_objectid_to_str
 from depictio.models.models.users import User
 
 render_endpoint_router = APIRouter()
@@ -144,11 +144,14 @@ async def render_component_endpoint(
             detail="Component is missing workflow or data collection reference (wf_id/dc_id).",
         )
 
-    # Dispatch Celery task
+    # Dispatch Celery task — sanitize component dict so ObjectId/datetime/Path
+    # values are converted to strings (Celery JSON serializer requires this)
     from depictio.api.v1.tasks.render_tasks import render_component
 
+    serializable_component = convert_objectid_to_str(component)
+
     task = render_component.delay(
-        component_metadata=component,
+        component_metadata=serializable_component,
         workflow_id=str(wf_id),
         dc_id=str(dc_id),
         theme=request.theme,
