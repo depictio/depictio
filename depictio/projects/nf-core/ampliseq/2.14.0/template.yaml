@@ -1,0 +1,321 @@
+# nf-core/ampliseq Template - Microbial Community Analysis
+# ============================================================================
+# This is a TEMPLATE project configuration. Use with:
+#   depictio-cli run --template nf-core/ampliseq/2.14.0 --data-root /path/to/your/data
+#
+# The original project.yaml (with hardcoded paths) is kept as a fixture for
+# Docker init. This template.yaml uses {DATA_ROOT} placeholders for reuse.
+# ============================================================================
+
+# Template metadata (parsed and removed before Project model validation)
+template:
+  template_id: "nf-core/ampliseq/2.14.0"
+  description: "nf-core/ampliseq microbial community analysis template for 16S/ITS amplicon sequencing"
+  version: "1.0.0"
+  variables:
+    - name: "DATA_ROOT"
+      description: "Root directory containing ampliseq pipeline output data"
+      required: true
+  expected_files:
+    - relative_path: "merged_metadata.tsv"
+      description: "Sample metadata with sample IDs and experimental factors"
+      format: "TSV"
+      columns: ["sample", "name", "habitat"]
+    - relative_path: "faith_pd_long.tsv"
+      description: "Alpha diversity rarefaction curves (Faith PD)"
+      format: "TSV"
+      columns: ["sample", "depth", "iter", "faith_pd"]
+    - relative_path: "taxonomy_long.tsv"
+      description: "Taxonomic composition across samples"
+      format: "TSV"
+      columns: ["sample", "taxonomy", "count", "habitat"]
+    - relative_path: "ancom_volcano.tsv"
+      description: "ANCOM differential abundance results"
+      format: "TSV"
+      columns: ["id", "taxonomy", "W", "clr"]
+    - relative_path: "alpha_diversity.tsv"
+      description: "Per-sample alpha diversity metrics"
+      format: "TSV"
+      columns: ["sample", "habitat", "faith_pd"]
+    - relative_path: "taxonomy_rel_abundance_long.tsv"
+      description: "Taxonomic relative abundance at Phylum level"
+      format: "TSV"
+      columns: ["sample", "taxonomy", "rel_abundance", "habitat"]
+    - relative_path: "ancombc_habitat_level2.tsv"
+      description: "ANCOM-BC differential abundance at Phylum level"
+      format: "TSV"
+      columns: ["id", "contrast", "lfc", "q_val"]
+  expected_directories:
+    - relative_path: "run_*"
+      description: "Sequencing run directories containing pipeline outputs"
+      glob_pattern: true
+    - relative_path: "run_*/multiqc_data"
+      description: "MultiQC output directories within each run"
+      glob_pattern: true
+
+# ============================================================================
+# PROJECT CONFIGURATION
+# ============================================================================
+
+name: "Ampliseq Microbial Community Analysis"
+project_type: "advanced"
+is_public: true
+workflows:
+  - name: "ampliseq"
+    version: "2.14.0"
+    engine:
+      name: "nextflow"
+      version: "24.10.4"
+    catalog:
+      name: "nf-core"
+      url: "https://nf-co.re"
+    repository_url: "https://github.com/nf-core/ampliseq"
+    data_location:
+      structure: "sequencing-runs"
+      runs_regex: "run_*"
+      locations:
+        - "{DATA_ROOT}"
+    data_collections:
+      - data_collection_tag: "multiqc_data"
+        description: "MultiQC report data"
+        config:
+          type: "MultiQC"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "multiqc_data/multiqc.parquet"
+          dc_specific_properties:
+            s3_location: null
+            modules:
+              - "cutadapt"
+              - "fastqc"
+            plots:
+              cutadapt:
+                - "Filtered Reads"
+                - "Trimmed Sequence Lengths (5')":
+                    - "Counts"
+                    - "Obs/Exp"
+              fastqc:
+                - "Sequence Counts"
+                - "Sequence Quality Histograms"
+                - "Per Sequence Quality Scores"
+                - "Per Sequence GC Content":
+                    - "Percentages"
+                    - "Counts"
+                - "Per Base N Content"
+                - "Sequence Length Distribution"
+                - "Sequence Duplication Levels"
+                - "Overrepresented sequences by sample"
+                - "Top overrepresented sequences"
+                - "Adapter Content"
+                - "Status Checks"
+
+      - data_collection_tag: "metadata"
+        description: "Sample metadata for ampliseq analysis"
+        config:
+          type: "Table"
+          metatype: "Metadata"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "{DATA_ROOT}/merged_metadata.tsv"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+              try_parse_dates: true
+            columns_description:
+              "sample": "Sample identifier (SRR accession)"
+              "name": "Sample name"
+              "habitat": "Sample habitat type"
+              "Riv_vs_Gro": "Habitat comparison group 1"
+              "Sed_vs_Soil": "Habitat comparison group 2"
+              "sampling_date": "Sample collection date (YYYY-MM-DD)"
+
+      - data_collection_tag: "alpha_rarefaction"
+        description: "Alpha diversity rarefaction curves"
+        config:
+          type: "Table"
+          metatype: "Metadata"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "{DATA_ROOT}/faith_pd_long.tsv"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+            columns_description:
+              "sample": "Sample identifier"
+              "depth": "Sequencing depth"
+              "iter": "Iteration number"
+              "faith_pd": "Faith's Phylogenetic Diversity metric"
+
+      - data_collection_tag: "taxonomy_composition"
+        description: "Taxonomic composition across samples"
+        config:
+          type: "Table"
+          metatype: "Metadata"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "{DATA_ROOT}/taxonomy_long.tsv"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+            columns_description:
+              "sample": "Sample identifier"
+              "taxonomy": "Taxonomic classification (Kingdom;Phylum)"
+              "count": "Raw sequence count for this taxonomy"
+              "habitat": "Habitat type of the sample"
+
+      - data_collection_tag: "ancom_volcano"
+        description: "ANCOM differential abundance analysis results"
+        config:
+          type: "Table"
+          metatype: "Metadata"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "{DATA_ROOT}/ancom_volcano.tsv"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+            columns_description:
+              "id": "ASV identifier"
+              "taxonomy": "Taxonomic classification (Kingdom;Phylum)"
+              "Kingdom": "Kingdom level classification"
+              "Phylum": "Phylum level classification"
+              "W": "W statistic from ANCOM analysis"
+              "clr": "Centered log-ratio transformed abundance"
+
+      - data_collection_tag: "alpha_diversity"
+        description: "Per-sample alpha diversity metrics (Faith PD)"
+        config:
+          type: "Table"
+          metatype: "Metadata"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "{DATA_ROOT}/alpha_diversity.tsv"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+            columns_description:
+              "sample": "Sample identifier"
+              "habitat": "Habitat type"
+              "faith_pd": "Faith's Phylogenetic Diversity (single value per sample)"
+
+      - data_collection_tag: "taxonomy_rel_abundance"
+        description: "Taxonomic relative abundance (Phylum level)"
+        config:
+          type: "Table"
+          metatype: "Metadata"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "{DATA_ROOT}/taxonomy_rel_abundance_long.tsv"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+            columns_description:
+              "sample": "Sample identifier"
+              "taxonomy": "Taxonomic classification (Kingdom;Phylum)"
+              "rel_abundance": "Relative abundance (0-1)"
+              "habitat": "Habitat type"
+              "Kingdom": "Kingdom level"
+              "Phylum": "Phylum level"
+
+      - data_collection_tag: "ancombc_results"
+        description: "ANCOM-BC differential abundance (habitat, Phylum level)"
+        config:
+          type: "Table"
+          metatype: "Metadata"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "{DATA_ROOT}/ancombc_habitat_level2.tsv"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+            columns_description:
+              "id": "Taxonomy identifier"
+              "contrast": "Statistical contrast (habitat comparison)"
+              "lfc": "Log-fold change"
+              "q_val": "FDR-adjusted p-value"
+              "w": "ANCOM-BC test statistic"
+              "Kingdom": "Kingdom level"
+              "Phylum": "Phylum level"
+              "neg_log10_qval": "-log10(q-value) for volcano plot"
+              "significant": "q < 0.05"
+
+# ============================================================================
+# RUNTIME LINKS CONFIGURATION
+# ============================================================================
+# Links use data_collection_tag references (resolved to IDs at instantiation)
+# ============================================================================
+
+links:
+  # Link 1: Metadata -> MultiQC (for MultiQC component filtering)
+  - source_dc_tag: "metadata"
+    source_column: "sample"
+    target_dc_tag: "multiqc_data"
+    target_type: "multiqc"
+    link_config:
+      resolver: "sample_mapping"
+      target_field: "sample_name"
+    description: "Filter MultiQC by metadata samples (habitat selections)"
+    enabled: true
+
+  # Link 2: Metadata -> Alpha Rarefaction (for Faith PD figure)
+  - source_dc_tag: "metadata"
+    source_column: "sample"
+    target_dc_tag: "alpha_rarefaction"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter alpha rarefaction by metadata samples"
+    enabled: true
+
+  # Link 3: Metadata -> Taxonomy Composition (for taxonomy figure)
+  - source_dc_tag: "metadata"
+    source_column: "sample"
+    target_dc_tag: "taxonomy_composition"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter taxonomy by metadata samples"
+    enabled: true
+
+  # Link 4: Metadata -> Alpha Diversity
+  - source_dc_tag: "metadata"
+    source_column: "sample"
+    target_dc_tag: "alpha_diversity"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter alpha diversity by metadata samples"
+    enabled: true
+
+  # Link 5: Metadata -> Taxonomy Rel Abundance
+  - source_dc_tag: "metadata"
+    source_column: "sample"
+    target_dc_tag: "taxonomy_rel_abundance"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter taxonomy rel abundance by metadata samples"
+    enabled: true
+
+  # Note: ANCOM volcano is not linked because it shows
+  # habitat-independent differential abundance analysis and has no sample column

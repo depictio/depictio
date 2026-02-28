@@ -31,6 +31,35 @@ def register_run_command(app: typer.Typer):
             str,
             typer.Option("--project-config-path", help="Path to the pipeline configuration file"),
         ] = "",
+        # Template options
+        template: Annotated[
+            str | None,
+            typer.Option(
+                "--template",
+                help="Template ID to use (e.g., nf-core/ampliseq/2.14.0). "
+                "Mutually exclusive with --project-config-path.",
+            ),
+        ] = None,
+        data_root: Annotated[
+            str | None,
+            typer.Option(
+                "--data-root",
+                help="Root directory containing data for template. Required when --template is used.",
+            ),
+        ] = None,
+        project_name: Annotated[
+            str | None,
+            typer.Option(
+                "--project-name",
+                help="Custom project name (auto-generated from template if omitted).",
+            ),
+        ] = None,
+        deep_validation: bool = typer.Option(
+            False,
+            "--deep",
+            help="Enable deep schema validation for template data (check column names).",
+        ),
+        # Existing options
         workflow_name: Annotated[
             str | None,
             typer.Option("--workflow-name", help="Name of the workflow to be scanned"),
@@ -89,7 +118,7 @@ def register_run_command(app: typer.Typer):
 
         2. Check S3 storage configuration
 
-        3. Validate project configuration
+        3. Validate project configuration (or resolve template)
 
         4. Sync project configuration to server
 
@@ -98,8 +127,24 @@ def register_run_command(app: typer.Typer):
         6. Process data collections
 
         7. Execute table joins (if defined in project config)
+
+        Template mode:
+            depictio-cli run --template nf-core/ampliseq/2.14.0 --data-root /path/to/data
         """
         rich_print_command_usage("run")
+
+        # Validate template/project-config-path mutual exclusivity
+        if template and project_config_path:
+            rich_print_checked_statement(
+                "--template and --project-config-path are mutually exclusive. "
+                "Use one or the other.",
+                "error",
+            )
+            raise typer.Exit(code=1)
+
+        if template and not data_root:
+            rich_print_checked_statement("--data-root is required when using --template.", "error")
+            raise typer.Exit(code=1)
 
         if dry_run:
             rich_print_checked_statement(
@@ -109,8 +154,95 @@ def register_run_command(app: typer.Typer):
         if sync_files:
             rescan_folders = True
 
+        # Track whether we're in template mode
+        is_template_mode = template is not None
+        template_resolved_config: dict | None = None
+
         success_count = 0
         total_steps = 7
+
+        # Step 0 (template only): Resolve template and validate data
+        if is_template_mode:
+            rich_print_section_separator("Step 0: Resolving project template")
+            try:
+                from depictio.cli.cli.utils.template_validator import validate_data_root
+                from depictio.cli.cli.utils.templates import resolve_template
+
+                # Resolve template
+                resolved_config, template_metadata, template_origin = resolve_template(
+                    template_id=template,  # type: ignore[arg-type]
+                    data_root=data_root,  # type: ignore[arg-type]
+                    project_name=project_name,
+                )
+
+                rich_print_checked_statement(
+                    f"Template '{template_metadata.template_id}' loaded successfully",
+                    "success",
+                )
+
+                # Validate data root
+                validation_level = "deep" if deep_validation else "standard"
+                rich_print_checked_statement(
+                    f"Validating data root ({validation_level}): {data_root}",
+                    "info",
+                )
+
+                validation_result = validate_data_root(
+                    template_metadata=template_metadata,
+                    data_root=data_root,  # type: ignore[arg-type]
+                    deep=deep_validation,
+                )
+
+                # Report warnings
+                for warning in validation_result.warnings:
+                    rich_print_checked_statement(f"Warning: {warning}", "warning")
+
+                # Report errors
+                if not validation_result.valid:
+                    for error in validation_result.errors:
+                        rich_print_checked_statement(f"Validation error: {error}", "error")
+                    rich_print_checked_statement(
+                        "Data validation failed. Fix the issues above and retry.",
+                        "error",
+                    )
+                    if not continue_on_error:
+                        raise typer.Exit(code=1)
+                else:
+                    rich_print_checked_statement("Data validation passed", "success")
+
+                template_resolved_config = resolved_config
+
+                if dry_run:
+                    import json
+
+                    rich_print_checked_statement("Resolved template configuration:", "info")
+                    # Print a summary, not the full config
+                    summary = {
+                        "name": resolved_config.get("name"),
+                        "template_origin": {
+                            "template_id": template_origin.template_id,
+                            "template_version": template_origin.template_version,
+                            "data_root": template_origin.data_root,
+                        },
+                        "workflows": [
+                            {
+                                "name": w.get("name"),
+                                "data_collections": [
+                                    dc.get("data_collection_tag")
+                                    for dc in w.get("data_collections", [])
+                                ],
+                            }
+                            for w in resolved_config.get("workflows", [])
+                        ],
+                    }
+                    logger.info(f"Template config summary: {json.dumps(summary, indent=2)}")
+
+            except typer.Exit:
+                raise
+            except Exception as e:
+                rich_print_checked_statement(f"Template resolution failed: {e}", "error")
+                if not continue_on_error:
+                    return
 
         # Step 1: Check server accessibility
         if not skip_server_check:
@@ -149,9 +281,20 @@ def register_run_command(app: typer.Typer):
         rich_print_section_separator("Step 3/7: Validating project configuration")
         try:
             if not dry_run:
-                CLI_config, validation_response = validate_project_config_and_check_S3_storage(
-                    CLI_config_path=CLI_config_path, project_config_path=project_config_path
-                )
+                if is_template_mode and template_resolved_config is not None:
+                    # Template mode: use resolved config dict
+                    from depictio.cli.cli.utils.config import validate_template_project_config
+
+                    CLI_config, validation_response = validate_template_project_config(
+                        CLI_config_path=CLI_config_path,
+                        resolved_config=template_resolved_config,
+                    )
+                else:
+                    # Standard mode: load from YAML file
+                    CLI_config, validation_response = validate_project_config_and_check_S3_storage(
+                        CLI_config_path=CLI_config_path,
+                        project_config_path=project_config_path,
+                    )
                 if not validation_response["success"]:
                     raise Exception("Project configuration validation failed")
                 project_config = validation_response["project_config"]
@@ -325,6 +468,8 @@ def register_run_command(app: typer.Typer):
 
         # Final summary
         rich_print_section_separator("Depictio-CLI Run Summary")
+        if is_template_mode:
+            rich_print_checked_statement(f"Template used: {template}", "info")
         if success_count == total_steps:
             rich_print_checked_statement(
                 f"Depictio-CLI run completed successfully! ({success_count}/{total_steps} steps)",
