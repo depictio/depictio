@@ -766,6 +766,11 @@ class DashboardDataLite(BaseModel):
                 lite_comp["column_type"] = normalize_column_type(
                     comp.get("column_type", ""), "float64"
                 )
+                # Multi-metric and conditional aggregation fields
+                if comp.get("aggregations"):
+                    lite_comp["aggregations"] = comp["aggregations"]
+                if comp.get("filter_expr"):
+                    lite_comp["filter_expr"] = comp["filter_expr"]
                 display = collect_display_fields(
                     comp,
                     [
@@ -984,6 +989,8 @@ class DashboardDataLite(BaseModel):
                         "column_name": comp_dict.get("column_name", ""),
                         "column_type": comp_dict.get("column_type", "float64"),
                         "value": None,
+                        "aggregations": comp_dict.get("aggregations"),
+                        "filter_expr": comp_dict.get("filter_expr"),
                     }
                 )
                 for f in [

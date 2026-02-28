@@ -75,6 +75,36 @@ components:
     icon_name: mdi:flower-tulip
     icon_color: "#2196F3"
 
+  # Card: Multi-metric summary of sepal length (hero + secondary metrics)
+  - tag: sepal-length-summary
+    component_type: card
+    workflow_tag: python/iris_workflow
+    data_collection_tag: iris_table
+    aggregation: average
+    aggregations:
+      - median
+      - std_dev
+      - min
+      - max
+    column_name: sepal.length
+    column_type: float64
+    icon_name: mdi:chart-box-outline
+    icon_color: "#FF5722"
+    title: "Sepal Length Summary"
+
+  # Card: Conditional aggregation — count of samples with sepal.length > 6
+  - tag: large-sepal-count
+    component_type: card
+    workflow_tag: python/iris_workflow
+    data_collection_tag: iris_table
+    aggregation: count
+    column_name: sepal.length
+    column_type: float64
+    filter_expr: "col('sepal.length') > 6"
+    icon_name: mdi:filter-check-outline
+    icon_color: "#607D8B"
+    title: "Samples with sepal > 6"
+
   # Interactive filter: Sepal length range
   - tag: sepal-length-filter
     component_type: interactive
