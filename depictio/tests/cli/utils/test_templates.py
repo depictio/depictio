@@ -35,7 +35,7 @@ class TestLocateTemplate:
         """Locate the nf-core/ampliseq template that exists in the repo."""
         path = locate_template("nf-core/ampliseq/2.14.0")
         assert path.is_file()
-        assert path.name == "project.yaml"
+        assert path.name == "template.yaml"
 
     def test_locate_unknown_template_raises(self) -> None:
         """Unknown template ID raises FileNotFoundError."""
