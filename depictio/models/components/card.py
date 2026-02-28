@@ -54,8 +54,14 @@ class CardComponent(CardLiteComponent):
     # Runtime: parent reference
     parent_index: str | None = None
 
-    # Runtime: computed value
+    # Runtime: computed value (hero metric)
     value: float | int | str | None = None
+
+    # Runtime: computed values for multi-metric cards (aggregation_name → value)
+    values: dict[str, float | int | str | None] = Field(
+        default_factory=dict,
+        description="Computed values for all aggregations (hero + secondary)",
+    )
 
     # Panel placement (for dual-panel layouts)
     panel: str | None = Field(default=None, description="Panel placement ('left' or 'right')")

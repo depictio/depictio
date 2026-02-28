@@ -31,7 +31,10 @@ from depictio.dash.background_callback_helpers import (
     should_use_background_for_component,
 )
 from depictio.dash.modules.card_component.utils import (
+    _create_secondary_metrics_rows,
+    _format_metric_value,
     agg_functions,
+    compute_multi_values,
     compute_value,
     get_adaptive_trend_colors,
 )
@@ -854,6 +857,8 @@ def register_core_callbacks(app):
                 dc_id = trigger_data.get("dc_id")
                 column_name = trigger_data.get("column_name")
                 aggregation = trigger_data.get("aggregation")
+                aggregations = trigger_data.get("aggregations")
+                filter_expr_str = trigger_data.get("filter_expr")
 
                 if not all([wf_id, dc_id, column_name, aggregation]):
                     all_values.append("Error")
@@ -881,22 +886,65 @@ def register_core_callbacks(app):
                         init_data=delta_locations,
                     )
 
-                # Compute value (no filters at initial load)
+                # Apply filter_expr if provided (conditional aggregation)
+                has_filter_expr = False
+                if filter_expr_str:
+                    try:
+                        from depictio.models.components.filter_expr import apply_filter_expr
+
+                        data = apply_filter_expr(data, filter_expr_str)
+                        has_filter_expr = True
+                    except Exception as e:
+                        logger.error(f"Card {i + 1}: filter_expr failed: {e}")
+                        all_values.append("Filter Error")
+                        all_metadata.append({"error": f"filter_expr failed: {e}"})
+                        continue
+
+                # Compute hero value (skip pre-computed stats if filter_expr was applied)
                 value = compute_value(
-                    data, column_name, aggregation, cols_json=cols_json, has_filters=False
+                    data,
+                    column_name,
+                    aggregation,
+                    cols_json=cols_json,
+                    has_filters=has_filter_expr,
                 )
 
+                # Compute secondary values for multi-metric cards
+                secondary_values: dict[str, Any] = {}
+                if aggregations:
+                    secondary_values = compute_multi_values(
+                        data,
+                        column_name,
+                        aggregations,
+                        cols_json=cols_json,
+                        has_filters=has_filter_expr,
+                    )
+
                 # Format value
-                try:
-                    if value is not None:
-                        formatted_value = str(round(float(value), 4))
-                    else:
-                        formatted_value = "N/A"
-                except (ValueError, TypeError):
-                    formatted_value = "Error"
+                formatted_value = _format_metric_value(value)
+
+                # For multi-metric cards, build a richer display including secondary metrics
+                if aggregations and secondary_values:
+                    import dash_mantine_components as dmc
+
+                    secondary_rows = _create_secondary_metrics_rows(
+                        secondary_values, text_color=None
+                    )
+                    # Return formatted hero value + divider + secondary metrics
+                    display = dmc.Stack(
+                        [
+                            formatted_value,
+                            dmc.Divider(size="xs", style={"margin": "4px 0"}),
+                            *secondary_rows,
+                        ],
+                        gap=4,
+                    )
+                    all_values.append(display)
+                else:
+                    all_values.append(formatted_value)
 
                 # Create metadata
-                metadata = {
+                metadata: dict[str, Any] = {
                     "reference_value": value,
                     "column_name": column_name,
                     "aggregation": aggregation,
@@ -906,8 +954,13 @@ def register_core_callbacks(app):
                     "delta_locations_available": True,
                     "has_been_patched": False,
                 }
+                if aggregations:
+                    metadata["aggregations"] = aggregations
+                    metadata["secondary_values"] = secondary_values
+                    metadata["reference_secondary_values"] = secondary_values.copy()
+                if filter_expr_str:
+                    metadata["filter_expr"] = filter_expr_str
 
-                all_values.append(formatted_value)
                 all_metadata.append(metadata)
 
             except Exception as e:
@@ -1290,9 +1343,24 @@ def _process_single_card(
         if dashboard_init_data and "column_specs" in dashboard_init_data:
             cols_json = dashboard_init_data.get("column_specs", {}).get(dc_id_str, {})
 
+        # Apply filter_expr if present (conditional aggregation — on top of interactive filters)
+        filter_expr_str = trigger_data.get("filter_expr")
+        if filter_expr_str:
+            try:
+                from depictio.models.components.filter_expr import apply_filter_expr
+
+                data = apply_filter_expr(data, filter_expr_str)
+            except Exception as e:
+                logger.error(f"Card filter_expr failed during patch: {e}")
+                return "Filter Error", [], {}
+
         # Compute new value on filtered data
         current_value = compute_value(
-            data, column_name, aggregation, cols_json=cols_json, has_filters=has_active_filters
+            data,
+            column_name,
+            aggregation,
+            cols_json=cols_json,
+            has_filters=has_active_filters or bool(filter_expr_str),
         )
 
         # Format current value
@@ -1309,6 +1377,31 @@ def _process_single_card(
         # Update metadata to mark card as patched
         updated_metadata = patch_metadata.copy() if patch_metadata else {}
         updated_metadata["has_been_patched"] = True
+
+        # Handle multi-metric secondary values
+        aggregations = trigger_data.get("aggregations")
+        if aggregations:
+            import dash_mantine_components as dmc
+
+            secondary_values = compute_multi_values(
+                data,
+                column_name,
+                aggregations,
+                cols_json=cols_json,
+                has_filters=has_active_filters or bool(filter_expr_str),
+            )
+            updated_metadata["secondary_values"] = secondary_values
+
+            # Build richer display with secondary metrics
+            secondary_rows = _create_secondary_metrics_rows(secondary_values, text_color=None)
+            formatted_value = dmc.Stack(
+                [
+                    formatted_value,
+                    dmc.Divider(size="xs", style={"margin": "4px 0"}),
+                    *secondary_rows,
+                ],
+                gap=4,
+            )
 
         return formatted_value, comparison_components, updated_metadata
 

@@ -142,7 +142,10 @@ class FigureLiteComponent(BaseLiteComponent):
 class CardLiteComponent(BaseLiteComponent):
     """Lite card component for user definition.
 
-    Example YAML:
+    Supports single-metric cards (backwards-compatible) and multi-metric summary cards.
+    Optional ``filter_expr`` pre-filters data before aggregation using Polars expressions.
+
+    Example YAML (single metric):
         - tag: card-1
           component_type: card
           workflow_tag: python/iris_workflow
@@ -150,17 +153,50 @@ class CardLiteComponent(BaseLiteComponent):
           aggregation: average
           column_name: sepal.length
           column_type: float64
+
+    Example YAML (multi-metric summary):
+        - tag: summary-card
+          component_type: card
+          workflow_tag: python/iris_workflow
+          data_collection_tag: iris_table
+          aggregation: average
+          aggregations: [median, std_dev, min, max]
+          column_name: sepal.length
+          column_type: float64
+
+    Example YAML (conditional aggregation):
+        - tag: filtered-card
+          component_type: card
+          workflow_tag: python/my_workflow
+          data_collection_tag: samples
+          aggregation: count
+          column_name: cell_count
+          column_type: float64
+          filter_expr: "(col('cell_count') >= 5) & (col('pop') == 'AMR')"
     """
 
     component_type: Literal["card"] = "card"
 
     # Aggregation configuration
-    aggregation: str = Field(..., description="Aggregation function (average, sum, count, etc.)")
+    aggregation: str = Field(..., description="Primary (hero) aggregation function")
     column_name: str = Field(..., description="Column to aggregate")
     column_type: str | None = Field(
         default=None,
         description="Data type of column (int64, float64, bool, datetime, timedelta, "
         "category, object). When provided, aggregation compatibility is validated.",
+    )
+
+    # Multi-metric support
+    aggregations: list[str] | None = Field(
+        default=None,
+        description="Secondary aggregation functions displayed below the hero metric",
+    )
+
+    # Conditional aggregation
+    filter_expr: str | None = Field(
+        default=None,
+        description="Polars filter expression applied before aggregation "
+        "(e.g. \"col('cell_count') >= 5\")",
     )
 
     # Styling (optional)
@@ -184,12 +220,36 @@ class CardLiteComponent(BaseLiteComponent):
         if self.column_type is None:
             return self
         valid_aggs = AGGREGATION_COMPATIBILITY.get(self.column_type, [])
-        if valid_aggs and self.aggregation not in valid_aggs:
+        if not valid_aggs:
+            return self
+
+        # Validate primary aggregation
+        if self.aggregation not in valid_aggs:
             valid = ", ".join(valid_aggs)
             raise ValueError(
                 f"Invalid aggregation '{self.aggregation}' for column_type='{self.column_type}'. "
                 f"Valid aggregations: {valid}"
             )
+
+        # Validate secondary aggregations
+        if self.aggregations:
+            for agg in self.aggregations:
+                if agg not in valid_aggs:
+                    valid = ", ".join(valid_aggs)
+                    raise ValueError(
+                        f"Invalid secondary aggregation '{agg}' for "
+                        f"column_type='{self.column_type}'. Valid aggregations: {valid}"
+                    )
+
+        return self
+
+    @model_validator(mode="after")
+    def validate_filter_expr_safety(self) -> "CardLiteComponent":
+        """Validate filter_expr is safe if provided."""
+        if self.filter_expr is not None:
+            from depictio.models.components.filter_expr import validate_filter_expr
+
+            validate_filter_expr(self.filter_expr)
         return self
 
 
