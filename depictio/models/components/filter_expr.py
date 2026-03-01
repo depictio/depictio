@@ -1,22 +1,42 @@
 """
 Safe Polars filter expression validation and execution.
 
-Provides a sandboxed evaluator for Polars filter expressions defined in YAML card
-configurations. Expressions are validated against an allowlist of safe constructs
-before being evaluated in a restricted namespace.
+Provides a sandboxed evaluator for Polars filter expressions defined in YAML
+component configurations. Expressions are validated against an allowlist of safe
+constructs before being evaluated in a restricted namespace.
+
+Two filtering paradigms are supported:
+
+**Row-level filtering** — keep individual rows matching a condition:
+    ``"col('read_depth') >= 30"``
+    ``"(col('read_depth') >= 30) & (col('contamination') < 0.05)"``
+    ``"col('gene').str.contains('HOX')"``
+    ``"col('tumor_expr') > col('normal_expr')"``
+    ``"col('expression').is_between(1.0, 100.0)"``
+    ``"~col('sample_type').is_in(['control', 'blank'])"``
+
+**Group-level filtering** — keep rows belonging to groups that pass an aggregate
+condition, using Polars window functions via ``.over()``:
+    ``"col('cell_type').count().over('cell_type') >= 100"``
+    ``"col('expression').mean().over('gene') > 1.0"``
+    ``"col('expression').std().over('gene') < 0.5"``
+    ``"col('read_depth').min().over('batch') > 30"``
 
 Allowed constructs:
     - ``col('name')`` with comparison operators: ``>=``, ``<=``, ``>``, ``<``, ``==``, ``!=``
     - Logical operators: ``&``, ``|``, ``~``
     - Parentheses for grouping
     - Literal values: numbers, quoted strings, ``True``, ``False``, ``None``
-    - Methods: ``.is_in([...])``, ``.is_null()``, ``.is_not_null()``, ``.str.contains(...)``
+    - Methods: ``.is_in()``, ``.is_null()``, ``.is_not_null()``
+    - String methods: ``.str.contains()``, ``.str.starts_with()``, ``.str.ends_with()``,
+      ``.str.to_lowercase()``, ``.str.to_uppercase()``, ``.str.strip()``
+    - Range check: ``.is_between(low, high)``
+    - Aggregations (for ``.over()``): ``.mean()``, ``.sum()``, ``.min()``, ``.max()``,
+      ``.count()``, ``.std()``, ``.median()``
+    - Window function: ``.over('group_col')``
+    - Date accessors: ``.dt.year()``, ``.dt.month()``, ``.dt.day()``
+    - Type casting: ``.cast()``
     - ``lit()`` for explicit literal wrapping
-
-Example expressions:
-    ``"col('cell_count') >= 5"``
-    ``"(col('cell_count') >= 5) & (col('pop') == 'AMR')"``
-    ``"col('status').is_in(['pass', 'warn'])"``
 """
 
 from __future__ import annotations
@@ -66,16 +86,42 @@ _BLOCKED_PATTERNS: list[re.Pattern[str]] = [
 
 # Allowed function/method names that can appear in expressions
 _ALLOWED_CALLABLES: set[str] = {
+    # Core constructors
     "col",
     "lit",
+    # Membership & null checks
     "is_in",
     "is_null",
     "is_not_null",
+    # Range check
+    "is_between",
+    # String namespace & methods
+    "str",
     "contains",
     "starts_with",
     "ends_with",
-    "str",
+    "to_lowercase",
+    "to_uppercase",
+    "strip",
+    "lstrip",
+    "rstrip",
+    # Type casting
     "cast",
+    # Aggregation methods (used with .over() for group-level filtering)
+    "mean",
+    "sum",
+    "min",
+    "max",
+    "count",
+    "std",
+    "median",
+    # Window function (group-by broadcasting)
+    "over",
+    # Date accessors
+    "dt",
+    "year",
+    "month",
+    "day",
 }
 
 
