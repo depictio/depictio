@@ -11,7 +11,7 @@ from depictio.dash.layouts.app_layout import create_app_layout
 app, dev_mode = create_dash_app()
 
 app.enable_dev_tools(
-    dev_tools_ui=True, dev_tools_serve_dev_bundles=True, dev_tools_hot_reload=dev_mode
+    dev_tools_ui=dev_mode, dev_tools_serve_dev_bundles=dev_mode, dev_tools_hot_reload=dev_mode
 )
 
 # Set the application layout

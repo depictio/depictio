@@ -58,7 +58,6 @@ DASH_INDEX_STRING = """
             {%config%}
             {%scripts%}
             {%renderer%}
-            <script src="/assets/debug-menu-control.js"></script>
         </footer>
     </body>
 </html>
@@ -195,9 +194,9 @@ def create_management_app(
 
     app_management = setup_profiling(app_management)
 
-    # Enable dev tools
+    # Enable dev tools only in dev mode
     app_management.enable_dev_tools(
-        dev_tools_ui=True, dev_tools_serve_dev_bundles=True, dev_tools_hot_reload=dev_mode
+        dev_tools_ui=dev_mode, dev_tools_serve_dev_bundles=dev_mode, dev_tools_hot_reload=dev_mode
     )
 
     return app_management
@@ -243,9 +242,9 @@ def create_viewer_app(
 
     app_viewer = setup_profiling(app_viewer)
 
-    # Enable dev tools
+    # Enable dev tools only in dev mode
     app_viewer.enable_dev_tools(
-        dev_tools_ui=True, dev_tools_serve_dev_bundles=True, dev_tools_hot_reload=dev_mode
+        dev_tools_ui=dev_mode, dev_tools_serve_dev_bundles=dev_mode, dev_tools_hot_reload=dev_mode
     )
 
     return app_viewer
@@ -292,9 +291,9 @@ def create_editor_app(
 
     app_editor = setup_profiling(app_editor)
 
-    # Enable dev tools
+    # Enable dev tools only in dev mode
     app_editor.enable_dev_tools(
-        dev_tools_ui=True, dev_tools_serve_dev_bundles=True, dev_tools_hot_reload=dev_mode
+        dev_tools_ui=dev_mode, dev_tools_serve_dev_bundles=dev_mode, dev_tools_hot_reload=dev_mode
     )
 
     return app_editor
