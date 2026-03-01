@@ -56,31 +56,28 @@ def register_simple_theme_system(app):
 
     dmc.add_figure_templates()  # type: ignore[unresolved-attribute]
 
-    # Consolidated theme callback — a single callback with 7 outputs replaces
-    # 7 separate callbacks (provider + switch + 5 logos), reducing 7 synchronous
-    # Redux dispatches to 1.  This is critical to stay under React 18's 50-update
-    # depth limit when combined with other page-load callbacks.
-    logo_outputs = [
-        "navbar-logo-content",
-        "header-powered-by-logo",
-        "auth-modal-logo-login",
-        "auth-modal-logo-register",
-        "auth-modal-logo-public",
-    ]
+    # Move theme callbacks to clientside for instant response
     app.clientside_callback(
         """
         function(theme_data) {
-            var theme = theme_data || 'light';
-            var checked = theme === 'dark';
-            var logo = checked
-                ? '/assets/images/logos/logo_white.svg'
-                : '/assets/images/logos/logo_black.svg';
-            return [theme, checked, logo, logo, logo, logo, logo];
+            console.log('🔥 CLIENTSIDE THEME: Setting MantineProvider.forceColorScheme to', theme_data || 'light');
+            return theme_data || 'light';
         }
         """,
         Output("mantine-provider", "forceColorScheme"),
+        Input("theme-store", "data"),
+        prevent_initial_call=False,
+    )
+
+    # Sync switch state with current theme - clientside
+    app.clientside_callback(
+        """
+        function(theme_data) {
+            console.log('🔧 CLIENTSIDE THEME SWITCH: Setting checked to', theme_data === 'dark');
+            return theme_data === 'dark';
+        }
+        """,
         Output("theme-switch", "checked"),
-        *[Output(lid, "src") for lid in logo_outputs],
         Input("theme-store", "data"),
         prevent_initial_call=False,
     )
@@ -234,7 +231,33 @@ def register_simple_theme_system(app):
     #     prevent_initial_call=True,
     # )
 
-    # Logo callbacks are consolidated into the single theme callback above.
+    # Theme-aware logo callback - shared logic for all logos
+    # Uses a single JavaScript function to update multiple logo elements
+    logo_callback_js = """
+        function(theme_data) {
+            const theme = theme_data || 'light';
+            return theme === 'dark'
+                ? '/assets/images/logos/logo_white.svg'
+                : '/assets/images/logos/logo_black.svg';
+        }
+    """
+
+    # Register logo callbacks for each logo element
+    logo_outputs = [
+        "navbar-logo-content",
+        "header-powered-by-logo",
+        "auth-modal-logo-login",
+        "auth-modal-logo-register",
+        "auth-modal-logo-public",  # Public mode sign-in options
+    ]
+
+    for logo_id in logo_outputs:
+        app.clientside_callback(
+            logo_callback_js,
+            Output(logo_id, "src"),
+            Input("theme-store", "data"),
+            prevent_initial_call=False,
+        )
 
     # Disable theme switch on dashboard pages only
     # @app.callback(

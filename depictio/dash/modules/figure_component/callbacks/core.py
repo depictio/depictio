@@ -864,21 +864,14 @@ def _create_figure_from_data(
             if selection_column not in existing_custom_data:
                 cleaned_kwargs["custom_data"] = [selection_column] + list(existing_custom_data)
 
-        # Heatmap uses plotly-complexheatmap instead of px
+        # TEMPORARILY DISABLED: heatmap rendering via plotly-complexheatmap
         if visu_type.lower() == "heatmap":
-            from plotly_complexheatmap import ComplexHeatmap
+            import plotly.graph_objects as go
 
-            from depictio.dash.modules.figure_component.utils import _collect_heatmap_kwargs
-
-            heatmap_kwargs = _collect_heatmap_kwargs(cleaned_kwargs)
-            hm = ComplexHeatmap.from_dataframe(pandas_df, **heatmap_kwargs)
-            fig = hm.to_plotly()
+            fig = go.Figure()
             fig.update_layout(
-                autosize=True,
-                width=None,
-                height=None,
+                title="Heatmap temporarily disabled",
                 paper_bgcolor="rgba(0,0,0,0)",
-                plot_bgcolor="rgba(0,0,0,0)",
             )
             return fig
 

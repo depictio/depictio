@@ -1154,8 +1154,16 @@ def render_figure(
         ), data_info
 
     try:
+        # TEMPORARILY DISABLED: heatmap rendering via plotly-complexheatmap
         if is_heatmap:
-            figure, data_info = _render_heatmap_figure(df, cleaned_kwargs, data_info)
+            import plotly.graph_objects as go
+
+            figure = go.Figure()
+            figure.update_layout(
+                title="Heatmap temporarily disabled",
+                paper_bgcolor="rgba(0,0,0,0)",
+            )
+            return figure, data_info
         elif is_clustering:
             figure = _render_clustering_figure(
                 df, visu_type, cleaned_kwargs, cutoff, force_full_data

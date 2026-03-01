@@ -383,13 +383,12 @@ def render_map(
 
         # Common layout updates
         # map.uirevision preserves the user's current pan/zoom/bearing/pitch
-        # across re-renders.  Top-level uirevision preserves selectedData/clickData
-        # so Plotly doesn't clear selection state on figure re-render.
+        # across re-renders.  This is map-viewport-specific and does NOT
+        # preserve trace selection state (we clear that with selectedpoints=None).
         layout_kwargs: dict[str, Any] = {
             "margin": {"l": 0, "r": 0, "t": 30 if title else 0, "b": 0},
             "paper_bgcolor": "rgba(0,0,0,0)",
             "map": {"uirevision": "preserve"},
-            "uirevision": "persistent",
         }
         if title:
             layout_kwargs["title"] = {
