@@ -1,4 +1,5 @@
-"""Tests for card component extensions: multi-metric and conditional aggregations."""
+"""Tests for card and interactive component extensions: multi-metric, conditional
+aggregations, and scoped interactive filters."""
 
 from __future__ import annotations
 
@@ -10,7 +11,7 @@ from depictio.models.components.filter_expr import (
     apply_filter_expr,
     validate_filter_expr,
 )
-from depictio.models.components.lite import CardLiteComponent
+from depictio.models.components.lite import CardLiteComponent, InteractiveLiteComponent
 
 # ---------------------------------------------------------------------------
 # CardLiteComponent model tests
@@ -240,3 +241,83 @@ class TestComputeMultiValues:
         # skewness may or may not work depending on Polars version, but should not raise
         assert "average" in results
         assert "skewness" in results
+
+
+# ---------------------------------------------------------------------------
+# InteractiveLiteComponent filter_expr tests
+# ---------------------------------------------------------------------------
+
+
+class TestInteractiveLiteComponentBackwardsCompat:
+    """Existing interactive components still work unchanged."""
+
+    def test_standard_multiselect(self) -> None:
+        comp = InteractiveLiteComponent(
+            tag="filter-1",
+            interactive_component_type="MultiSelect",
+            column_name="variety",
+            column_type="object",
+        )
+        assert comp.filter_expr is None
+
+    def test_standard_rangeslider(self) -> None:
+        comp = InteractiveLiteComponent(
+            tag="filter-2",
+            interactive_component_type="RangeSlider",
+            column_name="value",
+            column_type="float64",
+        )
+        assert comp.filter_expr is None
+
+
+class TestInteractiveLiteComponentFilterExpr:
+    """filter_expr field validation for interactive components."""
+
+    def test_valid_filter_expr(self) -> None:
+        comp = InteractiveLiteComponent(
+            tag="scoped-filter",
+            interactive_component_type="MultiSelect",
+            column_name="variety",
+            column_type="object",
+            filter_expr="col('sepal.length') > 5",
+        )
+        assert comp.filter_expr == "col('sepal.length') > 5"
+
+    def test_compound_filter_expr(self) -> None:
+        expr = "(col('sepal.length') > 5) & (col('petal.width') < 2)"
+        comp = InteractiveLiteComponent(
+            tag="compound",
+            interactive_component_type="MultiSelect",
+            column_name="variety",
+            filter_expr=expr,
+        )
+        assert comp.filter_expr == expr
+
+    def test_unsafe_filter_expr_rejected(self) -> None:
+        with pytest.raises(ValidationError, match="disallowed construct"):
+            InteractiveLiteComponent(
+                tag="bad",
+                interactive_component_type="MultiSelect",
+                column_name="variety",
+                filter_expr="import os; col('x') > 0",
+            )
+
+    def test_unsafe_dunder_rejected(self) -> None:
+        with pytest.raises(ValidationError, match="disallowed construct"):
+            InteractiveLiteComponent(
+                tag="bad",
+                interactive_component_type="MultiSelect",
+                column_name="variety",
+                filter_expr="col('x').__class__",
+            )
+
+    def test_filter_expr_with_rangeslider(self) -> None:
+        """filter_expr works with numeric slider components too."""
+        comp = InteractiveLiteComponent(
+            tag="scoped-slider",
+            interactive_component_type="RangeSlider",
+            column_name="sepal.length",
+            column_type="float64",
+            filter_expr="col('variety') == 'setosa'",
+        )
+        assert comp.filter_expr == "col('variety') == 'setosa'"
