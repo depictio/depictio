@@ -74,10 +74,13 @@ def register_general_stats_callbacks(app):
             return dash.no_update, dash.no_update, dash.no_update
 
         mode_data = store_data[read_mode]
+        violin_fig = mode_data["violin_figure"]
+        if isinstance(violin_fig, dict):
+            violin_fig.setdefault("layout", {})["uirevision"] = "persistent"
         return (
             mode_data["table_data"],
             mode_data["table_styles"],
-            mode_data["violin_figure"],
+            violin_fig,
         )
 
     # ------------------------------------------------------------------
@@ -138,6 +141,10 @@ def register_general_stats_callbacks(app):
         mode_data = store_data[mode]
         full_data = mode_data["table_data"]
         full_violin = mode_data["violin_figure"]
+        # Ensure uirevision is set to prevent Plotly from treating the figure
+        # as entirely new on each update, which contributes to React update depth.
+        if isinstance(full_violin, dict):
+            full_violin.setdefault("layout", {})["uirevision"] = "persistent"
 
         # No interactive values or empty -> reset to full data + violin
         if not interactive_values:
@@ -287,11 +294,16 @@ def _rebuild_violin_from_filtered(filtered_data: list[dict], mode_data: dict) ->
     """
     if not filtered_data:
         # Return an empty figure rather than the full violin
-        return {"data": [], "layout": {"height": 100, "title": {"text": "No data"}}}
+        return {
+            "data": [],
+            "layout": {"height": 100, "title": {"text": "No data"}, "uirevision": "persistent"},
+        }
 
     original_to_tool = mode_data.get("original_to_tool", {})
     display_to_original = mode_data.get("display_to_original")
 
     df_filtered = pd.DataFrame(filtered_data)
     fig = _create_violin_plot(df_filtered, original_to_tool, display_to_original)
-    return fig.to_dict()
+    fig_dict = fig.to_dict()
+    fig_dict.setdefault("layout", {})["uirevision"] = "persistent"
+    return fig_dict

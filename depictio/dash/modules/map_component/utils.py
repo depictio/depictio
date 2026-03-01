@@ -382,12 +382,13 @@ def render_map(
             )
 
         # Common layout updates
-        # map.uirevision preserves the user's current pan/zoom/bearing/pitch
-        # across re-renders.  This is map-viewport-specific and does NOT
-        # preserve trace selection state (we clear that with selectedpoints=None).
+        # Top-level uirevision preserves selectedData/clickData across re-renders,
+        # preventing infinite loops where figure updates reset selection state.
+        # map.uirevision preserves the user's current pan/zoom/bearing/pitch.
         layout_kwargs: dict[str, Any] = {
             "margin": {"l": 0, "r": 0, "t": 30 if title else 0, "b": 0},
             "paper_bgcolor": "rgba(0,0,0,0)",
+            "uirevision": "persistent",
             "map": {"uirevision": "preserve"},
         }
         if title:

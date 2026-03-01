@@ -75,14 +75,15 @@ def register_map_selection_callback(app):
         triggered_prop = ctx.triggered[0]["prop_id"] if ctx.triggered else ""
         triggered_value = ctx.triggered[0]["value"] if ctx.triggered else None
 
-        # Ignore clearing triggers from map re-render
-        if "selectedData" in triggered_prop and not triggered_value:
-            has_existing = any(
-                v.get("source") == SOURCE_TYPE
-                for v in current_store.get("interactive_components_values", [])
-            )
-            if has_existing:
-                raise dash.exceptions.PreventUpdate
+        # Ignore clearing triggers from map re-render (unconditional guard).
+        # When Plotly re-renders a figure, it resets selectedData/clickData to None.
+        # Without this guard, the None value would propagate back to the store,
+        # triggering another re-render and creating an infinite loop.
+        is_clearing_trigger = (
+            "selectedData" in triggered_prop or "clickData" in triggered_prop
+        ) and not triggered_value
+        if is_clearing_trigger:
+            raise dash.exceptions.PreventUpdate
 
         metadata_by_index = build_metadata_lookup(metadata_list, metadata_ids)
         existing_values = filter_existing_values(current_store, SOURCE_TYPE)
@@ -137,4 +138,20 @@ def register_map_selection_callback(app):
         if should_prevent_update(has_any_selection, current_store, SOURCE_TYPE):
             raise dash.exceptions.PreventUpdate
 
-        return merge_selection_values(existing_values, selection_values)
+        new_store = merge_selection_values(existing_values, selection_values)
+
+        # Final safety: prevent writing identical data to the store.
+        # Without this deep equality check, no-op writes can trigger downstream
+        # callbacks (render_maps_batch, etc.) and cause infinite re-render loops.
+        current_values = sorted(
+            current_store.get("interactive_components_values", []),
+            key=lambda x: (x.get("index", ""), x.get("source", "")),
+        )
+        new_values = sorted(
+            new_store.get("interactive_components_values", []),
+            key=lambda x: (x.get("index", ""), x.get("source", "")),
+        )
+        if current_values == new_values:
+            raise dash.exceptions.PreventUpdate
+
+        return new_store

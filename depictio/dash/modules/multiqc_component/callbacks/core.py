@@ -583,6 +583,13 @@ def register_core_callbacks(app):
 
             trace_metadata = analyze_multiqc_plot_structure(fig)
 
+            # Set uirevision to prevent Plotly from resetting selectedData/clickData
+            # on figure updates, which can trigger infinite re-render loops.
+            if isinstance(fig, dict):
+                fig.setdefault("layout", {})["uirevision"] = "persistent"
+            elif hasattr(fig, "update_layout"):
+                fig.update_layout(uirevision="persistent")
+
             return (
                 fig,
                 trace_metadata,
@@ -943,6 +950,7 @@ def register_core_callbacks(app):
                 if "layout" not in patched_fig:
                     patched_fig["layout"] = {}
                 patched_fig["layout"]["_depictio_filter_applied"] = has_active_filters
+                patched_fig["layout"]["uirevision"] = "persistent"
                 return patched_fig
 
             return dash.no_update

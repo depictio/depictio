@@ -945,7 +945,9 @@ def _finalize_figure(
     """
     # Heatmap figures have precisely computed margins/layout from ComplexHeatmap;
     # skip the generic margin/autosize override so dendrograms render correctly.
+    # Still apply uirevision to prevent selectedData/clickData reset loops.
     if visu_type.lower() == "heatmap":
+        figure.update_layout(uirevision="persistent")
         return figure
 
     # Fix marginal plot axis constraints
