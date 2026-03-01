@@ -429,69 +429,48 @@ def register_callbacks_header(app) -> None:
     # - edit_badge_clickable: Made edit badge clickable to toggle edit mode
 
     # =============================================================================
-    # BURGER BUTTON CALLBACKS (DMC Burger for navbar toggle) - CLIENTSIDE
+    # BURGER BUTTON CALLBACK (UNIFIED) - CLIENTSIDE
+    # Single callback replaces two bidirectional callbacks to eliminate the
+    # synchronous cycle: sidebar-collapsed → burger-opened → sidebar-collapsed.
+    # Uses callback_context.triggered to determine direction and returns
+    # no_update for the non-triggering side, structurally breaking the cycle.
     # =============================================================================
 
-    # Sync burger opened state with sidebar-collapsed store (inverted) - CLIENTSIDE for instant response
     app.clientside_callback(
         """
-        function(is_collapsed) {
-            console.log('🍔 CLIENTSIDE BURGER SYNC: collapsed=' + is_collapsed);
-            // Burger opened = NOT collapsed
-            var new_opened = (is_collapsed !== null && is_collapsed !== undefined) ? !is_collapsed : true;
-            // Guard: check DOM to avoid redundant update that would re-trigger the cycle
-            var burger = document.querySelector('#burger-button');
-            if (burger) {
-                var currentOpened = burger.getAttribute('data-opened') === 'true' ||
-                                   burger.classList.contains('mantine-Burger--opened');
-                if (currentOpened === new_opened) {
-                    console.log('🚫 Burger already in sync, skipping update');
-                    return window.dash_clientside.no_update;
-                }
+        function(sidebar_collapsed, burger_opened, pathname) {
+            var ctx = dash_clientside.callback_context;
+            var no_update = window.dash_clientside.no_update;
+
+            if (!ctx || !ctx.triggered || ctx.triggered.length === 0) {
+                return [no_update, no_update];
             }
-            return new_opened;
+
+            var trigger = ctx.triggered[0].prop_id;
+
+            if (trigger === 'sidebar-collapsed.data') {
+                // Store changed (e.g. from sidebar link click) → sync burger visual
+                var new_opened = (sidebar_collapsed !== null && sidebar_collapsed !== undefined)
+                    ? !sidebar_collapsed : true;
+                return [new_opened, no_update];
+            }
+
+            if (trigger === 'burger-button.opened') {
+                // User clicked burger → update store
+                // Only on dashboard pages
+                if (!pathname || !(pathname.startsWith('/dashboard/') || pathname.startsWith('/dashboard-edit/'))) {
+                    return [no_update, no_update];
+                }
+                var is_collapsed = !burger_opened;
+                return [no_update, is_collapsed];
+            }
+
+            return [no_update, no_update];
         }
         """,
         Output("burger-button", "opened", allow_duplicate=True),
-        Input("sidebar-collapsed", "data"),
-        prevent_initial_call=True,
-    )
-
-    # Update sidebar-collapsed store when burger is clicked - CLIENTSIDE for instant response
-    app.clientside_callback(
-        """
-        function(burger_opened, pathname) {
-            console.log('🍔 CLIENTSIDE BURGER CLICK: opened=' + burger_opened + ', pathname=' + pathname);
-
-            // Skip initial mount - only respond to actual user clicks
-            // Use a window flag to track if burger has been initialized
-            if (typeof window._burgerInitialized === 'undefined') {
-                window._burgerInitialized = true;
-                console.log('🚫 Skipping initial burger mount (not a user click)');
-                return window.dash_clientside.no_update;
-            }
-
-            // Only update on dashboard pages (viewer or editor app)
-            if (!pathname || !(pathname.startsWith('/dashboard/') || pathname.startsWith('/dashboard-edit/'))) {
-                console.log('🚫 Ignoring burger click on non-dashboard page');
-                return window.dash_clientside.no_update;
-            }
-
-            // sidebar-collapsed = NOT burger_opened
-            const is_collapsed = !burger_opened;
-
-            // Guard: if sidebar-collapsed already has this value, skip to break the cycle
-            if (typeof window._lastSidebarCollapsed !== 'undefined' && window._lastSidebarCollapsed === is_collapsed) {
-                console.log('🚫 sidebar-collapsed already ' + is_collapsed + ', skipping');
-                return window.dash_clientside.no_update;
-            }
-            window._lastSidebarCollapsed = is_collapsed;
-
-            console.log('✅ Setting collapsed=' + is_collapsed);
-            return is_collapsed;
-        }
-        """,
         Output("sidebar-collapsed", "data", allow_duplicate=True),
+        Input("sidebar-collapsed", "data"),
         Input("burger-button", "opened"),
         State("url", "pathname"),
         prevent_initial_call=True,
