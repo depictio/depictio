@@ -321,3 +321,115 @@ class TestInteractiveLiteComponentFilterExpr:
             filter_expr="col('variety') == 'setosa'",
         )
         assert comp.filter_expr == "col('variety') == 'setosa'"
+
+
+# ---------------------------------------------------------------------------
+# Expanded filter_expr capabilities (bioinformatics patterns)
+# ---------------------------------------------------------------------------
+
+
+class TestExpandedFilterExpressions:
+    """Tests for expanded filter_expr capabilities: is_between, string methods,
+    aggregation window functions (.over()), and compound patterns common in
+    bioinformatics workflows."""
+
+    @pytest.fixture
+    def iris_like_df(self) -> pl.DataFrame:
+        """Small iris-like DataFrame for testing."""
+        return pl.DataFrame(
+            {
+                "sepal_length": [5.1, 4.9, 7.0, 6.4, 5.9, 6.3, 4.6, 5.0, 6.7, 5.5],
+                "petal_length": [1.4, 1.4, 4.7, 4.5, 4.2, 6.0, 1.0, 1.5, 5.2, 1.3],
+                "petal_width": [0.2, 0.2, 1.4, 1.5, 1.5, 2.5, 0.2, 0.2, 2.3, 0.2],
+                "variety": [
+                    "Setosa",
+                    "Setosa",
+                    "Versicolor",
+                    "Versicolor",
+                    "Versicolor",
+                    "Virginica",
+                    "Setosa",
+                    "Setosa",
+                    "Virginica",
+                    "Setosa",
+                ],
+            }
+        )
+
+    # -- Validation tests (expression is accepted) --
+
+    def test_is_between_valid(self) -> None:
+        """is_between() passes validation."""
+        validate_filter_expr("col('x').is_between(2.0, 4.0)")
+
+    def test_over_valid(self) -> None:
+        """.mean().over() passes validation."""
+        validate_filter_expr("col('x').mean().over('group') > 5.0")
+
+    def test_to_lowercase_valid(self) -> None:
+        """str.to_lowercase() passes validation."""
+        validate_filter_expr("col('name').str.to_lowercase().str.contains('set')")
+
+    def test_strip_valid(self) -> None:
+        """str.strip_chars() pattern passes validation (strip is allowed)."""
+        validate_filter_expr("col('x').str.strip(' ')")
+
+    # -- Runtime tests (correct Polars behavior) --
+
+    def test_is_between_runtime(self, iris_like_df: pl.DataFrame) -> None:
+        """is_between() filters to rows in a numeric range."""
+        result = apply_filter_expr(iris_like_df, "col('sepal_length').is_between(5.0, 6.0)")
+        assert all(5.0 <= v <= 6.0 for v in result["sepal_length"].to_list())
+        # is_between is inclusive by default: [5.0, 6.0]
+        # Qualifying: 5.1, 5.9, 5.0, 5.5 (4.9 excluded)
+        assert len(result) == 4
+        expected = [v for v in iris_like_df["sepal_length"].to_list() if 5.0 <= v <= 6.0]
+        assert result["sepal_length"].to_list() == expected
+
+    def test_column_to_column_runtime(self, iris_like_df: pl.DataFrame) -> None:
+        """col('a') > col('b') keeps rows where a exceeds b."""
+        result = apply_filter_expr(iris_like_df, "col('sepal_length') > col('petal_length')")
+        for row in result.iter_rows(named=True):
+            assert row["sepal_length"] > row["petal_length"]
+
+    def test_negated_is_in_runtime(self, iris_like_df: pl.DataFrame) -> None:
+        """~col('x').is_in([...]) excludes matching rows."""
+        result = apply_filter_expr(iris_like_df, "~col('variety').is_in(['Setosa'])")
+        assert "Setosa" not in result["variety"].to_list()
+        assert len(result) == 5  # 3 Versicolor + 2 Virginica
+
+    def test_count_over_runtime(self, iris_like_df: pl.DataFrame) -> None:
+        """count().over() filters by group size."""
+        # Setosa: 5, Versicolor: 3, Virginica: 2
+        result = apply_filter_expr(iris_like_df, "col('variety').count().over('variety') >= 5")
+        # Only Setosa has 5 members
+        assert set(result["variety"].unique().to_list()) == {"Setosa"}
+        assert len(result) == 5
+
+    def test_mean_over_runtime(self, iris_like_df: pl.DataFrame) -> None:
+        """mean().over() filters by group mean."""
+        # Setosa mean sepal: (5.1+4.9+4.6+5.0+5.5)/5 = 5.02
+        # Versicolor mean sepal: (7.0+6.4+5.9)/3 = 6.43
+        # Virginica mean sepal: (6.3+6.7)/2 = 6.5
+        result = apply_filter_expr(
+            iris_like_df,
+            "col('sepal_length').mean().over('variety') > 6.0",
+        )
+        varieties = set(result["variety"].unique().to_list())
+        assert "Setosa" not in varieties
+        assert "Versicolor" in varieties
+        assert "Virginica" in varieties
+
+    def test_compound_group_and_row_runtime(self, iris_like_df: pl.DataFrame) -> None:
+        """Compound: row-level AND group-level condition."""
+        # Row: sepal > 5.0 AND group: variety count >= 3
+        # Setosa count=5 (>=3), Versicolor count=3 (>=3), Virginica count=2 (<3)
+        result = apply_filter_expr(
+            iris_like_df,
+            "(col('sepal_length') > 5.0) & (col('variety').count().over('variety') >= 3)",
+        )
+        # Virginica excluded (group size 2 < 3)
+        assert "Virginica" not in result["variety"].to_list()
+        # Setosa rows with sepal > 5.0: 5.1, 5.5 (4.9, 4.6, 5.0 excluded by row condition)
+        # Versicolor rows with sepal > 5.0: 7.0, 6.4, 5.9
+        assert len(result) == 5
