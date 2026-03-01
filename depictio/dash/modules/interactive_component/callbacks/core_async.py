@@ -234,7 +234,10 @@ def register_async_rendering_callback(app):
             component_type = trigger_data.get("interactive_component_type", "unknown")
 
             # IDEMPOTENCY CHECK: If already rendered, skip
-            if existing_meta and existing_meta.get("options") is not None:
+            # Selects store "options" in metadata, sliders store "min"/"max"
+            if existing_meta and (
+                existing_meta.get("options") is not None or existing_meta.get("min") is not None
+            ):
                 all_components.append(no_update)
                 all_metadata.append(no_update)
                 all_stored_metadata.append(no_update)
