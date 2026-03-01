@@ -432,33 +432,40 @@ def register_callbacks_header(app) -> None:
     # BURGER BUTTON CALLBACK (DMC Burger for navbar toggle) - CLIENTSIDE
     # =============================================================================
 
-    # Unified burger/sidebar sync — single callback eliminates the bidirectional
-    # cycle that caused "Maximum update depth exceeded" (two separate callbacks
-    # writing to each other's inputs created a synchronous React loop).
+    # Unified burger/sidebar sync — single callback with value guards to prevent
+    # the self-triggering loop (both values are Inputs AND Outputs, so setting
+    # one re-triggers the callback via the other Input).
     app.clientside_callback(
         """
         function(sidebar_collapsed, burger_opened, pathname) {
             var ctx = dash_clientside.callback_context;
+            var NO = window.dash_clientside.no_update;
             if (!ctx || !ctx.triggered || ctx.triggered.length === 0) {
-                return [window.dash_clientside.no_update, window.dash_clientside.no_update];
+                return [NO, NO];
             }
 
             var trigger = ctx.triggered[0].prop_id;
 
             if (trigger === 'sidebar-collapsed.data') {
-                // Sidebar changed externally (e.g. restored from localStorage) → sync burger
                 var new_opened = (sidebar_collapsed !== null && sidebar_collapsed !== undefined)
                     ? !sidebar_collapsed : true;
-                return [new_opened, window.dash_clientside.no_update];
+                // Value guard: if burger already matches, stop the loop
+                if (burger_opened === new_opened) {
+                    return [NO, NO];
+                }
+                return [new_opened, NO];
             }
 
             // Burger clicked → sync sidebar store
-            // Only update on dashboard pages (viewer or editor app)
             if (!pathname || !(pathname.startsWith('/dashboard/') || pathname.startsWith('/dashboard-edit/'))) {
-                return [window.dash_clientside.no_update, window.dash_clientside.no_update];
+                return [NO, NO];
             }
             var new_collapsed = !burger_opened;
-            return [window.dash_clientside.no_update, new_collapsed];
+            // Value guard: if sidebar already matches, stop the loop
+            if (sidebar_collapsed === new_collapsed) {
+                return [NO, NO];
+            }
+            return [NO, new_collapsed];
         }
         """,
         Output("burger-button", "opened", allow_duplicate=True),
