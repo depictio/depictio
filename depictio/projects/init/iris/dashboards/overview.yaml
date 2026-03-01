@@ -127,6 +127,19 @@ components:
     custom_color: "#4CAF50"
     icon_name: mdi:filter-variant
 
+  # Interactive filter: Scoped variety selector — only shows varieties with sepal > 6
+  - tag: large-sepal-variety-filter
+    component_type: interactive
+    workflow_tag: python/iris_workflow
+    data_collection_tag: iris_table
+    interactive_component_type: MultiSelect
+    column_name: variety
+    column_type: object
+    filter_expr: "col('sepal.length') > 6"
+    custom_color: "#FF9800"
+    icon_name: mdi:filter-check
+    title: "Varieties (sepal > 6)"
+
   # Data table
   - tag: data-table
     component_type: table

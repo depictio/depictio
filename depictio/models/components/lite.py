@@ -256,7 +256,12 @@ class CardLiteComponent(BaseLiteComponent):
 class InteractiveLiteComponent(BaseLiteComponent):
     """Lite interactive component for user definition.
 
-    Example YAML:
+    Supports optional ``filter_expr`` to pre-filter the underlying data before
+    computing component options (Select/MultiSelect) or ranges (Slider/RangeSlider).
+    This allows scoped filters — e.g., a dropdown showing only varieties where
+    ``sepal.length > 5``.
+
+    Example YAML (standard):
         - tag: filter-1
           component_type: interactive
           workflow_tag: python/iris_workflow
@@ -264,6 +269,16 @@ class InteractiveLiteComponent(BaseLiteComponent):
           interactive_component_type: MultiSelect
           column_name: variety
           column_type: object
+
+    Example YAML (pre-filtered options):
+        - tag: filtered-variety
+          component_type: interactive
+          workflow_tag: python/iris_workflow
+          data_collection_tag: iris_table
+          interactive_component_type: MultiSelect
+          column_name: variety
+          column_type: object
+          filter_expr: "col('sepal.length') > 5"
     """
 
     component_type: Literal["interactive"] = "interactive"
@@ -277,6 +292,13 @@ class InteractiveLiteComponent(BaseLiteComponent):
         default=None,
         description="Data type of column (int64, float64, bool, datetime, timedelta, "
         "category, object). When provided, component type compatibility is validated.",
+    )
+
+    # Conditional data scoping
+    filter_expr: str | None = Field(
+        default=None,
+        description="Polars filter expression to pre-filter data before computing "
+        "component options/ranges (e.g. \"col('sepal.length') > 5\")",
     )
 
     # Styling (optional)
@@ -309,6 +331,15 @@ class InteractiveLiteComponent(BaseLiteComponent):
                 f"for column_type='{self.column_type}'. "
                 f"Valid types: {valid}"
             )
+        return self
+
+    @model_validator(mode="after")
+    def validate_filter_expr_safety(self) -> "InteractiveLiteComponent":
+        """Validate filter_expr is safe if provided."""
+        if self.filter_expr is not None:
+            from depictio.models.components.filter_expr import validate_filter_expr
+
+            validate_filter_expr(self.filter_expr)
         return self
 
 
