@@ -171,4 +171,17 @@ def register_table_selection_callback(app):
         if should_prevent_update(has_any_selection, current_store, SOURCE_TYPE):
             raise dash.exceptions.PreventUpdate
 
-        return merge_selection_values(existing_values, selection_values)
+        # Deep equality check: avoid writing identical data back to the store
+        # (prevents unnecessary Redux notifications that cascade into re-renders)
+        def _sort_key(x: dict) -> tuple:
+            return (x.get("index", ""), x.get("source", ""))
+
+        new_store = merge_selection_values(existing_values, selection_values)
+        current_values = sorted(
+            current_store.get("interactive_components_values", []), key=_sort_key
+        )
+        new_values = sorted(new_store.get("interactive_components_values", []), key=_sort_key)
+        if current_values == new_values:
+            raise dash.exceptions.PreventUpdate
+
+        return new_store

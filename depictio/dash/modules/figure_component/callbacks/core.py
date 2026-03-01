@@ -525,10 +525,16 @@ def _process_single_figure(
                 selection_column=selection_column,
             )
 
+        # Add uirevision to prevent Plotly from resetting selectedData/clickData
+        # on figure re-render (which would trigger the scatter selection callback
+        # and create a cascading update loop exceeding React's depth limit)
         if isinstance(fig, go.Figure):
+            fig.update_layout(uirevision="persistent")
             fig_dict = json.loads(fig.to_json())
         else:
             fig_dict = fig
+            if isinstance(fig_dict, dict) and "layout" in fig_dict:
+                fig_dict["layout"].setdefault("uirevision", "persistent")
 
         metadata = {
             "index": component_id,

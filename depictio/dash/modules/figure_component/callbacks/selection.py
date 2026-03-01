@@ -152,21 +152,16 @@ def register_scatter_selection_callback(app):
             f"trigger={triggered_prop}"
         )
 
-        # Check if this is a "clearing" trigger (figure re-render clearing selectedData)
-        # When figure re-renders due to filtering, selectedData becomes None/empty
-        # We should NOT clear the selection in this case - only when user explicitly deselects
-        # If triggered by selectedData becoming None/empty, preserve existing selection
-        if "selectedData" in triggered_prop and not triggered_value:
-            # Check if we have existing scatter selections to preserve
-            has_existing_scatter = any(
-                v.get("source") == SOURCE_TYPE
-                for v in current_store.get("interactive_components_values", [])
-            )
-            if has_existing_scatter:
-                logger.info(
-                    "Scatter selection: Ignoring clear trigger (figure re-render), preserving selection"
-                )
-                raise dash.exceptions.PreventUpdate
+        # Guard: When selectedData or clickData becomes None/empty (figure re-render),
+        # ALWAYS prevent update. Figure re-renders reset these props to None, which is
+        # never a user action. Without this guard, the clearing event writes to
+        # interactive-values-store, triggering another figure re-render → infinite loop.
+        is_clearing_trigger = (
+            "selectedData" in triggered_prop or "clickData" in triggered_prop
+        ) and not triggered_value
+        if is_clearing_trigger:
+            logger.info("Scatter selection: Ignoring clear trigger (figure re-render)")
+            raise dash.exceptions.PreventUpdate
 
         # Build metadata lookup
         metadata_by_index = build_metadata_lookup(metadata_list, metadata_ids)
@@ -251,4 +246,17 @@ def register_scatter_selection_callback(app):
         if should_prevent_update(has_any_selection, current_store, SOURCE_TYPE):
             raise dash.exceptions.PreventUpdate
 
-        return merge_selection_values(existing_values, selection_values)
+        # Deep equality check: avoid writing identical data back to the store
+        # (prevents unnecessary Redux notifications that cascade into re-renders)
+        def _sort_key(x: dict) -> tuple:
+            return (x.get("index", ""), x.get("source", ""))
+
+        new_store = merge_selection_values(existing_values, selection_values)
+        current_values = sorted(
+            current_store.get("interactive_components_values", []), key=_sort_key
+        )
+        new_values = sorted(new_store.get("interactive_components_values", []), key=_sort_key)
+        if current_values == new_values:
+            raise dash.exceptions.PreventUpdate
+
+        return new_store
