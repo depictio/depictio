@@ -433,7 +433,6 @@ class S3CacheConfig(BaseSettings):
         default="~/.depictio/s3_cache",
         description="Local directory for S3 file cache. Use DEPICTIO_S3_CACHE_DIR to override.",
     )
-    mount_points: str = Field(default="", description="Comma-separated S3 FUSE mount points")
 
     model_config = SettingsConfigDict(env_prefix="DEPICTIO_S3_")
 
