@@ -8,10 +8,13 @@ from depictio.dash.flask_custom import register_static_routes
 from depictio.dash.layouts.app_layout import create_app_layout
 
 # Create and configure the Dash application
-app, dev_mode = create_dash_app()
+app, dev_mode, show_debug_ui = create_dash_app()
 
+# Enable dev tools: UI shown when debug UI flag is set, hot reload only in full dev mode
 app.enable_dev_tools(
-    dev_tools_ui=dev_mode, dev_tools_serve_dev_bundles=dev_mode, dev_tools_hot_reload=dev_mode
+    dev_tools_ui=show_debug_ui,
+    dev_tools_serve_dev_bundles=show_debug_ui,
+    dev_tools_hot_reload=dev_mode,
 )
 
 # Set the application layout

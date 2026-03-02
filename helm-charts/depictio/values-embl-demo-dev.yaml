@@ -70,6 +70,7 @@ frontend:
     # Performance
     DEPICTIO_DASH_WORKERS: "1"  # MUST be 1 until state_manager is refactored
     DEPICTIO_DEV_MODE: "false"
+    DEPICTIO_DASH_DEBUG_UI: "true"  # Show Dash debug UI without full dev mode
     DEPICTIO_GOOGLE_ANALYTICS_ENABLED: "true"
     DEPICTIO_GOOGLE_ANALYTICS_TRACKING_ID: "G-MCC33FDF2Z"
 
