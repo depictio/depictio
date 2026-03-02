@@ -6,43 +6,18 @@
 
 
 <details>
-<summary>Click to expand the changelog for 0.8.0-b1</summary>
+<summary>Click to expand the changelog for 0.8.0-b2</summary>
 
 ### Changes 📜
 
-#### New Features ✨
-
-* feat: integrate plotly-complexheatmap as native heatmap visu_type [1ccbfbd5]
-* feat: add GeoJSON data collection type with S3 loading and choropleth DC support [8b549c01]
-* feat: add choropleth map support with country borders and cross-filtering [11b8981b]
-* feat: add geospatial map component with cross-filtering support [068f6f7e]
-
-#### Bug Fixes 🐛
-
-* fix: remove absolute path from pixi.lock for CI portability [207bccad]
-* fix: add plotly-complexheatmap local path to pixi.toml [16a6100e]
-* fix: adjust map demo dashboard layout alignment and widths [fbc5bee3]
-* fix: promote theme-store to Input for reliable map theme switching [19742c4d]
-* fix: make map component theme-responsive with carto-positron default [11d910c8]
-* fix: map component UX polish and stepper save support [31b3a353]
-* fix: improve map component UX - viewport stability, selection highlighting, color locking [fc3f0c53]
-
-#### Improvements 🚀
-
-* refactor: simplify map component code with data-driven patterns [d19c85a7]
-
 #### Other Changes 📝
 
-* Bump version: 0.7.6-b1 → 0.8.0-b1 [86d4a269]
-* Update CHANGELOG.md for v0.7.6 [58db4143]
-* Fix CI dashboard_lite.yaml references to new dashboards/ paths [a1064d36]
-* Reorganize depictio/projects/ directory for consistency and versioning [ef248886]
-* test: add unit tests for GeoJSON DC type, MapLiteComponent, and YAML serialization [d62c231b]
-* Clarify default MongoDB URL description in CLAUDE.md [24fee1c1]
-* Slim root CLAUDE.md from 801 to 80 lines per Boris Cherny best practices [2c4360b6]
-* Add title, description, and styling options to table components [05f6aa46]
-* Update CHANGELOG.md for v0.7.6-b1 [0e003ea3]
-* Bump version: 0.7.5 → 0.7.6-b1 [0974a055]
+* Bump version: 0.8.0-b1 → 0.8.0-b2 [6166c831]
+* Restore debug-menu-control.js and its script tags [cec88cd2]
+* Add DEPICTIO_DASH_DEBUG_UI flag to show debug UI without full dev mode [6b1751d5]
+* Hide Dash debug UI in production mode [6a736f70]
+* Update CHANGELOG.md for v0.8.0-b1 [972c0228]
+* Bump version: 0.7.6-b1 → 0.8.0-b1 [ab4297da]
 
 
 </details>
@@ -51,9 +26,7 @@
 
 For more details, please refer to the [documentation](https://depictio.github.io/depictio-docs/)
 
-ection logic and improve MinIO configuration in Helm charts [dce087f8]
-* fix: reduce storage sizes for MongoDB, MinIO, screenshots, and keys in Helm chart [cd1de3f8]
-* fix: update Helm chart version and clean up ingress annotations for better functionality [7e0180b1]
+otations for better functionality [7e0180b1]
 * fix: simplify CI workflow by removing redundant build strategy and enhancing image handling [7fd96fb2]
 * fix: refactor CI workflow to streamline Helm chart deployment and Docker image handling [e8f1bbf2]
 * fix: update default host configurations with correct service names for frontend and backend [48e8fd63]
