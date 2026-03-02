@@ -673,11 +673,11 @@ class PerformanceConfig(BaseSettings):
     browser_element_timeout: int = Field(default=30000)  # 30s default
 
     # Screenshot-specific timeouts (production typically needs longer)
-    screenshot_navigation_timeout: int = Field(default=45000)  # 45s for navigation
-    screenshot_content_wait: int = Field(default=15000)  # 15s for content
-    screenshot_stabilization_wait: int = Field(default=5000)  # 5s for stability
-    screenshot_capture_timeout: int = Field(default=90000)  # 90s for actual screenshot capture
-    screenshot_api_timeout: int = Field(default=300)  # 5 minutes for complete screenshot API call
+    screenshot_navigation_timeout: int = Field(default=60000)  # 60s for navigation
+    screenshot_content_wait: int = Field(default=30000)  # 30s for content
+    screenshot_stabilization_wait: int = Field(default=10000)  # 10s for stability
+    screenshot_capture_timeout: int = Field(default=120000)  # 120s for actual screenshot capture
+    screenshot_api_timeout: int = Field(default=600)  # 10 minutes for complete screenshot API call
 
     # Service readiness check settings
     service_readiness_retries: int = Field(default=5)

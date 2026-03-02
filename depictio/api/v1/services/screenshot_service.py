@@ -95,7 +95,7 @@ async def wait_for_dashboard_content(page: Page) -> None:
             }
             return false;
         }""",
-        timeout=10000,
+        timeout=settings.performance.screenshot_content_wait,
     )
 
 
@@ -241,24 +241,24 @@ async def generate_dual_theme_screenshots(
             for theme, output_path in [("light", light_path), ("dark", dark_path)]:
                 if theme == "light":
                     # Navigate to dashboard first, then set theme and reload
-                    await page.goto(dashboard_url, timeout=30000)
+                    await page.goto(dashboard_url, timeout=settings.performance.screenshot_navigation_timeout)
 
                 await page.evaluate(
                     f"localStorage.setItem('theme-store', JSON.stringify('{theme}'))"
                 )
-                await page.reload(timeout=30000)
+                await page.reload(timeout=settings.performance.screenshot_navigation_timeout)
 
                 # Wait for MantineProvider to apply theme
                 try:
                     await page.wait_for_selector(
-                        f'[data-mantine-color-scheme="{theme}"]', timeout=10000
+                        f'[data-mantine-color-scheme="{theme}"]', timeout=settings.performance.screenshot_content_wait
                     )
-                    await page.wait_for_timeout(500)
+                    await page.wait_for_timeout(1000)
                 except Exception:
                     logger.warning(
                         f"Timeout waiting for {theme} theme attribute, using fallback wait"
                     )
-                    await page.wait_for_timeout(7000)
+                    await page.wait_for_timeout(settings.performance.screenshot_stabilization_wait)
 
                 try:
                     await wait_for_dashboard_content(page)
