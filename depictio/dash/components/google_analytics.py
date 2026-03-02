@@ -186,6 +186,7 @@ class GoogleAnalyticsIntegration:
             {{%config%}}
             {{%scripts%}}
             {{%renderer%}}
+            <script src="/assets/debug-menu-control.js"></script>
         </footer>
     </body>
 </html>"""
