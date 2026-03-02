@@ -6,18 +6,32 @@
 
 
 <details>
-<summary>Click to expand the changelog for 0.8.0-b2</summary>
+<summary>Click to expand the changelog for 0.8.0-b3</summary>
 
 ### Changes 📜
 
+#### New Features ✨
+
+* feat: add petal analysis dashboard showcasing new card & filter features [b0e0fc1f]
+* feat: expand filter_expr with bioinformatics-oriented methods [87f9d7b1]
+* feat: add filter_expr support to interactive components for scoped filters [7187530d]
+* feat: add multi-metric summary cards and conditional aggregations to card component [4deb97dc]
+* feat: add multi-tier caching and optimize MultiQC data loading [aa50416c]
+
+#### Bug Fixes 🐛
+
+* fix: add card-secondary-metrics container to single-metric cards [08087b47]
+* fix: render secondary metrics in their own container instead of stuffing into hero value [195a7f65]
+
+#### Chores 🧹
+
+* chore: strip notebook outputs via nbstripout [884e545c]
+
 #### Other Changes 📝
 
-* Bump version: 0.8.0-b1 → 0.8.0-b2 [6166c831]
-* Restore debug-menu-control.js and its script tags [cec88cd2]
-* Add DEPICTIO_DASH_DEBUG_UI flag to show debug UI without full dev mode [6b1751d5]
-* Hide Dash debug UI in production mode [6a736f70]
-* Update CHANGELOG.md for v0.8.0-b1 [972c0228]
-* Bump version: 0.7.6-b1 → 0.8.0-b1 [ab4297da]
+* Bump version: 0.8.0-b2 → 0.8.0-b3 [4ae5cd14]
+* Update CHANGELOG.md for v0.8.0-b2 [3d760bba]
+* Bump version: 0.8.0-b1 → 0.8.0-b2 [1073c875]
 
 
 </details>
@@ -26,15 +40,7 @@
 
 For more details, please refer to the [documentation](https://depictio.github.io/depictio-docs/)
 
-otations for better functionality [7e0180b1]
-* fix: simplify CI workflow by removing redundant build strategy and enhancing image handling [7fd96fb2]
-* fix: refactor CI workflow to streamline Helm chart deployment and Docker image handling [e8f1bbf2]
-* fix: update default host configurations with correct service names for frontend and backend [48e8fd63]
-* fix: update CI workflow to build Docker image instead of pulling it [40bbded4]
-* fix: update Helm chart version and appVersion in Chart.yaml; add step to pull Depictio image in CI workflow [62e66154]
-* fix: comment out Docker image build step in CI workflow [78ca7bdc]
-* fix: update service names in ingress configuration for frontend and backend [770d8e5d]
-* fix: enhance ingress configuration with default annotations and timeout settings [4d75fb17]
+otations and timeout settings [4d75fb17]
 * fix: update ingress host for API documentation testing [2c5d6730]
 * fix: reduce storage sizes for MongoDB, MinIO, screenshots, and keys in Helm chart [8a5725f1]
 * fix: update Helm chart version and clean up ingress annotations for better functionality [4f3a50c4]
