@@ -382,7 +382,7 @@ def _multiqc_data_bars_colormap(
                     ).format(column=col_id, min_bound=min_bound, max_bound=max_bound),
                     "column_id": column,
                 },
-                "background": (
+                "backgroundImage": (
                     f"linear-gradient(90deg, "
                     f"{bar_color} 0%, "
                     f"{bar_color} {max_bound_percentage}%, "
@@ -642,7 +642,7 @@ def _generate_data_bar_styles(
                 df_for_display,
                 internal_col,
                 colormap,
-                opacity=0.3,
+                opacity=0.5,
                 fixed_scale=fixed_scale,
                 reverse_colors=reverse_flag,
             )
@@ -768,6 +768,9 @@ _TABLE_CELL_STYLE: dict[str, str] = {
     "whiteSpace": "nowrap",
     "overflow": "hidden",
     "textOverflow": "ellipsis",
+    "backgroundColor": "var(--app-bg-color)",
+    "color": "var(--app-text-color)",
+    "borderBottom": "1px solid var(--app-border-color)",
 }
 
 _TABLE_HEADER_STYLE: dict[str, str] = {
@@ -776,12 +779,16 @@ _TABLE_HEADER_STYLE: dict[str, str] = {
     "fontSize": "12px",
     "fontFamily": "Arial, Helvetica, sans-serif",
     "padding": "8px",
+    "backgroundColor": "var(--app-surface-color)",
+    "color": "var(--app-text-color)",
+    "borderBottom": "2px solid var(--app-border-color)",
 }
 
 _TABLE_DATA_STYLE: dict[str, str] = {}
 
 _TABLE_STYLE: dict[str, str] = {
     "overflowX": "auto",
+    "border": "1px solid var(--app-border-color)",
 }
 
 
@@ -844,6 +851,7 @@ def _build_component_tree(
                             "if": {"column_id": "Sample Name"},
                             "minWidth": "200px",
                             "fontWeight": "bold",
+                            "color": "var(--app-text-color)",
                         }
                     ],
                     style_header=_TABLE_HEADER_STYLE,
