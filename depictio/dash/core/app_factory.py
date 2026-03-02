@@ -21,10 +21,14 @@ def create_dash_app():
     Create and configure a new Dash application instance.
 
     Returns:
-        dash.Dash: Configured Dash application instance
+        tuple: (app, dev_mode, show_debug_ui)
     """
     # Check if in development mode
     dev_mode = os.environ.get("DEPICTIO_DEV_MODE", "false").lower() == "true"
+
+    # Check if Dash debug UI should be shown (independent of full dev mode)
+    dash_debug_ui = os.environ.get("DEPICTIO_DASH_DEBUG_UI", "false").lower() == "true"
+    show_debug_ui = dev_mode or dash_debug_ui
 
     # Get the root path of the depictio.dash package
     dash_root_path = os.path.dirname(os.path.dirname(__file__))
@@ -116,4 +120,4 @@ def create_dash_app():
 
     app = setup_profiling(app)
 
-    return app, dev_mode
+    return app, dev_mode, show_debug_ui

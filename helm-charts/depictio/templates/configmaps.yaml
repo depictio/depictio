@@ -97,6 +97,7 @@ metadata:
   namespace: {{ .Release.Namespace }}
 data:
   DEPICTIO_DEV_MODE: {{ .Values.frontend.env.DEPICTIO_DEV_MODE | quote }}
+  DEPICTIO_DASH_DEBUG_UI: {{ .Values.frontend.env.DEPICTIO_DASH_DEBUG_UI | default "false" | quote }}
   DEPICTIO_LOGGING_VERBOSITY_LEVEL: {{ .Values.backend.env.DEPICTIO_LOGGING_VERBOSITY_LEVEL | quote }}
   DEPICTIO_FASTAPI_SERVICE_NAME: {{ printf "%s-depictio-backend" .Release.Name | quote }}
   DEPICTIO_FASTAPI_SERVICE_PORT: {{ .Values.frontend.env.DEPICTIO_FASTAPI_SERVICE_PORT | quote }}

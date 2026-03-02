@@ -83,10 +83,14 @@ def create_shared_dash_config():
     - Celery worker: Started conditionally via Docker Compose --profile celery
 
     Returns:
-        tuple: (assets_folder, background_callback_manager, dev_mode)
+        tuple: (assets_folder, background_callback_manager, dev_mode, show_debug_ui)
     """
     # Check if in development mode
     dev_mode = os.environ.get("DEPICTIO_DEV_MODE", "false").lower() == "true"
+
+    # Check if Dash debug UI should be shown (independent of full dev mode)
+    dash_debug_ui = os.environ.get("DEPICTIO_DASH_DEBUG_UI", "false").lower() == "true"
+    show_debug_ui = dev_mode or dash_debug_ui
 
     # Get the root path of the depictio.dash package
     dash_root_path = os.path.dirname(os.path.dirname(__file__))
@@ -107,7 +111,7 @@ def create_shared_dash_config():
         logger.warning("⚠️  FLASK DISPATCHER: Design mode will not work without Celery!")
         background_callback_manager = None
 
-    return assets_folder, background_callback_manager, dev_mode
+    return assets_folder, background_callback_manager, dev_mode, show_debug_ui
 
 
 def configure_flask_server(server: Flask, dash_root_path: str) -> None:
@@ -156,7 +160,11 @@ def configure_flask_server(server: Flask, dash_root_path: str) -> None:
 
 
 def create_management_app(
-    server: Flask, assets_folder: str, background_callback_manager, dev_mode: bool
+    server: Flask,
+    assets_folder: str,
+    background_callback_manager,
+    dev_mode: bool,
+    show_debug_ui: bool,
 ) -> dash.Dash:
     """
     Create the Management Dash app.
@@ -195,16 +203,22 @@ def create_management_app(
 
     app_management = setup_profiling(app_management)
 
-    # Enable dev tools
+    # Enable dev tools: UI shown when debug UI flag is set, hot reload only in full dev mode
     app_management.enable_dev_tools(
-        dev_tools_ui=True, dev_tools_serve_dev_bundles=True, dev_tools_hot_reload=dev_mode
+        dev_tools_ui=show_debug_ui,
+        dev_tools_serve_dev_bundles=show_debug_ui,
+        dev_tools_hot_reload=dev_mode,
     )
 
     return app_management
 
 
 def create_viewer_app(
-    server: Flask, assets_folder: str, background_callback_manager, dev_mode: bool
+    server: Flask,
+    assets_folder: str,
+    background_callback_manager,
+    dev_mode: bool,
+    show_debug_ui: bool,
 ) -> dash.Dash:
     """
     Create the Dashboard Viewer Dash app.
@@ -243,16 +257,22 @@ def create_viewer_app(
 
     app_viewer = setup_profiling(app_viewer)
 
-    # Enable dev tools
+    # Enable dev tools: UI shown when debug UI flag is set, hot reload only in full dev mode
     app_viewer.enable_dev_tools(
-        dev_tools_ui=True, dev_tools_serve_dev_bundles=True, dev_tools_hot_reload=dev_mode
+        dev_tools_ui=show_debug_ui,
+        dev_tools_serve_dev_bundles=show_debug_ui,
+        dev_tools_hot_reload=dev_mode,
     )
 
     return app_viewer
 
 
 def create_editor_app(
-    server: Flask, assets_folder: str, background_callback_manager, dev_mode: bool
+    server: Flask,
+    assets_folder: str,
+    background_callback_manager,
+    dev_mode: bool,
+    show_debug_ui: bool,
 ) -> dash.Dash:
     """
     Create the Dashboard Editor Dash app.
@@ -292,9 +312,11 @@ def create_editor_app(
 
     app_editor = setup_profiling(app_editor)
 
-    # Enable dev tools
+    # Enable dev tools: UI shown when debug UI flag is set, hot reload only in full dev mode
     app_editor.enable_dev_tools(
-        dev_tools_ui=True, dev_tools_serve_dev_bundles=True, dev_tools_hot_reload=dev_mode
+        dev_tools_ui=show_debug_ui,
+        dev_tools_serve_dev_bundles=show_debug_ui,
+        dev_tools_hot_reload=dev_mode,
     )
 
     return app_editor
@@ -315,7 +337,9 @@ def create_multi_app_dispatcher() -> tuple:
     server = Flask(__name__)
 
     # Get shared configuration
-    assets_folder, background_callback_manager, dev_mode = create_shared_dash_config()
+    assets_folder, background_callback_manager, dev_mode, show_debug_ui = (
+        create_shared_dash_config()
+    )
 
     # Get dash root path for static folder configuration
     dash_root_path = os.path.dirname(__file__)
@@ -325,10 +349,14 @@ def create_multi_app_dispatcher() -> tuple:
 
     # Create the three Dash apps
     app_management = create_management_app(
-        server, assets_folder, background_callback_manager, dev_mode
+        server, assets_folder, background_callback_manager, dev_mode, show_debug_ui
     )
-    app_viewer = create_viewer_app(server, assets_folder, background_callback_manager, dev_mode)
-    app_editor = create_editor_app(server, assets_folder, background_callback_manager, dev_mode)
+    app_viewer = create_viewer_app(
+        server, assets_folder, background_callback_manager, dev_mode, show_debug_ui
+    )
+    app_editor = create_editor_app(
+        server, assets_folder, background_callback_manager, dev_mode, show_debug_ui
+    )
 
     return server, app_management, app_viewer, app_editor, dev_mode
 
