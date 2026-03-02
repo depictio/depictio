@@ -24,6 +24,9 @@ celery_app = Celery(
 #     broker_connection_retry_on_startup=True,
 # )
 
+# Auto-discover render tasks from the API tasks module
+celery_app.autodiscover_tasks(["depictio.api.v1.tasks.render_tasks"])
+
 
 # Health check task for monitoring
 @celery_app.task(bind=True, name="health_check")
