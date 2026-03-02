@@ -1,0 +1,29 @@
+/**
+ * MultiQC General Statistics DataTable - supplementary dark-mode rules
+ *
+ * Background, text, and border colors are set via CSS variables in Python
+ * style dicts (see general_stats.py). This file only covers elements that
+ * Dash DataTable doesn't expose as style props.
+ */
+
+/* Row hover highlight */
+.dash-spreadsheet-container .dash-spreadsheet-inner td:hover {
+    background: white !important;
+    color: black !important;
+}
+
+/* Dark mode: white text for numeric data columns (skip first col = Sample Name) */
+[data-mantine-color-scheme="dark"] .dash-spreadsheet-container .dash-spreadsheet-inner td:not(:first-child) {
+    color: white !important;
+}
+
+/* Dark mode: filter/search input */
+[data-mantine-color-scheme="dark"] .dash-spreadsheet-container .dash-spreadsheet-inner input {
+    color: #c1c2c5;
+    background-color: #25262b;
+}
+
+/* Dark mode: focused cell highlight */
+[data-mantine-color-scheme="dark"] .dash-spreadsheet-container .dash-cell.focused {
+    background-color: rgba(0, 116, 217, 0.15);
+}

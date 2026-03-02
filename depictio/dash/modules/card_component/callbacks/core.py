@@ -363,7 +363,9 @@ def _determine_filtering_path(
         project_id = stored_metadata.get("project_id") if stored_metadata else None
 
         if project_id:
-            # Collect filter values from other DCs
+            # Collect and intersect resolved values from ALL cross-DC filters (AND semantics)
+            resolved_sets: list[set[str]] = []
+            resolved_target_column: str | None = None
             for filter_dc_id, filter_components in filters_by_dc.items():
                 if filter_dc_id != card_dc_str:
                     for comp in filter_components:
@@ -386,20 +388,27 @@ def _determine_filtering_path(
                             )
 
                             if resolved and resolved.get("resolved_values"):
-                                use_link_path = True
-                                target_column = resolved.get("target_column", filter_column)
-                                link_resolved_filter = {
-                                    "metadata": {
-                                        "column_name": target_column,
-                                        "dc_id": card_dc_str,
-                                        "interactive_component_type": "MultiSelect",
-                                    },
-                                    "value": resolved["resolved_values"],
-                                }
-                                break  # Use first successful resolution
+                                resolved_sets.append(set(resolved["resolved_values"]))
+                                if not resolved_target_column:
+                                    resolved_target_column = (
+                                        resolved.get("target_column") or "sample"
+                                    )
 
-                    if use_link_path:
-                        break
+            if resolved_sets:
+                use_link_path = True
+                # Intersect all resolved sets (AND semantics)
+                combined = resolved_sets[0]
+                for s in resolved_sets[1:]:
+                    combined = combined & s
+                target_column = resolved_target_column or "sample"
+                link_resolved_filter = {
+                    "metadata": {
+                        "column_name": target_column,
+                        "dc_id": card_dc_str,
+                        "interactive_component_type": "MultiSelect",
+                    },
+                    "value": list(combined),
+                }
 
             if not use_link_path:
                 logger.warning("Link resolution failed - no link found or no matches")

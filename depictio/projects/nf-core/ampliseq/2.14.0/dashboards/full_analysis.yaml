@@ -254,6 +254,33 @@ tabs:
             w: 2
             h: 2
         title: Habitat Types
+    -   component_type: map
+        workflow_tag: ampliseq
+        data_collection_tag: metadata
+        lat_column: latitude
+        lon_column: longitude
+        color_column: habitat
+        hover_columns: [sample, name, habitat, city, sampling_date]
+        title: "Sampling Locations"
+        map_style: carto-positron
+        size_max: 25
+        default_center: {lat: 51.0, lon: 10.5}
+        default_zoom: 5
+        selection_enabled: true
+        selection_column: sample
+        dict_kwargs:
+            color_discrete_map:
+                Riverwater: "#377EB8"
+                Groundwater: "#4DAF4A"
+                Sediment: "#E41A1C"
+                Soil: "#FF7F00"
+        # --- generated on export ---
+        tag: map-sampling-locations
+        layout:
+            x: 0
+            y: 2
+            w: 8
+            h: 6
     -   component_type: figure
         workflow_tag: ampliseq
         data_collection_tag: alpha_rarefaction
@@ -280,7 +307,7 @@ tabs:
         tag: figure-line_depth_faith_pd-5d9f17
         layout:
             x: 0
-            y: 2
+            y: 8
             w: 8
             h: 5
     -   component_type: figure
@@ -299,16 +326,17 @@ tabs:
                 habitat: Habitat
         mode: code
         code_content: "df_sorted = df.sort('sample')\nfig = px.bar(\n    df_sorted.to_pandas(),\n\
-            \    x='sample', y='faith_pd', color='habitat',\n    title='Alpha Diversity\
-            \ by Sample (Faith PD)',\n    labels={'sample': 'Sample', 'faith_pd':\
-            \ \"Faith's Phylogenetic Diversity\", 'habitat': 'Habitat'}\n)\nfig.update_layout(xaxis={'categoryorder':\
-            \ 'category ascending'})"
+            \    x='sample', y='faith_pd', color='habitat',\n    color_discrete_map={'Riverwater':\
+            \ '#377EB8', 'Groundwater': '#4DAF4A', 'Sediment': '#E41A1C', 'Soil':\
+            \ '#FF7F00'},\n    title='Alpha Diversity by Sample (Faith PD)',\n    labels={'sample':\
+            \ 'Sample', 'faith_pd': \"Faith's Phylogenetic Diversity\", 'habitat':\
+            \ 'Habitat'}\n)\nfig.update_layout(xaxis={'categoryorder': 'category ascending'})"
         selection_enabled: false
         # --- generated on export ---
         tag: figure-bar_sample_faith_pd-5b8018
         layout:
             x: 0
-            y: 7
+            y: 13
             w: 4
             h: 5
     -   component_type: figure
@@ -326,14 +354,15 @@ tabs:
         code_content: "df_modified = df.filter((pl.col('Phylum').is_not_null())\
             \ & (pl.col('Phylum') != '') & (pl.col('Phylum') != 'Unclassified')).group_by(['Kingdom',\
             \ 'Phylum']).agg(pl.col('rel_abundance').mean())\n\nfig = px.sunburst(df_modified.to_dicts(),\
-            \ path=['Kingdom', 'Phylum'],\nvalues='rel_abundance', title='Taxonomic\
+            \ path=['Kingdom', 'Phylum'],\nvalues='rel_abundance',\ncolor='Kingdom',\n\
+            color_discrete_map={'Bacteria': '#F8766D', 'Archaea': '#00BFC4'},\ntitle='Taxonomic\
             \ Composition - Hierarchical View (Relative Abundance)')"
         selection_enabled: false
         # --- generated on export ---
         tag: figure-sunburst-e651a9
         layout:
             x: 4
-            y: 7
+            y: 13
             w: 4
             h: 5
     -   component_type: figure
@@ -364,7 +393,7 @@ tabs:
         tag: figure-bar_phylum_rel_abundance-de4c39
         layout:
             x: 0
-            y: 12
+            y: 18
             w: 8
             h: 8
     -   component_type: figure
@@ -397,31 +426,63 @@ tabs:
         tag: figure-bar_sample_rel_abundance-de4c39
         layout:
             x: 0
-            y: 24
+            y: 30
             w: 8
             h: 8
+    -   component_type: figure
+        workflow_tag: ampliseq
+        data_collection_tag: taxonomy_heatmap
+        visu_type: heatmap
+        # --- optional ---
+        dict_kwargs:
+            index_column: Phylum
+            row_annotations: '{"Kingdom": {"type": "categorical", "colors": {"Bacteria": "#F8766D", "Archaea": "#00BFC4"}}}'
+            col_annotations: '{"habitat": {"values": ["Riverwater", "Riverwater", "Groundwater", "Groundwater", "Riverwater", "Groundwater", "Sediment", "Sediment", "Sediment", "Soil", "Soil", "Soil"], "type": "categorical", "colors": {"Riverwater": "#377EB8", "Groundwater": "#4DAF4A", "Sediment": "#E41A1C", "Soil": "#FF7F00"}}, "city": {"values": ["Frankfurt", "Hamburg", "Munich", "Berlin", "Cologne", "Frankfurt", "Cuxhaven", "Hamburg", "Berlin", "Munich", "Cologne", "Cuxhaven"], "type": "categorical", "colors": {"Frankfurt": "#1B9E77", "Hamburg": "#D95F02", "Munich": "#7570B3", "Berlin": "#E7298A", "Cologne": "#66A61E", "Cuxhaven": "#E6AB02"}}}'
+            cluster_rows: true
+            cluster_cols: true
+            normalize: row
+            colorscale: RdBu_r
+            name: z-score
+            width: 1000
+            height: 700
+        # --- generated on export ---
+        tag: figure-heatmap-taxonomy-composition
+        layout:
+            x: 0
+            y: 38
+            w: 8
+            h: 7
+        title: Taxonomic Composition Heatmap
     -   component_type: table
         workflow_tag: ampliseq
         data_collection_tag: metadata
         # --- optional ---
+        title: Sample Metadata
+        description: Sample identifiers, habitat types, geographic coordinates, and collection dates
+        title_size: h3
+        title_align: left
         row_selection_enabled: false
         # --- generated on export ---
         tag: table-table-df4371
         layout:
             x: 0
-            y: 24
+            y: 51
             w: 8
             h: 6
     -   component_type: table
         workflow_tag: ampliseq
         data_collection_tag: taxonomy_rel_abundance
         # --- optional ---
+        title: Taxonomy Relative Abundance
+        description: Phylum-level relative abundance per sample with habitat annotations
+        title_size: h3
+        title_align: left
         row_selection_enabled: false
         # --- generated on export ---
         tag: table-table-02f050
         layout:
             x: 0
-            y: 30
+            y: 57
             w: 8
             h: 6
     -   component_type: interactive

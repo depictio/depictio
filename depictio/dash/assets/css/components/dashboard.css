@@ -103,3 +103,11 @@
     box-shadow: 0 4px 16px rgba(102, 102, 102, 0.3) !important;
     background-color: var(--app-surface-color, #ffffff) !important;
 }
+
+/* Compact date inputs in DatePickerInput (range mode) */
+.mantine-DatePickerInput-input {
+    font-size: 0.9rem !important;
+    min-height: unset !important;
+    height: auto !important;
+    padding: 4px 8px !important;
+}

@@ -71,6 +71,7 @@ def build_map(**kwargs) -> html.Div:
         "color_continuous_scale",
         "range_color",
         "geojson_dc_id",
+        "color_discrete_map",
     ]
     trigger_data = {
         field: kwargs.get(field, _TRIGGER_DEFAULTS.get(field)) for field in _TRIGGER_FIELDS
@@ -318,7 +319,12 @@ def render_map(
             center = default_center
 
     # Lock color mapping so palette doesn't shift when data is filtered
+    # Priority: existing_metadata > trigger_data > dict_kwargs > auto-generated
     color_discrete_map = (existing_metadata or {}).get("color_discrete_map")
+    if not color_discrete_map:
+        color_discrete_map = trigger_data.get("color_discrete_map")
+    if not color_discrete_map:
+        color_discrete_map = extra_kwargs.get("color_discrete_map")
     if not color_discrete_map and color_column and color_column in pandas_df.columns:
         unique_vals = sorted(pandas_df[color_column].dropna().unique().tolist(), key=str)
         palette = px.colors.qualitative.Plotly
@@ -505,7 +511,11 @@ def _render_scatter_map(
     fig = px.scatter_map(**kwargs)
 
     # Force uniform marker opacity (px.scatter_map varies it with size encoding)
-    fig.update_traces(marker={"opacity": opacity})
+    # When no size column is used, set a visible default marker size
+    marker_updates: dict[str, Any] = {"opacity": opacity}
+    if not size_column:
+        marker_updates["size"] = size_max
+    fig.update_traces(marker=marker_updates)
 
     # Enable selection mode — keep pan as default drag, lasso available in toolbar
     if selection_enabled:

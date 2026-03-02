@@ -15,6 +15,7 @@ Callbacks:
 """
 
 import concurrent.futures
+import copy
 import hashlib
 import json
 import time
@@ -36,6 +37,7 @@ from depictio.dash.background_callback_helpers import (
 from depictio.dash.modules.figure_component.utils import _get_theme_template
 from depictio.dash.utils import (
     extend_filters_via_links,
+    resolve_link_values,
 )
 
 USE_BACKGROUND_CALLBACKS = should_use_background_for_component("figure")
@@ -209,6 +211,7 @@ def _extract_filters_for_figure(
     - Grouping filters by data collection
     - Including filters from source DCs for joined data collections
     - Including filters resolved via DC links (cross-DC filtering)
+    - Fallback: direct link resolution via project_metadata
 
     Args:
         dc_id: The data collection ID for the figure
@@ -255,6 +258,86 @@ def _extract_filters_for_figure(
     )
     if link_resolved_filters:
         relevant_filters.extend(link_resolved_filters)
+
+    # Fallback: if extend_filters_via_links returned nothing and we have
+    # cross-DC filters, try direct link resolution via project_metadata
+    if not link_resolved_filters and project_metadata and filters_by_dc:
+        project_data = project_metadata.get("project", {})
+        pid = project_data.get("_id") or project_data.get("id")
+        fallback_project_id = str(pid) if pid else None
+        if fallback_project_id:
+            for filter_dc_id, filter_components in filters_by_dc.items():
+                if filter_dc_id != card_dc_str:
+                    for comp in filter_components:
+                        filter_value = comp.get("value")
+                        filter_column = comp.get("metadata", {}).get("column_name")
+                        if filter_value and filter_column:
+                            filter_values = (
+                                filter_value if isinstance(filter_value, list) else [filter_value]
+                            )
+                            resolved = resolve_link_values(
+                                project_id=fallback_project_id,
+                                source_dc_id=filter_dc_id,
+                                source_column=filter_column,
+                                filter_values=filter_values,
+                                target_dc_id=card_dc_str,
+                                token=access_token,
+                            )
+                            if resolved and resolved.get("resolved_values"):
+                                target_column = resolved.get("target_column") or "sample"
+                                relevant_filters.append(
+                                    {
+                                        "index": f"link_fallback_{filter_dc_id[:8]}_{filter_column}",
+                                        "value": resolved["resolved_values"],
+                                        "metadata": {
+                                            "dc_id": card_dc_str,
+                                            "column_name": target_column,
+                                            "interactive_component_type": "MultiSelect",
+                                        },
+                                    }
+                                )
+
+    # Shared column passthrough: for cross-DC filters from DCs that have NO
+    # link to the target DC, pass through with the original column name.
+    # If the column exists in the target DataFrame, apply_runtime_filters()
+    # will filter rows; if not, it will be skipped (FILTER MISMATCH warning).
+    # This handles shared columns like Kingdom/Phylum across taxonomy DCs.
+    if project_metadata and filters_by_dc:
+        linked_source_dcs = set()
+        for link in project_metadata.get("project", {}).get("links", []):
+            if str(link.get("target_dc_id", "")) == card_dc_str and link.get("enabled", True):
+                linked_source_dcs.add(str(link.get("source_dc_id", "")))
+
+        for filter_dc_id, filter_components in filters_by_dc.items():
+            if filter_dc_id == card_dc_str:
+                continue  # Same-DC filters already included
+            if filter_dc_id in linked_source_dcs:
+                continue  # Handled by link resolution above
+            for comp in filter_components:
+                filter_value = comp.get("value")
+                filter_column = comp.get("metadata", {}).get("column_name")
+                comp_type = comp.get("metadata", {}).get(
+                    "interactive_component_type", "MultiSelect"
+                )
+                if not filter_value or not filter_column:
+                    continue
+                logger.info(
+                    f"[{batch_task_id}] Shared column passthrough: "
+                    f"{filter_dc_id[:8]}.{filter_column} -> {card_dc_str[:8]}"
+                )
+                relevant_filters.append(
+                    {
+                        "index": f"passthrough_{filter_dc_id[:8]}_{filter_column}",
+                        "value": (
+                            filter_value if isinstance(filter_value, list) else [filter_value]
+                        ),
+                        "metadata": {
+                            "dc_id": card_dc_str,
+                            "column_name": filter_column,
+                            "interactive_component_type": comp_type,
+                        },
+                    }
+                )
 
     active_filters = _filter_active_components(relevant_filters)
 
@@ -454,6 +537,133 @@ def _process_code_mode_figure(
     return True, fig, detected_visu_type
 
 
+def _apply_heatmap_column_filter(
+    df: Any,
+    dict_kwargs: dict,
+    figure_filters: list[dict],
+    task_id: str,
+) -> tuple[Any, dict]:
+    """
+    Filter heatmap DataFrame columns based on resolved sample filters.
+
+    For wide-format heatmaps where samples are column names, this function:
+    1. Identifies which DataFrame columns are structural (index, annotations)
+    2. Keeps only structural columns + columns matching filter values
+    3. Reindexes col_annotations to match the new column set
+
+    Args:
+        df: The heatmap DataFrame (Polars or Pandas)
+        dict_kwargs: Figure parameters (index_column, row_annotations, etc.)
+        figure_filters: Resolved filter metadata from link resolution
+        task_id: Task ID for logging
+
+    Returns:
+        Tuple of (filtered_df, updated_dict_kwargs)
+    """
+    # Collect resolved sample sets from each filter (AND semantics = intersection)
+    resolved_sets: list[set[str]] = []
+    for f in figure_filters:
+        meta = f.get("metadata", {})
+        vals = f.get("value", [])
+        if vals and meta.get("column_name") in ("sample", "column"):
+            vals_list = vals if isinstance(vals, list) else [vals]
+            resolved_sets.append(set(vals_list))
+
+    if not resolved_sets or not hasattr(df, "columns"):
+        return df, dict_kwargs
+
+    # AND semantics: intersect all resolved sample sets
+    sample_values = resolved_sets[0]
+    for s in resolved_sets[1:]:
+        sample_values = sample_values & s
+
+    logger.info(
+        f"[{task_id}] Heatmap filter: {len(resolved_sets)} filter(s), "
+        f"sizes={[len(s) for s in resolved_sets]}, "
+        f"intersected={len(sample_values)} samples"
+    )
+
+    if not sample_values:
+        return df, dict_kwargs
+
+    all_df_cols = list(df.columns)
+    all_df_cols_set = set(all_df_cols)
+    matching_cols = sample_values & all_df_cols_set
+
+    if not matching_cols:
+        return df, dict_kwargs
+
+    # Identify structural columns from heatmap config
+    structural = set()
+    if dict_kwargs.get("index_column"):
+        structural.add(dict_kwargs["index_column"])
+
+    def _extract_annotation_keys(val: Any) -> set[str]:
+        """Extract annotation column/key names from a parameter value."""
+        if isinstance(val, str):
+            try:
+                parsed = json.loads(val)
+            except (json.JSONDecodeError, ValueError):
+                return {val}
+        elif isinstance(val, (dict, list)):
+            parsed = val
+        else:
+            return set()
+        if isinstance(parsed, dict):
+            return set(parsed.keys())
+        if isinstance(parsed, list):
+            return {str(v) for v in parsed}
+        return set()
+
+    for param in ("row_annotations", "split_rows_by"):
+        structural.update(_extract_annotation_keys(dict_kwargs.get(param)))
+
+    # col_annotations keys are NOT DataFrame columns — they're annotation names
+    # (e.g., "habitat", "city") whose values are per-column arrays
+
+    # Compute sample columns = all non-structural columns in original order
+    sample_cols_ordered = [c for c in all_df_cols if c not in structural]
+    # Indices of kept sample columns (for reindexing col_annotations)
+    kept_indices = [j for j, c in enumerate(sample_cols_ordered) if c in matching_cols]
+
+    keep = [c for c in all_df_cols if c in structural or c in matching_cols]
+    logger.info(
+        f"[{task_id}] Heatmap column filter: "
+        f"structural={sorted(structural)}, "
+        f"matching={len(matching_cols)}/{len(all_df_cols)} cols, "
+        f"keeping {len(keep)} cols"
+    )
+    df = df.select(keep) if hasattr(df, "select") else df[keep]
+
+    # Reindex col_annotations to match filtered columns
+    ca_raw = dict_kwargs.get("col_annotations")
+    if ca_raw and kept_indices:
+        if isinstance(ca_raw, str):
+            try:
+                ca_parsed = json.loads(ca_raw)
+            except (json.JSONDecodeError, ValueError):
+                ca_parsed = None
+        elif isinstance(ca_raw, dict):
+            ca_parsed = ca_raw
+        else:
+            ca_parsed = None
+
+        if ca_parsed and isinstance(ca_parsed, dict):
+            # Deep-copy to avoid mutating shared trigger data
+            ca_filtered = copy.deepcopy(ca_parsed)
+            for ann_cfg in ca_filtered.values():
+                if isinstance(ann_cfg, dict) and "values" in ann_cfg:
+                    orig_values = ann_cfg["values"]
+                    if isinstance(orig_values, list) and len(orig_values) == len(
+                        sample_cols_ordered
+                    ):
+                        ann_cfg["values"] = [orig_values[j] for j in kept_indices]
+            # Write back as JSON string (downstream _collect_heatmap_kwargs expects string)
+            dict_kwargs = {**dict_kwargs, "col_annotations": json.dumps(ca_filtered)}
+
+    return df, dict_kwargs
+
+
 def _process_single_figure(
     trigger_data: dict | None,
     trigger_id: dict,
@@ -462,6 +672,7 @@ def _process_single_figure(
     figure_to_load_key: dict[int, LoadKey | None],
     current_theme: str,
     batch_task_id: str,
+    figure_filters: list[dict] | None = None,
 ) -> tuple[dict | go.Figure, dict]:
     """
     Process a single figure and return the figure and metadata.
@@ -474,6 +685,7 @@ def _process_single_figure(
         figure_to_load_key: Mapping from figure index to load key
         current_theme: Current theme name
         batch_task_id: Task ID for logging
+        figure_filters: Filter metadata for column-level filtering (heatmaps)
 
     Returns:
         Tuple of (figure, metadata) where figure is a Plotly figure dict
@@ -498,6 +710,10 @@ def _process_single_figure(
             return _create_error_figure("Data not available", current_theme), {}
 
         df = dc_cache[load_key]
+
+        # Heatmap column-level filtering: samples are column names, not row values
+        if visu_type.lower() == "heatmap" and figure_filters:
+            df, dict_kwargs = _apply_heatmap_column_filter(df, dict_kwargs, figure_filters, task_id)
 
         # Extract selection configuration
         selection_enabled = trigger_data.get("selection_enabled", False)
@@ -554,7 +770,7 @@ def _extend_filters_for_joined_dc(
     card_dc_str: str,
     filters_by_dc: dict,
     project_metadata: dict | None,
-    batch_task_id: str,
+    _batch_task_id: str,
 ) -> list:
     """
     Extend filters to include source DC filters when figure uses a joined DC.
@@ -616,7 +832,6 @@ def register_core_callbacks(app):
         Input("interactive-values-store", "data"),
         State({"type": "figure-trigger", "index": ALL}, "id"),
         State({"type": "figure-metadata", "index": ALL}, "data"),
-        State({"type": "stored-metadata-component", "index": ALL}, "data"),
         State({"type": "interactive-stored-metadata", "index": ALL}, "data"),
         State({"type": "interactive-stored-metadata", "index": ALL}, "id"),
         State("project-metadata-store", "data"),
@@ -629,8 +844,7 @@ def register_core_callbacks(app):
         trigger_data_list,
         filters_data,
         trigger_ids,
-        existing_metadata_list,
-        stored_metadata_list,
+        _existing_metadata_list,
         interactive_metadata_list,
         interactive_metadata_ids,
         project_metadata,
@@ -659,7 +873,6 @@ def register_core_callbacks(app):
             filters_data: Filter state from interactive-values-store (None on initial load)
             trigger_ids: List of component IDs for pattern matching
             existing_metadata_list: List of existing metadata stores (unused, for state)
-            stored_metadata_list: List of stored component metadata (unused, for state)
             interactive_metadata_list: Full metadata for interactive filter components
             interactive_metadata_ids: IDs of interactive filter components
             project_metadata: Dashboard metadata with workflows/DCs and join definitions
@@ -705,6 +918,11 @@ def register_core_callbacks(app):
         all_metadata = []
 
         for i, (trigger_data, trigger_id) in enumerate(zip(trigger_data_list, trigger_ids)):
+            # Pass filter metadata for column-level filtering (heatmaps)
+            load_key = figure_to_load_key.get(i)
+            figure_filters = (
+                dc_load_registry[load_key][0] if load_key and load_key in dc_load_registry else []
+            )
             fig_dict, metadata = _process_single_figure(
                 trigger_data,
                 trigger_id,
@@ -713,6 +931,7 @@ def register_core_callbacks(app):
                 figure_to_load_key,
                 current_theme,
                 batch_task_id,
+                figure_filters=figure_filters,
             )
             all_figures.append(fig_dict)
             all_metadata.append(metadata)

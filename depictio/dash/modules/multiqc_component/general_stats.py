@@ -382,16 +382,15 @@ def _multiqc_data_bars_colormap(
                     ).format(column=col_id, min_bound=min_bound, max_bound=max_bound),
                     "column_id": column,
                 },
-                "background": (
+                "backgroundImage": (
                     f"linear-gradient(90deg, "
                     f"{bar_color} 0%, "
                     f"{bar_color} {max_bound_percentage}%, "
-                    f"white {max_bound_percentage}%, "
-                    f"white 100%)"
+                    f"transparent {max_bound_percentage}%, "
+                    f"transparent 100%)"
                 ),
                 "paddingBottom": 4,
                 "paddingTop": 4,
-                "color": "black",
                 "fontWeight": "normal",
             }
         )
@@ -429,7 +428,9 @@ def _create_violin_plot(
             )
             .update_layout(
                 title="General Statistics - No Data",
-                template="plotly_white",
+                template="mantine_light",
+                paper_bgcolor="rgba(0,0,0,0)",
+                plot_bgcolor="rgba(0,0,0,0)",
                 height=200,
             )
         )
@@ -447,17 +448,16 @@ def _create_violin_plot(
     num_samples = len(df_general_stats)
     layout = go.Layout(
         title={
-            "text": (
-                f"General Statistics<br>"
-                f"<span style='font-size: 12px; color: #666;'>{num_samples} samples</span>"
-            ),
+            "text": f"General Statistics<br><span style='font-size: 12px;'>{num_samples} samples</span>",
             "x": 0.5,
             "xanchor": "center",
-            "font": {"size": 16, "color": "#333"},
+            "font": {"size": 16},
         },
         showlegend=False,
-        template="plotly_white",
+        template="mantine_light",
         margin=dict(pad=0, b=40, t=70, l=120, r=20),
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
         grid={
             "rows": len(metrics),
             "columns": 1,
@@ -469,14 +469,10 @@ def _create_violin_plot(
         height=VIOLIN_HEIGHT * len(metrics) + EXTRA_HEIGHT,
         xaxis={
             "automargin": False,
-            "tickfont": {"size": 9, "color": "rgba(0,0,0,0.5)"},
-            "gridcolor": "rgba(0,0,0,0.1)",
-            "zerolinecolor": "rgba(0,0,0,0.1)",
+            "tickfont": {"size": 9},
         },
         yaxis={
-            "tickfont": {"size": 9, "color": "rgba(0,0,0,0.5)"},
-            "gridcolor": "rgba(0,0,0,0.1)",
-            "zerolinecolor": "rgba(0,0,0,0.1)",
+            "tickfont": {"size": 9},
         },
         violingap=0,
     )
@@ -493,9 +489,7 @@ def _create_violin_plot(
         axis_key = "" if metric_idx == 0 else str(metric_idx + 1)
         x_axis_config: dict[str, Any] = {
             "automargin": False,
-            "tickfont": {"size": 9, "color": "rgba(0,0,0,0.5)"},
-            "gridcolor": "rgba(0,0,0,0.1)",
-            "zerolinecolor": "rgba(0,0,0,0.1)",
+            "tickfont": {"size": 9},
             "title": "",
             "hoverformat": ".2f",
         }
@@ -521,9 +515,7 @@ def _create_violin_plot(
 
         layout[f"yaxis{metric_idx + 1}"] = {
             "automargin": True,
-            "tickfont": {"size": 9, "color": "rgba(0,0,0,0.5)"},
-            "gridcolor": "rgba(0,0,0,0.1)",
-            "zerolinecolor": "rgba(0,0,0,0.1)",
+            "tickfont": {"size": 9},
             "tickmode": "array",
             "tickvals": [metric_idx],
             "ticktext": [metric],
@@ -561,7 +553,6 @@ def _create_violin_plot(
                 marker={"size": 4, "color": "#0b79e6"},
                 showlegend=False,
                 hovertemplate="<b>%{text}</b><br>%{x:.2f}<extra></extra>",
-                hoverlabel={"bgcolor": "white"},
             )
         )
 
@@ -651,7 +642,7 @@ def _generate_data_bar_styles(
                 df_for_display,
                 internal_col,
                 colormap,
-                opacity=0.3,
+                opacity=0.5,
                 fixed_scale=fixed_scale,
                 reverse_colors=reverse_flag,
             )
@@ -774,36 +765,30 @@ _TABLE_CELL_STYLE: dict[str, str] = {
     "padding": "6px 8px",
     "fontFamily": "Arial, Helvetica, sans-serif",
     "fontSize": "12px",
-    "border": "none",
-    "borderBottom": "1px solid #e8e8e8",
     "whiteSpace": "nowrap",
     "overflow": "hidden",
     "textOverflow": "ellipsis",
+    "backgroundColor": "var(--app-bg-color)",
+    "color": "var(--app-text-color)",
+    "borderBottom": "1px solid var(--app-border-color)",
 }
 
 _TABLE_HEADER_STYLE: dict[str, str] = {
-    "backgroundColor": "#f5f5f5",
     "fontWeight": "bold",
-    "borderBottom": "2px solid #ddd",
-    "borderTop": "none",
-    "borderLeft": "none",
-    "borderRight": "none",
     "textAlign": "left",
     "fontSize": "12px",
     "fontFamily": "Arial, Helvetica, sans-serif",
     "padding": "8px",
+    "backgroundColor": "var(--app-surface-color)",
+    "color": "var(--app-text-color)",
+    "borderBottom": "2px solid var(--app-border-color)",
 }
 
-_TABLE_DATA_STYLE: dict[str, str] = {
-    "border": "none",
-    "borderBottom": "1px solid #f0f0f0",
-}
+_TABLE_DATA_STYLE: dict[str, str] = {}
 
 _TABLE_STYLE: dict[str, str] = {
-    "border": "none",
-    "borderTop": "1px solid #ddd",
-    "borderBottom": "1px solid #ddd",
     "overflowX": "auto",
+    "border": "1px solid var(--app-border-color)",
 }
 
 
@@ -866,7 +851,7 @@ def _build_component_tree(
                             "if": {"column_id": "Sample Name"},
                             "minWidth": "200px",
                             "fontWeight": "bold",
-                            "backgroundColor": "white",
+                            "color": "var(--app-text-color)",
                         }
                     ],
                     style_header=_TABLE_HEADER_STYLE,
