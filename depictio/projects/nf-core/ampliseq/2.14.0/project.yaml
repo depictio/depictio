@@ -119,6 +119,9 @@ workflows:
               "Riv_vs_Gro": "Habitat comparison group 1"
               "Sed_vs_Soil": "Habitat comparison group 2"
               "sampling_date": "Sample collection date (YYYY-MM-DD)"
+              "city": "Sampling city (fictitious assignment)"
+              "latitude": "Sample collection latitude (decimal degrees)"
+              "longitude": "Sample collection longitude (decimal degrees)"
 
       - id: "646b0f3c1e4a2d7f8e5b8ca8"
         data_collection_tag: "alpha_rarefaction"
@@ -248,6 +251,24 @@ workflows:
               "neg_log10_qval": "-log10(q-value) for volcano plot"
               "significant": "q < 0.05"
 
+      - id: "646b0f3c1e4a2d7f8e5b8cae"
+        data_collection_tag: "taxonomy_heatmap"
+        description: "Taxonomic relative abundance matrix (wide format for heatmap)"
+        config:
+          type: "Table"
+          metatype: "Metadata"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "/app/depictio/projects/nf-core/ampliseq/2.14.0/taxonomy_heatmap.tsv"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+            columns_description:
+              "Phylum": "Phylum-level taxonomic classification (row identifier)"
+              "Kingdom": "Kingdom-level classification (row annotation)"
+
 # ============================================================================
 # TABLE JOINS CONFIGURATION
 # ============================================================================
@@ -321,6 +342,9 @@ links:
       target_field: "sample"
     description: "Filter taxonomy rel abundance by metadata samples"
     enabled: true
+
+  # Note: taxonomy_heatmap (646b0f3c1e4a2d7f8e5b8cae) is not linked because
+  # samples are column names in the wide-format matrix, not row values.
 
   # Note: ANCOM volcano (646b0f3c1e4a2d7f8e5b8caa) is not linked because it shows
   # habitat-independent differential abundance analysis and has no sample column
