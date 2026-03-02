@@ -31,7 +31,10 @@ from depictio.dash.background_callback_helpers import (
     should_use_background_for_component,
 )
 from depictio.dash.modules.card_component.utils import (
+    _create_secondary_metrics_rows,
+    _format_metric_value,
     agg_functions,
+    compute_multi_values,
     compute_value,
     get_adaptive_trend_colors,
 )
@@ -754,6 +757,7 @@ def register_core_callbacks(app):
     # OPTION A: Batch rendering - Process ALL cards in single callback (700ms total instead of 9×700ms)
     @app.callback(
         Output({"type": "card-value", "index": ALL}, "children"),
+        Output({"type": "card-secondary-metrics", "index": ALL}, "children"),
         Output({"type": "card-metadata-initial", "index": ALL}, "data"),
         Input({"type": "card-trigger", "index": ALL}, "data"),
         State({"type": "card-trigger", "index": ALL}, "id"),
@@ -790,14 +794,15 @@ def register_core_callbacks(app):
         from depictio.dash.modules.card_component.utils import compute_value
 
         # Early exit checks
+        n = len(trigger_data_list) if trigger_data_list else 0
         if not trigger_data_list or not any(trigger_data_list):
-            return [no_update] * len(trigger_data_list), [no_update] * len(trigger_data_list)
+            return [no_update] * n, [no_update] * n, [no_update] * n
 
         # Extract auth token
         access_token = local_data.get("access_token") if local_data else None
         if not access_token:
             logger.error("No access token")
-            return ["Auth Error"] * len(trigger_data_list), [{}] * len(trigger_data_list)
+            return ["Auth Error"] * n, [no_update] * n, [{}] * n
 
         # Extract delta_locations from project metadata (if available)
         # Background callbacks: project_metadata might not serialize, so use empty dict as fallback
@@ -820,6 +825,7 @@ def register_core_callbacks(app):
 
         # Process all cards
         all_values = []
+        all_secondary = []
         all_metadata = []
 
         for i, (trigger_data, trigger_id, existing_meta, stored_meta, stored_id) in enumerate(
@@ -839,12 +845,14 @@ def register_core_callbacks(app):
                 reference_value = metadata_to_use.get("reference_value")
                 formatted_value = str(reference_value) if reference_value is not None else "N/A"
                 all_values.append(formatted_value)
+                all_secondary.append(no_update)
                 all_metadata.append(metadata_to_use)
                 continue
 
             # Skip if trigger not ready
             if not trigger_data or not isinstance(trigger_data, dict):
                 all_values.append(no_update)
+                all_secondary.append(no_update)
                 all_metadata.append(no_update)
                 continue
 
@@ -854,9 +862,12 @@ def register_core_callbacks(app):
                 dc_id = trigger_data.get("dc_id")
                 column_name = trigger_data.get("column_name")
                 aggregation = trigger_data.get("aggregation")
+                aggregations = trigger_data.get("aggregations")
+                filter_expr_str = trigger_data.get("filter_expr")
 
                 if not all([wf_id, dc_id, column_name, aggregation]):
                     all_values.append("Error")
+                    all_secondary.append(no_update)
                     all_metadata.append({"error": "Missing parameters"})
                     continue
 
@@ -881,22 +892,55 @@ def register_core_callbacks(app):
                         init_data=delta_locations,
                     )
 
-                # Compute value (no filters at initial load)
+                # Apply filter_expr if provided (conditional aggregation)
+                has_filter_expr = False
+                if filter_expr_str:
+                    try:
+                        from depictio.models.components.filter_expr import apply_filter_expr
+
+                        data = apply_filter_expr(data, filter_expr_str)
+                        has_filter_expr = True
+                    except Exception as e:
+                        logger.error(f"Card {i + 1}: filter_expr failed: {e}")
+                        all_values.append("Filter Error")
+                        all_metadata.append({"error": f"filter_expr failed: {e}"})
+                        continue
+
+                # Compute hero value (skip pre-computed stats if filter_expr was applied)
                 value = compute_value(
-                    data, column_name, aggregation, cols_json=cols_json, has_filters=False
+                    data,
+                    column_name,
+                    aggregation,
+                    cols_json=cols_json,
+                    has_filters=has_filter_expr,
                 )
 
+                # Compute secondary values for multi-metric cards
+                secondary_values: dict[str, Any] = {}
+                if aggregations:
+                    secondary_values = compute_multi_values(
+                        data,
+                        column_name,
+                        aggregations,
+                        cols_json=cols_json,
+                        has_filters=has_filter_expr,
+                    )
+
                 # Format value
-                try:
-                    if value is not None:
-                        formatted_value = str(round(float(value), 4))
-                    else:
-                        formatted_value = "N/A"
-                except (ValueError, TypeError):
-                    formatted_value = "Error"
+                formatted_value = _format_metric_value(value)
+                all_values.append(formatted_value)
+
+                # For multi-metric cards, update secondary metrics container separately
+                if aggregations and secondary_values:
+                    secondary_rows = _create_secondary_metrics_rows(
+                        secondary_values, text_color=None
+                    )
+                    all_secondary.append(secondary_rows)
+                else:
+                    all_secondary.append(no_update)
 
                 # Create metadata
-                metadata = {
+                metadata: dict[str, Any] = {
                     "reference_value": value,
                     "column_name": column_name,
                     "aggregation": aggregation,
@@ -906,16 +950,22 @@ def register_core_callbacks(app):
                     "delta_locations_available": True,
                     "has_been_patched": False,
                 }
+                if aggregations:
+                    metadata["aggregations"] = aggregations
+                    metadata["secondary_values"] = secondary_values
+                    metadata["reference_secondary_values"] = secondary_values.copy()
+                if filter_expr_str:
+                    metadata["filter_expr"] = filter_expr_str
 
-                all_values.append(formatted_value)
                 all_metadata.append(metadata)
 
             except Exception as e:
                 logger.error(f"Card {i + 1}: {component_id} - Error: {e}")
                 all_values.append("Error")
+                all_secondary.append(no_update)
                 all_metadata.append({"error": str(e)})
 
-        return all_values, all_metadata
+        return all_values, all_secondary, all_metadata
 
     def is_default_value(component: dict) -> bool:
         """
@@ -998,6 +1048,7 @@ def register_core_callbacks(app):
     @app.callback(
         Output({"type": "card-value", "index": ALL}, "children", allow_duplicate=True),
         Output({"type": "card-comparison", "index": ALL}, "children", allow_duplicate=True),
+        Output({"type": "card-secondary-metrics", "index": ALL}, "children", allow_duplicate=True),
         Output(
             {"type": "card-metadata", "index": ALL}, "data"
         ),  # No allow_duplicate - only patch writes here
@@ -1079,7 +1130,12 @@ def register_core_callbacks(app):
         if not access_token:
             logger.error("No access_token available in local-store")
             num_cards = len(trigger_ids)
-            return (["Auth Error"] * num_cards, [[]] * num_cards, [{}] * num_cards)
+            return (
+                ["Auth Error"] * num_cards,
+                [[]] * num_cards,
+                [no_update] * num_cards,
+                [{}] * num_cards,
+            )
 
         # Phase 2: Pre-load unique DC+filter combinations in parallel
         dc_load_registry, card_to_load_key = _build_dc_load_registry(
@@ -1091,6 +1147,7 @@ def register_core_callbacks(app):
         # Phase 3: Process each card
         all_values: list[Any] = []
         all_comparisons: list[Any] = []
+        all_secondary: list[Any] = []
         all_metadata: list[dict[str, Any]] = []
 
         for i, (
@@ -1128,9 +1185,10 @@ def register_core_callbacks(app):
             )
             all_values.append(result[0])
             all_comparisons.append(result[1])
-            all_metadata.append(result[2])
+            all_secondary.append(result[2])
+            all_metadata.append(result[3])
 
-        return all_values, all_comparisons, all_metadata
+        return all_values, all_comparisons, all_secondary, all_metadata
 
 
 def _process_single_card(
@@ -1150,7 +1208,7 @@ def _process_single_card(
     dc_cache: dict[tuple[str, str, str], Any],
     access_token: str,
     is_default_value_func: Any,
-) -> tuple[Any, Any, dict[str, Any]]:
+) -> tuple[Any, Any, Any, dict[str, Any]]:
     """
     Process a single card in the batch filtering operation.
 
@@ -1177,7 +1235,7 @@ def _process_single_card(
         is_default_value_func: Function to check if component value is at default
 
     Returns:
-        Tuple of (formatted_value, comparison_components, updated_metadata)
+        Tuple of (formatted_value, comparison_components, secondary_rows, updated_metadata)
     """
     task_id = f"{batch_task_id}-{card_index}"
     component_id = trigger_id.get("index", "unknown")[:8] if trigger_id else "unknown"
@@ -1214,7 +1272,7 @@ def _process_single_card(
         # Skip patching for dummy/random cards (no data source)
         if not all([wf_id, dc_id, column_name, aggregation]):
             formatted_value, _ = _format_card_value(metadata_for_patch.get("reference_value"))
-            return formatted_value, [], {}
+            return formatted_value, [], no_update, {}
 
         # At this point wf_id and dc_id are guaranteed to be non-None
         wf_id_str = str(wf_id)
@@ -1233,7 +1291,7 @@ def _process_single_card(
         card_dc_type = dc_config.get("type", "table")
         if card_dc_type in ["multiqc", "jbrowse2"]:
             formatted_value, _ = _format_card_value(reference_value)
-            return formatted_value, [], {}
+            return formatted_value, [], no_update, {}
 
         # Group filters by DC and filter to table-only
         metadata_list = filters_data.get("interactive_components_values")
@@ -1290,9 +1348,24 @@ def _process_single_card(
         if dashboard_init_data and "column_specs" in dashboard_init_data:
             cols_json = dashboard_init_data.get("column_specs", {}).get(dc_id_str, {})
 
+        # Apply filter_expr if present (conditional aggregation — on top of interactive filters)
+        filter_expr_str = trigger_data.get("filter_expr")
+        if filter_expr_str:
+            try:
+                from depictio.models.components.filter_expr import apply_filter_expr
+
+                data = apply_filter_expr(data, filter_expr_str)
+            except Exception as e:
+                logger.error(f"Card filter_expr failed during patch: {e}")
+                return "Filter Error", [], no_update, {}
+
         # Compute new value on filtered data
         current_value = compute_value(
-            data, column_name, aggregation, cols_json=cols_json, has_filters=has_active_filters
+            data,
+            column_name,
+            aggregation,
+            cols_json=cols_json,
+            has_filters=has_active_filters or bool(filter_expr_str),
         )
 
         # Format current value
@@ -1310,7 +1383,22 @@ def _process_single_card(
         updated_metadata = patch_metadata.copy() if patch_metadata else {}
         updated_metadata["has_been_patched"] = True
 
-        return formatted_value, comparison_components, updated_metadata
+        # Handle multi-metric secondary values
+        secondary_output = no_update
+        aggregations = trigger_data.get("aggregations")
+        if aggregations:
+            secondary_values = compute_multi_values(
+                data,
+                column_name,
+                aggregations,
+                cols_json=cols_json,
+                has_filters=has_active_filters or bool(filter_expr_str),
+            )
+            updated_metadata["secondary_values"] = secondary_values
+
+            secondary_output = _create_secondary_metrics_rows(secondary_values, text_color=None)
+
+        return formatted_value, comparison_components, secondary_output, updated_metadata
 
     except Exception as e:
         duration_ms = (time.time() - card_start_time) * 1000
@@ -1319,7 +1407,7 @@ def _process_single_card(
             f"[{task_id}] CARD PATCH COMPLETE - Component: {component_id} - "
             f"Duration: {duration_ms:.2f}ms (error)"
         )
-        return "Error", [], {}
+        return "Error", [], no_update, {}
 
 
 def _check_card_early_exit_conditions(
@@ -1332,7 +1420,7 @@ def _check_card_early_exit_conditions(
     task_id: str,
     card_start_time: float,
     is_default_value_func: Any,
-) -> tuple[Any, Any, Any] | None:
+) -> tuple[Any, Any, Any, Any] | None:
     """
     Check for early exit conditions in card processing.
 
@@ -1370,16 +1458,16 @@ def _check_card_early_exit_conditions(
         if not modified_components and not has_been_patched:
             # Race condition check: reference_value must be populated before first patch
             if reference_value is None:
-                return no_update, no_update, no_update
+                return no_update, no_update, no_update, no_update
 
     # Check if metadata and trigger_data are properly populated
     metadata_for_patch = initial_metadata if initial_metadata else stored_metadata
     if metadata_for_patch is None or trigger_data is None:
-        return "...", [], {}
+        return "...", [], no_update, {}
 
     # Check if reference_value has been populated
     if metadata_for_patch.get("reference_value") is None:
-        return "...", [], {}
+        return "...", [], no_update, {}
 
     return None
 

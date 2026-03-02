@@ -653,12 +653,15 @@ def _create_card_stores(
     title_font_size: str,
     value_font_size: str,
     project_id: str | None = None,
+    aggregations: list[str] | None = None,
+    filter_expr: str | None = None,
 ) -> tuple:
-    """
-    Create the store components for card metadata and triggering.
+    """Create the store components for card metadata and triggering.
 
     Args:
-        project_id: Project ID for cross-DC link resolution
+        project_id: Project ID for cross-DC link resolution.
+        aggregations: Optional secondary aggregation functions for multi-metric cards.
+        filter_expr: Optional Polars filter expression for conditional aggregation.
 
     Returns:
         Tuple of (store_component, trigger_store, metadata_store, metadata_initial_store)
@@ -675,8 +678,10 @@ def _create_card_stores(
             "title": title,
             "wf_id": wf_id,
             "dc_id": dc_id,
-            "project_id": project_id,  # For cross-DC link resolution
+            "project_id": project_id,
             "aggregation": aggregation,
+            "aggregations": aggregations,
+            "filter_expr": filter_expr,
             "column_type": column_type,
             "column_name": column_name,
             "value": value,
@@ -703,6 +708,8 @@ def _create_card_stores(
             "column_name": column_name,
             "column_type": column_type,
             "aggregation": aggregation,
+            "aggregations": aggregations,
+            "filter_expr": filter_expr,
             "title": title,
             "color": color,
             "stepper": stepper,
@@ -768,6 +775,217 @@ def _create_icon_overlay(icon_name: str, icon_color: str | None) -> list:
             [DashIconify(**dashiconify_kwargs)],
             style={"position": "relative"},
         )
+    ]
+
+
+def compute_multi_values(
+    data: "pd.DataFrame",
+    column_name: str,
+    aggregations: list[str],
+    cols_json: dict | None = None,
+    has_filters: bool = False,
+) -> dict[str, any]:
+    """Compute multiple aggregation values for a single column.
+
+    Calls ``compute_value()`` for each aggregation in the list and returns
+    a mapping of aggregation name to computed value.
+
+    Args:
+        data: Polars or Pandas DataFrame.
+        column_name: Column to aggregate.
+        aggregations: List of aggregation function names.
+        cols_json: Optional pre-computed column statistics.
+        has_filters: Whether interactive filters are active.
+
+    Returns:
+        Dictionary mapping aggregation name to its computed value.
+    """
+    results: dict[str, any] = {}
+    for agg in aggregations:
+        try:
+            results[agg] = compute_value(
+                data, column_name, agg, cols_json=cols_json, has_filters=has_filters
+            )
+        except Exception:
+            logger.warning(f"Failed to compute aggregation '{agg}' for column '{column_name}'")
+            results[agg] = None
+    return results
+
+
+def _format_metric_value(value: any) -> str:
+    """Format a metric value for display.
+
+    Args:
+        value: The raw metric value.
+
+    Returns:
+        Formatted string representation.
+    """
+    if value is None:
+        return "N/A"
+    if isinstance(value, float):
+        # Use comma separator for large numbers, round to 2 decimals
+        if abs(value) >= 1000:
+            return f"{value:,.2f}"
+        return f"{value:.4g}"
+    if isinstance(value, int):
+        return f"{value:,}"
+    return str(value)
+
+
+def _create_secondary_metrics_rows(
+    secondary_values: dict[str, any],
+    text_color: str | None,
+) -> list:
+    """Build compact rows for secondary metrics in a multi-metric card.
+
+    Args:
+        secondary_values: Mapping of aggregation name to value.
+        text_color: Optional text color for consistency with card theme.
+
+    Returns:
+        List of DMC Group components, one per secondary metric.
+    """
+    rows = []
+    text_style = {"margin": "0"}
+    if text_color:
+        text_style["color"] = text_color
+
+    for agg_name, value in secondary_values.items():
+        label = agg_name.replace("_", " ").title()
+        formatted = _format_metric_value(value)
+        rows.append(
+            dmc.Group(
+                [
+                    dmc.Text(
+                        f"{label}:",
+                        size="xs",
+                        c="dimmed" if not text_color else None,
+                        style=text_style,
+                        fw=500,
+                    ),
+                    dmc.Text(formatted, size="sm", fw="bold", style=text_style),
+                ],
+                gap="xs",
+                justify="space-between",
+                style={"paddingRight": "40px"},  # Leave room for icon overlay
+            )
+        )
+    return rows
+
+
+def _create_multi_metric_content(
+    index: str,
+    card_title: str,
+    hero_value: any,
+    hero_aggregation: str,
+    secondary_values: dict[str, any],
+    styles: dict,
+    title_font_size: str,
+    value_font_size: str,
+    stores: tuple,
+) -> list:
+    """Create card content with a hero metric and secondary metric rows.
+
+    Layout:
+        Title
+        Hero value (large) with aggregation label
+        ───────────────────
+        secondary_1: value
+        secondary_2: value
+        ...
+
+    Args:
+        index: Component index.
+        card_title: Display title for the card.
+        hero_value: The primary metric value (or loading skeleton).
+        hero_aggregation: Name of the hero aggregation function.
+        secondary_values: Mapping of secondary aggregation names to values.
+        styles: Resolved style dictionary.
+        title_font_size: Font size for title.
+        value_font_size: Font size for hero value.
+        stores: Tuple of store components.
+
+    Returns:
+        List of card content components.
+    """
+    store_component, trigger_store, metadata_store, metadata_initial_store = stores
+
+    # Create icon overlay
+    icon_overlay = _create_icon_overlay(styles["icon_name"], styles["icon_color"])
+
+    # Build title text kwargs
+    title_text_kwargs = {
+        "children": card_title,
+        "size": title_font_size,
+        "fw": "bold",
+        "style": {"margin": "0", "marginLeft": "-2px"},
+    }
+    if styles["title_color"]:
+        title_text_kwargs["c"] = styles["title_color"]
+
+    # Build hero value style
+    value_text_style = {"margin": "0", "marginLeft": "-2px"}
+    if styles["title_color"]:
+        value_text_style["color"] = styles["title_color"]
+
+    # Hero aggregation label
+    hero_label = hero_aggregation.replace("_", " ").title()
+
+    # Format hero display
+    if hero_value is not None and not isinstance(hero_value, html.Span):
+        hero_display = _format_metric_value(hero_value)
+    else:
+        hero_display = hero_value
+
+    # Build secondary metric rows
+    secondary_rows = _create_secondary_metrics_rows(secondary_values, styles["title_color"])
+
+    return [
+        *icon_overlay,
+        dmc.Text(**title_text_kwargs),
+        # Hero value with aggregation label
+        dmc.Group(
+            [
+                dmc.Text(
+                    hero_display,
+                    size=value_font_size,
+                    fw="bold",
+                    id={"type": "card-value", "index": str(index)},
+                    style=value_text_style,
+                ),
+                dmc.Text(
+                    f"({hero_label})",
+                    size="xs",
+                    c="dimmed" if not styles["title_color"] else None,
+                    style=value_text_style,
+                ),
+            ],
+            gap="xs",
+            align="flex-end",
+        ),
+        # Comparison container (for filter-driven updates)
+        dmc.Group(
+            [],
+            id={"type": "card-comparison", "index": str(index)},
+            gap="xs",
+            align="center",
+            justify="flex-start",
+            style={"margin": "0", "marginLeft": "-2px"},
+        ),
+        # Divider between hero and secondary metrics
+        dmc.Divider(size="xs", style={"margin": "4px 0"}),
+        # Secondary metrics container
+        dmc.Stack(
+            secondary_rows,
+            id={"type": "card-secondary-metrics", "index": str(index)},
+            gap=4,
+        ),
+        # Stores
+        store_component,
+        trigger_store,
+        metadata_store,
+        metadata_initial_store,
     ]
 
 
@@ -839,6 +1057,13 @@ def _create_card_content(
             align="center",
             justify="flex-start",
             style={"margin": "0", "marginLeft": "-2px"},
+        ),
+        # Empty secondary metrics container (keeps ALL pattern consistent with multi-metric cards)
+        dmc.Stack(
+            [],
+            id={"type": "card-secondary-metrics", "index": str(index)},
+            gap=4,
+            style={"display": "none"},
         ),
         store_component,
         trigger_store,
@@ -984,8 +1209,11 @@ def build_card_frame(index, children=None, show_border=False):
 
 
 def build_card(**kwargs):
-    """
-    Build card component structure with pattern-matching callback architecture.
+    """Build card component structure with pattern-matching callback architecture.
+
+    Supports both single-metric cards (backwards-compatible) and multi-metric
+    summary cards. When ``aggregations`` is provided, the card renders a hero
+    metric with secondary metric rows below a divider.
 
     This function creates the card component UI structure but does NOT compute values.
     Value computation happens asynchronously in render_card_value_background callback.
@@ -995,6 +1223,7 @@ def build_card(**kwargs):
     - {"type": "card-value", "index": component_id} - Updated by callbacks
     - {"type": "card-comparison", "index": component_id} - Shows filter comparison
     - {"type": "card-metadata", "index": component_id} - Stores reference data
+    - {"type": "card-secondary-metrics", "index": component_id} - Multi-metric rows
     """
     # Extract parameters
     index = kwargs.get("index")
@@ -1004,6 +1233,8 @@ def build_card(**kwargs):
     column_name = kwargs.get("column_name")
     column_type = kwargs.get("column_type")
     aggregation = kwargs.get("aggregation")
+    aggregations = kwargs.get("aggregations")
+    filter_expr = kwargs.get("filter_expr")
     v = kwargs.get("value")
     build_frame = kwargs.get("build_frame", False)
     stepper = kwargs.get("stepper", False)
@@ -1056,6 +1287,8 @@ def build_card(**kwargs):
         title_font_size=title_font_size,
         value_font_size=value_font_size,
         project_id=kwargs.get("project_id"),
+        aggregations=aggregations,
+        filter_expr=filter_expr,
     )
 
     # Create card title
@@ -1074,16 +1307,32 @@ def build_card(**kwargs):
             style={"textAlign": "center", "padding": "10px"},
         )
 
-    # Create card content
-    card_content = _create_card_content(
-        index=index,
-        card_title=card_title,
-        display_value=display_value,
-        styles=styles,
-        title_font_size=title_font_size,
-        value_font_size=value_font_size,
-        stores=stores,
-    )
+    # Branch: multi-metric card vs. single-metric card
+    if aggregations:
+        # Multi-metric: hero + secondary rows (all show loading initially)
+        secondary_values = {agg: None for agg in aggregations}
+        card_content = _create_multi_metric_content(
+            index=index,
+            card_title=card_title,
+            hero_value=display_value,
+            hero_aggregation=aggregation or "unknown",
+            secondary_values=secondary_values,
+            styles=styles,
+            title_font_size=title_font_size,
+            value_font_size=value_font_size,
+            stores=stores,
+        )
+    else:
+        # Single-metric card (original behaviour)
+        card_content = _create_card_content(
+            index=index,
+            card_title=card_title,
+            display_value=display_value,
+            styles=styles,
+            title_font_size=title_font_size,
+            value_font_size=value_font_size,
+            stores=stores,
+        )
 
     # Build the card component
     new_card_body = _build_card_component(

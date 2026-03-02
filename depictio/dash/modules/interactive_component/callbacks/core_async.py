@@ -276,6 +276,20 @@ def register_async_rendering_callback(app):
                         init_data=init_data,
                     )
 
+                # Apply filter_expr if provided (scoped interactive components)
+                filter_expr_str = trigger_data.get("filter_expr")
+                if filter_expr_str:
+                    try:
+                        from depictio.models.components.filter_expr import apply_filter_expr
+
+                        df = apply_filter_expr(df, filter_expr_str)
+                    except Exception as e:
+                        logger.error(f"[{i}] filter_expr failed: {e}")
+                        all_components.append(f"Filter Error: {e}")
+                        all_metadata.append({})
+                        all_stored_metadata.append({})
+                        continue
+
                 # Build component based on type
                 if component_type in ["Select", "MultiSelect", "SegmentedControl"]:
                     component, metadata, stored_metadata = build_select_component(

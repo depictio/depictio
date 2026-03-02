@@ -1279,9 +1279,9 @@ def _build_frame_mode_component(
     parent_index,
     stepper,
     value_div_type,
+    filter_expr=None,
 ):
-    """
-    Build a frame mode component with placeholder and trigger stores.
+    """Build a frame mode component with placeholder and trigger stores.
 
     Creates a placeholder component with loader that will be populated
     by callback later. This avoids the "Loading..." -> component transition.
@@ -1303,6 +1303,7 @@ def _build_frame_mode_component(
         parent_index: Parent component index if nested.
         stepper: Whether in stepper (creation) mode.
         value_div_type: Type suffix for component ID.
+        filter_expr: Optional Polars filter expression to pre-filter data.
 
     Returns:
         dmc.Paper: Frame with placeholder component and trigger stores.
@@ -1337,6 +1338,7 @@ def _build_frame_mode_component(
             "value": value,
             "parent_index": parent_index,
             "stepper": stepper,
+            "filter_expr": filter_expr,
         },
     )
 
@@ -1657,6 +1659,7 @@ def build_interactive(**kwargs):
             parent_index=parent_index,
             stepper=stepper,
             value_div_type=value_div_type,
+            filter_expr=kwargs.get("filter_expr"),
         )
 
     # Validate required parameters are not None

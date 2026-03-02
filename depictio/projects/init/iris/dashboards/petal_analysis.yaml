@@ -1,0 +1,185 @@
+# Iris Petal Analysis Dashboard - DashboardDataLite format
+# Showcases multi-metric cards, conditional aggregations, and scoped filters
+version: 1
+
+title: "Iris Petal Analysis"
+subtitle: "Multi-metric summaries and conditional filters on petal measurements"
+project_tag: "Iris Dataset Project Data Analysis"
+
+components:
+  # ── Multi-metric cards ──────────────────────────────────────────────
+
+  # Hero: average petal length with full statistical breakdown
+  - tag: petal-length-summary
+    component_type: card
+    workflow_tag: python/iris_workflow
+    data_collection_tag: iris_table
+    aggregation: average
+    aggregations:
+      - median
+      - std_dev
+      - min
+      - max
+    column_name: petal.length
+    column_type: float64
+    icon_name: mdi:leaf
+    icon_color: "#43A047"
+    title: "Petal Length"
+
+  # Hero: average petal width with spread metrics
+  - tag: petal-width-summary
+    component_type: card
+    workflow_tag: python/iris_workflow
+    data_collection_tag: iris_table
+    aggregation: average
+    aggregations:
+      - median
+      - std_dev
+      - min
+      - max
+    column_name: petal.width
+    column_type: float64
+    icon_name: mdi:arrow-expand-horizontal
+    icon_color: "#00897B"
+    title: "Petal Width"
+
+  # Hero: average sepal length with range
+  - tag: sepal-length-overview
+    component_type: card
+    workflow_tag: python/iris_workflow
+    data_collection_tag: iris_table
+    aggregation: average
+    aggregations:
+      - min
+      - max
+      - std_dev
+    column_name: sepal.length
+    column_type: float64
+    icon_name: mdi:flower-outline
+    icon_color: "#8E24AA"
+    title: "Sepal Length"
+
+  # ── Conditional aggregation cards ───────────────────────────────────
+
+  # Count of samples with long petals (> 4 cm)
+  - tag: long-petal-count
+    component_type: card
+    workflow_tag: python/iris_workflow
+    data_collection_tag: iris_table
+    aggregation: count
+    column_name: petal.length
+    column_type: float64
+    filter_expr: "col('petal.length') > 4"
+    icon_name: mdi:filter-check-outline
+    icon_color: "#F4511E"
+    title: "Petals > 4 cm"
+
+  # Average sepal width where petal width is narrow (≤ 0.5)
+  - tag: narrow-petal-sepal-width
+    component_type: card
+    workflow_tag: python/iris_workflow
+    data_collection_tag: iris_table
+    aggregation: average
+    column_name: sepal.width
+    column_type: float64
+    filter_expr: "col('petal.width') <= 0.5"
+    icon_name: mdi:target
+    icon_color: "#1E88E5"
+    title: "Avg sepal width (narrow petals)"
+
+  # Total sample count
+  - tag: total-samples
+    component_type: card
+    workflow_tag: python/iris_workflow
+    data_collection_tag: iris_table
+    aggregation: count
+    column_name: variety
+    column_type: object
+    icon_name: mdi:counter
+    icon_color: "#546E7A"
+
+  # ── Interactive filters ─────────────────────────────────────────────
+
+  # Petal length range slider
+  - tag: petal-length-filter
+    component_type: interactive
+    workflow_tag: python/iris_workflow
+    data_collection_tag: iris_table
+    interactive_component_type: RangeSlider
+    column_name: petal.length
+    column_type: float64
+    custom_color: "#43A047"
+    icon_name: mdi:ruler
+
+  # Petal width range slider
+  - tag: petal-width-filter
+    component_type: interactive
+    workflow_tag: python/iris_workflow
+    data_collection_tag: iris_table
+    interactive_component_type: RangeSlider
+    column_name: petal.width
+    column_type: float64
+    custom_color: "#00897B"
+    icon_name: mdi:ruler
+
+  # Variety multi-select
+  - tag: variety-picker
+    component_type: interactive
+    workflow_tag: python/iris_workflow
+    data_collection_tag: iris_table
+    interactive_component_type: MultiSelect
+    column_name: variety
+    column_type: object
+    custom_color: "#8E24AA"
+    icon_name: mdi:filter-variant
+
+  # Scoped filter: varieties present among long-petal samples only
+  - tag: long-petal-variety-filter
+    component_type: interactive
+    workflow_tag: python/iris_workflow
+    data_collection_tag: iris_table
+    interactive_component_type: MultiSelect
+    column_name: variety
+    column_type: object
+    filter_expr: "col('petal.length') > 4"
+    custom_color: "#F4511E"
+    icon_name: mdi:filter-check
+    title: "Varieties (petal > 4 cm)"
+
+  # ── Figures ─────────────────────────────────────────────────────────
+
+  # Scatter: petal length vs petal width
+  - tag: petal-scatter
+    component_type: figure
+    workflow_tag: python/iris_workflow
+    data_collection_tag: iris_table
+    visu_type: scatter
+    dict_kwargs:
+      x: petal.length
+      y: petal.width
+      color: variety
+      title: "Petal Length vs Width"
+
+  # Box plot: petal length by variety
+  - tag: petal-box
+    component_type: figure
+    workflow_tag: python/iris_workflow
+    data_collection_tag: iris_table
+    visu_type: box
+    dict_kwargs:
+      x: variety
+      y: petal.length
+      title: "Petal Length by Variety"
+
+  # Histogram: petal width distribution
+  - tag: petal-width-histogram
+    component_type: figure
+    workflow_tag: python/iris_workflow
+    data_collection_tag: iris_table
+    visu_type: histogram
+    dict_kwargs:
+      x: petal.width
+      color: variety
+      nbins: 25
+      barmode: overlay
+      title: "Petal Width Distribution"
