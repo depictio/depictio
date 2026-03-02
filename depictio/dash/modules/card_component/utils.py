@@ -1058,6 +1058,13 @@ def _create_card_content(
             justify="flex-start",
             style={"margin": "0", "marginLeft": "-2px"},
         ),
+        # Empty secondary metrics container (keeps ALL pattern consistent with multi-metric cards)
+        dmc.Stack(
+            [],
+            id={"type": "card-secondary-metrics", "index": str(index)},
+            gap=4,
+            style={"display": "none"},
+        ),
         store_component,
         trigger_store,
         metadata_store,
