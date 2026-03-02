@@ -1,0 +1,54 @@
+/**
+ * MultiQC General Statistics DataTable - Theme-aware styling
+ *
+ * Dash DataTable does not natively support Mantine dark/light theme switching.
+ * These CSS rules provide automatic theme adaptation by targeting the
+ * data-mantine-color-scheme attribute.
+ */
+
+/* ── Light mode (default) ── */
+
+.dash-spreadsheet-container .dash-spreadsheet-inner th {
+    background-color: #f5f5f5;
+    color: #000;
+    border-bottom: 2px solid #ddd;
+}
+
+.dash-spreadsheet-container .dash-spreadsheet-inner td {
+    color: #000;
+    border-bottom: 1px solid #e8e8e8;
+}
+
+.dash-spreadsheet-container .dash-spreadsheet-inner table {
+    border-top: 1px solid #ddd;
+    border-bottom: 1px solid #ddd;
+}
+
+/* ── Dark mode ── */
+
+[data-mantine-color-scheme="dark"] .dash-spreadsheet-container .dash-spreadsheet-inner th {
+    background-color: #25262b;
+    color: #c1c2c5;
+    border-bottom: 2px solid #373a40;
+}
+
+[data-mantine-color-scheme="dark"] .dash-spreadsheet-container .dash-spreadsheet-inner td {
+    background-color: #1a1b1e;
+    color: #c1c2c5;
+    border-bottom: 1px solid #373a40;
+}
+
+[data-mantine-color-scheme="dark"] .dash-spreadsheet-container .dash-spreadsheet-inner table {
+    border-top: 1px solid #373a40;
+    border-bottom: 1px solid #373a40;
+}
+
+[data-mantine-color-scheme="dark"] .dash-spreadsheet-container .dash-spreadsheet-inner input {
+    color: #c1c2c5;
+    background-color: #25262b;
+}
+
+/* Active cell in dark mode */
+[data-mantine-color-scheme="dark"] .dash-spreadsheet-container .dash-cell.focused {
+    background-color: rgba(0, 116, 217, 0.15);
+}

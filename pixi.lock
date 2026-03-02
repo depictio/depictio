@@ -2571,8 +2571,8 @@ packages:
   requires_python: '>=3.9'
 - pypi: ./
   name: depictio
-  version: 0.7.6b1
-  sha256: cf0252bfc723f9663ed4286a9cc8606a80b4393cc83ccc8ee96884d5119a778f
+  version: 0.8.0b3
+  sha256: 287a34490401a0e8d439ff93261c4f04872a2920792d78314ad2f9a8e6351a89
   requires_dist:
   - bcrypt==4.2.1
   - bleach==6.2.0
@@ -2592,7 +2592,7 @@ packages:
   - dash-dynamic-grid-layout==0.1.3
   - dash-dock==0.0.1
   - plotly-express==0.4.1
-  - plotly-complexheatmap==0.1.0
+  - plotly-complexheatmap @ file:///Users/tweber/Gits/workspaces/depictio-workspace/depictio-worktrees/ampliseq-dashboard-v3/packages/plotly-complexheatmap
   - deltalake==0.24.0
   - fastparquet==2024.11.0
   - numpy==2.2.3

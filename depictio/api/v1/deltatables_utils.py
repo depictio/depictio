@@ -1166,13 +1166,16 @@ def apply_runtime_filters(df: pl.DataFrame, metadata: list[dict] | None) -> pl.D
     # Get DataFrame columns for validation
     df_columns = set(df.columns)
 
-    # Validate that all filter columns exist in the DataFrame
-    # Skip validation for empty-valued filters (they won't be applied anyway)
+    # Validate filter columns and keep only those matching DataFrame columns.
+    # Non-matching filters are skipped individually (not bail-out-all) so that
+    # valid row-level filters still apply even when heatmap column-level or
+    # cross-DC pseudo-column filters are present.
+    valid_metadata = []
     skipped_filters = []
     for component in metadata:
-        # Skip empty-valued filters
         filter_value = component.get("value")
         if filter_value in [None, [], "", False]:
+            valid_metadata.append(component)
             continue
 
         if "metadata" in component:
@@ -1190,8 +1193,9 @@ def apply_runtime_filters(df: pl.DataFrame, metadata: list[dict] | None) -> pl.D
                     "value": filter_value,
                 }
             )
+        else:
+            valid_metadata.append(component)
 
-    # If any filters were skipped, log prominently and return unfiltered data
     if skipped_filters:
         logger.warning(
             f"⚠️ FILTER MISMATCH: Skipping {len(skipped_filters)} filter(s) - columns not present in DataFrame"
@@ -1201,14 +1205,10 @@ def apply_runtime_filters(df: pl.DataFrame, metadata: list[dict] | None) -> pl.D
                 f"  ❌ Column '{skip['column']}' (type={skip['type']}, value={skip['value']}) not in DataFrame"
             )
         logger.warning(f"  📋 Available columns in DataFrame: {sorted(df_columns)}")
-        logger.warning(
-            f"  ⏭️  Returning UNFILTERED DataFrame with {original_row_count} rows (filtering skipped)"
-        )
-        # Return unfiltered DataFrame if any column is missing
-        # This prevents ColumnNotFoundError
-        return df
+        if valid_metadata:
+            logger.info(f"  ✅ Continuing with {len(valid_metadata)} valid filter(s)")
 
-    filter_expressions = process_metadata_and_filter(metadata)
+    filter_expressions = process_metadata_and_filter(valid_metadata)
 
     if filter_expressions:
         try:

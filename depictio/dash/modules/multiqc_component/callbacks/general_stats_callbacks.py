@@ -24,9 +24,6 @@ _HIDDEN_STYLE = {
 }
 
 _TABLE_VISIBLE_STYLE = {
-    "border": "none",
-    "borderTop": "1px solid #ddd",
-    "borderBottom": "1px solid #ddd",
     "overflowX": "auto",
 }
 
@@ -66,18 +63,20 @@ def register_general_stats_callbacks(app):
         Output({"type": "general-stats-violin", "index": MATCH}, "figure"),
         Input({"type": "general-stats-read-toggle", "index": MATCH}, "value"),
         State({"type": "general-stats-store", "index": MATCH}, "data"),
+        State("theme-store", "data"),
         prevent_initial_call=True,
     )
-    def switch_general_stats_read_mode(read_mode, store_data):
+    def switch_general_stats_read_mode(read_mode, store_data, theme_data):
         """Switch table data and violin when read mode changes."""
         if not store_data or read_mode not in store_data:
             return dash.no_update, dash.no_update, dash.no_update
 
         mode_data = store_data[read_mode]
+        violin_fig = _apply_theme_to_violin(mode_data["violin_figure"], theme_data)
         return (
             mode_data["table_data"],
             mode_data["table_styles"],
-            mode_data["violin_figure"],
+            violin_fig,
         )
 
     # ------------------------------------------------------------------
@@ -101,6 +100,8 @@ def register_general_stats_callbacks(app):
         State({"type": "interactive-stored-metadata", "index": ALL}, "data"),
         State({"type": "interactive-stored-metadata", "index": ALL}, "id"),
         State("local-store", "data"),
+        State("theme-store", "data"),
+        State("project-metadata-store", "data"),
         prevent_initial_call=True,
     )
     def filter_general_stats_by_interactive(
@@ -111,6 +112,8 @@ def register_general_stats_callbacks(app):
         interactive_metadata_list,
         interactive_metadata_ids,
         local_data,
+        theme_data,
+        project_metadata,
     ):
         """Filter general stats table/violin when interactive components change.
 
@@ -137,7 +140,7 @@ def register_general_stats_callbacks(app):
             return dash.no_update, dash.no_update
         mode_data = store_data[mode]
         full_data = mode_data["table_data"]
-        full_violin = mode_data["violin_figure"]
+        full_violin = _apply_theme_to_violin(mode_data["violin_figure"], theme_data)
 
         # No interactive values or empty -> reset to full data + violin
         if not interactive_values:
@@ -165,6 +168,11 @@ def register_general_stats_callbacks(app):
         # Resolve filter values to sample names
         multiqc_dc_id = stored_metadata.get("dc_id") or stored_metadata.get("data_collection_id")
         project_id = stored_metadata.get("project_id")
+        if not project_id and project_metadata:
+            project_data = project_metadata.get("project", {})
+            pid = project_data.get("_id") or project_data.get("id")
+            if pid:
+                project_id = str(pid)
         token = local_data.get("access_token") if local_data else None
         all_samples = set(store_data.get("all_samples", []))
 
@@ -185,9 +193,28 @@ def register_general_stats_callbacks(app):
         filtered_data = [row for row in full_data if row.get("Sample Name") in selected_samples]
 
         # Rebuild violin from filtered data
-        filtered_violin = _rebuild_violin_from_filtered(filtered_data, mode_data)
+        filtered_violin = _rebuild_violin_from_filtered(filtered_data, mode_data, theme_data)
 
         return filtered_data, filtered_violin
+
+
+def _expand_to_variants(resolved_values: list, all_samples: set[str]) -> set[str]:
+    """Expand canonical sample IDs to paired-end variants present in all_samples.
+
+    For each resolved value, also checks for _1/_2 suffix variants. This handles
+    the case where link resolution returns canonical IDs but MultiQC traces use
+    suffixed names.
+    """
+    expanded = set()
+    for val in resolved_values:
+        val_str = str(val)
+        if val_str in all_samples:
+            expanded.add(val_str)
+        for suffix in ("_1", "_2"):
+            variant = f"{val_str}{suffix}"
+            if variant in all_samples:
+                expanded.add(variant)
+    return expanded
 
 
 def _resolve_samples_from_enriched(
@@ -239,7 +266,9 @@ def _resolve_samples_from_enriched(
                 token=token,
             )
             if resolved and resolved.get("resolved_values"):
-                resolved_sets.append(set(resolved["resolved_values"]) & all_samples)
+                expanded = _expand_to_variants(resolved["resolved_values"], all_samples)
+                if expanded:
+                    resolved_sets.append(expanded)
         else:
             # Same-DC: check if values are sample names
             value_strs = {str(v) for v in values_list}
@@ -279,7 +308,25 @@ def _resolve_samples_from_enriched(
     return result if result else None
 
 
-def _rebuild_violin_from_filtered(filtered_data: list[dict], mode_data: dict) -> dict:
+def _apply_theme_to_violin(violin_fig: dict, theme_data: str | None) -> dict:
+    """Apply the current theme template and font color to a serialized violin figure."""
+    is_dark = theme_data == "dark"
+    template_name = "mantine_dark" if is_dark else "mantine_light"
+    font_color = "#f2f5fa" if is_dark else "#2a3f5f"
+    if isinstance(violin_fig, dict) and "layout" in violin_fig:
+        layout = {**violin_fig["layout"], "template": template_name}
+        font = layout.get("font", {})
+        if isinstance(font, dict):
+            layout["font"] = {**font, "color": font_color}
+        else:
+            layout["font"] = {"color": font_color}
+        violin_fig = {**violin_fig, "layout": layout}
+    return violin_fig
+
+
+def _rebuild_violin_from_filtered(
+    filtered_data: list[dict], mode_data: dict, theme_data: str | None = None
+) -> dict:
     """Rebuild the violin figure from filtered table data.
 
     Uses original_to_tool and display_to_original stored in mode_data
@@ -294,4 +341,5 @@ def _rebuild_violin_from_filtered(filtered_data: list[dict], mode_data: dict) ->
 
     df_filtered = pd.DataFrame(filtered_data)
     fig = _create_violin_plot(df_filtered, original_to_tool, display_to_original)
-    return fig.to_dict()
+    fig_dict = fig.to_dict()
+    return _apply_theme_to_violin(fig_dict, theme_data)

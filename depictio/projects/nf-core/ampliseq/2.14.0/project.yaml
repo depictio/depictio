@@ -343,8 +343,16 @@ links:
     description: "Filter taxonomy rel abundance by metadata samples"
     enabled: true
 
-  # Note: taxonomy_heatmap (646b0f3c1e4a2d7f8e5b8cae) is not linked because
-  # samples are column names in the wide-format matrix, not row values.
+  # Link 6: Metadata → Taxonomy Heatmap (wide-format: samples are columns)
+  - source_dc_id: "646b0f3c1e4a2d7f8e5b8ca5"  # metadata
+    source_column: "sample"
+    target_dc_id: "646b0f3c1e4a2d7f8e5b8cae"  # taxonomy_heatmap
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "column"  # special: filter columns, not rows
+    description: "Filter heatmap columns by metadata samples"
+    enabled: true
 
   # Note: ANCOM volcano (646b0f3c1e4a2d7f8e5b8caa) is not linked because it shows
   # habitat-independent differential abundance analysis and has no sample column

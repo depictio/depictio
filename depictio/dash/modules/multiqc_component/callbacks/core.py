@@ -806,7 +806,9 @@ def register_core_callbacks(app):
                                 )
 
                         if resolved_set:
-                            selected_samples = list(resolved_set)
+                            selected_samples = expand_canonical_samples_to_variants(
+                                list(resolved_set), sample_mappings
+                            )
                         else:
                             selected_samples = expand_canonical_samples_to_variants(
                                 indirect_filter_values, sample_mappings

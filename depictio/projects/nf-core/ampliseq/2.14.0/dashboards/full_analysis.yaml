@@ -457,6 +457,10 @@ tabs:
         workflow_tag: ampliseq
         data_collection_tag: metadata
         # --- optional ---
+        title: Sample Metadata
+        description: Sample identifiers, habitat types, geographic coordinates, and collection dates
+        title_size: h3
+        title_align: left
         row_selection_enabled: false
         # --- generated on export ---
         tag: table-table-df4371
@@ -469,6 +473,10 @@ tabs:
         workflow_tag: ampliseq
         data_collection_tag: taxonomy_rel_abundance
         # --- optional ---
+        title: Taxonomy Relative Abundance
+        description: Phylum-level relative abundance per sample with habitat annotations
+        title_size: h3
+        title_align: left
         row_selection_enabled: false
         # --- generated on export ---
         tag: table-table-02f050

@@ -119,9 +119,10 @@ def _find_link_for_resolution(project: dict, source_dc_id: str, target_dc_id: st
     """
     links = project.get("links", [])
     for link_data in links:
+        # Compare as strings — MongoDB stores ObjectId but API receives strings
         if (
-            link_data.get("source_dc_id") == source_dc_id
-            and link_data.get("target_dc_id") == target_dc_id
+            str(link_data.get("source_dc_id")) == source_dc_id
+            and str(link_data.get("target_dc_id")) == target_dc_id
             and link_data.get("enabled", True)
         ):
             return DCLink(**link_data)
