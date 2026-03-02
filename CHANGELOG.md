@@ -6,32 +6,34 @@
 
 
 <details>
-<summary>Click to expand the changelog for 0.8.0-b3</summary>
+<summary>Click to expand the changelog for 0.8.0-b4</summary>
 
 ### Changes 📜
 
 #### New Features ✨
 
-* feat: add petal analysis dashboard showcasing new card & filter features [b0e0fc1f]
-* feat: expand filter_expr with bioinformatics-oriented methods [87f9d7b1]
-* feat: add filter_expr support to interactive components for scoped filters [7187530d]
-* feat: add multi-metric summary cards and conditional aggregations to card component [4deb97dc]
-* feat: add multi-tier caching and optimize MultiQC data loading [aa50416c]
+* feat: add petal analysis dashboard showcasing new card & filter features [b60b9791]
+* feat: expand filter_expr with bioinformatics-oriented methods [aa04b529]
+* feat: add filter_expr support to interactive components for scoped filters [0e314246]
+* feat: add multi-metric summary cards and conditional aggregations to card component [566b8823]
+* feat: add map, heatmap, and geo metadata to ampliseq dashboard [fbf38b62]
 
 #### Bug Fixes 🐛
 
-* fix: add card-secondary-metrics container to single-metric cards [08087b47]
-* fix: render secondary metrics in their own container instead of stuffing into hero value [195a7f65]
-
-#### Chores 🧹
-
-* chore: strip notebook outputs via nbstripout [884e545c]
+* fix: remove absolute path from pixi.lock breaking CI [32f5bafa]
+* fix: increase screenshot timeouts and use configurable settings [bab48774]
+* fix: GS table dark mode for header, data bars, and hover highlight [d93804d1]
+* fix: cross-DC filtering for figures, MultiQC, and heatmap components [62719f99]
+* fix: add card-secondary-metrics container to single-metric cards [11816062]
+* fix: render secondary metrics in their own container instead of stuffing into hero value [162c85fe]
 
 #### Other Changes 📝
 
-* Bump version: 0.8.0-b2 → 0.8.0-b3 [4ae5cd14]
-* Update CHANGELOG.md for v0.8.0-b2 [3d760bba]
-* Bump version: 0.8.0-b1 → 0.8.0-b2 [1073c875]
+* Bump version: 0.8.0-b3 → 0.8.0-b4 [b33fb493]
+* Update CHANGELOG.md for v0.8.0-b3 [f874ff63]
+* Bump version: 0.8.0-b2 → 0.8.0-b3 [3ce61606]
+* Update CHANGELOG.md for v0.8.0-b3 [35678dd7]
+* Bump version: 0.8.0-b2 → 0.8.0-b3 [718041fe]
 
 
 </details>
@@ -40,10 +42,7 @@
 
 For more details, please refer to the [documentation](https://depictio.github.io/depictio-docs/)
 
-otations and timeout settings [4d75fb17]
-* fix: update ingress host for API documentation testing [2c5d6730]
-* fix: reduce storage sizes for MongoDB, MinIO, screenshots, and keys in Helm chart [8a5725f1]
-* fix: update Helm chart version and clean up ingress annotations for better functionality [4f3a50c4]
+otations for better functionality [4f3a50c4]
 * fix: simplify CI workflow by removing redundant build strategy and enhancing image handling [a1121502]
 * fix: refactor CI workflow to streamline Helm chart deployment and Docker image handling [af508913]
 * fix: update default host configurations with correct service names for frontend and backend [ce1a6ebb]
