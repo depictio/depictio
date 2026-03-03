@@ -40,7 +40,9 @@ def health_check(self):
     }
 
 
-@celery_app.task(bind=True, name="generate_dashboard_screenshot", soft_time_limit=600, time_limit=900)
+@celery_app.task(
+    bind=True, name="generate_dashboard_screenshot", soft_time_limit=600, time_limit=900
+)
 def generate_dashboard_screenshot(self, dashboard_id: str) -> dict:
     """
     Generate dashboard screenshot in background (legacy single-theme).
@@ -83,7 +85,9 @@ def generate_dashboard_screenshot(self, dashboard_id: str) -> dict:
         return {"status": "error", "dashboard_id": dashboard_id, "error": str(e)}
 
 
-@celery_app.task(bind=True, name="generate_dashboard_screenshot_dual", soft_time_limit=600, time_limit=900)
+@celery_app.task(
+    bind=True, name="generate_dashboard_screenshot_dual", soft_time_limit=600, time_limit=900
+)
 def generate_dashboard_screenshot_dual(self, dashboard_id: str, user_id: str) -> dict:
     """
     Generate dual-theme dashboard screenshots asynchronously with deduplication and permission validation.

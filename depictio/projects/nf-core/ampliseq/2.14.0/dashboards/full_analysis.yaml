@@ -324,9 +324,9 @@ tabs:
                 habitat: Habitat
                 faith_pd: "Faith's Phylogenetic Diversity"
         mode: code
-        code_content: "pdf = df.to_pandas()\nstats = pdf.groupby('habitat')['faith_pd'].agg(['mean',\
-            \ 'std']).reset_index()\nfig = px.bar(\n    stats, x='habitat', y='mean',\
-            \ color='habitat',\n    error_y='std',\n    color_discrete_map={'Riverwater':\
+        code_content: "df_modified = df.to_pandas().groupby('habitat')['faith_pd'].agg(['mean',\
+            \ 'std']).reset_index()\nfig = px.bar(\n    df_modified, x='habitat',\
+            \ y='mean', color='habitat',\n    error_y='std',\n    color_discrete_map={'Riverwater':\
             \ '#377EB8', 'Groundwater': '#4DAF4A', 'Sediment': '#E41A1C', 'Soil':\
             \ '#FF7F00'},\n    title='Alpha Diversity by Habitat (Faith PD)',\n   \
             \ labels={'habitat': 'Habitat', 'mean': \"Faith's Phylogenetic Diversity\"}\n\
