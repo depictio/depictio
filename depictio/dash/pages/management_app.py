@@ -30,6 +30,7 @@ Functions:
 import dash_mantine_components as dmc
 from dash import Input, Output, State, html
 
+from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
 from depictio.dash.api_calls import api_call_fetch_user_from_token
 from depictio.dash.components.analytics_tracker import create_analytics_tracker
@@ -268,6 +269,16 @@ def register_routing_callback(app):
 
         # Handle case where user token is invalid/expired (user is None in route_authenticated_user)
         if result is None:
+            # In public/anonymous mode: auto-recover by creating a fresh session
+            if settings.auth.requires_anonymous_user and not settings.auth.is_single_user_mode:
+                logger.info("MGMT: User lookup failed in public mode, attempting session recovery")
+                fresh_data, is_auth, _reason = validate_and_refresh_token(None)
+                if is_auth and fresh_data:
+                    result = route_authenticated_user(pathname, fresh_data, theme)
+                    if result is not None:
+                        content, header = result
+                        return content, header, pathname, fresh_data
+
             logger.warning("User token invalid - redirecting to auth and clearing local data")
             header = create_default_header("Welcome to Depictio")
             content = create_users_management_layout()

@@ -327,6 +327,9 @@ def api_call_create_temporary_user(
     """
     Create a temporary user with automatic expiration.
 
+    Retries up to 3 times with exponential backoff to handle transient
+    failures (e.g., API container not ready yet).
+
     Args:
         expiry_hours: Number of hours until the user expires (default: 24)
         expiry_minutes: Additional minutes until the user expires (default: 0)
@@ -334,29 +337,42 @@ def api_call_create_temporary_user(
     Returns:
         Session data for the temporary user or None if failed
     """
-    try:
-        logger.debug(f"Creating temporary user with expiry: {expiry_hours}h {expiry_minutes}m")
+    max_attempts = 3
+    backoff_seconds = 2.0
 
-        response = httpx.post(
-            f"{API_BASE_URL}/depictio/api/v1/auth/create_temporary_user",
-            params={"expiry_hours": expiry_hours, "expiry_minutes": expiry_minutes},
-            headers={"api-key": settings.auth.internal_api_key},
-            timeout=30.0,
-        )
+    for attempt in range(1, max_attempts + 1):
+        try:
+            logger.debug(f"Creating temporary user with expiry: {expiry_hours}h {expiry_minutes}m")
 
-        if response.status_code == 200:
-            session_data = response.json()
-            logger.debug("Successfully created temporary user session")
-            return session_data
-        else:
-            logger.error(
-                f"Failed to create temporary user: {response.status_code} - {response.text}"
+            response = httpx.post(
+                f"{API_BASE_URL}/depictio/api/v1/auth/create_temporary_user",
+                params={"expiry_hours": expiry_hours, "expiry_minutes": expiry_minutes},
+                headers={"api-key": settings.auth.internal_api_key},
+                timeout=30.0,
             )
-            return None
 
-    except Exception as e:
-        logger.error(f"Error creating temporary user: {e}")
-        return None
+            if response.status_code == 200:
+                session_data = response.json()
+                logger.debug("Successfully created temporary user session")
+                return session_data
+            else:
+                logger.error(
+                    f"Failed to create temporary user: {response.status_code} - {response.text}"
+                )
+
+        except Exception as e:
+            logger.error(f"Error creating temporary user: {e}")
+
+        if attempt < max_attempts:
+            logger.info(
+                f"Retrying temporary user creation (attempt {attempt + 1}/{max_attempts}) "
+                f"in {backoff_seconds}s..."
+            )
+            time.sleep(backoff_seconds)
+            backoff_seconds *= 2
+
+    logger.error("All attempts to create temporary user failed")
+    return None
 
 
 def api_call_cleanup_expired_temporary_users() -> dict[str, Any] | None:
