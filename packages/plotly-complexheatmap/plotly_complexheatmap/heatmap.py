@@ -50,6 +50,10 @@ class ComplexHeatmap:
         Fraction of figure allocated to each dendrogram axis.
     name:
         Name for the heatmap colourbar title.
+    title:
+        Figure title displayed at the top-centre of the figure.
+    description:
+        Subtitle text displayed below the title.
     width / height:
         Figure size in pixels.
     """
@@ -72,6 +76,8 @@ class ComplexHeatmap:
         cluster_metric: str = "euclidean",
         dendro_ratio: float = 0.08,
         name: str = "",
+        title: str = "",
+        description: str = "",
         width: int = 900,
         height: int = 700,
     ) -> None:
@@ -94,6 +100,8 @@ class ComplexHeatmap:
         self.cluster_metric = cluster_metric
         self.dendro_ratio = dendro_ratio
         self.name = name
+        self.title = title
+        self.description = description
         self.width = width
         self.height = height
 
@@ -930,12 +938,19 @@ class ComplexHeatmap:
 
         legend_x_frac = 1.0 + (label_px + colorbar_px + 8) / self.width
 
+        # Dynamic top margin based on title / description presence
+        top_margin = 30
+        if self.title and self.description:
+            top_margin = 65
+        elif self.title:
+            top_margin = 50
+
         fig.update_layout(
             width=self.width,
             height=self.height,
             plot_bgcolor="rgba(0,0,0,0)",
             paper_bgcolor="white",
-            margin={"l": left_margin, "r": right_margin, "t": 30, "b": 5},
+            margin={"l": left_margin, "r": right_margin, "t": top_margin, "b": 5},
             font={"family": FONT_FAMILY, "size": 11},
             legend={
                 "x": legend_x_frac,
@@ -950,6 +965,21 @@ class ComplexHeatmap:
                 "borderwidth": 1,
             },
         )
+
+        # Title (and optional subtitle via Plotly's native title.subtitle)
+        if self.title:
+            title_cfg: dict[str, object] = {
+                "text": self.title,
+                "x": 0.5,
+                "xanchor": "center",
+                "font": {"size": 16, "family": FONT_FAMILY},
+            }
+            if self.description:
+                title_cfg["subtitle"] = {
+                    "text": self.description,
+                    "font": {"size": 12, "family": FONT_FAMILY, "color": "#666666"},
+                }
+            fig.update_layout(title=title_cfg)
 
     @staticmethod
     def _axis_name(fig: go.Figure, cell: tuple[int, int], axis: str) -> str:

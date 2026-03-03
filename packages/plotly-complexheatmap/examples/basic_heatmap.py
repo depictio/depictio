@@ -28,6 +28,8 @@ hm = ComplexHeatmap(
     colorscale="RdBu_r",
     normalize="row",
     name="z-score",
+    title="Basic Heatmap",
+    description="Sample gene expression data",
     width=800,
     height=600,
 )
