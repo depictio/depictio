@@ -380,13 +380,14 @@ def register_tab_callbacks(app):
             Output("sidebar-tabs", "value"),
             Output("sidebar-collapsed", "data"),
             Output("sidebar-tabs", "color"),
+            Output("burger-button", "opened", allow_duplicate=True),
         ],
         [
             Input("url", "pathname"),
             Input("dashboard-init-data", "data"),
         ],
         State("local-store", "data"),
-        prevent_initial_call=False,
+        prevent_initial_call="initial_duplicate",
     )
     def populate_sidebar_tabs(pathname, dashboard_cache, local_data):
         """
@@ -559,7 +560,7 @@ def register_tab_callbacks(app):
             if tabs_color:
                 tabs_color = _hex_to_mantine.get(tabs_color.lower(), tabs_color)
 
-            return tab_items, dashboard_id, sidebar_collapsed, tabs_color
+            return tab_items, dashboard_id, sidebar_collapsed, tabs_color, not sidebar_collapsed
 
         except PreventUpdate:
             raise
