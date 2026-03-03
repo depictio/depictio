@@ -60,6 +60,7 @@ services:
       - ./depictio:/app/depictio
       - ./docker-images/run_dash.sh:/app/run_dash.sh
       - ./pyproject.toml:/app/pyproject.toml
+      - ./packages/plotly-complexheatmap:/app/packages/plotly-complexheatmap
       - ./VERSION:/app/VERSION
       - ./${DATA_DIR}/prof_files:/app/prof_files
       - ./${DATA_DIR}/cache:/app/cache
@@ -94,6 +95,7 @@ services:
       - ./depictio:/app/depictio
       - ./dashboards:/app/dashboards
       - ./pyproject.toml:/app/pyproject.toml
+      - ./packages/plotly-complexheatmap:/app/packages/plotly-complexheatmap
       - ./VERSION:/app/VERSION
       - ./docker-images/run_fastapi.sh:/app/run_fastapi.sh
       - ./${DATA_DIR}/prof_files:/app/prof_files
@@ -129,6 +131,7 @@ services:
       - ./depictio:/app/depictio
       - ./dashboards:/app/dashboards
       - ./pyproject.toml:/app/pyproject.toml
+      - ./packages/plotly-complexheatmap:/app/packages/plotly-complexheatmap
       - ./docker-images/run_celery_worker.sh:/app/run_celery_worker.sh
       - ./${DATA_DIR}/prof_files:/app/prof_files
     env_file:

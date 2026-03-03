@@ -203,7 +203,7 @@ def create_figure(layout: GridLayout, **kwargs: object) -> object:
         shared_xaxes="columns",
         shared_yaxes="rows",
         horizontal_spacing=0.015,
-        vertical_spacing=0.015,
+        vertical_spacing=0.008,
         specs=layout.specs,
         **kwargs,  # type: ignore[arg-type]
     )

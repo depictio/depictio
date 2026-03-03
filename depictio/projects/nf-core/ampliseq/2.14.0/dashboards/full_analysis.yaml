@@ -455,13 +455,14 @@ tabs:
             w: 8
             h: 7
         title: Taxonomic Composition Heatmap
+        description: Row-normalized (z-score) relative abundance of phyla across samples, clustered by similarity with habitat and city annotations
     -   component_type: table
         workflow_tag: ampliseq
         data_collection_tag: metadata
         # --- optional ---
         title: Sample Metadata
         description: Sample identifiers, habitat types, geographic coordinates, and collection dates
-        title_size: h3
+        title_size: h2
         title_align: left
         row_selection_enabled: false
         # --- generated on export ---
@@ -477,7 +478,7 @@ tabs:
         # --- optional ---
         title: Taxonomy Relative Abundance
         description: Phylum-level relative abundance per sample with habitat annotations
-        title_size: h3
+        title_size: h2
         title_align: left
         row_selection_enabled: false
         # --- generated on export ---

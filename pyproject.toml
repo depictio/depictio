@@ -112,7 +112,7 @@ depictio = "depictio.cli.depictio_cli:main"
 
 
 [tool.uv.sources]
-plotly-complexheatmap = { path = "packages/plotly-complexheatmap" }
+plotly-complexheatmap = { path = "packages/plotly-complexheatmap", editable = true }
 
 [build-system]
 requires = ["setuptools>=61", "wheel"]

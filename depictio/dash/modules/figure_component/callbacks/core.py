@@ -704,6 +704,13 @@ def _process_single_figure(
         dict_kwargs = trigger_data.get("dict_kwargs", {})
         code_content = trigger_data.get("code_content", "")
 
+        # Pass component-level title/description into dict_kwargs for heatmaps
+        if visu_type.lower() == "heatmap":
+            for field in ("title", "description"):
+                val = trigger_data.get(field)
+                if val and field not in dict_kwargs:
+                    dict_kwargs[field] = val
+
         load_key = figure_to_load_key.get(figure_index)
         if not load_key or load_key not in dc_cache:
             logger.warning(f"[{task_id}] No cached data for figure {component_id}")
