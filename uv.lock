@@ -1082,7 +1082,7 @@ wheels = [
 
 [[package]]
 name = "depictio"
-version = "0.8.0"
+version = "0.8.1b1"
 source = { editable = "." }
 dependencies = [
     { name = "bcrypt" },
@@ -1206,7 +1206,7 @@ requires-dist = [
     { name = "orjson", specifier = "==3.11.5" },
     { name = "pandas", specifier = "==2.2.3" },
     { name = "playwright", specifier = "==1.52.0" },
-    { name = "plotly-complexheatmap", directory = "packages/plotly-complexheatmap" },
+    { name = "plotly-complexheatmap", editable = "packages/plotly-complexheatmap" },
     { name = "plotly-express", specifier = "==0.4.1" },
     { name = "polars-lts-cpu", extras = ["numpy", "pandas", "pyarrow", "excel", "deltalake"], specifier = "==1.19.0" },
     { name = "pre-commit", marker = "extra == 'dev'", specifier = "==4.2.0" },
@@ -2973,7 +2973,7 @@ wheels = [
 [[package]]
 name = "plotly-complexheatmap"
 version = "0.1.0"
-source = { directory = "packages/plotly-complexheatmap" }
+source = { editable = "packages/plotly-complexheatmap" }
 dependencies = [
     { name = "numpy" },
     { name = "pandas" },
