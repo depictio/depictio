@@ -76,6 +76,19 @@ def fetch_file_data(dc_id: str, CLI_config: CLIConfig) -> list[File]:
 
     files = convert_to_file_objects(files_data)
 
+    # Deduplicate by file_location (guards against duplicate registrations from race conditions)
+    seen: set[str] = set()
+    unique_files = []
+    for f in files:
+        if f.file_location not in seen:
+            seen.add(f.file_location)
+            unique_files.append(f)
+    if len(unique_files) < len(files):
+        logger.warning(
+            f"Deduplicated {len(files) - len(unique_files)} duplicate file(s) for DC {dc_id}"
+        )
+    files = unique_files
+
     logger.info(f"Retrieved {len(files)} file(s) for Data Collection {dc_id}.")
     return files
 

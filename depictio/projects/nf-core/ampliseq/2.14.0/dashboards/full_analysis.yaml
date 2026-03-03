@@ -301,7 +301,8 @@ tabs:
             \    x=\"depth\", y=\"mean\", color=\"sample\",\n    error_y=\"std\",\
             \ markers=True,\n    labels={\"depth\": \"Rarefaction Depth\", \"mean\"\
             : \"Faith's Phylogenetic Diversity\"},\n    title=\"Alpha Diversity Rarefaction\
-            \ Curves\"\n)\nfig.update_traces(mode=\"lines+markers\")"
+            \ Curves\"\n)\nfig.update_traces(mode=\"lines+markers\")\nfig.update_layout(yaxis={'rangemode':\
+            \ 'tozero'})"
         selection_enabled: false
         # --- generated on export ---
         tag: figure-line_depth_faith_pd-5d9f17
@@ -330,7 +331,8 @@ tabs:
             \ '#377EB8', 'Groundwater': '#4DAF4A', 'Sediment': '#E41A1C', 'Soil':\
             \ '#FF7F00'},\n    title='Alpha Diversity by Habitat (Faith PD)',\n   \
             \ labels={'habitat': 'Habitat', 'mean': \"Faith's Phylogenetic Diversity\"}\n\
-            )\nfig.update_layout(xaxis={'categoryorder': 'category ascending'}, showlegend=False)"
+            )\nfig.update_layout(xaxis={'categoryorder': 'category ascending'}, yaxis={'rangemode':\
+            \ 'tozero'}, showlegend=False)"
         selection_enabled: false
         # --- generated on export ---
         tag: figure-bar_sample_faith_pd-5b8018
@@ -582,7 +584,7 @@ tabs:
         title: Sampling Period
     -   component_type: interactive
         workflow_tag: ampliseq
-        data_collection_tag: alpha_diversity
+        data_collection_tag: alpha_rarefaction
         interactive_component_type: RangeSlider
         column_name: faith_pd
         # --- optional ---

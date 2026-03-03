@@ -275,7 +275,7 @@
         "y": "faith_pd"
       },
       "mode": "code",
-      "code_content": "df_modified = df.group_by([\"sample\", \"depth\"]).agg([\n    pl.col(\"faith_pd\").mean().alias(\"mean\"),\n    pl.col(\"faith_pd\").std().alias(\"std\")\n]).sort(\"depth\")\n\nfig = px.line(\n    df_modified.to_pandas(),\n    x=\"depth\", y=\"mean\", color=\"sample\",\n    error_y=\"std\", markers=True,\n    labels={\"depth\": \"Rarefaction Depth\", \"mean\": \"Faith's Phylogenetic Diversity\"},\n    title=\"Alpha Diversity Rarefaction Curves\"\n)\nfig.update_traces(mode=\"lines+markers\")",
+      "code_content": "df_modified = df.group_by([\"sample\", \"depth\"]).agg([\n    pl.col(\"faith_pd\").mean().alias(\"mean\"),\n    pl.col(\"faith_pd\").std().alias(\"std\")\n]).sort(\"depth\")\n\nfig = px.line(\n    df_modified.to_pandas(),\n    x=\"depth\", y=\"mean\", color=\"sample\",\n    error_y=\"std\", markers=True,\n    labels={\"depth\": \"Rarefaction Depth\", \"mean\": \"Faith's Phylogenetic Diversity\"},\n    title=\"Alpha Diversity Rarefaction Curves\"\n)\nfig.update_traces(mode=\"lines+markers\")\nfig.update_layout(yaxis={'rangemode': 'tozero'})",
       "displayed_data_count": 0,
       "total_data_count": 0,
       "was_sampled": false,
@@ -321,7 +321,7 @@
         "y": "faith_pd"
       },
       "mode": "code",
-      "code_content": "df_modified = df.to_pandas().groupby('habitat')['faith_pd'].agg(['mean', 'std']).reset_index()\nfig = px.bar(\n    df_modified, x='habitat', y='mean', color='habitat',\n    error_y='std',\n    color_discrete_map={'Riverwater': '#377EB8', 'Groundwater': '#4DAF4A', 'Sediment': '#E41A1C', 'Soil': '#FF7F00'},\n    title='Alpha Diversity by Habitat (Faith PD)',\n    labels={'habitat': 'Habitat', 'mean': \"Faith's Phylogenetic Diversity\"}\n)\nfig.update_layout(xaxis={'categoryorder': 'category ascending'}, showlegend=False)",
+      "code_content": "df_modified = df.to_pandas().groupby('habitat')['faith_pd'].agg(['mean', 'std']).reset_index()\nfig = px.bar(\n    df_modified, x='habitat', y='mean', color='habitat',\n    error_y='std',\n    color_discrete_map={'Riverwater': '#377EB8', 'Groundwater': '#4DAF4A', 'Sediment': '#E41A1C', 'Soil': '#FF7F00'},\n    title='Alpha Diversity by Habitat (Faith PD)',\n    labels={'habitat': 'Habitat', 'mean': \"Faith's Phylogenetic Diversity\"}\n)\nfig.update_layout(xaxis={'categoryorder': 'category ascending'}, yaxis={'rangemode': 'tozero'}, showlegend=False)",
       "displayed_data_count": 0,
       "total_data_count": 0,
       "was_sampled": false,
@@ -770,21 +770,21 @@
       "component_type": "interactive",
       "title": "Faith PD Range",
       "workflow_tag": "ampliseq",
-      "data_collection_tag": "alpha_diversity",
+      "data_collection_tag": "alpha_rarefaction",
       "wf_id": {
         "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
       },
       "dc_id": {
-        "$oid": "646b0f3c1e4a2d7f8e5b8cab"
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca8"
       },
       "dc_config": {
         "type": null,
         "metatype": null,
-        "description": "Per-sample alpha diversity metrics (Faith PD)",
-        "data_collection_tag": "alpha_diversity",
+        "description": "Alpha diversity rarefaction curves",
+        "data_collection_tag": "alpha_rarefaction",
         "dc_specific_properties": null,
         "_id": {
-          "$oid": "646b0f3c1e4a2d7f8e5b8cab"
+          "$oid": "646b0f3c1e4a2d7f8e5b8ca8"
         }
       },
       "cols_json": {},

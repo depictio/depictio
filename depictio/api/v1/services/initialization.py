@@ -28,9 +28,12 @@ async def check_and_set_initialization() -> bool:
     from depictio.api.v1.db import initialization_collection
 
     try:
-        # Check if initialization is already complete
-        if initialization_collection.find_one({"initialization_complete": True}):
-            return False
+        # Check if initialization is already complete (skip when wipe requested)
+        from depictio.api.v1.configs.config import settings
+
+        if not settings.mongodb.wipe:
+            if initialization_collection.find_one({"initialization_complete": True}):
+                return False
 
         # Clean up stale locks (older than 5 minutes)
         stale_cutoff = datetime.now(timezone.utc) - timedelta(minutes=5)

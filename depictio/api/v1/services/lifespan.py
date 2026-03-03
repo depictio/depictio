@@ -76,15 +76,15 @@ async def handle_initialization() -> bool:
     Returns:
         True if this worker performed initialization, False otherwise
     """
-    # If wiping, clear existing initialization markers first
-    if settings.mongodb.wipe:
-        logger.info(f"Worker {WORKER_ID}: Database wipe requested")
-        from depictio.api.v1.db import initialization_collection
-
-        initialization_collection.delete_many({})
-
     # Check if this worker should perform initialization
     should_initialize = await check_and_set_initialization()
+
+    # Only the winning worker clears stale markers during wipe
+    if should_initialize and settings.mongodb.wipe:
+        logger.info(f"Worker {WORKER_ID}: Clearing initialization markers for wipe")
+        from depictio.api.v1.db import initialization_collection
+
+        initialization_collection.delete_many({"_id": {"$ne": "init_lock"}})
 
     if should_initialize:
         logger.info(f"Worker {WORKER_ID}: Running initialization...")
