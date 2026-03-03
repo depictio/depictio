@@ -1,7 +1,7 @@
 """Base cryptographic key management utilities without logger dependencies."""
 
-import hashlib
 import os
+import secrets
 from pathlib import Path
 from typing import Literal
 
@@ -39,24 +39,15 @@ def _load_or_generate_api_internal_key(
 
 @validate_call(validate_return=True)
 def _generate_api_internal_key() -> str:
-    """Generate a consistent API internal key.
+    """Generate a cryptographically random API internal key.
 
     Returns:
-        Consistently generated API internal key
+        Random 256-bit hex key, persisted via the shared keys volume
     """
-    # Use a combination of environment variables and a salt to generate a consistent key
-    salt = "DEPICTIO_INTERNAL_KEY_SALT"
     base_key = os.getenv("DEPICTIO_INTERNAL_API_KEY", "")
 
-    # If no base key exists, generate a persistent key
     if not base_key:
-        # Generate a hash based on a combination of system information
-        # NOTE: os.getpid() was intentionally removed — it differs across containers,
-        # causing API/Dash key mismatch and permanent 403 on internal calls.
-        system_info = f"{os.getuid()}:{salt}"
-        base_key = hashlib.sha256(system_info.encode()).hexdigest()
-
-        # Set the environment variable to persist the key
+        base_key = secrets.token_hex(32)
         os.environ["DEPICTIO_INTERNAL_API_KEY"] = base_key
 
     return base_key
