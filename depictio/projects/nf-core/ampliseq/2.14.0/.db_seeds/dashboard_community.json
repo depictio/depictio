@@ -8,13 +8,13 @@
   "dashboard_id": {
     "$oid": "646b0f3c1e4a2d7f8e5b8cb3"
   },
-  "version": 2,
+  "version": 15,
   "tmp_children_data": [],
   "stored_layout_data": [],
   "stored_children_data": [],
   "stored_metadata": [
     {
-      "index": "c3dab3d8-05df-4f26-bd81-a79897dee762",
+      "index": "f8bcef51-cfd3-45d3-9529-12ad2c3bf0ea",
       "component_type": "card",
       "title": "Total Samples",
       "workflow_tag": "ampliseq",
@@ -37,7 +37,7 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-03-03T10:17:10.407656",
+      "last_updated": "2026-03-03T09:51:38.081097",
       "aggregation": "nunique",
       "column_name": "sample",
       "column_type": "object",
@@ -48,10 +48,11 @@
       "icon_color": "#45B8AC",
       "title_color": "#45B8AC",
       "title_font_size": "xl",
-      "value_font_size": "xl"
+      "value_font_size": "xl",
+      "wf_tag": "nextflow/ampliseq"
     },
     {
-      "index": "416d1512-6504-483b-b604-9dc7316c5fbf",
+      "index": "a2799ee2-0d92-4290-8777-68b2b9bc09c5",
       "component_type": "card",
       "title": "Total Taxa",
       "workflow_tag": "ampliseq",
@@ -74,7 +75,7 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-03-03T10:17:10.407680",
+      "last_updated": "2026-03-03T09:51:38.081140",
       "aggregation": "nunique",
       "column_name": "taxonomy",
       "column_type": "object",
@@ -85,10 +86,11 @@
       "icon_color": "#8BC34A",
       "title_color": "#8BC34A",
       "title_font_size": "xl",
-      "value_font_size": "xl"
+      "value_font_size": "xl",
+      "wf_tag": "nextflow/ampliseq"
     },
     {
-      "index": "8742907b-a97a-49ca-9924-f29916a06f4b",
+      "index": "0381e445-bb33-410d-9e02-ab415fed3edf",
       "component_type": "card",
       "title": "Mean Faith PD",
       "workflow_tag": "ampliseq",
@@ -111,7 +113,7 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-03-03T10:17:10.407688",
+      "last_updated": "2026-03-03T09:51:38.081148",
       "aggregation": "average",
       "column_name": "faith_pd",
       "column_type": "float64",
@@ -122,10 +124,11 @@
       "icon_color": "#F68B33",
       "title_color": "#F68B33",
       "title_font_size": "xl",
-      "value_font_size": "xl"
+      "value_font_size": "xl",
+      "wf_tag": "nextflow/ampliseq"
     },
     {
-      "index": "0e759bc5-7b91-40bd-bea2-1e77befd1e3f",
+      "index": "2571b466-2c50-427a-afbf-6ddadba59b57",
       "component_type": "card",
       "title": "Habitat Types",
       "workflow_tag": "ampliseq",
@@ -148,7 +151,7 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-03-03T10:17:10.407694",
+      "last_updated": "2026-03-03T09:51:38.081154",
       "aggregation": "nunique",
       "column_name": "habitat",
       "column_type": "object",
@@ -159,20 +162,34 @@
       "icon_color": "#984EA3",
       "title_color": "#984EA3",
       "title_font_size": "xl",
-      "value_font_size": "xl"
+      "value_font_size": "xl",
+      "wf_tag": "nextflow/ampliseq"
     },
     {
-      "index": "d231925a-4270-436c-bb34-199f26d0fa3e",
+      "index": "9d34a1e4-b699-4278-a3e8-cc08a92305b1",
       "component_type": "map",
       "title": "Sampling Locations",
       "workflow_tag": "ampliseq",
       "data_collection_tag": "metadata",
-      "wf_id": null,
-      "dc_id": null,
-      "dc_config": {},
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca5"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Sample metadata for ampliseq analysis",
+        "data_collection_tag": "metadata",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8ca5"
+        }
+      },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-03-03T10:17:10.407710",
+      "last_updated": "2026-03-03T09:51:38.081228",
       "map_type": "scatter_map",
       "lat_column": "latitude",
       "lon_column": "longitude",
@@ -218,10 +235,11 @@
       "displayed_data_count": 0,
       "total_data_count": 0,
       "was_sampled": false,
-      "filter_applied": false
+      "filter_applied": false,
+      "wf_tag": "nextflow/ampliseq"
     },
     {
-      "index": "07864351-8b63-47ea-af06-fc6b04fc3ad0",
+      "index": "a5967432-a5ba-4df5-b28e-ba0b3aa093ff",
       "component_type": "figure",
       "title": "",
       "workflow_tag": "ampliseq",
@@ -244,7 +262,7 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-03-03T10:17:10.407725",
+      "last_updated": "2026-03-03T09:51:38.081257",
       "visu_type": "line",
       "dict_kwargs": {
         "color": "sample",
@@ -263,10 +281,11 @@
       "was_sampled": false,
       "filter_applied": false,
       "selection_enabled": false,
-      "selection_column": null
+      "selection_column": null,
+      "wf_tag": "nextflow/ampliseq"
     },
     {
-      "index": "0b4ceb3e-6d91-476c-904a-7cd85c7996af",
+      "index": "d6c36a7b-6b1d-419a-8cf4-80d9b91cc25e",
       "component_type": "figure",
       "title": "",
       "workflow_tag": "ampliseq",
@@ -289,30 +308,30 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-03-03T10:17:10.407731",
+      "last_updated": "2026-03-03T09:51:38.081289",
       "visu_type": "bar",
       "dict_kwargs": {
         "color": "habitat",
         "labels": {
           "faith_pd": "Faith's Phylogenetic Diversity",
-          "habitat": "Habitat",
-          "sample": "Sample"
+          "habitat": "Habitat"
         },
-        "title": "Alpha Diversity by Sample (Faith PD)",
-        "x": "sample",
+        "title": "Alpha Diversity by Habitat (Faith PD)",
+        "x": "habitat",
         "y": "faith_pd"
       },
       "mode": "code",
-      "code_content": "df_sorted = df.sort('sample')\nfig = px.bar(\n    df_sorted.to_pandas(),\n    x='sample', y='faith_pd', color='habitat',\n    color_discrete_map={'Riverwater': '#377EB8', 'Groundwater': '#4DAF4A', 'Sediment': '#E41A1C', 'Soil': '#FF7F00'},\n    title='Alpha Diversity by Sample (Faith PD)',\n    labels={'sample': 'Sample', 'faith_pd': \"Faith's Phylogenetic Diversity\", 'habitat': 'Habitat'}\n)\nfig.update_layout(xaxis={'categoryorder': 'category ascending'})",
+      "code_content": "df_modified = df.to_pandas().groupby('habitat')['faith_pd'].agg(['mean', 'std']).reset_index()\nfig = px.bar(\n    df_modified, x='habitat', y='mean', color='habitat',\n    error_y='std',\n    color_discrete_map={'Riverwater': '#377EB8', 'Groundwater': '#4DAF4A', 'Sediment': '#E41A1C', 'Soil': '#FF7F00'},\n    title='Alpha Diversity by Habitat (Faith PD)',\n    labels={'habitat': 'Habitat', 'mean': \"Faith's Phylogenetic Diversity\"}\n)\nfig.update_layout(xaxis={'categoryorder': 'category ascending'}, showlegend=False)",
       "displayed_data_count": 0,
       "total_data_count": 0,
       "was_sampled": false,
       "filter_applied": false,
       "selection_enabled": false,
-      "selection_column": null
+      "selection_column": null,
+      "wf_tag": "nextflow/ampliseq"
     },
     {
-      "index": "d10d6c65-6860-409c-a459-07e477af2378",
+      "index": "2e518508-1af3-4891-95ef-0e56b24b5df9",
       "component_type": "figure",
       "title": "",
       "workflow_tag": "ampliseq",
@@ -335,7 +354,7 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-03-03T10:17:10.407738",
+      "last_updated": "2026-03-03T09:51:38.081296",
       "visu_type": "sunburst",
       "dict_kwargs": {
         "path": [
@@ -352,10 +371,11 @@
       "was_sampled": false,
       "filter_applied": false,
       "selection_enabled": false,
-      "selection_column": null
+      "selection_column": null,
+      "wf_tag": "nextflow/ampliseq"
     },
     {
-      "index": "d595144f-eaab-45f9-9138-b6f342fe2582",
+      "index": "e9fcc356-5576-4eb3-97af-c5ff9efd27cc",
       "component_type": "figure",
       "title": "",
       "workflow_tag": "ampliseq",
@@ -378,7 +398,7 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-03-03T10:17:10.407742",
+      "last_updated": "2026-03-03T09:51:38.081303",
       "visu_type": "bar",
       "dict_kwargs": {
         "color": "Phylum",
@@ -399,10 +419,11 @@
       "was_sampled": false,
       "filter_applied": false,
       "selection_enabled": false,
-      "selection_column": null
+      "selection_column": null,
+      "wf_tag": "nextflow/ampliseq"
     },
     {
-      "index": "33f2e2ca-b45c-4b6f-bca2-6740404d9fa0",
+      "index": "3c353c6e-d436-4808-9d90-129764f6d2ec",
       "component_type": "figure",
       "title": "",
       "workflow_tag": "ampliseq",
@@ -425,7 +446,7 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-03-03T10:17:10.407747",
+      "last_updated": "2026-03-03T09:51:38.081309",
       "visu_type": "bar",
       "dict_kwargs": {
         "barmode": "stack",
@@ -447,20 +468,34 @@
       "was_sampled": false,
       "filter_applied": false,
       "selection_enabled": false,
-      "selection_column": null
+      "selection_column": null,
+      "wf_tag": "nextflow/ampliseq"
     },
     {
-      "index": "d1fd539e-d11d-441e-9afc-02974fa012c1",
+      "index": "cbda4f24-c99a-4ab1-a62e-33edaeaf0583",
       "component_type": "figure",
       "title": "Taxonomic Composition Heatmap",
       "workflow_tag": "ampliseq",
       "data_collection_tag": "taxonomy_heatmap",
-      "wf_id": null,
-      "dc_id": null,
-      "dc_config": {},
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8cae"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Taxonomic relative abundance matrix (wide format for heatmap)",
+        "data_collection_tag": "taxonomy_heatmap",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8cae"
+        }
+      },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-03-03T10:17:10.407752",
+      "last_updated": "2026-03-03T09:51:38.081341",
       "visu_type": "heatmap",
       "dict_kwargs": {
         "cluster_cols": true,
@@ -481,10 +516,11 @@
       "was_sampled": false,
       "filter_applied": false,
       "selection_enabled": false,
-      "selection_column": null
+      "selection_column": null,
+      "wf_tag": "nextflow/ampliseq"
     },
     {
-      "index": "ed0fdb74-53ef-4c0c-80ce-02032bb91878",
+      "index": "a4448805-0be7-4d4c-85cf-18c32254ba6c",
       "component_type": "table",
       "title": "Sample Metadata",
       "workflow_tag": "ampliseq",
@@ -507,16 +543,17 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-03-03T10:17:10.407758",
+      "last_updated": "2026-03-03T09:51:38.081368",
       "columns": [],
       "page_size": 10,
       "sortable": true,
       "filterable": true,
       "row_selection_enabled": false,
-      "row_selection_column": null
+      "row_selection_column": null,
+      "wf_tag": "nextflow/ampliseq"
     },
     {
-      "index": "71d770cf-c4d6-4ea5-8f06-9e3a22165d52",
+      "index": "3b359d0e-2ddf-4c1c-8e20-f16d6182796a",
       "component_type": "table",
       "title": "Taxonomy Relative Abundance",
       "workflow_tag": "ampliseq",
@@ -539,16 +576,17 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-03-03T10:17:10.407763",
+      "last_updated": "2026-03-03T09:51:38.081391",
       "columns": [],
       "page_size": 10,
       "sortable": true,
       "filterable": true,
       "row_selection_enabled": false,
-      "row_selection_column": null
+      "row_selection_column": null,
+      "wf_tag": "nextflow/ampliseq"
     },
     {
-      "index": "99acb5e6-7276-406b-b6cb-2c576d7e5252",
+      "index": "6f0ac899-2872-48ae-bcee-b756080e9318",
       "component_type": "interactive",
       "title": "Habitat Type",
       "workflow_tag": "ampliseq",
@@ -571,7 +609,7 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-03-03T10:17:10.407771",
+      "last_updated": "2026-03-03T09:51:38.081402",
       "interactive_component_type": "MultiSelect",
       "column_name": "habitat",
       "column_type": "object",
@@ -580,10 +618,11 @@
       "filter_expr": null,
       "title_size": "md",
       "custom_color": "#984EA3",
-      "icon_name": "mdi:earth"
+      "icon_name": "mdi:earth",
+      "wf_tag": "nextflow/ampliseq"
     },
     {
-      "index": "eb3ad4e9-be35-4b6d-835f-ec92576f2b41",
+      "index": "4b81f1fb-c73d-4bf9-9b9e-3f6955e8b5ff",
       "component_type": "interactive",
       "title": "Sample ID",
       "workflow_tag": "ampliseq",
@@ -606,7 +645,7 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-03-03T10:17:10.407777",
+      "last_updated": "2026-03-03T09:51:38.081408",
       "interactive_component_type": "MultiSelect",
       "column_name": "sample",
       "column_type": "object",
@@ -615,10 +654,11 @@
       "filter_expr": null,
       "title_size": "md",
       "custom_color": "#45B8AC",
-      "icon_name": "mdi:flask"
+      "icon_name": "mdi:flask",
+      "wf_tag": "nextflow/ampliseq"
     },
     {
-      "index": "95f9435e-8277-462d-b2ec-1f4f23ba5352",
+      "index": "4600920a-3735-4c2e-8c9f-599ccdb3a57a",
       "component_type": "interactive",
       "title": "Kingdom",
       "workflow_tag": "ampliseq",
@@ -641,7 +681,7 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-03-03T10:17:10.407781",
+      "last_updated": "2026-03-03T09:51:38.081414",
       "interactive_component_type": "MultiSelect",
       "column_name": "Kingdom",
       "column_type": "object",
@@ -650,10 +690,11 @@
       "filter_expr": null,
       "title_size": "md",
       "custom_color": "#377EB8",
-      "icon_name": "mdi:bacteria"
+      "icon_name": "mdi:bacteria",
+      "wf_tag": "nextflow/ampliseq"
     },
     {
-      "index": "3226e5db-fa49-48ee-a85b-976ccb77237d",
+      "index": "cdbcdc81-0ce5-4417-9bc6-431372166868",
       "component_type": "interactive",
       "title": "Phylum",
       "workflow_tag": "ampliseq",
@@ -676,7 +717,7 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-03-03T10:17:10.407785",
+      "last_updated": "2026-03-03T09:51:38.081420",
       "interactive_component_type": "MultiSelect",
       "column_name": "Phylum",
       "column_type": "object",
@@ -685,10 +726,11 @@
       "filter_expr": null,
       "title_size": "md",
       "custom_color": "#8BC34A",
-      "icon_name": "mdi:bacteria-outline"
+      "icon_name": "mdi:bacteria-outline",
+      "wf_tag": "nextflow/ampliseq"
     },
     {
-      "index": "ca57eb3d-3e99-4668-8f5f-206ef3e9597b",
+      "index": "b3a493f9-9da5-43c3-920f-adee67f633c1",
       "component_type": "interactive",
       "title": "Sampling Period",
       "workflow_tag": "ampliseq",
@@ -711,7 +753,7 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-03-03T10:17:10.407789",
+      "last_updated": "2026-03-03T09:51:38.081426",
       "interactive_component_type": "DateRangePicker",
       "column_name": "sampling_date",
       "column_type": "datetime",
@@ -720,7 +762,8 @@
       "filter_expr": null,
       "title_size": "md",
       "custom_color": "#45B8AC",
-      "icon_name": "mdi:calendar-range"
+      "icon_name": "mdi:calendar-range",
+      "wf_tag": "nextflow/ampliseq"
     },
     {
       "index": "range-faith-pd-slider",
@@ -746,7 +789,7 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-03-03T10:17:10.407793",
+      "last_updated": "2026-03-03T09:51:38.081431",
       "interactive_component_type": "RangeSlider",
       "column_name": "faith_pd",
       "column_type": "float64",
@@ -755,7 +798,8 @@
       "filter_expr": null,
       "title_size": "md",
       "custom_color": "#9C27B0",
-      "icon_name": "mdi:chart-box-outline"
+      "icon_name": "mdi:chart-box-outline",
+      "wf_tag": "nextflow/ampliseq"
     },
     {
       "index": "range-rel-abundance-slider",
@@ -781,7 +825,7 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-03-03T10:17:10.407797",
+      "last_updated": "2026-03-03T09:51:38.081436",
       "interactive_component_type": "RangeSlider",
       "column_name": "rel_abundance",
       "column_type": "float64",
@@ -790,13 +834,14 @@
       "filter_expr": null,
       "title_size": "md",
       "custom_color": "#FF9800",
-      "icon_name": "mdi:counter"
+      "icon_name": "mdi:counter",
+      "wf_tag": "nextflow/ampliseq"
     }
   ],
   "stored_edit_dashboard_mode_button": [],
   "left_panel_layout_data": [
     {
-      "i": "box-75715769-0979-4a10-bd92-00ded26b63e0",
+      "i": "box-6f0ac899-2872-48ae-bcee-b756080e9318",
       "x": 0,
       "y": 3,
       "w": 1,
@@ -804,7 +849,7 @@
       "static": false
     },
     {
-      "i": "box-4d765bac-13cb-43c5-bf85-8773854cbe15",
+      "i": "box-4b81f1fb-c73d-4bf9-9b9e-3f6955e8b5ff",
       "x": 0,
       "y": 5,
       "w": 1,
@@ -812,7 +857,7 @@
       "static": false
     },
     {
-      "i": "box-aa9f5785-f781-4eb9-8ca7-21b7b5972ad1",
+      "i": "box-4600920a-3735-4c2e-8c9f-599ccdb3a57a",
       "x": 0,
       "y": 8,
       "w": 1,
@@ -820,7 +865,7 @@
       "static": false
     },
     {
-      "i": "box-155bdb36-17ff-4be4-a7b4-21584fc8d992",
+      "i": "box-cdbcdc81-0ce5-4417-9bc6-431372166868",
       "x": 0,
       "y": 10,
       "w": 1,
@@ -828,7 +873,7 @@
       "static": false
     },
     {
-      "i": "box-579b064e-dd54-4c65-959b-12604aa4a745",
+      "i": "box-b3a493f9-9da5-43c3-920f-adee67f633c1",
       "x": 0,
       "y": 0,
       "w": 1,
@@ -854,7 +899,7 @@
   ],
   "right_panel_layout_data": [
     {
-      "i": "box-5470840c-c00f-4a5c-84c0-fababc94f0a3",
+      "i": "box-f8bcef51-cfd3-45d3-9529-12ad2c3bf0ea",
       "x": 0,
       "y": 0,
       "w": 2,
@@ -862,7 +907,7 @@
       "static": true
     },
     {
-      "i": "box-98929e90-ec7f-477c-bf8e-892e9f412346",
+      "i": "box-a2799ee2-0d92-4290-8777-68b2b9bc09c5",
       "x": 2,
       "y": 0,
       "w": 2,
@@ -870,7 +915,7 @@
       "static": true
     },
     {
-      "i": "box-9a669691-6ae3-41dd-9cb1-2f8a5868fe72",
+      "i": "box-0381e445-bb33-410d-9e02-ab415fed3edf",
       "x": 4,
       "y": 0,
       "w": 2,
@@ -878,7 +923,7 @@
       "static": true
     },
     {
-      "i": "box-277d2dcc-6203-481f-9713-18d784a7dc51",
+      "i": "box-2571b466-2c50-427a-afbf-6ddadba59b57",
       "x": 6,
       "y": 0,
       "w": 2,
@@ -886,7 +931,7 @@
       "static": true
     },
     {
-      "i": "box-d231925a-4270-436c-bb34-199f26d0fa3e",
+      "i": "box-9d34a1e4-b699-4278-a3e8-cc08a92305b1",
       "x": 0,
       "y": 2,
       "w": 8,
@@ -901,7 +946,7 @@
       ]
     },
     {
-      "i": "box-15114c9f-b480-4bfc-ae6e-6e6d34782da5",
+      "i": "box-a5967432-a5ba-4df5-b28e-ba0b3aa093ff",
       "x": 0,
       "y": 8,
       "w": 8,
@@ -916,7 +961,7 @@
       ]
     },
     {
-      "i": "box-6cfd2561-c157-4d81-a8c5-69ee067ec001",
+      "i": "box-d6c36a7b-6b1d-419a-8cf4-80d9b91cc25e",
       "x": 0,
       "y": 13,
       "w": 4,
@@ -931,7 +976,7 @@
       ]
     },
     {
-      "i": "box-1fbb5adf-4b17-4ccf-92a0-5a26b6c33859",
+      "i": "box-2e518508-1af3-4891-95ef-0e56b24b5df9",
       "x": 4,
       "y": 13,
       "w": 4,
@@ -946,7 +991,7 @@
       ]
     },
     {
-      "i": "box-cd1cf744-521b-4ee1-9a46-d210bdcfb525",
+      "i": "box-e9fcc356-5576-4eb3-97af-c5ff9efd27cc",
       "x": 0,
       "y": 18,
       "w": 8,
@@ -961,7 +1006,7 @@
       ]
     },
     {
-      "i": "box-881d915b-fb80-4bb8-9e9d-1857bc3880a1",
+      "i": "box-3c353c6e-d436-4808-9d90-129764f6d2ec",
       "x": 0,
       "y": 30,
       "w": 8,
@@ -976,7 +1021,7 @@
       ]
     },
     {
-      "i": "box-d1fd539e-d11d-441e-9afc-02974fa012c1",
+      "i": "box-cbda4f24-c99a-4ab1-a62e-33edaeaf0583",
       "x": 0,
       "y": 38,
       "w": 8,
@@ -991,7 +1036,7 @@
       ]
     },
     {
-      "i": "box-426ab00f-7405-4100-a9a4-e57572769b25",
+      "i": "box-a4448805-0be7-4d4c-85cf-18c32254ba6c",
       "x": 0,
       "y": 51,
       "w": 8,
@@ -1006,7 +1051,7 @@
       ]
     },
     {
-      "i": "box-14a239de-c2ee-4616-8863-8602f0f9b9aa",
+      "i": "box-3b359d0e-2ddf-4c1c-8e20-f16d6182796a",
       "x": 0,
       "y": 57,
       "w": 8,
@@ -1057,7 +1102,7 @@
     "viewers": []
   },
   "is_public": false,
-  "last_saved_ts": "2026-03-03 10:17:10",
+  "last_saved_ts": "2026-03-03 09:51:38",
   "project_id": {
     "$oid": "646b0f3c1e4a2d7f8e5b8ca2"
   },

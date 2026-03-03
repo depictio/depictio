@@ -241,7 +241,9 @@ async def generate_dual_theme_screenshots(
             for theme, output_path in [("light", light_path), ("dark", dark_path)]:
                 if theme == "light":
                     # Navigate to dashboard first, then set theme and reload
-                    await page.goto(dashboard_url, timeout=settings.performance.screenshot_navigation_timeout)
+                    await page.goto(
+                        dashboard_url, timeout=settings.performance.screenshot_navigation_timeout
+                    )
 
                 await page.evaluate(
                     f"localStorage.setItem('theme-store', JSON.stringify('{theme}'))"
@@ -251,7 +253,8 @@ async def generate_dual_theme_screenshots(
                 # Wait for MantineProvider to apply theme
                 try:
                     await page.wait_for_selector(
-                        f'[data-mantine-color-scheme="{theme}"]', timeout=settings.performance.screenshot_content_wait
+                        f'[data-mantine-color-scheme="{theme}"]',
+                        timeout=settings.performance.screenshot_content_wait,
                     )
                     await page.wait_for_timeout(1000)
                 except Exception:
