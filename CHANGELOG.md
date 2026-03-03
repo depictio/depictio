@@ -6,21 +6,15 @@
 
 
 <details>
-<summary>Click to expand the changelog for 0.8.0-b6</summary>
+<summary>Click to expand the changelog for 0.8.0</summary>
 
 ### Changes 📜
 
-#### Bug Fixes 🐛
-
-* fix: use df_modified pattern for alpha diversity code executor [ad11b5a5]
-* fix: alpha diversity chart uses avg+error bars, re-export all seeds [469b4e7e]
-* fix: regenerate all JSON seeds via proper YAML import roundtrip [683b936f]
-
 #### Other Changes 📝
 
-* Bump version: 0.8.0-b5 → 0.8.0-b6 [8e6b7b3b]
-* Update CHANGELOG.md for v0.8.0-b5 [45874ae5]
-* Bump version: 0.8.0-b4 → 0.8.0-b5 [463c196e]
+* Bump version: 0.8.0-b6 → 0.8.0 [2e9ba9e8]
+* Update CHANGELOG.md for v0.8.0-b6 [e0f531a9]
+* Bump version: 0.8.0-b5 → 0.8.0-b6 [3b22ae23]
 
 
 </details>
@@ -29,10 +23,7 @@
 
 For more details, please refer to the [documentation](https://depictio.github.io/depictio-docs/)
 
-ecessary integration jobs ; add fixture to set DEPICTIO_CONTEXT for test modules [cb64d183]
-* fix: update e2e-tests job dependencies to include docker-system-init ; refactor test fixture for DEPICTIO_CONTEXT environment variable [2c5ac43f]
-* fix: add missing files for CI [84f84bd7]
-* fix: remove unnecessary blank line in deploy workflow [9542c00e]
+ecessary blank line in deploy workflow [9542c00e]
 
 #### Improvements 🚀
 
