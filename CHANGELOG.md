@@ -6,19 +6,21 @@
 
 
 <details>
-<summary>Click to expand the changelog for 0.8.0-b5</summary>
+<summary>Click to expand the changelog for 0.8.0-b6</summary>
 
 ### Changes 📜
 
 #### Bug Fixes 🐛
 
-* fix: regenerate community JSON seed with map and heatmap components [4df48bec]
+* fix: use df_modified pattern for alpha diversity code executor [ad11b5a5]
+* fix: alpha diversity chart uses avg+error bars, re-export all seeds [469b4e7e]
+* fix: regenerate all JSON seeds via proper YAML import roundtrip [683b936f]
 
 #### Other Changes 📝
 
-* Bump version: 0.8.0-b4 → 0.8.0-b5 [da140d57]
-* Update CHANGELOG.md for v0.8.0-b4 [64cd5f1a]
-* Bump version: 0.8.0-b3 → 0.8.0-b4 [f4611623]
+* Bump version: 0.8.0-b5 → 0.8.0-b6 [8e6b7b3b]
+* Update CHANGELOG.md for v0.8.0-b5 [45874ae5]
+* Bump version: 0.8.0-b4 → 0.8.0-b5 [463c196e]
 
 
 </details>
@@ -27,24 +29,7 @@
 
 For more details, please refer to the [documentation](https://depictio.github.io/depictio-docs/)
 
-otations and timeout settings [59b9f921]
-* fix: update ingress host for API documentation testing [d856c8a6]
-* fix: refine package inclusion pattern in pyproject.toml for improved module discovery [e9d4ff87]
-* fix: update package inclusion pattern in pyproject.toml for broader API coverage [65e3fede]
-* fix: update run command documentation and remove unused status command [b3d6a8a9]
-* fix: adjust column spans and wrapping in design_header for responsive layout [85bd2c54]
-* fix: update .env.example with MinIO credentials and adjust docker-compose for script paths and DEV_MODE variable [3feb886f]
-* fix: add logging step for depictio-backend in deployment workflow [71a6916d]
-* fix: add visibility to backend and MinIO ports in Gitpod configuration [d091cfc6]
-* fix: uncomment .env file copy command in deployment workflow to ensure environment variables are set correctly [fd2849d8]
-* fix: update URL handling logic in ServiceConfig to use internal URL for server context and add debug print statement [e6ff7058]
-* fix: comment out .env file copy command in deployment workflow to prevent overwriting [55a273f1]
-* fix: clean up Gitpod environment script by removing hardcoded URL and adjusting formatting [f206a100]
-* fix: update service configuration to include external_service flag and adjust URL handling logic ; solve scenario where public url needs to be defined when using internal service (e.g: gitpod) [4aac1bd5]
-* fix: correct version format in bumpversion configuration and update push command in bump script [815214af]
-* fix: update Iris integration verification in CI workflow to reflect project name change [f89f2b5f]
-* fix: update e2e-tests job dependencies to remove docker-system-init requirement [de58bbb4]
-* fix: update e2e-tests job dependencies to remove unnecessary integration jobs ; add fixture to set DEPICTIO_CONTEXT for test modules [cb64d183]
+ecessary integration jobs ; add fixture to set DEPICTIO_CONTEXT for test modules [cb64d183]
 * fix: update e2e-tests job dependencies to include docker-system-init ; refactor test fixture for DEPICTIO_CONTEXT environment variable [2c5ac43f]
 * fix: add missing files for CI [84f84bd7]
 * fix: remove unnecessary blank line in deploy workflow [9542c00e]
