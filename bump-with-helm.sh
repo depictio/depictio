@@ -36,3 +36,11 @@ if git log -1 --pretty=%B | grep -q "Bump version"; then
     git commit --amend --no-edit
     # git push && git push --tags
 fi
+
+# Move the 'stable' tag for non-beta releases
+NEW_VERSION=$(cat VERSION)
+if [[ "$NEW_VERSION" != *-b* ]]; then
+    echo "Stable release detected (v${NEW_VERSION}) — moving 'stable' tag"
+    git tag -f stable "v${NEW_VERSION}"
+    echo "Remember to push with: git push origin refs/tags/stable --force"
+fi
