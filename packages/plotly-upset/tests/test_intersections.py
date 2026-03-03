@@ -128,6 +128,50 @@ class TestSortIntersections:
 
         assert sorted_result.patterns == result.patterns
 
+    def test_sort_by_degree_cardinality_descending(self, binary_df: pd.DataFrame) -> None:
+        matrix = binary_df.values.astype(int)
+        result = compute_intersections(matrix, list(binary_df.columns))
+        result = filter_intersections(result, exclude_empty=True)
+        sorted_result = sort_intersections(result, sort_by="degree-cardinality", sort_order="descending")
+
+        degrees = sorted_result.degrees.tolist()
+        sizes = sorted_result.sizes.tolist()
+
+        # Primary: degrees must be non-increasing
+        assert degrees == sorted(degrees, reverse=True)
+        # Secondary: within each degree group, sizes must be non-increasing
+        i = 0
+        while i < len(degrees):
+            j = i
+            while j < len(degrees) and degrees[j] == degrees[i]:
+                j += 1
+            group_sizes = sizes[i:j]
+            assert group_sizes == sorted(group_sizes, reverse=True), (
+                f"Sizes within degree={degrees[i]} not descending: {group_sizes}"
+            )
+            i = j
+
+    def test_sort_by_degree_cardinality_ascending(self, binary_df: pd.DataFrame) -> None:
+        matrix = binary_df.values.astype(int)
+        result = compute_intersections(matrix, list(binary_df.columns))
+        result = filter_intersections(result, exclude_empty=True)
+        sorted_result = sort_intersections(result, sort_by="degree-cardinality", sort_order="ascending")
+
+        degrees = sorted_result.degrees.tolist()
+        sizes = sorted_result.sizes.tolist()
+
+        # Primary: degrees must be non-decreasing
+        assert degrees == sorted(degrees)
+        # Secondary: within each degree group, sizes must be non-decreasing
+        i = 0
+        while i < len(degrees):
+            j = i
+            while j < len(degrees) and degrees[j] == degrees[i]:
+                j += 1
+            group_sizes = sizes[i:j]
+            assert group_sizes == sorted(group_sizes), f"Sizes within degree={degrees[i]} not ascending: {group_sizes}"
+            i = j
+
     def test_invalid_sort_by(self, binary_df: pd.DataFrame) -> None:
         matrix = binary_df.values.astype(int)
         result = compute_intersections(matrix, list(binary_df.columns))

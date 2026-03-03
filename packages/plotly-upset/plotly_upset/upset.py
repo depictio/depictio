@@ -40,7 +40,9 @@ class UpSetPlot:
     subtitle:
         Description displayed below the title.
     sort_by:
-        ``"cardinality"`` (default), ``"degree"``, or ``"input"``.
+        ``"cardinality"`` (default), ``"degree"``,
+        ``"degree-cardinality"`` (primary by degree, secondary by size),
+        or ``"input"``.
     sort_order:
         ``"descending"`` (default) or ``"ascending"``.
     min_size / max_size:

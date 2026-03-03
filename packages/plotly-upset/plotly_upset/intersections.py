@@ -161,6 +161,8 @@ def sort_intersections(
     sort_by:
         ``"cardinality"`` (by intersection size),
         ``"degree"`` (by number of sets in intersection),
+        ``"degree-cardinality"`` (primary sort by degree, secondary by
+        cardinality within each degree group),
         or ``"input"`` (keep original order).
     sort_order:
         ``"descending"`` or ``"ascending"``.
@@ -168,19 +170,26 @@ def sort_intersections(
     if sort_by == "input":
         return result
 
-    if sort_by == "cardinality":
-        sort_key = result.sizes
-    elif sort_by == "degree":
-        sort_key = result.degrees
-    else:
-        raise ValueError(f"Unknown sort_by: {sort_by!r}. Use 'cardinality', 'degree', or 'input'.")
-
     if sort_order == "descending":
-        order = np.argsort(-sort_key)
+        sign = -1
     elif sort_order == "ascending":
-        order = np.argsort(sort_key)
+        sign = 1
     else:
         raise ValueError(f"Unknown sort_order: {sort_order!r}. Use 'descending' or 'ascending'.")
+
+    if sort_by == "cardinality":
+        order = np.argsort(sign * result.sizes)
+    elif sort_by == "degree":
+        order = np.argsort(sign * result.degrees)
+    elif sort_by == "degree-cardinality":
+        # Compound sort: primary by degree, secondary by cardinality
+        # np.lexsort sorts by last key first, so (sizes, degrees) means
+        # primary=degrees, secondary=sizes
+        order = np.lexsort((sign * result.sizes, sign * result.degrees))
+    else:
+        raise ValueError(
+            f"Unknown sort_by: {sort_by!r}. Use 'cardinality', 'degree', 'degree-cardinality', or 'input'."
+        )
 
     patterns = [result.patterns[i] for i in order]
     sizes = result.sizes[order]
