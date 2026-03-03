@@ -83,8 +83,9 @@ class TestApiCallGetAnonymousUserSession:
         assert result is None
         self.mock_httpx_get.assert_called_once()
 
-    def test_get_anonymous_user_session_api_error(self):
-        """Test handling of API errors."""
+    @patch("depictio.dash.api_calls.time.sleep")
+    def test_get_anonymous_user_session_api_error(self, mock_sleep):
+        """Test handling of API errors with retries."""
         # Arrange
         mock_response = MagicMock()
         mock_response.status_code = 500
@@ -96,7 +97,7 @@ class TestApiCallGetAnonymousUserSession:
 
         # Assert
         assert result is None
-        self.mock_httpx_get.assert_called_once()
+        assert self.mock_httpx_get.call_count == 3  # 3 retry attempts
 
 
 # ------------------------------------------------------
@@ -179,8 +180,9 @@ class TestApiCallCreateTemporaryUser:
             timeout=30.0,
         )
 
-    def test_create_temporary_user_api_error(self):
-        """Test handling of API errors during user creation."""
+    @patch("depictio.dash.api_calls.time.sleep")
+    def test_create_temporary_user_api_error(self, mock_sleep):
+        """Test handling of API errors during user creation with retries."""
         # Arrange
         mock_response = MagicMock()
         mock_response.status_code = 500
@@ -192,7 +194,7 @@ class TestApiCallCreateTemporaryUser:
 
         # Assert
         assert result is None
-        self.mock_httpx_post.assert_called_once()
+        assert self.mock_httpx_post.call_count == 3  # 3 retry attempts
 
 
 # ------------------------------------------------------

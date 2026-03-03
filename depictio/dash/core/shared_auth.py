@@ -99,9 +99,29 @@ def validate_and_refresh_token(local_data: Optional[Dict]) -> Tuple[Optional[Dic
                 return None, False, "session_create_failed"
 
         # Public/demo mode: reuse existing valid session to avoid creating new
-        # temporary users on every page navigation.
+        # temporary users on every page navigation — but only if token hasn't expired.
         if local_data and local_data.get("access_token") and local_data.get("logged_in"):
-            return local_data, True, "existing_session"
+            expire_str = local_data.get("expire_datetime")
+            if expire_str:
+                try:
+                    if isinstance(expire_str, str):
+                        expire_dt = datetime.fromisoformat(expire_str.replace("Z", "+00:00"))
+                    else:
+                        expire_dt = expire_str
+                    if expire_dt > datetime.now(expire_dt.tzinfo):
+                        return local_data, True, "existing_session"
+                    else:
+                        logger.debug(
+                            "SHARED_AUTH: Public mode session expired locally, "
+                            "will create new temp user"
+                        )
+                except (ValueError, TypeError):
+                    logger.debug(
+                        "SHARED_AUTH: Could not parse expire_datetime, will create new temp user"
+                    )
+            else:
+                # No expiry info — trust the session (backward compat)
+                return local_data, True, "existing_session"
 
         # No valid session yet — create a new temporary user for public mode
         logger.debug("SHARED_AUTH: Public mode - creating temporary user session")
