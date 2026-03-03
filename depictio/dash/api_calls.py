@@ -276,32 +276,49 @@ def api_call_get_anonymous_user_session() -> dict | None:
     Get the anonymous user session data for unauthenticated mode.
     Synchronous version for Dash compatibility.
 
+    Retries up to 3 times with exponential backoff to handle transient
+    startup failures (e.g., API container not ready yet).
+
     Returns:
         Optional[dict]: The session data if successful, None otherwise
     """
+    max_attempts = 3
+    backoff_seconds = 2.0
 
-    try:
-        response = httpx.get(
-            f"{API_BASE_URL}/depictio/api/v1/auth/get_anonymous_user_session",
-            headers={"api-key": settings.auth.internal_api_key},
-            timeout=10,
-        )
-
-        if response.status_code == 200:
-            session_data = response.json()
-            return session_data
-        elif response.status_code == 403:
-            logger.warning("Anonymous user session not available - unauthenticated mode disabled")
-            return None
-        else:
-            logger.error(
-                f"Error fetching anonymous user session: {response.status_code} - {response.text}"
+    for attempt in range(1, max_attempts + 1):
+        try:
+            response = httpx.get(
+                f"{API_BASE_URL}/depictio/api/v1/auth/get_anonymous_user_session",
+                headers={"api-key": settings.auth.internal_api_key},
+                timeout=10,
             )
-            return None
 
-    except Exception as e:
-        logger.error(f"Exception during anonymous user session fetch: {e}")
-        return None
+            if response.status_code == 200:
+                session_data = response.json()
+                return session_data
+            elif response.status_code == 403:
+                logger.warning(
+                    "Anonymous user session not available - unauthenticated mode disabled"
+                )
+                return None
+            else:
+                logger.error(
+                    f"Error fetching anonymous user session: {response.status_code} - {response.text}"
+                )
+
+        except Exception as e:
+            logger.error(f"Exception during anonymous user session fetch: {e}")
+
+        if attempt < max_attempts:
+            logger.info(
+                f"Retrying anonymous user session fetch (attempt {attempt + 1}/{max_attempts}) "
+                f"in {backoff_seconds}s..."
+            )
+            time.sleep(backoff_seconds)
+            backoff_seconds *= 2
+
+    logger.error("All attempts to fetch anonymous user session failed")
+    return None
 
 
 def api_call_create_temporary_user(

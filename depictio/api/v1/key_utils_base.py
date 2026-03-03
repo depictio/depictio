@@ -51,7 +51,9 @@ def _generate_api_internal_key() -> str:
     # If no base key exists, generate a persistent key
     if not base_key:
         # Generate a hash based on a combination of system information
-        system_info = f"{os.getpid()}:{os.getuid()}:{salt}"
+        # NOTE: os.getpid() was intentionally removed — it differs across containers,
+        # causing API/Dash key mismatch and permanent 403 on internal calls.
+        system_info = f"{os.getuid()}:{salt}"
         base_key = hashlib.sha256(system_info.encode()).hexdigest()
 
         # Set the environment variable to persist the key
