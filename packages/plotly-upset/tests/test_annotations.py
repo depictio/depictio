@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import numpy as np
 import pandas as pd
+import plotly.graph_objects as go
 
 from plotly_upset.annotations import (
     MaterializedBarTrack,
@@ -141,3 +142,38 @@ class TestMaterializeCategorical:
         assert isinstance(track, MaterializedCategoricalTrack)
         assert set(track.categories) == {"A", "B", "C"}
         assert len(track.proportions) == len(order)
+
+
+class TestMaterializeCategoricalStacked:
+    def test_categorical_stacked_traces(self, annotated_df: pd.DataFrame) -> None:
+        """Categorical track now renders as vertical stacked Bar traces."""
+        indices, order = _get_test_context(annotated_df)
+        anno = UpSetAnnotation(data=annotated_df, category="category")
+        tracks = anno.materialize(indices, order)
+
+        track = tracks[0]
+        positions = np.arange(len(order), dtype=float)
+        traces = track.to_traces(positions)
+
+        # Should have one Bar trace per category (A, B, C = 3)
+        assert len(traces) == 3
+        assert all(isinstance(t, go.Bar) for t in traces)
+
+    def test_categorical_proportions_sum(self, annotated_df: pd.DataFrame) -> None:
+        """Proportions for each intersection should sum to ~1.0."""
+        indices, order = _get_test_context(annotated_df)
+        anno = UpSetAnnotation(data=annotated_df, category="category")
+        tracks = anno.materialize(indices, order)
+
+        track = tracks[0]
+        for props in track.proportions:
+            if props:  # non-empty intersections
+                total = sum(props.values())
+                assert abs(total - 1.0) < 1e-6
+
+    def test_categorical_legend_items_empty(self, annotated_df: pd.DataFrame) -> None:
+        """Legend is now handled by Bar traces directly, so legend_items returns empty."""
+        indices, order = _get_test_context(annotated_df)
+        anno = UpSetAnnotation(data=annotated_df, category="category")
+        tracks = anno.materialize(indices, order)
+        assert tracks[0].legend_items() == []

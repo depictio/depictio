@@ -56,6 +56,16 @@ class UpSetPlot:
         Default bar color for intersection bars.
     inactive_color:
         Color for inactive (unfilled) dots.
+    set_colors:
+        Per-set colors. Either a ``dict`` mapping set name to color,
+        or a ``list`` of colors (one per set, positional). When provided,
+        dots, set-size bars, and edges are colored per-set.
+    color_intersections_by:
+        How to color intersection bars. ``None`` uses a single *color*;
+        ``"set"`` colors degree-1 bars by their set color and multi-set
+        bars with a neutral dark color.
+    show_values:
+        If ``True``, display intersection count labels on top of bars.
     dot_size:
         Marker size for matrix dots.
     width / height:
@@ -81,6 +91,9 @@ class UpSetPlot:
         annotation: UpSetAnnotation | None = None,
         color: str = "#333333",
         inactive_color: str = "#C2C2C2",
+        set_colors: dict[str, str] | list[str] | None = None,
+        color_intersections_by: str | None = None,
+        show_values: bool = False,
         dot_size: int = 12,
         width: int = 900,
         height: int = 700,
@@ -100,14 +113,33 @@ class UpSetPlot:
         self.annotation = annotation
         self.color = color
         self.inactive_color = inactive_color
+        self.color_intersections_by = color_intersections_by
+        self.show_values = show_values
         self.dot_size = dot_size
         self.width = width
         self.height = height
+
+        # Normalize set_colors to a dict
+        self._set_colors_map = self._normalize_set_colors(set_colors)
 
         # Computed during to_plotly()
         self._result: IntersectionResult | None = None
         self._set_sizes: dict[str, int] | None = None
         self._materialized_tracks: list[MaterializedTrack] | None = None
+
+    def _normalize_set_colors(self, set_colors: dict[str, str] | list[str] | None) -> dict[str, str] | None:
+        """Convert set_colors input to a dict[str, str] or None."""
+        if set_colors is None:
+            return None
+        if isinstance(set_colors, dict):
+            return set_colors
+        if isinstance(set_colors, list):
+            if len(set_colors) != len(self._set_names):
+                raise ValueError(
+                    f"set_colors list has {len(set_colors)} items but there are {len(self._set_names)} sets"
+                )
+            return dict(zip(self._set_names, set_colors))
+        raise TypeError(f"set_colors must be dict, list, or None, got {type(set_colors).__name__}")
 
     @classmethod
     def from_sets(
@@ -201,6 +233,31 @@ class UpSetPlot:
         )
 
     # ------------------------------------------------------------------
+    # Intersection bar coloring
+    # ------------------------------------------------------------------
+
+    def _compute_bar_colors(self) -> str | list[str]:
+        """Compute per-bar colors for intersection bars."""
+        assert self._result is not None
+
+        if self.color_intersections_by is None or self._set_colors_map is None:
+            return self.color
+
+        if self.color_intersections_by == "set":
+            bar_colors: list[str] = []
+            for pattern in self._result.patterns:
+                active_sets = [i for i, b in enumerate(pattern) if b == 1]
+                if len(active_sets) == 1:
+                    bar_colors.append(self._set_colors_map.get(self._set_names[active_sets[0]], self.color))
+                elif len(active_sets) == 0:
+                    bar_colors.append(self.inactive_color)
+                else:
+                    bar_colors.append("#333333")
+            return bar_colors
+
+        raise ValueError(f"Unknown color_intersections_by: {self.color_intersections_by!r}. Use None or 'set'.")
+
+    # ------------------------------------------------------------------
     # Trace builders
     # ------------------------------------------------------------------
 
@@ -210,20 +267,26 @@ class UpSetPlot:
         positions = np.arange(len(self._result.patterns), dtype=float)
         cell = layout.intersection_bar_cell
 
-        fig.add_trace(
-            go.Bar(
-                x=positions.tolist(),
-                y=self._result.sizes.tolist(),
-                marker_color=self.color,
-                marker_line_color="#555555",
-                marker_line_width=0.5,
-                name="Intersection Size",
-                showlegend=False,
-                hovertemplate="Size: %{y}<extra></extra>",
-            ),
-            row=cell[0],
-            col=cell[1],
-        )
+        bar_colors = self._compute_bar_colors()
+        sizes = self._result.sizes.tolist()
+
+        bar_kwargs: dict[str, Any] = {
+            "x": positions.tolist(),
+            "y": sizes,
+            "marker_color": bar_colors,
+            "marker_line_color": "#555555",
+            "marker_line_width": 0.5,
+            "name": "Intersection Size",
+            "showlegend": False,
+            "hovertemplate": "Size: %{y}<extra></extra>",
+        }
+
+        if self.show_values:
+            bar_kwargs["text"] = [str(s) for s in sizes]
+            bar_kwargs["textposition"] = "outside"
+            bar_kwargs["textfont"] = {"size": 9, "family": FONT_FAMILY}
+
+        fig.add_trace(go.Bar(**bar_kwargs), row=cell[0], col=cell[1])
 
     def _add_dot_matrix(self, fig: go.Figure, layout: UpSetGridLayout) -> None:
         """Add the dot-matrix indicator panel."""
@@ -235,6 +298,7 @@ class UpSetPlot:
             self._set_names,
             active_color=self.color,
             inactive_color=self.inactive_color,
+            set_colors=self._set_colors_map,
             dot_size=self.dot_size,
         )
 
@@ -263,12 +327,18 @@ class UpSetPlot:
         sizes = [self._set_sizes[name] for name in self._set_names]
         positions = np.arange(len(self._set_names), dtype=float)
 
+        # Per-set coloring for set-size bars
+        if self._set_colors_map is not None:
+            bar_colors: str | list[str] = [self._set_colors_map.get(name, self.color) for name in self._set_names]
+        else:
+            bar_colors = self.color
+
         fig.add_trace(
             go.Bar(
                 x=sizes,
                 y=positions.tolist(),
                 orientation="h",
-                marker_color=self.color,
+                marker_color=bar_colors,
                 marker_line_color="#555555",
                 marker_line_width=0.5,
                 name="Set Size",
@@ -293,7 +363,7 @@ class UpSetPlot:
             for trace in traces:
                 fig.add_trace(trace, row=cell[0], col=cell[1])
 
-            # Add legend items for categorical tracks
+            # Add legend items for categorical tracks (if any remain)
             if isinstance(track, MaterializedCategoricalTrack):
                 for legend_trace in track.legend_items():
                     fig.add_trace(legend_trace, row=cell[0], col=cell[1])

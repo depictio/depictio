@@ -111,6 +111,56 @@ class TestUpSetPlotFromSets:
         assert isinstance(fig, go.Figure)
 
 
+class TestUpSetPlotColoring:
+    def test_set_colors_dict(self, binary_df: pd.DataFrame) -> None:
+        colors = {"SetA": "#E41A1C", "SetB": "#377EB8", "SetC": "#4DAF4A", "SetD": "#984EA3"}
+        plot = UpSetPlot(binary_df, set_colors=colors)
+        fig = plot.to_plotly()
+        assert isinstance(fig, go.Figure)
+
+    def test_set_colors_list(self, binary_df: pd.DataFrame) -> None:
+        plot = UpSetPlot(binary_df, set_colors=["#E41A1C", "#377EB8", "#4DAF4A", "#984EA3"])
+        fig = plot.to_plotly()
+        assert isinstance(fig, go.Figure)
+
+    def test_set_colors_list_wrong_length(self, binary_df: pd.DataFrame) -> None:
+        import pytest
+
+        with pytest.raises(ValueError, match="set_colors list has"):
+            UpSetPlot(binary_df, set_colors=["#E41A1C", "#377EB8"])
+
+    def test_color_intersections_by_set(self, binary_df: pd.DataFrame) -> None:
+        colors = {"SetA": "#E41A1C", "SetB": "#377EB8", "SetC": "#4DAF4A", "SetD": "#984EA3"}
+        plot = UpSetPlot(binary_df, set_colors=colors, color_intersections_by="set")
+        fig = plot.to_plotly()
+        assert isinstance(fig, go.Figure)
+
+    def test_color_intersections_by_set_without_set_colors(self, binary_df: pd.DataFrame) -> None:
+        """When color_intersections_by='set' but no set_colors, falls back to uniform color."""
+        plot = UpSetPlot(binary_df, color_intersections_by="set")
+        fig = plot.to_plotly()
+        assert isinstance(fig, go.Figure)
+
+    def test_show_values(self, binary_df: pd.DataFrame) -> None:
+        plot = UpSetPlot(binary_df, show_values=True)
+        fig = plot.to_plotly()
+        assert isinstance(fig, go.Figure)
+
+    def test_set_colors_with_annotations(self, annotated_df: pd.DataFrame) -> None:
+        colors = {"SetA": "#E41A1C", "SetB": "#377EB8", "SetC": "#4DAF4A", "SetD": "#984EA3"}
+        anno = UpSetAnnotation(data=annotated_df, score="score")
+        plot = UpSetPlot(
+            annotated_df,
+            set_columns=["SetA", "SetB", "SetC", "SetD"],
+            set_colors=colors,
+            color_intersections_by="set",
+            show_values=True,
+            annotation=anno,
+        )
+        fig = plot.to_plotly()
+        assert isinstance(fig, go.Figure)
+
+
 class TestUpSetPlotPolars:
     def test_polars_input(self, binary_df: pd.DataFrame) -> None:
         try:

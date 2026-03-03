@@ -15,14 +15,14 @@ import pandas as pd
 import plotly.graph_objects as go
 from numpy.typing import NDArray
 
-from plotly_upset.utils import categorical_colorscale, generate_colors
+from plotly_upset.utils import generate_colors
 
 # Default track sizes (fraction of figure dimension)
 _BOX_SIZE = 0.08
 _VIOLIN_SIZE = 0.08
 _BAR_SIZE = 0.06
 _SCATTER_SIZE = 0.06
-_CATEGORICAL_SIZE = 0.025
+_CATEGORICAL_SIZE = 0.06
 _STACKED_BAR_SIZE = 0.08
 
 # Aggregation function registry
@@ -139,10 +139,13 @@ class MaterializedViolinTrack(MaterializedTrack):
 
 @dataclass
 class MaterializedBarTrack(MaterializedTrack):
-    """Aggregated bar per intersection."""
+    """Aggregated bar per intersection.
+
+    ``color`` can be a single string or a list of strings for per-bar coloring.
+    """
 
     values: list[float] = field(default_factory=list)
-    color: str = "#4C78A8"
+    color: str | list[str] = "#4C78A8"
 
     def to_traces(self, positions: NDArray[np.floating]) -> list[go.BaseTraceType]:
         return [
@@ -161,10 +164,13 @@ class MaterializedBarTrack(MaterializedTrack):
 
 @dataclass
 class MaterializedScatterTrack(MaterializedTrack):
-    """Aggregated scatter point per intersection."""
+    """Aggregated scatter point per intersection.
+
+    ``color`` can be a single string or a list of strings for per-point coloring.
+    """
 
     values: list[float] = field(default_factory=list)
-    color: str = "#E45756"
+    color: str | list[str] = "#E45756"
     marker_size: int = 8
 
     def to_traces(self, positions: NDArray[np.floating]) -> list[go.BaseTraceType]:
@@ -183,7 +189,7 @@ class MaterializedScatterTrack(MaterializedTrack):
 
 @dataclass
 class MaterializedCategoricalTrack(MaterializedTrack):
-    """Categorical proportion display per intersection."""
+    """Categorical proportion display as vertical stacked bars per intersection."""
 
     proportions: list[dict[str, float]] = field(default_factory=list)
     categories: list[str] = field(default_factory=list)
@@ -193,59 +199,29 @@ class MaterializedCategoricalTrack(MaterializedTrack):
         if not self.categories:
             return []
 
-        n_cats = len(self.categories)
-        cat_to_int = {c: i for i, c in enumerate(self.categories)}
-        color_list = [self.colors[c] for c in self.categories]
-        cs = categorical_colorscale(color_list, n_cats)
-
-        # Build a matrix of dominant category per intersection
-        z_values: list[int] = []
-        hover_text: list[str] = []
-        for props in self.proportions:
-            if props:
-                dominant = max(props, key=props.get)  # type: ignore[arg-type]
-                z_values.append(cat_to_int[dominant])
-                parts = [f"{k}: {v:.0%}" for k, v in sorted(props.items())]
-                hover_text.append("<br>".join(parts))
-            else:
-                z_values.append(0)
-                hover_text.append("")
-
-        z = np.array(z_values).reshape(1, -1)
-        custom = np.array(hover_text, dtype=object).reshape(1, -1)
-
-        return [
-            go.Heatmap(
-                z=z,
-                x=positions.tolist(),
-                y=[self.name],
-                colorscale=cs,
-                zmin=-0.5,
-                zmax=n_cats - 0.5,
-                showscale=False,
-                hovertemplate="%{customdata}<extra></extra>",
-                customdata=custom,
-                xgap=1,
-                ygap=1,
-            )
-        ]
-
-    def legend_items(self) -> list[go.Scatter]:
-        items: list[go.Scatter] = []
+        traces: list[go.BaseTraceType] = []
         for cat in self.categories:
-            items.append(
-                go.Scatter(
-                    x=[None],
-                    y=[None],
-                    mode="markers",
-                    marker={"size": 10, "color": self.colors[cat], "symbol": "square"},
+            y_vals = [props.get(cat, 0.0) for props in self.proportions]
+            color = self.colors.get(cat, "#888888")
+            traces.append(
+                go.Bar(
+                    x=positions.tolist(),
+                    y=y_vals,
+                    marker_color=color,
+                    marker_line_color="#333333",
+                    marker_line_width=0.3,
                     name=f"{self.name}: {cat}",
                     legendgroup=self.name,
-                    legendgrouptitle={"text": self.name},
                     showlegend=True,
+                    legendgrouptitle={"text": self.name},
+                    hovertemplate=f"{cat}: %{{y:.0%}}<extra></extra>",
                 )
             )
-        return items
+        return traces
+
+    def legend_items(self) -> list[go.Scatter]:
+        # Legend is handled directly by the Bar traces via showlegend=True
+        return []
 
 
 @dataclass
