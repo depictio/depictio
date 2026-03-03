@@ -455,6 +455,7 @@ tabs:
             w: 8
             h: 7
         title: Taxonomic Composition Heatmap
+        description: Row-normalized (z-score) relative abundance of phyla across samples, clustered by similarity with habitat and city annotations
     -   component_type: table
         workflow_tag: ampliseq
         data_collection_tag: metadata

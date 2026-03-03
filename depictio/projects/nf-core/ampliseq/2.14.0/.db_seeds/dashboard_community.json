@@ -475,6 +475,7 @@
       "index": "cbda4f24-c99a-4ab1-a62e-33edaeaf0583",
       "component_type": "figure",
       "title": "Taxonomic Composition Heatmap",
+      "description": "Row-normalized (z-score) relative abundance of phyla across samples, clustered by similarity with habitat and city annotations",
       "workflow_tag": "ampliseq",
       "data_collection_tag": "taxonomy_heatmap",
       "wf_id": {
