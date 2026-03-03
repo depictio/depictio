@@ -524,6 +524,9 @@
       "index": "a4448805-0be7-4d4c-85cf-18c32254ba6c",
       "component_type": "table",
       "title": "Sample Metadata",
+      "description": "Sample identifiers, habitat types, geographic coordinates, and collection dates",
+      "title_size": "h2",
+      "title_align": "left",
       "workflow_tag": "ampliseq",
       "data_collection_tag": "metadata",
       "wf_id": {
@@ -557,6 +560,9 @@
       "index": "3b359d0e-2ddf-4c1c-8e20-f16d6182796a",
       "component_type": "table",
       "title": "Taxonomy Relative Abundance",
+      "description": "Phylum-level relative abundance per sample with habitat annotations",
+      "title_size": "h2",
+      "title_align": "left",
       "workflow_tag": "ampliseq",
       "data_collection_tag": "taxonomy_rel_abundance",
       "wf_id": {

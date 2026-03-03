@@ -46,6 +46,8 @@ HEATMAP_INIT_PARAMS: frozenset[str] = frozenset(
         "cluster_metric",
         "dendro_ratio",
         "name",
+        "title",
+        "description",
         "width",
         "height",
     }
@@ -2189,6 +2191,8 @@ def build_figure(**kwargs) -> html.Div | dcc.Loading:
                     "code_content": code_content,
                     "selection_enabled": selection_enabled,
                     "selection_column": selection_column,
+                    "title": kwargs.get("title", ""),
+                    "description": kwargs.get("description", ""),
                 },
             ),
             # Metadata store - for callback results

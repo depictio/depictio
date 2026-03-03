@@ -405,7 +405,7 @@ def _build_title_header(
                 description,
                 style={
                     "fontSize": d_font,
-                    "color": "gray",
+                    "color": "var(--mantine-color-dimmed, gray)",
                     "overflow": "hidden",
                     "textOverflow": "ellipsis",
                     "whiteSpace": "nowrap",
