@@ -8,7 +8,7 @@
   "dashboard_id": {
     "$oid": "646b0f3c1e4a2d7f8e5b8ca2"
   },
-  "version": 3,
+  "version": 15,
   "tmp_children_data": [],
   "stored_layout_data": [],
   "stored_children_data": [],
@@ -37,12 +37,13 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-02-25T13:35:41.184125",
+      "last_updated": "2026-03-03T09:49:25.502253",
       "interactive_component_type": "DateRangePicker",
       "column_name": "sampling_date",
       "column_type": "datetime",
       "value": null,
       "default_state": null,
+      "filter_expr": null,
       "title_size": "md",
       "custom_color": "#FF6B6B",
       "icon_name": "mdi:calendar-range",
@@ -72,12 +73,13 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-02-25T13:35:41.184154",
+      "last_updated": "2026-03-03T09:49:25.502310",
       "interactive_component_type": "MultiSelect",
       "column_name": "habitat",
       "column_type": "object",
       "value": null,
       "default_state": null,
+      "filter_expr": null,
       "title_size": "md",
       "custom_color": "#984EA3",
       "icon_name": "mdi:earth",
@@ -107,19 +109,20 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-02-25T13:35:41.184161",
+      "last_updated": "2026-03-03T09:49:25.502318",
       "interactive_component_type": "MultiSelect",
       "column_name": "sample",
       "column_type": "object",
       "value": null,
       "default_state": null,
+      "filter_expr": null,
       "title_size": "md",
       "custom_color": "#45B8AC",
       "icon_name": "mdi:flask",
       "wf_tag": "nextflow/ampliseq"
     },
     {
-      "index": "8a810350-66a2-41cb-a441-66d3952566a2",
+      "index": "09b06d1c-ba14-4596-95cb-4fbcc6e02567",
       "component_type": "multiqc",
       "title": "",
       "workflow_tag": "ampliseq",
@@ -142,13 +145,13 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-02-25T13:35:41.184185",
+      "last_updated": "2026-03-03T09:49:25.502324",
       "selected_module": "general_stats",
       "selected_plot": "general_stats",
       "wf_tag": "nextflow/ampliseq"
     },
     {
-      "index": "821d4402-2453-4a57-9bff-3e974e7feca6",
+      "index": "cf59f34e-03ab-470f-a997-d663474e4eeb",
       "component_type": "multiqc",
       "title": "",
       "workflow_tag": "ampliseq",
@@ -171,13 +174,13 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-02-25T13:35:41.184190",
+      "last_updated": "2026-03-03T09:49:25.502329",
       "selected_module": "cutadapt",
       "selected_plot": "Filtered Reads",
       "wf_tag": "nextflow/ampliseq"
     },
     {
-      "index": "3cba95f0-436f-4724-b77b-549d70befc9a",
+      "index": "9968ab1d-aafe-44e8-b0ad-918627acbb98",
       "component_type": "multiqc",
       "title": "",
       "workflow_tag": "ampliseq",
@@ -200,13 +203,13 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-02-25T13:35:41.184194",
+      "last_updated": "2026-03-03T09:49:25.502333",
       "selected_module": "fastqc",
       "selected_plot": "Sequence Counts",
       "wf_tag": "nextflow/ampliseq"
     },
     {
-      "index": "8683d0c6-3e05-4f81-bbf9-523fa631ecaa",
+      "index": "cae0b368-abcd-422b-ad72-c238f030f436",
       "component_type": "multiqc",
       "title": "",
       "workflow_tag": "ampliseq",
@@ -229,13 +232,13 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-02-25T13:35:41.184197",
+      "last_updated": "2026-03-03T09:49:25.502337",
       "selected_module": "fastqc",
       "selected_plot": "Sequence Quality Histograms",
       "wf_tag": "nextflow/ampliseq"
     },
     {
-      "index": "e17a3941-fe4a-43f8-8ab6-6f6ed34bfeab",
+      "index": "d0862d8d-fb69-460f-bd81-11cce59fdfd4",
       "component_type": "multiqc",
       "title": "",
       "workflow_tag": "ampliseq",
@@ -258,13 +261,13 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-02-25T13:35:41.184201",
+      "last_updated": "2026-03-03T09:49:25.502340",
       "selected_module": "fastqc",
       "selected_plot": "Per Sequence GC Content",
       "wf_tag": "nextflow/ampliseq"
     },
     {
-      "index": "1d61d8eb-7c34-4fd3-9925-b8d7c126fcca",
+      "index": "9f181994-abd7-4641-bbbe-e3bf12bd688c",
       "component_type": "multiqc",
       "title": "",
       "workflow_tag": "ampliseq",
@@ -287,13 +290,13 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-02-25T13:35:41.184204",
+      "last_updated": "2026-03-03T09:49:25.502344",
       "selected_module": "fastqc",
       "selected_plot": "Adapter Content",
       "wf_tag": "nextflow/ampliseq"
     },
     {
-      "index": "51f5ac5f-9580-4ded-b10d-9b7fc53de1ff",
+      "index": "d934f4be-a4fb-4992-b79f-d435abec7c59",
       "component_type": "multiqc",
       "title": "",
       "workflow_tag": "ampliseq",
@@ -316,7 +319,7 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-02-25T13:35:41.184207",
+      "last_updated": "2026-03-03T09:49:25.502347",
       "selected_module": "cutadapt",
       "selected_plot": "Trimmed Sequence Lengths (5')",
       "wf_tag": "nextflow/ampliseq"
@@ -351,7 +354,7 @@
   ],
   "right_panel_layout_data": [
     {
-      "i": "box-8a810350-66a2-41cb-a441-66d3952566a2",
+      "i": "box-09b06d1c-ba14-4596-95cb-4fbcc6e02567",
       "x": 0,
       "y": 0,
       "w": 8,
@@ -366,7 +369,7 @@
       ]
     },
     {
-      "i": "box-821d4402-2453-4a57-9bff-3e974e7feca6",
+      "i": "box-cf59f34e-03ab-470f-a997-d663474e4eeb",
       "x": 0,
       "y": 5,
       "w": 8,
@@ -381,7 +384,7 @@
       ]
     },
     {
-      "i": "box-3cba95f0-436f-4724-b77b-549d70befc9a",
+      "i": "box-9968ab1d-aafe-44e8-b0ad-918627acbb98",
       "x": 0,
       "y": 9,
       "w": 8,
@@ -396,7 +399,7 @@
       ]
     },
     {
-      "i": "box-8683d0c6-3e05-4f81-bbf9-523fa631ecaa",
+      "i": "box-cae0b368-abcd-422b-ad72-c238f030f436",
       "x": 0,
       "y": 13,
       "w": 4,
@@ -411,7 +414,7 @@
       ]
     },
     {
-      "i": "box-e17a3941-fe4a-43f8-8ab6-6f6ed34bfeab",
+      "i": "box-d0862d8d-fb69-460f-bd81-11cce59fdfd4",
       "x": 4,
       "y": 13,
       "w": 4,
@@ -426,7 +429,7 @@
       ]
     },
     {
-      "i": "box-1d61d8eb-7c34-4fd3-9925-b8d7c126fcca",
+      "i": "box-9f181994-abd7-4641-bbbe-e3bf12bd688c",
       "x": 0,
       "y": 18,
       "w": 4,
@@ -441,7 +444,7 @@
       ]
     },
     {
-      "i": "box-51f5ac5f-9580-4ded-b10d-9b7fc53de1ff",
+      "i": "box-d934f4be-a4fb-4992-b79f-d435abec7c59",
       "x": 4,
       "y": 18,
       "w": 4,
@@ -492,7 +495,7 @@
     "viewers": []
   },
   "is_public": false,
-  "last_saved_ts": "2026-02-25 13:35:41",
+  "last_saved_ts": "2026-03-03 09:49:25",
   "project_id": {
     "$oid": "646b0f3c1e4a2d7f8e5b8ca2"
   },
