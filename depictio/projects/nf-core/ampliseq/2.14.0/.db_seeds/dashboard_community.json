@@ -8,13 +8,13 @@
   "dashboard_id": {
     "$oid": "646b0f3c1e4a2d7f8e5b8cb3"
   },
-  "version": 14,
+  "version": 15,
   "tmp_children_data": [],
   "stored_layout_data": [],
   "stored_children_data": [],
   "stored_metadata": [
     {
-      "index": "c5fcd939-755f-4156-a697-150a331152e1",
+      "index": "f8bcef51-cfd3-45d3-9529-12ad2c3bf0ea",
       "component_type": "card",
       "title": "Total Samples",
       "workflow_tag": "ampliseq",
@@ -37,7 +37,7 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-03-03T09:49:25.549176",
+      "last_updated": "2026-03-03T09:51:38.081097",
       "aggregation": "nunique",
       "column_name": "sample",
       "column_type": "object",
@@ -52,7 +52,7 @@
       "wf_tag": "nextflow/ampliseq"
     },
     {
-      "index": "eb61f712-89c4-4870-8275-5c1982d53d75",
+      "index": "a2799ee2-0d92-4290-8777-68b2b9bc09c5",
       "component_type": "card",
       "title": "Total Taxa",
       "workflow_tag": "ampliseq",
@@ -75,7 +75,7 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-03-03T09:49:25.549206",
+      "last_updated": "2026-03-03T09:51:38.081140",
       "aggregation": "nunique",
       "column_name": "taxonomy",
       "column_type": "object",
@@ -90,7 +90,7 @@
       "wf_tag": "nextflow/ampliseq"
     },
     {
-      "index": "f9621c40-7f3f-4f08-81e9-f467129fccd0",
+      "index": "0381e445-bb33-410d-9e02-ab415fed3edf",
       "component_type": "card",
       "title": "Mean Faith PD",
       "workflow_tag": "ampliseq",
@@ -113,7 +113,7 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-03-03T09:49:25.549220",
+      "last_updated": "2026-03-03T09:51:38.081148",
       "aggregation": "average",
       "column_name": "faith_pd",
       "column_type": "float64",
@@ -128,7 +128,7 @@
       "wf_tag": "nextflow/ampliseq"
     },
     {
-      "index": "ef1c0982-11f6-4bed-9cdd-f0956d3b4d64",
+      "index": "2571b466-2c50-427a-afbf-6ddadba59b57",
       "component_type": "card",
       "title": "Habitat Types",
       "workflow_tag": "ampliseq",
@@ -151,7 +151,7 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-03-03T09:49:25.549234",
+      "last_updated": "2026-03-03T09:51:38.081154",
       "aggregation": "nunique",
       "column_name": "habitat",
       "column_type": "object",
@@ -166,7 +166,7 @@
       "wf_tag": "nextflow/ampliseq"
     },
     {
-      "index": "25ced02f-cc0e-4ce0-9c0b-b28f124600af",
+      "index": "9d34a1e4-b699-4278-a3e8-cc08a92305b1",
       "component_type": "map",
       "title": "Sampling Locations",
       "workflow_tag": "ampliseq",
@@ -189,7 +189,7 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-03-03T09:49:25.549315",
+      "last_updated": "2026-03-03T09:51:38.081228",
       "map_type": "scatter_map",
       "lat_column": "latitude",
       "lon_column": "longitude",
@@ -239,7 +239,7 @@
       "wf_tag": "nextflow/ampliseq"
     },
     {
-      "index": "c38a63cc-74cf-46e2-8a3a-7d6bd174d745",
+      "index": "a5967432-a5ba-4df5-b28e-ba0b3aa093ff",
       "component_type": "figure",
       "title": "",
       "workflow_tag": "ampliseq",
@@ -262,7 +262,7 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-03-03T09:49:25.549615",
+      "last_updated": "2026-03-03T09:51:38.081257",
       "visu_type": "line",
       "dict_kwargs": {
         "color": "sample",
@@ -285,7 +285,7 @@
       "wf_tag": "nextflow/ampliseq"
     },
     {
-      "index": "8d42d568-323e-4495-a671-00ab07415398",
+      "index": "d6c36a7b-6b1d-419a-8cf4-80d9b91cc25e",
       "component_type": "figure",
       "title": "",
       "workflow_tag": "ampliseq",
@@ -308,21 +308,20 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-03-03T09:49:25.549642",
+      "last_updated": "2026-03-03T09:51:38.081289",
       "visu_type": "bar",
       "dict_kwargs": {
         "color": "habitat",
         "labels": {
           "faith_pd": "Faith's Phylogenetic Diversity",
-          "habitat": "Habitat",
-          "sample": "Sample"
+          "habitat": "Habitat"
         },
-        "title": "Alpha Diversity by Sample (Faith PD)",
-        "x": "sample",
+        "title": "Alpha Diversity by Habitat (Faith PD)",
+        "x": "habitat",
         "y": "faith_pd"
       },
       "mode": "code",
-      "code_content": "df_sorted = df.sort('sample')\nfig = px.bar(\n    df_sorted.to_pandas(),\n    x='sample', y='faith_pd', color='habitat',\n    color_discrete_map={'Riverwater': '#377EB8', 'Groundwater': '#4DAF4A', 'Sediment': '#E41A1C', 'Soil': '#FF7F00'},\n    title='Alpha Diversity by Sample (Faith PD)',\n    labels={'sample': 'Sample', 'faith_pd': \"Faith's Phylogenetic Diversity\", 'habitat': 'Habitat'}\n)\nfig.update_layout(xaxis={'categoryorder': 'category ascending'})",
+      "code_content": "pdf = df.to_pandas()\nstats = pdf.groupby('habitat')['faith_pd'].agg(['mean', 'std']).reset_index()\nfig = px.bar(\n    stats, x='habitat', y='mean', color='habitat',\n    error_y='std',\n    color_discrete_map={'Riverwater': '#377EB8', 'Groundwater': '#4DAF4A', 'Sediment': '#E41A1C', 'Soil': '#FF7F00'},\n    title='Alpha Diversity by Habitat (Faith PD)',\n    labels={'habitat': 'Habitat', 'mean': \"Faith's Phylogenetic Diversity\"}\n)\nfig.update_layout(xaxis={'categoryorder': 'category ascending'}, showlegend=False)",
       "displayed_data_count": 0,
       "total_data_count": 0,
       "was_sampled": false,
@@ -332,7 +331,7 @@
       "wf_tag": "nextflow/ampliseq"
     },
     {
-      "index": "24cc5c4f-87a6-4656-880d-0802ec397b9f",
+      "index": "2e518508-1af3-4891-95ef-0e56b24b5df9",
       "component_type": "figure",
       "title": "",
       "workflow_tag": "ampliseq",
@@ -355,7 +354,7 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-03-03T09:49:25.549653",
+      "last_updated": "2026-03-03T09:51:38.081296",
       "visu_type": "sunburst",
       "dict_kwargs": {
         "path": [
@@ -376,7 +375,7 @@
       "wf_tag": "nextflow/ampliseq"
     },
     {
-      "index": "9f7ecc9c-18de-45e2-a9f4-6f3c29f17a24",
+      "index": "e9fcc356-5576-4eb3-97af-c5ff9efd27cc",
       "component_type": "figure",
       "title": "",
       "workflow_tag": "ampliseq",
@@ -399,7 +398,7 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-03-03T09:49:25.549659",
+      "last_updated": "2026-03-03T09:51:38.081303",
       "visu_type": "bar",
       "dict_kwargs": {
         "color": "Phylum",
@@ -424,7 +423,7 @@
       "wf_tag": "nextflow/ampliseq"
     },
     {
-      "index": "654ea9df-6b7c-428b-aefd-0c3753b12575",
+      "index": "3c353c6e-d436-4808-9d90-129764f6d2ec",
       "component_type": "figure",
       "title": "",
       "workflow_tag": "ampliseq",
@@ -447,7 +446,7 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-03-03T09:49:25.549666",
+      "last_updated": "2026-03-03T09:51:38.081309",
       "visu_type": "bar",
       "dict_kwargs": {
         "barmode": "stack",
@@ -473,7 +472,7 @@
       "wf_tag": "nextflow/ampliseq"
     },
     {
-      "index": "9002c09e-7a97-45f8-b103-3e40a4fc5737",
+      "index": "cbda4f24-c99a-4ab1-a62e-33edaeaf0583",
       "component_type": "figure",
       "title": "Taxonomic Composition Heatmap",
       "workflow_tag": "ampliseq",
@@ -496,7 +495,7 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-03-03T09:49:25.549675",
+      "last_updated": "2026-03-03T09:51:38.081341",
       "visu_type": "heatmap",
       "dict_kwargs": {
         "cluster_cols": true,
@@ -521,7 +520,7 @@
       "wf_tag": "nextflow/ampliseq"
     },
     {
-      "index": "59609764-e8c9-4959-b4e7-38f2194f81c6",
+      "index": "a4448805-0be7-4d4c-85cf-18c32254ba6c",
       "component_type": "table",
       "title": "Sample Metadata",
       "workflow_tag": "ampliseq",
@@ -544,7 +543,7 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-03-03T09:49:25.549702",
+      "last_updated": "2026-03-03T09:51:38.081368",
       "columns": [],
       "page_size": 10,
       "sortable": true,
@@ -554,7 +553,7 @@
       "wf_tag": "nextflow/ampliseq"
     },
     {
-      "index": "cc95b31b-956f-4956-8512-c9656de451ab",
+      "index": "3b359d0e-2ddf-4c1c-8e20-f16d6182796a",
       "component_type": "table",
       "title": "Taxonomy Relative Abundance",
       "workflow_tag": "ampliseq",
@@ -577,7 +576,7 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-03-03T09:49:25.549717",
+      "last_updated": "2026-03-03T09:51:38.081391",
       "columns": [],
       "page_size": 10,
       "sortable": true,
@@ -587,7 +586,7 @@
       "wf_tag": "nextflow/ampliseq"
     },
     {
-      "index": "d8654df8-c372-4e2e-bcd5-dc43a925348f",
+      "index": "6f0ac899-2872-48ae-bcee-b756080e9318",
       "component_type": "interactive",
       "title": "Habitat Type",
       "workflow_tag": "ampliseq",
@@ -610,7 +609,7 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-03-03T09:49:25.549731",
+      "last_updated": "2026-03-03T09:51:38.081402",
       "interactive_component_type": "MultiSelect",
       "column_name": "habitat",
       "column_type": "object",
@@ -623,7 +622,7 @@
       "wf_tag": "nextflow/ampliseq"
     },
     {
-      "index": "a4ab721e-c396-4306-bb1d-1146ec581351",
+      "index": "4b81f1fb-c73d-4bf9-9b9e-3f6955e8b5ff",
       "component_type": "interactive",
       "title": "Sample ID",
       "workflow_tag": "ampliseq",
@@ -646,7 +645,7 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-03-03T09:49:25.549742",
+      "last_updated": "2026-03-03T09:51:38.081408",
       "interactive_component_type": "MultiSelect",
       "column_name": "sample",
       "column_type": "object",
@@ -659,7 +658,7 @@
       "wf_tag": "nextflow/ampliseq"
     },
     {
-      "index": "fa6b356e-6e23-4b55-96bb-78e2dc0f2ae6",
+      "index": "4600920a-3735-4c2e-8c9f-599ccdb3a57a",
       "component_type": "interactive",
       "title": "Kingdom",
       "workflow_tag": "ampliseq",
@@ -682,7 +681,7 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-03-03T09:49:25.549748",
+      "last_updated": "2026-03-03T09:51:38.081414",
       "interactive_component_type": "MultiSelect",
       "column_name": "Kingdom",
       "column_type": "object",
@@ -695,7 +694,7 @@
       "wf_tag": "nextflow/ampliseq"
     },
     {
-      "index": "86dcfa9e-ea84-49ee-9986-285600311c87",
+      "index": "cdbcdc81-0ce5-4417-9bc6-431372166868",
       "component_type": "interactive",
       "title": "Phylum",
       "workflow_tag": "ampliseq",
@@ -718,7 +717,7 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-03-03T09:49:25.549765",
+      "last_updated": "2026-03-03T09:51:38.081420",
       "interactive_component_type": "MultiSelect",
       "column_name": "Phylum",
       "column_type": "object",
@@ -731,7 +730,7 @@
       "wf_tag": "nextflow/ampliseq"
     },
     {
-      "index": "f8b059a8-bab6-460e-af3e-3f67514bbd0f",
+      "index": "b3a493f9-9da5-43c3-920f-adee67f633c1",
       "component_type": "interactive",
       "title": "Sampling Period",
       "workflow_tag": "ampliseq",
@@ -754,7 +753,7 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-03-03T09:49:25.549771",
+      "last_updated": "2026-03-03T09:51:38.081426",
       "interactive_component_type": "DateRangePicker",
       "column_name": "sampling_date",
       "column_type": "datetime",
@@ -790,7 +789,7 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-03-03T09:49:25.549776",
+      "last_updated": "2026-03-03T09:51:38.081431",
       "interactive_component_type": "RangeSlider",
       "column_name": "faith_pd",
       "column_type": "float64",
@@ -826,7 +825,7 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-03-03T09:49:25.549781",
+      "last_updated": "2026-03-03T09:51:38.081436",
       "interactive_component_type": "RangeSlider",
       "column_name": "rel_abundance",
       "column_type": "float64",
@@ -842,7 +841,7 @@
   "stored_edit_dashboard_mode_button": [],
   "left_panel_layout_data": [
     {
-      "i": "box-d8654df8-c372-4e2e-bcd5-dc43a925348f",
+      "i": "box-6f0ac899-2872-48ae-bcee-b756080e9318",
       "x": 0,
       "y": 3,
       "w": 1,
@@ -850,7 +849,7 @@
       "static": false
     },
     {
-      "i": "box-a4ab721e-c396-4306-bb1d-1146ec581351",
+      "i": "box-4b81f1fb-c73d-4bf9-9b9e-3f6955e8b5ff",
       "x": 0,
       "y": 5,
       "w": 1,
@@ -858,7 +857,7 @@
       "static": false
     },
     {
-      "i": "box-fa6b356e-6e23-4b55-96bb-78e2dc0f2ae6",
+      "i": "box-4600920a-3735-4c2e-8c9f-599ccdb3a57a",
       "x": 0,
       "y": 8,
       "w": 1,
@@ -866,7 +865,7 @@
       "static": false
     },
     {
-      "i": "box-86dcfa9e-ea84-49ee-9986-285600311c87",
+      "i": "box-cdbcdc81-0ce5-4417-9bc6-431372166868",
       "x": 0,
       "y": 10,
       "w": 1,
@@ -874,7 +873,7 @@
       "static": false
     },
     {
-      "i": "box-f8b059a8-bab6-460e-af3e-3f67514bbd0f",
+      "i": "box-b3a493f9-9da5-43c3-920f-adee67f633c1",
       "x": 0,
       "y": 0,
       "w": 1,
@@ -900,7 +899,7 @@
   ],
   "right_panel_layout_data": [
     {
-      "i": "box-c5fcd939-755f-4156-a697-150a331152e1",
+      "i": "box-f8bcef51-cfd3-45d3-9529-12ad2c3bf0ea",
       "x": 0,
       "y": 0,
       "w": 2,
@@ -908,7 +907,7 @@
       "static": true
     },
     {
-      "i": "box-eb61f712-89c4-4870-8275-5c1982d53d75",
+      "i": "box-a2799ee2-0d92-4290-8777-68b2b9bc09c5",
       "x": 2,
       "y": 0,
       "w": 2,
@@ -916,7 +915,7 @@
       "static": true
     },
     {
-      "i": "box-f9621c40-7f3f-4f08-81e9-f467129fccd0",
+      "i": "box-0381e445-bb33-410d-9e02-ab415fed3edf",
       "x": 4,
       "y": 0,
       "w": 2,
@@ -924,7 +923,7 @@
       "static": true
     },
     {
-      "i": "box-ef1c0982-11f6-4bed-9cdd-f0956d3b4d64",
+      "i": "box-2571b466-2c50-427a-afbf-6ddadba59b57",
       "x": 6,
       "y": 0,
       "w": 2,
@@ -932,7 +931,7 @@
       "static": true
     },
     {
-      "i": "box-25ced02f-cc0e-4ce0-9c0b-b28f124600af",
+      "i": "box-9d34a1e4-b699-4278-a3e8-cc08a92305b1",
       "x": 0,
       "y": 2,
       "w": 8,
@@ -947,7 +946,7 @@
       ]
     },
     {
-      "i": "box-c38a63cc-74cf-46e2-8a3a-7d6bd174d745",
+      "i": "box-a5967432-a5ba-4df5-b28e-ba0b3aa093ff",
       "x": 0,
       "y": 8,
       "w": 8,
@@ -962,7 +961,7 @@
       ]
     },
     {
-      "i": "box-8d42d568-323e-4495-a671-00ab07415398",
+      "i": "box-d6c36a7b-6b1d-419a-8cf4-80d9b91cc25e",
       "x": 0,
       "y": 13,
       "w": 4,
@@ -977,7 +976,7 @@
       ]
     },
     {
-      "i": "box-24cc5c4f-87a6-4656-880d-0802ec397b9f",
+      "i": "box-2e518508-1af3-4891-95ef-0e56b24b5df9",
       "x": 4,
       "y": 13,
       "w": 4,
@@ -992,7 +991,7 @@
       ]
     },
     {
-      "i": "box-9f7ecc9c-18de-45e2-a9f4-6f3c29f17a24",
+      "i": "box-e9fcc356-5576-4eb3-97af-c5ff9efd27cc",
       "x": 0,
       "y": 18,
       "w": 8,
@@ -1007,7 +1006,7 @@
       ]
     },
     {
-      "i": "box-654ea9df-6b7c-428b-aefd-0c3753b12575",
+      "i": "box-3c353c6e-d436-4808-9d90-129764f6d2ec",
       "x": 0,
       "y": 30,
       "w": 8,
@@ -1022,7 +1021,7 @@
       ]
     },
     {
-      "i": "box-9002c09e-7a97-45f8-b103-3e40a4fc5737",
+      "i": "box-cbda4f24-c99a-4ab1-a62e-33edaeaf0583",
       "x": 0,
       "y": 38,
       "w": 8,
@@ -1037,7 +1036,7 @@
       ]
     },
     {
-      "i": "box-59609764-e8c9-4959-b4e7-38f2194f81c6",
+      "i": "box-a4448805-0be7-4d4c-85cf-18c32254ba6c",
       "x": 0,
       "y": 51,
       "w": 8,
@@ -1052,7 +1051,7 @@
       ]
     },
     {
-      "i": "box-cc95b31b-956f-4956-8512-c9656de451ab",
+      "i": "box-3b359d0e-2ddf-4c1c-8e20-f16d6182796a",
       "x": 0,
       "y": 57,
       "w": 8,
@@ -1103,7 +1102,7 @@
     "viewers": []
   },
   "is_public": false,
-  "last_saved_ts": "2026-03-03 09:49:25",
+  "last_saved_ts": "2026-03-03 09:51:38",
   "project_id": {
     "$oid": "646b0f3c1e4a2d7f8e5b8ca2"
   },

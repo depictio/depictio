@@ -316,21 +316,21 @@ tabs:
         visu_type: bar
         # --- optional ---
         figure_params:
-            x: sample
+            x: habitat
             y: faith_pd
             color: habitat
-            title: Alpha Diversity by Sample (Faith PD)
+            title: "Alpha Diversity by Habitat (Faith PD)"
             labels:
-                sample: Sample
-                faith_pd: "Faith's Phylogenetic Diversity"
                 habitat: Habitat
+                faith_pd: "Faith's Phylogenetic Diversity"
         mode: code
-        code_content: "df_sorted = df.sort('sample')\nfig = px.bar(\n    df_sorted.to_pandas(),\n\
-            \    x='sample', y='faith_pd', color='habitat',\n    color_discrete_map={'Riverwater':\
+        code_content: "pdf = df.to_pandas()\nstats = pdf.groupby('habitat')['faith_pd'].agg(['mean',\
+            \ 'std']).reset_index()\nfig = px.bar(\n    stats, x='habitat', y='mean',\
+            \ color='habitat',\n    error_y='std',\n    color_discrete_map={'Riverwater':\
             \ '#377EB8', 'Groundwater': '#4DAF4A', 'Sediment': '#E41A1C', 'Soil':\
-            \ '#FF7F00'},\n    title='Alpha Diversity by Sample (Faith PD)',\n    labels={'sample':\
-            \ 'Sample', 'faith_pd': \"Faith's Phylogenetic Diversity\", 'habitat':\
-            \ 'Habitat'}\n)\nfig.update_layout(xaxis={'categoryorder': 'category ascending'})"
+            \ '#FF7F00'},\n    title='Alpha Diversity by Habitat (Faith PD)',\n   \
+            \ labels={'habitat': 'Habitat', 'mean': \"Faith's Phylogenetic Diversity\"}\n\
+            )\nfig.update_layout(xaxis={'categoryorder': 'category ascending'}, showlegend=False)"
         selection_enabled: false
         # --- generated on export ---
         tag: figure-bar_sample_faith_pd-5b8018

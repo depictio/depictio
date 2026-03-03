@@ -8,7 +8,7 @@
   "dashboard_id": {
     "$oid": "646b0f3c1e4a2d7f8e5b8ca2"
   },
-  "version": 15,
+  "version": 16,
   "tmp_children_data": [],
   "stored_layout_data": [],
   "stored_children_data": [],
@@ -37,7 +37,7 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-03-03T09:49:25.502253",
+      "last_updated": "2026-03-03T09:51:38.040337",
       "interactive_component_type": "DateRangePicker",
       "column_name": "sampling_date",
       "column_type": "datetime",
@@ -73,7 +73,7 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-03-03T09:49:25.502310",
+      "last_updated": "2026-03-03T09:51:38.040371",
       "interactive_component_type": "MultiSelect",
       "column_name": "habitat",
       "column_type": "object",
@@ -109,7 +109,7 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-03-03T09:49:25.502318",
+      "last_updated": "2026-03-03T09:51:38.040378",
       "interactive_component_type": "MultiSelect",
       "column_name": "sample",
       "column_type": "object",
@@ -122,7 +122,7 @@
       "wf_tag": "nextflow/ampliseq"
     },
     {
-      "index": "09b06d1c-ba14-4596-95cb-4fbcc6e02567",
+      "index": "b404540d-9d6b-41f2-b90d-1378ed6ca81a",
       "component_type": "multiqc",
       "title": "",
       "workflow_tag": "ampliseq",
@@ -145,13 +145,13 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-03-03T09:49:25.502324",
+      "last_updated": "2026-03-03T09:51:38.040385",
       "selected_module": "general_stats",
       "selected_plot": "general_stats",
       "wf_tag": "nextflow/ampliseq"
     },
     {
-      "index": "cf59f34e-03ab-470f-a997-d663474e4eeb",
+      "index": "b7feee92-b6ed-4dbe-a5d0-b558b206a70f",
       "component_type": "multiqc",
       "title": "",
       "workflow_tag": "ampliseq",
@@ -174,13 +174,13 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-03-03T09:49:25.502329",
+      "last_updated": "2026-03-03T09:51:38.040390",
       "selected_module": "cutadapt",
       "selected_plot": "Filtered Reads",
       "wf_tag": "nextflow/ampliseq"
     },
     {
-      "index": "9968ab1d-aafe-44e8-b0ad-918627acbb98",
+      "index": "55555b2d-ca50-42c0-ac1a-38ab51b3c907",
       "component_type": "multiqc",
       "title": "",
       "workflow_tag": "ampliseq",
@@ -203,13 +203,13 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-03-03T09:49:25.502333",
+      "last_updated": "2026-03-03T09:51:38.040394",
       "selected_module": "fastqc",
       "selected_plot": "Sequence Counts",
       "wf_tag": "nextflow/ampliseq"
     },
     {
-      "index": "cae0b368-abcd-422b-ad72-c238f030f436",
+      "index": "dccf9656-8118-4970-842d-2e2e24201476",
       "component_type": "multiqc",
       "title": "",
       "workflow_tag": "ampliseq",
@@ -232,13 +232,13 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-03-03T09:49:25.502337",
+      "last_updated": "2026-03-03T09:51:38.040398",
       "selected_module": "fastqc",
       "selected_plot": "Sequence Quality Histograms",
       "wf_tag": "nextflow/ampliseq"
     },
     {
-      "index": "d0862d8d-fb69-460f-bd81-11cce59fdfd4",
+      "index": "cb594189-2c42-4cac-b981-e316e6f98d40",
       "component_type": "multiqc",
       "title": "",
       "workflow_tag": "ampliseq",
@@ -261,13 +261,13 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-03-03T09:49:25.502340",
+      "last_updated": "2026-03-03T09:51:38.040401",
       "selected_module": "fastqc",
       "selected_plot": "Per Sequence GC Content",
       "wf_tag": "nextflow/ampliseq"
     },
     {
-      "index": "9f181994-abd7-4641-bbbe-e3bf12bd688c",
+      "index": "11ad4be8-9c02-48e1-96de-3e8a7443f61e",
       "component_type": "multiqc",
       "title": "",
       "workflow_tag": "ampliseq",
@@ -290,13 +290,13 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-03-03T09:49:25.502344",
+      "last_updated": "2026-03-03T09:51:38.040405",
       "selected_module": "fastqc",
       "selected_plot": "Adapter Content",
       "wf_tag": "nextflow/ampliseq"
     },
     {
-      "index": "d934f4be-a4fb-4992-b79f-d435abec7c59",
+      "index": "a0fed4a1-3492-47f6-a9b7-9be350439c10",
       "component_type": "multiqc",
       "title": "",
       "workflow_tag": "ampliseq",
@@ -319,7 +319,7 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-03-03T09:49:25.502347",
+      "last_updated": "2026-03-03T09:51:38.040409",
       "selected_module": "cutadapt",
       "selected_plot": "Trimmed Sequence Lengths (5')",
       "wf_tag": "nextflow/ampliseq"
@@ -354,7 +354,7 @@
   ],
   "right_panel_layout_data": [
     {
-      "i": "box-09b06d1c-ba14-4596-95cb-4fbcc6e02567",
+      "i": "box-b404540d-9d6b-41f2-b90d-1378ed6ca81a",
       "x": 0,
       "y": 0,
       "w": 8,
@@ -369,7 +369,7 @@
       ]
     },
     {
-      "i": "box-cf59f34e-03ab-470f-a997-d663474e4eeb",
+      "i": "box-b7feee92-b6ed-4dbe-a5d0-b558b206a70f",
       "x": 0,
       "y": 5,
       "w": 8,
@@ -384,7 +384,7 @@
       ]
     },
     {
-      "i": "box-9968ab1d-aafe-44e8-b0ad-918627acbb98",
+      "i": "box-55555b2d-ca50-42c0-ac1a-38ab51b3c907",
       "x": 0,
       "y": 9,
       "w": 8,
@@ -399,7 +399,7 @@
       ]
     },
     {
-      "i": "box-cae0b368-abcd-422b-ad72-c238f030f436",
+      "i": "box-dccf9656-8118-4970-842d-2e2e24201476",
       "x": 0,
       "y": 13,
       "w": 4,
@@ -414,7 +414,7 @@
       ]
     },
     {
-      "i": "box-d0862d8d-fb69-460f-bd81-11cce59fdfd4",
+      "i": "box-cb594189-2c42-4cac-b981-e316e6f98d40",
       "x": 4,
       "y": 13,
       "w": 4,
@@ -429,7 +429,7 @@
       ]
     },
     {
-      "i": "box-9f181994-abd7-4641-bbbe-e3bf12bd688c",
+      "i": "box-11ad4be8-9c02-48e1-96de-3e8a7443f61e",
       "x": 0,
       "y": 18,
       "w": 4,
@@ -444,7 +444,7 @@
       ]
     },
     {
-      "i": "box-d934f4be-a4fb-4992-b79f-d435abec7c59",
+      "i": "box-a0fed4a1-3492-47f6-a9b7-9be350439c10",
       "x": 4,
       "y": 18,
       "w": 4,
@@ -495,7 +495,7 @@
     "viewers": []
   },
   "is_public": false,
-  "last_saved_ts": "2026-03-03 09:49:25",
+  "last_saved_ts": "2026-03-03 09:51:38",
   "project_id": {
     "$oid": "646b0f3c1e4a2d7f8e5b8ca2"
   },
