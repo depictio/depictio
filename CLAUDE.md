@@ -71,6 +71,12 @@ Management (`/dashboards`) | Viewer (`/dashboard/{id}`) | Editor (`/dashboard/{i
 - Component-based composite targeting via `.react-grid-item`
 - **Detail**: see `depictio/api/v1/endpoints/utils_endpoints/CLAUDE.md`
 
+### Dashboard YAML ↔ JSON Seeds
+- Fresh deployments load from `.db_seeds/*.json` files (via `db_init.py`), **not** from YAML
+- **After modifying dashboard YAML**: regenerate the corresponding `.db_seeds/*.json` or new components won't appear in fresh deployments
+- Path: `depictio/projects/{project}/dashboards/*.yaml` → `.db_seeds/*.json`
+- Multi-tab dashboards: main tab = `dashboard_multiqc.json`, child tabs = separate JSON files
+
 ### Data Flow
 CLI ingests data → Delta/S3/MongoDB → API serves → Dash renders
 
