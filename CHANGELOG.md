@@ -6,13 +6,30 @@
 
 
 <details>
-<summary>Click to expand the changelog for 0.8.0</summary>
+<summary>Click to expand the changelog for 0.8.1-b1</summary>
 
 ### Changes 📜
 
+#### New Features ✨
+
+* feat: add description to taxonomy heatmap component [1d64cb53]
+
+#### Bug Fixes 🐛
+
+* fix: pass heatmap title/description through figure-trigger store and improve table rendering [f308f24a]
+* fix: prevent data tripling in K8s multi-worker init and fix Faith PD axis [5b943477]
+
 #### Other Changes 📝
 
-* Bump version: 0.8.0-b6 → 0.8.0 [2e9ba9e8]
+* Bump version: 0.8.0 → 0.8.1-b1 [868cc86c]
+* revert: restore screenshot files to previous state [0981bbfb]
+* Fix tests for retry logic in api_call functions [be8ccb27]
+* Fix random /auth page landing in public mode [9523b6ec]
+* Fix burger icon out of sync on single-tab dashboard sidebar collapse [e6ccf0c9]
+* Fix fresh install auth redirect dead-end [a53d090d]
+* Add stable tag auto-update to bump-with-helm.sh [9bee88ee]
+* Update CHANGELOG.md for v0.8.0 [50545b5d]
+* Bump version: 0.8.0-b6 → 0.8.0 [57b7beef]
 * Update CHANGELOG.md for v0.8.0-b6 [e0f531a9]
 * Bump version: 0.8.0-b5 → 0.8.0-b6 [3b22ae23]
 
@@ -23,34 +40,7 @@
 
 For more details, please refer to the [documentation](https://depictio.github.io/depictio-docs/)
 
-ecessary blank line in deploy workflow [9542c00e]
-
-#### Improvements 🚀
-
-* refactor: update CLI and user models for improved configuration handling [034f9d26]
-* refactor: final ty compliant code [fd610250]
-* refactor: Refactor code structure for improved readability and maintainability [3f1f1b9b]
-* refactor: final ty compliant code [7fa61071]
-* refactor: Refactor code structure for improved readability and maintainability [dfeaf1f6]
-* refactor: Refactor projectwise user management layout to support user-only permissions [e6d995fb]
-* refactor: update AuthConfig paths to use default_factory for dynamic directory resolution [80900b40]
-* refactor: update dashboard owner display and improve spacing in profile layout [dde75143]
-* perf: optimize join processing and data loading in interactive components [ca01b4b3]
-* refactor: Update CI workflow and remove unused imports and environment variable for unauthenticated mode [9a75da3a]
-* refactor: Comment out unused URL error checks in dashboard health check [18433662]
-* refactor: Improve screenshot functionality by logging token retrieval and user data [336da078]
-* perf: optimize join processing and data loading in interactive components [b95cb643]
-* refactor: Refactor initialization process and streamline internal API key management [160c9fe2]
-* refactor: update AuthConfig to rename internal_api_key to internal_api_key_env; adjust related tests and logging for clarity [303299a9]
-* refactor: update AuthConfig to remove internal_api_key_env and adjust internal_api_key handling; improve logging in user endpoints [3228cc95]
-* refactor: update logging statements to use debug level for improved log management [5303adef]
-* refactor: rename list_registered_files to get_deltatable for clarity in endpoint functionality [bd4f5a5a]
-* refactor: streamline internal API key management with computed field and environment variable support [ab426519]
-* refactor: comment out verbose logging statements across multiple modules for improved clarity [edd44b51]
-* refactor: comment out verbose logging statements in token and user management modules [0e7a9b12]
-* refactor: further reduce logging verbosity [3ae00314]
-* refactor: Refactor logging statements across multiple modules to reduce verbosity [4e408f36]
-* refactor: update Helm chart testing workflow to improve inter-service connectivity checks and streamline service verification [21cc5ee7]
+ectivity checks and streamline service verification [21cc5ee7]
 * refactor: replace add_token function with _add_token for token creation in create_default_token [82e0a946]
 * refactor: simplify token validity tests by removing logger patching [ed4d3c04]
 * refactor: clean up app.py and enhance run scripts for development mode [2e0d7899]
