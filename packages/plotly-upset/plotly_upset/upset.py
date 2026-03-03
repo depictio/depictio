@@ -7,6 +7,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
+from numpy.typing import NDArray
 
 from plotly_upset.annotations import MaterializedCategoricalTrack, MaterializedTrack, UpSetAnnotation
 from plotly_upset.intersections import (
@@ -18,7 +19,7 @@ from plotly_upset.intersections import (
 )
 from plotly_upset.layout import UpSetGridLayout, compute_upset_layout, create_figure
 from plotly_upset.matrix import dot_matrix_traces
-from plotly_upset.utils import FONT_FAMILY, validate_binary_data
+from plotly_upset.utils import FONT_FAMILY, generate_colors, validate_binary_data
 
 
 class UpSetPlot:
@@ -63,7 +64,12 @@ class UpSetPlot:
     color_intersections_by:
         How to color intersection bars. ``None`` uses a single *color*;
         ``"set"`` colors degree-1 bars by their set color and multi-set
-        bars with a neutral dark color.
+        bars with a neutral dark color; ``"degree"`` assigns a color per
+        degree level (one legend entry per degree).
+    degree_colors:
+        Custom color mapping for degree-based coloring, e.g.
+        ``{1: "#E41A1C", 2: "#377EB8", 3: "#4DAF4A"}``. Only used when
+        ``color_intersections_by="degree"``. Auto-generated when ``None``.
     show_values:
         If ``True``, display intersection count labels on top of bars.
     dot_size:
@@ -93,6 +99,7 @@ class UpSetPlot:
         inactive_color: str = "#C2C2C2",
         set_colors: dict[str, str] | list[str] | None = None,
         color_intersections_by: str | None = None,
+        degree_colors: dict[int, str] | None = None,
         show_values: bool = False,
         dot_size: int = 12,
         width: int = 900,
@@ -114,6 +121,7 @@ class UpSetPlot:
         self.color = color
         self.inactive_color = inactive_color
         self.color_intersections_by = color_intersections_by
+        self.degree_colors = degree_colors
         self.show_values = show_values
         self.dot_size = dot_size
         self.width = width
@@ -167,6 +175,100 @@ class UpSetPlot:
                     binary_df = binary_df.join(data[extra_cols], how="left")
 
         return cls(binary_df, **kwargs)
+
+    @classmethod
+    def from_dataframe(
+        cls,
+        df: Any,
+        *,
+        set_columns: list[str] | None = None,
+        annotations: list[str] | dict[str, str | dict[str, Any]] | None = None,
+        **kwargs: Any,
+    ) -> UpSetPlot:
+        """Convenience constructor from a single DataFrame containing both
+        binary set columns and annotation columns.
+
+        Parameters
+        ----------
+        df:
+            DataFrame containing binary set columns and (optionally)
+            annotation columns.
+        set_columns:
+            Explicit list of binary (0/1) columns to use as sets.
+            If ``None``, auto-detects binary columns.
+        annotations:
+            Columns to use as annotation tracks. Accepts:
+
+            - ``list[str]``: column names, type auto-detected.
+            - ``dict[str, str]``: maps track name to column name
+              (type auto-detected).
+            - ``dict[str, dict]``: maps track name to a full spec dict
+              (keys: ``"column"``, ``"type"``, ``"agg"``, ``"color"``,
+              ``"size"``, ``"stack_columns"``).
+            - ``None``: **auto-detect** — all non-set, non-binary columns
+              become annotation tracks.
+        **kwargs:
+            Forwarded to ``UpSetPlot.__init__()`` (e.g. ``sort_by``,
+            ``set_colors``, ``color_intersections_by``, ``show_values``,
+            ``title``, ``width``, ``height``, …).
+        """
+        pdf = cls._ensure_pandas(df)
+
+        # Resolve set columns
+        if set_columns is not None:
+            missing = [c for c in set_columns if c not in pdf.columns]
+            if missing:
+                raise ValueError(f"Columns not found in data: {missing}")
+            resolved_sets = list(set_columns)
+        else:
+            resolved_sets = []
+            for col in pdf.columns:
+                vals = pdf[col].dropna().unique()
+                if len(vals) > 0 and set(vals).issubset({0, 1, 0.0, 1.0, True, False}):
+                    resolved_sets.append(col)
+            if not resolved_sets:
+                raise ValueError("No binary (0/1) columns found. Specify set_columns explicitly.")
+
+        # Resolve annotation specs
+        anno_specs: dict[str, str | dict[str, Any]] = {}
+
+        if annotations is None:
+            # Auto-detect: every non-set column becomes an annotation
+            for col in pdf.columns:
+                if col not in resolved_sets:
+                    anno_specs[col] = col  # str spec → auto-detect type
+        elif isinstance(annotations, list):
+            for col in annotations:
+                anno_specs[col] = col
+        elif isinstance(annotations, dict):
+            anno_specs = annotations
+        else:
+            raise TypeError(f"annotations must be list, dict, or None, got {type(annotations).__name__}")
+
+        # Build UpSetAnnotation if there are annotation columns
+        annotation_obj: UpSetAnnotation | None = None
+        if anno_specs:
+            annotation_obj = UpSetAnnotation(data=pdf, **anno_specs)
+
+        return cls(
+            pdf,
+            set_columns=resolved_sets,
+            annotation=annotation_obj,
+            **kwargs,
+        )
+
+    @staticmethod
+    def _ensure_pandas(data: Any) -> pd.DataFrame:
+        """Convert to pandas DataFrame."""
+        if isinstance(data, pd.DataFrame):
+            return data
+        try:
+            import polars as pl
+        except ImportError:
+            pl = None  # type: ignore[assignment]
+        if pl is not None and isinstance(data, pl.DataFrame):
+            return data.to_pandas()
+        raise TypeError(f"Expected pandas or polars DataFrame, got {type(data).__name__}")
 
     def to_plotly(self) -> go.Figure:
         """Build and return the complete Plotly ``Figure``."""
@@ -237,25 +339,32 @@ class UpSetPlot:
     # ------------------------------------------------------------------
 
     def _compute_bar_colors(self) -> str | list[str]:
-        """Compute per-bar colors for intersection bars."""
+        """Compute per-bar colors for intersection bars (used by 'set' mode)."""
         assert self._result is not None
 
-        if self.color_intersections_by is None or self._set_colors_map is None:
+        if self.color_intersections_by != "set" or self._set_colors_map is None:
             return self.color
 
-        if self.color_intersections_by == "set":
-            bar_colors: list[str] = []
-            for pattern in self._result.patterns:
-                active_sets = [i for i, b in enumerate(pattern) if b == 1]
-                if len(active_sets) == 1:
-                    bar_colors.append(self._set_colors_map.get(self._set_names[active_sets[0]], self.color))
-                elif len(active_sets) == 0:
-                    bar_colors.append(self.inactive_color)
-                else:
-                    bar_colors.append("#333333")
-            return bar_colors
+        bar_colors: list[str] = []
+        for pattern in self._result.patterns:
+            active_sets = [i for i, b in enumerate(pattern) if b == 1]
+            if len(active_sets) == 1:
+                bar_colors.append(self._set_colors_map.get(self._set_names[active_sets[0]], self.color))
+            elif len(active_sets) == 0:
+                bar_colors.append(self.inactive_color)
+            else:
+                bar_colors.append("#333333")
+        return bar_colors
 
-        raise ValueError(f"Unknown color_intersections_by: {self.color_intersections_by!r}. Use None or 'set'.")
+    def _get_degree_color_map(self) -> dict[int, str]:
+        """Build degree → color mapping for degree-based coloring."""
+        assert self._result is not None
+        if self.degree_colors is not None:
+            return self.degree_colors
+        # Auto-generate: one color per unique degree, sorted descending
+        unique_degrees = sorted(set(int(d) for d in self._result.degrees), reverse=True)
+        palette = generate_colors(len(unique_degrees))
+        return dict(zip(unique_degrees, palette))
 
     # ------------------------------------------------------------------
     # Trace builders
@@ -266,27 +375,65 @@ class UpSetPlot:
         assert self._result is not None
         positions = np.arange(len(self._result.patterns), dtype=float)
         cell = layout.intersection_bar_cell
-
-        bar_colors = self._compute_bar_colors()
         sizes = self._result.sizes.tolist()
 
-        bar_kwargs: dict[str, Any] = {
-            "x": positions.tolist(),
-            "y": sizes,
-            "marker_color": bar_colors,
-            "marker_line_color": "#555555",
-            "marker_line_width": 0.5,
-            "name": "Intersection Size",
-            "showlegend": False,
-            "hovertemplate": "Size: %{y}<extra></extra>",
-        }
+        if self.color_intersections_by == "degree":
+            self._add_degree_colored_bars(fig, cell, positions, sizes)
+        else:
+            bar_colors = self._compute_bar_colors()
+            bar_kwargs: dict[str, Any] = {
+                "x": positions.tolist(),
+                "y": sizes,
+                "marker_color": bar_colors,
+                "marker_line_color": "#555555",
+                "marker_line_width": 0.5,
+                "name": "Intersection Size",
+                "showlegend": False,
+                "hovertemplate": "Size: %{y}<extra></extra>",
+            }
+            if self.show_values:
+                bar_kwargs["text"] = [str(s) for s in sizes]
+                bar_kwargs["textposition"] = "outside"
+                bar_kwargs["textfont"] = {"size": 9, "family": FONT_FAMILY}
+            fig.add_trace(go.Bar(**bar_kwargs), row=cell[0], col=cell[1])
 
-        if self.show_values:
-            bar_kwargs["text"] = [str(s) for s in sizes]
-            bar_kwargs["textposition"] = "outside"
-            bar_kwargs["textfont"] = {"size": 9, "family": FONT_FAMILY}
+    def _add_degree_colored_bars(
+        self,
+        fig: go.Figure,
+        cell: tuple[int, int],
+        positions: NDArray[np.floating],
+        sizes: list[int],
+    ) -> None:
+        """Emit one go.Bar per degree group with legend entries."""
+        assert self._result is not None
+        degree_map = self._get_degree_color_map()
+        degrees = [int(d) for d in self._result.degrees]
 
-        fig.add_trace(go.Bar(**bar_kwargs), row=cell[0], col=cell[1])
+        # Group indices by degree (sorted descending so highest degree appears first in legend)
+        unique_degrees = sorted(set(degrees), reverse=True)
+        for deg in unique_degrees:
+            mask = [i for i, d in enumerate(degrees) if d == deg]
+            x_vals = [float(positions[i]) for i in mask]
+            y_vals = [sizes[i] for i in mask]
+            color = degree_map.get(deg, "#888888")
+
+            bar_kwargs: dict[str, Any] = {
+                "x": x_vals,
+                "y": y_vals,
+                "marker_color": color,
+                "marker_line_color": "#555555",
+                "marker_line_width": 0.5,
+                "name": str(deg),
+                "legendgroup": "degree",
+                "legendgrouptitle": {"text": "Nb. of associations"},
+                "showlegend": True,
+                "hovertemplate": f"Degree {deg}<br>Size: %{{y}}<extra></extra>",
+            }
+            if self.show_values:
+                bar_kwargs["text"] = [str(s) for s in y_vals]
+                bar_kwargs["textposition"] = "outside"
+                bar_kwargs["textfont"] = {"size": 9, "family": FONT_FAMILY}
+            fig.add_trace(go.Bar(**bar_kwargs), row=cell[0], col=cell[1])
 
     def _add_dot_matrix(self, fig: go.Figure, layout: UpSetGridLayout) -> None:
         """Add the dot-matrix indicator panel."""

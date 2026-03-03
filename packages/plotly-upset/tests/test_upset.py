@@ -111,6 +111,51 @@ class TestUpSetPlotFromSets:
         assert isinstance(fig, go.Figure)
 
 
+class TestUpSetPlotFromDataFrame:
+    def test_auto_detect_annotations(self, annotated_df: pd.DataFrame) -> None:
+        """All non-set columns auto-detected as annotations."""
+        plot = UpSetPlot.from_dataframe(annotated_df)
+        fig = plot.to_plotly()
+        assert isinstance(fig, go.Figure)
+        # score, quality, category should be detected → 3 annotation tracks
+        assert len(fig.data) > 3
+
+    def test_explicit_annotation_list(self, annotated_df: pd.DataFrame) -> None:
+        plot = UpSetPlot.from_dataframe(annotated_df, annotations=["score"])
+        fig = plot.to_plotly()
+        assert isinstance(fig, go.Figure)
+
+    def test_explicit_annotation_dict(self, annotated_df: pd.DataFrame) -> None:
+        plot = UpSetPlot.from_dataframe(
+            annotated_df,
+            annotations={
+                "quality_bar": {"column": "quality", "type": "bar", "agg": "median"},
+                "category": "category",
+            },
+        )
+        fig = plot.to_plotly()
+        assert isinstance(fig, go.Figure)
+
+    def test_no_annotations(self, annotated_df: pd.DataFrame) -> None:
+        """Empty list means no annotations."""
+        plot = UpSetPlot.from_dataframe(annotated_df, annotations=[])
+        fig = plot.to_plotly()
+        assert isinstance(fig, go.Figure)
+
+    def test_with_kwargs(self, annotated_df: pd.DataFrame) -> None:
+        plot = UpSetPlot.from_dataframe(
+            annotated_df,
+            annotations=["score"],
+            set_colors={"SetA": "#E41A1C", "SetB": "#377EB8", "SetC": "#4DAF4A", "SetD": "#984EA3"},
+            color_intersections_by="degree",
+            show_values=True,
+            title="From DataFrame",
+        )
+        fig = plot.to_plotly()
+        assert isinstance(fig, go.Figure)
+        assert fig.layout.title.text == "From DataFrame"
+
+
 class TestUpSetPlotColoring:
     def test_set_colors_dict(self, binary_df: pd.DataFrame) -> None:
         colors = {"SetA": "#E41A1C", "SetB": "#377EB8", "SetC": "#4DAF4A", "SetD": "#984EA3"}
@@ -138,6 +183,23 @@ class TestUpSetPlotColoring:
     def test_color_intersections_by_set_without_set_colors(self, binary_df: pd.DataFrame) -> None:
         """When color_intersections_by='set' but no set_colors, falls back to uniform color."""
         plot = UpSetPlot(binary_df, color_intersections_by="set")
+        fig = plot.to_plotly()
+        assert isinstance(fig, go.Figure)
+
+    def test_color_intersections_by_degree(self, binary_df: pd.DataFrame) -> None:
+        plot = UpSetPlot(binary_df, color_intersections_by="degree", sort_by="degree")
+        fig = plot.to_plotly()
+        assert isinstance(fig, go.Figure)
+        # Should have legend entries — at least one trace with showlegend=True
+        legend_traces = [t for t in fig.data if t.showlegend]
+        assert len(legend_traces) > 0
+
+    def test_color_intersections_by_degree_custom_colors(self, binary_df: pd.DataFrame) -> None:
+        plot = UpSetPlot(
+            binary_df,
+            color_intersections_by="degree",
+            degree_colors={1: "#E41A1C", 2: "#377EB8", 3: "#4DAF4A", 4: "#984EA3"},
+        )
         fig = plot.to_plotly()
         assert isinstance(fig, go.Figure)
 
