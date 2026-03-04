@@ -85,6 +85,8 @@ services:
     container_name: depictio-frontend
     ports:
       - 5080:5080
+    volumes:
+      - depictio_keys:/app/depictio/keys
     env_file:
       - path: .env
         required: false
@@ -115,6 +117,8 @@ services:
     container_name: depictio-backend
     ports:
       - 8058:8058
+    volumes:
+      - depictio_keys:/app/depictio/keys
     env_file:
       - path: .env
         required: false
@@ -143,6 +147,8 @@ services:
     # Always enabled - required for design mode (stepper) to work
     # Dashboard editor will fail without Celery worker running
     image: ghcr.io/depictio/depictio:${DEPICTIO_VERSION:-latest}
+    volumes:
+      - depictio_keys:/app/depictio/keys
     env_file:
       - path: .env
         required: false
@@ -167,4 +173,6 @@ volumes:
   redis_data:
     driver: local
   minio_data:
+    driver: local
+  depictio_keys:
     driver: local
