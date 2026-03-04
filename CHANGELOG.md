@@ -6,20 +6,15 @@
 
 
 <details>
-<summary>Click to expand the changelog for 0.8.2-b1</summary>
+<summary>Click to expand the changelog for 0.8.2</summary>
 
 ### Changes 📜
 
-#### Bug Fixes 🐛
-
-* fix: disable CLI config and logout in public/demo mode to prevent S3 credential exposure [7343377b]
-
 #### Other Changes 📝
 
-* Bump version: 0.8.1 → 0.8.2-b1 [a84c9dcf]
-* Update CHANGELOG.md for v0.8.1 [d7df512a]
-* Bump version: 0.8.1-b2 → 0.8.1 [318f5f9d]
-* Bump version: 0.8.1-b1 → 0.8.1-b2 [ff18ee60]
+* Bump version: 0.8.2-b1 → 0.8.2 [3377422c]
+* Update CHANGELOG.md for v0.8.2-b1 [ccb47aac]
+* Bump version: 0.8.1 → 0.8.2-b1 [157b634e]
 
 
 </details>
@@ -28,43 +23,7 @@
 
 For more details, please refer to the [documentation](https://depictio.github.io/depictio-docs/)
 
-ectivity checks [d00b14dd]
-* Revert values updates and adjust ingress [cd793a7b]
-* Improve CLI build for Poetry [569c89dd]
-* Add Gitpod workspace setup [e47b0c27]
-* Add Gitpod workspace setup [e556573f]
-* Update CHANGELOG.md for v0.0.5 [ddf5db89]
-* Bump version: 0.0.5-beta2 → 0.0.5 [6c68f484]
-* Bump version: v0.0.5-beta2 → v0.0.5 [12e97411]
-* test: add test suite for File model validation, including various validation scenarios [9957daa3]
-* Update CHANGELOG.md for v0.0.5-beta2 [23744a60]
-* Switch to host-based ingress [c6747515]
-
-
-</details>
-
-### Documentation 📖
-
-For more details, please refer to the [documentation](https://depictio.github.io/depictio-docs/)
-
-ectivity checks [e596e6d]
-* feat: add screenshot generation test to CI workflow and update dashboard screenshot endpoint response to protect user data [ad294b3]
-* feat: add screenshot file copy step in deployment for improved dashboard functionality [b6534f0]
-* feat: enhance changelog generation with expandable details section and add documentation reference in README [05d579a]
-* feat: add step to push Helm chart to GHCR on push and workflow_dispatch events [5b41d05]
-* feat: enhance release name generation to ensure DNS compliance [86d5fea]
-* feat: consolidate CI workflows by adding test, lint, build, and publish steps for depictio-cli [83abfc6]
-* feat: add Docker Buildx setup step in CI workflow [bb90dd9]
-* feat: update CI workflows and add initial CLI structure; remove setup.py and adjust pyproject.toml for dependencies [2915d3d]
-* feat: update CI workflows and add initial CLI structure; remove setup.py and adjust pyproject.toml for dependencies [185031e]
-* feat: add refresh token support across token management; enhance tests for token creation, validation, and expiration [6a198be]
-* feat: enhance token management with refresh token support; update token validity checks and add refresh token endpoint [ae25380]
-* feat: improve authentication process by optimizing token validity checks and adding debug logging; add minimal Dash app for testing [479b093]
-* feat: update _create_user_in_db to allow optional user ID and group parameters; enhance user existence check [66d6aec]
-* feat: enhance token validity checks with detailed logging and add callback for clearing expired tokens [f82641e]
-* feat: update _create_user_in_db to accept ObjectId; enhance user creation tests [1790de3]
-* feat: enhance initialization process with atomic checks and cleanup; update user creation to include ID [800be10]
-* feat: add Flask security assessment scanner for comprehensive application security checks [caa5476]
+er for comprehensive application security checks [caa5476]
 * feat: add blocking for debug endpoints in Flask server [db8fb6b]
 * feat: add GitHub Actions workflow for testing, linting, and building depictio-cli and clean up pyproject.toml [46503f3]
 * feat: update environment configuration for Gitpod setup and adjust logging verbosity [6b74b5f]
