@@ -6,32 +6,14 @@
 
 
 <details>
-<summary>Click to expand the changelog for 0.8.1-b1</summary>
+<summary>Click to expand the changelog for 0.8.1</summary>
 
 ### Changes 📜
 
-#### New Features ✨
-
-* feat: add description to taxonomy heatmap component [1d64cb53]
-
-#### Bug Fixes 🐛
-
-* fix: pass heatmap title/description through figure-trigger store and improve table rendering [f308f24a]
-* fix: prevent data tripling in K8s multi-worker init and fix Faith PD axis [5b943477]
-
 #### Other Changes 📝
 
-* Bump version: 0.8.0 → 0.8.1-b1 [868cc86c]
-* revert: restore screenshot files to previous state [0981bbfb]
-* Fix tests for retry logic in api_call functions [be8ccb27]
-* Fix random /auth page landing in public mode [9523b6ec]
-* Fix burger icon out of sync on single-tab dashboard sidebar collapse [e6ccf0c9]
-* Fix fresh install auth redirect dead-end [a53d090d]
-* Add stable tag auto-update to bump-with-helm.sh [9bee88ee]
-* Update CHANGELOG.md for v0.8.0 [50545b5d]
-* Bump version: 0.8.0-b6 → 0.8.0 [57b7beef]
-* Update CHANGELOG.md for v0.8.0-b6 [e0f531a9]
-* Bump version: 0.8.0-b5 → 0.8.0-b6 [3b22ae23]
+* Bump version: 0.8.1-b2 → 0.8.1 [01ac5f8b]
+* Bump version: 0.8.1-b1 → 0.8.1-b2 [ff18ee60]
 
 
 </details>
@@ -40,70 +22,7 @@
 
 For more details, please refer to the [documentation](https://depictio.github.io/depictio-docs/)
 
-ectivity checks and streamline service verification [21cc5ee7]
-* refactor: replace add_token function with _add_token for token creation in create_default_token [82e0a946]
-* refactor: simplify token validity tests by removing logger patching [ed4d3c04]
-* refactor: clean up app.py and enhance run scripts for development mode [2e0d7899]
-* refactor: remove commented-out code and clean up MongoDB initialization [070ae108]
-* refactor: update GitHub Actions workflow for testing and linting, streamline steps and dependencies [64d7c83b]
-* refactor: update publish workflow and dependencies in pyproject.toml [300b4a3d]
-* refactor: update workflow steps and improve S3 configuration handling in tests [3e50e0a2]
-* refactor: streamline S3 configuration handling [af316dee]
-
-#### Chores 🧹
-
-* chore: changelog generation update ; CHANGELOG.md update ; fix release DNS issue in helm CI ; CODEOWNERS file [dd019370]
-* chore: remove obsolete CI workflows for testing, linting, and building depictio-cli [45541695]
-* chore: CI cleaning, helm CI refactoring and extension [636d8392]
-* chore: update screenshot functionality to use 'domcontentloaded' for page navigation [6e6c945f]
-* chore: remove conditional setup call in setup.py and clean up README.md [0ac74b5c]
-* chore: refactor scan/processing to improve logging, implement run fonction to have a full execution of the steps [c3335e41]
-
-#### Other Changes 📝
-
-* Bump version: 0.1.0-b8 → 0.1.0 [fce8c884]
-* feat(auth): Implement Google OAuth authentication endpoints [a07364cb]
-* test: functional unit tests, CI to be tested [2478ea3b]
-* Update CHANGELOG.md for v0.1.0-b8 [a073088c]
-* Bump version: 0.1.0-b7 → 0.1.0-b8 [088774a7]
-* test: add comprehensive tests for convert_filter_model_to_metadata function [68c88fc8]
-* test: add pytest markers to skip database setup for specific tests [a2dad9c6]
-* test: add unit tests for deltatable_utils [538a00fc]
-* test: add tests for temporary user creation, session management, and cleanup tasks [2beadc92]
-* Update CHANGELOG.md for v0.1.0-b7 [7e2bfe38]
-* Bump version: 0.1.0-b6 → 0.1.0-b7 [17610016]
-* Update CHANGELOG.md for v0.1.0-b6 [9da89fb9]
-* Bump version: 0.1.0-b5 → 0.1.0-b6 [dfa47d06]
-* Update CHANGELOG.md for v0.1.0-b5 [45221c85]
-* Bump version: 0.1.0-b4 → 0.1.0-b5 [0791da44]
-* Update CHANGELOG.md for v0.1.0-b4 [5062406c]
-* Bump version: 0.1.0-b3 → 0.1.0-b4 [fc0dd723]
-* Update CHANGELOG.md for v0.1.0-b3 [a4cd2c66]
-* Bump version: 0.1.0-b2 → 0.1.0-b3 [f6134bf1]
-* test: add unit tests for deltatable_utils [7041731a]
-* Update CHANGELOG.md for v0.1.0-b2 [061ef4b2]
-* Bump version: 0.1.0-b1 → 0.1.0-b2 [a18d5421]
-* test: add tests for temporary user creation, session management, and cleanup tasks [12d35a2c]
-* Update values.yaml [89e6898e]
-* Update values.yaml [54c33428]
-* Update Chart.yaml [0a264e6e]
-* Update .bumpversion.cfg [6a1871db]
-* Update CHANGELOG.md for v0.1.0-b1 [4b5876ce]
-* Bump version: 0.0.6 → 0.1.0-b1 [36d26feb]
-* Clean sensitive logs and remove prints [35473648]
-* Update CHANGELOG.md for vrefs/heads/main [c912da60]
-* Update CHANGELOG.md for v0.0.6 [62ac118c]
-* Bump version: 0.0.6-b4 → 0.0.6 [9798a3fa]
-* Bump version: 0.0.6-beta3 → 0.0.6-b4 [d6dbb202]
-* Update CHANGELOG.md for v0.0.6-beta3 [7ea90b1e]
-* Bump version: 0.0.6-beta2 → 0.0.6-beta3 [e846f374]
-* Update CHANGELOG.md for v0.0.6-beta2 [8ac43f74]
-* Bump version: 0.0.6-beta1 → 0.0.6-beta2 [49c1720a]
-* Update CHANGELOG.md for v0.0.6-beta1 [196086a0]
-* Bump version: 0.0.5 → 0.0.6-beta1 [5009a561]
-* Use minikube IP for ingress checks [5f45a0f9]
-* test: check FastAPI docs endpoint [a337cc6d]
-* chore(ci): enhance ingress connectivity checks [3bbbe185]
+ectivity checks [3bbbe185]
 * Revert values updates and adjust ingress [8c2c7d2e]
 * Switch to host-based ingress [5be94a37]
 * Use minikube IP for ingress checks [72aed78b]
