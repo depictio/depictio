@@ -1,6 +1,12 @@
+<p align="center">
+  <img src="https://raw.githubusercontent.com/depictio/depictio/main/docs/images/logo_hd.png" alt="Depictio logo" width="300">
+</p>
+
 # Depictio CLI
 
 A command-line interface for interacting with the Depictio API.
+
+[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/depictio/depictio)
 
 ## Installation
 
