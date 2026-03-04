@@ -1,0 +1,76 @@
+name: nf-core Pipeline Updates Check
+
+on:
+  schedule:
+    # Every Monday at 8:00 UTC
+    - cron: '0 8 * * 1'
+  workflow_dispatch: {}
+
+permissions:
+  issues: write
+  contents: read
+
+jobs:
+  check-updates:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Install minimal dependencies
+        run: pip install httpx pyyaml
+
+      - name: Check for pipeline updates
+        id: check
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          python depictio/ci/check_nfcore_updates.py \
+            --projects-dir depictio/projects/nf-core \
+            --github-token "$GITHUB_TOKEN" \
+            --output-file /tmp/report.md \
+            -v
+
+      - name: Create GitHub issues for updates
+        if: steps.check.outputs.has_updates == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          update_count=${{ steps.check.outputs.update_count }}
+          for i in $(seq 0 $((update_count - 1))); do
+            eval "title=\${issue_title_${i}}"
+            eval "labels=\${issue_labels_${i}}"
+            eval "body_file=\${issue_body_file_${i}}"
+
+            # Read from GITHUB_OUTPUT
+            title=$(grep "^issue_title_${i}=" "$GITHUB_OUTPUT" | cut -d= -f2-)
+            labels=$(grep "^issue_labels_${i}=" "$GITHUB_OUTPUT" | cut -d= -f2-)
+            body_file=$(grep "^issue_body_file_${i}=" "$GITHUB_OUTPUT" | cut -d= -f2-)
+
+            if [ -f "$body_file" ]; then
+              # Deduplicate: skip if an open issue with same title exists
+              existing=$(gh issue list --state open --search "in:title $title" --json number --jq 'length' 2>/dev/null || echo "0")
+              if [ "$existing" -eq 0 ]; then
+                gh issue create \
+                  --title "$title" \
+                  --body-file "$body_file" \
+                  --label "$labels"
+                echo "Created issue: $title"
+              else
+                echo "Issue already exists: $title"
+              fi
+            fi
+          done
+
+      - name: Job summary
+        if: always()
+        run: |
+          echo "## nf-core Pipeline Update Check" >> "$GITHUB_STEP_SUMMARY"
+          if [ -f /tmp/report.md ]; then
+            cat /tmp/report.md >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "All tracked pipelines are up to date." >> "$GITHUB_STEP_SUMMARY"
+          fi
