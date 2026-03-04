@@ -6,13 +6,19 @@
 
 
 <details>
-<summary>Click to expand the changelog for 0.8.1</summary>
+<summary>Click to expand the changelog for 0.8.2-b1</summary>
 
 ### Changes 📜
 
+#### Bug Fixes 🐛
+
+* fix: disable CLI config and logout in public/demo mode to prevent S3 credential exposure [7343377b]
+
 #### Other Changes 📝
 
-* Bump version: 0.8.1-b2 → 0.8.1 [01ac5f8b]
+* Bump version: 0.8.1 → 0.8.2-b1 [a84c9dcf]
+* Update CHANGELOG.md for v0.8.1 [d7df512a]
+* Bump version: 0.8.1-b2 → 0.8.1 [318f5f9d]
 * Bump version: 0.8.1-b1 → 0.8.1-b2 [ff18ee60]
 
 
@@ -22,12 +28,7 @@
 
 For more details, please refer to the [documentation](https://depictio.github.io/depictio-docs/)
 
-ectivity checks [3bbbe185]
-* Revert values updates and adjust ingress [8c2c7d2e]
-* Switch to host-based ingress [5be94a37]
-* Use minikube IP for ingress checks [72aed78b]
-* test: check FastAPI docs endpoint [309427b7]
-* chore(ci): enhance ingress connectivity checks [d00b14dd]
+ectivity checks [d00b14dd]
 * Revert values updates and adjust ingress [cd793a7b]
 * Improve CLI build for Poetry [569c89dd]
 * Add Gitpod workspace setup [e47b0c27]
