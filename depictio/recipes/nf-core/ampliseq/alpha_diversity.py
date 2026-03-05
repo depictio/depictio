@@ -7,7 +7,7 @@ from depictio.models.models.transforms import RecipeSource
 SOURCES: list[RecipeSource] = [
     RecipeSource(
         ref="faith_pd",
-        path="diversity/alpha_diversity/faith_pd_vector/metadata.tsv",
+        path="qiime2/diversity/alpha_diversity/faith_pd_vector/metadata.tsv",
         format="TSV",
     ),
 ]

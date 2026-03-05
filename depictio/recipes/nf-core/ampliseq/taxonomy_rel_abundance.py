@@ -7,7 +7,7 @@ from depictio.models.models.transforms import RecipeSource
 SOURCES: list[RecipeSource] = [
     RecipeSource(
         ref="rel_table",
-        path="rel_abundance_tables/rel-table-2.tsv",
+        path="qiime2/rel_abundance_tables/rel-table-2.tsv",
         format="TSV",
         read_kwargs={"skip_rows": 1},
     ),
