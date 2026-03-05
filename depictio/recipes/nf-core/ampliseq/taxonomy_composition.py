@@ -10,10 +10,6 @@ SOURCES: list[RecipeSource] = [
         path="qiime2/barplot/level-2.csv",
         format="CSV",
     ),
-    RecipeSource(
-        ref="metadata",
-        dc_ref="metadata",
-    ),
 ]
 
 EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
@@ -25,7 +21,12 @@ EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
 
 
 def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
-    """Melt wide barplot CSV to long format with taxonomy and counts."""
+    """Melt wide barplot CSV to long format with taxonomy and counts.
+
+    The barplot CSV embeds metadata columns (index, habitat, etc.) alongside
+    taxonomy count columns. We extract habitat directly from the CSV — no
+    external metadata join needed.
+    """
     df = sources["barplot_csv"]
 
     # The barplot CSV has: index (sample), taxonomy columns, then metadata columns at end.
@@ -49,16 +50,21 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
     if not taxonomy_cols:
         raise ValueError("No taxonomy columns found in barplot CSV")
 
+    # Preserve habitat before melting (it's embedded in the CSV)
+    keep_cols = ["index"]
+    if "habitat" in df.columns:
+        keep_cols.append("habitat")
+
     # Melt to long format
-    df = df.unpivot(on=taxonomy_cols, index="index", variable_name="taxonomy", value_name="count")
+    df = df.unpivot(on=taxonomy_cols, index=keep_cols, variable_name="taxonomy", value_name="count")
     df = df.rename({"index": "sample"})
     df = df.with_columns(pl.col("count").cast(pl.Float64))
 
     # Filter out zero/null counts
     df = df.filter(pl.col("count").is_not_null() & (pl.col("count") > 0))
 
-    # Join with metadata for habitat
-    metadata = sources["metadata"].select("sample", "habitat")
-    df = df.join(metadata, on="sample", how="left")
+    # If habitat wasn't in the CSV, add null column
+    if "habitat" not in df.columns:
+        df = df.with_columns(pl.lit(None).cast(pl.Utf8).alias("habitat"))
 
     return df.select("sample", "taxonomy", "count", "habitat")

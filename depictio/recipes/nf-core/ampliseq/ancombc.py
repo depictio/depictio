@@ -7,27 +7,27 @@ from depictio.models.models.transforms import RecipeSource
 SOURCES: list[RecipeSource] = [
     RecipeSource(
         ref="lfc",
-        path="ancombc/differentials/Category-habitat-level-2/lfc_slice.csv",
+        path="qiime2/ancombc/differentials/Category-habitat-level-2/lfc_slice.csv",
         format="CSV",
     ),
     RecipeSource(
         ref="p_val",
-        path="ancombc/differentials/Category-habitat-level-2/p_val_slice.csv",
+        path="qiime2/ancombc/differentials/Category-habitat-level-2/p_val_slice.csv",
         format="CSV",
     ),
     RecipeSource(
         ref="q_val",
-        path="ancombc/differentials/Category-habitat-level-2/q_val_slice.csv",
+        path="qiime2/ancombc/differentials/Category-habitat-level-2/q_val_slice.csv",
         format="CSV",
     ),
     RecipeSource(
         ref="w",
-        path="ancombc/differentials/Category-habitat-level-2/w_slice.csv",
+        path="qiime2/ancombc/differentials/Category-habitat-level-2/w_slice.csv",
         format="CSV",
     ),
     RecipeSource(
         ref="se",
-        path="ancombc/differentials/Category-habitat-level-2/se_slice.csv",
+        path="qiime2/ancombc/differentials/Category-habitat-level-2/se_slice.csv",
         format="CSV",
     ),
 ]

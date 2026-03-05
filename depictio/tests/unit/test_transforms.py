@@ -90,23 +90,16 @@ class TestRecipeLoader:
 
     def test_load_taxonomy_composition(self):
         module = load_recipe("nf-core/ampliseq/taxonomy_composition.py")
-        assert len(module.SOURCES) == 2
-        dc_ref_sources = [s for s in module.SOURCES if s.dc_ref is not None]
-        assert len(dc_ref_sources) == 1
-
-    def test_load_ancom_volcano(self):
-        module = load_recipe("nf-core/ampliseq/ancom_volcano.py")
-        assert len(module.SOURCES) == 2
+        assert len(module.SOURCES) == 1  # No dc_ref dependency anymore
 
     def test_list_recipes(self):
         recipes = list_recipes()
-        assert len(recipes) >= 6
+        assert len(recipes) >= 5
         assert "nf-core/ampliseq/alpha_diversity.py" in recipes
         assert "nf-core/ampliseq/ancombc.py" in recipes
         assert "nf-core/ampliseq/taxonomy_rel_abundance.py" in recipes
         assert "nf-core/ampliseq/alpha_rarefaction.py" in recipes
         assert "nf-core/ampliseq/taxonomy_composition.py" in recipes
-        assert "nf-core/ampliseq/ancom_volcano.py" in recipes
 
 
 # ---------------------------------------------------------------------------
@@ -137,6 +130,7 @@ class TestAncomBCRecipe:
         module = load_recipe("nf-core/ampliseq/ancombc.py")
         # Synthetic ANCOM-BC data (2 taxa, 1 contrast)
         taxa = ["Bacteria;Firmicutes;Bacilli", "Bacteria;Proteobacteria;Gamma"]
+        sources = {}
         for name in ["lfc", "p_val", "q_val", "w", "se"]:
             vals = {
                 "lfc": [1.5, -0.8],
@@ -145,7 +139,7 @@ class TestAncomBCRecipe:
                 "w": [2.1, -0.5],
                 "se": [0.3, 0.6],
             }
-            globals()[f"df_{name}"] = pl.DataFrame(
+            sources[name] = pl.DataFrame(
                 {
                     "id": taxa,
                     "(Intercept)": [0.0, 0.0],
@@ -153,7 +147,6 @@ class TestAncomBCRecipe:
                 }
             )
 
-        sources = {name: globals()[f"df_{name}"] for name in ["lfc", "p_val", "q_val", "w", "se"]}
         result = module.transform(sources)
         assert result.height == 2  # 2 taxa x 1 contrast
         assert "Kingdom" in result.columns
@@ -186,16 +179,16 @@ class TestAlphaRarefactionRecipe:
 class TestTaxonomyCompositionRecipe:
     def test_transform(self):
         module = load_recipe("nf-core/ampliseq/taxonomy_composition.py")
-        # Synthetic barplot CSV (wide format with index + taxonomy cols + metadata cols)
+        # Synthetic barplot CSV (wide format with index + habitat + taxonomy cols)
         barplot = pl.DataFrame(
             {
                 "index": ["s1", "s2"],
+                "habitat": ["soil", "water"],
                 "k__Bacteria;p__Firmicutes": [100.0, 200.0],
                 "k__Bacteria;p__Proteobacteria": [50.0, 0.0],
             }
         )
-        metadata = pl.DataFrame({"sample": ["s1", "s2"], "habitat": ["soil", "water"]})
-        result = module.transform({"barplot_csv": barplot, "metadata": metadata})
+        result = module.transform({"barplot_csv": barplot})
         assert "sample" in result.columns
         assert "taxonomy" in result.columns
         assert "count" in result.columns
@@ -204,29 +197,19 @@ class TestTaxonomyCompositionRecipe:
         assert result.height == 3
         validate_schema(result, module.EXPECTED_SCHEMA, "taxonomy_composition")
 
-
-class TestAncomVolcanoRecipe:
-    def test_transform(self):
-        module = load_recipe("nf-core/ampliseq/ancom_volcano.py")
-        ancom = pl.DataFrame(
+    def test_transform_without_habitat(self):
+        """Barplot CSV without habitat column should still work (null habitat)."""
+        module = load_recipe("nf-core/ampliseq/taxonomy_composition.py")
+        barplot = pl.DataFrame(
             {
-                "id": ["ASV1", "ASV2"],
-                "W": [50.0, 20.0],
-                "clr": [3.5, -1.2],
+                "index": ["s1", "s2"],
+                "k__Bacteria;p__Firmicutes": [100.0, 200.0],
             }
         )
-        tax = pl.DataFrame(
-            {
-                "ID": ["ASV1", "ASV2"],
-                "Kingdom": ["Bacteria", "Bacteria"],
-                "Phylum": ["Firmicutes", "Proteobacteria"],
-            }
-        )
-        result = module.transform({"ancom_data": ancom, "taxonomy_table": tax})
-        assert result.columns == ["id", "taxonomy", "Kingdom", "Phylum", "W", "clr"]
+        result = module.transform({"barplot_csv": barplot})
         assert result.height == 2
-        assert result["taxonomy"][0] == "Bacteria;Firmicutes"
-        validate_schema(result, module.EXPECTED_SCHEMA, "ancom_volcano")
+        assert result["habitat"].null_count() == 2
+        validate_schema(result, module.EXPECTED_SCHEMA, "taxonomy_composition")
 
 
 class TestSchemaValidation:
