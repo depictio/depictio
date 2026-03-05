@@ -17,34 +17,40 @@ template:
       description: "Root directory containing ampliseq pipeline output data"
       required: true
   expected_files:
+    # User-provided file (not recipe-generated)
     - relative_path: "merged_metadata.tsv"
       description: "Sample metadata with sample IDs and experimental factors"
       format: "TSV"
       columns: ["sample", "name", "habitat"]
-    - relative_path: "faith_pd_long.tsv"
-      description: "Alpha diversity rarefaction curves (Faith PD)"
+    # Raw QIIME2 outputs (recipe inputs — transformed automatically during process)
+    - relative_path: "qiime2/alpha-rarefaction/faith_pd.csv"
+      description: "Raw QIIME2 rarefaction CSV (input for alpha_rarefaction recipe)"
+      format: "CSV"
+      columns: ["sample-id"]
+    - relative_path: "qiime2/barplot/level-2.csv"
+      description: "Raw QIIME2 barplot CSV (input for taxonomy_composition recipe)"
+      format: "CSV"
+      columns: ["index"]
+    - relative_path: "qiime2/ancom/Category-habitat-ASV/data.tsv"
+      description: "Raw ANCOM results (input for ancom_volcano recipe)"
       format: "TSV"
-      columns: ["sample", "depth", "iter", "faith_pd"]
-    - relative_path: "taxonomy_long.tsv"
-      description: "Taxonomic composition across samples"
+      columns: ["id", "W", "clr"]
+    - relative_path: "qiime2/rel_abundance_tables/rel-table-ASV_with-DADA2-tax.tsv"
+      description: "Taxonomy table with DADA2 annotations (input for ancom_volcano recipe)"
       format: "TSV"
-      columns: ["sample", "taxonomy", "count", "habitat"]
-    - relative_path: "ancom_volcano.tsv"
-      description: "ANCOM differential abundance results"
+      columns: ["ID"]
+    - relative_path: "diversity/alpha_diversity/faith_pd_vector/metadata.tsv"
+      description: "Raw QIIME2 Faith PD vector (input for alpha_diversity recipe)"
       format: "TSV"
-      columns: ["id", "taxonomy", "W", "clr"]
-    - relative_path: "alpha_diversity.tsv"
-      description: "Per-sample alpha diversity metrics"
+      columns: ["id", "faith_pd"]
+    - relative_path: "rel_abundance_tables/rel-table-2.tsv"
+      description: "Raw relative abundance table (input for taxonomy_rel_abundance recipe)"
       format: "TSV"
-      columns: ["sample", "habitat", "faith_pd"]
-    - relative_path: "taxonomy_rel_abundance_long.tsv"
-      description: "Taxonomic relative abundance at Phylum level"
-      format: "TSV"
-      columns: ["sample", "taxonomy", "rel_abundance", "habitat"]
-    - relative_path: "ancombc_habitat_level2.tsv"
-      description: "ANCOM-BC differential abundance at Phylum level"
-      format: "TSV"
-      columns: ["id", "contrast", "lfc", "q_val"]
+      columns: ["#OTU ID"]
+    - relative_path: "ancombc/differentials/Category-habitat-level-2/lfc_slice.csv"
+      description: "ANCOM-BC log-fold change slice (input for ancombc recipe)"
+      format: "CSV"
+      columns: ["id"]
   expected_directories:
     - relative_path: "run_*"
       description: "Sequencing run directories containing pipeline outputs"
@@ -133,19 +139,20 @@ workflows:
               "Sed_vs_Soil": "Habitat comparison group 2"
               "sampling_date": "Sample collection date (YYYY-MM-DD)"
 
+      # ----------------------------------------------------------------
+      # Recipe-transformed data collections
+      # These read raw QIIME2 outputs and transform them during process
+      # ----------------------------------------------------------------
+
       - data_collection_tag: "alpha_rarefaction"
-        description: "Alpha diversity rarefaction curves"
+        description: "Alpha diversity rarefaction curves (from raw QIIME2 CSV)"
         config:
           type: "Table"
-          metatype: "Metadata"
-          scan:
-            mode: "single"
-            scan_parameters:
-              filename: "{DATA_ROOT}/faith_pd_long.tsv"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/ampliseq/alpha_rarefaction.py"
           dc_specific_properties:
             format: "TSV"
-            polars_kwargs:
-              separator: "\t"
             columns_description:
               "sample": "Sample identifier"
               "depth": "Sequencing depth"
@@ -153,18 +160,14 @@ workflows:
               "faith_pd": "Faith's Phylogenetic Diversity metric"
 
       - data_collection_tag: "taxonomy_composition"
-        description: "Taxonomic composition across samples"
+        description: "Taxonomic composition across samples (from raw QIIME2 barplot)"
         config:
           type: "Table"
-          metatype: "Metadata"
-          scan:
-            mode: "single"
-            scan_parameters:
-              filename: "{DATA_ROOT}/taxonomy_long.tsv"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/ampliseq/taxonomy_composition.py"
           dc_specific_properties:
             format: "TSV"
-            polars_kwargs:
-              separator: "\t"
             columns_description:
               "sample": "Sample identifier"
               "taxonomy": "Taxonomic classification (Kingdom;Phylum)"
@@ -172,18 +175,14 @@ workflows:
               "habitat": "Habitat type of the sample"
 
       - data_collection_tag: "ancom_volcano"
-        description: "ANCOM differential abundance analysis results"
+        description: "ANCOM differential abundance (from raw ANCOM results + taxonomy)"
         config:
           type: "Table"
-          metatype: "Metadata"
-          scan:
-            mode: "single"
-            scan_parameters:
-              filename: "{DATA_ROOT}/ancom_volcano.tsv"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/ampliseq/ancom_volcano.py"
           dc_specific_properties:
             format: "TSV"
-            polars_kwargs:
-              separator: "\t"
             columns_description:
               "id": "ASV identifier"
               "taxonomy": "Taxonomic classification (Kingdom;Phylum)"
@@ -193,36 +192,28 @@ workflows:
               "clr": "Centered log-ratio transformed abundance"
 
       - data_collection_tag: "alpha_diversity"
-        description: "Per-sample alpha diversity metrics (Faith PD)"
+        description: "Per-sample alpha diversity (from raw QIIME2 Faith PD vector)"
         config:
           type: "Table"
-          metatype: "Metadata"
-          scan:
-            mode: "single"
-            scan_parameters:
-              filename: "{DATA_ROOT}/alpha_diversity.tsv"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/ampliseq/alpha_diversity.py"
           dc_specific_properties:
             format: "TSV"
-            polars_kwargs:
-              separator: "\t"
             columns_description:
               "sample": "Sample identifier"
               "habitat": "Habitat type"
               "faith_pd": "Faith's Phylogenetic Diversity (single value per sample)"
 
       - data_collection_tag: "taxonomy_rel_abundance"
-        description: "Taxonomic relative abundance (Phylum level)"
+        description: "Taxonomic relative abundance at Phylum level (from raw abundance table)"
         config:
           type: "Table"
-          metatype: "Metadata"
-          scan:
-            mode: "single"
-            scan_parameters:
-              filename: "{DATA_ROOT}/taxonomy_rel_abundance_long.tsv"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/ampliseq/taxonomy_rel_abundance.py"
           dc_specific_properties:
             format: "TSV"
-            polars_kwargs:
-              separator: "\t"
             columns_description:
               "sample": "Sample identifier"
               "taxonomy": "Taxonomic classification (Kingdom;Phylum)"
@@ -232,18 +223,14 @@ workflows:
               "Phylum": "Phylum level"
 
       - data_collection_tag: "ancombc_results"
-        description: "ANCOM-BC differential abundance (habitat, Phylum level)"
+        description: "ANCOM-BC differential abundance at Phylum level (from 5 raw CSV slices)"
         config:
           type: "Table"
-          metatype: "Metadata"
-          scan:
-            mode: "single"
-            scan_parameters:
-              filename: "{DATA_ROOT}/ancombc_habitat_level2.tsv"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/ampliseq/ancombc.py"
           dc_specific_properties:
             format: "TSV"
-            polars_kwargs:
-              separator: "\t"
             columns_description:
               "id": "Taxonomy identifier"
               "contrast": "Statistical contrast (habitat comparison)"

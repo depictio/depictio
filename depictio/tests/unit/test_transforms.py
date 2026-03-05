@@ -83,12 +83,30 @@ class TestRecipeLoader:
         with pytest.raises(RecipeError, match="Recipe not found"):
             load_recipe("nonexistent/recipe.py")
 
+    def test_load_alpha_rarefaction(self):
+        module = load_recipe("nf-core/ampliseq/alpha_rarefaction.py")
+        assert len(module.SOURCES) == 1
+        assert module.SOURCES[0].ref == "faith_pd_csv"
+
+    def test_load_taxonomy_composition(self):
+        module = load_recipe("nf-core/ampliseq/taxonomy_composition.py")
+        assert len(module.SOURCES) == 2
+        dc_ref_sources = [s for s in module.SOURCES if s.dc_ref is not None]
+        assert len(dc_ref_sources) == 1
+
+    def test_load_ancom_volcano(self):
+        module = load_recipe("nf-core/ampliseq/ancom_volcano.py")
+        assert len(module.SOURCES) == 2
+
     def test_list_recipes(self):
         recipes = list_recipes()
-        assert len(recipes) >= 3
+        assert len(recipes) >= 6
         assert "nf-core/ampliseq/alpha_diversity.py" in recipes
         assert "nf-core/ampliseq/ancombc.py" in recipes
         assert "nf-core/ampliseq/taxonomy_rel_abundance.py" in recipes
+        assert "nf-core/ampliseq/alpha_rarefaction.py" in recipes
+        assert "nf-core/ampliseq/taxonomy_composition.py" in recipes
+        assert "nf-core/ampliseq/ancom_volcano.py" in recipes
 
 
 # ---------------------------------------------------------------------------
@@ -142,6 +160,73 @@ class TestAncomBCRecipe:
         assert "significant" in result.columns
         assert result["significant"].dtype == pl.Boolean
         validate_schema(result, module.EXPECTED_SCHEMA, "ancombc")
+
+
+class TestAlphaRarefactionRecipe:
+    def test_transform(self):
+        module = load_recipe("nf-core/ampliseq/alpha_rarefaction.py")
+        # Synthetic wide rarefaction CSV
+        df = pl.DataFrame(
+            {
+                "sample-id": ["s1", "s2"],
+                "depth-0_iter-0": [1.0, 2.0],
+                "depth-500_iter-0": [5.5, 6.5],
+                "depth-500_iter-1": [5.3, 6.2],
+                "depth-1000_iter-0": [10.0, 11.0],
+            }
+        )
+        result = module.transform({"faith_pd_csv": df})
+        assert result.columns == ["sample", "depth", "iter", "faith_pd"]
+        assert result.height == 8  # 2 samples x 4 depth-iter combos
+        assert result["depth"].dtype == pl.Int64
+        assert result["iter"].dtype == pl.Int64
+        validate_schema(result, module.EXPECTED_SCHEMA, "alpha_rarefaction")
+
+
+class TestTaxonomyCompositionRecipe:
+    def test_transform(self):
+        module = load_recipe("nf-core/ampliseq/taxonomy_composition.py")
+        # Synthetic barplot CSV (wide format with index + taxonomy cols + metadata cols)
+        barplot = pl.DataFrame(
+            {
+                "index": ["s1", "s2"],
+                "k__Bacteria;p__Firmicutes": [100.0, 200.0],
+                "k__Bacteria;p__Proteobacteria": [50.0, 0.0],
+            }
+        )
+        metadata = pl.DataFrame({"sample": ["s1", "s2"], "habitat": ["soil", "water"]})
+        result = module.transform({"barplot_csv": barplot, "metadata": metadata})
+        assert "sample" in result.columns
+        assert "taxonomy" in result.columns
+        assert "count" in result.columns
+        assert "habitat" in result.columns
+        # s1 has 2 taxa, s2 has 1 (Proteobacteria=0 filtered out)
+        assert result.height == 3
+        validate_schema(result, module.EXPECTED_SCHEMA, "taxonomy_composition")
+
+
+class TestAncomVolcanoRecipe:
+    def test_transform(self):
+        module = load_recipe("nf-core/ampliseq/ancom_volcano.py")
+        ancom = pl.DataFrame(
+            {
+                "id": ["ASV1", "ASV2"],
+                "W": [50.0, 20.0],
+                "clr": [3.5, -1.2],
+            }
+        )
+        tax = pl.DataFrame(
+            {
+                "ID": ["ASV1", "ASV2"],
+                "Kingdom": ["Bacteria", "Bacteria"],
+                "Phylum": ["Firmicutes", "Proteobacteria"],
+            }
+        )
+        result = module.transform({"ancom_data": ancom, "taxonomy_table": tax})
+        assert result.columns == ["id", "taxonomy", "Kingdom", "Phylum", "W", "clr"]
+        assert result.height == 2
+        assert result["taxonomy"][0] == "Bacteria;Firmicutes"
+        validate_schema(result, module.EXPECTED_SCHEMA, "ancom_volcano")
 
 
 class TestSchemaValidation:
