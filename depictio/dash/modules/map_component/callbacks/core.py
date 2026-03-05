@@ -148,6 +148,41 @@ def _compute_filters_hash(metadata_to_pass: list[dict]) -> str:
 def register_core_callbacks(app):
     """Register core rendering callbacks for map component."""
 
+    # Clientside callback: update GeoJSON hideout.fill_opacity from slider
+    app.clientside_callback(
+        """
+        function(opacityValues, currentHideouts, sliderIds) {
+            if (!opacityValues || !currentHideouts || !sliderIds) {
+                return window.dash_clientside.no_update;
+            }
+            var updated = currentHideouts.map(function(h, i) {
+                if (!h) return h;
+                // Match slider to geojson by index
+                var geojsonIndex = null;
+                // Find matching slider value for this geojson
+                for (var j = 0; j < sliderIds.length; j++) {
+                    if (sliderIds[j] && sliderIds[j].index === (h._geojson_index || null)) {
+                        geojsonIndex = j;
+                        break;
+                    }
+                }
+                // Fallback: match by position
+                if (geojsonIndex === null) geojsonIndex = i;
+                if (geojsonIndex < opacityValues.length && opacityValues[geojsonIndex] !== null) {
+                    return Object.assign({}, h, {fill_opacity: opacityValues[geojsonIndex]});
+                }
+                return h;
+            });
+            return updated;
+        }
+        """,
+        Output({"type": "leaflet-geojson", "index": ALL}, "hideout"),
+        Input({"type": "leaflet-opacity-slider", "index": ALL}, "value"),
+        State({"type": "leaflet-geojson", "index": ALL}, "hideout"),
+        State({"type": "leaflet-opacity-slider", "index": ALL}, "id"),
+        prevent_initial_call=True,
+    )
+
     # Tiled map (dash-leaflet) rendering callback
     @app.callback(
         Output({"type": "leaflet-container", "index": ALL}, "children"),
@@ -219,9 +254,17 @@ def register_core_callbacks(app):
                 # Load scatter overlay data
                 scatter_overlay_data = None
                 overlay_dc_id = trigger_data.get("scatter_overlay_dc_id")
+                overlay_dc_tag = trigger_data.get("scatter_overlay_dc_tag")
                 if overlay_dc_id:
+                    logger.info(
+                        f"Tiled map {component_id}: loading scatter overlay dc_id={str(overlay_dc_id)[:8]}"
+                    )
                     wf_id = trigger_data.get("wf_id")
-                    if wf_id:
+                    if not wf_id:
+                        logger.warning(
+                            f"Tiled map {component_id}: scatter overlay skipped — no wf_id in trigger_data"
+                        )
+                    else:
                         overlay_filters = _extract_filters_for_map(
                             str(overlay_dc_id),
                             filters_data,
@@ -236,10 +279,28 @@ def register_core_callbacks(app):
                             metadata=overlay_filters,
                             TOKEN=access_token,
                         )
-                        if overlay_df is not None:
+                        if overlay_df is None:
+                            logger.warning(
+                                f"Tiled map {component_id}: load_deltatable_lite returned None for overlay dc_id={str(overlay_dc_id)[:8]}"
+                            )
+                        else:
                             scatter_overlay_data = build_scatter_overlay_data(
                                 overlay_df, trigger_data
                             )
+                            if not scatter_overlay_data:
+                                logger.warning(
+                                    f"Tiled map {component_id}: build_scatter_overlay_data returned empty list (check lat/lon/color column names)"
+                                )
+                            else:
+                                logger.info(
+                                    f"Tiled map {component_id}: scatter overlay loaded with {len(scatter_overlay_data)} markers"
+                                )
+                elif overlay_dc_tag:
+                    logger.warning(
+                        f"Tiled map {component_id}: scatter_overlay_dc_tag='{overlay_dc_tag}' present but scatter_overlay_dc_id is None — tag was not resolved during import"
+                    )
+                else:
+                    logger.info(f"Tiled map {component_id}: no scatter overlay configured")
 
                 leaflet_component = build_leaflet_map(
                     index=component_id,
@@ -422,7 +483,7 @@ def register_core_callbacks(app):
 
             load_key = map_to_load_key.get(i)
             if not load_key or load_key not in dc_cache:
-                all_figures.append({"data": [], "layout": {"title": "Data not available"}})
+                all_figures.append({"data": [], "layout": {}})
                 all_metadata.append({})
                 continue
 

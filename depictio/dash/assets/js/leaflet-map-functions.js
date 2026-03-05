@@ -15,12 +15,13 @@ window.dashExtensions = Object.assign({}, window.dashExtensions, {
             var defaultColor = context.hideout.default_color || "#888888";
             var value = props[colorProp] || "";
             var fillColor = colorMap[value] || defaultColor;
+            var fillOpacity = context.hideout.fill_opacity !== undefined ? context.hideout.fill_opacity : 0.6;
             return {
                 fillColor: fillColor,
                 color: fillColor,
                 weight: 0.5,
                 opacity: 0.8,
-                fillOpacity: 0.6
+                fillOpacity: fillOpacity
             };
         },
 

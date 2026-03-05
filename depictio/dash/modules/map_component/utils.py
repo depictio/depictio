@@ -110,24 +110,63 @@ def build_map(**kwargs) -> html.Div:
     map_type = trigger_data.get("map_type", "scatter_map")
 
     if map_type == "tiled_map":
-        # For tiled_map, use a placeholder div that will be populated by the
-        # leaflet rendering callback. The actual dash-leaflet Map is built
-        # server-side during the callback since it needs data from S3.
+        initial_opacity = trigger_data.get("opacity", 0.6)
+        map_title = kwargs.get("title")
+        # Title above the map
+        if map_title:
+            children.append(
+                html.Div(
+                    map_title,
+                    style={
+                        "textAlign": "center",
+                        "fontSize": "14px",
+                        "fontWeight": "bold",
+                        "padding": "4px 0",
+                        "flexShrink": "0",
+                    },
+                ),
+            )
+        # Leaflet map container (fills available space)
         children.append(
             html.Div(
                 id={"type": "leaflet-container", "index": index},
                 style={
-                    "height": "100%",
                     "width": "100%",
                     "flex": "1",
+                    "minHeight": "0",
+                    "overflow": "hidden",
                 },
             ),
         )
-        # Hidden map-graph so the ALL pattern in render_maps_batch stays consistent
+        # Compact opacity slider at the bottom
+        children.append(
+            html.Div(
+                [
+                    dmc.Text("Opacity", size="xs", c="dimmed", style={"whiteSpace": "nowrap"}),
+                    dmc.Slider(
+                        id={"type": "leaflet-opacity-slider", "index": index},
+                        min=0,
+                        max=1,
+                        step=0.05,
+                        value=initial_opacity,
+                        size="xs",
+                        style={"flex": "1", "minWidth": "80px"},
+                    ),
+                ],
+                style={
+                    "display": "flex",
+                    "alignItems": "center",
+                    "gap": "6px",
+                    "padding": "8px 12px 12px 12px",
+                    "flexShrink": "0",
+                },
+            ),
+        )
+        # Hidden map-graph so the ALL pattern in render_maps_batch stays consistent.
         children.append(
             dcc.Graph(
                 id={"type": "map-graph", "index": index},
-                style={"display": "none"},
+                style={"display": "none", "position": "absolute", "width": "0", "height": "0"},
             ),
         )
     else:

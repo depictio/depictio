@@ -8,7 +8,6 @@ components that render PMTiles vector tiles with progressive loading.
 from typing import Any
 
 import dash_leaflet as dl
-from dash import html
 from dash_extensions.javascript import Namespace
 
 # JS namespace references for functions defined in assets/js/leaflet-map-functions.js
@@ -59,7 +58,7 @@ def build_leaflet_map(
     geojson_data: dict | None = None,
     scatter_overlay_data: list[dict] | None = None,
     theme: str = "light",
-) -> html.Div:
+) -> Any:
     """Build a dash-leaflet Map component with tiled base layer and GeoJSON overlay.
 
     Args:
@@ -70,11 +69,10 @@ def build_leaflet_map(
         theme: Current theme ('light' or 'dark').
 
     Returns:
-        html.Div containing the dash-leaflet Map component.
+        dash-leaflet Map component.
     """
     default_center = trigger_data.get("default_center", {"lat": 51.0, "lon": 10.5})
     default_zoom = trigger_data.get("default_zoom", 6)
-    title = trigger_data.get("title")
 
     center = [default_center.get("lat", 51.0), default_center.get("lon", 10.5)]
     base_tile_url = _get_base_tile_url(theme)
@@ -87,6 +85,7 @@ def build_leaflet_map(
     ]
 
     # Add GeoJSON land cover overlay with per-feature styling and tooltips
+    initial_opacity = trigger_data.get("opacity", 0.6)
     if geojson_data and geojson_data.get("features"):
         tile_style = trigger_data.get("tile_layer_style") or {}
         color_config = tile_style.get("color_map", LAND_COVER_COLORS)
@@ -102,8 +101,10 @@ def build_leaflet_map(
                     "color_map": color_config,
                     "color_prop": "land_cover",
                     "default_color": DEFAULT_FEATURE_COLOR,
+                    "fill_opacity": initial_opacity,
                 },
                 zoomToBounds=False,
+                bubblingMouseEvents=True,
             ),
         )
 
@@ -129,7 +130,9 @@ def build_leaflet_map(
                 ),
             )
         if markers:
-            children_layers.append(dl.LayerGroup(markers))
+            children_layers.append(
+                dl.Pane(dl.LayerGroup(markers), name="scatter-overlay", style={"zIndex": 650})
+            )
 
     # Build the map
     leaflet_map = dl.Map(
@@ -144,30 +147,7 @@ def build_leaflet_map(
         },
     )
 
-    wrapper_children: list[Any] = []
-    if title:
-        wrapper_children.append(
-            html.Div(
-                title,
-                style={
-                    "textAlign": "center",
-                    "fontSize": "14px",
-                    "fontWeight": "bold",
-                    "padding": "4px 0",
-                },
-            )
-        )
-    wrapper_children.append(leaflet_map)
-
-    return html.Div(
-        wrapper_children,
-        style={
-            "height": "100%",
-            "width": "100%",
-            "display": "flex",
-            "flexDirection": "column",
-        },
-    )
+    return leaflet_map
 
 
 def build_scatter_overlay_data(
