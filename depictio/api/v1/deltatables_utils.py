@@ -833,12 +833,13 @@ def load_geojson_from_s3(dc_id: str, TOKEN: str | None = None) -> dict | None:
 
         logger.info(f"Loading GeoJSON from S3: {s3_path}")
 
-        # Read the GeoJSON from S3
-        import s3fs
+        # Read the GeoJSON from S3 using boto3
+        from depictio.api.v1.s3 import s3_client
 
-        fs = s3fs.S3FileSystem(**polars_s3_config)
-        with fs.open(s3_path, "r") as f:
-            geojson_data = json.load(f)
+        # s3_path format: s3://bucket/key
+        bucket, key = s3_path.replace("s3://", "").split("/", 1)
+        obj = s3_client.get_object(Bucket=bucket, Key=key)
+        geojson_data = json.load(obj["Body"])
 
         feature_count = len(geojson_data.get("features", []))
         logger.info(f"Loaded GeoJSON with {feature_count} features from {s3_path}")

@@ -8,6 +8,7 @@ using Plotly Express tile-based map functions (scatter_map, density_map, choropl
 import math
 from typing import Any
 
+import dash_mantine_components as dmc
 from dash import dcc, html
 
 from depictio.api.v1.configs.logging_init import logger
@@ -72,25 +73,79 @@ def build_map(**kwargs) -> html.Div:
         "range_color",
         "geojson_dc_id",
         "color_discrete_map",
+        # Scatter overlay fields
+        "scatter_overlay_dc_tag",
+        "scatter_overlay_dc_id",
+        "scatter_overlay_lat_column",
+        "scatter_overlay_lon_column",
+        "scatter_overlay_color_column",
+        "scatter_overlay_size_max",
+        "scatter_overlay_hover_columns",
+        "scatter_overlay_color_discrete_map",
+        # PMTiles / tiled_map fields
+        "pmtiles_dc_id",
+        "pmtiles_dc_tag",
+        "pmtiles_url",
+        "tile_layer_style",
     ]
     trigger_data = {
         field: kwargs.get(field, _TRIGGER_DEFAULTS.get(field)) for field in _TRIGGER_FIELDS
     }
 
-    return html.Div(
-        [
-            dcc.Store(
-                id={"type": "map-trigger", "index": index},
-                data=trigger_data,
+    children: list[Any] = [
+        dcc.Store(
+            id={"type": "map-trigger", "index": index},
+            data=trigger_data,
+        ),
+        dcc.Store(
+            id={"type": "map-metadata", "index": index},
+            data={},
+        ),
+        dcc.Store(
+            id={"type": "stored-metadata-component", "index": index},
+            data=kwargs,
+        ),
+    ]
+
+    map_type = trigger_data.get("map_type", "scatter_map")
+
+    if map_type == "tiled_map":
+        # For tiled_map, use a placeholder div that will be populated by the
+        # leaflet rendering callback. The actual dash-leaflet Map is built
+        # server-side during the callback since it needs data from S3.
+        children.append(
+            html.Div(
+                id={"type": "leaflet-container", "index": index},
+                style={
+                    "height": "100%",
+                    "width": "100%",
+                    "flex": "1",
+                },
             ),
-            dcc.Store(
-                id={"type": "map-metadata", "index": index},
-                data={},
+        )
+        # Hidden map-graph so the ALL pattern in render_maps_batch stays consistent
+        children.append(
+            dcc.Graph(
+                id={"type": "map-graph", "index": index},
+                style={"display": "none"},
             ),
-            dcc.Store(
-                id={"type": "stored-metadata-component", "index": index},
-                data=kwargs,
-            ),
+        )
+    else:
+        # Add metric selector when multi_color_columns is configured
+        multi_color_columns = (trigger_data.get("dict_kwargs") or {}).get("multi_color_columns")
+        if multi_color_columns and len(multi_color_columns) > 1:
+            metric_options = [m["name"] for m in multi_color_columns]
+            children.append(
+                dmc.SegmentedControl(
+                    id={"type": "map-metric-selector", "index": index},
+                    data=metric_options,
+                    value=metric_options[0],
+                    size="sm",
+                    style={"marginBottom": "4px", "alignSelf": "center"},
+                ),
+            )
+
+        children.append(
             dcc.Graph(
                 id={"type": "map-graph", "index": index},
                 config={
@@ -101,9 +156,13 @@ def build_map(**kwargs) -> html.Div:
                 style={
                     "height": "100%",
                     "width": "100%",
+                    "flex": "1",
                 },
             ),
-        ],
+        )
+
+    return html.Div(
+        children,
         style={
             "height": "100%",
             "width": "100%",
@@ -193,6 +252,7 @@ def render_map(
     existing_metadata: dict | None = None,
     active_selection_values: list | None = None,
     access_token: str | None = None,
+    scatter_overlay_df: Any | None = None,
 ) -> tuple[Any, dict]:
     """Render a Plotly map figure from DataFrame and configuration.
 
@@ -242,6 +302,13 @@ def render_map(
     color_continuous_scale = trigger_data.get("color_continuous_scale")
     range_color = trigger_data.get("range_color")
     geojson_dc_id = trigger_data.get("geojson_dc_id")
+
+    # Metric switching: _active_* overrides from clientside callback
+    if trigger_data.get("_active_color_column"):
+        color_column = trigger_data["_active_color_column"]
+    if trigger_data.get("_active_colorscale"):
+        color_continuous_scale = trigger_data["_active_colorscale"]
+    active_color_discrete_map = trigger_data.get("_active_color_discrete_map")
 
     # Resolve GeoJSON from data collection if no inline/URL source provided
     if map_type == "choropleth_map" and not geojson_data and not geojson_url and geojson_dc_id:
@@ -365,8 +432,13 @@ def render_map(
                 range_color=range_color,
                 opacity=opacity,
                 extra_kwargs=extra_kwargs,
+                active_color_discrete_map=active_color_discrete_map,
                 **common_kwargs,
             )
+
+            # Add scatter overlay on top of choropleth
+            if scatter_overlay_df is not None:
+                _add_scatter_overlay(fig, scatter_overlay_df, trigger_data)
         else:
             if map_type != "scatter_map":
                 logger.warning(f"Unsupported map_type: {map_type}, falling back to scatter_map")
@@ -453,6 +525,77 @@ def render_map(
     }
 
     return fig, data_info
+
+
+def _add_scatter_overlay(fig: Any, df: Any, trigger_data: dict) -> None:
+    """Add scatter marker traces on top of a choropleth map figure.
+
+    Creates one Scattermapbox trace per category (for legend) or a single
+    trace if no color column is configured.
+    """
+    import plotly.graph_objects as go
+
+    # Convert Polars to pandas if needed
+    if hasattr(df, "to_pandas"):
+        df = df.to_pandas()
+
+    lat_col = trigger_data.get("scatter_overlay_lat_column")
+    lon_col = trigger_data.get("scatter_overlay_lon_column")
+    if not lat_col or not lon_col or lat_col not in df.columns or lon_col not in df.columns:
+        return
+
+    color_col = trigger_data.get("scatter_overlay_color_column")
+    size_max = trigger_data.get("scatter_overlay_size_max", 15)
+    hover_cols = trigger_data.get("scatter_overlay_hover_columns", [])
+    color_map = trigger_data.get("scatter_overlay_color_discrete_map") or {}
+
+    # Drop rows missing coordinates
+    df = df.dropna(subset=[lat_col, lon_col])
+    if df.empty:
+        return
+
+    def _build_hovertext(subset):
+        if not hover_cols:
+            return None
+        valid_cols = [c for c in hover_cols if c in subset.columns]
+        if not valid_cols:
+            return None
+        texts = []
+        for _, row in subset.iterrows():
+            parts = [f"<b>{c}</b>: {row[c]}" for c in valid_cols]
+            texts.append("<br>".join(parts))
+        return texts
+
+    if color_col and color_col in df.columns:
+        for cat in sorted(df[color_col].dropna().unique(), key=str):
+            subset = df[df[color_col] == cat]
+            fig.add_trace(
+                go.Scattermapbox(
+                    lat=subset[lat_col],
+                    lon=subset[lon_col],
+                    mode="markers",
+                    marker=dict(
+                        size=size_max,
+                        color=color_map.get(str(cat), "#000000"),
+                    ),
+                    name=str(cat),
+                    hovertext=_build_hovertext(subset),
+                    hoverinfo="text",
+                    legendgroup="overlay",
+                )
+            )
+    else:
+        fig.add_trace(
+            go.Scattermapbox(
+                lat=df[lat_col],
+                lon=df[lon_col],
+                mode="markers",
+                marker=dict(size=size_max),
+                name="Sample Points",
+                hovertext=_build_hovertext(df),
+                hoverinfo="text",
+            )
+        )
 
 
 def _merge_extra_kwargs(kwargs: dict[str, Any], extra_kwargs: dict) -> None:
@@ -569,6 +712,7 @@ def _render_choropleth_map(
     range_color: list[float] | None,
     opacity: float,
     extra_kwargs: dict,
+    active_color_discrete_map: dict[str, str] | None = None,
     **common_kwargs: Any,
 ) -> Any:
     """Render a choropleth_map figure with colored polygon regions.
@@ -611,7 +755,10 @@ def _render_choropleth_map(
 
     if color_column and color_column in plot_df.columns:
         kwargs["color"] = color_column
-    if color_continuous_scale:
+    if active_color_discrete_map:
+        # Categorical metric: use px.choropleth_map with color_discrete_map
+        kwargs["color_discrete_map"] = active_color_discrete_map
+    elif color_continuous_scale:
         kwargs["color_continuous_scale"] = color_continuous_scale
     if range_color and len(range_color) == 2:
         kwargs["range_color"] = range_color
@@ -620,6 +767,8 @@ def _render_choropleth_map(
         if valid_hover:
             kwargs["hover_data"] = valid_hover
 
-    _merge_extra_kwargs(kwargs, extra_kwargs)
+    # Filter out custom keys that are not valid px.choropleth_map args
+    filtered_extra = {k: v for k, v in extra_kwargs.items() if k != "multi_color_columns"}
+    _merge_extra_kwargs(kwargs, filtered_extra)
 
     return px.choropleth_map(**kwargs)

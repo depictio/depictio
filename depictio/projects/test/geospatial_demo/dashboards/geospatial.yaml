@@ -1,0 +1,80 @@
+version: 1
+
+main_dashboard:
+  dashboard_id: "660b2c3d4e5f6a7b8c9d2f10"
+  title: "Geospatial Analysis"
+  subtitle: "Anthropogenic Impact Around Sampling Sites"
+  description: "Tiled map showing real satellite-derived land cover and sample locations"
+  icon: "tabler:map-2"
+  icon_color: "#4CAF50"
+  min_items_h: 3
+  max_items_h: 14
+  breakpoints: { lg: 1600, md: 1200, sm: 768 }
+  cols: { lg: 8, md: 6, sm: 4 }
+
+  interactive_components:
+    - component_type: interactive
+      interactive_component_type: MultiSelect
+      workflow_tag: python/geospatial_demo
+      data_collection_tag: metadata
+      column_name: habitat
+      label: "Habitat"
+      layout: { x: 0, y: 0, w: 1, h: 3, static: true }
+
+    - component_type: interactive
+      interactive_component_type: MultiSelect
+      workflow_tag: python/geospatial_demo
+      data_collection_tag: metadata
+      column_name: sample
+      label: "Sample"
+      layout: { x: 0, y: 3, w: 1, h: 4, static: true }
+
+  components:
+    # Tiled map: dash-leaflet with GeoJSON land cover + scatter overlay
+    - tag: anthropogenic-impact-map
+      component_type: map
+      workflow_tag: python/geospatial_demo
+      data_collection_tag: anthropogenic_metrics
+      map_type: tiled_map
+      geojson_dc_tag: anthropogenic_geojson
+      color_column: land_cover
+      opacity: 0.6
+      title: "Anthropogenic Impact Around Sampling Sites"
+      map_style: carto-positron
+      default_center: { lat: 51.0, lon: 10.5 }
+      default_zoom: 6
+      tile_layer_style:
+        color_map:
+          Grassland: "#90EE90"
+          Built-up: "#FF4444"
+          Tree Cover: "#006400"
+          Water: "#4169E1"
+          Cropland: "#DAA520"
+          Shrubland: "#8B7355"
+          Herbaceous wetland: "#8FBC8F"
+          Bare / sparse vegetation: "#D2B48C"
+      # Scatter overlay: sample locations from metadata DC
+      scatter_overlay_dc_tag: metadata
+      scatter_overlay_lat_column: latitude
+      scatter_overlay_lon_column: longitude
+      scatter_overlay_color_column: habitat
+      scatter_overlay_size_max: 20
+      scatter_overlay_hover_columns:
+        - sample
+        - name
+        - habitat
+        - city
+      scatter_overlay_color_discrete_map:
+        Riverwater: "#377EB8"
+        Groundwater: "#4DAF4A"
+        Sediment: "#E41A1C"
+        Soil: "#FF7F00"
+      layout: { x: 0, y: 0, w: 8, h: 10 }
+
+    # Metadata table below the map
+    - tag: sample-metadata-table
+      component_type: table
+      workflow_tag: python/geospatial_demo
+      data_collection_tag: metadata
+      title: "Sample Metadata"
+      layout: { x: 0, y: 10, w: 8, h: 5 }

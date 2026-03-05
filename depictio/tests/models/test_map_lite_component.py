@@ -177,7 +177,9 @@ class TestMapLiteComponentChoropleth:
 
     def test_choropleth_requires_geojson_source(self):
         """choropleth_map without any geojson source should fail."""
-        with pytest.raises(ValidationError, match="geojson_data, geojson_url, or geojson_dc_id"):
+        with pytest.raises(
+            ValidationError, match="geojson_data, geojson_url, geojson_dc_id, or geojson_dc_tag"
+        ):
             MapLiteComponent(
                 tag="no-geojson",
                 map_type="choropleth_map",

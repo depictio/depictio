@@ -14,7 +14,7 @@ from typing import Any
 
 import dash
 from bson import ObjectId
-from dash import ALL, Input, Output, State
+from dash import ALL, Input, Output, State, html
 
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.deltatables_utils import load_deltatable_lite
@@ -148,14 +148,125 @@ def _compute_filters_hash(metadata_to_pass: list[dict]) -> str:
 def register_core_callbacks(app):
     """Register core rendering callbacks for map component."""
 
+    # Tiled map (dash-leaflet) rendering callback
+    @app.callback(
+        Output({"type": "leaflet-container", "index": ALL}, "children"),
+        Input({"type": "map-trigger", "index": ALL}, "data"),
+        Input("interactive-values-store", "data"),
+        Input("theme-store", "data"),
+        State({"type": "map-trigger", "index": ALL}, "id"),
+        State({"type": "interactive-stored-metadata", "index": ALL}, "data"),
+        State({"type": "interactive-stored-metadata", "index": ALL}, "id"),
+        State("project-metadata-store", "data"),
+        State("local-store", "data"),
+        prevent_initial_call=False,
+    )
+    def render_tiled_maps_batch(
+        trigger_data_list,
+        filters_data,
+        theme_data,
+        trigger_ids,
+        interactive_metadata_list,
+        interactive_metadata_ids,
+        project_metadata,
+        local_data,
+    ):
+        """Batch rendering of tiled map (dash-leaflet) components."""
+        if not trigger_data_list or not trigger_ids:
+            raise dash.exceptions.PreventUpdate
+
+        current_theme = theme_data or "light"
+        access_token = local_data.get("access_token") if local_data else None
+
+        if not access_token:
+            logger.error("No access_token for tiled map rendering")
+            num_maps = len(trigger_ids)
+            return [html.Div("Auth Error")] * num_maps
+
+        from depictio.dash.modules.map_component.leaflet_utils import (
+            build_leaflet_map,
+            build_scatter_overlay_data,
+        )
+
+        all_children = []
+
+        for i, (trigger_data, trigger_id) in enumerate(zip(trigger_data_list, trigger_ids)):
+            if not trigger_data or not isinstance(trigger_data, dict):
+                all_children.append(html.Div())
+                continue
+
+            map_type = trigger_data.get("map_type", "scatter_map")
+            if map_type != "tiled_map":
+                all_children.append(html.Div())
+                continue
+
+            component_id = trigger_id.get("index", "unknown")
+
+            try:
+                # Load GeoJSON from S3 if configured
+                geojson_data = None
+                geojson_dc_id = trigger_data.get("geojson_dc_id")
+                pmtiles_dc_id = trigger_data.get("pmtiles_dc_id")
+
+                # For tiled_map, we can use geojson_dc_id to load GeoJSON
+                # (PMTiles integration will be added when the tile server is set up)
+                source_dc_id = geojson_dc_id or pmtiles_dc_id
+                if source_dc_id:
+                    from depictio.api.v1.deltatables_utils import load_geojson_from_s3
+
+                    geojson_data = load_geojson_from_s3(source_dc_id, TOKEN=access_token)
+
+                # Load scatter overlay data
+                scatter_overlay_data = None
+                overlay_dc_id = trigger_data.get("scatter_overlay_dc_id")
+                if overlay_dc_id:
+                    wf_id = trigger_data.get("wf_id")
+                    if wf_id:
+                        overlay_filters = _extract_filters_for_map(
+                            str(overlay_dc_id),
+                            filters_data,
+                            interactive_metadata_list,
+                            interactive_metadata_ids,
+                            project_metadata,
+                            access_token=access_token,
+                        )
+                        overlay_df = load_deltatable_lite(
+                            ObjectId(str(wf_id)),
+                            ObjectId(str(overlay_dc_id)),
+                            metadata=overlay_filters,
+                            TOKEN=access_token,
+                        )
+                        if overlay_df is not None:
+                            scatter_overlay_data = build_scatter_overlay_data(
+                                overlay_df, trigger_data
+                            )
+
+                leaflet_component = build_leaflet_map(
+                    index=component_id,
+                    trigger_data=trigger_data,
+                    geojson_data=geojson_data,
+                    scatter_overlay_data=scatter_overlay_data,
+                    theme=current_theme,
+                )
+                all_children.append(leaflet_component)
+
+            except Exception as e:
+                logger.error(f"Tiled map render failed for {component_id}: {e}", exc_info=True)
+                all_children.append(html.Div(f"Error: {e}"))
+
+        return all_children
+
+    # Plotly map (scatter/density/choropleth) rendering callback
     @app.callback(
         Output({"type": "map-graph", "index": ALL}, "figure"),
         Output({"type": "map-metadata", "index": ALL}, "data"),
         Input({"type": "map-trigger", "index": ALL}, "data"),
         Input("interactive-values-store", "data"),
         Input("theme-store", "data"),
+        Input({"type": "map-metric-selector", "index": ALL}, "value"),
         State({"type": "map-trigger", "index": ALL}, "id"),
         State({"type": "map-metadata", "index": ALL}, "data"),
+        State({"type": "map-metric-selector", "index": ALL}, "id"),
         State({"type": "interactive-stored-metadata", "index": ALL}, "data"),
         State({"type": "interactive-stored-metadata", "index": ALL}, "id"),
         State("project-metadata-store", "data"),
@@ -166,8 +277,10 @@ def register_core_callbacks(app):
         trigger_data_list,
         filters_data,
         theme_data,
+        metric_selector_values,
         trigger_ids,
         existing_metadata_list,
+        metric_selector_ids,
         interactive_metadata_list,
         interactive_metadata_ids,
         project_metadata,
@@ -189,16 +302,25 @@ def register_core_callbacks(app):
         # Build load registry (dedup DC loads)
         dc_load_registry: dict[LoadKey, list[dict]] = {}
         map_to_load_key: dict[int, LoadKey | None] = {}
+        map_to_overlay_key: dict[int, LoadKey | None] = {}
 
         for i, trigger_data in enumerate(trigger_data_list):
             if not trigger_data or not isinstance(trigger_data, dict):
                 map_to_load_key[i] = None
+                map_to_overlay_key[i] = None
+                continue
+
+            # Skip tiled_map — rendered by the leaflet callback, not Plotly
+            if trigger_data.get("map_type") == "tiled_map":
+                map_to_load_key[i] = None
+                map_to_overlay_key[i] = None
                 continue
 
             wf_id = trigger_data.get("wf_id")
             dc_id = trigger_data.get("dc_id")
             if not wf_id or not dc_id:
                 map_to_load_key[i] = None
+                map_to_overlay_key[i] = None
                 continue
 
             wf_id_str = str(wf_id)
@@ -220,6 +342,26 @@ def register_core_callbacks(app):
                 dc_load_registry[load_key] = metadata_to_pass
 
             map_to_load_key[i] = load_key
+
+            # Register scatter overlay DC for parallel loading
+            overlay_dc_id = trigger_data.get("scatter_overlay_dc_id")
+            if overlay_dc_id:
+                overlay_dc_id_str = str(overlay_dc_id)
+                overlay_filters = _extract_filters_for_map(
+                    overlay_dc_id_str,
+                    filters_data,
+                    interactive_metadata_list,
+                    interactive_metadata_ids,
+                    project_metadata,
+                    access_token=access_token,
+                )
+                overlay_hash = _compute_filters_hash(overlay_filters)
+                overlay_key: LoadKey = (wf_id_str, overlay_dc_id_str, overlay_hash)
+                if overlay_key not in dc_load_registry:
+                    dc_load_registry[overlay_key] = overlay_filters
+                map_to_overlay_key[i] = overlay_key
+            else:
+                map_to_overlay_key[i] = None
 
         # Load DCs in parallel
         dc_cache: dict[LoadKey, Any] = {}
@@ -259,6 +401,13 @@ def register_core_callbacks(app):
                         map_selection_values = val
                     break
 
+        # Build metric selector lookup: map index → selected metric name
+        metric_by_index: dict[str, str] = {}
+        if metric_selector_values and metric_selector_ids:
+            for val, mid in zip(metric_selector_values, metric_selector_ids):
+                if val and mid:
+                    metric_by_index[mid["index"]] = val
+
         # Process each map
         all_figures = []
         all_metadata = []
@@ -281,6 +430,28 @@ def register_core_callbacks(app):
 
             try:
                 prev_metadata = existing_metadata_list[i] if i < len(existing_metadata_list) else {}
+
+                # Load scatter overlay DF if configured
+                overlay_key = map_to_overlay_key.get(i)
+                overlay_df = dc_cache.get(overlay_key) if overlay_key else None
+
+                # Resolve active metric from SegmentedControl
+                map_index = trigger_id.get("index", "") if trigger_id else ""
+                selected_metric = metric_by_index.get(map_index)
+                if selected_metric:
+                    multi_cols = (trigger_data.get("dict_kwargs") or {}).get(
+                        "multi_color_columns", []
+                    )
+                    for mc in multi_cols:
+                        if mc.get("name") == selected_metric:
+                            trigger_data = {**trigger_data}  # shallow copy
+                            trigger_data["_active_color_column"] = mc.get("column")
+                            trigger_data["_active_colorscale"] = mc.get("colorscale")
+                            trigger_data["_active_color_discrete_map"] = mc.get(
+                                "color_discrete_map"
+                            )
+                            break
+
                 fig, data_info = render_map(
                     df,
                     trigger_data,
@@ -288,6 +459,7 @@ def register_core_callbacks(app):
                     existing_metadata=prev_metadata,
                     active_selection_values=map_selection_values,
                     access_token=access_token,
+                    scatter_overlay_df=overlay_df,
                 )
 
                 # Convert to dict for serialization

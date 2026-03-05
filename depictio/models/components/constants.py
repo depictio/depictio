@@ -61,6 +61,7 @@ MAP_TYPES: tuple[str, ...] = (
     "scatter_map",
     "density_map",
     "choropleth_map",
+    "tiled_map",
 )
 
 MAP_STYLES: tuple[str, ...] = (
