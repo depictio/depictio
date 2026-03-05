@@ -12,6 +12,7 @@ from depictio.models.models.data_collections_types.image import DCImageConfig
 from depictio.models.models.data_collections_types.jbrowse import DCJBrowse2Config
 from depictio.models.models.data_collections_types.multiqc import DCMultiQC
 from depictio.models.models.data_collections_types.table import DCTableConfig
+from depictio.models.models.transforms import TransformConfig
 
 
 class DataCollectionSource(str, Enum):
@@ -20,6 +21,7 @@ class DataCollectionSource(str, Enum):
     NATIVE = "native"  # Ingested from external files/sources (requires scan)
     JOINED = "joined"  # Derived from joining other DCs (no scan needed)
     AGGREGATED = "aggregated"  # Future: aggregations, transformations, etc.
+    TRANSFORMED = "transformed"  # Recipe-based: Python transform on raw files
 
 
 class WildcardRegexBase(BaseModel):
@@ -164,6 +166,7 @@ class DataCollectionConfig(MongoModel):
         DCTableConfig | DCJBrowse2Config | DCMultiQC | DCImageConfig | DCGeoJSONConfig
     )
     join: TableJoinConfig | None = None
+    transform: TransformConfig | None = None
 
     model_config = ConfigDict(extra="forbid", use_enum_values=True)
 
@@ -191,7 +194,7 @@ class DataCollectionConfig(MongoModel):
             except KeyError:
                 raise ValueError(f"Invalid DataCollectionSource member: {enum_member_name}")
 
-        # Handle enum value strings ("native", "joined", "aggregated")
+        # Handle enum value strings ("native", "joined", "aggregated", "transformed")
         try:
             return DataCollectionSource(v)
         except ValueError:

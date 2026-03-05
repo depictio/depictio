@@ -361,6 +361,11 @@ def client_aggregate_data(
     # Handle GeoJSON data collections - upload file to S3 and store location
     if data_collection.config.type.lower() == "geojson":
         return process_geojson_data_collection(data_collection, CLI_config, overwrite)
+
+    # Handle transformed (recipe-based) data collections
+    if data_collection.config.source == "transformed":
+        return process_recipe_data_collection(data_collection, CLI_config, overwrite)
+
     # Generate destination prefix using the data collection id - should be a S3 path
     destination_prefix = f"s3://{CLI_config.s3_storage.bucket}/{str(data_collection.id)}"
     logger.debug(f"Destination prefix: {destination_prefix}")
@@ -646,4 +651,89 @@ def process_geojson_data_collection(
     return {
         "result": "success",
         "message": f"GeoJSON uploaded to {s3_location}",
+    }
+
+
+def process_recipe_data_collection(
+    data_collection: DataCollection,
+    CLI_config: CLIConfig,
+    overwrite: bool = False,
+) -> dict[str, str]:
+    """Process a transformed (recipe-based) data collection.
+
+    Loads the recipe, resolves sources from the workflow data directory,
+    executes the transform, and writes the result to Delta Lake.
+
+    Args:
+        data_collection: DataCollection with source="transformed" and transform config.
+        CLI_config: CLI configuration with API URL and credentials.
+        overwrite: Whether to overwrite existing data.
+
+    Returns:
+        Result dict with success/error status.
+    """
+    from depictio.recipes import RecipeError, execute_recipe
+
+    transform_config = data_collection.config.transform
+    if transform_config is None:
+        return {
+            "result": "error",
+            "message": f"Transformed DC '{data_collection.data_collection_tag}' has no transform config.",
+        }
+
+    recipe_name = transform_config.recipe
+    rich_print_checked_statement(f"Running recipe: {recipe_name}", "info")
+
+    # Build source overrides dict
+    overrides = None
+    if transform_config.source_overrides:
+        overrides = {ref: so.path for ref, so in transform_config.source_overrides.items()}
+
+    # Determine data directory from workflow
+    # For now, use a placeholder — the actual data_dir comes from the workflow's data_location
+    # This will be wired up when the full process pipeline provides the data_dir
+    data_dir = "."  # TODO: resolve from workflow data_location
+
+    try:
+        result_df = execute_recipe(recipe_name, data_dir, overrides)
+    except RecipeError as e:
+        return {"result": "error", "message": f"Recipe failed: {e}"}
+
+    # Write to Delta Lake (same path as standard aggregation)
+    destination_prefix = f"s3://{CLI_config.s3_storage.bucket}/{data_collection.id!s}"
+    storage_options = turn_S3_config_into_polars_storage_options(CLI_config.s3_storage)
+
+    deltatable_size_bytes = calculate_dataframe_size_bytes(result_df)
+    write_result = write_delta_table(
+        aggregated_df=result_df,
+        destination_file=destination_prefix,
+        storage_options=storage_options,
+    )
+
+    if write_result.get("result") == "error":
+        return write_result
+
+    # Upsert metadata
+    api_upsert_result = api_upsert_deltatable(
+        data_collection_id=str(data_collection.id),
+        CLI_config=CLI_config,
+        delta_table_location=destination_prefix,
+        update=overwrite,
+        deltatable_size_bytes=deltatable_size_bytes,
+    )
+    if api_upsert_result.status_code != 200:
+        return {"result": "error", "message": f"API upsert failed: {api_upsert_result.text}"}
+
+    api_result = api_upsert_result.json()
+    if api_result.get("result") == "error":
+        return api_result
+
+    rich_print_checked_statement(
+        f"Recipe '{recipe_name}' produced {result_df.height} rows, written to Delta Lake",
+        "success",
+    )
+
+    return {
+        "result": "success",
+        "message": f"Recipe '{recipe_name}' result written to {destination_prefix}.",
     }
