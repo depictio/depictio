@@ -315,3 +315,9 @@ docker-compose.override.yaml
 # depictioDB/
 # minio_data/
 # cache/
+
+# ESA WorldCover tile cache (large GeoTIFF files)
+dev/geomap-features/.tile_cache/
+
+# PMTiles (generated, not tracked)
+*.pmtiles

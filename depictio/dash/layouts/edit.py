@@ -315,10 +315,10 @@ def _create_component_buttons(
             "view_accessible": ["metadata"],
         },
         "map": {
-            "orientation": "vertical",
-            "edit_only": ["drag", "duplicate", "edit", "remove"],
+            "orientation": "horizontal",
+            "edit_only": ["drag", "duplicate", "remove"],
             "view_accessible": ["metadata"],
-            "selection_edit_only": ["drag", "duplicate", "edit", "remove"],
+            "selection_edit_only": ["drag", "duplicate", "remove"],
             "selection_view_accessible": ["metadata", "reset"],
         },
         "text": {

@@ -530,6 +530,45 @@ def enrich_component_geojson_dc_tag(
             comp["geojson_dc_tag"] = tag
 
 
+def enrich_component_scatter_overlay_dc_tag(
+    comp: dict,
+    dc_cache: dict[str, dict | None],
+    projects_collection: Any,
+) -> None:
+    """Enrich a map component with scatter_overlay_dc_tag from scatter_overlay_dc_id."""
+    scatter_overlay_dc_id = comp.get("scatter_overlay_dc_id")
+    if not scatter_overlay_dc_id:
+        return
+
+    dc_id_str = str(scatter_overlay_dc_id)
+
+    if dc_id_str not in dc_cache:
+        try:
+            dc_doc = None
+            for project in projects_collection.find():
+                if "workflows" in project:
+                    for wf in project["workflows"]:
+                        if "data_collections" in wf:
+                            for dc in wf["data_collections"]:
+                                if str(dc.get("_id")) == dc_id_str:
+                                    dc_doc = dc
+                                    break
+                        if dc_doc:
+                            break
+                if dc_doc:
+                    break
+            dc_cache[dc_id_str] = dc_doc
+        except Exception as e:
+            logger.debug(f"Failed to lookup scatter overlay DC {scatter_overlay_dc_id}: {e}")
+            dc_cache[dc_id_str] = None
+
+    dc_doc = dc_cache[dc_id_str]
+    if dc_doc:
+        tag = dc_doc.get("data_collection_tag")
+        if tag:
+            comp["scatter_overlay_dc_tag"] = tag
+
+
 def enrich_dashboard_with_tags(
     dashboard_data: dict,
     db_client: Any = None,
@@ -566,6 +605,7 @@ def enrich_dashboard_with_tags(
         enrich_component_dc_tag(comp, dc_cache, projects_collection)
         enrich_component_wf_tag(comp, wf_cache, projects_collection)
         enrich_component_geojson_dc_tag(comp, dc_cache, projects_collection)
+        enrich_component_scatter_overlay_dc_tag(comp, dc_cache, projects_collection)
 
     return dashboard_data
 
