@@ -133,6 +133,8 @@ def build_leaflet_map(
         tile_style = trigger_data.get("tile_layer_style") or {}
         color_config = tile_style.get("color_map", LAND_COVER_COLORS)
 
+        # Create a named pane for land cover with lower z-index
+        children_layers.append(dl.Pane(name="land-cover-overlay", style={"zIndex": 400}))
         children_layers.append(
             dl.GeoJSON(
                 id={"type": "leaflet-geojson", "index": index},
@@ -148,6 +150,7 @@ def build_leaflet_map(
                 },
                 zoomToBounds=False,
                 bubblingMouseEvents=True,
+                pane="land-cover-overlay",
             ),
         )
 
@@ -155,16 +158,15 @@ def build_leaflet_map(
     if scatter_overlay_data:
         scatter_geojson = build_scatter_overlay_geojson(scatter_overlay_data)
         if scatter_geojson["features"]:
+            # Create a named pane for scatter with higher z-index
+            children_layers.append(dl.Pane(name="scatter-overlay", style={"zIndex": 650}))
             children_layers.append(
-                dl.Pane(
-                    dl.GeoJSON(
-                        id={"type": "leaflet-scatter", "index": index},
-                        data=scatter_geojson,
-                        pointToLayer=_point_to_layer,
-                        onEachFeature=_on_each_scatter_feature,
-                    ),
-                    name="scatter-overlay",
-                    style={"zIndex": 650},
+                dl.GeoJSON(
+                    id={"type": "leaflet-scatter", "index": index},
+                    data=scatter_geojson,
+                    pointToLayer=_point_to_layer,
+                    onEachFeature=_on_each_scatter_feature,
+                    pane="scatter-overlay",
                 ),
             )
 

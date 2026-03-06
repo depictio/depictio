@@ -74,7 +74,8 @@ window.dashExtensions = Object.assign({}, window.dashExtensions, {
                 fillColor: color,
                 fillOpacity: 0.8,
                 weight: 2,
-                opacity: 1
+                opacity: 1,
+                pane: 'scatter-overlay'
             });
         },
 

@@ -145,6 +145,69 @@ def _compute_filters_hash(metadata_to_pass: list[dict]) -> str:
     ).hexdigest()[:8]
 
 
+def _load_scatter_overlay(
+    component_id: str,
+    trigger_data: dict,
+    filters_data: dict | None,
+    interactive_metadata_list: list | None,
+    interactive_metadata_ids: list | None,
+    project_metadata: dict | None,
+    access_token: str | None,
+    build_scatter_overlay_data,
+) -> list[dict] | None:
+    """Load and filter scatter overlay data for a tiled map component."""
+    overlay_dc_id = trigger_data.get("scatter_overlay_dc_id")
+    overlay_dc_tag = trigger_data.get("scatter_overlay_dc_tag")
+
+    if not overlay_dc_id:
+        if overlay_dc_tag:
+            logger.warning(
+                f"Tiled map {component_id}: scatter_overlay_dc_tag='{overlay_dc_tag}' present but scatter_overlay_dc_id is None — tag was not resolved during import"
+            )
+        else:
+            logger.info(f"Tiled map {component_id}: no scatter overlay configured")
+        return None
+
+    logger.info(f"Tiled map {component_id}: loading scatter overlay dc_id={str(overlay_dc_id)[:8]}")
+    wf_id = trigger_data.get("wf_id")
+    if not wf_id:
+        logger.warning(
+            f"Tiled map {component_id}: scatter overlay skipped — no wf_id in trigger_data"
+        )
+        return None
+
+    overlay_filters = _extract_filters_for_map(
+        str(overlay_dc_id),
+        filters_data,
+        interactive_metadata_list,
+        interactive_metadata_ids,
+        project_metadata,
+        access_token=access_token,
+    )
+    overlay_df = load_deltatable_lite(
+        ObjectId(str(wf_id)),
+        ObjectId(str(overlay_dc_id)),
+        metadata=overlay_filters,
+        TOKEN=access_token,
+    )
+    if overlay_df is None:
+        logger.warning(
+            f"Tiled map {component_id}: load_deltatable_lite returned None for overlay dc_id={str(overlay_dc_id)[:8]}"
+        )
+        return None
+
+    scatter_overlay_data = build_scatter_overlay_data(overlay_df, trigger_data)
+    if not scatter_overlay_data:
+        logger.warning(
+            f"Tiled map {component_id}: build_scatter_overlay_data returned empty list (check lat/lon/color column names)"
+        )
+    else:
+        logger.info(
+            f"Tiled map {component_id}: scatter overlay loaded with {len(scatter_overlay_data)} markers"
+        )
+    return scatter_overlay_data
+
+
 def register_core_callbacks(app):
     """Register core rendering callbacks for map component."""
 
@@ -212,12 +275,12 @@ def register_core_callbacks(app):
         if not trigger_data_list or not trigger_ids:
             raise dash.exceptions.PreventUpdate
 
+        num_maps = len(trigger_ids)
         current_theme = theme_data or "light"
         access_token = local_data.get("access_token") if local_data else None
 
         if not access_token:
             logger.error("No access_token for tiled map rendering")
-            num_maps = len(trigger_ids)
             return [html.Div("Auth Error")] * num_maps, [[]] * num_maps
 
         from depictio.dash.modules.map_component.leaflet_utils import (
@@ -241,9 +304,6 @@ def register_core_callbacks(app):
                 geojson_data = None
                 geojson_dc_id = trigger_data.get("geojson_dc_id")
                 pmtiles_dc_id = trigger_data.get("pmtiles_dc_id")
-
-                # For tiled_map, we can use geojson_dc_id to load GeoJSON
-                # (PMTiles integration will be added when the tile server is set up)
                 source_dc_id = geojson_dc_id or pmtiles_dc_id
                 if source_dc_id:
                     from depictio.api.v1.deltatables_utils import load_geojson_from_s3
@@ -251,55 +311,16 @@ def register_core_callbacks(app):
                     geojson_data = load_geojson_from_s3(source_dc_id, TOKEN=access_token)
 
                 # Load scatter overlay data
-                scatter_overlay_data = None
-                overlay_dc_id = trigger_data.get("scatter_overlay_dc_id")
-                overlay_dc_tag = trigger_data.get("scatter_overlay_dc_tag")
-                if overlay_dc_id:
-                    logger.info(
-                        f"Tiled map {component_id}: loading scatter overlay dc_id={str(overlay_dc_id)[:8]}"
-                    )
-                    wf_id = trigger_data.get("wf_id")
-                    if not wf_id:
-                        logger.warning(
-                            f"Tiled map {component_id}: scatter overlay skipped — no wf_id in trigger_data"
-                        )
-                    else:
-                        overlay_filters = _extract_filters_for_map(
-                            str(overlay_dc_id),
-                            filters_data,
-                            interactive_metadata_list,
-                            interactive_metadata_ids,
-                            project_metadata,
-                            access_token=access_token,
-                        )
-                        overlay_df = load_deltatable_lite(
-                            ObjectId(str(wf_id)),
-                            ObjectId(str(overlay_dc_id)),
-                            metadata=overlay_filters,
-                            TOKEN=access_token,
-                        )
-                        if overlay_df is None:
-                            logger.warning(
-                                f"Tiled map {component_id}: load_deltatable_lite returned None for overlay dc_id={str(overlay_dc_id)[:8]}"
-                            )
-                        else:
-                            scatter_overlay_data = build_scatter_overlay_data(
-                                overlay_df, trigger_data
-                            )
-                            if not scatter_overlay_data:
-                                logger.warning(
-                                    f"Tiled map {component_id}: build_scatter_overlay_data returned empty list (check lat/lon/color column names)"
-                                )
-                            else:
-                                logger.info(
-                                    f"Tiled map {component_id}: scatter overlay loaded with {len(scatter_overlay_data)} markers"
-                                )
-                elif overlay_dc_tag:
-                    logger.warning(
-                        f"Tiled map {component_id}: scatter_overlay_dc_tag='{overlay_dc_tag}' present but scatter_overlay_dc_id is None — tag was not resolved during import"
-                    )
-                else:
-                    logger.info(f"Tiled map {component_id}: no scatter overlay configured")
+                scatter_overlay_data = _load_scatter_overlay(
+                    component_id,
+                    trigger_data,
+                    filters_data,
+                    interactive_metadata_list,
+                    interactive_metadata_ids,
+                    project_metadata,
+                    access_token,
+                    build_scatter_overlay_data,
+                )
 
                 leaflet_component = build_leaflet_map(
                     index=component_id,
