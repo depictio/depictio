@@ -194,6 +194,8 @@ def register_leaflet_selection_callback(app):
         triggered_type = triggered.get("type", "") if isinstance(triggered, dict) else ""
         triggered_index = triggered.get("index", "") if isinstance(triggered, dict) else ""
 
+        logger.info(f"Leaflet selection triggered: type={triggered_type}, index={triggered_index}")
+
         # Find the matching trigger_data for this component
         trigger_data = None
         for td, tid in zip(trigger_data_list, trigger_ids):
@@ -232,6 +234,9 @@ def register_leaflet_selection_callback(app):
                         value = props.get(selection_column)
                         if value is not None:
                             selected_values = [str(value)]
+                            logger.info(
+                                f"Leaflet scatter click: selected '{value}' from column '{selection_column}'"
+                            )
                     break
 
         elif triggered_type == "leaflet-edit-control":
@@ -252,10 +257,17 @@ def register_leaflet_selection_callback(app):
                         triggered_index, scatter_data_list, scatter_data_ids
                     )
                     if not scatter_data:
+                        logger.warning(
+                            f"Leaflet edit-control: no scatter data found for index={triggered_index}"
+                        )
                         raise dash.exceptions.PreventUpdate
 
                     selected_values = _points_in_drawn_shapes(
                         scatter_data, drawn_features, selection_column
+                    )
+                    logger.info(
+                        f"Leaflet draw selection: {len(drawn_features)} shapes, "
+                        f"{len(scatter_data)} points tested, {len(selected_values)} selected"
                     )
                     break
 
@@ -266,6 +278,7 @@ def register_leaflet_selection_callback(app):
                 for v in current_store.get("interactive_components_values", [])
             )
             if had_previous:
+                logger.info("Leaflet selection: clearing previous selection")
                 return merge_selection_values(existing_values, [])
             raise dash.exceptions.PreventUpdate
 

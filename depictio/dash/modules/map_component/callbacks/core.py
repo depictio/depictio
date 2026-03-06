@@ -252,9 +252,9 @@ def register_core_callbacks(app):
         Output({"type": "leaflet-container", "index": ALL}, "children"),
         Output({"type": "leaflet-scatter-data", "index": ALL}, "data"),
         Input({"type": "leaflet-trigger", "index": ALL}, "data"),
-        Input("interactive-values-store", "data"),
         Input("theme-store", "data"),
         State({"type": "leaflet-trigger", "index": ALL}, "id"),
+        State("interactive-values-store", "data"),
         State({"type": "interactive-stored-metadata", "index": ALL}, "data"),
         State({"type": "interactive-stored-metadata", "index": ALL}, "id"),
         State("project-metadata-store", "data"),
@@ -263,9 +263,9 @@ def register_core_callbacks(app):
     )
     def render_tiled_maps_batch(
         trigger_data_list,
-        filters_data,
         theme_data,
         trigger_ids,
+        filters_data,
         interactive_metadata_list,
         interactive_metadata_ids,
         project_metadata,
