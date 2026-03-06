@@ -1,0 +1,18 @@
+[project]
+name = "gene-explorer"
+version = "0.1.0"
+description = "Prototype: single-gene deep-dive explorer"
+requires-python = ">=3.13"
+dependencies = [
+    "dash>=3.0.0",
+    "dash-mantine-components>=2.0.0",
+    "dash-ag-grid>=31.0.0",
+    "dash-iconify>=0.1.2",
+    "plotly>=6.0.0",
+    "pandas>=2.0.0",
+    "numpy>=2.0.0",
+    "scipy>=1.10.0",
+]
+
+[tool.uv]
+package = false
