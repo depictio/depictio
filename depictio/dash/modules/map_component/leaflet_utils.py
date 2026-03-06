@@ -5,9 +5,11 @@ Provides build_leaflet_map() for creating dash-leaflet based tiled map
 components that render PMTiles vector tiles with progressive loading.
 """
 
+import hashlib
 from typing import Any
 
 import dash_leaflet as dl
+from dash import html
 from dash_extensions.javascript import Namespace
 
 # JS namespace references for functions defined in assets/js/leaflet-map-functions.js
@@ -94,6 +96,95 @@ def build_scatter_overlay_geojson(
     }
 
 
+def _inject_random_impact_index(geojson_data: dict) -> None:
+    """Inject deterministic random impact_index values into GeoJSON features.
+
+    Uses a hash of the feature's id/index for deterministic results across renders.
+    """
+    for i, feature in enumerate(geojson_data.get("features", [])):
+        props = feature.get("properties", {})
+        # Use feature id or index as seed for deterministic randomness
+        seed_str = str(props.get("id", i))
+        seed_hash = int(hashlib.md5(seed_str.encode()).hexdigest()[:8], 16)
+        # Map to 0-1 range with 2 decimal places
+        props["impact_index"] = round((seed_hash % 10000) / 10000, 2)
+
+
+def _build_legend_children(metric: dict) -> list:
+    """Build legend HTML children for a metric config."""
+    legend_style = {
+        "background": "var(--app-surface-color, rgba(255,255,255,0.9))",
+        "color": "var(--app-text-color, #333)",
+        "padding": "8px 10px",
+        "borderRadius": "4px",
+        "fontSize": "11px",
+        "boxShadow": "0 1px 4px rgba(0,0,0,0.3)",
+        "lineHeight": "1.6",
+        "maxHeight": "200px",
+        "overflowY": "auto",
+    }
+
+    if metric.get("type") == "continuous":
+        stops = metric.get("color_stops", [])
+        color_min = metric.get("color_min", 0)
+        color_max = metric.get("color_max", 1)
+        if stops:
+            gradient_parts = [f"{s[1]} {int(s[0] * 100)}%" for s in stops]
+            gradient_css = f"linear-gradient(to right, {', '.join(gradient_parts)})"
+        else:
+            gradient_css = "linear-gradient(to right, #228B22, #FF4444)"
+        return [
+            html.Div(
+                [
+                    html.Div(
+                        metric.get("name", "Metric"),
+                        style={"fontWeight": "bold", "marginBottom": "4px"},
+                    ),
+                    html.Div(
+                        style={
+                            "height": "12px",
+                            "background": gradient_css,
+                            "borderRadius": "2px",
+                            "marginBottom": "2px",
+                        }
+                    ),
+                    html.Div(
+                        [
+                            html.Span(str(color_min)),
+                            html.Span(str(color_max), style={"float": "right"}),
+                        ]
+                    ),
+                ],
+                style=legend_style,
+            )
+        ]
+    else:
+        # Categorical legend
+        color_map = metric.get("color_map", {})
+        items = []
+        for label, color in color_map.items():
+            items.append(
+                html.Div(
+                    [
+                        html.Span(
+                            style={
+                                "display": "inline-block",
+                                "width": "12px",
+                                "height": "12px",
+                                "backgroundColor": color,
+                                "marginRight": "6px",
+                                "verticalAlign": "middle",
+                                "borderRadius": "2px",
+                            }
+                        ),
+                        html.Span(label, style={"verticalAlign": "middle"}),
+                    ],
+                    style={"whiteSpace": "nowrap"},
+                )
+            )
+        return [html.Div(items, style=legend_style)]
+
+
 def build_leaflet_map(
     index: str,
     trigger_data: dict,
@@ -133,6 +224,38 @@ def build_leaflet_map(
         tile_style = trigger_data.get("tile_layer_style") or {}
         color_config = tile_style.get("color_map", LAND_COVER_COLORS)
 
+        # Build metrics config for hideout
+        tiled_map_metrics = trigger_data.get("tiled_map_metrics") or []
+        metrics_dict: dict[str, dict] = {}
+        initial_hideout: dict[str, Any] = {
+            "color_map": color_config,
+            "color_prop": "land_cover",
+            "color_type": "categorical",
+            "default_color": DEFAULT_FEATURE_COLOR,
+            "fill_opacity": initial_opacity,
+        }
+
+        if tiled_map_metrics:
+            first_metric = tiled_map_metrics[0]
+            initial_hideout["color_prop"] = first_metric.get("property", "land_cover")
+            initial_hideout["color_type"] = first_metric.get("type", "categorical")
+            if first_metric.get("type") == "categorical":
+                initial_hideout["color_map"] = first_metric.get("color_map", color_config)
+            elif first_metric.get("type") == "continuous":
+                initial_hideout["color_stops"] = first_metric.get("color_stops", [])
+                initial_hideout["color_min"] = first_metric.get("color_min", 0)
+                initial_hideout["color_max"] = first_metric.get("color_max", 1)
+
+            for m in tiled_map_metrics:
+                metrics_dict[m["name"]] = m
+            initial_hideout["metrics"] = metrics_dict
+
+            # Inject deterministic random impact_index for continuous metrics
+            for m in tiled_map_metrics:
+                if m.get("type") == "continuous" and m.get("property") == "impact_index":
+                    _inject_random_impact_index(geojson_data)
+                    break
+
         # Create a named pane for land cover with lower z-index
         children_layers.append(dl.Pane(name="land-cover-overlay", style={"zIndex": 400}))
         children_layers.append(
@@ -142,12 +265,7 @@ def build_leaflet_map(
                 style=_style_function,
                 hoverStyle=_hover_style,
                 onEachFeature=_on_each_feature,
-                hideout={
-                    "color_map": color_config,
-                    "color_prop": "land_cover",
-                    "default_color": DEFAULT_FEATURE_COLOR,
-                    "fill_opacity": initial_opacity,
-                },
+                hideout=initial_hideout,
                 zoomToBounds=False,
                 bubblingMouseEvents=True,
                 pane="land-cover-overlay",
@@ -202,7 +320,20 @@ def build_leaflet_map(
         },
     )
 
-    return leaflet_map
+    # Build all metric legends server-side; show first, hide rest
+    legend_children: list = []
+    tiled_map_metrics = trigger_data.get("tiled_map_metrics") or []
+    for mi, metric in enumerate(tiled_map_metrics):
+        display = "block" if mi == 0 else "none"
+        legend_children.append(
+            html.Div(
+                _build_legend_children(metric),
+                id={"type": "leaflet-legend-item", "index": index, "metric": metric["name"]},
+                style={"display": display},
+            )
+        )
+
+    return leaflet_map, legend_children
 
 
 def build_scatter_overlay_data(

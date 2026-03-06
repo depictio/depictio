@@ -845,6 +845,7 @@ class DashboardDataLite(BaseModel):
                     "geojson_url",
                     "geojson_dc_id",
                     "geojson_dc_tag",
+                    "tiled_map_metrics",
                     "choropleth_aggregation",
                     "color_continuous_scale",
                     "range_color",
@@ -1100,6 +1101,7 @@ class DashboardDataLite(BaseModel):
                     "pmtiles_dc_tag": None,
                     "pmtiles_url": None,
                     "tile_layer_style": None,
+                    "tiled_map_metrics": None,
                     "color_discrete_map": None,
                 }
                 for field, default in _MAP_FULL_DEFAULTS.items():

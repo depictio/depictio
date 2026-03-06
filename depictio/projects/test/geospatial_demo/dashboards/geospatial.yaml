@@ -93,6 +93,30 @@ main_dashboard:
           Shrubland: "#8B7355"
           Herbaceous wetland: "#8FBC8F"
           Bare / sparse vegetation: "#D2B48C"
+      tiled_map_metrics:
+        - name: "Land Cover"
+          property: "land_cover"
+          type: categorical
+          color_map:
+            Grassland: "#90EE90"
+            Built-up: "#FF4444"
+            Tree Cover: "#006400"
+            Water: "#4169E1"
+            Cropland: "#DAA520"
+            Shrubland: "#8B7355"
+            Herbaceous wetland: "#8FBC8F"
+            Bare / sparse vegetation: "#D2B48C"
+        - name: "Impact Factor"
+          property: "impact_index"
+          type: continuous
+          color_min: 0
+          color_max: 1
+          color_stops:
+            - [0.0, "#228B22"]
+            - [0.25, "#90EE90"]
+            - [0.5, "#FFFF00"]
+            - [0.75, "#FFA500"]
+            - [1.0, "#FF4444"]
       scatter_overlay_dc_tag: metadata
       scatter_overlay_lat_column: latitude
       scatter_overlay_lon_column: longitude

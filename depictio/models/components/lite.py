@@ -555,6 +555,12 @@ class MapLiteComponent(BaseLiteComponent):
         default=None, description="Color mapping for scatter overlay categories"
     )
 
+    # Tiled map metric switching
+    tiled_map_metrics: list[dict[str, Any]] | None = Field(
+        default=None,
+        description="List of switchable metrics for tiled_map. Each has name, property, type (categorical/continuous), and color config.",
+    )
+
     # PMTiles / tiled_map specific
     pmtiles_dc_id: str | None = Field(
         default=None,

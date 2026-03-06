@@ -87,6 +87,8 @@ def build_map(**kwargs) -> html.Div:
         "pmtiles_dc_tag",
         "pmtiles_url",
         "tile_layer_style",
+        # Tiled map metric switching
+        "tiled_map_metrics",
     ]
     trigger_data = {
         field: kwargs.get(field, _TRIGGER_DEFAULTS.get(field)) for field in _TRIGGER_FIELDS
@@ -130,11 +132,29 @@ def build_map(**kwargs) -> html.Div:
                     },
                 ),
             )
-        # Leaflet map container (fills available space)
+        # Leaflet map container (fills available space, positioned for legend overlay)
         children.append(
             html.Div(
-                id={"type": "leaflet-container", "index": index},
+                [
+                    html.Div(
+                        id={"type": "leaflet-container", "index": index},
+                        style={
+                            "width": "100%",
+                            "height": "100%",
+                        },
+                    ),
+                    html.Div(
+                        id={"type": "leaflet-legend", "index": index},
+                        style={
+                            "position": "absolute",
+                            "bottom": "30px",
+                            "right": "10px",
+                            "zIndex": "1000",
+                        },
+                    ),
+                ],
                 style={
+                    "position": "relative",
                     "width": "100%",
                     "flex": "1",
                     "minHeight": "0",
@@ -142,25 +162,44 @@ def build_map(**kwargs) -> html.Div:
                 },
             ),
         )
-        # Compact opacity slider at the bottom
+
+        # Bottom controls row: metric selector (if multiple metrics) + opacity slider
+        metrics = trigger_data.get("tiled_map_metrics") or []
+        bottom_controls = []
+
+        if len(metrics) > 1:
+            metric_options = [m["name"] for m in metrics]
+            bottom_controls.append(
+                dmc.SegmentedControl(
+                    id={"type": "leaflet-metric-selector", "index": index},
+                    data=metric_options,
+                    value=metric_options[0],
+                    size="xs",
+                ),
+            )
+
+        bottom_controls.extend(
+            [
+                dmc.Text("Opacity", size="xs", c="dimmed", style={"whiteSpace": "nowrap"}),
+                dmc.Slider(
+                    id={"type": "leaflet-opacity-slider", "index": index},
+                    min=0,
+                    max=1,
+                    step=0.05,
+                    value=initial_opacity,
+                    size="xs",
+                    style={"flex": "1", "minWidth": "80px"},
+                ),
+            ]
+        )
+
         children.append(
             html.Div(
-                [
-                    dmc.Text("Opacity", size="xs", c="dimmed", style={"whiteSpace": "nowrap"}),
-                    dmc.Slider(
-                        id={"type": "leaflet-opacity-slider", "index": index},
-                        min=0,
-                        max=1,
-                        step=0.05,
-                        value=initial_opacity,
-                        size="xs",
-                        style={"flex": "1", "minWidth": "80px"},
-                    ),
-                ],
+                bottom_controls,
                 style={
                     "display": "flex",
                     "alignItems": "center",
-                    "gap": "6px",
+                    "gap": "8px",
                     "padding": "8px 12px 12px 12px",
                     "flexShrink": "0",
                 },

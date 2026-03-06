@@ -251,6 +251,7 @@ def register_core_callbacks(app):
     @app.callback(
         Output({"type": "leaflet-container", "index": ALL}, "children"),
         Output({"type": "leaflet-scatter-data", "index": ALL}, "data"),
+        Output({"type": "leaflet-legend", "index": ALL}, "children"),
         Input({"type": "leaflet-trigger", "index": ALL}, "data"),
         Input("theme-store", "data"),
         State({"type": "leaflet-trigger", "index": ALL}, "id"),
@@ -281,7 +282,7 @@ def register_core_callbacks(app):
 
         if not access_token:
             logger.error("No access_token for tiled map rendering")
-            return [html.Div("Auth Error")] * num_maps, [[]] * num_maps
+            return [html.Div("Auth Error")] * num_maps, [[]] * num_maps, [[]] * num_maps
 
         from depictio.dash.modules.map_component.leaflet_utils import (
             build_leaflet_map,
@@ -290,11 +291,13 @@ def register_core_callbacks(app):
 
         all_children = []
         all_scatter_data = []
+        all_legends = []
 
         for i, (trigger_data, trigger_id) in enumerate(zip(trigger_data_list, trigger_ids)):
             if not trigger_data or not isinstance(trigger_data, dict):
                 all_children.append(html.Div())
                 all_scatter_data.append([])
+                all_legends.append([])
                 continue
 
             component_id = trigger_id.get("index", "unknown")
@@ -322,7 +325,7 @@ def register_core_callbacks(app):
                     build_scatter_overlay_data,
                 )
 
-                leaflet_component = build_leaflet_map(
+                leaflet_component, legend_children = build_leaflet_map(
                     index=component_id,
                     trigger_data=trigger_data,
                     geojson_data=geojson_data,
@@ -331,13 +334,106 @@ def register_core_callbacks(app):
                 )
                 all_children.append(leaflet_component)
                 all_scatter_data.append(scatter_overlay_data or [])
+                all_legends.append(legend_children)
 
             except Exception as e:
                 logger.error(f"Tiled map render failed for {component_id}: {e}", exc_info=True)
                 all_children.append(html.Div(f"Error: {e}"))
                 all_scatter_data.append([])
+                all_legends.append([])
 
-        return all_children, all_scatter_data
+        return all_children, all_scatter_data, all_legends
+
+    # Clientside callback: metric switching for tiled maps
+    # Updates hideout to switch color mode, and toggles pre-built legend divs
+    app.clientside_callback(
+        """
+        function(metricValues, currentHideouts, legendChildren, metricIds, hideoutIds, legendIds) {
+            if (!metricValues || !currentHideouts || !metricIds || !hideoutIds) {
+                return [window.dash_clientside.no_update, window.dash_clientside.no_update];
+            }
+
+            // Build index-to-metric lookup
+            var metricByIndex = {};
+            for (var i = 0; i < metricIds.length; i++) {
+                if (metricIds[i] && metricValues[i]) {
+                    metricByIndex[metricIds[i].index] = metricValues[i];
+                }
+            }
+
+            var updatedHideouts = [];
+            var updatedLegends = [];
+
+            for (var j = 0; j < hideoutIds.length; j++) {
+                var h = currentHideouts[j];
+                if (!h || !h.metrics) {
+                    updatedHideouts.push(window.dash_clientside.no_update);
+                    updatedLegends.push(window.dash_clientside.no_update);
+                    continue;
+                }
+
+                var geojsonIndex = hideoutIds[j].index;
+                var selectedName = metricByIndex[geojsonIndex];
+                if (!selectedName || !h.metrics[selectedName]) {
+                    updatedHideouts.push(window.dash_clientside.no_update);
+                    updatedLegends.push(window.dash_clientside.no_update);
+                    continue;
+                }
+
+                var metric = h.metrics[selectedName];
+                var newHideout = Object.assign({}, h, {
+                    color_prop: metric.property || "land_cover",
+                    color_type: metric.type || "categorical"
+                });
+
+                if (metric.type === "categorical") {
+                    newHideout.color_map = metric.color_map || {};
+                    delete newHideout.color_stops;
+                    delete newHideout.color_min;
+                    delete newHideout.color_max;
+                } else if (metric.type === "continuous") {
+                    newHideout.color_stops = metric.color_stops || [];
+                    newHideout.color_min = metric.color_min !== undefined ? metric.color_min : 0;
+                    newHideout.color_max = metric.color_max !== undefined ? metric.color_max : 1;
+                    delete newHideout.color_map;
+                }
+
+                updatedHideouts.push(newHideout);
+
+                // Toggle legend visibility: show/hide pre-built legend divs by metric name
+                var currentLegend = (j < legendChildren.length) ? legendChildren[j] : [];
+                if (currentLegend && Array.isArray(currentLegend)) {
+                    var newLegend = currentLegend.map(function(item) {
+                        if (!item || !item.props) return item;
+                        var itemId = item.props.id;
+                        if (itemId && itemId.metric) {
+                            var copy = Object.assign({}, item);
+                            copy.props = Object.assign({}, item.props);
+                            copy.props.style = Object.assign({}, item.props.style || {});
+                            copy.props.style.display = (itemId.metric === selectedName) ? "block" : "none";
+                            return copy;
+                        }
+                        return item;
+                    });
+                    updatedLegends.push(newLegend);
+                } else {
+                    updatedLegends.push(window.dash_clientside.no_update);
+                }
+            }
+
+            return [updatedHideouts, updatedLegends];
+        }
+        """,
+        Output({"type": "leaflet-geojson", "index": ALL}, "hideout", allow_duplicate=True),
+        Output({"type": "leaflet-legend", "index": ALL}, "children", allow_duplicate=True),
+        Input({"type": "leaflet-metric-selector", "index": ALL}, "value"),
+        State({"type": "leaflet-geojson", "index": ALL}, "hideout"),
+        State({"type": "leaflet-legend", "index": ALL}, "children"),
+        State({"type": "leaflet-metric-selector", "index": ALL}, "id"),
+        State({"type": "leaflet-geojson", "index": ALL}, "id"),
+        State({"type": "leaflet-legend", "index": ALL}, "id"),
+        prevent_initial_call=True,
+    )
 
     # Plotly map (scatter/density/choropleth) rendering callback
     @app.callback(
