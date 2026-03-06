@@ -377,7 +377,7 @@ def client_aggregate_data(
 
     # Handle transformed (recipe-based) data collections
     if data_collection.config.source == "transformed":
-        return process_recipe_data_collection(data_collection, CLI_config, overwrite)
+        return process_recipe_data_collection(data_collection, CLI_config, overwrite, workflow)
 
     # Generate destination prefix using the data collection id - should be a S3 path
     destination_prefix = f"s3://{CLI_config.s3_storage.bucket}/{str(data_collection.id)}"
@@ -671,6 +671,7 @@ def process_recipe_data_collection(
     data_collection: DataCollection,
     CLI_config: CLIConfig,
     overwrite: bool = False,
+    workflow=None,
 ) -> dict[str, str]:
     """Process a transformed (recipe-based) data collection.
 
@@ -681,6 +682,7 @@ def process_recipe_data_collection(
         data_collection: DataCollection with source="transformed" and transform config.
         CLI_config: CLI configuration with API URL and credentials.
         overwrite: Whether to overwrite existing data.
+        workflow: Optional Workflow object to resolve data_dir from data_location.
 
     Returns:
         Result dict with success/error status.
@@ -702,10 +704,13 @@ def process_recipe_data_collection(
     if transform_config.source_overrides:
         overrides = {ref: so.path for ref, so in transform_config.source_overrides.items()}
 
-    # Determine data directory from workflow
-    # For now, use a placeholder — the actual data_dir comes from the workflow's data_location
-    # This will be wired up when the full process pipeline provides the data_dir
-    data_dir = "."  # TODO: resolve from workflow data_location
+    # Resolve data directory from workflow's data_location
+    data_dir = "."
+    if workflow is not None and hasattr(workflow, "data_location") and workflow.data_location:
+        locations = getattr(workflow.data_location, "locations", None)
+        if locations and len(locations) > 0:
+            data_dir = str(locations[0])
+            rich_print_checked_statement(f"Recipe data dir: {data_dir}", "info")
 
     try:
         result_df = execute_recipe(recipe_name, data_dir, overrides)
