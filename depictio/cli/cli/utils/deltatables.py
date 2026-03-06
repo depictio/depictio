@@ -374,6 +374,13 @@ def client_aggregate_data(
     # Handle GeoJSON data collections - upload file to S3 and store location
     if data_collection.config.type.lower() == "geojson":
         return process_geojson_data_collection(data_collection, CLI_config, overwrite)
+
+    # Handle JBrowse2 data collections - index, upload to S3, generate session config
+    if data_collection.config.type.lower() == "jbrowse2":
+        from depictio.cli.cli.utils.jbrowse2_processor import process_jbrowse2_data_collection
+
+        return process_jbrowse2_data_collection(data_collection, CLI_config, overwrite)
+
     # Generate destination prefix using the data collection id - should be a S3 path
     destination_prefix = f"s3://{CLI_config.s3_storage.bucket}/{str(data_collection.id)}"
     logger.debug(f"Destination prefix: {destination_prefix}")

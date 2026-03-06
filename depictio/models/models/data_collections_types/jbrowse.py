@@ -1,59 +1,74 @@
-from pydantic import BaseModel, field_validator
+from enum import Enum
+
+from pydantic import BaseModel, ConfigDict, model_validator
+
+
+class JBrowse2TrackType(str, Enum):
+    """Supported JBrowse2 track types."""
+
+    BED = "bed"
+    BIGWIG = "bigwig"
+    MULTI_BIGWIG = "multi_bigwig"
+
+
+class MultiTrackPattern(BaseModel):
+    """Configuration for grouping files into composite multi-track displays.
+
+    Used with MULTI_BIGWIG track type to group multiple BigWig files into a single
+    MultiQuantitativeTrack. Generic: works for any grouping (strand pairing,
+    condition grouping, replicate merging, etc.).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    group_by: str
+    """Wildcard name to group files into one composite track (e.g., 'sample')."""
+
+    sub_track_by: str
+    """Wildcard name to create sub-tracks within each group (e.g., 'strand', 'condition')."""
+
+    sub_track_colors: dict[str, str] | None = None
+    """Optional color per sub-track value. E.g., {'W': 'rgb(244,164,96)', 'C': 'rgb(102,139,139)'}."""
 
 
 class DCJBrowse2Config(BaseModel):
-    index_extension: str | None = None
-    jbrowse_template_location: str | None = None
+    """Configuration for JBrowse2 data collections.
 
-    class Config:
-        extra = "forbid"  # Reject unexpected fields
+    Supports BED (indexed with tabix), BigWig (single quantitative track),
+    and Multi BigWig (composite MultiQuantitativeTrack) track types.
+    """
 
-    # TODO : start over for this one
-    @field_validator("format", check_fields=False)
-    def validate_format(cls, v, values, **kwargs):
-        allowed_values_for_table = ["csv", "tsv", "parquet", "feather", "xls", "xlsx"]
-        allowed_values_for_genome_browser = [
-            "gff3",
-            "gff",
-            "gtf",
-            "bed",
-            "bigbed",
-            "vcf",
-            "bigwig",
-            "bw",
-            "bam",
-            "cram",
-            "bai",
-            "crai",
-            "fai",
-            "tbi",
-            "csi",
-            "gzi",
-            "2bit",
-            "sizes",
-            "chrom.sizes",
-            "chromSizes",
-            "fasta",
-            "fa",
-            "fna",
-            "fasta.gz",
-        ]
+    model_config = ConfigDict(extra="forbid")
 
-        # Use the 'type' to determine allowed formats
-        data_type = values.get("type", "").lower()  # Ensuring type is accessed in lowercase
-        if data_type:  # Check if 'type' is available
-            allowed_values = {
-                "table": allowed_values_for_table,
-                "jbrowse2": allowed_values_for_genome_browser,
-            }.get(data_type, [])  # Default to empty list if type is not recognized
+    track_type: JBrowse2TrackType
+    """Type of JBrowse2 track to render."""
 
-            if v.lower() not in allowed_values:
-                allowed_formats_str = ", ".join(allowed_values)
-                raise ValueError(
-                    f"Invalid format '{v}' for type '{data_type}'. Allowed formats for this type are: {allowed_formats_str}"
-                )
-        else:
-            # Handle case where 'type' is not yet validated or missing
-            raise ValueError("Type must be validated before format.")
+    assembly_name: str = "hg38"
+    """Reference assembly name (must match a key in DEFAULT_ASSEMBLIES)."""
 
-        return v
+    index_extension: str | None = "tbi"
+    """Index file extension for BED tracks (e.g., 'tbi', 'csi')."""
+
+    category: list[str] | None = None
+    """JBrowse2 track category hierarchy for organizing tracks in the track selector."""
+
+    display_config: dict | None = None
+    """Optional display configuration overrides (color, height, renderer settings)."""
+
+    multi_track_pattern: MultiTrackPattern | None = None
+    """Configuration for multi-track grouping. Required when track_type is MULTI_BIGWIG."""
+
+    jbrowse_template_override: dict | None = None
+    """Full JBrowse2 track template override. When provided, replaces the built-in template."""
+
+    # Processing metadata (populated during CLI processing)
+    s3_session_location: str | None = None
+    """S3 location of the generated JBrowse2 session config JSON."""
+
+    @model_validator(mode="after")
+    def validate_track_type_constraints(self):
+        if self.track_type == JBrowse2TrackType.MULTI_BIGWIG and self.multi_track_pattern is None:
+            raise ValueError("multi_track_pattern is required when track_type is 'multi_bigwig'")
+        if self.track_type == JBrowse2TrackType.BED and self.index_extension is None:
+            raise ValueError("index_extension is required when track_type is 'bed'")
+        return self

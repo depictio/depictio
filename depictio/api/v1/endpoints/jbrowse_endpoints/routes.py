@@ -14,6 +14,11 @@ from depictio.api.v1.db import files_collection, jbrowse_collection, workflows_c
 from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user
 from depictio.api.v1.endpoints.validators import validate_workflow_and_collection
 from depictio.api.v1.s3 import s3_client
+from depictio.models.models.data_collections_types.jbrowse_templates import (
+    DEFAULT_ASSEMBLIES,
+    get_track_template,
+    populate_template_recursive,
+)
 from depictio.models.models.files import File
 from depictio.models.models.jbrowse import LogData
 
@@ -21,70 +26,34 @@ jbrowse_endpoints_router = APIRouter()
 
 
 def generate_track_config(track_type, track_details, data_collection_config):
-    """Generate JBrowse track configuration from track details and data collection config."""
-    category = data_collection_config.get("jbrowse_params", {}).get("category", "Uncategorized")
-    assemblyName = data_collection_config.get("jbrowse_params", {}).get("assemblyName", "hg38")
+    """Generate JBrowse track configuration using templates.
 
-    track_config = {
-        "trackId": track_details.get("uri"),
-        "name": track_details.get("name", "Unnamed Track"),
-        "assemblyNames": [assemblyName],
-        "category": category.split(",") + [track_details["run_id"]],
-    }
-    track_details.pop("run_id", None)
-
-    # Configure adapter based on track type and data collection config
-    if track_type == "FeatureTrack":
-        adapter_type = (
-            "BedTabixAdapter" if data_collection_config.get("format") == "BED" else "UnknownAdapter"
-        )
-        uri = track_details.get("uri")
-        index_uri = f"{uri}.{data_collection_config.get('index_extension', 'tbi')}"
-
-        track_config.update(
-            {
-                "type": "FeatureTrack",
-                "adapter": {
-                    "type": adapter_type,
-                    ("bedGzLocation" if adapter_type == "BedTabixAdapter" else "location"): {
-                        "locationType": "UriLocation",
-                        "uri": uri,
-                    },
-                    "index": {"location": {"locationType": "UriLocation", "uri": index_uri}},
-                },
-            }
-        )
-
-    return track_config
-
-
-def populate_template_recursive(template, values):
+    Supports FeatureTrack (BED), QuantitativeTrack (BigWig), and
+    MultiQuantitativeTrack track types via the template system.
     """
-    Recursively populate a template with values.
+    dc_props = data_collection_config.get("dc_specific_properties", {})
+    jbrowse_track_type = dc_props.get("track_type", "bed")
+    override = dc_props.get("jbrowse_template_override")
 
-    Args:
-        template: The template to populate (dict, list, or str).
-        values: The values to populate the template with.
+    # Get the appropriate template
+    template = get_track_template(jbrowse_track_type, override)
 
-    Returns:
-        The populated template.
-    """
-    if isinstance(template, dict):
-        return {k: populate_template_recursive(v, values) for k, v in template.items()}
-    if isinstance(template, list):
-        return [populate_template_recursive(item, values) for item in template]
-    if isinstance(template, str):
-        result = template
-        for key, value in values.items():
-            placeholder = f"{{{key}}}"
-            if placeholder in result:
-                result = result.replace(placeholder, str(value))
-        return result
-    return template
+    # Populate template with track details
+    populated = populate_template_recursive(template, track_details)
+
+    # Ensure category is a list
+    category = track_details.get("category", ["Uncategorized"])
+    if isinstance(category, str):
+        category = category.split(",")
+    populated["category"] = category
+
+    return populated
 
 
-def update_jbrowse_config(config_path, new_tracks=[]):
+def update_jbrowse_config(config_path, new_tracks=None):
     """Update JBrowse configuration with new tracks."""
+    if new_tracks is None:
+        new_tracks = []
     try:
         with open(config_path) as file:
             config = json.load(file)
@@ -141,7 +110,10 @@ def upload_file_to_s3(bucket_name, file_location, s3_key):
 
 
 def handle_jbrowse_tracks(file, user_id, workflow_id, data_collection):
-    """Handle JBrowse track creation for a file."""
+    """Handle JBrowse track creation for a file.
+
+    Supports BED (FeatureTrack) and BigWig (QuantitativeTrack) track types.
+    """
     if not isinstance(file, dict):
         file = file.mongo()
 
@@ -171,38 +143,44 @@ def handle_jbrowse_tracks(file, user_id, workflow_id, data_collection):
         f"{data_collection.data_collection_tag} - {data_collection.id}",
     ]
 
+    dc_props = data_collection.config.dc_specific_properties
+    index_extension = getattr(dc_props, "index_extension", "tbi") or "tbi"
+
     # Prepare the track details
     track_details = {
         "trackId": s3_key_hash,
         "name": file["filename"],
         "uri": f"{endpoint_url}:{port}/{bucket_name}/{s3_key}",
-        "indexUri": f"{endpoint_url}:{port}/{bucket_name}/{s3_key}.tbi",
+        "indexUri": f"{endpoint_url}:{port}/{bucket_name}/{s3_key}.{index_extension}",
+        "assemblyName": getattr(dc_props, "assembly_name", "hg38"),
         "run_id": run_id,
         "category": categories,
+        "color": "blue",
     }
-
-    file_index = data_collection.config.dc_specific_properties.index_extension
 
     file["S3_location"] = trackid
     file["trackId"] = s3_key_hash
     files_collection.update_one({"_id": file["_id"]}, {"$set": file})
 
     # Check if the file is an index and skip if it is
-    if not file_location.endswith(file_index):
-        # Generate the track configuration
-        track_config = generate_track_config(
-            "FeatureTrack",
-            track_details,
-            data_collection.mongo()["config"],
-        )
+    if not file_location.endswith(index_extension):
+        # Check for template override or use built-in template
+        jbrowse_template_override = getattr(dc_props, "jbrowse_template_override", None)
 
-        # Prepare the JBrowse template
-        jbrowse_template_location = (
-            data_collection.config.dc_specific_properties.jbrowse_template_location
-        )
-        jbrowse_template_json = json.load(open(jbrowse_template_location))
+        if jbrowse_template_override:
+            track_config = populate_template_recursive(jbrowse_template_override, track_details)
+        elif hasattr(dc_props, "jbrowse_template_location") and dc_props.jbrowse_template_location:
+            # Legacy: load template from file path
+            jbrowse_template_json = json.load(open(dc_props.jbrowse_template_location))
+            track_config = populate_template_recursive(jbrowse_template_json, track_details)
+        else:
+            # Use built-in template system
+            track_config = generate_track_config(
+                None,
+                track_details,
+                data_collection.mongo()["config"],
+            )
 
-        track_config = populate_template_recursive(jbrowse_template_json, track_details)
         # Ensure category is a list before appending
         category = track_details["category"]
         if isinstance(category, list):
@@ -266,6 +244,55 @@ async def create_trackset(
     return {"message": "JBrowse configuration updated."}
 
 
+@jbrowse_endpoints_router.get("/session_config/{data_collection_id}")
+async def get_session_config(
+    data_collection_id: str,
+    current_user: str = Depends(get_current_user),
+):
+    """Serve JBrowse2 session config JSON for a data collection.
+
+    Reads the session config from S3 (uploaded by the CLI processor)
+    and returns it as JSON for the JBrowse2 iframe to consume.
+    """
+    try:
+        bucket_name = settings.minio.bucket
+        s3_key = f"{data_collection_id}/jbrowse_session.json"
+
+        response = s3_client.get_object(Bucket=bucket_name, Key=s3_key)
+        session_json = json.loads(response["Body"].read().decode("utf-8"))
+        return session_json
+    except s3_client.exceptions.NoSuchKey:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No session config found for data collection {data_collection_id}",
+        )
+    except Exception as e:
+        logger.error(f"Error fetching session config: {e}")
+        raise HTTPException(status_code=500, detail=f"Error fetching session config: {e}")
+
+
+@jbrowse_endpoints_router.get("/assemblies")
+async def list_assemblies():
+    """List available built-in assembly configurations."""
+    return {
+        "assemblies": {
+            name: {"name": config["name"], "aliases": config.get("aliases", [])}
+            for name, config in DEFAULT_ASSEMBLIES.items()
+        }
+    }
+
+
+@jbrowse_endpoints_router.get("/assemblies/{assembly_name}")
+async def get_assembly(assembly_name: str):
+    """Get a specific assembly configuration."""
+    if assembly_name not in DEFAULT_ASSEMBLIES:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Assembly '{assembly_name}' not found. Available: {list(DEFAULT_ASSEMBLIES)}",
+        )
+    return DEFAULT_ASSEMBLIES[assembly_name]
+
+
 @jbrowse_endpoints_router.post("/log")
 async def log_message(log_data: LogData):
     """Log JBrowse navigation data."""
@@ -322,11 +349,13 @@ async def map_tracks_using_wildcards(
 
     files = files_collection.find({"data_collection._id": data_collection_oid})
     for file in files:
-        if file["filename"].endswith(
-            file["data_collection"]["config"]["dc_specific_properties"]["index_extension"]
-        ):
+        dc_props = (
+            file.get("data_collection", {}).get("config", {}).get("dc_specific_properties", {})
+        )
+        index_ext = dc_props.get("index_extension", "tbi")
+        if index_ext and file["filename"].endswith(index_ext):
             continue
-        for wildcard in file["wildcards"]:
+        for wildcard in file.get("wildcards", []):
             nested_dict[data_collection_id][wildcard["name"]][wildcard["value"]] = file["trackId"]
 
     return nested_dict
