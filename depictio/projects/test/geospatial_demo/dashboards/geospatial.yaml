@@ -4,7 +4,7 @@ main_dashboard:
   dashboard_id: "660b2c3d4e5f6a7b8c9d2f10"
   title: "Geospatial Analysis"
   subtitle: "Anthropogenic Impact Around Sampling Sites"
-  description: "Tiled map showing real satellite-derived land cover and sample locations"
+  description: "Tiled map showing real satellite-derived land cover and sample locations with linked quality metrics"
   icon: "tabler:map-2"
   icon_color: "#4CAF50"
   min_items_h: 3
@@ -12,7 +12,8 @@ main_dashboard:
   breakpoints: { lg: 1600, md: 1200, sm: 768 }
   cols: { lg: 8, md: 6, sm: 4 }
 
-  interactive_components:
+  components:
+    # Interactive filters (left panel)
     - component_type: interactive
       interactive_component_type: MultiSelect
       workflow_tag: python/geospatial_demo
@@ -29,7 +30,44 @@ main_dashboard:
       label: "Sample"
       layout: { x: 0, y: 3, w: 1, h: 4, static: true }
 
-  components:
+    # Cards: summary stats from sample_quality DC
+    - tag: total-read-count-card
+      component_type: card
+      workflow_tag: python/geospatial_demo
+      data_collection_tag: sample_quality
+      column_name: read_count
+      aggregation: sum
+      title: "Total Read Count"
+      metric_theme: default
+      layout: { x: 0, y: 0, w: 2, h: 2 }
+
+    - tag: avg-diversity-card
+      component_type: card
+      workflow_tag: python/geospatial_demo
+      data_collection_tag: sample_quality
+      column_name: shannon_diversity
+      aggregation: average
+      title: "Avg Shannon Diversity"
+      metric_theme: default
+      layout: { x: 2, y: 0, w: 2, h: 2 }
+
+    # Scatter figure: read_count vs species_count from sample_quality DC
+    - tag: quality-scatter-plot
+      component_type: figure
+      workflow_tag: python/geospatial_demo
+      data_collection_tag: sample_quality
+      visu_type: scatter
+      figure_params:
+        x: read_count
+        y: species_count
+        color: quality_score
+        hover_data:
+          - sample
+          - quality_score
+        title: "Read Count vs Species Count"
+        color_continuous_scale: Viridis
+      layout: { x: 4, y: 0, w: 4, h: 4 }
+
     # Tiled map: dash-leaflet with GeoJSON land cover + scatter overlay
     - tag: anthropogenic-impact-map
       component_type: map
@@ -43,6 +81,8 @@ main_dashboard:
       map_style: carto-positron
       default_center: { lat: 51.0, lon: 10.5 }
       default_zoom: 6
+      selection_enabled: true
+      selection_column: sample
       tile_layer_style:
         color_map:
           Grassland: "#90EE90"
@@ -53,7 +93,6 @@ main_dashboard:
           Shrubland: "#8B7355"
           Herbaceous wetland: "#8FBC8F"
           Bare / sparse vegetation: "#D2B48C"
-      # Scatter overlay: sample locations from metadata DC
       scatter_overlay_dc_tag: metadata
       scatter_overlay_lat_column: latitude
       scatter_overlay_lon_column: longitude
@@ -69,7 +108,7 @@ main_dashboard:
         Groundwater: "#4DAF4A"
         Sediment: "#E41A1C"
         Soil: "#FF7F00"
-      layout: { x: 0, y: 0, w: 8, h: 10 }
+      layout: { x: 0, y: 4, w: 8, h: 8 }
 
     # Metadata table below the map
     - tag: sample-metadata-table
@@ -77,4 +116,4 @@ main_dashboard:
       workflow_tag: python/geospatial_demo
       data_collection_tag: metadata
       title: "Sample Metadata"
-      layout: { x: 0, y: 10, w: 8, h: 5 }
+      layout: { x: 0, y: 12, w: 8, h: 5 }

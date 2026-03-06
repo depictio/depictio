@@ -71,6 +71,27 @@ workflows:
               "land_cover": "Land cover type (Grassland, Built-up, Tree Cover, Water)"
               "impact_index": "Anthropogenic impact index (0-1)"
 
+      - id: "660b2c3d4e5f6a7b8c9d2f05"
+        data_collection_tag: "sample_quality"
+        description: "Per-sample quality metrics (read counts, diversity, quality)"
+        config:
+          type: "Table"
+          metatype: "Metadata"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "depictio/projects/test/geospatial_demo/sample_quality.tsv"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+            columns_description:
+              "sample": "Sample identifier (SRR accession)"
+              "read_count": "Total sequencing read count"
+              "species_count": "Number of species detected"
+              "shannon_diversity": "Shannon diversity index"
+              "quality_score": "Overall quality score (0-1)"
+
 links:
   # Link: Metadata → Anthropogenic Metrics (filter grid cells by city of selected samples)
   - source_dc_id: "660b2c3d4e5f6a7b8c9d2f02"  # metadata
@@ -81,4 +102,15 @@ links:
       resolver: "direct"
       target_field: "city"
     description: "Filter anthropogenic metrics by city from metadata filters"
+    enabled: true
+
+  # Link: Metadata → Sample Quality (filter quality metrics by sample from metadata filters)
+  - source_dc_id: "660b2c3d4e5f6a7b8c9d2f02"  # metadata
+    source_column: "sample"
+    target_dc_id: "660b2c3d4e5f6a7b8c9d2f05"  # sample_quality
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter sample quality metrics by sample from metadata filters"
     enabled: true

@@ -106,6 +106,12 @@ def build_map(**kwargs) -> html.Div:
                 id={"type": "stored-metadata-component", "index": index},
                 data=kwargs,
             ),
+            # Stores scatter overlay point data for selection callback's
+            # point-in-polygon tests (populated by render_tiled_maps_batch)
+            dcc.Store(
+                id={"type": "leaflet-scatter-data", "index": index},
+                data=[],
+            ),
         ]
 
         initial_opacity = trigger_data.get("opacity", 0.6)

@@ -59,6 +59,50 @@ window.dashExtensions = Object.assign({}, window.dashExtensions, {
                     opacity: 0.9
                 });
             }
+        },
+
+        /**
+         * Render scatter overlay points as CircleMarkers with per-feature color.
+         */
+        pointToLayer: function(feature, latlng) {
+            var props = feature.properties || {};
+            var color = props.color || "#000000";
+            var radius = props.radius || 8;
+            return L.circleMarker(latlng, {
+                radius: radius,
+                color: color,
+                fillColor: color,
+                fillOpacity: 0.8,
+                weight: 2,
+                opacity: 1
+            });
+        },
+
+        /**
+         * Bind tooltips to scatter overlay features showing sample, habitat, city.
+         */
+        onEachScatterFeature: function(feature, layer) {
+            var props = feature.properties || {};
+            var parts = [];
+            if (props.sample) {
+                parts.push("<b>Sample:</b> " + props.sample);
+            }
+            if (props.name) {
+                parts.push("<b>Name:</b> " + props.name);
+            }
+            if (props.habitat) {
+                parts.push("<b>Habitat:</b> " + props.habitat);
+            }
+            if (props.city) {
+                parts.push("<b>City:</b> " + props.city);
+            }
+            if (parts.length > 0) {
+                layer.bindTooltip(parts.join("<br>"), {
+                    sticky: true,
+                    direction: "top",
+                    opacity: 0.9
+                });
+            }
         }
     }
 });

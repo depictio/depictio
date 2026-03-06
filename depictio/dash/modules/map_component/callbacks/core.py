@@ -187,6 +187,7 @@ def register_core_callbacks(app):
     # type so it is fully independent of the Plotly render_maps_batch callback.
     @app.callback(
         Output({"type": "leaflet-container", "index": ALL}, "children"),
+        Output({"type": "leaflet-scatter-data", "index": ALL}, "data"),
         Input({"type": "leaflet-trigger", "index": ALL}, "data"),
         Input("interactive-values-store", "data"),
         Input("theme-store", "data"),
@@ -217,7 +218,7 @@ def register_core_callbacks(app):
         if not access_token:
             logger.error("No access_token for tiled map rendering")
             num_maps = len(trigger_ids)
-            return [html.Div("Auth Error")] * num_maps
+            return [html.Div("Auth Error")] * num_maps, [[]] * num_maps
 
         from depictio.dash.modules.map_component.leaflet_utils import (
             build_leaflet_map,
@@ -225,10 +226,12 @@ def register_core_callbacks(app):
         )
 
         all_children = []
+        all_scatter_data = []
 
         for i, (trigger_data, trigger_id) in enumerate(zip(trigger_data_list, trigger_ids)):
             if not trigger_data or not isinstance(trigger_data, dict):
                 all_children.append(html.Div())
+                all_scatter_data.append([])
                 continue
 
             component_id = trigger_id.get("index", "unknown")
@@ -306,12 +309,14 @@ def register_core_callbacks(app):
                     theme=current_theme,
                 )
                 all_children.append(leaflet_component)
+                all_scatter_data.append(scatter_overlay_data or [])
 
             except Exception as e:
                 logger.error(f"Tiled map render failed for {component_id}: {e}", exc_info=True)
                 all_children.append(html.Div(f"Error: {e}"))
+                all_scatter_data.append([])
 
-        return all_children
+        return all_children, all_scatter_data
 
     # Plotly map (scatter/density/choropleth) rendering callback
     @app.callback(

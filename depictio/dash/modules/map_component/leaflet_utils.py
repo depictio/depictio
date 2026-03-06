@@ -15,6 +15,8 @@ _ns = Namespace("dashExtensions", "map")
 _style_function = _ns("styleFunction")
 _hover_style = _ns("hoverStyle")
 _on_each_feature = _ns("onEachFeature")
+_point_to_layer = _ns("pointToLayer")
+_on_each_scatter_feature = _ns("onEachScatterFeature")
 
 # Base tile layer URLs for light/dark themes
 TILE_URLS = {
@@ -52,6 +54,46 @@ def _get_base_tile_url(theme: str) -> str:
     return TILE_URLS["light"]
 
 
+def build_scatter_overlay_geojson(
+    scatter_overlay_data: list[dict],
+) -> dict:
+    """Convert scatter overlay point dicts to a GeoJSON FeatureCollection.
+
+    Args:
+        scatter_overlay_data: List of dicts with lat, lon, color, tooltip_parts, and properties.
+
+    Returns:
+        GeoJSON FeatureCollection with Point features.
+    """
+    features = []
+    for point in scatter_overlay_data:
+        lat = point.get("lat")
+        lon = point.get("lon")
+        if lat is None or lon is None:
+            continue
+        properties = {
+            "color": point.get("color", "#000000"),
+            "radius": point.get("radius", 8),
+        }
+        # Copy all extra properties (sample, habitat, city, etc.)
+        for key, value in point.get("properties", {}).items():
+            properties[key] = value
+        features.append(
+            {
+                "type": "Feature",
+                "geometry": {
+                    "type": "Point",
+                    "coordinates": [lon, lat],
+                },
+                "properties": properties,
+            }
+        )
+    return {
+        "type": "FeatureCollection",
+        "features": features,
+    }
+
+
 def build_leaflet_map(
     index: str,
     trigger_data: dict,
@@ -73,6 +115,7 @@ def build_leaflet_map(
     """
     default_center = trigger_data.get("default_center", {"lat": 51.0, "lon": 10.5})
     default_zoom = trigger_data.get("default_zoom", 6)
+    selection_enabled = trigger_data.get("selection_enabled", False)
 
     center = [default_center.get("lat", 51.0), default_center.get("lon", 10.5)]
     base_tile_url = _get_base_tile_url(theme)
@@ -108,31 +151,41 @@ def build_leaflet_map(
             ),
         )
 
-    # Add scatter overlay markers for sample points
+    # Add scatter overlay as GeoJSON point layer (enables click/selection)
     if scatter_overlay_data:
-        markers = []
-        for point in scatter_overlay_data:
-            lat = point.get("lat")
-            lon = point.get("lon")
-            if lat is None or lon is None:
-                continue
-            tooltip_text = point.get("tooltip", "")
-            color = point.get("color", "#000000")
-            markers.append(
-                dl.CircleMarker(
-                    center=[lat, lon],
-                    radius=8,
-                    color=color,
-                    fill=True,
-                    fillColor=color,
-                    fillOpacity=0.8,
-                    children=[dl.Tooltip(tooltip_text)] if tooltip_text else [],
+        scatter_geojson = build_scatter_overlay_geojson(scatter_overlay_data)
+        if scatter_geojson["features"]:
+            children_layers.append(
+                dl.Pane(
+                    dl.GeoJSON(
+                        id={"type": "leaflet-scatter", "index": index},
+                        data=scatter_geojson,
+                        pointToLayer=_point_to_layer,
+                        onEachFeature=_on_each_scatter_feature,
+                    ),
+                    name="scatter-overlay",
+                    style={"zIndex": 650},
                 ),
             )
-        if markers:
-            children_layers.append(
-                dl.Pane(dl.LayerGroup(markers), name="scatter-overlay", style={"zIndex": 650})
-            )
+
+    # Add EditControl for box/lasso selection when enabled
+    if selection_enabled:
+        children_layers.append(
+            dl.FeatureGroup(
+                dl.EditControl(
+                    id={"type": "leaflet-edit-control", "index": index},
+                    draw={
+                        "rectangle": True,
+                        "polygon": True,
+                        "circle": False,
+                        "marker": False,
+                        "polyline": False,
+                        "circlemarker": False,
+                    },
+                    edit={"edit": False},
+                ),
+            ),
+        )
 
     # Build the map
     leaflet_map = dl.Map(
@@ -161,7 +214,7 @@ def build_scatter_overlay_data(
         trigger_data: Configuration dict with overlay column mappings.
 
     Returns:
-        List of dicts with lat, lon, color, tooltip keys.
+        List of dicts with lat, lon, color, properties keys.
     """
     if hasattr(df, "to_pandas"):
         df = df.to_pandas()
@@ -185,18 +238,19 @@ def build_scatter_overlay_data(
         if color_col and color_col in df.columns:
             color = color_map.get(str(row[color_col]), "#000000")
 
-        tooltip_parts = []
+        # Collect all hover columns as properties for GeoJSON features
+        properties = {}
         for c in hover_cols:
             if c in df.columns:
-                tooltip_parts.append(f"{c}: {row[c]}")
-        tooltip = " | ".join(tooltip_parts)
+                val = row[c]
+                properties[c] = str(val) if val is not None else ""
 
         points.append(
             {
                 "lat": float(row[lat_col]),
                 "lon": float(row[lon_col]),
                 "color": color,
-                "tooltip": tooltip,
+                "properties": properties,
             }
         )
 

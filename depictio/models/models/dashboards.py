@@ -1002,6 +1002,8 @@ class DashboardDataLite(BaseModel):
                     "title_color",
                     "title_font_size",
                     "value_font_size",
+                    "metric_theme",
+                    "background_color",
                 ]:
                     if comp_dict.get(f):
                         full_comp[f] = comp_dict[f]
@@ -1084,6 +1086,21 @@ class DashboardDataLite(BaseModel):
                     "choropleth_aggregation": None,
                     "color_continuous_scale": None,
                     "range_color": None,
+                    # Scatter overlay fields
+                    "scatter_overlay_dc_tag": None,
+                    "scatter_overlay_dc_id": None,
+                    "scatter_overlay_lat_column": None,
+                    "scatter_overlay_lon_column": None,
+                    "scatter_overlay_color_column": None,
+                    "scatter_overlay_size_max": 15,
+                    "scatter_overlay_hover_columns": [],
+                    "scatter_overlay_color_discrete_map": None,
+                    # Tiled map / PMTiles fields
+                    "pmtiles_dc_id": None,
+                    "pmtiles_dc_tag": None,
+                    "pmtiles_url": None,
+                    "tile_layer_style": None,
+                    "color_discrete_map": None,
                 }
                 for field, default in _MAP_FULL_DEFAULTS.items():
                     full_comp[field] = comp_dict.get(field, default)
