@@ -1,18 +1,4 @@
-/* Fix pointer-events being blocked by react-grid-layout on dash-leaflet maps.
-   Force auto on the container and ALL descendants to override inherited none
-   from grid wrapper divs. Then restore Leaflet's internal pane behavior
-   (panes use none; individual SVG paths/markers set auto inline). */
-.react-grid-item .leaflet-container,
-.react-grid-item .leaflet-container * {
-    pointer-events: auto !important;
-}
-
+/* Ensure Leaflet receives pointer events inside react-grid-layout items. */
 .react-grid-item .leaflet-container {
-    touch-action: none !important;
-}
-
-/* Restore Leaflet pane pointer-events so click-through stacking works:
-   higher-z pane empty areas pass clicks to lower-z pane features. */
-.react-grid-item .leaflet-container .leaflet-pane {
-    pointer-events: none !important;
+    pointer-events: auto !important;
 }

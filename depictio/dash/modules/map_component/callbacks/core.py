@@ -183,13 +183,14 @@ def register_core_callbacks(app):
         prevent_initial_call=True,
     )
 
-    # Tiled map (dash-leaflet) rendering callback
+    # Tiled map (dash-leaflet) rendering callback — uses its own leaflet-trigger
+    # type so it is fully independent of the Plotly render_maps_batch callback.
     @app.callback(
         Output({"type": "leaflet-container", "index": ALL}, "children"),
-        Input({"type": "map-trigger", "index": ALL}, "data"),
+        Input({"type": "leaflet-trigger", "index": ALL}, "data"),
         Input("interactive-values-store", "data"),
         Input("theme-store", "data"),
-        State({"type": "map-trigger", "index": ALL}, "id"),
+        State({"type": "leaflet-trigger", "index": ALL}, "id"),
         State({"type": "interactive-stored-metadata", "index": ALL}, "data"),
         State({"type": "interactive-stored-metadata", "index": ALL}, "id"),
         State("project-metadata-store", "data"),
@@ -227,11 +228,6 @@ def register_core_callbacks(app):
 
         for i, (trigger_data, trigger_id) in enumerate(zip(trigger_data_list, trigger_ids)):
             if not trigger_data or not isinstance(trigger_data, dict):
-                all_children.append(html.Div())
-                continue
-
-            map_type = trigger_data.get("map_type", "scatter_map")
-            if map_type != "tiled_map":
                 all_children.append(html.Div())
                 continue
 
@@ -356,9 +352,7 @@ def register_core_callbacks(app):
 
         if not access_token:
             logger.error("No access_token for map rendering")
-            num_maps = len(trigger_ids)
-            empty = {"data": [], "layout": {"title": "Auth Error"}}
-            return [empty] * num_maps, [{}] * num_maps
+            raise dash.exceptions.PreventUpdate
 
         # Build load registry (dedup DC loads)
         dc_load_registry: dict[LoadKey, list[dict]] = {}
@@ -367,12 +361,6 @@ def register_core_callbacks(app):
 
         for i, trigger_data in enumerate(trigger_data_list):
             if not trigger_data or not isinstance(trigger_data, dict):
-                map_to_load_key[i] = None
-                map_to_overlay_key[i] = None
-                continue
-
-            # Skip tiled_map — rendered by the leaflet callback, not Plotly
-            if trigger_data.get("map_type") == "tiled_map":
                 map_to_load_key[i] = None
                 map_to_overlay_key[i] = None
                 continue

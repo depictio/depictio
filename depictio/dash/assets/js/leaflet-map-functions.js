@@ -1,3 +1,4 @@
+
 /**
  * Leaflet map JavaScript functions for dash-leaflet GeoJSON styling and interaction.
  * Used via dash_extensions.javascript.Namespace references.

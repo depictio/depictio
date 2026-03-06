@@ -92,24 +92,22 @@ def build_map(**kwargs) -> html.Div:
         field: kwargs.get(field, _TRIGGER_DEFAULTS.get(field)) for field in _TRIGGER_FIELDS
     }
 
-    children: list[Any] = [
-        dcc.Store(
-            id={"type": "map-trigger", "index": index},
-            data=trigger_data,
-        ),
-        dcc.Store(
-            id={"type": "map-metadata", "index": index},
-            data={},
-        ),
-        dcc.Store(
-            id={"type": "stored-metadata-component", "index": index},
-            data=kwargs,
-        ),
-    ]
-
     map_type = trigger_data.get("map_type", "scatter_map")
 
     if map_type == "tiled_map":
+        # Tiled maps use their own trigger type so the Plotly render_maps_batch
+        # callback never sees them — no dummy dcc.Graph needed.
+        children: list[Any] = [
+            dcc.Store(
+                id={"type": "leaflet-trigger", "index": index},
+                data=trigger_data,
+            ),
+            dcc.Store(
+                id={"type": "stored-metadata-component", "index": index},
+                data=kwargs,
+            ),
+        ]
+
         initial_opacity = trigger_data.get("opacity", 0.6)
         map_title = kwargs.get("title")
         # Title above the map
@@ -162,14 +160,23 @@ def build_map(**kwargs) -> html.Div:
                 },
             ),
         )
-        # Hidden map-graph so the ALL pattern in render_maps_batch stays consistent.
-        children.append(
-            dcc.Graph(
-                id={"type": "map-graph", "index": index},
-                style={"display": "none", "position": "absolute", "width": "0", "height": "0"},
-            ),
-        )
     else:
+        # Plotly maps: use map-trigger and map-metadata stores
+        children: list[Any] = [
+            dcc.Store(
+                id={"type": "map-trigger", "index": index},
+                data=trigger_data,
+            ),
+            dcc.Store(
+                id={"type": "map-metadata", "index": index},
+                data={},
+            ),
+            dcc.Store(
+                id={"type": "stored-metadata-component", "index": index},
+                data=kwargs,
+            ),
+        ]
+
         # Add metric selector when multi_color_columns is configured
         multi_color_columns = (trigger_data.get("dict_kwargs") or {}).get("multi_color_columns")
         if multi_color_columns and len(multi_color_columns) > 1:
