@@ -111,6 +111,10 @@ NFCORE_MODULES_REPO = "nf-core/modules"
 # Depictio's own MultiQC version (from pyproject.toml: multiqc==1.31.0)
 DEPICTIO_MULTIQC_VERSION = "1.31"
 
+# MultiQC parquet output was introduced in 1.30. Older versions cannot
+# produce the parquet files that Depictio ingests.
+MULTIQC_MIN_PARQUET_VERSION = "1.30"
+
 
 def fetch_latest_release(
     pipeline: str,
@@ -297,23 +301,34 @@ def check_multiqc_version_compat(
 ) -> list[str]:
     """Check compatibility between pipeline and Depictio MultiQC versions.
 
-    Major version mismatches are warnings. The pipeline producing data with
-    a newer MultiQC than Depictio can parse is a breaking concern.
+    MultiQC parquet output was introduced in v1.30. Pipelines pinning an
+    older version **cannot** produce parquet files, making them incompatible
+    with Depictio's ingestion pipeline.
 
     Args:
         pipeline_mqc_version: MultiQC version pinned in the pipeline.
         depictio_mqc_version: MultiQC version used by Depictio.
 
     Returns:
-        List of warning strings (empty if compatible).
+        List of warning/error strings (empty if fully compatible).
     """
     if pipeline_mqc_version is None:
         return ["Could not determine pipeline MultiQC version"]
 
     pip_ver = _parse_version(pipeline_mqc_version)
     dep_ver = _parse_version(depictio_mqc_version)
+    min_parquet = _parse_version(MULTIQC_MIN_PARQUET_VERSION)
 
     warnings: list[str] = []
+
+    # Critical: parquet support requires >= 1.30
+    if pip_ver < min_parquet:
+        warnings.append(
+            f"BREAKING: Pipeline pins MultiQC {pipeline_mqc_version} which predates "
+            f"parquet support (introduced in {MULTIQC_MIN_PARQUET_VERSION}). "
+            f"Depictio requires parquet output and cannot ingest data from this version."
+        )
+        return warnings
 
     if pip_ver[0] != dep_ver[0]:
         warnings.append(
@@ -328,7 +343,7 @@ def check_multiqc_version_compat(
     elif pip_ver < dep_ver:
         warnings.append(
             f"Pipeline uses MultiQC {pipeline_mqc_version}, Depictio uses "
-            f"{depictio_mqc_version} — generally OK but verify parquet compatibility"
+            f"{depictio_mqc_version} — compatible (both support parquet)"
         )
 
     return warnings

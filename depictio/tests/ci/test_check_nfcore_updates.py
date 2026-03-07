@@ -276,11 +276,25 @@ class TestCheckMultiqcVersionCompat:
     def test_same_version(self) -> None:
         assert check_multiqc_version_compat("1.31", "1.31") == []
 
-    def test_pipeline_older(self) -> None:
+    def test_pipeline_older_but_parquet_capable(self) -> None:
+        """1.30+ supports parquet — soft warning only."""
+        warnings = check_multiqc_version_compat("1.30", "1.31")
+        assert len(warnings) == 1
+        assert "compatible" in warnings[0]
+        assert "BREAKING" not in warnings[0]
+
+    def test_pipeline_pre_parquet_is_breaking(self) -> None:
+        """< 1.30 has no parquet output — BREAKING."""
         warnings = check_multiqc_version_compat("1.27", "1.31")
         assert len(warnings) == 1
-        assert "1.27" in warnings[0]
-        assert "1.31" in warnings[0]
+        assert "BREAKING" in warnings[0]
+        assert "parquet" in warnings[0].lower()
+
+    def test_pipeline_very_old_is_breaking(self) -> None:
+        """1.21 (ampliseq 2.11.0) — clearly no parquet."""
+        warnings = check_multiqc_version_compat("1.21", "1.31")
+        assert len(warnings) == 1
+        assert "BREAKING" in warnings[0]
 
     def test_pipeline_newer(self) -> None:
         warnings = check_multiqc_version_compat("1.35", "1.31")
