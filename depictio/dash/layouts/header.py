@@ -651,15 +651,15 @@ def _ensure_data_structure(data: dict) -> None:
         data["buttons_data"] = {"unified_edit_mode": True}
 
 
-def _fetch_project_name(project_id: str, access_token: str) -> str:
-    """Fetch project name from API.
+def _fetch_project_info(project_id: str, access_token: str) -> tuple[str, str | None]:
+    """Fetch project name and template origin from API.
 
     Args:
         project_id: Project ID to fetch.
         access_token: JWT access token.
 
     Returns:
-        Project name string.
+        Tuple of (project_name, template_id or None).
 
     Raises:
         Exception: If project fetch fails.
@@ -672,7 +672,10 @@ def _fetch_project_name(project_id: str, access_token: str) -> str:
     )
     if response.status_code != 200:
         raise Exception("Failed to fetch project data.")
-    return response.json()["name"]
+    project_data = response.json()
+    to = project_data.get("template_origin")
+    template_id = to["template_id"] if to else None
+    return project_data["name"], template_id
 
 
 def _create_header_action_buttons(
@@ -762,47 +765,57 @@ def _create_header_action_buttons(
     )
 
 
-def _create_dashboard_info_section(data: dict, project_name: str) -> dmc.Stack:
+def _create_dashboard_info_section(
+    data: dict, project_name: str, template_id: str | None = None
+) -> dmc.Stack:
     """Create dashboard info section for the settings drawer.
 
     Args:
         data: Dashboard data dictionary.
         project_name: Name of the project.
+        template_id: Optional template ID if project was generated from a template.
 
     Returns:
         Stack component with dashboard info badges.
     """
+    info_badges = [
+        dmc.Badge(
+            f"Project: {project_name}",
+            size="lg",
+            color=colors["teal"],
+            leftSection=DashIconify(icon="mdi:jira", width=16, color="white"),
+            style={"width": "100%", "justifyContent": "flex-start"},
+        ),
+        dmc.Badge(
+            f"Owner: {data['permissions']['owners'][0]['email']}",
+            size="lg",
+            color=colors["blue"],
+            leftSection=DashIconify(icon="mdi:account", width=16, color="white"),
+            style={"width": "100%", "justifyContent": "flex-start"},
+        ),
+        dmc.Badge(
+            _format_last_saved(data["last_saved_ts"]),
+            size="lg",
+            color=colors["purple"],
+            leftSection=DashIconify(icon="mdi:clock-time-four-outline", width=16, color="white"),
+            style={"width": "100%", "justifyContent": "flex-start"},
+        ),
+    ]
+    if template_id:
+        info_badges.append(
+            dmc.Badge(
+                f"Template: {template_id}",
+                size="lg",
+                color="indigo",
+                variant="dot",
+                leftSection=DashIconify(icon="mdi:file-document-outline", width=16, color="white"),
+                style={"width": "100%", "justifyContent": "flex-start"},
+            ),
+        )
     return dmc.Stack(
         [
             dmc.Title("Dashboard Info", order=4),
-            dmc.Stack(
-                [
-                    dmc.Badge(
-                        f"Project: {project_name}",
-                        size="lg",
-                        color=colors["teal"],
-                        leftSection=DashIconify(icon="mdi:jira", width=16, color="white"),
-                        style={"width": "100%", "justifyContent": "flex-start"},
-                    ),
-                    dmc.Badge(
-                        f"Owner: {data['permissions']['owners'][0]['email']}",
-                        size="lg",
-                        color=colors["blue"],
-                        leftSection=DashIconify(icon="mdi:account", width=16, color="white"),
-                        style={"width": "100%", "justifyContent": "flex-start"},
-                    ),
-                    dmc.Badge(
-                        _format_last_saved(data["last_saved_ts"]),
-                        size="lg",
-                        color=colors["purple"],
-                        leftSection=DashIconify(
-                            icon="mdi:clock-time-four-outline", width=16, color="white"
-                        ),
-                        style={"width": "100%", "justifyContent": "flex-start"},
-                    ),
-                ],
-                gap="sm",
-            ),
+            dmc.Stack(info_badges, gap="sm"),
             dmc.Divider(),
             dmc.Group(
                 [
@@ -1251,8 +1264,8 @@ def design_header(
     # Determine button states based on ownership
     disabled = not owner
 
-    # Get project name
-    project_name = _fetch_project_name(data["project_id"], local_store["access_token"])
+    # Get project info
+    project_name, template_id = _fetch_project_info(data["project_id"], local_store["access_token"])
 
     # Create action buttons
     (
@@ -1265,7 +1278,7 @@ def design_header(
     ) = _create_header_action_buttons(disabled, edit_mode)
 
     # Create drawer sections
-    dashboard_info = _create_dashboard_info_section(data, project_name)
+    dashboard_info = _create_dashboard_info_section(data, project_name, template_id)
     toggle_switches = _create_toggle_switches_section(data)
     actions_section = _create_actions_section(disabled, edit_mode)
 

@@ -1,0 +1,295 @@
+# nf-core/ampliseq Template v2.16.0 - Microbial Community Analysis
+# ============================================================================
+# This is a TEMPLATE project configuration. Use with:
+#   depictio run --template nf-core/ampliseq/2.16.0 --data-root /path/to/your/data
+#
+# Tested against nf-core/ampliseq AWS megatest results:
+#   s3://nf-core-awsmegatests/ampliseq/results-3d5c7e5bec28de279337f3ffe3c312a45940b782
+# ============================================================================
+
+# Template metadata (parsed and removed before Project model validation)
+template:
+  template_id: "nf-core/ampliseq/2.16.0"
+  description: "nf-core/ampliseq microbial community analysis template for 16S/ITS amplicon sequencing"
+  version: "1.0.0"
+  variables:
+    - name: "DATA_ROOT"
+      description: "Root directory containing ampliseq pipeline output data"
+      required: true
+  expected_files:
+    # User-provided file (not recipe-generated)
+    - relative_path: "input/Metadata_full.tsv"
+      description: "Sample metadata with sample IDs and experimental factors"
+      format: "TSV"
+      columns: ["ID", "name", "habitat"]
+    # Raw QIIME2 outputs (recipe inputs — transformed automatically during process)
+    - relative_path: "qiime2/diversity/alpha_diversity/faith_pd_vector/metadata.tsv"
+      description: "Raw QIIME2 Faith PD vector (input for alpha_diversity recipe)"
+      format: "TSV"
+      columns: ["id", "faith_pd"]
+    - relative_path: "qiime2/rel_abundance_tables/rel-table-2.tsv"
+      description: "Raw relative abundance table (input for taxonomy_rel_abundance recipe)"
+      format: "TSV"
+      columns: ["#OTU ID"]
+    - relative_path: "qiime2/alpha-rarefaction/faith_pd.csv"
+      description: "Raw QIIME2 rarefaction CSV (input for alpha_rarefaction recipe)"
+      format: "CSV"
+      columns: ["sample-id"]
+    - relative_path: "qiime2/barplot/level-2.csv"
+      description: "Raw QIIME2 barplot CSV (input for taxonomy_composition recipe)"
+      format: "CSV"
+      columns: ["index"]
+    - relative_path: "qiime2/ancombc/differentials/Category-habitat-level-2/lfc_slice.csv"
+      description: "ANCOM-BC log-fold change slice (input for ancombc recipe)"
+      format: "CSV"
+      columns: ["id"]
+    - relative_path: "qiime2/ancombc/differentials/Category-habitat-level-2/p_val_slice.csv"
+      description: "ANCOM-BC p-value slice"
+      format: "CSV"
+      columns: ["id"]
+    - relative_path: "qiime2/ancombc/differentials/Category-habitat-level-2/q_val_slice.csv"
+      description: "ANCOM-BC q-value slice"
+      format: "CSV"
+      columns: ["id"]
+    - relative_path: "qiime2/ancombc/differentials/Category-habitat-level-2/w_slice.csv"
+      description: "ANCOM-BC W statistic slice"
+      format: "CSV"
+      columns: ["id"]
+    - relative_path: "qiime2/ancombc/differentials/Category-habitat-level-2/se_slice.csv"
+      description: "ANCOM-BC standard error slice"
+      format: "CSV"
+      columns: ["id"]
+  expected_directories:
+    - relative_path: "qiime2"
+      description: "QIIME2 output directory"
+    - relative_path: "multiqc"
+      description: "MultiQC output directory"
+
+# ============================================================================
+# PROJECT CONFIGURATION
+# ============================================================================
+
+name: "Ampliseq Microbial Community Analysis"
+project_type: "advanced"
+is_public: true
+workflows:
+  - name: "ampliseq"
+    version: "2.16.0"
+    engine:
+      name: "nextflow"
+      version: "24.10.4"
+    catalog:
+      name: "nf-core"
+      url: "https://nf-co.re"
+    repository_url: "https://github.com/nf-core/ampliseq"
+    data_location:
+      structure: "flat"
+      locations:
+        - "{DATA_ROOT}"
+    data_collections:
+      - data_collection_tag: "multiqc_data"
+        description: "MultiQC report data"
+        config:
+          type: "MultiQC"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "multiqc/multiqc_data/multiqc.parquet"
+          dc_specific_properties:
+            s3_location: null
+            modules:
+              - "cutadapt"
+              - "fastqc"
+            plots:
+              cutadapt:
+                - "Filtered Reads"
+                - "Trimmed Sequence Lengths (5')":
+                    - "Counts"
+                    - "Obs/Exp"
+              fastqc:
+                - "Sequence Counts"
+                - "Sequence Quality Histograms"
+                - "Per Sequence Quality Scores"
+                - "Per Sequence GC Content":
+                    - "Percentages"
+                    - "Counts"
+                - "Per Base N Content"
+                - "Sequence Length Distribution"
+                - "Sequence Duplication Levels"
+                - "Overrepresented sequences by sample"
+                - "Top overrepresented sequences"
+                - "Adapter Content"
+                - "Status Checks"
+
+      - data_collection_tag: "metadata"
+        description: "Sample metadata for ampliseq analysis"
+        config:
+          type: "Table"
+          metatype: "Metadata"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "{DATA_ROOT}/input/Metadata_full.tsv"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+              try_parse_dates: true
+            columns_description:
+              "ID": "Sample identifier (SRR accession)"
+              "name": "Sample name"
+              "habitat": "Sample habitat type"
+              "Riv_vs_Gro": "Habitat comparison group 1"
+              "Sed_vs_Soil": "Habitat comparison group 2"
+
+      # ----------------------------------------------------------------
+      # Recipe-transformed data collections
+      # These read raw QIIME2 outputs and transform them during process
+      # ----------------------------------------------------------------
+
+      - data_collection_tag: "alpha_diversity"
+        description: "Per-sample alpha diversity (from raw QIIME2 Faith PD vector)"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/ampliseq/alpha_diversity.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample identifier"
+              "habitat": "Habitat type"
+              "faith_pd": "Faith's Phylogenetic Diversity (single value per sample)"
+
+      - data_collection_tag: "alpha_rarefaction"
+        description: "Alpha diversity rarefaction curves (from raw QIIME2 CSV)"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/ampliseq/alpha_rarefaction.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample identifier"
+              "depth": "Sequencing depth"
+              "iter": "Iteration number"
+              "faith_pd": "Faith's Phylogenetic Diversity metric"
+
+      - data_collection_tag: "taxonomy_composition"
+        description: "Taxonomic composition across samples (from raw QIIME2 barplot)"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/ampliseq/taxonomy_composition.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample identifier"
+              "taxonomy": "Taxonomic classification (Kingdom;Phylum)"
+              "count": "Raw sequence count for this taxonomy"
+              "habitat": "Habitat type of the sample"
+
+      - data_collection_tag: "taxonomy_rel_abundance"
+        description: "Taxonomic relative abundance at Phylum level (from raw abundance table)"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/ampliseq/taxonomy_rel_abundance.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample identifier"
+              "taxonomy": "Taxonomic classification (Kingdom;Phylum)"
+              "rel_abundance": "Relative abundance (0-1)"
+              "habitat": "Habitat type"
+              "Kingdom": "Kingdom level"
+              "Phylum": "Phylum level"
+
+      - data_collection_tag: "ancombc_results"
+        description: "ANCOM-BC differential abundance at Phylum level (from 5 raw CSV slices)"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/ampliseq/ancombc.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "id": "Taxonomy identifier"
+              "contrast": "Statistical contrast (habitat comparison)"
+              "lfc": "Log-fold change"
+              "q_val": "FDR-adjusted p-value"
+              "w": "ANCOM-BC test statistic"
+              "Kingdom": "Kingdom level"
+              "Phylum": "Phylum level"
+              "neg_log10_qval": "-log10(q-value) for volcano plot"
+              "significant": "q < 0.05"
+
+# ============================================================================
+# RUNTIME LINKS CONFIGURATION
+# ============================================================================
+# Links use data_collection_tag references (resolved to IDs at instantiation)
+# ============================================================================
+
+links:
+  # Link 1: Metadata -> MultiQC (for MultiQC component filtering)
+  - source_dc_tag: "metadata"
+    source_column: "ID"
+    target_dc_tag: "multiqc_data"
+    target_type: "multiqc"
+    link_config:
+      resolver: "sample_mapping"
+      target_field: "sample_name"
+    description: "Filter MultiQC by metadata samples (habitat selections)"
+    enabled: true
+
+  # Link 2: Metadata -> Alpha Diversity
+  - source_dc_tag: "metadata"
+    source_column: "ID"
+    target_dc_tag: "alpha_diversity"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter alpha diversity by metadata samples"
+    enabled: true
+
+  # Link 3: Metadata -> Alpha Rarefaction (for Faith PD figure)
+  - source_dc_tag: "metadata"
+    source_column: "ID"
+    target_dc_tag: "alpha_rarefaction"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter alpha rarefaction by metadata samples"
+    enabled: true
+
+  # Link 4: Metadata -> Taxonomy Composition (for taxonomy figure)
+  - source_dc_tag: "metadata"
+    source_column: "ID"
+    target_dc_tag: "taxonomy_composition"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter taxonomy by metadata samples"
+    enabled: true
+
+  # Link 5: Metadata -> Taxonomy Rel Abundance
+  - source_dc_tag: "metadata"
+    source_column: "ID"
+    target_dc_tag: "taxonomy_rel_abundance"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter taxonomy rel abundance by metadata samples"
+    enabled: true
+
+  # Note: ANCOM-BC results are not linked because they show
+  # habitat-independent differential abundance analysis and have no sample column

@@ -43,7 +43,11 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         pl.col("taxonomy").str.split(";").list.get(1).fill_null("Unclassified").alias("Phylum"),
     )
 
-    metadata = sources["metadata"].select("sample", "habitat")
+    metadata = sources["metadata"]
+    # Handle both column names: "sample" (2.14) and "ID" (2.16+)
+    if "ID" in metadata.columns and "sample" not in metadata.columns:
+        metadata = metadata.rename({"ID": "sample"})
+    metadata = metadata.select("sample", "habitat")
     df = df.join(metadata, on="sample", how="left")
 
     return df.select("sample", "taxonomy", "rel_abundance", "habitat", "Kingdom", "Phylum")
