@@ -13,6 +13,7 @@ from __future__ import annotations
 import argparse
 import logging
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -105,6 +106,10 @@ def discover_tracked_pipelines(projects_dir: Path) -> list[dict]:
 
 GITHUB_API = "https://api.github.com"
 GITHUB_RAW = "https://raw.githubusercontent.com"
+NFCORE_MODULES_REPO = "nf-core/modules"
+
+# Depictio's own MultiQC version (from pyproject.toml: multiqc==1.31.0)
+DEPICTIO_MULTIQC_VERSION = "1.31"
 
 
 def fetch_latest_release(
@@ -196,6 +201,137 @@ def extract_tools_from_modules_json(modules_json: dict) -> set[str]:
             for tool_name in ns_modules:
                 tools.add(tool_name.split("/")[-1].lower())
     return tools
+
+
+def fetch_modules_json_raw(
+    pipeline: str,
+    version: str,
+    token: str | None = None,
+) -> dict | None:
+    """Fetch the raw modules.json dict for a pipeline version.
+
+    Args:
+        pipeline: Pipeline name.
+        version: Git tag / version string.
+        token: Optional GitHub token.
+
+    Returns:
+        Parsed modules.json dict, or *None* on failure.
+    """
+    url = f"{GITHUB_RAW}/nf-core/{pipeline}/{version}/modules.json"
+    headers: dict[str, str] = {}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+
+    try:
+        resp = httpx.get(url, headers=headers, timeout=30.0)
+        if resp.status_code == 404:
+            return None
+        resp.raise_for_status()
+        return resp.json()
+    except httpx.HTTPError as exc:
+        logger.error("Failed to fetch modules.json for %s@%s: %s", pipeline, version, exc)
+        return None
+
+
+def extract_multiqc_git_sha(modules_json: dict) -> str | None:
+    """Extract the git_sha of the multiqc module from modules.json.
+
+    Args:
+        modules_json: Parsed modules.json content.
+
+    Returns:
+        The git_sha string, or *None* if multiqc is not in the pipeline.
+    """
+    for _repo_url, repo_data in modules_json.get("repos", {}).items():
+        for _ns, ns_modules in repo_data.get("modules", {}).items():
+            if "multiqc" in ns_modules:
+                return ns_modules["multiqc"].get("git_sha")
+    return None
+
+
+def fetch_pipeline_multiqc_version(
+    git_sha: str,
+    token: str | None = None,
+) -> str | None:
+    """Fetch the pinned MultiQC version from the nf-core/modules environment.yml.
+
+    Uses the git_sha from modules.json to read the exact ``environment.yml``
+    for the multiqc module and extracts the version from a line like
+    ``bioconda::multiqc=1.27``.
+
+    Args:
+        git_sha: Commit SHA in the nf-core/modules repo.
+        token: Optional GitHub token.
+
+    Returns:
+        Version string (e.g. ``"1.27"``), or *None* on failure.
+    """
+    url = f"{GITHUB_RAW}/{NFCORE_MODULES_REPO}/{git_sha}/modules/nf-core/multiqc/environment.yml"
+    headers: dict[str, str] = {}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+
+    try:
+        resp = httpx.get(url, headers=headers, timeout=30.0)
+        if resp.status_code == 404:
+            logger.warning("environment.yml not found at sha %s", git_sha[:12])
+            return None
+        resp.raise_for_status()
+    except httpx.HTTPError as exc:
+        logger.error("Failed to fetch multiqc environment.yml: %s", exc)
+        return None
+
+    # Parse "bioconda::multiqc=1.27" or "multiqc=1.27" from dependencies
+    match = re.search(r"multiqc[>=!<]*=(\d+\.\d+(?:\.\d+)?)", resp.text)
+    if match:
+        return match.group(1)
+
+    logger.warning("Could not parse multiqc version from environment.yml")
+    return None
+
+
+def check_multiqc_version_compat(
+    pipeline_mqc_version: str | None,
+    depictio_mqc_version: str = DEPICTIO_MULTIQC_VERSION,
+) -> list[str]:
+    """Check compatibility between pipeline and Depictio MultiQC versions.
+
+    Major version mismatches are warnings. The pipeline producing data with
+    a newer MultiQC than Depictio can parse is a breaking concern.
+
+    Args:
+        pipeline_mqc_version: MultiQC version pinned in the pipeline.
+        depictio_mqc_version: MultiQC version used by Depictio.
+
+    Returns:
+        List of warning strings (empty if compatible).
+    """
+    if pipeline_mqc_version is None:
+        return ["Could not determine pipeline MultiQC version"]
+
+    pip_ver = _parse_version(pipeline_mqc_version)
+    dep_ver = _parse_version(depictio_mqc_version)
+
+    warnings: list[str] = []
+
+    if pip_ver[0] != dep_ver[0]:
+        warnings.append(
+            f"Major MultiQC version mismatch: pipeline uses {pipeline_mqc_version}, "
+            f"Depictio uses {depictio_mqc_version}"
+        )
+    elif pip_ver > dep_ver:
+        warnings.append(
+            f"Pipeline uses MultiQC {pipeline_mqc_version} which is newer than "
+            f"Depictio's {depictio_mqc_version} — output format may differ"
+        )
+    elif pip_ver < dep_ver:
+        warnings.append(
+            f"Pipeline uses MultiQC {pipeline_mqc_version}, Depictio uses "
+            f"{depictio_mqc_version} — generally OK but verify parquet compatibility"
+        )
+
+    return warnings
 
 
 # ---------------------------------------------------------------------------
@@ -300,6 +436,7 @@ def generate_report(
     tool_diff: dict[str, list[str]],
     mqc_warnings: list[str],
     release_url: str,
+    mqc_version_info: dict[str, str | None] | None = None,
 ) -> str:
     """Generate a markdown report for a GitHub issue body.
 
@@ -310,6 +447,8 @@ def generate_report(
         tool_diff: Output of :func:`diff_tools`.
         mqc_warnings: Output of :func:`check_dashboard_multiqc_refs`.
         release_url: URL to the GitHub release page.
+        mqc_version_info: Optional dict with keys ``pipeline``, ``depictio``,
+            ``warnings`` for MultiQC version comparison.
 
     Returns:
         Markdown string.
@@ -323,6 +462,21 @@ def generate_report(
         f"**Release**: {release_url}",
         "",
     ]
+
+    # MultiQC version section
+    if mqc_version_info:
+        pip_v = mqc_version_info.get("pipeline") or "unknown"
+        dep_v = mqc_version_info.get("depictio") or "unknown"
+        lines.append("### MultiQC version")
+        lines.append(f"- Pipeline pins: **{pip_v}**")
+        lines.append(f"- Depictio uses: **{dep_v}**")
+        version_warnings = mqc_version_info.get("warnings", [])
+        if version_warnings:
+            for w in version_warnings:
+                lines.append(f"- {w}")
+        else:
+            lines.append("- Versions are compatible")
+        lines.append("")
 
     if tool_diff["removed"]:
         lines.append("### Removed tools")
@@ -354,6 +508,14 @@ def generate_report(
             f"- [ ] Copy & update project.yaml from {current_ver}",
             "- [ ] Run pipeline with new version and validate MultiQC output",
             "- [ ] Update dashboard YAML if modules changed",
+        ]
+    )
+
+    if mqc_version_info and mqc_version_info.get("warnings"):
+        lines.append("- [ ] Review MultiQC version mismatch and test parquet compatibility")
+
+    lines.extend(
+        [
             "- [ ] `depictio validate-project-config` + `depictio dashboard validate`",
             "",
             "---",
@@ -430,6 +592,22 @@ def main() -> int:
         new_tools = fetch_nfcore_tools(name, release["tag_name"], token=args.github_token)
         tdiff = diff_tools(current_tools, new_tools)
 
+        # Check MultiQC version compatibility
+        mqc_version_info: dict | None = None
+        new_modules_json = fetch_modules_json_raw(
+            name, release["tag_name"], token=args.github_token
+        )
+        if new_modules_json:
+            mqc_sha = extract_multiqc_git_sha(new_modules_json)
+            if mqc_sha:
+                pip_mqc_ver = fetch_pipeline_multiqc_version(mqc_sha, token=args.github_token)
+                ver_warnings = check_multiqc_version_compat(pip_mqc_ver)
+                mqc_version_info = {
+                    "pipeline": pip_mqc_ver,
+                    "depictio": DEPICTIO_MULTIQC_VERSION,
+                    "warnings": ver_warnings,
+                }
+
         # Check dashboard refs against new tool set
         mqc_modules = extract_multiqc_modules_from_project(pl["config"])
         new_mqc_available = mqc_modules - set(tdiff["removed"]) | set(tdiff["added"])
@@ -440,7 +618,15 @@ def main() -> int:
             for dashboard_file in dashboards_dir.glob("*.yaml"):
                 mqc_warnings.extend(check_dashboard_multiqc_refs(dashboard_file, new_mqc_available))
 
-        report = generate_report(name, cur_ver, new_ver, tdiff, mqc_warnings, release["url"])
+        report = generate_report(
+            name,
+            cur_ver,
+            new_ver,
+            tdiff,
+            mqc_warnings,
+            release["url"],
+            mqc_version_info=mqc_version_info,
+        )
 
         updates.append(
             {

@@ -10,8 +10,10 @@ import yaml
 from depictio.ci.check_nfcore_updates import (
     _parse_version,
     check_dashboard_multiqc_refs,
+    check_multiqc_version_compat,
     diff_tools,
     discover_tracked_pipelines,
+    extract_multiqc_git_sha,
     extract_multiqc_modules_from_project,
     extract_tools_from_modules_json,
     generate_report,
@@ -219,3 +221,78 @@ class TestGenerateReport:
             "ampliseq", "2.14.0", "2.15.0", tdiff, ["bad module ref"], "https://x"
         )
         assert "bad module ref" in report
+
+    def test_includes_mqc_version_info(self) -> None:
+        tdiff = {"added": [], "removed": [], "unchanged": []}
+        mqc_info = {
+            "pipeline": "1.27",
+            "depictio": "1.31",
+            "warnings": ["Pipeline uses MultiQC 1.27, Depictio uses 1.31"],
+        }
+        report = generate_report(
+            "ampliseq",
+            "2.14.0",
+            "2.15.0",
+            tdiff,
+            [],
+            "https://x",
+            mqc_version_info=mqc_info,
+        )
+        assert "1.27" in report
+        assert "1.31" in report
+        assert "MultiQC version" in report
+
+
+# -- Tests: MultiQC git_sha extraction ----------------------------------------
+
+
+class TestExtractMultiqcGitSha:
+    def test_finds_sha(self, sample_modules_json: dict) -> None:
+        # Add a git_sha to the multiqc entry in the fixture
+        modules = sample_modules_json["repos"]["https://github.com/nf-core/modules.git"]["modules"][
+            "nf-core"
+        ]
+        modules["multiqc"] = {
+            "branch": "master",
+            "git_sha": "abc123def456",
+        }
+        assert extract_multiqc_git_sha(sample_modules_json) == "abc123def456"
+
+    def test_no_multiqc(self) -> None:
+        modules_json = {
+            "repos": {
+                "https://github.com/nf-core/modules.git": {
+                    "modules": {"nf-core": {"fastqc": {"branch": "master"}}},
+                },
+            },
+        }
+        assert extract_multiqc_git_sha(modules_json) is None
+
+
+# -- Tests: MultiQC version compatibility -------------------------------------
+
+
+class TestCheckMultiqcVersionCompat:
+    def test_same_version(self) -> None:
+        assert check_multiqc_version_compat("1.31", "1.31") == []
+
+    def test_pipeline_older(self) -> None:
+        warnings = check_multiqc_version_compat("1.27", "1.31")
+        assert len(warnings) == 1
+        assert "1.27" in warnings[0]
+        assert "1.31" in warnings[0]
+
+    def test_pipeline_newer(self) -> None:
+        warnings = check_multiqc_version_compat("1.35", "1.31")
+        assert len(warnings) == 1
+        assert "newer" in warnings[0]
+
+    def test_major_mismatch(self) -> None:
+        warnings = check_multiqc_version_compat("2.0", "1.31")
+        assert len(warnings) == 1
+        assert "Major" in warnings[0]
+
+    def test_none_version(self) -> None:
+        warnings = check_multiqc_version_compat(None)
+        assert len(warnings) == 1
+        assert "Could not determine" in warnings[0]
