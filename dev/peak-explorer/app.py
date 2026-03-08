@@ -1,4 +1,4 @@
-"""Peak Explorer prototype — main entry point.
+"""Peak Explorer analysis module — main entry point.
 
 Run with:
     cd dev/peak-explorer
@@ -11,7 +11,7 @@ Then open http://localhost:8063 in your browser.
 import dash_mantine_components as dmc
 from callbacks import register_callbacks
 from dash import Dash
-from data import generate_consensus_matrix, generate_frip_scores, generate_peak_data
+from data import generate_peak_data
 from layout import create_layout
 
 
@@ -23,11 +23,9 @@ def main() -> None:
     )
 
     peak_df = generate_peak_data(n_peaks=3000)
-    consensus_df = generate_consensus_matrix(peak_df)
-    frip_df = generate_frip_scores()
 
     app.layout = create_layout()
-    register_callbacks(app, peak_df, consensus_df, frip_df)
+    register_callbacks(app, peak_df)
 
     app.run(debug=True, port=8063)
 

@@ -1,4 +1,4 @@
-"""Taxonomy Browser prototype — main entry point.
+"""Taxonomy Browser analysis module — main entry point.
 
 Run with:
     cd dev/taxonomy-browser

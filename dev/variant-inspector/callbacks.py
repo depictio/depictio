@@ -1,10 +1,15 @@
-"""Callbacks for the Variant Inspector prototype.
+"""Callbacks for the Variant Inspector analysis module.
 
 Architecture
 ------------
-1. Main update callback: reads sample selector, AF range, depth/quality filters,
-   effect/gene filters, then updates AF histogram, coverage track, lineage chart,
-   and variant table.
+Single main callback reads all sidebar controls and updates:
+- Summary badges row (total, passing, missense, high-confidence)
+- AF-vs-Quality quadrant scatter with dynamic threshold lines
+- Quadrant count badges
+- Filter funnel chart (Total -> AF -> Quality -> Depth -> Effect -> Gene -> Final)
+- Cross-sample variant sharing heatmap
+- AG Grid variant table
+- Sidebar summary badges
 """
 
 import dash_mantine_components as dmc
@@ -12,210 +17,449 @@ import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 from dash import Dash, Input, Output
-from data import GENE_REGIONS, GENOME_LENGTH
 
+# -- Table column definitions --------------------------------------------------
 
 TABLE_COLUMN_DEFS: list[dict] = [
-    {"field": "position", "headerName": "Position", "filter": "agNumberColumnFilter", "pinned": "left", "minWidth": 100, "valueFormatter": {"function": "d3.format(',')(params.value)"}},
+    {
+        "field": "position",
+        "headerName": "Position",
+        "filter": "agNumberColumnFilter",
+        "pinned": "left",
+        "minWidth": 100,
+        "valueFormatter": {"function": "d3.format(',')(params.value)"},
+    },
     {"field": "ref", "headerName": "Ref", "filter": "agTextColumnFilter", "maxWidth": 60},
     {"field": "alt", "headerName": "Alt", "filter": "agTextColumnFilter", "maxWidth": 60},
-    {"field": "alt_freq", "headerName": "AF", "filter": "agNumberColumnFilter", "valueFormatter": {"function": "d3.format('.4f')(params.value)"}},
-    {"field": "alt_depth", "headerName": "Alt DP", "filter": "agNumberColumnFilter", "valueFormatter": {"function": "d3.format(',')(params.value)"}},
-    {"field": "total_depth", "headerName": "Total DP", "filter": "agNumberColumnFilter", "valueFormatter": {"function": "d3.format(',')(params.value)"}},
+    {
+        "field": "alt_freq",
+        "headerName": "AF",
+        "filter": "agNumberColumnFilter",
+        "valueFormatter": {"function": "d3.format('.4f')(params.value)"},
+    },
+    {
+        "field": "alt_depth",
+        "headerName": "Alt DP",
+        "filter": "agNumberColumnFilter",
+        "valueFormatter": {"function": "d3.format(',')(params.value)"},
+    },
+    {
+        "field": "total_depth",
+        "headerName": "Total DP",
+        "filter": "agNumberColumnFilter",
+        "valueFormatter": {"function": "d3.format(',')(params.value)"},
+    },
     {"field": "alt_qual", "headerName": "Qual", "filter": "agNumberColumnFilter"},
     {"field": "gene", "headerName": "Gene", "filter": "agTextColumnFilter"},
     {"field": "effect", "headerName": "Effect", "filter": "agTextColumnFilter"},
     {"field": "aa_change", "headerName": "AA Change", "filter": "agTextColumnFilter"},
+    {"field": "quadrant", "headerName": "Quadrant", "filter": "agTextColumnFilter"},
 ]
 
 
-def _build_af_histogram(df: pd.DataFrame) -> go.Figure:
-    """Histogram of allele frequencies."""
-    fig = go.Figure(
-        go.Histogram(
-            x=df["alt_freq"],
-            nbinsx=40,
-            marker=dict(color="#228be6", line=dict(color="white", width=0.5)),
-        )
-    )
-    fig.update_layout(
-        title="Allele Frequency Distribution",
-        xaxis_title="Allele Frequency",
-        yaxis_title="Count",
-        template="plotly_white",
-        margin=dict(l=60, r=20, t=50, b=60),
-    )
-    return fig
+# -- Quadrant definitions ------------------------------------------------------
+
+QUADRANT_CONFIG = {
+    "Confident Fixed": {"color": "#2b8a3e", "symbol": "circle"},
+    "Confident Minority": {"color": "#1971c2", "symbol": "diamond"},
+    "Uncertain Fixed": {"color": "#e8590c", "symbol": "square"},
+    "Noise": {"color": "#868e96", "symbol": "x"},
+}
 
 
-def _build_coverage_track(
-    coverage_df: pd.DataFrame,
-    variant_df: pd.DataFrame,
+def _classify_quadrant(af: float, qual: float, af_thresh: float, qual_thresh: float) -> str:
+    """Classify a variant into one of the four quadrants."""
+    high_af = af >= af_thresh
+    high_qual = qual >= qual_thresh
+    if high_af and high_qual:
+        return "Confident Fixed"
+    if not high_af and high_qual:
+        return "Confident Minority"
+    if high_af and not high_qual:
+        return "Uncertain Fixed"
+    return "Noise"
+
+
+# -- Chart builders ------------------------------------------------------------
+
+
+def _build_quadrant_scatter(
+    df: pd.DataFrame,
+    af_thresh: float,
+    qual_thresh: float,
 ) -> go.Figure:
-    """Coverage track with gene annotations and variant positions."""
+    """AF-vs-Quality scatter with dynamic threshold lines and quadrant coloring."""
     fig = go.Figure()
 
-    # Coverage area
-    fig.add_trace(
-        go.Scatter(
-            x=coverage_df["position"],
-            y=coverage_df["depth"],
-            mode="lines",
-            fill="tozeroy",
-            line=dict(color="#228be6", width=1),
-            fillcolor="rgba(34, 139, 230, 0.2)",
-            name="Coverage",
-            hovertemplate="Pos: %{x:,}<br>Depth: %{y:,}<extra></extra>",
-        )
+    if not df.empty:
+        for quadrant_name, cfg in QUADRANT_CONFIG.items():
+            subset = df[df["quadrant"] == quadrant_name]
+            if subset.empty:
+                continue
+            fig.add_trace(
+                go.Scatter(
+                    x=subset["alt_freq"],
+                    y=subset["alt_qual"],
+                    mode="markers",
+                    name=quadrant_name,
+                    marker=dict(
+                        color=cfg["color"],
+                        symbol=cfg["symbol"],
+                        size=7,
+                        opacity=0.7,
+                        line=dict(width=0.5, color="white"),
+                    ),
+                    text=subset.apply(
+                        lambda r: (
+                            f"{r['gene']} {r['ref']}>{r['alt']}<br>"
+                            f"AF={r['alt_freq']:.3f} Qual={r['alt_qual']}<br>"
+                            f"Pos={r['position']:,}"
+                        ),
+                        axis=1,
+                    ),
+                    hovertemplate="%{text}<extra>%{fullData.name}</extra>",
+                )
+            )
+
+    # Dynamic threshold lines
+    fig.add_vline(
+        x=af_thresh,
+        line_dash="dash",
+        line_color="red",
+        line_width=1.5,
+        annotation_text=f"AF={af_thresh}",
+        annotation_position="top",
+    )
+    fig.add_hline(
+        y=qual_thresh,
+        line_dash="dash",
+        line_color="red",
+        line_width=1.5,
+        annotation_text=f"Qual={qual_thresh}",
+        annotation_position="right",
     )
 
-    # Variant markers on top
-    if not variant_df.empty:
-        fig.add_trace(
-            go.Scatter(
-                x=variant_df["position"],
-                y=[coverage_df["depth"].max() * 1.05] * len(variant_df),
-                mode="markers",
-                marker=dict(
-                    color=variant_df["alt_freq"],
-                    colorscale="RdYlBu_r",
-                    size=6,
-                    cmin=0,
-                    cmax=1,
-                    colorbar=dict(title="AF", thickness=12, len=0.5),
-                    line=dict(width=0.5, color="black"),
-                    symbol="triangle-down",
-                ),
-                name="Variants",
-                text=variant_df.apply(
-                    lambda r: f"{r['ref']}>{r['alt']} AF={r['alt_freq']:.2f} {r['gene']}",
-                    axis=1,
-                ),
-                hovertemplate="%{text}<br>Pos: %{x:,}<extra></extra>",
-            )
-        )
-
-    # Gene region annotations
-    max_depth = coverage_df["depth"].max()
-    for region in GENE_REGIONS:
-        fig.add_vrect(
-            x0=region["start"],
-            x1=region["end"],
-            fillcolor="rgba(0,0,0,0.03)",
-            line_width=0,
-            annotation_text=str(region["gene"]),
-            annotation_position="top left",
-            annotation=dict(font_size=9, font_color="gray"),
-        )
+    # Quadrant background shading
+    max_qual = max(250, qual_thresh * 1.5)
+    fig.add_shape(
+        type="rect",
+        x0=af_thresh,
+        x1=1,
+        y0=qual_thresh,
+        y1=max_qual,
+        fillcolor="rgba(43,138,62,0.05)",
+        line_width=0,
+        layer="below",
+    )
+    fig.add_shape(
+        type="rect",
+        x0=0,
+        x1=af_thresh,
+        y0=qual_thresh,
+        y1=max_qual,
+        fillcolor="rgba(25,113,194,0.05)",
+        line_width=0,
+        layer="below",
+    )
+    fig.add_shape(
+        type="rect",
+        x0=af_thresh,
+        x1=1,
+        y0=0,
+        y1=qual_thresh,
+        fillcolor="rgba(232,89,12,0.05)",
+        line_width=0,
+        layer="below",
+    )
+    fig.add_shape(
+        type="rect",
+        x0=0,
+        x1=af_thresh,
+        y0=0,
+        y1=qual_thresh,
+        fillcolor="rgba(134,142,150,0.05)",
+        line_width=0,
+        layer="below",
+    )
 
     fig.update_layout(
-        title="Genome Coverage & Variant Positions",
-        xaxis_title="Genomic Position",
-        yaxis_title="Depth",
+        title="AF vs Quality — Quadrant Classification",
+        xaxis_title="Allele Frequency",
+        yaxis_title="Variant Quality",
         template="plotly_white",
         margin=dict(l=60, r=20, t=50, b=60),
-        showlegend=False,
-        xaxis=dict(range=[0, GENOME_LENGTH]),
-    )
-    return fig
-
-
-def _build_lineage_chart(lineage_df: pd.DataFrame) -> go.Figure:
-    """Stacked bar chart of lineage composition per sample."""
-    lineages = lineage_df["lineage"].unique().tolist()
-    samples = lineage_df["sample"].unique().tolist()
-
-    colors = ["#e63946", "#457b9d", "#2a9d8f", "#e9c46a", "#a8dadc"]
-
-    fig = go.Figure()
-    for i, lineage in enumerate(lineages):
-        sub = lineage_df[lineage_df["lineage"] == lineage]
-        fig.add_trace(
-            go.Bar(
-                x=sub["sample"],
-                y=sub["abundance"],
-                name=lineage,
-                marker=dict(color=colors[i % len(colors)]),
-            )
-        )
-
-    fig.update_layout(
-        title="Lineage Composition",
-        barmode="stack",
-        xaxis_title="Sample",
-        yaxis_title="Relative Abundance",
-        template="plotly_white",
-        margin=dict(l=60, r=20, t=50, b=80),
+        xaxis=dict(range=[-0.02, 1.02]),
+        yaxis=dict(range=[0, max_qual]),
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
     )
     return fig
 
 
-def register_callbacks(
-    app: Dash,
+def _build_filter_funnel(funnel_data: list[dict]) -> go.Figure:
+    """Funnel chart showing the filter cascade."""
+    labels = [d["stage"] for d in funnel_data]
+    values = [d["count"] for d in funnel_data]
+
+    fig = go.Figure(
+        go.Funnel(
+            y=labels,
+            x=values,
+            textinfo="value+percent initial",
+            marker=dict(
+                color=[
+                    "#228be6",
+                    "#12b886",
+                    "#e8590c",
+                    "#7048e8",
+                    "#e63946",
+                    "#1971c2",
+                ],
+            ),
+            connector=dict(line=dict(color="lightgray", width=1)),
+        )
+    )
+    fig.update_layout(
+        title="Filter Funnel",
+        template="plotly_white",
+        margin=dict(l=20, r=20, t=50, b=20),
+    )
+    return fig
+
+
+def _build_sharing_heatmap(
     variant_df: pd.DataFrame,
-    coverage_df: pd.DataFrame,
-    lineage_df: pd.DataFrame,
-) -> None:
+    filtered_positions: set,
+    all_samples: list[str],
+) -> go.Figure:
+    """Cross-sample variant sharing heatmap.
+
+    For filtered variant positions, show which positions are present in each sample.
+    Rows = positions, columns = samples, color = present/absent.
+    """
+    fig = go.Figure()
+
+    if not filtered_positions:
+        fig.update_layout(
+            title="Cross-Sample Variant Sharing",
+            template="plotly_white",
+            margin=dict(l=60, r=20, t=50, b=60),
+            annotations=[
+                dict(
+                    text="No variants to display",
+                    xref="paper",
+                    yref="paper",
+                    x=0.5,
+                    y=0.5,
+                    showarrow=False,
+                    font=dict(size=14, color="gray"),
+                )
+            ],
+        )
+        return fig
+
+    # Build presence/absence matrix
+    positions_sorted = sorted(filtered_positions)
+
+    # Cap display at 80 positions for readability
+    if len(positions_sorted) > 80:
+        step = len(positions_sorted) // 80
+        positions_sorted = positions_sorted[::step]
+
+    # Subset the full dataframe to these positions across ALL samples
+    pos_sample_df = variant_df[variant_df["position"].isin(positions_sorted)]
+
+    # Use a pivot approach for efficiency
+    presence = pos_sample_df.groupby(["position", "sample"]).size().reset_index(name="count")
+    presence["present"] = 1
+
+    matrix = []
+    for pos in positions_sorted:
+        row = []
+        for sample in all_samples:
+            hit = ((presence["position"] == pos) & (presence["sample"] == sample)).any()
+            row.append(1 if hit else 0)
+        matrix.append(row)
+
+    matrix_arr = np.array(matrix)
+
+    fig.add_trace(
+        go.Heatmap(
+            z=matrix_arr,
+            x=all_samples,
+            y=[str(p) for p in positions_sorted],
+            colorscale=[[0, "#f1f3f5"], [1, "#228be6"]],
+            showscale=False,
+            hovertemplate="Sample: %{x}<br>Position: %{y}<br>Present: %{z}<extra></extra>",
+        )
+    )
+
+    fig.update_layout(
+        title="Cross-Sample Variant Sharing (filtered positions)",
+        xaxis_title="Sample",
+        yaxis_title="Genomic Position",
+        template="plotly_white",
+        margin=dict(l=80, r=20, t=50, b=80),
+        yaxis=dict(type="category", autorange="reversed"),
+        xaxis=dict(tickangle=-45),
+    )
+    return fig
+
+
+# -- Callback registration ----------------------------------------------------
+
+
+def register_callbacks(app: Dash, variant_df: pd.DataFrame) -> None:
     """Register all Dash callbacks."""
+    all_samples = sorted(variant_df["sample"].unique().tolist())
 
     @app.callback(
-        Output("af-histogram", "figure"),
-        Output("coverage-track", "figure"),
-        Output("lineage-chart", "figure"),
+        Output("summary-badges", "children"),
+        Output("quadrant-scatter", "figure"),
+        Output("quadrant-badges", "children"),
+        Output("filter-funnel", "figure"),
+        Output("sharing-heatmap", "figure"),
         Output("variant-table", "rowData"),
         Output("variant-table", "columnDefs"),
-        Output("variant-summary", "children"),
+        Output("sidebar-summary", "children"),
         Input("sample-selector", "value"),
-        Input("af-range-slider", "value"),
-        Input("min-depth-input", "value"),
-        Input("min-qual-input", "value"),
+        Input("af-threshold-slider", "value"),
+        Input("qual-threshold-slider", "value"),
+        Input("depth-threshold-input", "value"),
         Input("effect-filter", "value"),
         Input("gene-filter", "value"),
     )
-    def update_main(sample, af_range, min_depth, min_qual, effects, gene):
+    def update_main(
+        sample: str | None,
+        af_thresh: float | None,
+        qual_thresh: float | None,
+        depth_thresh: int | None,
+        effects: list[str] | None,
+        gene: str | None,
+    ):
         sample = sample or variant_df["sample"].iloc[0]
-        af_range = af_range or [0, 1]
-        min_depth = min_depth or 0
-        min_qual = min_qual or 0
+        af_thresh = af_thresh if af_thresh is not None else 0.5
+        qual_thresh = qual_thresh if qual_thresh is not None else 100
+        depth_thresh = depth_thresh if depth_thresh is not None else 0
         effects = effects or []
         gene = gene or "all"
 
-        # Filter to sample
+        # -- Filter cascade (track counts at each stage) -------------------
         sample_df = variant_df[variant_df["sample"] == sample].copy()
-
-        # Apply filters
-        mask = (
-            (sample_df["alt_freq"] >= af_range[0])
-            & (sample_df["alt_freq"] <= af_range[1])
-            & (sample_df["total_depth"] >= min_depth)
-            & (sample_df["alt_qual"] >= min_qual)
-            & (sample_df["effect"].isin(effects))
-        )
-        if gene != "all":
-            mask &= sample_df["gene"] == gene
-
-        filtered = sample_df[mask]
-
-        # Build charts
-        af_fig = _build_af_histogram(filtered)
-        coverage_fig = _build_coverage_track(coverage_df, filtered)
-        lineage_fig = _build_lineage_chart(lineage_df)
-
-        # Table
-        row_data = filtered.to_dict("records")
-
-        # Summary
         n_total = len(sample_df)
-        n_filtered = len(filtered)
-        n_missense = (filtered["effect"] == "missense").sum() if not filtered.empty else 0
-        median_af = round(filtered["alt_freq"].median(), 3) if not filtered.empty else 0
 
-        summary = [
-            dmc.Badge(f"Sample: {sample}", color="blue", variant="light", size="lg"),
-            dmc.Badge(f"{n_filtered}/{n_total} variants", color="teal", variant="light", size="lg"),
+        # Stage 1: AF filter
+        af_mask = sample_df["alt_freq"] >= af_thresh
+        n_after_af = int(af_mask.sum())
+
+        # Stage 2: Quality filter
+        qual_mask = sample_df["alt_qual"] >= qual_thresh
+        n_after_qual = int((af_mask & qual_mask).sum())
+
+        # Stage 3: Depth filter
+        depth_mask = sample_df["total_depth"] >= depth_thresh
+        n_after_depth = int((af_mask & qual_mask & depth_mask).sum())
+
+        # Stage 4: Effect filter
+        effect_mask = sample_df["effect"].isin(effects)
+        n_after_effect = int((af_mask & qual_mask & depth_mask & effect_mask).sum())
+
+        # Stage 5: Gene filter
+        if gene != "all":
+            gene_mask = sample_df["gene"] == gene
+        else:
+            gene_mask = pd.Series(True, index=sample_df.index)
+        final_mask = af_mask & qual_mask & depth_mask & effect_mask & gene_mask
+        filtered = sample_df[final_mask].copy()
+        n_final = len(filtered)
+
+        # -- Quadrant classification (on full sample_df for scatter) -------
+        sample_df["quadrant"] = sample_df.apply(
+            lambda r: _classify_quadrant(r["alt_freq"], r["alt_qual"], af_thresh, qual_thresh),
+            axis=1,
+        )
+        filtered["quadrant"] = filtered.apply(
+            lambda r: _classify_quadrant(r["alt_freq"], r["alt_qual"], af_thresh, qual_thresh),
+            axis=1,
+        )
+
+        # Quadrant counts (on all sample variants for the scatter)
+        q_counts = {}
+        for qname in QUADRANT_CONFIG:
+            q_counts[qname] = int((sample_df["quadrant"] == qname).sum())
+
+        # High-confidence = Confident Fixed
+        n_high_conf = q_counts.get("Confident Fixed", 0)
+        n_missense = int((filtered["effect"] == "missense").sum()) if not filtered.empty else 0
+
+        # -- Build outputs -------------------------------------------------
+
+        # Summary badges row (main area top)
+        summary_badges = [
+            dmc.Badge(f"Total: {n_total}", color="blue", variant="light", size="lg"),
+            dmc.Badge(f"Passing: {n_final}", color="teal", variant="light", size="lg"),
             dmc.Badge(f"Missense: {n_missense}", color="red", variant="light", size="lg"),
-            dmc.Badge(f"Median AF: {median_af}", color="grape", variant="light", size="lg"),
+            dmc.Badge(
+                f"High-Confidence: {n_high_conf}",
+                color="green",
+                variant="light",
+                size="lg",
+            ),
         ]
 
-        return af_fig, coverage_fig, lineage_fig, row_data, TABLE_COLUMN_DEFS, summary
+        # Quadrant scatter
+        scatter_fig = _build_quadrant_scatter(sample_df, af_thresh, qual_thresh)
+
+        # Quadrant count badges
+        quadrant_badges = []
+        for qname, cfg in QUADRANT_CONFIG.items():
+            quadrant_badges.append(
+                dmc.Badge(
+                    f"{qname}: {q_counts.get(qname, 0)}",
+                    color=cfg["color"],
+                    variant="outline",
+                    size="sm",
+                    styles={"root": {"borderColor": cfg["color"], "color": cfg["color"]}},
+                )
+            )
+
+        # Filter funnel (6 stages: Total -> AF -> Quality -> Depth -> Effect -> Gene)
+        funnel_data = [
+            {"stage": "Total", "count": n_total},
+            {"stage": "AF Filter", "count": n_after_af},
+            {"stage": "Quality", "count": n_after_qual},
+            {"stage": "Depth", "count": n_after_depth},
+            {"stage": "Effect Type", "count": n_after_effect},
+            {"stage": "Gene", "count": n_final},
+        ]
+        funnel_fig = _build_filter_funnel(funnel_data)
+
+        # Cross-sample sharing heatmap
+        filtered_positions = set(filtered["position"].tolist()) if not filtered.empty else set()
+        heatmap_fig = _build_sharing_heatmap(variant_df, filtered_positions, all_samples)
+
+        # Table data
+        row_data = filtered.to_dict("records")
+
+        # Sidebar summary
+        sidebar_summary = [
+            dmc.Badge(f"Sample: {sample}", color="blue", variant="light", size="lg"),
+            dmc.Badge(f"{n_final}/{n_total} variants", color="teal", variant="light", size="lg"),
+            dmc.Badge(f"Missense: {n_missense}", color="red", variant="light", size="lg"),
+            dmc.Badge(
+                f"Confident Fixed: {n_high_conf}",
+                color="green",
+                variant="light",
+                size="lg",
+            ),
+        ]
+
+        return (
+            summary_badges,
+            scatter_fig,
+            quadrant_badges,
+            funnel_fig,
+            heatmap_fig,
+            row_data,
+            TABLE_COLUMN_DEFS,
+            sidebar_summary,
+        )

@@ -1,69 +1,196 @@
-"""Layout for the Peak Explorer prototype.
+"""Layout for the Peak Explorer analysis module.
 
-DMC 2.0 AppShell with sidebar for peak filtering controls and main area for
-annotation distribution, peak width histogram, FRiP bar chart, consensus
-heatmap, and peak table.
+DMC 2.0 AppShell with progressive-filter sidebar (pattern-matching IDs)
+and main area with summary badges, scatter plot, funnel chart, enrichment
+curve, annotation pie, and AG Grid table.
 """
 
 import dash_ag_grid as dag
 import dash_mantine_components as dmc
 from dash import dcc, html
 from dash_iconify import DashIconify
+from data import ANNOTATION_CATEGORIES, CATEGORICAL_COLS, COLUMN_LABELS, NUMERIC_COLS
 
-ANNOTATION_CATEGORIES = [
-    "Promoter", "5' UTR", "3' UTR", "Exon", "Intron", "Intergenic", "TTS",
+ALL_COLS = NUMERIC_COLS + CATEGORICAL_COLS
+
+OPERATORS: list[dict[str, str]] = [
+    {"value": ">", "label": ">"},
+    {"value": "<", "label": "<"},
+    {"value": ">=", "label": ">="},
+    {"value": "<=", "label": "<="},
+]
+
+# Default filter chain for peak analysis
+DEFAULT_FILTERS = [
+    {
+        "id": 0,
+        "column": "score",
+        "col_type": "numeric",
+        "operator": ">=",
+        "threshold": 100,
+        "use_abs": False,
+        "cat_values": [],
+        "enabled": True,
+    },
+    {
+        "id": 1,
+        "column": "fold_enrichment",
+        "col_type": "numeric",
+        "operator": ">=",
+        "threshold": 3.0,
+        "use_abs": False,
+        "cat_values": [],
+        "enabled": True,
+    },
+    {
+        "id": 2,
+        "column": "neg_log10_pvalue",
+        "col_type": "numeric",
+        "operator": ">=",
+        "threshold": 5.0,
+        "use_abs": False,
+        "cat_values": [],
+        "enabled": True,
+    },
+    {
+        "id": 3,
+        "column": "annotation",
+        "col_type": "categorical",
+        "operator": ">",
+        "threshold": 0,
+        "use_abs": False,
+        "cat_values": list(ANNOTATION_CATEGORIES),
+        "enabled": True,
+    },
 ]
 
 
+def _col_options() -> list[dict[str, str]]:
+    """Build Select options for all columns."""
+    return [{"value": c, "label": COLUMN_LABELS.get(c, c)} for c in ALL_COLS]
+
+
+def _create_filter_card(f: dict) -> dmc.Paper:
+    """Create a single filter card from a filter definition dict."""
+    fid = f["id"]
+    is_numeric = f["col_type"] == "numeric"
+
+    return dmc.Paper(
+        dmc.Stack(
+            [
+                dmc.Group(
+                    [
+                        dmc.Text(f"Filter {fid + 1}", fw=600, size="sm"),
+                        dmc.Group(
+                            [
+                                dmc.Badge(
+                                    "---",
+                                    id={"type": "filter-count-badge", "index": fid},
+                                    color="blue",
+                                    variant="light",
+                                    size="sm",
+                                ),
+                                dmc.Switch(
+                                    id={"type": "filter-enabled", "index": fid},
+                                    checked=f["enabled"],
+                                    size="sm",
+                                    color="blue",
+                                ),
+                            ],
+                            gap="xs",
+                        ),
+                    ],
+                    justify="space-between",
+                ),
+                dmc.Select(
+                    id={"type": "filter-column", "index": fid},
+                    data=_col_options(),
+                    value=f["column"],
+                    label="Column",
+                    size="xs",
+                ),
+                # Numeric controls
+                html.Div(
+                    dmc.Group(
+                        [
+                            dmc.Select(
+                                id={"type": "filter-operator", "index": fid},
+                                data=OPERATORS,
+                                value=f["operator"],
+                                label="Operator",
+                                size="xs",
+                                w=80,
+                            ),
+                            dmc.Checkbox(
+                                id={"type": "filter-abs", "index": fid},
+                                label="|abs|",
+                                checked=f.get("use_abs", False),
+                                size="xs",
+                                mt=24,
+                            ),
+                        ],
+                    ),
+                    id={"type": "numeric-controls", "index": fid},
+                    style={"display": "block" if is_numeric else "none"},
+                ),
+                html.Div(
+                    [
+                        dmc.Text("Threshold", size="xs", c="dimmed"),
+                        dmc.NumberInput(
+                            id={"type": "filter-threshold", "index": fid},
+                            value=f["threshold"],
+                            size="xs",
+                            step=0.5,
+                            decimalScale=4,
+                        ),
+                    ],
+                    id={"type": "threshold-container", "index": fid},
+                    style={"display": "block" if is_numeric else "none"},
+                ),
+                # Categorical controls
+                html.Div(
+                    dmc.MultiSelect(
+                        id={"type": "filter-cat-values", "index": fid},
+                        data=[],
+                        value=f.get("cat_values", []),
+                        label="Allowed values",
+                        size="xs",
+                        placeholder="Select values...",
+                    ),
+                    id={"type": "cat-controls", "index": fid},
+                    style={"display": "block" if not is_numeric else "none"},
+                ),
+            ],
+            gap="xs",
+        ),
+        p="sm",
+        radius="sm",
+        withBorder=True,
+        id={"type": "filter-card", "index": fid},
+    )
+
+
 def _create_navbar_content() -> dmc.ScrollArea:
-    """Build sidebar with peak filtering controls."""
+    """Build sidebar with filter chain controls."""
+    default_cards = [_create_filter_card(f) for f in DEFAULT_FILTERS]
+
     return dmc.ScrollArea(
         dmc.Stack(
             [
                 dmc.Title("Peak Explorer", order=4),
-                dmc.Text("ChIP-seq / ATAC-seq / CUT&RUN", size="xs", c="dimmed"),
-                dmc.Divider(label="Filters", labelPosition="center"),
-                dmc.NumberInput(
-                    id="min-score-input",
-                    label="Min peak score",
-                    value=50,
-                    min=0,
-                    max=1000,
-                    step=10,
+                dmc.Text("Threshold-driven analysis", size="xs", c="dimmed"),
+                dmc.Divider(label="Filter Chain", labelPosition="center"),
+                dmc.Button(
+                    "Add Filter",
+                    id="add-filter-btn",
+                    leftSection=DashIconify(icon="mdi:plus", width=16),
+                    variant="light",
                     size="sm",
+                    fullWidth=True,
                 ),
-                dmc.NumberInput(
-                    id="min-fold-input",
-                    label="Min fold enrichment",
-                    value=2.0,
-                    min=0,
-                    max=50,
-                    step=0.5,
-                    decimalScale=1,
-                    size="sm",
-                ),
-                dmc.MultiSelect(
-                    id="annotation-filter",
-                    label="Annotation categories",
-                    data=[{"value": a, "label": a} for a in ANNOTATION_CATEGORIES],
-                    value=ANNOTATION_CATEGORIES,
-                    size="sm",
-                    placeholder="Select annotations...",
-                ),
-                dmc.Divider(label="Consensus", labelPosition="center"),
-                dmc.NumberInput(
-                    id="min-samples-input",
-                    label="Min samples with peak",
-                    value=1,
-                    min=1,
-                    max=6,
-                    step=1,
-                    size="sm",
-                ),
-                dmc.Divider(label="Summary", labelPosition="center"),
-                dmc.Stack(
-                    id="summary-stats",
-                    gap="xs",
+                html.Div(
+                    default_cards,
+                    id="filter-cards-container",
                 ),
             ],
             gap="sm",
@@ -109,47 +236,54 @@ def create_layout() -> dmc.MantineProvider:
                     dmc.Container(
                         dmc.Stack(
                             [
-                                # Row 1: Annotation pie + Peak width histogram
-                                dmc.Grid(
-                                    [
-                                        dmc.GridCol(
-                                            dmc.Paper(
-                                                dcc.Graph(
-                                                    id="annotation-chart",
-                                                    config={"displayModeBar": "hover", "responsive": True},
-                                                    style={"height": "380px"},
-                                                ),
-                                                p="xs",
-                                                radius="sm",
-                                                withBorder=True,
-                                            ),
-                                            span=6,
-                                        ),
-                                        dmc.GridCol(
-                                            dmc.Paper(
-                                                dcc.Graph(
-                                                    id="width-histogram",
-                                                    config={"displayModeBar": "hover", "responsive": True},
-                                                    style={"height": "380px"},
-                                                ),
-                                                p="xs",
-                                                radius="sm",
-                                                withBorder=True,
-                                            ),
-                                            span=6,
-                                        ),
-                                    ],
-                                    gutter="md",
+                                # Hidden stores
+                                dcc.Store(
+                                    id="filter-store",
+                                    data=DEFAULT_FILTERS,
                                 ),
-                                # Row 2: FRiP bar chart + Consensus heatmap
+                                dcc.Store(id="next-filter-id", data=len(DEFAULT_FILTERS)),
+                                # Summary badges row
+                                dmc.Paper(
+                                    dmc.Group(
+                                        id="summary-badges",
+                                        children=[
+                                            dmc.Text("Loading...", size="sm", c="dimmed"),
+                                        ],
+                                        gap="sm",
+                                        wrap="wrap",
+                                    ),
+                                    p="sm",
+                                    radius="sm",
+                                    withBorder=True,
+                                ),
+                                # Row 1: Scatter plot (span 7) + Funnel chart (span 5)
                                 dmc.Grid(
                                     [
                                         dmc.GridCol(
                                             dmc.Paper(
                                                 dcc.Graph(
-                                                    id="frip-chart",
-                                                    config={"displayModeBar": "hover", "responsive": True},
-                                                    style={"height": "350px"},
+                                                    id="scatter-plot",
+                                                    config={
+                                                        "displayModeBar": "hover",
+                                                        "responsive": True,
+                                                    },
+                                                    style={"height": "460px"},
+                                                ),
+                                                p="xs",
+                                                radius="sm",
+                                                withBorder=True,
+                                            ),
+                                            span=7,
+                                        ),
+                                        dmc.GridCol(
+                                            dmc.Paper(
+                                                dcc.Graph(
+                                                    id="funnel-chart",
+                                                    config={
+                                                        "displayModeBar": False,
+                                                        "responsive": True,
+                                                    },
+                                                    style={"height": "460px"},
                                                 ),
                                                 p="xs",
                                                 radius="sm",
@@ -157,18 +291,43 @@ def create_layout() -> dmc.MantineProvider:
                                             ),
                                             span=5,
                                         ),
+                                    ],
+                                    gutter="md",
+                                ),
+                                # Row 2: Enrichment curve (span 7) + Annotation pie (span 5)
+                                dmc.Grid(
+                                    [
                                         dmc.GridCol(
                                             dmc.Paper(
                                                 dcc.Graph(
-                                                    id="consensus-heatmap",
-                                                    config={"displayModeBar": "hover", "responsive": True},
-                                                    style={"height": "350px"},
+                                                    id="enrichment-curve",
+                                                    config={
+                                                        "displayModeBar": "hover",
+                                                        "responsive": True,
+                                                    },
+                                                    style={"height": "400px"},
                                                 ),
                                                 p="xs",
                                                 radius="sm",
                                                 withBorder=True,
                                             ),
                                             span=7,
+                                        ),
+                                        dmc.GridCol(
+                                            dmc.Paper(
+                                                dcc.Graph(
+                                                    id="annotation-pie",
+                                                    config={
+                                                        "displayModeBar": "hover",
+                                                        "responsive": True,
+                                                    },
+                                                    style={"height": "400px"},
+                                                ),
+                                                p="xs",
+                                                radius="sm",
+                                                withBorder=True,
+                                            ),
+                                            span=5,
                                         ),
                                     ],
                                     gutter="md",
@@ -188,7 +347,7 @@ def create_layout() -> dmc.MantineProvider:
                     ),
                 ),
             ],
-            navbar={"width": 300, "breakpoint": "sm"},
+            navbar={"width": 340, "breakpoint": "sm"},
             padding="md",
         ),
         forceColorScheme="light",

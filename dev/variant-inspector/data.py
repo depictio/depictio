@@ -22,8 +22,14 @@ EFFECT_PROBS: list[float] = [0.55, 0.30, 0.02, 0.03, 0.10]
 
 LINEAGES: list[str] = ["BA.5.2", "BA.5.1", "BQ.1.1", "XBB.1.5", "Other"]
 SAMPLES: list[str] = [
-    "WW_Site1_W01", "WW_Site1_W02", "WW_Site1_W03", "WW_Site1_W04",
-    "WW_Site2_W01", "WW_Site2_W02", "WW_Site2_W03", "WW_Site2_W04",
+    "WW_Site1_W01",
+    "WW_Site1_W02",
+    "WW_Site1_W03",
+    "WW_Site1_W04",
+    "WW_Site2_W01",
+    "WW_Site2_W02",
+    "WW_Site2_W03",
+    "WW_Site2_W04",
 ]
 
 
@@ -50,7 +56,9 @@ def generate_variant_data(n_variants: int = 200, seed: int = 42) -> pd.DataFrame
 
     rows = []
     # Generate variant positions (some shared across samples)
-    positions = sorted(rng.choice(range(200, GENOME_LENGTH - 200), size=n_variants // 2, replace=False))
+    positions = sorted(
+        rng.choice(range(200, GENOME_LENGTH - 200), size=n_variants // 2, replace=False)
+    )
 
     for sample in SAMPLES:
         # Each sample sees a subset of variants plus some private ones
