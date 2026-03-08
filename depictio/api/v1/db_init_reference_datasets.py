@@ -1,5 +1,6 @@
 """Reference dataset initialization with static ID management."""
 
+import copy
 import os
 from typing import Any, cast
 
@@ -34,12 +35,11 @@ STATIC_IDS = {
         "data_collections": {
             "multiqc_data": "646b0f3c1e4a2d7f8e5b8ca4",
             "metadata": "646b0f3c1e4a2d7f8e5b8ca5",
-            "alpha_rarefaction": "646b0f3c1e4a2d7f8e5b8ca8",
-            "taxonomy_composition": "646b0f3c1e4a2d7f8e5b8ca9",
-            "ancom_volcano": "646b0f3c1e4a2d7f8e5b8caa",
-            # Join results (disabled temporarily for initial testing)
-            # "alpha_rarefaction_enriched": "646b0f3c1e4a2d7f8e5b8cab",
-            # "taxonomy_enriched": "646b0f3c1e4a2d7f8e5b8cac",
+            "alpha_diversity": "646b0f3c1e4a2d7f8e5b8ca6",
+            "alpha_rarefaction": "646b0f3c1e4a2d7f8e5b8ca7",
+            "taxonomy_composition": "646b0f3c1e4a2d7f8e5b8ca8",
+            "taxonomy_rel_abundance": "646b0f3c1e4a2d7f8e5b8ca9",
+            "ancombc_results": "646b0f3c1e4a2d7f8e5b8caa",
         },
         "dashboards": {
             "ampliseq_multiqc": "646b0f3c1e4a2d7f8e5b8ca2",  # Main tab
@@ -130,10 +130,12 @@ class ReferenceDatasetRegistry:
             return dc_tag_to_id.get(dc_identifier)
 
         # Convert links from tag/ID-based to ID-based
+        # Support both formats: source_dc_id/target_dc_id (project.yaml) and
+        # source_dc_tag/target_dc_tag (template.yaml)
         resolved_links = []
         for link_config in links_config:
-            source_identifier = link_config.get("source_dc_id")
-            target_identifier = link_config.get("target_dc_id")
+            source_identifier = link_config.get("source_dc_id") or link_config.get("source_dc_tag")
+            target_identifier = link_config.get("target_dc_id") or link_config.get("target_dc_tag")
 
             source_id = resolve_dc_id(source_identifier)
             target_id = resolve_dc_id(target_identifier)
@@ -177,25 +179,87 @@ class ReferenceDatasetRegistry:
     DATASET_PATHS: dict[str, str] = {
         "iris": os.path.join("init", "iris"),
         "penguins": os.path.join("init", "penguins"),
-        "ampliseq": os.path.join("nf-core", "ampliseq", "2.14.0"),
+        "ampliseq": os.path.join("nf-core", "ampliseq", "2.16.0"),
     }
+
+    @classmethod
+    def resolve_template_for_init(
+        cls, template_config: dict[str, Any], data_root: str
+    ) -> dict[str, Any]:
+        """Resolve a template.yaml for init usage.
+
+        1. Strips the ``template:`` metadata section.
+        2. Substitutes ``{DATA_ROOT}`` (and any other template variables) with *data_root*.
+        3. Converts recipe-based DCs (``source: "transformed"``) to file-scan DCs
+           using the convention ``{DATA_ROOT}/{dc_tag}.tsv``.
+        """
+        config = copy.deepcopy(template_config)
+
+        # 1. Pop template metadata
+        config.pop("template", None)
+
+        # 2. Recursive variable substitution
+        def _substitute(obj: Any) -> Any:
+            if isinstance(obj, str):
+                return obj.replace("{DATA_ROOT}", data_root)
+            if isinstance(obj, dict):
+                return {k: _substitute(v) for k, v in obj.items()}
+            if isinstance(obj, list):
+                return [_substitute(item) for item in obj]
+            return obj
+
+        config = _substitute(config)
+
+        # 3. Convert recipe DCs → file-scan DCs
+        for workflow in config.get("workflows", []):
+            for dc in workflow.get("data_collections", []):
+                dc_config = dc.get("config", {})
+                if dc_config.get("source") == "transformed" and "transform" in dc_config:
+                    dc_tag = dc["data_collection_tag"]
+                    # Convention: pre-computed files are named {dc_tag}.tsv
+                    pre_computed_path = os.path.join(data_root, f"{dc_tag}.tsv")
+                    # Replace transform with file scan
+                    dc_config.pop("source", None)
+                    dc_config.pop("transform", None)
+                    dc_config["scan"] = {
+                        "mode": "single",
+                        "scan_parameters": {"filename": pre_computed_path},
+                    }
+                    logger.debug(
+                        f"Init resolver: converted recipe DC '{dc_tag}' → file scan: {pre_computed_path}"
+                    )
+
+        return config
 
     @classmethod
     async def create_reference_project(
         cls, dataset_name: str, admin_user: UserBeanie, token_payload: dict[str, Any]
     ) -> dict[str, Any]:
         """Create a reference project with proper static IDs."""
-        # Load project.yaml
         rel_path = cls.DATASET_PATHS[dataset_name]
-        project_yaml_path = os.path.join(
+        project_dir = os.path.join(
             os.path.dirname(__file__),
             "..",
             "..",
             "projects",
             rel_path,
-            "project.yaml",
         )
-        project_config = get_config(project_yaml_path)
+
+        # Prefer template.yaml (single source of truth), fall back to project.yaml
+        template_path = os.path.join(project_dir, "template.yaml")
+        project_yaml_path = os.path.join(project_dir, "project.yaml")
+
+        if os.path.exists(template_path):
+            raw_config = get_config(template_path)
+            # Resolve for Docker init: /app/depictio/projects/<rel_path>
+            data_root = f"/app/depictio/projects/{rel_path}"
+            project_config = cls.resolve_template_for_init(raw_config, data_root)
+        elif os.path.exists(project_yaml_path):
+            project_config = get_config(project_yaml_path)
+        else:
+            raise FileNotFoundError(
+                f"No template.yaml or project.yaml found for dataset '{dataset_name}' in {project_dir}"
+            )
 
         # Inject static IDs
         project_config = cls.inject_static_ids(project_config, dataset_name)
@@ -350,7 +414,7 @@ async def create_reference_datasets(
     """Create all reference datasets (iris, penguins, ampliseq).
 
     Note: ampliseq dataset uses 16S rRNA microbiome data from nf-core/ampliseq.
-    Data files are included under depictio/projects/nf-core/ampliseq/2.14.0/.
+    Data files are included under depictio/projects/nf-core/ampliseq/2.16.0/.
     """
     created_projects = []
 

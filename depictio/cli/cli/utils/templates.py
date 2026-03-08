@@ -5,7 +5,7 @@ Handles loading template project.yaml files, substituting {DATA_ROOT} variables,
 and producing resolved config dicts ready for Project model validation.
 
 Usage:
-    resolved = resolve_template("nf-core/ampliseq/2.14.0", "/path/to/data")
+    resolved = resolve_template("nf-core/ampliseq/2.16.0", "/path/to/data")
 """
 
 import copy
@@ -20,14 +20,14 @@ from depictio.models.utils import get_config
 
 
 def locate_template(template_id: str) -> Path:
-    """Find template YAML by template_id (e.g., 'nf-core/ampliseq/2.14.0').
+    """Find template YAML by template_id (e.g., 'nf-core/ampliseq/2.16.0').
 
     Searches in the depictio/projects/ directory relative to the package installation.
     Looks for template.yaml first (dedicated template file), then falls back to
     project.yaml (for backwards compatibility).
 
     Args:
-        template_id: Template identifier (e.g., 'nf-core/ampliseq/2.14.0').
+        template_id: Template identifier (e.g., 'nf-core/ampliseq/2.16.0').
 
     Returns:
         Path to the template YAML file.
@@ -160,7 +160,7 @@ def resolve_template(
     6. Builds TemplateOrigin for DB tracking
 
     Args:
-        template_id: Template identifier (e.g., 'nf-core/ampliseq/2.14.0').
+        template_id: Template identifier (e.g., 'nf-core/ampliseq/2.16.0').
         data_root: Absolute path to user's data root directory.
         project_name: Custom project name. If None, auto-generated from template.
 

@@ -36,7 +36,7 @@ def register_run_command(app: typer.Typer):
             str | None,
             typer.Option(
                 "--template",
-                help="Template ID to use (e.g., nf-core/ampliseq/2.14.0). "
+                help="Template ID to use (e.g., nf-core/ampliseq/2.16.0). "
                 "Mutually exclusive with --project-config-path.",
             ),
         ] = None,
@@ -129,7 +129,7 @@ def register_run_command(app: typer.Typer):
         7. Execute table joins (if defined in project config)
 
         Template mode:
-            depictio-cli run --template nf-core/ampliseq/2.14.0 --data-root /path/to/data
+            depictio-cli run --template nf-core/ampliseq/2.16.0 --data-root /path/to/data
         """
         rich_print_command_usage("run")
 

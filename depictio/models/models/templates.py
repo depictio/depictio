@@ -107,7 +107,7 @@ class TemplateMetadata(BaseModel):
 
     Example YAML:
         template:
-          template_id: "nf-core/ampliseq/2.14.0"
+          template_id: "nf-core/ampliseq/2.16.0"
           description: "nf-core/ampliseq microbial community analysis template"
           version: "1.0.0"
           variables:
@@ -121,7 +121,7 @@ class TemplateMetadata(BaseModel):
     """
 
     template_id: str = Field(
-        ..., description="Unique template identifier (e.g., 'nf-core/ampliseq/2.14.0')"
+        ..., description="Unique template identifier (e.g., 'nf-core/ampliseq/2.16.0')"
     )
     description: str = Field(..., description="Human-readable description of this template")
     version: str = Field(..., description="Template schema version (semver)")
@@ -164,7 +164,7 @@ class TemplateOrigin(BaseModel):
     """
 
     template_id: str = Field(
-        ..., description="Template identifier (e.g., 'nf-core/ampliseq/2.14.0')"
+        ..., description="Template identifier (e.g., 'nf-core/ampliseq/2.16.0')"
     )
     template_version: str = Field(..., description="Template schema version at time of use")
     data_root: str = Field(..., description="The actual --data-root value provided by the user")

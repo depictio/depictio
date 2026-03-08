@@ -33,7 +33,7 @@ class TestLocateTemplate:
 
     def test_locate_known_template(self) -> None:
         """Locate the nf-core/ampliseq template that exists in the repo."""
-        path = locate_template("nf-core/ampliseq/2.14.0")
+        path = locate_template("nf-core/ampliseq/2.16.0")
         assert path.is_file()
         assert path.name == "template.yaml"
 
@@ -118,14 +118,14 @@ class TestTemplateMetadataModel:
     def test_valid_metadata(self) -> None:
         """Valid metadata parses successfully."""
         metadata = TemplateMetadata(
-            template_id="nf-core/ampliseq/2.14.0",
+            template_id="nf-core/ampliseq/2.16.0",
             description="Test template",
             version="1.0.0",
             variables=[
                 TemplateVariable(name="DATA_ROOT", description="Data root dir"),
             ],
         )
-        assert metadata.template_id == "nf-core/ampliseq/2.14.0"
+        assert metadata.template_id == "nf-core/ampliseq/2.16.0"
         assert len(metadata.variables) == 1
 
     def test_get_required_variable_names(self) -> None:
@@ -148,12 +148,12 @@ class TestTemplateOriginModel:
     def test_valid_origin(self) -> None:
         """Valid template origin creates successfully."""
         origin = TemplateOrigin(
-            template_id="nf-core/ampliseq/2.14.0",
+            template_id="nf-core/ampliseq/2.16.0",
             template_version="1.0.0",
             data_root="/my/data",
             config_snapshot={"name": "test"},
         )
-        assert origin.template_id == "nf-core/ampliseq/2.14.0"
+        assert origin.template_id == "nf-core/ampliseq/2.16.0"
         assert origin.data_root == "/my/data"
         assert origin.applied_at  # auto-generated timestamp
 
