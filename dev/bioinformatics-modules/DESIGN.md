@@ -19,22 +19,29 @@ Pipeline dashboards are then **compositions of modules**, each wired to the appr
 
 ## 2. Pipeline Landscape Analysis
 
-### 2.1 Pipelines Analyzed
+### 2.1 Pipelines Analyzed (sorted by GitHub stars)
 
-| Pipeline | Category | Primary Outputs | Diff. Analysis? |
-|----------|----------|----------------|-----------------|
-| **rnaseq** | Transcriptomics | Count matrices (gene/transcript), TPM/FPKM | DESeq2 QC only (no DE results) |
-| **differentialabundance** | Multi-omics downstream | DE/DA tables, volcano, heatmaps, PCA, GSEA | Full (DESeq2, limma, edgeR, GSEA) |
-| **chipseq** | Epigenomics | Peaks (narrow/broad), bigWig, consensus | Full DESeq2 differential binding |
-| **atacseq** | Epigenomics | Peaks (broad), bigWig, consensus | Full DESeq2 differential accessibility |
-| **cutandrun** | Epigenomics | Peaks (SEACR), bigWig, consensus | None (no DiffBind) |
-| **ampliseq** | Metagenomics (16S) | ASV tables, taxonomy, abundance | ANCOM + ANCOMBC |
-| **viralrecon** | Virology | Variants (iVar TSV), assemblies, consensus | N/A |
-| **sarek** | Genomics (WGS/WES) | VCF (multiple callers), annotated variants | N/A |
-| **taxprofiler** | Metagenomics | Taxonomic profiles (multiple tools) | N/A |
-| **scrnaseq** | Single-cell | Count matrices (AnnData/Seurat), cell QC | N/A |
-| **methylseq** | Epigenomics | Methylation calls (CpG coverage/ratios) | N/A |
-| **smrnaseq** | Small RNA | miRNA counts, mature/hairpin quantification | edgeR (optional) |
+| Pipeline | Stars | Category | Primary Outputs | Diff. Analysis? |
+|----------|-------|----------|----------------|-----------------|
+| **rnaseq** | 1221 | Transcriptomics | Count matrices (gene/transcript), TPM/FPKM | DESeq2 QC only (no DE results) |
+| **sarek** | 553 | Genomics (WGS/WES) | VCF (Strelka/Mutect2/FreeBayes), annotated variants | N/A |
+| **scrnaseq** | 316 | Single-cell | Count matrices (AnnData/Seurat), cell QC | N/A |
+| **mag** | 277 | Metagenome assembly | MAGs, bins, taxonomy, abundance tables | N/A |
+| **ampliseq** | 236 | Metagenomics (16S) | ASV tables, taxonomy, abundance | ANCOM + ANCOMBC |
+| **chipseq** | 232 | Epigenomics | Peaks (narrow/broad), bigWig, consensus | Full DESeq2 differential binding |
+| **atacseq** | 220 | Epigenomics | Peaks (broad), bigWig, consensus | Full DESeq2 differential accessibility |
+| **nanoseq** | 219 | Long-read sequencing | Aligned reads, QC metrics | N/A |
+| **methylseq** | 189 | Epigenomics | Methylation calls (CpG coverage/ratios) | N/A |
+| **fetchngs** | 188 | Data retrieval | FASTQ + metadata (not analysis) | N/A |
+| **taxprofiler** | 179 | Metagenomics | Taxonomic profiles (multiple tools) | N/A |
+| **rnafusion** | 171 | Transcriptomics | Fusion gene calls | N/A |
+| **viralrecon** | 158 | Virology | Variants (iVar TSV), assemblies, consensus | N/A |
+| **raredisease** | 114 | Clinical genomics | VCF, SV calls, clinical reports | N/A |
+| **cutandrun** | 109 | Epigenomics | Peaks (SEACR), bigWig, consensus | None (no DiffBind) |
+| **hic** | 108 | 3D Genomics | Contact matrices, TADs, compartments | N/A |
+| **proteinfold** | 99 | Structural biology | PDB structures, confidence scores | N/A |
+| **smrnaseq** | 98 | Small RNA | miRNA counts, mature/hairpin quantification | edgeR (optional) |
+| **differentialabundance** | 90 | Multi-omics downstream | DE/DA tables, volcano, heatmaps, PCA, GSEA | Full (DESeq2, limma, edgeR, GSEA) |
 
 ### 2.2 Universal Outputs (ALL pipelines)
 
@@ -57,6 +64,36 @@ Despite the diversity, pipeline outputs collapse into a small number of **data s
 | **QC metrics table** | Sample-level QC metrics (read counts, mapping rate, duplication, etc.) | ALL (via MultiQC general_stats) |
 | **Genomic intervals** | BED/narrowPeak/broadPeak with chr, start, end, score, annotation | chipseq, atacseq, cutandrun, sarek (VCF) |
 | **Pairwise distances** | Sample × Sample distance/correlation matrix | rnaseq (DESeq2), ampliseq (beta diversity), any PCA input |
+
+### 2.4 Module Coverage Matrix (Top 19 pipelines)
+
+Which modules apply to which pipelines:
+
+```
+                        ProgFilt  CondHigh  Contrast  Feature  Enrich  DimRed  QCSumm  PeakExp  TaxBrow  VarInsp
+rnaseq (1221★)             ✓         ✓         ✓        ✓        ✓       ✓       ✓
+sarek (553★)               ✓         ✓                                           ✓                         ✓
+scrnaseq (316★)                                          ✓                ✓       ✓
+mag (277★)                 ✓                                             ✓       ✓                ✓
+ampliseq (236★)            ✓         ✓         ✓        ✓        ✓       ✓       ✓                ✓
+chipseq (232★)             ✓         ✓         ✓        ✓        ✓       ✓       ✓        ✓
+atacseq (220★)             ✓         ✓         ✓        ✓        ✓       ✓       ✓        ✓
+nanoseq (219★)                                                           ✓       ✓
+methylseq (189★)           ✓         ✓         ✓        ✓                ✓       ✓
+taxprofiler (179★)         ✓                                             ✓       ✓                ✓
+rnafusion (171★)           ✓                                                     ✓
+viralrecon (158★)          ✓         ✓                                           ✓                         ✓
+raredisease (114★)         ✓                                                     ✓                         ✓
+cutandrun (109★)           ✓         ✓         ✓        ✓                ✓       ✓        ✓
+hic (108★)                                                              ✓       ✓
+proteinfold (99★)                                                                ✓
+smrnaseq (98★)             ✓         ✓         ✓        ✓                ✓       ✓
+diffabundance (90★)        ✓         ✓         ✓        ✓        ✓       ✓       ✓
+────────────────────────────────────────────────────────────────────────────────────────
+Pipeline coverage:         15        10        10       10        6      15      18        3        3        3
+```
+
+**Key insight**: The 7 core modules cover ALL 19 top pipelines. The 3 domain-specific modules each cover 3 pipelines. `QC Summary` alone covers 18/19 pipelines.
 
 ---
 
@@ -744,12 +781,40 @@ seacr/consensus/featureCounts.txt             → peak_count_matrix
 deeptools/plotFingerprint.raw.txt             → signal_qc
 bowtie2/mergedLibrary/bigwig/*.bigWig         → signal_tracks
 
-# Differentialabundance
-tables/processed_counts/*.tsv                 → count_matrix
-tables/differential/*.tsv                     → de_results
-shinyngs_app/data/                            → expression + metadata
-report/gsea/*.tsv                             → enrichment_results
-plots/differential/*.png                      → static_plots
+# Differentialabundance (confirmed from S3 megatests)
+tables/processed_counts/*.normalised_counts.tsv  → count_matrix (normalized)
+tables/processed_counts/*.vst.tsv                → count_matrix (variance-stabilized)
+tables/differential/*.deseq2.results.tsv         → de_results (full DE table)
+tables/deseq2_other/*.deseq2.sizefactors.tsv     → size_factors
+tables/deseq2_other/*.dds.rld.rds                → R objects (rlog-transformed)
+tables/gsea/{contrast}/*.gsea_report_for_*.tsv   → enrichment_results (per group)
+plots/differential/{contrast}/png/volcano.png    → static_volcano
+plots/exploratory/{variable}/png/pca2d.png       → static_pca
+plots/exploratory/{variable}/png/boxplot.png     → static_boxplot
+plots/exploratory/{variable}/png/density.png     → static_density
+plots/exploratory/{variable}/png/sample_dendrogram.png → static_dendrogram
+plots/exploratory/{variable}/png/mad_correlation.png   → static_correlation
+plots/gsea/{contrast}/*.HALLMARK_*.png           → static_gsea_enrichment_plots
+plots/gsea/{contrast}/*.butterfly_plot.png       → static_gsea_butterfly
+plots/gsea/{contrast}/*.enplot_*.png             → static_gsea_enrichment_score
+
+# Sarek (WGS/WES variant calling, confirmed from S3)
+variant_calling/strelka/{sample}/*.strelka.variants.vcf.gz     → variant_calls
+variant_calling/strelka/{sample}/*.strelka.genome.vcf.gz       → genome_variants
+preprocessing/{sample}/*.recal.cram                             → aligned_reads
+reports/mosdepth/{sample}/*                                     → coverage
+reports/bcftools/{sample}/*                                     → variant_stats
+csv/recalibrated.csv                                            → sample_tracking
+
+# Taxprofiler (metagenomics taxonomic profiling, confirmed from S3)
+kraken2/{db}/{sample}/*.kraken2.report.txt    → taxonomy_report
+bracken/{db}/{sample}/*.bracken.report.txt    → abundance_estimation
+metaphlan/{version}/{sample}/*.txt            → taxonomy_profile
+kaiju/{db}/{sample}/*.kaiju.summary.tsv       → taxonomy_summary
+centrifuge/{db}/{sample}/*                    → taxonomy_classification
+krona/{tool}/{sample}/*.html                  → interactive_taxonomy_viz
+diamond/{db}/{sample}/*                       → protein_alignment
+nonpareil/{sample}/*                          → metagenome_coverage
 
 # Universal (all pipelines)
 multiqc/multiqc_data/multiqc_general_stats.txt  → qc_metrics
