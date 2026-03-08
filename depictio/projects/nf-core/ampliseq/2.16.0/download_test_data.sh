@@ -4,11 +4,11 @@
 #
 # Usage:
 #   bash download_test_data.sh [TARGET_DIR]
-#   # Default TARGET_DIR: /nf-core-awsmegatests/ampliseq/results-3d5c7e5bec28de279337f3ffe3c312a45940b782
+#   # Default TARGET_DIR: ./ampliseq-2.16.0-testdata
 set -euo pipefail
 
 S3_PREFIX="s3://nf-core-awsmegatests/ampliseq/results-3d5c7e5bec28de279337f3ffe3c312a45940b782"
-TARGET="${1:-/nf-core-awsmegatests/ampliseq/results-3d5c7e5bec28de279337f3ffe3c312a45940b782}"
+TARGET="${1:-./ampliseq-2.16.0-testdata}"
 
 echo "Downloading ampliseq 2.16.0 test data to: $TARGET"
 mkdir -p "$TARGET"
