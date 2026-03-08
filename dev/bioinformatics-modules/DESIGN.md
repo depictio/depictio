@@ -113,15 +113,15 @@ Based on the cross-pipeline analysis and existing prototypes, we define **7 core
 | **Feature Explorer** | Expression matrix + metadata + DE results | Violin/strip plot, heatmap row, rank badges, co-expression | `dev/gene-explorer/` |
 | **Enrichment Explorer** | Enrichment table + ranked gene list + expression matrix | Running ES, dot plot, leading edge heatmap, enrichment table | `dev/gsea-explorer/` |
 | **DimRed Explorer** | Feature × Sample matrix + metadata | PCA/UMAP/t-SNE scatter, variance bar, loadings, sample table | `dev/dimred-explorer/` |
-| **QC Summary** | QC metrics table (from MultiQC) | Summary cards, bar charts, violin distributions, pass/fail badges | NEW |
+| **QC Summary** | QC metrics table (from MultiQC) | Summary cards, bar charts, violin distributions, pass/fail badges | EXISTS (`depictio/dash/modules/multiqc_component/`) |
 
 #### Domain-Specific Modules (need specialized data)
 
-| Module | Input Shape | Key Visualizations | Applicable Pipelines |
-|--------|------------|-------------------|---------------------|
-| **Peak Explorer** | Genomic intervals + annotation + signal tracks | Peak annotation pie/bar, FRiP distribution, consensus heatmap | chipseq, atacseq, cutandrun |
-| **Taxonomy Browser** | Hierarchical abundance table (kingdom→species) | Stacked bar (relative abundance), krona-style sunburst, alpha/beta diversity | ampliseq, taxprofiler |
-| **Variant Inspector** | Variant table + coverage + lineage assignments | Variant table with AF filter, coverage track, lineage timeline/bar | viralrecon, sarek |
+| Module | Input Shape | Key Visualizations | Applicable Pipelines | Prototype |
+|--------|------------|-------------------|---------------------|-----------|
+| **Peak Explorer** | Genomic intervals + annotation + signal tracks | Peak annotation pie/bar, FRiP distribution, consensus heatmap | chipseq, atacseq, cutandrun | `dev/peak-explorer/` |
+| **Taxonomy Browser** | Hierarchical abundance table (kingdom→species) | Stacked bar (relative abundance), krona-style sunburst, alpha/beta diversity | ampliseq, taxprofiler | `dev/taxonomy-browser/` |
+| **Variant Inspector** | Variant table + coverage + lineage assignments | Variant table with AF filter, coverage track, lineage timeline/bar | viralrecon, sarek | `dev/variant-inspector/` |
 
 ### 3.2 Module Interface Contract
 
