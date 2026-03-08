@@ -979,6 +979,14 @@ krona/{tool}/{sample}/*.html                  → interactive_taxonomy_viz
 diamond/{db}/{sample}/*                       → protein_alignment
 nonpareil/{sample}/*                          → metagenome_coverage
 
+# Methylseq (bisulfite sequencing, confirmed from S3)
+bismark/deduplicated/{sample}/*.deduplicated.sorted.bam       → aligned_reads
+bismark/methylation_calls/{sample}/*.txt.gz                    → methylation_calls (CpG/CHG/CHH)
+bismark/methylation_calls/bedGraph/{sample}/*.bedGraph.gz      → methylation_coverage
+bismark/methylation_calls/mbias/{sample}/*                     → mbias_data
+trimgalore/{sample}/*                                          → trimming_stats
+multiqc/bismark/multiqc_data/*                                 → qc_metrics
+
 # Universal (all pipelines)
 multiqc/multiqc_data/multiqc_general_stats.txt  → qc_metrics
 multiqc/multiqc_data/multiqc_*.txt              → tool_specific_qc
