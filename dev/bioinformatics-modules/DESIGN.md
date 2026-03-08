@@ -358,7 +358,8 @@ class ColumnMapping:
 **Purpose**: Explore pathway/gene set enrichment results across contrasts.
 
 **Works for**:
-- GSEA results from differentialabundance pipeline
+- GSEA results from differentialabundance pipeline (NES, NOM p-val, FDR q-val)
+- gprofiler2 results from differentialabundance (GO, KEGG, Reactome, multiple sources)
 - GO/KEGG enrichment from any tool (clusterProfiler, g:Profiler, Enrichr)
 - Custom gene set analysis results
 
@@ -782,12 +783,17 @@ deeptools/plotFingerprint.raw.txt             → signal_qc
 bowtie2/mergedLibrary/bigwig/*.bigWig         → signal_tracks
 
 # Differentialabundance (confirmed from S3 megatests)
+# Supports 3 DE methods: DESeq2, limma, DREAM
+# Accepts multi-omics: RNA-seq, proteomics, microarrays, metabolomics
 tables/processed_counts/*.normalised_counts.tsv  → count_matrix (normalized)
 tables/processed_counts/*.vst.tsv                → count_matrix (variance-stabilized)
-tables/differential/*.deseq2.results.tsv         → de_results (full DE table)
+tables/differential/*.deseq2.results.tsv         → de_results (DESeq2)
+tables/differential/*.limma.results.tsv          → de_results (limma)
+tables/differential/*.dream.results.tsv          → de_results (DREAM mixed model)
 tables/deseq2_other/*.deseq2.sizefactors.tsv     → size_factors
-tables/deseq2_other/*.dds.rld.rds                → R objects (rlog-transformed)
-tables/gsea/{contrast}/*.gsea_report_for_*.tsv   → enrichment_results (per group)
+tables/gsea/{contrast}/*.gsea_report_for_*.tsv   → enrichment_results (GSEA)
+tables/gprofiler2/{contrast}/*.gost.tsv          → enrichment_results (gprofiler2)
+tables/gprofiler2/{contrast}/*.{source}.gprofiler2.results.tsv → enrichment_by_source
 plots/differential/{contrast}/png/volcano.png    → static_volcano
 plots/exploratory/{variable}/png/pca2d.png       → static_pca
 plots/exploratory/{variable}/png/boxplot.png     → static_boxplot
@@ -796,7 +802,8 @@ plots/exploratory/{variable}/png/sample_dendrogram.png → static_dendrogram
 plots/exploratory/{variable}/png/mad_correlation.png   → static_correlation
 plots/gsea/{contrast}/*.HALLMARK_*.png           → static_gsea_enrichment_plots
 plots/gsea/{contrast}/*.butterfly_plot.png       → static_gsea_butterfly
-plots/gsea/{contrast}/*.enplot_*.png             → static_gsea_enrichment_score
+plots/gprofiler2/{contrast}/*.gostplot.html      → interactive_enrichment_manhattan
+report/study.html                                → interactive_report (~14MB)
 
 # Sarek (WGS/WES variant calling, confirmed from S3)
 variant_calling/strelka/{sample}/*.strelka.variants.vcf.gz     → variant_calls
