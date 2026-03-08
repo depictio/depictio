@@ -78,7 +78,7 @@ COMMON_TYPOS: dict[str, str] = {
 
 # Visualization types that bypass standard px parameter validation
 # because they use custom rendering libraries (e.g. plotly-complexheatmap)
-CUSTOM_VISU_TYPES: frozenset[str] = frozenset({"heatmap", "umap"})
+CUSTOM_VISU_TYPES: frozenset[str] = frozenset({"heatmap", "umap", "upset"})
 
 # Parameter cache to avoid repeated signature inspection
 _parameter_cache: dict[str, set[str]] = {}
