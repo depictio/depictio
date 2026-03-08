@@ -955,11 +955,18 @@ plots/gprofiler2/{contrast}/*.gostplot.html      → interactive_enrichment_manh
 report/study.html                                → interactive_report (~14MB)
 
 # Sarek (WGS/WES variant calling, confirmed from S3)
-variant_calling/strelka/{sample}/*.strelka.variants.vcf.gz     → variant_calls
-variant_calling/strelka/{sample}/*.strelka.genome.vcf.gz       → genome_variants
-preprocessing/{sample}/*.recal.cram                             → aligned_reads
-reports/mosdepth/{sample}/*                                     → coverage
-reports/bcftools/{sample}/*                                     → variant_stats
+# Germline callers: HaplotypeCaller, DeepVariant, FreeBayes, Strelka2
+# Somatic callers: Mutect2, Strelka2, FreeBayes
+# SV callers: Manta, TIDDIT; CNV: ASCAT, CNVKit, Control-FREEC; MSI: MSIsensor2
+variant_calling/{caller}/{sample}/*.{caller}.variants.vcf.gz    → variant_calls (per caller)
+variant_calling/mutect2/{pair}/*.mutect2.filtered.vcf.gz        → somatic_variants
+variant_calling/manta/{sample}/*.manta.diploid_sv.vcf.gz        → structural_variants
+annotation/{caller}/{sample}/*.annotated.vcf.gz                 → annotated_variants (snpEff/VEP)
+preprocessing/recalibrated/{sample}/*.recal.cram                → aligned_reads
+reports/mosdepth/{sample}/*.mosdepth.summary.txt                → coverage_summary
+reports/bcftools/{caller}/{sample}/*.bcftools_stats.txt          → variant_stats
+reports/vcftools/{caller}/{sample}/*.TsTv.count                 → tstv_ratio
+csv/variantcalled.csv                                            → sample_to_vcf_mapping
 csv/recalibrated.csv                                            → sample_tracking
 
 # Taxprofiler (metagenomics taxonomic profiling, confirmed from S3)
