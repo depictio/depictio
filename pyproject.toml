@@ -63,6 +63,7 @@ dependencies = [
   "redis==5.2.1",
   "tomli==2.2.1",
   "types-requests==2.32.4.20250611",
+  "scipy>=1.12.0",
   "umap-learn==0.5.9.post2",
   # Storage
   "s3fs==2025.12.0",
