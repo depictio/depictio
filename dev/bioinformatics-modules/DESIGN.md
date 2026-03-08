@@ -693,9 +693,158 @@ When pointing depictio at an nf-core output folder:
 
 ---
 
-## 7. Generalization Summary
+## 7. Integration with Depictio Architecture
 
-### How each prototype generalizes:
+### 7.1 Existing Depictio Component System
+
+Depictio already has a mature component system that the bioinformatics modules must integrate with:
+
+**Component Types** (in `depictio/dash/modules/`):
+| Type | Module | Purpose |
+|------|--------|---------|
+| `figure` | `figure_component/` | Plotly-based visualizations (scatter, bar, box, histogram, etc.) |
+| `card` | `card_component/` | Metric cards with aggregation (count, sum, avg, etc.) |
+| `interactive` | `interactive_component/` | Filters (MultiSelect, RangeSlider, Slider, Select, etc.) |
+| `table` | `table_component/` | AG Grid data tables |
+| `multiqc` | `multiqc_component/` | MultiQC report integration |
+| `jbrowse` | `jbrowse_component/` | Genome browser |
+| `image` | `image_component/` | Image gallery |
+| `text` | `text_component/` | Static text/markdown |
+
+**Key Existing Features**:
+- **Code Mode**: Figure components support custom Python code (Polars + Plotly Express)
+- **Volcano Presets**: Already in `figure_component/customizations/presets.py`
+- **Parameter Discovery**: Auto-inspects Plotly Express signatures for UI generation
+- **Dashboard YAML**: Declarative component composition with layout grid
+- **Data Joins**: Pre-computed cross-table relationships in project YAML
+- **Clientside Callbacks**: Fast filtering without server round-trips
+
+**Existing nf-core Example**: `depictio/projects/nf-core/ampliseq/2.14.0/` — working ampliseq dashboard with MultiQC, cards, figures, interactive filters, and tabs.
+
+### 7.2 Implementation Strategy: Modules as Dashboard Templates
+
+Rather than creating entirely new component types, each bioinformatics module becomes a **dashboard template** — a pre-configured composition of existing depictio components:
+
+```
+┌───────────────────────────────────────────────────────┐
+│  Bioinformatics Module                                 │
+│  (e.g., Progressive Filter)                            │
+│                                                        │
+│  = Dashboard Template (YAML) composed of:              │
+│    ┌─────────────┐  ┌──────────────┐  ┌─────────────┐ │
+│    │ interactive  │  │   figure     │  │    table    │ │
+│    │ (RangeSlider │  │  (scatter/   │  │  (AG Grid)  │ │
+│    │  MultiSelect │  │   volcano)   │  │             │ │
+│    │  Switch)     │  │              │  │             │ │
+│    └─────────────┘  └──────────────┘  └─────────────┘ │
+│    ┌─────────────┐  ┌──────────────┐                   │
+│    │    card      │  │   figure     │                   │
+│    │  (counts,    │  │  (funnel/    │                   │
+│    │   badges)    │  │   bar chart) │                   │
+│    └─────────────┘  └──────────────┘                   │
+│                                                        │
+│  + Code Mode snippets for specialized logic            │
+│  + ColumnMapping config for pipeline adaptation        │
+│  + Links config for cross-component filtering          │
+└───────────────────────────────────────────────────────┘
+```
+
+### 7.3 What's New vs. What Exists
+
+| Capability | Status | Implementation |
+|-----------|--------|----------------|
+| Scatter/volcano/bar/box plots | EXISTS | `figure_component` with presets |
+| AG Grid data tables | EXISTS | `table_component` |
+| MultiSelect/RangeSlider filters | EXISTS | `interactive_component` |
+| Metric cards (counts, aggregations) | EXISTS | `card_component` |
+| MultiQC integration | EXISTS | `multiqc_component` |
+| Volcano plot customization | EXISTS | `customizations/presets.py` |
+| Code mode for custom Python | EXISTS | `figure_component` code mode |
+| Cross-table join filtering | EXISTS | Project YAML links |
+| Dashboard YAML templates | EXISTS | `projects/nf-core/ampliseq/` |
+| **ColumnMapping abstraction** | **NEW** | Map abstract roles → column names |
+| **Filter chain with funnel** | **NEW** | Progressive filter UI + funnel viz |
+| **Running ES plot** | **NEW** | GSEA enrichment score curve |
+| **DimRed computation** | **NEW** | PCA/UMAP/t-SNE in code mode |
+| **Co-expression computation** | **NEW** | Correlation matrix in code mode |
+| **Pipeline auto-detection** | **NEW** | `pipeline_info/` parsing |
+| **Module template system** | **NEW** | Composable dashboard templates |
+
+### 7.4 Module Implementation Plan (revised)
+
+Each module ships as:
+
+1. **Dashboard YAML template** — pre-configured component layout
+2. **Code mode snippets** — Python code for computations not available in UI mode
+3. **ColumnMapping config** — pipeline-specific column name mappings
+4. **Project YAML fragment** — data collection and join definitions
+
+Example for Progressive Filter module:
+```yaml
+# Module: progressive_filter
+# Template that gets instantiated per pipeline
+tabs:
+  - title: "Progressive Filter"
+    components:
+      # Filter controls (sidebar or top)
+      - component_type: interactive
+        interactive_component_type: RangeSlider
+        column_name: "{column_mapping.effect_size}"  # resolves to log2FoldChange
+        data_collection_tag: de_results
+
+      - component_type: interactive
+        interactive_component_type: RangeSlider
+        column_name: "{column_mapping.significance}"  # resolves to padj
+        data_collection_tag: de_results
+
+      # Volcano plot
+      - component_type: figure
+        visu_type: scatter
+        figure_params:
+          x: "{column_mapping.effect_size}"
+          y: "{column_mapping.neg_log10_sig}"  # computed column
+          color: significance_category
+        customizations:
+          - type: volcano_plot
+            significance_threshold: 0.05
+            fold_change_threshold: 1.0
+
+      # Results table
+      - component_type: table
+        data_collection_tag: de_results
+
+      # Summary cards
+      - component_type: card
+        aggregation: count
+        column_name: "{column_mapping.feature_id}"
+        filter_state: "all"  # total features
+
+      - component_type: card
+        aggregation: count
+        column_name: "{column_mapping.feature_id}"
+        filter_state: "filtered"  # after filter chain
+```
+
+### 7.5 New Code Required
+
+Only a small amount of new code is needed beyond templates:
+
+1. **ColumnMapping resolver** — substitutes `{column_mapping.X}` in YAML templates
+2. **Pipeline detector** — reads `pipeline_info/params_*.json` and selects templates
+3. **Computed columns** — code mode snippets for:
+   - `-log10(pvalue)` transformation
+   - PCA/UMAP/t-SNE computation
+   - Correlation matrix computation
+   - Running enrichment score calculation
+   - Significance classification (Up/Down/NS)
+4. **Template instantiation** — takes module YAML + ColumnMapping → dashboard YAML
+5. **Funnel chart** — new figure type or code mode snippet for filter chain visualization
+
+---
+
+## 8. Generalization Summary
+
+### 8.1 How each prototype generalizes:
 
 | Prototype | Generalizes To | Key Abstraction |
 |-----------|---------------|-----------------|
@@ -706,7 +855,7 @@ When pointing depictio at an nf-core output folder:
 | `gsea-explorer` → `enrichment-explorer` | **Any enrichment results table** | NES/ES column auto-detected; pathway sources are dynamic (not hardcoded GO/KEGG/Reactome) |
 | `dimred-explorer` | **Any high-dimensional data needing embedding** | Methods list is configurable; PCoA added for ecology; pre-computed embeddings supported |
 
-### What's truly RNA-seq specific vs. generic:
+### 8.2 What's truly RNA-seq specific vs. generic:
 
 | Concept | RNA-seq Term | Generic Term | Also Used By |
 |---------|-------------|-------------|-------------|
@@ -721,7 +870,7 @@ When pointing depictio at an nf-core output folder:
 
 ---
 
-## 8. Implementation Priority
+## 9. Implementation Priority
 
 ### Phase 1: Core Modules (pipeline-agnostic)
 1. **Progressive Filter** — most universally useful, already prototyped
@@ -745,7 +894,7 @@ When pointing depictio at an nf-core output folder:
 
 ---
 
-## 9. Appendix: Pipeline Output File Patterns
+## 10. Appendix: Pipeline Output File Patterns
 
 ### Files to parse per pipeline (for data binding)
 
