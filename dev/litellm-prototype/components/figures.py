@@ -46,17 +46,15 @@ def create_figure(
     # wide-form fallback on mixed-type DataFrames.
     needs_x = visu_type not in ("histogram",)
     if needs_x and "x" not in safe_kwargs:
-        numeric_cols = df.select_dtypes(include="number").columns.tolist()
-        if len(numeric_cols) >= 2:
-            safe_kwargs.setdefault("x", numeric_cols[0])
-            safe_kwargs.setdefault("y", numeric_cols[1])
-        elif numeric_cols:
-            safe_kwargs["x"] = numeric_cols[0]
-
+        raise ValueError(
+            f"Cannot create '{visu_type}' plot: missing required 'x' column mapping in dict_kwargs. "
+            f"Available columns: {list(df.columns)}"
+        )
     if visu_type == "histogram" and "x" not in safe_kwargs and "y" not in safe_kwargs:
-        numeric_cols = df.select_dtypes(include="number").columns.tolist()
-        if numeric_cols:
-            safe_kwargs["x"] = numeric_cols[0]
+        raise ValueError(
+            f"Cannot create histogram: missing 'x' or 'y' column mapping in dict_kwargs. "
+            f"Available columns: {list(df.columns)}"
+        )
 
     fig = plot_fn(df, **safe_kwargs)
     if title:

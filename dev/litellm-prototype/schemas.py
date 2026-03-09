@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class PlotSuggestion(BaseModel):
@@ -18,6 +18,20 @@ class PlotSuggestion(BaseModel):
     )
     title: str = Field(description="Human-readable chart title")
     explanation: str = Field(description="Brief explanation of why this visualization was suggested")
+
+    @model_validator(mode="after")
+    def check_dict_kwargs_not_empty(self) -> "PlotSuggestion":
+        if not self.dict_kwargs:
+            raise ValueError(
+                "dict_kwargs must not be empty — it must contain at least 'x' "
+                "(and 'y' for scatter/line/bar) with valid column names."
+            )
+        needs_x = self.visu_type not in ("histogram",)
+        if needs_x and "x" not in self.dict_kwargs:
+            raise ValueError(
+                f"dict_kwargs for '{self.visu_type}' must contain at least 'x' with a valid column name."
+            )
+        return self
 
 
 class CardSuggestion(BaseModel):

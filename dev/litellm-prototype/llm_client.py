@@ -112,16 +112,26 @@ DATASET:
 Respond with valid JSON matching this exact schema:
 {{
     "visu_type": "scatter|bar|line|histogram|box|violin|heatmap",
-    "dict_kwargs": {{"x": "column_name", "y": "column_name", ...}},
+    "dict_kwargs": {{"x": "column_name", "y": "column_name", "color": "column_name", ...}},
     "title": "Chart title",
     "explanation": "Why this plot is useful"
 }}
 
-IMPORTANT:
-- dict_kwargs MUST NOT be empty — always include at least "x" (and "y" for scatter/line/bar)
-- dict_kwargs must only contain valid Plotly Express parameter names (x, y, color, size, facet_col, facet_row, etc.)
-- Column names in dict_kwargs MUST match the dataset columns exactly
-- Do NOT include the DataFrame as a parameter — only column mappings
+EXAMPLE — for "scatter plot of sepal length vs width colored by variety":
+{{
+    "visu_type": "scatter",
+    "dict_kwargs": {{"x": "sepal_length", "y": "sepal_width", "color": "variety"}},
+    "title": "Sepal Length vs Width by Variety",
+    "explanation": "Shows how sepal dimensions differ across iris varieties."
+}}
+
+CRITICAL RULES:
+- dict_kwargs MUST NOT be empty — it MUST contain column mappings like "x", "y", "color", "size", etc.
+- For scatter/line/bar: dict_kwargs MUST include at least "x" and "y"
+- For histogram: dict_kwargs MUST include at least "x"
+- All column names in dict_kwargs MUST exactly match the dataset column names listed above
+- Only use valid Plotly Express parameter names: x, y, color, size, facet_col, facet_row, symbol, text, hover_name
+- Do NOT include the DataFrame — only column name mappings
 - Respond with ONLY the JSON object, no markdown fences or extra text"""
 
     messages = [
@@ -129,12 +139,24 @@ IMPORTANT:
         {"role": "user", "content": user_prompt},
     ]
 
-    result = completion(messages, response_format=PlotSuggestion)
-
-    if isinstance(result, str):
-        parsed = PlotSuggestion.model_validate_json(result)
+    # Try up to 2 times — retry if LLM returns empty dict_kwargs
+    last_error = None
+    for attempt in range(2):
+        result = completion(messages, response_format=PlotSuggestion)
+        try:
+            if isinstance(result, str):
+                parsed = PlotSuggestion.model_validate_json(result)
+            else:
+                parsed = PlotSuggestion.model_validate(result)
+            break  # validation passed
+        except Exception as e:
+            last_error = e
+            logger.warning("Attempt %d failed validation: %s — retrying", attempt + 1, e)
+            # Bust cache so retry gets a fresh LLM call
+            key = _cache_key(messages, get_model())
+            _cache.pop(key, None)
     else:
-        parsed = PlotSuggestion.model_validate(result)
+        raise ValueError(f"LLM returned invalid plot config after 2 attempts: {last_error}")
 
     logger.info(
         "═══ Parsed: PlotSuggestion ═══  type=%s | kwargs=%s | title=%s",
