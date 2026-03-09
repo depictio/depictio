@@ -139,15 +139,18 @@ CRITICAL RULES:
         {"role": "user", "content": user_prompt},
     ]
 
-    # Try up to 2 times — retry if LLM returns empty dict_kwargs
+    # Do NOT pass response_format=PlotSuggestion to litellm — the JSON Schema
+    # for dict[str, Any] becomes {"type": "object"} which allows {}, causing
+    # the LLM to return empty dict_kwargs. Plain text mode follows the prompt.
     last_error = None
     for attempt in range(2):
-        result = completion(messages, response_format=PlotSuggestion)
+        result = completion(messages)
         try:
-            if isinstance(result, str):
-                parsed = PlotSuggestion.model_validate_json(result)
-            else:
-                parsed = PlotSuggestion.model_validate(result)
+            # Strip markdown fences if present
+            text = result.strip()
+            if text.startswith("```"):
+                text = text.split("\n", 1)[1].rsplit("```", 1)[0].strip()
+            parsed = PlotSuggestion.model_validate_json(text)
             break  # validation passed
         except Exception as e:
             last_error = e
