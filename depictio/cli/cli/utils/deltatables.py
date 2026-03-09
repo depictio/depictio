@@ -740,8 +740,51 @@ def process_recipe_data_collection(
             data_dir = str(locations[0])
             rich_print_checked_statement(f"Recipe data dir: {data_dir}", "info")
 
+    # Resolve dc_ref sources: load referenced DCs from their Delta tables
+    extra_sources: dict[str, pl.DataFrame] | None = None
     try:
-        result_df = execute_recipe(recipe_name, data_dir, overrides)
+        from depictio.recipes import load_recipe as _load_recipe
+
+        recipe_module = _load_recipe(recipe_name)
+        dc_ref_sources = [s for s in recipe_module.SOURCES if s.dc_ref is not None]
+
+        if dc_ref_sources and workflow is not None:
+            storage_options = turn_S3_config_into_polars_storage_options(CLI_config.s3_storage)
+            extra_sources = {}
+            for src in dc_ref_sources:
+                # Find the referenced DC in the workflow by tag
+                ref_dc = next(
+                    (
+                        dc
+                        for dc in getattr(workflow, "data_collections", [])
+                        if dc.data_collection_tag == src.dc_ref
+                    ),
+                    None,
+                )
+                if ref_dc is None:
+                    return {
+                        "result": "error",
+                        "message": (
+                            f"dc_ref '{src.dc_ref}' not found in workflow. "
+                            f"Ensure the referenced data collection is processed first."
+                        ),
+                    }
+                ref_s3_path = f"s3://{CLI_config.s3_storage.bucket}/{ref_dc.id!s}"
+                read_result = read_delta_table(ref_s3_path, storage_options)
+                if read_result.get("result") != "success":
+                    return {
+                        "result": "error",
+                        "message": (
+                            f"Failed to read dc_ref '{src.dc_ref}' from Delta Lake: "
+                            f"{read_result.get('message')}"
+                        ),
+                    }
+                extra_sources[src.ref] = read_result["data"]
+    except RecipeError:
+        pass  # Will be caught below during execute_recipe
+
+    try:
+        result_df = execute_recipe(recipe_name, data_dir, overrides, extra_sources=extra_sources)
     except RecipeError as e:
         return {"result": "error", "message": f"Recipe failed: {e}"}
 
