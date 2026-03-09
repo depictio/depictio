@@ -6,6 +6,7 @@ import hashlib
 import json
 import logging
 import os
+import time
 
 import litellm
 from dotenv import load_dotenv
@@ -15,7 +16,7 @@ from schemas import AnalysisResult, PlotSuggestion
 load_dotenv()
 logger = logging.getLogger(__name__)
 
-# Suppress litellm's verbose logging
+# Suppress litellm's verbose internal logging
 litellm.suppress_debug_info = True
 
 # In-memory cache (use Redis in production)
@@ -31,22 +32,29 @@ def _cache_key(messages: list[dict], model: str) -> str:
     return hashlib.sha256(payload.encode()).hexdigest()
 
 
+def _log_messages(messages: list[dict]) -> None:
+    """Log each message role and content at DEBUG level."""
+    for msg in messages:
+        role = msg["role"].upper()
+        logger.debug("─── %s Prompt ───", role)
+        logger.debug("%s", msg["content"])
+
+
 def completion(messages: list[dict], response_format: type | None = None) -> str:
-    """Call LiteLLM with caching and optional structured output.
-
-    Args:
-        messages: Chat messages in OpenAI format.
-        response_format: Optional Pydantic model class for structured output.
-
-    Returns:
-        Raw string content from the LLM response.
-    """
+    """Call LiteLLM with caching and optional structured output."""
     model = get_model()
     key = _cache_key(messages, model)
+    fmt_name = response_format.__name__ if response_format else "None"
 
     if key in _cache:
-        logger.info("Cache hit for %s", key[:12])
+        logger.info("═══ Cache HIT ═══  key=%s format=%s", key[:12], fmt_name)
+        logger.debug("─── Cached Response ───")
+        logger.debug("%s", _cache[key])
         return _cache[key]
+
+    logger.info("═══ LLM Request ═══")
+    logger.info("Model: %s | temperature: 0 | format: %s", model, fmt_name)
+    _log_messages(messages)
 
     kwargs: dict = {
         "model": model,
@@ -57,9 +65,26 @@ def completion(messages: list[dict], response_format: type | None = None) -> str
     if response_format is not None:
         kwargs["response_format"] = response_format
 
-    logger.info("Calling %s (response_format=%s)", model, response_format)
+    t0 = time.perf_counter()
     response = litellm.completion(**kwargs)
+    elapsed = time.perf_counter() - t0
     content = response.choices[0].message.content
+
+    # Token usage
+    usage = getattr(response, "usage", None)
+    if usage:
+        logger.info(
+            "═══ LLM Response (%.1fs) ═══  Tokens: %d prompt + %d completion = %d total",
+            elapsed,
+            usage.prompt_tokens,
+            usage.completion_tokens,
+            usage.total_tokens,
+        )
+    else:
+        logger.info("═══ LLM Response (%.1fs) ═══  (no token usage reported)", elapsed)
+
+    logger.debug("─── Raw Response ───")
+    logger.debug("%s", content)
 
     _cache[key] = content
     return content
@@ -67,6 +92,10 @@ def completion(messages: list[dict], response_format: type | None = None) -> str
 
 def suggest_plot(user_prompt: str, column_metadata: str) -> PlotSuggestion:
     """Ask the LLM to suggest a Plotly Express plot configuration."""
+    logger.info("═══ suggest_plot() ═══")
+    logger.debug("─── Column Metadata ───")
+    logger.debug("%s", column_metadata)
+
     system_prompt = f"""You are a data visualization expert. Given a dataset description and a user request,
 suggest a single Plotly Express plot configuration.
 
@@ -94,14 +123,28 @@ IMPORTANT:
 
     result = completion(messages, response_format=PlotSuggestion)
 
-    # Parse — litellm may return raw JSON string or already-parsed content
     if isinstance(result, str):
-        return PlotSuggestion.model_validate_json(result)
-    return PlotSuggestion.model_validate(result)
+        parsed = PlotSuggestion.model_validate_json(result)
+    else:
+        parsed = PlotSuggestion.model_validate(result)
+
+    logger.info(
+        "═══ Parsed: PlotSuggestion ═══  type=%s | kwargs=%s | title=%s",
+        parsed.visu_type,
+        parsed.dict_kwargs,
+        parsed.title,
+    )
+    return parsed
 
 
 def analyze_data(user_prompt: str, column_metadata: str, sample_rows: str) -> AnalysisResult:
     """Ask the LLM to analyze the dataset."""
+    logger.info("═══ analyze_data() ═══")
+    logger.debug("─── Column Metadata ───")
+    logger.debug("%s", column_metadata)
+    logger.debug("─── Sample Rows ───")
+    logger.debug("%s", sample_rows)
+
     system_prompt = f"""You are a data analyst. Given a dataset description and sample rows,
 answer the user's question with structured analysis.
 
@@ -139,5 +182,19 @@ IMPORTANT:
     result = completion(messages, response_format=AnalysisResult)
 
     if isinstance(result, str):
-        return AnalysisResult.model_validate_json(result)
-    return AnalysisResult.model_validate(result)
+        parsed = AnalysisResult.model_validate_json(result)
+    else:
+        parsed = AnalysisResult.model_validate(result)
+
+    n_plots = len(parsed.suggested_plots) if parsed.suggested_plots else 0
+    logger.info(
+        "═══ Parsed: AnalysisResult ═══  summary=%d chars | findings=%d | suggested_plots=%d",
+        len(parsed.summary),
+        len(parsed.key_findings),
+        n_plots,
+    )
+    logger.info("─── Key Findings ───")
+    for i, finding in enumerate(parsed.key_findings, 1):
+        logger.info("  %d. %s", i, finding)
+
+    return parsed

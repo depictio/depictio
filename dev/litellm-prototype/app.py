@@ -24,7 +24,11 @@ from components.interactive import create_multiselect, create_range_slider, crea
 from components.tables import create_table
 from sample_data import DATASETS, get_column_metadata
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(
+    level=logging.DEBUG,
+    format="%(asctime)s %(name)-12s %(levelname)-5s %(message)s",
+    datefmt="%H:%M:%S",
+)
 
 # ---------------------------------------------------------------------------
 # App init
