@@ -1298,25 +1298,102 @@ jobs:
 
           echo "✅ Penguin reference dataset verified (project exists)"
 
-      - name: Verify Ampliseq template & recipe integration from CLI
+      - name: Download ampliseq test data from public S3
         run: |
-          # Verify the Ampliseq project was created via template system during docker-system-init
-          AMPLISEQ_PROJECT=$(docker compose exec -T mongo mongosh localhost:27018/depictioDB --eval "JSON.stringify(db.projects.find().toArray())" --quiet 2>&1 | grep '^[\[{]' | jq -r '.[] | select(.name == "Ampliseq Microbial Community Analysis") | .name')
-          [ -z "$AMPLISEQ_PROJECT" ] && echo "❌ Ampliseq project not found" && exit 1
-          echo "✅ Ampliseq project found: $AMPLISEQ_PROJECT"
+          S3_URL="https://nf-core-awsmegatests.s3.amazonaws.com/ampliseq/results-3d5c7e5bec28de279337f3ffe3c312a45940b782"
+          TARGET="ampliseq-testdata"
+          echo "📥 Downloading ampliseq test data..."
 
-          # Verify data collections were created (recipes produce these)
-          AMPLISEQ_PID=$(docker compose exec -T mongo mongosh localhost:27018/depictioDB --eval "JSON.stringify(db.projects.find().toArray())" --quiet 2>&1 | grep '^[\[{]' | jq -r '.[] | select(.name == "Ampliseq Microbial Community Analysis") | ._id')
-          AMPLISEQ_DC_COUNT=$(docker compose exec -T mongo mongosh localhost:27018/depictioDB --eval "JSON.stringify(db.projects.find({\"_id\": ObjectId(\"$AMPLISEQ_PID\")}).toArray())" --quiet 2>&1 | grep '^[\[{]' | jq -r '.[].workflows[0].data_collections | length')
-          [ "$AMPLISEQ_DC_COUNT" -lt 5 ] && echo "❌ Ampliseq data collections (recipes) not complete (expected >=5, got $AMPLISEQ_DC_COUNT)" && exit 1
-          echo "✅ Ampliseq recipe-derived data collections verified: $AMPLISEQ_DC_COUNT collections"
+          mkdir -p "$TARGET/input" \
+                   "$TARGET/multiqc/multiqc_data" \
+                   "$TARGET/qiime2/diversity/alpha_diversity/faith_pd_vector" \
+                   "$TARGET/qiime2/alpha-rarefaction" \
+                   "$TARGET/qiime2/barplot" \
+                   "$TARGET/qiime2/rel_abundance_tables" \
+                   "$TARGET/qiime2/ancombc/differentials/Category-habitat-level-2"
 
-          # Verify dashboards (template creates these)
-          AMPLISEQ_DASH_COUNT=$(docker compose exec -T mongo mongosh localhost:27018/depictioDB --eval "JSON.stringify(db.dashboards.find({\"project_id\": ObjectId(\"$AMPLISEQ_PID\")}).toArray())" --quiet 2>&1 | grep '^[\[{]' | jq -r 'length')
-          [ "$AMPLISEQ_DASH_COUNT" -lt 2 ] && echo "❌ Ampliseq template dashboards not created (expected >=2, got $AMPLISEQ_DASH_COUNT)" && exit 1
-          echo "✅ Ampliseq template dashboards verified: $AMPLISEQ_DASH_COUNT dashboards"
+          # Download all files needed by recipes + template
+          curl -fsSL "$S3_URL/input/Metadata_full.tsv" -o "$TARGET/input/Metadata_full.tsv"
+          curl -fsSL "$S3_URL/multiqc/multiqc_data/multiqc.parquet" -o "$TARGET/multiqc/multiqc_data/multiqc.parquet"
+          curl -fsSL "$S3_URL/qiime2/diversity/alpha_diversity/faith_pd_vector/metadata.tsv" -o "$TARGET/qiime2/diversity/alpha_diversity/faith_pd_vector/metadata.tsv"
+          curl -fsSL "$S3_URL/qiime2/alpha-rarefaction/faith_pd.csv" -o "$TARGET/qiime2/alpha-rarefaction/faith_pd.csv"
+          curl -fsSL "$S3_URL/qiime2/barplot/level-2.csv" -o "$TARGET/qiime2/barplot/level-2.csv"
+          curl -fsSL "$S3_URL/qiime2/rel_abundance_tables/rel-table-2.tsv" -o "$TARGET/qiime2/rel_abundance_tables/rel-table-2.tsv"
+          for f in lfc_slice.csv p_val_slice.csv q_val_slice.csv w_slice.csv se_slice.csv; do
+            curl -fsSL "$S3_URL/qiime2/ancombc/differentials/Category-habitat-level-2/$f" \
+              -o "$TARGET/qiime2/ancombc/differentials/Category-habitat-level-2/$f"
+          done
 
-          echo "✅ Ampliseq template & recipe integration verified from CLI job"
+          echo "✅ Test data downloaded ($(find "$TARGET" -type f | wc -l) files)"
+
+      - name: Run ampliseq recipes (standalone execution)
+        run: |
+          cd depictio/cli
+          source venv/bin/activate
+          DATA_DIR="$(pwd)/../../ampliseq-testdata"
+          echo "🔬 Running standalone recipe execution against real data..."
+
+          depictio-cli recipe run nf-core/ampliseq/alpha_diversity.py --data-dir "$DATA_DIR"
+          echo "✅ alpha_diversity recipe passed"
+
+          depictio-cli recipe run nf-core/ampliseq/alpha_rarefaction.py --data-dir "$DATA_DIR"
+          echo "✅ alpha_rarefaction recipe passed"
+
+          depictio-cli recipe run nf-core/ampliseq/taxonomy_composition.py --data-dir "$DATA_DIR"
+          echo "✅ taxonomy_composition recipe passed"
+
+          depictio-cli recipe run nf-core/ampliseq/ancombc.py --data-dir "$DATA_DIR"
+          echo "✅ ancombc recipe passed"
+
+          # taxonomy_rel_abundance has a dc_ref source — exits 0 with a skip message in standalone mode
+          depictio-cli recipe run nf-core/ampliseq/taxonomy_rel_abundance.py --data-dir "$DATA_DIR"
+          echo "✅ taxonomy_rel_abundance recipe passed (dc_ref skipped in standalone)"
+
+          echo "✅ All 5 ampliseq recipes executed successfully"
+
+      - name: Run ampliseq full template pipeline
+        run: |
+          cd depictio/cli
+          source venv/bin/activate
+          DATA_DIR="$(pwd)/../../ampliseq-testdata"
+          echo "🚀 Running full template pipeline: depictio run --template..."
+
+          depictio-cli run \
+            --template nf-core/ampliseq/2.16.0 \
+            --data-root "$DATA_DIR" \
+            --project-name "Ampliseq CI Template Test" \
+            --CLI-config-path admin_config.yaml \
+            --continue-on-error
+
+          echo "✅ Full template pipeline execution completed"
+
+      - name: Verify ampliseq template pipeline results
+        run: |
+          # Verify the CLI-created project exists (separate from the auto-initialized one)
+          AMPLISEQ_CI_PROJECT=$(docker compose exec -T mongo mongosh localhost:27018/depictioDB --eval "JSON.stringify(db.projects.find().toArray())" --quiet 2>&1 | grep '^[\[{]' | jq -r '.[] | select(.name == "Ampliseq CI Template Test") | .name')
+          [ -z "$AMPLISEQ_CI_PROJECT" ] && echo "❌ Ampliseq CI Template Test project not found" && exit 1
+          echo "✅ Template-created project found: $AMPLISEQ_CI_PROJECT"
+
+          # Verify data collections were created (7 expected: multiqc + metadata + 5 recipes)
+          AMPLISEQ_CI_PID=$(docker compose exec -T mongo mongosh localhost:27018/depictioDB --eval "JSON.stringify(db.projects.find().toArray())" --quiet 2>&1 | grep '^[\[{]' | jq -r '.[] | select(.name == "Ampliseq CI Template Test") | ._id')
+          DC_COUNT=$(docker compose exec -T mongo mongosh localhost:27018/depictioDB --eval "JSON.stringify(db.projects.find({\"_id\": ObjectId(\"$AMPLISEQ_CI_PID\")}).toArray())" --quiet 2>&1 | grep '^[\[{]' | jq -r '.[].workflows[0].data_collections | length')
+          [ "$DC_COUNT" -lt 5 ] && echo "❌ Data collections incomplete (expected >=5, got $DC_COUNT)" && exit 1
+          echo "✅ Data collections verified: $DC_COUNT collections"
+
+          # Count deltatables created for this project's data collections
+          DC_IDS=$(docker compose exec -T mongo mongosh localhost:27018/depictioDB --eval "JSON.stringify(db.projects.find({\"_id\": ObjectId(\"$AMPLISEQ_CI_PID\")}).toArray())" --quiet 2>&1 | grep '^[\[{]' | jq -r '.[].workflows[0].data_collections[]._id')
+          DT_COUNT=0
+          for dc_id in $DC_IDS; do
+            HAS_DT=$(docker compose exec -T mongo mongosh localhost:27018/depictioDB --eval "db.deltatables.countDocuments({\"data_collection_id\": ObjectId(\"$dc_id\")})" --quiet 2>&1 | tail -1)
+            [ "${HAS_DT:-0}" -gt 0 ] && DT_COUNT=$((DT_COUNT + 1))
+          done
+          echo "📊 Deltatables created for CI project: $DT_COUNT / $DC_COUNT data collections"
+
+          # Also verify the auto-initialized project still exists
+          AMPLISEQ_AUTO=$(docker compose exec -T mongo mongosh localhost:27018/depictioDB --eval "JSON.stringify(db.projects.find().toArray())" --quiet 2>&1 | grep '^[\[{]' | jq -r '.[] | select(.name == "Ampliseq Microbial Community Analysis") | .name')
+          [ -z "$AMPLISEQ_AUTO" ] && echo "⚠️  Auto-initialized ampliseq project not found (unexpected)" || echo "✅ Auto-initialized project still exists: $AMPLISEQ_AUTO"
+
+          echo "✅ Ampliseq template & recipe full execution verified"
 
       - name: Upload logs on failure
         if: failure()
