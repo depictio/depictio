@@ -191,6 +191,7 @@ def analyze_data(user_prompt: str, df: pd.DataFrame) -> AnalysisAgentResult:
         verbose=True,  # prints full ReAct chain to terminal
         return_intermediate_steps=True,
         allow_dangerous_code=True,  # required — we control the data
+        handle_parsing_errors=True,  # recover when LLM skips Action:/Action Input: format
         max_iterations=10,
     )
 
@@ -201,9 +202,19 @@ def analyze_data(user_prompt: str, df: pd.DataFrame) -> AnalysisAgentResult:
     steps = []
     for action, observation in result.get("intermediate_steps", []):
         # action is an AgentAction with .tool_input and .log
-        code = action.tool_input if isinstance(action.tool_input, str) else action.tool_input.get("query", str(action.tool_input))
+        # When handle_parsing_errors kicks in, tool_input may be the raw
+        # unparseable text — still useful to show the user what happened.
+        tool_input = getattr(action, "tool_input", "")
+        if isinstance(tool_input, str):
+            code = tool_input
+        elif isinstance(tool_input, dict):
+            code = tool_input.get("query", str(tool_input))
+        else:
+            code = str(tool_input)
+
+        thought = getattr(action, "log", "").strip()
         steps.append(ExecutionStep(
-            thought=action.log.strip(),
+            thought=thought,
             code=code,
             output=str(observation).strip(),
         ))
