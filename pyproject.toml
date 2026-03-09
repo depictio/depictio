@@ -175,6 +175,7 @@ testpaths = [
   "depictio/tests/models",
   "depictio/tests/cli",
   "depictio/tests/dash",
+  "depictio/tests/unit",
 ]
 markers = [
   "no_db: mark test to skip database setup",

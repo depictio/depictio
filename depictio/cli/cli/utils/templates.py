@@ -14,9 +14,19 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+import yaml
+
 from depictio.cli.cli_logging import logger
 from depictio.models.models.templates import TemplateMetadata, TemplateOrigin
-from depictio.models.utils import get_config
+
+
+def _load_yaml(path: str) -> dict:
+    """Load a YAML file and return its contents as a dict."""
+    with open(path) as f:
+        data = yaml.safe_load(f)
+    if not isinstance(data, dict):
+        raise ValueError(f"Invalid YAML file: expected a dictionary in {path}")
+    return data
 
 
 def locate_template(template_id: str) -> Path:
@@ -79,7 +89,7 @@ def _list_available_templates(package_root: Path) -> list[str]:
     for pattern in ("template.yaml", "project.yaml"):
         for yaml_path in projects_dir.rglob(pattern):
             try:
-                config = get_config(str(yaml_path))
+                config = _load_yaml(str(yaml_path))
                 if "template" in config:
                     template_id = config["template"].get("template_id", "")
                     if template_id and template_id not in templates:
@@ -174,7 +184,7 @@ def resolve_template(
     # 1. Locate and load template YAML
     template_path = locate_template(template_id)
     logger.info(f"Loading template from: {template_path}")
-    raw_config = get_config(str(template_path))
+    raw_config = _load_yaml(str(template_path))
 
     # 2. Extract and validate template metadata
     template_section = raw_config.pop("template", None)
