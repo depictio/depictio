@@ -703,7 +703,19 @@ def process_recipe_data_collection(
     Returns:
         Result dict with success/error status.
     """
-    from depictio.recipes import RecipeError, execute_recipe
+    try:
+        from depictio.recipes import RecipeError, execute_recipe
+    except ModuleNotFoundError:
+        # Fallback: import from source tree when package isn't installed with sub-packages
+        import importlib.util
+        import pathlib
+
+        _recipes_init = pathlib.Path(__file__).resolve().parents[3] / "recipes" / "__init__.py"
+        _spec = importlib.util.spec_from_file_location("depictio.recipes", _recipes_init)
+        _mod = importlib.util.module_from_spec(_spec)
+        _spec.loader.exec_module(_mod)
+        RecipeError = _mod.RecipeError
+        execute_recipe = _mod.execute_recipe
 
     transform_config = data_collection.config.transform
     if transform_config is None:
