@@ -380,8 +380,10 @@ def client_aggregate_data(
     if command_parameters:
         overwrite = command_parameters.get("overwrite", False)
         rich_tables = command_parameters.get("rich_tables", False)
+        preview_recipes = command_parameters.get("preview_recipes", False)
     else:
         overwrite = False
+        preview_recipes = False
 
     # Handle MultiQC data collections specially - copy parquet files to S3 and extract metadata
     if data_collection.config.type.lower() == "multiqc":
@@ -393,7 +395,9 @@ def client_aggregate_data(
 
     # Handle transformed (recipe-based) data collections
     if data_collection.config.source == "transformed":
-        return process_recipe_data_collection(data_collection, CLI_config, overwrite, workflow)
+        return process_recipe_data_collection(
+            data_collection, CLI_config, overwrite, workflow, preview=preview_recipes
+        )
 
     # Generate destination prefix using the data collection id - should be a S3 path
     destination_prefix = f"s3://{CLI_config.s3_storage.bucket}/{str(data_collection.id)}"
@@ -683,11 +687,63 @@ def process_geojson_data_collection(
     }
 
 
+def _print_recipe_preview(
+    recipe_name: str,
+    sources: dict[str, pl.DataFrame],
+    result_df: pl.DataFrame,
+) -> None:
+    """Print before/after tables for recipe preview mode."""
+    from rich.panel import Panel
+    from rich.table import Table
+
+    from depictio.cli.cli.utils.rich_utils import console
+
+    # --- Input sources ---
+    console.print()
+    console.print(Panel(f"[bold]Recipe Preview: {recipe_name}[/bold]", style="cyan", expand=False))
+
+    for ref, df in sources.items():
+        console.print(
+            f"\n[bold cyan]Input source '{ref}'[/bold cyan]  ({df.height} rows x {df.width} cols)"
+        )
+        # Build a Rich table from the first 5 rows
+        t = Table(show_header=True, header_style="bold", show_lines=True)
+        for col in df.columns:
+            t.add_column(col, style="dim" if col.startswith("_") else "")
+        for row in df.head(5).iter_rows():
+            t.add_row(*(str(v) for v in row))
+        console.print(t)
+        if df.height > 5:
+            console.print(f"  [dim]... and {df.height - 5} more rows[/dim]")
+
+    # --- Output ---
+    console.print(
+        f"\n[bold green]Output after transform[/bold green]  "
+        f"({result_df.height} rows x {result_df.width} cols)"
+    )
+    t = Table(show_header=True, header_style="bold green", show_lines=True)
+    for col in result_df.columns:
+        t.add_column(col)
+    for row in result_df.head(10).iter_rows():
+        t.add_row(*(str(v) for v in row))
+    console.print(t)
+    if result_df.height > 10:
+        console.print(f"  [dim]... and {result_df.height - 10} more rows[/dim]")
+
+    # Schema summary
+    console.print(
+        "\n[bold]Schema:[/bold] "
+        + ", ".join(f"{c}({result_df[c].dtype})" for c in result_df.columns)
+    )
+    console.print()
+
+
 def process_recipe_data_collection(
     data_collection: DataCollection,
     CLI_config: CLIConfig,
     overwrite: bool = False,
     workflow=None,
+    preview: bool = False,
 ) -> dict[str, str]:
     """Process a transformed (recipe-based) data collection.
 
@@ -699,6 +755,7 @@ def process_recipe_data_collection(
         CLI_config: CLI configuration with API URL and credentials.
         overwrite: Whether to overwrite existing data.
         workflow: Optional Workflow object to resolve data_dir from data_location.
+        preview: If True, display input/output tables and skip Delta Lake write.
 
     Returns:
         Result dict with success/error status.
@@ -706,6 +763,8 @@ def process_recipe_data_collection(
     try:
         from depictio.recipes import RecipeError, execute_recipe
         from depictio.recipes import load_recipe as _load_recipe
+        from depictio.recipes import resolve_sources as _resolve_sources
+        from depictio.recipes import validate_schema as _validate_schema
     except ModuleNotFoundError:
         # Fallback: import from source tree when package isn't installed with sub-packages
         import importlib.util
@@ -718,6 +777,8 @@ def process_recipe_data_collection(
         RecipeError = _mod.RecipeError
         execute_recipe = _mod.execute_recipe
         _load_recipe = _mod.load_recipe
+        _resolve_sources = _mod.resolve_sources
+        _validate_schema = _mod.validate_schema
 
     transform_config = data_collection.config.transform
     if transform_config is None:
@@ -782,6 +843,26 @@ def process_recipe_data_collection(
                 extra_sources[src.ref] = read_result["data"]
     except RecipeError:
         pass  # Will be caught below during execute_recipe
+
+    if preview:
+        # Preview mode: run recipe steps individually and display before/after
+        try:
+            recipe_module = _load_recipe(recipe_name)
+            sources = _resolve_sources(recipe_module, data_dir, overrides)
+            if extra_sources:
+                sources.update(extra_sources)
+            result_df = recipe_module.transform(sources)
+            if not isinstance(result_df, pl.DataFrame):
+                return {"result": "error", "message": "transform() did not return a DataFrame"}
+            _validate_schema(result_df, recipe_module.EXPECTED_SCHEMA, recipe_name)
+            _print_recipe_preview(recipe_name, sources, result_df)
+        except RecipeError as e:
+            return {"result": "error", "message": f"Recipe failed: {e}"}
+
+        return {
+            "result": "success",
+            "message": f"Recipe '{recipe_name}' preview complete (no data written).",
+        }
 
     try:
         result_df = execute_recipe(recipe_name, data_dir, overrides, extra_sources=extra_sources)

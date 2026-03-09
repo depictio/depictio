@@ -101,6 +101,11 @@ def register_run_command(app: typer.Typer):
         overwrite: bool = typer.Option(
             False, "--overwrite", help="Overwrite the workflow if it already exists"
         ),
+        preview_recipes: bool = typer.Option(
+            False,
+            "--preview-recipes",
+            help="Show recipe input sources and transformed output without writing to Delta Lake",
+        ),
         # General options
         continue_on_error: bool = typer.Option(
             False, "--continue-on-error", help="Continue execution even if a step fails"
@@ -395,6 +400,7 @@ def register_run_command(app: typer.Typer):
                             command_parameters = {
                                 "overwrite": overwrite,
                                 "rich_tables": rich_tables,
+                                "preview_recipes": preview_recipes,
                             }
 
                             process_project_helper(
