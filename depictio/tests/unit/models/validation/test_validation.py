@@ -4,6 +4,8 @@ Basic unit tests for component validation modules.
 Tests cover core functionality without exhaustive edge cases.
 """
 
+import pytest
+
 
 class TestPlotlyExpressValidation:
     """Tests for Plotly Express dict_kwargs validation."""
@@ -187,19 +189,25 @@ class TestComponentModelIntegration:
 
     def test_interactive_component_validates(self):
         """InteractiveComponent should validate type compatibility."""
+        import pydantic
+
         from depictio.models.components.interactive import InteractiveComponent
 
-        # Should create without error (warns but doesn't fail)
-        comp = InteractiveComponent(
-            interactive_component_type="Slider",
-            column_name="name",
-            column_type="object",  # Invalid for slider
-        )
-        assert comp.interactive_component_type == "Slider"
+        # Slider is invalid for column_type='object' — model rejects at construction
+        with pytest.raises(pydantic.ValidationError, match="Invalid interactive_component_type"):
+            InteractiveComponent(
+                interactive_component_type="Slider",
+                column_name="name",
+                column_type="object",
+            )
 
-        # Explicit validation should show error
-        is_valid, errors, _ = comp.get_validation_result()
-        assert is_valid is False
+        # Valid combination should succeed
+        comp = InteractiveComponent(
+            interactive_component_type="Select",
+            column_name="name",
+            column_type="object",
+        )
+        assert comp.interactive_component_type == "Select"
 
     def test_table_component_validates(self):
         """TableComponent should validate cols_json."""
