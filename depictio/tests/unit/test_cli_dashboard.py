@@ -402,8 +402,11 @@ class TestFullConversionPipeline:
         assert full_dict["title"] == "Test Dashboard"
         assert "stored_metadata" in full_dict
         assert len(full_dict["stored_metadata"]) == 4
-        assert "stored_layout_data" in full_dict
-        assert len(full_dict["stored_layout_data"]) == 4
+        assert "left_panel_layout_data" in full_dict
+        assert "right_panel_layout_data" in full_dict
+        # 1 interactive → left panel, 3 others → right panel
+        assert len(full_dict["left_panel_layout_data"]) == 1
+        assert len(full_dict["right_panel_layout_data"]) == 3
 
     def test_full_dict_to_dashboard_data(
         self, valid_yaml_content: str, sample_permission: Permission, sample_project_id: str
