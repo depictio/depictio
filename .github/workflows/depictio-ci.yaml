@@ -776,7 +776,7 @@ jobs:
           cd depictio/cli
           uv venv --python 3.12.9 venv
           source venv/bin/activate
-          uv pip install -e .
+          uv pip install -e ".[multiqc]"
 
       # ============================================
       # PHASE 1: Offline Tests (No Server Required)
