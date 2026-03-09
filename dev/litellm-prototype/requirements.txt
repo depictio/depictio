@@ -1,0 +1,9 @@
+dash>=3.0
+dash-mantine-components>=0.14
+dash-iconify
+dash-ag-grid
+plotly
+pandas
+litellm>=1.50
+pydantic>=2.0
+python-dotenv
