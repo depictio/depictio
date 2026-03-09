@@ -23,7 +23,7 @@ _cache: dict[str, str] = {}
 
 
 def get_model() -> str:
-    return os.getenv("LLM_MODEL", "anthropic/claude-sonnet-4-20250514")
+    return os.getenv("LLM_MODEL", "openrouter/anthropic/claude-sonnet-4-6")
 
 
 def _cache_key(messages: list[dict], model: str) -> str:
