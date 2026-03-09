@@ -11,7 +11,6 @@ import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 from dash import Dash, Input, Output, no_update
-
 from shared_stores import ACTIVE_CONTRAST, ACTIVE_FEATURE, FILTERED_FEATURE_IDS
 
 
@@ -155,7 +154,14 @@ def register_callbacks(app: Dash, data: dict) -> None:
         filtered = enrichment_df.loc[mask].copy()
         filtered = filtered.sort_values("padj")
         # Drop columns not needed in the table
-        display_cols = ["pathway_name", "NES", "padj", "leading_edge_size", "gene_set_size", "source"]
+        display_cols = [
+            "pathway_name",
+            "NES",
+            "padj",
+            "leading_edge_size",
+            "gene_set_size",
+            "source",
+        ]
         return filtered[display_cols].to_dict("records")
 
     # ── 2. Running ES plot on row selection ──────────────────
@@ -396,7 +402,6 @@ def register_callbacks(app: Dash, data: dict) -> None:
                     )
 
         # If active feature is set, highlight it with a border
-        annotations = []
         if active_feature and active_feature in available:
             gene_idx = available.index(active_feature)
             shapes.append(

@@ -245,17 +245,12 @@ def create_layout(data: dict) -> dmc.Paper:
     Returns:
         A ``dmc.Paper`` wrapping the complete module UI.
     """
-    # Determine available contrasts for the contrast selector
-    contrast_names = list(data["de_results"].keys())
-    contrast_options = [{"value": c, "label": c} for c in contrast_names]
-
     return dmc.Paper(
         dmc.Stack(
             [
                 # Hidden stores (module-internal)
                 dcc.Store(id="pf-filter-store", data=DEFAULT_FILTERS),
                 dcc.Store(id="pf-next-filter-id", data=3),
-
                 # Module layout: sidebar + main area
                 dmc.Grid(
                     [

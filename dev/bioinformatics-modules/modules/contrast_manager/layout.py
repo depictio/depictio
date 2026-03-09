@@ -12,7 +12,6 @@ from dash import dcc
 from dash_iconify import DashIconify
 
 
-
 def _get_conditions(data: dict) -> list[str]:
     """Extract unique conditions from metadata."""
     return sorted(data["metadata_df"]["condition"].unique().tolist())

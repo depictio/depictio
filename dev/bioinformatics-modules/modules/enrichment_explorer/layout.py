@@ -29,7 +29,11 @@ def _compute_summary_stats(data: dict, default_contrast: str | None) -> dict:
     if default_contrast:
         contrast_df = enrich_df[enrich_df["contrast"] == default_contrast]
         sig_pathways = int((contrast_df["padj"] < 0.05).sum())
-        top_nes = contrast_df.loc[contrast_df["NES"].abs().idxmax(), "NES"] if len(contrast_df) > 0 else 0.0
+        top_nes = (
+            contrast_df.loc[contrast_df["NES"].abs().idxmax(), "NES"]
+            if len(contrast_df) > 0
+            else 0.0
+        )
     else:
         sig_pathways = 0
         top_nes = 0.0
@@ -154,8 +158,18 @@ def _create_enrichment_grid() -> dag.AgGrid:
                 "valueFormatter": {"function": "d3.format('.2e')(params.value)"},
                 "flex": 1,
             },
-            {"field": "leading_edge_size", "headerName": "LE Size", "type": "numericColumn", "flex": 1},
-            {"field": "gene_set_size", "headerName": "Set Size", "type": "numericColumn", "flex": 1},
+            {
+                "field": "leading_edge_size",
+                "headerName": "LE Size",
+                "type": "numericColumn",
+                "flex": 1,
+            },
+            {
+                "field": "gene_set_size",
+                "headerName": "Set Size",
+                "type": "numericColumn",
+                "flex": 1,
+            },
             {"field": "source", "headerName": "Source", "flex": 1},
         ],
         rowData=[],

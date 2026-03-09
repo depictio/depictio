@@ -14,7 +14,6 @@ from __future__ import annotations
 from typing import Any
 
 import dash_mantine_components as dmc
-import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 from dash import (
@@ -23,11 +22,8 @@ from dash import (
     Input,
     Output,
     State,
-    callback_context,
-    html,
     no_update,
 )
-
 from shared_stores import ACTIVE_CONTRAST, ACTIVE_FEATURE, FILTERED_FEATURE_IDS, SELECTED_FEATURES
 
 from .layout import (
@@ -343,7 +339,9 @@ def register_callbacks(app: Dash, data: dict) -> None:
         filter_store,
     ):
         # Determine which contrast's DE data to use
-        contrast_key = active_contrast if active_contrast in data["de_results"] else default_contrast
+        contrast_key = (
+            active_contrast if active_contrast in data["de_results"] else default_contrast
+        )
         if contrast_key is None:
             # No data at all
             empty_fig = go.Figure()
@@ -396,9 +394,7 @@ def register_callbacks(app: Dash, data: dict) -> None:
 
             # Set categorical options
             if col and col in cat_unique:
-                cat_data_options.append(
-                    [{"value": v, "label": v} for v in cat_unique[col]]
-                )
+                cat_data_options.append([{"value": v, "label": v} for v in cat_unique[col]])
             else:
                 cat_data_options.append([])
 

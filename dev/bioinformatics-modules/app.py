@@ -18,20 +18,28 @@ import sys
 from pathlib import Path
 
 import dash_mantine_components as dmc
-from dash import Dash, Input, Output, callback_context, dcc, html
+from dash import Dash, Input, Output
 from dash_iconify import DashIconify
 
 # Add parent dir to path so modules can import shared_stores / shared_data
 sys.path.insert(0, str(Path(__file__).parent))
 
-from modules import contrast_manager, dimred_explorer, enrichment_explorer, feature_explorer, peak_explorer, progressive_filter, taxonomy_browser, variant_inspector
+from modules import (
+    contrast_manager,
+    dimred_explorer,
+    enrichment_explorer,
+    feature_explorer,
+    peak_explorer,
+    progressive_filter,
+    taxonomy_browser,
+    variant_inspector,
+)
 from shared_data import load_all_data
 from shared_stores import (
     ACTIVE_CONTRAST,
     ACTIVE_FEATURE,
     FILTERED_FEATURE_IDS,
     HIGHLIGHTED_SAMPLES,
-    SELECTED_FEATURES,
     create_shared_stores,
 )
 

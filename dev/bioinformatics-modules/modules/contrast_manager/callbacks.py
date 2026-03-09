@@ -11,10 +11,9 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 from dash import Dash, Input, Output
+from shared_stores import ACTIVE_CONTRAST, FILTERED_FEATURE_IDS, HIGHLIGHTED_SAMPLES
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
-
-from shared_stores import ACTIVE_CONTRAST, FILTERED_FEATURE_IDS, HIGHLIGHTED_SAMPLES
 
 
 def _get_contrast_summary(
@@ -114,12 +113,8 @@ def register_callbacks(app: Dash, data: dict) -> None:
         if not contrast_name or contrast_name not in de_results:
             return []
         treatment = contrast_name.replace("_vs_Control", "")
-        num_samples = metadata_df.loc[
-            metadata_df["condition"] == treatment, "sample_id"
-        ].tolist()
-        den_samples = metadata_df.loc[
-            metadata_df["condition"] == "Control", "sample_id"
-        ].tolist()
+        num_samples = metadata_df.loc[metadata_df["condition"] == treatment, "sample_id"].tolist()
+        den_samples = metadata_df.loc[metadata_df["condition"] == "Control", "sample_id"].tolist()
         return num_samples + den_samples
 
     # ── Update sig genes badge ─────────────────────────────
@@ -169,9 +164,7 @@ def register_callbacks(app: Dash, data: dict) -> None:
         Input("cm-active-contrast-select", "value"),
         Input(FILTERED_FEATURE_IDS, "data"),
     )
-    def update_ma_plot(
-        contrast_name: str | None, filtered_ids: list[str] | None
-    ) -> go.Figure:
+    def update_ma_plot(contrast_name: str | None, filtered_ids: list[str] | None) -> go.Figure:
         if not contrast_name or contrast_name not in de_results:
             return _empty_figure("Select a contrast")
 
@@ -314,9 +307,7 @@ def register_callbacks(app: Dash, data: dict) -> None:
         Input("cm-contrast-a-select", "value"),
         Input("cm-contrast-b-select", "value"),
     )
-    def update_contrast_scatter(
-        contrast_a: str | None, contrast_b: str | None
-    ) -> go.Figure:
+    def update_contrast_scatter(contrast_a: str | None, contrast_b: str | None) -> go.Figure:
         if (
             not contrast_a
             or not contrast_b

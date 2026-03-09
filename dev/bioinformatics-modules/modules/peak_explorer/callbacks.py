@@ -28,7 +28,6 @@ from dash import (
     State,
     no_update,
 )
-
 from shared_stores import FILTERED_FEATURE_IDS, HIGHLIGHTED_SAMPLES
 
 from .layout import (

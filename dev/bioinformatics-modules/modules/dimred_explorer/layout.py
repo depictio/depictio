@@ -242,9 +242,6 @@ def create_layout(data: dict) -> dmc.Paper:
     dmc.Paper
         Module wrapped in a Paper component, ready to compose in the demo app.
     """
-    n_samples = len(data["expression_df"])
-    n_genes = data["expression_df"].shape[1]
-
     sidebar = _create_sidebar()
 
     main_area = dmc.Stack(

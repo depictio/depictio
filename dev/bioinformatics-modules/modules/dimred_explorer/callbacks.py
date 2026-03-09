@@ -16,7 +16,6 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 from dash import Dash, Input, Output
-
 from shared_stores import ACTIVE_FEATURE, FILTERED_FEATURE_IDS, HIGHLIGHTED_SAMPLES
 
 from .layout import COLUMN_LABELS
@@ -127,9 +126,7 @@ def register_callbacks(app: Dash, data: dict) -> None:
         # than the current top-N setting, otherwise use top variable genes.
         if filtered_feature_ids:
             # Intersect with available genes in expression matrix
-            available_filtered = [
-                g for g in filtered_feature_ids if g in expression_df.columns
-            ]
+            available_filtered = [g for g in filtered_feature_ids if g in expression_df.columns]
             if available_filtered and len(available_filtered) < n_top_genes:
                 gene_subset = available_filtered
             else:
@@ -170,9 +167,7 @@ def register_callbacks(app: Dash, data: dict) -> None:
 
         elif method == "umap":
             UMAP = _get_umap_cls()
-            n_neighbors = max(
-                2, min(umap_n_neighbors or 15, X_scaled.shape[0] - 1)
-            )
+            n_neighbors = max(2, min(umap_n_neighbors or 15, X_scaled.shape[0] - 1))
             min_dist = max(0.0, min(umap_min_dist or 0.1, 1.0))
             reducer = UMAP(
                 n_components=2,
@@ -210,10 +205,7 @@ def register_callbacks(app: Dash, data: dict) -> None:
 
         # Determine color: if active_feature is set and exists in expression,
         # color by that feature's expression instead of metadata
-        use_feature_color = (
-            active_feature
-            and active_feature in expression_df.columns
-        )
+        use_feature_color = active_feature and active_feature in expression_df.columns
 
         if use_feature_color:
             plot_df["_feature_expr"] = expression_df[active_feature].values
@@ -347,9 +339,7 @@ def register_callbacks(app: Dash, data: dict) -> None:
             loading_genes = [gene_subset[i] for i in top_idx]
             loading_vals = loadings[comp_x_idx][top_idx]
 
-            loadings_df = pd.DataFrame(
-                {"Gene": loading_genes, "Loading": loading_vals}
-            )
+            loadings_df = pd.DataFrame({"Gene": loading_genes, "Loading": loading_vals})
             loadings_fig = px.bar(
                 loadings_df,
                 x="Loading",
@@ -368,17 +358,12 @@ def register_callbacks(app: Dash, data: dict) -> None:
             )
 
         # ── Table data ───────────────────────────────────────
-        table_df = plot_df[
-            ["sample_id", "condition", "batch", "cell_type", "x", "y"]
-        ].copy()
+        table_df = plot_df[["sample_id", "condition", "batch", "cell_type", "x", "y"]].copy()
         table_df = table_df.rename(columns={"x": x_label, "y": y_label})
         table_df[x_label] = table_df[x_label].round(3)
         table_df[y_label] = table_df[y_label].round(3)
 
-        col_defs = [
-            {"field": c, "headerName": COLUMN_LABELS.get(c, c)}
-            for c in table_df.columns
-        ]
+        col_defs = [{"field": c, "headerName": COLUMN_LABELS.get(c, c)} for c in table_df.columns]
         row_data = table_df.to_dict("records")
 
         # ── Summary badges ───────────────────────────────────

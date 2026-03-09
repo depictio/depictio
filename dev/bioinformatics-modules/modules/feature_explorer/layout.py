@@ -10,7 +10,7 @@ when composed with other modules.
 
 import dash_ag_grid as dag
 import dash_mantine_components as dmc
-from dash import dcc, html
+from dash import dcc
 from dash_iconify import DashIconify
 
 # ── Column metadata (matches shared_data metadata columns) ──────────────

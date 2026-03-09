@@ -14,14 +14,12 @@ Cross-module communication:
 from __future__ import annotations
 
 import dash_mantine_components as dmc
-import numpy as np
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
-from dash import Dash, Input, Output, State, no_update
+from dash import Dash, Input, Output
 from dash_iconify import DashIconify
 from scipy import stats
-
 from shared_stores import ACTIVE_CONTRAST, ACTIVE_FEATURE, FILTERED_FEATURE_IDS, SELECTED_FEATURES
 
 
@@ -46,11 +44,13 @@ def _get_top_correlated(
     for other in top_genes:
         r_val = correlation_matrix.loc[gene, other]
         _, p_val = stats.pearsonr(gene_vals, expression_df[other].values)
-        rows.append({
-            "gene_name": other,
-            "pearson_r": round(float(r_val), 4),
-            "pvalue": float(p_val),
-        })
+        rows.append(
+            {
+                "gene_name": other,
+                "pearson_r": round(float(r_val), 4),
+                "pvalue": float(p_val),
+            }
+        )
 
     return pd.DataFrame(rows)
 
