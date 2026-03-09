@@ -188,7 +188,7 @@ def resolve_template(
     logger.info(f"Template: {template_metadata.template_id} v{template_metadata.version}")
 
     # 3. Validate required variables are available
-    data_root_abs = str(Path(data_root).resolve())
+    data_root_abs = str(Path(data_root).absolute())
     variables: dict[str, str] = {"DATA_ROOT": data_root_abs}
 
     required_vars = template_metadata.get_required_variable_names()
