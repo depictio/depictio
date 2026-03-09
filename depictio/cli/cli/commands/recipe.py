@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Annotated
 
+import click.exceptions
 import typer
 
 from depictio.cli.cli_logging import logger
@@ -85,6 +86,8 @@ def recipe_run(
     except RecipeError as e:
         typer.echo(f"  FAILED: {e}")
         raise typer.Exit(code=1)
+    except click.exceptions.Exit:
+        raise  # Re-raise typer.Exit / click.Exit (e.g. dc_ref skip with code=0)
     except Exception as e:
         logger.exception("Recipe execution failed")
         typer.echo(f"  ERROR: {e}")
