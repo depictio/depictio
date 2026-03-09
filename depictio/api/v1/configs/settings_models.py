@@ -555,15 +555,15 @@ class DashboardYAMLConfig(BaseSettings):
         default=False, description="Enable YAML-based dashboard management (DEPRECATED)"
     )
     local_dir: Path = Field(
-        default_factory=lambda: Path(__file__).parent.parent.parent.parent.parent
-        / "dashboards"
-        / "local",
+        default_factory=lambda: (
+            Path(__file__).parent.parent.parent.parent.parent / "dashboards" / "local"
+        ),
         description="Directory for instance-specific dashboard YAML files (auto-synced)",
     )
     templates_dir: Path = Field(
-        default_factory=lambda: Path(__file__).parent.parent.parent.parent.parent
-        / "dashboards"
-        / "templates",
+        default_factory=lambda: (
+            Path(__file__).parent.parent.parent.parent.parent / "dashboards" / "templates"
+        ),
         description="Directory for template dashboard YAML files (version control)",
     )
     base_dir: Path | None = Field(
