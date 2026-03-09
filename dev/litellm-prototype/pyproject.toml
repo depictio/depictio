@@ -1,0 +1,20 @@
+[project]
+name = "litellm-prototype"
+version = "0.1.0"
+description = "AI Dashboard Prototype — LiteLLM + Dash + DMC"
+requires-python = ">=3.11"
+dependencies = [
+    "dash>=3.0",
+    "dash-mantine-components>=0.14",
+    "dash-iconify",
+    "dash-ag-grid",
+    "plotly",
+    "pandas",
+    "litellm>=1.50",
+    "pydantic>=2.0",
+    "python-dotenv",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
