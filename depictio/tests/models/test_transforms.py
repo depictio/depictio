@@ -58,7 +58,9 @@ class TestRecipeSource:
     def test_extra_fields_forbidden(self) -> None:
         """Extra fields are rejected."""
         with pytest.raises(Exception):
-            RecipeSource(ref="data", path="data.csv", unknown_field="value")
+            RecipeSource.model_validate(
+                {"ref": "data", "path": "data.csv", "unknown_field": "value"}
+            )
 
     def test_default_format_is_csv(self) -> None:
         """Default format is CSV."""
@@ -77,7 +79,7 @@ class TestSourceOverride:
     def test_extra_fields_forbidden(self) -> None:
         """Extra fields are rejected."""
         with pytest.raises(Exception):
-            SourceOverride(path="data.csv", extra="bad")
+            SourceOverride.model_validate({"path": "data.csv", "extra": "bad"})
 
 
 class TestTransformConfig:
@@ -115,4 +117,4 @@ class TestTransformConfig:
     def test_extra_fields_forbidden(self) -> None:
         """Extra fields are rejected."""
         with pytest.raises(Exception):
-            TransformConfig(recipe="test.py", extra="bad")
+            TransformConfig.model_validate({"recipe": "test.py", "extra": "bad"})

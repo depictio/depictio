@@ -134,7 +134,7 @@ def substitute_template_variables(config: Any, variables: dict[str, str]) -> Any
         return config
 
 
-def _strip_ids(config: dict[str, Any]) -> dict[str, Any]:
+def _strip_ids(config: Any) -> Any:
     """Remove hardcoded 'id' fields from config so fresh IDs are generated.
 
     Template project.yaml may contain example IDs that should not be reused
