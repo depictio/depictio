@@ -58,8 +58,10 @@ packages = [
   "depictio.api",
   "depictio.api.v1",
   "depictio.api.v1.configs",
+  "depictio.recipes",
 ]
 
 # Add explicit package data if needed
 [tool.setuptools.package-data]
 "depictio.cli" = ["*.yaml", "*.yml", "*.json"]
+"depictio.recipes" = ["**/*.py"]
