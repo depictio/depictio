@@ -118,8 +118,9 @@ plotly-complexheatmap = { path = "packages/plotly-complexheatmap", editable = tr
 requires = ["setuptools>=61", "wheel"]
 build-backend = "setuptools.build_meta"
 
-[tool.setuptools]
-packages = ["depictio"]
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["depictio*"]
 
 # [tool.mypy]
 # exclude = ["build/", "depictio/api/", "depictio/dash/"]
