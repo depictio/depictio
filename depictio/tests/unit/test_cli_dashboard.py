@@ -649,11 +649,12 @@ components: []
             permissions=sample_permission.model_dump(),
         )
 
-        # stored_layout_data should have one entry per component
-        assert len(dashboard.stored_layout_data) == len(dashboard.stored_metadata)
+        # Layout is now split: interactive → left panel, others → right panel
+        all_layout = dashboard.left_panel_layout_data + dashboard.right_panel_layout_data
+        assert len(all_layout) == len(dashboard.stored_metadata)
 
         # Each layout item should have position/size properties
-        for layout in dashboard.stored_layout_data:
+        for layout in all_layout:
             assert "i" in layout
             assert "x" in layout
             assert "y" in layout
