@@ -13,6 +13,9 @@ dependencies = [
     "litellm>=1.50",
     "pydantic>=2.0",
     "python-dotenv",
+    "langchain>=0.3",
+    "langchain-community>=0.3",
+    "langchain-experimental>=0.3",
 ]
 
 [build-system]

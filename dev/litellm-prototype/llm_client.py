@@ -1,4 +1,8 @@
-"""Provider-agnostic LLM client using LiteLLM with in-memory caching."""
+"""Provider-agnostic LLM client using LiteLLM with in-memory caching.
+
+Uses LangChain's pandas agent for data analysis — the LLM writes and
+executes real pandas code, with full execution trace for explainability.
+"""
 
 from __future__ import annotations
 
@@ -9,9 +13,12 @@ import os
 import time
 
 import litellm
+import pandas as pd
 from dotenv import load_dotenv
+from langchain_community.chat_models import ChatLiteLLM
+from langchain_experimental.agents.agent_toolkits import create_pandas_dataframe_agent
 
-from schemas import AnalysisResult, PlotSuggestion
+from schemas import AnalysisAgentResult, ExecutionStep, PlotSuggestion
 
 load_dotenv()
 logger = logging.getLogger(__name__)
@@ -137,73 +144,85 @@ IMPORTANT:
     return parsed
 
 
-def analyze_data(user_prompt: str, column_metadata: str, data_profile: str) -> AnalysisResult:
-    """Ask the LLM to analyze the dataset using pre-computed statistics.
+# ---------------------------------------------------------------------------
+# Analysis cache — same question + same data + same model → same result
+# ---------------------------------------------------------------------------
+_analysis_cache: dict[str, AnalysisAgentResult] = {}
 
-    The data_profile contains real pandas operations: describe(), corr(),
-    value_counts(), groupby().agg(), sample rows — so the LLM reasons
-    about actual computed numbers.
+
+def _analysis_cache_key(prompt: str, df: pd.DataFrame) -> str:
+    """Deterministic cache key from question + data content + model."""
+    df_hash = hashlib.sha256(
+        pd.util.hash_pandas_object(df).values.tobytes()
+    ).hexdigest()[:16]
+    return hashlib.sha256(
+        f"{prompt}:{df_hash}:{get_model()}".encode()
+    ).hexdigest()
+
+
+def analyze_data(user_prompt: str, df: pd.DataFrame) -> AnalysisAgentResult:
+    """Run LangChain pandas agent — the LLM writes + executes real pandas code.
+
+    Returns the final answer plus a full execution trace (thought → code → output)
+    for every step, enabling both explainability (UI accordion) and reproducibility
+    (cached by question + data hash + model).
     """
-    logger.info("═══ analyze_data() ═══")
-    logger.debug("─── Column Metadata ───")
-    logger.debug("%s", column_metadata)
-    logger.debug("─── Data Profile (%d chars) ───", len(data_profile))
-    logger.debug("%s", data_profile)
+    # Check cache first
+    cache_key = _analysis_cache_key(user_prompt, df)
+    if cache_key in _analysis_cache:
+        cached = _analysis_cache[cache_key]
+        logger.info("═══ Analysis Cache HIT ═══  key=%s  steps=%d", cache_key[:12], len(cached.steps))
+        return cached
 
-    system_prompt = f"""You are a data analyst. You have been given a dataset description and
-PRE-COMPUTED STATISTICS from real pandas operations (describe, correlations, value counts,
-group-by aggregations, and sample rows). Use these actual numbers to answer the user's question.
+    logger.info("═══ analyze_data() — LangChain pandas agent ═══")
+    logger.info("Question: %s", user_prompt)
+    logger.info("DataFrame: %d rows x %d cols  columns=%s", len(df), len(df.columns), list(df.columns))
 
-DATASET SCHEMA:
-{column_metadata}
+    t0 = time.perf_counter()
 
-PRE-COMPUTED DATA PROFILE:
-{data_profile}
+    # Create LangChain LLM backed by LiteLLM (provider-agnostic)
+    llm = ChatLiteLLM(model=get_model(), temperature=0)
 
-Base your analysis on the actual statistics above. Reference specific numbers, correlations,
-and group differences. Do not guess — use the computed values.
-
-Respond with valid JSON matching this exact schema:
-{{
-    "summary": "Markdown-formatted summary paragraph referencing actual statistics",
-    "key_findings": ["finding 1 with actual numbers", "finding 2 with actual numbers", ...],
-    "suggested_plots": [
-        {{
-            "visu_type": "scatter|bar|line|histogram|box|violin|heatmap",
-            "dict_kwargs": {{"x": "col", "y": "col", ...}},
-            "title": "Chart title",
-            "explanation": "Why this plot"
-        }}
-    ] or null
-}}
-
-IMPORTANT:
-- key_findings should be 3-6 concise bullet points with actual numbers from the profile
-- suggested_plots is optional — include only if relevant visualizations would help
-- Column names must match the dataset exactly
-- Respond with ONLY the JSON object, no markdown fences or extra text"""
-
-    messages = [
-        {"role": "system", "content": system_prompt},
-        {"role": "user", "content": user_prompt},
-    ]
-
-    result = completion(messages, response_format=AnalysisResult)
-
-    if isinstance(result, str):
-        parsed = AnalysisResult.model_validate_json(result)
-    else:
-        parsed = AnalysisResult.model_validate(result)
-
-    n_plots = len(parsed.suggested_plots) if parsed.suggested_plots else 0
-    logger.info(
-        "═══ Parsed: AnalysisResult ═══  summary=%d chars | findings=%d | suggested_plots=%d",
-        len(parsed.summary),
-        len(parsed.key_findings),
-        n_plots,
+    # Create pandas agent — it gets a Python REPL with `df` in scope
+    agent = create_pandas_dataframe_agent(
+        llm,
+        df,
+        agent_type="zero-shot-react-description",
+        verbose=True,  # prints full ReAct chain to terminal
+        return_intermediate_steps=True,
+        allow_dangerous_code=True,  # required — we control the data
+        max_iterations=10,
     )
-    logger.info("─── Key Findings ───")
-    for i, finding in enumerate(parsed.key_findings, 1):
-        logger.info("  %d. %s", i, finding)
 
-    return parsed
+    result = agent.invoke({"input": user_prompt})
+    elapsed = time.perf_counter() - t0
+
+    # Extract execution trace from intermediate steps
+    steps = []
+    for action, observation in result.get("intermediate_steps", []):
+        # action is an AgentAction with .tool_input and .log
+        code = action.tool_input if isinstance(action.tool_input, str) else action.tool_input.get("query", str(action.tool_input))
+        steps.append(ExecutionStep(
+            thought=action.log.strip(),
+            code=code,
+            output=str(observation).strip(),
+        ))
+
+    agent_result = AnalysisAgentResult(
+        answer=result["output"],
+        steps=steps,
+    )
+
+    # Log summary
+    logger.info("═══ Agent complete (%.1fs) — %d steps ═══", elapsed, len(steps))
+    for i, step in enumerate(steps, 1):
+        logger.info("─── Step %d ───", i)
+        logger.info("  Code: %s", step.code)
+        logger.info("  Output: %s", step.output[:200] + ("..." if len(step.output) > 200 else ""))
+    logger.info("─── Final Answer ───")
+    logger.info("  %s", agent_result.answer[:500])
+
+    # Cache for reproducibility
+    _analysis_cache[cache_key] = agent_result
+
+    return agent_result

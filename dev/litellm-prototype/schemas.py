@@ -32,10 +32,25 @@ class CardSuggestion(BaseModel):
 
 
 class AnalysisResult(BaseModel):
-    """Structured output for data analysis."""
+    """Structured output for data analysis (legacy — kept for reference)."""
 
     summary: str = Field(description="Markdown-formatted summary of the analysis")
     key_findings: list[str] = Field(description="List of key findings as bullet points")
     suggested_plots: list[PlotSuggestion] | None = Field(
         default=None, description="Optional list of suggested visualizations"
     )
+
+
+class ExecutionStep(BaseModel):
+    """A single step in the LangChain pandas agent's execution trace."""
+
+    thought: str = Field(description="The agent's reasoning for this step")
+    code: str = Field(description="The pandas code that was executed")
+    output: str = Field(description="The result of executing the code")
+
+
+class AnalysisAgentResult(BaseModel):
+    """Result from the LangChain pandas agent — answer + full execution trace."""
+
+    answer: str = Field(description="Final natural-language answer from the agent")
+    steps: list[ExecutionStep] = Field(description="Ordered list of code execution steps")

@@ -17,12 +17,12 @@ from dash import Dash, Input, Output, State, callback, ctx, dcc, html, no_update
 from dash_iconify import DashIconify
 
 import llm_client
-from components.ai_panel import create_ai_component_creator, create_ai_data_analyst
+from components.ai_panel import create_ai_component_creator, create_ai_data_analyst, render_execution_trace
 from components.cards import create_stat_card
 from components.figures import create_figure
 from components.interactive import create_multiselect, create_range_slider, create_select
 from components.tables import create_table
-from sample_data import DATASETS, compute_data_profile, get_column_metadata
+from sample_data import DATASETS, get_column_metadata
 
 logging.basicConfig(
     level=logging.DEBUG,
@@ -399,63 +399,12 @@ def run_ai_analysis(n_clicks, user_prompt, dataset_key):
 
     try:
         df = load_dataset(dataset_key)
-        metadata = get_column_metadata(df)
-        data_profile = compute_data_profile(df)
 
-        result = llm_client.analyze_data(user_prompt, metadata, data_profile)
+        # LangChain pandas agent — writes + executes real pandas code
+        result = llm_client.analyze_data(user_prompt, df)
 
-        # Build results display
-        findings_list = dmc.List(
-            [dmc.ListItem(f) for f in result.key_findings],
-            size="sm",
-            spacing="xs",
-        )
-
-        results = dmc.Stack(
-            [
-                dmc.Alert(
-                    children=dmc.Text(result.summary, size="sm"),
-                    title="Summary",
-                    color="teal",
-                    variant="light",
-                ),
-                dmc.Paper(
-                    dmc.Stack(
-                        [
-                            dmc.Text("Key Findings", size="md", fw=600),
-                            findings_list,
-                        ],
-                        gap="xs",
-                    ),
-                    withBorder=True,
-                    p="md",
-                    radius="md",
-                ),
-            ],
-            gap="sm",
-        )
-
-        # Add suggested plots if any
-        if result.suggested_plots:
-            plot_previews = []
-            for i, sp in enumerate(result.suggested_plots[:3]):  # max 3
-                try:
-                    plot_previews.append(
-                        create_figure(df, sp.visu_type, sp.dict_kwargs, title=sp.title, graph_id=f"analysis-plot-{i}")
-                    )
-                except Exception:
-                    pass
-
-            if plot_previews:
-                results.children.append(
-                    dmc.Stack(
-                        [dmc.Text("Suggested Visualizations", size="md", fw=600)]
-                        + plot_previews,
-                        gap="sm",
-                    )
-                )
-
-        return results
+        # Render answer + collapsible execution trace
+        return render_execution_trace(result)
 
     except Exception as e:
         logging.error("AI analysis failed: %s", traceback.format_exc())

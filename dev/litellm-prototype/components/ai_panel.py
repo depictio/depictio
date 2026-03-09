@@ -6,6 +6,8 @@ import dash_mantine_components as dmc
 from dash import dcc, html
 from dash_iconify import DashIconify
 
+from schemas import AnalysisAgentResult
+
 
 def create_ai_component_creator() -> dmc.Paper:
     """Panel for AI-assisted plot/component creation."""
@@ -69,6 +71,69 @@ def create_ai_component_creator() -> dmc.Paper:
     )
 
 
+def render_execution_trace(result: AnalysisAgentResult) -> dmc.Stack:
+    """Render the agent's answer + collapsible execution trace (thought → code → output)."""
+    # Final answer
+    answer_section = dmc.Alert(
+        children=dmc.Text(result.answer, size="sm"),
+        title="Answer",
+        color="teal",
+        variant="light",
+    )
+
+    # Build accordion items for each execution step
+    if result.steps:
+        accordion_items = []
+        for i, step in enumerate(result.steps, 1):
+            item_content = dmc.Stack(
+                [
+                    # Thought
+                    dmc.Text("Thought", size="xs", fw=600, c="dimmed"),
+                    dmc.Text(step.thought, size="sm"),
+                    # Code
+                    dmc.Text("Code", size="xs", fw=600, c="dimmed"),
+                    dmc.Code(step.code, block=True),
+                    # Output
+                    dmc.Text("Output", size="xs", fw=600, c="dimmed"),
+                    dmc.Code(step.output, block=True),
+                ],
+                gap=4,
+            )
+            accordion_items.append(
+                dmc.AccordionItem(
+                    [
+                        dmc.AccordionControl(f"Step {i}: {step.code[:60]}{'...' if len(step.code) > 60 else ''}"),
+                        dmc.AccordionPanel(item_content),
+                    ],
+                    value=f"step-{i}",
+                )
+            )
+
+        trace_section = dmc.Paper(
+            dmc.Stack(
+                [
+                    dmc.Text(
+                        f"Execution Trace ({len(result.steps)} steps)",
+                        size="md",
+                        fw=600,
+                    ),
+                    dmc.Accordion(
+                        accordion_items,
+                        variant="separated",
+                    ),
+                ],
+                gap="xs",
+            ),
+            withBorder=True,
+            p="md",
+            radius="md",
+        )
+    else:
+        trace_section = dmc.Text("No execution steps recorded.", size="sm", c="dimmed")
+
+    return dmc.Stack([answer_section, trace_section], gap="sm")
+
+
 def create_ai_data_analyst() -> dmc.Paper:
     """Panel for AI-assisted data analysis."""
     return dmc.Paper(
@@ -82,7 +147,8 @@ def create_ai_data_analyst() -> dmc.Paper:
                     gap="xs",
                 ),
                 dmc.Text(
-                    "Ask questions about your data and get structured analysis with key findings.",
+                    "Ask questions about your data — the AI writes and runs real pandas code, "
+                    "then shows you every step.",
                     size="sm",
                     c="dimmed",
                 ),
