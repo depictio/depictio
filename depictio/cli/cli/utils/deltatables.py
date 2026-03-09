@@ -1,3 +1,4 @@
+import os
 from datetime import datetime
 
 import polars as pl
@@ -73,6 +74,21 @@ def fetch_file_data(dc_id: str, CLI_config: CLIConfig) -> list[File]:
             error_msg
         )  # Changed from ERROR to DEBUG - this is expected for some data collection types
         raise Exception(error_msg)
+
+    # Filter out stale file records whose paths no longer exist locally
+    # (happens when re-running with a different template or data_root)
+    valid_files_data = []
+    for fd in files_data:
+        loc = fd.get("file_location", "")
+        if os.path.exists(loc):
+            valid_files_data.append(fd)
+        else:
+            logger.warning(f"Skipping stale file record (path does not exist): {loc}")
+    if not valid_files_data:
+        error_msg = f"No valid files found for Data Collection {dc_id} (all file paths are stale)."
+        logger.error(error_msg)
+        raise Exception(error_msg)
+    files_data = valid_files_data
 
     files = convert_to_file_objects(files_data)
 
