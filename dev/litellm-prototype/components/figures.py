@@ -42,6 +42,22 @@ def create_figure(
         else:
             safe_kwargs[k] = v
 
+    # Guard: px functions need at least x (or y for histogram) to avoid
+    # wide-form fallback on mixed-type DataFrames.
+    needs_x = visu_type not in ("histogram",)
+    if needs_x and "x" not in safe_kwargs:
+        numeric_cols = df.select_dtypes(include="number").columns.tolist()
+        if len(numeric_cols) >= 2:
+            safe_kwargs.setdefault("x", numeric_cols[0])
+            safe_kwargs.setdefault("y", numeric_cols[1])
+        elif numeric_cols:
+            safe_kwargs["x"] = numeric_cols[0]
+
+    if visu_type == "histogram" and "x" not in safe_kwargs and "y" not in safe_kwargs:
+        numeric_cols = df.select_dtypes(include="number").columns.tolist()
+        if numeric_cols:
+            safe_kwargs["x"] = numeric_cols[0]
+
     fig = plot_fn(df, **safe_kwargs)
     if title:
         fig.update_layout(title=title)

@@ -118,6 +118,7 @@ Respond with valid JSON matching this exact schema:
 }}
 
 IMPORTANT:
+- dict_kwargs MUST NOT be empty — always include at least "x" (and "y" for scatter/line/bar)
 - dict_kwargs must only contain valid Plotly Express parameter names (x, y, color, size, facet_col, facet_row, etc.)
 - Column names in dict_kwargs MUST match the dataset columns exactly
 - Do NOT include the DataFrame as a parameter — only column mappings
