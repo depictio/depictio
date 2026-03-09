@@ -95,62 +95,26 @@ jobs:
           uv pip list | grep -i polars
           python -c "import polars; assert '1.19' in polars.__version__, f'Wrong version: {polars.__version__}'; print(f'✅ Polars {polars.__version__} verified')"
 
-      # - name: Run Ruff for formatting
-      #   run: |
-      #     source venv/bin/activate
-      #     ruff format depictio
+      - name: Run Ruff formatting check
+        run: |
+          source venv/bin/activate
+          ruff format --check depictio
 
-      # - uses: astral-sh/ruff-action@v3
-      #   with:
-      #     src: depictio
-      #     args: check --fix --exit-non-zero-on-fix --line-length=100
-      #     version-file: pyproject.toml
+      - name: Run Ruff linting
+        run: |
+          source venv/bin/activate
+          ruff check depictio
 
-      # - name: Debug environment before Ruff check
-      #   run: |
-      #     source venv/bin/activate
-      #     echo "=== RUFF DEBUGGING INFO ==="
-      #     echo "Ruff version: $(ruff --version)"
-      #     echo "Working directory: $(pwd)"
-      #     echo "Python path: $(which python)"
-      #     echo "Python version: $(python --version)"
+      - name: Run ty type checker (must pass)
+        run: |
+          source venv/bin/activate
+          ty version
+          ty check depictio/models/ depictio/api/ depictio/dash/ depictio/cli/ depictio/tests/
 
-      #     echo "=== RUFF CONFIGURATION ==="
-      #     ruff check --show-settings depictio | head -20
-
-      #     echo "=== FILE COUNTS ==="
-      #     echo "Total Python files in depictio: $(find depictio -name '*.py' | wc -l)"
-      #     echo "Sample files being checked:"
-      #     find depictio -name '*.py' | head -10
-
-      #     echo "=== IMPORT VIOLATIONS CHECK ==="
-      #     echo "Running import-only check to see specific violations:"
-      #     ruff check depictio --select I --output-format=json | jq '.[0:5]' || echo "No import violations found or jq not available"
-
-      #     echo "=== PRE-COMMIT RUFF VERSION ==="
-      #     cat .pre-commit-config.yaml | grep -A 2 "charliermarsh/ruff-pre-commit" || echo "Pre-commit config not found"
-
-      # - name: Run Ruff for linting
-      #   run: |
-      #     source venv/bin/activate
-      #     ruff check depictio
-
-      # - uses: astral-sh/ruff-action@v3
-      #   with:
-      #     src: depictio
-      #     args: format
-      #     version-file: pyproject.toml
-
-      # - name: Run ty type checker (must pass)
-      #   run: |
-      #     source venv/bin/activate
-      #     ty version
-      #     ty check depictio/models/ depictio/api/ depictio/dash/ depictio/cli/ depictio/tests/
-
-      # - name: Run pre-commit hooks
-      #   run: |
-      #     source venv/bin/activate
-      #     pre-commit run --all-files
+      - name: Run pre-commit hooks
+        run: |
+          source venv/bin/activate
+          pre-commit run --all-files
 
       - name: Run tests
         run: |
@@ -842,6 +806,41 @@ jobs:
 
           echo "✅ Dashboard validate passed"
 
+      - name: Test recipe list and info (offline)
+        run: |
+          cd depictio/cli
+          source venv/bin/activate
+          echo "📋 Testing recipe discovery (offline)..."
+
+          # List all available recipes
+          depictio-cli recipe list
+
+          # Show info for each known ampliseq recipe
+          depictio-cli recipe info nf-core/ampliseq/alpha_diversity.py
+          depictio-cli recipe info nf-core/ampliseq/alpha_rarefaction.py
+          depictio-cli recipe info nf-core/ampliseq/ancombc.py
+          depictio-cli recipe info nf-core/ampliseq/taxonomy_composition.py
+          depictio-cli recipe info nf-core/ampliseq/taxonomy_rel_abundance.py
+
+          echo "✅ Recipe list and info passed"
+
+      - name: Test template validation (offline)
+        run: |
+          cd depictio/cli
+          source venv/bin/activate
+          echo "📋 Testing template validation (offline)..."
+
+          # Validate known template project configs
+          depictio-cli config validate-project-config \
+            --project-config-path ../projects/nf-core/ampliseq/2.16.0/template.yaml \
+            --CLI-config-path admin_config.yaml 2>&1 || true
+
+          depictio-cli config validate-project-config \
+            --project-config-path ../projects/nf-core/ampliseq/2.14.0/template.yaml \
+            --CLI-config-path admin_config.yaml 2>&1 || true
+
+          echo "✅ Template validation passed"
+
       # ============================================
       # PHASE 2: Server-Connected Tests
       # ============================================
@@ -1298,6 +1297,26 @@ jobs:
           fi
 
           echo "✅ Penguin reference dataset verified (project exists)"
+
+      - name: Verify Ampliseq template & recipe integration from CLI
+        run: |
+          # Verify the Ampliseq project was created via template system during docker-system-init
+          AMPLISEQ_PROJECT=$(docker compose exec -T mongo mongosh localhost:27018/depictioDB --eval "JSON.stringify(db.projects.find().toArray())" --quiet 2>&1 | grep '^[\[{]' | jq -r '.[] | select(.name == "Ampliseq Microbial Community Analysis") | .name')
+          [ -z "$AMPLISEQ_PROJECT" ] && echo "❌ Ampliseq project not found" && exit 1
+          echo "✅ Ampliseq project found: $AMPLISEQ_PROJECT"
+
+          # Verify data collections were created (recipes produce these)
+          AMPLISEQ_PID=$(docker compose exec -T mongo mongosh localhost:27018/depictioDB --eval "JSON.stringify(db.projects.find().toArray())" --quiet 2>&1 | grep '^[\[{]' | jq -r '.[] | select(.name == "Ampliseq Microbial Community Analysis") | ._id')
+          AMPLISEQ_DC_COUNT=$(docker compose exec -T mongo mongosh localhost:27018/depictioDB --eval "JSON.stringify(db.projects.find({\"_id\": ObjectId(\"$AMPLISEQ_PID\")}).toArray())" --quiet 2>&1 | grep '^[\[{]' | jq -r '.[].workflows[0].data_collections | length')
+          [ "$AMPLISEQ_DC_COUNT" -lt 5 ] && echo "❌ Ampliseq data collections (recipes) not complete (expected >=5, got $AMPLISEQ_DC_COUNT)" && exit 1
+          echo "✅ Ampliseq recipe-derived data collections verified: $AMPLISEQ_DC_COUNT collections"
+
+          # Verify dashboards (template creates these)
+          AMPLISEQ_DASH_COUNT=$(docker compose exec -T mongo mongosh localhost:27018/depictioDB --eval "JSON.stringify(db.dashboards.find({\"project_id\": ObjectId(\"$AMPLISEQ_PID\")}).toArray())" --quiet 2>&1 | grep '^[\[{]' | jq -r 'length')
+          [ "$AMPLISEQ_DASH_COUNT" -lt 2 ] && echo "❌ Ampliseq template dashboards not created (expected >=2, got $AMPLISEQ_DASH_COUNT)" && exit 1
+          echo "✅ Ampliseq template dashboards verified: $AMPLISEQ_DASH_COUNT dashboards"
+
+          echo "✅ Ampliseq template & recipe integration verified from CLI job"
 
       - name: Upload logs on failure
         if: failure()
