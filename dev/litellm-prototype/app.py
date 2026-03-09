@@ -13,7 +13,7 @@ import traceback
 import dash_mantine_components as dmc
 import pandas as pd
 import plotly.express as px
-from dash import Dash, Input, Output, State, callback, ctx, dcc, html, no_update
+from dash import ClientsideFunction, Dash, Input, Output, State, callback, ctx, dcc, html, no_update
 from dash_iconify import DashIconify
 
 import llm_client
@@ -190,6 +190,8 @@ app.layout = dmc.MantineProvider(
                             ),
                             # Dynamic AI-generated figures area
                             html.Div(id="ai-generated-figures"),
+                            # Hidden div for step filter clientside callback
+                            html.Div(id="step-filter-output", style={"display": "none"}),
                         ],
                         gap="lg",
                         pt="md",
@@ -203,6 +205,17 @@ app.layout = dmc.MantineProvider(
         padding="md",
     ),
     forceColorScheme="light",
+)
+
+
+# ---------------------------------------------------------------------------
+# Clientside callback: filter execution trace steps
+# ---------------------------------------------------------------------------
+app.clientside_callback(
+    ClientsideFunction(namespace="step_filter", function_name="filter_steps"),
+    Output("step-filter-output", "children"),
+    Input("analysis-step-filter", "value"),
+    prevent_initial_call=True,
 )
 
 
@@ -403,8 +416,8 @@ def run_ai_analysis(n_clicks, user_prompt, dataset_key):
         # LangChain pandas agent — writes + executes real pandas code
         result = llm_client.analyze_data(user_prompt, df)
 
-        # Render answer + collapsible execution trace
-        return render_execution_trace(result)
+        # Render answer + collapsible execution trace with column highlighting
+        return render_execution_trace(result, columns=list(df.columns))
 
     except Exception as e:
         logging.error("AI analysis failed: %s", traceback.format_exc())

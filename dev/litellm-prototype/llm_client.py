@@ -219,6 +219,14 @@ def analyze_data(user_prompt: str, df: pd.DataFrame) -> AnalysisAgentResult:
         allow_dangerous_code=True,  # required — we control the data
         handle_parsing_errors=True,  # recover when LLM skips Action:/Action Input: format
         max_iterations=10,
+        prefix=(
+            "You are a data analysis expert working with a pandas DataFrame called `df`.\n"
+            "When providing your Final Answer:\n"
+            "- Include specific numbers and statistics (exact values, not vague descriptions)\n"
+            "- Reference column names exactly as they appear in the DataFrame\n"
+            "- Structure findings clearly: lead with the key insight, then supporting details\n"
+            "- If there are multiple findings, number them\n"
+        ),
     )
 
     result = agent.invoke({"input": user_prompt})
