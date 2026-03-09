@@ -705,6 +705,7 @@ def process_recipe_data_collection(
     """
     try:
         from depictio.recipes import RecipeError, execute_recipe
+        from depictio.recipes import load_recipe as _load_recipe
     except ModuleNotFoundError:
         # Fallback: import from source tree when package isn't installed with sub-packages
         import importlib.util
@@ -716,6 +717,7 @@ def process_recipe_data_collection(
         _spec.loader.exec_module(_mod)
         RecipeError = _mod.RecipeError
         execute_recipe = _mod.execute_recipe
+        _load_recipe = _mod.load_recipe
 
     transform_config = data_collection.config.transform
     if transform_config is None:
@@ -743,8 +745,6 @@ def process_recipe_data_collection(
     # Resolve dc_ref sources: load referenced DCs from their Delta tables
     extra_sources: dict[str, pl.DataFrame] | None = None
     try:
-        from depictio.recipes import load_recipe as _load_recipe
-
         recipe_module = _load_recipe(recipe_name)
         dc_ref_sources = [s for s in recipe_module.SOURCES if s.dc_ref is not None]
 
