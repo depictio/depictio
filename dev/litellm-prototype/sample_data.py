@@ -81,3 +81,63 @@ def get_column_metadata(df: pd.DataFrame) -> str:
             stats = f"unique={uniq}, examples={examples}"
         lines.append(f"  - {col} ({dtype}): {stats}")
     return f"Columns ({len(df)} rows):\n" + "\n".join(lines)
+
+
+def compute_data_profile(df: pd.DataFrame) -> str:
+    """Run real pandas operations and return a comprehensive text profile.
+
+    This gives the LLM actual computed statistics to reason about,
+    not just metadata. All operations are logged to the terminal.
+    """
+    import logging
+
+    logger = logging.getLogger("data_profile")
+    sections = []
+
+    # --- 1. Shape & dtypes ---
+    logger.info("─── Computing: shape & dtypes ───")
+    sections.append(f"SHAPE: {df.shape[0]} rows x {df.shape[1]} columns")
+
+    # --- 2. df.describe() for numeric columns ---
+    numeric_cols = df.select_dtypes(include="number").columns.tolist()
+    if numeric_cols:
+        logger.info("─── Computing: df.describe() on %s ───", numeric_cols)
+        desc = df[numeric_cols].describe().round(3)
+        sections.append(f"DESCRIPTIVE STATISTICS (numeric):\n{desc.to_string()}")
+
+        # --- 3. Correlation matrix ---
+        if len(numeric_cols) >= 2:
+            logger.info("─── Computing: df[%s].corr() ───", numeric_cols)
+            corr = df[numeric_cols].corr().round(3)
+            sections.append(f"CORRELATION MATRIX:\n{corr.to_string()}")
+
+        # --- 4. Null counts ---
+        logger.info("─── Computing: df.isnull().sum() ───")
+        nulls = df[numeric_cols].isnull().sum()
+        if nulls.any():
+            sections.append(f"NULL COUNTS:\n{nulls.to_string()}")
+        else:
+            sections.append("NULL COUNTS: none")
+
+    # --- 5. Categorical columns: value counts ---
+    cat_cols = df.select_dtypes(include=["object", "category"]).columns.tolist()
+    for col in cat_cols:
+        logger.info("─── Computing: df['%s'].value_counts() ───", col)
+        vc = df[col].value_counts()
+        sections.append(f"VALUE COUNTS for '{col}':\n{vc.to_string()}")
+
+    # --- 6. Group-by stats (categorical × numeric) ---
+    if cat_cols and numeric_cols:
+        for cat_col in cat_cols[:2]:  # max 2 categorical columns
+            logger.info("─── Computing: df.groupby('%s')[%s].agg(['mean','std','count']) ───", cat_col, numeric_cols)
+            grouped = df.groupby(cat_col)[numeric_cols].agg(["mean", "std", "count"]).round(3)
+            sections.append(f"GROUP-BY '{cat_col}' STATISTICS:\n{grouped.to_string()}")
+
+    # --- 7. Sample rows ---
+    logger.info("─── Computing: df.head(5) + df.tail(5) ───")
+    sections.append(f"FIRST 5 ROWS:\n{df.head(5).to_string(index=False)}")
+    sections.append(f"LAST 5 ROWS:\n{df.tail(5).to_string(index=False)}")
+
+    profile = "\n\n".join(sections)
+    logger.info("─── Data profile complete: %d chars ───", len(profile))
+    return profile

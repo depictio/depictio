@@ -22,7 +22,7 @@ from components.cards import create_stat_card
 from components.figures import create_figure
 from components.interactive import create_multiselect, create_range_slider, create_select
 from components.tables import create_table
-from sample_data import DATASETS, get_column_metadata
+from sample_data import DATASETS, compute_data_profile, get_column_metadata
 
 logging.basicConfig(
     level=logging.DEBUG,
@@ -400,9 +400,9 @@ def run_ai_analysis(n_clicks, user_prompt, dataset_key):
     try:
         df = load_dataset(dataset_key)
         metadata = get_column_metadata(df)
-        sample_rows = df.head(5).to_string(index=False)
+        data_profile = compute_data_profile(df)
 
-        result = llm_client.analyze_data(user_prompt, metadata, sample_rows)
+        result = llm_client.analyze_data(user_prompt, metadata, data_profile)
 
         # Build results display
         findings_list = dmc.List(

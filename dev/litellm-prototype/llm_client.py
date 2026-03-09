@@ -137,27 +137,36 @@ IMPORTANT:
     return parsed
 
 
-def analyze_data(user_prompt: str, column_metadata: str, sample_rows: str) -> AnalysisResult:
-    """Ask the LLM to analyze the dataset."""
+def analyze_data(user_prompt: str, column_metadata: str, data_profile: str) -> AnalysisResult:
+    """Ask the LLM to analyze the dataset using pre-computed statistics.
+
+    The data_profile contains real pandas operations: describe(), corr(),
+    value_counts(), groupby().agg(), sample rows — so the LLM reasons
+    about actual computed numbers.
+    """
     logger.info("═══ analyze_data() ═══")
     logger.debug("─── Column Metadata ───")
     logger.debug("%s", column_metadata)
-    logger.debug("─── Sample Rows ───")
-    logger.debug("%s", sample_rows)
+    logger.debug("─── Data Profile (%d chars) ───", len(data_profile))
+    logger.debug("%s", data_profile)
 
-    system_prompt = f"""You are a data analyst. Given a dataset description and sample rows,
-answer the user's question with structured analysis.
+    system_prompt = f"""You are a data analyst. You have been given a dataset description and
+PRE-COMPUTED STATISTICS from real pandas operations (describe, correlations, value counts,
+group-by aggregations, and sample rows). Use these actual numbers to answer the user's question.
 
-DATASET:
+DATASET SCHEMA:
 {column_metadata}
 
-SAMPLE ROWS (first 5):
-{sample_rows}
+PRE-COMPUTED DATA PROFILE:
+{data_profile}
+
+Base your analysis on the actual statistics above. Reference specific numbers, correlations,
+and group differences. Do not guess — use the computed values.
 
 Respond with valid JSON matching this exact schema:
 {{
-    "summary": "Markdown-formatted summary paragraph",
-    "key_findings": ["finding 1", "finding 2", ...],
+    "summary": "Markdown-formatted summary paragraph referencing actual statistics",
+    "key_findings": ["finding 1 with actual numbers", "finding 2 with actual numbers", ...],
     "suggested_plots": [
         {{
             "visu_type": "scatter|bar|line|histogram|box|violin|heatmap",
@@ -169,7 +178,7 @@ Respond with valid JSON matching this exact schema:
 }}
 
 IMPORTANT:
-- key_findings should be 3-6 concise bullet points
+- key_findings should be 3-6 concise bullet points with actual numbers from the profile
 - suggested_plots is optional — include only if relevant visualizations would help
 - Column names must match the dataset exactly
 - Respond with ONLY the JSON object, no markdown fences or extra text"""
