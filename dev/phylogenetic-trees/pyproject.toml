@@ -1,0 +1,22 @@
+[project]
+name = "depictio-phylogenetic-prototypes"
+version = "0.1.0"
+description = "Phylogenetic tree visualization prototypes for depictio"
+requires-python = ">=3.11"
+dependencies = [
+    "dash>=3.2.0",
+    "dash-mantine-components>=2.1.0",
+    "dash-iconify>=0.1.2",
+    "dash-cytoscape>=1.0.2",
+    "pandas>=2.0",
+    "plotly>=5.0",
+    "biopython>=1.80",
+    "dash-phylotree",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.uv.sources]
+dash-phylotree = { path = "../../packages/dash-phylotree", editable = true }
