@@ -49,6 +49,13 @@ SAMPLE_TREES = {
     "Simple example": "((A:0.1,B:0.2):0.3,(C:0.4,(D:0.5,E:0.6):0.1):0.2);",
 }
 
+# Add nf-core pipeline trees if downloaded (see download_nfcore_trees.sh)
+NFCORE_DIR = DATA_DIR / "nfcore"
+if (NFCORE_DIR / "ampliseq_tree.nwk").exists():
+    SAMPLE_TREES["ampliseq (nf-core)"] = (NFCORE_DIR / "ampliseq_tree.nwk").read_text().strip()
+if (NFCORE_DIR / "viralrecon_tree.nwk").exists():
+    SAMPLE_TREES["viralrecon (nf-core)"] = (NFCORE_DIR / "viralrecon_tree.nwk").read_text().strip()
+
 PLOTLY_LAYOUTS = [
     {"value": "rectangular", "label": "Rectangular"},
     {"value": "circular", "label": "Circular"},
