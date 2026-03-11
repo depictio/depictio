@@ -1,9 +1,11 @@
 """
-Hi-C Contact Map Viewer — Dash application with DMC 2.0+ controls.
+Hi-C Contact Map Browser — JBrowse-style Dash application.
 
-A standalone prototype for visualizing Hi-C contact maps using Plotly.
-Supports loading .cool/.mcool files from nf-core/hic pipeline results
-or generating synthetic demo data.
+A genome browser-style viewer for Hi-C contact maps with:
+- Navigation bar: chromosome, position, zoom in/out, pan left/right
+- Hi-C heatmap with optional upper-triangle view
+- Linear genome ruler track below the heatmap
+- Interactive zoom via Plotly relayout events
 
 Run:
     python app.py
@@ -17,15 +19,14 @@ import argparse
 import os
 
 import dash_mantine_components as dmc
-from dash import Dash, Input, Output, State, callback, dcc
+from dash import Dash, Input, Output, State, callback, ctx, dcc
 from hic_data import (
-    HiCData,
     generate_synthetic_hic,
     list_cool_chroms,
     list_mcool_resolutions,
     load_cool_matrix,
 )
-from hic_figure import DEFAULT_COLORSCALE, HIC_COLORSCALES, create_contact_map_figure
+from hic_figure import DEFAULT_COLORSCALE, HIC_COLORSCALES, create_browser_figure
 
 # ---------------------------------------------------------------------------
 # App initialization
@@ -36,167 +37,198 @@ app = Dash(
     external_stylesheets=[dmc.styles.ALL],
     suppress_callback_exceptions=True,
 )
-app.title = "Hi-C Contact Map Viewer"
-
-
-# ---------------------------------------------------------------------------
-# Global state for file path (set via CLI args)
-# ---------------------------------------------------------------------------
+app.title = "Hi-C Contact Map Browser"
 
 COOL_FILE_PATH: str | None = None
-
-
-def get_initial_data() -> HiCData:
-    """Load initial data from file or generate synthetic."""
-    if COOL_FILE_PATH and os.path.exists(COOL_FILE_PATH):
-        chroms = list_cool_chroms(COOL_FILE_PATH)
-        # Pick first autosome
-        chrom = next((c for c in chroms if c.startswith("chr") and c[3:].isdigit()), chroms[0])
-        resolution = None
-        if COOL_FILE_PATH.endswith(".mcool"):
-            resolutions = list_mcool_resolutions(COOL_FILE_PATH)
-            resolution = resolutions[len(resolutions) // 2]  # Mid resolution
-        return load_cool_matrix(COOL_FILE_PATH, chrom, resolution)
-    return generate_synthetic_hic()
-
 
 # ---------------------------------------------------------------------------
 # Layout
 # ---------------------------------------------------------------------------
 
 
-def build_controls() -> dmc.Paper:
-    """Build the left sidebar with all controls."""
+def build_navbar() -> dmc.Paper:
+    """JBrowse-style navigation bar."""
     return dmc.Paper(
-        shadow="sm",
-        p="md",
+        shadow="xs",
+        p="xs",
         radius="md",
-        children=dmc.Stack(
-            gap="md",
+        mb="sm",
+        children=dmc.Group(
+            gap="sm",
+            wrap="nowrap",
             children=[
-                dmc.Title("Hi-C Contact Map", order=3),
-                dmc.Text(
-                    "Interactive viewer for chromosome conformation data", size="sm", c="dimmed"
-                ),
                 # Data source
-                dmc.Divider(label="Data Source", labelPosition="center"),
                 dmc.Select(
                     id="data-source-select",
-                    label="Source",
                     data=[
-                        {"value": "synthetic", "label": "Synthetic demo data"},
-                        {"value": "file", "label": "Cool/mcool file"},
+                        {"value": "synthetic", "label": "Synthetic"},
+                        {"value": "file", "label": "File"},
                     ],
                     value="file" if COOL_FILE_PATH else "synthetic",
+                    w=110,
+                    size="sm",
                 ),
                 dmc.TextInput(
                     id="file-path-input",
-                    label="File path",
-                    placeholder="/path/to/matrix.cool or .mcool",
+                    placeholder="path/to/file.cool",
                     value=COOL_FILE_PATH or "",
+                    w=200,
+                    size="sm",
                     style={"display": "block" if COOL_FILE_PATH else "none"},
                 ),
+                dmc.Divider(orientation="vertical", h=30),
                 # Chromosome
-                dmc.Divider(label="Region", labelPosition="center"),
                 dmc.Select(
                     id="chrom-select",
-                    label="Chromosome",
                     data=[],
                     searchable=True,
+                    w=130,
+                    size="sm",
+                    placeholder="Chromosome",
                 ),
-                # Resolution
+                # Resolution (for mcool)
                 dmc.Select(
                     id="resolution-select",
-                    label="Resolution",
                     data=[],
+                    w=100,
+                    size="sm",
+                    placeholder="Resolution",
                 ),
-                # Region range
-                dmc.Text("Genomic region (Mb)", size="sm", fw=500),
-                dmc.Group(
-                    gap="xs",
-                    children=[
-                        dmc.NumberInput(
-                            id="region-start-input",
-                            label="Start",
-                            value=0,
-                            min=0,
-                            step=1,
-                            suffix=" Mb",
-                            w=120,
-                        ),
-                        dmc.NumberInput(
-                            id="region-end-input",
-                            label="End",
-                            value=0,
-                            min=0,
-                            step=1,
-                            suffix=" Mb",
-                            w=120,
-                        ),
-                    ],
+                dmc.Divider(orientation="vertical", h=30),
+                # Position input
+                dmc.TextInput(
+                    id="position-input",
+                    placeholder="e.g. 50-100 (Mb)",
+                    w=140,
+                    size="sm",
                 ),
-                # Visualization
-                dmc.Divider(label="Visualization", labelPosition="center"),
+                # Navigation buttons
+                dmc.ActionIcon(
+                    dmc.Text("⟪", size="lg", fw=700),
+                    id="nav-far-left",
+                    variant="light",
+                    size="sm",
+                ),
+                dmc.ActionIcon(
+                    dmc.Text("◀", size="sm"),
+                    id="nav-left",
+                    variant="light",
+                    size="sm",
+                ),
+                dmc.ActionIcon(
+                    dmc.Text("▶", size="sm"),
+                    id="nav-right",
+                    variant="light",
+                    size="sm",
+                ),
+                dmc.ActionIcon(
+                    dmc.Text("⟫", size="lg", fw=700),
+                    id="nav-far-right",
+                    variant="light",
+                    size="sm",
+                ),
+                dmc.Divider(orientation="vertical", h=30),
+                # Zoom buttons
+                dmc.ActionIcon(
+                    dmc.Text("−", size="lg", fw=700),
+                    id="zoom-out",
+                    variant="light",
+                    color="blue",
+                    size="sm",
+                ),
+                dmc.ActionIcon(
+                    dmc.Text("+", size="lg", fw=700),
+                    id="zoom-in",
+                    variant="light",
+                    color="blue",
+                    size="sm",
+                ),
+                dmc.ActionIcon(
+                    dmc.Text("⊞", size="lg"),
+                    id="zoom-fit",
+                    variant="light",
+                    color="gray",
+                    size="sm",
+                ),
+            ],
+        ),
+    )
+
+
+def build_settings_drawer() -> dmc.Paper:
+    """Collapsible settings panel below navbar."""
+    return dmc.Paper(
+        shadow="xs",
+        p="xs",
+        radius="md",
+        mb="sm",
+        children=dmc.Group(
+            gap="md",
+            wrap="nowrap",
+            children=[
                 dmc.Select(
                     id="colorscale-select",
-                    label="Color scale",
+                    label="Color",
                     data=[{"value": k, "label": k} for k in HIC_COLORSCALES],
                     value=DEFAULT_COLORSCALE,
+                    w=140,
+                    size="xs",
                 ),
                 dmc.Switch(
                     id="log-scale-switch",
                     label="Log scale",
                     checked=True,
+                    size="xs",
                 ),
-                dmc.Text("Value cap percentile", size="sm", fw=500),
-                dmc.Slider(
-                    id="cap-percentile-slider",
+                dmc.Switch(
+                    id="upper-triangle-switch",
+                    label="Upper triangle",
+                    checked=False,
+                    size="xs",
+                ),
+                dmc.NumberInput(
+                    id="cap-percentile-input",
+                    label="Cap %ile",
                     value=99.5,
                     min=90,
                     max=100,
                     step=0.5,
-                    marks=[
-                        {"value": 90, "label": "90"},
-                        {"value": 95, "label": "95"},
-                        {"value": 100, "label": "100"},
-                    ],
+                    w=80,
+                    size="xs",
                 ),
-                # Synthetic data params
-                dmc.Divider(
-                    label="Synthetic Params", labelPosition="center", id="synthetic-divider"
-                ),
+                # Synthetic params (hidden when file mode)
                 dmc.NumberInput(
                     id="n-bins-input",
-                    label="Matrix size (bins)",
+                    label="Bins",
                     value=500,
                     min=50,
                     max=2000,
                     step=50,
+                    w=80,
+                    size="xs",
+                    style={"display": "none"},
                 ),
                 dmc.NumberInput(
                     id="n-tads-input",
-                    label="Number of TADs",
+                    label="TADs",
                     value=8,
                     min=1,
                     max=30,
                     step=1,
+                    w=70,
+                    size="xs",
+                    style={"display": "none"},
                 ),
                 dmc.NumberInput(
                     id="n-loops-input",
-                    label="Number of loops",
+                    label="Loops",
                     value=5,
                     min=0,
                     max=20,
                     step=1,
-                ),
-                # Load button
-                dmc.Button(
-                    "Render Contact Map",
-                    id="render-button",
-                    fullWidth=True,
-                    variant="filled",
-                    size="md",
-                    mt="md",
+                    w=70,
+                    size="xs",
+                    style={"display": "none"},
                 ),
             ],
         ),
@@ -204,57 +236,53 @@ def build_controls() -> dmc.Paper:
 
 
 def build_layout() -> dmc.MantineProvider:
-    """Build the full application layout."""
+    """Full application layout."""
     return dmc.MantineProvider(
         forceColorScheme="light",
         children=[
-            dcc.Store(id="hic-data-store", data=None),
+            # Stores
+            dcc.Store(id="view-store", data={"start_bp": 0, "end_bp": 0, "chrom_length": 0}),
+            dcc.Store(id="data-loaded-store", data=False),
             dmc.Container(
                 fluid=True,
-                p="md",
+                p="sm",
                 children=[
-                    dmc.Grid(
-                        gutter="md",
+                    # Navigation bar
+                    build_navbar(),
+                    # Settings bar
+                    build_settings_drawer(),
+                    # Main viewer
+                    dmc.Paper(
+                        shadow="sm",
+                        p="xs",
+                        radius="md",
                         children=[
-                            # Left controls
-                            dmc.GridCol(
-                                span=3,
-                                children=build_controls(),
-                            ),
-                            # Right: contact map
-                            dmc.GridCol(
-                                span=9,
-                                children=dmc.Paper(
-                                    shadow="sm",
-                                    p="md",
-                                    radius="md",
-                                    children=[
-                                        dcc.Loading(
-                                            children=dcc.Graph(
-                                                id="contact-map-graph",
-                                                config={
-                                                    "displayModeBar": True,
-                                                    "modeBarButtonsToAdd": [
-                                                        "drawrect",
-                                                        "eraseshape",
-                                                    ],
-                                                    "scrollZoom": True,
-                                                    "displaylogo": False,
-                                                },
-                                                style={"height": "80vh"},
-                                            ),
-                                            type="circle",
-                                        ),
-                                        # Info bar
-                                        dmc.Group(
-                                            mt="xs",
-                                            gap="lg",
-                                            children=[
-                                                dmc.Text(id="info-text", size="sm", c="dimmed"),
-                                            ],
-                                        ),
-                                    ],
+                            dcc.Loading(
+                                children=dcc.Graph(
+                                    id="browser-graph",
+                                    config={
+                                        "displayModeBar": True,
+                                        "modeBarButtonsToRemove": [
+                                            "lasso2d",
+                                            "select2d",
+                                        ],
+                                        "scrollZoom": True,
+                                        "displaylogo": False,
+                                        "doubleClick": "reset",
+                                    },
+                                    style={"height": "82vh"},
                                 ),
+                                type="circle",
+                            ),
+                            # Info bar
+                            dmc.Group(
+                                mt="xs",
+                                px="sm",
+                                gap="lg",
+                                children=[
+                                    dmc.Text(id="info-text", size="xs", c="dimmed"),
+                                    dmc.Text(id="position-text", size="xs", c="dimmed"),
+                                ],
                             ),
                         ],
                     ),
@@ -266,7 +294,6 @@ def build_layout() -> dmc.MantineProvider:
 
 app.layout = build_layout()
 
-
 # ---------------------------------------------------------------------------
 # Callbacks
 # ---------------------------------------------------------------------------
@@ -274,18 +301,20 @@ app.layout = build_layout()
 
 @callback(
     Output("file-path-input", "style"),
-    Output("synthetic-divider", "style"),
     Output("n-bins-input", "style"),
     Output("n-tads-input", "style"),
     Output("n-loops-input", "style"),
     Input("data-source-select", "value"),
 )
-def toggle_source_controls(source):
-    """Show/hide controls based on data source selection."""
+def toggle_source(source):
+    """Show/hide file vs synthetic controls."""
     is_file = source == "file"
-    file_style = {"display": "block"} if is_file else {"display": "none"}
-    synth_style = {"display": "none"} if is_file else {"display": "block"}
-    return file_style, synth_style, synth_style, synth_style, synth_style
+    return (
+        {"display": "block"} if is_file else {"display": "none"},
+        {"display": "none"} if is_file else {"display": "block"},
+        {"display": "none"} if is_file else {"display": "block"},
+        {"display": "none"} if is_file else {"display": "block"},
+    )
 
 
 @callback(
@@ -297,68 +326,91 @@ def toggle_source_controls(source):
     Input("file-path-input", "value"),
 )
 def update_metadata(source, file_path):
-    """Update chromosome and resolution dropdowns based on data source."""
+    """Populate chromosome and resolution dropdowns."""
     if source == "file" and file_path and os.path.exists(file_path):
         chroms = list_cool_chroms(file_path)
         chrom_data = [{"value": c, "label": c} for c in chroms]
         default_chrom = next(
             (c for c in chroms if c.startswith("chr") and c[3:].isdigit()), chroms[0]
         )
-
         res_data = []
         default_res = None
         if file_path.endswith(".mcool"):
             resolutions = list_mcool_resolutions(file_path)
-            res_data = [{"value": str(r), "label": _format_res(r)} for r in resolutions]
+            res_data = [{"value": str(r), "label": _fmt_res(r)} for r in resolutions]
             default_res = str(resolutions[len(resolutions) // 2])
-
         return chrom_data, default_chrom, res_data, default_res
 
-    # Synthetic: provide standard chromosome list
     chroms = [f"chr{i}" for i in range(1, 23)] + ["chrX"]
     chrom_data = [{"value": c, "label": c} for c in chroms]
     res_data = [
-        {"value": str(r), "label": _format_res(r)}
+        {"value": str(r), "label": _fmt_res(r)}
         for r in [10_000, 25_000, 50_000, 100_000, 250_000, 500_000, 1_000_000]
     ]
     return chrom_data, "chr1", res_data, "50000"
 
 
 @callback(
-    Output("contact-map-graph", "figure"),
+    Output("browser-graph", "figure"),
     Output("info-text", "children"),
-    Input("render-button", "n_clicks"),
+    Output("position-text", "children"),
+    Output("view-store", "data"),
+    Output("position-input", "value"),
+    # Triggers
+    Input("chrom-select", "value"),
+    Input("resolution-select", "value"),
+    Input("zoom-in", "n_clicks"),
+    Input("zoom-out", "n_clicks"),
+    Input("zoom-fit", "n_clicks"),
+    Input("nav-left", "n_clicks"),
+    Input("nav-right", "n_clicks"),
+    Input("nav-far-left", "n_clicks"),
+    Input("nav-far-right", "n_clicks"),
+    Input("position-input", "n_submit"),
+    Input("colorscale-select", "value"),
+    Input("log-scale-switch", "checked"),
+    Input("upper-triangle-switch", "checked"),
+    Input("cap-percentile-input", "value"),
+    Input("browser-graph", "relayoutData"),
+    # State
     State("data-source-select", "value"),
     State("file-path-input", "value"),
-    State("chrom-select", "value"),
-    State("resolution-select", "value"),
-    State("region-start-input", "value"),
-    State("region-end-input", "value"),
-    State("colorscale-select", "value"),
-    State("log-scale-switch", "checked"),
-    State("cap-percentile-slider", "value"),
+    State("position-input", "value"),
+    State("view-store", "data"),
     State("n-bins-input", "value"),
     State("n-tads-input", "value"),
     State("n-loops-input", "value"),
     prevent_initial_call=False,
 )
-def render_contact_map(
-    n_clicks,
-    source,
-    file_path,
+def render_browser(
     chrom,
     resolution,
-    region_start,
-    region_end,
+    _zi,
+    _zo,
+    _zf,
+    _nl,
+    _nr,
+    _nfl,
+    _nfr,
+    _pos_submit,
     colorscale,
     log_scale,
+    upper_triangle,
     cap_percentile,
+    relayout_data,
+    source,
+    file_path,
+    position_text,
+    view_store,
     n_bins,
     n_tads,
     n_loops,
 ):
-    """Main callback: load data and render the contact map figure."""
+    """Main render callback — handles all navigation and visualization."""
+    import plotly.graph_objects as go
+
     try:
+        # Load data
         if source == "file" and file_path and os.path.exists(file_path):
             res = int(resolution) if resolution else None
             data = load_cool_matrix(file_path, chrom or "chr1", res)
@@ -371,35 +423,90 @@ def render_contact_map(
                 n_loops=int(n_loops or 5),
             )
 
-        # Region in base pairs (input is in Mb)
-        rs = int(region_start * 1_000_000) if region_start else None
-        re = int(region_end * 1_000_000) if region_end else None
-        if rs == 0 and re == 0:
-            rs, re = None, None
+        chrom_len = data.end
+        triggered = ctx.triggered_id
 
-        fig = create_contact_map_figure(
+        # Determine current view
+        vs = view_store.get("start_bp", 0)
+        ve = view_store.get("end_bp", 0)
+        old_chrom_len = view_store.get("chrom_length", 0)
+
+        # Reset view on chromosome/resolution change or first load
+        if (
+            triggered in ("chrom-select", "resolution-select", None)
+            or ve == 0
+            or old_chrom_len != chrom_len
+        ):
+            vs, ve = 0, chrom_len
+
+        span = ve - vs
+
+        # Handle navigation
+        if triggered == "zoom-in":
+            delta = span // 4
+            vs = vs + delta
+            ve = ve - delta
+        elif triggered == "zoom-out":
+            delta = span // 2
+            vs = max(0, vs - delta)
+            ve = min(chrom_len, ve + delta)
+        elif triggered == "zoom-fit":
+            vs, ve = 0, chrom_len
+        elif triggered == "nav-left":
+            shift = span // 4
+            vs = max(0, vs - shift)
+            ve = vs + span
+        elif triggered == "nav-right":
+            shift = span // 4
+            ve = min(chrom_len, ve + shift)
+            vs = ve - span
+        elif triggered == "nav-far-left":
+            ve = span
+            vs = 0
+        elif triggered == "nav-far-right":
+            vs = max(0, chrom_len - span)
+            ve = chrom_len
+        elif triggered == "position-input" and position_text:
+            vs, ve = _parse_position(position_text, chrom_len)
+        elif triggered == "browser-graph" and relayout_data:
+            # Capture zoom from Plotly (rubberband / scroll zoom)
+            if "xaxis.range[0]" in relayout_data and "xaxis.range[1]" in relayout_data:
+                new_start_mb = relayout_data["xaxis.range[0]"]
+                new_end_mb = relayout_data["xaxis.range[1]"]
+                vs = max(0, int(new_start_mb * 1_000_000))
+                ve = min(chrom_len, int(new_end_mb * 1_000_000))
+            elif "xaxis.autorange" in relayout_data:
+                vs, ve = 0, chrom_len
+
+        # Clamp
+        vs = max(0, vs)
+        ve = min(chrom_len, ve)
+        if ve <= vs:
+            ve = min(vs + data.resolution * 10, chrom_len)
+
+        fig = create_browser_figure(
             data,
             colorscale=colorscale or DEFAULT_COLORSCALE,
             log_scale=bool(log_scale),
             value_cap_percentile=float(cap_percentile or 99.5),
-            region_start=rs,
-            region_end=re,
+            view_start_bp=vs,
+            view_end_bp=ve,
+            upper_triangle=bool(upper_triangle),
         )
 
         n = data.matrix.shape[0]
-        res_label = _format_res(data.resolution)
-        info = (
-            f"Matrix: {n}×{n} bins | Resolution: {res_label} | {data.chrom}:{data.start}-{data.end}"
-        )
+        view_bins = (ve - vs) // data.resolution
+        info = f"Matrix: {n}×{n} | Viewing: {view_bins} bins | {_fmt_res(data.resolution)}"
+        pos_display = f"{data.chrom}:{_fmt_bp(vs)}-{_fmt_bp(ve)} ({_fmt_bp(ve - vs)} span)"
+        pos_input = f"{vs / 1_000_000:.1f}-{ve / 1_000_000:.1f}"
 
-        return fig, info
+        new_view = {"start_bp": vs, "end_bp": ve, "chrom_length": chrom_len}
+        return fig, info, pos_display, new_view, pos_input
 
     except Exception as e:
         import traceback
 
         traceback.print_exc()
-        import plotly.graph_objects as go
-
         fig = go.Figure()
         fig.add_annotation(
             text=f"Error: {e}",
@@ -416,16 +523,41 @@ def render_contact_map(
             xaxis=dict(visible=False),
             yaxis=dict(visible=False),
         )
-        return fig, f"Error: {e}"
+        return fig, f"Error: {e}", "", view_store, ""
 
 
-def _format_res(res: int) -> str:
-    """Format resolution for display."""
+def _parse_position(text: str, chrom_len: int) -> tuple[int, int]:
+    """Parse position text like '50-100' (Mb) or '50000000-100000000' (bp)."""
+    text = text.strip().replace(",", "").replace(" ", "")
+    if "-" in text:
+        parts = text.split("-")
+        a, b = float(parts[0]), float(parts[1])
+    else:
+        a = float(text)
+        b = a + 10  # Default 10 Mb window
+
+    # If values look like Mb (< 1000), convert
+    if a < 1000 and b < 1000:
+        a *= 1_000_000
+        b *= 1_000_000
+
+    return max(0, int(a)), min(chrom_len, int(b))
+
+
+def _fmt_res(res: int) -> str:
     if res >= 1_000_000:
         return f"{res // 1_000_000} Mb"
     if res >= 1_000:
         return f"{res // 1_000} kb"
     return f"{res} bp"
+
+
+def _fmt_bp(bp: int) -> str:
+    if bp >= 1_000_000:
+        return f"{bp / 1_000_000:.1f} Mb"
+    if bp >= 1_000:
+        return f"{bp / 1_000:.0f} kb"
+    return f"{bp} bp"
 
 
 # ---------------------------------------------------------------------------
@@ -436,7 +568,7 @@ def _format_res(res: int) -> str:
 def main():
     """CLI entry point."""
     global COOL_FILE_PATH
-    parser = argparse.ArgumentParser(description="Hi-C Contact Map Viewer")
+    parser = argparse.ArgumentParser(description="Hi-C Contact Map Browser")
     parser.add_argument("--file", "-f", help="Path to .cool or .mcool file")
     parser.add_argument("--port", "-p", type=int, default=8050, help="Port (default: 8050)")
     parser.add_argument("--debug", action="store_true", help="Enable debug mode")
