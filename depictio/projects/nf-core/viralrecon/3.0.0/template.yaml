@@ -1,15 +1,20 @@
-# nf-core/viralrecon Template v2.6.0 - Viral Genome Analysis
+# nf-core/viralrecon Template v3.0.0 - Viral Genome Analysis
 # ============================================================================
 # This is a TEMPLATE project configuration. Use with:
-#   depictio run --template nf-core/viralrecon/2.6.0 --data-root /path/to/your/data
+#   depictio run --template nf-core/viralrecon/3.0.0 --data-root /path/to/your/data
+#
+# Tested against nf-core/viralrecon AWS megatest results:
+#   s3://nf-core-awsmegatests/viralrecon/results-395079f1d24dce731ac22e03d7a5e71f110103fc
 #
 # Designed for nf-core/viralrecon amplicon (ivar) workflow outputs.
 # Generic, core-facility compatible — no sensitive metadata required.
+# Data collections use "Aggregated" metatype for time-series aggregation
+# across multiple sequencing runs.
 # ============================================================================
 
 # Template metadata (parsed and removed before Project model validation)
 template:
-  template_id: "nf-core/viralrecon/2.6.0"
+  template_id: "nf-core/viralrecon/3.0.0"
   description: "nf-core/viralrecon viral genome analysis template for amplicon sequencing (ivar variant caller)"
   version: "1.0.0"
   variables:
@@ -58,7 +63,7 @@ project_type: "advanced"
 is_public: true
 workflows:
   - name: "viralrecon"
-    version: "2.6.0"
+    version: "3.0.0"
     engine:
       name: "nextflow"
       version: "24.10.4"
@@ -67,7 +72,8 @@ workflows:
       url: "https://nf-co.re"
     repository_url: "https://github.com/nf-core/viralrecon"
     data_location:
-      structure: "flat"
+      structure: "sequencing-runs"
+      runs_regex: "run_*"
       locations:
         - "{DATA_ROOT}"
     data_collections:
@@ -97,6 +103,7 @@ workflows:
               - "pangolin"
               - "nextclade"
               - "quast"
+              - "freyja"
             plots:
               fastp:
                 - "Filtered Reads"
@@ -118,13 +125,14 @@ workflows:
                 - "Assembly Statistics"
 
       # ----------------------------------------------------------------
-      # Recipe-transformed data collections
+      # Recipe-transformed data collections (Aggregated metatype)
       # ----------------------------------------------------------------
 
       - data_collection_tag: "summary_metrics"
         description: "Per-sample alignment, coverage, and variant calling summary metrics"
         config:
           type: "Table"
+          metatype: "Aggregated"
           source: "transformed"
           transform:
             recipe: "nf-core/viralrecon/summary_metrics.py"
@@ -146,6 +154,7 @@ workflows:
         description: "Per-sample variant calls with functional annotations"
         config:
           type: "Table"
+          metatype: "Aggregated"
           source: "transformed"
           transform:
             recipe: "nf-core/viralrecon/variants_long.py"
@@ -172,6 +181,7 @@ workflows:
         description: "Pangolin lineage assignments for each sample"
         config:
           type: "Table"
+          metatype: "Aggregated"
           source: "transformed"
           transform:
             recipe: "nf-core/viralrecon/pangolin_lineages.py"
@@ -193,6 +203,7 @@ workflows:
         description: "Nextclade clade assignments and sequence quality metrics"
         config:
           type: "Table"
+          metatype: "Aggregated"
           source: "transformed"
           transform:
             recipe: "nf-core/viralrecon/nextclade_results.py"
