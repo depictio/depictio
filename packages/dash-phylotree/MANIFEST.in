@@ -1,0 +1,4 @@
+include dash_phylotree/*.min.js
+include dash_phylotree/*.min.js.map
+include dash_phylotree/metadata.json
+include dash_phylotree/package-info.json

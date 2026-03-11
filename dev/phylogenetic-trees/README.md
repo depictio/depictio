@@ -12,6 +12,11 @@ pip install biopython  # if not already installed
 python dev/phylogenetic-trees/prototype_plotly.py      # Port 8051 - Plotly traces
 python dev/phylogenetic-trees/prototype_cytoscape.py   # Port 8052 - Cytoscape graph
 python dev/phylogenetic-trees/prototype_combined.py    # Port 8053 - Combined viewer
+
+# Prototype 4 requires building the custom Dash component first:
+cd packages/dash-phylotree && npm install && npm run build
+pip install -e packages/dash-phylotree
+python dev/phylogenetic-trees/prototype_phylocanvas.py # Port 8054 - Phylocanvas 3
 ```
 
 ## Prototypes
@@ -45,6 +50,17 @@ Best of both worlds: switch between Plotly and Cytoscape engines via segmented c
 - Dark/light theme toggle
 - Node info panel on click
 
+### 4. `prototype_phylocanvas.py` — Phylocanvas 3 / Custom Dash Component (port 8054)
+Uses a custom Dash component (`dash-phylotree`) wrapping [react-phylogeny-tree](https://github.com/mkoliba/react-phylogeny-tree), which is a React wrapper around Phylocanvas 3 (`@mkoliba/phylogeny-tree`). Renders directly to HTML canvas.
+
+**Layouts**: Rectangular, Circular, Radial, Diagonal, Hierarchical (all 5 natively!)
+
+**Pros**: Purpose-built for phylogenetics, all 5 tree layouts natively, canvas rendering (fast), native interaction (pan/zoom/selection/context menu), handles up to ~15k leaves, closest to Microreact's actual rendering engine.
+
+**Cons**: Requires building a custom Dash component (`npm install && npm run build`), canvas-based (harder to integrate with Plotly theming), no Plotly hover/trace interop.
+
+**Custom component**: `packages/dash-phylotree/` — wraps react-phylogeny-tree with Dash-compatible JSON props and `setProps()` for bidirectional selectedIds.
+
 ## Architecture
 
 ```
@@ -54,6 +70,7 @@ dev/phylogenetic-trees/
 ├── prototype_plotly.py        # Prototype 1: Plotly traces
 ├── prototype_cytoscape.py     # Prototype 2: Cytoscape graph
 ├── prototype_combined.py      # Prototype 3: Combined viewer
+├── prototype_phylocanvas.py   # Prototype 4: Phylocanvas 3 (custom Dash component)
 └── data/
     ├── sample_tree.nwk        # Mammal phylogeny (15 taxa)
     ├── bacterial_tree.nwk     # Bacterial phylogeny (21 taxa)
@@ -101,19 +118,21 @@ dev/phylogenetic-trees/
 
 ## Microreact Feature Comparison
 
-| Feature | Microreact | Plotly Proto | Cytoscape Proto |
-|---|---|---|---|
-| Rectangular tree | ✅ | ✅ | ✅ (dagre/preset) |
-| Circular tree | ✅ | ✅ | ❌ (circle ≠ circular phylogram) |
-| Radial tree | ✅ | ✅ | ❌ |
-| Diagonal tree | ✅ | ✅ | ❌ |
-| Hierarchical tree | ✅ | ✅ (rectangular) | ✅ (breadthfirst) |
-| Leaf labels | ✅ | ✅ | ✅ |
-| Metadata coloring | ✅ | ✅ | ✅ |
-| Node selection | ✅ | ⚠️ (click only) | ✅ (click + box) |
-| Subtree filtering | ✅ | ❌ | ✅ (possible) |
-| Zoom/Pan | ✅ | ✅ | ✅ |
-| Newick input | ✅ | ✅ | ✅ |
+| Feature | Microreact | Plotly Proto | Cytoscape Proto | Phylocanvas Proto |
+|---|---|---|---|---|
+| Rectangular tree | ✅ | ✅ | ✅ (dagre/preset) | ✅ |
+| Circular tree | ✅ | ✅ | ❌ (circle ≠ circular phylogram) | ✅ |
+| Radial tree | ✅ | ✅ | ❌ | ✅ |
+| Diagonal tree | ✅ | ✅ | ❌ | ✅ |
+| Hierarchical tree | ✅ | ✅ (rectangular) | ✅ (breadthfirst) | ✅ |
+| Leaf labels | ✅ | ✅ | ✅ | ✅ |
+| Metadata coloring | ✅ | ✅ | ✅ | ✅ |
+| Node selection | ✅ | ⚠️ (click only) | ✅ (click + box) | ✅ (click + context menu) |
+| Subtree filtering | ✅ | ❌ | ✅ (possible) | ✅ (context menu) |
+| Zoom/Pan | ✅ | ✅ | ✅ | ✅ |
+| Newick input | ✅ | ✅ | ✅ | ✅ |
+| Canvas rendering | ✅ | ❌ (SVG) | ❌ (SVG) | ✅ |
+| Same engine as Microreact | ✅ | ❌ | ❌ | ✅ (Phylocanvas 3) |
 
 ## Integration Path into Depictio
 
@@ -136,8 +155,20 @@ depictio/dash/modules/tree_component/
 
 ## Dependencies
 
-- `biopython` — Tree parsing (Newick, PhyloXML, NEXUS)
-- `dash-cytoscape` — Already in pyproject.toml
+- `biopython` — Tree parsing (Newick, PhyloXML, NEXUS) — for prototypes 1-3
+- `dash-cytoscape` — Already in pyproject.toml — for prototypes 2-3
+- `dash-phylotree` — Custom package in `packages/dash-phylotree/` — for prototype 4
 - `plotly` / `dash` — Already in project
 - `dash-mantine-components` — Already in project
 - `pandas` — For metadata handling
+
+### Building dash-phylotree
+
+```bash
+cd packages/dash-phylotree
+npm install                    # Install react-phylogeny-tree + webpack deps
+npm run build                  # Bundle → dash_phylotree/dash_phylotree.min.js (96 KB)
+pip install -e .               # Install Python package in editable mode
+```
+
+The package wraps [react-phylogeny-tree](https://github.com/mkoliba/react-phylogeny-tree) v0.0.4, which uses `@mkoliba/phylogeny-tree` (Phylocanvas 3 beta). The React component renders to an HTML canvas and supports all 5 tree layouts natively.

@@ -1,0 +1,17 @@
+[project]
+name = "dash-phylotree"
+version = "0.1.0"
+description = "Dash component wrapping react-phylogeny-tree (Phylocanvas 3) for phylogenetic tree visualization"
+requires-python = ">=3.10"
+license = "MIT"
+dependencies = ["dash>=2.0"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["dash_phylotree"]
+
+[tool.hatch.build.targets.sdist]
+include = ["dash_phylotree/**", "pyproject.toml"]
