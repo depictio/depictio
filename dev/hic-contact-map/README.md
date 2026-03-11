@@ -11,6 +11,19 @@ Designed for future integration into Depictio.
 - **DMC 2.0+ UI**: Mantine-based controls matching Depictio conventions
 - **Configurable**: Color scales, log transform, value capping, resolution switching
 
+## Install
+
+```bash
+# Using uv (recommended)
+uv pip install -e .
+
+# Or with pip
+pip install -e .
+
+# Optional: install cooler for advanced features
+uv pip install -e ".[cooler]"
+```
+
 ## Quick Start
 
 ```bash
@@ -18,30 +31,38 @@ Designed for future integration into Depictio.
 python app.py
 
 # With a cool/mcool file (e.g. nf-core/hic output)
-python app.py --file /path/to/matrix.mcool
+python app.py --file data/HIC_ES_4.1000000_balanced.cool
+python app.py --file data/HIC_ES_4.mcool
 
 # Debug mode
 python app.py --debug --port 8051
 ```
 
-## Dependencies
+## Download test data (nf-core/hic v2.0.0 mouse ES cell)
 
+```bash
+mkdir -p data
+
+# Small — 1Mb resolution (4.2 MB)
+aws s3 cp s3://nf-core-awsmegatests/hic/results-b4d89cfacf97a5835fba804887cf0fc7e0449e8d/contact_maps/cool/HIC_ES_4.1000000_balanced.cool data/ --no-sign-request
+
+# Medium — 500kb resolution (12 MB)
+aws s3 cp s3://nf-core-awsmegatests/hic/results-b4d89cfacf97a5835fba804887cf0fc7e0449e8d/contact_maps/cool/HIC_ES_4.500000_balanced.cool data/ --no-sign-request
+
+# Full multi-resolution mcool (368 MB, resolutions: 20kb–10Mb)
+aws s3 cp s3://nf-core-awsmegatests/hic/results-b4d89cfacf97a5835fba804887cf0fc7e0449e8d/contact_maps/cool/HIC_ES_4.mcool data/ --no-sign-request
 ```
-dash>=2.0
-dash-mantine-components>=0.14
-plotly>=5.0
-numpy
-scipy
-h5py
-```
+
+Sample: HIC_ES_4 (mouse ES cell Hi-C), genome: mm10, 22 chromosomes.
 
 ## Architecture
 
 ```
 dev/hic-contact-map/
-├── app.py          # Dash app with DMC 2.0+ layout and callbacks
-├── hic_data.py     # Data loading: cool/mcool reader + synthetic generator
-├── hic_figure.py   # Plotly figure generation for contact maps
+├── app.py           # Dash app with DMC 2.0+ layout and callbacks
+├── hic_data.py      # Data loading: cool/mcool reader + synthetic generator
+├── hic_figure.py    # Plotly figure generation for contact maps
+├── pyproject.toml   # Project config for uv/pip install
 └── README.md
 ```
 
@@ -66,7 +87,10 @@ Output contact maps are in:
 - `results/contact_maps/raw/` — raw .cool files
 - `results/contact_maps/norm/` — normalized .cool and .mcool files
 
-### S3 test data
+### S3 test data (v2.0.0, complete run)
 ```
-s3://nf-core-awsmegatests/hic/results-fe4ac656317d24c37e81e7940a526ed9ea812f8e/
+s3://nf-core-awsmegatests/hic/results-b4d89cfacf97a5835fba804887cf0fc7e0449e8d/
 ```
+
+Available resolutions for `.cool`: 20kb, 40kb, 250kb, 500kb, 1Mb
+Available resolutions for `.mcool`: 20kb, 40kb, 80kb, 160kb, 320kb, 640kb, 1.28Mb, 2.56Mb, 5.12Mb, 10.24Mb

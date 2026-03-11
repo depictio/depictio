@@ -432,7 +432,10 @@ def _format_res(res: int) -> str:
 # Entry point
 # ---------------------------------------------------------------------------
 
-if __name__ == "__main__":
+
+def main():
+    """CLI entry point."""
+    global COOL_FILE_PATH
     parser = argparse.ArgumentParser(description="Hi-C Contact Map Viewer")
     parser.add_argument("--file", "-f", help="Path to .cool or .mcool file")
     parser.add_argument("--port", "-p", type=int, default=8050, help="Port (default: 8050)")
@@ -443,3 +446,7 @@ if __name__ == "__main__":
         COOL_FILE_PATH = args.file
 
     app.run(debug=args.debug, port=args.port)
+
+
+if __name__ == "__main__":
+    main()

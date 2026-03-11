@@ -1,0 +1,21 @@
+[project]
+name = "hic-contact-map"
+version = "0.1.0"
+description = "Interactive Hi-C contact map viewer using Plotly and Dash"
+requires-python = ">=3.10"
+dependencies = [
+    "dash>=2.0",
+    "dash-mantine-components>=0.14",
+    "plotly>=5.0",
+    "numpy>=1.24",
+    "scipy>=1.10",
+    "h5py>=3.8",
+]
+
+[project.optional-dependencies]
+cooler = [
+    "cooler>=0.9",
+]
+
+[project.scripts]
+hic-contact-map = "app:main"

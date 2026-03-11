@@ -1,0 +1,10 @@
+# Hi-C data files (download via S3)
+data/
+*.cool
+*.mcool
+*.hic
+
+# Python
+__pycache__/
+*.pyc
+.venv/
