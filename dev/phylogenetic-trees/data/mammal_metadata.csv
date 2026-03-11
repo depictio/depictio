@@ -1,0 +1,16 @@
+taxon,order,diet,body_mass_kg,conservation_status
+Homo_sapiens,Primates,Omnivore,70.0,LC
+Pan_troglodytes,Primates,Omnivore,52.0,EN
+Gorilla_gorilla,Primates,Herbivore,160.0,CR
+Pongo_abelii,Primates,Omnivore,78.0,CR
+Macaca_mulatta,Primates,Omnivore,7.7,LC
+Papio_anubis,Primates,Omnivore,25.0,LC
+Mus_musculus,Rodentia,Omnivore,0.02,LC
+Rattus_norvegicus,Rodentia,Omnivore,0.35,LC
+Oryctolagus_cuniculus,Lagomorpha,Herbivore,2.0,EN
+Ochotona_princeps,Lagomorpha,Herbivore,0.17,LC
+Canis_lupus,Carnivora,Carnivore,40.0,LC
+Felis_catus,Carnivora,Carnivore,4.5,LC
+Bos_taurus,Artiodactyla,Herbivore,750.0,DD
+Sus_scrofa,Artiodactyla,Omnivore,80.0,LC
+Equus_caballus,Perissodactyla,Herbivore,500.0,DD
