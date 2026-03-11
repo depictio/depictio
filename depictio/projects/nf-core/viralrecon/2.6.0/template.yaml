@@ -1,0 +1,265 @@
+# nf-core/viralrecon Template v2.6.0 - Viral Genome Analysis
+# ============================================================================
+# This is a TEMPLATE project configuration. Use with:
+#   depictio run --template nf-core/viralrecon/2.6.0 --data-root /path/to/your/data
+#
+# Designed for nf-core/viralrecon amplicon (ivar) workflow outputs.
+# Generic, core-facility compatible — no sensitive metadata required.
+# ============================================================================
+
+# Template metadata (parsed and removed before Project model validation)
+template:
+  template_id: "nf-core/viralrecon/2.6.0"
+  description: "nf-core/viralrecon viral genome analysis template for amplicon sequencing (ivar variant caller)"
+  version: "1.0.0"
+  variables:
+    - name: "DATA_ROOT"
+      description: "Root directory containing viralrecon pipeline output data"
+      required: true
+  expected_files:
+    # MultiQC outputs
+    - relative_path: "multiqc/multiqc_data/multiqc.parquet"
+      description: "MultiQC aggregated report data"
+      format: "Parquet"
+    - relative_path: "multiqc/summary_variants_metrics_mqc.csv"
+      description: "Summary of read alignment, coverage, and variant calling metrics per sample"
+      format: "CSV"
+      columns: ["Sample"]
+    # Variant calling outputs (ivar default for amplicon protocol)
+    - relative_path: "variants/ivar/variants_long_table.csv"
+      description: "Long-format table with per-sample variants, functional effects, and lineage"
+      format: "CSV"
+      columns: ["CHROM", "POS", "REF", "ALT", "FILTER", "DP", "AF", "GENE", "EFFECT", "sample"]
+    # Lineage & clade assignment
+    - relative_path: "variants/ivar/pangolin/pangolin.csv"
+      description: "Pangolin lineage assignments for consensus sequences"
+      format: "CSV"
+      columns: ["taxon", "lineage", "conflict", "ambiguity_score"]
+    - relative_path: "variants/ivar/nextclade/nextclade.csv"
+      description: "Nextclade clade assignments, mutations, and QC metrics"
+      format: "CSV"
+      columns: ["seqName", "clade", "totalSubstitutions", "coverage"]
+  expected_directories:
+    - relative_path: "multiqc"
+      description: "MultiQC output directory"
+    - relative_path: "variants/ivar"
+      description: "iVar variant calling results"
+    - relative_path: "variants/ivar/pangolin"
+      description: "Pangolin lineage assignment results"
+    - relative_path: "variants/ivar/nextclade"
+      description: "Nextclade clade assignment results"
+
+# ============================================================================
+# PROJECT CONFIGURATION
+# ============================================================================
+
+name: "Viralrecon Viral Genome Analysis"
+project_type: "advanced"
+is_public: true
+workflows:
+  - name: "viralrecon"
+    version: "2.6.0"
+    engine:
+      name: "nextflow"
+      version: "24.10.4"
+    catalog:
+      name: "nf-core"
+      url: "https://nf-co.re"
+    repository_url: "https://github.com/nf-core/viralrecon"
+    data_location:
+      structure: "flat"
+      locations:
+        - "{DATA_ROOT}"
+    data_collections:
+      # ----------------------------------------------------------------
+      # MultiQC data collection (native parquet)
+      # ----------------------------------------------------------------
+      - data_collection_tag: "multiqc_data"
+        description: "MultiQC report data with QC metrics from all pipeline tools"
+        config:
+          type: "MultiQC"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "multiqc/multiqc_data/multiqc.parquet"
+          dc_specific_properties:
+            s3_location: null
+            modules:
+              - "fastp"
+              - "bowtie2"
+              - "samtools"
+              - "picard"
+              - "mosdepth"
+              - "ivar"
+              - "bcftools"
+              - "snpeff"
+              - "pangolin"
+              - "nextclade"
+              - "quast"
+            plots:
+              fastp:
+                - "Filtered Reads"
+                - "Insert Sizes"
+              bowtie2:
+                - "SE"
+                - "PE"
+              samtools:
+                - "Alignment Metrics"
+              mosdepth:
+                - "Coverage Distribution"
+                - "Coverage Per Contig"
+              ivar:
+                - "Variants Counts"
+              snpeff:
+                - "Variant Effects by Genomic Region"
+                - "Variant Effects by Impact"
+              quast:
+                - "Assembly Statistics"
+
+      # ----------------------------------------------------------------
+      # Recipe-transformed data collections
+      # ----------------------------------------------------------------
+
+      - data_collection_tag: "summary_metrics"
+        description: "Per-sample alignment, coverage, and variant calling summary metrics"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/viralrecon/summary_metrics.py"
+          dc_specific_properties:
+            format: "CSV"
+            columns_description:
+              "sample": "Sample identifier"
+              "num_reads_mapped": "Number of reads mapped to reference"
+              "pct_reads_mapped": "Percentage of reads mapped"
+              "coverage_median": "Median genome coverage depth"
+              "pct_genome_covered_1x": "Percentage of genome covered at >= 1x depth"
+              "pct_genome_covered_10x": "Percentage of genome covered at >= 10x depth"
+              "num_variants_snp": "Number of SNP variants called"
+              "num_variants_indel": "Number of indel variants called"
+              "num_variants_total": "Total number of variants called"
+              "lineage": "Pangolin lineage assignment"
+
+      - data_collection_tag: "variants_long"
+        description: "Per-sample variant calls with functional annotations"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/viralrecon/variants_long.py"
+          dc_specific_properties:
+            format: "CSV"
+            columns_description:
+              "sample": "Sample identifier"
+              "CHROM": "Chromosome/reference sequence"
+              "POS": "Variant position on reference"
+              "REF": "Reference allele"
+              "ALT": "Alternative allele"
+              "FILTER": "Variant filter status"
+              "DP": "Read depth at position"
+              "REF_DP": "Reference allele read depth"
+              "ALT_DP": "Alternative allele read depth"
+              "AF": "Allele frequency (0-1)"
+              "GENE": "Gene annotation"
+              "AA": "Amino acid change"
+              "EFFECT": "Variant effect (e.g., missense, synonymous)"
+              "FUNCLASS": "Functional class (SILENT, MISSENSE, NONSENSE)"
+              "mutation_label": "Formatted mutation label (GENE:REFposALT)"
+
+      - data_collection_tag: "pangolin_lineages"
+        description: "Pangolin lineage assignments for each sample"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/viralrecon/pangolin_lineages.py"
+          dc_specific_properties:
+            format: "CSV"
+            columns_description:
+              "sample": "Sample identifier"
+              "lineage": "PANGO lineage designation"
+              "conflict": "Lineage assignment conflict score"
+              "ambiguity_score": "Ambiguity in lineage assignment"
+              "scorpio_call": "Scorpio constellation call"
+              "scorpio_support": "Scorpio support score"
+              "pangolin_version": "Pangolin software version"
+              "pango_version": "PANGO data version"
+              "status": "Assignment status"
+              "qc_status": "QC status (pass/fail)"
+
+      - data_collection_tag: "nextclade_results"
+        description: "Nextclade clade assignments and sequence quality metrics"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/viralrecon/nextclade_results.py"
+          dc_specific_properties:
+            format: "CSV"
+            columns_description:
+              "sample": "Sample identifier"
+              "clade": "Nextclade clade designation"
+              "Nextclade_pango": "PANGO lineage from Nextclade"
+              "totalSubstitutions": "Total nucleotide substitutions vs reference"
+              "totalDeletions": "Total deletions vs reference"
+              "totalInsertions": "Total insertions vs reference"
+              "totalFrameShifts": "Total frame shifts detected"
+              "totalMissing": "Total missing (N) bases"
+              "totalNonACGTNs": "Total non-ACGTN characters"
+              "alignmentScore": "Alignment quality score"
+              "coverage": "Genome coverage fraction"
+              "qc_overallScore": "Nextclade overall QC score"
+              "qc_overallStatus": "Nextclade QC status (good/mediocre/bad)"
+
+# ============================================================================
+# RUNTIME LINKS CONFIGURATION
+# ============================================================================
+# Links use data_collection_tag references (resolved to IDs at instantiation)
+# ============================================================================
+
+links:
+  # Link 1: Summary Metrics -> MultiQC (for cross-filtering)
+  - source_dc_tag: "summary_metrics"
+    source_column: "sample"
+    target_dc_tag: "multiqc_data"
+    target_type: "multiqc"
+    link_config:
+      resolver: "sample_mapping"
+      target_field: "sample_name"
+    description: "Filter MultiQC by sample selections from summary metrics"
+    enabled: true
+
+  # Link 2: Summary Metrics -> Variants Long
+  - source_dc_tag: "summary_metrics"
+    source_column: "sample"
+    target_dc_tag: "variants_long"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter variants table by selected samples"
+    enabled: true
+
+  # Link 3: Summary Metrics -> Pangolin Lineages
+  - source_dc_tag: "summary_metrics"
+    source_column: "sample"
+    target_dc_tag: "pangolin_lineages"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter Pangolin lineages by selected samples"
+    enabled: true
+
+  # Link 4: Summary Metrics -> Nextclade Results
+  - source_dc_tag: "summary_metrics"
+    source_column: "sample"
+    target_dc_tag: "nextclade_results"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter Nextclade results by selected samples"
+    enabled: true
