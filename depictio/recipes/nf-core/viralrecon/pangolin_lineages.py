@@ -7,7 +7,7 @@ from depictio.models.models.transforms import RecipeSource
 SOURCES: list[RecipeSource] = [
     RecipeSource(
         ref="pangolin_raw",
-        path="variants/ivar/pangolin/pangolin.csv",
+        path="variants/ivar/consensus/bcftools/pangolin/pangolin.csv",
         format="CSV",
     ),
 ]

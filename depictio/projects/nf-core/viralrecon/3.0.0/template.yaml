@@ -36,11 +36,11 @@ template:
       format: "CSV"
       columns: ["CHROM", "POS", "REF", "ALT", "FILTER", "DP", "AF", "GENE", "EFFECT", "sample"]
     # Lineage & clade assignment
-    - relative_path: "variants/ivar/pangolin/pangolin.csv"
+    - relative_path: "variants/ivar/consensus/bcftools/pangolin/pangolin.csv"
       description: "Pangolin lineage assignments for consensus sequences"
       format: "CSV"
       columns: ["taxon", "lineage", "conflict", "ambiguity_score"]
-    - relative_path: "variants/ivar/nextclade/nextclade.csv"
+    - relative_path: "variants/ivar/consensus/bcftools/nextclade/nextclade.csv"
       description: "Nextclade clade assignments, mutations, and QC metrics"
       format: "CSV"
       columns: ["seqName", "clade", "totalSubstitutions", "coverage"]
@@ -49,9 +49,9 @@ template:
       description: "MultiQC output directory"
     - relative_path: "variants/ivar"
       description: "iVar variant calling results"
-    - relative_path: "variants/ivar/pangolin"
+    - relative_path: "variants/ivar/consensus/bcftools/pangolin"
       description: "Pangolin lineage assignment results"
-    - relative_path: "variants/ivar/nextclade"
+    - relative_path: "variants/ivar/consensus/bcftools/nextclade"
       description: "Nextclade clade assignment results"
 
 # ============================================================================

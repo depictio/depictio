@@ -7,7 +7,7 @@ from depictio.models.models.transforms import RecipeSource
 SOURCES: list[RecipeSource] = [
     RecipeSource(
         ref="nextclade_raw",
-        path="variants/ivar/nextclade/nextclade.csv",
+        path="variants/ivar/consensus/bcftools/nextclade/nextclade.csv",
         format="CSV",
         read_kwargs={"separator": ";"},
     ),
