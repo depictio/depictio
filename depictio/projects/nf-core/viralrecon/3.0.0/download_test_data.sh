@@ -1,12 +1,21 @@
 #!/usr/bin/env bash
-# Download nf-core/viralrecon 3.0.0 AWS megatest data for local testing.
-# Only downloads the files needed by the template recipes + MultiQC.
+# Generate nf-core/viralrecon 3.0.0 test data for depictio template testing.
+#
+# The aggregated output files (multiqc.parquet, variants_long_table.csv,
+# pangolin.csv, nextclade.csv, summary_variants_metrics_mqc.csv) are NOT
+# available from nf-core AWS megatests — they are only produced by the full
+# Illumina amplicon workflow. This script runs the pipeline with the built-in
+# test_illumina profile to generate them.
+#
+# Prerequisites:
+#   - Nextflow >= 24.10  (https://www.nextflow.io)
+#   - Docker or Singularity
 #
 # Usage:
 #   bash download_test_data.sh [TARGET_DIR]
 #   # Default TARGET_DIR: ./viralrecon-3.0.0-testdata
 #
-# The data is organized in a sequencing-runs structure so that multiple
+# Output is organized in a sequencing-runs structure so that multiple
 # runs can be aggregated over time:
 #   TARGET_DIR/
 #     run_1/
@@ -14,64 +23,75 @@
 #       variants/ivar/...
 set -euo pipefail
 
-S3_PREFIX="s3://nf-core-awsmegatests/viralrecon/results-395079f1d24dce731ac22e03d7a5e71f110103fc"
 TARGET="${1:-./viralrecon-3.0.0-testdata}"
 RUN_DIR="$TARGET/run_1"
 
-echo "Downloading viralrecon 3.0.0 test data to: $TARGET"
-mkdir -p "$RUN_DIR"
+echo "=== nf-core/viralrecon 3.0.0 test data generator ==="
+echo ""
+echo "Output directory: $RUN_DIR"
+echo ""
 
-# --- MultiQC outputs ---
-echo "  [1/5] MultiQC parquet..."
-aws s3 cp "$S3_PREFIX/multiqc/multiqc_data/multiqc.parquet" \
-  "$RUN_DIR/multiqc/multiqc_data/multiqc.parquet" --no-sign-request
+# Check for nextflow
+if ! command -v nextflow &> /dev/null; then
+    echo "ERROR: nextflow not found. Install from https://www.nextflow.io"
+    exit 1
+fi
 
-echo "  [2/5] Summary variants metrics..."
-aws s3 cp "$S3_PREFIX/multiqc/summary_variants_metrics_mqc.csv" \
-  "$RUN_DIR/multiqc/summary_variants_metrics_mqc.csv" --no-sign-request
+echo "Running nf-core/viralrecon 3.0.0 with test_illumina profile..."
+echo "This may take 10-30 minutes depending on your machine."
+echo ""
 
-# --- Variant calling outputs (ivar) ---
-echo "  [3/5] Variants long table..."
-aws s3 cp "$S3_PREFIX/variants/ivar/variants_long_table.csv" \
-  "$RUN_DIR/variants/ivar/variants_long_table.csv" --no-sign-request
-
-# --- Pangolin lineage assignments ---
-echo "  [4/5] Pangolin results..."
-aws s3 cp "$S3_PREFIX/variants/ivar/pangolin/" \
-  "$RUN_DIR/variants/ivar/pangolin/" --recursive --no-sign-request \
-  --exclude "*" --include "*.csv"
-
-# --- Nextclade clade assignments ---
-echo "  [5/5] Nextclade results..."
-aws s3 cp "$S3_PREFIX/variants/ivar/nextclade/" \
-  "$RUN_DIR/variants/ivar/nextclade/" --recursive --no-sign-request \
-  --exclude "*" --include "*.csv"
+nextflow run nf-core/viralrecon \
+    -r 3.0.0 \
+    -profile test_illumina,docker \
+    --outdir "$RUN_DIR" \
+    --variant_caller ivar
 
 echo ""
-echo "Download complete. Total files:"
+echo "Pipeline complete. Verifying expected output files..."
+echo ""
+
+MISSING=0
+for f in \
+    "multiqc/multiqc_data/multiqc.parquet" \
+    "multiqc/summary_variants_metrics_mqc.csv" \
+    "variants/ivar/variants_long_table.csv" \
+    "variants/ivar/pangolin/pangolin.csv" \
+    "variants/ivar/nextclade/nextclade.csv"; do
+    if [ -f "$RUN_DIR/$f" ]; then
+        echo "  OK  $f"
+    else
+        echo "  MISSING  $f"
+        MISSING=$((MISSING + 1))
+    fi
+done
+
+echo ""
+if [ "$MISSING" -gt 0 ]; then
+    echo "WARNING: $MISSING expected file(s) not found."
+    echo "Check the pipeline log above for errors."
+else
+    echo "All expected files present."
+fi
+
+echo ""
+echo "Total output files:"
 find "$TARGET" -type f | wc -l
-
-echo ""
-echo "Directory structure:"
-find "$TARGET" -type f | sed "s|$TARGET/||" | sort
 
 echo ""
 echo "=== Quick test commands ==="
 echo ""
-echo "# 1. List available recipes"
-echo "depictio recipe list"
-echo ""
-echo "# 2. Test individual recipes against downloaded data"
+echo "# 1. Test individual recipes against generated data"
 echo "depictio recipe run nf-core/viralrecon/summary_metrics.py -d $RUN_DIR"
 echo "depictio recipe run nf-core/viralrecon/variants_long.py -d $RUN_DIR"
 echo "depictio recipe run nf-core/viralrecon/pangolin_lineages.py -d $RUN_DIR"
 echo "depictio recipe run nf-core/viralrecon/nextclade_results.py -d $RUN_DIR"
 echo ""
-echo "# 3. Full template run (requires running depictio server)"
+echo "# 2. Full template run (requires running depictio server)"
 echo "depictio run --template nf-core/viralrecon/3.0.0 --data-root $TARGET"
 echo ""
-echo "# 4. Dry run (validate template without server)"
+echo "# 3. Dry run (validate template without server)"
 echo "depictio run --template nf-core/viralrecon/3.0.0 --data-root $TARGET --dry-run"
 echo ""
-echo "# 5. Deep validation (checks file headers match expected columns)"
+echo "# 4. Deep validation (checks file headers match expected columns)"
 echo "depictio run --template nf-core/viralrecon/3.0.0 --data-root $TARGET --dry-run --deep"
