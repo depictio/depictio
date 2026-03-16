@@ -35,14 +35,16 @@ template:
       description: "Long-format table with per-sample variants, functional effects, and lineage"
       format: "CSV"
       columns: ["CHROM", "POS", "REF", "ALT", "FILTER", "DP", "AF", "GENE", "EFFECT", "sample"]
-    # Lineage & clade assignment
-    - relative_path: "variants/ivar/consensus/bcftools/pangolin/pangolin.csv"
-      description: "Pangolin lineage assignments for consensus sequences"
+    # Lineage & clade assignment (per-sample files, globbed by recipes)
+    - relative_path: "variants/ivar/consensus/bcftools/pangolin/*.pangolin.csv"
+      description: "Per-sample Pangolin lineage assignments"
       format: "CSV"
+      glob: true
       columns: ["taxon", "lineage", "conflict", "ambiguity_score"]
-    - relative_path: "variants/ivar/consensus/bcftools/nextclade/nextclade.csv"
-      description: "Nextclade clade assignments, mutations, and QC metrics"
+    - relative_path: "variants/ivar/consensus/bcftools/nextclade/*.csv"
+      description: "Per-sample Nextclade clade assignments and QC metrics"
       format: "CSV"
+      glob: true
       columns: ["seqName", "clade", "totalSubstitutions", "coverage"]
   expected_directories:
     - relative_path: "multiqc"

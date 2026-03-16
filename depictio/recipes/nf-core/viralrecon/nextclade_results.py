@@ -7,7 +7,7 @@ from depictio.models.models.transforms import RecipeSource
 SOURCES: list[RecipeSource] = [
     RecipeSource(
         ref="nextclade_raw",
-        path="variants/ivar/consensus/bcftools/nextclade/nextclade.csv",
+        glob_pattern="variants/ivar/consensus/bcftools/nextclade/*.csv",
         format="CSV",
         read_kwargs={"separator": ";"},
     ),
@@ -34,14 +34,19 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
     """Clean Nextclade CSV: extract sample name, select key QC and clade columns."""
     df = sources["nextclade_raw"]
 
-    # Extract sample name from seqName (remove consensus suffixes)
+    # Extract sample name from seqName: strip reference genome suffix and consensus suffixes
     if "seqName" in df.columns:
         df = df.with_columns(
             pl.col("seqName")
+            .str.replace(r"\s+.*$", "")
             .str.replace(r"\.consensus.*$", "")
             .str.replace(r"\.primertrimmed.*$", "")
             .alias("sample")
         )
+
+    # Use clade_display if available (more readable), fall back to clade
+    if "clade_display" in df.columns and "clade" in df.columns:
+        df = df.with_columns(pl.col("clade_display").alias("clade"))
 
     # Cast integer columns
     int_cols = [

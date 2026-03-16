@@ -52,12 +52,11 @@ echo "Pipeline complete. Verifying expected output files..."
 echo ""
 
 MISSING=0
+# Single files
 for f in \
     "multiqc/multiqc_data/multiqc.parquet" \
     "multiqc/summary_variants_metrics_mqc.csv" \
-    "variants/ivar/variants_long_table.csv" \
-    "variants/ivar/pangolin/pangolin.csv" \
-    "variants/ivar/nextclade/nextclade.csv"; do
+    "variants/ivar/variants_long_table.csv"; do
     if [ -f "$RUN_DIR/$f" ]; then
         echo "  OK  $f"
     else
@@ -65,10 +64,25 @@ for f in \
         MISSING=$((MISSING + 1))
     fi
 done
+# Per-sample directories (glob)
+PANGOLIN_COUNT=$(find "$RUN_DIR/variants/ivar/consensus/bcftools/pangolin" -name "*.pangolin.csv" 2>/dev/null | wc -l)
+NEXTCLADE_COUNT=$(find "$RUN_DIR/variants/ivar/consensus/bcftools/nextclade" -name "*.csv" 2>/dev/null | wc -l)
+if [ "$PANGOLIN_COUNT" -gt 0 ]; then
+    echo "  OK  variants/ivar/consensus/bcftools/pangolin/ ($PANGOLIN_COUNT per-sample files)"
+else
+    echo "  MISSING  variants/ivar/consensus/bcftools/pangolin/*.pangolin.csv"
+    MISSING=$((MISSING + 1))
+fi
+if [ "$NEXTCLADE_COUNT" -gt 0 ]; then
+    echo "  OK  variants/ivar/consensus/bcftools/nextclade/ ($NEXTCLADE_COUNT per-sample files)"
+else
+    echo "  MISSING  variants/ivar/consensus/bcftools/nextclade/*.csv"
+    MISSING=$((MISSING + 1))
+fi
 
 echo ""
 if [ "$MISSING" -gt 0 ]; then
-    echo "WARNING: $MISSING expected file(s) not found."
+    echo "WARNING: $MISSING expected file(s)/dir(s) not found."
     echo "Check the pipeline log above for errors."
 else
     echo "All expected files present."
