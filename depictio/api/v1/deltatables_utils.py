@@ -13,7 +13,7 @@ from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.s3 import polars_s3_config
 
 # FEATURE FLAGS
-ENABLE_CACHING = True  # Global toggle for caching system
+ENABLE_CACHING = False  # Global toggle for caching system (DISABLED for real-time testing)
 
 # PERFORMANCE TESTING: Toggle for local filesystem caching
 USE_LOCAL_FILES = os.getenv("DEPICTIO_USE_LOCAL_FILES", "false").lower() == "true"

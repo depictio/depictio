@@ -241,7 +241,37 @@ async def upsert_deltatable(
                 },
             )
 
+    # Broadcast real-time event to connected dashboards
+    await _broadcast_dc_update(str(data_collection_oid))
+
     return {"message": "DeltaTableAggregated upserted successfully", "result": "success"}
+
+
+async def _broadcast_dc_update(dc_id: str) -> None:
+    """Invalidate caches and broadcast a data-collection-updated event to all connected dashboards."""
+    from datetime import timezone
+
+    from depictio.api.v1.deltatables_utils import invalidate_dc_cache
+    from depictio.api.v1.services.events import connection_manager
+    from depictio.models.models.realtime import EventMessage, EventSourceType, EventType
+
+    cache_result = invalidate_dc_cache(dc_id)
+    logger.info(f"Cache invalidated for DC {dc_id}: {cache_result}")
+
+    event = EventMessage(
+        event_type=EventType.DATA_COLLECTION_UPDATED,
+        source_type=EventSourceType.MONGODB_CHANGES,
+        timestamp=datetime.now(timezone.utc),
+        data_collection_id=dc_id,
+        payload={"operation": "upsert"},
+    )
+
+    subscribed = connection_manager.get_all_subscribed_dashboards()
+    for dashboard_id in subscribed:
+        event_copy = event.model_copy(update={"dashboard_id": dashboard_id})
+        await connection_manager.broadcast_to_dashboard(dashboard_id, event_copy)
+
+    logger.info(f"Upsert event broadcast for DC {dc_id} to {len(subscribed)} dashboards")
 
 
 def _build_permission_pipeline(data_collection_id: PyObjectId, user_id) -> list[dict]:
