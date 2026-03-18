@@ -64,6 +64,8 @@ template:
       description: "QIIME2 output directory"
     - relative_path: "multiqc"
       description: "MultiQC output directory"
+  dashboards:
+    - "dashboards/full_analysis.yaml"
 
 # ============================================================================
 # PROJECT CONFIGURATION

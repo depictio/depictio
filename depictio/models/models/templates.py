@@ -134,6 +134,14 @@ class TemplateMetadata(BaseModel):
     expected_directories: list[ExpectedDirectory] = Field(
         default_factory=list, description="Directories expected under DATA_ROOT"
     )
+    dashboards: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Relative paths to dashboard YAML files bundled with this template "
+            "(e.g., 'dashboards/full_analysis.yaml'). Imported automatically after "
+            "project setup unless overridden via --dashboard CLI flag."
+        ),
+    )
 
     @field_validator("template_id")
     @classmethod

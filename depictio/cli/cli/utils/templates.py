@@ -14,6 +14,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+import httpx
 import yaml
 
 from depictio.cli.cli_logging import logger
@@ -158,7 +159,7 @@ def resolve_template(
     template_id: str,
     data_root: str,
     project_name: str | None = None,
-) -> tuple[dict[str, Any], TemplateMetadata, TemplateOrigin]:
+) -> tuple[dict[str, Any], TemplateMetadata, TemplateOrigin, list[Path]]:
     """Load template YAML, substitute {DATA_ROOT}, return resolved config.
 
     This is the main entry point for the template system. It:
@@ -168,6 +169,7 @@ def resolve_template(
     4. Strips hardcoded IDs
     5. Sets project name
     6. Builds TemplateOrigin for DB tracking
+    7. Resolves dashboard YAML paths from template metadata
 
     Args:
         template_id: Template identifier (e.g., 'nf-core/ampliseq/2.16.0').
@@ -175,7 +177,7 @@ def resolve_template(
         project_name: Custom project name. If None, auto-generated from template.
 
     Returns:
-        Tuple of (resolved_config_dict, template_metadata, template_origin).
+        Tuple of (resolved_config_dict, template_metadata, template_origin, dashboard_paths).
 
     Raises:
         FileNotFoundError: If template not found.
@@ -233,5 +235,91 @@ def resolve_template(
     # 8. Inject template_origin into config
     resolved_config["template_origin"] = template_origin.model_dump()
 
+    # 9. Resolve dashboard YAML paths relative to the template directory
+    dashboard_paths: list[Path] = []
+    if template_metadata.dashboards:
+        template_dir = template_path.parent
+        for rel_path in template_metadata.dashboards:
+            abs_path = (template_dir / rel_path).resolve()
+            if abs_path.is_file():
+                dashboard_paths.append(abs_path)
+                logger.info(f"Dashboard found: {abs_path}")
+            else:
+                logger.warning(f"Dashboard YAML not found: {abs_path}")
+
     logger.info(f"Template resolved successfully. Project name: {resolved_config['name']}")
-    return resolved_config, template_metadata, template_origin
+    return resolved_config, template_metadata, template_origin, dashboard_paths
+
+
+def import_dashboards_from_template(
+    dashboard_paths: list[Path],
+    api_url: str,
+    headers: dict[str, str],
+    project_id: str | None = None,
+    overwrite: bool = True,
+) -> list[dict[str, Any]]:
+    """Import dashboard YAML files from a template into the server.
+
+    Called after project sync during ``depictio run --template`` to automatically
+    create the template's default dashboards.
+
+    Args:
+        dashboard_paths: Absolute paths to dashboard YAML files.
+        api_url: Base API URL (e.g., ``http://localhost:8058``).
+        headers: Auth headers (from ``generate_api_headers``).
+        project_id: Project ObjectId string. When provided, overrides
+            ``project_tag`` inside the YAML.
+        overwrite: If True, update existing dashboards with the same title.
+
+    Returns:
+        List of result dicts, one per dashboard file.  Each contains
+        ``path``, ``success``, and either ``dashboard_id``/``title`` or ``error``.
+    """
+    results: list[dict[str, Any]] = []
+    url = f"{api_url}/depictio/api/v1/dashboards/import/yaml"
+
+    for path in dashboard_paths:
+        entry: dict[str, Any] = {"path": str(path), "success": False}
+        try:
+            yaml_content = path.read_text(encoding="utf-8")
+
+            params: dict[str, str | bool] = {}
+            if project_id:
+                params["project_id"] = project_id
+            if overwrite:
+                params["overwrite"] = True
+
+            response = httpx.post(
+                url,
+                params=params,
+                content=yaml_content,
+                headers={**headers, "Content-Type": "text/plain"},
+                timeout=60,
+            )
+
+            if response.status_code == 200:
+                data = response.json()
+                entry.update(
+                    success=True,
+                    dashboard_id=data.get("dashboard_id"),
+                    title=data.get("title"),
+                    updated=data.get("updated", False),
+                    dash_url=data.get("dash_url"),
+                )
+                logger.info(f"Dashboard imported: {data.get('title')} ({path.name})")
+            else:
+                detail = response.text
+                try:
+                    detail = response.json().get("detail", detail)
+                except Exception:
+                    pass
+                entry["error"] = f"HTTP {response.status_code}: {detail}"
+                logger.error(f"Dashboard import failed for {path.name}: {entry['error']}")
+
+        except Exception as exc:
+            entry["error"] = str(exc)
+            logger.error(f"Dashboard import failed for {path.name}: {exc}")
+
+        results.append(entry)
+
+    return results
