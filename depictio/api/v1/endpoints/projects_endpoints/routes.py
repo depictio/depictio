@@ -266,13 +266,16 @@ async def delete_project(project_id: PyObjectId, current_user=Depends(get_curren
         except Exception as exc:
             logger.warning(f"S3 cleanup failed for project {project_id} (non-fatal): {exc}")
 
-    # Cascade delete dependent MongoDB documents
+    # Cascade delete dependent MongoDB documents.
+    # data_collection_id may be stored as ObjectId or plain string depending on code path,
+    # so query with both forms to ensure all documents are found.
     if dc_ids:
-        files_collection.delete_many({"data_collection_id": {"$in": dc_ids}})
-        deltatables_collection.delete_many({"data_collection_id": {"$in": dc_ids}})
-        runs_collection.delete_many({"data_collection_id": {"$in": dc_ids}})
-        multiqc_collection.delete_many({"data_collection_id": {"$in": dc_ids}})
-        jbrowse_collection.delete_many({"data_collection_id": {"$in": dc_ids}})
+        dc_query: dict = {"$in": dc_ids + [str(dc_id) for dc_id in dc_ids]}
+        files_collection.delete_many({"data_collection_id": dc_query})
+        deltatables_collection.delete_many({"data_collection_id": dc_query})
+        runs_collection.delete_many({"data_collection_id": dc_query})
+        multiqc_collection.delete_many({"data_collection_id": dc_query})
+        jbrowse_collection.delete_many({"data_collection_id": dc_query})
         data_collections_collection.delete_many({"_id": {"$in": dc_ids}})
 
     dashboards_collection.delete_many({"project_id": ObjectId(project_id)})

@@ -91,6 +91,16 @@ def _normalize_s3_path(location: str, bucket: str) -> str | None:
     return parts[1] if len(parts) == 2 else None
 
 
+def _dc_ids_query(dc_ids: list[ObjectId]) -> dict:
+    """Build a $in query matching data_collection_id stored as either ObjectId or string.
+
+    Some documents (e.g. deltatables created by the background processor) store
+    data_collection_id as a plain string; others store it as an ObjectId.  Querying
+    with both forms ensures we find all matching documents regardless of storage format.
+    """
+    return {"$in": dc_ids + [str(dc_id) for dc_id in dc_ids]}
+
+
 def _collect_s3_locations_for_project(dc_ids: list[ObjectId], source_bucket: str) -> list[str]:
     """Collect all S3 paths for a project's data collections across all DC types."""
     locations: list[str] = []
@@ -101,8 +111,10 @@ def _collect_s3_locations_for_project(dc_ids: list[ObjectId], source_bucket: str
             seen.add(loc)
             locations.append(loc)
 
+    dc_query = _dc_ids_query(dc_ids)
+
     # Delta Lake tables
-    for dt in deltatables_collection.find({"data_collection_id": {"$in": dc_ids}}):
+    for dt in deltatables_collection.find({"data_collection_id": dc_query}):
         raw = dt.get("delta_table_location") or dt.get("location")
         add(_normalize_s3_path(raw, source_bucket) if raw else None)
 
@@ -119,13 +131,13 @@ def _collect_s3_locations_for_project(dc_ids: list[ObjectId], source_bucket: str
             add(_normalize_s3_path(image_folder, source_bucket))
 
     # MultiQC reports
-    for report in multiqc_collection.find({"data_collection_id": {"$in": dc_ids}}):
+    for report in multiqc_collection.find({"data_collection_id": dc_query}):
         raw = report.get("s3_location")
         if raw:
             add(_normalize_s3_path(raw, source_bucket))
 
     # JBrowse2 – only include S3 URIs
-    for jb in jbrowse_collection.find({"data_collection_id": {"$in": dc_ids}}):
+    for jb in jbrowse_collection.find({"data_collection_id": dc_query}):
         for track in jb.get("tracks", []):
             uri = track.get("uri", "")
             if uri.startswith("s3://"):
@@ -293,10 +305,9 @@ async def export_project(
 
     if mode in ("all", "metadata"):
         if dc_ids:
-            files_docs = list(files_collection.find({"data_collection_id": {"$in": dc_ids}}))
-            deltatables_docs = list(
-                deltatables_collection.find({"data_collection_id": {"$in": dc_ids}})
-            )
+            dc_query = _dc_ids_query(dc_ids)
+            files_docs = list(files_collection.find({"data_collection_id": dc_query}))
+            deltatables_docs = list(deltatables_collection.find({"data_collection_id": dc_query}))
         if workflow_ids:
             runs_docs = list(runs_collection.find({"workflow_id": {"$in": workflow_ids}}))
 
