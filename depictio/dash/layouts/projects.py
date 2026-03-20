@@ -77,6 +77,51 @@ def fetch_projects(token: str) -> list[Project]:
 # =============================================================================
 
 
+def _create_import_project_tab_content() -> dmc.Stack:
+    """Create the Import tab content for the project modal."""
+    return dmc.Stack(
+        [
+            dmc.Text(
+                "Upload a .zip bundle exported from another Depictio instance.",
+                c="dimmed",
+                size="sm",
+            ),
+            dcc.Upload(
+                id="import-project-upload",
+                children=dmc.Stack(
+                    [
+                        DashIconify(icon="mdi:file-upload", width=40, color="violet"),
+                        dmc.Text("Drop .zip here or click to browse", c="dimmed"),
+                    ],
+                    align="center",
+                ),
+                style={
+                    "borderWidth": "2px",
+                    "borderStyle": "dashed",
+                    "borderRadius": "8px",
+                    "borderColor": "#7c3aed",
+                    "padding": "40px 20px",
+                    "textAlign": "center",
+                    "cursor": "pointer",
+                },
+                accept=".zip",
+                multiple=False,
+            ),
+            html.Div(id="import-project-preview"),
+            dcc.Store(id="import-project-store"),
+            dmc.Button(
+                "Import Project",
+                id="import-project-submit",
+                leftSection=DashIconify(icon="mdi:check", width=16),
+                color="violet",
+                disabled=True,
+            ),
+            html.Div(id="import-project-status"),
+        ],
+        gap="md",
+    )
+
+
 def create_project_modal(opened: bool = False) -> tuple[dmc.Modal, str]:
     """Create the project creation modal with stepper wizard.
 
@@ -114,108 +159,140 @@ def create_project_modal(opened: bool = False) -> tuple[dmc.Modal, str]:
         },
         children=[
             html.Div(id="dummy-hover-output", style={"display": "none"}),
-            dcc.Store(
-                id="project-creation-store",
-                data={
-                    "current_step": 0,
-                    "project_type": None,
-                    "project_name": "",
-                    "is_public": False,
-                    "data_collections": [],
-                },
-            ),
-            dcc.Store(
-                id="project-card-click-memory",
-                data={"basic_clicks": 0},
-                storage_type="memory",
-            ),
-            dmc.Stack(
-                gap="xl",
+            dmc.Tabs(
+                id="project-modal-tabs",
+                value="create",
+                variant="pills",
                 children=[
-                    # Header with icon and title
-                    dmc.Group(
-                        justify="center",
-                        gap="sm",
-                        children=[
-                            DashIconify(
-                                icon="mdi:folder-plus-outline",
-                                width=40,
-                                height=40,
-                                color=colors["teal"],
+                    dmc.TabsList(
+                        [
+                            dmc.TabsTab(
+                                "Create New",
+                                value="create",
+                                leftSection=DashIconify(icon="mdi:plus", width=16),
                             ),
-                            dmc.Title(
-                                "Create New Project",
-                                order=1,
-                                c=colors["teal"],
-                                style={"margin": 0},
+                            dmc.TabsTab(
+                                "Import",
+                                value="import",
+                                leftSection=DashIconify(icon="mdi:import", width=16),
                             ),
-                        ],
+                        ]
                     ),
-                    # Divider
-                    dmc.Divider(style={"marginTop": 5, "marginBottom": 5}),
-                    # Stepper
-                    dmc.Stepper(
-                        id="project-creation-stepper",
-                        active=0,
-                        color=colors["teal"],
+                    dmc.TabsPanel(
+                        value="create",
+                        pt="lg",
                         children=[
-                            dmc.StepperStep(
-                                label="Project Type",
-                                description="Choose basic or advanced",
-                                children=[html.Div(id="step-1-content")],
+                            dcc.Store(
+                                id="project-creation-store",
+                                data={
+                                    "current_step": 0,
+                                    "project_type": None,
+                                    "project_name": "",
+                                    "is_public": False,
+                                    "data_collections": [],
+                                },
                             ),
-                            dmc.StepperStep(
-                                label="Project Details",
-                                description="Configure your project",
-                                children=[html.Div(id="step-2-content")],
+                            dcc.Store(
+                                id="project-card-click-memory",
+                                data={"basic_clicks": 0},
+                                storage_type="memory",
                             ),
-                            dmc.StepperCompleted(
+                            dmc.Stack(
+                                gap="xl",
                                 children=[
-                                    dmc.Center(
-                                        [
-                                            dmc.Stack(
+                                    # Header with icon and title
+                                    dmc.Group(
+                                        justify="center",
+                                        gap="sm",
+                                        children=[
+                                            DashIconify(
+                                                icon="mdi:folder-plus-outline",
+                                                width=40,
+                                                height=40,
+                                                color=colors["teal"],
+                                            ),
+                                            dmc.Title(
+                                                "Create New Project",
+                                                order=1,
+                                                c=colors["teal"],
+                                                style={"margin": 0},
+                                            ),
+                                        ],
+                                    ),
+                                    # Divider
+                                    dmc.Divider(style={"marginTop": 5, "marginBottom": 5}),
+                                    # Stepper
+                                    dmc.Stepper(
+                                        id="project-creation-stepper",
+                                        active=0,
+                                        color=colors["teal"],
+                                        children=[
+                                            dmc.StepperStep(
+                                                label="Project Type",
+                                                description="Choose basic or advanced",
+                                                children=[html.Div(id="step-1-content")],
+                                            ),
+                                            dmc.StepperStep(
+                                                label="Project Details",
+                                                description="Configure your project",
+                                                children=[html.Div(id="step-2-content")],
+                                            ),
+                                            dmc.StepperCompleted(
+                                                children=[
+                                                    dmc.Center(
+                                                        [
+                                                            dmc.Stack(
+                                                                [
+                                                                    DashIconify(
+                                                                        icon="mdi:check-circle",
+                                                                        width=64,
+                                                                        color=colors["teal"],
+                                                                    ),
+                                                                    dmc.Text(
+                                                                        "Project created successfully!",
+                                                                        ta="center",
+                                                                        fw="bold",
+                                                                    ),
+                                                                ],
+                                                                align="center",
+                                                            )
+                                                        ]
+                                                    )
+                                                ]
+                                            ),
+                                        ],
+                                    ),
+                                    # Navigation buttons
+                                    dmc.Group(
+                                        justify="space-between",
+                                        mt="xl",
+                                        children=[
+                                            dmc.Button(
+                                                "Previous",
+                                                id="project-stepper-prev",
+                                                variant="outline",
+                                                disabled=True,
+                                            ),
+                                            dmc.Group(
                                                 [
-                                                    DashIconify(
-                                                        icon="mdi:check-circle",
-                                                        width=64,
+                                                    dmc.Button(
+                                                        "Next",
+                                                        id="project-stepper-next",
                                                         color=colors["teal"],
                                                     ),
-                                                    dmc.Text(
-                                                        "Project created successfully!",
-                                                        ta="center",
-                                                        fw="bold",
-                                                    ),
                                                 ],
-                                                align="center",
-                                            )
-                                        ]
-                                    )
-                                ]
+                                                justify="flex-end",
+                                            ),
+                                        ],
+                                    ),
+                                ],
                             ),
                         ],
                     ),
-                    # Navigation buttons
-                    dmc.Group(
-                        justify="space-between",
-                        mt="xl",
-                        children=[
-                            dmc.Button(
-                                "Previous",
-                                id="project-stepper-prev",
-                                variant="outline",
-                                disabled=True,
-                            ),
-                            dmc.Group(
-                                [
-                                    dmc.Button(
-                                        "Next",
-                                        id="project-stepper-next",
-                                        color=colors["teal"],
-                                    ),
-                                ],
-                                justify="flex-end",
-                            ),
-                        ],
+                    dmc.TabsPanel(
+                        value="import",
+                        pt="lg",
+                        children=_create_import_project_tab_content(),
                     ),
                 ],
             ),
@@ -1055,6 +1132,15 @@ def create_project_management_panel(project: Project, current_user: UserBase) ->
                     size="sm",
                     disabled=not user_can_manage,
                 ),
+                dmc.Button(
+                    "Export Project",
+                    id={"type": "export-project-button", "index": str(project.id)},
+                    leftSection=DashIconify(icon="mdi:export", width=16),
+                    variant="light",
+                    color="violet",
+                    size="sm",
+                ),
+                dcc.Download(id={"type": "export-project-download", "index": str(project.id)}),
             ],
             gap="md",
         ),
@@ -2235,3 +2321,107 @@ def register_workflows_callbacks(app) -> None:
     #     [Input("project-creation-modal", "opened"), Input("project-creation-store", "data")],
     #     prevent_initial_call=True,
     # )
+
+    # Export project to ZIP
+    @app.callback(
+        Output({"type": "export-project-download", "index": MATCH}, "data"),
+        Input({"type": "export-project-button", "index": MATCH}, "n_clicks"),
+        State("local-store", "data"),
+        prevent_initial_call=True,
+    )
+    def export_project_to_zip(n_clicks, local_data):
+        """Download a project bundle as a ZIP file."""
+        if not n_clicks:
+            raise dash.exceptions.PreventUpdate
+        ctx = dash.callback_context
+        project_id = ctx.triggered_id["index"]
+        token = local_data.get("access_token") if local_data else None
+        if not token:
+            raise dash.exceptions.PreventUpdate
+        headers = {"Authorization": f"Bearer {token}"}
+        resp = httpx.post(
+            f"{API_BASE_URL}/depictio/api/v1/migrate/export-project",
+            json={"project_id": project_id, "mode": "all"},
+            headers=headers,
+            timeout=120.0,
+        )
+        if resp.status_code != 200:
+            logger.error(f"Export project failed: {resp.text}")
+            raise dash.exceptions.PreventUpdate
+        return dcc.send_bytes(resp.content, f"depictio_export_{project_id}.zip")
+
+    # Handle import project ZIP upload — parse and show preview
+    @app.callback(
+        [
+            Output("import-project-store", "data"),
+            Output("import-project-preview", "children"),
+            Output("import-project-submit", "disabled"),
+        ],
+        Input("import-project-upload", "contents"),
+        State("import-project-upload", "filename"),
+        prevent_initial_call=True,
+    )
+    def handle_import_project_upload(contents, filename):
+        """Parse uploaded ZIP and show project preview."""
+        import base64
+        import io as _io
+        import json as _json
+        import zipfile as _zipfile
+
+        if not contents:
+            raise dash.exceptions.PreventUpdate
+        _content_type, content_string = contents.split(",")
+        decoded = base64.b64decode(content_string)
+        buf = _io.BytesIO(decoded)
+        try:
+            with _zipfile.ZipFile(buf) as zf:
+                meta = _json.loads(zf.read("migrate_metadata.json"))
+                bundle_data = _json.loads(zf.read("bundle.json"))
+        except Exception as e:
+            preview = dmc.Alert(f"Invalid ZIP file: {e}", color="red")
+            return dash.no_update, preview, True
+        preview = dmc.Paper(
+            [
+                dmc.Text(f"Project: {meta.get('project_name')}", fw=600),
+                dmc.Text(
+                    f"Mode: {meta.get('mode')}  |  Exported: {str(meta.get('timestamp', ''))[:10]}",
+                    size="sm",
+                    c="dimmed",
+                ),
+                dmc.Text(str(meta.get("document_counts", {})), size="xs", c="dimmed"),
+            ],
+            p="sm",
+            withBorder=True,
+            radius="md",
+        )
+        full_bundle = {"migrate_metadata": meta, "data": bundle_data}
+        return full_bundle, preview, False
+
+    # Submit import — POST bundle to API
+    @app.callback(
+        [
+            Output("import-project-status", "children"),
+            Output("project-creation-modal", "opened", allow_duplicate=True),
+        ],
+        Input("import-project-submit", "n_clicks"),
+        [State("import-project-store", "data"), State("local-store", "data")],
+        prevent_initial_call=True,
+    )
+    def submit_project_import(n_clicks, bundle, local_data):
+        """POST the import bundle to the API and close modal on success."""
+        if not n_clicks or not bundle:
+            raise dash.exceptions.PreventUpdate
+        token = local_data.get("access_token") if local_data else None
+        if not token:
+            raise dash.exceptions.PreventUpdate
+        headers = {"Authorization": f"Bearer {token}"}
+        resp = httpx.post(
+            f"{API_BASE_URL}/depictio/api/v1/migrate/import-project",
+            json={"bundle": bundle, "force_owner_remap": True},
+            headers=headers,
+            timeout=120.0,
+        )
+        if resp.status_code == 200:
+            return dmc.Alert("Project imported successfully!", color="green"), False
+        else:
+            return dmc.Alert(f"Import failed: {resp.text}", color="red"), True

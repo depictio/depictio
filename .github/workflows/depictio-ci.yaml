@@ -1922,6 +1922,91 @@ jobs:
             exit 1
           fi
 
+      - name: Test migrate (self-migration, metadata mode) - ${{ matrix.strategy_name }}
+        run: |
+          echo "🔄 Testing depictio migrate (self-migration, metadata mode) for ${{ matrix.strategy_name }}..."
+          cd depictio/cli
+          source venv/bin/activate
+
+          # Resolve the Iris project name and capture before-counts
+          IRIS_PROJECT_NAME="Iris Dataset Project Data Analysis"
+
+          PROJECT_COUNT_BEFORE=$(docker compose exec -T mongo mongosh localhost:27018/depictioDB \
+            --eval "db.projects.countDocuments({})" --quiet 2>&1 | tail -1)
+          WORKFLOW_COUNT_BEFORE=$(docker compose exec -T mongo mongosh localhost:27018/depictioDB \
+            --eval "db.workflows.countDocuments({})" --quiet 2>&1 | tail -1)
+          DASHBOARD_COUNT_BEFORE=$(docker compose exec -T mongo mongosh localhost:27018/depictioDB \
+            --eval "db.dashboards.countDocuments({})" --quiet 2>&1 | tail -1)
+          echo "📊 Before migrate: projects=$PROJECT_COUNT_BEFORE  workflows=$WORKFLOW_COUNT_BEFORE  dashboards=$DASHBOARD_COUNT_BEFORE"
+
+          # Dry-run first — must not change anything
+          echo "🏃 Running dry-run migrate..."
+          depictio-cli -v -vl DEBUG migrate \
+            --project "$IRIS_PROJECT_NAME" \
+            --CLI-config-path admin_config.yaml \
+            --target-config admin_config.yaml \
+            --mode metadata \
+            --dry-run
+          echo "✅ Dry-run migrate completed"
+
+          PROJECT_COUNT_DRY=$(docker compose exec -T mongo mongosh localhost:27018/depictioDB \
+            --eval "db.projects.countDocuments({})" --quiet 2>&1 | tail -1)
+          [ "$PROJECT_COUNT_DRY" -eq "$PROJECT_COUNT_BEFORE" ] || \
+            { echo "❌ Dry-run changed project count ($PROJECT_COUNT_BEFORE → $PROJECT_COUNT_DRY)"; exit 1; }
+          echo "✅ Dry-run did not modify the database"
+
+          # Real migrate (same instance as source and target — idempotent upsert)
+          echo "🚀 Running real migrate (metadata mode)..."
+          depictio-cli -v -vl DEBUG migrate \
+            --project "$IRIS_PROJECT_NAME" \
+            --CLI-config-path admin_config.yaml \
+            --target-config admin_config.yaml \
+            --mode metadata
+          echo "✅ Real migrate completed"
+
+          # Verify counts are preserved (upsert is non-destructive)
+          PROJECT_COUNT_AFTER=$(docker compose exec -T mongo mongosh localhost:27018/depictioDB \
+            --eval "db.projects.countDocuments({})" --quiet 2>&1 | tail -1)
+          WORKFLOW_COUNT_AFTER=$(docker compose exec -T mongo mongosh localhost:27018/depictioDB \
+            --eval "db.workflows.countDocuments({})" --quiet 2>&1 | tail -1)
+          DASHBOARD_COUNT_AFTER=$(docker compose exec -T mongo mongosh localhost:27018/depictioDB \
+            --eval "db.dashboards.countDocuments({})" --quiet 2>&1 | tail -1)
+          echo "📊 After migrate: projects=$PROJECT_COUNT_AFTER  workflows=$WORKFLOW_COUNT_AFTER  dashboards=$DASHBOARD_COUNT_AFTER"
+
+          [ "$PROJECT_COUNT_AFTER" -ge "$PROJECT_COUNT_BEFORE" ] || \
+            { echo "❌ Projects decreased after migrate ($PROJECT_COUNT_BEFORE → $PROJECT_COUNT_AFTER)"; exit 1; }
+          [ "$WORKFLOW_COUNT_AFTER" -ge "$WORKFLOW_COUNT_BEFORE" ] || \
+            { echo "❌ Workflows decreased after migrate ($WORKFLOW_COUNT_BEFORE → $WORKFLOW_COUNT_AFTER)"; exit 1; }
+
+          echo "✅ Migrate (metadata mode) verified — non-destructive upsert confirmed"
+
+      - name: Test migrate (dashboard mode) - ${{ matrix.strategy_name }}
+        run: |
+          echo "📊 Testing depictio migrate --mode dashboard for ${{ matrix.strategy_name }}..."
+          cd depictio/cli
+          source venv/bin/activate
+
+          IRIS_PROJECT_NAME="Iris Dataset Project Data Analysis"
+
+          DASH_COUNT_BEFORE=$(docker compose exec -T mongo mongosh localhost:27018/depictioDB \
+            --eval "db.dashboards.countDocuments({})" --quiet 2>&1 | tail -1)
+          echo "📊 Dashboards before dashboard-mode migrate: $DASH_COUNT_BEFORE"
+
+          depictio-cli -v -vl DEBUG migrate \
+            --project "$IRIS_PROJECT_NAME" \
+            --CLI-config-path admin_config.yaml \
+            --target-config admin_config.yaml \
+            --mode dashboard
+
+          DASH_COUNT_AFTER=$(docker compose exec -T mongo mongosh localhost:27018/depictioDB \
+            --eval "db.dashboards.countDocuments({})" --quiet 2>&1 | tail -1)
+          echo "📊 Dashboards after dashboard-mode migrate: $DASH_COUNT_AFTER"
+
+          [ "$DASH_COUNT_AFTER" -ge "$DASH_COUNT_BEFORE" ] || \
+            { echo "❌ Dashboards decreased after dashboard migrate ($DASH_COUNT_BEFORE → $DASH_COUNT_AFTER)"; exit 1; }
+
+          echo "✅ Migrate (dashboard mode) verified"
+
       - name: Cleanup and summary - ${{ matrix.strategy_name }}
         run: |
           echo "🧹 Cleanup and summary for ${{ matrix.strategy_name }}..."
