@@ -27,6 +27,7 @@ def register_realtime_callbacks(app: Dash) -> None:
     logger.info(f"Registering real-time WebSocket callbacks for app: {app.title}")
     register_native_websocket_callback(app)
     register_data_update_notification_callback(app)
+    register_waiting_for_data_notification_callback(app)
     register_track_updated_data_collections_callback(app)
     register_track_new_table_rows_callback(app)
     register_auto_refresh_components_callback(app)
@@ -229,16 +230,92 @@ def register_data_update_notification_callback(app: Dash) -> None:
         operation = payload.get("operation", "updated")
         dc_id = ws_data.get("data_collection_id", "unknown")
         received_at = ws_data.get("received_at", 0)
+        n_rows = payload.get("n_rows")
+        n_cols = payload.get("n_columns")
 
-        logger.info(f"Real-time notification: {dc_tag} {operation}")
+        # Build informative message
+        details = []
+        if n_rows is not None:
+            details.append(f"{n_rows} rows")
+        if n_cols is not None:
+            details.append(f"{n_cols} columns")
+        detail_str = f" ({', '.join(details)})" if details else ""
+
+        if operation == "upserted":
+            title = "New data received"
+            message = f"{dc_tag}{detail_str} — dashboard refreshing automatically."
+            color = "green"
+        else:
+            title = "Data updated"
+            message = f"{dc_tag} has been {operation}{detail_str}."
+            color = "blue"
+
+        logger.info(f"Real-time notification: {dc_tag} {operation}{detail_str}")
         return [
             {
                 "action": "show",
                 "id": f"data-update-{dc_id}-{received_at}",
-                "title": "Data Updated",
-                "message": f"{dc_tag} has been {operation}. Refresh to see changes.",
-                "color": "blue",
+                "title": title,
+                "message": message,
+                "color": color,
                 "autoClose": 8000,
+            },
+        ]
+
+
+def register_waiting_for_data_notification_callback(app: Dash) -> None:
+    """
+    Show a one-time notification when the dashboard has no data yet.
+
+    Fires once after project metadata loads. If no data collection has a
+    delta_location, shows an info notification telling the user the dashboard
+    is waiting for data ingestion.
+    """
+
+    @app.callback(
+        Output("notification-container", "sendNotifications", allow_duplicate=True),
+        Input("project-metadata-store", "data"),
+        prevent_initial_call=True,
+    )
+    def show_waiting_for_data_notification(
+        project_metadata: dict | None,
+    ) -> list[dict] | type[no_update]:
+        if not project_metadata or not isinstance(project_metadata, dict):
+            return no_update
+
+        project_data = project_metadata.get("project", {})
+
+        # Try loading one DC to see if data actually exists
+        from bson import ObjectId as BsonObjectId
+
+        from depictio.api.v1.deltatables_utils import load_deltatable_lite
+
+        for wf in project_data.get("workflows", []):
+            wf_id = str(wf.get("_id", ""))
+            for dc in wf.get("data_collections", []):
+                dc_id = str(dc.get("_id", ""))
+                if not wf_id or not dc_id:
+                    continue
+                delta_loc = dc.get("delta_location")
+                init = {dc_id: {"delta_location": delta_loc, "size_bytes": -1}} if delta_loc else {}
+                try:
+                    df = load_deltatable_lite(
+                        BsonObjectId(wf_id), BsonObjectId(dc_id), init_data=init
+                    )
+                    if len(df) > 0:
+                        return no_update
+                except Exception:
+                    pass
+
+        return [
+            {
+                "action": "show",
+                "id": "waiting-for-data",
+                "title": "Waiting for data",
+                "message": "No data has been ingested yet. "
+                "Components will populate automatically when data arrives.",
+                "color": "yellow",
+                "autoClose": 15000,
             }
         ]
 
@@ -367,17 +444,27 @@ def register_auto_refresh_components_callback(app: Dash) -> None:
     """
     Register clientside callback to trigger component refresh when data is updated.
 
-    This callback watches ws-new-data-ids and triggers a refresh of figure
-    and table components that use the updated data collections.
+    This callback watches ws-new-data-ids and triggers a refresh of figure,
+    card, and image components that use the updated data collections.
     """
-    # Clientside callback to trigger figure refresh
-    # This updates figure-trigger stores to force re-render
+    # Register the same auto-refresh pattern for all trigger-based component types
+    _register_trigger_auto_refresh(app, "figure")
+    _register_trigger_auto_refresh(app, "card")
+    _register_trigger_auto_refresh(app, "image")
+    _register_trigger_auto_refresh(app, "interactive")
+
+
+def _register_trigger_auto_refresh(app: Dash, component_type: str) -> None:
+    """Register a clientside callback to refresh {component_type}-trigger stores on data updates."""
+    trigger_type = f"{component_type}-trigger"
     app.clientside_callback(
         """
         function(newDataIds, triggerData, triggerIds, config) {
-            // Check if auto-refresh is enabled
+            const componentType = '"""
+        + component_type
+        + """';
+
             if (!config || config.refresh_mode !== 'auto-refresh') {
-                console.log('[AutoRefresh] Auto-refresh not enabled');
                 return window.dash_clientside.no_update;
             }
 
@@ -389,20 +476,16 @@ def register_auto_refresh_components_callback(app: Dash) -> None:
                 return window.dash_clientside.no_update;
             }
 
-            // Get set of updated DC IDs
             const updatedDcIds = new Set(newDataIds.map(item => item.dc_id));
-            console.log('[AutoRefresh] Updated DC IDs:', Array.from(updatedDcIds));
 
-            // Check if any figure uses an updated DC
             let needsUpdate = false;
             const updatedTriggers = triggerData.map((trigger, idx) => {
                 if (!trigger) return trigger;
 
                 const dcId = trigger.dc_id;
                 if (updatedDcIds.has(dcId)) {
-                    console.log('[AutoRefresh] Triggering refresh for figure with DC:', dcId);
+                    console.log('[AutoRefresh] Triggering', componentType, 'refresh for DC:', dcId);
                     needsUpdate = true;
-                    // Add refresh timestamp to force re-render
                     return {
                         ...trigger,
                         _refresh_timestamp: Date.now(),
@@ -413,17 +496,16 @@ def register_auto_refresh_components_callback(app: Dash) -> None:
             });
 
             if (needsUpdate) {
-                console.log('[AutoRefresh] Triggering figure refresh');
                 return updatedTriggers;
             }
 
             return window.dash_clientside.no_update;
         }
         """,
-        Output({"type": "figure-trigger", "index": dash.ALL}, "data", allow_duplicate=True),
+        Output({"type": trigger_type, "index": dash.ALL}, "data", allow_duplicate=True),
         Input("ws-new-data-ids", "data"),
-        State({"type": "figure-trigger", "index": dash.ALL}, "data"),
-        State({"type": "figure-trigger", "index": dash.ALL}, "id"),
+        State({"type": trigger_type, "index": dash.ALL}, "data"),
+        State({"type": trigger_type, "index": dash.ALL}, "id"),
         State("ws-connection-config", "data"),
         prevent_initial_call=True,
     )
