@@ -159,142 +159,149 @@ def create_project_modal(opened: bool = False) -> tuple[dmc.Modal, str]:
         },
         children=[
             html.Div(id="dummy-hover-output", style={"display": "none"}),
-            dmc.Tabs(
-                id="project-modal-tabs",
-                value="create",
-                variant="pills",
-                color=colors["teal"],
+            # Shared header — always visible above the tabs
+            dmc.Stack(
+                gap=0,
+                mb="md",
                 children=[
-                    dmc.TabsList(
-                        [
-                            dmc.TabsTab(
-                                "Create New",
-                                value="create",
-                                leftSection=DashIconify(icon="mdi:plus", width=16),
+                    dmc.Group(
+                        justify="center",
+                        gap="sm",
+                        mb="md",
+                        children=[
+                            DashIconify(
+                                icon="mdi:folder-plus-outline",
+                                width=40,
+                                height=40,
+                                color=colors["teal"],
                             ),
-                            dmc.TabsTab(
-                                "Import",
-                                value="import",
-                                leftSection=DashIconify(icon="mdi:import", width=16),
+                            dmc.Title(
+                                "Projects",
+                                order=1,
+                                c=colors["teal"],
+                                style={"margin": 0},
                             ),
                         ],
-                        mb="md",
                     ),
-                    dmc.TabsPanel(
+                    dmc.Tabs(
+                        id="project-modal-tabs",
                         value="create",
-                        pt="lg",
+                        variant="pills",
+                        color=colors["teal"],
                         children=[
-                            dcc.Store(
-                                id="project-creation-store",
-                                data={
-                                    "current_step": 0,
-                                    "project_type": None,
-                                    "project_name": "",
-                                    "is_public": False,
-                                    "data_collections": [],
-                                },
-                            ),
-                            dcc.Store(
-                                id="project-card-click-memory",
-                                data={"basic_clicks": 0},
-                                storage_type="memory",
-                            ),
-                            dmc.Stack(
-                                gap="xl",
-                                children=[
-                                    # Header with icon and title
-                                    dmc.Group(
-                                        justify="center",
-                                        gap="sm",
-                                        children=[
-                                            DashIconify(
-                                                icon="mdi:folder-plus-outline",
-                                                width=40,
-                                                height=40,
-                                                color=colors["teal"],
-                                            ),
-                                            dmc.Title(
-                                                "Create New Project",
-                                                order=1,
-                                                c=colors["teal"],
-                                                style={"margin": 0},
-                                            ),
-                                        ],
+                            dmc.TabsList(
+                                [
+                                    dmc.TabsTab(
+                                        "Create New",
+                                        value="create",
+                                        leftSection=DashIconify(icon="mdi:plus", width=16),
                                     ),
-                                    # Divider
-                                    dmc.Divider(style={"marginTop": 5, "marginBottom": 5}),
-                                    # Stepper
-                                    dmc.Stepper(
-                                        id="project-creation-stepper",
-                                        active=0,
-                                        color=colors["teal"],
+                                    dmc.TabsTab(
+                                        "Import",
+                                        value="import",
+                                        leftSection=DashIconify(icon="mdi:import", width=16),
+                                    ),
+                                ],
+                                justify="center",
+                                mb="md",
+                            ),
+                            dmc.Divider(mb="md"),
+                            dmc.TabsPanel(
+                                value="create",
+                                children=[
+                                    dcc.Store(
+                                        id="project-creation-store",
+                                        data={
+                                            "current_step": 0,
+                                            "project_type": None,
+                                            "project_name": "",
+                                            "is_public": False,
+                                            "data_collections": [],
+                                        },
+                                    ),
+                                    dcc.Store(
+                                        id="project-card-click-memory",
+                                        data={"basic_clicks": 0},
+                                        storage_type="memory",
+                                    ),
+                                    dmc.Stack(
+                                        gap="xl",
                                         children=[
-                                            dmc.StepperStep(
-                                                label="Project Type",
-                                                description="Choose basic or advanced",
-                                                children=[html.Div(id="step-1-content")],
-                                            ),
-                                            dmc.StepperStep(
-                                                label="Project Details",
-                                                description="Configure your project",
-                                                children=[html.Div(id="step-2-content")],
-                                            ),
-                                            dmc.StepperCompleted(
+                                            # Stepper
+                                            dmc.Stepper(
+                                                id="project-creation-stepper",
+                                                active=0,
+                                                color=colors["teal"],
                                                 children=[
-                                                    dmc.Center(
-                                                        [
-                                                            dmc.Stack(
+                                                    dmc.StepperStep(
+                                                        label="Project Type",
+                                                        description="Choose basic or advanced",
+                                                        children=[html.Div(id="step-1-content")],
+                                                    ),
+                                                    dmc.StepperStep(
+                                                        label="Project Details",
+                                                        description="Configure your project",
+                                                        children=[html.Div(id="step-2-content")],
+                                                    ),
+                                                    dmc.StepperCompleted(
+                                                        children=[
+                                                            dmc.Center(
                                                                 [
-                                                                    DashIconify(
-                                                                        icon="mdi:check-circle",
-                                                                        width=64,
-                                                                        color=colors["teal"],
-                                                                    ),
-                                                                    dmc.Text(
-                                                                        "Project created successfully!",
-                                                                        ta="center",
-                                                                        fw="bold",
-                                                                    ),
-                                                                ],
-                                                                align="center",
+                                                                    dmc.Stack(
+                                                                        [
+                                                                            DashIconify(
+                                                                                icon="mdi:check-circle",
+                                                                                width=64,
+                                                                                color=colors[
+                                                                                    "teal"
+                                                                                ],
+                                                                            ),
+                                                                            dmc.Text(
+                                                                                "Project created successfully!",
+                                                                                ta="center",
+                                                                                fw="bold",
+                                                                            ),
+                                                                        ],
+                                                                        align="center",
+                                                                    )
+                                                                ]
                                                             )
                                                         ]
-                                                    )
-                                                ]
-                                            ),
-                                        ],
-                                    ),
-                                    # Navigation buttons
-                                    dmc.Group(
-                                        justify="space-between",
-                                        mt="xl",
-                                        children=[
-                                            dmc.Button(
-                                                "Previous",
-                                                id="project-stepper-prev",
-                                                variant="outline",
-                                                disabled=True,
-                                            ),
-                                            dmc.Group(
-                                                [
-                                                    dmc.Button(
-                                                        "Next",
-                                                        id="project-stepper-next",
-                                                        color=colors["teal"],
                                                     ),
                                                 ],
-                                                justify="flex-end",
+                                            ),
+                                            # Navigation buttons
+                                            dmc.Group(
+                                                justify="space-between",
+                                                mt="xl",
+                                                children=[
+                                                    dmc.Button(
+                                                        "Previous",
+                                                        id="project-stepper-prev",
+                                                        variant="outline",
+                                                        disabled=True,
+                                                    ),
+                                                    dmc.Group(
+                                                        [
+                                                            dmc.Button(
+                                                                "Next",
+                                                                id="project-stepper-next",
+                                                                color=colors["teal"],
+                                                            ),
+                                                        ],
+                                                        justify="flex-end",
+                                                    ),
+                                                ],
                                             ),
                                         ],
                                     ),
                                 ],
                             ),
+                            dmc.TabsPanel(
+                                value="import",
+                                children=_create_import_project_tab_content(),
+                            ),
                         ],
-                    ),
-                    dmc.TabsPanel(
-                        value="import",
-                        pt="lg",
-                        children=_create_import_project_tab_content(),
                     ),
                 ],
             ),

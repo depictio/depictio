@@ -342,12 +342,27 @@ async def export_project(
     if s3_metadata:
         bundle["s3_migrate_metadata"] = s3_metadata
 
+    def _json_default(obj: Any) -> Any:
+        """Fallback serializer for types _convert_complex_objects_to_strings doesn't cover."""
+        if isinstance(obj, datetime):
+            return obj.isoformat()
+        raise TypeError(f"Object of type {type(obj).__name__} is not JSON serializable")
+
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
-        zf.writestr("migrate_metadata.json", json.dumps(bundle["migrate_metadata"], indent=2))
-        zf.writestr("bundle.json", json.dumps(bundle["data"], indent=2))
+        zf.writestr(
+            "migrate_metadata.json",
+            json.dumps(bundle["migrate_metadata"], indent=2, default=_json_default),
+        )
+        zf.writestr(
+            "bundle.json",
+            json.dumps(bundle["data"], indent=2, default=_json_default),
+        )
         if "s3_migrate_metadata" in bundle:
-            zf.writestr("s3_metadata.json", json.dumps(bundle["s3_migrate_metadata"], indent=2))
+            zf.writestr(
+                "s3_metadata.json",
+                json.dumps(bundle["s3_migrate_metadata"], indent=2, default=_json_default),
+            )
     buf.seek(0)
 
     project_name = (project.get("name") or "export").replace(" ", "_")
