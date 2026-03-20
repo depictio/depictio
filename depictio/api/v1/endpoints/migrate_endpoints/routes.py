@@ -252,30 +252,35 @@ async def export_project(
     # Workflows are embedded in the project document (may be ID-only refs after processing).
     # Fetch full workflow documents from workflows_collection for authoritative DC IDs.
     embedded_workflows: list[dict] = project.get("workflows", [])
+
+    def _extract_oid(doc: dict) -> ObjectId | None:
+        """Return the ObjectId from a doc that may use '_id' or 'id' as the key."""
+        for key in ("_id", "id"):
+            val = doc.get(key)
+            if isinstance(val, ObjectId):
+                return val
+            if isinstance(val, str):
+                try:
+                    return ObjectId(val)
+                except Exception:
+                    pass
+        return None
+
     workflow_ids: list[ObjectId] = [
-        w["_id"] for w in embedded_workflows if isinstance(w.get("_id"), ObjectId)
+        oid for w in embedded_workflows if (oid := _extract_oid(w)) is not None
     ]
 
     # Prefer workflows_collection (authoritative) over embedded refs (may be ID-only)
-    if workflow_ids:
-        full_workflows = list(workflows_collection.find({"_id": {"$in": workflow_ids}}))
-    else:
-        full_workflows = []
+    full_workflows = (
+        list(workflows_collection.find({"_id": {"$in": workflow_ids}})) if workflow_ids else []
+    )
 
     dc_ids: list[ObjectId] = [
-        dc["_id"]
-        for wf in full_workflows
+        oid
+        for wf in (full_workflows or embedded_workflows)
         for dc in wf.get("data_collections", [])
-        if isinstance(dc.get("_id"), ObjectId)
+        if (oid := _extract_oid(dc)) is not None
     ]
-    # Fallback: extract from embedded workflows if workflows_collection returned nothing
-    if not dc_ids:
-        dc_ids = [
-            dc["_id"]
-            for wf in embedded_workflows
-            for dc in wf.get("data_collections", [])
-            if isinstance(dc.get("_id"), ObjectId)
-        ]
     logger.info(
         "migrate export: project=%s workflow_ids=%d dc_ids=%d",
         str(project_id),
@@ -471,7 +476,7 @@ async def import_project(
             existing = projects_collection.find_one({"_id": ObjectId(str(raw_pid))})
         except Exception:
             existing = None
-        if existing and not request.overwrite:
+        if existing and not request.overwrite and not request.dry_run:
             project_name = existing.get("name", str(raw_pid))
             return MigrateImportResponse(
                 success=False,
