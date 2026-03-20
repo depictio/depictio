@@ -90,7 +90,7 @@ def _create_import_project_tab_content() -> dmc.Stack:
                 id="import-project-upload",
                 children=dmc.Stack(
                     [
-                        DashIconify(icon="mdi:file-upload", width=40, color="violet"),
+                        DashIconify(icon="mdi:file-upload", width=40, color=colors["teal"]),
                         dmc.Text("Drop .zip here or click to browse", c="dimmed"),
                     ],
                     align="center",
@@ -99,7 +99,7 @@ def _create_import_project_tab_content() -> dmc.Stack:
                     "borderWidth": "2px",
                     "borderStyle": "dashed",
                     "borderRadius": "8px",
-                    "borderColor": "#7c3aed",
+                    "borderColor": colors["teal"],
                     "padding": "40px 20px",
                     "textAlign": "center",
                     "cursor": "pointer",
@@ -113,7 +113,7 @@ def _create_import_project_tab_content() -> dmc.Stack:
                 "Import Project",
                 id="import-project-submit",
                 leftSection=DashIconify(icon="mdi:check", width=16),
-                color="violet",
+                color=colors["teal"],
                 disabled=True,
             ),
             html.Div(id="import-project-status"),
@@ -163,6 +163,7 @@ def create_project_modal(opened: bool = False) -> tuple[dmc.Modal, str]:
                 id="project-modal-tabs",
                 value="create",
                 variant="pills",
+                color=colors["teal"],
                 children=[
                     dmc.TabsList(
                         [
@@ -176,7 +177,8 @@ def create_project_modal(opened: bool = False) -> tuple[dmc.Modal, str]:
                                 value="import",
                                 leftSection=DashIconify(icon="mdi:import", width=16),
                             ),
-                        ]
+                        ],
+                        mb="md",
                     ),
                     dmc.TabsPanel(
                         value="create",
@@ -1136,8 +1138,8 @@ def create_project_management_panel(project: Project, current_user: UserBase) ->
                     "Export Project",
                     id={"type": "export-project-button", "index": str(project.id)},
                     leftSection=DashIconify(icon="mdi:export", width=16),
-                    variant="light",
-                    color="violet",
+                    variant="outline",
+                    color=colors["teal"],
                     size="sm",
                 ),
                 dcc.Download(id={"type": "export-project-download", "index": str(project.id)}),

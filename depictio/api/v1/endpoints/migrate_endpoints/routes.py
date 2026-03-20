@@ -33,7 +33,6 @@ from depictio.api.v1.db import (
     projects_collection,
     runs_collection,
     users_collection,
-    workflows_collection,
 )
 from depictio.api.v1.endpoints.backup_endpoints.routes import _convert_complex_objects_to_strings
 from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user
@@ -251,16 +250,18 @@ async def export_project(
     mode = request.mode
 
     # Cascade queries ---------------------------------------------------
-    dc_ids: list[ObjectId] = []
-
-    workflows = list(workflows_collection.find({"project_id": project_id}))
-    workflow_ids = [w["_id"] for w in workflows]
-
-    if workflow_ids:
-        dcs = list(data_collections_collection.find({"workflow_id": {"$in": workflow_ids}}))
-        dc_ids = [dc["_id"] for dc in dcs]
-    else:
-        dcs = []
+    # Workflows and data_collections are embedded in the project document.
+    # Extract them directly rather than querying separate collections.
+    embedded_workflows: list[dict] = project.get("workflows", [])
+    workflow_ids: list[ObjectId] = [
+        w["_id"] for w in embedded_workflows if isinstance(w.get("_id"), ObjectId)
+    ]
+    dc_ids: list[ObjectId] = [
+        dc["_id"]
+        for wf in embedded_workflows
+        for dc in wf.get("data_collections", [])
+        if isinstance(dc.get("_id"), ObjectId)
+    ]
 
     files_docs: list[dict] = []
     deltatables_docs: list[dict] = []
@@ -287,9 +288,8 @@ async def export_project(
     # Build data dict based on mode
     data: dict[str, list[dict]] = {}
     if mode in ("all", "metadata"):
+        # The project document already embeds workflows and data_collections — no separate entries needed.
         data["projects"] = [project]
-        data["workflows"] = workflows
-        data["data_collections"] = dcs
         data["files"] = files_docs
         data["deltatables"] = deltatables_docs
         data["runs"] = runs_docs
@@ -301,8 +301,11 @@ async def export_project(
     # Serialize all ObjectIds / DBRefs
     data = cast(dict[str, list[dict]], _convert_complex_objects_to_strings(data))
 
-    # Document counts
+    # Document counts (include embedded workflows/DCs for informational purposes)
     doc_counts = {k: len(v) for k, v in data.items()}
+    if mode in ("all", "metadata"):
+        doc_counts["workflows_embedded"] = len(embedded_workflows)
+        doc_counts["data_collections_embedded"] = len(dc_ids)
 
     # S3 copy -----------------------------------------------------------
     s3_metadata: dict[str, Any] = {}
@@ -391,21 +394,19 @@ async def import_project(
     # Collect existing user IDs on this instance (for owner remapping)
     existing_user_ids = {str(u["_id"]) for u in users_collection.find({}, {"_id": 1})}
 
+    # workflows and data_collections are embedded in the project document,
+    # so they are not stored in separate collections and don't appear in the bundle.
     collection_map: dict[str, Collection[dict[str, Any]]] = {
         "projects": projects_collection,
-        "workflows": workflows_collection,
-        "data_collections": data_collections_collection,
         "files": files_collection,
         "deltatables": deltatables_collection,
         "runs": runs_collection,
         "dashboards": dashboards_collection,
     }
 
-    # Import order respects dependencies
+    # Import order respects dependencies (project first, then its dependents)
     import_order = [
         "projects",
-        "workflows",
-        "data_collections",
         "files",
         "deltatables",
         "runs",
