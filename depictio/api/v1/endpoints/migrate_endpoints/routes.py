@@ -33,7 +33,6 @@ from depictio.api.v1.db import (
     projects_collection,
     runs_collection,
     users_collection,
-    workflows_collection,
 )
 from depictio.api.v1.endpoints.backup_endpoints.routes import _convert_complex_objects_to_strings
 from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user
@@ -253,33 +252,32 @@ async def export_project(
     # Fetch full workflow documents from workflows_collection for authoritative DC IDs.
     embedded_workflows: list[dict] = project.get("workflows", [])
 
-    def _extract_oid(doc: dict) -> ObjectId | None:
-        """Return the ObjectId from a doc that may use '_id' or 'id' as the key."""
-        for key in ("_id", "id"):
-            val = doc.get(key)
-            if isinstance(val, ObjectId):
-                return val
-            if isinstance(val, str):
-                try:
-                    return ObjectId(val)
-                except Exception:
-                    pass
-        return None
-
-    workflow_ids: list[ObjectId] = [
-        oid for w in embedded_workflows if (oid := _extract_oid(w)) is not None
-    ]
-
-    # Prefer workflows_collection (authoritative) over embedded refs (may be ID-only)
-    full_workflows = (
-        list(workflows_collection.find({"_id": {"$in": workflow_ids}})) if workflow_ids else []
+    # Use the same aggregation pattern as other endpoints (get_tag_from_id, _build_permission_pipeline)
+    # to extract DC and workflow IDs — proven way to traverse project.workflows.data_collections._id
+    dc_agg = list(
+        projects_collection.aggregate(
+            [
+                {"$match": {"_id": project_id}},
+                {"$unwind": "$workflows"},
+                {"$unwind": "$workflows.data_collections"},
+                {"$project": {"_id": 0, "dc_id": "$workflows.data_collections._id"}},
+            ]
+        )
     )
+    dc_ids: list[ObjectId] = [r["dc_id"] for r in dc_agg if isinstance(r.get("dc_id"), ObjectId)]
 
-    dc_ids: list[ObjectId] = [
-        oid
-        for wf in (full_workflows or embedded_workflows)
-        for dc in wf.get("data_collections", [])
-        if (oid := _extract_oid(dc)) is not None
+    # Also collect workflow IDs (needed for runs_collection query)
+    wf_agg = list(
+        projects_collection.aggregate(
+            [
+                {"$match": {"_id": project_id}},
+                {"$unwind": "$workflows"},
+                {"$project": {"_id": 0, "wf_id": "$workflows._id"}},
+            ]
+        )
+    )
+    workflow_ids: list[ObjectId] = [
+        r["wf_id"] for r in wf_agg if isinstance(r.get("wf_id"), ObjectId)
     ]
     logger.info(
         "migrate export: project=%s workflow_ids=%d dc_ids=%d",
