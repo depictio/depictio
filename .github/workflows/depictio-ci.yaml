@@ -1941,7 +1941,7 @@ jobs:
 
           # Dry-run first — must not change anything
           echo "🏃 Running dry-run migrate..."
-          depictio-cli -v -vl DEBUG migrate \
+          depictio-cli -v -vl DEBUG migrate run \
             --project "$IRIS_PROJECT_NAME" \
             --CLI-config-path admin_config.yaml \
             --target-config admin_config.yaml \
@@ -1957,7 +1957,7 @@ jobs:
 
           # Real migrate (same instance as source and target — idempotent upsert)
           echo "🚀 Running real migrate (metadata mode)..."
-          depictio-cli -v -vl DEBUG migrate \
+          depictio-cli -v -vl DEBUG migrate run \
             --project "$IRIS_PROJECT_NAME" \
             --CLI-config-path admin_config.yaml \
             --target-config admin_config.yaml \
@@ -1992,7 +1992,7 @@ jobs:
             --eval "db.dashboards.countDocuments({})" --quiet 2>&1 | tail -1)
           echo "📊 Dashboards before dashboard-mode migrate: $DASH_COUNT_BEFORE"
 
-          depictio-cli -v -vl DEBUG migrate \
+          depictio-cli -v -vl DEBUG migrate run \
             --project "$IRIS_PROJECT_NAME" \
             --CLI-config-path admin_config.yaml \
             --target-config admin_config.yaml \
