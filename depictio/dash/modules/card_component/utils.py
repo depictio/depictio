@@ -86,10 +86,7 @@ def get_adaptive_trend_colors(background_color: str | None) -> dict:
         {'positive': 'green', 'negative': 'red', 'neutral': 'gray'}
     """
     # If None or empty, assume DMC default (light) theme
-    if not background_color:
-        is_light = True
-    else:
-        is_light = is_color_light(background_color)
+    is_light = not background_color or is_color_light(background_color)
 
     if is_light:
         # Light background - use standard dark colors
@@ -423,12 +420,7 @@ def get_reference_value_from_cols_json(cols_json, column_name, aggregation):
     if not cols_json_field:
         return None
 
-    # Extract the value
-    reference_value = column_specs.get(cols_json_field)
-    if reference_value is not None:
-        return reference_value
-    else:
-        return None
+    return column_specs.get(cols_json_field)
 
 
 # Mapping from custom aggregation names to pandas functions
@@ -475,6 +467,10 @@ def compute_value(data, column_name, aggregation, cols_json=None, has_filters=Fa
     import polars as pl
 
     is_polars = isinstance(data, pl.DataFrame) or isinstance(data, pl.LazyFrame)
+
+    # Handle empty DataFrames (e.g., before data ingestion)
+    if is_polars and isinstance(data, pl.DataFrame) and (len(data) == 0 or len(data.columns) == 0):
+        return 0 if aggregation == "count" else None
 
     # Convert to pandas only if necessary (for mode aggregation)
     if aggregation == "mode":
@@ -1241,7 +1237,6 @@ def build_card(**kwargs):
     color = kwargs.get("color", None)
     parent_index = kwargs.get("parent_index", None)
     metric_theme = kwargs.get("metric_theme", None)
-    kwargs.get("init_data", None)
 
     # Style parameters (convert empty strings to None for DMC compliance)
     background_color = kwargs.get("background_color") or None
@@ -1343,8 +1338,7 @@ def build_card(**kwargs):
 
     if not build_frame:
         return new_card_body
-    else:
-        return build_card_frame(index=index, children=new_card_body, show_border=stepper)
+    return build_card_frame(index=index, children=new_card_body, show_border=stepper)
 
 
 # List of all the possible aggregation methods for each data type
@@ -1593,13 +1587,7 @@ agg_functions = {
 }
 
 
-# Async wrapper for background callbacks - now calls sync version
+# Async wrapper for background callbacks - delegates to sync version
 async def build_card_async(**kwargs):
-    """
-    Async wrapper for build_card function - async functionality disabled, calls sync version.
-    """
-
-    # Call the synchronous build_card function
-    result = build_card(**kwargs)
-
-    return result
+    """Async wrapper for build_card function - delegates to sync version."""
+    return build_card(**kwargs)
