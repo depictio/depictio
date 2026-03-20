@@ -1587,8 +1587,37 @@ jobs:
             sleep 15
           done
 
-          echo "⏳ Additional stabilization period..."
-          sleep 30
+          # Wait for background reference-dataset processing to complete
+          # (iris/penguins/ampliseq scan+process runs async after API startup;
+          #  deltatables are only created once background_processing_complete=true)
+          echo "⏳ Waiting for background reference dataset processing to complete..."
+          for i in {1..20}; do
+            bg_status=$(docker compose exec -T mongo mongosh localhost:27018/depictioDB \
+              --eval "var doc = db.initialization.findOne({_id: 'reference_datasets_metadata'}); \
+                      print(doc ? (doc.background_processing_complete ? 'complete' : (doc.background_processing_failed ? 'failed' : 'pending')) : 'missing')" \
+              --quiet 2>&1 | tail -1)
+            echo "📊 Background processing status (attempt $i/20): $bg_status"
+            if [ "$bg_status" = "complete" ]; then
+              echo "✅ Reference dataset background processing complete"
+              break
+            elif [ "$bg_status" = "failed" ]; then
+              echo "❌ Background processing failed — checking logs:"
+              docker compose logs --tail=30 depictio-backend
+              exit 1
+            fi
+            sleep 15
+          done
+
+          # Verify iris deltatable was created (needed for migrate all-mode test)
+          IRIS_DC_ID=$(docker compose exec -T mongo mongosh localhost:27018/depictioDB \
+            --eval "JSON.stringify(db.projects.find().toArray())" --quiet 2>&1 | \
+            grep '^[\[{]' | jq -r '.[] | select(.name == "Iris Dataset Project Data Analysis") | .workflows[0].data_collections[0]._id' 2>/dev/null || echo "")
+          if [ -n "$IRIS_DC_ID" ]; then
+            IRIS_DT=$(docker compose exec -T mongo mongosh localhost:27018/depictioDB \
+              --eval "JSON.stringify(db.deltatables.find({\"data_collection_id\": ObjectId(\"$IRIS_DC_ID\")}).toArray())" \
+              --quiet 2>&1 | grep '^[\[{]' | jq -r '.[]._id // empty' 2>/dev/null || echo "")
+            echo "📊 Iris deltatable: ${IRIS_DT:-not found yet}"
+          fi
 
           echo "📊 Final container status before backup testing:"
           docker compose ps
