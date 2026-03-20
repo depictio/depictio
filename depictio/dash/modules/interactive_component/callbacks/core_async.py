@@ -276,6 +276,21 @@ def register_async_rendering_callback(app):
                         init_data=init_data,
                     )
 
+                # Handle empty DataFrame (no data ingested yet)
+                if len(df) == 0 or len(df.columns) == 0:
+                    logger.info(f"[{i}] No data yet for interactive {component_type}")
+                    component = dmc.Text(
+                        "Waiting for data...",
+                        c="dimmed",
+                        fs="italic",
+                        ta="center",
+                        py="md",
+                    )
+                    all_components.append(component)
+                    all_metadata.append({})
+                    all_stored_metadata.append({})
+                    continue
+
                 # Apply filter_expr if provided (scoped interactive components)
                 filter_expr_str = trigger_data.get("filter_expr")
                 if filter_expr_str:
