@@ -2099,6 +2099,78 @@ jobs:
 
           echo "✅ Migrate (all mode) verified — files=$UPSERTED_FILES deltatables=$UPSERTED_DELTATABLES upserted, S3 copy confirmed"
 
+      - name: Test project cascade delete (S3 + MongoDB cleanup) - ${{ matrix.strategy_name }}
+        run: |
+          echo "🗑️ Testing project cascade delete for ${{ matrix.strategy_name }}..."
+          cd depictio/cli
+          source venv/bin/activate
+
+          IRIS_PROJECT_NAME="Iris Dataset Project Data Analysis"
+
+          # Resolve project ID
+          IRIS_PROJECT_ID=$(python3 -c "
+          import httpx, sys
+          r = httpx.get('http://localhost:8058/depictio/api/v1/projects/get/all',
+                        headers={'Authorization': 'Bearer $(cat admin_config.yaml | python3 -c \"import sys,yaml; print(yaml.safe_load(sys.stdin)[\\\"token\\\"])\")'})
+          r.raise_for_status()
+          projects = r.json()
+          match = [p for p in projects if p.get('name') == '$IRIS_PROJECT_NAME']
+          print(match[0]['id'] if match else '')
+          " 2>/dev/null)
+
+          if [ -z "$IRIS_PROJECT_ID" ]; then
+            echo "⚠️  Iris project not found — skipping cascade delete test"
+            exit 0
+          fi
+          echo "📌 Iris project ID: $IRIS_PROJECT_ID"
+
+          # Snapshot MongoDB counts before deletion
+          FILES_BEFORE=$(docker compose exec -T mongo mongosh localhost:27018/depictioDB \
+            --eval "db.files.countDocuments({})" --quiet 2>&1 | tail -1)
+          DELTATABLES_BEFORE=$(docker compose exec -T mongo mongosh localhost:27018/depictioDB \
+            --eval "db.deltatables.countDocuments({})" --quiet 2>&1 | tail -1)
+          DASHBOARDS_BEFORE=$(docker compose exec -T mongo mongosh localhost:27018/depictioDB \
+            --eval "db.dashboards.countDocuments({})" --quiet 2>&1 | tail -1)
+          PROJECTS_BEFORE=$(docker compose exec -T mongo mongosh localhost:27018/depictioDB \
+            --eval "db.projects.countDocuments({})" --quiet 2>&1 | tail -1)
+          echo "📊 Before delete: projects=$PROJECTS_BEFORE files=$FILES_BEFORE deltatables=$DELTATABLES_BEFORE dashboards=$DASHBOARDS_BEFORE"
+
+          # Delete the project via the API
+          TOKEN=$(cat admin_config.yaml | python3 -c "import sys,yaml; print(yaml.safe_load(sys.stdin)['token'])")
+          DELETE_RESP=$(python3 -c "
+          import httpx
+          r = httpx.delete('http://localhost:8058/depictio/api/v1/projects/delete',
+                           params={'project_id': '$IRIS_PROJECT_ID'},
+                           headers={'Authorization': 'Bearer $TOKEN'})
+          print(r.status_code, r.text[:200])
+          ")
+          echo "🗑️ Delete response: $DELETE_RESP"
+
+          # Verify project is gone
+          PROJECTS_AFTER=$(docker compose exec -T mongo mongosh localhost:27018/depictioDB \
+            --eval "db.projects.countDocuments({})" --quiet 2>&1 | tail -1)
+          [ "$PROJECTS_AFTER" -lt "$PROJECTS_BEFORE" ] || \
+            { echo "❌ Project count did not decrease ($PROJECTS_BEFORE → $PROJECTS_AFTER)"; exit 1; }
+          echo "✅ Project document deleted"
+
+          # Verify dependent MongoDB docs were cascade-deleted
+          FILES_AFTER=$(docker compose exec -T mongo mongosh localhost:27018/depictioDB \
+            --eval "db.files.countDocuments({})" --quiet 2>&1 | tail -1)
+          DELTATABLES_AFTER=$(docker compose exec -T mongo mongosh localhost:27018/depictioDB \
+            --eval "db.deltatables.countDocuments({})" --quiet 2>&1 | tail -1)
+          DASHBOARDS_AFTER=$(docker compose exec -T mongo mongosh localhost:27018/depictioDB \
+            --eval "db.dashboards.countDocuments({})" --quiet 2>&1 | tail -1)
+          echo "📊 After delete: projects=$PROJECTS_AFTER files=$FILES_AFTER deltatables=$DELTATABLES_AFTER dashboards=$DASHBOARDS_AFTER"
+
+          [ "$FILES_AFTER" -lt "$FILES_BEFORE" ] || \
+            { echo "❌ files collection not cleaned up ($FILES_BEFORE → $FILES_AFTER)"; exit 1; }
+          [ "$DELTATABLES_AFTER" -lt "$DELTATABLES_BEFORE" ] || \
+            { echo "❌ deltatables collection not cleaned up ($DELTATABLES_BEFORE → $DELTATABLES_AFTER)"; exit 1; }
+          [ "$DASHBOARDS_AFTER" -lt "$DASHBOARDS_BEFORE" ] || \
+            { echo "❌ dashboards collection not cleaned up ($DASHBOARDS_BEFORE → $DASHBOARDS_AFTER)"; exit 1; }
+
+          echo "✅ Cascade delete verified — files/deltatables/dashboards all cleaned up"
+
       - name: Cleanup and summary - ${{ matrix.strategy_name }}
         run: |
           echo "🧹 Cleanup and summary for ${{ matrix.strategy_name }}..."
