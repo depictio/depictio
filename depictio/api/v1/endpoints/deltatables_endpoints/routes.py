@@ -8,6 +8,7 @@ upsert, fetch, batch existence checks, and shape queries.
 import hashlib
 import math
 from datetime import datetime, timezone
+from typing import Any
 
 import boto3
 import polars as pl
@@ -245,22 +246,42 @@ async def upsert_deltatable(
             )
 
     # Broadcast real-time event to connected dashboards
-    await _broadcast_dc_update(str(data_collection_oid))
+    dc_tag = dc_data.get("data_collection_tag", "Data")
+    n_rows = df.height if not is_multiqc else None
+    n_columns = len(df.columns) if not is_multiqc else None
+    await _broadcast_dc_update(
+        str(data_collection_oid), dc_tag=dc_tag, n_rows=n_rows, n_columns=n_columns
+    )
 
     return {"message": "DeltaTableAggregated upserted successfully", "result": "success"}
 
 
-async def _broadcast_dc_update(dc_id: str) -> None:
+async def _broadcast_dc_update(
+    dc_id: str,
+    *,
+    dc_tag: str = "Data",
+    n_rows: int | None = None,
+    n_columns: int | None = None,
+) -> None:
     """Invalidate caches and broadcast a data-collection-updated event to all connected dashboards."""
     cache_result = invalidate_dc_cache(dc_id)
     logger.info(f"Cache invalidated for DC {dc_id}: {cache_result}")
+
+    payload: dict[str, Any] = {
+        "operation": "upserted",
+        "data_collection_tag": dc_tag,
+    }
+    if n_rows is not None:
+        payload["n_rows"] = n_rows
+    if n_columns is not None:
+        payload["n_columns"] = n_columns
 
     event = EventMessage(
         event_type=EventType.DATA_COLLECTION_UPDATED,
         source_type=EventSourceType.MONGODB_CHANGES,
         timestamp=datetime.now(timezone.utc),
         data_collection_id=dc_id,
-        payload={"operation": "upsert"},
+        payload=payload,
     )
 
     subscribed = connection_manager.get_all_subscribed_dashboards()
