@@ -996,6 +996,9 @@ class DashboardDataLite(BaseModel):
                         "filter_expr": comp_dict.get("filter_expr"),
                     }
                 )
+                # Multi-metric summary: secondary aggregations
+                if comp_dict.get("aggregations"):
+                    full_comp["aggregations"] = comp_dict["aggregations"]
                 for f in [
                     "icon_name",
                     "icon_color",
