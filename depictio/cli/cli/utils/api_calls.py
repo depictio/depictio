@@ -913,24 +913,21 @@ def api_export_project(
             headers=generate_api_headers(CLI_config),
             timeout=600.0,
         )
-        if response.status_code == 200:
-            buf = io.BytesIO(response.content)
-            with zipfile.ZipFile(buf) as zf:
-                bundle_data = json.loads(zf.read("bundle.json"))
-                migrate_metadata = json.loads(zf.read("migrate_metadata.json"))
-                s3_metadata: dict = {}
-                if "s3_metadata.json" in zf.namelist():
-                    s3_metadata = json.loads(zf.read("s3_metadata.json"))
-            result: dict = {"data": bundle_data, "migrate_metadata": migrate_metadata}
-            if s3_metadata:
-                result["s3_migrate_metadata"] = s3_metadata
-            return result
-        else:
+        if response.status_code != 200:
             logger.error(f"Export failed: {response.text}")
             return {
                 "success": False,
                 "message": f"API request failed with status {response.status_code}: {response.text}",
             }
+
+        with zipfile.ZipFile(io.BytesIO(response.content)) as zf:
+            result: dict = {
+                "data": json.loads(zf.read("bundle.json")),
+                "migrate_metadata": json.loads(zf.read("migrate_metadata.json")),
+            }
+            if "s3_metadata.json" in zf.namelist():
+                result["s3_migrate_metadata"] = json.loads(zf.read("s3_metadata.json"))
+        return result
     except httpx.TimeoutException:
         return {"success": False, "message": "Export request timed out"}
     except Exception as e:
@@ -942,10 +939,11 @@ def api_import_project(
     bundle: dict,
     owner_user_id: str | None = None,
     dry_run: bool = False,
+    overwrite: bool = False,
 ) -> dict:
     """Import a project bundle into the target instance (non-destructive upsert)."""
     url = f"{CLI_config.api_base_url}/depictio/api/v1/migrate/import-project"
-    payload: dict = {"bundle": bundle, "dry_run": dry_run}
+    payload: dict = {"bundle": bundle, "dry_run": dry_run, "overwrite": overwrite}
     if owner_user_id:
         payload["owner_user_id"] = owner_user_id
     return _post_migrate_endpoint(CLI_config, url, payload, "Import")

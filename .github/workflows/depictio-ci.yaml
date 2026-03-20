@@ -1956,13 +1956,27 @@ jobs:
           echo "✅ Dry-run did not modify the database"
 
           # Real migrate (same instance as source and target — idempotent upsert)
+          # --overwrite required because the project already exists on this instance
           echo "🚀 Running real migrate (metadata mode)..."
           depictio-cli -v -vl DEBUG migrate run \
             --project "$IRIS_PROJECT_NAME" \
             --CLI-config-path admin_config.yaml \
             --target-config admin_config.yaml \
-            --mode metadata
+            --mode metadata \
+            --overwrite
           echo "✅ Real migrate completed"
+
+          # Verify conflict detection: run WITHOUT --overwrite → must fail with conflict
+          echo "🔒 Testing conflict detection (no --overwrite, should fail)..."
+          if depictio-cli migrate run \
+            --project "$IRIS_PROJECT_NAME" \
+            --CLI-config-path admin_config.yaml \
+            --target-config admin_config.yaml \
+            --mode metadata 2>&1; then
+            echo "❌ Expected conflict exit but command succeeded"
+            exit 1
+          fi
+          echo "✅ Conflict detection works — second import without --overwrite correctly rejected"
 
           # Verify counts are preserved (upsert is non-destructive)
           PROJECT_COUNT_AFTER=$(docker compose exec -T mongo mongosh localhost:27018/depictioDB \
@@ -2002,7 +2016,8 @@ jobs:
             --project "$IRIS_PROJECT_NAME" \
             --CLI-config-path admin_config.yaml \
             --target-config admin_config.yaml \
-            --mode dashboard 2>&1 | tee "$MIGRATE_LOG"
+            --mode dashboard \
+            --overwrite 2>&1 | tee "$MIGRATE_LOG"
 
           # Check that the export found > 0 dashboards (not a no-op due to wrong project_id query)
           UPSERTED_DASHBOARDS=$(python3 -c "
@@ -2045,11 +2060,31 @@ jobs:
             --project "$IRIS_PROJECT_NAME" \
             --CLI-config-path admin_config.yaml \
             --target-config admin_config.yaml \
-            --mode all 2>&1 | tee "$MIGRATE_LOG"
+            --mode all \
+            --overwrite 2>&1 | tee "$MIGRATE_LOG"
 
-          # Verify S3 copy ran (may copy 0 locations if no delta tables, that is ok)
+          # Verify S3 copy ran
           echo "📋 Migrate all-mode output (S3 section):"
           grep -i "s3\|location\|copied\|files" "$MIGRATE_LOG" || echo "(no S3 lines in output)"
+
+          # Verify files and deltatables were included (dc_ids fix)
+          UPSERTED_FILES=$(python3 -c "
+          import re
+          text = open('$MIGRATE_LOG').read()
+          m = re.search(r'\"files\"[^0-9]*([0-9]+)', text)
+          print(m.group(1) if m else '0')
+          " 2>/dev/null || echo "0")
+          UPSERTED_DELTATABLES=$(python3 -c "
+          import re
+          text = open('$MIGRATE_LOG').read()
+          m = re.search(r'\"deltatables\"[^0-9]*([0-9]+)', text)
+          print(m.group(1) if m else '0')
+          " 2>/dev/null || echo "0")
+          echo "📊 All-mode upserted: files=$UPSERTED_FILES  deltatables=$UPSERTED_DELTATABLES"
+          [ "$UPSERTED_FILES" -gt 0 ] || \
+            { echo "❌ All mode upserted 0 files (dc_ids lookup failed)"; exit 1; }
+          [ "$UPSERTED_DELTATABLES" -gt 0 ] || \
+            { echo "❌ All mode upserted 0 deltatables (dc_ids lookup failed)"; exit 1; }
 
           PROJECT_COUNT_AFTER=$(docker compose exec -T mongo mongosh localhost:27018/depictioDB \
             --eval "db.projects.countDocuments({})" --quiet 2>&1 | tail -1)
@@ -2062,7 +2097,7 @@ jobs:
           [ "$DASHBOARD_COUNT_AFTER" -ge "$DASHBOARD_COUNT_BEFORE" ] || \
             { echo "❌ Dashboards decreased after all-mode migrate ($DASHBOARD_COUNT_BEFORE → $DASHBOARD_COUNT_AFTER)"; exit 1; }
 
-          echo "✅ Migrate (all mode) verified — non-destructive upsert + S3 copy confirmed"
+          echo "✅ Migrate (all mode) verified — files=$UPSERTED_FILES deltatables=$UPSERTED_DELTATABLES upserted, S3 copy confirmed"
 
       - name: Cleanup and summary - ${{ matrix.strategy_name }}
         run: |

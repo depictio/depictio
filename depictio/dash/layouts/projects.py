@@ -2379,22 +2379,21 @@ def register_workflows_callbacks(app) -> None:
     def handle_import_project_upload(contents, filename):
         """Parse uploaded ZIP and show project preview."""
         import base64
-        import io as _io
-        import json as _json
-        import zipfile as _zipfile
+        import io
+        import json
+        import zipfile
 
         if not contents:
             raise dash.exceptions.PreventUpdate
         _content_type, content_string = contents.split(",")
         decoded = base64.b64decode(content_string)
-        buf = _io.BytesIO(decoded)
         try:
-            with _zipfile.ZipFile(buf) as zf:
-                meta = _json.loads(zf.read("migrate_metadata.json"))
-                bundle_data = _json.loads(zf.read("bundle.json"))
+            with zipfile.ZipFile(io.BytesIO(decoded)) as zf:
+                meta = json.loads(zf.read("migrate_metadata.json"))
+                bundle_data = json.loads(zf.read("bundle.json"))
         except Exception as e:
-            preview = dmc.Alert(f"Invalid ZIP file: {e}", color="red")
-            return dash.no_update, preview, True
+            return dash.no_update, dmc.Alert(f"Invalid ZIP file: {e}", color="red"), True
+
         preview = dmc.Paper(
             [
                 dmc.Text(f"Project: {meta.get('project_name')}", fw=600),
@@ -2409,8 +2408,7 @@ def register_workflows_callbacks(app) -> None:
             withBorder=True,
             radius="md",
         )
-        full_bundle = {"migrate_metadata": meta, "data": bundle_data}
-        return full_bundle, preview, False
+        return {"migrate_metadata": meta, "data": bundle_data}, preview, False
 
     # Submit import — POST bundle to API
     @app.callback(
@@ -2434,27 +2432,28 @@ def register_workflows_callbacks(app) -> None:
         token = local_data.get("access_token") if local_data else None
         if not token:
             raise dash.exceptions.PreventUpdate
-        headers = {"Authorization": f"Bearer {token}"}
+
         resp = httpx.post(
             f"{API_BASE_URL}/depictio/api/v1/migrate/import-project",
             json={"bundle": bundle, "force_owner_remap": True, "overwrite": bool(overwrite)},
-            headers=headers,
+            headers={"Authorization": f"Bearer {token}"},
             timeout=120.0,
         )
-        no_refresh = dash.no_update
-        if resp.status_code == 200:
-            result = resp.json()
-            if result.get("conflict"):
-                msg = dmc.Alert(
-                    result.get("message", "Project already exists."),
-                    color="yellow",
-                    title="Conflict",
-                    icon=DashIconify(icon="mdi:alert-outline", width=20),
-                )
-                return msg, True, no_refresh
-            # Success — refresh project list and close modal
-            projects = fetch_projects(token)
-            refreshed = render_projects_list(projects=projects, admin_UI=False, token=token)
-            return dmc.Alert("Project imported successfully!", color="green"), False, refreshed
-        else:
-            return dmc.Alert(f"Import failed: {resp.text}", color="red"), True, no_refresh
+
+        if resp.status_code != 200:
+            return dmc.Alert(f"Import failed: {resp.text}", color="red"), True, dash.no_update
+
+        result = resp.json()
+        if result.get("conflict"):
+            alert = dmc.Alert(
+                result.get("message", "Project already exists."),
+                color="yellow",
+                title="Conflict",
+                icon=DashIconify(icon="mdi:alert-outline", width=20),
+            )
+            return alert, True, dash.no_update
+
+        # Success -- refresh project list and close modal
+        projects = fetch_projects(token)
+        refreshed = render_projects_list(projects=projects, admin_UI=False, token=token)
+        return dmc.Alert("Project imported successfully!", color="green"), False, refreshed

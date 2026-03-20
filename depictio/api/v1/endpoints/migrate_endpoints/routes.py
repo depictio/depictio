@@ -79,18 +79,17 @@ class MigrateImportResponse(BaseModel):
 def _normalize_s3_path(location: str, bucket: str) -> str | None:
     """Strip s3://bucket/ prefix and return the path within the bucket.
 
-    Returns None if the path is not S3 or belongs to a different bucket.
+    Returns None if the path is empty or an S3 URI without a key component.
+    Non-S3 paths are assumed to be bare keys and returned as-is.
     """
     if not location:
         return None
-    if location.startswith("s3://"):
-        rest = location[len("s3://") :]
-        parts = rest.split("/", 1)
-        if len(parts) == 2:
-            return parts[1]
-        return None
-    # Assume it is already a bare path
-    return location
+    prefix = "s3://"
+    if not location.startswith(prefix):
+        return location
+    # Split "bucket/path/to/object" into at most 2 parts
+    parts = location[len(prefix) :].split("/", 1)
+    return parts[1] if len(parts) == 2 else None
 
 
 def _collect_s3_locations_for_project(dc_ids: list[ObjectId], source_bucket: str) -> list[str]:
@@ -173,17 +172,14 @@ def _copy_s3_locations(
             paginator = source_client.get_paginator("list_objects_v2")
             for page in paginator.paginate(Bucket=source_bucket, Prefix=path_key):
                 for obj in page.get("Contents", []):
-                    source_key = obj["Key"]
-                    target_key = source_key  # Preserve path
+                    key = obj["Key"]
                     if not dry_run:
                         try:
-                            get_resp = source_client.get_object(
-                                Bucket=source_bucket, Key=source_key
-                            )
+                            get_resp = source_client.get_object(Bucket=source_bucket, Key=key)
                             target_client.upload_fileobj(
                                 get_resp["Body"],
                                 target_bucket,
-                                target_key,
+                                key,
                                 ExtraArgs={
                                     "ContentType": get_resp.get(
                                         "ContentType", "application/octet-stream"
@@ -191,7 +187,7 @@ def _copy_s3_locations(
                                 },
                             )
                         except ClientError as e:
-                            error_msg = f"Failed to copy {source_key}: {e}"
+                            error_msg = f"Failed to copy {key}: {e}"
                             logger.error(error_msg)
                             errors.append(error_msg)
                             continue
@@ -200,9 +196,9 @@ def _copy_s3_locations(
                     logger.debug(
                         "%s %s -> s3://%s/%s",
                         "DRY RUN:" if dry_run else "Copied:",
-                        source_key,
+                        key,
                         target_bucket,
-                        target_key,
+                        key,
                     )
         except ClientError as e:
             error_msg = f"Error listing {path_key}: {e}"
@@ -495,49 +491,34 @@ async def import_project(
     # Collect existing user IDs on this instance (for owner remapping)
     existing_user_ids = {str(u["_id"]) for u in users_collection.find({}, {"_id": 1})}
 
-    # workflows and data_collections are embedded in the project document,
+    # Import order respects dependencies (project first, then its dependents).
+    # Workflows and data_collections are embedded in the project document,
     # so they are not stored in separate collections and don't appear in the bundle.
-    collection_map: dict[str, Collection[dict[str, Any]]] = {
-        "projects": projects_collection,
-        "files": files_collection,
-        "deltatables": deltatables_collection,
-        "runs": runs_collection,
-        "dashboards": dashboards_collection,
-    }
-
-    # Import order respects dependencies (project first, then its dependents)
-    import_order = [
-        "projects",
-        "files",
-        "deltatables",
-        "runs",
-        "dashboards",
+    ordered_collections: list[tuple[str, Collection[dict[str, Any]]]] = [
+        ("projects", projects_collection),
+        ("files", files_collection),
+        ("deltatables", deltatables_collection),
+        ("runs", runs_collection),
+        ("dashboards", dashboards_collection),
     ]
 
     data_section = bundle["data"]
     upserted: dict[str, int] = {}
-    total_upserted = 0
 
-    for collection_name in import_order:
-        if collection_name not in data_section:
-            continue
-
-        raw_docs: list[dict] = data_section[collection_name]
+    for collection_name, collection in ordered_collections:
+        raw_docs: list[dict] = data_section.get(collection_name, [])
         if not raw_docs:
             upserted[collection_name] = 0
             continue
 
-        collection = collection_map[collection_name]
         ops: list[ReplaceOne] = []
-
         for doc in raw_docs:
             doc = _prepare_doc_for_import(
                 doc, existing_user_ids, admin_id, force_remap=request.force_owner_remap
             )
             ops.append(ReplaceOne({"_id": doc["_id"]}, doc, upsert=True))
 
-        count = len(ops)
-        if not request.dry_run and ops:
+        if not request.dry_run:
             try:
                 collection.bulk_write(ops, ordered=False)
             except Exception as e:
@@ -547,18 +528,18 @@ async def import_project(
                     detail=f"Import failed for {collection_name}: {e}",
                 )
 
-        upserted[collection_name] = count
-        total_upserted += count
+        upserted[collection_name] = len(ops)
         logger.info(
             "migrate import: %s %d docs into %s",
             "DRY RUN would upsert" if request.dry_run else "upserted",
-            count,
+            len(ops),
             collection_name,
         )
 
+    total = sum(upserted.values())
     return MigrateImportResponse(
         success=True,
-        message=f"{'DRY RUN: would upsert' if request.dry_run else 'Upserted'} {total_upserted} documents",
+        message=f"{'DRY RUN: would upsert' if request.dry_run else 'Upserted'} {total} documents",
         upserted=upserted,
         dry_run=request.dry_run,
     )

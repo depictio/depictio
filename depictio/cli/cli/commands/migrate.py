@@ -56,6 +56,13 @@ def run(
     dry_run: Annotated[
         bool, typer.Option("--dry-run", help="Preview changes without writing anything")
     ] = False,
+    overwrite: Annotated[
+        bool,
+        typer.Option(
+            "--overwrite",
+            help="Replace the project on the target if it already exists",
+        ),
+    ] = False,
 ):
     """
     Migrate a project from one Depictio instance to another (non-destructive).
@@ -163,7 +170,16 @@ def run(
         remote_config,
         bundle=bundle,
         dry_run=dry_run,
+        overwrite=overwrite,
     )
+
+    if import_result.get("conflict"):
+        rich_print_checked_statement(
+            f"Conflict: {import_result.get('message', 'project already exists')}. "
+            "Use --overwrite to replace it.",
+            "error",
+        )
+        raise typer.Exit(1)
 
     if not import_result.get("success"):
         rich_print_checked_statement(
