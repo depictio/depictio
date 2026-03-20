@@ -51,17 +51,6 @@ def extract_scatter_selection_values(
 
     Returns:
         List of unique values extracted from selection
-
-    Example:
-        selectedData structure:
-        {
-            "points": [
-                {"pointIndex": 0, "customdata": ["sample1", "cluster_a"]},
-                {"pointIndex": 1, "customdata": ["sample2", "cluster_b"]},
-            ]
-        }
-
-        With selection_column_index=0, returns ["sample1", "sample2"]
     """
     values: set[Any] = set()
 
@@ -73,19 +62,23 @@ def extract_scatter_selection_values(
 
     points = data_to_process.get("points", [])
 
+    if points:
+        logger.info(
+            f"Selection extract: {len(points)} points, "
+            f"first_keys={list(points[0].keys())}, "
+            f"first_customdata={points[0].get('customdata')!r}"
+        )
+
     for point in points:
         customdata = point.get("customdata")
         if customdata is None:
             continue
-
-        # Handle both single value and array customdata
         if isinstance(customdata, list):
             if selection_column_index < len(customdata):
                 value = customdata[selection_column_index]
                 if value is not None:
                     values.add(value)
         else:
-            # Single value customdata
             if selection_column_index == 0:
                 values.add(customdata)
 

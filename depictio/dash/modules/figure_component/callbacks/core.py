@@ -25,11 +25,12 @@ from typing import Any
 import dash
 import plotly.express as px
 import plotly.graph_objects as go
+import polars as pl
 from bson import ObjectId
 from dash import ALL, Input, Output, State
 
 from depictio.api.v1.configs.logging_init import logger
-from depictio.api.v1.deltatables_utils import load_deltatable_lite
+from depictio.api.v1.deltatables_utils import DeltaTableNotFoundError, load_deltatable_lite
 from depictio.dash.background_callback_helpers import (
     log_background_callback_status,
     should_use_background_for_component,
@@ -44,7 +45,6 @@ USE_BACKGROUND_CALLBACKS = should_use_background_for_component("figure")
 
 LoadKey = tuple[str, str, str]  # (wf_id, dc_id, filters_hash)
 LoadKeyExtended = tuple[str, str, str, str]  # (wf_id, dc_id, filters_hash, columns_hash)
-
 
 
 def _build_metadata_index(
@@ -470,6 +470,9 @@ def _load_dcs_parallel(
                 TOKEN=access_token,
             )
             return load_key, data
+        except DeltaTableNotFoundError:
+            logger.info(f"   Delta table not yet available: {dc_id[:8]}")
+            return load_key, pl.DataFrame()
         except Exception as e:
             logger.error(f"   Parallel load failed: {dc_id[:8]}: {e}", exc_info=True)
             return load_key, None
@@ -719,6 +722,11 @@ def _process_single_figure(
 
         df = dc_cache[load_key]
 
+        # Handle empty DataFrame (e.g., before first data ingestion)
+        if hasattr(df, "__len__") and len(df) == 0:
+            logger.info(f"[{task_id}] Empty DataFrame for figure {component_id}")
+            return _create_waiting_figure(current_theme), {}
+
         # Heatmap column-level filtering: samples are column names, not row values
         if visu_type.lower() == "heatmap" and figure_filters:
             df, dict_kwargs = _apply_heatmap_column_filter(df, dict_kwargs, figure_filters, task_id)
@@ -752,13 +760,23 @@ def _process_single_figure(
             )
 
         if isinstance(fig, go.Figure):
+            # Serialize to dict, then fix customdata for selection-enabled figures.
+            # Plotly 6 binary-encodes customdata (bdata/dtype/shape) which Plotly.js
+            # doesn't decode back into selectedData callback payloads.
             fig_dict = json.loads(fig.to_json())
+            if selection_enabled:
+                for i, trace_obj in enumerate(fig.data):
+                    if hasattr(trace_obj, "customdata") and trace_obj.customdata is not None:
+                        fig_dict["data"][i]["customdata"] = trace_obj.customdata.tolist()
+                logger.info(f"[{task_id}] Fixed customdata for selection")
         else:
             fig_dict = fig
 
-        # Ensure uirevision is preserved in serialized dict
+        # Ensure uirevision is preserved for zoom/pan but clear stale selection highlights
         if isinstance(fig_dict, dict) and "layout" in fig_dict:
             fig_dict["layout"].setdefault("uirevision", "persistent")
+            for trace in fig_dict.get("data", []):
+                trace.pop("selectedpoints", None)
 
         metadata = {
             "index": component_id,
@@ -828,8 +846,6 @@ def _extend_filters_for_joined_dc(
     return relevant_filters
 
 
-
-
 def register_core_callbacks(app):
     """Register core rendering callbacks for figure component."""
 
@@ -897,6 +913,9 @@ def register_core_callbacks(app):
             - all_metadata: List of metadata dicts with index, visu_type, rendered_at
         """
         batch_task_id = str(uuid.uuid4())[:8]
+        logger.info(
+            f"FIGURE BATCH CALLBACK FIRED: {len(trigger_data_list) if trigger_data_list else 0} triggers"
+        )
 
         # Handle empty dashboard
         if not trigger_data_list or not trigger_ids:
@@ -1095,6 +1114,12 @@ def _create_figure_from_data(
             if selection_column not in existing_custom_data:
                 cleaned_kwargs["custom_data"] = [selection_column] + list(existing_custom_data)
 
+        # Cast color column to string when color_discrete_map is set,
+        # so Plotly treats it as categorical (stable colors across filters)
+        color_col = cleaned_kwargs.get("color")
+        if color_col and color_col in pandas_df.columns and "color_discrete_map" in cleaned_kwargs:
+            pandas_df[color_col] = pandas_df[color_col].astype(str)
+
         # Heatmap uses plotly-complexheatmap instead of px
         if visu_type.lower() == "heatmap":
             from plotly_complexheatmap import ComplexHeatmap
@@ -1117,6 +1142,11 @@ def _create_figure_from_data(
             logger.warning(f"Unsupported visualization type: {visu_type}, defaulting to scatter")
             visu_type = "scatter"
 
+        # Force SVG rendering for scatter when selection is enabled,
+        # because scattergl (WebGL) does not return customdata in selectedData
+        if selection_enabled and visu_type == "scatter":
+            cleaned_kwargs["render_mode"] = "svg"
+
         plot_func = getattr(px, visu_type)
         fig = plot_func(pandas_df, **cleaned_kwargs)
 
@@ -1133,11 +1163,48 @@ def _create_figure_from_data(
 
         fig.update_layout(**layout_updates)
 
+        # Prevent Plotly from dimming unselected points after lasso/box selection
+        if selection_enabled:
+            fig.update_traces(
+                unselected={"marker": {"opacity": 1}},
+                selected={"marker": {"opacity": 1}},
+            )
+
         return fig
 
     except Exception as e:
         logger.error(f"Figure creation failed: {e}", exc_info=True)
         return _create_error_figure(f"Error: {str(e)}", theme)
+
+
+def _create_waiting_figure(theme: str = "light") -> go.Figure:
+    """Create a placeholder figure shown when data has not been ingested yet."""
+    template = _get_theme_template(theme)
+    text_color = "#868e96" if theme == "light" else "#909296"
+
+    fig = px.scatter(template=template, title="")
+    fig.add_annotation(
+        text="Waiting for data...",
+        xref="paper",
+        yref="paper",
+        x=0.5,
+        y=0.5,
+        xanchor="center",
+        yanchor="middle",
+        showarrow=False,
+        font={"size": 16, "color": text_color},
+        bgcolor="rgba(0,0,0,0)",
+    )
+
+    fig.update_xaxes(visible=False)
+    fig.update_yaxes(visible=False)
+    fig.update_layout(
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        margin={"l": 0, "r": 0, "t": 0, "b": 0},
+    )
+
+    return fig
 
 
 def _create_error_figure(error_message: str, theme: str = "light") -> go.Figure:
