@@ -277,7 +277,12 @@ async def export_project(
             runs_docs = list(runs_collection.find({"workflow_id": {"$in": workflow_ids}}))
 
     if mode in ("all", "metadata", "dashboard"):
-        dashboards_docs = list(dashboards_collection.find({"project_id": project_id}))
+        # project_id may be stored as ObjectId or string depending on how the dashboard was created
+        dashboards_docs = list(
+            dashboards_collection.find(
+                {"$or": [{"project_id": project_id}, {"project_id": str(project_id)}]}
+            )
+        )
 
     # Build data dict based on mode
     data: dict[str, list[dict]] = {}

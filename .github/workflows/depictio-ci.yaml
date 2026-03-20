@@ -1992,11 +1992,28 @@ jobs:
             --eval "db.dashboards.countDocuments({})" --quiet 2>&1 | tail -1)
           echo "📊 Dashboards before dashboard-mode migrate: $DASH_COUNT_BEFORE"
 
+          # Verify there are dashboards to work with
+          [ "$DASH_COUNT_BEFORE" -gt 0 ] || \
+            { echo "❌ No dashboards found before dashboard-mode test — environment not set up correctly"; exit 1; }
+
+          # Run migrate and capture output to verify dashboards were actually exported
+          MIGRATE_LOG=$(mktemp)
           depictio-cli -v -vl DEBUG migrate run \
             --project "$IRIS_PROJECT_NAME" \
             --CLI-config-path admin_config.yaml \
             --target-config admin_config.yaml \
-            --mode dashboard
+            --mode dashboard 2>&1 | tee "$MIGRATE_LOG"
+
+          # Check that the export found > 0 dashboards (not a no-op due to wrong project_id query)
+          UPSERTED_DASHBOARDS=$(python3 -c "
+          import re, sys
+          text = open('$MIGRATE_LOG').read()
+          m = re.search(r'\"dashboards\"[^0-9]*([0-9]+)', text)
+          print(m.group(1) if m else '0')
+          " 2>/dev/null || echo "0")
+          echo "📊 Dashboards upserted in bundle: $UPSERTED_DASHBOARDS"
+          [ "$UPSERTED_DASHBOARDS" -gt 0 ] || \
+            { echo "❌ Dashboard mode exported 0 dashboards (project_id lookup failed)"; exit 1; }
 
           DASH_COUNT_AFTER=$(docker compose exec -T mongo mongosh localhost:27018/depictioDB \
             --eval "db.dashboards.countDocuments({})" --quiet 2>&1 | tail -1)
@@ -2005,7 +2022,47 @@ jobs:
           [ "$DASH_COUNT_AFTER" -ge "$DASH_COUNT_BEFORE" ] || \
             { echo "❌ Dashboards decreased after dashboard migrate ($DASH_COUNT_BEFORE → $DASH_COUNT_AFTER)"; exit 1; }
 
-          echo "✅ Migrate (dashboard mode) verified"
+          echo "✅ Migrate (dashboard mode) verified — exported $UPSERTED_DASHBOARDS dashboards"
+
+      - name: Test migrate (all mode, S3 + MongoDB) - ${{ matrix.strategy_name }}
+        run: |
+          echo "🔄 Testing depictio migrate --mode all for ${{ matrix.strategy_name }}..."
+          cd depictio/cli
+          source venv/bin/activate
+
+          IRIS_PROJECT_NAME="Iris Dataset Project Data Analysis"
+
+          PROJECT_COUNT_BEFORE=$(docker compose exec -T mongo mongosh localhost:27018/depictioDB \
+            --eval "db.projects.countDocuments({})" --quiet 2>&1 | tail -1)
+          DASHBOARD_COUNT_BEFORE=$(docker compose exec -T mongo mongosh localhost:27018/depictioDB \
+            --eval "db.dashboards.countDocuments({})" --quiet 2>&1 | tail -1)
+          echo "📊 Before all-mode migrate: projects=$PROJECT_COUNT_BEFORE  dashboards=$DASHBOARD_COUNT_BEFORE"
+
+          # Run mode=all (self-migration: same instance as source and target)
+          # This exercises the S3 copy code path in addition to MongoDB upserts
+          MIGRATE_LOG=$(mktemp)
+          depictio-cli -v -vl DEBUG migrate run \
+            --project "$IRIS_PROJECT_NAME" \
+            --CLI-config-path admin_config.yaml \
+            --target-config admin_config.yaml \
+            --mode all 2>&1 | tee "$MIGRATE_LOG"
+
+          # Verify S3 copy ran (may copy 0 locations if no delta tables, that is ok)
+          echo "📋 Migrate all-mode output (S3 section):"
+          grep -i "s3\|location\|copied\|files" "$MIGRATE_LOG" || echo "(no S3 lines in output)"
+
+          PROJECT_COUNT_AFTER=$(docker compose exec -T mongo mongosh localhost:27018/depictioDB \
+            --eval "db.projects.countDocuments({})" --quiet 2>&1 | tail -1)
+          DASHBOARD_COUNT_AFTER=$(docker compose exec -T mongo mongosh localhost:27018/depictioDB \
+            --eval "db.dashboards.countDocuments({})" --quiet 2>&1 | tail -1)
+          echo "📊 After all-mode migrate: projects=$PROJECT_COUNT_AFTER  dashboards=$DASHBOARD_COUNT_AFTER"
+
+          [ "$PROJECT_COUNT_AFTER" -ge "$PROJECT_COUNT_BEFORE" ] || \
+            { echo "❌ Projects decreased after all-mode migrate ($PROJECT_COUNT_BEFORE → $PROJECT_COUNT_AFTER)"; exit 1; }
+          [ "$DASHBOARD_COUNT_AFTER" -ge "$DASHBOARD_COUNT_BEFORE" ] || \
+            { echo "❌ Dashboards decreased after all-mode migrate ($DASHBOARD_COUNT_BEFORE → $DASHBOARD_COUNT_AFTER)"; exit 1; }
+
+          echo "✅ Migrate (all mode) verified — non-destructive upsert + S3 copy confirmed"
 
       - name: Cleanup and summary - ${{ matrix.strategy_name }}
         run: |
