@@ -1,4 +1,8 @@
 #!/bin/bash
+# Save caller's shell options so we can restore them when this script is sourced.
+# Without this, `set -e` leaks into the interactive shell and breaks readline
+# (Esc key, Ctrl+R history search, etc. all return non-zero and abort the shell).
+_ALLOCATE_PORTS_SAVED_OPTS=$(set +o)
 set -e
 
 # Port allocation script for git worktree-based multi-instance setup
@@ -215,3 +219,8 @@ export DASH_PORT
 export MINIO_PORT
 export MINIO_CONSOLE_PORT
 export DATA_DIR="data/${COMPOSE_PROJECT_NAME}"
+
+# Restore caller's shell options (prevents set -e from leaking into the
+# interactive shell when this script is sourced).
+eval "$_ALLOCATE_PORTS_SAVED_OPTS"
+unset _ALLOCATE_PORTS_SAVED_OPTS
