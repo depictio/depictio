@@ -1,7 +1,20 @@
+import boto3
 from bson import ObjectId
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from depictio.api.v1.db import dashboards_collection, deltatables_collection, projects_collection
+from depictio.api.v1.configs.config import settings
+from depictio.api.v1.configs.logging_init import logger
+from depictio.api.v1.db import (
+    dashboards_collection,
+    data_collections_collection,
+    deltatables_collection,
+    files_collection,
+    jbrowse_collection,
+    multiqc_collection,
+    projects_collection,
+    runs_collection,
+)
+from depictio.api.v1.endpoints.migrate_endpoints.routes import _collect_s3_locations_for_project
 from depictio.api.v1.endpoints.projects_endpoints.utils import (
     _async_get_all_projects,
     _async_get_project_from_id,
@@ -213,7 +226,58 @@ async def delete_project(project_id: PyObjectId, current_user=Depends(get_curren
             detail="User does not have permission to delete this project.",
         )
 
-    # Delete the project
+    # Collect dc_ids and workflow_ids via aggregation (same pattern as migrate endpoint)
+    dc_agg = list(
+        projects_collection.aggregate(
+            [
+                {"$match": {"_id": ObjectId(project_id)}},
+                {"$unwind": "$workflows"},
+                {"$unwind": "$workflows.data_collections"},
+                {"$project": {"_id": 0, "dc_id": "$workflows.data_collections._id"}},
+            ]
+        )
+    )
+    dc_ids: list[ObjectId] = [r["dc_id"] for r in dc_agg if isinstance(r.get("dc_id"), ObjectId)]
+
+    # Delete S3 objects (best-effort: log errors but don't fail the request)
+    if dc_ids:
+        try:
+            s3_paths = _collect_s3_locations_for_project(dc_ids, settings.minio.bucket)
+            if s3_paths:
+                s3_client = boto3.client(
+                    "s3",
+                    endpoint_url=settings.minio.endpoint_url,
+                    aws_access_key_id=settings.minio.root_user,
+                    aws_secret_access_key=settings.minio.root_password,
+                    region_name="us-east-1",
+                    verify=False,
+                )
+                for prefix in s3_paths:
+                    paginator = s3_client.get_paginator("list_objects_v2")
+                    for page in paginator.paginate(
+                        Bucket=settings.minio.bucket, Prefix=prefix.strip("/")
+                    ):
+                        keys = [{"Key": obj["Key"]} for obj in page.get("Contents", [])]
+                        if keys:
+                            s3_client.delete_objects(
+                                Bucket=settings.minio.bucket, Delete={"Objects": keys}
+                            )
+                logger.info(f"Deleted S3 objects for project {project_id}: {s3_paths}")
+        except Exception as exc:
+            logger.warning(f"S3 cleanup failed for project {project_id} (non-fatal): {exc}")
+
+    # Cascade delete dependent MongoDB documents
+    if dc_ids:
+        files_collection.delete_many({"data_collection_id": {"$in": dc_ids}})
+        deltatables_collection.delete_many({"data_collection_id": {"$in": dc_ids}})
+        runs_collection.delete_many({"data_collection_id": {"$in": dc_ids}})
+        multiqc_collection.delete_many({"data_collection_id": {"$in": dc_ids}})
+        jbrowse_collection.delete_many({"data_collection_id": {"$in": dc_ids}})
+        data_collections_collection.delete_many({"_id": {"$in": dc_ids}})
+
+    dashboards_collection.delete_many({"project_id": ObjectId(project_id)})
+
+    # Delete the project document
     projects_collection.delete_one({"_id": ObjectId(project_id)})
 
     return {
