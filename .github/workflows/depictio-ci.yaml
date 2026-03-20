@@ -2082,6 +2082,29 @@ jobs:
             --eval "db.dashboards.countDocuments({})" --quiet 2>&1 | tail -1)
           echo "📊 Before all-mode migrate: projects=$PROJECT_COUNT_BEFORE  dashboards=$DASHBOARD_COUNT_BEFORE"
 
+          # === Pre-flight diagnostics: verify MongoDB state before migrate ===
+          echo "Pre-migrate DB diagnostics:"
+          IRIS_DC_ID=$(docker compose exec -T mongo mongosh localhost:27018/depictioDB \
+            --eval "var p=db.projects.findOne({name:'Iris Dataset Project Data Analysis'}); \
+                    print(p&&p.workflows&&p.workflows[0]&&p.workflows[0].data_collections&&p.workflows[0].data_collections[0] \
+                          ? p.workflows[0].data_collections[0]._id : 'NOT_FOUND')" \
+            --quiet 2>&1 | tail -1)
+          echo "  Iris DC _id from project: $IRIS_DC_ID"
+
+          DT_COUNT=$(docker compose exec -T mongo mongosh localhost:27018/depictioDB \
+            --eval "db.deltatables.countDocuments({})" --quiet 2>&1 | tail -1)
+          echo "  Total deltatables: $DT_COUNT"
+
+          FILES_COUNT=$(docker compose exec -T mongo mongosh localhost:27018/depictioDB \
+            --eval "db.files.countDocuments({})" --quiet 2>&1 | tail -1)
+          echo "  Total files: $FILES_COUNT"
+
+          echo "  DT data_collection_id field sample (first 3):"
+          docker compose exec -T mongo mongosh localhost:27018/depictioDB \
+            --eval "db.deltatables.find({},{data_collection_id:1,delta_table_location:1}).limit(3).forEach(d=>print(JSON.stringify(d)))" \
+            --quiet 2>&1 | grep -v "^$" || true
+          echo "=== End pre-migrate diagnostics ==="
+
           # Run mode=all (self-migration: same instance as source and target)
           # This exercises the S3 copy code path in addition to MongoDB upserts
           MIGRATE_LOG=$(mktemp)
