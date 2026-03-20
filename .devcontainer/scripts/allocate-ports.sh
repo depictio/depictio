@@ -106,6 +106,9 @@ else
 fi
 echo ""
 
+# Development auth settings (default: single-user mode for devcontainers)
+DEPICTIO_AUTH_SINGLE_USER_MODE=${DEPICTIO_AUTH_SINGLE_USER_MODE:-true}
+
 # Save configuration to .env.instance for persistence
 cat > .env.instance <<EOF
 # Auto-generated instance configuration
@@ -146,7 +149,7 @@ DEPICTIO_MINIO_ROOT_PASSWORD=minio123
 
 # Development settings
 DEPICTIO_DEV_MODE=true
-DEPICTIO_AUTH_SINGLE_USER_MODE=true
+DEPICTIO_AUTH_SINGLE_USER_MODE=${DEPICTIO_AUTH_SINGLE_USER_MODE}
 DEPICTIO_MONGODB_WIPE=${MONGODB_WIPE}
 
 # Data directory
