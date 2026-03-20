@@ -33,6 +33,7 @@ from depictio.api.v1.db import (
     projects_collection,
     runs_collection,
     users_collection,
+    workflows_collection,
 )
 from depictio.api.v1.endpoints.backup_endpoints.routes import _convert_complex_objects_to_strings
 from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user
@@ -59,6 +60,7 @@ class MigrateImportRequest(BaseModel):
     owner_user_id: str | None = None
     dry_run: bool = False
     force_owner_remap: bool = False
+    overwrite: bool = False  # must be True to replace an already-existing project
 
 
 class MigrateImportResponse(BaseModel):
@@ -66,6 +68,7 @@ class MigrateImportResponse(BaseModel):
     message: str
     upserted: dict = {}
     dry_run: bool = False
+    conflict: bool = False  # True when project exists and overwrite=False was rejected
 
 
 # ---------------------------------------------------------------------------
@@ -250,18 +253,39 @@ async def export_project(
     mode = request.mode
 
     # Cascade queries ---------------------------------------------------
-    # Workflows and data_collections are embedded in the project document.
-    # Extract them directly rather than querying separate collections.
+    # Workflows are embedded in the project document (may be ID-only refs after processing).
+    # Fetch full workflow documents from workflows_collection for authoritative DC IDs.
     embedded_workflows: list[dict] = project.get("workflows", [])
     workflow_ids: list[ObjectId] = [
         w["_id"] for w in embedded_workflows if isinstance(w.get("_id"), ObjectId)
     ]
+
+    # Prefer workflows_collection (authoritative) over embedded refs (may be ID-only)
+    if workflow_ids:
+        full_workflows = list(workflows_collection.find({"_id": {"$in": workflow_ids}}))
+    else:
+        full_workflows = []
+
     dc_ids: list[ObjectId] = [
         dc["_id"]
-        for wf in embedded_workflows
+        for wf in full_workflows
         for dc in wf.get("data_collections", [])
         if isinstance(dc.get("_id"), ObjectId)
     ]
+    # Fallback: extract from embedded workflows if workflows_collection returned nothing
+    if not dc_ids:
+        dc_ids = [
+            dc["_id"]
+            for wf in embedded_workflows
+            for dc in wf.get("data_collections", [])
+            if isinstance(dc.get("_id"), ObjectId)
+        ]
+    logger.info(
+        "migrate export: project=%s workflow_ids=%d dc_ids=%d",
+        str(project_id),
+        len(workflow_ids),
+        len(dc_ids),
+    )
 
     files_docs: list[dict] = []
     deltatables_docs: list[dict] = []
@@ -307,25 +331,33 @@ async def export_project(
         doc_counts["workflows_embedded"] = len(embedded_workflows)
         doc_counts["data_collections_embedded"] = len(dc_ids)
 
-    # S3 copy -----------------------------------------------------------
+    # S3 handling -------------------------------------------------------
     s3_metadata: dict[str, Any] = {}
-    if mode in ("all", "files") and request.target_s3_config:
-        source_config = {
-            "bucket": settings.minio.bucket,
-            "endpoint_url": settings.minio.endpoint_url,
-            "aws_access_key_id": settings.minio.aws_access_key_id,
-            "aws_secret_access_key": settings.minio.aws_secret_access_key,
-            "region_name": "us-east-1",
-        }
+    s3_paths: list[str] = []
+    if mode in ("all", "files"):
         s3_paths = _collect_s3_locations_for_project(dc_ids, settings.minio.bucket)
-        logger.info("Migrate: copying %d S3 locations to target", len(s3_paths))
-        s3_metadata = _copy_s3_locations(
-            s3_paths,
-            source_config,
-            request.target_s3_config,
-            dry_run=request.dry_run,
-        )
-        s3_metadata["paths"] = s3_paths
+        logger.info("Migrate: found %d S3 locations for project", len(s3_paths))
+
+        if request.target_s3_config:
+            # CLI path: copy between two S3 instances
+            source_config = {
+                "bucket": settings.minio.bucket,
+                "endpoint_url": settings.minio.endpoint_url,
+                "aws_access_key_id": settings.minio.aws_access_key_id,
+                "aws_secret_access_key": settings.minio.aws_secret_access_key,
+                "region_name": "us-east-1",
+            }
+            logger.info("Migrate: copying %d S3 locations to target", len(s3_paths))
+            s3_metadata = _copy_s3_locations(
+                s3_paths,
+                source_config,
+                request.target_s3_config,
+                dry_run=request.dry_run,
+            )
+            s3_metadata["paths"] = s3_paths
+        else:
+            # UI path: S3 objects will be bundled directly into the ZIP below
+            s3_metadata = {"paths": s3_paths, "bundled_in_zip": True, "dry_run": request.dry_run}
 
     bundle: dict[str, Any] = {
         "migrate_metadata": {
@@ -358,6 +390,43 @@ async def export_project(
             "bundle.json",
             json.dumps(bundle["data"], indent=2, default=_json_default),
         )
+
+        # UI path: bundle S3 objects directly into the ZIP under s3_data/
+        if (
+            mode in ("all", "files")
+            and not request.target_s3_config
+            and s3_paths
+            and not request.dry_run
+        ):
+            s3_client = boto3.client(
+                "s3",
+                endpoint_url=settings.minio.endpoint_url,
+                aws_access_key_id=settings.minio.aws_access_key_id,
+                aws_secret_access_key=settings.minio.aws_secret_access_key,
+                region_name="us-east-1",
+                verify=False,
+            )
+            bundled_files = 0
+            for path in s3_paths:
+                path_key = path.strip("/")
+                try:
+                    paginator = s3_client.get_paginator("list_objects_v2")
+                    for page in paginator.paginate(Bucket=settings.minio.bucket, Prefix=path_key):
+                        for obj in page.get("Contents", []):
+                            key = obj["Key"]
+                            try:
+                                resp = s3_client.get_object(Bucket=settings.minio.bucket, Key=key)
+                                zf.writestr(f"s3_data/{key}", resp["Body"].read())
+                                bundled_files += 1
+                                logger.debug("Bundled S3 object into ZIP: %s", key)
+                            except ClientError as e:
+                                logger.error("Failed to bundle S3 object %s: %s", key, e)
+                except ClientError as e:
+                    logger.error("Error listing S3 path %s: %s", path_key, e)
+            logger.info("Migrate: bundled %d S3 files into ZIP", bundled_files)
+            bundle["s3_migrate_metadata"]["bundled_files"] = bundled_files
+
+        # Write s3_metadata.json last so bundled_files count is included
         if "s3_migrate_metadata" in bundle:
             zf.writestr(
                 "s3_metadata.json",
@@ -397,6 +466,23 @@ async def import_project(
     bundle = request.bundle
     if "data" not in bundle:
         raise HTTPException(status_code=400, detail="Bundle missing 'data' section")
+
+    # Conflict check — refuse to overwrite an existing project unless overwrite=True
+    project_docs = bundle.get("data", {}).get("projects", [])
+    if project_docs:
+        raw_pid = project_docs[0].get("_id") or project_docs[0].get("id")
+        try:
+            existing = projects_collection.find_one({"_id": ObjectId(str(raw_pid))})
+        except Exception:
+            existing = None
+        if existing and not request.overwrite:
+            project_name = existing.get("name", str(raw_pid))
+            return MigrateImportResponse(
+                success=False,
+                message=f"Project '{project_name}' already exists on this instance. "
+                "Set overwrite=true to replace it.",
+                conflict=True,
+            )
 
     # Determine fallback owner ID
     admin_id = current_user.id
@@ -482,6 +568,7 @@ async def import_project(
 async def import_project_zip(
     file: UploadFile = File(...),
     dry_run: bool = False,
+    overwrite: bool = False,
     current_user: User = Depends(get_current_user),
 ) -> MigrateImportResponse:
     """
@@ -499,6 +586,34 @@ async def import_project_zip(
         with zipfile.ZipFile(buf) as zf:
             bundle_data = json.loads(zf.read("bundle.json"))
             migrate_metadata = json.loads(zf.read("migrate_metadata.json"))
+
+            # Restore S3 data files bundled in the ZIP back to MinIO at original paths
+            s3_keys = [n for n in zf.namelist() if n.startswith("s3_data/")]
+            if s3_keys and not dry_run:
+                s3_client = boto3.client(
+                    "s3",
+                    endpoint_url=settings.minio.endpoint_url,
+                    aws_access_key_id=settings.minio.aws_access_key_id,
+                    aws_secret_access_key=settings.minio.aws_secret_access_key,
+                    region_name="us-east-1",
+                    verify=False,
+                )
+                uploaded = 0
+                for zip_path in s3_keys:
+                    s3_key = zip_path[len("s3_data/") :]  # strip prefix to get original path
+                    if not s3_key:
+                        continue
+                    try:
+                        s3_client.put_object(
+                            Bucket=settings.minio.bucket,
+                            Key=s3_key,
+                            Body=zf.read(zip_path),
+                        )
+                        uploaded += 1
+                        logger.debug("Restored S3 object: %s", s3_key)
+                    except ClientError as e:
+                        logger.error("Failed to restore S3 object %s: %s", s3_key, e)
+                logger.info("Migrate import: restored %d S3 objects to MinIO", uploaded)
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Invalid ZIP bundle: {e}")
 
@@ -507,6 +622,7 @@ async def import_project_zip(
         bundle=bundle,
         dry_run=dry_run,
         force_owner_remap=True,
+        overwrite=overwrite,
     )
     return await import_project(import_request, current_user)
 
@@ -559,6 +675,7 @@ def _prepare_doc_for_import(
 
 
 _ID_FIELD_NAMES = {
+    "_id",
     "project_id",
     "workflow_id",
     "data_collection_id",

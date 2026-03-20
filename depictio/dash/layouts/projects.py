@@ -109,6 +109,12 @@ def _create_import_project_tab_content() -> dmc.Stack:
             ),
             html.Div(id="import-project-preview"),
             dcc.Store(id="import-project-store"),
+            dmc.Switch(
+                id="import-project-overwrite",
+                label="Overwrite if project already exists",
+                color=colors["teal"],
+                checked=False,
+            ),
             dmc.Button(
                 "Import Project",
                 id="import-project-submit",
@@ -2411,13 +2417,18 @@ def register_workflows_callbacks(app) -> None:
         [
             Output("import-project-status", "children"),
             Output("project-creation-modal", "opened", allow_duplicate=True),
+            Output("projects-content", "children", allow_duplicate=True),
         ],
         Input("import-project-submit", "n_clicks"),
-        [State("import-project-store", "data"), State("local-store", "data")],
+        [
+            State("import-project-store", "data"),
+            State("local-store", "data"),
+            State("import-project-overwrite", "checked"),
+        ],
         prevent_initial_call=True,
     )
-    def submit_project_import(n_clicks, bundle, local_data):
-        """POST the import bundle to the API and close modal on success."""
+    def submit_project_import(n_clicks, bundle, local_data, overwrite):
+        """POST the import bundle to the API, refresh project list on success."""
         if not n_clicks or not bundle:
             raise dash.exceptions.PreventUpdate
         token = local_data.get("access_token") if local_data else None
@@ -2426,11 +2437,24 @@ def register_workflows_callbacks(app) -> None:
         headers = {"Authorization": f"Bearer {token}"}
         resp = httpx.post(
             f"{API_BASE_URL}/depictio/api/v1/migrate/import-project",
-            json={"bundle": bundle, "force_owner_remap": True},
+            json={"bundle": bundle, "force_owner_remap": True, "overwrite": bool(overwrite)},
             headers=headers,
             timeout=120.0,
         )
+        no_refresh = dash.no_update
         if resp.status_code == 200:
-            return dmc.Alert("Project imported successfully!", color="green"), False
+            result = resp.json()
+            if result.get("conflict"):
+                msg = dmc.Alert(
+                    result.get("message", "Project already exists."),
+                    color="yellow",
+                    title="Conflict",
+                    icon=DashIconify(icon="mdi:alert-outline", width=20),
+                )
+                return msg, True, no_refresh
+            # Success — refresh project list and close modal
+            projects = fetch_projects(token)
+            refreshed = render_projects_list(projects=projects, admin_UI=False, token=token)
+            return dmc.Alert("Project imported successfully!", color="green"), False, refreshed
         else:
-            return dmc.Alert(f"Import failed: {resp.text}", color="red"), True
+            return dmc.Alert(f"Import failed: {resp.text}", color="red"), True, no_refresh
