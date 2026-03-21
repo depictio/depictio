@@ -16,17 +16,6 @@ template:
     - name: "DATA_ROOT"
       description: "Root directory containing ampliseq pipeline output data"
       required: true
-  expected_files:
-    # Only files NOT covered by recipe SOURCES declarations.
-    # Recipe inputs are validated automatically by the 4-checkpoint recipe pipeline.
-    - relative_path: "input/Metadata_full.tsv"
-      description: "Sample metadata with sample IDs and experimental factors"
-      format: "TSV"
-  expected_directories:
-    # MultiQC uses recursive scan mode which silently returns zero results if the
-    # directory is missing — this pre-flight check catches that failure early.
-    - relative_path: "multiqc"
-      description: "MultiQC output directory"
   dashboards:
     - "dashboards/full_analysis.yaml"
 

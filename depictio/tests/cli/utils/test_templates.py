@@ -5,23 +5,16 @@ Tests cover the core template functions:
 - Template location
 - Variable substitution
 - Template resolution
-- Data root validation
 """
-
-import tempfile
-from pathlib import Path
 
 import pytest
 
-from depictio.cli.cli.utils.template_validator import validate_data_root
 from depictio.cli.cli.utils.templates import (
     _strip_ids,
     locate_template,
     substitute_template_variables,
 )
 from depictio.models.models.templates import (
-    ExpectedDirectory,
-    ExpectedFile,
     TemplateMetadata,
     TemplateOrigin,
     TemplateVariable,
@@ -156,82 +149,3 @@ class TestTemplateOriginModel:
         assert origin.template_id == "nf-core/ampliseq/2.16.0"
         assert origin.data_root == "/my/data"
         assert origin.applied_at  # auto-generated timestamp
-
-
-class TestValidateDataRoot:
-    """Tests for data root validation."""
-
-    def test_validate_existing_directory(self) -> None:
-        """Valid directory with expected files passes validation."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            # Create expected files
-            (Path(tmpdir) / "metadata.tsv").write_text("sample\thabitat\nS1\tsoil")
-
-            metadata = TemplateMetadata(
-                template_id="test",
-                description="Test",
-                version="1.0.0",
-                expected_files=[
-                    ExpectedFile(
-                        relative_path="metadata.tsv",
-                        description="Metadata",
-                        format="TSV",
-                    ),
-                ],
-            )
-
-            result = validate_data_root(metadata, tmpdir)
-            assert result.valid
-            assert len(result.errors) == 0
-
-    def test_validate_missing_file(self) -> None:
-        """Missing expected file produces an error."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            metadata = TemplateMetadata(
-                template_id="test",
-                description="Test",
-                version="1.0.0",
-                expected_files=[
-                    ExpectedFile(
-                        relative_path="nonexistent.tsv",
-                        description="Missing file",
-                    ),
-                ],
-            )
-
-            result = validate_data_root(metadata, tmpdir)
-            assert not result.valid
-            assert any("nonexistent.tsv" in e for e in result.errors)
-
-    def test_validate_nonexistent_directory(self) -> None:
-        """Nonexistent data root produces an error."""
-        metadata = TemplateMetadata(
-            template_id="test",
-            description="Test",
-            version="1.0.0",
-        )
-
-        result = validate_data_root(metadata, "/nonexistent/path/12345")
-        assert not result.valid
-        assert any("does not exist" in e for e in result.errors)
-
-    def test_validate_glob_directory_warning(self) -> None:
-        """Missing glob-pattern directories produce warnings (not errors)."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            metadata = TemplateMetadata(
-                template_id="test",
-                description="Test",
-                version="1.0.0",
-                expected_directories=[
-                    ExpectedDirectory(
-                        relative_path="run_*",
-                        description="Run directories",
-                        glob_pattern=True,
-                    ),
-                ],
-            )
-
-            result = validate_data_root(metadata, tmpdir)
-            assert result.valid  # Glob patterns produce warnings, not errors
-            assert len(result.warnings) > 0
-

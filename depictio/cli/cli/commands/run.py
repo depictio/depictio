@@ -182,8 +182,15 @@ def register_run_command(app: typer.Typer):
         if is_template_mode:
             rich_print_section_separator("Step 0: Resolving project template")
             try:
-                from depictio.cli.cli.utils.template_validator import validate_data_root
                 from depictio.cli.cli.utils.templates import resolve_template
+
+                # Check data root exists before doing anything
+                if not Path(data_root).is_dir():  # type: ignore[arg-type]
+                    rich_print_checked_statement(
+                        f"--data-root does not exist or is not a directory: {data_root}",
+                        "error",
+                    )
+                    raise typer.Exit(code=1)
 
                 # Resolve template
                 resolved_config, template_metadata, template_origin, default_dashboard_paths = (
@@ -198,34 +205,6 @@ def register_run_command(app: typer.Typer):
                     f"Template '{template_metadata.template_id}' loaded successfully",
                     "success",
                 )
-
-                # Validate data root
-                rich_print_checked_statement(
-                    f"Validating data root: {data_root}",
-                    "info",
-                )
-
-                validation_result = validate_data_root(
-                    template_metadata=template_metadata,
-                    data_root=data_root,  # type: ignore[arg-type]
-                )
-
-                # Report warnings
-                for warning in validation_result.warnings:
-                    rich_print_checked_statement(f"Warning: {warning}", "warning")
-
-                # Report errors
-                if not validation_result.valid:
-                    for error in validation_result.errors:
-                        rich_print_checked_statement(f"Validation error: {error}", "error")
-                    rich_print_checked_statement(
-                        "Data validation failed. Fix the issues above and retry.",
-                        "error",
-                    )
-                    if not continue_on_error:
-                        raise typer.Exit(code=1)
-                else:
-                    rich_print_checked_statement("Data validation passed", "success")
 
                 template_resolved_config = resolved_config
 

@@ -3,13 +3,12 @@ Models for the project template system.
 
 Templates allow users to reuse predefined project configurations (e.g., nf-core/ampliseq)
 with their own data by providing a data root directory. The template system resolves
-path variables like {DATA_ROOT} and validates that user data matches the expected structure.
+path variables like {DATA_ROOT} throughout the project config at runtime.
 
 Key concepts:
-- TemplateMetadata: Declared in template project.yaml, describes variables and expected structure
+- TemplateMetadata: Declared in template project.yaml, describes the template identity
 - TemplateOrigin: Stored on Project model to track that a template was used
 - TemplateVariable: A required variable (e.g., DATA_ROOT) with description
-- ExpectedFile/ExpectedDirectory: Used by the validator to check user data placement
 """
 
 from datetime import datetime
@@ -43,64 +42,11 @@ class TemplateVariable(BaseModel):
         return v
 
 
-class ExpectedFile(BaseModel):
-    """A file expected at a relative path under DATA_ROOT.
-
-    Used by the template validator to verify that user data is correctly placed.
-    The relative_path is relative to DATA_ROOT (e.g., 'merged_metadata.tsv').
-    """
-
-    relative_path: str = Field(
-        ..., description="Path relative to DATA_ROOT (e.g., 'merged_metadata.tsv')"
-    )
-    description: str = Field(..., description="Human-readable description of this file")
-    format: str | None = Field(
-        default=None, description="Expected file format (e.g., 'TSV', 'parquet')"
-    )
-
-    @field_validator("relative_path")
-    @classmethod
-    def validate_relative_path(cls, v: str) -> str:
-        """Ensure relative path is non-empty and not absolute."""
-        if not v or not v.strip():
-            raise ValueError("Relative path cannot be empty")
-        v = v.strip()
-        if v.startswith("/"):
-            raise ValueError("Expected file path must be relative, not absolute")
-        return v
-
-
-class ExpectedDirectory(BaseModel):
-    """A directory expected under DATA_ROOT.
-
-    Supports glob patterns for directories with variable names (e.g., 'run_*').
-    """
-
-    relative_path: str = Field(
-        ..., description="Path relative to DATA_ROOT (e.g., 'run_*/multiqc_data')"
-    )
-    description: str = Field(..., description="Human-readable description of this directory")
-    glob_pattern: bool = Field(
-        default=False, description="Whether relative_path contains wildcards (*, ?, **)"
-    )
-
-    @field_validator("relative_path")
-    @classmethod
-    def validate_relative_path(cls, v: str) -> str:
-        """Ensure relative path is non-empty and not absolute."""
-        if not v or not v.strip():
-            raise ValueError("Relative path cannot be empty")
-        v = v.strip()
-        if v.startswith("/"):
-            raise ValueError("Expected directory path must be relative, not absolute")
-        return v
-
-
 class TemplateMetadata(BaseModel):
     """Metadata section declared in a template project.yaml.
 
     This section is parsed from the top-level 'template' key in the YAML file.
-    It describes the template identity, required variables, and expected data structure.
+    It describes the template identity and required variables.
 
     Example YAML:
         template:
@@ -110,10 +56,8 @@ class TemplateMetadata(BaseModel):
           variables:
             - name: "DATA_ROOT"
               description: "Root directory containing ampliseq output data"
-          expected_files:
-            - relative_path: "merged_metadata.tsv"
-              description: "Sample metadata file"
-              format: "TSV"
+          dashboards:
+            - "dashboards/full_analysis.yaml"
     """
 
     template_id: str = Field(
@@ -123,12 +67,6 @@ class TemplateMetadata(BaseModel):
     version: str = Field(..., description="Template schema version (semver)")
     variables: list[TemplateVariable] = Field(
         default_factory=list, description="Variables required by this template"
-    )
-    expected_files: list[ExpectedFile] = Field(
-        default_factory=list, description="Files expected under DATA_ROOT"
-    )
-    expected_directories: list[ExpectedDirectory] = Field(
-        default_factory=list, description="Directories expected under DATA_ROOT"
     )
     dashboards: list[str] = Field(
         default_factory=list,
