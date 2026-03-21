@@ -867,7 +867,10 @@ def process_recipe_data_collection(
 
     try:
         result_df = execute_recipe(
-            recipe_name, data_dir, overrides, extra_sources=extra_sources,
+            recipe_name,
+            data_dir,
+            overrides,
+            extra_sources=extra_sources,
             pipeline_version=pipeline_version,
         )
     except RecipeError as e:
