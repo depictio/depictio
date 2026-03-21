@@ -137,8 +137,9 @@ def register_demo_tour_callbacks(app: dash.Dash) -> None:
 
         # URL changes
         if triggered_id == "url":
-            # Mark welcome as shown when navigating away
-            if pathname != "/dashboards" and not tour_data.get("welcome_shown"):
+            # Mark welcome as shown when navigating away (but NOT for /auth redirects,
+            # which are system-driven and don't indicate the user has seen the tour).
+            if pathname not in ("/dashboards", "/auth") and not tour_data.get("welcome_shown"):
                 tour_data["welcome_shown"] = True
                 return tour_data, get_popover_style(False)
 
