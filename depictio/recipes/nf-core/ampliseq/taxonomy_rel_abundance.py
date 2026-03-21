@@ -33,7 +33,7 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
     df = df.rename({"#OTU ID": "taxonomy"})
 
     sample_cols = [c for c in df.columns if c != "taxonomy"]
-    df = df.with_columns([pl.col(c).cast(pl.Float64) for c in sample_cols])
+    df = df.with_columns(pl.col(sample_cols).cast(pl.Float64))
     df = df.unpivot(
         on=sample_cols, index="taxonomy", variable_name="sample", value_name="rel_abundance"
     )

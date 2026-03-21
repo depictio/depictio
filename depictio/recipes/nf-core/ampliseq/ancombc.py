@@ -64,9 +64,6 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
     for name in ["p_val", "q_val", "w", "se"]:
         result = result.join(melted[name], on=["id", "contrast"], how="left")
 
-    for col_name in ["lfc", "p_val", "q_val", "w", "se"]:
-        result = result.with_columns(pl.col(col_name).cast(pl.Float64))
-
     result = result.with_columns(
         pl.col("id").str.split(";").list.get(0).alias("Kingdom"),
         pl.col("id").str.split(";").list.get(1).fill_null("Unclassified").alias("Phylum"),

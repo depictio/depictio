@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Annotated
 
 import click.exceptions
+import polars as pl
 import typer
 
 from depictio.cli.cli_logging import logger
@@ -55,7 +56,7 @@ def recipe_run(
 
         # Checkpoint 3: transform
         result = module.transform(sources)
-        if not isinstance(result, __import__("polars").DataFrame):
+        if not isinstance(result, pl.DataFrame):
             typer.echo(f"  ERROR: transform() returned {type(result).__name__}, expected DataFrame")
             raise typer.Exit(code=1)
         if result.is_empty():

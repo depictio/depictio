@@ -20,6 +20,8 @@ import yaml
 from depictio.cli.cli_logging import logger
 from depictio.models.models.templates import TemplateMetadata, TemplateOrigin
 
+_TEMPLATE_VAR_RE = re.compile(r"\{([A-Z0-9_]+)\}")
+
 
 def _load_yaml(path: str) -> dict:
     """Load a YAML file and return its contents as a dict."""
@@ -122,8 +124,7 @@ def substitute_template_variables(config: Any, variables: dict[str, str]) -> Any
     elif isinstance(config, list):
         return [substitute_template_variables(item, variables) for item in config]
     elif isinstance(config, str):
-        env_var_pattern = re.compile(r"\{([A-Z0-9_]+)\}")
-        matches = env_var_pattern.findall(config)
+        matches = _TEMPLATE_VAR_RE.findall(config)
         result = config
         for match in matches:
             if match in variables:

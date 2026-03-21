@@ -17,6 +17,13 @@ from typing import Any
 from pydantic import BaseModel, Field, field_validator
 
 
+def _require_nonempty(v: str, label: str) -> str:
+    """Strip and validate that a string field is non-empty."""
+    if not v or not v.strip():
+        raise ValueError(f"{label} cannot be empty")
+    return v.strip()
+
+
 class TemplateVariable(BaseModel):
     """A variable required by a template (e.g., DATA_ROOT).
 
@@ -80,18 +87,12 @@ class TemplateMetadata(BaseModel):
     @field_validator("template_id")
     @classmethod
     def validate_template_id(cls, v: str) -> str:
-        """Ensure template_id is non-empty."""
-        if not v or not v.strip():
-            raise ValueError("Template ID cannot be empty")
-        return v.strip()
+        return _require_nonempty(v, "Template ID")
 
     @field_validator("version")
     @classmethod
     def validate_version(cls, v: str) -> str:
-        """Ensure version is non-empty."""
-        if not v or not v.strip():
-            raise ValueError("Template version cannot be empty")
-        return v.strip()
+        return _require_nonempty(v, "Template version")
 
     def get_required_variable_names(self) -> list[str]:
         """Return names of all required variables."""
@@ -122,15 +123,9 @@ class TemplateOrigin(BaseModel):
     @field_validator("template_id")
     @classmethod
     def validate_template_id(cls, v: str) -> str:
-        """Ensure template_id is non-empty."""
-        if not v or not v.strip():
-            raise ValueError("Template ID cannot be empty")
-        return v.strip()
+        return _require_nonempty(v, "Template ID")
 
     @field_validator("data_root")
     @classmethod
     def validate_data_root(cls, v: str) -> str:
-        """Ensure data_root is non-empty."""
-        if not v or not v.strip():
-            raise ValueError("Data root cannot be empty")
-        return v.strip()
+        return _require_nonempty(v, "Data root")

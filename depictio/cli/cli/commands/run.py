@@ -491,17 +491,15 @@ def register_run_command(app: typer.Typer):
                         import_dashboards_from_template,
                     )
 
-                    cli_config = load_depictio_config(yaml_config_path=CLI_config_path)
-                    headers = generate_api_headers(cli_config)
-                    api_url = str(cli_config.api_base_url)
+                    headers = generate_api_headers(CLI_config)
+                    api_url = str(CLI_config.api_base_url)
 
                     # Resolve the project ID from the server
                     project_id: str | None = None
                     remote_project = api_get_project_from_name(str(project_config.name), CLI_config)
                     if remote_project.status_code == 200:
-                        project_id = remote_project.json().get("_id") or remote_project.json().get(
-                            "id"
-                        )
+                        remote_project_data = remote_project.json()
+                        project_id = remote_project_data.get("_id") or remote_project_data.get("id")
 
                     results = import_dashboards_from_template(
                         dashboard_paths=template_dashboard_paths,
@@ -511,8 +509,9 @@ def register_run_command(app: typer.Typer):
                         overwrite=overwrite,
                     )
 
-                    imported = [r for r in results if r["success"]]
-                    failed = [r for r in results if not r["success"]]
+                    imported, failed = [], []
+                    for r in results:
+                        (imported if r["success"] else failed).append(r)
 
                     for r in imported:
                         action = "updated" if r.get("updated") else "imported"
