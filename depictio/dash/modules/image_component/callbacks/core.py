@@ -322,6 +322,9 @@ def register_core_callbacks(app):
                 # Get unique, sorted image paths
                 image_paths = data[image_column].unique(maintain_order=True).to_list()
                 image_paths = [p for p in image_paths if p and is_supported_image_format(str(p))]
+                logger.info(
+                    f"Image {component_id}: {len(data)} rows, {len(image_paths)} valid paths, max_images={max_images}"
+                )
                 image_paths = sorted(image_paths)[:max_images]
 
                 if not image_paths:

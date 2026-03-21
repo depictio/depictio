@@ -1,5 +1,4 @@
 #!/bin/bash
-set -e
 
 # Port allocation script for git worktree-based multi-instance setup
 # Uses branch naming convention to assign deterministic port offsets
@@ -17,7 +16,7 @@ while [[ $# -gt 0 ]]; do
       echo "Unknown option: $1"
       echo "Usage: $0 [--wipe|-w]"
       echo "  --wipe, -w  Enable MongoDB wipe (DEPICTIO_MONGODB_WIPE=true)"
-      exit 1
+      return 1 2>/dev/null || exit 1
       ;;
   esac
 done

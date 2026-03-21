@@ -7,7 +7,8 @@ upsert, fetch, batch existence checks, and shape queries.
 
 import hashlib
 import math
-from datetime import datetime
+from datetime import datetime, timezone
+from typing import Any
 
 import boto3
 import polars as pl
@@ -18,9 +19,11 @@ from fastapi import APIRouter, Depends, HTTPException
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.db import deltatables_collection, projects_collection, users_collection
+from depictio.api.v1.deltatables_utils import invalidate_dc_cache
 from depictio.api.v1.endpoints.deltatables_endpoints.utils import precompute_columns_specs
 from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user, get_user_or_anonymous
 from depictio.api.v1.s3 import polars_s3_config
+from depictio.api.v1.services.events import connection_manager
 from depictio.api.v1.utils import agg_functions
 from depictio.models.models.base import PyObjectId, convert_objectid_to_str
 from depictio.models.models.deltatables import (
@@ -28,6 +31,7 @@ from depictio.models.models.deltatables import (
     DeltaTableAggregated,
     UpsertDeltaTableAggregated,
 )
+from depictio.models.models.realtime import EventMessage, EventSourceType, EventType
 from depictio.models.models.users import User
 
 deltatables_endpoint_router = APIRouter()
@@ -241,7 +245,51 @@ async def upsert_deltatable(
                 },
             )
 
+    # Broadcast real-time event to connected dashboards
+    dc_tag = dc_data.get("data_collection_tag", "Data")
+    n_rows = df.height if not is_multiqc else None
+    n_columns = len(df.columns) if not is_multiqc else None
+    await _broadcast_dc_update(
+        str(data_collection_oid), dc_tag=dc_tag, n_rows=n_rows, n_columns=n_columns
+    )
+
     return {"message": "DeltaTableAggregated upserted successfully", "result": "success"}
+
+
+async def _broadcast_dc_update(
+    dc_id: str,
+    *,
+    dc_tag: str = "Data",
+    n_rows: int | None = None,
+    n_columns: int | None = None,
+) -> None:
+    """Invalidate caches and broadcast a data-collection-updated event to all connected dashboards."""
+    cache_result = invalidate_dc_cache(dc_id)
+    logger.info(f"Cache invalidated for DC {dc_id}: {cache_result}")
+
+    payload: dict[str, Any] = {
+        "operation": "upserted",
+        "data_collection_tag": dc_tag,
+    }
+    if n_rows is not None:
+        payload["n_rows"] = n_rows
+    if n_columns is not None:
+        payload["n_columns"] = n_columns
+
+    event = EventMessage(
+        event_type=EventType.DATA_COLLECTION_UPDATED,
+        source_type=EventSourceType.MONGODB_CHANGES,
+        timestamp=datetime.now(timezone.utc),
+        data_collection_id=dc_id,
+        payload=payload,
+    )
+
+    subscribed = connection_manager.get_all_subscribed_dashboards()
+    for dashboard_id in subscribed:
+        event_copy = event.model_copy(update={"dashboard_id": dashboard_id})
+        await connection_manager.broadcast_to_dashboard(dashboard_id, event_copy)
+
+    logger.info(f"Upsert event broadcast for DC {dc_id} to {len(subscribed)} dashboards")
 
 
 def _build_permission_pipeline(data_collection_id: PyObjectId, user_id) -> list[dict]:

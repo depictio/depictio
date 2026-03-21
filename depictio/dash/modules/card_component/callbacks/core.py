@@ -796,11 +796,10 @@ def register_core_callbacks(app):
         Backend work is parallelized internally, Dash framework overhead happens once instead of 9x.
         """
 
-        from bson import ObjectId
-        from dash import no_update
-
-        from depictio.api.v1.deltatables_utils import load_deltatable_lite
-        from depictio.dash.modules.card_component.utils import compute_value
+        logger.info(
+            f"CARD BATCH CALLBACK FIRED: {len(trigger_data_list)} triggers, "
+            f"background={USE_BACKGROUND_CALLBACKS}"
+        )
 
         # Early exit checks
         n = len(trigger_data_list) if trigger_data_list else 0
@@ -1494,8 +1493,5 @@ def _has_active_filter_values(metadata_list: list[dict[str, Any]] | None) -> boo
     if not metadata_list:
         return False
 
-    for component in metadata_list:
-        value = component.get("value")
-        if value is not None and value != [] and value != "" and value is not False:
-            return True
-    return False
+    empty_values = (None, [], "", False)
+    return any(component.get("value") not in empty_values for component in metadata_list)

@@ -12,8 +12,13 @@ from depictio.api.v1.configs.config import API_BASE_URL
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.s3 import polars_s3_config
 
+
+class DeltaTableNotFoundError(Exception):
+    """Raised when a delta table does not exist yet (e.g., before first data ingestion)."""
+
+
 # FEATURE FLAGS
-ENABLE_CACHING = True  # Global toggle for caching system
+ENABLE_CACHING = False  # Global toggle for caching system (DISABLED for real-time testing)
 
 # PERFORMANCE TESTING: Toggle for local filesystem caching
 USE_LOCAL_FILES = os.getenv("DEPICTIO_USE_LOCAL_FILES", "false").lower() == "true"
@@ -126,9 +131,8 @@ def add_filter(
             if not isinstance(value, list):
                 value = [value]
 
-            # Use native type filtering - Polars handles type coercion automatically
-            # Join type mismatches are handled separately by normalize_join_column_types()
-            filter_list.append(pl.col(column_name).is_in(value))
+            # Cast filter values to match column dtype to avoid is_in type mismatches
+            filter_list.append(pl.col(column_name).cast(pl.Utf8).is_in([str(v) for v in value]))
 
     elif interactive_component_type == "TextInput":
         if value:
@@ -411,9 +415,19 @@ def _get_delta_location(
     Raises:
         Exception: If API call fails or response is invalid.
     """
-    if init_data and data_collection_id_str in init_data:
-        file_id = init_data[data_collection_id_str]["delta_location"]
-        return file_id
+    if init_data is not None:
+        if data_collection_id_str in init_data:
+            delta_loc = init_data[data_collection_id_str].get("delta_location")
+            if not delta_loc:
+                raise DeltaTableNotFoundError(
+                    f"No delta_location for DC {data_collection_id_str} in init_data"
+                )
+            return delta_loc
+
+        # init_data was provided but this DC has no entry — delta table not created yet
+        raise DeltaTableNotFoundError(
+            f"DC {data_collection_id_str} not in init_data (delta table not yet created)"
+        )
 
     # Legacy API path with deprecation warning
     warnings.warn(
@@ -429,6 +443,16 @@ def _get_delta_location(
     try:
         response = httpx.get(url, headers=headers)
         response.raise_for_status()
+    except httpx.HTTPStatusError as e:
+        if e.response.status_code == 404:
+            raise DeltaTableNotFoundError(
+                f"Delta table not found for DC {data_collection_id_str}"
+            ) from e
+        logger.error(
+            f"HTTP error loading deltatable for workflow {workflow_id_str} "
+            f"and data collection {data_collection_id_str}: {e}"
+        )
+        raise Exception("Error loading deltatable") from e
     except httpx.HTTPError as e:
         logger.error(
             f"HTTP error loading deltatable for workflow {workflow_id_str} "
@@ -438,11 +462,9 @@ def _get_delta_location(
 
     file_id = response.json().get("delta_table_location")
     if not file_id:
-        logger.error(
-            f"No 'delta_table_location' found in response for workflow {workflow_id_str} "
-            f"and data collection {data_collection_id_str}"
+        raise DeltaTableNotFoundError(
+            f"No delta_table_location in response for DC {data_collection_id_str}"
         )
-        raise Exception("Invalid response: missing 'delta_table_location'")
 
     return file_id
 
@@ -477,11 +499,18 @@ def _create_delta_scan(file_id: str, dc_type: str | None = None) -> pl.LazyFrame
         return pl.scan_parquet(parquet_pattern, storage_options=polars_s3_config)
 
     # Standard delta table scan
-    if USE_LOCAL_FILES:
-        cache_path = cache_delta_table_from_s3(file_id, polars_s3_config)
-        return pl.scan_delta(cache_path)
+    try:
+        if USE_LOCAL_FILES:
+            cache_path = cache_delta_table_from_s3(file_id, polars_s3_config)
+            return pl.scan_delta(cache_path)
 
-    return pl.scan_delta(file_id, storage_options=polars_s3_config)
+        return pl.scan_delta(file_id, storage_options=polars_s3_config)
+    except Exception as e:
+        if "no log files" in str(e) or "TableNotFoundError" in type(e).__name__:
+            raise DeltaTableNotFoundError(
+                f"Delta table at {file_id} has no data yet (no log files)"
+            ) from e
+        raise
 
 
 def _apply_scan_options(
@@ -673,12 +702,6 @@ def _cache_dataframe_to_stores(
         "timestamp": time.time(),
     }
     _total_memory_usage += size_bytes
-
-
-def _log_cache_status() -> None:
-    """Log current cache status (Redis and memory)."""
-    # Cache status logging disabled for cleaner output
-    pass
 
 
 def _load_and_cache_fresh_data(
@@ -895,6 +918,7 @@ def load_deltatable_lite(
 
     Returns:
         The loaded and optionally filtered DataFrame.
+        Returns an empty DataFrame when the delta table does not exist yet.
 
     Raises:
         Exception: If the HTTP request to load the Delta table fails (legacy path).
@@ -911,9 +935,18 @@ def load_deltatable_lite(
             "See get_result_dc_for_workflow() in depictio/dash/utils.py."
         )
 
+    # Handle missing delta tables gracefully (e.g., before first data ingestion)
+    try:
+        file_id = _get_delta_location(data_collection_id_str, workflow_id_str, init_data, TOKEN)
+    except DeltaTableNotFoundError:
+        logger.info(
+            f"Delta table not found for DC {data_collection_id_str} - "
+            "returning empty DataFrame (data not ingested yet)"
+        )
+        return pl.DataFrame()
+
     # CACHING DISABLED PATH - load directly from storage
     if not ENABLE_CACHING:
-        file_id = _get_delta_location(data_collection_id_str, workflow_id_str, init_data, TOKEN)
         # Extract dc_type for special handling (e.g., MultiQC uses parquet)
         if init_data and data_collection_id_str in init_data:
             dc_type = init_data[data_collection_id_str].get("dc_type")
@@ -931,8 +964,6 @@ def load_deltatable_lite(
         return _finalize_dataframe(df, metadata, load_for_options, None)
 
     # CACHING ENABLED PATH
-    _log_cache_status()
-
     # Generate cache keys
     base_cache_key, filtered_cache_key, filter_hash = _generate_cache_keys(
         workflow_id_str,
@@ -984,8 +1015,7 @@ def load_deltatable_lite(
         # Fallback: query database for dc_type when init_data not available
         dc_type = _get_dc_type_from_db(data_collection_id_obj)
 
-    # Get delta location and create scan
-    file_id = _get_delta_location(data_collection_id_str, workflow_id_str, init_data, TOKEN)
+    # Create scan from already-resolved file_id
     delta_scan = _create_delta_scan(file_id, dc_type)
 
     # Apply column projection at scan level
@@ -1270,6 +1300,59 @@ def clear_memory_cache():
     _dataframe_memory_cache.clear()
     _cache_metadata.clear()
     _total_memory_usage = 0
+
+
+def invalidate_dc_cache(dc_id: str) -> dict:
+    """
+    Invalidate all caches for a data collection (local file, Redis, memory).
+
+    Call this when a DC's delta table has been updated to ensure fresh data
+    is served on the next request.
+
+    Args:
+        dc_id: Data collection ID string
+
+    Returns:
+        Dict with invalidation results per cache layer.
+    """
+    import shutil
+
+    results: dict = {"dc_id": dc_id, "local_file": False, "redis": 0, "memory": 0}
+
+    # 1. Local file cache
+    cache_path = get_local_cache_path(f"s3://x/{dc_id}")
+    if os.path.exists(cache_path):
+        shutil.rmtree(cache_path)
+        results["local_file"] = True
+        logger.info(f"Invalidated local file cache for DC {dc_id}")
+
+    # 2. Memory cache — evict keys containing this DC ID
+    global _total_memory_usage
+    keys_to_remove = [k for k in _dataframe_memory_cache if dc_id in k]
+    for key in keys_to_remove:
+        if key in _cache_metadata:
+            _total_memory_usage -= _cache_metadata[key].get("size_bytes", 0)
+            del _cache_metadata[key]
+        del _dataframe_memory_cache[key]
+        results["memory"] += 1
+
+    # 3. Redis cache — delete keys matching this DC ID
+    try:
+        from depictio.api.cache import get_cache
+
+        cache = get_cache()
+        if cache._redis_available and cache._redis:
+            prefix = cache.cache_config.cache_key_prefix
+            pattern = f"{prefix}*{dc_id}*"
+            keys = cache._redis.keys(pattern)
+            if keys:
+                cache._redis.delete(*keys)
+                results["redis"] = len(keys)
+    except Exception as e:
+        logger.warning(f"Redis invalidation failed for DC {dc_id}: {e}")
+
+    logger.info(f"Cache invalidated for DC {dc_id}: {results}")
+    return results
 
 
 def join_deltatables_dev(

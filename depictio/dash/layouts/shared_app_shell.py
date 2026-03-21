@@ -72,7 +72,7 @@ def create_shared_stores():
             storage_type="memory",
             data={
                 "enabled": True,
-                "refresh_mode": "notification",  # "notification" or "auto-refresh"
+                "refresh_mode": "auto-refresh",  # "notification" or "auto-refresh"
                 "paused": False,
             },
         ),
@@ -280,9 +280,10 @@ def create_minimal_app_shell(
     # Create shared stores
     stores = create_shared_stores()
 
-    # Add WebSocket component for real-time updates
-    # Temporarily disabled - will be re-enabled with native JS implementation from feature/realtime-events-websocket
-    # stores.append(create_websocket_component("ws"))
+    # Add hidden div for native WebSocket state management
+    # The WebSocket is managed via clientside callback in realtime_callbacks.py
+    from dash import html
+    stores.append(html.Div(id="ws-state", style={"display": "none"}))
 
     # Add additional app-specific stores if provided
     if additional_stores:

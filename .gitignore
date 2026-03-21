@@ -311,6 +311,9 @@ data/depictio-*/
 .devcontainer/docker-compose.git-mount.yaml
 docker-compose.override.yaml
 
+# Test project: real-time microscopy simulation
+depictio/projects/test/adapt_feedb_ms/
+
 # Old data directories (kept for backward compatibility reference)
 # depictioDB/
 # minio_data/
