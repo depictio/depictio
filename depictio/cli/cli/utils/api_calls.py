@@ -1,3 +1,7 @@
+import io
+import json
+import zipfile
+
 import httpx
 import typer
 from pydantic import validate_call
@@ -854,3 +858,92 @@ def api_update_multiqc_report(report_id: str, multiqc_report: dict, CLI_config: 
     except httpx.RequestError as e:
         logger.error(f"HTTP request failed: {e}")
         raise
+
+
+def _post_migrate_endpoint(
+    CLI_config: CLIConfig,
+    url: str,
+    payload: dict,
+    operation: str,
+) -> dict:
+    """Shared helper for migrate POST endpoints with consistent error handling."""
+    try:
+        response = httpx.post(
+            url,
+            json=payload,
+            headers=generate_api_headers(CLI_config),
+            timeout=600.0,
+        )
+        if response.status_code == 200:
+            return response.json()
+        else:
+            logger.error(f"{operation} failed: {response.text}")
+            return {
+                "success": False,
+                "message": f"API request failed with status {response.status_code}: {response.text}",
+            }
+    except httpx.TimeoutException:
+        return {"success": False, "message": f"{operation} request timed out"}
+    except Exception as e:
+        return {"success": False, "message": f"{operation} failed: {str(e)}"}
+
+
+def api_export_project(
+    CLI_config: CLIConfig,
+    project_name: str | None = None,
+    project_id: str | None = None,
+    mode: str = "all",
+    target_s3_config: dict | None = None,
+    dry_run: bool = False,
+) -> dict:
+    """Export a project bundle from the source instance (returns parsed ZIP content)."""
+    url = f"{CLI_config.api_base_url}/depictio/api/v1/migrate/export-project"
+    payload: dict = {"mode": mode, "dry_run": dry_run}
+    if project_name:
+        payload["project_name"] = project_name
+    if project_id:
+        payload["project_id"] = project_id
+    if target_s3_config:
+        payload["target_s3_config"] = target_s3_config
+
+    try:
+        response = httpx.post(
+            url,
+            json=payload,
+            headers=generate_api_headers(CLI_config),
+            timeout=600.0,
+        )
+        if response.status_code != 200:
+            logger.error(f"Export failed: {response.text}")
+            return {
+                "success": False,
+                "message": f"API request failed with status {response.status_code}: {response.text}",
+            }
+
+        with zipfile.ZipFile(io.BytesIO(response.content)) as zf:
+            result: dict = {
+                "data": json.loads(zf.read("bundle.json")),
+                "migrate_metadata": json.loads(zf.read("migrate_metadata.json")),
+            }
+            if "s3_metadata.json" in zf.namelist():
+                result["s3_migrate_metadata"] = json.loads(zf.read("s3_metadata.json"))
+        return result
+    except httpx.TimeoutException:
+        return {"success": False, "message": "Export request timed out"}
+    except Exception as e:
+        return {"success": False, "message": f"Export failed: {str(e)}"}
+
+
+def api_import_project(
+    CLI_config: CLIConfig,
+    bundle: dict,
+    owner_user_id: str | None = None,
+    dry_run: bool = False,
+    overwrite: bool = False,
+) -> dict:
+    """Import a project bundle into the target instance (non-destructive upsert)."""
+    url = f"{CLI_config.api_base_url}/depictio/api/v1/migrate/import-project"
+    payload: dict = {"bundle": bundle, "dry_run": dry_run, "overwrite": overwrite}
+    if owner_user_id:
+        payload["owner_user_id"] = owner_user_id
+    return _post_migrate_endpoint(CLI_config, url, payload, "Import")

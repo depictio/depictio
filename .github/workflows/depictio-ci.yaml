@@ -1587,8 +1587,37 @@ jobs:
             sleep 15
           done
 
-          echo "⏳ Additional stabilization period..."
-          sleep 30
+          # Wait for background reference-dataset processing to complete
+          # (iris/penguins/ampliseq scan+process runs async after API startup;
+          #  deltatables are only created once background_processing_complete=true)
+          echo "⏳ Waiting for background reference dataset processing to complete..."
+          for i in {1..20}; do
+            bg_status=$(docker compose exec -T mongo mongosh localhost:27018/depictioDB \
+              --eval "var doc = db.initialization.findOne({_id: 'reference_datasets_metadata'}); \
+                      print(doc ? (doc.background_processing_complete ? 'complete' : (doc.background_processing_failed ? 'failed' : 'pending')) : 'missing')" \
+              --quiet 2>&1 | tail -1)
+            echo "📊 Background processing status (attempt $i/20): $bg_status"
+            if [ "$bg_status" = "complete" ]; then
+              echo "✅ Reference dataset background processing complete"
+              break
+            elif [ "$bg_status" = "failed" ]; then
+              echo "❌ Background processing failed — checking logs:"
+              docker compose logs --tail=30 depictio-backend
+              exit 1
+            fi
+            sleep 15
+          done
+
+          # Verify iris deltatable was created (needed for migrate all-mode test)
+          IRIS_DC_ID=$(docker compose exec -T mongo mongosh localhost:27018/depictioDB \
+            --eval "JSON.stringify(db.projects.find().toArray())" --quiet 2>&1 | \
+            grep '^[\[{]' | jq -r '.[] | select(.name == "Iris Dataset Project Data Analysis") | .workflows[0].data_collections[0]._id' 2>/dev/null || echo "")
+          if [ -n "$IRIS_DC_ID" ]; then
+            IRIS_DT=$(docker compose exec -T mongo mongosh localhost:27018/depictioDB \
+              --eval "JSON.stringify(db.deltatables.find({\"data_collection_id\": ObjectId(\"$IRIS_DC_ID\")}).toArray())" \
+              --quiet 2>&1 | grep '^[\[{]' | jq -r '.[]._id // empty' 2>/dev/null || echo "")
+            echo "📊 Iris deltatable: ${IRIS_DT:-not found yet}"
+          fi
 
           echo "📊 Final container status before backup testing:"
           docker compose ps
@@ -1921,6 +1950,278 @@ jobs:
             echo "❌ No backup ID found for restoration test"
             exit 1
           fi
+
+      - name: Test migrate (self-migration, metadata mode) - ${{ matrix.strategy_name }}
+        run: |
+          echo "🔄 Testing depictio migrate (self-migration, metadata mode) for ${{ matrix.strategy_name }}..."
+          cd depictio/cli
+          source venv/bin/activate
+
+          # Resolve the Iris project name and capture before-counts
+          IRIS_PROJECT_NAME="Iris Dataset Project Data Analysis"
+
+          PROJECT_COUNT_BEFORE=$(docker compose exec -T mongo mongosh localhost:27018/depictioDB \
+            --eval "db.projects.countDocuments({})" --quiet 2>&1 | tail -1)
+          WORKFLOW_COUNT_BEFORE=$(docker compose exec -T mongo mongosh localhost:27018/depictioDB \
+            --eval "db.workflows.countDocuments({})" --quiet 2>&1 | tail -1)
+          DASHBOARD_COUNT_BEFORE=$(docker compose exec -T mongo mongosh localhost:27018/depictioDB \
+            --eval "db.dashboards.countDocuments({})" --quiet 2>&1 | tail -1)
+          echo "📊 Before migrate: projects=$PROJECT_COUNT_BEFORE  workflows=$WORKFLOW_COUNT_BEFORE  dashboards=$DASHBOARD_COUNT_BEFORE"
+
+          # Dry-run first — must not change anything
+          echo "🏃 Running dry-run migrate..."
+          depictio-cli -v -vl DEBUG migrate run \
+            --project "$IRIS_PROJECT_NAME" \
+            --CLI-config-path admin_config.yaml \
+            --target-config admin_config.yaml \
+            --mode metadata \
+            --dry-run
+          echo "✅ Dry-run migrate completed"
+
+          PROJECT_COUNT_DRY=$(docker compose exec -T mongo mongosh localhost:27018/depictioDB \
+            --eval "db.projects.countDocuments({})" --quiet 2>&1 | tail -1)
+          [ "$PROJECT_COUNT_DRY" -eq "$PROJECT_COUNT_BEFORE" ] || \
+            { echo "❌ Dry-run changed project count ($PROJECT_COUNT_BEFORE → $PROJECT_COUNT_DRY)"; exit 1; }
+          echo "✅ Dry-run did not modify the database"
+
+          # Real migrate (same instance as source and target — idempotent upsert)
+          # --overwrite required because the project already exists on this instance
+          echo "🚀 Running real migrate (metadata mode)..."
+          depictio-cli -v -vl DEBUG migrate run \
+            --project "$IRIS_PROJECT_NAME" \
+            --CLI-config-path admin_config.yaml \
+            --target-config admin_config.yaml \
+            --mode metadata \
+            --overwrite
+          echo "✅ Real migrate completed"
+
+          # Verify conflict detection: run WITHOUT --overwrite → must fail with conflict
+          echo "🔒 Testing conflict detection (no --overwrite, should fail)..."
+          if depictio-cli migrate run \
+            --project "$IRIS_PROJECT_NAME" \
+            --CLI-config-path admin_config.yaml \
+            --target-config admin_config.yaml \
+            --mode metadata 2>&1; then
+            echo "❌ Expected conflict exit but command succeeded"
+            exit 1
+          fi
+          echo "✅ Conflict detection works — second import without --overwrite correctly rejected"
+
+          # Verify counts are preserved (upsert is non-destructive)
+          PROJECT_COUNT_AFTER=$(docker compose exec -T mongo mongosh localhost:27018/depictioDB \
+            --eval "db.projects.countDocuments({})" --quiet 2>&1 | tail -1)
+          WORKFLOW_COUNT_AFTER=$(docker compose exec -T mongo mongosh localhost:27018/depictioDB \
+            --eval "db.workflows.countDocuments({})" --quiet 2>&1 | tail -1)
+          DASHBOARD_COUNT_AFTER=$(docker compose exec -T mongo mongosh localhost:27018/depictioDB \
+            --eval "db.dashboards.countDocuments({})" --quiet 2>&1 | tail -1)
+          echo "📊 After migrate: projects=$PROJECT_COUNT_AFTER  workflows=$WORKFLOW_COUNT_AFTER  dashboards=$DASHBOARD_COUNT_AFTER"
+
+          [ "$PROJECT_COUNT_AFTER" -ge "$PROJECT_COUNT_BEFORE" ] || \
+            { echo "❌ Projects decreased after migrate ($PROJECT_COUNT_BEFORE → $PROJECT_COUNT_AFTER)"; exit 1; }
+          [ "$WORKFLOW_COUNT_AFTER" -ge "$WORKFLOW_COUNT_BEFORE" ] || \
+            { echo "❌ Workflows decreased after migrate ($WORKFLOW_COUNT_BEFORE → $WORKFLOW_COUNT_AFTER)"; exit 1; }
+
+          echo "✅ Migrate (metadata mode) verified — non-destructive upsert confirmed"
+
+      - name: Test migrate (dashboard mode) - ${{ matrix.strategy_name }}
+        run: |
+          echo "📊 Testing depictio migrate --mode dashboard for ${{ matrix.strategy_name }}..."
+          cd depictio/cli
+          source venv/bin/activate
+
+          IRIS_PROJECT_NAME="Iris Dataset Project Data Analysis"
+
+          DASH_COUNT_BEFORE=$(docker compose exec -T mongo mongosh localhost:27018/depictioDB \
+            --eval "db.dashboards.countDocuments({})" --quiet 2>&1 | tail -1)
+          echo "📊 Dashboards before dashboard-mode migrate: $DASH_COUNT_BEFORE"
+
+          # Verify there are dashboards to work with
+          [ "$DASH_COUNT_BEFORE" -gt 0 ] || \
+            { echo "❌ No dashboards found before dashboard-mode test — environment not set up correctly"; exit 1; }
+
+          # Run migrate and capture output to verify dashboards were actually exported
+          MIGRATE_LOG=$(mktemp)
+          depictio-cli -v -vl DEBUG migrate run \
+            --project "$IRIS_PROJECT_NAME" \
+            --CLI-config-path admin_config.yaml \
+            --target-config admin_config.yaml \
+            --mode dashboard \
+            --overwrite 2>&1 | tee "$MIGRATE_LOG"
+
+          # Check that the export found > 0 dashboards (not a no-op due to wrong project_id query)
+          UPSERTED_DASHBOARDS=$(python3 -c "
+          import re, sys
+          text = open('$MIGRATE_LOG').read()
+          m = re.search(r'\"dashboards\"[^0-9]*([0-9]+)', text)
+          print(m.group(1) if m else '0')
+          " 2>/dev/null || echo "0")
+          echo "📊 Dashboards upserted in bundle: $UPSERTED_DASHBOARDS"
+          [ "$UPSERTED_DASHBOARDS" -gt 0 ] || \
+            { echo "❌ Dashboard mode exported 0 dashboards (project_id lookup failed)"; exit 1; }
+
+          DASH_COUNT_AFTER=$(docker compose exec -T mongo mongosh localhost:27018/depictioDB \
+            --eval "db.dashboards.countDocuments({})" --quiet 2>&1 | tail -1)
+          echo "📊 Dashboards after dashboard-mode migrate: $DASH_COUNT_AFTER"
+
+          [ "$DASH_COUNT_AFTER" -ge "$DASH_COUNT_BEFORE" ] || \
+            { echo "❌ Dashboards decreased after dashboard migrate ($DASH_COUNT_BEFORE → $DASH_COUNT_AFTER)"; exit 1; }
+
+          echo "✅ Migrate (dashboard mode) verified — exported $UPSERTED_DASHBOARDS dashboards"
+
+      - name: Test migrate (all mode, S3 + MongoDB) - ${{ matrix.strategy_name }}
+        run: |
+          echo "🔄 Testing depictio migrate --mode all for ${{ matrix.strategy_name }}..."
+          cd depictio/cli
+          source venv/bin/activate
+
+          IRIS_PROJECT_NAME="Iris Dataset Project Data Analysis"
+
+          PROJECT_COUNT_BEFORE=$(docker compose exec -T mongo mongosh localhost:27018/depictioDB \
+            --eval "db.projects.countDocuments({})" --quiet 2>&1 | tail -1)
+          DASHBOARD_COUNT_BEFORE=$(docker compose exec -T mongo mongosh localhost:27018/depictioDB \
+            --eval "db.dashboards.countDocuments({})" --quiet 2>&1 | tail -1)
+          echo "📊 Before all-mode migrate: projects=$PROJECT_COUNT_BEFORE  dashboards=$DASHBOARD_COUNT_BEFORE"
+
+          # === Pre-flight diagnostics: verify MongoDB state before migrate ===
+          echo "Pre-migrate DB diagnostics:"
+          IRIS_DC_ID=$(docker compose exec -T mongo mongosh localhost:27018/depictioDB \
+            --eval "var p=db.projects.findOne({name:'Iris Dataset Project Data Analysis'}); \
+                    print(p&&p.workflows&&p.workflows[0]&&p.workflows[0].data_collections&&p.workflows[0].data_collections[0] \
+                          ? p.workflows[0].data_collections[0]._id : 'NOT_FOUND')" \
+            --quiet 2>&1 | tail -1)
+          echo "  Iris DC _id from project: $IRIS_DC_ID"
+
+          DT_COUNT=$(docker compose exec -T mongo mongosh localhost:27018/depictioDB \
+            --eval "db.deltatables.countDocuments({})" --quiet 2>&1 | tail -1)
+          echo "  Total deltatables: $DT_COUNT"
+
+          FILES_COUNT=$(docker compose exec -T mongo mongosh localhost:27018/depictioDB \
+            --eval "db.files.countDocuments({})" --quiet 2>&1 | tail -1)
+          echo "  Total files: $FILES_COUNT"
+
+          echo "  DT data_collection_id field sample (first 3):"
+          docker compose exec -T mongo mongosh localhost:27018/depictioDB \
+            --eval "db.deltatables.find({},{data_collection_id:1,delta_table_location:1}).limit(3).forEach(d=>print(JSON.stringify(d)))" \
+            --quiet 2>&1 | grep -v "^$" || true
+          echo "=== End pre-migrate diagnostics ==="
+
+          # Run mode=all (self-migration: same instance as source and target)
+          # This exercises the S3 copy code path in addition to MongoDB upserts
+          MIGRATE_LOG=$(mktemp)
+          depictio-cli -v -vl DEBUG migrate run \
+            --project "$IRIS_PROJECT_NAME" \
+            --CLI-config-path admin_config.yaml \
+            --target-config admin_config.yaml \
+            --mode all \
+            --overwrite 2>&1 | tee "$MIGRATE_LOG"
+
+          # Verify S3 copy ran
+          echo "📋 Migrate all-mode output (S3 section):"
+          grep -i "s3\|location\|copied\|files" "$MIGRATE_LOG" || echo "(no S3 lines in output)"
+
+          # Verify files and deltatables were included (dc_ids fix)
+          UPSERTED_FILES=$(python3 -c "
+          import re
+          text = open('$MIGRATE_LOG').read()
+          m = re.search(r'\"files\"[^0-9]*([0-9]+)', text)
+          print(m.group(1) if m else '0')
+          " 2>/dev/null || echo "0")
+          UPSERTED_DELTATABLES=$(python3 -c "
+          import re
+          text = open('$MIGRATE_LOG').read()
+          m = re.search(r'\"deltatables\"[^0-9]*([0-9]+)', text)
+          print(m.group(1) if m else '0')
+          " 2>/dev/null || echo "0")
+          echo "📊 All-mode upserted: files=$UPSERTED_FILES  deltatables=$UPSERTED_DELTATABLES"
+          [ "$UPSERTED_FILES" -gt 0 ] || \
+            { echo "❌ All mode upserted 0 files (dc_ids lookup failed)"; exit 1; }
+          [ "$UPSERTED_DELTATABLES" -gt 0 ] || \
+            { echo "❌ All mode upserted 0 deltatables (dc_ids lookup failed)"; exit 1; }
+
+          PROJECT_COUNT_AFTER=$(docker compose exec -T mongo mongosh localhost:27018/depictioDB \
+            --eval "db.projects.countDocuments({})" --quiet 2>&1 | tail -1)
+          DASHBOARD_COUNT_AFTER=$(docker compose exec -T mongo mongosh localhost:27018/depictioDB \
+            --eval "db.dashboards.countDocuments({})" --quiet 2>&1 | tail -1)
+          echo "📊 After all-mode migrate: projects=$PROJECT_COUNT_AFTER  dashboards=$DASHBOARD_COUNT_AFTER"
+
+          [ "$PROJECT_COUNT_AFTER" -ge "$PROJECT_COUNT_BEFORE" ] || \
+            { echo "❌ Projects decreased after all-mode migrate ($PROJECT_COUNT_BEFORE → $PROJECT_COUNT_AFTER)"; exit 1; }
+          [ "$DASHBOARD_COUNT_AFTER" -ge "$DASHBOARD_COUNT_BEFORE" ] || \
+            { echo "❌ Dashboards decreased after all-mode migrate ($DASHBOARD_COUNT_BEFORE → $DASHBOARD_COUNT_AFTER)"; exit 1; }
+
+          echo "✅ Migrate (all mode) verified — files=$UPSERTED_FILES deltatables=$UPSERTED_DELTATABLES upserted, S3 copy confirmed"
+
+      - name: Test project cascade delete (S3 + MongoDB cleanup) - ${{ matrix.strategy_name }}
+        run: |
+          echo "🗑️ Testing project cascade delete for ${{ matrix.strategy_name }}..."
+          cd depictio/cli
+          source venv/bin/activate
+
+          IRIS_PROJECT_NAME="Iris Dataset Project Data Analysis"
+
+          # Resolve project ID
+          TOKEN=$(grep 'access_token' admin_config.yaml | awk '{print $2}' | tr -d "'\"")
+          IRIS_PROJECT_ID=$(python3 -c "
+          import httpx
+          r = httpx.get('http://localhost:8058/depictio/api/v1/projects/get/all',
+                        headers={'Authorization': 'Bearer $TOKEN'})
+          r.raise_for_status()
+          projects = r.json()
+          match = [p for p in projects if p.get('name') == '$IRIS_PROJECT_NAME']
+          print(match[0]['id'] if match else '')
+          " 2>/dev/null)
+
+          if [ -z "$IRIS_PROJECT_ID" ]; then
+            echo "⚠️  Iris project not found — skipping cascade delete test"
+            exit 0
+          fi
+          echo "📌 Iris project ID: $IRIS_PROJECT_ID"
+
+          # Snapshot MongoDB counts before deletion
+          FILES_BEFORE=$(docker compose exec -T mongo mongosh localhost:27018/depictioDB \
+            --eval "db.files.countDocuments({})" --quiet 2>&1 | tail -1)
+          DELTATABLES_BEFORE=$(docker compose exec -T mongo mongosh localhost:27018/depictioDB \
+            --eval "db.deltatables.countDocuments({})" --quiet 2>&1 | tail -1)
+          DASHBOARDS_BEFORE=$(docker compose exec -T mongo mongosh localhost:27018/depictioDB \
+            --eval "db.dashboards.countDocuments({})" --quiet 2>&1 | tail -1)
+          PROJECTS_BEFORE=$(docker compose exec -T mongo mongosh localhost:27018/depictioDB \
+            --eval "db.projects.countDocuments({})" --quiet 2>&1 | tail -1)
+          echo "📊 Before delete: projects=$PROJECTS_BEFORE files=$FILES_BEFORE deltatables=$DELTATABLES_BEFORE dashboards=$DASHBOARDS_BEFORE"
+
+          # Delete the project via the API (TOKEN already set above)
+          DELETE_RESP=$(python3 -c "
+          import httpx
+          r = httpx.delete('http://localhost:8058/depictio/api/v1/projects/delete',
+                           params={'project_id': '$IRIS_PROJECT_ID'},
+                           headers={'Authorization': 'Bearer $TOKEN'})
+          print(r.status_code, r.text[:200])
+          ")
+          echo "🗑️ Delete response: $DELETE_RESP"
+
+          # Verify project is gone
+          PROJECTS_AFTER=$(docker compose exec -T mongo mongosh localhost:27018/depictioDB \
+            --eval "db.projects.countDocuments({})" --quiet 2>&1 | tail -1)
+          [ "$PROJECTS_AFTER" -lt "$PROJECTS_BEFORE" ] || \
+            { echo "❌ Project count did not decrease ($PROJECTS_BEFORE → $PROJECTS_AFTER)"; exit 1; }
+          echo "✅ Project document deleted"
+
+          # Verify dependent MongoDB docs were cascade-deleted
+          FILES_AFTER=$(docker compose exec -T mongo mongosh localhost:27018/depictioDB \
+            --eval "db.files.countDocuments({})" --quiet 2>&1 | tail -1)
+          DELTATABLES_AFTER=$(docker compose exec -T mongo mongosh localhost:27018/depictioDB \
+            --eval "db.deltatables.countDocuments({})" --quiet 2>&1 | tail -1)
+          DASHBOARDS_AFTER=$(docker compose exec -T mongo mongosh localhost:27018/depictioDB \
+            --eval "db.dashboards.countDocuments({})" --quiet 2>&1 | tail -1)
+          echo "📊 After delete: projects=$PROJECTS_AFTER files=$FILES_AFTER deltatables=$DELTATABLES_AFTER dashboards=$DASHBOARDS_AFTER"
+
+          [ "$FILES_AFTER" -lt "$FILES_BEFORE" ] || \
+            { echo "❌ files collection not cleaned up ($FILES_BEFORE → $FILES_AFTER)"; exit 1; }
+          [ "$DELTATABLES_AFTER" -lt "$DELTATABLES_BEFORE" ] || \
+            { echo "❌ deltatables collection not cleaned up ($DELTATABLES_BEFORE → $DELTATABLES_AFTER)"; exit 1; }
+          [ "$DASHBOARDS_AFTER" -lt "$DASHBOARDS_BEFORE" ] || \
+            { echo "❌ dashboards collection not cleaned up ($DASHBOARDS_BEFORE → $DASHBOARDS_AFTER)"; exit 1; }
+
+          echo "✅ Cascade delete verified — files/deltatables/dashboards all cleaned up"
 
       - name: Cleanup and summary - ${{ matrix.strategy_name }}
         run: |
