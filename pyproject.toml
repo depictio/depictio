@@ -128,6 +128,7 @@ include = ["depictio*"]
 
 [tool.ruff]
 line-length = 100
+exclude = ["dev/", "packages/", "scripts/"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I"] # Enable import sorting (I rules) - restored original
