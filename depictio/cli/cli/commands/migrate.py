@@ -32,12 +32,12 @@ from depictio.cli.cli.utils.rich_utils import (
     rich_print_json,
 )
 
-app = typer.Typer()
+app = typer.Typer(invoke_without_command=True)
 
 _MODES = ["all", "metadata", "dashboard", "files"]
 
 
-@app.command()
+@app.callback()
 def migrate(
     project: Annotated[str, typer.Option("--project", help="Project name to migrate")],
     CLI_config_path: Annotated[
