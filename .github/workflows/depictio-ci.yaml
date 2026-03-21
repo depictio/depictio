@@ -2160,10 +2160,11 @@ jobs:
           IRIS_PROJECT_NAME="Iris Dataset Project Data Analysis"
 
           # Resolve project ID
+          TOKEN=$(cat admin_config.yaml | python3 -c "import sys,yaml; print(yaml.safe_load(sys.stdin)['token'])")
           IRIS_PROJECT_ID=$(python3 -c "
-          import httpx, sys
+          import httpx
           r = httpx.get('http://localhost:8058/depictio/api/v1/projects/get/all',
-                        headers={'Authorization': 'Bearer $(cat admin_config.yaml | python3 -c \"import sys,yaml; print(yaml.safe_load(sys.stdin)[\\\"token\\\"])\")'})
+                        headers={'Authorization': 'Bearer $TOKEN'})
           r.raise_for_status()
           projects = r.json()
           match = [p for p in projects if p.get('name') == '$IRIS_PROJECT_NAME']
