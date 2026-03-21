@@ -28,7 +28,7 @@ EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
 
 
 def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
-    """Unpivot wide abundance table and join with metadata."""
+    """Unpivot wide abundance table and join with metadata (v2.14: metadata column is 'sample')."""
     df = sources["rel_table"]
     df = df.rename({"#OTU ID": "taxonomy"})
 
@@ -43,11 +43,7 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         pl.col("taxonomy").str.split(";").list.get(1).fill_null("Unclassified").alias("Phylum"),
     )
 
-    metadata = sources["metadata"]
-    # Handle both column names: "sample" (2.14) and "ID" (2.16+)
-    if "ID" in metadata.columns and "sample" not in metadata.columns:
-        metadata = metadata.rename({"ID": "sample"})
-    metadata = metadata.select("sample", "habitat")
+    metadata = sources["metadata"].select("sample", "habitat")
     df = df.join(metadata, on="sample", how="left")
 
     return df.select("sample", "taxonomy", "rel_abundance", "habitat", "Kingdom", "Phylum")

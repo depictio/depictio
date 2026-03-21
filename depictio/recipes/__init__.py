@@ -10,7 +10,10 @@ import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
 
-RECIPES_DIR = Path(__file__).parent
+# Recipes live inside the projects directory, co-located with the templates that use them.
+# Shared (pipeline-level) recipes:  projects/{pipeline}/recipes/{name}.py
+# Version overrides:                 projects/{pipeline}/{version}/recipes/{name}.py
+PROJECTS_DIR = Path(__file__).parent.parent / "projects"
 
 
 class RecipeError(Exception):
@@ -18,18 +21,57 @@ class RecipeError(Exception):
 
 
 # ---------------------------------------------------------------------------
+# Path resolution: versioned-then-shared fallback
+# ---------------------------------------------------------------------------
+
+
+def resolve_recipe_path(recipe_ref: str, pipeline_version: str | None = None) -> Path:
+    """Resolve the filesystem path for a recipe using versioned-then-shared fallback.
+
+    Args:
+        recipe_ref: Pipeline-qualified recipe name, e.g. 'nf-core/ampliseq/alpha_diversity.py'.
+        pipeline_version: Optional pipeline version, e.g. '2.16.0'. When provided, a
+            version-specific override is tried first before falling back to the shared recipe.
+
+    Resolution order:
+        1. PROJECTS_DIR/{pipeline}/{version}/recipes/{name}  — version override (if version given)
+        2. PROJECTS_DIR/{pipeline}/recipes/{name}            — shared fallback
+    """
+    *pipeline_parts, name = recipe_ref.split("/")
+    pipeline = "/".join(pipeline_parts)
+
+    if pipeline_version:
+        versioned = PROJECTS_DIR / pipeline / pipeline_version / "recipes" / name
+        if versioned.exists():
+            return versioned
+
+    shared = PROJECTS_DIR / pipeline / "recipes" / name
+    if shared.exists():
+        return shared
+
+    if pipeline_version:
+        raise RecipeError(
+            f"Recipe not found: {recipe_ref} "
+            f"(tried version '{pipeline_version}' override and shared)"
+        )
+    raise RecipeError(f"Recipe not found: {recipe_ref}")
+
+
+# ---------------------------------------------------------------------------
 # Checkpoint 1: Load recipe module
 # ---------------------------------------------------------------------------
 
 
-def load_recipe(recipe_name: str) -> ModuleType:
-    """Load a recipe Python module by name (e.g. 'nf-core/ampliseq/alpha_diversity.py').
+def load_recipe(recipe_name: str, pipeline_version: str | None = None) -> ModuleType:
+    """Load a recipe Python module by name.
+
+    Args:
+        recipe_name: Pipeline-qualified recipe name (e.g. 'nf-core/ampliseq/alpha_diversity.py').
+        pipeline_version: Optional pipeline version for version-specific recipe lookup.
 
     Validates that the module has SOURCES, EXPECTED_SCHEMA, and a callable transform().
     """
-    recipe_path = RECIPES_DIR / recipe_name
-    if not recipe_path.exists():
-        raise RecipeError(f"Recipe not found: {recipe_path}")
+    recipe_path = resolve_recipe_path(recipe_name, pipeline_version)
 
     spec = importlib.util.spec_from_file_location(
         f"depictio.recipes.{recipe_name.replace('/', '.')}", recipe_path
@@ -148,20 +190,22 @@ def execute_recipe(
     data_dir: str | Path,
     overrides: dict[str, str] | None = None,
     extra_sources: dict[str, pl.DataFrame] | None = None,
+    pipeline_version: str | None = None,
 ) -> pl.DataFrame:
     """Full pipeline: load → resolve → transform → validate.
 
     Args:
-        recipe_name: Recipe path relative to recipes dir (e.g. 'nf-core/ampliseq/alpha_diversity.py').
+        recipe_name: Pipeline-qualified recipe name (e.g. 'nf-core/ampliseq/alpha_diversity.py').
         data_dir: Root directory containing workflow output files.
         overrides: Optional source path overrides.
         extra_sources: Optional pre-loaded DataFrames for dc_ref sources.
+        pipeline_version: Optional pipeline version for version-specific recipe lookup.
 
     Returns:
         Validated output DataFrame.
     """
     # Checkpoint 1: load
-    module = load_recipe(recipe_name)
+    module = load_recipe(recipe_name, pipeline_version)
 
     # Checkpoint 2: resolve
     sources = resolve_sources(module, data_dir, overrides)
@@ -200,11 +244,22 @@ def execute_recipe(
 
 
 def list_recipes() -> list[str]:
-    """List all available recipe names."""
+    """List all available shared recipe names.
+
+    Returns pipeline-qualified names (e.g. 'nf-core/ampliseq/alpha_diversity.py').
+    Version-specific overrides are not listed — they are applied automatically
+    based on pipeline version context during execution.
+    """
     recipes = []
-    for py_file in RECIPES_DIR.rglob("*.py"):
+    for py_file in PROJECTS_DIR.rglob("recipes/*.py"):
         if py_file.name == "__init__.py":
             continue
-        rel = py_file.relative_to(RECIPES_DIR)
-        recipes.append(str(rel))
+        # Version overrides live inside a directory that has a template.yaml.
+        # Shared recipes live at the pipeline level (no template.yaml in parent).
+        version_dir = py_file.parent.parent  # dir containing the "recipes/" folder
+        if (version_dir / "template.yaml").exists():
+            continue  # skip version-specific overrides
+        pipeline_dir = version_dir
+        recipe_ref = str(pipeline_dir.relative_to(PROJECTS_DIR) / py_file.name)
+        recipes.append(recipe_ref)
     return sorted(recipes)

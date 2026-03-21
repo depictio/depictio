@@ -22,6 +22,15 @@ def recipe_run(
     data_dir: Annotated[
         str, typer.Option("--data-dir", "-d", help="Root directory with workflow output files")
     ],
+    pipeline_version: Annotated[
+        str | None,
+        typer.Option(
+            "--version",
+            "-v",
+            help="Pipeline version for version-specific recipe (e.g. 2.14.0). "
+            "Uses shared recipe when omitted.",
+        ),
+    ] = None,
     output: Annotated[
         str | None, typer.Option("--output", "-o", help="Save result to parquet file")
     ] = None,
@@ -37,7 +46,7 @@ def recipe_run(
 
     try:
         # Checkpoint 1: load
-        module = load_recipe(recipe_name)
+        module = load_recipe(recipe_name, pipeline_version)
         source_count = len(module.SOURCES)
         typer.echo(f"  Loaded recipe: {recipe_name} ({source_count} source(s))")
 
@@ -97,7 +106,7 @@ def recipe_run(
 
 @app.command("list")
 def recipe_list() -> None:
-    """List all available bundled recipes."""
+    """List all available shared recipes."""
     from depictio.recipes import list_recipes
 
     recipes = list_recipes()
@@ -115,12 +124,21 @@ def recipe_info(
     recipe_name: Annotated[
         str, typer.Argument(help="Recipe name (e.g. nf-core/ampliseq/alpha_diversity.py)")
     ],
+    pipeline_version: Annotated[
+        str | None,
+        typer.Option(
+            "--version",
+            "-v",
+            help="Pipeline version for version-specific recipe (e.g. 2.14.0). "
+            "Uses shared recipe when omitted.",
+        ),
+    ] = None,
 ) -> None:
     """Show recipe details: docstring, sources, and expected schema."""
     from depictio.recipes import RecipeError, load_recipe
 
     try:
-        module = load_recipe(recipe_name)
+        module = load_recipe(recipe_name, pipeline_version)
     except RecipeError as e:
         typer.echo(f"Error: {e}")
         raise typer.Exit(code=1)
@@ -128,6 +146,8 @@ def recipe_info(
     # Docstring
     doc = module.__doc__ or "(no description)"
     typer.echo(f"Recipe: {recipe_name}")
+    if pipeline_version:
+        typer.echo(f"Version: {pipeline_version}")
     typer.echo(f"Description: {doc.strip()}")
 
     # Sources

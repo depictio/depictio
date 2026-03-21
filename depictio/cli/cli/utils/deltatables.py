@@ -788,6 +788,7 @@ def process_recipe_data_collection(
         }
 
     recipe_name = transform_config.recipe
+    pipeline_version: str | None = getattr(workflow, "version", None)
     rich_print_checked_statement(f"Running recipe: {recipe_name}", "info")
 
     # Build source overrides dict
@@ -806,7 +807,7 @@ def process_recipe_data_collection(
     # Resolve dc_ref sources: load referenced DCs from their Delta tables
     extra_sources: dict[str, pl.DataFrame] | None = None
     try:
-        recipe_module = _load_recipe(recipe_name)
+        recipe_module = _load_recipe(recipe_name, pipeline_version)
         dc_ref_sources = [s for s in recipe_module.SOURCES if s.dc_ref is not None]
 
         if dc_ref_sources and workflow is not None:
@@ -847,7 +848,7 @@ def process_recipe_data_collection(
     if preview:
         # Preview mode: run recipe steps individually and display before/after
         try:
-            recipe_module = _load_recipe(recipe_name)
+            recipe_module = _load_recipe(recipe_name, pipeline_version)
             sources = _resolve_sources(recipe_module, data_dir, overrides)
             if extra_sources:
                 sources.update(extra_sources)
@@ -865,7 +866,10 @@ def process_recipe_data_collection(
         }
 
     try:
-        result_df = execute_recipe(recipe_name, data_dir, overrides, extra_sources=extra_sources)
+        result_df = execute_recipe(
+            recipe_name, data_dir, overrides, extra_sources=extra_sources,
+            pipeline_version=pipeline_version,
+        )
     except RecipeError as e:
         return {"result": "error", "message": f"Recipe failed: {e}"}
 

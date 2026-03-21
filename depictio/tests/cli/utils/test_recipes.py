@@ -57,6 +57,12 @@ class TestListRecipes:
         for recipe in expected:
             assert recipe in recipes, f"Missing recipe: {recipe}"
 
+    def test_list_recipes_excludes_version_overrides(self) -> None:
+        """Version-specific override recipes are not listed (they're implementation details)."""
+        recipes = list_recipes()
+        assert not any("/2.14.0/" in r for r in recipes)
+        assert not any("/2.16.0/" in r for r in recipes)
+
 
 class TestLoadRecipe:
     """Tests for recipe module loading and validation."""
@@ -93,6 +99,22 @@ class TestLoadRecipe:
             assert len(module.SOURCES) > 0
             assert isinstance(module.EXPECTED_SCHEMA, dict)
             assert len(module.EXPECTED_SCHEMA) > 0
+
+    def test_load_recipe_version_override(self) -> None:
+        """Version-specific override is loaded when version is provided and override exists."""
+        # v2.14.0 has an override for taxonomy_rel_abundance
+        module_v14 = load_recipe("nf-core/ampliseq/taxonomy_rel_abundance.py", "2.14.0")
+        module_shared = load_recipe("nf-core/ampliseq/taxonomy_rel_abundance.py")
+        # Both load successfully; the v2.14.0 version has different transform logic
+        assert callable(module_v14.transform)
+        assert callable(module_shared.transform)
+
+    def test_load_recipe_version_fallback_to_shared(self) -> None:
+        """When no version override exists, shared recipe is used."""
+        # alpha_diversity has no version override, so v2.14.0 falls back to shared
+        module_versioned = load_recipe("nf-core/ampliseq/alpha_diversity.py", "2.14.0")
+        module_shared = load_recipe("nf-core/ampliseq/alpha_diversity.py")
+        assert module_versioned.SOURCES == module_shared.SOURCES
 
 
 class TestReadSourceFile:
@@ -237,14 +259,23 @@ class TestValidateSchema:
 class TestExecuteRecipe:
     """Tests for the full execute_recipe pipeline."""
 
+    def _make_fake_projects_dir(self, tmpdir: str, recipe_name: str, code: str) -> Path:
+        """Create a minimal fake projects dir with a shared recipe at pipeline/recipes/name."""
+        projects_dir = Path(tmpdir) / "projects"
+        # recipe_name e.g. "mypipe/simple.py" → pipeline="mypipe", name="simple.py"
+        *pipeline_parts, name = recipe_name.split("/")
+        pipeline = "/".join(pipeline_parts)
+        recipe_dir = projects_dir / pipeline / "recipes"
+        recipe_dir.mkdir(parents=True)
+        (recipe_dir / name).write_text(code)
+        return projects_dir
+
     def test_execute_with_synthetic_data(self) -> None:
         """Execute a simple recipe against synthetic CSV data."""
         with tempfile.TemporaryDirectory() as tmpdir:
-            # Create a minimal recipe module file
-            recipe_dir = Path(tmpdir) / "test_recipes"
-            recipe_dir.mkdir()
-            recipe_file = recipe_dir / "simple.py"
-            recipe_file.write_text(
+            projects_dir = self._make_fake_projects_dir(
+                tmpdir,
+                "mypipe/simple.py",
                 "import polars as pl\n"
                 "from depictio.models.models.transforms import RecipeSource\n"
                 "\n"
@@ -252,32 +283,29 @@ class TestExecuteRecipe:
                 "EXPECTED_SCHEMA = {'value': pl.Int64}\n"
                 "\n"
                 "def transform(sources):\n"
-                "    return sources['input'].select('value')\n"
+                "    return sources['input'].select('value')\n",
             )
 
-            # Create data file
             data_file = Path(tmpdir) / "data.csv"
             data_file.write_text("value,extra\n1,a\n2,b\n")
 
-            # Monkey-patch RECIPES_DIR temporarily
             import depictio.recipes as recipes_mod
 
-            original_dir = recipes_mod.RECIPES_DIR
+            original_dir = recipes_mod.PROJECTS_DIR
             try:
-                recipes_mod.RECIPES_DIR = recipe_dir
-                result = execute_recipe("simple.py", tmpdir)
+                recipes_mod.PROJECTS_DIR = projects_dir
+                result = execute_recipe("mypipe/simple.py", tmpdir)
                 assert result.shape == (2, 1)
                 assert result.columns == ["value"]
             finally:
-                recipes_mod.RECIPES_DIR = original_dir
+                recipes_mod.PROJECTS_DIR = original_dir
 
     def test_execute_recipe_transform_returns_non_dataframe(self) -> None:
         """transform() returning non-DataFrame raises RecipeError."""
         with tempfile.TemporaryDirectory() as tmpdir:
-            recipe_dir = Path(tmpdir) / "test_recipes"
-            recipe_dir.mkdir()
-            recipe_file = recipe_dir / "bad.py"
-            recipe_file.write_text(
+            projects_dir = self._make_fake_projects_dir(
+                tmpdir,
+                "mypipe/bad.py",
                 "import polars as pl\n"
                 "from depictio.models.models.transforms import RecipeSource\n"
                 "\n"
@@ -285,7 +313,7 @@ class TestExecuteRecipe:
                 "EXPECTED_SCHEMA = {'value': pl.Int64}\n"
                 "\n"
                 "def transform(sources):\n"
-                "    return {'not': 'a dataframe'}\n"
+                "    return {'not': 'a dataframe'}\n",
             )
 
             data_file = Path(tmpdir) / "data.csv"
@@ -293,21 +321,20 @@ class TestExecuteRecipe:
 
             import depictio.recipes as recipes_mod
 
-            original_dir = recipes_mod.RECIPES_DIR
+            original_dir = recipes_mod.PROJECTS_DIR
             try:
-                recipes_mod.RECIPES_DIR = recipe_dir
+                recipes_mod.PROJECTS_DIR = projects_dir
                 with pytest.raises(RecipeError, match="must return pl.DataFrame"):
-                    execute_recipe("bad.py", tmpdir)
+                    execute_recipe("mypipe/bad.py", tmpdir)
             finally:
-                recipes_mod.RECIPES_DIR = original_dir
+                recipes_mod.PROJECTS_DIR = original_dir
 
     def test_execute_with_extra_sources(self) -> None:
         """dc_ref sources can be injected via extra_sources."""
         with tempfile.TemporaryDirectory() as tmpdir:
-            recipe_dir = Path(tmpdir) / "test_recipes"
-            recipe_dir.mkdir()
-            recipe_file = recipe_dir / "joined.py"
-            recipe_file.write_text(
+            projects_dir = self._make_fake_projects_dir(
+                tmpdir,
+                "mypipe/joined.py",
                 "import polars as pl\n"
                 "from depictio.models.models.transforms import RecipeSource\n"
                 "\n"
@@ -318,32 +345,30 @@ class TestExecuteRecipe:
                 "EXPECTED_SCHEMA = {'id': pl.Utf8, 'label': pl.Utf8}\n"
                 "\n"
                 "def transform(sources):\n"
-                "    return sources['main'].join(sources['meta'], on='id')\n"
+                "    return sources['main'].join(sources['meta'], on='id')\n",
             )
 
             data_file = Path(tmpdir) / "data.csv"
             data_file.write_text("id\nA\nB\n")
-
             meta_df = pl.DataFrame({"id": ["A", "B"], "label": ["alpha", "beta"]})
 
             import depictio.recipes as recipes_mod
 
-            original_dir = recipes_mod.RECIPES_DIR
+            original_dir = recipes_mod.PROJECTS_DIR
             try:
-                recipes_mod.RECIPES_DIR = recipe_dir
-                result = execute_recipe("joined.py", tmpdir, extra_sources={"meta": meta_df})
+                recipes_mod.PROJECTS_DIR = projects_dir
+                result = execute_recipe("mypipe/joined.py", tmpdir, extra_sources={"meta": meta_df})
                 assert result.shape == (2, 2)
                 assert "label" in result.columns
             finally:
-                recipes_mod.RECIPES_DIR = original_dir
+                recipes_mod.PROJECTS_DIR = original_dir
 
     def test_execute_unresolved_dc_ref_raises(self) -> None:
         """Missing dc_ref source without extra_sources raises RecipeError."""
         with tempfile.TemporaryDirectory() as tmpdir:
-            recipe_dir = Path(tmpdir) / "test_recipes"
-            recipe_dir.mkdir()
-            recipe_file = recipe_dir / "needs_meta.py"
-            recipe_file.write_text(
+            projects_dir = self._make_fake_projects_dir(
+                tmpdir,
+                "mypipe/needs_meta.py",
                 "import polars as pl\n"
                 "from depictio.models.models.transforms import RecipeSource\n"
                 "\n"
@@ -354,7 +379,7 @@ class TestExecuteRecipe:
                 "EXPECTED_SCHEMA = {'id': pl.Utf8}\n"
                 "\n"
                 "def transform(sources):\n"
-                "    return sources['main']\n"
+                "    return sources['main']\n",
             )
 
             data_file = Path(tmpdir) / "data.csv"
@@ -362,10 +387,59 @@ class TestExecuteRecipe:
 
             import depictio.recipes as recipes_mod
 
-            original_dir = recipes_mod.RECIPES_DIR
+            original_dir = recipes_mod.PROJECTS_DIR
             try:
-                recipes_mod.RECIPES_DIR = recipe_dir
+                recipes_mod.PROJECTS_DIR = projects_dir
                 with pytest.raises(RecipeError, match="not resolved"):
-                    execute_recipe("needs_meta.py", tmpdir)
+                    execute_recipe("mypipe/needs_meta.py", tmpdir)
             finally:
-                recipes_mod.RECIPES_DIR = original_dir
+                recipes_mod.PROJECTS_DIR = original_dir
+
+    def test_execute_with_version_override(self) -> None:
+        """Version-specific override recipe is used when it exists."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            projects_dir = Path(tmpdir) / "projects"
+            # Shared recipe returns column "shared_col"
+            shared_dir = projects_dir / "mypipe" / "recipes"
+            shared_dir.mkdir(parents=True)
+            (shared_dir / "recipe.py").write_text(
+                "import polars as pl\n"
+                "from depictio.models.models.transforms import RecipeSource\n"
+                "SOURCES = [RecipeSource(ref='d', path='data.csv', format='csv')]\n"
+                "EXPECTED_SCHEMA = {'shared_col': pl.Int64}\n"
+                "def transform(s): return s['d'].rename({'value': 'shared_col'})\n"
+            )
+            # Version override returns column "versioned_col"
+            # No template.yaml in version dir (so it IS detected as override via parent check)
+            # Actually we need template.yaml for list_recipes() to skip it, but for
+            # resolve_recipe_path() we just check existence. Let's add template.yaml.
+            version_dir = projects_dir / "mypipe" / "1.0.0"
+            version_recipes_dir = version_dir / "recipes"
+            version_recipes_dir.mkdir(parents=True)
+            (version_dir / "template.yaml").write_text("template_id: mypipe/1.0.0\n")
+            (version_recipes_dir / "recipe.py").write_text(
+                "import polars as pl\n"
+                "from depictio.models.models.transforms import RecipeSource\n"
+                "SOURCES = [RecipeSource(ref='d', path='data.csv', format='csv')]\n"
+                "EXPECTED_SCHEMA = {'versioned_col': pl.Int64}\n"
+                "def transform(s): return s['d'].rename({'value': 'versioned_col'})\n"
+            )
+
+            data_file = Path(tmpdir) / "data.csv"
+            data_file.write_text("value\n42\n")
+
+            import depictio.recipes as recipes_mod
+
+            original_dir = recipes_mod.PROJECTS_DIR
+            try:
+                recipes_mod.PROJECTS_DIR = projects_dir
+                # Without version → shared
+                result_shared = execute_recipe("mypipe/recipe.py", tmpdir)
+                assert "shared_col" in result_shared.columns
+                # With version → override
+                result_versioned = execute_recipe(
+                    "mypipe/recipe.py", tmpdir, pipeline_version="1.0.0"
+                )
+                assert "versioned_col" in result_versioned.columns
+            finally:
+                recipes_mod.PROJECTS_DIR = original_dir
