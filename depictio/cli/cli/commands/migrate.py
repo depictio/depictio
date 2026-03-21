@@ -102,9 +102,13 @@ def run(
     if dry_run:
         rich_print_checked_statement("DRY RUN mode — no data will be written", "info")
 
-    # Build target S3 config for S3 copy
+    # Build target S3 config for S3 copy.
+    # Skip S3 copy when source and target point to the same API instance — the S3 data is
+    # already there and the external endpoint URL sent by the CLI would be unreachable from
+    # inside the backend container (e.g. localhost:9000 vs minio:9000 in Docker).
     target_s3_config: dict | None = None
-    if mode in ("all", "files"):
+    same_instance = source_config.api_base_url == remote_config.api_base_url
+    if mode in ("all", "files") and not same_instance:
         s3 = remote_config.s3_storage
         target_s3_config = {
             "endpoint_url": s3.endpoint_url,
@@ -115,6 +119,10 @@ def run(
         }
         rich_print_checked_statement(
             f"S3 target: {target_s3_config['endpoint_url']} / {target_s3_config['bucket']}", "info"
+        )
+    elif mode in ("all", "files") and same_instance:
+        rich_print_checked_statement(
+            "S3 copy skipped — source and target are the same instance", "info"
         )
 
     # Step 1 – Export from source -----------------------------------------
