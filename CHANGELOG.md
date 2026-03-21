@@ -6,13 +6,45 @@
 
 
 <details>
-<summary>Click to expand the changelog for 0.8.2</summary>
+<summary>Click to expand the changelog for 0.9.0</summary>
 
 ### Changes 📜
 
+#### New Features ✨
+
+* feat: complete migrate export/import — S3 bundling, conflict detection, auto-refresh [2e916d9e]
+* feat: add project migrate command with ZIP export/import and UI [bc1fe240]
+
+#### Bug Fixes 🐛
+
+* fix: use app.callback() so depictio-cli migrate invokes directly without subcommand [f29c4060]
+* fix: rename migrate run → migrate in CLI command and CI workflow [a461e3cb]
+* fix: skip S3 copy for self-migration (source == target instance) [9616f9ba]
+* fix: query data_collection_id as both ObjectId and string [590ad790]
+* fix: cascade delete S3 objects and dependent MongoDB docs on project delete [42326d20]
+* fix: use aggregation pipeline to extract dc_ids/workflow_ids from project doc [3a0d7bcd]
+* fix: dc_ids extraction handles 'id'/'_id' keys + dry-run skips conflict check [440aba84]
+* fix: CLI --overwrite flag, CI conflict/files/deltatables assertions, code cleanup [dc25af07]
+* fix: datetime JSON serialization error + tabs centered under title [8b29cd1b]
+* fix: export now includes embedded workflows/DCs + UI teal consistency [7ac40f49]
+* fix: remove set -e from sourced script to prevent readline freeze [6cbcf9c5]
+* fix: set -e leaks into interactive shell when allocate-ports.sh is sourced [b70e1f6b]
+* fix: DEPICTIO_AUTH_SINGLE_USER_MODE always empty in docker-compose.override.yaml [69cbb95b]
+* fix: dashboard export finds 0 docs due to string vs ObjectId project_id mismatch [9bcd151e]
+* fix: use 'migrate run' subcommand in CI test script [90e63187]
+* fix: add logo and Codespaces badge to CLI README for PyPI display [98789a7c]
+* fix: add logo and Codespaces badge to CLI README for PyPI display [2cf40afb]
+
 #### Other Changes 📝
 
-* Bump version: 0.8.2-b1 → 0.8.2 [3377422c]
+* Bump version: 0.8.2 → 0.9.0 [4b7743d0]
+* fix(ci): use grep/awk to extract access_token from admin_config.yaml [65002c87]
+* fix(ci): fix syntax error in cascade delete step — extract token first [6e68900a]
+* debug(ci): add pre-migrate MongoDB diagnostics to diagnose files=0/deltatables=0 [d66e2b22]
+* fix(ci): wait for background reference dataset processing before migrate tests [4ee8507b]
+* test(ci): add cascade delete verification step for project deletion [249c7df0]
+* Update CHANGELOG.md for v0.8.2 [78c78e2a]
+* Bump version: 0.8.2-b1 → 0.8.2 [a5d24f29]
 * Update CHANGELOG.md for v0.8.2-b1 [ccb47aac]
 * Bump version: 0.8.1 → 0.8.2-b1 [157b634e]
 
@@ -23,70 +55,7 @@
 
 For more details, please refer to the [documentation](https://depictio.github.io/depictio-docs/)
 
-er for comprehensive application security checks [caa5476]
-* feat: add blocking for debug endpoints in Flask server [db8fb6b]
-* feat: add GitHub Actions workflow for testing, linting, and building depictio-cli and clean up pyproject.toml [46503f3]
-* feat: update environment configuration for Gitpod setup and adjust logging verbosity [6b74b5f]
-* feat: update Gitpod setup for zsh and Docker permissions [6b3bc25]
-* feat: enhance Gitpod setup with zsh and starship configuration [a1e50c0]
-* feat: enhance Gitpod setup with zsh and starship configuration [8b29d27]
-* feat: enhance Iris integration verification in CI workflow ; add checks for project, deltatable, and dashboard [9a8a6b0]
-* feat: rename docker-setup job to docker-system-init and update dependencies in CI workflow ; add fixture to set DEPICTIO_CONTEXT environment variable in test suite (test_scan_utils) [596395e]
-* feat: refactor deploy workflow to split CI jobs, enhance logging, and streamline Docker setup and integration tests [1d605c8]
-* feat: add run and standalone commands to CLI, enhance logging, and remove installation test script [0bad484]
-* feat: add logging step for depictio-frontend in deployment workflow [223cbcc]
-* feat: enhance S3 configuration handling and logging in storage options conversion [54fec27]
-* feat: add backend log retrieval steps to Iris CLI workflow [96a0630]
-
-#### Bug Fixes 🐛
-
-* fix: remove redundant screenshot generation test and streamline functionality [faecb4e]
-* fix: simplify screenshot generation tests and use a dummy dashboard ID [2a6f38f]
-* fix: resolve screenshot endpoint authentication and CI timeout issues [98598ee]
-* fix: enhance screenshot context creation with error handling and fallbacks [d2c70ca]
-* fix: enhance screenshot endpoint testing with actual dashboard ID and improved debugging [3cf00eb]
-* fix: update token query to use refresh_expire_datetime for active sessions [0b2b9d3]
-* fix: update dependency installation and improve path assertions in tests [64a928a]
-* fix: set pythonpath in pytest.ini_options for test discovery [d70d912]
-* fix: convert current_user.id to PyObjectId for consistency in get_dashboard function [875dedc]
-* fix: ensure components recalculate values and handle empty DataFrames correctly [292bd2a]
-* fix: comment out logger.info statements for debugging purposes [77cb291]
-* fix: replace hardcoded passwords with hashed passwords in temporary user tests [81c6cba]
-* fix: update edit permissions check for non-owner users in load_depictio_data function [c9d3253]
-* fix: handle session data retrieval and fallback for unauthenticated users in authentication process [378aa14]
-* fix: update test assertion for project visibility to reflect public status [8c733a9]
-* fix: update visibility settings to make dashboard and project public [226d8a1]
-* fix: Comment out typeguard dependency and add pytest-cov to optional dev dependencies [b00168a]
-* fix: Update pip installation command for development dependencies [365e649]
-* fix: Update anonymous user email in CI workflow for unauthenticated mode [aa9f8e4]
-* fix: Update screenshot API endpoint for dashboard functionality [3742089]
-* fix: Update screenshot API endpoint for dashboard functionality [6704418]
-* fix: Enhance screenshot functionality with detailed logging of user tokens and current datetime [804626c]
-* fix: convert current_user.id to PyObjectId for consistency in get_dashboard function [ed2d95a]
-* fix: ensure components recalculate values and handle empty DataFrames correctly [aa1b113]
-* fix: comment out logger.info statements for debugging purposes [5bff2ff]
-* fix: replace hardcoded passwords with hashed passwords in temporary user tests [7f8b80a]
-* fix: update edit permissions check for non-owner users in load_depictio_data function [71d5a12]
-* fix: Enhance backend readiness checks with improved init containers for key generation [9445935]
-* fix: handle session data retrieval and fallback for unauthenticated users in authentication process [bbd7c98]
-* fix: update test assertion for project visibility to reflect public status [985a300]
-* fix: update visibility settings to make dashboard and project public [266f35a]
-* fix: update logging verbosity level to use environment variable [b2d6bf9]
-* fix: update screenshot path in save_dashboard function to use output_file variable [24f863f]
-* fix: update resource limits for mongo, minio, backend, and frontend in Helm chart values [f682630]
-* fix: ensure main branch is specified for push and pull_request events in workflow files [463db16]
-* fix: add version input to workflow_dispatch for manual release triggering [2cedb8b]
-* fix: update beta release tag pattern and change release action to softprops/action-gh-release [6c4bc50]
-* fix: update changelog generation script invocation and change GitHub token reference [8c99139]
-* fix: allow publishing on workflow dispatch in addition to tags [691e379]
-* fix: update dry run publish condition to include main branch [8026bb0]
-* fix: add package installation and import verification steps in CI workflow [64288fe]
-* fix: standardize quotes in workflow configuration and update publish conditions [cab8e4b]
-* fix: enhance artifact upload conditions and add dry run for publishing [02fb80c]
-* fix: update workflow triggers and artifact upload conditions [7e79897]
-* fix: update paths for artifact handling in CI workflow [b6bd7d8]
-* fix: enhance issue templates for bug reports and feature requests [a0fa509]
-* fix: remove direct MinIO connectivity tests from CI workflow [9ffe00d]
+ectivity tests from CI workflow [9ffe00d]
 * fix: remove obsolete MinIO Console connectivity test from workflow [6ee1d30]
 * fix: enhance inter-service connectivity tests with readiness checks and improved error handling [ea147c5]
 * fix: add netcat-openbsd to Dockerfile dependencies for improved functionality [ccdf0b6]
