@@ -1970,7 +1970,7 @@ jobs:
 
           # Dry-run first — must not change anything
           echo "🏃 Running dry-run migrate..."
-          depictio-cli -v -vl DEBUG migrate run \
+          depictio-cli -v -vl DEBUG migrate \
             --project "$IRIS_PROJECT_NAME" \
             --CLI-config-path admin_config.yaml \
             --target-config admin_config.yaml \
@@ -1987,7 +1987,7 @@ jobs:
           # Real migrate (same instance as source and target — idempotent upsert)
           # --overwrite required because the project already exists on this instance
           echo "🚀 Running real migrate (metadata mode)..."
-          depictio-cli -v -vl DEBUG migrate run \
+          depictio-cli -v -vl DEBUG migrate \
             --project "$IRIS_PROJECT_NAME" \
             --CLI-config-path admin_config.yaml \
             --target-config admin_config.yaml \
@@ -1997,7 +1997,7 @@ jobs:
 
           # Verify conflict detection: run WITHOUT --overwrite → must fail with conflict
           echo "🔒 Testing conflict detection (no --overwrite, should fail)..."
-          if depictio-cli migrate run \
+          if depictio-cli migrate \
             --project "$IRIS_PROJECT_NAME" \
             --CLI-config-path admin_config.yaml \
             --target-config admin_config.yaml \
@@ -2041,7 +2041,7 @@ jobs:
 
           # Run migrate and capture output to verify dashboards were actually exported
           MIGRATE_LOG=$(mktemp)
-          depictio-cli -v -vl DEBUG migrate run \
+          depictio-cli -v -vl DEBUG migrate \
             --project "$IRIS_PROJECT_NAME" \
             --CLI-config-path admin_config.yaml \
             --target-config admin_config.yaml \
@@ -2108,7 +2108,7 @@ jobs:
           # Run mode=all (self-migration: same instance as source and target)
           # This exercises the S3 copy code path in addition to MongoDB upserts
           MIGRATE_LOG=$(mktemp)
-          depictio-cli -v -vl DEBUG migrate run \
+          depictio-cli -v -vl DEBUG migrate \
             --project "$IRIS_PROJECT_NAME" \
             --CLI-config-path admin_config.yaml \
             --target-config admin_config.yaml \
