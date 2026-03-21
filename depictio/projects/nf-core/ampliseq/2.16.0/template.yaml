@@ -17,51 +17,14 @@ template:
       description: "Root directory containing ampliseq pipeline output data"
       required: true
   expected_files:
-    # User-provided file (not recipe-generated)
+    # Only files NOT covered by recipe SOURCES declarations.
+    # Recipe inputs are validated automatically by the 4-checkpoint recipe pipeline.
     - relative_path: "input/Metadata_full.tsv"
       description: "Sample metadata with sample IDs and experimental factors"
       format: "TSV"
-      columns: ["ID", "name", "habitat"]
-    # Raw QIIME2 outputs (recipe inputs — transformed automatically during process)
-    - relative_path: "qiime2/diversity/alpha_diversity/faith_pd_vector/metadata.tsv"
-      description: "Raw QIIME2 Faith PD vector (input for alpha_diversity recipe)"
-      format: "TSV"
-      columns: ["id", "faith_pd"]
-    - relative_path: "qiime2/rel_abundance_tables/rel-table-2.tsv"
-      description: "Raw relative abundance table (input for taxonomy_rel_abundance recipe)"
-      format: "TSV"
-      columns: ["#OTU ID"]
-    - relative_path: "qiime2/alpha-rarefaction/faith_pd.csv"
-      description: "Raw QIIME2 rarefaction CSV (input for alpha_rarefaction recipe)"
-      format: "CSV"
-      columns: ["sample-id"]
-    - relative_path: "qiime2/barplot/level-2.csv"
-      description: "Raw QIIME2 barplot CSV (input for taxonomy_composition recipe)"
-      format: "CSV"
-      columns: ["index"]
-    - relative_path: "qiime2/ancombc/differentials/Category-habitat-level-2/lfc_slice.csv"
-      description: "ANCOM-BC log-fold change slice (input for ancombc recipe)"
-      format: "CSV"
-      columns: ["id"]
-    - relative_path: "qiime2/ancombc/differentials/Category-habitat-level-2/p_val_slice.csv"
-      description: "ANCOM-BC p-value slice"
-      format: "CSV"
-      columns: ["id"]
-    - relative_path: "qiime2/ancombc/differentials/Category-habitat-level-2/q_val_slice.csv"
-      description: "ANCOM-BC q-value slice"
-      format: "CSV"
-      columns: ["id"]
-    - relative_path: "qiime2/ancombc/differentials/Category-habitat-level-2/w_slice.csv"
-      description: "ANCOM-BC W statistic slice"
-      format: "CSV"
-      columns: ["id"]
-    - relative_path: "qiime2/ancombc/differentials/Category-habitat-level-2/se_slice.csv"
-      description: "ANCOM-BC standard error slice"
-      format: "CSV"
-      columns: ["id"]
   expected_directories:
-    - relative_path: "qiime2"
-      description: "QIIME2 output directory"
+    # MultiQC uses recursive scan mode which silently returns zero results if the
+    # directory is missing — this pre-flight check catches that failure early.
     - relative_path: "multiqc"
       description: "MultiQC output directory"
   dashboards:

@@ -55,11 +55,6 @@ def register_run_command(app: typer.Typer):
                 help="Custom project name (auto-generated from template if omitted).",
             ),
         ] = None,
-        deep_validation: bool = typer.Option(
-            False,
-            "--deep",
-            help="Enable deep schema validation for template data (check column names).",
-        ),
         dashboard: Annotated[
             list[str] | None,
             typer.Option(
@@ -205,16 +200,14 @@ def register_run_command(app: typer.Typer):
                 )
 
                 # Validate data root
-                validation_level = "deep" if deep_validation else "standard"
                 rich_print_checked_statement(
-                    f"Validating data root ({validation_level}): {data_root}",
+                    f"Validating data root: {data_root}",
                     "info",
                 )
 
                 validation_result = validate_data_root(
                     template_metadata=template_metadata,
                     data_root=data_root,  # type: ignore[arg-type]
-                    deep=deep_validation,
                 )
 
                 # Report warnings

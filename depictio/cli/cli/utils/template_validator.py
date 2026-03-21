@@ -2,14 +2,14 @@
 Template data validator for depictio-cli.
 
 Validates that a user's data root directory matches the expected structure
-defined in a template's metadata. Supports two validation levels:
+defined in a template's metadata (pre-flight check at Step 0):
 
-- Level 1 (default): Check directory exists, expected files/directories present
-- Level 2 (--deep):  Also read file headers to verify column names match
+- data_root directory exists and is accessible
+- expected_files are present at their declared relative paths
+- expected_directories exist (with glob expansion for wildcard patterns)
 
 Usage:
     result = validate_data_root(template_metadata, "/path/to/data")
-    result = validate_data_root(template_metadata, "/path/to/data", deep=True)
 """
 
 from pathlib import Path
@@ -33,23 +33,20 @@ class ValidationResult(BaseModel):
 def validate_data_root(
     template_metadata: TemplateMetadata,
     data_root: str,
-    deep: bool = False,
 ) -> ValidationResult:
     """Validate user's data root against template expectations.
 
-    Level 1 (always):
+    Checks:
     - data_root directory exists and is accessible
     - Expected files exist at their relative paths
     - Expected directories exist (with glob expansion for wildcard patterns)
 
-    Level 2 (when deep=True):
-    - Read TSV/CSV headers and check expected columns exist
-    - Check parquet schema for expected columns
+    Recipe source files are NOT checked here — they are validated automatically
+    by the 4-checkpoint recipe pipeline during Step 5 (process).
 
     Args:
         template_metadata: Template metadata with expected structure.
         data_root: Absolute path to user's data root directory.
-        deep: Whether to enable Level 2 schema validation.
 
     Returns:
         ValidationResult with errors and warnings.
@@ -107,86 +104,5 @@ def validate_data_root(
                     f"Expected directory is not a directory: {expected_dir.relative_path}"
                 )
 
-    # Level 2: Deep schema validation
-    if deep:
-        for expected_file in template_metadata.expected_files:
-            if not expected_file.columns:
-                continue
-
-            file_path = root / expected_file.relative_path
-            if not file_path.exists():
-                continue  # Already reported in Level 1
-
-            column_errors = _validate_file_columns(
-                file_path=file_path,
-                expected_columns=expected_file.columns,
-                file_format=expected_file.format,
-                relative_path=expected_file.relative_path,
-            )
-            errors.extend(column_errors)
-
     valid = len(errors) == 0
     return ValidationResult(valid=valid, errors=errors, warnings=warnings)
-
-
-def _validate_file_columns(
-    file_path: Path,
-    expected_columns: list[str],
-    file_format: str | None,
-    relative_path: str,
-) -> list[str]:
-    """Validate that a file contains expected columns.
-
-    Supports TSV, CSV, and Parquet formats.
-
-    Args:
-        file_path: Absolute path to the file.
-        expected_columns: List of column names expected in the file.
-        file_format: File format hint ('TSV', 'CSV', 'parquet').
-        relative_path: Relative path for error messages.
-
-    Returns:
-        List of error strings (empty if all columns found).
-    """
-    errors: list[str] = []
-
-    try:
-        import polars as pl
-
-        fmt = (file_format or "").upper()
-
-        if fmt == "TSV":
-            df = pl.read_csv(file_path, separator="\t", n_rows=0)
-        elif fmt == "CSV":
-            df = pl.read_csv(file_path, n_rows=0)
-        elif fmt in ("PARQUET", ""):
-            if file_path.suffix == ".parquet":
-                df = pl.read_parquet(file_path, n_rows=0)
-            elif file_path.suffix in (".tsv", ".txt"):
-                df = pl.read_csv(file_path, separator="\t", n_rows=0)
-            elif file_path.suffix == ".csv":
-                df = pl.read_csv(file_path, n_rows=0)
-            else:
-                logger.warning(
-                    f"Cannot determine format for {relative_path}, skipping column check"
-                )
-                return errors
-        else:
-            logger.warning(f"Unsupported format '{file_format}' for {relative_path}, skipping")
-            return errors
-
-        actual_columns = set(df.columns)
-        missing = [col for col in expected_columns if col not in actual_columns]
-
-        if missing:
-            errors.append(
-                f"File '{relative_path}' is missing expected columns: {', '.join(missing)}. "
-                f"Found columns: {', '.join(sorted(actual_columns))}"
-            )
-
-    except ImportError:
-        logger.warning("polars not available, skipping deep column validation")
-    except Exception as e:
-        errors.append(f"Error reading '{relative_path}' for column validation: {e}")
-
-    return errors

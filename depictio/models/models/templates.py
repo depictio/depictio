@@ -57,9 +57,6 @@ class ExpectedFile(BaseModel):
     format: str | None = Field(
         default=None, description="Expected file format (e.g., 'TSV', 'parquet')"
     )
-    columns: list[str] = Field(
-        default_factory=list, description="Expected column names (for deep validation)"
-    )
 
     @field_validator("relative_path")
     @classmethod
@@ -117,7 +114,6 @@ class TemplateMetadata(BaseModel):
             - relative_path: "merged_metadata.tsv"
               description: "Sample metadata file"
               format: "TSV"
-              columns: ["sample", "name", "habitat"]
     """
 
     template_id: str = Field(
