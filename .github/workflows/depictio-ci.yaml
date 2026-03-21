@@ -2160,7 +2160,7 @@ jobs:
           IRIS_PROJECT_NAME="Iris Dataset Project Data Analysis"
 
           # Resolve project ID
-          TOKEN=$(cat admin_config.yaml | python3 -c "import sys,yaml; print(yaml.safe_load(sys.stdin)['token'])")
+          TOKEN=$(grep 'access_token' admin_config.yaml | awk '{print $2}' | tr -d "'\"")
           IRIS_PROJECT_ID=$(python3 -c "
           import httpx
           r = httpx.get('http://localhost:8058/depictio/api/v1/projects/get/all',
@@ -2188,8 +2188,7 @@ jobs:
             --eval "db.projects.countDocuments({})" --quiet 2>&1 | tail -1)
           echo "📊 Before delete: projects=$PROJECTS_BEFORE files=$FILES_BEFORE deltatables=$DELTATABLES_BEFORE dashboards=$DASHBOARDS_BEFORE"
 
-          # Delete the project via the API
-          TOKEN=$(cat admin_config.yaml | python3 -c "import sys,yaml; print(yaml.safe_load(sys.stdin)['token'])")
+          # Delete the project via the API (TOKEN already set above)
           DELETE_RESP=$(python3 -c "
           import httpx
           r = httpx.delete('http://localhost:8058/depictio/api/v1/projects/delete',
