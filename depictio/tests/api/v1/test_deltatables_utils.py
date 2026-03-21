@@ -755,9 +755,6 @@ class TestLoadDeltatablelite:
         mock_response.json.return_value = {"delta_table_location": "s3://bucket/table"}
         mock_httpx_get.return_value = mock_response
 
-        # Mock large size to force lazy loading path
-        mock_get_size.return_value = 2 * 1024 * 1024 * 1024  # 2GB - forces lazy loading
-
         mock_df = pl.DataFrame({"category": ["A", "B"], "value": [1, 2]})
         mock_lazy_frame = MagicMock()
         mock_lazy_frame.filter.return_value = mock_lazy_frame
@@ -780,10 +777,11 @@ class TestLoadDeltatablelite:
             TOKEN="test_token",
         )
 
-        # Assert
+        # Assert: filtering is applied via apply_runtime_filters on the collected DataFrame
+        # (ENABLE_CACHING=False → collect first, then filter in memory)
         assert result is not None
-        # Should have applied filtering
-        mock_lazy_frame.filter.assert_called_once()
+        assert len(result) == 1
+        assert result["category"][0] == "A"
 
 
 class TestCachingFixes:
