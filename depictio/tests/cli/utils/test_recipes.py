@@ -3,7 +3,6 @@ Tests for the recipe loader/executor system (depictio/recipes/__init__.py).
 
 Tests here use only synthetic fixture data (in-memory or temp-dir recipes) and
 never depend on any specific pipeline (ampliseq, etc.) existing on disk.
-Pipeline-specific tests belong in depictio/tests/integration/.
 
 Covers:
 - Recipe discovery (list_recipes)
@@ -12,6 +11,7 @@ Covers:
 - Source resolution (resolve_sources)
 - Schema validation (validate_schema)
 - Full pipeline execution (execute_recipe)
+- Structural validation of every bundled recipe on disk (TestBundledRecipes)
 """
 
 import tempfile
@@ -664,3 +664,18 @@ class TestExecuteRecipe:
                 assert "versioned_col" in result_versioned.columns
             finally:
                 recipes_mod.PROJECTS_DIR = original_dir
+
+
+@pytest.mark.parametrize("recipe_name", list_recipes())
+def test_bundled_recipe_structure(recipe_name: str) -> None:
+    """Every bundled recipe on disk has SOURCES, EXPECTED_SCHEMA, and a callable transform."""
+    module = load_recipe(recipe_name)
+    assert hasattr(module, "SOURCES"), f"{recipe_name}: missing SOURCES"
+    assert hasattr(module, "EXPECTED_SCHEMA"), f"{recipe_name}: missing EXPECTED_SCHEMA"
+    assert callable(module.transform), f"{recipe_name}: transform not callable"
+    assert isinstance(module.SOURCES, list) and len(module.SOURCES) > 0
+    assert isinstance(module.EXPECTED_SCHEMA, dict) and len(module.EXPECTED_SCHEMA) > 0
+    for src in module.SOURCES:
+        assert isinstance(src, RecipeSource), (
+            f"{recipe_name}: SOURCES must contain RecipeSource instances"
+        )
