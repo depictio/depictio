@@ -824,6 +824,10 @@ def process_recipe_data_collection(
                     None,
                 )
                 if ref_dc is None:
+                    if src.optional:
+                        # Optional dc_ref: pass None so transform() can handle absence
+                        extra_sources[src.ref] = None  # type: ignore[assignment]
+                        continue
                     return {
                         "result": "error",
                         "message": (
@@ -834,6 +838,9 @@ def process_recipe_data_collection(
                 ref_s3_path = f"s3://{CLI_config.s3_storage.bucket}/{ref_dc.id!s}"
                 read_result = read_delta_table(ref_s3_path, storage_options)
                 if read_result.get("result") != "success":
+                    if src.optional:
+                        extra_sources[src.ref] = None  # type: ignore[assignment]
+                        continue
                     return {
                         "result": "error",
                         "message": (

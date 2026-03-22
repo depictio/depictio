@@ -9,6 +9,7 @@ Key concepts:
 - TemplateMetadata: Declared in template project.yaml, describes the template identity
 - TemplateOrigin: Stored on Project model to track that a template was used
 - TemplateVariable: A required variable (e.g., DATA_ROOT) with description
+- TemplateConditional: Optional-variable rules for DC removal and dashboard selection
 """
 
 from datetime import datetime
@@ -49,6 +50,39 @@ class TemplateVariable(BaseModel):
         return v
 
 
+class TemplateConditional(BaseModel):
+    """A conditional rule applied during template resolution based on variable presence.
+
+    Rules fire when the named optional variable is absent or present. Matching rules
+    remove listed DCs (and links that reference them) and override the dashboard list.
+
+    Example YAML:
+        conditional:
+          - if_var_absent: "METADATA_FILE"
+            remove_dc_tags: ["metadata", "ancombc_results"]
+            dashboards: ["dashboards/base.yaml"]
+          - if_var_present: "METADATA_FILE"
+            dashboards: ["dashboards/base.yaml", "dashboards/extended.yaml"]
+    """
+
+    if_var_absent: str | None = Field(
+        default=None,
+        description="Variable name: rule fires when this variable is NOT provided",
+    )
+    if_var_present: str | None = Field(
+        default=None,
+        description="Variable name: rule fires when this variable IS provided",
+    )
+    remove_dc_tags: list[str] = Field(
+        default_factory=list,
+        description="DC tags to remove from all workflows when this rule fires",
+    )
+    dashboards: list[str] = Field(
+        default_factory=list,
+        description="Dashboard paths to use when this rule fires (overrides template default)",
+    )
+
+
 class TemplateMetadata(BaseModel):
     """Metadata section declared in a template project.yaml.
 
@@ -63,8 +97,18 @@ class TemplateMetadata(BaseModel):
           variables:
             - name: "DATA_ROOT"
               description: "Root directory containing ampliseq output data"
+              required: true
+            - name: "METADATA_FILE"
+              description: "Path to metadata TSV (optional)"
+              required: false
           dashboards:
-            - "dashboards/full_analysis.yaml"
+            - "dashboards/base.yaml"
+          conditional:
+            - if_var_absent: "METADATA_FILE"
+              remove_dc_tags: ["metadata", "ancombc_results"]
+              dashboards: ["dashboards/base.yaml"]
+            - if_var_present: "METADATA_FILE"
+              dashboards: ["dashboards/base.yaml", "dashboards/extended.yaml"]
     """
 
     template_id: str = Field(
@@ -79,8 +123,15 @@ class TemplateMetadata(BaseModel):
         default_factory=list,
         description=(
             "Relative paths to dashboard YAML files bundled with this template "
-            "(e.g., 'dashboards/full_analysis.yaml'). Imported automatically after "
+            "(e.g., 'dashboards/base.yaml'). Imported automatically after "
             "project setup unless overridden via --dashboard CLI flag."
+        ),
+    )
+    conditional: list[TemplateConditional] = Field(
+        default_factory=list,
+        description=(
+            "Conditional rules applied during resolution based on optional variable presence. "
+            "Each rule fires when its if_var_absent / if_var_present condition matches."
         ),
     )
 

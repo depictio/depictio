@@ -13,6 +13,7 @@ class RecipeSource(BaseModel):
     dc_ref: str | None = None  # Reference another DC by tag (for joined sources)
     format: str = "CSV"  # CSV, TSV, Parquet
     read_kwargs: dict | None = None  # Extra kwargs passed to polars read function
+    optional: bool = False  # If True and dc_ref not resolvable, passes None to transform()
 
     model_config = ConfigDict(extra="forbid")
 

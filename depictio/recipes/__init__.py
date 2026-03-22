@@ -169,8 +169,20 @@ def resolve_sources(
 # ---------------------------------------------------------------------------
 
 
-def validate_schema(result: pl.DataFrame, expected_schema: dict, recipe_name: str) -> None:
-    """Validate that the result DataFrame matches the expected schema."""
+def validate_schema(
+    result: pl.DataFrame,
+    expected_schema: dict,
+    recipe_name: str,
+    optional_schema: dict | None = None,
+) -> None:
+    """Validate that the result DataFrame matches the expected schema.
+
+    Args:
+        result: Output DataFrame from transform().
+        expected_schema: Dict of column_name → polars dtype. All must be present.
+        recipe_name: Recipe name used in error messages.
+        optional_schema: Dict of column_name → polars dtype. Validated only if present.
+    """
     for col_name, expected_type in expected_schema.items():
         if col_name not in result.columns:
             raise RecipeError(
@@ -183,6 +195,15 @@ def validate_schema(result: pl.DataFrame, expected_schema: dict, recipe_name: st
                 f"Recipe {recipe_name}: column '{col_name}' expected {expected_type}, "
                 f"got {actual_type}"
             )
+    if optional_schema:
+        for col_name, expected_type in optional_schema.items():
+            if col_name in result.columns:
+                actual_type = result[col_name].dtype
+                if actual_type != expected_type:
+                    raise RecipeError(
+                        f"Recipe {recipe_name}: optional column '{col_name}' expected "
+                        f"{expected_type}, got {actual_type}"
+                    )
 
 
 def execute_recipe(
@@ -214,13 +235,16 @@ def execute_recipe(
     if extra_sources:
         sources.update(extra_sources)
 
-    # Check all sources are resolved
+    # Check all sources are resolved; optional missing dc_ref sources are injected as None
     for source in module.SOURCES:
         if source.ref not in sources:
-            raise RecipeError(
-                f"Source '{source.ref}' not resolved. "
-                f"If it uses dc_ref, provide it via extra_sources."
-            )
+            if source.dc_ref is not None and source.optional:
+                sources[source.ref] = None  # type: ignore[assignment]
+            else:
+                raise RecipeError(
+                    f"Source '{source.ref}' not resolved. "
+                    f"If it uses dc_ref, provide it via extra_sources."
+                )
 
     # Checkpoint 3: transform
     result = module.transform(sources)
@@ -232,8 +256,13 @@ def execute_recipe(
     if result.is_empty():
         raise RecipeError(f"Recipe {recipe_name}: transform() produced empty DataFrame")
 
-    # Checkpoint 4: schema validation
-    validate_schema(result, module.EXPECTED_SCHEMA, recipe_name)
+    # Checkpoint 4: schema validation (required + optional columns)
+    validate_schema(
+        result,
+        module.EXPECTED_SCHEMA,
+        recipe_name,
+        getattr(module, "OPTIONAL_SCHEMA", None),
+    )
 
     return result
 

@@ -1,4 +1,9 @@
-"""Transform QIIME2 relative abundance table to long-format per-sample taxonomy table."""
+"""Transform QIIME2 relative abundance table to long-format per-sample taxonomy table.
+
+When a metadata DC is present (--var METADATA_FILE=... provided to depictio-cli),
+all metadata columns are joined generically. Without metadata, only the core
+abundance + taxonomy columns are returned.
+"""
 
 import polars as pl
 
@@ -13,7 +18,8 @@ SOURCES: list[RecipeSource] = [
     ),
     RecipeSource(
         ref="metadata",
-        dc_ref="metadata",  # Reference another DC
+        dc_ref="metadata",  # Reference the metadata DC (optional)
+        optional=True,  # Absent when no --var METADATA_FILE was provided
     ),
 ]
 
@@ -21,14 +27,15 @@ EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "taxonomy": pl.Utf8,
     "rel_abundance": pl.Float64,
-    "habitat": pl.Utf8,
     "Kingdom": pl.Utf8,
     "Phylum": pl.Utf8,
 }
+# Metadata columns are user-defined; validated dynamically via OPTIONAL_SCHEMA = {}
+OPTIONAL_SCHEMA: dict[str, type[pl.DataType]] = {}
 
 
 def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
-    """Unpivot wide abundance table and join with metadata."""
+    """Unpivot wide abundance table and optionally join with all metadata columns."""
     df = sources["rel_table"]
     df = df.rename({"#OTU ID": "taxonomy"})
 
@@ -43,7 +50,13 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         pl.col("taxonomy").str.split(";").list.get(1).fill_null("Unclassified").alias("Phylum"),
     )
 
-    metadata = sources["metadata"].rename({"ID": "sample"}).select("sample", "habitat")
-    df = df.join(metadata, on="sample", how="left")
+    # Join ALL metadata columns generically when metadata is available
+    metadata = sources.get("metadata")
+    if metadata is not None:
+        metadata = metadata.rename({"ID": "sample"})
+        df = df.join(metadata, on="sample", how="left")
 
-    return df.select("sample", "taxonomy", "rel_abundance", "habitat", "Kingdom", "Phylum")
+    # Core columns first, then any metadata columns appended
+    core = ["sample", "taxonomy", "rel_abundance", "Kingdom", "Phylum"]
+    extra = [c for c in df.columns if c not in core]
+    return df.select(core + extra)

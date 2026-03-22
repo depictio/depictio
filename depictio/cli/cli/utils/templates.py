@@ -18,7 +18,7 @@ import httpx
 import yaml
 
 from depictio.cli.cli_logging import logger
-from depictio.models.models.templates import TemplateMetadata, TemplateOrigin
+from depictio.models.models.templates import TemplateConditional, TemplateMetadata, TemplateOrigin
 
 _TEMPLATE_VAR_RE = re.compile(r"\{([A-Z0-9_]+)\}")
 
@@ -156,26 +156,105 @@ def _strip_ids(config: Any) -> Any:
         return config
 
 
+def _apply_conditionals(
+    config: dict[str, Any],
+    conditionals: list[TemplateConditional],
+    provided_vars: set[str],
+    template_dir: Path,
+) -> tuple[dict[str, Any], list[str]]:
+    """Apply conditional rules based on which optional variables were provided.
+
+    For each conditional that fires:
+    - Removes DCs listed in remove_dc_tags from all workflows
+    - Prunes links whose source_dc_tag or target_dc_tag references a removed DC
+    - Overrides the active dashboard list
+
+    Args:
+        config: Resolved project config dict (modified in place).
+        conditionals: List of conditional rules from template metadata.
+        provided_vars: Set of variable names actually provided by the user.
+        template_dir: Template directory for resolving dashboard paths.
+
+    Returns:
+        Tuple of (modified_config, active_dashboard_rel_paths).
+    """
+    removed_dc_tags: set[str] = set()
+    active_dashboards: list[str] = []
+
+    for rule in conditionals:
+        fires = False
+        if rule.if_var_absent and rule.if_var_absent not in provided_vars:
+            fires = True
+        elif rule.if_var_present and rule.if_var_present in provided_vars:
+            fires = True
+
+        if not fires:
+            continue
+
+        # Collect DC tags to remove
+        for tag in rule.remove_dc_tags:
+            removed_dc_tags.add(tag)
+            logger.info(f"Conditional rule: removing DC tag '{tag}'")
+
+        # Override active dashboards
+        if rule.dashboards:
+            active_dashboards = rule.dashboards
+            logger.info(f"Conditional rule: using dashboards {rule.dashboards}")
+
+    # Remove DCs from all workflows
+    if removed_dc_tags:
+        for workflow in config.get("workflows", []):
+            dcs = workflow.get("data_collections", [])
+            original_count = len(dcs)
+            workflow["data_collections"] = [
+                dc for dc in dcs if dc.get("data_collection_tag") not in removed_dc_tags
+            ]
+            removed_count = original_count - len(workflow["data_collections"])
+            if removed_count:
+                logger.info(
+                    f"Workflow '{workflow.get('name')}': removed {removed_count} DC(s) "
+                    f"({', '.join(removed_dc_tags)})"
+                )
+
+        # Prune links referencing removed DCs
+        surviving_links = []
+        for link in config.get("links", []):
+            src = link.get("source_dc_tag", "")
+            tgt = link.get("target_dc_tag", "")
+            if src in removed_dc_tags or tgt in removed_dc_tags:
+                logger.info(f"Pruning link {src} → {tgt} (references removed DC)")
+            else:
+                surviving_links.append(link)
+        config["links"] = surviving_links
+
+    return config, active_dashboards
+
+
 def resolve_template(
     template_id: str,
     data_root: str,
     project_name: str | None = None,
+    extra_vars: dict[str, str] | None = None,
 ) -> tuple[dict[str, Any], TemplateMetadata, TemplateOrigin, list[Path]]:
-    """Load template YAML, substitute {DATA_ROOT}, return resolved config.
+    """Load template YAML, substitute variables, apply conditionals, return resolved config.
 
     This is the main entry point for the template system. It:
     1. Locates the template YAML
     2. Extracts and validates template metadata
-    3. Substitutes {DATA_ROOT} in all paths
-    4. Strips hardcoded IDs
-    5. Sets project name
-    6. Builds TemplateOrigin for DB tracking
-    7. Resolves dashboard YAML paths from template metadata
+    3. Builds variables dict (DATA_ROOT + extra_vars from --var flags)
+    4. Validates required variables; skips optional vars gracefully if absent
+    5. Substitutes template variables in all paths
+    6. Applies conditional rules (remove DCs, prune links, select dashboards)
+    7. Strips hardcoded IDs
+    8. Sets project name
+    9. Builds TemplateOrigin for DB tracking
+    10. Resolves dashboard YAML paths
 
     Args:
         template_id: Template identifier (e.g., 'nf-core/ampliseq/2.16.0').
         data_root: Absolute path to user's data root directory.
         project_name: Custom project name. If None, auto-generated from template.
+        extra_vars: Additional variables from --var KEY=VALUE flags (e.g., METADATA_FILE).
 
     Returns:
         Tuple of (resolved_config_dict, template_metadata, template_origin, dashboard_paths).
@@ -200,10 +279,15 @@ def resolve_template(
     template_metadata = TemplateMetadata(**template_section)
     logger.info(f"Template: {template_metadata.template_id} v{template_metadata.version}")
 
-    # 3. Validate required variables are available
+    # 3. Build variables dict: DATA_ROOT is always set; extra_vars adds --var values
     data_root_abs = str(Path(data_root).absolute())
     variables: dict[str, str] = {"DATA_ROOT": data_root_abs}
+    if extra_vars:
+        variables.update(extra_vars)
 
+    provided_vars: set[str] = set(variables.keys())
+
+    # 4. Validate required variables; warn about unknown extras
     required_vars = template_metadata.get_required_variable_names()
     missing_vars = [v for v in required_vars if v not in variables]
     if missing_vars:
@@ -212,19 +296,33 @@ def resolve_template(
             f"Provided: {', '.join(variables.keys())}"
         )
 
-    # 4. Substitute template variables in all paths
+    declared_var_names = {var.name for var in template_metadata.variables}
+    for v in variables:
+        if v not in declared_var_names and v != "DATA_ROOT":
+            logger.warning(f"Variable '{v}' provided via --var but not declared in template")
+
+    # 5. Substitute template variables in all paths
     resolved_config = substitute_template_variables(raw_config, variables)
 
-    # 5. Strip hardcoded IDs (fresh project gets new ones)
+    # 6. Apply conditional rules based on which optional vars were provided
+    template_dir = template_path.parent
+    resolved_config, conditional_dashboards = _apply_conditionals(
+        resolved_config,
+        template_metadata.conditional,
+        provided_vars,
+        template_dir,
+    )
+
+    # 7. Strip hardcoded IDs (fresh project gets new ones)
     resolved_config = _strip_ids(resolved_config)
 
-    # 6. Set project name
+    # 8. Set project name
     if project_name:
         resolved_config["name"] = project_name
     elif "name" not in resolved_config or not resolved_config.get("name"):
         resolved_config["name"] = f"{template_id} - {Path(data_root).name}"
 
-    # 7. Build TemplateOrigin for DB tracking
+    # 9. Build TemplateOrigin for DB tracking
     template_origin = TemplateOrigin(
         template_id=template_metadata.template_id,
         template_version=template_metadata.version,
@@ -233,20 +331,19 @@ def resolve_template(
         config_snapshot=copy.deepcopy(resolved_config),
     )
 
-    # 8. Inject template_origin into config
+    # 10. Inject template_origin into config
     resolved_config["template_origin"] = template_origin.model_dump()
 
-    # 9. Resolve dashboard YAML paths relative to the template directory
+    # 11. Resolve dashboard YAML paths — conditional overrides template defaults
+    active_dashboard_rels = conditional_dashboards or template_metadata.dashboards
     dashboard_paths: list[Path] = []
-    if template_metadata.dashboards:
-        template_dir = template_path.parent
-        for rel_path in template_metadata.dashboards:
-            abs_path = (template_dir / rel_path).resolve()
-            if abs_path.is_file():
-                dashboard_paths.append(abs_path)
-                logger.info(f"Dashboard found: {abs_path}")
-            else:
-                logger.warning(f"Dashboard YAML not found: {abs_path}")
+    for rel_path in active_dashboard_rels:
+        abs_path = (template_dir / rel_path).resolve()
+        if abs_path.is_file():
+            dashboard_paths.append(abs_path)
+            logger.info(f"Dashboard found: {abs_path}")
+        else:
+            logger.warning(f"Dashboard YAML not found: {abs_path}")
 
     logger.info(f"Template resolved successfully. Project name: {resolved_config['name']}")
     return resolved_config, template_metadata, template_origin, dashboard_paths

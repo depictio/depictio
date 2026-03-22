@@ -1,15 +1,16 @@
-"""Tests for the recipe/transform system."""
+"""Pure unit tests for the recipe/transform system.
+
+Tests here use only synthetic in-memory data and never load real recipe modules
+from disk. Pipeline-specific tests (ampliseq, etc.) belong in
+depictio/tests/integration/.
+"""
 
 import polars as pl
 import pytest
 
 from depictio.models.models.transforms import RecipeSource, TransformConfig
-from depictio.recipes import (
-    RecipeError,
-    list_recipes,
-    load_recipe,
-    validate_schema,
-)
+from depictio.recipes import RecipeError, validate_schema
+
 
 # ---------------------------------------------------------------------------
 # RecipeSource model tests
@@ -35,15 +36,23 @@ class TestRecipeSource:
             RecipeSource(ref="", path="f.csv")
 
     def test_dc_ref_source(self):
-        s = RecipeSource(ref="metadata", dc_ref="metadata")
-        assert s.dc_ref == "metadata"
+        s = RecipeSource(ref="joined", dc_ref="other_dc")
+        assert s.dc_ref == "other_dc"
         assert s.path is None
+
+    def test_optional_default_false(self):
+        s = RecipeSource(ref="data", path="data.csv")
+        assert s.optional is False
+
+    def test_optional_dc_ref_source(self):
+        s = RecipeSource(ref="joined", dc_ref="other_dc", optional=True)
+        assert s.optional is True
 
 
 class TestTransformConfig:
     def test_valid_config(self):
-        c = TransformConfig(recipe="nf-core/ampliseq/alpha_diversity.py")
-        assert c.recipe == "nf-core/ampliseq/alpha_diversity.py"
+        c = TransformConfig(recipe="vendor/pipeline/transform.py")
+        assert c.recipe == "vendor/pipeline/transform.py"
 
     def test_empty_recipe(self):
         with pytest.raises(ValueError, match="recipe path cannot be empty"):
@@ -55,174 +64,47 @@ class TestTransformConfig:
 
 
 # ---------------------------------------------------------------------------
-# Recipe loader tests
+# Schema validation unit tests
 # ---------------------------------------------------------------------------
 
 
-class TestRecipeLoader:
-    def test_load_alpha_diversity(self):
-        module = load_recipe("nf-core/ampliseq/alpha_diversity.py")
-        assert hasattr(module, "SOURCES")
-        assert hasattr(module, "EXPECTED_SCHEMA")
-        assert callable(module.transform)
-        assert len(module.SOURCES) == 1
-        assert module.SOURCES[0].ref == "faith_pd"
-
-    def test_load_ancombc(self):
-        module = load_recipe("nf-core/ampliseq/ancombc.py")
-        assert len(module.SOURCES) == 5
-
-    def test_load_taxonomy(self):
-        module = load_recipe("nf-core/ampliseq/taxonomy_rel_abundance.py")
-        assert len(module.SOURCES) == 2
-        # One source uses dc_ref
-        dc_ref_sources = [s for s in module.SOURCES if s.dc_ref is not None]
-        assert len(dc_ref_sources) == 1
-
-    def test_load_nonexistent(self):
-        with pytest.raises(RecipeError, match="Recipe not found"):
-            load_recipe("nonexistent/recipe.py")
-
-    def test_load_alpha_rarefaction(self):
-        module = load_recipe("nf-core/ampliseq/alpha_rarefaction.py")
-        assert len(module.SOURCES) == 1
-        assert module.SOURCES[0].ref == "faith_pd_csv"
-
-    def test_load_taxonomy_composition(self):
-        module = load_recipe("nf-core/ampliseq/taxonomy_composition.py")
-        assert len(module.SOURCES) == 1  # No dc_ref dependency anymore
-
-    def test_list_recipes(self):
-        recipes = list_recipes()
-        assert len(recipes) >= 5
-        assert "nf-core/ampliseq/alpha_diversity.py" in recipes
-        assert "nf-core/ampliseq/ancombc.py" in recipes
-        assert "nf-core/ampliseq/taxonomy_rel_abundance.py" in recipes
-        assert "nf-core/ampliseq/alpha_rarefaction.py" in recipes
-        assert "nf-core/ampliseq/taxonomy_composition.py" in recipes
-
-
-# ---------------------------------------------------------------------------
-# Recipe execution tests with synthetic data
-# ---------------------------------------------------------------------------
-
-
-class TestAlphaDiversityRecipe:
-    def test_transform(self):
-        module = load_recipe("nf-core/ampliseq/alpha_diversity.py")
-        # Synthetic data matching raw Faith PD vector format
-        df = pl.DataFrame(
-            {
-                "id": ["#q2:types", "sample1", "sample2", "sample3"],
-                "faith_pd": ["numeric", "12.5", "8.3", "15.1"],
-                "habitat": ["categorical", "soil", "water", "soil"],
-            }
-        )
-        result = module.transform({"faith_pd": df})
-        assert result.columns == ["sample", "habitat", "faith_pd"]
-        assert result.height == 3  # #q2:types row filtered out
-        assert result["faith_pd"].dtype == pl.Float64
-        validate_schema(result, module.EXPECTED_SCHEMA, "alpha_diversity")
-
-
-class TestAncomBCRecipe:
-    def test_transform(self):
-        module = load_recipe("nf-core/ampliseq/ancombc.py")
-        # Synthetic ANCOM-BC data (2 taxa, 1 contrast)
-        taxa = ["Bacteria;Firmicutes;Bacilli", "Bacteria;Proteobacteria;Gamma"]
-        sources = {}
-        for name in ["lfc", "p_val", "q_val", "w", "se"]:
-            vals = {
-                "lfc": [1.5, -0.8],
-                "p_val": [0.01, 0.2],
-                "q_val": [0.03, 0.4],
-                "w": [2.1, -0.5],
-                "se": [0.3, 0.6],
-            }
-            sources[name] = pl.DataFrame(
-                {
-                    "id": taxa,
-                    "(Intercept)": [0.0, 0.0],
-                    "habitat_soil": vals[name],
-                }
-            )
-
-        result = module.transform(sources)
-        assert result.height == 2  # 2 taxa x 1 contrast
-        assert "Kingdom" in result.columns
-        assert "significant" in result.columns
-        assert result["significant"].dtype == pl.Boolean
-        validate_schema(result, module.EXPECTED_SCHEMA, "ancombc")
-
-
-class TestAlphaRarefactionRecipe:
-    def test_transform(self):
-        module = load_recipe("nf-core/ampliseq/alpha_rarefaction.py")
-        # Synthetic wide rarefaction CSV
-        df = pl.DataFrame(
-            {
-                "sample-id": ["s1", "s2"],
-                "depth-0_iter-0": [1.0, 2.0],
-                "depth-500_iter-0": [5.5, 6.5],
-                "depth-500_iter-1": [5.3, 6.2],
-                "depth-1000_iter-0": [10.0, 11.0],
-            }
-        )
-        result = module.transform({"faith_pd_csv": df})
-        assert result.columns == ["sample", "depth", "iter", "faith_pd"]
-        assert result.height == 8  # 2 samples x 4 depth-iter combos
-        assert result["depth"].dtype == pl.Int64
-        assert result["iter"].dtype == pl.Int64
-        validate_schema(result, module.EXPECTED_SCHEMA, "alpha_rarefaction")
-
-
-class TestTaxonomyCompositionRecipe:
-    def test_transform(self):
-        module = load_recipe("nf-core/ampliseq/taxonomy_composition.py")
-        # Synthetic barplot CSV (wide format with index + habitat + taxonomy cols)
-        barplot = pl.DataFrame(
-            {
-                "index": ["s1", "s2"],
-                "habitat": ["soil", "water"],
-                "k__Bacteria;p__Firmicutes": [100.0, 200.0],
-                "k__Bacteria;p__Proteobacteria": [50.0, 0.0],
-            }
-        )
-        result = module.transform({"barplot_csv": barplot})
-        assert "sample" in result.columns
-        assert "taxonomy" in result.columns
-        assert "count" in result.columns
-        assert "habitat" in result.columns
-        # s1 has 2 taxa, s2 has 1 (Proteobacteria=0 filtered out)
-        assert result.height == 3
-        validate_schema(result, module.EXPECTED_SCHEMA, "taxonomy_composition")
-
-    def test_transform_without_habitat(self):
-        """Barplot CSV without habitat column should still work (null habitat)."""
-        module = load_recipe("nf-core/ampliseq/taxonomy_composition.py")
-        barplot = pl.DataFrame(
-            {
-                "index": ["s1", "s2"],
-                "k__Bacteria;p__Firmicutes": [100.0, 200.0],
-            }
-        )
-        result = module.transform({"barplot_csv": barplot})
-        assert result.height == 2
-        assert result["habitat"].null_count() == 2
-        validate_schema(result, module.EXPECTED_SCHEMA, "taxonomy_composition")
-
-
-class TestSchemaValidation:
-    def test_missing_column(self):
+class TestValidateSchema:
+    def test_missing_required_column(self):
         df = pl.DataFrame({"a": [1]})
         with pytest.raises(RecipeError, match="missing output column 'b'"):
-            validate_schema(df, {"b": pl.Int64}, "test")
+            validate_schema(df, {"b": pl.Int64}, "test_recipe")
 
-    def test_wrong_type(self):
+    def test_wrong_dtype(self):
         df = pl.DataFrame({"a": ["hello"]})
         with pytest.raises(RecipeError, match="expected Int64"):
-            validate_schema(df, {"a": pl.Int64}, "test")
+            validate_schema(df, {"a": pl.Int64}, "test_recipe")
 
-    def test_valid_schema(self):
+    def test_valid_schema_passes(self):
         df = pl.DataFrame({"a": [1], "b": ["x"]})
-        validate_schema(df, {"a": pl.Int64, "b": pl.Utf8}, "test")  # should not raise
+        validate_schema(df, {"a": pl.Int64, "b": pl.Utf8}, "test_recipe")
+
+    def test_extra_columns_ignored(self):
+        """Columns not in expected_schema are not checked (not an error)."""
+        df = pl.DataFrame({"a": [1], "extra": ["ignored"]})
+        validate_schema(df, {"a": pl.Int64}, "test_recipe")
+
+    def test_optional_schema_absent_col_passes(self):
+        """Optional column absent from result: validation passes."""
+        df = pl.DataFrame({"a": [1]})
+        validate_schema(df, {"a": pl.Int64}, "test_recipe", optional_schema={"opt_col": pl.Utf8})
+
+    def test_optional_schema_present_correct_type(self):
+        """Optional column present with correct type: validation passes."""
+        df = pl.DataFrame({"a": [1], "opt_col": ["value"]})
+        validate_schema(df, {"a": pl.Int64}, "test_recipe", optional_schema={"opt_col": pl.Utf8})
+
+    def test_optional_schema_present_wrong_type_raises(self):
+        """Optional column present with wrong type: RecipeError raised."""
+        df = pl.DataFrame({"a": [1], "opt_col": [42]})
+        with pytest.raises(RecipeError, match="optional column 'opt_col'"):
+            validate_schema(df, {"a": pl.Int64}, "test_recipe", optional_schema={"opt_col": pl.Utf8})
+
+    def test_optional_schema_none_is_noop(self):
+        """optional_schema=None behaves the same as no optional_schema."""
+        df = pl.DataFrame({"a": [1]})
+        validate_schema(df, {"a": pl.Int64}, "test_recipe", optional_schema=None)

@@ -55,6 +55,17 @@ def register_run_command(app: typer.Typer):
                 help="Custom project name (auto-generated from template if omitted).",
             ),
         ] = None,
+        var: Annotated[
+            list[str],
+            typer.Option(
+                "--var",
+                help=(
+                    "Extra template variable as KEY=VALUE. Repeatable. "
+                    "Example: --var SAMPLESHEET_FILE=/path/to/samplesheet.csv "
+                    "--var METADATA_FILE=/path/to/metadata.tsv"
+                ),
+            ),
+        ] = [],
         dashboard: Annotated[
             list[str] | None,
             typer.Option(
@@ -192,12 +203,24 @@ def register_run_command(app: typer.Typer):
                     )
                     raise typer.Exit(code=1)
 
+                # Parse --var KEY=VALUE pairs into extra_vars dict
+                extra_vars: dict[str, str] = {}
+                for v in var:
+                    if "=" not in v:
+                        rich_print_checked_statement(
+                            f"--var must be KEY=VALUE format, got: {v!r}", "error"
+                        )
+                        raise typer.Exit(code=1)
+                    k, val = v.split("=", 1)
+                    extra_vars[k.strip()] = val.strip()
+
                 # Resolve template
                 resolved_config, template_metadata, template_origin, default_dashboard_paths = (
                     resolve_template(
                         template_id=template,  # type: ignore[arg-type]
                         data_root=data_root,  # type: ignore[arg-type]
                         project_name=project_name,
+                        extra_vars=extra_vars or None,
                     )
                 )
 
