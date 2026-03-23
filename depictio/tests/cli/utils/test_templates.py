@@ -53,9 +53,7 @@ class TestSubstituteTemplateVariables:
         assert result["scan"]["filename"] == "/data/input.tsv"
 
     def test_substitute_list(self) -> None:
-        result = substitute_template_variables(
-            ["{ROOT}/a.tsv", "{ROOT}/b.tsv"], {"ROOT": "/root"}
-        )
+        result = substitute_template_variables(["{ROOT}/a.tsv", "{ROOT}/b.tsv"], {"ROOT": "/root"})
         assert result == ["/root/a.tsv", "/root/b.tsv"]
 
     def test_no_substitution_for_non_matching(self) -> None:
@@ -222,9 +220,7 @@ class TestTemplateOriginModel:
 
     def test_template_id_cannot_be_empty(self) -> None:
         with pytest.raises(ValueError):
-            TemplateOrigin(
-                template_id="", template_version="1.0.0", data_root="/data"
-            )
+            TemplateOrigin(template_id="", template_version="1.0.0", data_root="/data")
 
     def test_data_root_cannot_be_empty(self) -> None:
         with pytest.raises(ValueError):
@@ -326,18 +322,26 @@ class TestApplyConditionals:
         """DCs are removed from ALL workflows, not just the first."""
         config = {
             "workflows": [
-                {"name": "wf1", "data_collections": [
-                    {"data_collection_tag": "dc_always"},
-                    {"data_collection_tag": "dc_optional_a"},
-                ]},
-                {"name": "wf2", "data_collections": [
-                    {"data_collection_tag": "dc_optional_a"},
-                    {"data_collection_tag": "dc_core"},
-                ]},
+                {
+                    "name": "wf1",
+                    "data_collections": [
+                        {"data_collection_tag": "dc_always"},
+                        {"data_collection_tag": "dc_optional_a"},
+                    ],
+                },
+                {
+                    "name": "wf2",
+                    "data_collections": [
+                        {"data_collection_tag": "dc_optional_a"},
+                        {"data_collection_tag": "dc_core"},
+                    ],
+                },
             ],
             "links": [],
         }
-        conditionals = [TemplateConditional(if_var_absent="OPT_VAR", remove_dc_tags=["dc_optional_a"])]
+        conditionals = [
+            TemplateConditional(if_var_absent="OPT_VAR", remove_dc_tags=["dc_optional_a"])
+        ]
         result, _ = _apply_conditionals(config, conditionals, set(), Path("/tmp"))
         for wf in result["workflows"]:
             tags = [dc["data_collection_tag"] for dc in wf["data_collections"]]

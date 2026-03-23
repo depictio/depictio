@@ -38,7 +38,9 @@ class TestRecipeSource:
         assert source.path is None
 
     def test_source_with_read_kwargs(self) -> None:
-        source = RecipeSource(ref="data", path="data.tsv", format="tsv", read_kwargs={"skip_rows": 1})
+        source = RecipeSource(
+            ref="data", path="data.tsv", format="tsv", read_kwargs={"skip_rows": 1}
+        )
         assert source.read_kwargs == {"skip_rows": 1}
 
     def test_optional_default_false(self) -> None:
@@ -60,7 +62,9 @@ class TestRecipeSource:
 
     def test_extra_fields_forbidden(self) -> None:
         with pytest.raises(Exception):
-            RecipeSource.model_validate({"ref": "data", "path": "data.csv", "unknown_field": "value"})
+            RecipeSource.model_validate(
+                {"ref": "data", "path": "data.csv", "unknown_field": "value"}
+            )
 
     def test_default_format_is_csv(self) -> None:
         source = RecipeSource(ref="data", path="data.csv")

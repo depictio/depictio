@@ -102,7 +102,9 @@ class TestValidateSchema:
         """Optional column present with wrong type: RecipeError raised."""
         df = pl.DataFrame({"a": [1], "opt_col": [42]})
         with pytest.raises(RecipeError, match="optional column 'opt_col'"):
-            validate_schema(df, {"a": pl.Int64}, "test_recipe", optional_schema={"opt_col": pl.Utf8})
+            validate_schema(
+                df, {"a": pl.Int64}, "test_recipe", optional_schema={"opt_col": pl.Utf8}
+            )
 
     def test_optional_schema_none_is_noop(self):
         """optional_schema=None behaves the same as no optional_schema."""
