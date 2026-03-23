@@ -2,14 +2,32 @@
 
 import copy
 import os
+import re as _re
+from pathlib import Path
 from typing import Any, cast
 
 from bson import ObjectId
 
 from depictio.api.v1.configs.logging_init import logger
+from depictio.cli.cli.utils.templates import _apply_conditionals, substitute_template_variables
 from depictio.models.models.base import PyObjectId
+from depictio.models.models.templates import TemplateConditional
 from depictio.models.models.users import Permission, UserBase, UserBeanie
 from depictio.models.utils import get_config
+
+_UNRESOLVED_VAR_RE = _re.compile(r"\{[A-Z0-9_]+\}")
+
+
+def _has_unresolved_vars(obj: Any) -> bool:
+    """Return True if any string in obj still contains a {VAR} placeholder."""
+    if isinstance(obj, str):
+        return bool(_UNRESOLVED_VAR_RE.search(obj))
+    if isinstance(obj, dict):
+        return any(_has_unresolved_vars(v) for v in obj.values())
+    if isinstance(obj, list):
+        return any(_has_unresolved_vars(item) for item in obj)
+    return False
+
 
 # Static ID mappings (hardcoded for K8s consistency)
 STATIC_IDS = {
@@ -188,29 +206,45 @@ class ReferenceDatasetRegistry:
     ) -> dict[str, Any]:
         """Resolve a template.yaml for init usage.
 
-        1. Strips the ``template:`` metadata section.
-        2. Substitutes ``{DATA_ROOT}`` (and any other template variables) with *data_root*.
-        3. Converts recipe-based DCs (``source: "transformed"``) to file-scan DCs
+        1. Reads ``template:`` conditionals, then strips the section.
+        2. Substitutes ``{DATA_ROOT}`` via the shared ``substitute_template_variables``.
+        3. Applies conditional DC/link removal (e.g. removes metadata DC when METADATA_FILE absent).
+        4. Skips DCs whose config still contains unresolved ``{VAR}`` placeholders
+           (e.g. samplesheet DC with ``{SAMPLESHEET_FILE}`` — required in CLI runs but
+           not applicable to the reference demo dataset).
+        5. Converts recipe-based DCs (``source: "transformed"``) to file-scan DCs
            using the convention ``{DATA_ROOT}/{dc_tag}.tsv``.
         """
         config = copy.deepcopy(template_config)
 
-        # 1. Pop template metadata
+        # 1. Read template metadata BEFORE popping — need conditionals
+        template_section = config.get("template", {})
+        raw_conditionals = template_section.get("conditional", [])
+        conditionals = [TemplateConditional(**c) for c in raw_conditionals]
         config.pop("template", None)
 
-        # 2. Recursive variable substitution
-        def _substitute(obj: Any) -> Any:
-            if isinstance(obj, str):
-                return obj.replace("{DATA_ROOT}", data_root)
-            if isinstance(obj, dict):
-                return {k: _substitute(v) for k, v in obj.items()}
-            if isinstance(obj, list):
-                return [_substitute(item) for item in obj]
-            return obj
+        # 2. Substitute DATA_ROOT only (init has no user-supplied vars)
+        variables: dict[str, str] = {"DATA_ROOT": data_root}
+        provided_vars: set[str] = set(variables.keys())
+        config = substitute_template_variables(config, variables)
 
-        config = _substitute(config)
+        # 3. Apply conditional DC/link removal (pass dummy template_dir — init ignores dashboards)
+        config, _ = _apply_conditionals(config, conditionals, provided_vars, Path("."))
 
-        # 3. Convert recipe DCs → file-scan DCs
+        # 4. Skip DCs whose config still has unresolved {VAR} placeholders
+        for workflow in config.get("workflows", []):
+            surviving = []
+            for dc in workflow.get("data_collections", []):
+                if _has_unresolved_vars(dc.get("config", {})):
+                    logger.debug(
+                        f"Init resolver: skipping DC '{dc['data_collection_tag']}' "
+                        "— config contains unresolved template variables"
+                    )
+                else:
+                    surviving.append(dc)
+            workflow["data_collections"] = surviving
+
+        # 5. Convert recipe DCs → file-scan DCs
         for workflow in config.get("workflows", []):
             for dc in workflow.get("data_collections", []):
                 dc_config = dc.get("config", {})
@@ -218,7 +252,6 @@ class ReferenceDatasetRegistry:
                     dc_tag = dc["data_collection_tag"]
                     # Convention: pre-computed files are named {dc_tag}.tsv
                     pre_computed_path = os.path.join(data_root, f"{dc_tag}.tsv")
-                    # Replace transform with file scan
                     dc_config.pop("source", None)
                     dc_config.pop("transform", None)
                     dc_config["scan"] = {

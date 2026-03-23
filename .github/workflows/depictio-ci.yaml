@@ -1324,6 +1324,9 @@ jobs:
               -o "$TARGET/qiime2/ancombc/differentials/Category-habitat-level-2/$f"
           done
 
+          # Minimal samplesheet for template CLI test (sampleID column required by the template)
+          printf "sampleID\nERR12345\n" > "$TARGET/samplesheet.csv"
+
           echo "✅ Test data downloaded ($(find "$TARGET" -type f | wc -l) files)"
 
       - name: Run ampliseq recipes (standalone execution)
@@ -1362,6 +1365,7 @@ jobs:
             --template nf-core/ampliseq/2.16.0 \
             --data-root "$DATA_DIR" \
             --project-name "Ampliseq CI Template Test" \
+            --var SAMPLESHEET_FILE="$DATA_DIR/samplesheet.csv" \
             --CLI-config-path admin_config.yaml \
             --continue-on-error
 
