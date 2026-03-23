@@ -279,7 +279,7 @@ class TestApplyConditionals:
         assert "dc_always" in dc_tags
         assert "dc_core" in dc_tags
         # Only the dc_always→dc_core link survives
-        links = [(l["source_dc_tag"], l["target_dc_tag"]) for l in result["links"]]
+        links = [(lnk["source_dc_tag"], lnk["target_dc_tag"]) for lnk in result["links"]]
         assert ("dc_always", "dc_core") in links
         assert ("dc_optional_a", "dc_results") not in links
         assert ("dc_optional_a", "dc_optional_b") not in links

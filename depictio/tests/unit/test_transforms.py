@@ -11,7 +11,6 @@ import pytest
 from depictio.models.models.transforms import RecipeSource, TransformConfig
 from depictio.recipes import RecipeError, validate_schema
 
-
 # ---------------------------------------------------------------------------
 # RecipeSource model tests
 # ---------------------------------------------------------------------------
