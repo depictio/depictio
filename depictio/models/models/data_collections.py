@@ -282,6 +282,7 @@ class DataCollectionConfig(MongoModel):
 class DataCollection(MongoModel):
     data_collection_tag: str
     config: DataCollectionConfig
+    optional: bool = False  # template hint: DC excluded when its variable is absent
 
     def __eq__(self, other):
         if isinstance(other, DataCollection):
