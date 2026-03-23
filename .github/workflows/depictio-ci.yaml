@@ -1324,8 +1324,10 @@ jobs:
               -o "$TARGET/qiime2/ancombc/differentials/Category-habitat-level-2/$f"
           done
 
-          # Minimal samplesheet for template CLI test (sampleID column required by the template)
-          printf "sampleID\nERR12345\n" > "$TARGET/samplesheet.csv"
+          # Generate samplesheet from Metadata_full.tsv (ID column → sampleID)
+          echo "sampleID" > "$TARGET/samplesheet.csv"
+          tail -n +2 "$TARGET/input/Metadata_full.tsv" | awk -F'\t' '{print $1}' >> "$TARGET/samplesheet.csv"
+          echo "📋 Samplesheet created with $(tail -n +2 "$TARGET/samplesheet.csv" | wc -l | tr -d ' ') samples"
 
           echo "✅ Test data downloaded ($(find "$TARGET" -type f | wc -l) files)"
 
