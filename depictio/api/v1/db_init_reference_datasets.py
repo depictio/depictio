@@ -52,6 +52,7 @@ STATIC_IDS = {
         "workflows": {"ampliseq": "646b0f3c1e4a2d7f8e5b8ca3"},
         "data_collections": {
             "multiqc_data": "646b0f3c1e4a2d7f8e5b8ca4",
+            "samplesheet": "646b0f3c1e4a2d7f8e5b8cab",
             "metadata": "646b0f3c1e4a2d7f8e5b8ca5",
             "alpha_diversity": "646b0f3c1e4a2d7f8e5b8ca6",
             "alpha_rarefaction": "646b0f3c1e4a2d7f8e5b8ca7",
@@ -217,25 +218,32 @@ class ReferenceDatasetRegistry:
         """
         config = copy.deepcopy(template_config)
 
-        # 1. Read template metadata BEFORE popping — need conditionals
+        # 1. Read template metadata BEFORE popping — need conditionals + reference defaults
         template_section = config.get("template", {})
         raw_conditionals = template_section.get("conditional", [])
         conditionals = [TemplateConditional(**c) for c in raw_conditionals]
+        reference_defaults: dict[str, str] = (template_section.get("reference") or {}).get(
+            "vars", {}
+        )
         config.pop("template", None)
 
-        # 2. Substitute DATA_ROOT only (init has no user-supplied vars)
+        # 2. Build variables: DATA_ROOT + reference defaults (with DATA_ROOT substituted inside them)
         variables: dict[str, str] = {"DATA_ROOT": data_root}
+        for var_name, var_default in reference_defaults.items():
+            variables[var_name] = var_default.replace("{DATA_ROOT}", data_root)
         provided_vars: set[str] = set(variables.keys())
         config = substitute_template_variables(config, variables)
 
         # 3. Apply conditional DC/link removal (pass dummy template_dir — init ignores dashboards)
         config, _ = _apply_conditionals(config, conditionals, provided_vars, Path("."))
 
-        # 4. Skip DCs whose config still has unresolved {VAR} placeholders
+        # 4. Skip DCs whose config still has unresolved {VAR} placeholders and prune their links
+        skipped_dc_tags: set[str] = set()
         for workflow in config.get("workflows", []):
             surviving = []
             for dc in workflow.get("data_collections", []):
                 if _has_unresolved_vars(dc.get("config", {})):
+                    skipped_dc_tags.add(dc["data_collection_tag"])
                     logger.debug(
                         f"Init resolver: skipping DC '{dc['data_collection_tag']}' "
                         "— config contains unresolved template variables"
@@ -243,6 +251,14 @@ class ReferenceDatasetRegistry:
                 else:
                     surviving.append(dc)
             workflow["data_collections"] = surviving
+
+        if skipped_dc_tags:
+            config["links"] = [
+                lnk
+                for lnk in config.get("links", [])
+                if lnk.get("source_dc_tag") not in skipped_dc_tags
+                and lnk.get("target_dc_tag") not in skipped_dc_tags
+            ]
 
         # 5. Convert recipe DCs → file-scan DCs
         for workflow in config.get("workflows", []):

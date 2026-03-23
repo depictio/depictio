@@ -28,13 +28,17 @@ template:
       description: "Path to sample metadata TSV (--metadata in ampliseq run). Optional."
       required: false
   dashboards:
-    - "dashboards/full_analysis.yaml"
+    - "dashboards/base.yaml"
   conditional:
     - if_var_absent: "METADATA_FILE"
       remove_dc_tags: ["metadata", "ancombc_results"]
-      dashboards: ["dashboards/full_analysis.yaml"]
+      dashboards: ["dashboards/base.yaml"]
     - if_var_present: "METADATA_FILE"
-      dashboards: ["dashboards/full_analysis.yaml"]
+      dashboards: ["dashboards/base.yaml", "dashboards/full_analysis.yaml"]
+  reference:
+    vars:
+      SAMPLESHEET_FILE: "{DATA_ROOT}/input/samplesheet.csv"
+      METADATA_FILE: "{DATA_ROOT}/input/Metadata_full.tsv"
 
 # ============================================================================
 # PROJECT CONFIGURATION
@@ -120,7 +124,7 @@ workflows:
               separator: "\t"
               try_parse_dates: true
             columns_description:
-              "ID": "Sample identifier — must match samplesheet sampleID. All other columns are passed through."
+              "sample": "Sample identifier — must match samplesheet sampleID. All other columns are passed through."
 
       # ----------------------------------------------------------------
       # Recipe-transformed data collections
@@ -231,7 +235,7 @@ links:
 
   # Link 2: Metadata -> Alpha Diversity
   - source_dc_tag: "metadata"
-    source_column: "ID"
+    source_column: "sample"
     target_dc_tag: "alpha_diversity"
     target_type: "table"
     link_config:
@@ -242,7 +246,7 @@ links:
 
   # Link 3: Metadata -> Alpha Rarefaction
   - source_dc_tag: "metadata"
-    source_column: "ID"
+    source_column: "sample"
     target_dc_tag: "alpha_rarefaction"
     target_type: "table"
     link_config:
@@ -253,7 +257,7 @@ links:
 
   # Link 4: Metadata -> Taxonomy Composition
   - source_dc_tag: "metadata"
-    source_column: "ID"
+    source_column: "sample"
     target_dc_tag: "taxonomy_composition"
     target_type: "table"
     link_config:
@@ -264,7 +268,7 @@ links:
 
   # Link 5: Metadata -> Taxonomy Rel Abundance
   - source_dc_tag: "metadata"
-    source_column: "ID"
+    source_column: "sample"
     target_dc_tag: "taxonomy_rel_abundance"
     target_type: "table"
     link_config:
