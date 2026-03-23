@@ -136,6 +136,22 @@ def substitute_template_variables(config: Any, variables: dict[str, str]) -> Any
         return config
 
 
+_TEMPLATE_DC_FIELDS = {"optional"}
+
+
+def _strip_template_dc_fields(config: dict[str, Any]) -> dict[str, Any]:
+    """Remove template-only fields from data_collection entries.
+
+    Fields like 'optional' are authoring hints used during template resolution
+    and must be stripped before the config is validated by Pydantic models.
+    """
+    for workflow in config.get("workflows", []):
+        for dc in workflow.get("data_collections", []):
+            for field in _TEMPLATE_DC_FIELDS:
+                dc.pop(field, None)
+    return config
+
+
 def _strip_ids(config: Any) -> Any:
     """Remove hardcoded 'id' fields from config so fresh IDs are generated.
 
@@ -313,8 +329,9 @@ def resolve_template(
         template_dir,
     )
 
-    # 7. Strip hardcoded IDs (fresh project gets new ones)
+    # 7. Strip hardcoded IDs and template-only DC fields
     resolved_config = _strip_ids(resolved_config)
+    resolved_config = _strip_template_dc_fields(resolved_config)
 
     # 8. Set project name
     if project_name:
