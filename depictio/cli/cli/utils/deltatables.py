@@ -155,7 +155,10 @@ def read_single_file_lazy(file_info: File, file_format: str, polars_kwargs: dict
 
     try:
         if file_format in ["csv", "tsv", "txt"]:
-            lf = pl.scan_csv(file_path, **polars_kwargs)
+            effective_kwargs = dict(polars_kwargs)
+            if file_format == "tsv" and "separator" not in effective_kwargs:
+                effective_kwargs["separator"] = "\t"
+            lf = pl.scan_csv(file_path, **effective_kwargs)
         elif file_format == "parquet":
             lf = pl.scan_parquet(file_path, **polars_kwargs)
         elif file_format == "feather":
