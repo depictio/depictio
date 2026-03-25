@@ -713,8 +713,13 @@ def _process_single_figure(
 
         load_key = figure_to_load_key.get(figure_index)
         if not load_key or load_key not in dc_cache:
-            logger.warning(f"[{task_id}] No cached data for figure {component_id}")
-            return _create_error_figure("Data not available", current_theme), {}
+            from depictio.dash.modules.shared.placeholders import (
+                create_data_unavailable_figure,
+            )
+
+            dc_tag = trigger_data.get("data_collection_tag", "unknown")
+            logger.warning(f"[{task_id}] No cached data for figure {component_id} (dc: {dc_tag})")
+            return create_data_unavailable_figure(dc_tag, theme=current_theme), {}
 
         df = dc_cache[load_key]
 
