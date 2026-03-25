@@ -58,12 +58,23 @@ STATIC_IDS = {
             "alpha_rarefaction": "646b0f3c1e4a2d7f8e5b8ca7",
             "taxonomy_composition": "646b0f3c1e4a2d7f8e5b8ca8",
             "taxonomy_rel_abundance": "646b0f3c1e4a2d7f8e5b8ca9",
+            "taxonomy_heatmap": "646b0f3c1e4a2d7f8e5b8caf",
             "ancombc_results": "646b0f3c1e4a2d7f8e5b8caa",
         },
         "dashboards": {
-            "ampliseq_multiqc": "646b0f3c1e4a2d7f8e5b8ca2",  # Main tab
-            "ampliseq_community": "646b0f3c1e4a2d7f8e5b8cb3",  # Community Analysis tab
-            "ampliseq_differential": "646b0f3c1e4a2d7f8e5b8cb4",  # Differential Abundance tab
+            "ampliseq_multiqc": "646b0f3c1e4a2d7f8e5b8cb7",
+            "ampliseq_community": "646b0f3c1e4a2d7f8e5b8cb3",
+            "ampliseq_differential": "646b0f3c1e4a2d7f8e5b8cb4",
+        },
+    },
+    "ampliseq_base": {
+        # Separate project entry that shares DCs with the main ampliseq project
+        # but presents only the base (no-metadata) dashboard variant.
+        "project": "646b0f3c1e4a2d7f8e5b8cb6",
+        "dashboards": {
+            "ampliseq_base_multiqc": "646b0f3c1e4a2d7f8e5b8cb8",
+            "ampliseq_base_community": "646b0f3c1e4a2d7f8e5b8cb5",
+            "ampliseq_base_differential": "646b0f3c1e4a2d7f8e5b8cc1",
         },
     },
 }

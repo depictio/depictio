@@ -25,7 +25,13 @@ template:
       description: "Path to ampliseq samplesheet CSV (always produced by the pipeline)"
       required: true
     - name: "METADATA_FILE"
-      description: "Path to sample metadata TSV (--metadata in ampliseq run). Optional."
+      description: "Path to sample metadata TSV (--metadata in ampliseq run). Optional. All non-ID columns become annotations."
+      required: false
+    - name: "GROUP_COL"
+      description: "Metadata column for grouping/facetting in dashboards. Auto-detected as first annotation column if not provided."
+      required: false
+    - name: "ANNOTATION_COLS"
+      description: "Auto-populated: comma-separated list of all annotation columns discovered from metadata file."
       required: false
   dashboards:
     - "dashboards/base.yaml"
@@ -39,6 +45,7 @@ template:
     vars:
       SAMPLESHEET_FILE: "{DATA_ROOT}/input/samplesheet.csv"
       METADATA_FILE: "{DATA_ROOT}/input/Metadata_full.tsv"
+      GROUP_COL: "habitat"
 
 # ============================================================================
 # PROJECT CONFIGURATION
@@ -142,7 +149,6 @@ workflows:
             format: "TSV"
             columns_description:
               "sample": "Sample identifier"
-              "habitat": "Habitat type"
               "faith_pd": "Faith's Phylogenetic Diversity (single value per sample)"
 
       - data_collection_tag: "alpha_rarefaction"
@@ -173,7 +179,6 @@ workflows:
               "sample": "Sample identifier"
               "taxonomy": "Taxonomic classification (Kingdom;Phylum)"
               "count": "Raw sequence count for this taxonomy"
-              "habitat": "Habitat type of the sample"
 
       - data_collection_tag: "taxonomy_rel_abundance"
         description: "Taxonomic relative abundance at Phylum level (from raw abundance table)"
@@ -188,9 +193,21 @@ workflows:
               "sample": "Sample identifier"
               "taxonomy": "Taxonomic classification (Kingdom;Phylum)"
               "rel_abundance": "Relative abundance (0-1)"
-              "habitat": "Habitat type"
               "Kingdom": "Kingdom level"
               "Phylum": "Phylum level"
+
+      - data_collection_tag: "taxonomy_heatmap"
+        description: "Taxonomic relative abundance matrix in wide format (Phylum × sample) for heatmap visualisation"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/ampliseq/taxonomy_heatmap.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "Phylum": "Phylum-level taxonomic classification (row identifier)"
+              "Kingdom": "Kingdom-level classification (row annotation)"
 
       - data_collection_tag: "ancombc_results"
         description: "ANCOM-BC differential abundance at Phylum level (from 5 raw CSV slices)"
@@ -199,11 +216,22 @@ workflows:
           source: "transformed"
           transform:
             recipe: "nf-core/ampliseq/ancombc.py"
+            source_overrides:
+              lfc:
+                path: "qiime2/ancombc/differentials/Category-{GROUP_COL}-level-2/lfc_slice.csv"
+              p_val:
+                path: "qiime2/ancombc/differentials/Category-{GROUP_COL}-level-2/p_val_slice.csv"
+              q_val:
+                path: "qiime2/ancombc/differentials/Category-{GROUP_COL}-level-2/q_val_slice.csv"
+              w:
+                path: "qiime2/ancombc/differentials/Category-{GROUP_COL}-level-2/w_slice.csv"
+              se:
+                path: "qiime2/ancombc/differentials/Category-{GROUP_COL}-level-2/se_slice.csv"
           dc_specific_properties:
             format: "TSV"
             columns_description:
               "id": "Taxonomy identifier"
-              "contrast": "Statistical contrast (habitat comparison)"
+              "contrast": "Statistical contrast (GROUP_COL-based comparison)"
               "lfc": "Log-fold change"
               "q_val": "FDR-adjusted p-value"
               "w": "ANCOM-BC test statistic"

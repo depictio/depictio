@@ -16,43 +16,23 @@ main_dashboard:
     -   component_type: interactive
         workflow_tag: ampliseq
         data_collection_tag: metadata
-        interactive_component_type: DateRangePicker
-        column_name: sampling_date
-        # --- optional ---
-        column_type: datetime
-        display:
-            title_size: md
-            custom_color: '#FF6B6B'
-            icon_name: mdi:calendar-range
-        # --- generated on export ---
-        tag: interactive-multiqc-sampling-date-b9d091
-        index: multiqc-sampling-date
-        layout:
-            x: 0
-            y: 0
-            w: 1
-            h: 3
-        title: Sampling Period
-    -   component_type: interactive
-        workflow_tag: ampliseq
-        data_collection_tag: metadata
         interactive_component_type: MultiSelect
-        column_name: habitat
+        column_name: "{GROUP_COL}"
         # --- optional ---
         column_type: object
         display:
             title_size: md
             custom_color: '#984EA3'
-            icon_name: mdi:earth
+            icon_name: mdi:tag-multiple
         # --- generated on export ---
-        tag: interactive-multiqc-habitat-filter-d8ca83
-        index: multiqc-habitat-filter
+        tag: interactive-multiqc-group-filter-d8ca83
+        index: multiqc-group-filter
         layout:
             x: 0
-            y: 3
+            y: 0
             w: 1
             h: 2
-        title: Habitat Type
+        title: "{GROUP_COL}"
     -   component_type: interactive
         workflow_tag: ampliseq
         data_collection_tag: metadata
@@ -237,7 +217,7 @@ tabs:
         workflow_tag: ampliseq
         data_collection_tag: metadata
         aggregation: nunique
-        column_name: habitat
+        column_name: "{GROUP_COL}"
         # --- optional ---
         column_type: object
         display:
@@ -253,7 +233,7 @@ tabs:
             y: 0
             w: 2
             h: 2
-        title: Habitat Types
+        title: "{GROUP_COL} Types"
     -   component_type: figure
         workflow_tag: ampliseq
         data_collection_tag: alpha_rarefaction
@@ -290,22 +270,20 @@ tabs:
         visu_type: bar
         # --- optional ---
         figure_params:
-            x: habitat
+            x: "{GROUP_COL}"
             y: faith_pd
-            color: habitat
-            title: "Alpha Diversity by Habitat (Faith PD)"
+            color: "{GROUP_COL}"
+            title: "Alpha Diversity by {GROUP_COL} (Faith PD)"
             labels:
-                habitat: Habitat
+                "{GROUP_COL}": "{GROUP_COL}"
                 faith_pd: "Faith's Phylogenetic Diversity"
         mode: code
-        code_content: "df_modified = df.to_pandas().groupby('habitat')['faith_pd'].agg(['mean',\
-            \ 'std']).reset_index()\nfig = px.bar(\n    df_modified, x='habitat',\
-            \ y='mean', color='habitat',\n    error_y='std',\n    color_discrete_map={'Riverwater':\
-            \ '#377EB8', 'Groundwater': '#4DAF4A', 'Sediment': '#E41A1C', 'Soil':\
-            \ '#FF7F00'},\n    title='Alpha Diversity by Habitat (Faith PD)',\n   \
-            \ labels={'habitat': 'Habitat', 'mean': \"Faith's Phylogenetic Diversity\"}\n\
-            )\nfig.update_layout(xaxis={'categoryorder': 'category ascending'}, yaxis={'rangemode':\
-            \ 'tozero'}, showlegend=False)"
+        code_content: "df_modified = df.to_pandas().groupby('{GROUP_COL}')['faith_pd'].agg(['mean',\
+            \ 'std']).reset_index()\nfig = px.bar(\n    df_modified, x='{GROUP_COL}',\
+            \ y='mean', color='{GROUP_COL}',\n    error_y='std',\n    title='Alpha\
+            \ Diversity by {GROUP_COL} (Faith PD)',\n    labels={'{GROUP_COL}': '{GROUP_COL}',\
+            \ 'mean': \"Faith's Phylogenetic Diversity\"}\n)\nfig.update_layout(xaxis={'categoryorder':\
+            \ 'category ascending'}, yaxis={'rangemode': 'tozero'}, showlegend=False)"
         selection_enabled: false
         # --- generated on export ---
         tag: figure-bar_sample_faith_pd-5b8018
@@ -349,17 +327,17 @@ tabs:
             x: Phylum
             y: mean_rel_abundance
             color: Phylum
-            facet_row: habitat
-            title: Mean Relative Abundance by Habitat
+            facet_row: "{GROUP_COL}"
+            title: "Mean Relative Abundance by {GROUP_COL}"
             labels:
                 Phylum: Phylum
                 mean_rel_abundance: Mean Relative Abundance
-                habitat: Habitat
+                "{GROUP_COL}": "{GROUP_COL}"
         mode: code
-        code_content: "df_mean = df.group_by(['habitat', 'Phylum']).agg(pl.col('rel_abundance').mean().alias('mean_rel_abundance')).sort('Phylum')\n\
+        code_content: "df_mean = df.group_by(['{GROUP_COL}', 'Phylum']).agg(pl.col('rel_abundance').mean().alias('mean_rel_abundance')).sort('Phylum')\n\
             fig = px.bar(\n    df_mean.to_pandas(),\n    x='Phylum', y='mean_rel_abundance',\
-            \ color='Phylum',\n    facet_row='habitat',\n    title='Mean Relative\
-            \ Abundance by Habitat',\n    labels={'Phylum': 'Phylum', 'mean_rel_abundance':\
+            \ color='Phylum',\n    facet_row='{GROUP_COL}',\n    title='Mean Relative\
+            \ Abundance by {GROUP_COL}',\n    labels={'Phylum': 'Phylum', 'mean_rel_abundance':\
             \ 'Mean Relative Abundance'}\n)\nfig.update_layout(xaxis={'categoryorder':\
             \ 'category ascending'})\nfig.update_xaxes(tickangle=-45, tickfont={'size':\
             \ 9})\nfig.update_layout(showlegend=False)"
@@ -380,8 +358,8 @@ tabs:
             x: sample
             y: rel_abundance
             color: Phylum
-            facet_col: habitat
-            title: Taxonomic Composition by Sample (Relative Abundance)
+            facet_col: "{GROUP_COL}"
+            title: "Taxonomic Composition by Sample (Relative Abundance)"
             labels:
                 sample: Sample ID
                 rel_abundance: Relative Abundance
@@ -389,7 +367,7 @@ tabs:
             barmode: stack
         mode: code
         code_content: "df_sorted = df.sort('sample')\nfig = px.bar(\n    df_sorted.to_pandas(),\n\
-            \    x='sample', y='rel_abundance', color='Phylum',\n    facet_col='habitat',\n\
+            \    x='sample', y='rel_abundance', color='Phylum',\n    facet_col='{GROUP_COL}',\n\
             \    title='Taxonomic Composition by Sample (Relative Abundance)',\n \
             \   labels={'sample': 'Sample ID', 'rel_abundance': 'Relative Abundance',\
             \ 'Phylum': 'Phylum'},\n    barmode='stack',\n    category_orders={'sample':\
@@ -409,7 +387,7 @@ tabs:
         data_collection_tag: metadata
         # --- optional ---
         title: Sample Metadata
-        description: Sample identifiers, habitat types, geographic coordinates, and collection dates
+        description: Sample identifiers and metadata annotations
         title_size: h2
         title_align: left
         row_selection_enabled: false
@@ -417,7 +395,7 @@ tabs:
         tag: table-table-df4371
         layout:
             x: 0
-            y: 32
+            y: 39
             w: 8
             h: 6
     -   component_type: table
@@ -425,7 +403,7 @@ tabs:
         data_collection_tag: taxonomy_rel_abundance
         # --- optional ---
         title: Taxonomy Relative Abundance
-        description: Phylum-level relative abundance per sample with habitat annotations
+        description: Phylum-level relative abundance per sample with metadata annotations
         title_size: h2
         title_align: left
         row_selection_enabled: false
@@ -433,28 +411,55 @@ tabs:
         tag: table-table-02f050
         layout:
             x: 0
-            y: 38
+            y: 45
             w: 8
             h: 6
+    -   component_type: figure
+        workflow_tag: ampliseq
+        data_collection_tag: taxonomy_heatmap
+        visu_type: heatmap
+        dict_kwargs:
+            index_column: Phylum
+            row_annotations: '{"Kingdom": {"type": "categorical", "colors": {"Bacteria":
+              "#F8766D", "Archaea": "#00BFC4"}}}'
+            cluster_rows: true
+            cluster_cols: true
+            normalize: row
+            colorscale: RdBu_r
+            name: z-score
+            width: 1000
+            height: 700
+        mode: ui
+        selection_enabled: false
+        tag: figure-heatmap-taxonomy-composition
+        title: Taxonomic Composition Heatmap
+        description: Row-normalized (z-score) relative abundance of phyla across samples,
+            clustered by similarity with metadata and Kingdom annotations (annotations
+            injected dynamically from metadata when available)
+        layout:
+            x: 0
+            y: 32
+            w: 8
+            h: 7
     -   component_type: interactive
         workflow_tag: ampliseq
         data_collection_tag: metadata
         interactive_component_type: MultiSelect
-        column_name: habitat
+        column_name: "{GROUP_COL}"
         # --- optional ---
         column_type: object
         display:
             title_size: md
             custom_color: '#984EA3'
-            icon_name: mdi:earth
+            icon_name: mdi:tag-multiple
         # --- generated on export ---
-        tag: interactive-habitat-d8ca83
+        tag: interactive-group-col-d8ca83
         layout:
             x: 0
             y: 3
             w: 1
             h: 2
-        title: Habitat Type
+        title: "{GROUP_COL}"
     -   component_type: interactive
         workflow_tag: ampliseq
         data_collection_tag: metadata
@@ -512,25 +517,6 @@ tabs:
             w: 1
             h: 3
         title: Phylum
-    -   component_type: interactive
-        workflow_tag: ampliseq
-        data_collection_tag: metadata
-        interactive_component_type: DateRangePicker
-        column_name: sampling_date
-        # --- optional ---
-        column_type: datetime
-        display:
-            title_size: md
-            custom_color: '#45B8AC'
-            icon_name: mdi:calendar-range
-        # --- generated on export ---
-        tag: interactive-sampling_date-b9d091
-        layout:
-            x: 0
-            y: 0
-            w: 1
-            h: 3
-        title: Sampling Period
     -   component_type: interactive
         workflow_tag: ampliseq
         data_collection_tag: alpha_rarefaction

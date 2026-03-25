@@ -230,12 +230,45 @@ def _apply_conditionals(
     return config, active_dashboards
 
 
+def _auto_detect_metadata_columns(metadata_path: Path, variables: dict[str, str]) -> None:
+    """Read metadata file headers and auto-populate GROUP_COL and ANNOTATION_COLS.
+
+    The first column is assumed to be the sample ID.  All subsequent columns are
+    treated as annotation columns.  If GROUP_COL was not explicitly provided by
+    the user, it defaults to the first annotation column.
+
+    Args:
+        metadata_path: Absolute path to the metadata file (TSV or CSV).
+        variables: Variables dict to update in place.
+    """
+    try:
+        with open(metadata_path) as f:
+            header_line = f.readline().strip()
+        if not header_line:
+            return
+        sep = "\t" if "\t" in header_line else ","
+        cols = [c.strip() for c in header_line.split(sep)]
+        if len(cols) < 2:
+            return
+        # First column is always the sample ID; the rest are annotations
+        annotation_cols = [c for c in cols[1:] if c]
+        if annotation_cols:
+            variables.setdefault("GROUP_COL", annotation_cols[0])
+            variables["ANNOTATION_COLS"] = ",".join(annotation_cols)
+            logger.info(
+                f"Metadata auto-detect: {len(annotation_cols)} annotation columns "
+                f"({', '.join(annotation_cols)}), GROUP_COL={variables['GROUP_COL']}"
+            )
+    except OSError as exc:
+        logger.warning(f"Could not read metadata file for column detection: {exc}")
+
+
 def resolve_template(
     template_id: str,
     data_root: str,
     project_name: str | None = None,
     extra_vars: dict[str, str] | None = None,
-) -> tuple[dict[str, Any], TemplateMetadata, TemplateOrigin, list[Path]]:
+) -> tuple[dict[str, Any], TemplateMetadata, TemplateOrigin, list[Path], dict[str, str]]:
     """Load template YAML, substitute variables, apply conditionals, return resolved config.
 
     This is the main entry point for the template system. It:
@@ -257,7 +290,8 @@ def resolve_template(
         extra_vars: Additional variables from --var KEY=VALUE flags (e.g., METADATA_FILE).
 
     Returns:
-        Tuple of (resolved_config_dict, template_metadata, template_origin, dashboard_paths).
+        Tuple of (resolved_config_dict, template_metadata, template_origin,
+        dashboard_paths, resolved_variables).
 
     Raises:
         FileNotFoundError: If template not found.
@@ -284,6 +318,14 @@ def resolve_template(
     variables: dict[str, str] = {"DATA_ROOT": data_root_abs}
     if extra_vars:
         variables.update(extra_vars)
+
+    # 3b. Auto-detect metadata annotation columns when METADATA_FILE is provided
+    if "METADATA_FILE" in variables:
+        metadata_path = Path(variables["METADATA_FILE"])
+        if not metadata_path.is_absolute():
+            metadata_path = Path(data_root_abs) / metadata_path
+        if metadata_path.is_file():
+            _auto_detect_metadata_columns(metadata_path, variables)
 
     provided_vars: set[str] = set(variables.keys())
 
@@ -346,7 +388,7 @@ def resolve_template(
             logger.warning(f"Dashboard YAML not found: {abs_path}")
 
     logger.info(f"Template resolved successfully. Project name: {resolved_config['name']}")
-    return resolved_config, template_metadata, template_origin, dashboard_paths
+    return resolved_config, template_metadata, template_origin, dashboard_paths, variables
 
 
 def import_dashboards_from_template(
@@ -355,6 +397,7 @@ def import_dashboards_from_template(
     headers: dict[str, str],
     project_id: str | None = None,
     overwrite: bool = True,
+    variables: dict[str, str] | None = None,
 ) -> list[dict[str, Any]]:
     """Import dashboard YAML files from a template into the server.
 
@@ -368,6 +411,8 @@ def import_dashboards_from_template(
         project_id: Project ObjectId string. When provided, overrides
             ``project_tag`` inside the YAML.
         overwrite: If True, update existing dashboards with the same title.
+        variables: Template variables to substitute in dashboard YAML
+            (e.g., ``{GROUP_COL}`` placeholders).
 
     Returns:
         List of result dicts, one per dashboard file.  Each contains
@@ -380,6 +425,12 @@ def import_dashboards_from_template(
         entry: dict[str, Any] = {"path": str(path), "success": False}
         try:
             yaml_content = path.read_text(encoding="utf-8")
+
+            # Substitute template variables in dashboard YAML
+            if variables:
+                parsed = yaml.safe_load(yaml_content)
+                parsed = substitute_template_variables(parsed, variables)
+                yaml_content = yaml.dump(parsed, default_flow_style=False, allow_unicode=True)
 
             params: dict[str, str | bool] = {}
             if project_id:

@@ -16,44 +16,43 @@ EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "taxonomy": pl.Utf8,
     "count": pl.Float64,
-    "habitat": pl.Utf8,
 }
+# Metadata columns (e.g. habitat) are user-defined and passed through dynamically.
+OPTIONAL_SCHEMA: dict[str, type[pl.DataType]] = {}
 
 
 def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
     """Melt wide barplot CSV to long format with taxonomy and counts.
 
     The barplot CSV embeds metadata columns (index, habitat, etc.) alongside
-    taxonomy count columns. We extract habitat directly from the CSV — no
-    external metadata join needed.
+    taxonomy count columns.  Taxonomy columns are detected by QIIME2 convention:
+    their values contain semicolons (e.g. ``d__Bacteria;p__Firmicutes``).
+    Everything else (except ``index``) is treated as metadata and passed through.
     """
     df = sources["barplot_csv"]
 
-    # The barplot CSV has: index (sample), taxonomy columns, then metadata columns at end.
-    # Metadata columns are known names that should be excluded from melting.
-    metadata_col_names = {
-        "index",
-        "name",
-        "condition",
-        "condition_binary",
-        "cycle",
-        "bio_rep",
-        "habitat",
-        "Riv_vs_Gro",
-        "Sed_vs_Soil",
-        "sampling_date",
-    }
-
-    # Taxonomy columns are everything that's not index or a known metadata column
-    taxonomy_cols = [c for c in df.columns if c not in metadata_col_names]
+    # Detect taxonomy columns by QIIME2 convention: values contain ";"
+    # (lineage format like d__Bacteria;p__Firmicutes).
+    taxonomy_cols: list[str] = []
+    metadata_cols: list[str] = []
+    for col in df.columns:
+        if col == "index":
+            continue
+        first_val = (
+            str(df[col].drop_nulls().head(1).to_list()[0]) if df[col].drop_nulls().len() > 0 else ""
+        )
+        if ";" in first_val:
+            taxonomy_cols.append(col)
+        else:
+            metadata_cols.append(col)
 
     if not taxonomy_cols:
-        raise ValueError("No taxonomy columns found in barplot CSV")
+        raise ValueError(
+            "No taxonomy columns found in barplot CSV (expected QIIME2 lineage format with ';')"
+        )
 
-    # Preserve habitat before melting (it's embedded in the CSV)
-    keep_cols = ["index"]
-    if "habitat" in df.columns:
-        keep_cols.append("habitat")
+    # Preserve metadata columns alongside index before melting
+    keep_cols = ["index"] + metadata_cols
 
     # Melt to long format
     df = df.unpivot(on=taxonomy_cols, index=keep_cols, variable_name="taxonomy", value_name="count")
@@ -63,8 +62,6 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
     # Filter out zero/null counts
     df = df.filter(pl.col("count").is_not_null() & (pl.col("count") > 0))
 
-    # If habitat wasn't in the CSV, add null column
-    if "habitat" not in df.columns:
-        df = df.with_columns(pl.lit(None).cast(pl.Utf8).alias("habitat"))
-
-    return df.select("sample", "taxonomy", "count", "habitat")
+    # Core columns first, then any metadata columns appended
+    core = ["sample", "taxonomy", "count"]
+    return df.select(core + metadata_cols)

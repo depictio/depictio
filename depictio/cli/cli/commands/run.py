@@ -215,13 +215,17 @@ def register_run_command(app: typer.Typer):
                     extra_vars[k.strip()] = val.strip()
 
                 # Resolve template
-                resolved_config, template_metadata, template_origin, default_dashboard_paths = (
-                    resolve_template(
-                        template_id=template,  # type: ignore[arg-type]
-                        data_root=data_root,  # type: ignore[arg-type]
-                        project_name=project_name,
-                        extra_vars=extra_vars or None,
-                    )
+                (
+                    resolved_config,
+                    template_metadata,
+                    template_origin,
+                    default_dashboard_paths,
+                    template_variables,
+                ) = resolve_template(
+                    template_id=template,  # type: ignore[arg-type]
+                    data_root=data_root,  # type: ignore[arg-type]
+                    project_name=project_name,
+                    extra_vars=extra_vars or None,
                 )
 
                 rich_print_checked_statement(
@@ -530,6 +534,7 @@ def register_run_command(app: typer.Typer):
                         headers=headers,
                         project_id=project_id,
                         overwrite=overwrite,
+                        variables=template_variables,
                     )
 
                     imported, failed = [], []
