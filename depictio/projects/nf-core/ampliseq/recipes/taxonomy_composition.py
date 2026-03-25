@@ -26,22 +26,19 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
 
     The barplot CSV embeds metadata columns (index, habitat, etc.) alongside
     taxonomy count columns.  Taxonomy columns are detected by QIIME2 convention:
-    their values contain semicolons (e.g. ``d__Bacteria;p__Firmicutes``).
+    their column names contain semicolons (e.g. ``Bacteria;Proteobacteria``).
     Everything else (except ``index``) is treated as metadata and passed through.
     """
     df = sources["barplot_csv"]
 
-    # Detect taxonomy columns by QIIME2 convention: values contain ";"
-    # (lineage format like d__Bacteria;p__Firmicutes).
+    # Detect taxonomy columns by QIIME2 convention: column NAMES contain ";"
+    # (lineage format like Bacteria;Proteobacteria). Cell values are numeric counts.
     taxonomy_cols: list[str] = []
     metadata_cols: list[str] = []
     for col in df.columns:
         if col == "index":
             continue
-        first_val = (
-            str(df[col].drop_nulls().head(1).to_list()[0]) if df[col].drop_nulls().len() > 0 else ""
-        )
-        if ";" in first_val:
+        if ";" in col:
             taxonomy_cols.append(col)
         else:
             metadata_cols.append(col)
