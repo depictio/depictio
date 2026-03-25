@@ -37,7 +37,7 @@ template:
     - "dashboards/base.yaml"
   conditional:
     - if_var_absent: "METADATA_FILE"
-      remove_dc_tags: ["metadata", "ancombc_results"]
+      remove_dc_tags: ["metadata", "alpha_diversity", "alpha_rarefaction", "ancombc_results"]
       dashboards: ["dashboards/base.yaml"]
     - if_var_present: "METADATA_FILE"
       dashboards: ["dashboards/base.yaml", "dashboards/full_analysis.yaml"]
