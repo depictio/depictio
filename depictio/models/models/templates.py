@@ -15,6 +15,7 @@ Key concepts:
 from datetime import datetime
 from typing import Any
 
+from bson import ObjectId
 from pydantic import BaseModel, Field, field_validator
 
 
@@ -170,6 +171,22 @@ class TemplateOrigin(BaseModel):
         default_factory=dict,
         description="Frozen copy of the resolved template config (for reproducibility)",
     )
+
+    @field_validator("config_snapshot", mode="before")
+    @classmethod
+    def sanitize_objectids(cls, v: Any) -> Any:
+        """Recursively convert bson ObjectId values to strings for JSON serialization."""
+
+        def _convert(obj: Any) -> Any:
+            if isinstance(obj, ObjectId):
+                return str(obj)
+            if isinstance(obj, dict):
+                return {k: _convert(val) for k, val in obj.items()}
+            if isinstance(obj, list):
+                return [_convert(item) for item in obj]
+            return obj
+
+        return _convert(v)
 
     @field_validator("template_id")
     @classmethod

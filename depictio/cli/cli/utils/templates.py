@@ -517,10 +517,13 @@ def resolve_template(
         template_dir,
     )
 
-    # 6b. Scan for missing source files and auto-remove DCs
-    resolved_config, removal_report = _remove_dcs_with_missing_files(resolved_config, data_root_abs)
-    if removal_report:
-        _log_removal_report(removal_report)
+    # 6b. File scanning for missing source files (disabled for now —
+    # conditionals handle base vs extended split; file scanning is too
+    # aggressive with pre-computed reference data).
+    # TODO: Re-enable when running against real pipeline output directories.
+    # resolved_config, removal_report = _remove_dcs_with_missing_files(resolved_config, data_root_abs)
+    # if removal_report:
+    #     _log_removal_report(removal_report)
 
     # 7. Strip hardcoded IDs (fresh project gets new ones)
     resolved_config = _strip_ids(resolved_config)

@@ -88,6 +88,24 @@ main_dashboard:
       y: 18
       w: 4
       h: 5
+  - component_type: interactive
+    workflow_tag: ampliseq
+    data_collection_tag: samplesheet
+    interactive_component_type: MultiSelect
+    column_name: sampleID
+    column_type: object
+    display:
+      title_size: md
+      custom_color: '#45B8AC'
+      icon_name: mdi:flask
+    tag: interactive-multiqc-sample-filter-base
+    index: multiqc-sample-filter
+    layout:
+      x: 0
+      y: 0
+      w: 1
+      h: 3
+    title: Sample ID
 tabs:
 - title: Community Analysis
   subtitle: Taxonomic Composition
@@ -103,6 +121,25 @@ tabs:
     workflow_tag: ampliseq
     data_collection_tag: taxonomy_rel_abundance
     aggregation: nunique
+    column_name: sample
+    column_type: object
+    display:
+      icon_name: mdi:flask
+      icon_color: '#45B8AC'
+      title_color: '#45B8AC'
+      title_font_size: xl
+      value_font_size: xl
+    tag: card-sample_nunique-base-a1b2c3
+    layout:
+      x: 0
+      y: 0
+      w: 1
+      h: 4
+    title: Total Samples
+  - component_type: card
+    workflow_tag: ampliseq
+    data_collection_tag: taxonomy_rel_abundance
+    aggregation: nunique
     column_name: taxonomy
     column_type: object
     display:
@@ -113,11 +150,49 @@ tabs:
       value_font_size: xl
     tag: card-taxonomy_nunique-d2ba1c
     layout:
+      x: 1
+      y: 0
+      w: 1
+      h: 4
+    title: Total Taxa
+  - component_type: card
+    workflow_tag: ampliseq
+    data_collection_tag: taxonomy_rel_abundance
+    aggregation: nunique
+    column_name: Kingdom
+    column_type: object
+    display:
+      icon_name: mdi:domain
+      icon_color: '#F8766D'
+      title_color: '#F8766D'
+      title_font_size: xl
+      value_font_size: xl
+    tag: card-kingdom_nunique-base-d4e5f6
+    layout:
       x: 2
       y: 0
-      w: 2
-      h: 2
-    title: Total Taxa
+      w: 1
+      h: 4
+    title: Kingdoms
+  - component_type: card
+    workflow_tag: ampliseq
+    data_collection_tag: taxonomy_rel_abundance
+    aggregation: nunique
+    column_name: Phylum
+    column_type: object
+    display:
+      icon_name: mdi:bacteria-outline
+      icon_color: '#377EB8'
+      title_color: '#377EB8'
+      title_font_size: xl
+      value_font_size: xl
+    tag: card-phylum_nunique-base-g7h8i9
+    layout:
+      x: 3
+      y: 0
+      w: 1
+      h: 4
+    title: Unique Phyla
   - component_type: figure
     workflow_tag: ampliseq
     data_collection_tag: taxonomy_rel_abundance
@@ -138,9 +213,10 @@ tabs:
     tag: figure-sunburst-e651a9
     layout:
       x: 4
-      y: 2
+      y: 0
       w: 4
-      h: 5
+      h: 4
+    title: Taxonomic Hierarchy
   - component_type: figure
     workflow_tag: ampliseq
     data_collection_tag: taxonomy_rel_abundance
@@ -164,7 +240,7 @@ tabs:
     tag: figure-bar_phylum_rel_abundance-de4c39
     layout:
       x: 0
-      y: 7
+      y: 4
       w: 8
       h: 5
   - component_type: figure
@@ -192,7 +268,7 @@ tabs:
     tag: figure-bar_sample_rel_abundance-de4c39
     layout:
       x: 0
-      y: 12
+      y: 9
       w: 8
       h: 8
   - component_type: table
@@ -206,7 +282,7 @@ tabs:
     tag: table-table-02f050
     layout:
       x: 0
-      y: 27
+      y: 24
       w: 8
       h: 6
   - component_type: figure
@@ -232,9 +308,27 @@ tabs:
       clustered by similarity with Kingdom annotations
     layout:
       x: 0
-      y: 20
+      y: 17
       w: 8
       h: 7
+  - component_type: interactive
+    workflow_tag: ampliseq
+    data_collection_tag: taxonomy_rel_abundance
+    interactive_component_type: MultiSelect
+    column_name: sample
+    column_type: object
+    display:
+      title_size: md
+      custom_color: '#45B8AC'
+      icon_name: mdi:flask
+    tag: interactive-community-sample-filter-base
+    index: community-sample-filter
+    layout:
+      x: 0
+      y: 0
+      w: 1
+      h: 3
+    title: Sample ID
   - component_type: interactive
     workflow_tag: ampliseq
     data_collection_tag: taxonomy_rel_abundance
@@ -248,7 +342,7 @@ tabs:
     tag: interactive-kingdom-b112bb
     layout:
       x: 0
-      y: 2
+      y: 3
       w: 1
       h: 2
     title: Kingdom
@@ -265,7 +359,7 @@ tabs:
     tag: interactive-phylum-f89384
     layout:
       x: 0
-      y: 4
+      y: 5
       w: 1
       h: 3
     title: Phylum
@@ -283,7 +377,7 @@ tabs:
     index: range-rel-abundance-slider
     layout:
       x: 0
-      y: 7
+      y: 8
       w: 1
       h: 3
     title: Relative Abundance Range

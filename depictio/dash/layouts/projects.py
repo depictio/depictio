@@ -1355,11 +1355,14 @@ def _create_project_badges(project: Project, current_user: UserBase) -> list[dmc
     template_origin = getattr(project, "template_origin", None)
     if template_origin is not None:
         badges.append(
-            dmc.Badge(
-                children=f"Template: {template_origin.template_id}",
-                color="indigo",
-                variant="dot",
-                style={"width": "auto", "justifyContent": "center"},
+            dmc.Tooltip(
+                label=f"Generated from template: {template_origin.template_id}",
+                children=dmc.Badge(
+                    template_origin.template_id,
+                    color="indigo",
+                    variant="light",
+                    leftSection=DashIconify(icon="mdi:layers-outline", width=14),
+                ),
             )
         )
 
