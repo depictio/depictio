@@ -45,6 +45,90 @@ from depictio.dash.layouts.layouts_toolbox import (
 from depictio.models.models.projects import ProjectResponse
 
 
+def _create_template_origin_section(project) -> html.Div:
+    """Create a template origin info section if the project was created from a template."""
+    template_origin = getattr(project, "template_origin", None)
+    if template_origin is None:
+        return html.Div()
+
+    template_id = template_origin.template_id
+    docs_base = "https://depictio.github.io/depictio-docs/usage/projects/templates"
+    docs_url = f"{docs_base}#{template_id.replace('/', '').replace('.', '')}"
+
+    to_dict = template_origin.model_dump() if hasattr(template_origin, "model_dump") else {}
+
+    # Template metadata rows
+    var_items = []
+    for key, label in [
+        ("data_root", "Data root"),
+        ("applied_at", "Applied at"),
+        ("template_version", "Template version"),
+    ]:
+        val = to_dict.get(key, "")
+        if val:
+            var_items.append(
+                dmc.Group(
+                    [
+                        dmc.Text(f"{label}:", size="sm", fw=500, c="dimmed"),
+                        dmc.Code(str(val), style={"fontSize": "12px"}),
+                    ],
+                    gap="xs",
+                )
+            )
+
+    # Extract populated template variables from config_snapshot.template_origin
+    # (the snapshot contains the resolved config which has the variables baked in)
+    snapshot = to_dict.get("config_snapshot", {})
+    # Variables are not stored separately, but we can show key paths
+    # Look for common variable patterns in the config
+    for wf in snapshot.get("workflows", []):
+        for dc in wf.get("data_collections", []):
+            scan = dc.get("config", {}).get("scan", {}).get("scan_parameters", {})
+            fname = scan.get("filename")
+            if fname and not fname.startswith("{"):
+                tag = dc.get("data_collection_tag", "")
+                if tag in ("samplesheet", "metadata"):
+                    var_items.append(
+                        dmc.Group(
+                            [
+                                dmc.Text(f"{tag}:", size="sm", fw=500, c="dimmed"),
+                                dmc.Code(str(fname), style={"fontSize": "12px"}),
+                            ],
+                            gap="xs",
+                        )
+                    )
+
+    return dmc.Paper(
+        children=[
+            dmc.Group(
+                [
+                    DashIconify(icon="mdi:layers-outline", width=20, color=colors.get("indigo", "indigo")),
+                    dmc.Text("Template Origin", fw="bold"),
+                    dmc.Anchor(
+                        dmc.Badge(
+                            template_id,
+                            color="indigo",
+                            variant="light",
+                            size="sm",
+                            rightSection=DashIconify(icon="mdi:open-in-new", width=12),
+                            style={"cursor": "pointer"},
+                        ),
+                        href=docs_url,
+                        target="_blank",
+                        style={"textDecoration": "none"},
+                    ),
+                ],
+                gap="sm",
+            ),
+            dmc.Space(h=8),
+            dmc.Stack(var_items, gap=4),
+        ],
+        withBorder=True,
+        radius="md",
+        p="md",
+    )
+
+
 def calculate_total_storage_size(data_collections):
     """
     Calculate the total storage size across all data collections.
@@ -1686,6 +1770,8 @@ def create_data_collections_landing_ui():
                     ),
                     # Project type indicator
                     html.Div(id="project-type-indicator"),
+                    # Template origin info (populated by callback if project is from a template)
+                    html.Div(id="template-origin-info"),
                     dmc.Divider(),
                 ],
                 gap="lg",
@@ -2326,6 +2412,7 @@ def register_project_data_collections_callbacks(app):
             Output("workflows-manager-section", "children"),
             Output("data-collections-manager-section", "children"),
             Output("project-type-indicator", "children"),
+            Output("template-origin-info", "children"),
         ],
         [
             Input("url", "pathname"),
@@ -2359,12 +2446,12 @@ def register_project_data_collections_callbacks(app):
             try:
                 project_id = project_data_store.get("project_id")
                 if not project_id or not local_data or not local_data.get("access_token"):
-                    return dash.no_update, dash.no_update, dash.no_update, dash.no_update
+                    return dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update
 
                 # Fetch fresh project data from API
                 project_data = api_call_fetch_project_by_id(project_id, local_data["access_token"])
                 if not project_data:
-                    return dash.no_update, dash.no_update, dash.no_update, dash.no_update
+                    return dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update
 
                 project = ProjectResponse.model_validate(project_data)
 
@@ -2421,18 +2508,18 @@ def register_project_data_collections_callbacks(app):
 
             except Exception as e:
                 logger.error(f"Error refreshing project data: {e}")
-                return dash.no_update, dash.no_update, dash.no_update, dash.no_update
+                return dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update
 
         # Original logic for URL/local-store changes
         if not pathname or not pathname.startswith("/project/") or not pathname.endswith("/data"):
-            return dash.no_update, dash.no_update, dash.no_update, dash.no_update
+            return dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update
 
         # Extract project ID from URL
         try:
             project_id = pathname.split("/")[-2]
         except IndexError:
             logger.error(f"Could not extract project ID from pathname: {pathname}")
-            return {}, html.Div("Error: Invalid project URL"), html.Div(), html.Div()
+            return {}, html.Div("Error: Invalid project URL"), html.Div(), html.Div(), html.Div()
 
         # Get authentication token
         if not local_data or not local_data.get("access_token"):
@@ -2442,6 +2529,7 @@ def register_project_data_collections_callbacks(app):
                 html.Div("Authentication required"),
                 html.Div(),
                 html.Div(),
+                html.Div(),
             )
 
         try:
@@ -2449,7 +2537,7 @@ def register_project_data_collections_callbacks(app):
             project_data = api_call_fetch_project_by_id(project_id, local_data["access_token"])
             if not project_data:
                 logger.error(f"Failed to fetch project data for {project_id}")
-                return dash.no_update, dash.no_update, dash.no_update
+                return dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update
             project = ProjectResponse.model_validate(project_data)
 
             # Debug project information
@@ -2541,11 +2629,15 @@ def register_project_data_collections_callbacks(app):
             # Create project type indicator
             project_type_indicator = create_project_type_indicator(project.project_type)
 
+            # Create template origin section
+            template_section = _create_template_origin_section(project)
+
             return (
                 project_store_data,
                 workflows_section,
                 data_collections_section,
                 project_type_indicator,
+                template_section,
             )
 
         except Exception as e:
@@ -2560,7 +2652,7 @@ def register_project_data_collections_callbacks(app):
                     )
                 ]
             )
-            return {"project_id": project_id}, error_msg, html.Div(), html.Div()
+            return {"project_id": project_id}, error_msg, html.Div(), html.Div(), html.Div()
 
     @app.callback(
         [
