@@ -172,7 +172,7 @@ tabs:
         workflow_tag: ampliseq
         data_collection_tag: metadata
         aggregation: nunique
-        column_name: sample
+        column_name: ID
         # --- optional ---
         column_type: object
         display:
