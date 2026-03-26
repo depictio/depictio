@@ -51,11 +51,22 @@ def _create_template_origin_section(project) -> html.Div:
     if template_origin is None:
         return html.Div()
 
-    template_id = template_origin.template_id
+    # Handle both Pydantic model and raw dict
+    if isinstance(template_origin, dict):
+        template_id = template_origin.get("template_id", "")
+    else:
+        template_id = template_origin.template_id
+    if not template_id:
+        return html.Div()
     docs_base = "https://depictio.github.io/depictio-docs/usage/projects/templates"
     docs_url = f"{docs_base}#{template_id.replace('/', '').replace('.', '')}"
 
-    to_dict = template_origin.model_dump() if hasattr(template_origin, "model_dump") else {}
+    if hasattr(template_origin, "model_dump"):
+        to_dict = template_origin.model_dump()
+    elif isinstance(template_origin, dict):
+        to_dict = template_origin
+    else:
+        to_dict = {}
 
     # Template info rows
     info_items = []
