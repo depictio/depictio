@@ -266,7 +266,7 @@ links:
 
   # Link 2: Metadata -> Alpha Diversity
   - source_dc_tag: "metadata"
-    source_column: "sample"
+    source_column: "ID"
     target_dc_tag: "alpha_diversity"
     target_type: "table"
     link_config:
@@ -277,7 +277,7 @@ links:
 
   # Link 3: Metadata -> Alpha Rarefaction
   - source_dc_tag: "metadata"
-    source_column: "sample"
+    source_column: "ID"
     target_dc_tag: "alpha_rarefaction"
     target_type: "table"
     link_config:
@@ -288,7 +288,7 @@ links:
 
   # Link 4: Metadata -> Taxonomy Composition
   - source_dc_tag: "metadata"
-    source_column: "sample"
+    source_column: "ID"
     target_dc_tag: "taxonomy_composition"
     target_type: "table"
     link_config:
@@ -299,7 +299,7 @@ links:
 
   # Link 5: Metadata -> Taxonomy Rel Abundance
   - source_dc_tag: "metadata"
-    source_column: "sample"
+    source_column: "ID"
     target_dc_tag: "taxonomy_rel_abundance"
     target_type: "table"
     link_config:
