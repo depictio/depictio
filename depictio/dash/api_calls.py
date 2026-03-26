@@ -2510,15 +2510,17 @@ def api_call_create_multiqc_data_collection(
         temp_dir = tempfile.mkdtemp(prefix="depictio_multiqc_upload_")
 
         try:
-            # Save all uploaded files into separate subdirectories
+            # Save all uploaded files into separate subdirectories.
+            # The MultiQC processor discovers files via glob patterns like
+            # */multiqc_data/multiqc.parquet, so we must save as "multiqc.parquet".
             for i, (decoded, fname) in enumerate(zip(decoded_files, filenames_list)):
-                # Each file gets its own multiqc_data directory
                 subdir = os.path.join(temp_dir, f"report_{i}", "multiqc_data")
                 os.makedirs(subdir, exist_ok=True)
-                temp_file_path = os.path.join(subdir, fname)
+                # Always save as multiqc.parquet for discovery
+                temp_file_path = os.path.join(subdir, "multiqc.parquet")
                 with open(temp_file_path, "wb") as f:
                     f.write(decoded)
-                logger.debug(f"Saved uploaded MultiQC file to: {temp_file_path}")
+                logger.debug(f"Saved uploaded MultiQC file '{fname}' to: {temp_file_path}")
 
             logger.debug(f"Saved {len(decoded_files)} MultiQC file(s) to: {temp_dir}")
 
@@ -2612,24 +2614,9 @@ def api_call_create_multiqc_data_collection(
 
             logger.debug("MultiQC data collection added to project successfully!")
 
-            # Process the data collection - scan first
-            scan_result = process_data_collection_helper(
-                CLI_config=cli_config,
-                wf=workflow,
-                dc_id=str(data_collection.id),
-                mode="scan",
-            )
-
-            logger.info(f"MultiQC scan result: {scan_result}")
-
-            if scan_result.get("result") != "success":
-                return {
-                    "success": False,
-                    "message": f"MultiQC file scanning failed: {scan_result.get('message', 'Unknown error')}",
-                    "status_code": 500,
-                }
-
-            # Then process the data (this triggers MultiQC metadata extraction + S3 upload)
+            # MultiQC does NOT use the scan step (no scan config needed).
+            # Go directly to process, which calls process_multiqc_data_collection
+            # that discovers parquet files from workflow data locations.
             process_result = process_data_collection_helper(
                 CLI_config=cli_config,
                 wf=workflow,
