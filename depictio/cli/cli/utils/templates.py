@@ -230,6 +230,18 @@ def _apply_conditionals(
     return config, active_dashboards
 
 
+def _file_exists_any(filepath: str, data_root: str) -> bool:
+    """Check if a file exists, trying multiple resolution strategies.
+
+    Tries: absolute path, relative to data_root, relative to CWD.
+    """
+    p = Path(filepath)
+    if p.is_absolute():
+        return p.exists()
+    # Relative: try data_root first, then CWD
+    return (Path(data_root) / p).exists() or p.exists()
+
+
 def _check_dc_source_files(
     dc: dict[str, Any],
     data_root: str,
@@ -245,7 +257,7 @@ def _check_dc_source_files(
         if not recipe_name:
             return None
         try:
-            from depictio.recipes import RecipeError, load_recipe
+            from depictio.recipes import load_recipe
 
             module = load_recipe(recipe_name)
             overrides = {}
@@ -260,9 +272,9 @@ def _check_dc_source_files(
                 if src.optional:
                     continue
                 rel_path = overrides.get(src.ref, src.path)
-                if rel_path and not (Path(data_root) / rel_path).exists():
+                if rel_path and not _file_exists_any(rel_path, data_root):
                     return rel_path
-        except (RecipeError, Exception) as exc:
+        except Exception as exc:
             logger.warning(f"Could not validate recipe '{recipe_name}': {exc}")
             return None  # Don't remove on recipe load failure
     else:
@@ -271,13 +283,12 @@ def _check_dc_source_files(
         params = scan.get("scan_parameters", {})
         filename = params.get("filename")
         if filename:
-            path = Path(filename) if Path(filename).is_absolute() else Path(data_root) / filename
-            if not path.exists():
+            if not _file_exists_any(filename, data_root):
                 return str(filename)
         regex = params.get("regex_config", {}).get("pattern")
         if regex and not any(c in regex for c in r".*+?[](){}|^$\\"):
             # Literal path (no regex metacharacters)
-            if not (Path(data_root) / regex).exists():
+            if not _file_exists_any(regex, data_root):
                 return regex
 
     return None
@@ -470,7 +481,11 @@ def resolve_template(
     if "METADATA_FILE" in variables:
         metadata_path = Path(variables["METADATA_FILE"])
         if not metadata_path.is_absolute():
-            metadata_path = Path(data_root_abs) / metadata_path
+            # Try relative to data_root first, then CWD
+            candidate = Path(data_root_abs) / metadata_path
+            if candidate.is_file():
+                metadata_path = candidate
+            # else keep as-is (relative to CWD)
         if metadata_path.is_file():
             _auto_detect_metadata_columns(metadata_path, variables)
 
