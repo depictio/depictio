@@ -2949,7 +2949,6 @@ def register_project_data_collections_callbacks(app):
             State("selected-workflow-store", "data"),
             State("local-store", "data"),
         ],
-        prevent_initial_call=True,
     )
     def populate_multiqc_metadata_content(
         selected_dc_tag, project_data, selected_workflow_id, local_data
