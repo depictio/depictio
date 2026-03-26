@@ -1283,6 +1283,41 @@ def _create_project_details_paper(project: Project) -> dmc.Paper:
         ),
     ]
 
+    # Template origin row (if project was created from a template)
+    template_origin = getattr(project, "template_origin", None)
+    if template_origin is not None:
+        # TODO: replace with actual docs URL once template pages are published
+        docs_base = "https://depictio.github.io/depictio-docs/usage/projects/templates"
+        template_id = template_origin.template_id
+        docs_url = f"{docs_base}#{template_id.replace('/', '').replace('.', '')}"
+
+        rows.append(
+            dmc.Group(
+                children=[
+                    dmc.Text("Template:", fw="bold", className="label-text"),
+                    dmc.Tooltip(
+                        label="View template documentation",
+                        children=dmc.Anchor(
+                            dmc.Badge(
+                                template_id,
+                                color="indigo",
+                                variant="light",
+                                leftSection=DashIconify(icon="mdi:layers-outline", width=14),
+                            ),
+                            href=docs_url,
+                            target="_blank",
+                            style={"textDecoration": "none"},
+                        ),
+                    ),
+                ],
+                gap="xs",
+            ),
+        )
+        if template_origin.applied_at:
+            rows.append(
+                _create_project_detail_row("Template applied at", template_origin.applied_at),
+            )
+
     return dmc.Paper(
         children=[html.Div(children=rows, className="project-details p-3")],
         radius="md",
