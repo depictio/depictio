@@ -965,17 +965,20 @@ def _extract_required_columns(dict_kwargs: dict, visu_type: str) -> list[str]:
         List of column names required for the figure
     """
     # Heatmap: if value_columns specified, use those + index + annotations;
-    # otherwise return empty list to load all columns (auto-detects numeric)
+    # otherwise return empty list to load ALL columns (auto-detects numeric).
+    # Returning empty list ensures _col_annotations_json and sample columns are preserved.
     if visu_type.lower() == "heatmap":
-        columns: list[str] = []
+        # Only constrain columns when value_columns is explicitly specified
+        if not dict_kwargs.get("value_columns"):
+            return []
 
-        # Scalar column params
+        columns: list[str] = ["_col_annotations_json"]
+
         for param in ("index_column", "split_rows_by"):
             val = dict_kwargs.get(param)
             if val and isinstance(val, str):
                 columns.append(val)
 
-        # List-like column params (value_columns, row_annotations)
         for param in ("value_columns", "row_annotations"):
             val = dict_kwargs.get(param)
             if isinstance(val, str):
@@ -985,10 +988,7 @@ def _extract_required_columns(dict_kwargs: dict, visu_type: str) -> list[str]:
             elif isinstance(val, dict):
                 columns.extend(val.keys())
 
-        # Always include _col_annotations_json if present (dynamic column annotations from recipe)
-        columns.append("_col_annotations_json")
-
-        return list(set(columns)) if columns else []
+        return list(set(columns))
 
     columns = []
 
