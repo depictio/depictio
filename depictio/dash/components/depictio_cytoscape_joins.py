@@ -950,10 +950,15 @@ def generate_elements_from_project(
         config = dc.get("config", {})
 
         # Priority 1: last_aggregation.aggregation_columns_specs (from enriched API response)
+        # This is a list of dicts like [{"name": "col1", "type": "float64", ...}, ...]
         last_agg = dc.get("last_aggregation", {})
         if last_agg:
-            agg_specs = last_agg.get("aggregation_columns_specs", {})
-            if isinstance(agg_specs, dict) and agg_specs:
+            agg_specs = last_agg.get("aggregation_columns_specs", [])
+            if isinstance(agg_specs, list) and agg_specs:
+                columns = [
+                    s.get("name", "") for s in agg_specs if isinstance(s, dict) and s.get("name")
+                ]
+            elif isinstance(agg_specs, dict) and agg_specs:
                 columns = list(agg_specs.keys())
 
         # Priority 2: flexible_metadata columns
