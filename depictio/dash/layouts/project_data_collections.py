@@ -125,32 +125,27 @@ def _create_template_origin_section(project) -> html.Div:
                     dmc.Stack(
                         [
                             dmc.Text("Info", size="xs", fw=600, c="dimmed", tt="uppercase"),
-                            dmc.SimpleGrid(
-                                cols={"base": 1, "sm": 2},
-                                spacing=2,
-                                verticalSpacing=2,
+                            dmc.Stack(
+                                gap=2,
                                 children=[
-                                    item
+                                    dmc.Group(
+                                        [
+                                            DashIconify(icon=icon, width=14, color="gray"),
+                                            dmc.Text(f"{label}:", size="sm", c="dimmed"),
+                                            dmc.Text(
+                                                str(to_dict[key]),
+                                                size="sm",
+                                                style={"wordBreak": "break-all"},
+                                            ),
+                                        ],
+                                        gap=4,
+                                    )
                                     for key, label, icon in [
                                         ("template_version", "Version", "mdi:tag-outline"),
                                         ("data_root", "Data root", "mdi:folder-outline"),
                                         ("applied_at", "Applied", "mdi:clock-outline"),
                                     ]
                                     if to_dict.get(key)
-                                    for item in [
-                                        dmc.Group(
-                                            [
-                                                DashIconify(icon=icon, width=14, color="gray"),
-                                                dmc.Text(label, size="sm", c="dimmed"),
-                                            ],
-                                            gap=4,
-                                        ),
-                                        dmc.Text(
-                                            str(to_dict[key]),
-                                            size="sm",
-                                            style={"wordBreak": "break-all"},
-                                        ),
-                                    ]
                                 ],
                             ),
                         ],
