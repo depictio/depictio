@@ -40,6 +40,8 @@ OPTIONAL_SCHEMA: dict[str, type[pl.DataType]] = {}
 # Column that holds the sample identifier in the metadata file
 _METADATA_ID_COL = "ID"
 _MAX_ANNOTATIONS = 5
+# Columns to skip when selecting annotations (IDs, technical fields, coordinates)
+_SKIP_ANNOTATION_COLS = {"name", "sampling_date", "latitude", "longitude", "depictio_run_id", "aggregation_time"}
 
 
 def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
@@ -70,8 +72,11 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         if _METADATA_ID_COL in metadata.columns:
             metadata = metadata.rename({_METADATA_ID_COL: "sample"})
 
-        # All columns except "sample" are optional annotation columns
-        annotation_cols = [c for c in metadata.columns if c != "sample"][:_MAX_ANNOTATIONS]
+        # Select meaningful annotation columns, skipping IDs and coordinates
+        annotation_cols = [
+            c for c in metadata.columns
+            if c != "sample" and c not in _SKIP_ANNOTATION_COLS
+        ][:_MAX_ANNOTATIONS]
 
         if annotation_cols:
             # Build per-sample lookup restricted to samples present in the matrix
