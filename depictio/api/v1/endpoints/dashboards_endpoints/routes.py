@@ -1457,6 +1457,45 @@ def _regenerate_component_indices(dashboard_dict: dict) -> None:
                     layout_item["i"] = f"box-{new_index}"
 
 
+def _filter_unresolved_components(dashboard_dict: dict) -> None:
+    """Remove components whose DC could not be resolved (dc_id is None).
+
+    This happens when the dashboard YAML references DCs that were removed
+    from the project (e.g. by the template file scanner). Also removes
+    corresponding layout entries.
+    """
+    stored = dashboard_dict.get("stored_metadata", [])
+    if not stored:
+        return
+
+    before = len(stored)
+    resolved = []
+    removed_indices: set[str] = set()
+
+    for component in stored:
+        dc_tag = component.get("data_collection_tag", "")
+        # MultiQC components don't need dc_id resolved the same way
+        if component.get("component_type") == "multiqc" or component.get("dc_id"):
+            resolved.append(component)
+        else:
+            removed_indices.add(component.get("index", ""))
+            logger.info(
+                f"Filtered out component '{component.get('tag', '?')}' "
+                f"(dc_tag='{dc_tag}' not found in project)"
+            )
+
+    if removed_indices:
+        dashboard_dict["stored_metadata"] = resolved
+        # Also clean layout entries
+        for layout_key in ["left_panel_layout_data", "right_panel_layout_data", "stored_layout_data"]:
+            if layout_key in dashboard_dict:
+                dashboard_dict[layout_key] = [
+                    item for item in dashboard_dict[layout_key]
+                    if not any(item.get("i", "").endswith(idx) for idx in removed_indices if idx)
+                ]
+        logger.info(f"Removed {before - len(resolved)} unresolved components from dashboard")
+
+
 def _import_multi_tab_dashboard(
     yaml_data: dict,
     project_id: PyObjectId,
@@ -1527,6 +1566,8 @@ def _import_multi_tab_dashboard(
     for component in main_dashboard_dict.get("stored_metadata", []):
         _resolve_workflow_tags(component, project_id=project_id)
         _regenerate_component_fields(component)
+    # Remove components whose DC was not found in the project (e.g. removed by file scanner)
+    _filter_unresolved_components(main_dashboard_dict)
     _regenerate_component_indices(main_dashboard_dict)
 
     # Validate and insert/update main dashboard
@@ -1595,6 +1636,7 @@ def _import_multi_tab_dashboard(
         for component in tab_dashboard_dict.get("stored_metadata", []):
             _resolve_workflow_tags(component, project_id=project_id)
             _regenerate_component_fields(component)
+        _filter_unresolved_components(tab_dashboard_dict)
         _regenerate_component_indices(tab_dashboard_dict)
 
         # Validate and insert/update tab
@@ -1807,6 +1849,7 @@ async def import_dashboard_from_yaml(
         _regenerate_component_fields(
             component
         )  # Regenerate s3_base_folder, etc. after dc_config is populated
+    _filter_unresolved_components(dashboard_dict)
     _regenerate_component_indices(dashboard_dict)
 
     try:
