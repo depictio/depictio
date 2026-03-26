@@ -1298,6 +1298,23 @@ def _render_heatmap_figure(
     """
     from plotly_complexheatmap import ComplexHeatmap
 
+    # Extract dynamic column annotations embedded by the recipe, if present
+    if "_col_annotations_json" in df.columns:
+        if "col_annotations" not in cleaned_kwargs or not cleaned_kwargs.get("col_annotations"):
+            try:
+                raw_val = df["_col_annotations_json"][0]
+                cleaned_kwargs = dict(cleaned_kwargs)
+                if isinstance(raw_val, str):
+                    cleaned_kwargs["col_annotations"] = raw_val
+                elif isinstance(raw_val, dict):
+                    cleaned_kwargs["col_annotations"] = raw_val
+                else:
+                    logger.warning(f"Unexpected _col_annotations_json type: {type(raw_val)}")
+                logger.info(f"Heatmap: injected col_annotations from _col_annotations_json (type={type(raw_val).__name__})")
+            except Exception as e:
+                logger.error(f"Failed to extract _col_annotations_json: {e}", exc_info=True)
+        df = df.drop("_col_annotations_json")
+
     heatmap_kwargs = _collect_heatmap_kwargs(cleaned_kwargs)
     data_info["total_data_count"] = df.height
 

@@ -1458,43 +1458,15 @@ def _regenerate_component_indices(dashboard_dict: dict) -> None:
 
 
 def _filter_unresolved_components(dashboard_dict: dict) -> None:
-    """Remove components whose DC could not be resolved (dc_id is None).
+    """Remove components whose DC could not be resolved.
 
-    This happens when the dashboard YAML references DCs that were removed
-    from the project (e.g. by the template file scanner). Also removes
-    corresponding layout entries.
+    Disabled for now: the file scanner (which removes DCs) is disabled,
+    and the aggressive dc_id check was stripping valid components whose
+    tags hadn't been resolved yet (the frontend resolves them at render time).
     """
-    stored = dashboard_dict.get("stored_metadata", [])
-    if not stored:
-        return
-
-    before = len(stored)
-    resolved = []
-    removed_indices: set[str] = set()
-
-    for component in stored:
-        dc_tag = component.get("data_collection_tag", "")
-        # MultiQC and map components resolve dc_id differently
-        comp_type = component.get("component_type", "")
-        if comp_type in ("multiqc", "map") or component.get("dc_id"):
-            resolved.append(component)
-        else:
-            removed_indices.add(component.get("index", ""))
-            logger.info(
-                f"Filtered out component '{component.get('tag', '?')}' "
-                f"(dc_tag='{dc_tag}' not found in project)"
-            )
-
-    if removed_indices:
-        dashboard_dict["stored_metadata"] = resolved
-        # Also clean layout entries
-        for layout_key in ["left_panel_layout_data", "right_panel_layout_data", "stored_layout_data"]:
-            if layout_key in dashboard_dict:
-                dashboard_dict[layout_key] = [
-                    item for item in dashboard_dict[layout_key]
-                    if not any(item.get("i", "").endswith(idx) for idx in removed_indices if idx)
-                ]
-        logger.info(f"Removed {before - len(resolved)} unresolved components from dashboard")
+    # TODO: Re-enable when file scanner is active, but use dc_tag validation
+    # against the project instead of dc_id presence check.
+    pass
 
 
 def _import_multi_tab_dashboard(
