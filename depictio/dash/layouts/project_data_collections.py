@@ -126,9 +126,9 @@ def _create_template_origin_section(project) -> html.Div:
                         [
                             dmc.Text("Info", size="xs", fw=600, c="dimmed", tt="uppercase"),
                             dmc.SimpleGrid(
-                                cols=2,
-                                spacing=4,
-                                verticalSpacing=4,
+                                cols={"base": 1, "sm": 2},
+                                spacing=2,
+                                verticalSpacing=2,
                                 children=[
                                     item
                                     for key, label, icon in [
