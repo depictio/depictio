@@ -32,7 +32,7 @@ main_dashboard:
             y: 0
             w: 1
             h: 2
-        title: "{GROUP_COL}"
+        title: "{GROUP_COL_DISPLAY}"
     -   component_type: interactive
         workflow_tag: ampliseq
         data_collection_tag: metadata
@@ -251,7 +251,7 @@ tabs:
             y: 0
             w: 2
             h: 2
-        title: "{GROUP_COL} Types"
+        title: "{GROUP_COL_DISPLAY} Types"
     -   component_type: figure
         workflow_tag: ampliseq
         data_collection_tag: alpha_rarefaction
@@ -291,7 +291,7 @@ tabs:
             x: "{GROUP_COL}"
             y: faith_pd
             color: "{GROUP_COL}"
-            title: "Alpha Diversity by {GROUP_COL} (Faith PD)"
+            title: "Alpha Diversity by {GROUP_COL_DISPLAY} (Faith PD)"
             labels:
                 "{GROUP_COL}": "{GROUP_COL}"
                 faith_pd: "Faith's Phylogenetic Diversity"
@@ -299,7 +299,7 @@ tabs:
         code_content: "df_modified = df.to_pandas().groupby('{GROUP_COL}')['faith_pd'].agg(['mean',\
             \ 'std']).reset_index()\nfig = px.bar(\n    df_modified, x='{GROUP_COL}',\
             \ y='mean', color='{GROUP_COL}',\n    error_y='std',\n    title='Alpha\
-            \ Diversity by {GROUP_COL} (Faith PD)',\n    labels={'{GROUP_COL}': '{GROUP_COL}',\
+            \ Diversity by {GROUP_COL_DISPLAY} (Faith PD)',\n    labels={'{GROUP_COL}': '{GROUP_COL_DISPLAY}',\
             \ 'mean': \"Faith's Phylogenetic Diversity\"}\n)\nfig.update_layout(xaxis={'categoryorder':\
             \ 'category ascending'}, yaxis={'rangemode': 'tozero'}, showlegend=False)"
         selection_enabled: false
@@ -346,7 +346,7 @@ tabs:
             y: mean_rel_abundance
             color: Phylum
             facet_row: "{GROUP_COL}"
-            title: "Mean Relative Abundance by {GROUP_COL}"
+            title: "Mean Relative Abundance by {GROUP_COL_DISPLAY}"
             labels:
                 Phylum: Phylum
                 mean_rel_abundance: Mean Relative Abundance
@@ -356,7 +356,7 @@ tabs:
             \    pl.col('rel_abundance').mean().alias('mean_rel_abundance'),\n    pl.col('rel_abundance').std().alias('std_rel_abundance')\n\
             ]).sort('Phylum')\nfig = px.bar(\n    df_stats.to_pandas(),\n    x='Phylum',\
             \ y='mean_rel_abundance', color='Phylum',\n    error_y='std_rel_abundance',\n\
-            \    facet_row='{GROUP_COL}',\n    title='Mean Relative Abundance by {GROUP_COL}\
+            \    facet_row='{GROUP_COL}',\n    title='Mean Relative Abundance by {GROUP_COL_DISPLAY}\
             \ (± std)',\n    labels={'Phylum': 'Phylum', 'mean_rel_abundance': 'Mean\
             \ Relative Abundance'}\n)\nfig.update_layout(xaxis={'categoryorder': 'category\
             \ ascending'})\nfig.update_xaxes(tickangle=-45, tickfont={'size': 9})\n\
@@ -479,7 +479,7 @@ tabs:
             y: 3
             w: 1
             h: 2
-        title: "{GROUP_COL}"
+        title: "{GROUP_COL_DISPLAY}"
     -   component_type: interactive
         workflow_tag: ampliseq
         data_collection_tag: metadata

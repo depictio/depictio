@@ -30,6 +30,9 @@ template:
     - name: "GROUP_COL"
       description: "Metadata column for grouping/facetting in dashboards. Auto-detected as first annotation column if not provided."
       required: false
+    - name: "GROUP_COL_DISPLAY"
+      description: "Auto-populated: title-cased version of GROUP_COL for display in chart titles."
+      required: false
     - name: "ANNOTATION_COLS"
       description: "Auto-populated: comma-separated list of all annotation columns discovered from metadata file."
       required: false

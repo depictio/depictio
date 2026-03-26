@@ -412,6 +412,7 @@ def _auto_detect_metadata_columns(metadata_path: Path, variables: dict[str, str]
         annotation_cols = [c for c in cols[1:] if c]
         if annotation_cols:
             variables.setdefault("GROUP_COL", annotation_cols[0])
+            variables.setdefault("GROUP_COL_DISPLAY", variables["GROUP_COL"].replace("_", " ").title())
             variables["ANNOTATION_COLS"] = ",".join(annotation_cols)
             logger.info(
                 f"Metadata auto-detect: {len(annotation_cols)} annotation columns "
