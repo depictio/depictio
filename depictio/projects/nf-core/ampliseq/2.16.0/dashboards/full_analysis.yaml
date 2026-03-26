@@ -36,6 +36,24 @@ main_dashboard:
     -   component_type: interactive
         workflow_tag: ampliseq
         data_collection_tag: metadata
+        interactive_component_type: DateRangePicker
+        column_name: sampling_date
+        column_type: datetime
+        display:
+            title_size: md
+            custom_color: '#FF6B6B'
+            icon_name: mdi:calendar-range
+        tag: interactive-multiqc-daterange-a1b2c3
+        index: multiqc-daterange
+        layout:
+            x: 0
+            y: 2
+            w: 1
+            h: 3
+        title: Sampling Period
+    -   component_type: interactive
+        workflow_tag: ampliseq
+        data_collection_tag: metadata
         interactive_component_type: MultiSelect
         column_name: ID
         # --- optional ---
@@ -465,19 +483,35 @@ tabs:
     -   component_type: interactive
         workflow_tag: ampliseq
         data_collection_tag: metadata
+        interactive_component_type: DateRangePicker
+        column_name: sampling_date
+        column_type: datetime
+        display:
+            title_size: md
+            custom_color: '#FF6B6B'
+            icon_name: mdi:calendar-range
+        tag: interactive-community-daterange-d4e5f6
+        index: community-daterange
+        layout:
+            x: 0
+            y: 5
+            w: 1
+            h: 3
+        title: Sampling Period
+    -   component_type: interactive
+        workflow_tag: ampliseq
+        data_collection_tag: metadata
         interactive_component_type: MultiSelect
-        column_name: sample
-        # --- optional ---
+        column_name: ID
         column_type: object
         display:
             title_size: md
             custom_color: '#45B8AC'
             icon_name: mdi:flask
-        # --- generated on export ---
         tag: interactive-sample-78c9c2
         layout:
             x: 0
-            y: 5
+            y: 8
             w: 1
             h: 3
         title: Sample ID
