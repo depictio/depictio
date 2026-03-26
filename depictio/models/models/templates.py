@@ -167,6 +167,10 @@ class TemplateOrigin(BaseModel):
         default_factory=lambda: datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         description="Timestamp when template was applied",
     )
+    variables: dict[str, str] = Field(
+        default_factory=dict,
+        description="Resolved template variables (DATA_ROOT, SAMPLESHEET_FILE, GROUP_COL, etc.)",
+    )
     config_snapshot: dict[str, Any] = Field(
         default_factory=dict,
         description="Frozen copy of the resolved template config (for reproducibility)",

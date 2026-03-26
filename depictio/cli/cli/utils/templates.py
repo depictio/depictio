@@ -539,6 +539,7 @@ def resolve_template(
         template_id=template_metadata.template_id,
         template_version=template_metadata.version,
         data_root=data_root_abs,
+        variables=dict(variables),
         applied_at=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         config_snapshot=copy.deepcopy(resolved_config),
     )

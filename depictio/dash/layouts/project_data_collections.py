@@ -57,76 +57,72 @@ def _create_template_origin_section(project) -> html.Div:
 
     to_dict = template_origin.model_dump() if hasattr(template_origin, "model_dump") else {}
 
-    # Template metadata rows
-    var_items = []
+    # Template info rows
+    info_items = []
     for key, label in [
+        ("template_version", "Version"),
         ("data_root", "Data root"),
         ("applied_at", "Applied at"),
-        ("template_version", "Template version"),
     ]:
         val = to_dict.get(key, "")
         if val:
-            var_items.append(
+            info_items.append(
                 dmc.Group(
-                    [
-                        dmc.Text(f"{label}:", size="sm", fw=500, c="dimmed"),
-                        dmc.Code(str(val), style={"fontSize": "12px"}),
-                    ],
+                    [dmc.Text(f"{label}:", size="sm", fw=500, c="dimmed"), dmc.Code(str(val))],
                     gap="xs",
                 )
             )
 
-    # Extract populated template variables from config_snapshot.template_origin
-    # (the snapshot contains the resolved config which has the variables baked in)
-    snapshot = to_dict.get("config_snapshot", {})
-    # Variables are not stored separately, but we can show key paths
-    # Look for common variable patterns in the config
-    for wf in snapshot.get("workflows", []):
-        for dc in wf.get("data_collections", []):
-            scan = dc.get("config", {}).get("scan", {}).get("scan_parameters", {})
-            fname = scan.get("filename")
-            if fname and not fname.startswith("{"):
-                tag = dc.get("data_collection_tag", "")
-                if tag in ("samplesheet", "metadata"):
-                    var_items.append(
-                        dmc.Group(
-                            [
-                                dmc.Text(f"{tag}:", size="sm", fw=500, c="dimmed"),
-                                dmc.Code(str(fname), style={"fontSize": "12px"}),
-                            ],
-                            gap="xs",
-                        )
-                    )
-
-    return dmc.Paper(
-        children=[
+    # Template variables (stored explicitly on TemplateOrigin)
+    variables = to_dict.get("variables", {})
+    var_items = []
+    for var_name, var_value in variables.items():
+        if var_name == "DATA_ROOT":
+            continue  # already shown as "Data root" above
+        var_items.append(
             dmc.Group(
-                [
-                    DashIconify(icon="mdi:layers-outline", width=20, color=colors.get("indigo", "indigo")),
-                    dmc.Text("Template Origin", fw="bold"),
-                    dmc.Anchor(
-                        dmc.Badge(
-                            template_id,
-                            color="indigo",
-                            variant="light",
-                            size="sm",
-                            rightSection=DashIconify(icon="mdi:open-in-new", width=12),
-                            style={"cursor": "pointer"},
-                        ),
-                        href=docs_url,
-                        target="_blank",
-                        style={"textDecoration": "none"},
+                [dmc.Code(var_name), dmc.Text("=", size="sm", c="dimmed"), dmc.Code(str(var_value))],
+                gap=4,
+            )
+        )
+
+    children = [
+        dmc.Group(
+            [
+                DashIconify(
+                    icon="mdi:layers-outline", width=20, color=colors.get("indigo", "indigo")
+                ),
+                dmc.Text("Template Origin", fw="bold"),
+                dmc.Anchor(
+                    dmc.Badge(
+                        template_id,
+                        color="indigo",
+                        variant="light",
+                        size="sm",
+                        rightSection=DashIconify(icon="mdi:open-in-new", width=12),
+                        style={"cursor": "pointer"},
                     ),
-                ],
-                gap="sm",
-            ),
-            dmc.Space(h=8),
-            dmc.Stack(var_items, gap=4),
-        ],
-        withBorder=True,
-        radius="md",
-        p="md",
-    )
+                    href=docs_url,
+                    target="_blank",
+                    style={"textDecoration": "none"},
+                ),
+            ],
+            gap="sm",
+        ),
+        dmc.Space(h=8),
+        dmc.Stack(info_items, gap=4),
+    ]
+
+    if var_items:
+        children.extend(
+            [
+                dmc.Space(h=8),
+                dmc.Text("Variables", size="sm", fw=600, c="dimmed"),
+                dmc.Stack(var_items, gap=4),
+            ]
+        )
+
+    return dmc.Paper(children=children, withBorder=True, radius="md", p="md")
 
 
 def calculate_total_storage_size(data_collections):
