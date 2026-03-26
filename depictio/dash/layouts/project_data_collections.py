@@ -25,10 +25,14 @@ from dash_iconify import DashIconify
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.deltatables_utils import load_deltatable_lite
 from depictio.dash.api_calls import (
+    api_call_create_link,
+    api_call_delete_link,
     api_call_fetch_all_multiqc_reports,
     api_call_fetch_delta_table_info,
     api_call_fetch_multiqc_report,
     api_call_fetch_project_by_id,
+    api_call_get_dc_columns,
+    api_call_get_project_links,
 )
 from depictio.dash.colors import colors
 from depictio.dash.components.depictio_cytoscape_joins import (
@@ -41,6 +45,7 @@ from depictio.dash.layouts.layouts_toolbox import (
     create_data_collection_edit_name_modal,
     create_data_collection_modal,
     create_data_collection_overwrite_modal,
+    create_dc_link_modal,
 )
 from depictio.models.models.projects import ProjectResponse
 
@@ -1780,6 +1785,8 @@ def create_data_collections_landing_ui():
     """
     # Create data collection modal
     data_collection_modal, data_collection_modal_id = create_data_collection_modal()
+    # Create DC link modal
+    dc_link_modal, dc_link_modal_id = create_dc_link_modal()
 
     return html.Div(
         [
@@ -1796,6 +1803,8 @@ def create_data_collections_landing_ui():
             ),
             # Data collection creation modal
             data_collection_modal,
+            # DC link creation modal
+            dc_link_modal,
             # Header section
             dmc.Stack(
                 [
@@ -1828,6 +1837,11 @@ def create_data_collections_landing_ui():
             html.Div(id="workflows-manager-section", style={"marginBottom": "3rem"}),
             # Data Collections Manager Section
             html.Div(id="data-collections-manager-section", style={"marginTop": "2rem"}),
+            # DC Links Manager Section
+            html.Div(
+                id="dc-links-manager-section",
+                style={"marginTop": "2rem"},
+            ),
             # Data Collection Joins Visualization Section
             html.Div(
                 id="joins-visualization-section",
@@ -3489,6 +3503,451 @@ def register_project_data_collections_callbacks(app):
 
         return separator_style, custom_style
 
+    # Data type toggle callback: show/hide table vs MultiQC options
+    @app.callback(
+        [
+            Output("data-collection-creation-table-options-container", "style"),
+            Output("data-collection-creation-multiqc-options-container", "style"),
+        ],
+        [Input("data-collection-creation-type-select", "value")],
+    )
+    def toggle_data_type_options(data_type):
+        """Show/hide table or MultiQC specific options based on data type selection."""
+        if data_type == "multiqc":
+            return {"display": "none"}, {"display": "block"}
+        return {"display": "block"}, {"display": "none"}
+
+    # =========================================================================
+    # DC Link Modal Callbacks
+    # =========================================================================
+
+    @app.callback(
+        [
+            Output("dc-link-creation-modal", "opened"),
+            Output("dc-link-creation-error-alert", "style", allow_duplicate=True),
+        ],
+        [
+            Input("create-dc-link-button", "n_clicks"),
+            Input("cancel-dc-link-creation-button", "n_clicks"),
+        ],
+        [dash.State("dc-link-creation-modal", "opened")],
+        prevent_initial_call=True,
+    )
+    def toggle_dc_link_modal(open_clicks, cancel_clicks, opened):
+        """Handle opening and closing of DC link creation modal."""
+        if not ctx.triggered:
+            return False, {"display": "none"}
+
+        trigger = ctx.triggered_id
+        if trigger == "create-dc-link-button" and open_clicks:
+            return True, {"display": "none"}
+        elif trigger == "cancel-dc-link-creation-button" and cancel_clicks:
+            return False, {"display": "none"}
+        return opened, {"display": "none"}
+
+    @app.callback(
+        [
+            Output("dc-link-creation-source-dc-select", "data"),
+            Output("dc-link-creation-target-dc-select", "data"),
+        ],
+        [Input("dc-link-creation-modal", "opened")],
+        [dash.State("project-data-store", "data")],
+        prevent_initial_call=True,
+    )
+    def populate_link_dc_selects(opened, project_data):
+        """Populate source and target DC selects when the link modal opens."""
+        if not opened or not project_data:
+            return [], []
+
+        # Gather all data collections from the project
+        dc_options = []
+        data_collections = project_data.get("data_collections", [])
+
+        # Also check workflows
+        for wf in project_data.get("workflows", []):
+            for dc in wf.get("data_collections", []):
+                if dc not in data_collections:
+                    data_collections.append(dc)
+
+        for dc in data_collections:
+            dc_tag = dc.get("data_collection_tag", "Unknown")
+            dc_id = str(dc.get("id", ""))
+            dc_type = dc.get("config", {}).get("type", "unknown")
+            label = f"{dc_tag} ({dc_type})"
+            dc_options.append({"value": dc_id, "label": label})
+
+        return dc_options, dc_options
+
+    @app.callback(
+        [
+            Output("dc-link-creation-source-column-select", "data"),
+            Output("dc-link-creation-source-column-select", "disabled"),
+        ],
+        [Input("dc-link-creation-source-dc-select", "value")],
+        [dash.State("local-store", "data")],
+        prevent_initial_call=True,
+    )
+    def load_source_dc_columns(source_dc_id, local_data):
+        """Load columns for the selected source DC."""
+        if not source_dc_id or not local_data or not local_data.get("access_token"):
+            return [], True
+
+        token = local_data["access_token"]
+        columns = api_call_get_dc_columns(source_dc_id, token)
+
+        if columns:
+            col_options = [{"value": c, "label": c} for c in columns]
+            return col_options, False
+        return [], True
+
+    @app.callback(
+        Output("dc-link-creation-target-type-input", "value"),
+        [Input("dc-link-creation-target-dc-select", "value")],
+        [dash.State("project-data-store", "data")],
+        prevent_initial_call=True,
+    )
+    def detect_target_dc_type(target_dc_id, project_data):
+        """Auto-detect the target DC type when a target is selected."""
+        if not target_dc_id or not project_data:
+            return ""
+
+        # Search in data_collections and workflows
+        all_dcs = list(project_data.get("data_collections", []))
+        for wf in project_data.get("workflows", []):
+            all_dcs.extend(wf.get("data_collections", []))
+
+        for dc in all_dcs:
+            if str(dc.get("id", "")) == target_dc_id:
+                return dc.get("config", {}).get("type", "unknown")
+        return ""
+
+    @app.callback(
+        Output("create-dc-link-creation-submit", "disabled"),
+        [
+            Input("dc-link-creation-source-dc-select", "value"),
+            Input("dc-link-creation-source-column-select", "value"),
+            Input("dc-link-creation-target-dc-select", "value"),
+        ],
+    )
+    def update_link_submit_state(source_dc, source_col, target_dc):
+        """Enable link submit button only when all required fields are filled."""
+        if source_dc and source_col and target_dc and source_dc != target_dc:
+            return False
+        return True
+
+    @app.callback(
+        Output("dc-link-creation-resolver-select", "value"),
+        [Input("dc-link-creation-target-type-input", "value")],
+        prevent_initial_call=True,
+    )
+    def auto_select_resolver(target_type):
+        """Auto-select resolver based on target type."""
+        if target_type == "multiqc":
+            return "sample_mapping"
+        return "direct"
+
+    @app.callback(
+        [
+            Output("dc-link-creation-modal", "opened", allow_duplicate=True),
+            Output("project-data-store", "data", allow_duplicate=True),
+            Output("dc-link-creation-error-alert", "children"),
+            Output("dc-link-creation-error-alert", "style"),
+        ],
+        [Input("create-dc-link-creation-submit", "n_clicks")],
+        [
+            dash.State("dc-link-creation-source-dc-select", "value"),
+            dash.State("dc-link-creation-source-column-select", "value"),
+            dash.State("dc-link-creation-target-dc-select", "value"),
+            dash.State("dc-link-creation-target-type-input", "value"),
+            dash.State("dc-link-creation-resolver-select", "value"),
+            dash.State("dc-link-creation-description-input", "value"),
+            dash.State("project-data-store", "data"),
+            dash.State("local-store", "data"),
+        ],
+        prevent_initial_call=True,
+    )
+    def submit_dc_link_creation(
+        n_clicks,
+        source_dc_id,
+        source_column,
+        target_dc_id,
+        target_type,
+        resolver,
+        description,
+        project_data,
+        local_data,
+    ):
+        """Handle DC link creation submission."""
+        if not n_clicks or not source_dc_id or not source_column or not target_dc_id:
+            return dash.no_update, dash.no_update, dash.no_update, dash.no_update
+
+        if not local_data or not local_data.get("access_token"):
+            return (
+                dash.no_update,
+                dash.no_update,
+                "Authentication required.",
+                {"display": "block"},
+            )
+
+        if source_dc_id == target_dc_id:
+            return (
+                dash.no_update,
+                dash.no_update,
+                "Source and target must be different data collections.",
+                {"display": "block"},
+            )
+
+        token = local_data["access_token"]
+        project_id = project_data.get("project_id")
+
+        # Map target type - default to "table" if not recognized
+        valid_types = ["table", "multiqc", "image"]
+        effective_type = target_type if target_type in valid_types else "table"
+
+        result = api_call_create_link(
+            project_id=project_id,
+            source_dc_id=source_dc_id,
+            source_column=source_column,
+            target_dc_id=target_dc_id,
+            target_type=effective_type,
+            resolver=resolver or "direct",
+            description=description,
+            token=token,
+        )
+
+        if result and result.get("success"):
+            from datetime import datetime
+
+            updated = project_data.copy()
+            updated["refresh_timestamp"] = datetime.now().isoformat()
+            return False, updated, "", {"display": "none"}
+        else:
+            error_msg = result.get("message", "Unknown error") if result else "API call failed"
+            return (
+                dash.no_update,
+                dash.no_update,
+                f"Failed to create link: {error_msg}",
+                {"display": "block"},
+            )
+
+    # DC Links Manager Section callback
+    @app.callback(
+        Output("dc-links-manager-section", "children"),
+        [Input("project-data-store", "data")],
+        [dash.State("local-store", "data")],
+    )
+    def render_dc_links_section(project_data, local_data):
+        """Render the DC links manager section with existing links and create button."""
+        if not project_data or not project_data.get("project_id"):
+            return []
+
+        project_id = project_data.get("project_id")
+        token = local_data.get("access_token") if local_data else None
+
+        # Get all data collections for label lookup
+        all_dcs = {}
+        for dc in project_data.get("data_collections", []):
+            dc_id = str(dc.get("id", ""))
+            all_dcs[dc_id] = dc.get("data_collection_tag", "Unknown")
+        for wf in project_data.get("workflows", []):
+            for dc in wf.get("data_collections", []):
+                dc_id = str(dc.get("id", ""))
+                all_dcs[dc_id] = dc.get("data_collection_tag", "Unknown")
+
+        # Need at least 2 DCs to create links
+        if len(all_dcs) < 2:
+            return []
+
+        # Fetch existing links
+        links = []
+        if token:
+            links = api_call_get_project_links(project_id, token)
+
+        # Build link cards
+        link_cards = []
+        for link in links:
+            link_id = str(link.get("id", ""))
+            source_name = all_dcs.get(str(link.get("source_dc_id", "")), "Unknown DC")
+            target_name = all_dcs.get(str(link.get("target_dc_id", "")), "Unknown DC")
+            source_col = link.get("source_column", "?")
+            resolver = link.get("link_config", {}).get("resolver", "direct")
+            target_type = link.get("target_type", "unknown")
+            desc = link.get("description", "")
+
+            link_cards.append(
+                dmc.Card(
+                    [
+                        dmc.Group(
+                            [
+                                dmc.Group(
+                                    [
+                                        DashIconify(
+                                            icon="mdi:link-variant",
+                                            width=20,
+                                            color=colors["blue"],
+                                        ),
+                                        dmc.Stack(
+                                            [
+                                                dmc.Group(
+                                                    [
+                                                        dmc.Text(source_name, fw="bold", size="sm"),
+                                                        dmc.Text(
+                                                            f"({source_col})",
+                                                            size="xs",
+                                                            c="gray",
+                                                        ),
+                                                        DashIconify(
+                                                            icon="mdi:arrow-right",
+                                                            width=16,
+                                                            color="gray",
+                                                        ),
+                                                        dmc.Text(target_name, fw="bold", size="sm"),
+                                                    ],
+                                                    gap="xs",
+                                                ),
+                                                dmc.Group(
+                                                    [
+                                                        dmc.Badge(
+                                                            resolver,
+                                                            color="blue",
+                                                            variant="light",
+                                                            size="xs",
+                                                        ),
+                                                        dmc.Badge(
+                                                            target_type,
+                                                            color="gray",
+                                                            variant="outline",
+                                                            size="xs",
+                                                        ),
+                                                        dmc.Text(
+                                                            desc or "",
+                                                            size="xs",
+                                                            c="gray",
+                                                            fs="italic",
+                                                        ),
+                                                    ],
+                                                    gap="xs",
+                                                ),
+                                            ],
+                                            gap="xs",
+                                        ),
+                                    ],
+                                    gap="sm",
+                                    align="center",
+                                ),
+                                dmc.ActionIcon(
+                                    DashIconify(icon="mdi:delete", width=16),
+                                    color="red",
+                                    variant="subtle",
+                                    id={"type": "dc-link-delete-button", "index": link_id},
+                                    size="sm",
+                                ),
+                            ],
+                            justify="space-between",
+                            align="center",
+                        ),
+                    ],
+                    withBorder=True,
+                    shadow="xs",
+                    radius="md",
+                    p="sm",
+                )
+            )
+
+        return dmc.Stack(
+            [
+                dmc.Divider(
+                    label="Data Collection Links",
+                    labelPosition="center",
+                    my="md",
+                ),
+                dmc.Group(
+                    [
+                        dmc.Group(
+                            [
+                                DashIconify(
+                                    icon="mdi:link-variant",
+                                    width=24,
+                                    color=colors["blue"],
+                                ),
+                                dmc.Text(
+                                    "Cross-DC Links",
+                                    fw="bold",
+                                    size="lg",
+                                ),
+                                dmc.Text(
+                                    f"({len(links)} active)",
+                                    size="sm",
+                                    c="gray",
+                                ),
+                            ],
+                            gap="sm",
+                        ),
+                        dmc.Button(
+                            "Link Collections",
+                            id="create-dc-link-button",
+                            leftSection=DashIconify(icon="mdi:link-variant-plus", width=16),
+                            color="blue",
+                            variant="light",
+                            radius="md",
+                            size="sm",
+                        ),
+                    ],
+                    justify="space-between",
+                ),
+                dmc.Stack(
+                    link_cards
+                    if link_cards
+                    else [
+                        dmc.Text(
+                            "No links defined yet. Create a link to enable cross-DC filtering.",
+                            size="sm",
+                            c="gray",
+                            fs="italic",
+                            ta="center",
+                        )
+                    ],
+                    gap="sm",
+                ),
+            ],
+            gap="md",
+        )
+
+    @app.callback(
+        Output("project-data-store", "data", allow_duplicate=True),
+        [Input({"type": "dc-link-delete-button", "index": ALL}, "n_clicks")],
+        [
+            dash.State("project-data-store", "data"),
+            dash.State("local-store", "data"),
+        ],
+        prevent_initial_call=True,
+    )
+    def handle_dc_link_delete(n_clicks_list, project_data, local_data):
+        """Handle deletion of a DC link."""
+        if not any(n_clicks_list):
+            return dash.no_update
+
+        trigger = ctx.triggered_id
+        if not trigger:
+            return dash.no_update
+
+        link_id = trigger["index"]
+        if not local_data or not local_data.get("access_token"):
+            return dash.no_update
+
+        token = local_data["access_token"]
+        project_id = project_data.get("project_id")
+
+        result = api_call_delete_link(project_id, link_id, token)
+        if result and result.get("success"):
+            from datetime import datetime
+
+            updated = project_data.copy()
+            updated["refresh_timestamp"] = datetime.now().isoformat()
+            return updated
+
+        return dash.no_update
+
     def _check_user_is_viewer(project_data, local_data):
         """Helper function to check if current user is a viewer."""
         if not project_data or not local_data:
@@ -3682,14 +4141,13 @@ def register_project_data_collections_callbacks(app):
     )
     def handle_file_upload(contents, filename, last_modified):
         """
-        Handle file upload and display file information.
+        Handle file upload and display basic file information.
 
-        Decodes uploaded file, validates size against 5MB limit, and displays
-        file information card with name and size.
+        Supports both single file and multi-file uploads.
 
         Args:
-            contents: Base64-encoded file contents.
-            filename: Original filename.
+            contents: Base64-encoded file contents (string or list).
+            filename: Original filename (string or list).
             last_modified: File last modified timestamp.
 
         Returns:
@@ -3698,49 +4156,75 @@ def register_project_data_collections_callbacks(app):
         if not contents or not filename:
             return []
 
-        # Decode the file content to check size
+        # Normalize to lists for uniform handling
+        if isinstance(contents, str):
+            contents_list = [contents]
+            filenames_list = [filename] if isinstance(filename, str) else filename
+        else:
+            contents_list = contents
+            filenames_list = filename if isinstance(filename, list) else [filename]
+
         try:
-            content_type, content_string = contents.split(",")
-            decoded = base64.b64decode(content_string)
-            file_size = len(decoded)
+            total_size = 0
+            file_infos = []
+            for content, fname in zip(contents_list, filenames_list):
+                content_type, content_string = content.split(",")
+                decoded = base64.b64decode(content_string)
+                file_size = len(decoded)
+                total_size += file_size
+                file_infos.append((fname, file_size))
 
-            # Check file size limit (5MB)
-            max_size = 5 * 1024 * 1024  # 5MB in bytes
-            if file_size > max_size:
-                return dmc.Alert(
-                    f"File size ({file_size / (1024 * 1024):.1f}MB) exceeds the 5MB limit",
-                    color="red",
-                    icon=DashIconify(icon="mdi:alert"),
+            if len(file_infos) == 1:
+                fname, fsize = file_infos[0]
+                return dmc.Card(
+                    [
+                        dmc.Group(
+                            [
+                                DashIconify(icon="mdi:file-check", width=20, color="green"),
+                                dmc.Stack(
+                                    [
+                                        dmc.Text(fname, fw="bold", size="sm"),
+                                        dmc.Text(
+                                            f"Size: {fsize / 1024:.1f}KB",
+                                            size="xs",
+                                            c="gray",
+                                        ),
+                                    ],
+                                    gap="xs",
+                                ),
+                            ],
+                            gap="md",
+                            align="center",
+                        ),
+                    ],
+                    withBorder=True,
+                    shadow="xs",
+                    radius="md",
+                    p="sm",
+                    style={"backgroundColor": "var(--mantine-color-green-0)"},
                 )
-
-            # Display file info
-            return dmc.Card(
-                [
-                    dmc.Group(
-                        [
-                            DashIconify(icon="mdi:file-check", width=20, color="green"),
-                            dmc.Stack(
-                                [
-                                    dmc.Text(filename, fw="bold", size="sm"),
-                                    dmc.Text(
-                                        f"Size: {file_size / 1024:.1f}KB",
-                                        size="xs",
-                                        c="gray",
-                                    ),
-                                ],
-                                gap="xs",
-                            ),
-                        ],
-                        gap="md",
-                        align="center",
-                    ),
-                ],
-                withBorder=True,
-                shadow="xs",
-                radius="md",
-                p="sm",
-                style={"backgroundColor": "var(--mantine-color-green-0)"},
-            )
+            else:
+                return dmc.Card(
+                    [
+                        dmc.Group(
+                            [
+                                DashIconify(icon="mdi:file-check", width=20, color="green"),
+                                dmc.Text(
+                                    f"{len(file_infos)} files uploaded ({total_size / 1024:.1f}KB total)",
+                                    fw="bold",
+                                    size="sm",
+                                ),
+                            ],
+                            gap="md",
+                            align="center",
+                        ),
+                    ],
+                    withBorder=True,
+                    shadow="xs",
+                    radius="md",
+                    p="sm",
+                    style={"backgroundColor": "var(--mantine-color-green-0)"},
+                )
 
         except Exception as e:
             return dmc.Alert(
@@ -3774,6 +4258,96 @@ def register_project_data_collections_callbacks(app):
             return True
         return False
 
+    def _validate_multiqc_files(contents, filename):
+        """Validate uploaded MultiQC parquet file(s) and return preview info."""
+        # Normalize to lists
+        if isinstance(contents, str):
+            contents_list = [contents]
+            filenames_list = [filename] if isinstance(filename, str) else filename
+        else:
+            contents_list = contents
+            filenames_list = filename if isinstance(filename, list) else [filename]
+
+        file_cards = []
+        total_size = 0
+
+        for i, (content, fname) in enumerate(zip(contents_list, filenames_list)):
+            # Check it's a parquet file
+            if not fname.lower().endswith(".parquet"):
+                return dmc.Alert(
+                    f"File '{fname}' is not a .parquet file. "
+                    "Only MultiQC parquet files are supported.",
+                    color="red",
+                    icon=DashIconify(icon="mdi:alert"),
+                )
+
+            try:
+                content_type, content_string = content.split(",")
+                decoded = base64.b64decode(content_string)
+                file_size = len(decoded)
+                total_size += file_size
+
+                # Check individual file size (50MB)
+                if file_size > 50 * 1024 * 1024:
+                    return dmc.Alert(
+                        f"File '{fname}' ({file_size / (1024 * 1024):.1f}MB) exceeds the 50MB limit",
+                        color="red",
+                        icon=DashIconify(icon="mdi:alert"),
+                    )
+
+                file_cards.append(
+                    dmc.Card(
+                        [
+                            dmc.Group(
+                                [
+                                    DashIconify(icon="mdi:file-check", width=20, color="green"),
+                                    dmc.Stack(
+                                        [
+                                            dmc.Text(fname, fw="bold", size="sm"),
+                                            dmc.Text(
+                                                f"Size: {file_size / 1024:.1f}KB • Format: Parquet (MultiQC)",
+                                                size="xs",
+                                                c="gray",
+                                            ),
+                                        ],
+                                        gap="xs",
+                                    ),
+                                ],
+                                gap="md",
+                                align="center",
+                            ),
+                        ],
+                        withBorder=True,
+                        shadow="xs",
+                        radius="md",
+                        p="sm",
+                        style={"backgroundColor": "var(--mantine-color-green-0)"},
+                    )
+                )
+            except Exception as e:
+                return dmc.Alert(
+                    f"Error processing file '{fname}': {str(e)}",
+                    color="red",
+                    icon=DashIconify(icon="mdi:alert"),
+                )
+
+        # Check total size (500MB)
+        if total_size > 500 * 1024 * 1024:
+            return dmc.Alert(
+                f"Total file size ({total_size / (1024 * 1024):.1f}MB) exceeds the 500MB limit",
+                color="red",
+                icon=DashIconify(icon="mdi:alert"),
+            )
+
+        summary = dmc.Text(
+            f"{len(file_cards)} file(s), {total_size / 1024:.1f}KB total",
+            size="xs",
+            c="gray",
+            fw="bold",
+        )
+
+        return dmc.Stack([summary] + file_cards, gap="sm")
+
     @app.callback(
         Output("data-collection-creation-file-info", "children", allow_duplicate=True),
         [
@@ -3785,31 +4359,50 @@ def register_project_data_collections_callbacks(app):
         ],
         [
             dash.State("data-collection-creation-file-upload", "filename"),
+            dash.State("data-collection-creation-type-select", "value"),
         ],
         prevent_initial_call=True,
     )
     def validate_file_with_polars(
-        contents, file_format, separator, custom_separator, has_header, filename
+        contents, file_format, separator, custom_separator, has_header, filename, data_type
     ):
         """
-        Validate uploaded file using polars and display detailed information.
+        Validate uploaded file(s) and display detailed information.
 
-        Saves file temporarily, reads with polars using specified format options,
-        and displays row/column counts with column names preview.
+        For table type: validates with polars using format options.
+        For MultiQC type: validates parquet files.
 
         Args:
-            contents: Base64-encoded file contents.
+            contents: Base64-encoded file contents (single string or list for multi-upload).
             file_format: Selected file format for parsing.
             separator: Selected delimiter character.
             custom_separator: Custom delimiter if separator is 'custom'.
             has_header: Whether file has header row.
-            filename: Original filename.
+            filename: Original filename (single string or list for multi-upload).
+            data_type: Selected data type (table or multiqc).
 
         Returns:
             Stack component with file info and data preview, or error alert.
         """
         if not contents or not filename:
             return []
+
+        # Handle MultiQC type
+        if data_type == "multiqc":
+            return _validate_multiqc_files(contents, filename)
+
+        # For table type, handle single file (contents may be a list with one element)
+        if isinstance(contents, list):
+            if len(contents) > 1:
+                return dmc.Alert(
+                    "Table data collections only support a single file upload.",
+                    color="red",
+                    icon=DashIconify(icon="mdi:alert"),
+                )
+            contents = contents[0]
+            filename = filename[0] if isinstance(filename, list) else filename
+        if isinstance(filename, list):
+            filename = filename[0]
 
         try:
             # Decode file content
@@ -4065,21 +4658,52 @@ def register_project_data_collections_callbacks(app):
 
             token = local_data["access_token"]
 
-            # Call the API function to create the data collection
-            result = api_call_create_data_collection(
-                name=name,
-                description=description or "",
-                data_type=data_type,
-                file_format=file_format,
-                separator=separator,
-                custom_separator=custom_separator,
-                compression=compression,
-                has_header=has_header,
-                file_contents=file_contents,
-                filename=filename,
-                project_id=project_id,
-                token=token,
-            )
+            if data_type == "multiqc":
+                # Handle MultiQC data collection creation
+                from depictio.dash.api_calls import api_call_create_multiqc_data_collection
+
+                # Normalize to lists for multi-file support
+                if isinstance(file_contents, str):
+                    contents_list = [file_contents]
+                    filenames_list = [filename] if isinstance(filename, str) else filename
+                else:
+                    contents_list = file_contents
+                    filenames_list = filename if isinstance(filename, list) else [filename]
+
+                result = api_call_create_multiqc_data_collection(
+                    name=name,
+                    description=description or "",
+                    file_contents_list=contents_list,
+                    filenames_list=filenames_list,
+                    project_id=project_id,
+                    token=token,
+                )
+            else:
+                # Handle table data collection creation
+                from depictio.dash.api_calls import api_call_create_data_collection
+
+                # For table type, ensure single file
+                single_contents = file_contents
+                single_filename = filename
+                if isinstance(file_contents, list):
+                    single_contents = file_contents[0]
+                if isinstance(filename, list):
+                    single_filename = filename[0]
+
+                result = api_call_create_data_collection(
+                    name=name,
+                    description=description or "",
+                    data_type=data_type,
+                    file_format=file_format,
+                    separator=separator,
+                    custom_separator=custom_separator,
+                    compression=compression,
+                    has_header=has_header,
+                    file_contents=single_contents,
+                    filename=single_filename,
+                    project_id=project_id,
+                    token=token,
+                )
 
             if result and result.get("success"):
                 logger.debug(f"Data collection created successfully: {result.get('message')}")
