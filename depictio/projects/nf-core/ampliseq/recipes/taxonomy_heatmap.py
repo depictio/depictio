@@ -14,6 +14,7 @@ all other columns are optional and are used as annotations dynamically.
 
 import json
 
+import plotly.colors
 import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
@@ -42,6 +43,10 @@ _METADATA_ID_COL = "ID"
 _MAX_ANNOTATIONS = 5
 # Columns to skip when selecting annotations (IDs, technical fields, coordinates)
 _SKIP_ANNOTATION_COLS = {"name", "sampling_date", "latitude", "longitude", "depictio_run_id", "aggregation_time"}
+
+# Use Plotly's default qualitative color sequence for deterministic auto-coloring.
+# Sorted unique values always get the same color assignment, matching Plotly charts.
+_PLOTLY_QUALITATIVE = plotly.colors.qualitative.Plotly
 
 
 def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
@@ -108,7 +113,21 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
                 # (ComplexHeatmap can't handle empty strings in color mapping)
                 if any(v == "" or v is None for v in values):
                     continue
-                col_annotations[col] = {"values": values, "type": "categorical"}
+
+                # Auto-generate deterministic colors from Plotly's default palette.
+                # Sorted unique values always map to the same color, matching
+                # what Plotly charts produce when using the same color column.
+                unique_vals = sorted(set(values))
+                colors = {
+                    v: _PLOTLY_QUALITATIVE[i % len(_PLOTLY_QUALITATIVE)]
+                    for i, v in enumerate(unique_vals)
+                }
+
+                col_annotations[col] = {
+                    "values": values,
+                    "type": "categorical",
+                    "colors": colors,
+                }
 
             result = result.with_columns(
                 pl.lit(json.dumps(col_annotations)).alias("_col_annotations_json")

@@ -308,7 +308,7 @@ links:
     description: "Filter taxonomy rel abundance by metadata samples"
     enabled: true
 
-  # Link 6: Samplesheet -> Taxonomy Heatmap (works for both base and extended)
+  # Link 6: Samplesheet -> Taxonomy Heatmap (always present, base filtering)
   - source_dc_tag: "samplesheet"
     source_column: "sampleID"
     target_dc_tag: "taxonomy_heatmap"
@@ -317,6 +317,17 @@ links:
       resolver: "direct"
       target_field: "sample"
     description: "Filter taxonomy heatmap by samplesheet samples"
+    enabled: true
+
+  # Link 7: Metadata -> Taxonomy Heatmap (extended: enables habitat/city filtering)
+  - source_dc_tag: "metadata"
+    source_column: "ID"
+    target_dc_tag: "taxonomy_heatmap"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter taxonomy heatmap by metadata samples"
     enabled: true
 
   # Note: ANCOM-BC results are not linked (no sample column — habitat-level results only)
