@@ -945,23 +945,40 @@ def generate_elements_from_project(
         dc_by_tag[dc_tag] = dc
         dc_by_id[dc_id] = dc
 
-        # Extract columns from data collection config
+        # Extract columns from data collection — try multiple sources
         columns = []
         config = dc.get("config", {})
 
-        # Priority: columns from config
-        if config.get("columns"):
-            columns = config["columns"]
-        # Or from dc_specific_properties
-        elif config.get("dc_specific_properties", {}).get("columns_description"):
-            columns = list(config["dc_specific_properties"]["columns_description"].keys())
-        # Or delta_table_schema
-        elif dc.get("delta_table_schema"):
+        # Priority 1: last_aggregation.aggregation_columns_specs (from enriched API response)
+        last_agg = dc.get("last_aggregation", {})
+        if last_agg:
+            agg_specs = last_agg.get("aggregation_columns_specs", {})
+            if isinstance(agg_specs, dict) and agg_specs:
+                columns = list(agg_specs.keys())
+
+        # Priority 2: flexible_metadata columns
+        if not columns:
+            flex = dc.get("flexible_metadata", {})
+            if isinstance(flex, dict) and flex.get("columns"):
+                columns = flex["columns"]
+
+        # Priority 3: dc_specific_properties.columns_description
+        if not columns:
+            dc_props = config.get("dc_specific_properties", {})
+            if isinstance(dc_props, dict) and dc_props.get("columns_description"):
+                columns = list(dc_props["columns_description"].keys())
+
+        # Priority 4: delta_table_schema
+        if not columns and dc.get("delta_table_schema"):
             schema = dc["delta_table_schema"]
             if isinstance(schema, dict):
                 columns = list(schema.keys())
             elif isinstance(schema, list):
                 columns = [f.get("name", str(f)) for f in schema if isinstance(f, dict)]
+
+        # Priority 5: config.columns (legacy)
+        if not columns and config.get("columns"):
+            columns = config["columns"]
 
         # Limit columns to display for readability (max 8)
         dc_columns[dc_tag] = columns[:8] if columns else ["id"]
