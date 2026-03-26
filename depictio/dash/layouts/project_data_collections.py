@@ -68,72 +68,116 @@ def _create_template_origin_section(project) -> html.Div:
     else:
         to_dict = {}
 
-    # Template info rows
-    info_items = []
-    for key, label in [
-        ("template_version", "Version"),
-        ("data_root", "Data root"),
-        ("applied_at", "Applied at"),
-    ]:
-        val = to_dict.get(key, "")
-        if val:
-            info_items.append(
-                dmc.Group(
-                    [dmc.Text(f"{label}:", size="sm", fw=500, c="dimmed"), dmc.Code(str(val))],
-                    gap="xs",
-                )
-            )
-
     # Template variables (stored explicitly on TemplateOrigin)
     variables = to_dict.get("variables", {})
-    var_items = []
+    var_rows = []
     for var_name, var_value in variables.items():
         if var_name == "DATA_ROOT":
-            continue  # already shown as "Data root" above
-        var_items.append(
-            dmc.Group(
-                [dmc.Code(var_name), dmc.Text("=", size="sm", c="dimmed"), dmc.Code(str(var_value))],
-                gap=4,
+            continue  # shown in info section
+        var_rows.append(
+            html.Tr(
+                [
+                    html.Td(
+                        dmc.Code(var_name, style={"fontSize": "12px"}),
+                        style={"paddingRight": "12px", "verticalAlign": "top"},
+                    ),
+                    html.Td(
+                        dmc.Text(str(var_value), size="sm", style={"wordBreak": "break-all"}),
+                    ),
+                ]
             )
         )
 
-    children = [
-        dmc.Group(
-            [
-                DashIconify(
-                    icon="mdi:layers-outline", width=20, color=colors.get("indigo", "indigo")
-                ),
-                dmc.Text("Template Origin", fw="bold"),
-                dmc.Anchor(
-                    dmc.Badge(
-                        template_id,
-                        color="indigo",
-                        variant="light",
-                        size="sm",
-                        rightSection=DashIconify(icon="mdi:open-in-new", width=12),
-                        style={"cursor": "pointer"},
+    return dmc.Paper(
+        children=[
+            # Header: icon + title + badge link
+            dmc.Group(
+                [
+                    DashIconify(
+                        icon="mdi:layers-outline",
+                        width=22,
+                        color=colors.get("indigo", "indigo"),
                     ),
-                    href=docs_url,
-                    target="_blank",
-                    style={"textDecoration": "none"},
-                ),
-            ],
-            gap="sm",
-        ),
-        dmc.Space(h=8),
-        dmc.Stack(info_items, gap=4),
-    ]
-
-    if var_items:
-        children.extend(
-            [
-                dmc.Space(h=8),
-                dmc.Text("Variables", size="sm", fw=600, c="dimmed"),
-                dmc.Stack(var_items, gap=4),
-            ]
-        )
-
-    return dmc.Paper(children=children, withBorder=True, radius="md", p="md")
+                    dmc.Text("Template", fw="bold", size="lg"),
+                    dmc.Anchor(
+                        dmc.Badge(
+                            template_id,
+                            color="indigo",
+                            variant="light",
+                            size="sm",
+                            rightSection=DashIconify(icon="mdi:open-in-new", width=12),
+                            style={"cursor": "pointer"},
+                        ),
+                        href=docs_url,
+                        target="_blank",
+                        style={"textDecoration": "none"},
+                    ),
+                ],
+                gap="sm",
+            ),
+            dmc.Divider(my="xs"),
+            # Two-column layout: info left, variables right
+            dmc.SimpleGrid(
+                cols=2,
+                spacing="xl",
+                children=[
+                    # Left column: template info
+                    dmc.Stack(
+                        [
+                            dmc.Text("Info", size="xs", fw=600, c="dimmed", tt="uppercase"),
+                            dmc.SimpleGrid(
+                                cols=2,
+                                spacing=4,
+                                verticalSpacing=4,
+                                children=[
+                                    item
+                                    for key, label, icon in [
+                                        ("template_version", "Version", "mdi:tag-outline"),
+                                        ("data_root", "Data root", "mdi:folder-outline"),
+                                        ("applied_at", "Applied", "mdi:clock-outline"),
+                                    ]
+                                    if to_dict.get(key)
+                                    for item in [
+                                        dmc.Group(
+                                            [
+                                                DashIconify(icon=icon, width=14, color="gray"),
+                                                dmc.Text(label, size="sm", c="dimmed"),
+                                            ],
+                                            gap=4,
+                                        ),
+                                        dmc.Text(
+                                            str(to_dict[key]),
+                                            size="sm",
+                                            style={"wordBreak": "break-all"},
+                                        ),
+                                    ]
+                                ],
+                            ),
+                        ],
+                        gap=4,
+                    ),
+                    # Right column: variables
+                    dmc.Stack(
+                        [
+                            dmc.Text(
+                                "Variables", size="xs", fw=600, c="dimmed", tt="uppercase"
+                            ),
+                            html.Table(
+                                html.Tbody(var_rows),
+                                style={"borderCollapse": "collapse"},
+                            )
+                            if var_rows
+                            else dmc.Text("No variables", size="sm", c="dimmed", fs="italic"),
+                        ],
+                        gap=4,
+                    ),
+                ],
+            ),
+        ],
+        withBorder=True,
+        radius="md",
+        p="md",
+    )
 
 
 def calculate_total_storage_size(data_collections):
