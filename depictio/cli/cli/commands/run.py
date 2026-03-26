@@ -357,6 +357,60 @@ def register_run_command(app: typer.Typer):
                         update=update_config,
                     )
                 rich_print_checked_statement("Project configuration sync completed", "success")
+
+                # Resolve tag-based link IDs now that the server has assigned real DC IDs
+                if is_template_mode and not dry_run:
+                    try:
+                        from depictio.cli.cli.utils.api_calls import (
+                            api_get_project_from_id,
+                            api_update_project,
+                        )
+
+                        # Use name lookup first, fall back to ID-based fetch
+                        remote = api_get_project_from_name(str(project_config.name), CLI_config)
+                        if remote.status_code != 200:
+                            # Name lookup may fail with special chars; try by scanning
+                            # the project list or use the project_config's id if available
+                            pid = getattr(project_config, "id", None)
+                            if pid:
+                                remote = api_get_project_from_id(pid, CLI_config)
+                        if remote.status_code == 200:
+                            proj_data = remote.json()
+                            tag_to_id: dict[str, str] = {}
+                            for wf in proj_data.get("workflows", []):
+                                for dc in wf.get("data_collections", []):
+                                    tag = dc.get("data_collection_tag")
+                                    dc_id = dc.get("_id")
+                                    if tag and dc_id:
+                                        tag_to_id[tag] = str(dc_id)
+
+                            links_updated = False
+                            for link in proj_data.get("links", []):
+                                for field, tag_field in [
+                                    ("source_dc_id", "source_dc_tag"),
+                                    ("target_dc_id", "target_dc_tag"),
+                                ]:
+                                    tag = link.get(tag_field)
+                                    if (
+                                        tag
+                                        and tag in tag_to_id
+                                        and str(link.get(field, "")).startswith("tag:")
+                                    ):
+                                        link[field] = tag_to_id[tag]
+                                        links_updated = True
+
+                            if links_updated:
+                                resp = api_update_project(proj_data, CLI_config)
+                                rich_print_checked_statement(
+                                    f"Resolved link tags to DC IDs ({resp.status_code})", "success"
+                                )
+                            else:
+                                rich_print_checked_statement(
+                                    "Links already have DC IDs (no tag: placeholders)", "info"
+                                )
+                    except Exception as e:
+                        logger.warning(f"Link tag resolution failed (non-blocking): {e}")
+
                 success_count += 1
             except Exception as e:
                 rich_print_checked_statement(f"Project configuration sync failed: {e}", "error")

@@ -1310,7 +1310,9 @@ def _render_heatmap_figure(
                     cleaned_kwargs["col_annotations"] = raw_val
                 else:
                     logger.warning(f"Unexpected _col_annotations_json type: {type(raw_val)}")
-                logger.info(f"Heatmap: injected col_annotations from _col_annotations_json (type={type(raw_val).__name__})")
+                logger.info(
+                    f"Heatmap: injected col_annotations from _col_annotations_json (type={type(raw_val).__name__})"
+                )
             except Exception as e:
                 logger.error(f"Failed to extract _col_annotations_json: {e}", exc_info=True)
         df = df.drop("_col_annotations_json")

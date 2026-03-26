@@ -1121,7 +1121,9 @@ def _create_figure_from_data(
 
             # Extract dynamic column annotations from recipe-generated column
             if "_col_annotations_json" in pandas_df.columns:
-                if "col_annotations" not in cleaned_kwargs or not cleaned_kwargs.get("col_annotations"):
+                if "col_annotations" not in cleaned_kwargs or not cleaned_kwargs.get(
+                    "col_annotations"
+                ):
                     try:
                         raw_val = pandas_df["_col_annotations_json"].iloc[0]
                         if isinstance(raw_val, str):
@@ -1136,9 +1138,12 @@ def _create_figure_from_data(
 
             # Sanitize col_annotations: remove annotations with None/empty values
             # (ComplexHeatmap crashes on None in categorical color mapping)
-            if "col_annotations" in heatmap_kwargs and isinstance(heatmap_kwargs["col_annotations"], dict):
+            if "col_annotations" in heatmap_kwargs and isinstance(
+                heatmap_kwargs["col_annotations"], dict
+            ):
                 heatmap_kwargs["col_annotations"] = {
-                    k: v for k, v in heatmap_kwargs["col_annotations"].items()
+                    k: v
+                    for k, v in heatmap_kwargs["col_annotations"].items()
                     if not any(val is None or val == "" for val in v.get("values", []))
                 }
 

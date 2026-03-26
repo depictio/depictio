@@ -154,9 +154,7 @@ def _create_template_origin_section(project) -> html.Div:
                     # Right column: variables
                     dmc.Stack(
                         [
-                            dmc.Text(
-                                "Variables", size="xs", fw=600, c="dimmed", tt="uppercase"
-                            ),
+                            dmc.Text("Variables", size="xs", fw=600, c="dimmed", tt="uppercase"),
                             html.Table(
                                 html.Tbody(var_rows),
                                 style={"borderCollapse": "collapse"},
@@ -2492,12 +2490,24 @@ def register_project_data_collections_callbacks(app):
             try:
                 project_id = project_data_store.get("project_id")
                 if not project_id or not local_data or not local_data.get("access_token"):
-                    return dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update
+                    return (
+                        dash.no_update,
+                        dash.no_update,
+                        dash.no_update,
+                        dash.no_update,
+                        dash.no_update,
+                    )
 
                 # Fetch fresh project data from API
                 project_data = api_call_fetch_project_by_id(project_id, local_data["access_token"])
                 if not project_data:
-                    return dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update
+                    return (
+                        dash.no_update,
+                        dash.no_update,
+                        dash.no_update,
+                        dash.no_update,
+                        dash.no_update,
+                    )
 
                 project = ProjectResponse.model_validate(project_data)
 
@@ -2554,7 +2564,13 @@ def register_project_data_collections_callbacks(app):
 
             except Exception as e:
                 logger.error(f"Error refreshing project data: {e}")
-                return dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update
+                return (
+                    dash.no_update,
+                    dash.no_update,
+                    dash.no_update,
+                    dash.no_update,
+                    dash.no_update,
+                )
 
         # Original logic for URL/local-store changes
         if not pathname or not pathname.startswith("/project/") or not pathname.endswith("/data"):
@@ -2583,7 +2599,13 @@ def register_project_data_collections_callbacks(app):
             project_data = api_call_fetch_project_by_id(project_id, local_data["access_token"])
             if not project_data:
                 logger.error(f"Failed to fetch project data for {project_id}")
-                return dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update
+                return (
+                    dash.no_update,
+                    dash.no_update,
+                    dash.no_update,
+                    dash.no_update,
+                    dash.no_update,
+                )
             project = ProjectResponse.model_validate(project_data)
 
             # Debug project information

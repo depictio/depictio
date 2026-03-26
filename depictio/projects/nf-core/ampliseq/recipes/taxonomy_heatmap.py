@@ -42,7 +42,14 @@ OPTIONAL_SCHEMA: dict[str, type[pl.DataType]] = {}
 _METADATA_ID_COL = "ID"
 _MAX_ANNOTATIONS = 5
 # Columns to skip when selecting annotations (IDs, technical fields, coordinates)
-_SKIP_ANNOTATION_COLS = {"name", "sampling_date", "latitude", "longitude", "depictio_run_id", "aggregation_time"}
+_SKIP_ANNOTATION_COLS = {
+    "name",
+    "sampling_date",
+    "latitude",
+    "longitude",
+    "depictio_run_id",
+    "aggregation_time",
+}
 
 # Use Plotly's default qualitative color sequence for deterministic auto-coloring.
 # Sorted unique values always get the same color assignment, matching Plotly charts.
@@ -79,8 +86,7 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
 
         # Select meaningful annotation columns, skipping IDs and coordinates
         annotation_cols = [
-            c for c in metadata.columns
-            if c != "sample" and c not in _SKIP_ANNOTATION_COLS
+            c for c in metadata.columns if c != "sample" and c not in _SKIP_ANNOTATION_COLS
         ][:_MAX_ANNOTATIONS]
 
         if annotation_cols:
@@ -105,7 +111,8 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
                 raw_values = meta_lookup[col].to_list()
                 # Convert non-serializable types and None to string
                 values = [
-                    str(v) if v is not None and not isinstance(v, (str, int, float, bool))
+                    str(v)
+                    if v is not None and not isinstance(v, (str, int, float, bool))
                     else (v if v is not None else "")
                     for v in raw_values
                 ]
