@@ -723,6 +723,21 @@ def _process_single_figure(
 
         df = dc_cache[load_key]
 
+        # Extract _col_annotations_json into dict_kwargs BEFORE heatmap column
+        # filtering -- the filter drops non-structural columns, losing the
+        # annotation data.  Placing it in dict_kwargs lets the filter's existing
+        # reindexing logic (lines 639-662) keep annotations aligned with the
+        # filtered sample columns.
+        if visu_type.lower() == "heatmap" and "_col_annotations_json" in df.columns:
+            if "col_annotations" not in dict_kwargs or not dict_kwargs.get("col_annotations"):
+                try:
+                    raw_val = df["_col_annotations_json"][0]
+                    if isinstance(raw_val, str):
+                        dict_kwargs["col_annotations"] = raw_val
+                except Exception:
+                    pass
+            df = df.drop("_col_annotations_json")
+
         # Heatmap column-level filtering: samples are column names, not row values
         if visu_type.lower() == "heatmap" and figure_filters:
             df, dict_kwargs = _apply_heatmap_column_filter(df, dict_kwargs, figure_filters, task_id)
