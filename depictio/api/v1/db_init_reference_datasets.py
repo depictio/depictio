@@ -378,6 +378,19 @@ class ReferenceDatasetRegistry:
         # Set reference projects as public by default for K8s demo environments
         project_config["is_public"] = True
 
+        # Add template_origin for template-based projects (ampliseq)
+        if os.path.exists(template_path):
+            from depictio.models.models.templates import TemplateOrigin
+
+            raw_template = get_config(template_path)
+            tmpl = raw_template.get("template", {})
+            project_config["template_origin"] = TemplateOrigin(
+                template_id=tmpl.get("template_id", dataset_name),
+                template_version=tmpl.get("version", "1.0.0"),
+                data_root=data_root,
+                variables=tmpl.get("reference", {}).get("vars", {}),
+            ).model_dump()
+
         # Extract and remove _static_dc_id from join definitions (not allowed in ProjectBeanie)
         # These will be handled during join execution in the background processor
         if "joins" in project_config:
