@@ -92,7 +92,7 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
 
             col_annotations: dict = {}
             for col in annotation_cols:
-                values = [str(v) if not isinstance(v, (str, int, float, bool, type(None))) else v
+                values = [str(v) if v is not None and not isinstance(v, (str, int, float, bool)) else (v if v is not None else "")
                           for v in meta_lookup[col].to_list()]
                 col_annotations[col] = {"values": values, "type": "categorical"}
 
