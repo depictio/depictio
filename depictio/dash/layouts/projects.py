@@ -1366,22 +1366,26 @@ def _create_project_badges(project: Project, current_user: UserBase) -> list[dmc
     is_public = getattr(project, "is_public", False)
     role, role_color = _determine_user_role(project, current_user)
 
+    badge_size = "sm"
     badges = [
         dmc.Badge(
             children=project_type.title(),
             color="orange" if project_type == "advanced" else "cyan",
             variant="light",
+            size=badge_size,
             style={"width": "100px", "justifyContent": "center"},
         ),
         dmc.Badge(
             children="Public" if is_public else "Private",
             color="green" if is_public else "violet",
             variant="filled",
+            size=badge_size,
             style={"width": "100px", "justifyContent": "center"},
         ),
         dmc.Badge(
             children=role,
             color=role_color,
+            size=badge_size,
             style={"width": "100px", "justifyContent": "center"},
         ),
     ]
@@ -1395,6 +1399,7 @@ def _create_project_badges(project: Project, current_user: UserBase) -> list[dmc
                     template_origin.template_id,
                     color="indigo",
                     variant="light",
+                    size=badge_size,
                     leftSection=DashIconify(icon="mdi:layers-outline", width=14),
                 ),
             )
