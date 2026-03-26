@@ -1104,6 +1104,19 @@ def _create_figure_from_data(
 
             from depictio.dash.modules.figure_component.utils import _collect_heatmap_kwargs
 
+            # Extract dynamic column annotations from recipe-generated column
+            if "_col_annotations_json" in pandas_df.columns:
+                if "col_annotations" not in cleaned_kwargs or not cleaned_kwargs.get("col_annotations"):
+                    try:
+                        raw_val = pandas_df["_col_annotations_json"].iloc[0]
+                        if isinstance(raw_val, str):
+                            cleaned_kwargs["col_annotations"] = raw_val
+                        elif isinstance(raw_val, dict):
+                            cleaned_kwargs["col_annotations"] = raw_val
+                    except Exception as e:
+                        logger.error(f"Failed to extract _col_annotations_json: {e}")
+                pandas_df = pandas_df.drop(columns=["_col_annotations_json"])
+
             heatmap_kwargs = _collect_heatmap_kwargs(cleaned_kwargs)
             hm = ComplexHeatmap.from_dataframe(pandas_df, **heatmap_kwargs)
             fig = hm.to_plotly()
