@@ -37,7 +37,7 @@ main_dashboard:
         workflow_tag: ampliseq
         data_collection_tag: metadata
         interactive_component_type: MultiSelect
-        column_name: sample
+        column_name: ID
         # --- optional ---
         column_type: object
         display:
@@ -334,13 +334,15 @@ tabs:
                 mean_rel_abundance: Mean Relative Abundance
                 "{GROUP_COL}": "{GROUP_COL}"
         mode: code
-        code_content: "df_mean = df.group_by(['{GROUP_COL}', 'Phylum']).agg(pl.col('rel_abundance').mean().alias('mean_rel_abundance')).sort('Phylum')\n\
-            fig = px.bar(\n    df_mean.to_pandas(),\n    x='Phylum', y='mean_rel_abundance',\
-            \ color='Phylum',\n    facet_row='{GROUP_COL}',\n    title='Mean Relative\
-            \ Abundance by {GROUP_COL}',\n    labels={'Phylum': 'Phylum', 'mean_rel_abundance':\
-            \ 'Mean Relative Abundance'}\n)\nfig.update_layout(xaxis={'categoryorder':\
-            \ 'category ascending'})\nfig.update_xaxes(tickangle=-45, tickfont={'size':\
-            \ 9})\nfig.update_layout(showlegend=False)"
+        code_content: "df_stats = df.group_by(['{GROUP_COL}', 'Phylum']).agg([\n\
+            \    pl.col('rel_abundance').mean().alias('mean_rel_abundance'),\n    pl.col('rel_abundance').std().alias('std_rel_abundance')\n\
+            ]).sort('Phylum')\nfig = px.bar(\n    df_stats.to_pandas(),\n    x='Phylum',\
+            \ y='mean_rel_abundance', color='Phylum',\n    error_y='std_rel_abundance',\n\
+            \    facet_row='{GROUP_COL}',\n    title='Mean Relative Abundance by {GROUP_COL}\
+            \ (± std)',\n    labels={'Phylum': 'Phylum', 'mean_rel_abundance': 'Mean\
+            \ Relative Abundance'}\n)\nfig.update_layout(xaxis={'categoryorder': 'category\
+            \ ascending'})\nfig.update_xaxes(tickangle=-45, tickfont={'size': 9})\n\
+            fig.update_layout(showlegend=False)"
         selection_enabled: false
         # --- generated on export ---
         tag: figure-bar_phylum_rel_abundance-de4c39
