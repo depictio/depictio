@@ -434,6 +434,33 @@ tabs:
             y: 45
             w: 8
             h: 6
+    -   component_type: map
+        workflow_tag: ampliseq
+        data_collection_tag: metadata
+        map_type: scatter_map
+        lat_column: latitude
+        lon_column: longitude
+        color_column: "{GROUP_COL}"
+        hover_columns:
+        - ID
+        - name
+        - "{GROUP_COL}"
+        - city
+        - sampling_date
+        map_style: carto-positron
+        default_zoom: 5
+        default_center:
+            lat: 51.0
+            lon: 10.5
+        selection_enabled: true
+        selection_column: ID
+        tag: map-sampling-locations
+        title: Sampling Locations
+        layout:
+            x: 0
+            y: 32
+            w: 8
+            h: 6
     -   component_type: figure
         workflow_tag: ampliseq
         data_collection_tag: taxonomy_heatmap
@@ -454,11 +481,10 @@ tabs:
         tag: figure-heatmap-taxonomy-composition
         title: Taxonomic Composition Heatmap
         description: Row-normalized (z-score) relative abundance of phyla across samples,
-            clustered by similarity with metadata and Kingdom annotations (annotations
-            injected dynamically from metadata when available)
+            clustered by similarity with Kingdom and metadata annotations
         layout:
             x: 0
-            y: 32
+            y: 38
             w: 8
             h: 7
     -   component_type: interactive
