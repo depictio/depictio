@@ -92,8 +92,17 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
 
             col_annotations: dict = {}
             for col in annotation_cols:
-                values = [str(v) if v is not None and not isinstance(v, (str, int, float, bool)) else (v if v is not None else "")
-                          for v in meta_lookup[col].to_list()]
+                raw_values = meta_lookup[col].to_list()
+                # Convert non-serializable types and None to string
+                values = [
+                    str(v) if v is not None and not isinstance(v, (str, int, float, bool))
+                    else (v if v is not None else "")
+                    for v in raw_values
+                ]
+                # Skip annotations that have any empty/null values
+                # (ComplexHeatmap can't handle empty strings in color mapping)
+                if any(v == "" or v is None for v in values):
+                    continue
                 col_annotations[col] = {"values": values, "type": "categorical"}
 
             result = result.with_columns(
