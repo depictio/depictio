@@ -1295,25 +1295,18 @@ def _create_project_details_paper(project: Project) -> dmc.Paper:
             dmc.Group(
                 children=[
                     dmc.Text("Template:", fw="bold", className="label-text"),
-                    dmc.Badge(
-                        template_id,
-                        color="indigo",
-                        variant="light",
-                        leftSection=DashIconify(icon="mdi:layers-outline", width=14),
-                    ),
-                ],
-                gap="xs",
-            ),
-        )
-        rows.append(
-            dmc.Group(
-                children=[
-                    dmc.Text("Template docs:", fw="bold", className="label-text"),
                     dmc.Anchor(
-                        docs_url,
+                        dmc.Badge(
+                            template_id,
+                            color="indigo",
+                            variant="light",
+                            leftSection=DashIconify(icon="mdi:layers-outline", width=14),
+                            rightSection=DashIconify(icon="mdi:open-in-new", width=12),
+                            style={"cursor": "pointer"},
+                        ),
                         href=docs_url,
                         target="_blank",
-                        size="sm",
+                        style={"textDecoration": "none"},
                     ),
                 ],
                 gap="xs",
