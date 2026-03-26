@@ -1121,20 +1121,33 @@ def generate_elements_from_project(
         source_dc_tag = source_dc_data.get("data_collection_tag", f"DC_{source_dc_id}")
         target_dc_tag = target_dc_data.get("data_collection_tag", f"DC_{target_dc_id}")
 
-        # Mark source column as linked
+        # Determine source node for the edge.
+        # For table sources with column nodes, use the column node if it exists.
+        # Otherwise, fall back to the DC background node.
         source_col_id = f"{source_dc_tag}_{source_column}"
-        for elem in elements:
-            if elem["data"].get("id") == source_col_id:
-                elem["data"]["is_link_column"] = True
-                if "join-column" not in elem.get("classes", ""):
-                    elem["classes"] = elem.get("classes", "") + " join-column"
+        source_node_exists = any(elem["data"].get("id") == source_col_id for elem in elements)
+
+        if source_node_exists:
+            source_node = source_col_id
+            # Mark source column as linked
+            for elem in elements:
+                if elem["data"].get("id") == source_col_id:
+                    elem["data"]["is_link_column"] = True
+                    if "join-column" not in elem.get("classes", ""):
+                        elem["classes"] = elem.get("classes", "") + " join-column"
+        else:
+            # Column node not found — connect to DC background node instead
+            source_node = f"dc_bg_{source_dc_id}"
 
         # Create link edge - connect to DC background for non-table targets
         if target_type in ("multiqc", "image"):
             target_node = f"dc_bg_{target_dc_id}"
         else:
             target_field = link_config.get("target_field", source_column)
-            target_node = f"{target_dc_tag}_{target_field}"
+            candidate = f"{target_dc_tag}_{target_field}"
+            # Fall back to DC background if target column node doesn't exist
+            target_node_exists = any(elem["data"].get("id") == candidate for elem in elements)
+            target_node = candidate if target_node_exists else f"dc_bg_{target_dc_id}"
 
         # Calculate adjacency
         try:
@@ -1151,7 +1164,7 @@ def generate_elements_from_project(
             {
                 "data": {
                     "id": f"link_edge_{edge_counter}",
-                    "source": source_col_id,
+                    "source": source_node,
                     "target": target_node,
                     "label": f"Link ({resolver})",
                     "link_type": target_type,
