@@ -1118,6 +1118,15 @@ def _create_figure_from_data(
                 pandas_df = pandas_df.drop(columns=["_col_annotations_json"])
 
             heatmap_kwargs = _collect_heatmap_kwargs(cleaned_kwargs)
+
+            # Sanitize col_annotations: remove annotations with None/empty values
+            # (ComplexHeatmap crashes on None in categorical color mapping)
+            if "col_annotations" in heatmap_kwargs and isinstance(heatmap_kwargs["col_annotations"], dict):
+                heatmap_kwargs["col_annotations"] = {
+                    k: v for k, v in heatmap_kwargs["col_annotations"].items()
+                    if not any(val is None or val == "" for val in v.get("values", []))
+                }
+
             hm = ComplexHeatmap.from_dataframe(pandas_df, **heatmap_kwargs)
             fig = hm.to_plotly()
             fig.update_layout(
