@@ -985,6 +985,9 @@ def _extract_required_columns(dict_kwargs: dict, visu_type: str) -> list[str]:
             elif isinstance(val, dict):
                 columns.extend(val.keys())
 
+        # Always include _col_annotations_json if present (dynamic column annotations from recipe)
+        columns.append("_col_annotations_json")
+
         return list(set(columns)) if columns else []
 
     columns = []
