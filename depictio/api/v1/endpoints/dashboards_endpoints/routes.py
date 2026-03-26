@@ -1474,8 +1474,9 @@ def _filter_unresolved_components(dashboard_dict: dict) -> None:
 
     for component in stored:
         dc_tag = component.get("data_collection_tag", "")
-        # MultiQC components don't need dc_id resolved the same way
-        if component.get("component_type") == "multiqc" or component.get("dc_id"):
+        # MultiQC and map components resolve dc_id differently
+        comp_type = component.get("component_type", "")
+        if comp_type in ("multiqc", "map") or component.get("dc_id"):
             resolved.append(component)
         else:
             removed_indices.add(component.get("index", ""))

@@ -16,26 +16,6 @@ main_dashboard:
     -   component_type: interactive
         workflow_tag: ampliseq
         data_collection_tag: metadata
-        interactive_component_type: MultiSelect
-        column_name: "{GROUP_COL}"
-        # --- optional ---
-        column_type: object
-        display:
-            title_size: md
-            custom_color: '#984EA3'
-            icon_name: mdi:tag-multiple
-        # --- generated on export ---
-        tag: interactive-multiqc-group-filter-d8ca83
-        index: multiqc-group-filter
-        layout:
-            x: 0
-            y: 0
-            w: 1
-            h: 2
-        title: "{GROUP_COL_DISPLAY}"
-    -   component_type: interactive
-        workflow_tag: ampliseq
-        data_collection_tag: metadata
         interactive_component_type: DateRangePicker
         column_name: sampling_date
         column_type: datetime
@@ -47,7 +27,7 @@ main_dashboard:
         index: multiqc-daterange
         layout:
             x: 0
-            y: 2
+            y: 0
             w: 1
             h: 3
         title: Sampling Period
@@ -55,14 +35,30 @@ main_dashboard:
         workflow_tag: ampliseq
         data_collection_tag: metadata
         interactive_component_type: MultiSelect
+        column_name: "{GROUP_COL}"
+        column_type: object
+        display:
+            title_size: md
+            custom_color: '#984EA3'
+            icon_name: mdi:tag-multiple
+        tag: interactive-multiqc-group-filter-d8ca83
+        index: multiqc-group-filter
+        layout:
+            x: 0
+            y: 3
+            w: 1
+            h: 2
+        title: "{GROUP_COL_DISPLAY}"
+    -   component_type: interactive
+        workflow_tag: ampliseq
+        data_collection_tag: metadata
+        interactive_component_type: MultiSelect
         column_name: ID
-        # --- optional ---
         column_type: object
         display:
             title_size: md
             custom_color: '#45B8AC'
             icon_name: mdi:flask
-        # --- generated on export ---
         tag: interactive-multiqc-sample-filter-78c9c2
         index: multiqc-sample-filter
         layout:
@@ -490,25 +486,6 @@ tabs:
     -   component_type: interactive
         workflow_tag: ampliseq
         data_collection_tag: metadata
-        interactive_component_type: MultiSelect
-        column_name: "{GROUP_COL}"
-        # --- optional ---
-        column_type: object
-        display:
-            title_size: md
-            custom_color: '#984EA3'
-            icon_name: mdi:tag-multiple
-        # --- generated on export ---
-        tag: interactive-group-col-d8ca83
-        layout:
-            x: 0
-            y: 3
-            w: 1
-            h: 2
-        title: "{GROUP_COL_DISPLAY}"
-    -   component_type: interactive
-        workflow_tag: ampliseq
-        data_collection_tag: metadata
         interactive_component_type: DateRangePicker
         column_name: sampling_date
         column_type: datetime
@@ -520,10 +497,27 @@ tabs:
         index: community-daterange
         layout:
             x: 0
-            y: 5
+            y: 0
             w: 1
             h: 3
         title: Sampling Period
+    -   component_type: interactive
+        workflow_tag: ampliseq
+        data_collection_tag: metadata
+        interactive_component_type: MultiSelect
+        column_name: "{GROUP_COL}"
+        column_type: object
+        display:
+            title_size: md
+            custom_color: '#984EA3'
+            icon_name: mdi:tag-multiple
+        tag: interactive-group-col-d8ca83
+        layout:
+            x: 0
+            y: 3
+            w: 1
+            h: 2
+        title: "{GROUP_COL_DISPLAY}"
     -   component_type: interactive
         workflow_tag: ampliseq
         data_collection_tag: metadata
@@ -537,7 +531,7 @@ tabs:
         tag: interactive-sample-78c9c2
         layout:
             x: 0
-            y: 8
+            y: 5
             w: 1
             h: 3
         title: Sample ID
