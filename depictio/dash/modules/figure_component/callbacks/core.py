@@ -1108,6 +1108,24 @@ def _create_figure_from_data(
             )
             return fig
 
+        # UpSet plot uses plotly-upset instead of px
+        if visu_type.lower() == "upset":
+            from plotly_upset import UpSetPlot
+
+            from depictio.dash.modules.figure_component.utils import _collect_upset_kwargs
+
+            upset_kwargs = _collect_upset_kwargs(cleaned_kwargs)
+            plot = UpSetPlot.from_dataframe(pandas_df, **upset_kwargs)
+            fig = plot.to_plotly()
+            fig.update_layout(
+                autosize=True,
+                width=None,
+                height=None,
+                paper_bgcolor="rgba(0,0,0,0)",
+                plot_bgcolor="rgba(0,0,0,0)",
+            )
+            return fig
+
         if visu_type not in ["scatter", "line", "bar", "box", "histogram"]:
             logger.warning(f"Unsupported visualization type: {visu_type}, defaulting to scatter")
             visu_type = "scatter"

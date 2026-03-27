@@ -1020,7 +1020,7 @@ def discover_all_visualizations() -> Dict[str, VisualizationDefinition]:
         Dictionary mapping function names to visualization definitions.
     """
     functions = get_available_plotly_functions()
-    functions.extend(["umap", "heatmap"])  # Add custom visualization functions
+    functions.extend(["umap", "heatmap", "upset"])  # Add custom visualization functions
 
     visualizations = {}
 
@@ -1033,6 +1033,8 @@ def discover_all_visualizations() -> Dict[str, VisualizationDefinition]:
                 viz_def = create_umap_visualization_definition()
             elif func_name == "heatmap":
                 viz_def = create_heatmap_visualization_definition()
+            elif func_name == "upset":
+                viz_def = create_upset_visualization_definition()
             else:
                 viz_def = parameter_inspector.create_visualization_definition(
                     func_name=func_name,
@@ -1398,6 +1400,148 @@ def create_heatmap_visualization_definition() -> VisualizationDefinition:
         description="Clustered heatmap with dendrograms and annotation tracks",
         parameters=heatmap_parameters,
         icon="mdi:grid-large",
+        group=VisualizationGroup.SPECIALIZED,
+    )
+
+
+def create_upset_visualization_definition() -> VisualizationDefinition:
+    """Create UpSet plot visualization definition with custom parameters."""
+
+    upset_parameters = [
+        # Core parameters
+        ParameterDefinition(
+            name="set_columns",
+            type=ParameterType.MULTI_SELECT,
+            category=ParameterCategory.CORE,
+            label="Set Columns",
+            description="Binary columns representing set membership (auto-detected if empty)",
+            required=False,
+            options=[],
+        ),
+        ParameterDefinition(
+            name="set_names",
+            type=ParameterType.MULTI_SELECT,
+            category=ParameterCategory.CORE,
+            label="Set Names",
+            description="Display names for sets (defaults to column names)",
+            required=False,
+            options=[],
+        ),
+        ParameterDefinition(
+            name="annotations",
+            type=ParameterType.STRING,
+            category=ParameterCategory.CORE,
+            label="Annotations",
+            description="JSON dict mapping track names to annotation config",
+            required=False,
+        ),
+        # Sorting parameters
+        ParameterDefinition(
+            name="sort_by",
+            type=ParameterType.CATEGORICAL,
+            category=ParameterCategory.SPECIFIC,
+            label="Sort By",
+            description="How to sort intersections",
+            default="cardinality",
+            options=["cardinality", "degree", "degree-cardinality", "input"],
+            required=False,
+        ),
+        ParameterDefinition(
+            name="sort_order",
+            type=ParameterType.CATEGORICAL,
+            category=ParameterCategory.SPECIFIC,
+            label="Sort Order",
+            description="Sort direction",
+            default="descending",
+            options=["descending", "ascending"],
+            required=False,
+        ),
+        # Filtering parameters
+        ParameterDefinition(
+            name="min_size",
+            type=ParameterType.INTEGER,
+            category=ParameterCategory.SPECIFIC,
+            label="Min Size",
+            description="Minimum intersection size to display",
+            default=0,
+            min_value=0,
+            required=False,
+        ),
+        ParameterDefinition(
+            name="max_size",
+            type=ParameterType.INTEGER,
+            category=ParameterCategory.SPECIFIC,
+            label="Max Size",
+            description="Maximum intersection size to display (None for no limit)",
+            required=False,
+        ),
+        ParameterDefinition(
+            name="exclude_empty",
+            type=ParameterType.BOOLEAN,
+            category=ParameterCategory.SPECIFIC,
+            label="Exclude Empty",
+            description="Exclude intersections with zero members",
+            default=True,
+            required=False,
+        ),
+        # Display parameters
+        ParameterDefinition(
+            name="show_set_sizes",
+            type=ParameterType.BOOLEAN,
+            category=ParameterCategory.COMMON,
+            label="Show Set Sizes",
+            description="Show horizontal bar chart of set sizes",
+            default=True,
+            required=False,
+        ),
+        ParameterDefinition(
+            name="show_values",
+            type=ParameterType.BOOLEAN,
+            category=ParameterCategory.COMMON,
+            label="Show Values",
+            description="Show count values on intersection bars",
+            default=False,
+            required=False,
+        ),
+        ParameterDefinition(
+            name="dot_size",
+            type=ParameterType.INTEGER,
+            category=ParameterCategory.COMMON,
+            label="Dot Size",
+            description="Size of dots in the matrix",
+            default=12,
+            min_value=4,
+            max_value=30,
+            required=False,
+        ),
+        # Color parameters
+        ParameterDefinition(
+            name="color",
+            type=ParameterType.STRING,
+            category=ParameterCategory.COMMON,
+            label="Color",
+            description="Default color for active elements",
+            default="#333333",
+            required=False,
+        ),
+        ParameterDefinition(
+            name="color_intersections_by",
+            type=ParameterType.CATEGORICAL,
+            category=ParameterCategory.COMMON,
+            label="Color Intersections By",
+            description="Color intersection bars by set membership or degree",
+            options=["set", "degree"],
+            required=False,
+        ),
+    ]
+
+    return VisualizationDefinition(
+        name="upset",
+        function_name="upset",
+        label="UpSet Plot",
+        description="Set intersection visualization with matrix layout and annotation tracks",
+        parameters=upset_parameters,
+        icon="mdi:set-all",
         group=VisualizationGroup.SPECIALIZED,
     )
 

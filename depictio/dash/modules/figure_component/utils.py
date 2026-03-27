@@ -68,6 +68,52 @@ HEATMAP_INT_PARAMS: frozenset[str] = frozenset({"width", "height"})
 # Float heatmap parameters
 HEATMAP_FLOAT_PARAMS: frozenset[str] = frozenset({"dendro_ratio"})
 
+# ---------------------------------------------------------------------------
+# UpSet plot parameter sets – shared with callbacks/core.py
+# ---------------------------------------------------------------------------
+
+# Parameters accepted by UpSetPlot.from_dataframe()
+UPSET_FROM_DF_PARAMS: frozenset[str] = frozenset(
+    {
+        "set_columns",
+        "annotations",
+    }
+)
+
+# Parameters accepted by UpSetPlot.__init__()
+UPSET_INIT_PARAMS: frozenset[str] = frozenset(
+    {
+        "set_names",
+        "title",
+        "subtitle",
+        "sort_by",
+        "sort_order",
+        "min_size",
+        "max_size",
+        "exclude_empty",
+        "show_set_sizes",
+        "color",
+        "inactive_color",
+        "set_colors",
+        "color_intersections_by",
+        "degree_colors",
+        "show_values",
+        "dot_size",
+    }
+)
+
+# Combined set of all recognized upset parameters
+UPSET_PARAMS: frozenset[str] = UPSET_FROM_DF_PARAMS | UPSET_INIT_PARAMS
+
+# Parameters that accept comma-separated list values
+UPSET_LIST_PARAMS: frozenset[str] = frozenset({"set_columns", "set_names"})
+
+# Boolean upset parameters
+UPSET_BOOL_PARAMS: frozenset[str] = frozenset({"exclude_empty", "show_set_sizes", "show_values"})
+
+# Integer upset parameters
+UPSET_INT_PARAMS: frozenset[str] = frozenset({"min_size", "max_size", "dot_size"})
+
 
 def stringify_id(id_dict):
     """Convert dictionary ID to string format exactly as Dash does internally.
@@ -1303,6 +1349,87 @@ def _render_heatmap_figure(
 
     hm = ComplexHeatmap.from_dataframe(df, **heatmap_kwargs)
     figure = hm.to_plotly()
+
+    # Clear fixed dimensions so the dcc.Graph responsive config takes over,
+    # and set transparent background for theme compatibility.
+    figure.update_layout(
+        autosize=True,
+        width=None,
+        height=None,
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+    )
+
+    return figure, data_info
+
+
+def _parse_upset_param(key: str, val: Any) -> Any:
+    """Parse a single upset parameter value from YAML/JSON string forms.
+
+    Handles JSON-encoded strings, comma-separated lists, booleans, and
+    integer types for UpSetPlot parameters.
+    """
+    if not isinstance(val, str):
+        return val
+
+    stripped = val.strip()
+
+    # JSON-encoded dicts/lists (set_columns, annotations, set_colors, degree_colors)
+    if stripped.startswith(("{", "[")):
+        try:
+            return json.loads(val)
+        except (json.JSONDecodeError, ValueError):
+            pass
+
+    # Comma-separated list params
+    if key in UPSET_LIST_PARAMS:
+        return [s.strip() for s in val.split(",") if s.strip()]
+
+    # Boolean params
+    if key in UPSET_BOOL_PARAMS:
+        return stripped.lower() in ("true", "1", "yes")
+
+    # Integer params
+    if key in UPSET_INT_PARAMS:
+        try:
+            return int(val)
+        except ValueError:
+            return None
+
+    return val
+
+
+def _collect_upset_kwargs(cleaned_kwargs: dict) -> dict[str, Any]:
+    """Filter and parse upset-specific parameters from the full kwargs dict.
+
+    Args:
+        cleaned_kwargs: Full parameter dictionary (may contain non-upset keys)
+
+    Returns:
+        Dictionary of parsed parameters suitable for UpSetPlot
+    """
+    upset_kwargs: dict[str, Any] = {}
+    for k, v in cleaned_kwargs.items():
+        if k in UPSET_PARAMS and v is not None and v != "":
+            parsed = _parse_upset_param(k, v)
+            if parsed is not None:
+                upset_kwargs[k] = parsed
+    return upset_kwargs
+
+
+def _render_upset_figure(
+    df: pl.DataFrame,
+    cleaned_kwargs: dict,
+    data_info: dict,
+) -> tuple[Any, dict]:
+    """Render an UpSet figure using plotly-upset."""
+    from plotly_upset import UpSetPlot
+
+    upset_kwargs = _collect_upset_kwargs(cleaned_kwargs)
+    data_info["total_data_count"] = df.height
+
+    plot = UpSetPlot.from_dataframe(df, **upset_kwargs)
+    figure = plot.to_plotly()
 
     # Clear fixed dimensions so the dcc.Graph responsive config takes over,
     # and set transparent background for theme compatibility.
