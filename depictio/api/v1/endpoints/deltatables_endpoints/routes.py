@@ -101,12 +101,13 @@ async def upsert_deltatable(
             detail=f"Data collection with ID {data_collection_oid} not found in any project workflow.",
         )
 
-    # Check if this is a MultiQC data collection (stored as parquet, not delta table)
+    # Check if this is a MultiQC or GeoJSON data collection (not stored as delta table)
     dc_type = dc_data.get("config", {}).get("type", "")
     is_multiqc = dc_type.lower() == "multiqc"
+    is_geojson = dc_type.lower() == "geojson"
 
-    # For MultiQC, skip delta table validation since it's stored as raw parquet
-    if is_multiqc:
+    # For MultiQC/GeoJSON, skip delta table validation since they're not delta tables
+    if is_multiqc or is_geojson:
         # Create minimal hash for MultiQC without reading the file
         final_hash = hashlib.sha256(
             f"{payload.delta_table_location}{datetime.now()}".encode()

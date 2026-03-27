@@ -17,10 +17,11 @@ def register_callbacks_map_component(app):
         app: Dash application instance.
     """
     from .core import register_core_callbacks
-    from .selection import register_map_selection_callback
+    from .selection import register_leaflet_selection_callback, register_map_selection_callback
 
     register_core_callbacks(app)
     register_map_selection_callback(app)
+    register_leaflet_selection_callback(app)
 
 
 def load_design_callbacks(app):
