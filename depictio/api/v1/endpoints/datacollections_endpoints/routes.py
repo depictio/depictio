@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.db import db, projects_collection
+from depictio.api.v1.endpoints.datacollections_endpoints.process_routes import process_s3_router
 from depictio.api.v1.endpoints.datacollections_endpoints.utils import (
     _delete_data_collection_by_id,
     _get_data_collection_specs,
@@ -16,6 +17,7 @@ from depictio.api.v1.endpoints.workflow_endpoints.routes import get_workflow_fro
 from depictio.models.models.base import PyObjectId
 
 datacollections_endpoint_router = APIRouter()
+datacollections_endpoint_router.include_router(process_s3_router)
 
 workflows_collection = db[settings.mongodb.collections.workflow_collection]
 
