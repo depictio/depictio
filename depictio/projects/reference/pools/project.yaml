@@ -1,0 +1,118 @@
+# HGSVC Pools Strand-seq Analysis for Depictio
+name: "HGSVC Pools Strand-seq Analysis"
+project_type: "basic"
+is_public: false
+workflows:
+  - name: "hgsvc_pools_analysis"
+    engine:
+      name: "snakemake"
+      version: "7.19.2"
+    description: "Comparative analysis of HGSVC pools strand-seq data"
+    data_location:
+      structure: "flat"
+      locations:
+        - "{DEPICTIO_DATA_DIR}/projects/reference/pools"
+    data_collections:
+    # Population metadata
+    - data_collection_tag: "population_metadata"
+      description: "Population metadata for HGSVC samples with ancestry information"
+      config:
+        type: "Table"
+        metatype: "Metadata"
+        scan:
+          mode: "recursive"
+          scan_parameters:
+            regex_config:
+              pattern: "population_metadata.xlsx"
+        dc_specific_properties:
+          format: "XLSX"
+          columns_description:
+            sample_id: "Sample identifier matching sequencing data"
+            ANCESTRY: "Ancestry description (e.g. African Ancestry in SW USA)"
+            pop: "Population code (e.g. ASW, GBR)"
+            superpop: "Superpopulation code (e.g. AFR, EUR)"
+            Batch_Number: "ONT sequencing batch number"
+    # Demultiplexing results
+    - data_collection_tag: "demuxid_result"
+      description: "Demultiplexing results for HGSVC pools strand-seq data"
+      config:
+        type: "Table"
+        metatype: "Metadata"
+        scan:
+          mode: "recursive"
+          scan_parameters:
+            regex_config:
+              pattern: "demuxid_results.xlsx"
+        dc_specific_properties:
+          format: "XLSX"
+          columns_description:
+            pool_name: "Name of the pool from which the sample originates"
+            sample_id: "Sample identifier matching population metadata"
+            cell_count: "Number of cells assigned to the sample"
+            is_DM: "Flag indicating if the sample was demultiplexed"
+            cell_category: "Category classification of the cell"
+            status: "Processing status of the sample"
+    # Synthetic inversion genotype matrix
+    - data_collection_tag: "sample_inversion_genotypes"
+      description: "Synthetic genotype matrix: 600 inversions × 479 samples (HW-simulated from superpop AFs)"
+      config:
+        type: "Table"
+        metatype: "Metadata"
+        scan:
+          mode: "recursive"
+          scan_parameters:
+            regex_config:
+              pattern: "sample_inversion_genotypes.xlsx"
+        dc_specific_properties:
+          format: "XLSX"
+          columns_description:
+            inversion_id: "Inversion identifier (e.g. INV_0001)"
+            global_af: "Global allele frequency of the inversion"
+            af_afr_prop: "Normalized proportion of African superpopulation AF"
+            af_eur_prop: "Normalized proportion of European superpopulation AF"
+            af_eas_prop: "Normalized proportion of East Asian superpopulation AF"
+            af_sas_prop: "Normalized proportion of South Asian superpopulation AF"
+            af_amr_prop: "Normalized proportion of American superpopulation AF"
+    # Strand-seq QC metrics
+    # - data_collection_tag: "strandseq_qc_metrics"
+    #   description: "Strand-seq quality control metrics for HGSVC samples"
+    #   config:
+    #     type: "Table"
+    #     metatype: "Metadata"
+    #     scan:
+    #       mode: "single"
+    #       scan_parameters:
+    #         filename: "/app/depictio/projects/reference/pools/pools_qc_summary.xlsx"
+    #     dc_specific_properties:
+    #       format: "XLSX"
+    #       columns_description:
+    #         pool_name: "Name of the pool"
+    #         cell: "Cell identifier"
+    #         mapped: "Number of mapped reads"
+    #         dupl_rate: "Duplicate read rate"
+    #         good: "Usable reads after filtering"
+    #         usable: "Flag indicating if the cell passed QC"
+    #     join:
+    #       on_columns:
+    #         - pool_name
+    #       how: "inner"
+    #       with_dc:
+    #         - "demuxid_result"
+
+# ============================================================================
+# TABLE JOINS CONFIGURATION
+# ============================================================================
+# Client-side joins executed locally with `depictio data join`
+# ============================================================================
+
+joins:
+  # Join demultiplexing results with population metadata
+  - name: "demux_with_population"
+    description: "Demultiplexing results enriched with population metadata"
+    left_dc: "demuxid_result"
+    right_dc: "population_metadata"
+    on_columns:
+      - "sample_id"
+    how: "inner"
+    persist: true
+    workflow_name: "hgsvc_pools_analysis"
