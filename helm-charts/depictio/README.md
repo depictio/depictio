@@ -109,6 +109,13 @@ These credentials are also stored in the Kubernetes Secret named `<release-name>
 | `minio.service.type` | MinIO service type | `ClusterIP` |
 | `minio.service.httpPort` | MinIO HTTP service port | `9000` |
 | `minio.service.consolePort` | MinIO console service port | `9001` |
+| `minio.ingress.enabled` | Force a dedicated MinIO ingress resource | `false` |
+| `minio.ingress.separateRoute` | Split MinIO out of the shared ingress so `/` auth settings do not affect it | `false` |
+| `minio.ingress.inheritDefaultAnnotations` | Reuse `ingress.annotations` on the dedicated MinIO ingress when MinIO annotations are empty | `true` |
+| `minio.ingress.annotations` | MinIO-specific ingress annotations; falls back to `ingress.annotations` | `{}` |
+| `minio.ingress.labels` | MinIO-specific ingress labels; falls back to `ingress.labels` | `{}` |
+| `minio.ingress.hosts` | Optional explicit host rules for the dedicated MinIO ingress | `[]` |
+| `minio.ingress.tls` | Optional TLS entries for the dedicated MinIO ingress; falls back to `ingress.tls` | `[]` |
 | `minio.args` | MinIO container arguments | `["server", "/data", "--console-address", ":9001"]` |
 
 ### Backend parameters

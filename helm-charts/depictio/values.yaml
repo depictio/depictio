@@ -136,6 +136,21 @@ minio:
     DEPICTIO_MINIO_ROOT_PASSWORD: "minio123"
     DEPICTIO_MINIO_BUCKET: "depictio-bucket"
     DEPICTIO_MINIO_SERVICE_PORT: "9000"
+  ingress:
+    # When any value in this block is set, MinIO can be rendered as a dedicated Ingress.
+    # This allows MinIO-specific annotations while optionally falling back to ingress.* defaults.
+    enabled: false
+    # Split MinIO out of the shared ingress even when no other MinIO ingress overrides are set.
+    # Use this to keep auth annotations from the main ingress away from MinIO.
+    separateRoute: false
+    ingressClassName: ""
+    # When true and no MinIO-specific annotations are set, reuse ingress.annotations.
+    # Set to false when MinIO must not inherit shared auth annotations.
+    inheritDefaultAnnotations: true
+    annotations: {}
+    labels: {}
+    hosts: []
+    tls: []
 
 # Backend settings
 backend:
