@@ -1,3 +1,9 @@
+{{- $minioIngress := .Values.minio.ingress | default dict }}
+{{- $useSeparateMinioIngress := and .Values.ingress.enabled .Values.minio.enabled (or $minioIngress.enabled $minioIngress.separateRoute $minioIngress.annotations $minioIngress.labels $minioIngress.hosts $minioIngress.tls $minioIngress.ingressClassName) }}
+{{- $inheritDefaultMinioAnnotations := ne $minioIngress.inheritDefaultAnnotations false }}
+{{- $backendIngress := .Values.backend.ingress | default dict }}
+{{- $useSeparateBackendIngress := and .Values.ingress.enabled (or $backendIngress.enabled $backendIngress.separateRoute $backendIngress.annotations $backendIngress.labels $backendIngress.hosts $backendIngress.tls $backendIngress.ingressClassName) }}
+{{- $inheritDefaultBackendAnnotations := ne $backendIngress.inheritDefaultAnnotations false }}
 {{- if .Values.ingress.enabled }}
 apiVersion: networking.k8s.io/v1
 kind: Ingress
@@ -52,6 +58,7 @@ spec:
                 name: {{ .Release.Name }}-depictio-frontend
                 port:
                   number: {{ .Values.frontend.service.httpPort }}
+    {{- if not $useSeparateBackendIngress }}
     - host: {{ include "depictio.apiUrl" . | quote }}
       http:
         paths:
@@ -62,7 +69,8 @@ spec:
                 name: {{ .Release.Name }}-depictio-backend
                 port:
                   number: {{ .Values.backend.service.httpPort }}
-    {{- if .Values.minio.enabled }}
+    {{- end }}
+    {{- if and .Values.minio.enabled (not $useSeparateMinioIngress) }}
     - host: {{ include "depictio.minioUrl" . | quote }}
       http:
         paths:
@@ -76,6 +84,140 @@ spec:
     {{- end }}
   {{- end }}
   {{- if .Values.ingress.tls }}
+  tls:
+    {{- toYaml .Values.ingress.tls | nindent 4 }}
+  {{- end }}
+{{- end }}
+{{- if $useSeparateMinioIngress }}
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ .Release.Name }}-minio-ingress
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: depictio
+    component: minio-ingress
+    {{- if $minioIngress.labels }}
+    {{- toYaml $minioIngress.labels | nindent 4 }}
+    {{- else if .Values.ingress.labels }}
+    {{- toYaml .Values.ingress.labels | nindent 4 }}
+    {{- end }}
+  annotations:
+    {{- if $minioIngress.annotations }}
+    {{- toYaml $minioIngress.annotations | nindent 4 }}
+    {{- else if and $inheritDefaultMinioAnnotations .Values.ingress.annotations }}
+    {{- toYaml .Values.ingress.annotations | nindent 4 }}
+    {{- end }}
+spec:
+  {{- if $minioIngress.ingressClassName }}
+  ingressClassName: {{ $minioIngress.ingressClassName }}
+  {{- else if .Values.ingress.ingressClassName }}
+  ingressClassName: {{ .Values.ingress.ingressClassName }}
+  {{- end }}
+  rules:
+  {{- if $minioIngress.hosts }}
+  {{- range $minioIngress.hosts }}
+    - host: {{ .host | quote }}
+      http:
+        paths:
+        {{- range .paths }}
+          - path: {{ .path }}
+            pathType: {{ .pathType | default "Prefix" }}
+            backend:
+              service:
+                name: {{ printf "%s-%s" $.Release.Name .service.name }}
+                port:
+                  {{- if .service.portName }}
+                  name: {{ .service.portName }}
+                  {{- else }}
+                  number: {{ .service.port }}
+                  {{- end }}
+        {{- end }}
+  {{- end }}
+  {{- else }}
+    - host: {{ include "depictio.minioUrl" . | quote }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ .Release.Name }}-minio
+                port:
+                  number: {{ .Values.minio.service.httpPort }}
+  {{- end }}
+  {{- if $minioIngress.tls }}
+  tls:
+    {{- toYaml $minioIngress.tls | nindent 4 }}
+  {{- else if .Values.ingress.tls }}
+  tls:
+    {{- toYaml .Values.ingress.tls | nindent 4 }}
+  {{- end }}
+{{- end }}
+{{- if $useSeparateBackendIngress }}
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ .Release.Name }}-backend-ingress
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: depictio
+    component: backend-ingress
+    {{- if $backendIngress.labels }}
+    {{- toYaml $backendIngress.labels | nindent 4 }}
+    {{- else if .Values.ingress.labels }}
+    {{- toYaml .Values.ingress.labels | nindent 4 }}
+    {{- end }}
+  annotations:
+    {{- if $backendIngress.annotations }}
+    {{- toYaml $backendIngress.annotations | nindent 4 }}
+    {{- else if and $inheritDefaultBackendAnnotations .Values.ingress.annotations }}
+    {{- toYaml .Values.ingress.annotations | nindent 4 }}
+    {{- end }}
+spec:
+  {{- if $backendIngress.ingressClassName }}
+  ingressClassName: {{ $backendIngress.ingressClassName }}
+  {{- else if .Values.ingress.ingressClassName }}
+  ingressClassName: {{ .Values.ingress.ingressClassName }}
+  {{- end }}
+  rules:
+  {{- if $backendIngress.hosts }}
+  {{- range $backendIngress.hosts }}
+    - host: {{ .host | quote }}
+      http:
+        paths:
+        {{- range .paths }}
+          - path: {{ .path }}
+            pathType: {{ .pathType | default "Prefix" }}
+            backend:
+              service:
+                name: {{ printf "%s-%s" $.Release.Name .service.name }}
+                port:
+                  {{- if .service.portName }}
+                  name: {{ .service.portName }}
+                  {{- else }}
+                  number: {{ .service.port }}
+                  {{- end }}
+        {{- end }}
+  {{- end }}
+  {{- else }}
+    - host: {{ include "depictio.apiUrl" . | quote }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ .Release.Name }}-depictio-backend
+                port:
+                  number: {{ .Values.backend.service.httpPort }}
+  {{- end }}
+  {{- if $backendIngress.tls }}
+  tls:
+    {{- toYaml $backendIngress.tls | nindent 4 }}
+  {{- else if .Values.ingress.tls }}
   tls:
     {{- toYaml .Values.ingress.tls | nindent 4 }}
   {{- end }}
