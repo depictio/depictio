@@ -137,15 +137,10 @@ minio:
     DEPICTIO_MINIO_BUCKET: "depictio-bucket"
     DEPICTIO_MINIO_SERVICE_PORT: "9000"
   ingress:
-    # When any value in this block is set, MinIO is rendered as a dedicated Ingress.
-    # This allows MinIO-specific annotations while optionally falling back to ingress.* defaults.
-    enabled: false
-    # Split MinIO out of the shared ingress even when no other MinIO ingress overrides are set.
-    # Use this to keep auth annotations from the main ingress away from MinIO.
+    # Set separateRoute: true to keep shared-ingress auth annotations away from MinIO.
     separateRoute: false
     ingressClassName: ""
-    # When true and no MinIO-specific annotations are set, reuse ingress.annotations.
-    # Set to false when MinIO must not inherit shared auth annotations.
+    # Set to false to prevent MinIO from inheriting shared ingress auth annotations.
     inheritDefaultAnnotations: true
     annotations: {}
     labels: {}
@@ -240,15 +235,10 @@ backend:
     seccompProfile:
       type: RuntimeDefault
   ingress:
-    # When any value in this block is set, the backend API is rendered as a dedicated Ingress.
-    # This allows API-specific annotations while optionally falling back to ingress.* defaults.
-    enabled: false
-    # Split the backend out of the shared ingress even when no other backend ingress overrides are set.
-    # Use this to keep auth annotations from the main ingress away from the API.
+    # Set separateRoute: true to keep shared-ingress auth annotations away from the API.
     separateRoute: false
     ingressClassName: ""
-    # When true and no backend-specific annotations are set, reuse ingress.annotations.
-    # Set to false when the backend must not inherit shared auth annotations.
+    # Set to false to prevent the backend from inheriting shared ingress auth annotations.
     inheritDefaultAnnotations: true
     annotations: {}
     labels: {}
