@@ -103,9 +103,6 @@ metadata:
     {{- toYaml .Values.ingress.labels | nindent 4 }}
     {{- end }}
   annotations:
-    nginx.ingress.kubernetes.io/custom-http-errors: "503,502"
-    nginx.ingress.kubernetes.io/default-backend: nginx-errors
-    nginx.ingress.kubernetes.io/proxy-body-size: {{ .Values.ingress.clientMaxBodySize | default "100m" | quote }}
     {{- if $minioIngress.annotations }}
     {{- toYaml $minioIngress.annotations | nindent 4 }}
     {{- end }}
@@ -171,9 +168,6 @@ metadata:
     {{- toYaml .Values.ingress.labels | nindent 4 }}
     {{- end }}
   annotations:
-    nginx.ingress.kubernetes.io/custom-http-errors: "503,502"
-    nginx.ingress.kubernetes.io/default-backend: nginx-errors
-    nginx.ingress.kubernetes.io/proxy-body-size: {{ .Values.ingress.clientMaxBodySize | default "100m" | quote }}
     {{- if $backendIngress.annotations }}
     {{- toYaml $backendIngress.annotations | nindent 4 }}
     {{- end }}
