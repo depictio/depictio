@@ -808,7 +808,6 @@ def _create_dashboard_info_section(
                 size="lg",
                 color="indigo",
                 variant="dot",
-                leftSection=DashIconify(icon="mdi:file-document-outline", width=16, color="white"),
                 style={"width": "100%", "justifyContent": "flex-start"},
             ),
         )

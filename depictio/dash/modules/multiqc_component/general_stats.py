@@ -483,7 +483,10 @@ def _create_violin_plot(
         values = []
         samples = []
         for _, row in df_general_stats.iterrows():
-            values.append(row[metric])
+            val = row[metric]
+            if pd.isna(val):
+                continue
+            values.append(val)
             samples.append(row["Sample Name"])
 
         axis_key = "" if metric_idx == 0 else str(metric_idx + 1)
