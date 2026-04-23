@@ -1,13 +1,13 @@
 # Serve-specific values for Depictio deployment.
-# Auth annotations on the shared ingress are rendered automatically by the
-# ingress template based on the `permission` value set by Serve at deploy time.
+# Auth annotations on the shared ingress are rendered by the template based
+# on `permission` set by Serve at deploy time. Base nginx annotations on the
+# dedicated backend/minio ingresses are always rendered by the template.
 ingress:
   enabled: true
   ingressClassName: "nginx"
   annotations:
     nginx.ingress.kubernetes.io/custom-http-errors: "503,502"
     nginx.ingress.kubernetes.io/default-backend: nginx-errors
-    nginx.ingress.kubernetes.io/proxy-body-size: "100m"
   tls:
     - secretName: "serve-tls-secret"
       hosts: []
@@ -18,19 +18,11 @@ backend:
   ingress:
     separateRoute: true
     inheritDefaultAnnotations: false
-    annotations:
-      nginx.ingress.kubernetes.io/custom-http-errors: "503,502"
-      nginx.ingress.kubernetes.io/default-backend: nginx-errors
-      nginx.ingress.kubernetes.io/proxy-body-size: "100m"
 
 minio:
   ingress:
     separateRoute: true
     inheritDefaultAnnotations: false
-    annotations:
-      nginx.ingress.kubernetes.io/custom-http-errors: "503,502"
-      nginx.ingress.kubernetes.io/default-backend: nginx-errors
-      nginx.ingress.kubernetes.io/proxy-body-size: "100m"
 
 global:
   domain: ""
