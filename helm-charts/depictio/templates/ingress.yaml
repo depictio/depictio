@@ -17,11 +17,6 @@ metadata:
     {{- toYaml .Values.ingress.labels | nindent 4 }}
     {{- end }}
   annotations:
-    {{- if and (ne (.Values.permission | default "") "public") (ne (.Values.permission | default "") "link") .Values.global.auth_domain }}
-    nginx.ingress.kubernetes.io/auth-url: {{ printf "%s://%s:8080/auth/?release=%s" .Values.global.protocol .Values.global.auth_domain .Values.release | quote }}
-    nginx.ingress.kubernetes.io/auth-signin: {{ printf "https://%s/accounts/login/" .Values.global.domain | quote }}
-    nginx.ingress.kubernetes.io/auth-signin-redirect-param: "next"
-    {{- end }}
     {{- if .Values.ingress.annotations }}
     {{- toYaml .Values.ingress.annotations | nindent 4 }}
     {{- end }}

@@ -374,10 +374,6 @@ initContainerResources:
     memory: "128Mi"
     cpu: "100m"
 
-# Set by Serve at deploy time; controls auth annotations on the shared ingress
-permission: ""
-release: ""
-
 global:
   domain: "example.com" # Default domain, can be overridden in environment-specific values
 
