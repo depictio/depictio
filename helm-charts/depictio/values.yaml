@@ -137,11 +137,8 @@ minio:
     DEPICTIO_MINIO_BUCKET: "depictio-bucket"
     DEPICTIO_MINIO_SERVICE_PORT: "9000"
   ingress:
-    # Set separateRoute: true to keep shared-ingress auth annotations away from MinIO.
     separateRoute: false
     ingressClassName: ""
-    # Set to false to prevent MinIO from inheriting shared ingress auth annotations.
-    inheritDefaultAnnotations: true
     annotations: {}
     labels: {}
     hosts: []
@@ -238,8 +235,6 @@ backend:
     # Set separateRoute: true to keep shared-ingress auth annotations away from the API.
     separateRoute: false
     ingressClassName: ""
-    # Set to false to prevent the backend from inheriting shared ingress auth annotations.
-    inheritDefaultAnnotations: true
     annotations: {}
     labels: {}
     hosts: []

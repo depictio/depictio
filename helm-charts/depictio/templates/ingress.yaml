@@ -1,9 +1,7 @@
 {{- $minioIngress := .Values.minio.ingress | default dict }}
 {{- $useSeparateMinioIngress := and .Values.ingress.enabled .Values.minio.enabled (or $minioIngress.separateRoute $minioIngress.annotations $minioIngress.labels $minioIngress.hosts $minioIngress.tls $minioIngress.ingressClassName) }}
-{{- $inheritDefaultMinioAnnotations := $minioIngress.inheritDefaultAnnotations | default true }}
 {{- $backendIngress := .Values.backend.ingress | default dict }}
 {{- $useSeparateBackendIngress := and .Values.ingress.enabled (or $backendIngress.separateRoute $backendIngress.annotations $backendIngress.labels $backendIngress.hosts $backendIngress.tls $backendIngress.ingressClassName) }}
-{{- $inheritDefaultBackendAnnotations := $backendIngress.inheritDefaultAnnotations | default true }}
 {{- if .Values.ingress.enabled }}
 apiVersion: networking.k8s.io/v1
 kind: Ingress
