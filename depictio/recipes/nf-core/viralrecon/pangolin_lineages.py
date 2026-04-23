@@ -19,11 +19,7 @@ EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
     "ambiguity_score": pl.Float64,
     "scorpio_call": pl.Utf8,
     "scorpio_support": pl.Float64,
-    "scorpio_conflict": pl.Float64,
-    "scorpio_notes": pl.Utf8,
     "pangolin_version": pl.Utf8,
-    "status": pl.Utf8,
-    "note": pl.Utf8,
     "qc_status": pl.Utf8,
 }
 

@@ -241,6 +241,15 @@ def _get_or_parse_multiqc_logs(s3_locations: List[str], use_s3_cache: bool = Tru
                 logger.warning(f"Failed to restore cached report: {e}")
 
     with _multiqc_lock:
+        # Double-check cache inside lock (another thread may have parsed while we waited)
+        cached_report = cache.get(cache_key)
+        if cached_report is not None:
+            try:
+                multiqc.report = cached_report
+                return True
+            except Exception as e:
+                logger.warning(f"Failed to restore cached report after lock: {e}")
+
         multiqc.reset()
 
         parsed_files = 0

@@ -189,7 +189,12 @@ def print_polars_info_with_rich(
 
     info_table.add_row("Shape", f"{df.shape[0]} rows × {df.shape[1]} columns")
     info_table.add_row("Memory Usage", f"{df.estimated_size('mb'):.2f} MB")
-    info_table.add_row("Columns", ", ".join(df.columns))
+    max_cols_display = 15
+    if len(df.columns) > max_cols_display:
+        cols_str = "\t".join(df.columns[:max_cols_display]) + f",\n... and {len(df.columns) - max_cols_display} more columns"
+    else:
+        cols_str = "\t".join(df.columns)
+    info_table.add_row("Columns", cols_str)
 
     console.print(info_table)
 

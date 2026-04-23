@@ -146,6 +146,22 @@ def _create_columns_description_table(cols_json: dict) -> Optional[dmc.Table]:
         return None
 
 
+def _coerce_color(color: Any) -> str | None:
+    """Return a safe string for a Mantine color prop, or None.
+
+    Mantine raises "Failed to parse color. Expected color to be a string,
+    instead got object" when a style prop like `c` or `color` receives a dict.
+    Callback inputs coming from `dmc.ColorInput` are usually strings, but on
+    rare edit-mode paths they can arrive as a dict (e.g. stored metadata).
+    """
+    if color is None:
+        return None
+    if isinstance(color, str):
+        return color if color != "" else None
+    logger.warning("Dropping non-string color in interactive preview: %r", color)
+    return None
+
+
 def _build_preview_by_type(
     aggregation_value: str,
     column_value: str,
@@ -164,6 +180,7 @@ def _build_preview_by_type(
     Returns:
         Dash Mantine component for the preview.
     """
+    color = _coerce_color(color)
     if aggregation_value in ["Select", "MultiSelect", "SegmentedControl"]:
         unique_vals = df[column_value].unique()
         if hasattr(unique_vals, "to_list"):
@@ -232,14 +249,14 @@ def _build_preview_by_type(
             component_kwargs = {
                 "min": col_min,
                 "max": col_max,
-                "value": (col_min, col_max),
+                "value": [col_min, col_max],
                 "style": {"width": "100%"},
                 "marks": [
                     {"value": col_min, "label": str(round(col_min, 2))},
                     {"value": col_max, "label": str(round(col_max, 2))},
                 ],
             }
-            if color and color != "":
+            if color:
                 component_kwargs["color"] = color
             return dmc.RangeSlider(**component_kwargs)
 
@@ -279,22 +296,18 @@ def _wrap_preview_with_title(
     Returns:
         dmc.Stack containing the titled preview.
     """
+    safe_color = _coerce_color(color_value)
+
+    icon_kwargs: dict[str, Any] = {"icon": icon_name or "bx:slider-alt", "width": 24}
+    text_kwargs: dict[str, Any] = {"size": title_size, "fw": "bold"}
+    if safe_color:
+        icon_kwargs["color"] = safe_color
+        text_kwargs["c"] = safe_color
+
     return dmc.Stack(
         [
             dmc.Group(
-                [
-                    DashIconify(
-                        icon=icon_name or "bx:slider-alt",
-                        width=24,
-                        color=color_value if (color_value and color_value != "") else None,
-                    ),
-                    dmc.Text(
-                        title,
-                        size=title_size,
-                        fw="bold",
-                        c=color_value if (color_value and color_value != "") else None,
-                    ),
-                ],
+                [DashIconify(**icon_kwargs), dmc.Text(title, **text_kwargs)],
                 gap="xs",
             ),
             preview_component,

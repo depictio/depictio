@@ -633,7 +633,6 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
                         f"Template: {template_origin_id}",
                         color="indigo",
                         variant="dot",
-                        leftSection=DashIconify(icon="mdi:file-document-outline", width=16),
                     ),
                 )
 

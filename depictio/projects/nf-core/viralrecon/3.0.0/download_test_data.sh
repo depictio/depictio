@@ -56,7 +56,10 @@ MISSING=0
 for f in \
     "multiqc/multiqc_data/multiqc.parquet" \
     "multiqc/summary_variants_metrics_mqc.csv" \
-    "variants/ivar/variants_long_table.csv"; do
+    "variants/ivar/variants_long_table.csv" \
+    "variants/bowtie2/mosdepth/amplicon/all_samples.mosdepth.coverage.tsv" \
+    "variants/bowtie2/mosdepth/genome/all_samples.mosdepth.coverage.tsv" \
+    "variants/bowtie2/mosdepth/amplicon/all_samples.mosdepth.heatmap.tsv"; do
     if [ -f "$RUN_DIR/$f" ]; then
         echo "  OK  $f"
     else

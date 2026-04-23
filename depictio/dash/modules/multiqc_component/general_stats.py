@@ -224,6 +224,18 @@ def _process_multiqc_data(
     df_general_stats = df_raw.filter(pl.col("anchor") == "general_stats_table")
     df_metrics_pl = df_general_stats.filter(pl.col("type") == "plot_input_row")
 
+    # Fallback: try summary_variants_metrics_plot (nf-core/viralrecon style)
+    if len(df_metrics_pl) == 0:
+        for fallback_anchor in [
+            "summary_variants_metrics_plot",
+            "summary_assembly_metrics_plot",
+        ]:
+            df_fallback = df_raw.filter(pl.col("anchor") == fallback_anchor)
+            df_fallback_metrics = df_fallback.filter(pl.col("type") == "plot_input_row")
+            if len(df_fallback_metrics) > 0:
+                df_metrics_pl = df_fallback_metrics
+                break
+
     if len(df_metrics_pl) == 0:
         msg = f"No general_stats_table data found in {parquet_path}"
         raise ValueError(msg)
@@ -265,10 +277,10 @@ def _process_multiqc_data(
         for tool in tools:
             if tool in column_metadata and col in column_metadata[tool]:
                 config = column_metadata[tool][col]
-                display_name = config["title"]
-                if config["suffix"] and not display_name.endswith(f" ({config['suffix'].strip()})"):
-                    suffix = config["suffix"].strip()
-                    display_name = f"{display_name} ({suffix})"
+                display_name = config.get("title") or col.replace("_", " ").title()
+                suffix = config.get("suffix")
+                if suffix and not display_name.endswith(f" ({suffix.strip()})"):
+                    display_name = f"{display_name} ({suffix.strip()})"
                 break
 
         if display_name is None:
@@ -279,7 +291,8 @@ def _process_multiqc_data(
 
         column_mapping[col] = display_name
 
-        if config and config["suffix"].strip() == "%":
+        suffix = config.get("suffix") if config else None
+        if suffix and suffix.strip() == "%":
             percentage_columns.append(display_name)
         elif display_name.endswith(" (%)"):
             percentage_columns.append(display_name)
@@ -672,11 +685,11 @@ def _get_column_format(
         return Format(symbol=Symbol.yes, symbol_suffix=" bp").precision(0).scheme("f")
     if column_name in column_formats:
         format_info = column_formats[column_name]
-        format_str = format_info["format"] or "{:,.1f}"
-        suffix = format_info.get("suffix", "")
+        format_str = format_info.get("format") or "{:,.1f}"
+        suffix = format_info.get("suffix") or ""
         if suffix and suffix.strip() == "M":
             return Format(symbol=Symbol.yes, symbol_suffix=" M").precision(2).scheme("f")
-        if "bp" in suffix:
+        if suffix and "bp" in suffix:
             if ".0f" in format_str:
                 return Format(symbol=Symbol.yes, symbol_suffix=" bp").precision(0).scheme("f")
             elif ".1f" in format_str:
@@ -811,20 +824,20 @@ def _build_component_tree(
 ) -> list:
     """Build the Dash component tree shared by both fresh build and cache rebuild."""
     controls: list = [dmc.Title("General Statistics", order=4)]
-    if is_paired_end:
-        controls.append(
-            dmc.SegmentedControl(
-                id={"type": "general-stats-read-toggle", "index": component_id},
-                value="mean",
-                data=[
-                    {"label": "Mean", "value": "mean"},
-                    {"label": "R1", "value": "r1"},
-                    {"label": "R2", "value": "r2"},
-                    {"label": "All reads", "value": "all"},
-                ],
-                size="sm",
-            )
+    controls.append(
+        dmc.SegmentedControl(
+            id={"type": "general-stats-read-toggle", "index": component_id},
+            value="mean",
+            data=[
+                {"label": "Mean", "value": "mean"},
+                {"label": "R1", "value": "r1"},
+                {"label": "R2", "value": "r2"},
+                {"label": "All reads", "value": "all"},
+            ],
+            size="sm",
+            style={"display": "inline-flex"} if is_paired_end else {"display": "none"},
         )
+    )
     controls.append(
         dmc.SegmentedControl(
             id={"type": "general-stats-view-toggle", "index": component_id},

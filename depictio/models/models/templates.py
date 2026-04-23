@@ -15,7 +15,8 @@ Key concepts:
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, Field, field_validator
+from bson import ObjectId
+from pydantic import BaseModel, Field, field_serializer, field_validator
 
 
 def _require_nonempty(v: str, label: str) -> str:
@@ -134,6 +135,16 @@ class TemplateMetadata(BaseModel):
             "Each rule fires when its if_var_absent / if_var_present condition matches."
         ),
     )
+    structure: str | None = Field(
+        default=None,
+        description="Data layout structure: 'flat' (files directly under DATA_ROOT) "
+        "or 'sequencing-runs' (files under run directories matching runs_regex)",
+    )
+    runs_regex: str | None = Field(
+        default=None,
+        description="Regex pattern for run directory names (e.g., 'run_*'). "
+        "Only used when structure='sequencing-runs'.",
+    )
 
     @field_validator("template_id")
     @classmethod
@@ -170,6 +181,21 @@ class TemplateOrigin(BaseModel):
         default_factory=dict,
         description="Frozen copy of the resolved template config (for reproducibility)",
     )
+
+    @field_serializer("config_snapshot")
+    def serialize_config_snapshot(self, v: dict[str, Any]) -> dict[str, Any]:
+        """Recursively convert ObjectId values to strings for JSON serialization."""
+
+        def convert(obj: Any) -> Any:
+            if isinstance(obj, ObjectId):
+                return str(obj)
+            if isinstance(obj, dict):
+                return {k: convert(val) for k, val in obj.items()}
+            if isinstance(obj, list):
+                return [convert(item) for item in obj]
+            return obj
+
+        return convert(v)
 
     @field_validator("template_id")
     @classmethod

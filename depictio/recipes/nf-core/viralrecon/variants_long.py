@@ -46,6 +46,25 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
     if "AF" in df.columns:
         df = df.with_columns(pl.col("AF").cast(pl.Float64, strict=False))
 
+    # Derive AA from HGVS_P_1LETTER if AA column not present
+    if "AA" not in df.columns and "HGVS_P_1LETTER" in df.columns:
+        df = df.with_columns(pl.col("HGVS_P_1LETTER").alias("AA"))
+    elif "AA" not in df.columns and "HGVS_P" in df.columns:
+        df = df.with_columns(pl.col("HGVS_P").alias("AA"))
+
+    # Derive FUNCLASS from EFFECT if not present
+    if "FUNCLASS" not in df.columns and "EFFECT" in df.columns:
+        df = df.with_columns(
+            pl.when(pl.col("EFFECT").str.contains("(?i)synonymous") & ~pl.col("EFFECT").str.contains("(?i)missense|non"))
+            .then(pl.lit("SILENT"))
+            .when(pl.col("EFFECT").str.contains("(?i)missense"))
+            .then(pl.lit("MISSENSE"))
+            .when(pl.col("EFFECT").str.contains("(?i)stop_gained|nonsense|frameshift"))
+            .then(pl.lit("NONSENSE"))
+            .otherwise(pl.lit("OTHER"))
+            .alias("FUNCLASS")
+        )
+
     # Fill null string columns
     for col_name in ("GENE", "AA", "EFFECT", "FUNCLASS", "FILTER"):
         if col_name in df.columns:

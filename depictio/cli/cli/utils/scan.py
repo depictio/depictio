@@ -390,10 +390,16 @@ def scan_run_for_multiple_data_collections(
         for file_location in all_files_in_run:
             file_name = os.path.basename(file_location)
 
-            # Check regex match
+            # Check regex match against basename first
             match, _ = regex_match(file_name, full_regex)
             if not match:
-                continue
+                # If the pattern contains path separators (e.g., "variants/bowtie2/..."),
+                # try matching against the relative path from the run directory
+                if "/" in full_regex:
+                    rel_path = os.path.relpath(file_location, run_location)
+                    match, _ = regex_match(rel_path, full_regex)
+                if not match:
+                    continue
 
             logger.debug(f"File {file_name} matches DC {dc.data_collection_tag}")
 
@@ -411,6 +417,7 @@ def scan_run_for_multiple_data_collections(
                 permissions=permissions,
             )
 
+            # skip_regex=True because we already matched in the loop above
             file_scan_result = scan_single_file(
                 file_location=file_location,
                 run=temp_run,
@@ -419,7 +426,7 @@ def scan_run_for_multiple_data_collections(
                 existing_files=existing_files_for_dc,
                 update_files=update_files,
                 full_regex=full_regex,
-                skip_regex=False,
+                skip_regex=True,
             )
 
             if file_scan_result:
