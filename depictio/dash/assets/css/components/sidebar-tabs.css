@@ -1,0 +1,11 @@
+/* =============================================================================
+   SIDEBAR TABS
+   Ensure the tab label fills available space so rightSection (edit-mode "⋮"
+   menu) anchors to the right edge of each vertical tab.
+   ============================================================================= */
+
+#sidebar-tabs .mantine-Tabs-tabLabel {
+    flex: 1 1 auto;
+    min-width: 0;
+    text-align: left;
+}
