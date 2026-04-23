@@ -136,6 +136,13 @@ minio:
     DEPICTIO_MINIO_ROOT_PASSWORD: "minio123"
     DEPICTIO_MINIO_BUCKET: "depictio-bucket"
     DEPICTIO_MINIO_SERVICE_PORT: "9000"
+  ingress:
+    separateRoute: false
+    ingressClassName: ""
+    annotations: {}
+    labels: {}
+    hosts: []
+    tls: []
 
 # Backend settings
 backend:
@@ -224,6 +231,14 @@ backend:
       - ALL
     seccompProfile:
       type: RuntimeDefault
+  ingress:
+    # Set separateRoute: true to keep shared-ingress auth annotations away from the API.
+    separateRoute: false
+    ingressClassName: ""
+    annotations: {}
+    labels: {}
+    hosts: []
+    tls: []
 
 # Celery Worker settings
 celery:
