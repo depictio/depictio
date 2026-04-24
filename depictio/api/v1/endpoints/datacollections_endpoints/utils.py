@@ -213,6 +213,68 @@ async def _update_data_collection_name(
     return {"message": f"Data collection name updated to '{new_name}' successfully"}
 
 
+async def _update_dc_specific_properties(
+    data_collection_id: str, properties: dict, current_user
+) -> dict:
+    """Update dc_specific_properties fields for a data collection.
+
+    Performs a partial update: only the keys present in *properties* are
+    modified; existing keys that are not mentioned are left untouched.
+
+    Args:
+        data_collection_id: String ID of the data collection.
+        properties: Dict of field-name → value to set inside dc_specific_properties.
+        current_user: Authenticated user object.
+
+    Returns:
+        dict with a success message.
+
+    Raises:
+        HTTPException: 400/404 on bad input or missing DC.
+    """
+    if not properties:
+        raise HTTPException(status_code=400, detail="properties dict must not be empty")
+
+    try:
+        dc_oid = ObjectId(data_collection_id)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    project = projects_collection.find_one(
+        {
+            "workflows.data_collections._id": dc_oid,
+            "$or": [
+                {"permissions.owners._id": current_user.id},
+                {"permissions.viewers._id": current_user.id},
+            ],
+        }
+    )
+    if not project:
+        raise HTTPException(status_code=404, detail="Data collection not found or access denied")
+
+    # Build $set paths for each property key
+    set_fields = {
+        f"workflows.$[].data_collections.$[dc].config.dc_specific_properties.{key}": value
+        for key, value in properties.items()
+    }
+
+    result = projects_collection.update_one(
+        {"_id": project["_id"], "workflows.data_collections._id": dc_oid},
+        {"$set": set_fields},
+        array_filters=[{"dc._id": dc_oid}],
+    )
+
+    if result.modified_count == 0:
+        raise HTTPException(
+            status_code=404, detail="Data collection not found or no changes applied"
+        )
+
+    logger.info(
+        f"Updated dc_specific_properties for DC {data_collection_id}: {list(properties.keys())}"
+    )
+    return {"message": "dc_specific_properties updated successfully"}
+
+
 async def _cleanup_s3_delta_table(data_collection_id: str) -> None:
     """Core function to cleanup S3 Delta table objects.
 

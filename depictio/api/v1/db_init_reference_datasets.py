@@ -1,14 +1,33 @@
 """Reference dataset initialization with static ID management."""
 
+import copy
 import os
+import re as _re
+from pathlib import Path
 from typing import Any, cast
 
 from bson import ObjectId
 
 from depictio.api.v1.configs.logging_init import logger
+from depictio.cli.cli.utils.templates import _apply_conditionals, substitute_template_variables
 from depictio.models.models.base import PyObjectId
+from depictio.models.models.templates import TemplateConditional
 from depictio.models.models.users import Permission, UserBase, UserBeanie
 from depictio.models.utils import get_config
+
+_UNRESOLVED_VAR_RE = _re.compile(r"\{[A-Z0-9_]+\}")
+
+
+def _has_unresolved_vars(obj: Any) -> bool:
+    """Return True if any string in obj still contains a {VAR} placeholder."""
+    if isinstance(obj, str):
+        return bool(_UNRESOLVED_VAR_RE.search(obj))
+    if isinstance(obj, dict):
+        return any(_has_unresolved_vars(v) for v in obj.values())
+    if isinstance(obj, list):
+        return any(_has_unresolved_vars(item) for item in obj)
+    return False
+
 
 # Static ID mappings (hardcoded for K8s consistency)
 STATIC_IDS = {
@@ -33,18 +52,29 @@ STATIC_IDS = {
         "workflows": {"ampliseq": "646b0f3c1e4a2d7f8e5b8ca3"},
         "data_collections": {
             "multiqc_data": "646b0f3c1e4a2d7f8e5b8ca4",
+            "samplesheet": "646b0f3c1e4a2d7f8e5b8cab",
             "metadata": "646b0f3c1e4a2d7f8e5b8ca5",
-            "alpha_rarefaction": "646b0f3c1e4a2d7f8e5b8ca8",
-            "taxonomy_composition": "646b0f3c1e4a2d7f8e5b8ca9",
-            "ancom_volcano": "646b0f3c1e4a2d7f8e5b8caa",
-            # Join results (disabled temporarily for initial testing)
-            # "alpha_rarefaction_enriched": "646b0f3c1e4a2d7f8e5b8cab",
-            # "taxonomy_enriched": "646b0f3c1e4a2d7f8e5b8cac",
+            "alpha_diversity": "646b0f3c1e4a2d7f8e5b8ca6",
+            "alpha_rarefaction": "646b0f3c1e4a2d7f8e5b8ca7",
+            "taxonomy_composition": "646b0f3c1e4a2d7f8e5b8ca8",
+            "taxonomy_rel_abundance": "646b0f3c1e4a2d7f8e5b8ca9",
+            "taxonomy_heatmap": "646b0f3c1e4a2d7f8e5b8caf",
+            "ancombc_results": "646b0f3c1e4a2d7f8e5b8caa",
         },
         "dashboards": {
-            "ampliseq_multiqc": "646b0f3c1e4a2d7f8e5b8ca2",  # Main tab
-            "ampliseq_community": "646b0f3c1e4a2d7f8e5b8cb3",  # Community Analysis tab
-            "ampliseq_differential": "646b0f3c1e4a2d7f8e5b8cb4",  # Differential Abundance tab
+            "ampliseq_multiqc": "646b0f3c1e4a2d7f8e5b8cb7",
+            "ampliseq_community": "646b0f3c1e4a2d7f8e5b8cb3",
+            "ampliseq_differential": "646b0f3c1e4a2d7f8e5b8cb4",
+        },
+    },
+    "ampliseq_base": {
+        # Separate project entry that shares DCs with the main ampliseq project
+        # but presents only the base (no-metadata) dashboard variant.
+        "project": "646b0f3c1e4a2d7f8e5b8cb6",
+        "dashboards": {
+            "ampliseq_base_multiqc": "646b0f3c1e4a2d7f8e5b8cb8",
+            "ampliseq_base_community": "646b0f3c1e4a2d7f8e5b8cb5",
+            "ampliseq_base_differential": "646b0f3c1e4a2d7f8e5b8cc1",
         },
     },
 }
@@ -130,10 +160,12 @@ class ReferenceDatasetRegistry:
             return dc_tag_to_id.get(dc_identifier)
 
         # Convert links from tag/ID-based to ID-based
+        # Support both formats: source_dc_id/target_dc_id (project.yaml) and
+        # source_dc_tag/target_dc_tag (template.yaml)
         resolved_links = []
         for link_config in links_config:
-            source_identifier = link_config.get("source_dc_id")
-            target_identifier = link_config.get("target_dc_id")
+            source_identifier = link_config.get("source_dc_id") or link_config.get("source_dc_tag")
+            target_identifier = link_config.get("target_dc_id") or link_config.get("target_dc_tag")
 
             source_id = resolve_dc_id(source_identifier)
             target_id = resolve_dc_id(target_identifier)
@@ -177,25 +209,117 @@ class ReferenceDatasetRegistry:
     DATASET_PATHS: dict[str, str] = {
         "iris": os.path.join("init", "iris"),
         "penguins": os.path.join("init", "penguins"),
-        "ampliseq": os.path.join("nf-core", "ampliseq", "2.14.0"),
+        "ampliseq": os.path.join("nf-core", "ampliseq", "2.16.0"),
     }
+
+    @classmethod
+    def resolve_template_for_init(
+        cls, template_config: dict[str, Any], data_root: str
+    ) -> dict[str, Any]:
+        """Resolve a template.yaml for init usage.
+
+        1. Reads ``template:`` conditionals, then strips the section.
+        2. Substitutes ``{DATA_ROOT}`` via the shared ``substitute_template_variables``.
+        3. Applies conditional DC/link removal (e.g. removes metadata DC when METADATA_FILE absent).
+        4. Skips DCs whose config still contains unresolved ``{VAR}`` placeholders
+           (e.g. samplesheet DC with ``{SAMPLESHEET_FILE}`` — required in CLI runs but
+           not applicable to the reference demo dataset).
+        5. Converts recipe-based DCs (``source: "transformed"``) to file-scan DCs
+           using the convention ``{DATA_ROOT}/{dc_tag}.tsv``.
+        """
+        config = copy.deepcopy(template_config)
+
+        # 1. Read template metadata BEFORE popping — need conditionals + reference defaults
+        template_section = config.get("template", {})
+        raw_conditionals = template_section.get("conditional", [])
+        conditionals = [TemplateConditional(**c) for c in raw_conditionals]
+        reference_defaults: dict[str, str] = (template_section.get("reference") or {}).get(
+            "vars", {}
+        )
+        config.pop("template", None)
+
+        # 2. Build variables: DATA_ROOT + reference defaults (with DATA_ROOT substituted inside them)
+        variables: dict[str, str] = {"DATA_ROOT": data_root}
+        for var_name, var_default in reference_defaults.items():
+            variables[var_name] = var_default.replace("{DATA_ROOT}", data_root)
+        provided_vars: set[str] = set(variables.keys())
+        config = substitute_template_variables(config, variables)
+
+        # 3. Apply conditional DC/link removal (pass dummy template_dir — init ignores dashboards)
+        config, _ = _apply_conditionals(config, conditionals, provided_vars, Path("."))
+
+        # 4. Skip DCs whose config still has unresolved {VAR} placeholders and prune their links
+        skipped_dc_tags: set[str] = set()
+        for workflow in config.get("workflows", []):
+            surviving = []
+            for dc in workflow.get("data_collections", []):
+                if _has_unresolved_vars(dc.get("config", {})):
+                    skipped_dc_tags.add(dc["data_collection_tag"])
+                    logger.debug(
+                        f"Init resolver: skipping DC '{dc['data_collection_tag']}' "
+                        "— config contains unresolved template variables"
+                    )
+                else:
+                    surviving.append(dc)
+            workflow["data_collections"] = surviving
+
+        if skipped_dc_tags:
+            config["links"] = [
+                lnk
+                for lnk in config.get("links", [])
+                if lnk.get("source_dc_tag") not in skipped_dc_tags
+                and lnk.get("target_dc_tag") not in skipped_dc_tags
+            ]
+
+        # 5. Convert recipe DCs → file-scan DCs
+        for workflow in config.get("workflows", []):
+            for dc in workflow.get("data_collections", []):
+                dc_config = dc.get("config", {})
+                if dc_config.get("source") == "transformed" and "transform" in dc_config:
+                    dc_tag = dc["data_collection_tag"]
+                    # Convention: pre-computed files are named {dc_tag}.tsv
+                    pre_computed_path = os.path.join(data_root, f"{dc_tag}.tsv")
+                    dc_config.pop("source", None)
+                    dc_config.pop("transform", None)
+                    dc_config["scan"] = {
+                        "mode": "single",
+                        "scan_parameters": {"filename": pre_computed_path},
+                    }
+                    logger.debug(
+                        f"Init resolver: converted recipe DC '{dc_tag}' → file scan: {pre_computed_path}"
+                    )
+
+        return config
 
     @classmethod
     async def create_reference_project(
         cls, dataset_name: str, admin_user: UserBeanie, token_payload: dict[str, Any]
     ) -> dict[str, Any]:
         """Create a reference project with proper static IDs."""
-        # Load project.yaml
         rel_path = cls.DATASET_PATHS[dataset_name]
-        project_yaml_path = os.path.join(
+        project_dir = os.path.join(
             os.path.dirname(__file__),
             "..",
             "..",
             "projects",
             rel_path,
-            "project.yaml",
         )
-        project_config = get_config(project_yaml_path)
+
+        # Prefer template.yaml (single source of truth), fall back to project.yaml
+        template_path = os.path.join(project_dir, "template.yaml")
+        project_yaml_path = os.path.join(project_dir, "project.yaml")
+
+        if os.path.exists(template_path):
+            raw_config = get_config(template_path)
+            # Resolve for Docker init: /app/depictio/projects/<rel_path>
+            data_root = f"/app/depictio/projects/{rel_path}"
+            project_config = cls.resolve_template_for_init(raw_config, data_root)
+        elif os.path.exists(project_yaml_path):
+            project_config = get_config(project_yaml_path)
+        else:
+            raise FileNotFoundError(
+                f"No template.yaml or project.yaml found for dataset '{dataset_name}' in {project_dir}"
+            )
 
         # Inject static IDs
         project_config = cls.inject_static_ids(project_config, dataset_name)
@@ -253,6 +377,19 @@ class ReferenceDatasetRegistry:
 
         # Set reference projects as public by default for K8s demo environments
         project_config["is_public"] = True
+
+        # Add template_origin for template-based projects (ampliseq)
+        if os.path.exists(template_path):
+            from depictio.models.models.templates import TemplateOrigin
+
+            raw_template = get_config(template_path)
+            tmpl = raw_template.get("template", {})
+            project_config["template_origin"] = TemplateOrigin(
+                template_id=tmpl.get("template_id", dataset_name),
+                template_version=tmpl.get("version", "1.0.0"),
+                data_root=data_root,
+                variables=tmpl.get("reference", {}).get("vars", {}),
+            ).model_dump()
 
         # Extract and remove _static_dc_id from join definitions (not allowed in ProjectBeanie)
         # These will be handled during join execution in the background processor
@@ -350,7 +487,7 @@ async def create_reference_datasets(
     """Create all reference datasets (iris, penguins, ampliseq).
 
     Note: ampliseq dataset uses 16S rRNA microbiome data from nf-core/ampliseq.
-    Data files are included under depictio/projects/nf-core/ampliseq/2.14.0/.
+    Data files are included under depictio/projects/nf-core/ampliseq/2.16.0/.
     """
     created_projects = []
 

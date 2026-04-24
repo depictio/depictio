@@ -1283,6 +1283,40 @@ def _create_project_details_paper(project: Project) -> dmc.Paper:
         ),
     ]
 
+    # Template origin row (if project was created from a template)
+    template_origin = getattr(project, "template_origin", None)
+    if template_origin is not None:
+        # TODO: replace with actual docs URL once template pages are published
+        docs_base = "https://depictio.github.io/depictio-docs/usage/projects/templates"
+        template_id = template_origin.template_id
+        docs_url = f"{docs_base}#{template_id.replace('/', '').replace('.', '')}"
+
+        rows.append(
+            dmc.Group(
+                children=[
+                    dmc.Text("Template:", fw="bold", className="label-text"),
+                    dmc.Anchor(
+                        dmc.Badge(
+                            template_id,
+                            color="indigo",
+                            variant="light",
+                            leftSection=DashIconify(icon="mdi:layers-outline", width=14),
+                            rightSection=DashIconify(icon="mdi:open-in-new", width=12),
+                            style={"cursor": "pointer"},
+                        ),
+                        href=docs_url,
+                        target="_blank",
+                        style={"textDecoration": "none"},
+                    ),
+                ],
+                gap="xs",
+            ),
+        )
+        if template_origin.applied_at:
+            rows.append(
+                _create_project_detail_row("Template applied at", template_origin.applied_at),
+            )
+
     return dmc.Paper(
         children=[html.Div(children=rows, className="project-details p-3")],
         radius="md",
@@ -1318,43 +1352,60 @@ def _determine_user_role(project: Project, current_user: UserBase) -> tuple[str,
     return "Viewer", "gray"
 
 
-def _create_project_badges(
-    project: Project, current_user: UserBase
-) -> tuple[dmc.Badge, dmc.Badge, dmc.Badge]:
-    """Create badges for project type, visibility, and user role.
+def _create_project_badges(project: Project, current_user: UserBase) -> list[dmc.Badge]:
+    """Create badges for project type, visibility, user role, and template origin.
 
     Args:
         project: Project model instance.
         current_user: Current user for role determination.
 
     Returns:
-        Tuple of (project_type_badge, visibility_badge, role_badge).
+        List of badge components.
     """
     project_type = getattr(project, "project_type", "basic")
     is_public = getattr(project, "is_public", False)
     role, role_color = _determine_user_role(project, current_user)
 
-    badge_project_type = dmc.Badge(
-        children=project_type.title(),
-        color="orange" if project_type == "advanced" else "cyan",
-        variant="light",
-        style={"width": "100px", "justifyContent": "center"},
-    )
+    badge_size = "sm"
+    badges = [
+        dmc.Badge(
+            children=project_type.title(),
+            color="orange" if project_type == "advanced" else "cyan",
+            variant="light",
+            size=badge_size,
+            style={"width": "100px", "justifyContent": "center"},
+        ),
+        dmc.Badge(
+            children="Public" if is_public else "Private",
+            color="green" if is_public else "violet",
+            variant="filled",
+            size=badge_size,
+            style={"width": "100px", "justifyContent": "center"},
+        ),
+        dmc.Badge(
+            children=role,
+            color=role_color,
+            size=badge_size,
+            style={"width": "100px", "justifyContent": "center"},
+        ),
+    ]
 
-    badge_visibility = dmc.Badge(
-        children="Public" if is_public else "Private",
-        color="green" if is_public else "violet",
-        variant="filled",
-        style={"width": "100px", "justifyContent": "center"},
-    )
+    template_origin = getattr(project, "template_origin", None)
+    if template_origin is not None:
+        badges.append(
+            dmc.Tooltip(
+                label=f"Generated from template: {template_origin.template_id}",
+                children=dmc.Badge(
+                    template_origin.template_id,
+                    color="indigo",
+                    variant="light",
+                    size=badge_size,
+                    leftSection=DashIconify(icon="mdi:layers-outline", width=14),
+                ),
+            )
+        )
 
-    badge_ownership = dmc.Badge(
-        children=role,
-        color=role_color,
-        style={"width": "100px", "justifyContent": "center"},
-    )
-
-    return badge_project_type, badge_visibility, badge_ownership
+    return badges
 
 
 def _create_project_accordion_items(
@@ -1446,9 +1497,7 @@ def render_project_item(
     project_details = _create_project_details_paper(project)
 
     # Create badges
-    badge_project_type, badge_visibility, badge_ownership = _create_project_badges(
-        project, current_user
-    )
+    project_badges = _create_project_badges(project, current_user)
 
     # Create accordion items
     accordion_items = _create_project_accordion_items(project, project_details, current_user)
@@ -1458,9 +1507,7 @@ def render_project_item(
             dmc.AccordionControl(
                 dmc.Group(
                     [
-                        badge_project_type,
-                        badge_visibility,
-                        badge_ownership,
+                        *project_badges,
                         dmc.Text(f"{project.name}", fw="bold", style={"flex": "1"}),
                     ],
                     gap="md",

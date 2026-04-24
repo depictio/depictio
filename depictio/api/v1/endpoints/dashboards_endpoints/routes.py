@@ -1345,11 +1345,17 @@ async def bulk_get_component_data_endpoint(
 # ============================================================================
 
 
-def _resolve_workflow_tags(component: dict) -> None:
+def _resolve_workflow_tags(component: dict, project_id: PyObjectId | None = None) -> None:
     """Resolve workflow and data collection tags to MongoDB IDs.
 
-    Searches projects for matching workflows and data collections,
-    updating the component dict in place with wf_id, dc_id, and dc_config.
+    Searches the target project (or all projects as fallback) for matching
+    workflows and data collections, updating the component dict in place
+    with wf_id, dc_id, and dc_config.
+
+    Args:
+        component: Component dict to update in place.
+        project_id: Target project ID. When provided, only searches this project
+            (prevents resolving to the wrong project's DC IDs).
     """
     wf_tag = component.get("workflow_tag")
     dc_tag = component.get("data_collection_tag")
@@ -1360,7 +1366,14 @@ def _resolve_workflow_tags(component: dict) -> None:
     # Parse engine/name format (e.g., "python/iris_workflow")
     wf_name = wf_tag.split("/", 1)[1] if "/" in wf_tag else wf_tag
 
-    for proj in projects_collection.find():
+    # Search target project first, fall back to all projects
+    if project_id:
+        projects = [projects_collection.find_one({"_id": ObjectId(project_id)})]
+        projects = [p for p in projects if p]
+    else:
+        projects = list(projects_collection.find())
+
+    for proj in projects:
         for wf in proj.get("workflows", []):
             if wf.get("name") != wf_name and wf.get("workflow_tag") != wf_name:
                 continue
@@ -1444,6 +1457,18 @@ def _regenerate_component_indices(dashboard_dict: dict) -> None:
                     layout_item["i"] = f"box-{new_index}"
 
 
+def _filter_unresolved_components(dashboard_dict: dict) -> None:
+    """Remove components whose DC could not be resolved.
+
+    Disabled for now: the file scanner (which removes DCs) is disabled,
+    and the aggressive dc_id check was stripping valid components whose
+    tags hadn't been resolved yet (the frontend resolves them at render time).
+    """
+    # TODO: Re-enable when file scanner is active, but use dc_tag validation
+    # against the project instead of dc_id presence check.
+    pass
+
+
 def _import_multi_tab_dashboard(
     yaml_data: dict,
     project_id: PyObjectId,
@@ -1512,8 +1537,10 @@ def _import_multi_tab_dashboard(
 
     # Resolve tags and regenerate fields for main dashboard components
     for component in main_dashboard_dict.get("stored_metadata", []):
-        _resolve_workflow_tags(component)
+        _resolve_workflow_tags(component, project_id=project_id)
         _regenerate_component_fields(component)
+    # Remove components whose DC was not found in the project (e.g. removed by file scanner)
+    _filter_unresolved_components(main_dashboard_dict)
     _regenerate_component_indices(main_dashboard_dict)
 
     # Validate and insert/update main dashboard
@@ -1580,8 +1607,9 @@ def _import_multi_tab_dashboard(
 
         # Resolve tags and regenerate fields for tab components
         for component in tab_dashboard_dict.get("stored_metadata", []):
-            _resolve_workflow_tags(component)
+            _resolve_workflow_tags(component, project_id=project_id)
             _regenerate_component_fields(component)
+        _filter_unresolved_components(tab_dashboard_dict)
         _regenerate_component_indices(tab_dashboard_dict)
 
         # Validate and insert/update tab
@@ -1790,10 +1818,11 @@ async def import_dashboard_from_yaml(
 
     # Resolve tags to MongoDB IDs, regenerate fields from DC config, and regenerate component indices
     for component in dashboard_dict.get("stored_metadata", []):
-        _resolve_workflow_tags(component)
+        _resolve_workflow_tags(component, project_id=project_id)
         _regenerate_component_fields(
             component
         )  # Regenerate s3_base_folder, etc. after dc_config is populated
+    _filter_unresolved_components(dashboard_dict)
     _regenerate_component_indices(dashboard_dict)
 
     try:

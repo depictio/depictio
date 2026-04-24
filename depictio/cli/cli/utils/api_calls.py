@@ -91,6 +91,20 @@ def api_get_project_from_name(project_name: str, CLI_config: CLIConfig):
 
 
 @validate_call
+def api_update_dc_specific_properties(
+    data_collection_id: str, properties: dict, CLI_config: CLIConfig
+):
+    """Update dc_specific_properties for a data collection via the API."""
+    response = httpx.patch(
+        f"{CLI_config.api_base_url}/depictio/api/v1/datacollections/{data_collection_id}/dc_specific_properties",
+        json=properties,
+        headers=generate_api_headers(CLI_config),
+        timeout=60.0,
+    )
+    return response
+
+
+@validate_call
 def api_create_project(project_config: dict, CLI_config: CLIConfig):
     """
     Create a project on the server.

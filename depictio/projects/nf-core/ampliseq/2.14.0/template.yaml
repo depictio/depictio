@@ -1,0 +1,276 @@
+# nf-core/ampliseq Template - Microbial Community Analysis
+# ============================================================================
+# This is a TEMPLATE project configuration. Use with:
+#   depictio-cli run --template nf-core/ampliseq/2.14.0 --data-root /path/to/your/data
+#
+# The original project.yaml (with hardcoded paths) is kept as a fixture for
+# Docker init. This template.yaml uses {DATA_ROOT} placeholders for reuse.
+# ============================================================================
+
+# Template metadata (parsed and removed before Project model validation)
+# ⚠️  METADATA IS OPTIONAL in this template.
+# Without --var METADATA_FILE=...: metadata DC and ancombc_results DC are excluded.
+# With metadata: extended analysis (grouping by any metadata col, ANCOM-BC) is enabled.
+# Required metadata column: "ID" — must match the sampleID in the samplesheet.
+# All other metadata columns are passed through and available for dashboard grouping.
+template:
+  template_id: "nf-core/ampliseq/2.14.0"
+  description: "nf-core/ampliseq microbial community analysis template for 16S/ITS amplicon sequencing"
+  version: "1.1.0"
+  variables:
+    - name: "DATA_ROOT"
+      description: "Root directory containing ampliseq pipeline output (multiqc/, qiime2/)"
+      required: true
+    - name: "SAMPLESHEET_FILE"
+      description: "Path to ampliseq samplesheet CSV (always produced by the pipeline)"
+      required: true
+    - name: "METADATA_FILE"
+      description: "Path to sample metadata TSV (--metadata in ampliseq run). Optional."
+      required: false
+  dashboards:
+    - "dashboards/full_analysis.yaml"
+  conditional:
+    - if_var_absent: "METADATA_FILE"
+      remove_dc_tags: ["metadata", "ancombc_results"]
+      dashboards: ["dashboards/full_analysis.yaml"]
+    - if_var_present: "METADATA_FILE"
+      dashboards: ["dashboards/full_analysis.yaml"]
+
+# ============================================================================
+# PROJECT CONFIGURATION
+# ============================================================================
+
+name: "Ampliseq Microbial Community Analysis"
+project_type: "advanced"
+is_public: true
+workflows:
+  - name: "ampliseq"
+    version: "2.14.0"
+    engine:
+      name: "nextflow"
+    catalog:
+      name: "nf-core"
+      url: "https://nf-co.re"
+    repository_url: "https://github.com/nf-core/ampliseq"
+    data_location:
+      structure: "flat"
+      locations:
+        - "{DATA_ROOT}"
+    data_collections:
+      - data_collection_tag: "multiqc_data"
+        description: "MultiQC report data"
+        config:
+          type: "MultiQC"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "multiqc/multiqc_data/multiqc.parquet"
+          dc_specific_properties:
+            modules:
+              - "cutadapt"
+              - "fastqc"
+            plots:
+              cutadapt:
+                - "Filtered Reads"
+                - "Trimmed Sequence Lengths (5')":
+                    - "Counts"
+                    - "Obs/Exp"
+              fastqc:
+                - "Sequence Counts"
+                - "Sequence Quality Histograms"
+                - "Per Sequence Quality Scores"
+                - "Per Sequence GC Content":
+                    - "Percentages"
+                    - "Counts"
+                - "Per Base N Content"
+                - "Sequence Length Distribution"
+                - "Sequence Duplication Levels"
+                - "Overrepresented sequences by sample"
+                - "Top overrepresented sequences"
+                - "Adapter Content"
+                - "Status Checks"
+
+      - data_collection_tag: "samplesheet"
+        description: "Ampliseq samplesheet (always present, used for cross-DC filtering)"
+        config:
+          type: "Table"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "{SAMPLESHEET_FILE}"
+          dc_specific_properties:
+            format: "CSV"
+            columns_description:
+              "sampleID": "Sample identifier (used for cross-DC filtering via links)"
+
+      - data_collection_tag: "metadata"
+        optional: true
+        description: "Sample metadata TSV (optional — provide via --var METADATA_FILE=...)"
+        config:
+          type: "Table"
+          metatype: "Metadata"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "{METADATA_FILE}"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+              try_parse_dates: true
+            columns_description:
+              "ID": "Sample identifier — must match samplesheet sampleID. All other columns are passed through."
+
+      # ----------------------------------------------------------------
+      # Recipe-transformed data collections
+      # These read raw QIIME2 outputs and transform them during process
+      # ----------------------------------------------------------------
+
+      - data_collection_tag: "alpha_diversity"
+        description: "Per-sample alpha diversity (from raw QIIME2 Faith PD vector)"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/ampliseq/alpha_diversity.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample identifier"
+              "habitat": "Habitat type"
+              "faith_pd": "Faith's Phylogenetic Diversity (single value per sample)"
+
+      - data_collection_tag: "alpha_rarefaction"
+        description: "Alpha diversity rarefaction curves (from raw QIIME2 CSV)"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/ampliseq/alpha_rarefaction.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample identifier"
+              "depth": "Sequencing depth"
+              "iter": "Iteration number"
+              "faith_pd": "Faith's Phylogenetic Diversity metric"
+
+      - data_collection_tag: "taxonomy_composition"
+        description: "Taxonomic composition across samples (from raw QIIME2 barplot)"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/ampliseq/taxonomy_composition.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample identifier"
+              "taxonomy": "Taxonomic classification (Kingdom;Phylum)"
+              "count": "Raw sequence count for this taxonomy"
+              "habitat": "Habitat type of the sample"
+
+      - data_collection_tag: "taxonomy_rel_abundance"
+        description: "Taxonomic relative abundance at Phylum level (from raw abundance table)"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/ampliseq/taxonomy_rel_abundance.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample identifier"
+              "taxonomy": "Taxonomic classification (Kingdom;Phylum)"
+              "rel_abundance": "Relative abundance (0-1)"
+              "habitat": "Habitat type"
+              "Kingdom": "Kingdom level"
+              "Phylum": "Phylum level"
+
+      - data_collection_tag: "ancombc_results"
+        description: "ANCOM-BC differential abundance at Phylum level (from 5 raw CSV slices)"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/ampliseq/ancombc.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "id": "Taxonomy identifier"
+              "contrast": "Statistical contrast (habitat comparison)"
+              "lfc": "Log-fold change"
+              "q_val": "FDR-adjusted p-value"
+              "w": "ANCOM-BC test statistic"
+              "Kingdom": "Kingdom level"
+              "Phylum": "Phylum level"
+              "neg_log10_qval": "-log10(q-value) for volcano plot"
+              "significant": "q < 0.05"
+
+# ============================================================================
+# RUNTIME LINKS CONFIGURATION
+# ============================================================================
+# Links use data_collection_tag references (resolved to IDs at instantiation)
+# ============================================================================
+
+links:
+  # Link 1 (always present): Samplesheet -> MultiQC (primary sample filter)
+  - source_dc_tag: "samplesheet"
+    source_column: "sampleID"
+    target_dc_tag: "multiqc_data"
+    target_type: "multiqc"
+    link_config:
+      resolver: "sample_mapping"
+      target_field: "sample_name"
+    description: "Filter MultiQC by samplesheet samples"
+    enabled: true
+
+  # Links 2-6 reference the metadata DC and are pruned automatically
+  # when METADATA_FILE is absent (conditional block removes metadata DC).
+
+  # Link 2: Metadata -> Alpha Diversity
+  - source_dc_tag: "metadata"
+    source_column: "ID"
+    target_dc_tag: "alpha_diversity"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter alpha diversity by metadata samples"
+    enabled: true
+
+  # Link 3: Metadata -> Alpha Rarefaction
+  - source_dc_tag: "metadata"
+    source_column: "ID"
+    target_dc_tag: "alpha_rarefaction"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter alpha rarefaction by metadata samples"
+    enabled: true
+
+  # Link 4: Metadata -> Taxonomy Composition
+  - source_dc_tag: "metadata"
+    source_column: "ID"
+    target_dc_tag: "taxonomy_composition"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter taxonomy composition by metadata samples"
+    enabled: true
+
+  # Link 5: Metadata -> Taxonomy Rel Abundance
+  - source_dc_tag: "metadata"
+    source_column: "ID"
+    target_dc_tag: "taxonomy_rel_abundance"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter taxonomy rel abundance by metadata samples"
+    enabled: true
+
+  # Note: ANCOM-BC results are not linked (no sample column — habitat-level results only)

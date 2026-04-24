@@ -587,13 +587,9 @@ def process_multiqc_data_collection(
 
         logger.info(f"Created {len(created_reports)} MultiQC reports in database")
 
-        # Update the data collection's dc_specific_properties with extracted metadata
+        # Update the data collection's dc_specific_properties with extracted metadata via API
         try:
-            from bson import ObjectId
-
-            from depictio.api.v1.db import projects_collection
-
-            dc_oid = ObjectId(str(data_collection.id))
+            from depictio.cli.cli.utils.api_calls import api_update_dc_specific_properties
 
             logger.info(f"Updating data collection {data_collection.id} with extracted metadata")
             logger.info(f"Samples: {len(unique_samples)}")
@@ -602,39 +598,26 @@ def process_multiqc_data_collection(
             logger.info(f"S3 location: {first_s3_location}")
             logger.info(f"Individual MultiQC reports created: {len(created_reports)}")
 
-            # Index-based MongoDB update: find exact array indices first, then update
-            # This avoids the silent failure of array_filters on certain MongoDB configurations
-            project_doc = projects_collection.find_one({"workflows.data_collections._id": dc_oid})
-            result = None
-            if project_doc:
-                for wf_idx, wf in enumerate(project_doc.get("workflows", [])):
-                    for dc_idx, dc in enumerate(wf.get("data_collections", [])):
-                        if dc.get("_id") == dc_oid:
-                            result = projects_collection.update_one(
-                                {"_id": project_doc["_id"]},
-                                {
-                                    "$set": {
-                                        f"workflows.{wf_idx}.data_collections.{dc_idx}.config.dc_specific_properties.samples": unique_samples,
-                                        f"workflows.{wf_idx}.data_collections.{dc_idx}.config.dc_specific_properties.modules": unique_modules,
-                                        f"workflows.{wf_idx}.data_collections.{dc_idx}.config.dc_specific_properties.plots": all_plots,
-                                        f"workflows.{wf_idx}.data_collections.{dc_idx}.config.dc_specific_properties.s3_location": first_s3_location,
-                                        f"workflows.{wf_idx}.data_collections.{dc_idx}.config.dc_specific_properties.processed_files": processed_files,
-                                        f"workflows.{wf_idx}.data_collections.{dc_idx}.config.dc_specific_properties.file_size_bytes": sum(
-                                            f["file_size_bytes"] for f in individual_file_metadata
-                                        ),
-                                    }
-                                },
-                            )
-                            break
-                    else:
-                        continue
-                    break
+            properties = {
+                "samples": unique_samples,
+                "modules": unique_modules,
+                "plots": all_plots,
+                "s3_location": first_s3_location,
+                "processed_files": processed_files,
+                "file_size_bytes": sum(f["file_size_bytes"] for f in individual_file_metadata),
+            }
 
-            if result and result.modified_count > 0:
-                logger.info("✅ Updated dc_specific_properties with MultiQC metadata")
+            response = api_update_dc_specific_properties(
+                data_collection_id=str(data_collection.id),
+                properties=properties,
+                CLI_config=CLI_config,
+            )
+
+            if response.status_code == 200:
+                logger.info("Updated dc_specific_properties with MultiQC metadata")
             else:
                 logger.warning(
-                    "⚠️  No documents modified - data collection may not exist or no changes needed"
+                    f"Failed to update dc_specific_properties: HTTP {response.status_code} - {response.text}"
                 )
 
         except Exception as e:

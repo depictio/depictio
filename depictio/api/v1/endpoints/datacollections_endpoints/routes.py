@@ -8,6 +8,7 @@ from depictio.api.v1.endpoints.datacollections_endpoints.utils import (
     _delete_data_collection_by_id,
     _get_data_collection_specs,
     _update_data_collection_name,
+    _update_dc_specific_properties,
     generate_join_dict,
 )
 from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user, get_user_or_anonymous
@@ -155,6 +156,16 @@ async def update_data_collection_name(
     if new_name is None:
         raise HTTPException(status_code=400, detail="new_name is required")
     return await _update_data_collection_name(data_collection_id, new_name, current_user)
+
+
+@datacollections_endpoint_router.patch("/{data_collection_id}/dc_specific_properties")
+async def update_dc_specific_properties(
+    data_collection_id: str,
+    properties: dict,
+    current_user: str = Depends(get_current_user),
+):
+    """Partially update dc_specific_properties for a data collection."""
+    return await _update_dc_specific_properties(data_collection_id, properties, current_user)
 
 
 @datacollections_endpoint_router.delete("/{data_collection_id}")

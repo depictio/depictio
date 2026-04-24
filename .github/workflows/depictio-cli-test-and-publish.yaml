@@ -62,7 +62,7 @@ jobs:
 
           sed -i 's|^package-dir = {"" = "../.."}|# package-dir = {"" = "../.."}|' pyproject.toml
 
-          python -m build
+          python -m build --installer uv
 
       - name: Verify package
         run: |

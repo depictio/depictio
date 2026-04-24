@@ -1,3 +1,4 @@
+from pathlib import Path
 from typing import Annotated
 
 import typer
@@ -7,7 +8,7 @@ from depictio.cli.cli.utils.api_calls import (
     api_login,
     api_sync_project_config_to_server,
 )
-from depictio.cli.cli.utils.common import load_depictio_config
+from depictio.cli.cli.utils.common import generate_api_headers, load_depictio_config
 from depictio.cli.cli.utils.config import validate_project_config_and_check_S3_storage
 from depictio.cli.cli.utils.helpers import process_project_helper
 from depictio.cli.cli.utils.rich_utils import (
@@ -31,6 +32,56 @@ def register_run_command(app: typer.Typer):
             str,
             typer.Option("--project-config-path", help="Path to the pipeline configuration file"),
         ] = "",
+        # Template options
+        template: Annotated[
+            str | None,
+            typer.Option(
+                "--template",
+                help="Template ID to use (e.g., nf-core/ampliseq/2.16.0). "
+                "Mutually exclusive with --project-config-path.",
+            ),
+        ] = None,
+        data_root: Annotated[
+            str | None,
+            typer.Option(
+                "--data-root",
+                help="Root directory containing data for template. Required when --template is used.",
+            ),
+        ] = None,
+        project_name: Annotated[
+            str | None,
+            typer.Option(
+                "--project-name",
+                help="Custom project name (auto-generated from template if omitted).",
+            ),
+        ] = None,
+        var: Annotated[
+            list[str],
+            typer.Option(
+                "--var",
+                help=(
+                    "Extra template variable as KEY=VALUE. Repeatable. "
+                    "Example: --var SAMPLESHEET_FILE=/path/to/samplesheet.csv "
+                    "--var METADATA_FILE=/path/to/metadata.tsv"
+                ),
+            ),
+        ] = [],
+        dashboard: Annotated[
+            list[str] | None,
+            typer.Option(
+                "--dashboard",
+                help=(
+                    "Override template default dashboards with custom YAML file paths. "
+                    "Can be specified multiple times."
+                ),
+            ),
+        ] = None,
+        skip_dashboard_import: bool = typer.Option(
+            False,
+            "--skip-dashboard-import",
+            help="Skip automatic dashboard import from template.",
+        ),
+        # Existing options
         workflow_name: Annotated[
             str | None,
             typer.Option("--workflow-name", help="Name of the workflow to be scanned"),
@@ -72,6 +123,11 @@ def register_run_command(app: typer.Typer):
         overwrite: bool = typer.Option(
             False, "--overwrite", help="Overwrite the workflow if it already exists"
         ),
+        preview_recipes: bool = typer.Option(
+            False,
+            "--preview-recipes",
+            help="Show recipe input sources and transformed output without writing to Delta Lake",
+        ),
         # General options
         continue_on_error: bool = typer.Option(
             False, "--continue-on-error", help="Continue execution even if a step fails"
@@ -89,7 +145,7 @@ def register_run_command(app: typer.Typer):
 
         2. Check S3 storage configuration
 
-        3. Validate project configuration
+        3. Validate project configuration (or resolve template)
 
         4. Sync project configuration to server
 
@@ -98,8 +154,24 @@ def register_run_command(app: typer.Typer):
         6. Process data collections
 
         7. Execute table joins (if defined in project config)
+
+        Template mode:
+            depictio-cli run --template nf-core/ampliseq/2.16.0 --data-root /path/to/data
         """
         rich_print_command_usage("run")
+
+        # Validate template/project-config-path mutual exclusivity
+        if template and project_config_path:
+            rich_print_checked_statement(
+                "--template and --project-config-path are mutually exclusive. "
+                "Use one or the other.",
+                "error",
+            )
+            raise typer.Exit(code=1)
+
+        if template and not data_root:
+            rich_print_checked_statement("--data-root is required when using --template.", "error")
+            raise typer.Exit(code=1)
 
         if dry_run:
             rich_print_checked_statement(
@@ -109,12 +181,110 @@ def register_run_command(app: typer.Typer):
         if sync_files:
             rescan_folders = True
 
+        # Track whether we're in template mode
+        is_template_mode = template is not None
+        template_resolved_config: dict | None = None
+        template_dashboard_paths: list[Path] = []
+
         success_count = 0
-        total_steps = 7
+        total_steps = 8 if is_template_mode else 7
+
+        # Step 0 (template only): Resolve template and validate data
+        if is_template_mode:
+            rich_print_section_separator("Step 0: Resolving project template")
+            try:
+                from depictio.cli.cli.utils.templates import resolve_template
+
+                # Check data root exists before doing anything
+                if not Path(data_root).is_dir():  # type: ignore[arg-type]
+                    rich_print_checked_statement(
+                        f"--data-root does not exist or is not a directory: {data_root}",
+                        "error",
+                    )
+                    raise typer.Exit(code=1)
+
+                # Parse --var KEY=VALUE pairs into extra_vars dict
+                extra_vars: dict[str, str] = {}
+                for v in var:
+                    if "=" not in v:
+                        rich_print_checked_statement(
+                            f"--var must be KEY=VALUE format, got: {v!r}", "error"
+                        )
+                        raise typer.Exit(code=1)
+                    k, val = v.split("=", 1)
+                    extra_vars[k.strip()] = val.strip()
+
+                # Resolve template
+                (
+                    resolved_config,
+                    template_metadata,
+                    template_origin,
+                    default_dashboard_paths,
+                    template_variables,
+                ) = resolve_template(
+                    template_id=template,  # type: ignore[arg-type]
+                    data_root=data_root,  # type: ignore[arg-type]
+                    project_name=project_name,
+                    extra_vars=extra_vars or None,
+                )
+
+                rich_print_checked_statement(
+                    f"Template '{template_metadata.template_id}' loaded successfully",
+                    "success",
+                )
+
+                template_resolved_config = resolved_config
+
+                # Resolve dashboard paths: CLI --dashboard overrides template defaults
+                if dashboard:
+                    template_dashboard_paths = [Path(p).resolve() for p in dashboard]
+                    rich_print_checked_statement(
+                        f"Using {len(template_dashboard_paths)} dashboard(s) from --dashboard override",
+                        "info",
+                    )
+                else:
+                    template_dashboard_paths = default_dashboard_paths
+                    if template_dashboard_paths:
+                        rich_print_checked_statement(
+                            f"Template provides {len(template_dashboard_paths)} default dashboard(s)",
+                            "info",
+                        )
+
+                if dry_run:
+                    import json
+
+                    rich_print_checked_statement("Resolved template configuration:", "info")
+                    # Print a summary, not the full config
+                    summary = {
+                        "name": resolved_config.get("name"),
+                        "template_origin": {
+                            "template_id": template_origin.template_id,
+                            "template_version": template_origin.template_version,
+                            "data_root": template_origin.data_root,
+                        },
+                        "workflows": [
+                            {
+                                "name": w.get("name"),
+                                "data_collections": [
+                                    dc.get("data_collection_tag")
+                                    for dc in w.get("data_collections", [])
+                                ],
+                            }
+                            for w in resolved_config.get("workflows", [])
+                        ],
+                    }
+                    logger.info(f"Template config summary: {json.dumps(summary, indent=2)}")
+
+            except typer.Exit:
+                raise
+            except Exception as e:
+                rich_print_checked_statement(f"Template resolution failed: {e}", "error")
+                if not continue_on_error:
+                    return
 
         # Step 1: Check server accessibility
         if not skip_server_check:
-            rich_print_section_separator("Step 1/7: Checking server accessibility")
+            rich_print_section_separator(f"Step 1/{total_steps}: Checking server accessibility")
             try:
                 if not dry_run:
                     api_login(CLI_config_path)
@@ -130,7 +300,7 @@ def register_run_command(app: typer.Typer):
 
         # Step 2: Check S3 storage
         if not skip_s3_check:
-            rich_print_section_separator("Step 2/7: Checking S3 storage configuration")
+            rich_print_section_separator(f"Step 2/{total_steps}: Checking S3 storage configuration")
             try:
                 if not dry_run:
                     CLI_config = load_depictio_config(yaml_config_path=CLI_config_path)
@@ -146,12 +316,23 @@ def register_run_command(app: typer.Typer):
             success_count += 1
 
         # Step 3: Validate project configuration
-        rich_print_section_separator("Step 3/7: Validating project configuration")
+        rich_print_section_separator(f"Step 3/{total_steps}: Validating project configuration")
         try:
             if not dry_run:
-                CLI_config, validation_response = validate_project_config_and_check_S3_storage(
-                    CLI_config_path=CLI_config_path, project_config_path=project_config_path
-                )
+                if is_template_mode and template_resolved_config is not None:
+                    # Template mode: use resolved config dict
+                    from depictio.cli.cli.utils.config import validate_template_project_config
+
+                    CLI_config, validation_response = validate_template_project_config(
+                        CLI_config_path=CLI_config_path,
+                        resolved_config=template_resolved_config,
+                    )
+                else:
+                    # Standard mode: load from YAML file
+                    CLI_config, validation_response = validate_project_config_and_check_S3_storage(
+                        CLI_config_path=CLI_config_path,
+                        project_config_path=project_config_path,
+                    )
                 if not validation_response["success"]:
                     raise Exception("Project configuration validation failed")
                 project_config = validation_response["project_config"]
@@ -164,7 +345,9 @@ def register_run_command(app: typer.Typer):
 
         # Step 4: Sync project configuration to server
         if not skip_sync:
-            rich_print_section_separator("Step 4/7: Syncing project configuration to server")
+            rich_print_section_separator(
+                f"Step 4/{total_steps}: Syncing project configuration to server"
+            )
             try:
                 if not dry_run:
                     project_config_dict = convert_model_to_dict(project_config)
@@ -174,6 +357,60 @@ def register_run_command(app: typer.Typer):
                         update=update_config,
                     )
                 rich_print_checked_statement("Project configuration sync completed", "success")
+
+                # Resolve tag-based link IDs now that the server has assigned real DC IDs
+                if is_template_mode and not dry_run:
+                    try:
+                        from depictio.cli.cli.utils.api_calls import (
+                            api_get_project_from_id,
+                            api_update_project,
+                        )
+
+                        # Use name lookup first, fall back to ID-based fetch
+                        remote = api_get_project_from_name(str(project_config.name), CLI_config)
+                        if remote.status_code != 200:
+                            # Name lookup may fail with special chars; try by scanning
+                            # the project list or use the project_config's id if available
+                            pid = getattr(project_config, "id", None)
+                            if pid:
+                                remote = api_get_project_from_id(pid, CLI_config)
+                        if remote.status_code == 200:
+                            proj_data = remote.json()
+                            tag_to_id: dict[str, str] = {}
+                            for wf in proj_data.get("workflows", []):
+                                for dc in wf.get("data_collections", []):
+                                    tag = dc.get("data_collection_tag")
+                                    dc_id = dc.get("_id")
+                                    if tag and dc_id:
+                                        tag_to_id[tag] = str(dc_id)
+
+                            links_updated = False
+                            for link in proj_data.get("links", []):
+                                for field, tag_field in [
+                                    ("source_dc_id", "source_dc_tag"),
+                                    ("target_dc_id", "target_dc_tag"),
+                                ]:
+                                    tag = link.get(tag_field)
+                                    if (
+                                        tag
+                                        and tag in tag_to_id
+                                        and str(link.get(field, "")).startswith("tag:")
+                                    ):
+                                        link[field] = tag_to_id[tag]
+                                        links_updated = True
+
+                            if links_updated:
+                                resp = api_update_project(proj_data, CLI_config)
+                                rich_print_checked_statement(
+                                    f"Resolved link tags to DC IDs ({resp.status_code})", "success"
+                                )
+                            else:
+                                rich_print_checked_statement(
+                                    "Links already have DC IDs (no tag: placeholders)", "info"
+                                )
+                    except Exception as e:
+                        logger.warning(f"Link tag resolution failed (non-blocking): {e}")
+
                 success_count += 1
             except Exception as e:
                 rich_print_checked_statement(f"Project configuration sync failed: {e}", "error")
@@ -185,7 +422,7 @@ def register_run_command(app: typer.Typer):
 
         # Step 5: Scan data files
         if not skip_scan:
-            rich_print_section_separator("Step 5/7: Scanning data files")
+            rich_print_section_separator(f"Step 5/{total_steps}: Scanning data files")
             try:
                 if not dry_run:
                     # Get remote project configuration to compare hashes
@@ -235,7 +472,7 @@ def register_run_command(app: typer.Typer):
 
         # Step 6: Process data collections
         if not skip_process:
-            rich_print_section_separator("Step 6/7: Processing data collections")
+            rich_print_section_separator(f"Step 6/{total_steps}: Processing data collections")
             try:
                 if not dry_run:
                     # Get remote project configuration again for processing
@@ -252,6 +489,7 @@ def register_run_command(app: typer.Typer):
                             command_parameters = {
                                 "overwrite": overwrite,
                                 "rich_tables": rich_tables,
+                                "preview_recipes": preview_recipes,
                             }
 
                             process_project_helper(
@@ -277,7 +515,7 @@ def register_run_command(app: typer.Typer):
 
         # Step 7: Execute table joins
         if not skip_join:
-            rich_print_section_separator("Step 7/7: Executing table joins")
+            rich_print_section_separator(f"Step 7/{total_steps}: Executing table joins")
             try:
                 if not dry_run:
                     # Check if project has joins defined
@@ -323,8 +561,79 @@ def register_run_command(app: typer.Typer):
             rich_print_checked_statement("Skipping join execution", "info")
             success_count += 1
 
+        # Step 8 (template only): Import dashboards
+        if is_template_mode and not skip_dashboard_import and template_dashboard_paths:
+            rich_print_section_separator(
+                f"Step {total_steps}/{total_steps}: Importing template dashboards"
+            )
+            try:
+                if not dry_run:
+                    from depictio.cli.cli.utils.templates import (
+                        import_dashboards_from_template,
+                    )
+
+                    headers = generate_api_headers(CLI_config)
+                    api_url = str(CLI_config.api_base_url)
+
+                    # Resolve the project ID from the server
+                    project_id: str | None = None
+                    remote_project = api_get_project_from_name(str(project_config.name), CLI_config)
+                    if remote_project.status_code == 200:
+                        remote_project_data = remote_project.json()
+                        project_id = remote_project_data.get("_id") or remote_project_data.get("id")
+
+                    results = import_dashboards_from_template(
+                        dashboard_paths=template_dashboard_paths,
+                        api_url=api_url,
+                        headers=headers,
+                        project_id=project_id,
+                        overwrite=overwrite,
+                        variables=template_variables,
+                    )
+
+                    imported, failed = [], []
+                    for r in results:
+                        (imported if r["success"] else failed).append(r)
+
+                    for r in imported:
+                        action = "updated" if r.get("updated") else "imported"
+                        rich_print_checked_statement(
+                            f"Dashboard {action}: {r.get('title', 'unknown')}", "success"
+                        )
+                        if r.get("dash_url"):
+                            rich_print_checked_statement(
+                                f"  View at: {r['dash_url']}/dashboard/{r.get('dashboard_id')}",
+                                "info",
+                            )
+
+                    for r in failed:
+                        rich_print_checked_statement(
+                            f"Dashboard failed: {Path(r['path']).name} - {r.get('error', 'unknown')}",
+                            "error",
+                        )
+
+                    if failed and not continue_on_error:
+                        raise Exception(f"{len(failed)} dashboard(s) failed to import")
+
+                rich_print_checked_statement("Dashboard import completed", "success")
+                success_count += 1
+            except Exception as e:
+                rich_print_checked_statement(f"Dashboard import failed: {e}", "error")
+                if not continue_on_error:
+                    return
+        elif is_template_mode and skip_dashboard_import:
+            rich_print_checked_statement(
+                "Skipping dashboard import (--skip-dashboard-import)", "info"
+            )
+            success_count += 1
+        elif is_template_mode and not template_dashboard_paths:
+            rich_print_checked_statement("No dashboards defined in template", "info")
+            success_count += 1
+
         # Final summary
         rich_print_section_separator("Depictio-CLI Run Summary")
+        if is_template_mode:
+            rich_print_checked_statement(f"Template used: {template}", "info")
         if success_count == total_steps:
             rich_print_checked_statement(
                 f"Depictio-CLI run completed successfully! ({success_count}/{total_steps} steps)",

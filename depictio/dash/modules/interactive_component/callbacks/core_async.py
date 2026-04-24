@@ -314,8 +314,18 @@ def register_async_rendering_callback(app):
                 all_stored_metadata.append(stored_metadata)
 
             except Exception as e:
-                logger.error(f"[{i}] Interactive render error: {e}", exc_info=True)
-                all_components.append(f"Error: {str(e)}")
+                error_str = str(e).lower()
+                if "not found" in error_str or "no delta" in error_str or "no data" in error_str:
+                    from depictio.dash.modules.shared.placeholders import (
+                        create_data_unavailable_box,
+                    )
+
+                    dc_tag = trigger_data.get("data_collection_tag", "unknown")
+                    logger.warning(f"[{i}] Interactive data unavailable (dc: {dc_tag}): {e}")
+                    all_components.append(create_data_unavailable_box(dc_tag))
+                else:
+                    logger.error(f"[{i}] Interactive render error: {e}", exc_info=True)
+                    all_components.append(f"Error: {str(e)}")
                 all_metadata.append({})
                 all_stored_metadata.append({})
 

@@ -232,7 +232,7 @@ class TestCLIValidateCommand:
         """Invalid YAML file should fail validation."""
         result = runner.invoke(app, ["validate", str(invalid_yaml_file)])
         assert result.exit_code == 1
-        assert "Validation failed" in result.output
+        assert "validation failed" in result.output.lower()
 
     def test_validate_nonexistent_file(self):
         """Non-existent file should fail with error."""
@@ -324,7 +324,7 @@ class TestCLIImportCommand:
             ],
         )
         assert result.exit_code == 1
-        assert "Validation failed" in result.output
+        assert "validation failed" in result.output.lower()
 
     def test_import_shows_component_count(self, valid_yaml_file: Path):
         """Import should show component count during validation."""
@@ -402,8 +402,11 @@ class TestFullConversionPipeline:
         assert full_dict["title"] == "Test Dashboard"
         assert "stored_metadata" in full_dict
         assert len(full_dict["stored_metadata"]) == 4
-        assert "stored_layout_data" in full_dict
-        assert len(full_dict["stored_layout_data"]) == 4
+        assert "left_panel_layout_data" in full_dict
+        assert "right_panel_layout_data" in full_dict
+        # 1 interactive → left panel, 3 others → right panel
+        assert len(full_dict["left_panel_layout_data"]) == 1
+        assert len(full_dict["right_panel_layout_data"]) == 3
 
     def test_full_dict_to_dashboard_data(
         self, valid_yaml_content: str, sample_permission: Permission, sample_project_id: str
@@ -646,11 +649,12 @@ components: []
             permissions=sample_permission.model_dump(),
         )
 
-        # stored_layout_data should have one entry per component
-        assert len(dashboard.stored_layout_data) == len(dashboard.stored_metadata)
+        # Layout is now split: interactive → left panel, others → right panel
+        all_layout = dashboard.left_panel_layout_data + dashboard.right_panel_layout_data
+        assert len(all_layout) == len(dashboard.stored_metadata)
 
         # Each layout item should have position/size properties
-        for layout in dashboard.stored_layout_data:
+        for layout in all_layout:
             assert "i" in layout
             assert "x" in layout
             assert "y" in layout

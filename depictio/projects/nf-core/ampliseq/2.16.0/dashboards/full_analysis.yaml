@@ -1,0 +1,895 @@
+version: 1
+main_dashboard:
+    title: nf-core/ampliseq
+    # --- optional ---
+    subtitle: MultiQC Analysis - Cutadapt & FastQC
+    project_tag: Ampliseq Microbial Community Analysis
+    main_tab_name: MultiQC
+    tab_icon: /assets/images/logos/multiqc.png
+    tab_icon_color: orange
+    icon: /assets/images/workflows/nf-core.png
+    icon_color: green
+    workflow_system: nf-core
+    # --- generated on export ---
+    dashboard_id: 646b0f3c1e4a2d7f8e5b8ca2
+    components:
+    -   component_type: interactive
+        workflow_tag: ampliseq
+        data_collection_tag: metadata
+        interactive_component_type: DateRangePicker
+        column_name: sampling_date
+        column_type: datetime
+        display:
+            title_size: md
+            custom_color: '#FF6B6B'
+            icon_name: mdi:calendar-range
+        tag: interactive-multiqc-daterange-a1b2c3
+        index: multiqc-daterange
+        layout:
+            x: 0
+            y: 0
+            w: 1
+            h: 3
+        title: Sampling Period
+    -   component_type: interactive
+        workflow_tag: ampliseq
+        data_collection_tag: metadata
+        interactive_component_type: MultiSelect
+        column_name: "{GROUP_COL}"
+        column_type: object
+        display:
+            title_size: md
+            custom_color: '#984EA3'
+            icon_name: mdi:tag-multiple
+        tag: interactive-multiqc-group-filter-d8ca83
+        index: multiqc-group-filter
+        layout:
+            x: 0
+            y: 3
+            w: 1
+            h: 2
+        title: "{GROUP_COL_DISPLAY}"
+    -   component_type: interactive
+        workflow_tag: ampliseq
+        data_collection_tag: metadata
+        interactive_component_type: MultiSelect
+        column_name: ID
+        column_type: object
+        display:
+            title_size: md
+            custom_color: '#45B8AC'
+            icon_name: mdi:flask
+        tag: interactive-multiqc-sample-filter-78c9c2
+        index: multiqc-sample-filter
+        layout:
+            x: 0
+            y: 5
+            w: 1
+            h: 3
+        title: Sample ID
+    -   component_type: multiqc
+        workflow_tag: ampliseq
+        data_collection_tag: multiqc_data
+        selected_module: general_stats
+        selected_plot: general_stats
+        # --- generated on export ---
+        tag: multiqc-general_stats-table-a1c3f7
+        layout:
+            x: 0
+            y: 0
+            w: 8
+            h: 5
+    -   component_type: multiqc
+        workflow_tag: ampliseq
+        data_collection_tag: multiqc_data
+        selected_module: cutadapt
+        selected_plot: Filtered Reads
+        # --- generated on export ---
+        tag: multiqc-cutadapt_filtered-reads-d421ae
+        layout:
+            x: 0
+            y: 5
+            w: 8
+            h: 4
+    -   component_type: multiqc
+        workflow_tag: ampliseq
+        data_collection_tag: multiqc_data
+        selected_module: fastqc
+        selected_plot: Sequence Counts
+        # --- generated on export ---
+        tag: multiqc-fastqc_sequence-counts-52bd04
+        layout:
+            x: 0
+            y: 9
+            w: 8
+            h: 4
+    -   component_type: multiqc
+        workflow_tag: ampliseq
+        data_collection_tag: multiqc_data
+        selected_module: fastqc
+        selected_plot: Sequence Quality Histograms
+        # --- generated on export ---
+        tag: multiqc-fastqc_sequence-quality-histograms-ce2a02
+        layout:
+            x: 0
+            y: 13
+            w: 4
+            h: 5
+    -   component_type: multiqc
+        workflow_tag: ampliseq
+        data_collection_tag: multiqc_data
+        selected_module: fastqc
+        selected_plot: Per Sequence GC Content
+        # --- generated on export ---
+        tag: multiqc-fastqc_per-sequence-gc-content-359f73
+        layout:
+            x: 4
+            y: 13
+            w: 4
+            h: 5
+    -   component_type: multiqc
+        workflow_tag: ampliseq
+        data_collection_tag: multiqc_data
+        selected_module: fastqc
+        selected_plot: Adapter Content
+        # --- generated on export ---
+        tag: multiqc-fastqc_adapter-content-6dd1a9
+        layout:
+            x: 0
+            y: 18
+            w: 4
+            h: 5
+    -   component_type: multiqc
+        workflow_tag: ampliseq
+        data_collection_tag: multiqc_data
+        selected_module: cutadapt
+        selected_plot: Trimmed Sequence Lengths (5')
+        # --- generated on export ---
+        tag: multiqc-cutadapt_trimmed-sequence-lengths-5-e5e50a
+        layout:
+            x: 4
+            y: 18
+            w: 4
+            h: 5
+tabs:
+-   title: Community Analysis
+    # --- optional ---
+    subtitle: Alpha Diversity & Taxonomic Composition
+    tab_order: 1
+    tab_icon: mdi:bacteria-outline
+    tab_icon_color: teal
+    icon: /assets/images/workflows/nf-core.png
+    icon_color: green
+    workflow_system: nf-core
+    # --- generated on export ---
+    dashboard_id: 646b0f3c1e4a2d7f8e5b8cb3
+    components:
+    -   component_type: card
+        workflow_tag: ampliseq
+        data_collection_tag: metadata
+        aggregation: nunique
+        column_name: ID
+        # --- optional ---
+        column_type: object
+        display:
+            icon_name: mdi:flask
+            icon_color: '#45B8AC'
+            title_color: '#45B8AC'
+            title_font_size: xl
+            value_font_size: xl
+        # --- generated on export ---
+        tag: card-sample_nunique-faa7e6
+        layout:
+            x: 0
+            y: 0
+            w: 2
+            h: 2
+        title: Total Samples
+    -   component_type: card
+        workflow_tag: ampliseq
+        data_collection_tag: taxonomy_rel_abundance
+        aggregation: nunique
+        column_name: taxonomy
+        # --- optional ---
+        column_type: object
+        display:
+            icon_name: mdi:bacteria
+            icon_color: '#8BC34A'
+            title_color: '#8BC34A'
+            title_font_size: xl
+            value_font_size: xl
+        # --- generated on export ---
+        tag: card-taxonomy_nunique-d2ba1c
+        layout:
+            x: 2
+            y: 0
+            w: 2
+            h: 2
+        title: Total Taxa
+    -   component_type: card
+        workflow_tag: ampliseq
+        data_collection_tag: alpha_diversity
+        aggregation: average
+        column_name: faith_pd
+        # --- optional ---
+        column_type: float64
+        display:
+            icon_name: mdi:chart-line
+            icon_color: '#F68B33'
+            title_color: '#F68B33'
+            title_font_size: xl
+            value_font_size: xl
+        # --- generated on export ---
+        tag: card-faith_pd_average-66fb50
+        layout:
+            x: 4
+            y: 0
+            w: 2
+            h: 2
+        title: Mean Faith PD
+    -   component_type: card
+        workflow_tag: ampliseq
+        data_collection_tag: metadata
+        aggregation: nunique
+        column_name: "{GROUP_COL}"
+        # --- optional ---
+        column_type: object
+        display:
+            icon_name: mdi:earth
+            icon_color: '#984EA3'
+            title_color: '#984EA3'
+            title_font_size: xl
+            value_font_size: xl
+        # --- generated on export ---
+        tag: card-habitat_nunique-1fc891
+        layout:
+            x: 6
+            y: 0
+            w: 2
+            h: 2
+        title: "{GROUP_COL_DISPLAY} Types"
+    -   component_type: figure
+        workflow_tag: ampliseq
+        data_collection_tag: alpha_rarefaction
+        visu_type: line
+        # --- optional ---
+        figure_params:
+            x: depth
+            y: faith_pd
+            color: sample
+            title: Alpha Diversity Rarefaction Curves
+            labels:
+                depth: Rarefaction Depth
+                faith_pd: Faith's Phylogenetic Diversity
+        mode: code
+        code_content: "df_modified = df.group_by([\"sample\", \"depth\"]).agg([\n\
+            \    pl.col(\"faith_pd\").mean().alias(\"mean\"),\n    pl.col(\"faith_pd\"\
+            ).std().alias(\"std\")\n]).sort(\"depth\")\n\nfig = px.line(\n    df_modified.to_pandas(),\n\
+            \    x=\"depth\", y=\"mean\", color=\"sample\",\n    error_y=\"std\",\
+            \ markers=True,\n    labels={\"depth\": \"Rarefaction Depth\", \"mean\"\
+            : \"Faith's Phylogenetic Diversity\"},\n    title=\"Alpha Diversity Rarefaction\
+            \ Curves\"\n)\nfig.update_traces(mode=\"lines+markers\")\nfig.update_layout(yaxis={'rangemode':\
+            \ 'tozero'})"
+        selection_enabled: false
+        # --- generated on export ---
+        tag: figure-line_depth_faith_pd-5d9f17
+        layout:
+            x: 0
+            y: 2
+            w: 8
+            h: 5
+    -   component_type: figure
+        workflow_tag: ampliseq
+        data_collection_tag: alpha_diversity
+        visu_type: bar
+        # --- optional ---
+        figure_params:
+            x: "{GROUP_COL}"
+            y: faith_pd
+            color: "{GROUP_COL}"
+            title: "Alpha Diversity by {GROUP_COL_DISPLAY} (Faith PD)"
+            labels:
+                "{GROUP_COL}": "{GROUP_COL}"
+                faith_pd: "Faith's Phylogenetic Diversity"
+        mode: code
+        code_content: "df_modified = df.to_pandas().groupby('{GROUP_COL}')['faith_pd'].agg(['mean',\
+            \ 'std']).reset_index()\nfig = px.bar(\n    df_modified, x='{GROUP_COL}',\
+            \ y='mean', color='{GROUP_COL}',\n    error_y='std',\n    title='Alpha\
+            \ Diversity by {GROUP_COL_DISPLAY} (Faith PD)',\n    labels={'{GROUP_COL}': '{GROUP_COL_DISPLAY}',\
+            \ 'mean': \"Faith's Phylogenetic Diversity\"}\n)\nfig.update_layout(xaxis={'categoryorder':\
+            \ 'category ascending'}, yaxis={'rangemode': 'tozero'}, showlegend=False)"
+        selection_enabled: false
+        # --- generated on export ---
+        tag: figure-bar_sample_faith_pd-5b8018
+        layout:
+            x: 0
+            y: 7
+            w: 4
+            h: 5
+    -   component_type: figure
+        workflow_tag: ampliseq
+        data_collection_tag: taxonomy_rel_abundance
+        visu_type: sunburst
+        # --- optional ---
+        figure_params:
+            path:
+            - Kingdom
+            - Phylum
+            values: rel_abundance
+            title: Taxonomic Composition - Hierarchical View (Relative Abundance)
+        mode: code
+        code_content: "df_modified = df.filter((pl.col('Phylum').is_not_null())\
+            \ & (pl.col('Phylum') != '') & (pl.col('Phylum') != 'Unclassified')).group_by(['Kingdom',\
+            \ 'Phylum']).agg(pl.col('rel_abundance').mean())\n\nfig = px.sunburst(df_modified.to_dicts(),\
+            \ path=['Kingdom', 'Phylum'],\nvalues='rel_abundance',\ncolor='Kingdom',\n\
+            color_discrete_map={'Bacteria': '#F8766D', 'Archaea': '#00BFC4'},\ntitle='Taxonomic\
+            \ Composition - Hierarchical View (Relative Abundance)')"
+        selection_enabled: false
+        # --- generated on export ---
+        tag: figure-sunburst-e651a9
+        layout:
+            x: 4
+            y: 7
+            w: 4
+            h: 5
+    -   component_type: figure
+        workflow_tag: ampliseq
+        data_collection_tag: taxonomy_rel_abundance
+        visu_type: bar
+        # --- optional ---
+        figure_params:
+            x: Phylum
+            y: mean_rel_abundance
+            color: Phylum
+            facet_row: "{GROUP_COL}"
+            title: "Mean Relative Abundance by {GROUP_COL_DISPLAY}"
+            labels:
+                Phylum: Phylum
+                mean_rel_abundance: Mean Relative Abundance
+                "{GROUP_COL}": "{GROUP_COL}"
+        mode: code
+        code_content: "df_stats = df.group_by(['{GROUP_COL}', 'Phylum']).agg([\n\
+            \    pl.col('rel_abundance').mean().alias('mean_rel_abundance'),\n    pl.col('rel_abundance').std().alias('std_rel_abundance')\n\
+            ]).sort('Phylum')\nfig = px.bar(\n    df_stats.to_pandas(),\n    x='Phylum',\
+            \ y='mean_rel_abundance', color='Phylum',\n    error_y='std_rel_abundance',\n\
+            \    facet_row='{GROUP_COL}',\n    title='Mean Relative Abundance by {GROUP_COL_DISPLAY}\
+            \ (± std)',\n    labels={'Phylum': 'Phylum', 'mean_rel_abundance': 'Mean\
+            \ Relative Abundance'}\n)\nfig.update_layout(xaxis={'categoryorder': 'category\
+            \ ascending'})\nfig.update_xaxes(tickangle=-45, tickfont={'size': 9})\n\
+            fig.update_layout(showlegend=False)"
+        selection_enabled: false
+        # --- generated on export ---
+        tag: figure-bar_phylum_rel_abundance-de4c39
+        layout:
+            x: 0
+            y: 12
+            w: 8
+            h: 8
+    -   component_type: figure
+        workflow_tag: ampliseq
+        data_collection_tag: taxonomy_rel_abundance
+        visu_type: bar
+        # --- optional ---
+        figure_params:
+            x: sample
+            y: rel_abundance
+            color: Phylum
+            facet_col: "{GROUP_COL}"
+            title: "Taxonomic Composition by Sample (Relative Abundance)"
+            labels:
+                sample: Sample ID
+                rel_abundance: Relative Abundance
+                Phylum: Phylum
+            barmode: stack
+        mode: code
+        code_content: "df_sorted = df.sort('sample')\nfig = px.bar(\n    df_sorted.to_pandas(),\n\
+            \    x='sample', y='rel_abundance', color='Phylum',\n    facet_col='{GROUP_COL}',\n\
+            \    title='Taxonomic Composition by Sample (Relative Abundance)',\n \
+            \   labels={'sample': 'Sample ID', 'rel_abundance': 'Relative Abundance',\
+            \ 'Phylum': 'Phylum'},\n    barmode='stack',\n    category_orders={'sample':\
+            \ sorted(df_sorted['sample'].unique().to_list())}\n)\nfig.update_xaxes(matches=None,\
+            \ tickangle=-45, tickfont={'size': 9})\nfig.for_each_xaxis(lambda axis:\
+            \ axis.update(categoryorder='category ascending'))"
+        selection_enabled: false
+        # --- generated on export ---
+        tag: figure-bar_sample_rel_abundance-de4c39
+        layout:
+            x: 0
+            y: 24
+            w: 8
+            h: 8
+    -   component_type: table
+        workflow_tag: ampliseq
+        data_collection_tag: metadata
+        # --- optional ---
+        title: Sample Metadata
+        description: Sample identifiers and metadata annotations
+        title_size: h2
+        title_align: left
+        row_selection_enabled: false
+        # --- generated on export ---
+        tag: table-table-df4371
+        layout:
+            x: 0
+            y: 39
+            w: 8
+            h: 6
+    -   component_type: table
+        workflow_tag: ampliseq
+        data_collection_tag: taxonomy_rel_abundance
+        # --- optional ---
+        title: Taxonomy Relative Abundance
+        description: Phylum-level relative abundance per sample with metadata annotations
+        title_size: h2
+        title_align: left
+        row_selection_enabled: false
+        # --- generated on export ---
+        tag: table-table-02f050
+        layout:
+            x: 0
+            y: 45
+            w: 8
+            h: 6
+    -   component_type: map
+        workflow_tag: ampliseq
+        data_collection_tag: metadata
+        map_type: scatter_map
+        lat_column: latitude
+        lon_column: longitude
+        color_column: "{GROUP_COL}"
+        hover_columns:
+        - ID
+        - name
+        - "{GROUP_COL}"
+        - city
+        - sampling_date
+        map_style: carto-positron
+        default_zoom: 5
+        default_center:
+            lat: 51.0
+            lon: 10.5
+        selection_enabled: true
+        selection_column: ID
+        tag: map-sampling-locations
+        title: Sampling Locations
+        layout:
+            x: 0
+            y: 32
+            w: 8
+            h: 6
+    -   component_type: figure
+        workflow_tag: ampliseq
+        data_collection_tag: taxonomy_heatmap
+        visu_type: heatmap
+        dict_kwargs:
+            index_column: Phylum
+            row_annotations: '{"Kingdom": {"type": "categorical", "colors": {"Bacteria":
+              "#F8766D", "Archaea": "#00BFC4"}}}'
+            cluster_rows: true
+            cluster_cols: true
+            normalize: row
+            colorscale: RdBu_r
+            name: z-score
+            width: 1000
+            height: 700
+        mode: ui
+        selection_enabled: false
+        tag: figure-heatmap-taxonomy-composition
+        title: Taxonomic Composition Heatmap
+        description: Row-normalized (z-score) relative abundance of phyla across samples,
+            clustered by similarity with Kingdom and metadata annotations
+        layout:
+            x: 0
+            y: 38
+            w: 8
+            h: 7
+    -   component_type: interactive
+        workflow_tag: ampliseq
+        data_collection_tag: metadata
+        interactive_component_type: DateRangePicker
+        column_name: sampling_date
+        column_type: datetime
+        display:
+            title_size: md
+            custom_color: '#FF6B6B'
+            icon_name: mdi:calendar-range
+        tag: interactive-community-daterange-d4e5f6
+        index: community-daterange
+        layout:
+            x: 0
+            y: 0
+            w: 1
+            h: 3
+        title: Sampling Period
+    -   component_type: interactive
+        workflow_tag: ampliseq
+        data_collection_tag: metadata
+        interactive_component_type: MultiSelect
+        column_name: "{GROUP_COL}"
+        column_type: object
+        display:
+            title_size: md
+            custom_color: '#984EA3'
+            icon_name: mdi:tag-multiple
+        tag: interactive-group-col-d8ca83
+        layout:
+            x: 0
+            y: 3
+            w: 1
+            h: 2
+        title: "{GROUP_COL_DISPLAY}"
+    -   component_type: interactive
+        workflow_tag: ampliseq
+        data_collection_tag: metadata
+        interactive_component_type: MultiSelect
+        column_name: ID
+        column_type: object
+        display:
+            title_size: md
+            custom_color: '#45B8AC'
+            icon_name: mdi:flask
+        tag: interactive-sample-78c9c2
+        layout:
+            x: 0
+            y: 5
+            w: 1
+            h: 3
+        title: Sample ID
+    -   component_type: interactive
+        workflow_tag: ampliseq
+        data_collection_tag: taxonomy_rel_abundance
+        interactive_component_type: MultiSelect
+        column_name: Kingdom
+        # --- optional ---
+        column_type: object
+        display:
+            title_size: md
+            custom_color: '#377EB8'
+            icon_name: mdi:bacteria
+        # --- generated on export ---
+        tag: interactive-kingdom-b112bb
+        layout:
+            x: 0
+            y: 8
+            w: 1
+            h: 2
+        title: Kingdom
+    -   component_type: interactive
+        workflow_tag: ampliseq
+        data_collection_tag: taxonomy_rel_abundance
+        interactive_component_type: MultiSelect
+        column_name: Phylum
+        # --- optional ---
+        column_type: object
+        display:
+            title_size: md
+            custom_color: '#8BC34A'
+            icon_name: mdi:bacteria-outline
+        # --- generated on export ---
+        tag: interactive-phylum-f89384
+        layout:
+            x: 0
+            y: 10
+            w: 1
+            h: 3
+        title: Phylum
+    -   component_type: interactive
+        workflow_tag: ampliseq
+        data_collection_tag: alpha_rarefaction
+        interactive_component_type: RangeSlider
+        column_name: faith_pd
+        # --- optional ---
+        column_type: float64
+        display:
+            title_size: md
+            custom_color: '#9C27B0'
+            icon_name: mdi:chart-box-outline
+        # --- generated on export ---
+        tag: interactive-range-faith-pd-slider-5cf75b
+        index: range-faith-pd-slider
+        layout:
+            x: 0
+            y: 13
+            w: 1
+            h: 3
+        title: Faith PD Range
+    -   component_type: interactive
+        workflow_tag: ampliseq
+        data_collection_tag: taxonomy_rel_abundance
+        interactive_component_type: RangeSlider
+        column_name: rel_abundance
+        # --- optional ---
+        column_type: float64
+        display:
+            title_size: md
+            custom_color: '#FF9800'
+            icon_name: mdi:counter
+        # --- generated on export ---
+        tag: interactive-range-rel-abundance-slider-7e70dc
+        index: range-rel-abundance-slider
+        layout:
+            x: 0
+            y: 16
+            w: 1
+            h: 3
+        title: Relative Abundance Range
+-   title: Diff. Abundance
+    # --- optional ---
+    subtitle: ANCOM-BC Volcano Plot
+    tab_order: 2
+    tab_icon: mdi:chart-scatter-plot
+    tab_icon_color: red
+    icon: /assets/images/workflows/nf-core.png
+    icon_color: green
+    workflow_system: nf-core
+    # --- generated on export ---
+    dashboard_id: 646b0f3c1e4a2d7f8e5b8cb4
+    components:
+    -   component_type: interactive
+        workflow_tag: ampliseq
+        data_collection_tag: ancombc_results
+        interactive_component_type: MultiSelect
+        column_name: contrast
+        # --- optional ---
+        column_type: object
+        display:
+            title_size: md
+            custom_color: '#2196F3'
+            icon_name: mdi:compare-horizontal
+        # --- generated on export ---
+        tag: interactive-diff-contrast-filter-a1b2c3
+        index: diff-contrast-filter
+        layout:
+            x: 0
+            y: 0
+            w: 1
+            h: 2
+        title: Contrast
+    -   component_type: interactive
+        workflow_tag: ampliseq
+        data_collection_tag: ancombc_results
+        interactive_component_type: MultiSelect
+        column_name: Phylum
+        # --- optional ---
+        column_type: object
+        display:
+            title_size: md
+            custom_color: '#8BC34A'
+            icon_name: mdi:bacteria-outline
+        # --- generated on export ---
+        tag: interactive-diff-filter-phylum-19799f
+        index: diff-filter-phylum
+        layout:
+            x: 0
+            y: 2
+            w: 1
+            h: 3
+        title: Phylum
+    -   component_type: interactive
+        workflow_tag: ampliseq
+        data_collection_tag: ancombc_results
+        interactive_component_type: MultiSelect
+        column_name: Kingdom
+        # --- optional ---
+        column_type: object
+        display:
+            title_size: md
+            custom_color: '#377EB8'
+            icon_name: mdi:bacteria
+        # --- generated on export ---
+        tag: interactive-diff-kingdom-filter-06c93a
+        index: diff-kingdom-filter
+        layout:
+            x: 0
+            y: 5
+            w: 1
+            h: 2
+        title: Kingdom
+    -   component_type: interactive
+        workflow_tag: ampliseq
+        data_collection_tag: ancombc_results
+        interactive_component_type: RangeSlider
+        column_name: w
+        # --- optional ---
+        column_type: float64
+        display:
+            title_size: md
+            custom_color: '#E74C3C'
+            icon_name: mdi:chart-line
+        # --- generated on export ---
+        tag: interactive-diff-w-slider-39626c
+        index: diff-w-slider
+        layout:
+            x: 0
+            y: 7
+            w: 1
+            h: 3
+        title: W Statistic Range
+    -   component_type: interactive
+        workflow_tag: ampliseq
+        data_collection_tag: ancombc_results
+        interactive_component_type: RangeSlider
+        column_name: lfc
+        # --- optional ---
+        column_type: float64
+        display:
+            title_size: md
+            custom_color: '#F68B33'
+            icon_name: mdi:chart-bell-curve
+        # --- generated on export ---
+        tag: interactive-diff-lfc-slider-151c9f
+        index: diff-lfc-slider
+        layout:
+            x: 0
+            y: 10
+            w: 1
+            h: 3
+        title: Log-Fold Change Range
+    -   component_type: card
+        workflow_tag: ampliseq
+        data_collection_tag: ancombc_results
+        aggregation: count
+        column_name: id
+        # --- optional ---
+        column_type: object
+        display:
+            icon_name: mdi:bacteria
+            icon_color: '#45B8AC'
+            title_color: '#45B8AC'
+            title_font_size: xl
+            value_font_size: xl
+        # --- generated on export ---
+        tag: card-diff-card-total-taxa-92484f
+        index: diff-card-total-taxa
+        layout:
+            x: 0
+            y: 0
+            w: 2
+            h: 2
+        title: Total Taxa Analyzed
+    -   component_type: card
+        workflow_tag: ampliseq
+        data_collection_tag: ancombc_results
+        aggregation: count
+        column_name: id
+        # --- optional ---
+        column_type: object
+        display:
+            icon_name: mdi:alert-circle
+            icon_color: '#E74C3C'
+            title_color: '#E74C3C'
+            title_font_size: xl
+            value_font_size: xl
+        # --- generated on export ---
+        tag: card-diff-card-significant-2550e3
+        index: diff-card-significant
+        layout:
+            x: 2
+            y: 0
+            w: 2
+            h: 2
+        title: Significant Taxa (q<0.05)
+    -   component_type: card
+        workflow_tag: ampliseq
+        data_collection_tag: ancombc_results
+        aggregation: nunique
+        column_name: Phylum
+        # --- optional ---
+        column_type: object
+        display:
+            icon_name: mdi:bacteria-outline
+            icon_color: '#8BC34A'
+            title_color: '#8BC34A'
+            title_font_size: xl
+            value_font_size: xl
+        # --- generated on export ---
+        tag: card-diff-card-phyla-80b1ba
+        index: diff-card-phyla
+        layout:
+            x: 4
+            y: 0
+            w: 2
+            h: 2
+        title: Unique Phyla
+    -   component_type: card
+        workflow_tag: ampliseq
+        data_collection_tag: ancombc_results
+        aggregation: max
+        column_name: lfc
+        # --- optional ---
+        column_type: float64
+        display:
+            icon_name: mdi:chart-line-variant
+            icon_color: '#F68B33'
+            title_color: '#F68B33'
+            title_font_size: xl
+            value_font_size: xl
+        # --- generated on export ---
+        tag: card-diff-card-max-effect-da2320
+        index: diff-card-max-effect
+        layout:
+            x: 6
+            y: 0
+            w: 2
+            h: 2
+        title: Max Log-Fold Change
+    -   component_type: figure
+        workflow_tag: ampliseq
+        data_collection_tag: ancombc_results
+        visu_type: scatter
+        # --- optional ---
+        figure_params:
+            x: lfc
+            y: neg_log10_qval
+            color: Phylum
+            facet_col: contrast
+            hover_data:
+            - id
+            - q_val
+            title: ANCOM-BC Volcano Plot
+            labels:
+                lfc: Log-Fold Change
+                neg_log10_qval: "-log10(q-value)"
+                Phylum: Phylum
+        mode: code
+        code_content: "fig = px.scatter(\n    df.to_pandas(),\n\
+            \    x='lfc', y='neg_log10_qval', color='Phylum',\n    facet_col='contrast',\n\
+            \    hover_data=['id', 'q_val'],\n    title='ANCOM-BC Volcano Plot',\n\
+            \    labels={'lfc': 'Log-Fold Change', 'neg_log10_qval': '-log10(q-value)'}\n\
+            )\nfig.add_hline(y=-np.log10(0.05), line_dash='dash', line_color='red',\
+            \ annotation_text='q=0.05')\nfig.add_vline(x=0, line_dash='dash', line_color='gray')"
+        selection_enabled: false
+        # --- generated on export ---
+        tag: figure-scatter_lfc_qval-734503
+        layout:
+            x: 0
+            y: 2
+            w: 8
+            h: 6
+    -   component_type: figure
+        workflow_tag: ampliseq
+        data_collection_tag: ancombc_results
+        visu_type: bar
+        # --- optional ---
+        figure_params:
+            x: Phylum
+            y: lfc
+            color: Phylum
+            facet_col: contrast
+            title: Top Differential Taxa by Log-Fold Change
+            labels:
+                Phylum: Phylum
+                lfc: Log-Fold Change
+        mode: code
+        code_content: "df_sig = df.filter(pl.col('significant') == True)\ndf_top =\
+            \ df_sig.with_columns(pl.col('lfc').abs().alias('abs_lfc')).sort('abs_lfc',\
+            \ descending=True).group_by('contrast').head(10)\ndf_plot = df_top.sort(['contrast',\
+            \ 'lfc'])\nfig = px.bar(\n    df_plot.to_pandas(),\n    x='Phylum', y='lfc',\
+            \ color='Phylum',\n    facet_col='contrast',\n    title='Top Significant\
+            \ Taxa by Log-Fold Change (per contrast)',\n    labels={'Phylum': 'Phylum',\
+            \ 'lfc': 'Log-Fold Change'}\n)\nfig.update_xaxes(matches=None, tickangle=-45,\
+            \ tickfont={'size': 9})\nfig.for_each_xaxis(lambda axis: axis.update(categoryorder='total\
+            \ ascending'))\nfig.add_hline(y=0, line_dash='solid', line_color='gray',\
+            \ line_width=0.5)"
+        selection_enabled: false
+        # --- generated on export ---
+        tag: figure-diff-bar-top-taxa-145fd5
+        index: diff-bar-top-taxa
+        layout:
+            x: 0
+            y: 9
+            w: 8
+            h: 8
+    -   component_type: table
+        workflow_tag: ampliseq
+        data_collection_tag: ancombc_results
+        # --- optional ---
+        row_selection_enabled: false
+        # --- generated on export ---
+        tag: table-diff-table-results-6655ac
+        index: diff-table-results
+        layout:
+            x: 0
+            y: 17
+            w: 8
+            h: 6

@@ -1,3 +1,4 @@
+import os
 from datetime import datetime
 
 import polars as pl
@@ -74,6 +75,21 @@ def fetch_file_data(dc_id: str, CLI_config: CLIConfig) -> list[File]:
         )  # Changed from ERROR to DEBUG - this is expected for some data collection types
         raise Exception(error_msg)
 
+    # Filter out stale file records whose paths no longer exist locally
+    # (happens when re-running with a different template or data_root)
+    valid_files_data = []
+    for fd in files_data:
+        loc = fd.get("file_location", "")
+        if os.path.exists(loc):
+            valid_files_data.append(fd)
+        else:
+            logger.warning(f"Skipping stale file record (path does not exist): {loc}")
+    if not valid_files_data:
+        error_msg = f"No valid files found for Data Collection {dc_id} (all file paths are stale)."
+        logger.error(error_msg)
+        raise Exception(error_msg)
+    files_data = valid_files_data
+
     files = convert_to_file_objects(files_data)
 
     # Deduplicate by file_location (guards against duplicate registrations from race conditions)
@@ -139,7 +155,10 @@ def read_single_file_lazy(file_info: File, file_format: str, polars_kwargs: dict
 
     try:
         if file_format in ["csv", "tsv", "txt"]:
-            lf = pl.scan_csv(file_path, **polars_kwargs)
+            effective_kwargs = dict(polars_kwargs)
+            if file_format == "tsv" and "separator" not in effective_kwargs:
+                effective_kwargs["separator"] = "\t"
+            lf = pl.scan_csv(file_path, **effective_kwargs)
         elif file_format == "parquet":
             lf = pl.scan_parquet(file_path, **polars_kwargs)
         elif file_format == "feather":
@@ -364,8 +383,10 @@ def client_aggregate_data(
     if command_parameters:
         overwrite = command_parameters.get("overwrite", False)
         rich_tables = command_parameters.get("rich_tables", False)
+        preview_recipes = command_parameters.get("preview_recipes", False)
     else:
         overwrite = False
+        preview_recipes = False
 
     # Handle MultiQC data collections specially - copy parquet files to S3 and extract metadata
     if data_collection.config.type.lower() == "multiqc":
@@ -374,6 +395,13 @@ def client_aggregate_data(
     # Handle GeoJSON data collections - upload file to S3 and store location
     if data_collection.config.type.lower() == "geojson":
         return process_geojson_data_collection(data_collection, CLI_config, overwrite)
+
+    # Handle transformed (recipe-based) data collections
+    if data_collection.config.source == "transformed":
+        return process_recipe_data_collection(
+            data_collection, CLI_config, overwrite, workflow, preview=preview_recipes
+        )
+
     # Generate destination prefix using the data collection id - should be a S3 path
     destination_prefix = f"s3://{CLI_config.s3_storage.bucket}/{str(data_collection.id)}"
     logger.debug(f"Destination prefix: {destination_prefix}")
@@ -659,4 +687,240 @@ def process_geojson_data_collection(
     return {
         "result": "success",
         "message": f"GeoJSON uploaded to {s3_location}",
+    }
+
+
+def _print_recipe_preview(
+    recipe_name: str,
+    sources: dict[str, pl.DataFrame],
+    result_df: pl.DataFrame,
+) -> None:
+    """Print before/after tables for recipe preview mode."""
+    from rich.panel import Panel
+    from rich.table import Table
+
+    from depictio.cli.cli.utils.rich_utils import console
+
+    # --- Input sources ---
+    console.print()
+    console.print(Panel(f"[bold]Recipe Preview: {recipe_name}[/bold]", style="cyan", expand=False))
+
+    for ref, df in sources.items():
+        console.print(
+            f"\n[bold cyan]Input source '{ref}'[/bold cyan]  ({df.height} rows x {df.width} cols)"
+        )
+        # Build a Rich table from the first 5 rows
+        t = Table(show_header=True, header_style="bold", show_lines=True)
+        for col in df.columns:
+            t.add_column(col, style="dim" if col.startswith("_") else "")
+        for row in df.head(5).iter_rows():
+            t.add_row(*(str(v) for v in row))
+        console.print(t)
+        if df.height > 5:
+            console.print(f"  [dim]... and {df.height - 5} more rows[/dim]")
+
+    # --- Output ---
+    console.print(
+        f"\n[bold green]Output after transform[/bold green]  "
+        f"({result_df.height} rows x {result_df.width} cols)"
+    )
+    t = Table(show_header=True, header_style="bold green", show_lines=True)
+    for col in result_df.columns:
+        t.add_column(col)
+    for row in result_df.head(10).iter_rows():
+        t.add_row(*(str(v) for v in row))
+    console.print(t)
+    if result_df.height > 10:
+        console.print(f"  [dim]... and {result_df.height - 10} more rows[/dim]")
+
+    # Schema summary
+    console.print(
+        "\n[bold]Schema:[/bold] "
+        + ", ".join(f"{c}({result_df[c].dtype})" for c in result_df.columns)
+    )
+    console.print()
+
+
+def process_recipe_data_collection(
+    data_collection: DataCollection,
+    CLI_config: CLIConfig,
+    overwrite: bool = False,
+    workflow=None,
+    preview: bool = False,
+) -> dict[str, str]:
+    """Process a transformed (recipe-based) data collection.
+
+    Loads the recipe, resolves sources from the workflow data directory,
+    executes the transform, and writes the result to Delta Lake.
+
+    Args:
+        data_collection: DataCollection with source="transformed" and transform config.
+        CLI_config: CLI configuration with API URL and credentials.
+        overwrite: Whether to overwrite existing data.
+        workflow: Optional Workflow object to resolve data_dir from data_location.
+        preview: If True, display input/output tables and skip Delta Lake write.
+
+    Returns:
+        Result dict with success/error status.
+    """
+    try:
+        from depictio.recipes import RecipeError, execute_recipe
+        from depictio.recipes import load_recipe as _load_recipe
+        from depictio.recipes import resolve_sources as _resolve_sources
+        from depictio.recipes import validate_schema as _validate_schema
+    except ModuleNotFoundError:
+        # Fallback: import from source tree when package isn't installed with sub-packages
+        import importlib.util
+        import pathlib
+
+        _recipes_init = pathlib.Path(__file__).resolve().parents[3] / "recipes" / "__init__.py"
+        _spec = importlib.util.spec_from_file_location("depictio.recipes", _recipes_init)
+        _mod = importlib.util.module_from_spec(_spec)
+        _spec.loader.exec_module(_mod)
+        RecipeError = _mod.RecipeError
+        execute_recipe = _mod.execute_recipe
+        _load_recipe = _mod.load_recipe
+        _resolve_sources = _mod.resolve_sources
+        _validate_schema = _mod.validate_schema
+
+    transform_config = data_collection.config.transform
+    if transform_config is None:
+        return {
+            "result": "error",
+            "message": f"Transformed DC '{data_collection.data_collection_tag}' has no transform config.",
+        }
+
+    recipe_name = transform_config.recipe
+    pipeline_version: str | None = getattr(workflow, "version", None)
+    rich_print_checked_statement(f"Running recipe: {recipe_name}", "info")
+
+    # Build source overrides dict
+    overrides = None
+    if transform_config.source_overrides:
+        overrides = {ref: so.path for ref, so in transform_config.source_overrides.items()}
+
+    # Resolve data directory from workflow's data_location
+    data_dir = "."
+    if workflow is not None and hasattr(workflow, "data_location") and workflow.data_location:
+        locations = getattr(workflow.data_location, "locations", None)
+        if locations and len(locations) > 0:
+            data_dir = str(locations[0])
+            rich_print_checked_statement(f"Recipe data dir: {data_dir}", "info")
+
+    # Resolve dc_ref sources: load referenced DCs from their Delta tables
+    extra_sources: dict[str, pl.DataFrame] | None = None
+    try:
+        recipe_module = _load_recipe(recipe_name, pipeline_version)
+        dc_ref_sources = [s for s in recipe_module.SOURCES if s.dc_ref is not None]
+
+        if dc_ref_sources and workflow is not None:
+            storage_options = turn_S3_config_into_polars_storage_options(CLI_config.s3_storage)
+            extra_sources = {}
+            for src in dc_ref_sources:
+                # Find the referenced DC in the workflow by tag
+                ref_dc = next(
+                    (
+                        dc
+                        for dc in getattr(workflow, "data_collections", [])
+                        if dc.data_collection_tag == src.dc_ref
+                    ),
+                    None,
+                )
+                if ref_dc is None:
+                    if src.optional:
+                        # Optional dc_ref: pass None so transform() can handle absence
+                        extra_sources[src.ref] = None  # type: ignore[assignment]
+                        continue
+                    return {
+                        "result": "error",
+                        "message": (
+                            f"dc_ref '{src.dc_ref}' not found in workflow. "
+                            f"Ensure the referenced data collection is processed first."
+                        ),
+                    }
+                ref_s3_path = f"s3://{CLI_config.s3_storage.bucket}/{ref_dc.id!s}"
+                read_result = read_delta_table(ref_s3_path, storage_options)
+                if read_result.get("result") != "success":
+                    if src.optional:
+                        extra_sources[src.ref] = None  # type: ignore[assignment]
+                        continue
+                    return {
+                        "result": "error",
+                        "message": (
+                            f"Failed to read dc_ref '{src.dc_ref}' from Delta Lake: "
+                            f"{read_result.get('message')}"
+                        ),
+                    }
+                extra_sources[src.ref] = read_result["data"]
+    except RecipeError:
+        pass  # Will be caught below during execute_recipe
+
+    if preview:
+        # Preview mode: run recipe steps individually and display before/after
+        try:
+            recipe_module = _load_recipe(recipe_name, pipeline_version)
+            sources = _resolve_sources(recipe_module, data_dir, overrides)
+            if extra_sources:
+                sources.update(extra_sources)
+            result_df = recipe_module.transform(sources)
+            if not isinstance(result_df, pl.DataFrame):
+                return {"result": "error", "message": "transform() did not return a DataFrame"}
+            _validate_schema(result_df, recipe_module.EXPECTED_SCHEMA, recipe_name)
+            _print_recipe_preview(recipe_name, sources, result_df)
+        except RecipeError as e:
+            return {"result": "error", "message": f"Recipe failed: {e}"}
+
+        return {
+            "result": "success",
+            "message": f"Recipe '{recipe_name}' preview complete (no data written).",
+        }
+
+    try:
+        result_df = execute_recipe(
+            recipe_name,
+            data_dir,
+            overrides,
+            extra_sources=extra_sources,
+            pipeline_version=pipeline_version,
+        )
+    except RecipeError as e:
+        return {"result": "error", "message": f"Recipe failed: {e}"}
+
+    # Write to Delta Lake (same path as standard aggregation)
+    destination_prefix = f"s3://{CLI_config.s3_storage.bucket}/{data_collection.id!s}"
+    storage_options = turn_S3_config_into_polars_storage_options(CLI_config.s3_storage)
+
+    deltatable_size_bytes = calculate_dataframe_size_bytes(result_df)
+    write_result = write_delta_table(
+        aggregated_df=result_df,
+        destination_file=destination_prefix,
+        storage_options=storage_options,
+    )
+
+    if write_result.get("result") == "error":
+        return write_result
+
+    # Upsert metadata
+    api_upsert_result = api_upsert_deltatable(
+        data_collection_id=str(data_collection.id),
+        CLI_config=CLI_config,
+        delta_table_location=destination_prefix,
+        update=overwrite,
+        deltatable_size_bytes=deltatable_size_bytes,
+    )
+    if api_upsert_result.status_code != 200:
+        return {"result": "error", "message": f"API upsert failed: {api_upsert_result.text}"}
+
+    api_result = api_upsert_result.json()
+    if api_result.get("result") == "error":
+        return api_result
+
+    rich_print_checked_statement(
+        f"Recipe '{recipe_name}' produced {result_df.height} rows, written to Delta Lake",
+        "success",
+    )
+
+    return {
+        "result": "success",
+        "message": f"Recipe '{recipe_name}' result written to {destination_prefix}.",
     }

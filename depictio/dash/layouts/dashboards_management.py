@@ -552,18 +552,25 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
 
             # Use project cache to avoid redundant API calls
             project_id_str = str(dashboard["project_id"])
+            template_origin_id = None
             if project_id_str in project_cache:
-                project_name = project_cache[project_id_str]
+                project_name = project_cache[project_id_str]["name"]
+                template_origin_id = project_cache[project_id_str].get("template_origin_id")
             else:
                 response = api_get_project_from_id(project_id=dashboard["project_id"], token=token)
                 if response.status_code == 200:
                     project = response.json()
                     project_name = project["name"]
-                    project_cache[project_id_str] = project_name  # Cache for next use
+                    to = project.get("template_origin")
+                    template_origin_id = to["template_id"] if to else None
+                    project_cache[project_id_str] = {
+                        "name": project_name,
+                        "template_origin_id": template_origin_id,
+                    }
                 else:
                     logger.error(f"Failed to get project from ID: {dashboard['project_id']}")
                     project_name = "Unknown"
-                    project_cache[project_id_str] = project_name  # Cache the failure too
+                    project_cache[project_id_str] = {"name": project_name}
 
             # Project badge with tooltip
             badge_project = dmc.Tooltip(
@@ -616,6 +623,19 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
             # Tab count badge (only show when > 1 total tab)
             tabs_info = get_child_tabs_info(str(dashboard["dashboard_id"]), token)
             child_tab_count = tabs_info["count"]  # Number of child tabs only
+
+            # Template origin badge
+            badge_template = None
+            if template_origin_id:
+                badge_template = dmc.Tooltip(
+                    label=f"Generated from template: {template_origin_id}",
+                    children=dmc.Badge(
+                        template_origin_id,
+                        color="indigo",
+                        variant="light",
+                        leftSection=DashIconify(icon="mdi:layers-outline", width=14),
+                    ),
+                )
 
             # Total tabs = 1 (main) + child tabs count
             total_tab_count = 1 + child_tab_count
@@ -740,7 +760,7 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
                         align="center",
                     ),
                     dmc.Space(h=10),
-                    dmc.Stack(
+                    dmc.Group(
                         children=[
                             item
                             for item in [
@@ -749,13 +769,12 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
                                 badge_status,
                                 badge_last_modified,
                                 badge_tab_count,
-                                # badge_tooltip_additional_info,
+                                badge_template,
                             ]
                             if item is not None
                         ],
-                        justify="center",
-                        align="flex-start",
-                        gap=4,  # Minimal gap between badges (4px instead of xs=10px)
+                        gap=4,
+                        wrap="wrap",
                     ),
                     dmc.Space(h=10),
                 ]

@@ -153,6 +153,11 @@ def process(
     rich_tables: bool = typer.Option(
         False, "--rich-tables", help="Display rich tables in the output"
     ),
+    preview_recipes: bool = typer.Option(
+        False,
+        "--preview-recipes",
+        help="Show recipe input sources and transformed output without writing to Delta Lake",
+    ),
 ):
     """
     Process data collections for a specific tag.
@@ -195,6 +200,7 @@ def process(
                 command_parameters = {
                     "overwrite": overwrite,
                     "rich_tables": rich_tables,
+                    "preview_recipes": preview_recipes,
                 }
 
                 rich_print_section_separator("Processing files")

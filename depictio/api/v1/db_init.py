@@ -222,7 +222,6 @@ async def create_initial_dashboards(admin_user: UserBeanie) -> list[dict | None]
                 ".db_seeds",
                 "dashboard_differential.json",
             ),
-            # Child tab dashboard - preserve DC IDs from JSON file
             "static_dc_id": None,
         },
     ]
@@ -422,6 +421,53 @@ async def create_initial_dashboard(admin_user: UserBeanie) -> dict | None:
     )
 
 
+def _ensure_ampliseq_base_project(admin_user: UserBeanie) -> None:
+    """Create a minimal shell project for the ampliseq-base dashboard variant.
+
+    This project shares all data collections (delta tables) with the main ampliseq
+    project but appears as a separate entry in the management page, presenting only
+    the base (no-metadata) dashboard variant.  Idempotent — safe to call on every init.
+    """
+    from bson import ObjectId
+
+    from depictio.api.v1.db import projects_collection
+    from depictio.api.v1.db_init_reference_datasets import STATIC_IDS
+
+    base_project_id = ObjectId(STATIC_IDS["ampliseq_base"]["project"])
+    if projects_collection.find_one({"_id": base_project_id}):
+        logger.info("ampliseq-base shell project already exists, skipping")
+        return
+
+    owner = {
+        "_id": admin_user.id,
+        "email": admin_user.email,
+        "is_admin": admin_user.is_admin,
+        "description": None,
+        "flexible_metadata": None,
+        "hash": None,
+        "is_anonymous": False,
+        "is_temporary": False,
+        "expiration_time": None,
+    }
+    doc = {
+        "_id": base_project_id,
+        "name": "nf-core/ampliseq (Base)",
+        "description": "Base ampliseq dashboard — no metadata annotations",
+        "flexible_metadata": None,
+        "hash": None,
+        "workflows": [],
+        "data_collections": [],
+        "joins": [],
+        "links": [],
+        "permissions": {"owners": [owner], "editors": [], "viewers": []},
+        "is_public": True,
+        "project_type": "basic",
+        "registration_time": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
+    }
+    projects_collection.insert_one(doc)
+    logger.info(f"Created ampliseq-base shell project with id {base_project_id}")
+
+
 async def initialize_db(wipe: bool = False) -> UserBeanie | None:
     """Initialize the database with default users and groups."""
 
@@ -540,6 +586,8 @@ async def initialize_db(wipe: bool = False) -> UserBeanie | None:
     created_projects = await create_reference_datasets(
         admin_user=admin_user, token_payload=token_payload
     )
+
+    # Note: ampliseq-base shell project removed — only the extended (full) variant is loaded
 
     # Store metadata for background processing (use replace_one for idempotency)
     from depictio.api.v1.db import initialization_collection

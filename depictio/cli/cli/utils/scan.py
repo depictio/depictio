@@ -881,6 +881,23 @@ def scan_files_for_data_collection(
             if existing_files
             else {}
         )
+
+        # Clean up stale files whose paths no longer match the current scan config
+        # This happens when re-running with a different template or data_root
+        current_file_path = data_collection.config.scan.scan_parameters.filename
+        if existing_files_reformated:
+            stale_files = [
+                f for loc, f in existing_files_reformated.items() if loc != current_file_path
+            ]
+            for stale_file in stale_files:
+                stale_id = stale_file.get("_id") or stale_file.get("id")
+                if stale_id:
+                    logger.info(
+                        f"Removing stale file {stale_file['file_location']} "
+                        f"(expected {current_file_path})"
+                    )
+                    api_delete_file(str(stale_id), CLI_config)
+                    del existing_files_reformated[stale_file["file_location"]]
     else:
         existing_files_reformated = {}
         logger.warning(

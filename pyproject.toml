@@ -118,8 +118,9 @@ plotly-complexheatmap = { path = "packages/plotly-complexheatmap", editable = tr
 requires = ["setuptools>=61", "wheel"]
 build-backend = "setuptools.build_meta"
 
-[tool.setuptools]
-packages = ["depictio"]
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["depictio*"]
 
 # [tool.mypy]
 # exclude = ["build/", "depictio/api/", "depictio/dash/"]
@@ -127,6 +128,7 @@ packages = ["depictio"]
 
 [tool.ruff]
 line-length = 100
+exclude = ["dev/", "packages/", "scripts/"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I"] # Enable import sorting (I rules) - restored original
@@ -174,6 +176,7 @@ testpaths = [
   "depictio/tests/models",
   "depictio/tests/cli",
   "depictio/tests/dash",
+  "depictio/tests/unit",
 ]
 markers = [
   "no_db: mark test to skip database setup",

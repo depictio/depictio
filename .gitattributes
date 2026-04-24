@@ -1,2 +1,3 @@
 notebooks/** linguist-vendored
 dev/** linguist-vendored
+*.ipynb linguist-detectable=false
