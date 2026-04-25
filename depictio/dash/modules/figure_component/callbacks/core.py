@@ -26,7 +26,7 @@ import dash
 import plotly.express as px
 import plotly.graph_objects as go
 from bson import ObjectId
-from dash import ALL, Input, Output, State
+from dash import ALL, Input, Output, State, no_update
 
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.deltatables_utils import load_deltatable_lite
@@ -44,6 +44,15 @@ USE_BACKGROUND_CALLBACKS = should_use_background_for_component("figure")
 
 LoadKey = tuple[str, str, str]  # (wf_id, dc_id, filters_hash)
 LoadKeyExtended = tuple[str, str, str, str]  # (wf_id, dc_id, filters_hash, columns_hash)
+
+
+def _stable_hash(value: Any) -> str:
+    """Deterministic short hash of any JSON-serialisable value; falls back to repr()."""
+    try:
+        raw = json.dumps(value, sort_keys=True, default=str).encode()
+    except (TypeError, ValueError):
+        raw = repr(value).encode()
+    return hashlib.md5(raw).hexdigest()[:16]
 
 
 def _build_metadata_index(
