@@ -5,6 +5,9 @@ import { InteractiveFilter, StoredMetadata } from '../api';
 import FigureRenderer from './FigureRenderer';
 import TableRenderer from './TableRenderer';
 import ImageRenderer from './ImageRenderer';
+import MapRenderer from './MapRenderer';
+import JBrowseRenderer from './JBrowseRenderer';
+import MultiQCRenderer from './MultiQCRenderer';
 import MultiSelectRenderer from './interactive/MultiSelectRenderer';
 import RangeSliderRenderer from './interactive/RangeSliderRenderer';
 import SliderRenderer from './interactive/SliderRenderer';
@@ -138,6 +141,36 @@ const ComponentRenderer: React.FC<ComponentRendererProps> = ({
       <ImageRenderer
         dashboardId={dashboardId}
         metadata={metadata}
+      />
+    );
+  }
+
+  if (metadata.component_type === 'map' && dashboardId) {
+    return (
+      <MapRenderer
+        dashboardId={dashboardId}
+        metadata={metadata}
+        filters={filters}
+      />
+    );
+  }
+
+  if (metadata.component_type === 'jbrowse' && dashboardId) {
+    return (
+      <JBrowseRenderer
+        dashboardId={dashboardId}
+        metadata={metadata}
+        filters={filters}
+      />
+    );
+  }
+
+  if (metadata.component_type === 'multiqc' && dashboardId) {
+    return (
+      <MultiQCRenderer
+        dashboardId={dashboardId}
+        metadata={metadata}
+        filters={filters}
       />
     );
   }

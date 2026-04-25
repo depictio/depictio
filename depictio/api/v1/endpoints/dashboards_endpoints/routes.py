@@ -1937,6 +1937,383 @@ async def render_image_paths_endpoint(
 
 
 # ============================================================================
+# React viewer: map rendering (Plotly px.scatter_map / density_map / choropleth_map)
+# ============================================================================
+
+
+@dashboards_endpoint_router.post("/render_map/{dashboard_id}/{component_id}")
+async def render_map_endpoint(
+    dashboard_id: PyObjectId,
+    component_id: str,
+    request: dict,
+    current_user: User = Depends(get_user_or_anonymous),
+):
+    """Render a Plotly map component as JSON for the React viewer.
+
+    Mirrors `render_figure_endpoint` but delegates to
+    `depictio.dash.modules.map_component.utils.render_map`. The full map
+    `stored_metadata` already carries every trigger_data field (map_type,
+    lat_column, lon_column, color_column, geojson_*, etc.) — the Dash callback
+    just rebuilds it from kwargs at create time — so we pass `component`
+    directly as `trigger_data`. `render_map` reads what it needs via `.get()`.
+    """
+    from depictio.api.v1.deltatables_utils import load_deltatable_lite
+    from depictio.dash.modules.map_component.utils import render_map
+
+    filters = request.get("filters") or []
+    theme = request.get("theme") or "light"
+
+    dashboard_data = dashboards_collection.find_one({"dashboard_id": dashboard_id})
+    if not dashboard_data:
+        raise HTTPException(status_code=404, detail=f"Dashboard '{dashboard_id}' not found.")
+
+    project_id = dashboard_data.get("project_id")
+    if not project_id or not check_project_permission(project_id, current_user, "viewer"):
+        raise HTTPException(status_code=403, detail="Permission denied.")
+
+    component = next(
+        (
+            m
+            for m in (dashboard_data.get("stored_metadata") or [])
+            if str(m.get("index")) == component_id and m.get("component_type") == "map"
+        ),
+        None,
+    )
+    if component is None:
+        raise HTTPException(status_code=404, detail=f"Map component '{component_id}' not found.")
+
+    wf_id = component.get("wf_id")
+    dc_id = component.get("dc_id")
+    if not wf_id or not dc_id:
+        raise HTTPException(status_code=400, detail="Component missing wf_id/dc_id.")
+
+    filter_metadata = [
+        {
+            "interactive_component_type": f.get("interactive_component_type"),
+            "column_name": f.get("column_name"),
+            "value": f.get("value"),
+        }
+        for f in filters
+        if f.get("column_name") and f.get("value") not in (None, [], "")
+    ]
+
+    dc_config = component.get("dc_config") or {}
+    init_data: dict[str, dict] = {}
+    delta_loc = dc_config.get("delta_location")
+    if not delta_loc:
+        from depictio.api.v1.db import deltatables_collection
+
+        dt = deltatables_collection.find_one({"data_collection_id": ObjectId(str(dc_id))})
+        if dt:
+            delta_loc = dt.get("delta_table_location")
+    if delta_loc:
+        init_data[str(dc_id)] = {
+            "delta_location": delta_loc,
+            "dc_type": dc_config.get("type") or "table",
+            "size_bytes": dc_config.get("size_bytes", 0),
+        }
+
+    try:
+        df = load_deltatable_lite(
+            workflow_id=ObjectId(str(wf_id)) if not isinstance(wf_id, ObjectId) else wf_id,
+            data_collection_id=str(dc_id),
+            metadata=filter_metadata or None,
+            init_data=init_data,
+        )
+    except Exception as e:
+        logger.error(f"render_map: DC load failed for {dc_id}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to load data: {e}")
+
+    import plotly.io as pio
+
+    if "mantine_light" not in pio.templates or "mantine_dark" not in pio.templates:
+        try:
+            import dash_mantine_components as dmc
+
+            dmc.add_figure_templates()
+        except Exception as e:
+            logger.warning(f"render_map: failed to register mantine templates: {e}")
+
+    try:
+        fig, data_info = render_map(
+            df=df,
+            trigger_data=component,
+            theme=theme,
+            existing_metadata=None,
+            active_selection_values=None,
+            access_token=None,
+        )
+
+        if hasattr(fig, "to_json"):
+            fig_dict = json.loads(fig.to_json())
+        elif hasattr(fig, "to_plotly_json"):
+            fig_dict = fig.to_plotly_json()
+        else:
+            fig_dict = fig
+
+        if isinstance(fig_dict, dict) and "layout" in fig_dict:
+            fig_dict["layout"].setdefault("uirevision", "persistent")
+
+        return {
+            "figure": fig_dict,
+            "metadata": {
+                "map_type": component.get("map_type", "scatter_map"),
+                "filter_applied": bool(filter_metadata),
+                "displayed_count": data_info.get("displayed_count"),
+                "total_count": data_info.get("total_count"),
+            },
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"render_map: build failed for {component_id}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Map render failed: {e}")
+
+
+# ============================================================================
+# React viewer: JBrowse session URL
+# ============================================================================
+
+
+@dashboards_endpoint_router.post("/render_jbrowse/{dashboard_id}/{component_id}")
+async def render_jbrowse_endpoint(
+    dashboard_id: PyObjectId,
+    component_id: str,
+    request: dict,
+    current_user: User = Depends(get_user_or_anonymous),
+):
+    """Synthesise the JBrowse 2 iframe URL for the React viewer.
+
+    JBrowse 2 must be running at ``localhost:3000`` and its session config
+    server at ``localhost:9010/sessions/...``; if either is unreachable,
+    returns 503 (no silent fallback).
+    """
+    import httpx
+
+    from depictio.api.v1.configs.config import API_BASE_URL
+
+    JBROWSE_HOST = "http://localhost:3000"
+    JBROWSE_SESSIONS_HOST = "http://localhost:9010"
+
+    filters = request.get("filters") or []
+
+    dashboard_data = dashboards_collection.find_one({"dashboard_id": dashboard_id})
+    if not dashboard_data:
+        raise HTTPException(status_code=404, detail=f"Dashboard '{dashboard_id}' not found.")
+
+    project_id = dashboard_data.get("project_id")
+    if not project_id or not check_project_permission(project_id, current_user, "viewer"):
+        raise HTTPException(status_code=403, detail="Permission denied.")
+
+    component = next(
+        (
+            m
+            for m in (dashboard_data.get("stored_metadata") or [])
+            if str(m.get("index")) == component_id and m.get("component_type") == "jbrowse"
+        ),
+        None,
+    )
+    if component is None:
+        raise HTTPException(
+            status_code=404, detail=f"JBrowse component '{component_id}' not found."
+        )
+
+    wf_id = component.get("wf_id")
+    dc_id = component.get("dc_id")
+    if not wf_id or not dc_id:
+        raise HTTPException(status_code=400, detail="Component missing wf_id/dc_id.")
+
+    dc_config = component.get("dc_config") or {}
+    jbrowse_params = dc_config.get("jbrowse_params") or {}
+    assembly = jbrowse_params.get("assemblyName") or "hg38"
+    default_loc = jbrowse_params.get("default_location") or "chr1:1-248956422"
+
+    user_id = str(getattr(current_user, "id", "anonymous"))
+    session = f"{user_id}_{dc_id}_lite.json"
+
+    track_ids: list[str] = []
+    filter_applied = bool(filters)
+
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            try:
+                last_status_resp = await client.get(
+                    f"{API_BASE_URL}/depictio/api/v1/jbrowse/last_status"
+                )
+                if last_status_resp.status_code == 200:
+                    last_status = last_status_resp.json()
+                    assembly = last_status.get("assembly") or assembly
+                    if last_status.get("loc"):
+                        default_loc = last_status["loc"]
+            except httpx.HTTPError as e:
+                logger.warning(f"render_jbrowse: last_status unreachable: {e}")
+
+            if filters:
+                try:
+                    map_resp = await client.get(
+                        f"{API_BASE_URL}/depictio/api/v1/jbrowse/map_tracks_using_wildcards/"
+                        f"{wf_id}/{dc_id}",
+                    )
+                    if map_resp.status_code == 200:
+                        mapping = map_resp.json() or {}
+                        dc_map = mapping.get(str(dc_id), {})
+                        for f in filters:
+                            col = f.get("column_name")
+                            value = f.get("value")
+                            if not col or value in (None, [], ""):
+                                continue
+                            values = value if isinstance(value, list) else [value]
+                            col_map = dc_map.get(col, {})
+                            for v in values:
+                                tid = col_map.get(str(v))
+                                if tid:
+                                    track_ids.append(tid)
+                except httpx.HTTPError as e:
+                    logger.warning(f"render_jbrowse: map_tracks unreachable: {e}")
+
+                if track_ids and len(track_ids) <= 100:
+                    try:
+                        filter_resp = await client.post(
+                            f"{API_BASE_URL}/depictio/api/v1/jbrowse/filter_config",
+                            json={
+                                "tracks": track_ids,
+                                "dashboard_id": str(dashboard_id),
+                                "data_collection_id": str(dc_id),
+                            },
+                        )
+                        if filter_resp.status_code == 200:
+                            body = filter_resp.json() or {}
+                            if body.get("session"):
+                                session = body["session"]
+                    except httpx.HTTPError as e:
+                        logger.warning(f"render_jbrowse: filter_config unreachable: {e}")
+    except Exception as e:
+        logger.error(f"render_jbrowse: internal jbrowse routing failed: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=503,
+            detail=f"JBrowse internal services unreachable: {e}",
+        )
+
+    qs = f"assembly={assembly}&loc={default_loc}"
+    if track_ids and len(track_ids) <= 100:
+        qs += f"&tracks={','.join(track_ids)}"
+    iframe_url = f"{JBROWSE_HOST}?config={JBROWSE_SESSIONS_HOST}/sessions/{session}&{qs}"
+
+    return {
+        "iframe_url": iframe_url,
+        "assembly": assembly,
+        "location": default_loc,
+        "tracks": track_ids or None,
+        "metadata": {"filter_applied": filter_applied},
+    }
+
+
+# ============================================================================
+# React viewer: MultiQC rendering
+# ============================================================================
+
+
+@dashboards_endpoint_router.post("/render_multiqc/{dashboard_id}/{component_id}")
+async def render_multiqc_endpoint(
+    dashboard_id: PyObjectId,
+    component_id: str,
+    request: dict,
+    current_user: User = Depends(get_user_or_anonymous),
+):
+    """Render a MultiQC Plotly figure as JSON for the React viewer.
+
+    Wraps the pure ``create_multiqc_plot()`` helper in
+    ``depictio.dash.modules.figure_component.multiqc_vis`` — same function the
+    Dash callback uses. Reads ``selected_module``, ``selected_plot``,
+    ``selected_dataset`` and ``s3_locations`` from the component's
+    stored_metadata (with a DC-config fallback for ``s3_locations`` if missing,
+    matching the Dash restoration path).
+    """
+    theme = request.get("theme") or "light"
+
+    dashboard_data = dashboards_collection.find_one({"dashboard_id": dashboard_id})
+    if not dashboard_data:
+        raise HTTPException(status_code=404, detail=f"Dashboard '{dashboard_id}' not found.")
+
+    project_id = dashboard_data.get("project_id")
+    if not project_id or not check_project_permission(project_id, current_user, "viewer"):
+        raise HTTPException(status_code=403, detail="Permission denied.")
+
+    component = next(
+        (
+            m
+            for m in (dashboard_data.get("stored_metadata") or [])
+            if str(m.get("index")) == component_id and m.get("component_type") == "multiqc"
+        ),
+        None,
+    )
+    if component is None:
+        raise HTTPException(
+            status_code=404, detail=f"MultiQC component '{component_id}' not found."
+        )
+
+    selected_module = component.get("selected_module")
+    selected_plot = component.get("selected_plot")
+    selected_dataset = component.get("selected_dataset")
+    s3_locations = component.get("s3_locations") or []
+
+    if not s3_locations:
+        from depictio.dash.modules.multiqc_component.models import _fetch_s3_locations_from_dc
+
+        dc_id = component.get("dc_id") or component.get("data_collection_id")
+        if dc_id:
+            s3_locations = _fetch_s3_locations_from_dc(str(dc_id), str(project_id))
+
+    if not selected_module or not selected_plot or not s3_locations:
+        raise HTTPException(
+            status_code=400,
+            detail="MultiQC component is missing module/plot/s3_locations.",
+        )
+
+    import plotly.io as pio
+
+    if "mantine_light" not in pio.templates or "mantine_dark" not in pio.templates:
+        try:
+            import dash_mantine_components as dmc
+
+            dmc.add_figure_templates()
+        except Exception as e:
+            logger.warning(f"render_multiqc: failed to register mantine templates: {e}")
+
+    from depictio.dash.modules.figure_component.multiqc_vis import create_multiqc_plot
+
+    try:
+        fig = create_multiqc_plot(
+            s3_locations=s3_locations,
+            module=selected_module,
+            plot=selected_plot,
+            dataset_id=selected_dataset,
+            theme=theme,
+        )
+        if hasattr(fig, "to_json"):
+            fig_dict = json.loads(fig.to_json())
+        else:
+            fig_dict = fig
+
+        if isinstance(fig_dict, dict) and "layout" in fig_dict:
+            fig_dict["layout"].setdefault("uirevision", "persistent")
+
+        return {
+            "figure": fig_dict,
+            "metadata": {
+                "module": selected_module,
+                "plot": selected_plot,
+                "dataset_id": selected_dataset,
+            },
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"render_multiqc: build failed for {component_id}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"MultiQC render failed: {e}")
+
+
+# ============================================================================
 # YAML Import Endpoint (CLI support)
 # ============================================================================
 

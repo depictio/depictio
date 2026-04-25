@@ -274,3 +274,81 @@ export async function fetchImagePaths(
   const body = (await res.json()) as { paths?: string[] };
   return body.paths || [];
 }
+
+/** Server-rendered Plotly map (px.scatter_map / density_map / choropleth_map). */
+export async function renderMap(
+  dashboardId: string,
+  componentId: string,
+  filters: InteractiveFilter[],
+  theme: 'light' | 'dark' = 'light',
+): Promise<FigureResponse> {
+  const res = await fetch(
+    `${API_BASE}/dashboards/render_map/${dashboardId}/${componentId}`,
+    {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify({ filters, theme }),
+    },
+  );
+  if (!res.ok) throw new Error(`Failed to render map: ${res.status}`);
+  return res.json();
+}
+
+/** JBrowse 2 iframe session payload. The standalone JBrowse server runs at
+ *  localhost:3000 with sessions hosted at localhost:9010. Filter state may
+ *  narrow the visible tracks via existing /jbrowse/* internal endpoints. If
+ *  any of those services are unreachable, the backend returns 503.
+ */
+export interface JBrowseSessionResponse {
+  iframe_url: string;
+  assembly: string;
+  location: string;
+  tracks?: string[];
+  metadata?: { filter_applied?: boolean };
+}
+
+export async function fetchJBrowseSession(
+  dashboardId: string,
+  componentId: string,
+  filters: InteractiveFilter[],
+  theme: 'light' | 'dark' = 'light',
+): Promise<JBrowseSessionResponse> {
+  const res = await fetch(
+    `${API_BASE}/dashboards/render_jbrowse/${dashboardId}/${componentId}`,
+    {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify({ filters, theme }),
+    },
+  );
+  if (!res.ok) {
+    let detail = `Failed to render JBrowse: ${res.status}`;
+    try {
+      const body = await res.json();
+      if (body?.detail) detail = String(body.detail);
+    } catch {
+      // ignore non-JSON error
+    }
+    throw new Error(detail);
+  }
+  return res.json();
+}
+
+/** Server-rendered MultiQC Plotly figure (wraps create_multiqc_plot). */
+export async function renderMultiQC(
+  dashboardId: string,
+  componentId: string,
+  filters: InteractiveFilter[],
+  theme: 'light' | 'dark' = 'light',
+): Promise<FigureResponse> {
+  const res = await fetch(
+    `${API_BASE}/dashboards/render_multiqc/${dashboardId}/${componentId}`,
+    {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify({ filters, theme }),
+    },
+  );
+  if (!res.ok) throw new Error(`Failed to render MultiQC: ${res.status}`);
+  return res.json();
+}
