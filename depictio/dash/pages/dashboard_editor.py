@@ -455,6 +455,7 @@ def load_and_render_dashboard(
         local_data=local_data,
         theme=theme,
         init_data=dashboard_init_data,
+        is_editor_app=True,
     )
 
     if not depictio_dash_data:

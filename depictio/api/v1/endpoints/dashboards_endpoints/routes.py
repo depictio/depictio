@@ -1341,6 +1341,534 @@ async def bulk_get_component_data_endpoint(
 
 
 # ============================================================================
+# React viewer: bulk card value computation with filters
+# ============================================================================
+
+
+def _agg_value(col: Any, aggregation: str) -> Any:
+    """Compute a scalar aggregation over a Polars Series.
+
+    Covers the aggregations used by Depictio card components. Matches the
+    subset of ``depictio.dash.modules.card_component.utils.compute_value``
+    but avoids pulling any Dash imports into the FastAPI process.
+    """
+    agg = (aggregation or "").lower()
+    try:
+        if agg == "count":
+            return int(col.drop_nulls().len())
+        if agg in ("average", "mean"):
+            mean = col.mean()
+            return float(mean) if mean is not None else None
+        if agg == "sum":
+            s = col.sum()
+            return float(s) if s is not None else None
+        if agg == "median":
+            m = col.median()
+            return float(m) if m is not None else None
+        if agg == "min":
+            mn = col.min()
+            return float(mn) if isinstance(mn, (int, float)) else (str(mn) if mn is not None else None)
+        if agg == "max":
+            mx = col.max()
+            return float(mx) if isinstance(mx, (int, float)) else (str(mx) if mx is not None else None)
+        if agg in ("std", "std_dev"):
+            return float(col.std()) if col.std() is not None else None
+        if agg in ("variance", "var"):
+            return float(col.var()) if col.var() is not None else None
+        if agg in ("nunique", "unique"):
+            return int(col.n_unique())
+        if agg == "range":
+            mn, mx = col.min(), col.max()
+            if mn is None or mx is None:
+                return None
+            return float(mx) - float(mn) if isinstance(mn, (int, float)) else None
+        if agg == "mode":
+            m = col.mode()
+            return None if len(m) == 0 else (float(m[0]) if isinstance(m[0], (int, float)) else str(m[0]))
+    except Exception as e:
+        logger.warning(f"Aggregation {agg!r} failed on column: {e}")
+        return None
+    return None
+
+
+@dashboards_endpoint_router.post("/bulk_compute_cards/{dashboard_id}")
+async def bulk_compute_cards(
+    dashboard_id: PyObjectId,
+    request: dict,
+    current_user: User = Depends(get_user_or_anonymous),
+):
+    """Compute card values with interactive filters applied.
+
+    Called by the React viewer whenever the filter state changes. Dedupes
+    Delta-table loads: multiple cards referencing the same (wf_id, dc_id, filter
+    fingerprint) share one load. Returns a map keyed by component index.
+
+    Request body:
+        {
+            "filters": [
+                {"index": "...", "value": ..., "column_name": "...",
+                 "interactive_component_type": "MultiSelect"},
+                ...
+            ],
+            "component_ids": ["...", ...]   # optional; defaults to all cards
+        }
+
+    Response:
+        {
+            "values": {"<component_index>": <scalar or null>, ...},
+            "filter_applied": bool,
+            "filter_count": int
+        }
+
+    Notes:
+        - Uses load_deltatable_lite with the same metadata format as Dash so
+          the filter semantics match the Dash viewer exactly.
+        - The Dash callback render_card_value_background in
+          card_component/callbacks/core.py remains the source of truth for the
+          edit path; this endpoint mirrors its math.
+    """
+    from depictio.api.v1.deltatables_utils import load_deltatable_lite
+
+    filters = request.get("filters") or []
+    requested_ids: list[str] | None = request.get("component_ids")
+
+    dashboard_data = dashboards_collection.find_one({"dashboard_id": dashboard_id})
+    if not dashboard_data:
+        raise HTTPException(status_code=404, detail=f"Dashboard '{dashboard_id}' not found.")
+
+    project_id = dashboard_data.get("project_id")
+    if not project_id or not check_project_permission(project_id, current_user, "viewer"):
+        raise HTTPException(status_code=403, detail="Permission denied.")
+
+    stored_metadata = dashboard_data.get("stored_metadata") or []
+
+    # Collect card components (optionally filtered by component_ids)
+    requested = set(requested_ids) if requested_ids else None
+    cards = [
+        m for m in stored_metadata
+        if m.get("component_type") == "card"
+        and (requested is None or str(m.get("index")) in requested)
+    ]
+
+    if not cards:
+        return {"values": {}, "filter_applied": bool(filters), "filter_count": len(filters)}
+
+    # Build init_data mapping for load_deltatable_lite to avoid per-card API calls
+    init_data: dict[str, dict] = {}
+    for m in cards:
+        dc_id = str(m.get("dc_id"))
+        if not dc_id or dc_id in init_data:
+            continue
+        dc_config = m.get("dc_config") or {}
+        delta_loc = dc_config.get("delta_location")
+        if not delta_loc:
+            # Fallback: look up via deltatables_collection
+            from depictio.api.v1.db import deltatables_collection
+            dt = deltatables_collection.find_one({"data_collection_id": ObjectId(dc_id)})
+            if dt:
+                delta_loc = dt.get("delta_table_location")
+        if delta_loc:
+            init_data[dc_id] = {
+                "delta_location": delta_loc,
+                "dc_type": dc_config.get("type") or "table",
+                "size_bytes": dc_config.get("size_bytes", 0),
+            }
+
+    # Filters are global (applied to any card whose DC contains the filter column).
+    # Wrap into the shape process_metadata_and_filter expects.
+    filter_metadata = [
+        {
+            "interactive_component_type": f.get("interactive_component_type"),
+            "column_name": f.get("column_name"),
+            "value": f.get("value"),
+        }
+        for f in filters
+        if f.get("column_name") and f.get("value") not in (None, [], "")
+    ]
+
+    # Dedupe Delta loads per (wf_id, dc_id). One load can serve N cards.
+    df_cache: dict[tuple, Any] = {}
+    # Per-DC precomputed aggregation specs cache (one DB hit per unique dc_id).
+    # Mirrors `/deltatables/specs/{dc_id}` shape: {column: {aggregation: value}}.
+    specs_cache: dict[str, dict] = {}
+    values: dict[str, Any] = {}
+
+    has_filters = len(filter_metadata) > 0
+    logger.debug(
+        f"bulk_compute_cards: dashboard={dashboard_id} cards={len(cards)} "
+        f"init_data_keys={list(init_data.keys())} filters={len(filter_metadata)}"
+    )
+
+    def _get_specs(dc_id_str: str) -> dict[str, dict]:
+        """Return precomputed column aggregations as ``{column_name: specs_dict}``.
+
+        The Mongo schema stores ``aggregation_columns_specs`` as a list of
+        ``{name, type, description, specs}`` entries — flatten to a name-keyed
+        dict for O(1) lookup. Also handle the legacy dict shape for safety.
+        """
+        if dc_id_str in specs_cache:
+            return specs_cache[dc_id_str]
+        from depictio.api.v1.db import deltatables_collection as _dt_coll
+
+        dt = _dt_coll.find_one({"data_collection_id": ObjectId(dc_id_str)})
+        agg_list = (dt or {}).get("aggregation") or []
+        raw = (agg_list[-1] or {}).get("aggregation_columns_specs") if agg_list else None
+
+        flat: dict[str, dict] = {}
+        if isinstance(raw, list):
+            for entry in raw:
+                if isinstance(entry, dict) and entry.get("name"):
+                    flat[entry["name"]] = entry.get("specs") or {}
+        elif isinstance(raw, dict):
+            flat = raw  # legacy
+
+        specs_cache[dc_id_str] = flat
+        return flat
+
+    for card in cards:
+        idx = str(card.get("index"))
+        wf_id = card.get("wf_id")
+        dc_id = card.get("dc_id")
+        column = card.get("column_name")
+        aggregation = card.get("aggregation")
+
+        if not (wf_id and dc_id and column and aggregation):
+            logger.warning(
+                f"bulk_compute_cards: skipping {idx}: wf_id={wf_id} dc_id={dc_id} "
+                f"column={column} aggregation={aggregation}"
+            )
+            values[idx] = None
+            continue
+
+        # Fast path (no filters): read precomputed aggregation from
+        # aggregation_columns_specs. Mirrors what the Dash callback does via
+        # compute_value's `cols_json` short-circuit. Avoids touching raw Delta
+        # data — necessary for DCs whose Delta file has corrupted columns.
+        if not has_filters:
+            specs = _get_specs(str(dc_id))
+            col_specs = specs.get(column) or {}
+            specs_value = col_specs.get(aggregation)
+            if specs_value is not None:
+                values[idx] = (
+                    float(specs_value)
+                    if isinstance(specs_value, (int, float))
+                    else specs_value
+                )
+                logger.debug(
+                    f"bulk_compute_cards: {idx} ({aggregation}/{column}) = {values[idx]} (specs)"
+                )
+                continue
+
+        # Slow path: load Delta and compute. Required when filters change the
+        # input set, or when the precomputed aggregation isn't available.
+        cache_key = (str(wf_id), str(dc_id))
+        df = df_cache.get(cache_key)
+        if df is None:
+            try:
+                df = load_deltatable_lite(
+                    workflow_id=ObjectId(str(wf_id)) if not isinstance(wf_id, ObjectId) else wf_id,
+                    data_collection_id=str(dc_id),
+                    metadata=filter_metadata if filter_metadata else None,
+                    init_data=init_data,
+                )
+                logger.debug(
+                    f"bulk_compute_cards: loaded {cache_key}: shape={df.shape if df is not None else None}"
+                )
+            except Exception as e:
+                logger.warning(
+                    f"bulk_compute_cards: DC load failed for {cache_key}: {e}", exc_info=True
+                )
+                values[idx] = None
+                continue
+            df_cache[cache_key] = df
+
+        if column not in df.columns:
+            logger.warning(
+                f"bulk_compute_cards: column {column!r} not in df for {idx}; "
+                f"available cols (first 10): {df.columns[:10]}"
+            )
+            values[idx] = None
+            continue
+
+        values[idx] = _agg_value(df[column], aggregation)
+        logger.debug(
+            f"bulk_compute_cards: {idx} ({aggregation}/{column}) = {values[idx]}"
+        )
+
+    return {
+        "values": values,
+        "filter_applied": len(filter_metadata) > 0,
+        "filter_count": len(filter_metadata),
+    }
+
+
+# ============================================================================
+# React viewer: figure rendering
+# ============================================================================
+
+
+@dashboards_endpoint_router.post("/render_figure/{dashboard_id}/{component_id}")
+async def render_figure_endpoint(
+    dashboard_id: PyObjectId,
+    component_id: str,
+    request: dict,
+    current_user: User = Depends(get_user_or_anonymous),
+):
+    """Render a Plotly figure component as JSON for the React viewer.
+
+    Mirrors what `_process_single_figure` does in the Dash callback at
+    ``depictio.dash.modules.figure_component.callbacks.core.py:676`` — loads
+    the data collection, applies filters, calls `_create_figure_from_data`
+    (UI mode) or `_process_code_mode_figure` (code mode), and returns the
+    Plotly figure dict ready for ``react-plotly.js``.
+
+    Request body:
+        {"filters": [...], "theme": "light" | "dark"}
+
+    Response:
+        {"figure": <plotly fig dict>, "metadata": {visu_type, ...}}
+    """
+    from depictio.api.v1.deltatables_utils import load_deltatable_lite
+
+    filters = request.get("filters") or []
+    theme = request.get("theme") or "light"
+
+    dashboard_data = dashboards_collection.find_one({"dashboard_id": dashboard_id})
+    if not dashboard_data:
+        raise HTTPException(status_code=404, detail=f"Dashboard '{dashboard_id}' not found.")
+
+    project_id = dashboard_data.get("project_id")
+    if not project_id or not check_project_permission(project_id, current_user, "viewer"):
+        raise HTTPException(status_code=403, detail="Permission denied.")
+
+    component = next(
+        (
+            m
+            for m in (dashboard_data.get("stored_metadata") or [])
+            if str(m.get("index")) == component_id
+            and m.get("component_type") == "figure"
+        ),
+        None,
+    )
+    if component is None:
+        raise HTTPException(status_code=404, detail=f"Figure component '{component_id}' not found.")
+
+    wf_id = component.get("wf_id")
+    dc_id = component.get("dc_id")
+    if not wf_id or not dc_id:
+        raise HTTPException(status_code=400, detail="Component missing wf_id/dc_id.")
+
+    # Load DC with filter metadata
+    filter_metadata = [
+        {
+            "interactive_component_type": f.get("interactive_component_type"),
+            "column_name": f.get("column_name"),
+            "value": f.get("value"),
+        }
+        for f in filters
+        if f.get("column_name") and f.get("value") not in (None, [], "")
+    ]
+
+    dc_config = component.get("dc_config") or {}
+    init_data: dict[str, dict] = {}
+    delta_loc = dc_config.get("delta_location")
+    if not delta_loc:
+        from depictio.api.v1.db import deltatables_collection
+        dt = deltatables_collection.find_one({"data_collection_id": ObjectId(str(dc_id))})
+        if dt:
+            delta_loc = dt.get("delta_table_location")
+    if delta_loc:
+        init_data[str(dc_id)] = {
+            "delta_location": delta_loc,
+            "dc_type": dc_config.get("type") or "table",
+            "size_bytes": dc_config.get("size_bytes", 0),
+        }
+
+    try:
+        df = load_deltatable_lite(
+            workflow_id=ObjectId(str(wf_id)) if not isinstance(wf_id, ObjectId) else wf_id,
+            data_collection_id=str(dc_id),
+            metadata=filter_metadata or None,
+            init_data=init_data,
+        )
+    except Exception as e:
+        logger.error(f"render_figure: DC load failed for {dc_id}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to load data: {e}")
+
+    # Lazy-import the Dash figure builder. Loads dash_mantine_components on
+    # first call inside the FastAPI process — fine, modules are cached.
+    from depictio.dash.modules.figure_component.callbacks.core import (
+        _create_figure_from_data,
+        _process_code_mode_figure,
+    )
+
+    # Register mantine_light / mantine_dark Plotly templates inside this
+    # FastAPI worker. The Dash startup path calls this implicitly via the app
+    # init; FastAPI never goes through that path. Without this, plotly express
+    # raises KeyError: 'mantine_light' when Depictio's theme template lookup
+    # asks for the mantine theme.
+    import plotly.io as pio  # noqa: PLC0415
+
+    if "mantine_light" not in pio.templates or "mantine_dark" not in pio.templates:
+        try:
+            import dash_mantine_components as dmc  # noqa: PLC0415
+
+            dmc.add_figure_templates()
+        except Exception as e:
+            logger.warning(f"render_figure: failed to register mantine templates: {e}")
+
+    visu_type = component.get("visu_type", "scatter")
+    dict_kwargs = component.get("dict_kwargs") or {}
+    mode = component.get("mode", "ui")
+    code_content = component.get("code_content", "")
+    selection_enabled = component.get("selection_enabled", False)
+    selection_column = component.get("selection_column")
+
+    try:
+        if mode == "code":
+            ok, fig, detected = _process_code_mode_figure(code_content, df, theme, "viewer")
+            if not ok:
+                raise HTTPException(status_code=500, detail="Code-mode figure failed.")
+            if detected:
+                visu_type = detected
+        else:
+            fig = _create_figure_from_data(
+                df=df,
+                visu_type=visu_type,
+                dict_kwargs=dict_kwargs,
+                theme=theme,
+                selection_enabled=selection_enabled,
+                selection_column=selection_column,
+            )
+
+        # Plotly Figure → JSON-serializable dict
+        if hasattr(fig, "to_json"):
+            fig_dict = json.loads(fig.to_json())
+        else:
+            fig_dict = fig
+
+        if isinstance(fig_dict, dict) and "layout" in fig_dict:
+            fig_dict["layout"].setdefault("uirevision", "persistent")
+
+        return {
+            "figure": fig_dict,
+            "metadata": {"visu_type": visu_type, "filter_applied": bool(filter_metadata)},
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"render_figure: build failed for {component_id}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Figure render failed: {e}")
+
+
+# ============================================================================
+# React viewer: table data (lazy rows for AG Grid)
+# ============================================================================
+
+
+@dashboards_endpoint_router.post("/render_table/{dashboard_id}/{component_id}")
+async def render_table_endpoint(
+    dashboard_id: PyObjectId,
+    component_id: str,
+    request: dict,
+    current_user: User = Depends(get_user_or_anonymous),
+):
+    """Return table rows + column definitions for the React viewer's AG Grid.
+
+    Request body:
+        {"filters": [...], "start": 0, "limit": 100}
+
+    Response:
+        {"columns": [{"field", "headerName", "type"}, ...],
+         "rows":    [{...}, ...],
+         "total":   <int>}
+    """
+    from depictio.api.v1.deltatables_utils import load_deltatable_lite
+
+    filters = request.get("filters") or []
+    start = int(request.get("start") or 0)
+    limit = int(request.get("limit") or 100)
+    limit = max(1, min(limit, 500))
+
+    dashboard_data = dashboards_collection.find_one({"dashboard_id": dashboard_id})
+    if not dashboard_data:
+        raise HTTPException(status_code=404, detail=f"Dashboard '{dashboard_id}' not found.")
+
+    project_id = dashboard_data.get("project_id")
+    if not project_id or not check_project_permission(project_id, current_user, "viewer"):
+        raise HTTPException(status_code=403, detail="Permission denied.")
+
+    component = next(
+        (
+            m
+            for m in (dashboard_data.get("stored_metadata") or [])
+            if str(m.get("index")) == component_id
+            and m.get("component_type") == "table"
+        ),
+        None,
+    )
+    if component is None:
+        raise HTTPException(status_code=404, detail=f"Table component '{component_id}' not found.")
+
+    wf_id = component.get("wf_id")
+    dc_id = component.get("dc_id")
+    if not wf_id or not dc_id:
+        raise HTTPException(status_code=400, detail="Component missing wf_id/dc_id.")
+
+    filter_metadata = [
+        {
+            "interactive_component_type": f.get("interactive_component_type"),
+            "column_name": f.get("column_name"),
+            "value": f.get("value"),
+        }
+        for f in filters
+        if f.get("column_name") and f.get("value") not in (None, [], "")
+    ]
+
+    dc_config = component.get("dc_config") or {}
+    init_data: dict[str, dict] = {}
+    delta_loc = dc_config.get("delta_location")
+    if not delta_loc:
+        from depictio.api.v1.db import deltatables_collection
+        dt = deltatables_collection.find_one({"data_collection_id": ObjectId(str(dc_id))})
+        if dt:
+            delta_loc = dt.get("delta_table_location")
+    if delta_loc:
+        init_data[str(dc_id)] = {
+            "delta_location": delta_loc,
+            "dc_type": dc_config.get("type") or "table",
+            "size_bytes": dc_config.get("size_bytes", 0),
+        }
+
+    try:
+        df = load_deltatable_lite(
+            workflow_id=ObjectId(str(wf_id)) if not isinstance(wf_id, ObjectId) else wf_id,
+            data_collection_id=str(dc_id),
+            metadata=filter_metadata or None,
+            init_data=init_data,
+        )
+    except Exception as e:
+        logger.error(f"render_table: DC load failed: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to load data: {e}")
+
+    total = df.height
+    sliced = df.slice(start, limit)
+    rows = sliced.to_dicts()
+
+    columns = []
+    for name, dtype in zip(df.columns, df.dtypes):
+        type_str = str(dtype).lower()
+        ag_type = (
+            "numericColumn"
+            if any(t in type_str for t in ("int", "float", "double"))
+            else "textColumn"
+        )
+        columns.append({"field": name, "headerName": name, "type": ag_type})
+
+    return {"columns": columns, "rows": rows, "total": total}
+
+
+# ============================================================================
 # YAML Import Endpoint (CLI support)
 # ============================================================================
 

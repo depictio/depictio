@@ -827,6 +827,7 @@ def load_depictio_data(
     theme: str = "light",
     cached_user_data: dict | None = None,
     init_data: dict | None = None,
+    is_editor_app: bool = False,
 ) -> dict | None:
     """Load the dashboard data from the API and render it.
 
@@ -931,6 +932,13 @@ def load_depictio_data(
                     "unified_edit_mode",
                     dashboard_data.buttons_data.get("edit_components_button", False),
                 )
+
+            # Viewer app (read-only URL): force edit buttons off regardless of stored flag.
+            # Cuts ~32 pattern-matched DOM instances per viewer load (drag/remove/edit/duplicate
+            # per component × N components). Editor app passes is_editor_app=True and keeps
+            # the stored flag behavior.
+            if not is_editor_app:
+                edit_components_button_checked = False
 
             # Disable edit_components_button for anonymous users and temporary users on public dashboards in unauthenticated mode
             if settings.auth.unauthenticated_mode:

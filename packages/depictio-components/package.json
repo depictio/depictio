@@ -1,0 +1,44 @@
+{
+  "name": "depictio-components",
+  "version": "0.1.0",
+  "description": "Shared React components for Depictio dashboards — consumed by both the Dash editor (via auto-generated Python wrappers) and the React viewer.",
+  "private": true,
+  "main": "depictio_components/depictio_components.min.js",
+  "module": "src/lib/index.ts",
+  "types": "src/lib/index.ts",
+  "scripts": {
+    "build:js": "webpack --mode production",
+    "build:js-dev": "webpack --mode development",
+    "build:py": "node scripts/generate_python_wrappers.js",
+    "build": "npm run build:js && npm run build:py",
+    "dev": "webpack --mode development --watch"
+  },
+  "peerDependencies": {
+    "@iconify/react": "^5.0.2",
+    "@mantine/core": "^7.14.0",
+    "@mantine/hooks": "^7.14.0",
+    "react": "^18.0.0",
+    "react-dom": "^18.0.0"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.24.0",
+    "@babel/preset-env": "^7.24.0",
+    "@babel/preset-react": "^7.24.0",
+    "@babel/preset-typescript": "^7.24.0",
+    "@iconify/react": "^5.0.2",
+    "@mantine/core": "^7.14.0",
+    "@mantine/hooks": "^7.14.0",
+    "@types/react": "^18.2.0",
+    "@types/react-dom": "^18.2.0",
+    "babel-loader": "^9.1.0",
+    "css-loader": "^6.10.0",
+    "react": "^18.2.0",
+    "react-docgen-typescript": "^2.2.2",
+    "react-dom": "^18.2.0",
+    "style-loader": "^3.3.0",
+    "ts-loader": "^9.5.0",
+    "typescript": "^5.3.0",
+    "webpack": "^5.90.0",
+    "webpack-cli": "^5.1.0"
+  }
+}

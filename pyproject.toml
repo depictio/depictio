@@ -27,6 +27,7 @@ dependencies = [
   "dash-dock==0.0.1",
   "plotly-express==0.4.1",
   "plotly-complexheatmap",
+  "depictio-components",
   # Data processing
   "deltalake==0.24.0",
   "fastparquet==2024.11.0",
@@ -113,6 +114,7 @@ depictio = "depictio.cli.depictio_cli:main"
 
 [tool.uv.sources]
 plotly-complexheatmap = { path = "packages/plotly-complexheatmap", editable = true }
+depictio-components = { path = "packages/depictio-components", editable = true }
 
 [build-system]
 requires = ["setuptools>=61", "wheel"]

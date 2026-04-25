@@ -1,0 +1,85 @@
+/*
+ * Depictio viewer app styles.
+ *
+ * CSS custom properties declared here match what the Dash app serves from
+ * depictio/dash/assets/css/*.css (see theme_utils.py). Replicated here so the
+ * React viewer can ship standalone without loading Dash's assets directory.
+ *
+ * For full visual parity, also bundle the Dash app's logo SVGs, Virgil font,
+ * and any workflow-specific CSS under public/.
+ */
+
+:root,
+[data-mantine-color-scheme='light'] {
+  --app-bg-color: #f8f9fa;
+  --app-surface-color: #ffffff;
+  --app-text-color: #1a1b1e;
+  --app-border-color: #e9ecef;
+  --app-subtle-bg: #f1f3f5;
+  --app-accent: #228be6;
+}
+
+[data-mantine-color-scheme='dark'] {
+  --app-bg-color: #1a1b1e;
+  --app-surface-color: #25262b;
+  --app-text-color: #e9ecef;
+  --app-border-color: #373a40;
+  --app-subtle-bg: #2c2e33;
+  --app-accent: #4dabf7;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: var(--app-bg-color);
+  color: var(--app-text-color);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+/* Dashboard component hover animation — matches depictio/dash/assets/css/draggable-grid.css */
+.dashboard-component-hover {
+  transition: all 0.3s ease;
+  border: 1px solid transparent;
+}
+
+.dashboard-component-hover:hover {
+  border-color: var(--app-border-color);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+/* react-grid-layout default styles — pulled from Dash's dashboard-grid.css */
+.react-grid-layout {
+  position: relative;
+  transition: height 200ms ease;
+}
+
+.react-grid-item {
+  transition: all 200ms ease;
+  transition-property: left, top, width, height;
+  box-sizing: border-box;
+}
+
+.react-grid-item.react-grid-placeholder {
+  background: var(--app-accent);
+  opacity: 0.2;
+  transition-duration: 100ms;
+  z-index: 2;
+  user-select: none;
+  border-radius: 8px;
+}
+
+.dashboard-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+  color: var(--app-text-color);
+  font-size: 0.875rem;
+}
+
+.dashboard-error {
+  padding: 2rem;
+  color: #fa5252;
+  text-align: center;
+}
