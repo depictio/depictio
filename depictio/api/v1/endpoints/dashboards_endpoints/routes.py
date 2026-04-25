@@ -7,7 +7,7 @@ from uuid import UUID
 
 import yaml
 from bson import ObjectId
-from fastapi import APIRouter, Body, Depends, HTTPException
+from fastapi import APIRouter, Body, Depends, HTTPException, Request
 from fastapi.responses import Response
 
 from depictio.api.v1.configs.config import settings
@@ -2217,7 +2217,8 @@ async def render_jbrowse_endpoint(
 async def render_multiqc_endpoint(
     dashboard_id: PyObjectId,
     component_id: str,
-    request: dict,
+    req: Request,
+    request: dict = Body(...),
     current_user: User = Depends(get_user_or_anonymous),
 ):
     """Render a MultiQC Plotly figure as JSON for the React viewer.
@@ -2257,17 +2258,60 @@ async def render_multiqc_endpoint(
     selected_dataset = component.get("selected_dataset")
     s3_locations = component.get("s3_locations") or []
 
-    if not s3_locations:
-        from depictio.dash.modules.multiqc_component.models import _fetch_s3_locations_from_dc
+    wf_id = component.get("wf_id")
+    dc_id = component.get("dc_id") or component.get("data_collection_id")
 
-        dc_id = component.get("dc_id") or component.get("data_collection_id")
-        if dc_id:
-            s3_locations = _fetch_s3_locations_from_dc(str(dc_id), str(project_id))
+    # Mirror the Dash viewer's resolution path for s3_locations:
+    #   1. project_doc.workflows[].data_collections[].config.dc_specific_properties.s3_location
+    #   2. Fallback: GET /depictio/api/v1/multiqc/reports/data-collection/{dc_id}
+    # `_fetch_multiqc_metadata_from_dc` covers both. The simpler helper in
+    # multiqc_component/models.py only covers (1), which fails when the YAML
+    # leaves s3_location null pre-deployment-init.
+    if not s3_locations and wf_id and dc_id and project_id:
+        auth_header = req.headers.get("authorization", "")
+        token = (
+            auth_header.removeprefix("Bearer ").strip()
+            if auth_header.lower().startswith("bearer ")
+            else ""
+        )
+        try:
+            from depictio.dash.layouts.draggable_scenarios.restore_dashboard import (
+                _fetch_multiqc_metadata_from_dc,
+            )
+
+            mqc_meta = _fetch_multiqc_metadata_from_dc(
+                project_id=str(project_id),
+                workflow_id=str(wf_id),
+                data_collection_id=str(dc_id),
+                token=token,
+            )
+            s3_locations = mqc_meta.get("s3_locations") or []
+            logger.info(
+                f"render_multiqc: _fetch_multiqc_metadata_from_dc"
+                f"(project={project_id!s}, wf={wf_id!s}, dc={dc_id!s})"
+                f" → {len(s3_locations)} s3_location(s)"
+            )
+        except Exception as e:
+            logger.warning(
+                f"render_multiqc: _fetch_multiqc_metadata_from_dc failed: {e}",
+                exc_info=True,
+            )
 
     if not selected_module or not selected_plot or not s3_locations:
+        missing = []
+        if not selected_module:
+            missing.append("selected_module")
+        if not selected_plot:
+            missing.append("selected_plot")
+        if not s3_locations:
+            missing.append(
+                f"s3_locations (dc_id={dc_id!s}; tried project_doc.workflows[].data_collections"
+                f".config.dc_specific_properties.s3_location AND "
+                f"/multiqc/reports/data-collection/{dc_id} — both empty)"
+            )
         raise HTTPException(
             status_code=400,
-            detail="MultiQC component is missing module/plot/s3_locations.",
+            detail=f"MultiQC component is missing: {', '.join(missing)}.",
         )
 
     import plotly.io as pio
