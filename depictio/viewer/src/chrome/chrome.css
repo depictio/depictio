@@ -1,0 +1,17 @@
+/**
+ * Shared chrome styling — kept minimal so Mantine theming stays the source of
+ * truth. Only adds smooth hover transitions for chrome links/buttons.
+ */
+.depictio-chrome-link {
+  transition: opacity 0.2s ease;
+}
+.depictio-chrome-link:hover {
+  opacity: 0.75;
+}
+
+/* Keep tab labels readable in the vertical sidebar */
+.depictio-chrome-tab-label {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

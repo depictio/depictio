@@ -1,0 +1,31 @@
+/**
+ * Per-component chrome: a hover-only floating action toolbar layered over the
+ * rendered component. The renderers (FigureRenderer, TableRenderer, etc.)
+ * already wrap themselves in <Paper withBorder/>, so the chrome stays
+ * background-less to avoid nested-paper visual noise.
+ */
+.depictio-component-chrome {
+  position: relative;
+  height: 100%;
+}
+.depictio-component-actions {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 5;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  pointer-events: none;
+}
+.depictio-component-chrome:hover .depictio-component-actions,
+.depictio-component-chrome:focus-within .depictio-component-actions {
+  opacity: 1;
+  pointer-events: auto;
+}
+.depictio-component-chrome.fullscreen-active {
+  background: var(--mantine-color-body);
+  padding: 1rem;
+}
+.depictio-component-chrome.fullscreen-active > * {
+  height: 100%;
+}

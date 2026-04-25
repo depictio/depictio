@@ -18,7 +18,8 @@
     "esModuleInterop": true,
     "allowSyntheticDefaultImports": true,
     "paths": {
-      "depictio-components": ["../../packages/depictio-components/src/lib"]
+      "depictio-components": ["../../packages/depictio-components/src/lib"],
+      "depictio-react-core": ["../../packages/depictio-react-core/src"]
     }
   },
   "include": ["src"],

@@ -5,47 +5,42 @@ import {
   Text,
   Loader,
   Anchor,
-  Burger,
-  NavLink,
   Stack,
   Title,
-  ScrollArea,
   Grid,
   Paper,
   SimpleGrid,
   Divider,
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
-import { Icon } from '@iconify/react';
 
 import {
   fetchDashboard,
   fetchAllDashboards,
   bulkComputeCards,
+  ComponentRenderer,
+} from 'depictio-react-core';
+import type {
   DashboardData,
   DashboardSummary,
   InteractiveFilter,
-  StoredMetadata,
-} from './api';
-import ComponentRenderer from './components/ComponentRenderer';
+} from 'depictio-react-core';
+import { Header, Sidebar, SettingsDrawer } from './chrome';
 
 /**
- * Top-level SPA. Layout (per user spec):
+ * Top-level SPA. Layout:
  *
- *   ┌──────── Header (65px) ─────────┐
- *   │ Burger | Depictio | Tab title  │
- *   ├────────┬───────────────────────┤
- *   │ Tabs   │ Main: 1/3 + 2/3       │
- *   │ navbar │ ┌─────┬─────────────┐ │
- *   │ collap │ │ 1/3 │  Cards row  │ │
- *   │ sible  │ │ inter│────────────│ │
- *   │        │ │ active│ figures   │ │
- *   │        │ │      │ tables ... │ │
- *   │        │ └─────┴─────────────┘ │
+ *   ┌──────── Header (65px) ─────────────────┐
+ *   │ Burger | tab-icon | Title  | PoweredBy | Edit | Reset | Settings │
+ *   ├──────────┬─────────────────────────────┤
+ *   │ Sidebar  │ Main: 1/3 + 2/3             │
+ *   │ (tabs    │ ┌─────┬───────────────────┐ │
+ *   │  theme   │ │ 1/3 │  Cards row        │ │
+ *   │  status  │ │ inter│──────────────────│ │
+ *   │  profile)│ │ active│ figures/tables  │ │
  *
- * Sidebar shows the parent dashboard + sibling tabs.
- * Left panel (1/3) holds all interactive components stacked vertically.
- * Right panel (2/3) shows the 4 cards in a single row, then any figures/tables.
+ * The chrome (Header + Sidebar + per-component action icons) mirrors the Dash
+ * viewer's UI for cross-app parity.
  */
 const App: React.FC = () => {
   const [dashboard, setDashboard] = useState<DashboardData | null>(null);
@@ -57,6 +52,7 @@ const App: React.FC = () => {
   const [cardsLoading, setCardsLoading] = useState(false);
   const [mobileOpened, { toggle: toggleMobile }] = useDisclosure();
   const [desktopOpened, { toggle: toggleDesktop }] = useDisclosure(true);
+  const [settingsOpened, { open: openSettings, close: closeSettings }] = useDisclosure(false);
 
   const dashboardId = extractDashboardId();
   const bulkCtrl = useRef<AbortController | null>(null);
@@ -111,12 +107,9 @@ const App: React.FC = () => {
     });
   }, []);
 
-  // Group tabs: parent dashboard + all its child tabs. Works whether the
-  // current view is the parent or one of its children.
-  //   - If current is the parent (no parent_dashboard_id) → include self
-  //     + every dashboard whose parent_dashboard_id === self.dashboard_id
-  //   - If current is a child → include the parent + every dashboard with
-  //     the same parent_dashboard_id
+  const handleResetAllFilters = useCallback(() => setFilters([]), []);
+
+  // Group tabs: parent dashboard + all its child tabs.
   const tabSiblings = useMemo(() => {
     if (!dashboard || !allDashboards.length) return [] as DashboardSummary[];
     const dashId = String(dashboard.dashboard_id || dashboard._id || dashboardId || '');
@@ -131,7 +124,16 @@ const App: React.FC = () => {
       if (a.parent_dashboard_id && !b.parent_dashboard_id) return 1;
       return (a.title || '').localeCompare(b.title || '');
     });
-  }, [dashboard, allDashboards]);
+  }, [dashboard, allDashboards, dashboardId]);
+
+  const activeTab = useMemo(
+    () => tabSiblings.find((d) => d.dashboard_id === dashboardId) || null,
+    [tabSiblings, dashboardId],
+  );
+  const parentTab = useMemo(
+    () => tabSiblings.find((d) => !d.parent_dashboard_id) || null,
+    [tabSiblings],
+  );
 
   const interactiveComponents = useMemo(
     () => (dashboard?.stored_metadata || []).filter((m) => m.component_type === 'interactive'),
@@ -160,68 +162,23 @@ const App: React.FC = () => {
       padding="md"
     >
       <AppShell.Header>
-        <Group h="100%" px="md" justify="space-between">
-          <Group gap="sm">
-            <Burger
-              opened={mobileOpened}
-              onClick={toggleMobile}
-              hiddenFrom="sm"
-              size="sm"
-            />
-            <Burger
-              opened={desktopOpened}
-              onClick={toggleDesktop}
-              visibleFrom="sm"
-              size="sm"
-              aria-label="Toggle tab sidebar"
-            />
-            <Text fw={700} style={{ fontFamily: 'Virgil, sans-serif' }}>
-              Depictio
-            </Text>
-            <Text c="dimmed" size="sm">/</Text>
-            <Text size="sm">{dashboard?.title || dashboardId || 'Dashboard'}</Text>
-            <Text c="dimmed" size="xs" ml="xs">(beta viewer)</Text>
-            {cardsLoading && <Loader size="xs" ml="xs" />}
-          </Group>
-          {dashboardId && (
-            <Anchor href={`/dashboard/${dashboardId}`} size="sm">
-              ← Back to classic viewer
-            </Anchor>
-          )}
-        </Group>
+        <Header
+          dashboardId={dashboardId}
+          dashboard={dashboard}
+          activeTab={activeTab}
+          parentTab={parentTab}
+          mobileOpened={mobileOpened}
+          desktopOpened={desktopOpened}
+          onToggleMobile={toggleMobile}
+          onToggleDesktop={toggleDesktop}
+          onReset={handleResetAllFilters}
+          onOpenSettings={openSettings}
+          cardsLoading={cardsLoading}
+        />
       </AppShell.Header>
 
       <AppShell.Navbar p="md">
-        <ScrollArea style={{ flex: 1 }}>
-          <Stack gap={2}>
-            <Text c="dimmed" size="xs" tt="uppercase" fw={700} mb={4}>
-              Tabs
-            </Text>
-            {tabSiblings.length === 0 && (
-              <Text size="xs" c="dimmed">No sibling tabs.</Text>
-            )}
-            {tabSiblings.map((d) => {
-              const isCurrent = d.dashboard_id === dashboardId;
-              const isParent = !d.parent_dashboard_id;
-              return (
-                <NavLink
-                  key={d.dashboard_id}
-                  active={isCurrent}
-                  label={d.title || d.dashboard_id}
-                  leftSection={
-                    <Icon
-                      icon={isParent ? 'mdi:view-dashboard' : 'mdi:tab'}
-                      width={16}
-                    />
-                  }
-                  href={`/dashboard-beta/${d.dashboard_id}`}
-                  variant={isCurrent ? 'filled' : 'light'}
-                  pl={isParent ? 8 : 24}
-                />
-              );
-            })}
-          </Stack>
-        </ScrollArea>
+        <Sidebar tabs={tabSiblings} activeId={dashboardId} />
       </AppShell.Navbar>
 
       <AppShell.Main>
@@ -255,7 +212,7 @@ const App: React.FC = () => {
                   {filters.length > 0 && (
                     <Anchor
                       component="button"
-                      onClick={() => setFilters([])}
+                      onClick={handleResetAllFilters}
                       size="xs"
                       mt="xs"
                     >
@@ -306,6 +263,12 @@ const App: React.FC = () => {
           </Grid>
         )}
       </AppShell.Main>
+
+      <SettingsDrawer
+        opened={settingsOpened}
+        onClose={closeSettings}
+        dashboard={dashboard}
+      />
     </AppShell>
   );
 };

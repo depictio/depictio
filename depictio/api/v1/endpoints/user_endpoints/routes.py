@@ -338,6 +338,43 @@ async def get_current_user_info(current_user: User = Depends(get_current_user)) 
     return current_user
 
 
+@auth_endpoint_router.get("/me/optional", include_in_schema=True)
+async def get_current_user_info_optional(
+    token: Annotated[str | None, Depends(oauth2_scheme_optional)] = None,
+) -> dict | None:
+    """Get current user identity for the React viewer (anonymous-tolerant).
+
+    Unlike ``/me``, this endpoint does NOT 401 when the Authorization header is
+    missing or invalid — it returns ``null`` instead. This lets the React viewer
+    render a profile badge (or fall back to anonymous mode) without having to
+    catch 401s.
+
+    Args:
+        token: Optional JWT access token from the Authorization header.
+
+    Returns:
+        Minimal user identity dict (``id``, ``email``, ``is_admin``) or ``None``
+        when the request is anonymous.
+    """
+    if not token:
+        return None
+
+    try:
+        user = await _async_fetch_user_from_token(token)
+    except Exception as exc:  # noqa: BLE001 - tolerate any auth failure
+        logger.debug(f"/me/optional: token resolution failed ({exc}); returning anonymous")
+        return None
+
+    if not user:
+        return None
+
+    return {
+        "id": str(user.id),
+        "email": user.email,
+        "is_admin": getattr(user, "is_admin", False),
+    }
+
+
 @auth_endpoint_router.get("/get_anonymous_user_session", include_in_schema=True)
 async def api_get_anonymous_user_session(
     api_key: str = Header(..., description="Internal API key for authentication"),

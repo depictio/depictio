@@ -17,6 +17,9 @@ interface TableRendererProps {
   dashboardId: string;
   metadata: StoredMetadata;
   filters: InteractiveFilter[];
+  /** When provided, the grid api is mirrored to this ref so the chrome's
+   *  Download button can call `exportDataAsCsv` without prop-drilling. */
+  agGridApiRef?: React.RefObject<GridApi | null>;
 }
 
 const CACHE_BLOCK_SIZE = 100;
@@ -34,6 +37,7 @@ const TableRenderer: React.FC<TableRendererProps> = ({
   dashboardId,
   metadata,
   filters,
+  agGridApiRef,
 }) => {
   const [colDefs, setColDefs] = useState<ColDef[]>([]);
   const [loading, setLoading] = useState(true);
@@ -126,6 +130,10 @@ const TableRenderer: React.FC<TableRendererProps> = ({
 
   const onGridReady = (event: GridReadyEvent) => {
     gridApiRef.current = event.api;
+    if (agGridApiRef) {
+      // RefObject's `.current` is readonly in TS but writable at runtime.
+      (agGridApiRef as React.MutableRefObject<GridApi | null>).current = event.api;
+    }
     event.api.setGridOption('datasource', datasource);
   };
 

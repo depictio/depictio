@@ -30,6 +30,12 @@ export default defineConfig({
         __dirname,
         '../../packages/depictio-components/src/lib',
       ),
+      // depictio-react-core is a sibling workspace package — alias straight to
+      // its src/index.ts so Vite/HMR sees source changes without a build step.
+      'depictio-react-core': path.resolve(
+        __dirname,
+        '../../packages/depictio-react-core/src',
+      ),
     },
     // Force a single instance of these packages across the whole graph.
     // Without this, depictio-components' own node_modules contributes a
@@ -40,7 +46,14 @@ export default defineConfig({
       'react-dom',
       '@mantine/core',
       '@mantine/hooks',
+      '@mantine/dates',
       '@iconify/react',
+      'dayjs',
+      'plotly.js',
+      'react-plotly.js',
+      'ag-grid-community',
+      'ag-grid-react',
+      'react-grid-layout',
     ],
   },
 });

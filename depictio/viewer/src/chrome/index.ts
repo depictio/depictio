@@ -1,0 +1,10 @@
+/**
+ * Compact re-exports so App.tsx can `import { Header, Sidebar, ... } from './chrome'`.
+ */
+export { default as Header } from './Header';
+export { default as Sidebar } from './Sidebar';
+export { default as ThemeToggle } from './ThemeToggle';
+export { default as ServerStatusBadge } from './ServerStatusBadge';
+export { default as ProfileBadge } from './ProfileBadge';
+export { default as PoweredBy } from './PoweredBy';
+export { default as SettingsDrawer } from './SettingsDrawer';

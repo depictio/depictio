@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useRef } from 'react';
 import { DepictioCard } from 'depictio-components';
+import type { GridApi } from 'ag-grid-community';
 
 import { InteractiveFilter, StoredMetadata } from '../api';
 import FigureRenderer from './FigureRenderer';
@@ -14,6 +15,7 @@ import SliderRenderer from './interactive/SliderRenderer';
 import DatePickerRenderer from './interactive/DatePickerRenderer';
 import CheckboxSwitchRenderer from './interactive/CheckboxSwitchRenderer';
 import SegmentedControlRenderer from './interactive/SegmentedControlRenderer';
+import { wrapWithChrome } from './chrome';
 
 interface ComponentRendererProps {
   metadata: StoredMetadata;
@@ -28,11 +30,8 @@ interface ComponentRendererProps {
 }
 
 /**
- * Renders ONE component based on metadata.component_type. Data flow:
- *   - Cards: parent App runs a single bulk_compute_cards fetch for all cards
- *     on mount AND on filter change. This component just displays `cardValue`.
- *   - Interactive sub-types live under ./interactive/ and self-fetch their
- *     own bounds/options as needed.
+ * Renders ONE component based on metadata.component_type, wrapped in a
+ * `ComponentChrome` that adds metadata/fullscreen/download/reset action icons.
  */
 const ComponentRenderer: React.FC<ComponentRendererProps> = ({
   metadata,
@@ -43,92 +42,73 @@ const ComponentRenderer: React.FC<ComponentRendererProps> = ({
   dashboardId,
 }) => {
   if (metadata.component_type === 'card') {
-    return (
+    return wrapWithChrome(
+      'card',
+      metadata,
+      undefined,
       <CardRenderer
         metadata={metadata}
         value={cardValue}
         loading={cardLoading}
         filterApplied={filters.length > 0}
-      />
+      />,
     );
   }
 
   if (metadata.component_type === 'interactive') {
+    const onResetFilter = onFilterChange
+      ? () => onFilterChange({ index: metadata.index, value: null })
+      : undefined;
     const subType = metadata.interactive_component_type;
+    let inner: React.ReactNode;
     if (subType === 'MultiSelect' || subType === 'Select') {
-      return (
-        <MultiSelectRenderer
-          metadata={metadata}
-          filters={filters}
-          onChange={onFilterChange}
-        />
+      inner = (
+        <MultiSelectRenderer metadata={metadata} filters={filters} onChange={onFilterChange} />
       );
-    }
-    if (subType === 'RangeSlider') {
-      return (
-        <RangeSliderRenderer
-          metadata={metadata}
-          filters={filters}
-          onChange={onFilterChange}
-        />
+    } else if (subType === 'RangeSlider') {
+      inner = (
+        <RangeSliderRenderer metadata={metadata} filters={filters} onChange={onFilterChange} />
       );
-    }
-    if (subType === 'Slider') {
-      return (
-        <SliderRenderer
-          metadata={metadata}
-          filters={filters}
-          onChange={onFilterChange}
-        />
+    } else if (subType === 'Slider') {
+      inner = <SliderRenderer metadata={metadata} filters={filters} onChange={onFilterChange} />;
+    } else if (subType === 'DatePicker' || subType === 'DateRangePicker') {
+      inner = (
+        <DatePickerRenderer metadata={metadata} filters={filters} onChange={onFilterChange} />
       );
-    }
-    if (subType === 'DatePicker' || subType === 'DateRangePicker') {
-      return (
-        <DatePickerRenderer
-          metadata={metadata}
-          filters={filters}
-          onChange={onFilterChange}
-        />
+    } else if (subType === 'Checkbox' || subType === 'Switch') {
+      inner = (
+        <CheckboxSwitchRenderer metadata={metadata} filters={filters} onChange={onFilterChange} />
       );
-    }
-    if (subType === 'Checkbox' || subType === 'Switch') {
-      return (
-        <CheckboxSwitchRenderer
-          metadata={metadata}
-          filters={filters}
-          onChange={onFilterChange}
-        />
-      );
-    }
-    if (subType === 'SegmentedControl') {
-      return (
+    } else if (subType === 'SegmentedControl') {
+      inner = (
         <SegmentedControlRenderer
           metadata={metadata}
           filters={filters}
           onChange={onFilterChange}
         />
       );
+    } else {
+      inner = (
+        <div className="dashboard-error" style={{ fontSize: '0.75rem' }}>
+          Interactive type "{subType}" not yet ported to the React viewer.
+        </div>
+      );
     }
-    return (
-      <div className="dashboard-error" style={{ fontSize: '0.75rem' }}>
-        Interactive type "{subType}" not yet ported to the React viewer.
-      </div>
-    );
+    return wrapWithChrome('interactive', metadata, undefined, inner, { onResetFilter });
   }
 
   if (metadata.component_type === 'figure' && dashboardId) {
-    return (
-      <FigureRenderer
-        dashboardId={dashboardId}
-        metadata={metadata}
-        filters={filters}
-      />
+    return wrapWithChrome(
+      'figure',
+      metadata,
+      undefined,
+      <FigureRenderer dashboardId={dashboardId} metadata={metadata} filters={filters} />,
     );
   }
 
   if (metadata.component_type === 'table' && dashboardId) {
     return (
-      <TableRenderer
+      <TableBlock
         dashboardId={dashboardId}
         metadata={metadata}
         filters={filters}
@@ -137,41 +117,38 @@ const ComponentRenderer: React.FC<ComponentRendererProps> = ({
   }
 
   if (metadata.component_type === 'image' && dashboardId) {
-    return (
-      <ImageRenderer
-        dashboardId={dashboardId}
-        metadata={metadata}
-      />
+    return wrapWithChrome(
+      'image',
+      metadata,
+      undefined,
+      <ImageRenderer dashboardId={dashboardId} metadata={metadata} />,
     );
   }
 
   if (metadata.component_type === 'map' && dashboardId) {
-    return (
-      <MapRenderer
-        dashboardId={dashboardId}
-        metadata={metadata}
-        filters={filters}
-      />
+    return wrapWithChrome(
+      'map',
+      metadata,
+      undefined,
+      <MapRenderer dashboardId={dashboardId} metadata={metadata} filters={filters} />,
     );
   }
 
   if (metadata.component_type === 'jbrowse' && dashboardId) {
-    return (
-      <JBrowseRenderer
-        dashboardId={dashboardId}
-        metadata={metadata}
-        filters={filters}
-      />
+    return wrapWithChrome(
+      'jbrowse',
+      metadata,
+      undefined,
+      <JBrowseRenderer dashboardId={dashboardId} metadata={metadata} filters={filters} />,
     );
   }
 
   if (metadata.component_type === 'multiqc' && dashboardId) {
-    return (
-      <MultiQCRenderer
-        dashboardId={dashboardId}
-        metadata={metadata}
-        filters={filters}
-      />
+    return wrapWithChrome(
+      'multiqc',
+      metadata,
+      undefined,
+      <MultiQCRenderer dashboardId={dashboardId} metadata={metadata} filters={filters} />,
     );
   }
 
@@ -185,6 +162,28 @@ const ComponentRenderer: React.FC<ComponentRendererProps> = ({
 export default ComponentRenderer;
 
 // ---------------------------------------------------------------------------
+// Per-type wrappers that own refs locally — keeps hooks-rules-of-hooks happy
+// (no useRef inside a switch).
+
+const TableBlock: React.FC<{
+  dashboardId: string;
+  metadata: StoredMetadata;
+  filters: InteractiveFilter[];
+}> = ({ dashboardId, metadata, filters }) => {
+  const agGridApiRef = useRef<GridApi | null>(null);
+  return wrapWithChrome(
+    'table',
+    metadata,
+    undefined,
+    <TableRenderer
+      dashboardId={dashboardId}
+      metadata={metadata}
+      filters={filters}
+      agGridApiRef={agGridApiRef}
+    />,
+    { agGridApiRef },
+  );
+};
 
 const CardRenderer: React.FC<{
   metadata: StoredMetadata;

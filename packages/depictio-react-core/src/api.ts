@@ -82,6 +82,11 @@ export interface DashboardSummary {
   title?: string;
   parent_dashboard_id?: string | null;
   project_id?: string;
+  /** Tab-specific fields. Dash precedence: `tab_icon || icon`, `tab_icon_color || icon_color`. */
+  tab_icon?: string;
+  tab_icon_color?: string;
+  icon?: string;
+  icon_color?: string;
 }
 
 export async function fetchAllDashboards(): Promise<DashboardSummary[]> {
@@ -351,4 +356,31 @@ export async function renderMultiQC(
   );
   if (!res.ok) throw new Error(`Failed to render MultiQC: ${res.status}`);
   return res.json();
+}
+
+/** Server status — backs the sidebar status badge. Polled every 30s. */
+export interface ServerStatusResponse {
+  status: 'online' | 'offline' | string;
+  version?: string;
+}
+
+export async function fetchServerStatus(): Promise<ServerStatusResponse> {
+  const res = await fetch(`${API_BASE}/utils/status`, { cache: 'no-cache' });
+  if (!res.ok) return { status: 'offline' };
+  return res.json();
+}
+
+/** Current user — anonymous-tolerant. Returns null for missing/invalid token. */
+export interface CurrentUser {
+  id?: string;
+  email: string;
+  is_admin: boolean;
+}
+
+export async function fetchCurrentUser(): Promise<CurrentUser | null> {
+  const res = await fetch(`${API_BASE}/auth/me/optional`, { headers: authHeaders() });
+  if (!res.ok) return null;
+  const data = (await res.json()) as { id?: string; email?: string; is_admin?: boolean } | null;
+  if (!data || !data.email) return null;
+  return { id: data.id, email: data.email, is_admin: Boolean(data.is_admin) };
 }
