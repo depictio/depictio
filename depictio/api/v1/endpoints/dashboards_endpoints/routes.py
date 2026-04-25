@@ -2228,7 +2228,14 @@ async def render_multiqc_endpoint(
     ``selected_dataset`` and ``s3_locations`` from the component's
     stored_metadata (with a DC-config fallback for ``s3_locations`` if missing,
     matching the Dash restoration path).
+
+    Filters: applied via ``patch_multiqc_figures()`` after sample resolution.
+    Filters that target a metadata DC different from the MultiQC DC are
+    resolved by loading the metadata DC with the filters applied, then
+    pulling the unique values of the ``sample`` join column. Filters that
+    target the MultiQC DC's own ``sample`` column are used directly.
     """
+    filters = request.get("filters") or []
     theme = request.get("theme") or "light"
 
     dashboard_data = dashboards_collection.find_one({"dashboard_id": dashboard_id})
@@ -2257,6 +2264,7 @@ async def render_multiqc_endpoint(
     selected_dataset = component.get("selected_dataset")
     s3_locations = component.get("s3_locations") or []
 
+    wf_id = component.get("wf_id")
     dc_id = component.get("dc_id") or component.get("data_collection_id")
 
     # Direct MongoDB lookup via the process-agnostic helper. It covers both:
@@ -2320,12 +2328,110 @@ async def render_multiqc_endpoint(
         if isinstance(fig_dict, dict) and "layout" in fig_dict:
             fig_dict["layout"].setdefault("uirevision", "persistent")
 
+        # ------ Sample-aware filtering -------------------------------------
+        # Resolve `filters` to a list of sample names, then apply
+        # `patch_multiqc_figures` to the figure dict. Mirrors the Dash
+        # `patch_multiqc_plot_with_interactive_filtering` callback's simple
+        # path (use_link_resolution=False branch): load the metadata DC with
+        # filters applied, pull unique values of the `sample` column.
+        selected_samples: list[str] = []
+        filter_applied = False
+        if filters and wf_id:
+            multiqc_dc_id_str = str(dc_id)
+            stored_meta_index = {
+                str(m.get("index")): m for m in (dashboard_data.get("stored_metadata") or [])
+            }
+
+            metadata_dc_id: str | None = None
+            direct_sample_values: list[str] = []
+            indirect_filter_metadata: list[dict] = []
+
+            for f in filters:
+                value = f.get("value")
+                if value in (None, [], ""):
+                    continue
+                fdx = str(f.get("index") or "")
+                comp_meta = stored_meta_index.get(fdx) or {}
+                comp_dc = str(comp_meta.get("dc_id") or comp_meta.get("data_collection_id") or "")
+                column_name = f.get("column_name") or comp_meta.get("column_name")
+
+                if comp_dc == multiqc_dc_id_str and column_name == "sample":
+                    # Direct filter on MultiQC's own sample column.
+                    values_list = value if isinstance(value, list) else [value]
+                    direct_sample_values.extend(str(v) for v in values_list)
+                    continue
+
+                if comp_dc and comp_dc != multiqc_dc_id_str:
+                    if metadata_dc_id is None:
+                        metadata_dc_id = comp_dc
+                    if comp_dc == metadata_dc_id:
+                        indirect_filter_metadata.append(
+                            {
+                                "interactive_component_type": f.get("interactive_component_type")
+                                or comp_meta.get("interactive_component_type"),
+                                "column_name": column_name,
+                                "value": value,
+                            }
+                        )
+
+            if direct_sample_values:
+                selected_samples.extend(direct_sample_values)
+
+            if metadata_dc_id and indirect_filter_metadata:
+                from depictio.api.v1.deltatables_utils import load_deltatable_lite
+
+                try:
+                    meta_df = load_deltatable_lite(
+                        workflow_id=ObjectId(str(wf_id))
+                        if not isinstance(wf_id, ObjectId)
+                        else wf_id,
+                        data_collection_id=str(metadata_dc_id),
+                        metadata=indirect_filter_metadata,
+                    )
+                    if meta_df is not None and not meta_df.is_empty():
+                        if "sample" in meta_df.columns:
+                            selected_samples.extend(
+                                str(s) for s in meta_df["sample"].unique().to_list()
+                            )
+                        else:
+                            logger.warning(
+                                f"render_multiqc: metadata DC {metadata_dc_id} has no 'sample' "
+                                f"column; columns={meta_df.columns}"
+                            )
+                except Exception as e:
+                    logger.warning(
+                        f"render_multiqc: filter resolution on DC {metadata_dc_id} failed: {e}",
+                        exc_info=True,
+                    )
+
+            # De-duplicate
+            selected_samples = list(dict.fromkeys(selected_samples))
+
+            if selected_samples:
+                from depictio.dash.modules.multiqc_component.callbacks.core import (
+                    patch_multiqc_figures,
+                )
+
+                patched = patch_multiqc_figures([fig_dict], selected_samples)
+                if patched:
+                    fig_dict = patched[0]
+                    if isinstance(fig_dict, dict):
+                        fig_dict.setdefault("layout", {})
+                        fig_dict["layout"]["_depictio_filter_applied"] = True
+                    filter_applied = True
+                    logger.info(
+                        f"render_multiqc: applied filter — {len(selected_samples)} sample(s)"
+                    )
+        # -------------------------------------------------------------------
+
         return {
             "figure": fig_dict,
             "metadata": {
                 "module": selected_module,
                 "plot": selected_plot,
                 "dataset_id": selected_dataset,
+                "filter_applied": filter_applied,
+                "selected_sample_count": len(selected_samples) if filter_applied else None,
             },
         }
     except HTTPException:
