@@ -292,6 +292,7 @@ def handle_authenticated_user(
             local_data=local_data,
             theme=theme,
             init_data=dashboard_init_data,  # Pass consolidated init data for components
+            is_editor_app=is_edit_mode,
         )
 
         # # Create dashboard layout

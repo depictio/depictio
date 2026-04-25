@@ -247,6 +247,7 @@ def _create_component_buttons(
     create_alignment_button=None,
     create_metadata_button=None,
     create_partial_data_warning_button=None,
+    edit_mode: bool = True,
 ) -> tuple[dmc.ActionIconGroup | None, None]:
     """
     Create action buttons based on component type and configuration.
@@ -392,12 +393,19 @@ def _create_component_buttons(
     if create_partial_data_warning_button is not None:
         button_functions["partial_data"] = create_partial_data_warning_button
 
-    # Create edit-only button components (wrapped with CSS class for conditional visibility)
-    edit_only_components = [
-        html.Div(button_functions[btn](), className="component-action-buttons-item")
-        for btn in edit_only_list
-        if btn in button_functions
-    ]
+    # Create edit-only button components (wrapped with CSS class for conditional visibility).
+    # When edit_mode is False (viewer app, non-owner), skip construction entirely — these
+    # buttons (drag/remove/edit/duplicate/alignment) would only be CSS-hidden otherwise, but
+    # React still mounts them and they inflate the pattern-matched DOM (bab4: 32 nodes saved).
+    edit_only_components = (
+        [
+            html.Div(button_functions[btn](), className="component-action-buttons-item")
+            for btn in edit_only_list
+            if btn in button_functions
+        ]
+        if edit_mode
+        else []
+    )
 
     # Create view-accessible button components (wrapped with CSS class - always visible)
     view_accessible_components = [
@@ -936,6 +944,7 @@ def enable_box_edit_mode(
         create_alignment_button,
         create_metadata_button,
         partial_data_button_func,
+        edit_mode=switch_state,
     )
 
     # Handle native Dash component - wrap in list for consistent processing

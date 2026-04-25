@@ -54,8 +54,17 @@ from depictio.models.utils import convert_model_to_dict
 auth_endpoint_router = APIRouter()
 
 
-# OAuth2 scheme
+# OAuth2 scheme — strict (raises 401 if Authorization header is missing)
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/depictio/api/v1/auth/login")
+
+# Optional OAuth2 scheme for anonymous-tolerant endpoints. ``auto_error=False``
+# lets missing/invalid Authorization headers reach the dependent function so
+# its single-user / public-mode anonymous fallback can run instead of FastAPI
+# returning 401 before the function executes.
+oauth2_scheme_optional = OAuth2PasswordBearer(
+    tokenUrl="/depictio/api/v1/auth/login",
+    auto_error=False,
+)
 
 
 async def get_current_user(token: Annotated[str, Depends(oauth2_scheme)]) -> User:
@@ -81,7 +90,7 @@ async def get_current_user(token: Annotated[str, Depends(oauth2_scheme)]) -> Use
 
 
 async def get_user_or_anonymous(
-    token: Annotated[str | None, Depends(oauth2_scheme)] = None,
+    token: Annotated[str | None, Depends(oauth2_scheme_optional)] = None,
 ) -> User:
     """Get the authenticated user or anonymous user if unauthenticated mode is enabled.
 

@@ -7,12 +7,14 @@ Main application entry point with middleware, routing, and error handling.
 import logging
 import os
 import re
+from pathlib import Path
 from typing import Any, cast
 
 from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.endpoints.routers import router
@@ -78,6 +80,40 @@ if settings.analytics.enabled:
 api_version = get_api_version()
 api_prefix = f"/depictio/api/{api_version}"
 app.include_router(router, prefix=api_prefix)
+
+
+# ---------------------------------------------------------------------------
+# React viewer SPA — served at /dashboard-beta/{id} alongside the API.
+#
+# Built artifact lives at depictio/viewer/dist/ (produced by `npm run build`
+# in that directory). FastAPI serves the static bundle and falls back to
+# index.html for unknown paths so client-side routing works.
+#
+# If the bundle isn't built yet, the mount is skipped and a friendly 404 is
+# returned. Rebuild with `cd depictio/viewer && npm install && npm run build`.
+# ---------------------------------------------------------------------------
+_VIEWER_DIST = Path(__file__).resolve().parent.parent / "viewer" / "dist"
+if _VIEWER_DIST.is_dir():
+    # /dashboard-beta/assets/... → static bundle assets
+    app.mount(
+        "/dashboard-beta/assets",
+        StaticFiles(directory=str(_VIEWER_DIST / "assets")),
+        name="viewer-assets",
+    )
+
+    @app.get("/dashboard-beta/{_dashboard_id:path}")
+    async def _serve_viewer_spa(_dashboard_id: str) -> FileResponse:
+        """Serve the React viewer SPA. All sub-paths fall through to index.html
+        so React's client-side router handles the dashboard ID segment."""
+        return FileResponse(_VIEWER_DIST / "index.html")
+else:
+    logger = logging.getLogger(__name__)
+    logger.warning(
+        "⚠️  React viewer bundle not found at %s — /dashboard-beta/ routes "
+        "will 404 until `cd depictio/viewer && npm install && npm run build` "
+        "is executed.",
+        _VIEWER_DIST,
+    )
 
 
 @app.get("/health")
