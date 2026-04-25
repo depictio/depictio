@@ -190,6 +190,17 @@ def build_multiqc(**kwargs: Any):
     dc_id_str = resolve_bson_id(kwargs.get("data_collection_id") or kwargs.get("dc_id"))
     project_id_str = resolve_bson_id(kwargs.get("project_id"))
 
+    # Replace the full samples list with just its count — the list can grow to tens of
+    # thousands of entries and is not read during view-mode rendering. Design-mode callbacks
+    # detect the missing list and re-fetch via get_multiqc_reports_for_data_collection.
+    raw_metadata = kwargs.get("metadata", {}) or {}
+    if isinstance(raw_metadata, dict) and isinstance(raw_metadata.get("samples"), list):
+        samples_list = raw_metadata["samples"]
+        raw_metadata = {
+            **{k: v for k, v in raw_metadata.items() if k != "samples"},
+            "sample_count": len(samples_list),
+        }
+
     # Create comprehensive metadata for the component including interactive filtering support
     component_metadata = {
         "index": str(data_index),
@@ -203,8 +214,8 @@ def build_multiqc(**kwargs: Any):
         "selected_plot": selected_plot,
         "selected_dataset": selected_dataset,
         "s3_locations": s3_locations,
-        # Additional metadata needed for interactive filtering
-        "metadata": kwargs.get("metadata", {}),  # MultiQC metadata (modules, plots, samples)
+        # MultiQC metadata (modules, plots, sample_count — samples list stripped above)
+        "metadata": raw_metadata,
         "interactive_patching_enabled": True,  # Flag to enable interactive patching
     }
 
