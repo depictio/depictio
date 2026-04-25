@@ -1367,10 +1367,14 @@ def _agg_value(col: Any, aggregation: str) -> Any:
             return float(m) if m is not None else None
         if agg == "min":
             mn = col.min()
-            return float(mn) if isinstance(mn, (int, float)) else (str(mn) if mn is not None else None)
+            return (
+                float(mn) if isinstance(mn, (int, float)) else (str(mn) if mn is not None else None)
+            )
         if agg == "max":
             mx = col.max()
-            return float(mx) if isinstance(mx, (int, float)) else (str(mx) if mx is not None else None)
+            return (
+                float(mx) if isinstance(mx, (int, float)) else (str(mx) if mx is not None else None)
+            )
         if agg in ("std", "std_dev"):
             return float(col.std()) if col.std() is not None else None
         if agg in ("variance", "var"):
@@ -1384,7 +1388,11 @@ def _agg_value(col: Any, aggregation: str) -> Any:
             return float(mx) - float(mn) if isinstance(mn, (int, float)) else None
         if agg == "mode":
             m = col.mode()
-            return None if len(m) == 0 else (float(m[0]) if isinstance(m[0], (int, float)) else str(m[0]))
+            return (
+                None
+                if len(m) == 0
+                else (float(m[0]) if isinstance(m[0], (int, float)) else str(m[0]))
+            )
     except Exception as e:
         logger.warning(f"Aggregation {agg!r} failed on column: {e}")
         return None
@@ -1445,7 +1453,8 @@ async def bulk_compute_cards(
     # Collect card components (optionally filtered by component_ids)
     requested = set(requested_ids) if requested_ids else None
     cards = [
-        m for m in stored_metadata
+        m
+        for m in stored_metadata
         if m.get("component_type") == "card"
         and (requested is None or str(m.get("index")) in requested)
     ]
@@ -1464,6 +1473,7 @@ async def bulk_compute_cards(
         if not delta_loc:
             # Fallback: look up via deltatables_collection
             from depictio.api.v1.db import deltatables_collection
+
             dt = deltatables_collection.find_one({"data_collection_id": ObjectId(dc_id)})
             if dt:
                 delta_loc = dt.get("delta_table_location")
@@ -1550,9 +1560,7 @@ async def bulk_compute_cards(
             specs_value = col_specs.get(aggregation)
             if specs_value is not None:
                 values[idx] = (
-                    float(specs_value)
-                    if isinstance(specs_value, (int, float))
-                    else specs_value
+                    float(specs_value) if isinstance(specs_value, (int, float)) else specs_value
                 )
                 logger.debug(
                     f"bulk_compute_cards: {idx} ({aggregation}/{column}) = {values[idx]} (specs)"
@@ -1591,9 +1599,7 @@ async def bulk_compute_cards(
             continue
 
         values[idx] = _agg_value(df[column], aggregation)
-        logger.debug(
-            f"bulk_compute_cards: {idx} ({aggregation}/{column}) = {values[idx]}"
-        )
+        logger.debug(f"bulk_compute_cards: {idx} ({aggregation}/{column}) = {values[idx]}")
 
     return {
         "values": values,
@@ -1645,8 +1651,7 @@ async def render_figure_endpoint(
         (
             m
             for m in (dashboard_data.get("stored_metadata") or [])
-            if str(m.get("index")) == component_id
-            and m.get("component_type") == "figure"
+            if str(m.get("index")) == component_id and m.get("component_type") == "figure"
         ),
         None,
     )
@@ -1674,6 +1679,7 @@ async def render_figure_endpoint(
     delta_loc = dc_config.get("delta_location")
     if not delta_loc:
         from depictio.api.v1.db import deltatables_collection
+
         dt = deltatables_collection.find_one({"data_collection_id": ObjectId(str(dc_id))})
         if dt:
             delta_loc = dt.get("delta_table_location")
@@ -1697,17 +1703,17 @@ async def render_figure_endpoint(
 
     # Lazy-import the Dash figure builder. Loads dash_mantine_components on
     # first call inside the FastAPI process — fine, modules are cached.
-    from depictio.dash.modules.figure_component.callbacks.core import (
-        _create_figure_from_data,
-        _process_code_mode_figure,
-    )
-
     # Register mantine_light / mantine_dark Plotly templates inside this
     # FastAPI worker. The Dash startup path calls this implicitly via the app
     # init; FastAPI never goes through that path. Without this, plotly express
     # raises KeyError: 'mantine_light' when Depictio's theme template lookup
     # asks for the mantine theme.
     import plotly.io as pio  # noqa: PLC0415
+
+    from depictio.dash.modules.figure_component.callbacks.core import (
+        _create_figure_from_data,
+        _process_code_mode_figure,
+    )
 
     if "mantine_light" not in pio.templates or "mantine_dark" not in pio.templates:
         try:
@@ -1802,8 +1808,7 @@ async def render_table_endpoint(
         (
             m
             for m in (dashboard_data.get("stored_metadata") or [])
-            if str(m.get("index")) == component_id
-            and m.get("component_type") == "table"
+            if str(m.get("index")) == component_id and m.get("component_type") == "table"
         ),
         None,
     )
@@ -1830,6 +1835,7 @@ async def render_table_endpoint(
     delta_loc = dc_config.get("delta_location")
     if not delta_loc:
         from depictio.api.v1.db import deltatables_collection
+
         dt = deltatables_collection.find_one({"data_collection_id": ObjectId(str(dc_id))})
         if dt:
             delta_loc = dt.get("delta_table_location")
@@ -1866,6 +1872,68 @@ async def render_table_endpoint(
         columns.append({"field": name, "headerName": name, "type": ag_type})
 
     return {"columns": columns, "rows": rows, "total": total}
+
+
+@dashboards_endpoint_router.get("/render_image_paths/{dashboard_id}/{component_id}")
+async def render_image_paths_endpoint(
+    dashboard_id: PyObjectId,
+    component_id: str,
+    max: int = 50,
+    current_user: User = Depends(get_user_or_anonymous),
+):
+    """Return up to `max` non-null values of an image component's `image_column`.
+
+    Mirrors the auth/permission/lookup logic of `render_table_endpoint`. The
+    React viewer's ImageRenderer uses these paths to build URLs against
+    `/files/serve/image?s3_path=...` for thumbnail rendering.
+    """
+    from depictio.api.v1.deltatables_utils import load_deltatable_lite
+
+    limit = max if max and max > 0 else 50
+    if limit > 500:
+        limit = 500
+
+    dashboard_data = dashboards_collection.find_one({"dashboard_id": dashboard_id})
+    if not dashboard_data:
+        raise HTTPException(status_code=404, detail=f"Dashboard '{dashboard_id}' not found.")
+
+    project_id = dashboard_data.get("project_id")
+    if not project_id or not check_project_permission(project_id, current_user, "viewer"):
+        raise HTTPException(status_code=403, detail="Permission denied.")
+
+    component = next(
+        (
+            m
+            for m in (dashboard_data.get("stored_metadata") or [])
+            if str(m.get("index")) == component_id and m.get("component_type") == "image"
+        ),
+        None,
+    )
+    if component is None:
+        raise HTTPException(status_code=404, detail=f"Image component '{component_id}' not found.")
+
+    wf_id = component.get("wf_id")
+    dc_id = component.get("dc_id")
+    image_column = component.get("image_column")
+    if not (wf_id and dc_id and image_column):
+        raise HTTPException(status_code=400, detail="Component missing wf_id/dc_id/image_column.")
+
+    try:
+        df = load_deltatable_lite(
+            workflow_id=ObjectId(str(wf_id)) if not isinstance(wf_id, ObjectId) else wf_id,
+            data_collection_id=str(dc_id),
+        )
+    except Exception as e:
+        logger.error(f"render_image_paths: DC load failed: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to load data: {e}")
+
+    if image_column not in df.columns:
+        raise HTTPException(
+            status_code=400, detail=f"Column '{image_column}' missing from Delta table."
+        )
+
+    paths = df.select(image_column).drop_nulls().head(limit).to_series().to_list()
+    return {"paths": [str(p) for p in paths]}
 
 
 # ============================================================================

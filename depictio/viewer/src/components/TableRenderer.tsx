@@ -1,9 +1,15 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Paper, Loader, Text, Stack } from '@mantine/core';
 import { AgGridReact } from 'ag-grid-react';
 import 'ag-grid-community/styles/ag-grid.css';
 import 'ag-grid-community/styles/ag-theme-alpine.css';
-import type { ColDef } from 'ag-grid-community';
+import type {
+  ColDef,
+  GridReadyEvent,
+  IDatasource,
+  IGetRowsParams,
+  GridApi,
+} from 'ag-grid-community';
 
 import { renderTable, InteractiveFilter, StoredMetadata } from '../api';
 
@@ -13,30 +19,44 @@ interface TableRendererProps {
   filters: InteractiveFilter[];
 }
 
+const CACHE_BLOCK_SIZE = 100;
+const MAX_BLOCKS_IN_CACHE = 10;
+
 /**
- * Renders a table component via AG Grid. Backend route POSTs filters and
- * returns paginated rows. For the MVP we fetch the first 200 rows; full
- * server-side row model can be wired later via AG Grid's infinite row model.
+ * Renders a table component via AG Grid using the infinite row model. The
+ * grid pulls pages on demand from the backend via `renderTable`, which already
+ * accepts `start` + `limit` query params — no client-side prefetch of all rows.
+ *
+ * Filter changes purge the infinite cache so the grid re-fetches from row 0
+ * with the new filter state.
  */
 const TableRenderer: React.FC<TableRendererProps> = ({
   dashboardId,
   metadata,
   filters,
 }) => {
-  const [rows, setRows] = useState<Record<string, unknown>[] | null>(null);
   const [colDefs, setColDefs] = useState<ColDef[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [total, setTotal] = useState(0);
+  const [ready, setReady] = useState(false);
 
+  const gridApiRef = useRef<GridApi | null>(null);
+  // Stable ref to current filters so the IDatasource closure always reads the
+  // latest value without us having to recreate the datasource on every render.
+  const filtersRef = useRef<InteractiveFilter[]>(filters);
+  filtersRef.current = filters;
+
+  // One-shot bootstrap: fetch column defs + total row count via a tiny
+  // (start=0, limit=1) call. The infinite row model then takes over for paging.
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
     setError(null);
-    renderTable(dashboardId, metadata.index, filters, 0, 200)
+    setReady(false);
+    renderTable(dashboardId, metadata.index, filters, 0, 1)
       .then((res) => {
         if (cancelled) return;
-        setRows(res.rows);
         setColDefs(
           res.columns.map((c) => ({
             field: c.field,
@@ -48,6 +68,7 @@ const TableRenderer: React.FC<TableRendererProps> = ({
           })),
         );
         setTotal(res.total);
+        setReady(true);
       })
       .catch((err) => {
         if (cancelled) return;
@@ -62,6 +83,52 @@ const TableRenderer: React.FC<TableRendererProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dashboardId, metadata.index, JSON.stringify(filters)]);
 
+  // When filters change after the grid is mounted, purge the cache so the
+  // grid re-requests rows with the new filter state. The bootstrap effect
+  // above also re-runs to refresh `total`.
+  useEffect(() => {
+    if (gridApiRef.current && ready) {
+      gridApiRef.current.purgeInfiniteCache();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [JSON.stringify(filters), ready]);
+
+  const datasource = useMemo<IDatasource>(
+    () => ({
+      getRows: (params: IGetRowsParams) => {
+        const start = params.startRow;
+        const limit = params.endRow - params.startRow;
+        renderTable(
+          dashboardId,
+          metadata.index,
+          filtersRef.current,
+          start,
+          limit,
+        )
+          .then((res) => {
+            // lastRow tells the grid the total — required so the scrollbar is
+            // accurate and the grid stops asking past the end.
+            const lastRow =
+              typeof res.total === 'number' && res.total >= 0
+                ? res.total
+                : undefined;
+            params.successCallback(res.rows, lastRow);
+            if (typeof res.total === 'number') setTotal(res.total);
+          })
+          .catch((err) => {
+            setError(err?.message || String(err));
+            params.failCallback();
+          });
+      },
+    }),
+    [dashboardId, metadata.index],
+  );
+
+  const onGridReady = (event: GridReadyEvent) => {
+    gridApiRef.current = event.api;
+    event.api.setGridOption('datasource', datasource);
+  };
+
   const defaultColDef = useMemo<ColDef>(
     () => ({ flex: 1, minWidth: 100, resizable: true }),
     [],
@@ -74,7 +141,7 @@ const TableRenderer: React.FC<TableRendererProps> = ({
           {metadata.title}
           {total > 0 && (
             <Text component="span" c="dimmed" size="xs" ml="xs">
-              ({total} rows{total > 200 ? `, showing first 200` : ''})
+              ({total} rows)
             </Text>
           )}
         </Text>
@@ -90,14 +157,15 @@ const TableRenderer: React.FC<TableRendererProps> = ({
           <Text size="sm" c="red">Table failed: {error}</Text>
         </Stack>
       )}
-      {rows && !loading && !error && (
+      {ready && !loading && !error && (
         <div className="ag-theme-alpine" style={{ width: '100%', height: 400 }}>
           <AgGridReact
-            rowData={rows}
             columnDefs={colDefs}
             defaultColDef={defaultColDef}
-            pagination
-            paginationPageSize={20}
+            rowModelType="infinite"
+            cacheBlockSize={CACHE_BLOCK_SIZE}
+            maxBlocksInCache={MAX_BLOCKS_IN_CACHE}
+            onGridReady={onGridReady}
           />
         </div>
       )}

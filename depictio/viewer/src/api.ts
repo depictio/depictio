@@ -253,3 +253,24 @@ export async function renderTable(
   if (!res.ok) throw new Error(`Failed to render table: ${res.status}`);
   return res.json();
 }
+
+/** Fetch up to `max` non-null values of an image component's image_column.
+ *  `dcId`, `imageColumn`, `s3BaseFolder` accepted for call-site symmetry but
+ *  resolved server-side from the component's `stored_metadata`.
+ */
+export async function fetchImagePaths(
+  dashboardId: string,
+  componentId: string,
+  _dcId: string,
+  _imageColumn: string,
+  _s3BaseFolder: string,
+  max = 50,
+): Promise<string[]> {
+  const res = await fetch(
+    `${API_BASE}/dashboards/render_image_paths/${dashboardId}/${componentId}?max=${max}`,
+    { headers: authHeaders() },
+  );
+  if (!res.ok) throw new Error(`Failed to fetch image paths: ${res.status}`);
+  const body = (await res.json()) as { paths?: string[] };
+  return body.paths || [];
+}
