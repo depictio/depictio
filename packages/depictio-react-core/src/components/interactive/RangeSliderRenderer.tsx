@@ -65,11 +65,25 @@ const RangeSliderRenderer: React.FC<{
     <DepictioRangeSlider
       title={metadata.title}
       column_name={metadata.column_name}
+      interactive_component_type={metadata.interactive_component_type}
       min={bounds.min}
       max={bounds.max}
       value={selectedValue || [bounds.min, bounds.max]}
-      icon_name={metadata.icon_name}
-      color={metadata.icon_color}
+      icon_name={metadata.icon_name || 'bx:slider-alt'}
+      icon_color={metadata.icon_color}
+      color={
+        // Mirrors `kwargs.get("color") or kwargs.get("custom_color")` from
+        // depictio/dash/modules/interactive_component/utils.py:1612
+        ((metadata as Record<string, unknown>).color as string | undefined) ||
+        ((metadata as Record<string, unknown>).custom_color as string | undefined)
+      }
+      title_color={metadata.title_color}
+      title_size={
+        ((metadata as Record<string, unknown>).title_size as
+          | 'xs' | 'sm' | 'md' | 'lg' | 'xl' | undefined) ||
+        metadata.title_font_size ||
+        'md'
+      }
       marks_number={(metadata.default_state as Record<string, unknown> | undefined)?.marks_number as number | undefined}
       onChange={(next) =>
         onChange?.({

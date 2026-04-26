@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import GridLayout, { Layout } from 'react-grid-layout';
 import 'react-grid-layout/css/styles.css';
 import 'react-resizable/css/styles.css';
@@ -30,11 +30,15 @@ interface LeftFilterPanelProps {
   onLeftLayoutChange: (newLayout: Layout[]) => void;
   editMode: boolean;
   onDeleteComponent: (componentId: string) => void;
+  onDuplicateComponent?: (componentId: string) => void;
   /** Width to render the grid at — typically the panel's measured width. */
   width?: number;
 }
 
-const ROW_HEIGHT = 70;
+// Compact filter rows: rowHeight=40, h=2 → 80 px per filter (tighter than
+// Dash's default 100 px). User asked for more compaction so more filters fit
+// without scrolling.
+const ROW_HEIGHT = 40;
 const DEFAULT_H = 2;
 
 function normalizeLeftLayout(
@@ -43,8 +47,11 @@ function normalizeLeftLayout(
 ): Layout[] {
   const items = extractLayoutItems(layoutData);
   const indexSet = new Set(components.map((c) => c.index));
+  // All interactive components share the SAME height (DEFAULT_H). User asked
+  // for visual uniformity in the filter panel — preserve only the user's
+  // chosen ORDER (y position), not per-item heights.
   const matched = items
-    .map((it) => ({ ...it, i: stripBoxPrefix(it.i) }))
+    .map((it) => ({ ...it, i: stripBoxPrefix(it.i), w: 1, h: DEFAULT_H }))
     .filter((it) => indexSet.has(it.i));
 
   const seen = new Set(matched.map((it) => it.i));
@@ -53,7 +60,7 @@ function normalizeLeftLayout(
     .map((c, idx) => ({
       i: c.index,
       x: 0,
-      y: matched.length + idx * DEFAULT_H,
+      y: (matched.length + idx) * DEFAULT_H,
       w: 1,
       h: DEFAULT_H,
     }));
@@ -96,6 +103,7 @@ const LeftFilterPanel: React.FC<LeftFilterPanelProps> = ({
   onLeftLayoutChange,
   editMode,
   onDeleteComponent,
+  onDuplicateComponent,
   width,
 }) => {
   const layout = useMemo(
@@ -103,15 +111,29 @@ const LeftFilterPanel: React.FC<LeftFilterPanelProps> = ({
     [interactiveComponents, layoutData],
   );
 
-  const measuredWidth =
-    width && width > 0
-      ? width
-      : typeof window !== 'undefined'
-      ? Math.max(280, Math.floor(window.innerWidth * 0.28) - 32)
-      : 320;
+  // Self-measure to avoid horizontal overflow into the right panel when the
+  // pane is narrower than `window.innerWidth * 0.28`.
+  const wrapperRef = useRef<HTMLDivElement | null>(null);
+  const [measuredWidth, setMeasuredWidth] = useState<number>(() =>
+    width && width > 0 ? width : 280,
+  );
+  useEffect(() => {
+    if (!wrapperRef.current || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver((entries) => {
+      const next = entries[0]?.contentRect.width;
+      if (next && next > 0) setMeasuredWidth(Math.floor(next));
+    });
+    ro.observe(wrapperRef.current);
+    return () => ro.disconnect();
+  }, []);
 
   return (
-    <Paper p="md" withBorder radius="md" style={{ height: '100%' }}>
+    <Paper
+      p="md"
+      withBorder
+      radius="md"
+      style={{ height: '100%', overflow: 'hidden' }}
+    >
       <Title order={5} mb="sm">
         Filters
       </Title>
@@ -122,6 +144,7 @@ const LeftFilterPanel: React.FC<LeftFilterPanelProps> = ({
           </Text>
         </Stack>
       ) : (
+        <div ref={wrapperRef} style={{ width: '100%', overflowX: 'hidden' }}>
         <GridLayout
           className="layout left-filter-grid"
           layout={layout}
@@ -134,26 +157,34 @@ const LeftFilterPanel: React.FC<LeftFilterPanelProps> = ({
           isResizable={false}
           compactType="vertical"
           onLayoutChange={(newLayout) => onLeftLayoutChange(newLayout)}
+          draggableHandle=".react-grid-dragHandle"
         >
           {interactiveComponents.map((m) => (
             <div
               key={m.index}
-              style={{ position: 'relative', overflow: 'hidden' }}
+              style={{ overflow: 'hidden', height: '100%', display: 'flex', flexDirection: 'column' }}
             >
-              <GridItemEditOverlay
-                dashboardId={dashboardId}
-                componentId={m.index}
-                editMode={editMode}
-                onDelete={onDeleteComponent}
-              />
               <ComponentRenderer
                 metadata={m}
                 filters={filters}
                 onFilterChange={onFilterChange}
+                showDragHandle={editMode}
+                extraActions={
+                  editMode ? (
+                    <GridItemEditOverlay
+                      dashboardId={dashboardId}
+                      componentId={m.index}
+                      editMode={editMode}
+                      onDelete={onDeleteComponent}
+                      onDuplicate={onDuplicateComponent}
+                    />
+                  ) : undefined
+                }
               />
             </div>
           ))}
         </GridLayout>
+        </div>
       )}
     </Paper>
   );

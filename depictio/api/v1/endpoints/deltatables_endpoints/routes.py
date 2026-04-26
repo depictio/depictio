@@ -458,9 +458,7 @@ async def get_unique_values(
         raise
     except Exception as e:
         logger.error(f"Error fetching unique values for column {column}: {e}")
-        raise HTTPException(
-            status_code=500, detail=f"Failed to read unique values: {e}"
-        )
+        raise HTTPException(status_code=500, detail=f"Failed to read unique values: {e}")
 
 
 @deltatables_endpoint_router.get("/shape/{data_collection_id}")

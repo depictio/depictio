@@ -27,6 +27,10 @@ interface ComponentRendererProps {
   cardLoading?: boolean;
   /** Required for figure/table fetches. */
   dashboardId?: string;
+  /** Extra action-icon nodes appended to the chrome row. Editor uses this to inject the per-cell "..." edit menu. */
+  extraActions?: React.ReactNode;
+  /** Show the drag handle (3×3 grip) on the chrome — typically only in editor mode. */
+  showDragHandle?: boolean;
 }
 
 /**
@@ -40,6 +44,8 @@ const ComponentRenderer: React.FC<ComponentRendererProps> = ({
   cardValue,
   cardLoading,
   dashboardId,
+  extraActions,
+  showDragHandle,
 }) => {
   if (metadata.component_type === 'card') {
     return wrapWithChrome(
@@ -52,6 +58,7 @@ const ComponentRenderer: React.FC<ComponentRendererProps> = ({
         loading={cardLoading}
         filterApplied={filters.length > 0}
       />,
+      { extraActions, showDragHandle },
     );
   }
 
@@ -94,7 +101,7 @@ const ComponentRenderer: React.FC<ComponentRendererProps> = ({
         </div>
       );
     }
-    return wrapWithChrome('interactive', metadata, undefined, inner, { onResetFilter });
+    return wrapWithChrome('interactive', metadata, undefined, inner, { onResetFilter, extraActions, showDragHandle });
   }
 
   if (metadata.component_type === 'figure' && dashboardId) {
@@ -103,6 +110,7 @@ const ComponentRenderer: React.FC<ComponentRendererProps> = ({
       metadata,
       undefined,
       <FigureRenderer dashboardId={dashboardId} metadata={metadata} filters={filters} />,
+      { extraActions, showDragHandle },
     );
   }
 
@@ -112,6 +120,8 @@ const ComponentRenderer: React.FC<ComponentRendererProps> = ({
         dashboardId={dashboardId}
         metadata={metadata}
         filters={filters}
+        extraActions={extraActions}
+        showDragHandle={showDragHandle}
       />
     );
   }
@@ -122,6 +132,7 @@ const ComponentRenderer: React.FC<ComponentRendererProps> = ({
       metadata,
       undefined,
       <ImageRenderer dashboardId={dashboardId} metadata={metadata} />,
+      { extraActions, showDragHandle },
     );
   }
 
@@ -131,6 +142,7 @@ const ComponentRenderer: React.FC<ComponentRendererProps> = ({
       metadata,
       undefined,
       <MapRenderer dashboardId={dashboardId} metadata={metadata} filters={filters} />,
+      { extraActions, showDragHandle },
     );
   }
 
@@ -140,6 +152,7 @@ const ComponentRenderer: React.FC<ComponentRendererProps> = ({
       metadata,
       undefined,
       <JBrowseRenderer dashboardId={dashboardId} metadata={metadata} filters={filters} />,
+      { extraActions, showDragHandle },
     );
   }
 
@@ -149,6 +162,7 @@ const ComponentRenderer: React.FC<ComponentRendererProps> = ({
       metadata,
       undefined,
       <MultiQCRenderer dashboardId={dashboardId} metadata={metadata} filters={filters} />,
+      { extraActions, showDragHandle },
     );
   }
 
@@ -169,7 +183,9 @@ const TableBlock: React.FC<{
   dashboardId: string;
   metadata: StoredMetadata;
   filters: InteractiveFilter[];
-}> = ({ dashboardId, metadata, filters }) => {
+  extraActions?: React.ReactNode;
+  showDragHandle?: boolean;
+}> = ({ dashboardId, metadata, filters, extraActions, showDragHandle }) => {
   const agGridApiRef = useRef<GridApi | null>(null);
   return wrapWithChrome(
     'table',
@@ -181,7 +197,7 @@ const TableBlock: React.FC<{
       filters={filters}
       agGridApiRef={agGridApiRef}
     />,
-    { agGridApiRef },
+    { agGridApiRef, extraActions, showDragHandle },
   );
 };
 

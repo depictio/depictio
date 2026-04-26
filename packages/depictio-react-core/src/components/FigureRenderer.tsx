@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Paper, Loader, Text, Stack } from '@mantine/core';
+import { Paper, Loader, Text, Stack, useMantineColorScheme } from '@mantine/core';
 import Plot from 'react-plotly.js';
 
 import { renderFigure, InteractiveFilter, StoredMetadata } from '../api';
@@ -24,12 +24,14 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
   const [figure, setFigure] = useState<{ data?: unknown[]; layout?: Record<string, unknown> } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const { colorScheme } = useMantineColorScheme();
+  const theme: 'light' | 'dark' = colorScheme === 'dark' ? 'dark' : 'light';
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
     setError(null);
-    renderFigure(dashboardId, metadata.index, filters)
+    renderFigure(dashboardId, metadata.index, filters, theme)
       .then((res) => {
         if (cancelled) return;
         setFigure(res.figure);
@@ -45,44 +47,57 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dashboardId, metadata.index, JSON.stringify(filters)]);
+  }, [dashboardId, metadata.index, JSON.stringify(filters), theme]);
 
   return (
-    <Paper p="sm" withBorder radius="md" style={{ minHeight: 320 }}>
+    <Paper
+      p="sm"
+      withBorder
+      radius="md"
+      style={{
+        flex: 1,
+        minHeight: 0,
+        height: '100%',
+        display: 'flex',
+        flexDirection: 'column',
+      }}
+    >
       {metadata.title && (
         <Text fw={600} size="sm" mb="xs">
           {metadata.title}
         </Text>
       )}
       {loading && (
-        <Stack align="center" justify="center" gap="xs" mih={250}>
+        <Stack align="center" justify="center" gap="xs" style={{ flex: 1 }}>
           <Loader size="sm" />
           <Text size="xs" c="dimmed">Rendering figure…</Text>
         </Stack>
       )}
       {error && !loading && (
-        <Stack mih={250} justify="center" align="center">
+        <Stack style={{ flex: 1 }} justify="center" align="center">
           <Text size="sm" c="red">Figure failed: {error}</Text>
         </Stack>
       )}
       {figure && !loading && !error && (
-        <Plot
-          data={(figure.data as any[]) || []}
-          layout={{
-            ...((figure.layout as Record<string, unknown>) || {}),
-            autosize: true,
-            margin: {
-              l: 50,
-              r: 20,
-              t: 30,
-              b: 50,
-              ...((figure.layout?.margin as Record<string, unknown>) || {}),
-            },
-          }}
-          config={{ displaylogo: false, responsive: true }}
-          style={{ width: '100%', height: 320 }}
-          useResizeHandler
-        />
+        <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
+          <Plot
+            data={(figure.data as any[]) || []}
+            layout={{
+              ...((figure.layout as Record<string, unknown>) || {}),
+              autosize: true,
+              margin: {
+                l: 50,
+                r: 20,
+                t: 30,
+                b: 50,
+                ...((figure.layout?.margin as Record<string, unknown>) || {}),
+              },
+            }}
+            config={{ displaylogo: false, responsive: true }}
+            style={{ width: '100%', height: '100%' }}
+            useResizeHandler
+          />
+        </div>
       )}
     </Paper>
   );

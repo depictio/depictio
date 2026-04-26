@@ -15,8 +15,11 @@ export interface CurrentUser {
   is_admin: boolean;
 }
 
+export type AuthMode = 'standard' | 'single_user' | 'unauthenticated';
+
 export interface UseCurrentUserResult {
   user: CurrentUser | null;
+  authMode: AuthMode;
   loading: boolean;
 }
 
@@ -38,6 +41,7 @@ function authHeaders(): Record<string, string> {
 
 export function useCurrentUser(): UseCurrentUserResult {
   const [user, setUser] = useState<CurrentUser | null>(null);
+  const [authMode, setAuthMode] = useState<AuthMode>('standard');
   const [loading, setLoading] = useState<boolean>(true);
 
   useEffect(() => {
@@ -52,17 +56,27 @@ export function useCurrentUser(): UseCurrentUserResult {
           }
           return;
         }
-        const data = (await res.json()) as {
-          id?: string;
-          email?: string;
-          is_admin?: boolean;
-        } | null;
+        // Backend now returns { auth_mode, user }. Older shape (just user) is
+        // tolerated for forward/backward compat during rollout.
+        const data = (await res.json()) as
+          | {
+              auth_mode?: AuthMode;
+              user?: { email?: string; is_admin?: boolean } | null;
+              email?: string;
+              is_admin?: boolean;
+            }
+          | null;
         if (cancelled) return;
-        if (!data || !data.email) {
-          setUser(null);
-        } else {
-          setUser({ email: data.email, is_admin: Boolean(data.is_admin) });
-        }
+        const mode: AuthMode = (data?.auth_mode as AuthMode) ?? 'standard';
+        const u =
+          data?.user ??
+          (data?.email ? { email: data.email, is_admin: data.is_admin } : null);
+        setAuthMode(mode);
+        setUser(
+          u && u.email
+            ? { email: u.email, is_admin: Boolean(u.is_admin) }
+            : null,
+        );
       } catch {
         if (!cancelled) setUser(null);
       } finally {
@@ -74,5 +88,5 @@ export function useCurrentUser(): UseCurrentUserResult {
     };
   }, []);
 
-  return { user, loading };
+  return { user, authMode, loading };
 }

@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Group } from '@mantine/core';
+import { ActionIcon, Group } from '@mantine/core';
+import { Icon } from '@iconify/react';
 
 import { StoredMetadata } from '../../api';
 import MetadataPopover from './MetadataPopover';
@@ -8,7 +9,7 @@ import DownloadButton from './DownloadButton';
 import ResetButton from './ResetButton';
 import './chrome.css';
 
-export type ChromeAction = 'metadata' | 'fullscreen' | 'download' | 'reset';
+export type ChromeAction = 'metadata' | 'fullscreen' | 'download' | 'reset' | 'drag';
 
 export interface ComponentChromeProps {
   metadata: StoredMetadata;
@@ -20,6 +21,16 @@ export interface ComponentChromeProps {
   agGridApiRef?: React.RefObject<{ exportDataAsCsv: () => void } | null>;
   /** Element to fullscreen — defaults to the chrome wrapper itself. */
   fullscreenRef?: React.RefObject<HTMLDivElement | null>;
+  /**
+   * Additional action-icon nodes appended after the standard actions in the
+   * chrome row. Editor uses this to inject the per-cell "..." edit menu so it
+   * lives in the same hover cluster (single z-index, no overlap with the
+   * input widget on interactive components).
+   */
+  extraActions?: React.ReactNode;
+  /** When true, render the drag-handle action (3×3 grip). The actual drag is
+   *  wired by react-grid-layout via `draggableHandle=".react-grid-dragHandle"`. */
+  showDragHandle?: boolean;
 }
 
 /** View-accessible action visibility per component type. Mirrors the
@@ -44,6 +55,20 @@ export function actionsFor(componentType: string): ChromeAction[] {
   }
 }
 
+/** Action-row orientation per component type. Mirrors `button_configs` in
+ *  `depictio/dash/layouts/edit.py:282-334` (figure/multiqc/map = vertical,
+ *  everything else horizontal). */
+export function orientationFor(componentType: string): 'horizontal' | 'vertical' {
+  switch (componentType) {
+    case 'figure':
+    case 'multiqc':
+    case 'map':
+      return 'vertical';
+    default:
+      return 'horizontal';
+  }
+}
+
 /**
  * Per-component action chrome. Renders the wrapped component as-is and adds a
  * floating, hover-revealed action-icon row at top-right. The chrome itself is
@@ -60,6 +85,8 @@ const ComponentChrome: React.FC<ComponentChromeProps> = ({
   children,
   agGridApiRef,
   fullscreenRef: externalFullscreenRef,
+  extraActions,
+  showDragHandle = false,
 }) => {
   const localFullscreenRef = useRef<HTMLDivElement | null>(null);
   const fullscreenRef = externalFullscreenRef ?? localFullscreenRef;
@@ -104,8 +131,62 @@ const ComponentChrome: React.FC<ComponentChromeProps> = ({
         (isFullscreenActive ? ' fullscreen-active' : '')
       }
     >
-      <Group gap={4} className="depictio-component-actions" wrap="nowrap">
-        {actions.map(renderAction)}
+      <Group
+        gap={4}
+        className={
+          'depictio-component-actions' +
+          (orientationFor(componentType) === 'vertical' ? ' depictio-actions-vertical' : '')
+        }
+        wrap="nowrap"
+      >
+        {/* Drag handle sits alongside the other action icons. drag is gated
+         * via `draggableHandle=".react-grid-dragHandle"` on the GridLayout;
+         * non-handle icons stop propagation to prevent accidental drag. */}
+        {showDragHandle && (
+          // Wrapped in a span so it sits as the same kind of flex child as
+          // the other action icons; the wrapper itself carries the
+          // `react-grid-dragHandle` class so a mousedown anywhere on it (or
+          // its descendants) is recognised by react-grid-layout's
+          // draggableHandle selector. NO stopPropagation here — drag MUST
+          // bubble up.
+          <span
+            className="react-grid-dragHandle depictio-drag-handle"
+            style={{ display: 'inline-flex', alignItems: 'center' }}
+          >
+            <ActionIcon
+              variant="light"
+              color="gray"
+              size="sm"
+              aria-label="Drag to move"
+              tabIndex={-1}
+            >
+              <Icon icon="mdi:dots-grid" width={16} height={16} />
+            </ActionIcon>
+          </span>
+        )}
+        {actions.map((a) => (
+          <span
+            key={a}
+            className="dgl-no-drag"
+            style={{ display: 'inline-flex', alignItems: 'center' }}
+            onMouseDown={(e) => e.stopPropagation()}
+            onTouchStart={(e) => e.stopPropagation()}
+            onPointerDown={(e) => e.stopPropagation()}
+          >
+            {renderAction(a)}
+          </span>
+        ))}
+        {extraActions && (
+          <span
+            className="dgl-no-drag"
+            style={{ display: 'inline-flex', alignItems: 'center' }}
+            onMouseDown={(e) => e.stopPropagation()}
+            onTouchStart={(e) => e.stopPropagation()}
+            onPointerDown={(e) => e.stopPropagation()}
+          >
+            {extraActions}
+          </span>
+        )}
       </Group>
       {children}
     </div>

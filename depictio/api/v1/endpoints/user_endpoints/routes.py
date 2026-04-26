@@ -341,38 +341,45 @@ async def get_current_user_info(current_user: User = Depends(get_current_user)) 
 @auth_endpoint_router.get("/me/optional", include_in_schema=True)
 async def get_current_user_info_optional(
     token: Annotated[str | None, Depends(oauth2_scheme_optional)] = None,
-) -> dict | None:
-    """Get current user identity for the React viewer (anonymous-tolerant).
+) -> dict:
+    """Get current user identity + server auth mode for the React viewer.
 
     Unlike ``/me``, this endpoint does NOT 401 when the Authorization header is
-    missing or invalid — it returns ``null`` instead. This lets the React viewer
-    render a profile badge (or fall back to anonymous mode) without having to
-    catch 401s.
+    missing or invalid. It always returns 200 with an ``auth_mode`` field so the
+    React UI can render the right profile badge variant ("Single user mode",
+    "Anonymous", or the actual user). The ``user`` field is ``null`` when no
+    valid token is supplied.
 
     Args:
         token: Optional JWT access token from the Authorization header.
 
     Returns:
-        Minimal user identity dict (``id``, ``email``, ``is_admin``) or ``None``
-        when the request is anonymous.
+        Dict with ``auth_mode`` ('single_user' | 'unauthenticated' | 'standard')
+        and ``user`` (minimal user identity or ``null``).
     """
-    if not token:
-        return None
+    auth_mode: str = "standard"
+    if settings.auth.is_single_user_mode:
+        auth_mode = "single_user"
+    elif getattr(settings.auth, "unauthenticated_mode", False):
+        auth_mode = "unauthenticated"
 
-    try:
-        user = await _async_fetch_user_from_token(token)
-    except Exception as exc:  # noqa: BLE001 - tolerate any auth failure
-        logger.debug(f"/me/optional: token resolution failed ({exc}); returning anonymous")
-        return None
+    user_payload: dict | None = None
+    if token:
+        try:
+            user = await _async_fetch_user_from_token(token)
+        except Exception as exc:  # noqa: BLE001 - tolerate any auth failure
+            logger.debug(
+                f"/me/optional: token resolution failed ({exc}); returning anonymous"
+            )
+            user = None
+        if user:
+            user_payload = {
+                "id": str(user.id),
+                "email": user.email,
+                "is_admin": getattr(user, "is_admin", False),
+            }
 
-    if not user:
-        return None
-
-    return {
-        "id": str(user.id),
-        "email": user.email,
-        "is_admin": getattr(user, "is_admin", False),
-    }
+    return {"auth_mode": auth_mode, "user": user_payload}
 
 
 @auth_endpoint_router.get("/get_anonymous_user_session", include_in_schema=True)

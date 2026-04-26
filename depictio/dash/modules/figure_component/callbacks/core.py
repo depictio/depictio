@@ -26,7 +26,7 @@ import dash
 import plotly.express as px
 import plotly.graph_objects as go
 from bson import ObjectId
-from dash import ALL, Input, Output, State, no_update
+from dash import ALL, Input, Output, State
 
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.deltatables_utils import load_deltatable_lite

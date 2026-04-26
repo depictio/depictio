@@ -53,10 +53,18 @@ const MultiSelectRenderer: React.FC<{
   const selected =
     (filters.find((f) => f.index === metadata.index)?.value as string[]) || [];
 
+  // Mirrors Dash DEFAULT_ICONS in interactive_component/utils.py:1622.
+  const defaultIcon =
+    metadata.interactive_component_type === 'SegmentedControl' ||
+    metadata.interactive_component_type === 'Switch'
+      ? 'mdi:toggle-switch'
+      : 'mdi:form-select';
+
   return (
     <DepictioMultiSelect
       title={metadata.title}
       column_name={metadata.column_name}
+      interactive_component_type={metadata.interactive_component_type}
       options={options}
       value={selected}
       placeholder={
@@ -64,8 +72,21 @@ const MultiSelectRenderer: React.FC<{
           ? 'Loading options…'
           : `Select ${metadata.column_name || 'values'}…`
       }
-      color={metadata.icon_color}
-      icon_name={metadata.icon_name}
+      color={
+        // Mirrors `kwargs.get("color") or kwargs.get("custom_color")` from
+        // depictio/dash/modules/interactive_component/utils.py:1612
+        ((metadata as Record<string, unknown>).color as string | undefined) ||
+        ((metadata as Record<string, unknown>).custom_color as string | undefined)
+      }
+      icon_name={metadata.icon_name || defaultIcon}
+      icon_color={metadata.icon_color}
+      title_color={metadata.title_color}
+      title_size={
+        ((metadata as Record<string, unknown>).title_size as
+          | 'xs' | 'sm' | 'md' | 'lg' | 'xl' | undefined) ||
+        metadata.title_font_size ||
+        'md'
+      }
       onChange={(next) =>
         onChange?.({
           index: metadata.index,

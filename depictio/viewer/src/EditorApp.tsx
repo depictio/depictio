@@ -32,13 +32,14 @@ import {
   Group,
   Text,
   Loader,
-  Title,
   Box,
   Paper,
   Stack,
-  SimpleGrid,
+  Title,
 } from '@mantine/core';
-import GridLayout, { Layout } from 'react-grid-layout';
+import { useDisclosure } from '@mantine/hooks';
+import { notifications } from '@mantine/notifications';
+import type { Layout } from 'react-grid-layout';
 import 'react-grid-layout/css/styles.css';
 import 'react-resizable/css/styles.css';
 
@@ -46,7 +47,7 @@ import {
   fetchDashboard,
   fetchAllDashboards,
   bulkComputeCards,
-  ComponentRenderer,
+  DashboardGrid,
 } from 'depictio-react-core';
 import type {
   DashboardData,
@@ -55,13 +56,34 @@ import type {
   StoredMetadata,
 } from 'depictio-react-core';
 
-import PanelSplitter from './components/PanelSplitter';
 import LeftFilterPanel from './components/LeftFilterPanel';
 import GridItemEditOverlay from './components/GridItemEditOverlay';
-import AddComponentButton from './components/AddComponentButton';
+import { Header, Sidebar, SettingsDrawer } from './chrome';
+import './chrome/chrome.css';
 
 const API_BASE = '/depictio/api/v1';
 const SAVE_DEBOUNCE_MS = 500;
+
+/**
+ * Dash app base — the component add/edit pages live in the Dash editor on a
+ * different port than the FastAPI-served React SPA. In dev: 5122 (Dash) vs
+ * 8122 (FastAPI). In production both are typically behind one reverse proxy
+ * and same-origin routing works; in that case the env var is empty and we
+ * fall back to the current origin.
+ */
+function dashOrigin(): string {
+  const env = (import.meta as unknown as { env?: Record<string, string> }).env;
+  if (env?.VITE_DASH_ORIGIN) return env.VITE_DASH_ORIGIN.replace(/\/$/, '');
+  // Dev convention: same hostname, port 5122.
+  if (
+    typeof window !== 'undefined' &&
+    window.location.hostname &&
+    window.location.port === '8122'
+  ) {
+    return `${window.location.protocol}//${window.location.hostname}:5122`;
+  }
+  return '';
+}
 
 /** Local helper — uses the same auth pattern as `depictio-react-core/api.ts`. */
 function authHeaders(): Record<string, string> {
@@ -101,13 +123,16 @@ type SaveStatus = 'idle' | 'saving' | 'saved' | 'error';
 
 const EditorApp: React.FC = () => {
   const [dashboard, setDashboard] = useState<DashboardData | null>(null);
-  const [, setAllDashboards] = useState<DashboardSummary[]>([]);
+  const [allDashboards, setAllDashboards] = useState<DashboardSummary[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState<InteractiveFilter[]>([]);
   const [cardValues, setCardValues] = useState<Record<string, unknown>>({});
   const [cardsLoading, setCardsLoading] = useState(false);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
+  const [mobileOpened, { toggle: toggleMobile }] = useDisclosure(false);
+  const [desktopOpened, { toggle: toggleDesktop }] = useDisclosure(false);
+  const [settingsOpened, { open: openSettings, close: closeSettings }] = useDisclosure(false);
 
   const dashboardId = extractDashboardId();
   const bulkCtrl = useRef<AbortController | null>(null);
@@ -117,6 +142,15 @@ const EditorApp: React.FC = () => {
   useEffect(() => {
     dashboardRef.current = dashboard;
   }, [dashboard]);
+
+  // Keep the browser tab title in sync with the dashboard name.
+  useEffect(() => {
+    if (dashboard?.title) {
+      document.title = `Depictio — ${dashboard.title}`;
+    } else if (dashboardId) {
+      document.title = `Depictio — ${dashboardId}`;
+    }
+  }, [dashboard?.title, dashboardId]);
 
   // Fetch dashboard + tab list
   useEffect(() => {
@@ -146,6 +180,10 @@ const EditorApp: React.FC = () => {
 
     const timer = setTimeout(() => {
       setCardsLoading(true);
+      // Reset card values so each card shows its individual loader while the
+      // bulk-compute round-trip is in flight (instead of keeping stale values
+      // visible until the response).
+      setCardValues({});
       if (bulkCtrl.current) bulkCtrl.current.abort();
       bulkCtrl.current = new AbortController();
       bulkComputeCards(dashboardId, filters, cardIds)
@@ -255,6 +293,108 @@ const EditorApp: React.FC = () => {
     [dashboardId],
   );
 
+  /**
+   * Duplicate: deep-clone the source component's stored_metadata entry, give
+   * it a fresh UUID, and stack a layout entry directly below the source in
+   * whichever panel (left/right) the source lives in. POSTs the full
+   * DashboardData and re-fetches on success — same pattern as delete.
+   */
+  const handleDuplicateComponent = useCallback(
+    async (componentId: string) => {
+      if (!dashboardId) return;
+      const cur = dashboardRef.current;
+      if (!cur) return;
+      const source = (cur.stored_metadata || []).find(
+        (m) => m.index === componentId,
+      );
+      if (!source) {
+        console.warn(
+          '[EditorApp] duplicate: source metadata not found for',
+          componentId,
+        );
+        return;
+      }
+
+      const newId =
+        typeof crypto !== 'undefined' &&
+        typeof crypto.randomUUID === 'function'
+          ? crypto.randomUUID()
+          : fallbackUuid();
+
+      // Deep-clone via structuredClone with a JSON fallback for older runtimes.
+      const cloned: StoredMetadata = (typeof structuredClone === 'function'
+        ? structuredClone(source)
+        : (JSON.parse(JSON.stringify(source)) as StoredMetadata)) as StoredMetadata;
+      (cloned as { index: string }).index = newId;
+      // Append " (copy)" to title if present, but don't fail on unusual shapes.
+      const maybeTitled = cloned as unknown as { title?: unknown };
+      if (typeof maybeTitled.title === 'string' && maybeTitled.title.length) {
+        maybeTitled.title = `${maybeTitled.title} (copy)`;
+      }
+
+      // Decide which panel the source lives in by scanning layouts for
+      // either `box-${id}` or the bare id (matching stripBoxPrefix logic).
+      const inLeft = layoutContains(cur.left_panel_layout_data, componentId);
+      const inRight = layoutContains(cur.right_panel_layout_data, componentId);
+      // Default fallback: interactive components → left, everything else → right.
+      const targetPanel: 'left' | 'right' = inLeft
+        ? 'left'
+        : inRight
+        ? 'right'
+        : source.component_type === 'interactive'
+        ? 'left'
+        : 'right';
+
+      const sourceLayoutEntry =
+        targetPanel === 'left'
+          ? findLayoutEntry(cur.left_panel_layout_data, componentId)
+          : findLayoutEntry(cur.right_panel_layout_data, componentId);
+
+      // Stack immediately below the source. compactType="vertical" downstream
+      // will resolve any overlap.
+      const newLayoutEntry: Layout = {
+        i: `box-${newId}`,
+        x: sourceLayoutEntry?.x ?? 0,
+        y:
+          (sourceLayoutEntry?.y ?? 0) +
+          (sourceLayoutEntry?.h ?? (targetPanel === 'left' ? 2 : 4)),
+        w: sourceLayoutEntry?.w ?? (targetPanel === 'left' ? 1 : 6),
+        h: sourceLayoutEntry?.h ?? (targetPanel === 'left' ? 2 : 4),
+      };
+
+      const next: DashboardData = {
+        ...cur,
+        stored_metadata: [...(cur.stored_metadata || []), cloned],
+        left_panel_layout_data:
+          targetPanel === 'left'
+            ? appendToLayout(cur.left_panel_layout_data, newLayoutEntry)
+            : cur.left_panel_layout_data,
+        right_panel_layout_data:
+          targetPanel === 'right'
+            ? appendToLayout(cur.right_panel_layout_data, newLayoutEntry)
+            : cur.right_panel_layout_data,
+      };
+
+      // Cancel any pending debounced save — we're saving NOW.
+      if (saveTimer.current) {
+        clearTimeout(saveTimer.current);
+        saveTimer.current = null;
+      }
+      setDashboard(next);
+      setSaveStatus('saving');
+      try {
+        await saveDashboard(dashboardId, next);
+        const fresh = await fetchDashboard(dashboardId);
+        setDashboard(fresh);
+        setSaveStatus('saved');
+      } catch (err) {
+        console.error('[EditorApp] duplicate failed:', err);
+        setSaveStatus('error');
+      }
+    },
+    [dashboardId],
+  );
+
   const interactiveComponents = useMemo(
     () =>
       (dashboard?.stored_metadata || []).filter(
@@ -278,18 +418,132 @@ const EditorApp: React.FC = () => {
     [dashboard],
   );
 
+  // Tab family: parent dashboard + its child tabs (mirrors App.tsx).
+  const tabSiblings = useMemo(() => {
+    if (!dashboard || !allDashboards.length) return [] as DashboardSummary[];
+    const dashId = String(
+      dashboard.dashboard_id || dashboard._id || dashboardId || '',
+    );
+    const current = allDashboards.find((d) => d.dashboard_id === dashId);
+    const parentId = current?.parent_dashboard_id || dashId;
+    const family = allDashboards.filter(
+      (d) => d.dashboard_id === parentId || d.parent_dashboard_id === parentId,
+    );
+    return family.sort((a, b) => {
+      // Mirrors depictio/dash/layouts/tab_callbacks.py: parent (tab_order=0) first,
+      // then children sorted by tab_order. Title is a stable tiebreaker.
+      const ao = a.tab_order ?? (a.parent_dashboard_id ? 1 : 0);
+      const bo = b.tab_order ?? (b.parent_dashboard_id ? 1 : 0);
+      if (ao !== bo) return ao - bo;
+      return (a.title || '').localeCompare(b.title || '');
+    });
+  }, [dashboard, allDashboards, dashboardId]);
+
+  const activeTab = useMemo(
+    () => tabSiblings.find((d) => d.dashboard_id === dashboardId) || null,
+    [tabSiblings, dashboardId],
+  );
+  const parentTab = useMemo(
+    () => tabSiblings.find((d) => !d.parent_dashboard_id) || null,
+    [tabSiblings],
+  );
+
+  const handleResetAllFilters = useCallback(() => setFilters([]), []);
+
+  const handleAddComponent = useCallback(() => {
+    if (!dashboardId) return;
+    const newId =
+      typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+        ? crypto.randomUUID()
+        : fallbackUuid();
+    window.location.assign(
+      `${dashOrigin()}/dashboard-edit/${dashboardId}/component/add/${newId}`,
+    );
+  }, [dashboardId]);
+
+  /** Force-save: cancel any pending debounce and POST current state now.
+   *  Mirrors depictio/dash/layouts/save.py:save_dashboard_minimal — uses
+   *  Mantine notifications for success/failure feedback (no persistent header
+   *  text). */
+  const handleForceSave = useCallback(async () => {
+    if (!dashboardId) return;
+    const cur = dashboardRef.current;
+    if (!cur) return;
+    if (saveTimer.current) {
+      clearTimeout(saveTimer.current);
+      saveTimer.current = null;
+    }
+    setSaveStatus('saving');
+    const notifId = notifications.show({
+      loading: true,
+      title: 'Saving dashboard…',
+      message: '',
+      autoClose: false,
+      withCloseButton: false,
+    });
+    try {
+      await saveDashboard(dashboardId, cur);
+      setSaveStatus('saved');
+      notifications.update({
+        id: notifId,
+        loading: false,
+        color: 'teal',
+        title: 'Dashboard saved',
+        message: '',
+        icon: null,
+        autoClose: 2000,
+        withCloseButton: true,
+      });
+    } catch (err) {
+      console.error('[EditorApp] force-save failed:', err);
+      setSaveStatus('error');
+      notifications.update({
+        id: notifId,
+        loading: false,
+        color: 'red',
+        title: 'Save failed',
+        message: err instanceof Error ? err.message : String(err),
+        icon: null,
+        autoClose: 4000,
+        withCloseButton: true,
+      });
+    }
+  }, [dashboardId]);
+
   return (
-    <AppShell header={{ height: 65 }} padding={0}>
+    <AppShell
+      header={{ height: 50 }}
+      navbar={{
+        width: 250,
+        breakpoint: 'sm',
+        collapsed: { mobile: !mobileOpened, desktop: !desktopOpened },
+      }}
+      padding={0}
+    >
       <AppShell.Header>
-        <EditorHeader
+        <Header
           dashboardId={dashboardId}
           dashboard={dashboard}
-          saveStatus={saveStatus}
+          activeTab={activeTab}
+          parentTab={parentTab}
+          mobileOpened={mobileOpened}
+          desktopOpened={desktopOpened}
+          onToggleMobile={toggleMobile}
+          onToggleDesktop={toggleDesktop}
+          onReset={handleResetAllFilters}
+          onOpenSettings={openSettings}
           cardsLoading={cardsLoading}
+          mode="edit"
+          onAddComponent={handleAddComponent}
+          onSave={handleForceSave}
         />
       </AppShell.Header>
 
-      <AppShell.Main style={{ height: 'calc(100vh - 65px)' }}>
+      <AppShell.Navbar p="md">
+        <Sidebar tabs={tabSiblings} activeId={dashboardId} />
+      </AppShell.Navbar>
+
+      <AppShell.Main style={{ height: 'calc(100vh - 50px)' }}>
         {loading && (
           <Group p="lg">
             <Loader size="sm" />
@@ -302,117 +556,78 @@ const EditorApp: React.FC = () => {
           </Text>
         )}
         {dashboard && !loading && !error && (
-          <PanelSplitter
-            left={
-              <Box p="md" style={{ height: '100%' }}>
-                <LeftFilterPanel
-                  dashboardId={dashboardId!}
-                  interactiveComponents={interactiveComponents}
-                  layoutData={dashboard.left_panel_layout_data}
-                  filters={filters}
-                  onFilterChange={handleFilterChange}
-                  onLeftLayoutChange={handleLeftLayoutChange}
-                  editMode={true}
-                  onDeleteComponent={handleDeleteComponent}
-                />
-              </Box>
-            }
-            right={
-              <Box p="md" style={{ height: '100%' }}>
-                <RightComponentGrid
-                  dashboardId={dashboardId!}
-                  cardComponents={cardComponents}
-                  otherComponents={otherComponents}
-                  layoutData={dashboard.right_panel_layout_data}
-                  filters={filters}
-                  cardValues={cardValues}
-                  cardsLoading={cardsLoading}
-                  onLayoutChange={handleRightLayoutChange}
-                  onDeleteComponent={handleDeleteComponent}
-                />
-              </Box>
-            }
-          />
+          <div
+            style={{
+              display: 'grid',
+              // 20vw / remainder. Using viewport units (vs. % of main) so the
+              // left panel keeps a fixed visual width regardless of any chrome
+              // that might shrink "main". User asked for ~1/5 left, 4/5 right.
+              gridTemplateColumns: '20vw 1fr',
+              height: '100%',
+              width: '100%',
+              gap: 4,
+              overflow: 'hidden',
+            }}
+          >
+            <Box
+              px={4}
+              py={4}
+              style={{
+                height: '100%',
+                minWidth: 0,
+                overflowY: 'auto',
+                overflowX: 'hidden',
+              }}
+            >
+              <LeftFilterPanel
+                dashboardId={dashboardId!}
+                interactiveComponents={interactiveComponents}
+                layoutData={dashboard.left_panel_layout_data}
+                filters={filters}
+                onFilterChange={handleFilterChange}
+                onLeftLayoutChange={handleLeftLayoutChange}
+                editMode={true}
+                onDeleteComponent={handleDeleteComponent}
+                onDuplicateComponent={handleDuplicateComponent}
+              />
+            </Box>
+            <Box
+              px={4}
+              py={4}
+              style={{
+                height: '100%',
+                minWidth: 0,
+                overflowY: 'auto',
+                overflowX: 'hidden',
+              }}
+            >
+              <RightComponentGrid
+                dashboardId={dashboardId!}
+                cardComponents={cardComponents}
+                otherComponents={otherComponents}
+                layoutData={dashboard.right_panel_layout_data}
+                filters={filters}
+                cardValues={cardValues}
+                cardsLoading={cardsLoading}
+                onLayoutChange={handleRightLayoutChange}
+                onDeleteComponent={handleDeleteComponent}
+                onDuplicateComponent={handleDuplicateComponent}
+              />
+            </Box>
+          </div>
         )}
       </AppShell.Main>
+
+      <SettingsDrawer
+        opened={settingsOpened}
+        onClose={closeSettings}
+        dashboard={dashboard}
+      />
     </AppShell>
   );
 };
 
 export default EditorApp;
-
-// ---------------------------------------------------------------------------
-// Header
-// ---------------------------------------------------------------------------
-
-interface EditorHeaderProps {
-  dashboardId: string | null;
-  dashboard: DashboardData | null;
-  saveStatus: SaveStatus;
-  cardsLoading: boolean;
-}
-
-const EditorHeader: React.FC<EditorHeaderProps> = ({
-  dashboardId,
-  dashboard,
-  saveStatus,
-  cardsLoading,
-}) => {
-  const title = dashboard?.title || dashboardId || 'Dashboard';
-  return (
-    <Group h="100%" px="md" justify="space-between" wrap="nowrap">
-      <Group gap="sm" wrap="nowrap" style={{ minWidth: 0 }}>
-        <Title
-          order={3}
-          style={{
-            whiteSpace: 'nowrap',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            minWidth: 0,
-          }}
-        >
-          {title}
-        </Title>
-        <Text size="xs" c="dimmed">
-          (editor)
-        </Text>
-        {cardsLoading && <Loader size="xs" />}
-      </Group>
-      <Group gap={8} wrap="nowrap" style={{ flexShrink: 0 }}>
-        <SaveIndicator status={saveStatus} />
-        {dashboardId && <AddComponentButton dashboardId={dashboardId} />}
-      </Group>
-    </Group>
-  );
-};
-
-const SaveIndicator: React.FC<{ status: SaveStatus }> = ({ status }) => {
-  if (status === 'saving') {
-    return (
-      <Group gap={6}>
-        <Loader size="xs" />
-        <Text size="xs" c="dimmed">
-          Saving…
-        </Text>
-      </Group>
-    );
-  }
-  if (status === 'saved') {
-    return (
-      <Text size="xs" c="green">
-        Saved
-      </Text>
-    );
-  }
-  if (status === 'error') {
-    return (
-      <Text size="xs" c="red">
-        Save failed
-      </Text>
-    );
-  }
-  return null;
-};
 
 // ---------------------------------------------------------------------------
 // Right grid
@@ -428,17 +643,16 @@ interface RightComponentGridProps {
   cardsLoading: boolean;
   onLayoutChange: (newLayout: Layout[]) => void;
   onDeleteComponent: (componentId: string) => void;
+  onDuplicateComponent: (componentId: string) => void;
 }
 
 /**
- * The right pane is rendered as a draggable + resizable react-grid-layout.
- * `DashboardGrid` from the shared core hardcodes draggable/resizable=false,
- * so we render `GridLayout` directly here for the editor.
- *
- * Cards are pinned to the top of the grid (auto-flow as 4×3 cells); other
- * components below at 6×4 — same fallback policy as DashboardGrid's
- * `normalizeLayout`. Once `stored_layout_data`/right_panel_layout_data is
- * populated, that takes precedence.
+ * The right pane in the editor: a single draggable + resizable grid that
+ * holds every right-panel component (cards + figures + tables + ...). All
+ * items live in `right_panel_layout_data` so they can be rearranged together.
+ * Rendered via the shared `DashboardGrid` with `isDraggable` / `isResizable` /
+ * `editMode` enabled and a `renderItemOverlay` callback that injects the
+ * per-cell edit menu.
  */
 const RightComponentGrid: React.FC<RightComponentGridProps> = ({
   dashboardId,
@@ -450,14 +664,11 @@ const RightComponentGrid: React.FC<RightComponentGridProps> = ({
   cardsLoading,
   onLayoutChange,
   onDeleteComponent,
+  onDuplicateComponent,
 }) => {
   const allComponents = useMemo(
     () => [...cardComponents, ...otherComponents],
     [cardComponents, otherComponents],
-  );
-  const layout = useMemo(
-    () => normalizeRightLayout(allComponents, layoutData),
-    [allComponents, layoutData],
   );
 
   // Empty-state fallback so users see SOMETHING before any layout is saved.
@@ -475,75 +686,28 @@ const RightComponentGrid: React.FC<RightComponentGridProps> = ({
     );
   }
 
-  // Use the parent box width for the grid; fall back to a sensible default.
-  const containerWidth =
-    typeof window !== 'undefined'
-      ? Math.max(640, Math.floor(window.innerWidth * 0.7) - 32)
-      : 1000;
-
   return (
-    <>
-      {cardComponents.length > 0 && (
-        <SimpleGrid
-          cols={{ base: 1, xs: 2, md: Math.min(cardComponents.length, 4) }}
-          spacing="md"
-          mb="md"
-        >
-          {cardComponents.map((m) => (
-            <Box key={m.index} style={{ position: 'relative' }}>
-              <GridItemEditOverlay
-                dashboardId={dashboardId}
-                componentId={m.index}
-                editMode={true}
-                onDelete={onDeleteComponent}
-              />
-              <ComponentRenderer
-                metadata={m}
-                filters={filters}
-                cardValue={cardValues?.[m.index]}
-                cardLoading={cardsLoading}
-              />
-            </Box>
-          ))}
-        </SimpleGrid>
+    <DashboardGrid
+      dashboardId={dashboardId}
+      metadataList={allComponents}
+      layoutData={layoutData}
+      filters={filters}
+      cardValues={cardValues}
+      cardValuesLoading={cardsLoading}
+      isDraggable={true}
+      isResizable={true}
+      editMode={true}
+      onLayoutChange={onLayoutChange}
+      renderItemOverlay={(componentId) => (
+        <GridItemEditOverlay
+          dashboardId={dashboardId}
+          componentId={componentId}
+          editMode={true}
+          onDelete={onDeleteComponent}
+          onDuplicate={onDuplicateComponent}
+        />
       )}
-      {otherComponents.length > 0 && (
-        <GridLayout
-          className="layout right-component-grid"
-          layout={layout.filter((l) =>
-            otherComponents.some((c) => c.index === l.i),
-          )}
-          cols={12}
-          rowHeight={50}
-          width={containerWidth}
-          margin={[12, 12]}
-          containerPadding={[0, 0]}
-          isDraggable={true}
-          isResizable={true}
-          compactType="vertical"
-          onLayoutChange={(next) => onLayoutChange(next)}
-        >
-          {otherComponents.map((m) => (
-            <div
-              key={m.index}
-              style={{ position: 'relative', overflow: 'hidden' }}
-            >
-              <GridItemEditOverlay
-                dashboardId={dashboardId}
-                componentId={m.index}
-                editMode={true}
-                onDelete={onDeleteComponent}
-              />
-              <ComponentRenderer
-                metadata={m}
-                filters={filters}
-                dashboardId={dashboardId}
-              />
-            </div>
-          ))}
-        </GridLayout>
-      )}
-    </>
+    />
   );
 };
 
@@ -553,7 +717,7 @@ const RightComponentGrid: React.FC<RightComponentGridProps> = ({
 
 function extractDashboardId(): string | null {
   const path = window.location.pathname;
-  const match = path.match(/\/dashboard-beta\/([^/?#]+)/);
+  const match = path.match(/\/dashboard-beta-edit\/([^/?#]+)/);
   return match?.[1] || null;
 }
 
@@ -564,51 +728,6 @@ function stableFilterKey(filters: InteractiveFilter[]): string {
 
 function stripBoxPrefix(id: string): string {
   return id.startsWith('box-') ? id.slice(4) : id;
-}
-
-function normalizeRightLayout(
-  components: StoredMetadata[],
-  layoutData: unknown,
-): Layout[] {
-  const items = extractLayoutItems(layoutData);
-  const indexSet = new Set(components.map((c) => c.index));
-  const matched = items
-    .map((it) => ({ ...it, i: stripBoxPrefix(it.i) }))
-    .filter((it) => indexSet.has(it.i));
-  const seen = new Set(matched.map((it) => it.i));
-  const fallback = components
-    .filter((c) => !seen.has(c.index))
-    .map((c, idx) => ({
-      i: c.index,
-      x: (idx % 2) * 6,
-      y: 1000 + Math.floor(idx / 2) * 4,
-      w: 6,
-      h: 4,
-    }));
-  return [...matched, ...fallback];
-}
-
-function extractLayoutItems(layoutData: unknown): Layout[] {
-  if (!layoutData) return [];
-  if (Array.isArray(layoutData)) {
-    return layoutData.filter(
-      (i): i is Layout =>
-        Boolean(i) && typeof i === 'object' && 'i' in i && 'x' in i && 'y' in i,
-    );
-  }
-  if (typeof layoutData === 'object') {
-    const obj = layoutData as Record<string, unknown>;
-    const candidateKey =
-      'lg' in obj
-        ? 'lg'
-        : Object.keys(obj).find((k) => Array.isArray(obj[k])) || '';
-    if (candidateKey && Array.isArray(obj[candidateKey])) {
-      return (obj[candidateKey] as Layout[]).filter(
-        (i) => Boolean(i) && typeof i === 'object' && 'i' in i,
-      );
-    }
-  }
-  return [];
 }
 
 /** Strip a single component id from a layout array (or breakpoint dict). */
@@ -653,4 +772,72 @@ function layoutsEqual(a: unknown, b: unknown): boolean {
   } catch {
     return false;
   }
+}
+
+/** RFC4122-ish v4 UUID for runtimes lacking crypto.randomUUID. */
+function fallbackUuid(): string {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === 'x' ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
+
+/** Yield each layout entry from either an array or breakpoint-keyed dict. */
+function eachLayoutEntry(layoutData: unknown): Layout[] {
+  if (!layoutData) return [];
+  if (Array.isArray(layoutData)) {
+    return layoutData.filter(
+      (it): it is Layout =>
+        Boolean(it) && typeof it === 'object' && 'i' in it,
+    );
+  }
+  if (typeof layoutData === 'object') {
+    const obj = layoutData as Record<string, unknown>;
+    const out: Layout[] = [];
+    for (const v of Object.values(obj)) {
+      if (Array.isArray(v)) {
+        for (const it of v) {
+          if (it && typeof it === 'object' && 'i' in it) out.push(it as Layout);
+        }
+      }
+    }
+    return out;
+  }
+  return [];
+}
+
+function layoutContains(layoutData: unknown, componentId: string): boolean {
+  return eachLayoutEntry(layoutData).some(
+    (it) => stripBoxPrefix(String(it.i)) === componentId,
+  );
+}
+
+function findLayoutEntry(
+  layoutData: unknown,
+  componentId: string,
+): Layout | undefined {
+  return eachLayoutEntry(layoutData).find(
+    (it) => stripBoxPrefix(String(it.i)) === componentId,
+  );
+}
+
+/**
+ * Append a new layout entry to either an array layout or each breakpoint of a
+ * dict layout. Preserves the original container shape so downstream code keeps
+ * working without a normalization step.
+ */
+function appendToLayout(layoutData: unknown, entry: Layout): unknown {
+  if (!layoutData || Array.isArray(layoutData)) {
+    return [...((layoutData as Layout[] | null) || []), entry];
+  }
+  if (typeof layoutData === 'object') {
+    const obj = layoutData as Record<string, unknown>;
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(obj)) {
+      out[k] = Array.isArray(v) ? [...(v as Layout[]), entry] : v;
+    }
+    return out;
+  }
+  return [entry];
 }

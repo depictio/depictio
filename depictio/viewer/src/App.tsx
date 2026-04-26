@@ -7,10 +7,8 @@ import {
   Anchor,
   Stack,
   Title,
-  Grid,
   Paper,
-  SimpleGrid,
-  Divider,
+  Box,
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 
@@ -19,6 +17,7 @@ import {
   fetchAllDashboards,
   bulkComputeCards,
   ComponentRenderer,
+  DashboardGrid,
 } from 'depictio-react-core';
 import type {
   DashboardData,
@@ -50,12 +49,21 @@ const App: React.FC = () => {
   const [filters, setFilters] = useState<InteractiveFilter[]>([]);
   const [cardValues, setCardValues] = useState<Record<string, unknown>>({});
   const [cardsLoading, setCardsLoading] = useState(false);
-  const [mobileOpened, { toggle: toggleMobile }] = useDisclosure();
-  const [desktopOpened, { toggle: toggleDesktop }] = useDisclosure(true);
+  const [mobileOpened, { toggle: toggleMobile }] = useDisclosure(false);
+  const [desktopOpened, { toggle: toggleDesktop }] = useDisclosure(false);
   const [settingsOpened, { open: openSettings, close: closeSettings }] = useDisclosure(false);
 
   const dashboardId = extractDashboardId();
   const bulkCtrl = useRef<AbortController | null>(null);
+
+  // Keep the browser tab title in sync with the dashboard name.
+  useEffect(() => {
+    if (dashboard?.title) {
+      document.title = `Depictio — ${dashboard.title}`;
+    } else if (dashboardId) {
+      document.title = `Depictio — ${dashboardId}`;
+    }
+  }, [dashboard?.title, dashboardId]);
 
   // Fetch dashboard + tab list in parallel
   useEffect(() => {
@@ -85,6 +93,9 @@ const App: React.FC = () => {
 
     const timer = setTimeout(() => {
       setCardsLoading(true);
+      // Reset card values so each card shows its individual loader while the
+      // bulk-compute round-trip is in flight.
+      setCardValues({});
       if (bulkCtrl.current) bulkCtrl.current.abort();
       bulkCtrl.current = new AbortController();
       bulkComputeCards(dashboardId, filters, cardIds)
@@ -151,15 +162,23 @@ const App: React.FC = () => {
     [dashboard],
   );
 
+  // View mode uses the SAME DashboardGrid + saved-layout source as the editor;
+  // only `editMode`/`isDraggable`/`isResizable` differ. Identical visual output
+  // for any given dashboard, regardless of which URL the user lands on.
+  const rightComponents = useMemo(
+    () => [...cardComponents, ...otherComponents],
+    [cardComponents, otherComponents],
+  );
+
   return (
     <AppShell
-      header={{ height: 65 }}
+      header={{ height: 50 }}
       navbar={{
         width: 250,
         breakpoint: 'sm',
         collapsed: { mobile: !mobileOpened, desktop: !desktopOpened },
       }}
-      padding="md"
+      padding={0}
     >
       <AppShell.Header>
         <Header
@@ -181,7 +200,7 @@ const App: React.FC = () => {
         <Sidebar tabs={tabSiblings} activeId={dashboardId} />
       </AppShell.Navbar>
 
-      <AppShell.Main>
+      <AppShell.Main style={{ height: 'calc(100vh - 50px)' }}>
         {loading && (
           <Group p="lg">
             <Loader size="sm" />
@@ -190,9 +209,26 @@ const App: React.FC = () => {
         )}
         {error && <Text c="red" p="lg">{error}</Text>}
         {dashboard && !loading && !error && (
-          <Grid gutter="md">
-            {/* LEFT 1/3 — interactive components stacked */}
-            <Grid.Col span={{ base: 12, md: 4 }}>
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: '20vw 1fr',
+              height: '100%',
+              width: '100%',
+              gap: 4,
+              overflow: 'hidden',
+            }}
+          >
+            <Box
+              px={4}
+              py={4}
+              style={{
+                height: '100%',
+                minWidth: 0,
+                overflowY: 'auto',
+                overflowX: 'hidden',
+              }}
+            >
               <Paper p="md" withBorder radius="md" style={{ height: '100%' }}>
                 <Title order={5} mb="sm">
                   Filters
@@ -221,46 +257,30 @@ const App: React.FC = () => {
                   )}
                 </Stack>
               </Paper>
-            </Grid.Col>
-
-            {/* RIGHT 2/3 — cards row + other components */}
-            <Grid.Col span={{ base: 12, md: 8 }}>
-              <Stack gap="md">
-                {cardComponents.length > 0 && (
-                  <SimpleGrid
-                    cols={{ base: 1, xs: 2, md: cardComponents.length }}
-                    spacing="md"
-                  >
-                    {cardComponents.map((m) => (
-                      <ComponentRenderer
-                        key={m.index}
-                        metadata={m}
-                        filters={filters}
-                        cardValue={cardValues?.[m.index]}
-                        cardLoading={cardsLoading}
-                      />
-                    ))}
-                  </SimpleGrid>
-                )}
-
-                {otherComponents.length > 0 && (
-                  <>
-                    {cardComponents.length > 0 && <Divider />}
-                    <Stack gap="md">
-                      {otherComponents.map((m) => (
-                        <ComponentRenderer
-                          key={m.index}
-                          metadata={m}
-                          filters={filters}
-                          dashboardId={dashboardId!}
-                        />
-                      ))}
-                    </Stack>
-                  </>
-                )}
-              </Stack>
-            </Grid.Col>
-          </Grid>
+            </Box>
+            <Box
+              px={4}
+              py={4}
+              style={{
+                height: '100%',
+                minWidth: 0,
+                overflowY: 'auto',
+                overflowX: 'hidden',
+              }}
+            >
+              <DashboardGrid
+                dashboardId={dashboardId!}
+                metadataList={rightComponents}
+                layoutData={dashboard.right_panel_layout_data}
+                filters={filters}
+                cardValues={cardValues}
+                cardValuesLoading={cardsLoading}
+                isDraggable={false}
+                isResizable={false}
+                editMode={false}
+              />
+            </Box>
+          </div>
         )}
       </AppShell.Main>
 

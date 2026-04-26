@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Paper, Loader, Text, Stack } from '@mantine/core';
+import { Paper, Loader, Text, Stack, useMantineColorScheme } from '@mantine/core';
 import Plot from 'react-plotly.js';
 
 import { renderMultiQC, InteractiveFilter, StoredMetadata } from '../../api';
@@ -32,12 +32,14 @@ const MultiQCFigure: React.FC<MultiQCFigureProps> = ({
   >(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const { colorScheme } = useMantineColorScheme();
+  const theme: 'light' | 'dark' = colorScheme === 'dark' ? 'dark' : 'light';
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
     setError(null);
-    renderMultiQC(dashboardId, metadata.index, filters)
+    renderMultiQC(dashboardId, metadata.index, filters, theme)
       .then((res) => {
         if (cancelled) return;
         setFigure(res.figure);
@@ -53,7 +55,7 @@ const MultiQCFigure: React.FC<MultiQCFigureProps> = ({
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dashboardId, metadata.index, JSON.stringify(filters)]);
+  }, [dashboardId, metadata.index, JSON.stringify(filters), theme]);
 
   const titleText =
     (metadata.title as string | undefined) ||
@@ -62,25 +64,37 @@ const MultiQCFigure: React.FC<MultiQCFigureProps> = ({
       .join(' / ');
 
   return (
-    <Paper p="sm" withBorder radius="md" style={{ minHeight: 320, position: 'relative' }}>
+    <Paper
+      p="sm"
+      withBorder
+      radius="md"
+      style={{
+        flex: 1,
+        minHeight: 0,
+        height: '100%',
+        display: 'flex',
+        flexDirection: 'column',
+        position: 'relative',
+      }}
+    >
       {titleText && (
         <Text fw={600} size="sm" mb="xs">
           {titleText}
         </Text>
       )}
       {loading && (
-        <Stack align="center" justify="center" gap="xs" mih={250}>
+        <Stack align="center" justify="center" gap="xs" style={{ flex: 1 }}>
           <Loader size="sm" />
           <Text size="xs" c="dimmed">Rendering MultiQC plot…</Text>
         </Stack>
       )}
       {error && !loading && (
-        <Stack mih={250} justify="center" align="center">
+        <Stack style={{ flex: 1 }} justify="center" align="center">
           <Text size="sm" c="red" className="dashboard-error">MultiQC failed: {error}</Text>
         </Stack>
       )}
       {figure && !loading && !error && (
-        <>
+        <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
           <Plot
             data={(figure.data as any[]) || []}
             layout={{
@@ -95,25 +109,31 @@ const MultiQCFigure: React.FC<MultiQCFigureProps> = ({
               },
             }}
             config={{ displaylogo: false, responsive: true }}
-            style={{ width: '100%', height: 320 }}
+            style={{ width: '100%', height: '100%' }}
             useResizeHandler
           />
-          <img
-            src="/assets/images/logos/multiqc.png"
-            alt="MultiQC"
+          {/* MultiQC overlay badge — text-only since the SPA's FastAPI mount
+            doesn't serve the Dash assets dir. Cheap, theme-aware, no 404. */}
+          <span
             title="Generated with MultiQC"
             style={{
               position: 'absolute',
-              top: 10,
-              right: 10,
-              width: 36,
-              height: 36,
-              opacity: 0.6,
+              top: 8,
+              right: 8,
+              fontSize: 10,
+              fontWeight: 700,
+              letterSpacing: 0.5,
+              padding: '2px 6px',
+              borderRadius: 4,
+              background: 'rgba(0,0,0,0.06)',
+              color: 'var(--mantine-color-dimmed)',
               pointerEvents: 'none',
               zIndex: 5,
             }}
-          />
-        </>
+          >
+            MultiQC
+          </span>
+        </div>
       )}
     </Paper>
   );

@@ -93,24 +93,55 @@ app.include_router(router, prefix=api_prefix)
 # returned. Rebuild with `cd depictio/viewer && npm install && npm run build`.
 # ---------------------------------------------------------------------------
 _VIEWER_DIST = Path(__file__).resolve().parent.parent / "viewer" / "dist"
-if _VIEWER_DIST.is_dir():
+_VIEWER_ASSETS = _VIEWER_DIST / "assets"
+_VIEWER_INDEX = _VIEWER_DIST / "index.html"
+# Require both index.html and assets/ — `dist/` alone may exist as an empty
+# leftover from an interrupted build and would crash StaticFiles at startup.
+if _VIEWER_DIST.is_dir() and _VIEWER_ASSETS.is_dir() and _VIEWER_INDEX.is_file():
     # /dashboard-beta/assets/... → static bundle assets
     app.mount(
         "/dashboard-beta/assets",
-        StaticFiles(directory=str(_VIEWER_DIST / "assets")),
+        StaticFiles(directory=str(_VIEWER_ASSETS)),
         name="viewer-assets",
     )
+    # /dashboard-beta/logos/... → SPA public/ assets (logos, etc.). Mounted
+    # only when the directory exists so the SPA still serves when public/ is
+    # absent (e.g. older build).
+    _viewer_logos = _VIEWER_DIST / "logos"
+    if _viewer_logos.is_dir():
+        app.mount(
+            "/dashboard-beta/logos",
+            StaticFiles(directory=str(_viewer_logos)),
+            name="viewer-logos",
+        )
+
+    # Favicon must be registered BEFORE the catch-all SPA route, otherwise
+    # the path segment matches `{_dashboard_id:path}` and returns index.html.
+    _viewer_favicon = _VIEWER_DIST / "favicon.svg"
+    if _viewer_favicon.is_file():
+
+        @app.get("/dashboard-beta/favicon.svg")
+        async def _serve_viewer_favicon() -> FileResponse:
+            return FileResponse(_viewer_favicon, media_type="image/svg+xml")
 
     @app.get("/dashboard-beta/{_dashboard_id:path}")
     async def _serve_viewer_spa(_dashboard_id: str) -> FileResponse:
         """Serve the React viewer SPA. All sub-paths fall through to index.html
         so React's client-side router handles the dashboard ID segment."""
         return FileResponse(_VIEWER_DIST / "index.html")
+
+    @app.get("/dashboard-beta-edit/{_dashboard_id:path}")
+    async def _serve_editor_spa(_dashboard_id: str) -> FileResponse:
+        """Serve the React editor SPA. Same bundle as the viewer; the SPA's
+        boot routing inspects window.location.pathname to render EditorApp.
+        Asset paths in index.html still resolve via /dashboard-beta/assets/."""
+        return FileResponse(_VIEWER_DIST / "index.html")
 else:
     logger = logging.getLogger(__name__)
     logger.warning(
-        "⚠️  React viewer bundle not found at %s — /dashboard-beta/ routes "
-        "will 404 until `cd depictio/viewer && npm install && npm run build` "
+        "⚠️  React viewer bundle not built at %s (missing index.html or "
+        "assets/) — /dashboard-beta/ and /dashboard-beta-edit/ routes will "
+        "404 until `cd depictio/viewer && npm install && npm run build` "
         "is executed.",
         _VIEWER_DIST,
     )

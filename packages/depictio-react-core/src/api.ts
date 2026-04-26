@@ -82,6 +82,10 @@ export interface DashboardSummary {
   title?: string;
   parent_dashboard_id?: string | null;
   project_id?: string;
+  /** Order within parent (0 = main tab). Mirrors the Dash sort key. */
+  tab_order?: number;
+  /** Custom name shown for the parent (main) tab. Defaults to dashboard title. */
+  main_tab_name?: string;
   /** Tab-specific fields. Dash precedence: `tab_icon || icon`, `tab_icon_color || icon_color`. */
   tab_icon?: string;
   tab_icon_color?: string;

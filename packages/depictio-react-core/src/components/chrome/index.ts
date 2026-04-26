@@ -14,6 +14,8 @@ export interface WrapWithChromeOpts {
   onResetFilter?: () => void;
   agGridApiRef?: React.RefObject<{ exportDataAsCsv: () => void } | null>;
   fullscreenRef?: React.RefObject<HTMLDivElement | null>;
+  extraActions?: React.ReactNode;
+  showDragHandle?: boolean;
 }
 
 /**
@@ -38,6 +40,8 @@ export function wrapWithChrome(
       onResetFilter: opts?.onResetFilter,
       agGridApiRef: opts?.agGridApiRef,
       fullscreenRef: opts?.fullscreenRef,
+      extraActions: opts?.extraActions,
+      showDragHandle: opts?.showDragHandle,
     },
   );
 }

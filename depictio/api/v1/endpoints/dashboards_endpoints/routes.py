@@ -534,7 +534,7 @@ async def edit_dashboard(
 async def save_dashboard(
     dashboard_id: PyObjectId,
     data: DashboardData,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_user_or_anonymous),
 ):
     """Check if an entry with the same dashboard_id exists, if not, insert, if yes, update."""
     # Allow anonymous users in single-user mode (they have admin privileges)

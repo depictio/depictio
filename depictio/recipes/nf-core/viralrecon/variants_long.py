@@ -55,7 +55,10 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
     # Derive FUNCLASS from EFFECT if not present
     if "FUNCLASS" not in df.columns and "EFFECT" in df.columns:
         df = df.with_columns(
-            pl.when(pl.col("EFFECT").str.contains("(?i)synonymous") & ~pl.col("EFFECT").str.contains("(?i)missense|non"))
+            pl.when(
+                pl.col("EFFECT").str.contains("(?i)synonymous")
+                & ~pl.col("EFFECT").str.contains("(?i)missense|non")
+            )
             .then(pl.lit("SILENT"))
             .when(pl.col("EFFECT").str.contains("(?i)missense"))
             .then(pl.lit("MISSENSE"))

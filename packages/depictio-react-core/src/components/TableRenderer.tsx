@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Paper, Loader, Text, Stack } from '@mantine/core';
+import { Paper, Loader, Text, Stack, useMantineColorScheme } from '@mantine/core';
 import { AgGridReact } from 'ag-grid-react';
 import 'ag-grid-community/styles/ag-grid.css';
 import 'ag-grid-community/styles/ag-theme-alpine.css';
@@ -44,6 +44,8 @@ const TableRenderer: React.FC<TableRendererProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [total, setTotal] = useState(0);
   const [ready, setReady] = useState(false);
+  const { colorScheme } = useMantineColorScheme();
+  const isDark = colorScheme === 'dark';
 
   const gridApiRef = useRef<GridApi | null>(null);
   // Stable ref to current filters so the IDatasource closure always reads the
@@ -143,7 +145,18 @@ const TableRenderer: React.FC<TableRendererProps> = ({
   );
 
   return (
-    <Paper p="sm" withBorder radius="md">
+    <Paper
+      p="sm"
+      withBorder
+      radius="md"
+      style={{
+        flex: 1,
+        minHeight: 0,
+        height: '100%',
+        display: 'flex',
+        flexDirection: 'column',
+      }}
+    >
       {metadata.title && (
         <Text fw={600} size="sm" mb="xs">
           {metadata.title}
@@ -155,18 +168,21 @@ const TableRenderer: React.FC<TableRendererProps> = ({
         </Text>
       )}
       {loading && (
-        <Stack align="center" justify="center" gap="xs" mih={200}>
+        <Stack align="center" justify="center" gap="xs" style={{ flex: 1 }}>
           <Loader size="sm" />
           <Text size="xs" c="dimmed">Loading rows…</Text>
         </Stack>
       )}
       {error && !loading && (
-        <Stack mih={200} justify="center" align="center">
+        <Stack style={{ flex: 1 }} justify="center" align="center">
           <Text size="sm" c="red">Table failed: {error}</Text>
         </Stack>
       )}
       {ready && !loading && !error && (
-        <div className="ag-theme-alpine" style={{ width: '100%', height: 400 }}>
+        <div
+          className={isDark ? 'ag-theme-alpine-dark' : 'ag-theme-alpine'}
+          style={{ width: '100%', flex: 1, minHeight: 0 }}
+        >
           <AgGridReact
             columnDefs={colDefs}
             defaultColDef={defaultColDef}
