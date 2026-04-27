@@ -39,6 +39,7 @@ import {
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { notifications } from '@mantine/notifications';
+import { useSidebarOpen } from './hooks/useSidebarOpen';
 import type { Layout } from 'react-grid-layout';
 import 'react-grid-layout/css/styles.css';
 import 'react-resizable/css/styles.css';
@@ -47,6 +48,10 @@ import {
   fetchDashboard,
   fetchAllDashboards,
   bulkComputeCards,
+  createTab,
+  deleteTab,
+  reorderTabs,
+  updateTab,
   DashboardGrid,
 } from 'depictio-react-core';
 import type {
@@ -58,7 +63,8 @@ import type {
 
 import LeftFilterPanel from './components/LeftFilterPanel';
 import GridItemEditOverlay from './components/GridItemEditOverlay';
-import { Header, Sidebar, SettingsDrawer } from './chrome';
+import { Header, Sidebar, SettingsDrawer, TabModal } from './chrome';
+import type { TabModalSubmitPayload } from './chrome';
 import './chrome/chrome.css';
 
 const API_BASE = '/depictio/api/v1';
@@ -104,7 +110,8 @@ function authHeaders(): Record<string, string> {
   return headers;
 }
 
-/** Local POST wrapper for layout/component persistence. */
+/** Local POST wrapper for layout/component persistence. Surfaces the response
+ *  body on failure so callers can debug 422 validation errors at the console. */
 async function saveDashboard(
   dashboardId: string,
   dashboardData: DashboardData,
@@ -115,7 +122,8 @@ async function saveDashboard(
     body: JSON.stringify(dashboardData),
   });
   if (!res.ok) {
-    throw new Error(`Failed to save dashboard: ${res.status}`);
+    const text = await res.text().catch(() => '');
+    throw new Error(`Failed to save dashboard: ${res.status} ${text}`);
   }
 }
 
@@ -131,17 +139,31 @@ const EditorApp: React.FC = () => {
   const [cardsLoading, setCardsLoading] = useState(false);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
   const [mobileOpened, { toggle: toggleMobile }] = useDisclosure(false);
-  const [desktopOpened, { toggle: toggleDesktop }] = useDisclosure(false);
+  // Persist across tab/page navigations (matches App.tsx + Dash app).
+  const [desktopOpened, toggleDesktop] = useSidebarOpen();
   const [settingsOpened, { open: openSettings, close: closeSettings }] = useDisclosure(false);
+  // Tab modal state — `mode` decides between create vs edit. `target` is the
+  // tab being edited (or null for create). `submitting` blocks Save while a
+  // request is in flight.
+  const [tabModalState, setTabModalState] = useState<{
+    open: boolean;
+    mode: 'create' | 'edit';
+    target: DashboardSummary | null;
+    submitting: boolean;
+  }>({ open: false, mode: 'create', target: null, submitting: false });
 
   const dashboardId = extractDashboardId();
   const bulkCtrl = useRef<AbortController | null>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // Latest dashboard ref so the debounced save uses fresh state.
+  // Latest dashboard ref so the debounced save uses fresh state. We update
+  // it synchronously alongside setDashboard via `applyDashboard` — relying on
+  // a post-render useEffect lets react-grid-layout's onLayoutChange fire with
+  // a stale ref, which then re-saves the prior (pre-duplicate/delete) state.
   const dashboardRef = useRef<DashboardData | null>(null);
-  useEffect(() => {
-    dashboardRef.current = dashboard;
-  }, [dashboard]);
+  const applyDashboard = useCallback((d: DashboardData | null) => {
+    dashboardRef.current = d;
+    setDashboard(d);
+  }, []);
 
   // Keep the browser tab title in sync with the dashboard name.
   useEffect(() => {
@@ -161,7 +183,7 @@ const EditorApp: React.FC = () => {
     }
     Promise.all([fetchDashboard(dashboardId), fetchAllDashboards()])
       .then(([dash, all]) => {
-        setDashboard(dash);
+        applyDashboard(dash);
         setAllDashboards(all);
       })
       .catch((err) => {
@@ -212,7 +234,7 @@ const EditorApp: React.FC = () => {
   const scheduleSave = useCallback(
     (next: DashboardData) => {
       if (!dashboardId) return;
-      setDashboard(next);
+      applyDashboard(next);
       setSaveStatus('saving');
       if (saveTimer.current) clearTimeout(saveTimer.current);
       saveTimer.current = setTimeout(() => {
@@ -226,7 +248,7 @@ const EditorApp: React.FC = () => {
           });
       }, SAVE_DEBOUNCE_MS);
     },
-    [dashboardId],
+    [dashboardId, applyDashboard],
   );
 
   const handleLeftLayoutChange = useCallback(
@@ -278,19 +300,19 @@ const EditorApp: React.FC = () => {
         clearTimeout(saveTimer.current);
         saveTimer.current = null;
       }
-      setDashboard(next);
+      applyDashboard(next);
       setSaveStatus('saving');
       try {
         await saveDashboard(dashboardId, next);
         const fresh = await fetchDashboard(dashboardId);
-        setDashboard(fresh);
+        applyDashboard(fresh);
         setSaveStatus('saved');
       } catch (err) {
         console.error('[EditorApp] delete failed:', err);
         setSaveStatus('error');
       }
     },
-    [dashboardId],
+    [dashboardId, applyDashboard],
   );
 
   /**
@@ -326,6 +348,13 @@ const EditorApp: React.FC = () => {
         ? structuredClone(source)
         : (JSON.parse(JSON.stringify(source)) as StoredMetadata)) as StoredMetadata;
       (cloned as { index: string }).index = newId;
+      // Strip any MongoDB-side identifiers that might have ridden along with
+      // the source dict — keeping them on the clone makes the backend think
+      // we're updating an existing document and triggers either a 422 or a
+      // silent overwrite of the source.
+      const cloneScratch = cloned as Record<string, unknown>;
+      delete cloneScratch._id;
+      delete cloneScratch.id;
       // Append " (copy)" to title if present, but don't fail on unusual shapes.
       const maybeTitled = cloned as unknown as { title?: unknown };
       if (typeof maybeTitled.title === 'string' && maybeTitled.title.length) {
@@ -380,19 +409,53 @@ const EditorApp: React.FC = () => {
         clearTimeout(saveTimer.current);
         saveTimer.current = null;
       }
-      setDashboard(next);
+      applyDashboard(next);
       setSaveStatus('saving');
       try {
         await saveDashboard(dashboardId, next);
         const fresh = await fetchDashboard(dashboardId);
-        setDashboard(fresh);
+        applyDashboard(fresh);
         setSaveStatus('saved');
+        // Scroll the freshly placed component into view + brief highlight pulse
+        // so the user can see where it landed (otherwise auto-placed items at
+        // the bottom are easy to miss).
+        const flashNewComponent = () => {
+          const inner = document.querySelector(
+            `[data-component-id="${newId}"]`,
+          ) as HTMLElement | null;
+          // The .react-grid-item ancestor is the absolutely-positioned cell,
+          // so we scroll/highlight that — not the inner content wrapper.
+          const el = (inner?.closest('.react-grid-item') as HTMLElement | null) || inner;
+          if (!el) return;
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          el.classList.add('depictio-duplicate-flash');
+          window.setTimeout(
+            () => el.classList.remove('depictio-duplicate-flash'),
+            1500,
+          );
+        };
+        // Wait two frames so react-grid-layout has positioned the new item.
+        requestAnimationFrame(() =>
+          requestAnimationFrame(flashNewComponent),
+        );
+        notifications.show({
+          color: 'teal',
+          title: 'Component duplicated',
+          message: 'Scrolled to the new copy.',
+          autoClose: 2000,
+        });
       } catch (err) {
         console.error('[EditorApp] duplicate failed:', err);
         setSaveStatus('error');
+        notifications.show({
+          color: 'red',
+          title: 'Duplicate failed',
+          message: err instanceof Error ? err.message : String(err),
+          autoClose: 5000,
+        });
       }
     },
-    [dashboardId],
+    [dashboardId, applyDashboard],
   );
 
   const interactiveComponents = useMemo(
@@ -461,6 +524,202 @@ const EditorApp: React.FC = () => {
     );
   }, [dashboardId]);
 
+  /** Refetch the global dashboard list so tab edits show up in the sidebar
+   *  without a full page reload. */
+  const refreshTabList = useCallback(async () => {
+    try {
+      const all = await fetchAllDashboards();
+      setAllDashboards(all);
+    } catch (err) {
+      console.warn('[EditorApp] refresh tab list failed:', err);
+    }
+  }, []);
+
+  const openCreateTabModal = useCallback(() => {
+    setTabModalState({
+      open: true,
+      mode: 'create',
+      target: null,
+      submitting: false,
+    });
+  }, []);
+
+  const openEditTabModal = useCallback((tab: DashboardSummary) => {
+    setTabModalState({
+      open: true,
+      mode: 'edit',
+      target: tab,
+      submitting: false,
+    });
+  }, []);
+
+  const closeTabModal = useCallback(() => {
+    setTabModalState((s) => ({ ...s, open: false, submitting: false }));
+  }, []);
+
+  const handleTabModalSubmit = useCallback(
+    async (payload: TabModalSubmitPayload) => {
+      setTabModalState((s) => ({ ...s, submitting: true }));
+      try {
+        if (tabModalState.mode === 'create') {
+          // Resolve parent: the current dashboard is either the parent itself
+          // (main tab) or a child whose `parent_dashboard_id` points at it.
+          const cur = dashboardRef.current;
+          const currentSummary = allDashboards.find(
+            (d) => d.dashboard_id === dashboardId,
+          );
+          const parentId =
+            currentSummary?.parent_dashboard_id ||
+            String(cur?.dashboard_id || dashboardId || '');
+          if (!parentId) throw new Error('No parent dashboard id available.');
+          const newId = await createTab(parentId, {
+            title: payload.title,
+            tab_icon: payload.tab_icon,
+            tab_icon_color: payload.tab_icon_color,
+          });
+          notifications.show({
+            color: 'teal',
+            title: 'Tab created',
+            message: payload.title,
+            autoClose: 2000,
+          });
+          setTabModalState({
+            open: false,
+            mode: 'create',
+            target: null,
+            submitting: false,
+          });
+          // Navigate to the new tab — preserves edit mode via the same
+          // `/dashboard-beta-edit/{id}` route we're already on.
+          window.location.assign(`/dashboard-beta-edit/${newId}`);
+          return;
+        }
+
+        const target = tabModalState.target;
+        if (!target) throw new Error('No tab to edit.');
+        await updateTab(target.dashboard_id, payload);
+        notifications.show({
+          color: 'teal',
+          title: 'Tab updated',
+          message: payload.title,
+          autoClose: 2000,
+        });
+        setTabModalState({
+          open: false,
+          mode: 'edit',
+          target: null,
+          submitting: false,
+        });
+        await refreshTabList();
+      } catch (err) {
+        console.error('[EditorApp] tab modal submit failed:', err);
+        notifications.show({
+          color: 'red',
+          title: 'Tab save failed',
+          message: err instanceof Error ? err.message : String(err),
+          autoClose: 4000,
+        });
+        setTabModalState((s) => ({ ...s, submitting: false }));
+      }
+    },
+    [
+      tabModalState.mode,
+      tabModalState.target,
+      dashboardId,
+      allDashboards,
+      refreshTabList,
+    ],
+  );
+
+  const handleDeleteTab = useCallback(
+    async (tab: DashboardSummary) => {
+      // Backend rejects deleting the main tab — guard here too so we never
+      // even attempt the call (also keeps the menu intent clear).
+      if (!tab.parent_dashboard_id) {
+        notifications.show({
+          color: 'red',
+          title: 'Cannot delete main tab',
+          message: 'Delete the parent dashboard from /dashboards instead.',
+          autoClose: 3000,
+        });
+        return;
+      }
+      if (
+        typeof window !== 'undefined' &&
+        !window.confirm(`Delete tab "${tab.title || tab.dashboard_id}"?`)
+      ) {
+        return;
+      }
+      try {
+        await deleteTab(tab.dashboard_id);
+        notifications.show({
+          color: 'teal',
+          title: 'Tab deleted',
+          message: tab.title || tab.dashboard_id,
+          autoClose: 2000,
+        });
+        // Navigate to the parent (or first remaining sibling) so we don't
+        // sit on a now-deleted dashboard id.
+        const parentId = tab.parent_dashboard_id;
+        if (tab.dashboard_id === dashboardId && parentId) {
+          window.location.assign(`/dashboard-beta-edit/${parentId}`);
+        } else {
+          await refreshTabList();
+        }
+      } catch (err) {
+        console.error('[EditorApp] delete tab failed:', err);
+        notifications.show({
+          color: 'red',
+          title: 'Delete tab failed',
+          message: err instanceof Error ? err.message : String(err),
+          autoClose: 4000,
+        });
+      }
+    },
+    [dashboardId, refreshTabList],
+  );
+
+  const handleMoveTab = useCallback(
+    async (tab: DashboardSummary, direction: 'up' | 'down') => {
+      // Build the new ordering by swapping `tab` with its neighbor in the
+      // child-only list. The main tab keeps tab_order=0 and isn't part of
+      // the reorder payload.
+      const children = (
+        tabSiblings.length
+          ? tabSiblings
+          : allDashboards.filter(
+              (d) => d.parent_dashboard_id === tab.parent_dashboard_id,
+            )
+      ).filter((t) => t.parent_dashboard_id);
+      const idx = children.findIndex((c) => c.dashboard_id === tab.dashboard_id);
+      if (idx === -1) return;
+      const swapIdx = direction === 'up' ? idx - 1 : idx + 1;
+      if (swapIdx < 0 || swapIdx >= children.length) return;
+
+      const reordered = [...children];
+      [reordered[idx], reordered[swapIdx]] = [reordered[swapIdx], reordered[idx]];
+      const tabOrders = reordered.map((c, i) => ({
+        dashboard_id: c.dashboard_id,
+        tab_order: i + 1,
+      }));
+      const parentId = tab.parent_dashboard_id;
+      if (!parentId) return;
+      try {
+        await reorderTabs(parentId, tabOrders);
+        await refreshTabList();
+      } catch (err) {
+        console.error('[EditorApp] reorder tabs failed:', err);
+        notifications.show({
+          color: 'red',
+          title: 'Reorder failed',
+          message: err instanceof Error ? err.message : String(err),
+          autoClose: 4000,
+        });
+      }
+    },
+    [tabSiblings, allDashboards, refreshTabList],
+  );
+
   /** Force-save: cancel any pending debounce and POST current state now.
    *  Mirrors depictio/dash/layouts/save.py:save_dashboard_minimal — uses
    *  Mantine notifications for success/failure feedback (no persistent header
@@ -519,6 +778,8 @@ const EditorApp: React.FC = () => {
         collapsed: { mobile: !mobileOpened, desktop: !desktopOpened },
       }}
       padding={0}
+      transitionDuration={300}
+      transitionTimingFunction="ease"
     >
       <AppShell.Header>
         <Header
@@ -540,7 +801,15 @@ const EditorApp: React.FC = () => {
       </AppShell.Header>
 
       <AppShell.Navbar p="md">
-        <Sidebar tabs={tabSiblings} activeId={dashboardId} />
+        <Sidebar
+          tabs={tabSiblings}
+          activeId={dashboardId}
+          mode="edit"
+          onAddTab={openCreateTabModal}
+          onEditTab={openEditTabModal}
+          onDeleteTab={handleDeleteTab}
+          onMoveTab={handleMoveTab}
+        />
       </AppShell.Navbar>
 
       <AppShell.Main style={{ height: 'calc(100vh - 50px)' }}>
@@ -623,6 +892,15 @@ const EditorApp: React.FC = () => {
         onClose={closeSettings}
         dashboard={dashboard}
       />
+
+      <TabModal
+        opened={tabModalState.open}
+        mode={tabModalState.mode}
+        tab={tabModalState.target}
+        onClose={closeTabModal}
+        onSubmit={handleTabModalSubmit}
+        submitting={tabModalState.submitting}
+      />
     </AppShell>
   );
 };
@@ -698,13 +976,14 @@ const RightComponentGrid: React.FC<RightComponentGridProps> = ({
       isResizable={true}
       editMode={true}
       onLayoutChange={onLayoutChange}
-      renderItemOverlay={(componentId) => (
+      renderItemOverlay={(componentId, metadata) => (
         <GridItemEditOverlay
           dashboardId={dashboardId}
           componentId={componentId}
           editMode={true}
           onDelete={onDeleteComponent}
           onDuplicate={onDuplicateComponent}
+          componentType={metadata.component_type}
         />
       )}
     />

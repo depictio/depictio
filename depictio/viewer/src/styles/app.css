@@ -9,23 +9,43 @@
  * and any workflow-specific CSS under public/.
  */
 
-:root,
-[data-mantine-color-scheme='light'] {
-  --app-bg-color: #f8f9fa;
-  --app-surface-color: #ffffff;
-  --app-text-color: #1a1b1e;
-  --app-border-color: #e9ecef;
-  --app-subtle-bg: #f1f3f5;
-  --app-accent: #228be6;
+/*
+ * The `--app-*` tokens are kept as thin aliases over Mantine's native theme
+ * variables so anything still referencing them inherits Mantine's light/dark
+ * flip for free. New code should reach for `--mantine-color-*` directly.
+ *
+ * `--combobox-chevron-color` overrides Mantine's default (`gray.6` light /
+ * `dark.3` dark) — the dark default is a low-contrast `#a6a7ab` that the
+ * user perceives as too dim. Pinning to `--mantine-color-text` gives a
+ * proper white in dark mode and near-black in light, and is read by
+ * Mantine's chevron element via the cascade (no class-name targeting).
+ */
+:root {
+  --app-bg-color: var(--mantine-color-body);
+  --app-surface-color: var(--mantine-color-body);
+  --app-text-color: var(--mantine-color-text);
+  --app-border-color: var(--mantine-color-default-border);
+  --app-subtle-bg: var(--mantine-color-default-hover);
+  --app-accent: var(--mantine-primary-color-filled);
+
+  --combobox-chevron-color: var(--mantine-color-text);
 }
 
-[data-mantine-color-scheme='dark'] {
-  --app-bg-color: #1a1b1e;
-  --app-surface-color: #25262b;
-  --app-text-color: #e9ecef;
-  --app-border-color: #373a40;
-  --app-subtle-bg: #2c2e33;
-  --app-accent: #4dabf7;
+/* `react-resizable` corner-handles ship with a hard-coded near-black SVG
+ * `background-image` (a small triangle indicator). On the dark page surface
+ * the triangle effectively disappears — user perceives them as black. In
+ * dark mode invert the handle so the same SVG renders white-on-dark. */
+[data-mantine-color-scheme='dark'] .react-resizable-handle {
+  filter: invert(1);
+}
+
+/* Ensure resize handles always paint above any inner content that creates
+ * a stacking context (Plotly's `position: absolute` modebar, Mantine
+ * Paper's `box-shadow`, etc.). Without this the top-row handles
+ * (nw/n/ne) can be visually obscured by content that sits flush with the
+ * top edge. */
+.react-grid-item > .react-resizable-handle {
+  z-index: 5;
 }
 
 html,
@@ -88,4 +108,38 @@ body {
   padding: 2rem;
   color: #fa5252;
   text-align: center;
+}
+
+/* Hide the per-cell border/shadow in viewer mode. The grid root carries
+ * `.depictio-edit-mode` only when the editor is active (set in
+ * DashboardGrid.tsx), so this selector targets viewer mode only. Mantine v7
+ * still emits the `mantine-Paper-root` class alongside its hashed class name,
+ * which keeps this selector stable. */
+.depictio-dashboard-grid:not(.depictio-edit-mode) .mantine-Paper-root {
+  border: none;
+  box-shadow: none;
+}
+
+/* Brief highlight pulse on a freshly duplicated grid cell so the user can see
+ * where it landed. Removed from the DOM after ~1.5s by EditorApp. */
+@keyframes depictio-duplicate-flash {
+  0% {
+    box-shadow: 0 0 0 0 rgba(56, 217, 169, 0);
+    outline: 2px solid rgba(56, 217, 169, 0.9);
+    outline-offset: 2px;
+  }
+  20% {
+    box-shadow: 0 0 0 10px rgba(56, 217, 169, 0.55);
+    outline: 2px solid rgba(56, 217, 169, 0.9);
+    outline-offset: 2px;
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(56, 217, 169, 0);
+    outline: 2px solid rgba(56, 217, 169, 0);
+    outline-offset: 2px;
+  }
+}
+.depictio-duplicate-flash {
+  animation: depictio-duplicate-flash 1.5s ease-out;
+  border-radius: 6px;
 }

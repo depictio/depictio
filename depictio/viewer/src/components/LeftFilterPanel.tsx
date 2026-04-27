@@ -162,6 +162,7 @@ const LeftFilterPanel: React.FC<LeftFilterPanelProps> = ({
           {interactiveComponents.map((m) => (
             <div
               key={m.index}
+              data-component-id={m.index}
               style={{ overflow: 'hidden', height: '100%', display: 'flex', flexDirection: 'column' }}
             >
               <ComponentRenderer
@@ -177,6 +178,7 @@ const LeftFilterPanel: React.FC<LeftFilterPanelProps> = ({
                       editMode={editMode}
                       onDelete={onDeleteComponent}
                       onDuplicate={onDuplicateComponent}
+                      componentType={m.component_type}
                     />
                   ) : undefined
                 }

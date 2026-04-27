@@ -113,25 +113,39 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
       resizeHandles={['s', 'e', 'w', 'n', 'sw', 'se', 'nw', 'ne']}
     >
       {metadataList.map((m) => (
+        // Outer div = the cloned target react-resizable injects the
+        // resize-handle <span>s into. It must NOT clip overflow or the
+        // top-edge handles (nw/n/ne) get sliced off — the inner div clips
+        // content (Plotly modebar, AG Grid scroll shadow, ...) instead.
         <div
           key={m.index}
+          data-component-id={m.index}
           style={{
-            overflow: 'hidden',
             height: '100%',
             display: 'flex',
             flexDirection: 'column',
           }}
         >
-          <ComponentRenderer
-            dashboardId={dashboardId}
-            metadata={m}
-            filters={filters}
-            onFilterChange={onFilterChange}
-            cardValue={cardValues?.[m.index]}
-            cardLoading={cardValuesLoading}
-            extraActions={showOverlays ? renderItemOverlay!(m.index, m) : undefined}
-            showDragHandle={editMode && isDraggable}
-          />
+          <div
+            style={{
+              overflow: 'hidden',
+              flex: 1,
+              minHeight: 0,
+              display: 'flex',
+              flexDirection: 'column',
+            }}
+          >
+            <ComponentRenderer
+              dashboardId={dashboardId}
+              metadata={m}
+              filters={filters}
+              onFilterChange={onFilterChange}
+              cardValue={cardValues?.[m.index]}
+              cardLoading={cardValuesLoading}
+              extraActions={showOverlays ? renderItemOverlay!(m.index, m) : undefined}
+              showDragHandle={editMode && isDraggable}
+            />
+          </div>
         </div>
       ))}
     </GridLayout>
