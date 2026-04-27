@@ -1,0 +1,116 @@
+# Geospatial Demo Project — Anthropogenic Impact Around Ampliseq Sampling Sites
+id: "660b2c3d4e5f6a7b8c9d2f00"
+name: "Geospatial Demo — Ampliseq Anthropogenic Impact"
+is_public: true
+workflows:
+  - id: "660b2c3d4e5f6a7b8c9d2f01"
+    name: "geospatial_demo"
+    engine:
+      name: "python"
+    data_location:
+      structure: "flat"
+      locations:
+        - depictio/projects/test/geospatial_demo
+    data_collections:
+      - id: "660b2c3d4e5f6a7b8c9d2f02"
+        data_collection_tag: "metadata"
+        description: "Ampliseq sample metadata with GPS coordinates"
+        config:
+          type: "Table"
+          metatype: "Metadata"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "depictio/projects/test/geospatial_demo/merged_metadata.tsv"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+              try_parse_dates: true
+            columns_description:
+              "sample": "Sample identifier (SRR accession)"
+              "name": "Sample name"
+              "habitat": "Sample habitat type"
+              "Riv_vs_Gro": "Habitat comparison group 1"
+              "Sed_vs_Soil": "Habitat comparison group 2"
+              "sampling_date": "Sample collection date (YYYY-MM-DD)"
+              "city": "Sampling city"
+              "latitude": "Sample collection latitude (decimal degrees)"
+              "longitude": "Sample collection longitude (decimal degrees)"
+
+      - id: "660b2c3d4e5f6a7b8c9d2f03"
+        data_collection_tag: "anthropogenic_geojson"
+        description: "GeoJSON grid cells (100m, 5km radius) around sampling cities"
+        config:
+          type: "GeoJSON"
+          metatype: "GeoJSON"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "depictio/projects/test/geospatial_demo/anthropogenic_impact.geojson"
+          dc_specific_properties:
+            feature_id_key: "properties.cell_id"
+
+      - id: "660b2c3d4e5f6a7b8c9d2f04"
+        data_collection_tag: "anthropogenic_metrics"
+        description: "Land cover and anthropogenic impact metrics per grid cell"
+        config:
+          type: "Table"
+          metatype: "Metadata"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "depictio/projects/test/geospatial_demo/anthropogenic_metrics.tsv"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+            columns_description:
+              "cell_id": "Grid cell identifier (city_NNNNNN)"
+              "city": "Nearest sampling city"
+              "land_cover": "Land cover type (Grassland, Built-up, Tree Cover, Water)"
+              "impact_index": "Anthropogenic impact index (0-1)"
+
+      - id: "660b2c3d4e5f6a7b8c9d2f05"
+        data_collection_tag: "sample_quality"
+        description: "Per-sample quality metrics (read counts, diversity, quality)"
+        config:
+          type: "Table"
+          metatype: "Metadata"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "depictio/projects/test/geospatial_demo/sample_quality.tsv"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+            columns_description:
+              "sample": "Sample identifier (SRR accession)"
+              "read_count": "Total sequencing read count"
+              "species_count": "Number of species detected"
+              "shannon_diversity": "Shannon diversity index"
+              "quality_score": "Overall quality score (0-1)"
+
+links:
+  # Link: Metadata → Anthropogenic Metrics (filter grid cells by city of selected samples)
+  - source_dc_id: "660b2c3d4e5f6a7b8c9d2f02"  # metadata
+    source_column: "city"
+    target_dc_id: "660b2c3d4e5f6a7b8c9d2f04"  # anthropogenic_metrics
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "city"
+    description: "Filter anthropogenic metrics by city from metadata filters"
+    enabled: true
+
+  # Link: Metadata → Sample Quality (filter quality metrics by sample from metadata filters)
+  - source_dc_id: "660b2c3d4e5f6a7b8c9d2f02"  # metadata
+    source_column: "sample"
+    target_dc_id: "660b2c3d4e5f6a7b8c9d2f05"  # sample_quality
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter sample quality metrics by sample from metadata filters"
+    enabled: true

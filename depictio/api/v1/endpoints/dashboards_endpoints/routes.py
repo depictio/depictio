@@ -1409,6 +1409,18 @@ def _resolve_workflow_tags(component: dict, project_id: PyObjectId | None = None
                         )
                         break
 
+            # Resolve scatter_overlay_dc_tag to scatter_overlay_dc_id
+            scatter_overlay_dc_tag = component.get("scatter_overlay_dc_tag")
+            if scatter_overlay_dc_tag and not component.get("scatter_overlay_dc_id"):
+                for dc in wf.get("data_collections", []):
+                    if dc.get("data_collection_tag") == scatter_overlay_dc_tag:
+                        component["scatter_overlay_dc_id"] = str(dc["_id"])
+                        logger.debug(
+                            f"Resolved scatter_overlay_dc_tag '{scatter_overlay_dc_tag}' "
+                            f"to scatter_overlay_dc_id {dc['_id']}"
+                        )
+                        break
+
             return
 
 

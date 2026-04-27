@@ -527,6 +527,58 @@ class MapLiteComponent(BaseLiteComponent):
     # Display title
     title: str | None = Field(default=None, description="Title displayed above the map")
 
+    # Scatter overlay on choropleth maps (secondary DC with lat/lon points)
+    scatter_overlay_dc_tag: str | None = Field(
+        default=None,
+        description="Data collection tag for scatter overlay points (resolved to scatter_overlay_dc_id)",
+    )
+    scatter_overlay_dc_id: str | None = Field(
+        default=None,
+        description="Data collection ID for scatter overlay (resolved from scatter_overlay_dc_tag)",
+    )
+    scatter_overlay_lat_column: str | None = Field(
+        default=None, description="Latitude column in the overlay DC"
+    )
+    scatter_overlay_lon_column: str | None = Field(
+        default=None, description="Longitude column in the overlay DC"
+    )
+    scatter_overlay_color_column: str | None = Field(
+        default=None, description="Color column in the overlay DC"
+    )
+    scatter_overlay_size_max: int = Field(
+        default=15, description="Maximum marker size for scatter overlay"
+    )
+    scatter_overlay_hover_columns: list[str] = Field(
+        default_factory=list, description="Columns to show on hover for scatter overlay"
+    )
+    scatter_overlay_color_discrete_map: dict[str, str] | None = Field(
+        default=None, description="Color mapping for scatter overlay categories"
+    )
+
+    # Tiled map metric switching
+    tiled_map_metrics: list[dict[str, Any]] | None = Field(
+        default=None,
+        description="List of switchable metrics for tiled_map. Each has name, property, type (categorical/continuous), and color config.",
+    )
+
+    # PMTiles / tiled_map specific
+    pmtiles_dc_id: str | None = Field(
+        default=None,
+        description="Data collection ID for a PMTiles DC (for tiled_map)",
+    )
+    pmtiles_dc_tag: str | None = Field(
+        default=None,
+        description="Human-readable tag for PMTiles DC (resolved to pmtiles_dc_id during import)",
+    )
+    pmtiles_url: str | None = Field(
+        default=None,
+        description="Direct URL to a PMTiles file (alternative to pmtiles_dc_id)",
+    )
+    tile_layer_style: dict[str, Any] | None = Field(
+        default=None,
+        description="Style function config for tiled_map vector tiles",
+    )
+
     # Pass-through kwargs for extra Plotly Express parameters
     dict_kwargs: dict[str, Any] = Field(
         default_factory=dict,
@@ -565,9 +617,14 @@ class MapLiteComponent(BaseLiteComponent):
         if self.map_type == "choropleth_map":
             if not self.locations_column:
                 raise ValueError("locations_column is required when map_type='choropleth_map'")
-            if not self.geojson_data and not self.geojson_url and not self.geojson_dc_id:
+            if (
+                not self.geojson_data
+                and not self.geojson_url
+                and not self.geojson_dc_id
+                and not self.geojson_dc_tag
+            ):
                 raise ValueError(
-                    "geojson_data, geojson_url, or geojson_dc_id is required "
+                    "geojson_data, geojson_url, geojson_dc_id, or geojson_dc_tag is required "
                     "when map_type='choropleth_map'"
                 )
             if not self.color_column:
@@ -592,6 +649,31 @@ class MapLiteComponent(BaseLiteComponent):
 
         if self.range_color is not None and len(self.range_color) != 2:
             raise ValueError("range_color must have exactly 2 elements [min, max]")
+
+        # tiled_map requires a tile/GeoJSON source
+        if self.map_type == "tiled_map":
+            has_pmtiles = self.pmtiles_dc_id or self.pmtiles_dc_tag or self.pmtiles_url
+            has_geojson = (
+                self.geojson_dc_id or self.geojson_dc_tag or self.geojson_data or self.geojson_url
+            )
+            if not has_pmtiles and not has_geojson:
+                raise ValueError(
+                    "tiled_map requires a data source: pmtiles_dc_id/pmtiles_dc_tag/pmtiles_url "
+                    "or geojson_dc_id/geojson_dc_tag/geojson_data/geojson_url"
+                )
+
+        # Scatter overlay is only valid on choropleth or tiled maps
+        if self.scatter_overlay_dc_tag or self.scatter_overlay_dc_id:
+            if self.map_type not in ("choropleth_map", "tiled_map"):
+                raise ValueError(
+                    "scatter_overlay_dc_tag/scatter_overlay_dc_id is only supported "
+                    "for choropleth_map and tiled_map"
+                )
+            if not self.scatter_overlay_lat_column or not self.scatter_overlay_lon_column:
+                raise ValueError(
+                    "scatter_overlay_lat_column and scatter_overlay_lon_column are required "
+                    "when using scatter overlay"
+                )
 
         if self.default_center is not None:
             if "lat" not in self.default_center or "lon" not in self.default_center:

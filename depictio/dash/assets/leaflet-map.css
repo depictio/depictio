@@ -1,0 +1,4 @@
+/* Ensure Leaflet receives pointer events inside react-grid-layout items. */
+.react-grid-item .leaflet-container {
+    pointer-events: auto !important;
+}
