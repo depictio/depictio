@@ -63,6 +63,60 @@ def _create_auth_mode_badge():
     return None
 
 
+def _create_beta_switcher():
+    """Create a "Try the new version" pill that links to the React beta of the
+    current page. The link's href and visibility are updated clientside (see
+    register_sidebar_callbacks → beta-switcher block) — routes without a beta
+    counterpart hide the pill entirely.
+
+    The React SPA is served by FastAPI on a separate port (DASH=5xxx,
+    FASTAPI=8xxx, allocated by .devcontainer/scripts/allocate-ports.sh), so
+    the href is an absolute URL built from settings.fastapi.external_url
+    (provided to the browser via api-base-url-store) and opens in a new tab.
+    """
+    return html.Div(
+        id="beta-switcher-container",
+        children=dmc.Center(
+            html.A(
+                id="beta-switcher-link",
+                href="#",  # Real href written by clientside callback once api-base-url-store is populated
+                target="_blank",
+                rel="noopener noreferrer",
+                style={"textDecoration": "none", "display": "inline-block"},
+                children=dmc.Tooltip(
+                    label="Open this page in the new React UI (new tab)",
+                    position="right",
+                    withArrow=True,
+                    children=dmc.Badge(
+                        "Try the new version",
+                        leftSection=DashIconify(icon="mdi:rocket-launch-outline", height=14),
+                        variant="light",
+                        color="gray",
+                        size="lg",
+                        radius="xl",
+                        styles={
+                            "root": {
+                                "cursor": "pointer",
+                                "textTransform": "none",
+                                "fontWeight": 500,
+                                "letterSpacing": "0.2px",
+                                "paddingLeft": "14px",
+                                "paddingRight": "14px",
+                                "border": "1px solid var(--mantine-color-gray-4)",
+                                "boxShadow": "0 1px 2px rgba(0, 0, 0, 0.04)",
+                                "transition": "transform 0.15s ease, box-shadow 0.15s ease",
+                            },
+                            "section": {"marginRight": "6px"},
+                        },
+                        className="beta-switcher-pill",
+                    ),
+                ),
+            ),
+        ),
+        style={"padding": "8px 16px"},
+    )
+
+
 def create_sidebar_footer():
     """
     Create standardized sidebar footer with theme controls and server status.
@@ -83,6 +137,9 @@ def create_sidebar_footer():
 
     # Build children list, conditionally including auth mode badge
     children = [
+        # Beta switcher — sits just above the footer divider so it visually
+        # caps the nav-link stack without competing with the colored links.
+        _create_beta_switcher(),
         # Separator above theme section
         dmc.Divider(variant="solid", my="md"),
         # Theme controls
@@ -450,6 +507,77 @@ def register_sidebar_callbacks(app, register_tabs: bool = True) -> None:
         Output({"type": "sidebar-link", "index": ALL}, "active"),
         Input("url", "pathname"),
         prevent_initial_call=True,
+    )
+
+    # Beta switcher — two single-output callbacks. Each is one anonymous
+    # function expression with the route-mapping helper INLINED inside it.
+    # (Don't concatenate a `function name(){}` declaration before the main
+    # `function(){}` expression — eval treats the trailing anonymous one as
+    # a statement-position function declaration without a name and refuses to
+    # parse, so the callback never registers and the renderer throws
+    # `dc[namespace][function_name] is not a function`.)
+    _BETA_HELPER_INLINE = """
+            function betaRouteFor(pathname) {
+                if (!pathname) return null;
+                var staticMap = {
+                    "/dashboards": "/dashboards-beta",
+                    "/projects": "/projects-beta",
+                    "/profile": "/profile-beta",
+                    "/about": "/about-beta",
+                    "/admin": "/admin-beta",
+                    "/cli_configs": "/cli-agents-beta"
+                };
+                if (staticMap[pathname]) return staticMap[pathname];
+                if (pathname.indexOf("/dashboard/") === 0) {
+                    var parts = pathname.split("/");
+                    if (parts.length >= 3 && parts[2]) {
+                        var dashId = parts[2];
+                        return pathname.endsWith("/edit")
+                            ? ("/dashboard-beta-edit/" + dashId)
+                            : ("/dashboard-beta/" + dashId);
+                    }
+                }
+                if (pathname.indexOf("/project/") === 0) {
+                    var pparts = pathname.split("/");
+                    if (pparts.length >= 3 && pparts[2]) {
+                        return "/projects-beta/" + pparts[2];
+                    }
+                }
+                return null;
+            }
+    """
+
+    # Container visibility (pathname only)
+    app.clientside_callback(
+        """
+        function(pathname) {
+            __HELPER__
+            var route = betaRouteFor(pathname);
+            if (!route) return {"display": "none"};
+            return {"padding": "8px 16px"};
+        }
+        """.replace("__HELPER__", _BETA_HELPER_INLINE),
+        Output("beta-switcher-container", "style"),
+        Input("url", "pathname"),
+        prevent_initial_call=False,
+    )
+
+    # href — absolute URL on the FastAPI host (different port from Dash).
+    # api-base-url-store holds settings.fastapi.external_url, populated by
+    # the populate_api_base_url callback below.
+    app.clientside_callback(
+        """
+        function(pathname, apiBaseUrl) {
+            __HELPER__
+            var route = betaRouteFor(pathname);
+            if (!route) return window.dash_clientside.no_update;
+            var base = (apiBaseUrl || "").replace(/\\/$/, "");
+            return base ? (base + route) : route;
+        }
+        """.replace("__HELPER__", _BETA_HELPER_INLINE),
+        Output("beta-switcher-link", "href"),
+        [Input("url", "pathname"), Input("api-base-url-store", "data")],
+        prevent_initial_call=False,
     )
 
     # Hide logo on dashboard pages for cleaner view

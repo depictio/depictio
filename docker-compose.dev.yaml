@@ -74,6 +74,14 @@ services:
         # Use mounted volume for S3 cache persistence across container restarts
         DEPICTIO_S3_CACHE_DIR: "/app/cache/s3_files"
         DEPICTIO_DELTA_CACHE_DIR: "/app/cache/delta_cache"
+        # Browser-facing URLs the Dash app needs to know about. Without these,
+        # settings.fastapi.external_url falls back to the default port and
+        # cross-port links (e.g. the sidebar's beta switcher pointing at the
+        # FastAPI-served React SPA) point at the wrong host:port.
+        DEPICTIO_FASTAPI_EXTERNAL_PORT: "${DEPICTIO_FASTAPI_EXTERNAL_PORT:-8058}"
+        DEPICTIO_FASTAPI_EXTERNAL_HOST: "${DEPICTIO_FASTAPI_EXTERNAL_HOST:-localhost}"
+        DEPICTIO_DASH_EXTERNAL_PORT: "${DEPICTIO_DASH_EXTERNAL_PORT:-5080}"
+        DEPICTIO_DASH_EXTERNAL_HOST: "${DEPICTIO_DASH_EXTERNAL_HOST:-localhost}"
     command: ["/app/run_dash.sh"]
     user: "${UID:-1000}:${GID:-1000}"
     depends_on:
@@ -148,3 +156,24 @@ services:
       - redis
       - depictio-backend
       - minio
+
+  # Optional Celery monitoring UI. Enable with `docker compose --profile monitoring up`.
+  # Bound to 127.0.0.1 only — do not expose without auth.
+  flower:
+    image: mher/flower:2.0
+    container_name: depictio-flower
+    profiles: ["monitoring"]
+    command:
+      - celery
+      - --broker=redis://redis:6379/1
+      - flower
+      - --port=5555
+      - --persistent=True
+      - --db=/data/flower.db
+    ports:
+      - "127.0.0.1:${FLOWER_PORT:-5555}:5555"
+    volumes:
+      - ./${DATA_DIR:-data}/flower:/data
+    depends_on:
+      - redis
+      - depictio-celery-worker
