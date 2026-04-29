@@ -24,6 +24,41 @@ function authHeaders(): Record<string, string> {
   return headers;
 }
 
+/** Throw `Error("<prefix>: <status> <body-text>")` after reading the body as
+ *  text. Used for the bulk of endpoints whose error envelope is irrelevant. */
+async function throwHttpError(res: Response, prefix: string): Promise<never> {
+  const text = await res.text().catch(() => '');
+  throw new Error(`${prefix}: ${res.status} ${text}`.trimEnd());
+}
+
+/** Throw using FastAPI's `{detail}` envelope when present, otherwise fall back
+ *  to `<fallback-or-prefix>: <status>`. Both single-string and JSON `detail`
+ *  bodies are surfaced (the latter stringified). */
+async function throwHttpDetailError(
+  res: Response,
+  prefix: string,
+): Promise<never> {
+  let message = `${prefix}: ${res.status}`;
+  try {
+    const body = await res.json();
+    if (body?.detail) {
+      message =
+        typeof body.detail === 'string' ? body.detail : JSON.stringify(body.detail);
+    }
+  } catch {
+    // ignore non-JSON error bodies
+  }
+  throw new Error(message);
+}
+
+/** 24-char hex id matching MongoDB ObjectId shape. Mirrors the format used by
+ *  `bson.ObjectId()` server-side so client-generated ids round-trip cleanly. */
+function generateObjectId(): string {
+  return typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+    ? crypto.randomUUID().replace(/-/g, '').slice(0, 24)
+    : Math.random().toString(16).slice(2).padEnd(24, '0').slice(0, 24);
+}
+
 export interface StoredMetadata {
   index: string;
   component_type: string;
@@ -330,16 +365,7 @@ export async function fetchJBrowseSession(
       body: JSON.stringify({ filters, theme }),
     },
   );
-  if (!res.ok) {
-    let detail = `Failed to render JBrowse: ${res.status}`;
-    try {
-      const body = await res.json();
-      if (body?.detail) detail = String(body.detail);
-    } catch {
-      // ignore non-JSON error
-    }
-    throw new Error(detail);
-  }
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to render JBrowse');
   return res.json();
 }
 
@@ -420,16 +446,7 @@ export async function renderMultiQCGeneralStats(
       body: JSON.stringify({ filters }),
     },
   );
-  if (!res.ok) {
-    let detail = `Failed to render MultiQC General Stats: ${res.status}`;
-    try {
-      const body = await res.json();
-      if (body?.detail) detail = String(body.detail);
-    } catch {
-      // ignore non-JSON error bodies
-    }
-    throw new Error(detail);
-  }
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to render MultiQC General Stats');
   return res.json();
 }
 
@@ -475,10 +492,7 @@ export async function updateTab(
     headers: authHeaders(),
     body: JSON.stringify(payload),
   });
-  if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    throw new Error(`Failed to update tab: ${res.status} ${text}`);
-  }
+  if (!res.ok) await throwHttpError(res, 'Failed to update tab');
 }
 
 export async function deleteTab(dashboardId: string): Promise<void> {
@@ -486,10 +500,7 @@ export async function deleteTab(dashboardId: string): Promise<void> {
     method: 'DELETE',
     headers: authHeaders(),
   });
-  if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    throw new Error(`Failed to delete tab: ${res.status} ${text}`);
-  }
+  if (!res.ok) await throwHttpError(res, 'Failed to delete tab');
 }
 
 export interface TabOrderEntry {
@@ -509,10 +520,7 @@ export async function reorderTabs(
       tab_orders: tabOrders,
     }),
   });
-  if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    throw new Error(`Failed to reorder tabs: ${res.status} ${text}`);
-  }
+  if (!res.ok) await throwHttpError(res, 'Failed to reorder tabs');
 }
 
 /**
@@ -537,10 +545,7 @@ export async function createTab(
   ).length;
   const nextOrder = childCount + 1;
 
-  const newId =
-    typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
-      ? crypto.randomUUID().replace(/-/g, '').slice(0, 24)
-      : Math.random().toString(16).slice(2).padEnd(24, '0').slice(0, 24);
+  const newId = generateObjectId();
 
   const payload: Record<string, unknown> = {
     dashboard_id: newId,
@@ -568,10 +573,7 @@ export async function createTab(
     headers: authHeaders(),
     body: JSON.stringify(payload),
   });
-  if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    throw new Error(`Failed to create tab: ${res.status} ${text}`);
-  }
+  if (!res.ok) await throwHttpError(res, 'Failed to create tab');
   return newId;
 }
 
@@ -744,16 +746,7 @@ export async function previewFigure(
       ...body,
     }),
   });
-  if (!res.ok) {
-    let detail = `Preview failed: ${res.status}`;
-    try {
-      const body = await res.json();
-      if (body?.detail) detail = String(body.detail);
-    } catch {
-      // ignore
-    }
-    throw new Error(detail);
-  }
+  if (!res.ok) await throwHttpDetailError(res, 'Preview failed');
   return res.json();
 }
 
@@ -776,16 +769,7 @@ export async function previewMultiQC(
     headers: authHeaders(),
     body: JSON.stringify({ theme: 'light', ...body }),
   });
-  if (!res.ok) {
-    let detail = `MultiQC preview failed: ${res.status}`;
-    try {
-      const b = await res.json();
-      if (b?.detail) detail = String(b.detail);
-    } catch {
-      // ignore
-    }
-    throw new Error(detail);
-  }
+  if (!res.ok) await throwHttpDetailError(res, 'MultiQC preview failed');
   return res.json();
 }
 
@@ -880,16 +864,7 @@ export async function fetchFigureParameterDiscovery(
     `${API_BASE}/figure/parameter-discovery/${encodeURIComponent(vizType)}`,
     { headers: authHeaders() },
   );
-  if (!res.ok) {
-    let detail = `${res.status}`;
-    try {
-      const body = await res.json();
-      if (body?.detail) detail = String(body.detail);
-    } catch {
-      /* ignore */
-    }
-    throw new Error(`Parameter discovery failed: ${detail}`);
-  }
+  if (!res.ok) await throwHttpDetailError(res, 'Parameter discovery failed');
   return res.json();
 }
 
@@ -901,16 +876,7 @@ export async function fetchFigureVisualizationList(): Promise<
   const res = await fetch(`${API_BASE}/figure/visualizations`, {
     headers: authHeaders(),
   });
-  if (!res.ok) {
-    let detail = `${res.status}`;
-    try {
-      const body = await res.json();
-      if (body?.detail) detail = String(body.detail);
-    } catch {
-      /* ignore */
-    }
-    throw new Error(`Visualization list failed: ${detail}`);
-  }
+  if (!res.ok) await throwHttpDetailError(res, 'Visualization list failed');
   return res.json();
 }
 
@@ -1018,10 +984,7 @@ export async function upsertComponent(
     headers: authHeaders(),
     body: JSON.stringify(payload),
   });
-  if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    throw new Error(`Failed to save component: ${res.status} ${text}`);
-  }
+  if (!res.ok) await throwHttpError(res, 'Failed to save component');
 }
 
 export async function fetchCurrentUser(): Promise<CurrentUser | null> {
@@ -1120,10 +1083,7 @@ export async function loginUser(email: string, password: string): Promise<Sessio
     body: body.toString(),
   });
   if (res.status === 401) throw new Error('invalid_credentials');
-  if (!res.ok) {
-    const detail = await res.text().catch(() => '');
-    throw new Error(`Login failed: ${res.status} ${detail}`);
-  }
+  if (!res.ok) await throwHttpError(res, 'Login failed');
   const token = (await res.json()) as {
     access_token: string;
     refresh_token: string;
@@ -1183,30 +1143,21 @@ export async function createTemporaryUser(): Promise<SessionPayload> {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
   });
-  if (!res.ok) {
-    const detail = await res.text().catch(() => '');
-    throw new Error(`Failed to create temporary user: ${res.status} ${detail}`);
-  }
+  if (!res.ok) await throwHttpError(res, 'Failed to create temporary user');
   return (await res.json()) as SessionPayload;
 }
 
 /** Single-user / public-mode anonymous session for auto-redirects. */
 export async function getAnonymousSession(): Promise<SessionPayload> {
   const res = await fetch(`${API_BASE}/auth/public/get_anonymous_user_session`);
-  if (!res.ok) {
-    const detail = await res.text().catch(() => '');
-    throw new Error(`Failed to fetch anonymous session: ${res.status} ${detail}`);
-  }
+  if (!res.ok) await throwHttpError(res, 'Failed to fetch anonymous session');
   return (await res.json()) as SessionPayload;
 }
 
 /** Initiate Google OAuth — caller redirects to the returned authorization_url. */
 export async function startGoogleOAuth(): Promise<{ authorization_url: string; state: string }> {
   const res = await fetch(`${API_BASE}/auth/google/login`);
-  if (!res.ok) {
-    const detail = await res.text().catch(() => '');
-    throw new Error(`Failed to start Google OAuth: ${res.status} ${detail}`);
-  }
+  if (!res.ok) await throwHttpError(res, 'Failed to start Google OAuth');
   return (await res.json()) as { authorization_url: string; state: string };
 }
 
@@ -1320,10 +1271,7 @@ export async function listDashboards(
     `${API_BASE}/dashboards/list?include_child_tabs=${includeChildTabs}`,
     { headers: authHeaders() },
   );
-  if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    throw new Error(`Failed to list dashboards: ${res.status} ${text}`);
-  }
+  if (!res.ok) await throwHttpError(res, 'Failed to list dashboards');
   const data = await res.json();
   return Array.isArray(data) ? data : (data?.dashboards ?? []);
 }
@@ -1367,10 +1315,7 @@ export async function fetchProject(
   const res = await fetch(`${API_BASE}/projects/get/from_id?${params}`, {
     headers: authHeaders(),
   });
-  if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    throw new Error(`Failed to fetch project ${projectId}: ${res.status} ${text}`);
-  }
+  if (!res.ok) await throwHttpError(res, `Failed to fetch project ${projectId}`);
   const data = await res.json();
   // skip_enrichment=true returns the project dict directly; the default
   // returns {project, delta_locations}. Normalize to the wrapped shape.
@@ -1402,12 +1347,6 @@ export interface CreateProjectResult {
   project_id?: string;
 }
 
-function generateProjectId(): string {
-  return typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
-    ? crypto.randomUUID().replace(/-/g, '').slice(0, 24)
-    : Math.random().toString(16).slice(2).padEnd(24, '0').slice(0, 24);
-}
-
 /** Create a project. Stamps `permissions.owners` with the current user;
  *  mirrors `api_call_create_project` in
  *  depictio/dash/layouts/api_calls.py:1185. */
@@ -1418,7 +1357,7 @@ export async function createProject(
   if (!me?.id) {
     throw new Error('You must be signed in to create a project.');
   }
-  const newId = generateProjectId();
+  const newId = generateObjectId();
   const ownerEntry = { _id: me.id, email: me.email, is_admin: me.is_admin };
   const payload: Record<string, unknown> = {
     _id: newId,
@@ -1436,10 +1375,7 @@ export async function createProject(
     headers: authHeaders(),
     body: JSON.stringify(payload),
   });
-  if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    throw new Error(`Failed to create project: ${res.status} ${text}`);
-  }
+  if (!res.ok) await throwHttpError(res, 'Failed to create project');
   const result = (await res.json()) as CreateProjectResult;
   if (!result.success) throw new Error(result.message || 'Project creation failed');
   return { ...result, project_id: result.project_id ?? newId };
@@ -1467,10 +1403,7 @@ export async function updateProject(
     headers: authHeaders(),
     body: JSON.stringify(merged),
   });
-  if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    throw new Error(`Failed to update project: ${res.status} ${text}`);
-  }
+  if (!res.ok) await throwHttpError(res, 'Failed to update project');
 }
 
 /** Cascading delete: the backend removes S3 objects, delta tables, files,
@@ -1481,10 +1414,7 @@ export async function deleteProject(projectId: string): Promise<void> {
     method: 'DELETE',
     headers: authHeaders(),
   });
-  if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    throw new Error(`Failed to delete project: ${res.status} ${text}`);
-  }
+  if (!res.ok) await throwHttpError(res, 'Failed to delete project');
 }
 
 export async function toggleProjectVisibility(
@@ -1496,10 +1426,7 @@ export async function toggleProjectVisibility(
     `${API_BASE}/projects/toggle_public_private/${projectId}?${params}`,
     { method: 'POST', headers: authHeaders() },
   );
-  if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    throw new Error(`Failed to toggle project visibility: ${res.status} ${text}`);
-  }
+  if (!res.ok) await throwHttpError(res, 'Failed to toggle project visibility');
 }
 
 export interface ProjectPermissionsInput {
@@ -1519,10 +1446,7 @@ export async function updateProjectPermissions(
     headers: authHeaders(),
     body: JSON.stringify(input),
   });
-  if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    throw new Error(`Failed to update permissions: ${res.status} ${text}`);
-  }
+  if (!res.ok) await throwHttpError(res, 'Failed to update permissions');
 }
 
 /** Upload a project .zip and create the project from its contents.
@@ -1545,10 +1469,7 @@ export async function importProjectZip(
     headers,
     body: formData,
   });
-  if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    throw new Error(`Failed to import project: ${res.status} ${text}`);
-  }
+  if (!res.ok) await throwHttpError(res, 'Failed to import project');
   return res.json();
 }
 
@@ -1565,10 +1486,7 @@ export async function fetchUserByEmail(email: string): Promise<{
     headers: authHeaders(),
   });
   if (res.status === 404) return null;
-  if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    throw new Error(`User lookup failed: ${res.status} ${text}`);
-  }
+  if (!res.ok) await throwHttpError(res, 'User lookup failed');
   const data = await res.json();
   if (!data) return null;
   return {
@@ -1588,10 +1506,7 @@ export async function exportProjectZip(projectId: string): Promise<void> {
     headers: authHeaders(),
     body: JSON.stringify({ project_id: projectId, mode: 'all' }),
   });
-  if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    throw new Error(`Failed to export project: ${res.status} ${text}`);
-  }
+  if (!res.ok) await throwHttpError(res, 'Failed to export project');
   const blob = await res.blob();
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -1654,10 +1569,7 @@ export async function fetchMultiQCByDataCollection(
     `${API_BASE}/multiqc/reports/data-collection/${dcId}?limit=${limit}`,
     { headers: authHeaders() },
   );
-  if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    throw new Error(`Failed to fetch MultiQC reports: ${res.status} ${text}`);
-  }
+  if (!res.ok) await throwHttpError(res, 'Failed to fetch MultiQC reports');
   return res.json();
 }
 
@@ -1671,10 +1583,7 @@ export async function renameDataCollection(
     headers: authHeaders(),
     body: JSON.stringify({ new_name: newTag }),
   });
-  if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    throw new Error(`Failed to rename data collection: ${res.status} ${text}`);
-  }
+  if (!res.ok) await throwHttpError(res, 'Failed to rename data collection');
 }
 
 /** Delete a data collection by ID. Cascades to files, delta tables, runs. */
@@ -1683,10 +1592,7 @@ export async function deleteDataCollection(dcId: string): Promise<void> {
     method: 'DELETE',
     headers: authHeaders(),
   });
-  if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    throw new Error(`Failed to delete data collection: ${res.status} ${text}`);
-  }
+  if (!res.ok) await throwHttpError(res, 'Failed to delete data collection');
 }
 
 export interface CreateDataCollectionUploadInput {
@@ -1759,14 +1665,6 @@ export interface CreateDashboardInput {
   icon_color?: string;
 }
 
-/** Generate the same kind of 24-char hex string that `createTab` uses, so the
- *  shape stays identical regardless of which client path created the doc. */
-function generateDashboardId(): string {
-  return typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
-    ? crypto.randomUUID().replace(/-/g, '').slice(0, 24)
-    : Math.random().toString(16).slice(2).padEnd(24, '0').slice(0, 24);
-}
-
 export async function createDashboard(input: CreateDashboardInput): Promise<string> {
   // The save endpoint requires `permissions.owners` to be set — stamp the
   // current user as the sole owner. Mirrors handle_dashboard_creation() in
@@ -1775,7 +1673,7 @@ export async function createDashboard(input: CreateDashboardInput): Promise<stri
   if (!me?.id) {
     throw new Error('You must be signed in to create a dashboard.');
   }
-  const newId = generateDashboardId();
+  const newId = generateObjectId();
   const ownerEntry = { _id: me.id, email: me.email, is_admin: me.is_admin };
   const payload: Record<string, unknown> = {
     dashboard_id: newId,
@@ -1799,10 +1697,7 @@ export async function createDashboard(input: CreateDashboardInput): Promise<stri
     headers: authHeaders(),
     body: JSON.stringify(payload),
   });
-  if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    throw new Error(`Failed to create dashboard: ${res.status} ${text}`);
-  }
+  if (!res.ok) await throwHttpError(res, 'Failed to create dashboard');
   return newId;
 }
 
@@ -1825,10 +1720,7 @@ export async function editDashboard(
     headers: authHeaders(),
     body: JSON.stringify(input),
   });
-  if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    throw new Error(`Failed to edit dashboard: ${res.status} ${text}`);
-  }
+  if (!res.ok) await throwHttpError(res, 'Failed to edit dashboard');
 }
 
 export async function deleteDashboard(dashboardId: string): Promise<void> {
@@ -1836,10 +1728,7 @@ export async function deleteDashboard(dashboardId: string): Promise<void> {
     method: 'DELETE',
     headers: authHeaders(),
   });
-  if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    throw new Error(`Failed to delete dashboard: ${res.status} ${text}`);
-  }
+  if (!res.ok) await throwHttpError(res, 'Failed to delete dashboard');
 }
 
 /** Duplicate a dashboard. Mirrors handle_dashboard_duplication() in
@@ -1853,7 +1742,7 @@ export async function duplicateDashboard(sourceDashboardId: string): Promise<str
     throw new Error('You must be signed in to duplicate a dashboard.');
   }
   const source = (await fetchDashboard(sourceDashboardId)) as Record<string, unknown>;
-  const newId = generateDashboardId();
+  const newId = generateObjectId();
   const ownerEntry = { _id: me.id, email: me.email, is_admin: me.is_admin };
 
   const payload: Record<string, unknown> = {
@@ -1874,10 +1763,7 @@ export async function duplicateDashboard(sourceDashboardId: string): Promise<str
     headers: authHeaders(),
     body: JSON.stringify(payload),
   });
-  if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    throw new Error(`Failed to duplicate dashboard: ${res.status} ${text}`);
-  }
+  if (!res.ok) await throwHttpError(res, 'Failed to duplicate dashboard');
   return newId;
 }
 
@@ -1914,18 +1800,7 @@ export async function importDashboardJson(
       body: JSON.stringify(jsonContent),
     },
   );
-  if (!res.ok) {
-    let detail = `Failed to import dashboard: ${res.status}`;
-    try {
-      const body = await res.json();
-      if (body?.detail) {
-        detail = typeof body.detail === 'string' ? body.detail : JSON.stringify(body.detail);
-      }
-    } catch {
-      // ignore non-JSON
-    }
-    throw new Error(detail);
-  }
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to import dashboard');
   return res.json();
 }
 
@@ -1943,18 +1818,7 @@ export async function importDashboardYaml(
     `${API_BASE}/dashboards/import/yaml${qs ? `?${qs}` : ''}`,
     { method: 'POST', headers, body: yamlContent },
   );
-  if (!res.ok) {
-    let detail = `Failed to import YAML dashboard: ${res.status}`;
-    try {
-      const body = await res.json();
-      if (body?.detail) {
-        detail = typeof body.detail === 'string' ? body.detail : JSON.stringify(body.detail);
-      }
-    } catch {
-      // ignore non-JSON
-    }
-    throw new Error(detail);
-  }
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to import YAML dashboard');
   return res.json();
 }
 
@@ -1979,10 +1843,7 @@ export async function exportDashboardJson(
   const res = await fetch(`${API_BASE}/dashboards/${dashboardId}/json`, {
     headers: authHeaders(),
   });
-  if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    throw new Error(`Failed to export dashboard: ${res.status} ${text}`);
-  }
+  if (!res.ok) await throwHttpError(res, 'Failed to export dashboard');
   return res.json();
 }
 
@@ -2008,10 +1869,7 @@ export interface AdminUser {
 
 export async function listAllUsers(): Promise<AdminUser[]> {
   const res = await fetch(`${API_BASE}/auth/list`, { headers: authHeaders() });
-  if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    throw new Error(`Failed to list users: ${res.status} ${text}`);
-  }
+  if (!res.ok) await throwHttpError(res, 'Failed to list users');
   const data = await res.json();
   return Array.isArray(data) ? data : [];
 }
@@ -2021,10 +1879,7 @@ export async function deleteUser(userId: string): Promise<void> {
     method: 'DELETE',
     headers: authHeaders(),
   });
-  if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    throw new Error(`Failed to delete user: ${res.status} ${text}`);
-  }
+  if (!res.ok) await throwHttpError(res, 'Failed to delete user');
 }
 
 /** Toggle the `is_admin` flag on a user. The backend's path takes the new
@@ -2036,10 +1891,7 @@ export async function setUserAdmin(userId: string, isAdmin: boolean): Promise<vo
     `${API_BASE}/auth/turn_sysadmin/${userId}/${flag}`,
     { method: 'POST', headers: authHeaders() },
   );
-  if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    throw new Error(`Failed to update admin status: ${res.status} ${text}`);
-  }
+  if (!res.ok) await throwHttpError(res, 'Failed to update admin status');
 }
 
 /** Admin variant of project listing — same endpoint as `listProjects()` but
@@ -2058,10 +1910,7 @@ export interface AdminProject {
 
 export async function listAllProjects(): Promise<AdminProject[]> {
   const res = await fetch(`${API_BASE}/projects/get/all`, { headers: authHeaders() });
-  if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    throw new Error(`Failed to list all projects: ${res.status} ${text}`);
-  }
+  if (!res.ok) await throwHttpError(res, 'Failed to list all projects');
   const data = await res.json();
   return Array.isArray(data) ? data : [];
 }
@@ -2080,10 +1929,7 @@ export interface AdminDashboard {
 
 export async function listAllDashboards(): Promise<AdminDashboard[]> {
   const res = await fetch(`${API_BASE}/dashboards/list_all`, { headers: authHeaders() });
-  if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    throw new Error(`Failed to list all dashboards: ${res.status} ${text}`);
-  }
+  if (!res.ok) await throwHttpError(res, 'Failed to list all dashboards');
   const data = await res.json();
   return Array.isArray(data) ? data : [];
 }
@@ -2134,16 +1980,7 @@ export async function editPassword(oldPassword: string, newPassword: string): Pr
     headers: authHeaders(),
     body: JSON.stringify({ old_password: oldPassword, new_password: newPassword }),
   });
-  if (!res.ok) {
-    let detail = `Password update failed: ${res.status}`;
-    try {
-      const body = await res.json();
-      if (body?.detail) detail = String(body.detail);
-    } catch {
-      // ignore non-JSON
-    }
-    throw new Error(detail);
-  }
+  if (!res.ok) await throwHttpDetailError(res, 'Password update failed');
 }
 
 /** A long-lived CLI token entry — the management page only renders these
@@ -2162,10 +1999,7 @@ export async function listLongLivedTokens(): Promise<CliToken[]> {
   const res = await fetch(`${API_BASE}/auth/list_tokens?${params.toString()}`, {
     headers: authHeaders(),
   });
-  if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    throw new Error(`Failed to list tokens: ${res.status} ${text}`);
-  }
+  if (!res.ok) await throwHttpError(res, 'Failed to list tokens');
   const data = await res.json();
   if (!Array.isArray(data)) return [];
   return data.map((t: Record<string, unknown>) => ({
@@ -2198,16 +2032,7 @@ export async function createLongLivedToken(name: string): Promise<CreatedToken> 
     headers: authHeaders(),
     body: JSON.stringify({ name }),
   });
-  if (!res.ok) {
-    let detail = `Failed to create token: ${res.status}`;
-    try {
-      const body = await res.json();
-      if (body?.detail) detail = String(body.detail);
-    } catch {
-      // ignore non-JSON
-    }
-    throw new Error(detail);
-  }
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to create token');
   const t = (await res.json()) as Record<string, unknown>;
   return {
     _id: String(t._id ?? t.id ?? ''),
@@ -2227,16 +2052,7 @@ export async function deleteLongLivedToken(tokenId: string): Promise<void> {
     method: 'DELETE',
     headers: authHeaders(),
   });
-  if (!res.ok) {
-    let detail = `Failed to delete token: ${res.status}`;
-    try {
-      const body = await res.json();
-      if (body?.detail) detail = String(body.detail);
-    } catch {
-      // ignore non-JSON
-    }
-    throw new Error(detail);
-  }
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to delete token');
 }
 
 /** CLI YAML config returned by `/auth/generate_agent_config`. Shape mirrors
@@ -2259,10 +2075,7 @@ export async function generateAgentConfig(token: CreatedToken): Promise<CliAgent
       name: token.name,
     }),
   });
-  if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    throw new Error(`Failed to generate CLI config: ${res.status} ${text}`);
-  }
+  if (!res.ok) await throwHttpError(res, 'Failed to generate CLI config');
   return (await res.json()) as CliAgentConfig;
 }
 
@@ -2277,9 +2090,6 @@ export async function upgradeToTemporaryUser(expiryHours = 24): Promise<SessionP
     headers: authHeaders(),
   });
   if (res.status === 400) return null; // already temporary
-  if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    throw new Error(`Upgrade failed: ${res.status} ${text}`);
-  }
+  if (!res.ok) await throwHttpError(res, 'Upgrade failed');
   return (await res.json()) as SessionPayload;
 }
