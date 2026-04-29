@@ -21,6 +21,11 @@ env:
 
 jobs:
   test-build-push:
+    # Skip for pull requests from forks — repository secrets (GHCR_PAT) are not
+    # exposed to fork PRs, so docker login to ghcr.io would fail with
+    # "Password required". Maintainers can still test fork PRs by pushing the
+    # branch to the upstream repo or via workflow_dispatch.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     permissions:
       contents: read
