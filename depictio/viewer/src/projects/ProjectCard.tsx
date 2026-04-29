@@ -84,65 +84,39 @@ function parseTemplate(project: ProjectListEntry): ParsedTemplate | null {
   return { full: raw, source, repo, version };
 }
 
-/** Inline brand marks for the well-known template sources. Bundled rather
- *  than fetched so they render instantly and don't depend on external CDNs.
- *  Each glyph is sized for a 22x22 Avatar context. */
+/** Brand marks for the well-known template sources. The PNG/SVG files come
+ *  from the canonical workflow logos already in `depictio/dash/assets/images/
+ *  workflows/` (mirrored into `depictio/viewer/public/logos/workflows/` so
+ *  Vite copies them into the bundle). FastAPI serves them at
+ *  `/dashboard-beta/logos/workflows/<name>.png`; we resolve via Vite's
+ *  base URL to stay correct under any deployment prefix. */
+const LOGO = (name: string) => `${import.meta.env.BASE_URL}logos/workflows/${name}`;
+
+const BrandImg: React.FC<{ src: string; alt: string; size?: number }> = ({
+  src,
+  alt,
+  size = 22,
+}) => (
+  <img
+    src={src}
+    alt={alt}
+    width={size}
+    height={size}
+    style={{ objectFit: 'contain', display: 'block' }}
+  />
+);
+
 const NfCoreLogo: React.FC<{ size?: number }> = ({ size = 22 }) => (
-  <svg viewBox="0 0 32 32" width={size} height={size} aria-hidden>
-    <path d="M16 2L29 9.5v13L16 30L3 22.5v-13L16 2z" fill="#24B064" />
-    <path
-      d="M11 11.5v9 M11 11.5l5 4.5l5 -4.5 M21 11.5v9"
-      stroke="#fff"
-      strokeWidth="2.4"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      fill="none"
-    />
-  </svg>
+  <BrandImg src={LOGO('nf-core.png')} alt="nf-core" size={size} />
 );
-
 const SnakemakeLogo: React.FC<{ size?: number }> = ({ size = 22 }) => (
-  <svg viewBox="0 0 32 32" width={size} height={size} aria-hidden>
-    <circle cx="16" cy="16" r="15" fill="#3a8db4" />
-    <path
-      d="M9 11 q5 -3 11 0 q3 2 -2 4 q-7 2 -3 5 q4 3 9 1"
-      stroke="#fff"
-      strokeWidth="2.6"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      fill="none"
-    />
-    <circle cx="22" cy="11" r="1.5" fill="#fff" />
-  </svg>
+  <BrandImg src={LOGO('snakemake.svg')} alt="Snakemake" size={size} />
 );
-
 const GalaxyLogo: React.FC<{ size?: number }> = ({ size = 22 }) => (
-  <svg viewBox="0 0 32 32" width={size} height={size} aria-hidden>
-    <circle cx="16" cy="16" r="15" fill="#2a3046" />
-    <path
-      d="M8 16 c0 -5 4 -8 8 -8 c5 0 8 4 8 8 c0 -3 -3 -5 -6 -5 c-4 0 -7 4 -7 8 c0 -2 -1 -3 -3 -3z"
-      fill="#f3a847"
-    />
-    <circle cx="16" cy="16" r="1.6" fill="#fff" />
-  </svg>
+  <BrandImg src={LOGO('galaxy.png')} alt="Galaxy" size={size} />
 );
-
 const IwcLogo: React.FC<{ size?: number }> = ({ size = 22 }) => (
-  <svg viewBox="0 0 32 32" width={size} height={size} aria-hidden>
-    <rect width="32" height="32" rx="6" fill="#9c46d6" />
-    <text
-      x="16"
-      y="22"
-      textAnchor="middle"
-      fontFamily="-apple-system, system-ui, sans-serif"
-      fontSize="11"
-      fontWeight="800"
-      fill="#fff"
-      letterSpacing="0.5"
-    >
-      IWC
-    </text>
-  </svg>
+  <BrandImg src={LOGO('iwc.png')} alt="IWC" size={size} />
 );
 
 interface SourceMeta {
