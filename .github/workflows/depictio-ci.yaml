@@ -201,9 +201,16 @@ jobs:
 
   docker-build:
     needs: [check-quality-cache, quality]
-    # Run if quality passed OR if it was skipped due to cache hit
+    # Skip for pull requests from forks — repository secrets (GHCR_PAT) are not
+    # exposed to fork PRs, so docker login + push to ghcr.io would fail. The
+    # downstream jobs that depend on the pushed image (docker-system-init,
+    # e2e-tests*, cli-comprehensive-test, backup-s3-strategies-comprehensive-tests)
+    # auto-skip via their `needs.docker-build.result == 'success'` guard.
+    # Run if quality passed OR if it was skipped due to cache hit.
     if: |
       always() &&
+      (github.event_name != 'pull_request' ||
+       github.event.pull_request.head.repo.full_name == github.repository) &&
       (needs.quality.result == 'success' ||
        (needs.quality.result == 'skipped' && needs.check-quality-cache.outputs.cache-hit == 'true'))
     runs-on: ubuntu-22.04
