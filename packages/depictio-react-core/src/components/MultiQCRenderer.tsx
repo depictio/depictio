@@ -30,7 +30,13 @@ const MultiQCRenderer: React.FC<MultiQCRendererProps> = ({
     selectedModule === 'general_stats' || selectedPlot === 'general_stats';
 
   if (isGeneralStats) {
-    return <MultiQCGeneralStats dashboardId={dashboardId} metadata={metadata} />;
+    return (
+      <MultiQCGeneralStats
+        dashboardId={dashboardId}
+        metadata={metadata}
+        filters={filters}
+      />
+    );
   }
 
   return (

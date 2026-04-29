@@ -12,6 +12,7 @@ import type {
 } from 'ag-grid-community';
 
 import { renderTable, InteractiveFilter, StoredMetadata } from '../api';
+import { useInView } from '../hooks/useInView';
 
 interface TableRendererProps {
   dashboardId: string;
@@ -46,6 +47,7 @@ const TableRenderer: React.FC<TableRendererProps> = ({
   const [ready, setReady] = useState(false);
   const { colorScheme } = useMantineColorScheme();
   const isDark = colorScheme === 'dark';
+  const [containerRef, inView] = useInView<HTMLDivElement>('200px');
 
   const gridApiRef = useRef<GridApi | null>(null);
   // Stable ref to current filters so the IDatasource closure always reads the
@@ -56,6 +58,7 @@ const TableRenderer: React.FC<TableRendererProps> = ({
   // One-shot bootstrap: fetch column defs + total row count via a tiny
   // (start=0, limit=1) call. The infinite row model then takes over for paging.
   useEffect(() => {
+    if (!inView) return;
     let cancelled = false;
     setLoading(true);
     setError(null);
@@ -87,7 +90,7 @@ const TableRenderer: React.FC<TableRendererProps> = ({
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dashboardId, metadata.index, JSON.stringify(filters)]);
+  }, [dashboardId, metadata.index, JSON.stringify(filters), inView]);
 
   // When filters change after the grid is mounted, purge the cache so the
   // grid re-requests rows with the new filter state. The bootstrap effect
@@ -146,6 +149,7 @@ const TableRenderer: React.FC<TableRendererProps> = ({
 
   return (
     <Paper
+      ref={containerRef}
       p="sm"
       withBorder
       radius="md"
@@ -167,7 +171,7 @@ const TableRenderer: React.FC<TableRendererProps> = ({
           )}
         </Text>
       )}
-      {loading && (
+      {(!inView || loading) && (
         <Stack align="center" justify="center" gap="xs" style={{ flex: 1 }}>
           <Loader size="sm" />
           <Text size="xs" c="dimmed">Loading rows…</Text>

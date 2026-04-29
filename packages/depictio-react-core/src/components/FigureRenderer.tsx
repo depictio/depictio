@@ -3,6 +3,7 @@ import { Paper, Loader, Text, Stack, useMantineColorScheme } from '@mantine/core
 import Plot from 'react-plotly.js';
 
 import { renderFigure, InteractiveFilter, StoredMetadata } from '../api';
+import { useInView } from '../hooks/useInView';
 
 interface FigureRendererProps {
   dashboardId: string;
@@ -26,8 +27,10 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
   const [error, setError] = useState<string | null>(null);
   const { colorScheme } = useMantineColorScheme();
   const theme: 'light' | 'dark' = colorScheme === 'dark' ? 'dark' : 'light';
+  const [containerRef, inView] = useInView<HTMLDivElement>('200px');
 
   useEffect(() => {
+    if (!inView) return;
     let cancelled = false;
     setLoading(true);
     setError(null);
@@ -47,10 +50,11 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dashboardId, metadata.index, JSON.stringify(filters), theme]);
+  }, [dashboardId, metadata.index, JSON.stringify(filters), theme, inView]);
 
   return (
     <Paper
+      ref={containerRef}
       p="sm"
       withBorder
       radius="md"
@@ -67,7 +71,7 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
           {metadata.title}
         </Text>
       )}
-      {loading && (
+      {(!inView || loading) && (
         <Stack align="center" justify="center" gap="xs" style={{ flex: 1 }}>
           <Loader size="sm" />
           <Text size="xs" c="dimmed">Rendering figure…</Text>

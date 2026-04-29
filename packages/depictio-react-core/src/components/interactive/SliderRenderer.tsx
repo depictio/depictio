@@ -101,6 +101,21 @@ const SliderRenderer: React.FC<{
     });
   }, [bounds, marksNumber, useLogScale]);
 
+  // Hook order is fixed for every render — keep useCallback BEFORE any
+  // early returns. Otherwise React's hook-count check (error #310) trips on
+  // the loading→loaded transition.
+  const handleChange = useCallback(
+    (next: number) => {
+      onChange?.({
+        index: metadata.index,
+        value: next,
+        column_name: metadata.column_name,
+        interactive_component_type: 'Slider',
+      });
+    },
+    [onChange, metadata.index, metadata.column_name],
+  );
+
   if (error) {
     return (
       <div
@@ -126,18 +141,6 @@ const SliderRenderer: React.FC<{
   const iconCol = metadata.icon_color || 'var(--mantine-color-blue-6)';
   const stepSize = (bounds.max - bounds.min) / 100;
 
-  const handleChange = useCallback(
-    (next: number) => {
-      onChange?.({
-        index: metadata.index,
-        value: next,
-        column_name: metadata.column_name,
-        interactive_component_type: 'Slider',
-      });
-    },
-    [onChange, metadata.index, metadata.column_name],
-  );
-
   return (
     <Paper
       p="md"
@@ -145,7 +148,6 @@ const SliderRenderer: React.FC<{
       shadow="xs"
       className="dashboard-component-hover"
       style={{
-        backgroundColor: 'var(--app-surface-color, #ffffff)',
         height: '100%',
         boxSizing: 'border-box',
       }}
@@ -162,7 +164,7 @@ const SliderRenderer: React.FC<{
                   style={{ color: iconCol, flexShrink: 0 }}
                 />
               )}
-              <Text fw={600} size="sm" style={{ color: 'var(--app-text-color, #1a1b1e)' }}>
+              <Text fw={600} size="sm">
                 {displayTitle}
               </Text>
             </Group>

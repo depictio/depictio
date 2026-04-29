@@ -65,7 +65,6 @@ const CheckboxSwitchRenderer: React.FC<CheckboxSwitchRendererProps> = ({
       shadow="xs"
       className="dashboard-component-hover"
       style={{
-        backgroundColor: 'var(--app-surface-color, #ffffff)',
         height: '100%',
         display: 'flex',
         flexDirection: 'column',
@@ -83,11 +82,7 @@ const CheckboxSwitchRenderer: React.FC<CheckboxSwitchRendererProps> = ({
                 style={{ color: iconCol, flexShrink: 0 }}
               />
             )}
-            <Text
-              fw={600}
-              size="sm"
-              style={{ color: 'var(--app-text-color, #1a1b1e)' }}
-            >
+            <Text fw={600} size="sm">
               {displayTitle}
             </Text>
           </Group>

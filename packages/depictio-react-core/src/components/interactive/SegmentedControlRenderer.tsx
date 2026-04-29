@@ -111,7 +111,7 @@ const SegmentedControlRenderer: React.FC<{
           style={{ color: iconCol, flexShrink: 0 }}
         />
       )}
-      <Text fw={600} size="sm" style={{ color: 'var(--app-text-color, #1a1b1e)' }}>
+      <Text fw={600} size="sm">
         {displayTitle}
       </Text>
     </Group>
@@ -124,7 +124,6 @@ const SegmentedControlRenderer: React.FC<{
       shadow="xs"
       className="dashboard-component-hover"
       style={{
-        backgroundColor: 'var(--app-surface-color, #ffffff)',
         height: '100%',
         display: 'flex',
         flexDirection: 'column',
@@ -186,12 +185,6 @@ const SegmentedControlRenderer: React.FC<{
         onChange={handleChange}
         color={metadata.icon_color || undefined}
         fullWidth
-        styles={{
-          root: {
-            backgroundColor: 'var(--app-surface-color, #ffffff)',
-            borderColor: 'var(--app-border-color, #e9ecef)',
-          },
-        }}
       />
     </Frame>
   );
