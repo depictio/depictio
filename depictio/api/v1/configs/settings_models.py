@@ -384,6 +384,22 @@ class CeleryConfig(BaseSettings):
     worker_send_task_events: bool = Field(default=True, description="Enable task event monitoring")
     task_send_sent_event: bool = Field(default=True, description="Send task sent events")
 
+    # FastAPI offload settings — wraps preview/render endpoints with a
+    # non-blocking poll on a Celery task so heavy Polars/Plotly work runs on
+    # the worker process instead of pinning an API worker.
+    offload_preview: bool = Field(
+        default=True,
+        description="Always offload component-design preview endpoints (/figure/preview etc.) to Celery",
+    )
+    offload_rendering: bool = Field(
+        default=False,
+        description="Offload dashboard render endpoints (/dashboards/render_*) to Celery",
+    )
+    offload_timeout_seconds: float = Field(
+        default=30.0,
+        description="Per-request Celery offload timeout (seconds) before HTTP 504",
+    )
+
     @computed_field
     @property
     def _redis_password(self) -> str:

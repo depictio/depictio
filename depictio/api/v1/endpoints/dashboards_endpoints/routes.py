@@ -10,6 +10,8 @@ from bson import ObjectId
 from fastapi import APIRouter, Body, Depends, HTTPException
 from fastapi.responses import Response
 
+from depictio.api.v1.celery_dispatch import offload_or_run
+from depictio.api.v1.celery_tasks import build_figure_preview as build_figure_preview_task
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.db import dashboards_collection, projects_collection
@@ -598,6 +600,29 @@ async def save_dashboard(
 
         # Convert dashboard_id to string to ensure proper JSON serialization
         dashboard_id_str = str(dashboard_id)
+
+        # Auto-queue screenshot regeneration so /dashboards-beta and any
+        # other listing surface picks up the latest dashboard state without
+        # the user needing to navigate to the viewer first. Mirrors the
+        # explicit `.delay(...)` call the Dash editor's save callback makes
+        # at depictio/dash/layouts/save.py:367 — moving the dispatch here
+        # means every client (Dash editor, React editor, the React component
+        # builder's upsertComponent flow) gets screenshots queued by default.
+        # Lazy import to keep API startup independent of the Dash worker
+        # module, and a broad except so a Celery/broker outage never breaks
+        # the save response itself.
+        try:
+            from depictio.dash.celery_app import generate_dashboard_screenshot_dual
+
+            user_id = str(getattr(current_user, "id", "") or "")
+            generate_dashboard_screenshot_dual.delay(dashboard_id_str, user_id)
+            logger.debug(
+                f"Queued screenshot regeneration for dashboard {dashboard_id_str}"
+            )
+        except Exception as exc:  # noqa: BLE001 — non-fatal best-effort dispatch
+            logger.warning(
+                f"Could not queue screenshot for {dashboard_id_str}: {exc}"
+            )
 
         return {"message": message, "dashboard_id": dashboard_id_str}
     else:
@@ -1630,10 +1655,11 @@ def bulk_compute_cards(
 
 
 @dashboards_endpoint_router.post("/render_figure/{dashboard_id}/{component_id}")
-def render_figure_endpoint(
+async def render_figure_endpoint(
     dashboard_id: PyObjectId,
     component_id: str,
     request: dict,
+    response: Response,
     current_user: User = Depends(get_user_or_anonymous),
 ):
     """Render a Plotly figure component as JSON for the React viewer.
@@ -1644,14 +1670,17 @@ def render_figure_endpoint(
     (UI mode) or `_process_code_mode_figure` (code mode), and returns the
     Plotly figure dict ready for ``react-plotly.js``.
 
+    Heavy work (delta load + Plotly build) runs on Celery when
+    `settings.celery.offload_rendering` is true. Reuses the
+    `build_figure_preview` task — preview and render share the exact same
+    code path on the worker.
+
     Request body:
         {"filters": [...], "theme": "light" | "dark"}
 
     Response:
         {"figure": <plotly fig dict>, "metadata": {visu_type, ...}}
     """
-    from depictio.api.v1.deltatables_utils import load_deltatable_lite
-
     filters = request.get("filters") or []
     theme = request.get("theme") or "light"
 
@@ -1679,7 +1708,6 @@ def render_figure_endpoint(
     if not wf_id or not dc_id:
         raise HTTPException(status_code=400, detail="Component missing wf_id/dc_id.")
 
-    # Load DC with filter metadata
     filter_metadata = [
         {
             "interactive_component_type": f.get("interactive_component_type"),
@@ -1690,110 +1718,32 @@ def render_figure_endpoint(
         if f.get("column_name") and f.get("value") not in (None, [], "")
     ]
 
-    dc_config = component.get("dc_config") or {}
-    init_data: dict[str, dict] = {}
-    delta_loc = dc_config.get("delta_location")
-    if not delta_loc:
-        from depictio.api.v1.db import deltatables_collection
+    # Build a JSON-safe payload for the task. ObjectIds in the component dict
+    # are normalized to strings so the JSON serializer doesn't choke; the task
+    # body re-coerces wf_id back to ObjectId for `load_deltatable_lite`.
+    metadata = {
+        "wf_id": str(wf_id),
+        "dc_id": str(dc_id),
+        "dc_config": convert_objectid_to_str(component.get("dc_config") or {}),
+        "visu_type": component.get("visu_type", "scatter"),
+        "dict_kwargs": component.get("dict_kwargs") or {},
+        "mode": component.get("mode", "ui"),
+        "code_content": component.get("code_content", ""),
+        "selection_enabled": bool(component.get("selection_enabled", False)),
+        "selection_column": component.get("selection_column"),
+    }
 
-        dt = deltatables_collection.find_one({"data_collection_id": ObjectId(str(dc_id))})
-        if dt:
-            delta_loc = dt.get("delta_table_location")
-    if delta_loc:
-        init_data[str(dc_id)] = {
-            "delta_location": delta_loc,
-            "dc_type": dc_config.get("type") or "table",
-            "size_bytes": dc_config.get("size_bytes", 0),
-        }
+    offload = settings.celery.offload_rendering
+    response.headers["X-Celery-Path"] = "offloaded" if offload else "inline"
 
-    import time as _time
-
-    _t_fig0 = _time.perf_counter()
+    payload = {"metadata": metadata, "filter_metadata": filter_metadata, "theme": theme}
     try:
-        df = load_deltatable_lite(
-            workflow_id=ObjectId(str(wf_id)) if not isinstance(wf_id, ObjectId) else wf_id,
-            data_collection_id=str(dc_id),
-            metadata=filter_metadata or None,
-            init_data=init_data,
+        return await offload_or_run(
+            build_figure_preview_task,
+            (payload,),
+            offload=offload,
+            label=f"render_figure cid={component_id} dc={dc_id}",
         )
-    except Exception as e:
-        logger.error(f"render_figure: DC load failed for {dc_id}: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to load data: {e}")
-    _t_load_ms = (_time.perf_counter() - _t_fig0) * 1000
-
-    # Lazy-import the Dash figure builder. Loads dash_mantine_components on
-    # first call inside the FastAPI process — fine, modules are cached.
-    # Register mantine_light / mantine_dark Plotly templates inside this
-    # FastAPI worker. The Dash startup path calls this implicitly via the app
-    # init; FastAPI never goes through that path. Without this, plotly express
-    # raises KeyError: 'mantine_light' when Depictio's theme template lookup
-    # asks for the mantine theme.
-    import plotly.io as pio  # noqa: PLC0415
-
-    from depictio.dash.modules.figure_component.callbacks.core import (
-        _create_figure_from_data,
-        _process_code_mode_figure,
-    )
-
-    if "mantine_light" not in pio.templates or "mantine_dark" not in pio.templates:
-        try:
-            import dash_mantine_components as dmc  # noqa: PLC0415
-
-            dmc.add_figure_templates()
-        except Exception as e:
-            logger.warning(f"render_figure: failed to register mantine templates: {e}")
-
-    visu_type = component.get("visu_type", "scatter")
-    dict_kwargs = component.get("dict_kwargs") or {}
-    mode = component.get("mode", "ui")
-    code_content = component.get("code_content", "")
-    selection_enabled = component.get("selection_enabled", False)
-    selection_column = component.get("selection_column")
-
-    try:
-        _t_build0 = _time.perf_counter()
-        if mode == "code":
-            ok, fig, detected = _process_code_mode_figure(code_content, df, theme, "viewer")
-            if not ok:
-                raise HTTPException(status_code=500, detail="Code-mode figure failed.")
-            if detected:
-                visu_type = detected
-        else:
-            fig = _create_figure_from_data(
-                df=df,
-                visu_type=visu_type,
-                dict_kwargs=dict_kwargs,
-                theme=theme,
-                selection_enabled=selection_enabled,
-                selection_column=selection_column,
-            )
-        _t_build_ms = (_time.perf_counter() - _t_build0) * 1000
-
-        # `fig.to_json()` runs Plotly's PlotlyJSONEncoder, which coerces numpy
-        # arrays / timestamps / decimals into plain JSON types. `fig.to_dict()`
-        # does NOT — using it here can leave numpy in the response and break
-        # FastAPI's default serializer for some figure shapes.
-        _t_json0 = _time.perf_counter()
-        if hasattr(fig, "to_json"):
-            fig_dict = json.loads(fig.to_json())
-        else:
-            fig_dict = fig
-        _t_json_ms = (_time.perf_counter() - _t_json0) * 1000
-
-        if isinstance(fig_dict, dict) and "layout" in fig_dict:
-            fig_dict["layout"].setdefault("uirevision", "persistent")
-
-        _t_total_ms = (_time.perf_counter() - _t_fig0) * 1000
-        logger.info(
-            f"TIMING render_figure cid={component_id} "
-            f"load_ms={_t_load_ms:.1f} build_ms={_t_build_ms:.1f} "
-            f"to_json_ms={_t_json_ms:.1f} total_ms={_t_total_ms:.1f}"
-        )
-
-        return {
-            "figure": fig_dict,
-            "metadata": {"visu_type": visu_type, "filter_applied": bool(filter_metadata)},
-        }
     except HTTPException:
         raise
     except Exception as e:

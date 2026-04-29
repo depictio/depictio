@@ -13,8 +13,10 @@ import boto3
 import polars as pl
 from botocore.exceptions import ClientError
 from bson import ObjectId
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response
 
+from depictio.api.v1.celery_dispatch import offload_or_run
+from depictio.api.v1.celery_tasks import preview_deltatable as preview_deltatable_task
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.db import deltatables_collection, projects_collection, users_collection
@@ -504,6 +506,57 @@ async def get_shape(
     except Exception as e:
         logger.error(f"Error reading delta table shape: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to read delta table shape: {e}")
+
+
+@deltatables_endpoint_router.get("/preview/{data_collection_id}")
+async def get_preview(
+    response: Response,
+    data_collection_id: PyObjectId,
+    limit: int = 100,
+    current_user: str = Depends(get_user_or_anonymous),
+):
+    """
+    Return the first `limit` rows + column names for a data collection's
+    delta table, for the React stepper data-source preview pane.
+
+    Mirrors what the Dash stepper builds via
+    ``load_deltatable_lite(..., limit_rows=100, load_for_preview=True)``.
+
+    Heavy work (Polars scan + collect) runs on Celery when
+    `settings.celery.offload_preview` is true (default).
+    """
+    pipeline = _build_permission_pipeline(data_collection_id, current_user.id)  # type: ignore[possibly-unbound-attribute]
+    project_result = list(projects_collection.aggregate(pipeline))
+    if not project_result:
+        raise HTTPException(status_code=404, detail="Data collection not found or access denied.")
+
+    deltatables_list = list(deltatables_collection.find({"data_collection_id": data_collection_id}))
+    if not deltatables_list:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No DeltaTable found for Data Collection ID {data_collection_id}.",
+        )
+
+    delta_table_location = deltatables_list[-1].get("delta_table_location")
+    if not delta_table_location:
+        raise HTTPException(
+            status_code=404, detail="Delta table location not found in deltatable document."
+        )
+
+    offload = settings.celery.offload_preview
+    response.headers["X-Celery-Path"] = "offloaded" if offload else "inline"
+    try:
+        return await offload_or_run(
+            preview_deltatable_task,
+            ({"delta_table_location": delta_table_location, "limit": limit},),
+            offload=offload,
+            label=f"deltatable_preview dc={data_collection_id}",
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error reading delta table preview: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to read delta table preview: {e}")
 
 
 @deltatables_endpoint_router.delete("/delete/{deltatable_id}")
