@@ -114,6 +114,7 @@ export {
   fetchMultiQCByDataCollection,
   renameDataCollection,
   deleteDataCollection,
+  createDataCollectionFromUpload,
   // Admin
   listAllUsers,
   deleteUser,
@@ -177,6 +178,8 @@ export type {
   ProjectPermissionsInput,
   MultiQCReportSummary,
   MultiQCReportsList,
+  CreateDataCollectionUploadInput,
+  CreateDataCollectionResult,
   // Admin types
   AdminUser,
   AdminProject,

@@ -3,7 +3,7 @@ import { Group, Paper, Stack, Text, Title } from '@mantine/core';
 import { Icon } from '@iconify/react';
 import { useMantineColorScheme } from '@mantine/core';
 import CytoscapeComponent from 'react-cytoscapejs';
-import type { Core, ElementDefinition, StylesheetCSS } from 'cytoscape';
+import type { Core, ElementDefinition } from 'cytoscape';
 
 /** Shape of one row in the inputs to this component. Mirrors the slice of
  *  `data_collection` we read from the project response — `id`, `tag`, `type`
@@ -65,10 +65,16 @@ const COLORS = {
 /** Stylesheet — abridged port of the Dash get_depictio_cytoscape_stylesheet.
  *  Only the selectors we actually emit are defined; the rest of the long
  *  Dash stylesheet covers states (hover/select) we don't expose yet. */
+// Loosened return type — the cytoscape `StylesheetCSS` typings (newly
+// strict in cytoscape 3.33+) reject numeric values for `width`/`height`/
+// `text-max-width` even though the runtime accepts them. Returning a
+// permissive shape keeps the cast at the call site (line ~444) honest.
+type LooseStyle = Record<string, unknown>;
+
 function buildStylesheet(
   isDark: boolean,
   highlightId?: string,
-): StylesheetCSS[] {
+): { selector: string; css: LooseStyle }[] {
   const text = isDark ? '#f8f9fa' : '#212529';
   const groupBg = isDark ? '#1e1e1e' : '#f8f9fa';
   const columnBg = isDark ? '#263238' : '#e3f2fd';
@@ -440,11 +446,9 @@ const JoinsGraph: React.FC<JoinsGraphProps> = ({
           <CytoscapeComponent
             elements={elements as ElementDefinition[]}
             style={{ width: '100%', height: canvasHeight }}
-            stylesheet={
-              buildStylesheet(isDark, highlightDcId) as unknown as StylesheetCSS[]
-            }
+            stylesheet={buildStylesheet(isDark, highlightDcId) as never}
             layout={{ name: 'preset', padding: 30, fit: true }}
-            cy={(cy) => {
+            cy={(cy: Core) => {
               cyRef.current = cy;
             }}
           />

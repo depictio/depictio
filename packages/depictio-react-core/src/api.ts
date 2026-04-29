@@ -1689,6 +1689,65 @@ export async function deleteDataCollection(dcId: string): Promise<void> {
   }
 }
 
+export interface CreateDataCollectionUploadInput {
+  projectId: string;
+  name: string;
+  description?: string;
+  dataType?: string;
+  fileFormat: string;
+  separator: string;
+  customSeparator?: string | null;
+  compression: string;
+  hasHeader: boolean;
+  file: File;
+}
+
+export interface CreateDataCollectionResult {
+  success: boolean;
+  message?: string;
+  data_collection_id?: string;
+  workflow_id?: string;
+}
+
+/** Upload a file and create a data collection. Wraps the same scan + process
+ *  pipeline as `depictio-cli`, but exposed as a single multipart endpoint. */
+export async function createDataCollectionFromUpload(
+  input: CreateDataCollectionUploadInput,
+): Promise<CreateDataCollectionResult> {
+  const fd = new FormData();
+  fd.append('project_id', input.projectId);
+  fd.append('name', input.name);
+  fd.append('description', input.description ?? '');
+  fd.append('data_type', input.dataType ?? 'table');
+  fd.append('file_format', input.fileFormat);
+  fd.append('separator', input.separator);
+  if (input.customSeparator) fd.append('custom_separator', input.customSeparator);
+  fd.append('compression', input.compression);
+  fd.append('has_header', input.hasHeader ? 'true' : 'false');
+  fd.append('file', input.file, input.file.name);
+
+  // Strip Content-Type so the browser sets the multipart boundary itself.
+  const headers = authHeaders();
+  delete headers['Content-Type'];
+
+  const res = await fetch(`${API_BASE}/datacollections/create_from_upload`, {
+    method: 'POST',
+    headers,
+    body: fd,
+  });
+  if (!res.ok) {
+    let detail = '';
+    try {
+      const body = await res.json();
+      detail = body?.detail ?? body?.message ?? '';
+    } catch {
+      detail = await res.text().catch(() => '');
+    }
+    throw new Error(detail || `Upload failed: ${res.status}`);
+  }
+  return res.json();
+}
+
 /** Fields the management Create-modal collects. Matches the allowlist on
  *  POST /dashboards/save/{id} — we hand the rest of the payload defaults
  *  client-side so the user only fills what's interesting. */

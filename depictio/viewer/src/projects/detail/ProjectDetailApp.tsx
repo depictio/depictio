@@ -26,7 +26,16 @@ import 'ag-grid-community/styles/ag-theme-alpine.css';
 import type { ColDef } from 'ag-grid-community';
 
 import { notifications } from '@mantine/notifications';
-import { Alert, Anchor, Modal, TextInput } from '@mantine/core';
+import {
+  Alert,
+  Anchor,
+  FileInput,
+  Modal,
+  Select,
+  Switch,
+  Textarea,
+  TextInput,
+} from '@mantine/core';
 
 import {
   fetchProject,
@@ -34,6 +43,7 @@ import {
   fetchMultiQCByDataCollection,
   renameDataCollection,
   deleteDataCollection,
+  createDataCollectionFromUpload,
 } from 'depictio-react-core';
 import type {
   ProjectListEntry,
@@ -461,10 +471,15 @@ const ProjectDetailApp: React.FC = () => {
         </Box>
       </AppShell.Main>
 
-      <CreateDataCollectionPlaceholderModal
+      <CreateDataCollectionModal
         opened={createDcOpened}
         projectType={projectType}
+        projectId={projectId}
         onClose={() => setCreateDcOpened(false)}
+        onSuccess={() => {
+          setCreateDcOpened(false);
+          refresh();
+        }}
       />
       <RenameDataCollectionModal
         target={renameTarget}
@@ -489,63 +504,323 @@ const ProjectDetailApp: React.FC = () => {
   );
 };
 
-const CreateDataCollectionPlaceholderModal: React.FC<{
+const FORMAT_OPTIONS = [
+  { value: 'csv', label: 'CSV' },
+  { value: 'tsv', label: 'TSV' },
+  { value: 'parquet', label: 'Parquet' },
+  { value: 'feather', label: 'Feather' },
+];
+
+const SEPARATOR_OPTIONS = [
+  { value: ',', label: 'Comma (,)' },
+  { value: '\t', label: 'Tab (\\t)' },
+  { value: ';', label: 'Semicolon (;)' },
+  { value: '|', label: 'Pipe (|)' },
+  { value: 'custom', label: 'Custom…' },
+];
+
+const COMPRESSION_OPTIONS = [
+  { value: 'none', label: 'None' },
+  { value: 'gzip', label: 'gzip' },
+  { value: 'zip', label: 'zip' },
+  { value: 'bz2', label: 'bz2' },
+];
+
+/** Guess the file format from extension. Lets the user override afterwards. */
+function guessFormat(name: string | undefined): string | null {
+  if (!name) return null;
+  const lower = name.toLowerCase();
+  if (lower.endsWith('.csv')) return 'csv';
+  if (lower.endsWith('.tsv') || lower.endsWith('.tab')) return 'tsv';
+  if (lower.endsWith('.parquet') || lower.endsWith('.pq')) return 'parquet';
+  if (lower.endsWith('.feather') || lower.endsWith('.arrow')) return 'feather';
+  return null;
+}
+
+const CreateDataCollectionModal: React.FC<{
   opened: boolean;
   projectType: 'basic' | 'advanced';
+  projectId: string | null;
   onClose: () => void;
-}> = ({ opened, projectType, onClose }) => {
+  onSuccess: () => void;
+}> = ({ opened, projectType, projectId, onClose, onSuccess }) => {
+  const [file, setFile] = useState<File | null>(null);
+  const [name, setName] = useState('');
+  const [description, setDescription] = useState('');
+  const [fileFormat, setFileFormat] = useState<string>('csv');
+  const [separator, setSeparator] = useState<string>(',');
+  const [customSeparator, setCustomSeparator] = useState('');
+  const [compression, setCompression] = useState<string>('none');
+  const [hasHeader, setHasHeader] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Reset everything when the modal closes — otherwise re-opening shows stale
+  // state from the previous attempt.
+  useEffect(() => {
+    if (!opened) {
+      setFile(null);
+      setName('');
+      setDescription('');
+      setFileFormat('csv');
+      setSeparator(',');
+      setCustomSeparator('');
+      setCompression('none');
+      setHasHeader(true);
+      setError(null);
+      setSubmitting(false);
+    }
+  }, [opened]);
+
+  // Auto-fill format + name from picked filename. Don't clobber a name the
+  // user already typed; do clobber the format because picking a new file
+  // means a new format.
+  useEffect(() => {
+    if (!file) return;
+    const guessed = guessFormat(file.name);
+    if (guessed) {
+      setFileFormat(guessed);
+      setSeparator(guessed === 'tsv' ? '\t' : ',');
+    }
+    if (!name.trim()) {
+      const stem = file.name.replace(/\.[^.]+$/, '');
+      setName(stem);
+    }
+  }, [file, name]);
+
+  if (projectType === 'advanced') {
+    return (
+      <Modal
+        opened={opened}
+        onClose={onClose}
+        title="Create data collection"
+        centered
+        size="md"
+      >
+        <Stack gap="md">
+          <Group gap="xs">
+            <Icon
+              icon="mdi:database-plus-outline"
+              width={28}
+              color="var(--mantine-color-orange-6)"
+            />
+            <Text fw={500}>Advanced project — use depictio-CLI</Text>
+          </Group>
+          <Alert
+            color="yellow"
+            variant="light"
+            icon={<Icon icon="mdi:information-outline" width={18} />}
+          >
+            <Text size="sm">
+              For advanced (CLI-driven) projects, data collections are added by
+              running <code>depictio-cli</code> against your workflow output —
+              not from this UI.
+            </Text>
+          </Alert>
+          <Group justify="flex-end">
+            <Button variant="default" onClick={onClose}>
+              Got it
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
+    );
+  }
+
+  const handleSubmit = async () => {
+    if (!projectId) {
+      setError('Project ID missing from URL.');
+      return;
+    }
+    if (!file) {
+      setError('Pick a file to upload.');
+      return;
+    }
+    if (!name.trim()) {
+      setError('Data collection name is required.');
+      return;
+    }
+    if (separator === 'custom' && !customSeparator) {
+      setError('Custom separator cannot be empty.');
+      return;
+    }
+    setSubmitting(true);
+    setError(null);
+    try {
+      const result = await createDataCollectionFromUpload({
+        projectId,
+        name: name.trim(),
+        description: description.trim(),
+        dataType: 'table',
+        fileFormat,
+        separator,
+        customSeparator: separator === 'custom' ? customSeparator : null,
+        compression,
+        hasHeader,
+        file,
+      });
+      notifications.show({
+        color: 'teal',
+        title: 'Data collection created',
+        message: result.message || `"${name.trim()}" is ready.`,
+        autoClose: 2500,
+      });
+      onSuccess();
+    } catch (err) {
+      setError((err as Error).message || 'Upload failed.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const isDelimited = fileFormat === 'csv' || fileFormat === 'tsv';
+
   return (
     <Modal
       opened={opened}
       onClose={onClose}
       title="Create data collection"
       centered
-      size="md"
+      size="lg"
+      closeOnClickOutside={!submitting}
+      withCloseButton={!submitting}
     >
       <Stack gap="md">
         <Group gap="xs">
           <Icon
             icon="mdi:database-plus-outline"
-            width={28}
+            width={26}
             color="var(--mantine-color-teal-6)"
           />
-          <Text fw={500}>
-            {projectType === 'advanced'
-              ? 'Advanced project — use depictio-CLI'
-              : 'React UI flow under construction'}
-          </Text>
+          <Text fw={500}>Upload a file to register a new data collection.</Text>
         </Group>
+
+        <FileInput
+          label="File"
+          placeholder="Select a CSV, TSV, Parquet, or Feather file"
+          required
+          accept=".csv,.tsv,.tab,.parquet,.pq,.feather,.arrow"
+          value={file}
+          onChange={setFile}
+          disabled={submitting}
+          leftSection={<Icon icon="mdi:file-upload-outline" width={16} />}
+          description="Maximum size: 50 MB"
+        />
+
+        <TextInput
+          label="Name"
+          placeholder="e.g. samples_metadata"
+          required
+          value={name}
+          onChange={(e) => setName(e.currentTarget.value)}
+          disabled={submitting}
+        />
+
+        <Textarea
+          label="Description"
+          placeholder="What does this data collection contain? (optional)"
+          value={description}
+          onChange={(e) => setDescription(e.currentTarget.value)}
+          autosize
+          minRows={2}
+          maxRows={4}
+          disabled={submitting}
+        />
+
+        <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
+          <Select
+            label="Format"
+            data={FORMAT_OPTIONS}
+            value={fileFormat}
+            onChange={(v) => v && setFileFormat(v)}
+            allowDeselect={false}
+            disabled={submitting}
+          />
+          {isDelimited && (
+            <Select
+              label="Separator"
+              data={SEPARATOR_OPTIONS}
+              value={separator}
+              onChange={(v) => v && setSeparator(v)}
+              allowDeselect={false}
+              disabled={submitting}
+            />
+          )}
+        </SimpleGrid>
+
+        {isDelimited && separator === 'custom' && (
+          <TextInput
+            label="Custom separator"
+            placeholder="e.g. ::"
+            value={customSeparator}
+            onChange={(e) => setCustomSeparator(e.currentTarget.value)}
+            required
+            disabled={submitting}
+          />
+        )}
+
+        <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
+          <Select
+            label="Compression"
+            data={COMPRESSION_OPTIONS}
+            value={compression}
+            onChange={(v) => v && setCompression(v)}
+            allowDeselect={false}
+            disabled={submitting}
+          />
+          {isDelimited && (
+            <Switch
+              mt="lg"
+              label="File has header row"
+              checked={hasHeader}
+              onChange={(e) => setHasHeader(e.currentTarget.checked)}
+              disabled={submitting}
+            />
+          )}
+        </SimpleGrid>
+
+        {error && (
+          <Alert
+            color="red"
+            variant="light"
+            icon={<Icon icon="mdi:alert-circle-outline" width={18} />}
+          >
+            {error}
+          </Alert>
+        )}
+
         <Alert
-          color="yellow"
+          color="blue"
           variant="light"
           icon={<Icon icon="mdi:information-outline" width={18} />}
         >
-          {projectType === 'advanced' ? (
-            <Text size="sm">
-              For advanced (CLI-driven) projects, data collections are added by
-              running <code>depictio-cli</code> against your workflow output —
-              not from this UI. The dedicated React modal is only relevant for
-              basic projects.
-            </Text>
-          ) : (
-            <Text size="sm">
-              The new data-collection wizard for basic projects (file upload +
-              schema preview + Polars validation) is being ported from the Dash
-              UI. Use the existing Dash{' '}
-              <Anchor
-                href={`/project/${readProjectIdFromPath()}/data`}
-                target="_blank"
-                rel="noreferrer"
-              >
-                Project Data Manager
-              </Anchor>{' '}
-              for now.
-            </Text>
-          )}
+          <Text size="xs">
+            The file will be scanned and aggregated to a Delta table on the
+            server. Larger files take longer — keep this dialog open until you
+            see the success notification. Need the legacy flow?{' '}
+            <Anchor
+              href={`/project/${readProjectIdFromPath()}/data`}
+              target="_blank"
+              rel="noreferrer"
+            >
+              Open in Dash
+            </Anchor>
+            .
+          </Text>
         </Alert>
-        <Group justify="flex-end">
-          <Button variant="default" onClick={onClose}>
-            Got it
+
+        <Group justify="flex-end" gap="sm">
+          <Button variant="default" onClick={onClose} disabled={submitting}>
+            Cancel
+          </Button>
+          <Button
+            color="teal"
+            onClick={handleSubmit}
+            loading={submitting}
+            disabled={!file || !name.trim()}
+            leftSection={<Icon icon="mdi:cloud-upload-outline" width={16} />}
+          >
+            Create
           </Button>
         </Group>
       </Stack>
