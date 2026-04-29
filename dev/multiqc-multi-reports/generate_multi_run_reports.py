@@ -12,6 +12,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import csv
 import math
 import os
 import random
@@ -52,6 +53,122 @@ RUN_PROFILES: dict[str, dict] = {
     "run_09": {"read_length": 150, "depth_range": (20_000_000, 45_000_000), "gc_center": 44},
     "run_10": {"read_length": 150, "depth_range": (1_000_000, 5_000_000), "gc_center": 47},
 }
+
+SAMPLE_METADATA: dict[str, dict[str, str]] = {
+    "NA12878": {"tissue": "blood", "condition": "control", "sex": "F", "species": "human"},
+    "NA12891": {"tissue": "blood", "condition": "case", "sex": "M", "species": "human"},
+    "NA12892": {"tissue": "blood", "condition": "case", "sex": "F", "species": "human"},
+    "HG001": {"tissue": "fibroblast", "condition": "control", "sex": "M", "species": "human"},
+    "HG002": {"tissue": "fibroblast", "condition": "case", "sex": "M", "species": "human"},
+    "HG003": {"tissue": "fibroblast", "condition": "case", "sex": "F", "species": "human"},
+    "HG004": {"tissue": "fibroblast", "condition": "control", "sex": "F", "species": "human"},
+    "GM12878": {"tissue": "lymphoblastoid", "condition": "control", "sex": "F", "species": "human"},
+    "GM18507": {"tissue": "lymphoblastoid", "condition": "case", "sex": "M", "species": "human"},
+    "GM19240": {"tissue": "lymphoblastoid", "condition": "case", "sex": "F", "species": "human"},
+    "K562": {"tissue": "leukemia", "condition": "case", "sex": "F", "species": "human"},
+    "HeLa": {"tissue": "cervical", "condition": "case", "sex": "F", "species": "human"},
+    "PATIENT_001": {"tissue": "tumor", "condition": "case", "sex": "M", "species": "human"},
+    "PATIENT_002": {"tissue": "tumor", "condition": "case", "sex": "F", "species": "human"},
+    "PATIENT_003": {"tissue": "normal", "condition": "control", "sex": "M", "species": "human"},
+    "PATIENT_010": {"tissue": "tumor", "condition": "case", "sex": "F", "species": "human"},
+    "PATIENT_011": {"tissue": "tumor", "condition": "case", "sex": "M", "species": "human"},
+    "PATIENT_012": {"tissue": "normal", "condition": "control", "sex": "F", "species": "human"},
+    "PATIENT_013": {"tissue": "normal", "condition": "control", "sex": "M", "species": "human"},
+    "DONOR_A": {"tissue": "blood", "condition": "control", "sex": "F", "species": "human"},
+    "DONOR_B": {"tissue": "blood", "condition": "case", "sex": "M", "species": "human"},
+    "DONOR_C": {"tissue": "blood", "condition": "case", "sex": "F", "species": "human"},
+    "DONOR_D": {"tissue": "blood", "condition": "control", "sex": "M", "species": "human"},
+    "DONOR_E": {"tissue": "blood", "condition": "case", "sex": "F", "species": "human"},
+    "PROJ_WGS_S1": {"tissue": "brain", "condition": "case", "sex": "M", "species": "human"},
+    "PROJ_WGS_S2": {"tissue": "brain", "condition": "control", "sex": "F", "species": "human"},
+    "PROJ_WGS_S3": {"tissue": "brain", "condition": "case", "sex": "M", "species": "human"},
+    "RNASEQ_LIB01": {"tissue": "liver", "condition": "case", "sex": "F", "species": "human"},
+    "RNASEQ_LIB02": {"tissue": "liver", "condition": "control", "sex": "M", "species": "human"},
+    "RNASEQ_LIB03": {"tissue": "liver", "condition": "case", "sex": "F", "species": "human"},
+    "RNASEQ_LIB04": {"tissue": "liver", "condition": "control", "sex": "M", "species": "human"},
+    "EXOME_A1": {"tissue": "skin", "condition": "case", "sex": "M", "species": "human"},
+    "EXOME_A2": {"tissue": "skin", "condition": "control", "sex": "F", "species": "human"},
+    "EXOME_B1": {"tissue": "skin", "condition": "case", "sex": "M", "species": "human"},
+    "EXOME_B2": {"tissue": "skin", "condition": "control", "sex": "F", "species": "human"},
+    "EXOME_B3": {"tissue": "skin", "condition": "case", "sex": "M", "species": "human"},
+    "CTRL_POS": {
+        "tissue": "control",
+        "condition": "positive_ctrl",
+        "sex": "NA",
+        "species": "synthetic",
+    },
+    "CTRL_NEG": {
+        "tissue": "control",
+        "condition": "negative_ctrl",
+        "sex": "NA",
+        "species": "synthetic",
+    },
+    "LIBRARY_QC1": {
+        "tissue": "control",
+        "condition": "library_qc",
+        "sex": "NA",
+        "species": "synthetic",
+    },
+    "LIBRARY_QC2": {
+        "tissue": "control",
+        "condition": "library_qc",
+        "sex": "NA",
+        "species": "synthetic",
+    },
+}
+
+
+# ---------------------------------------------------------------------------
+# TSV metadata generation
+# ---------------------------------------------------------------------------
+
+
+def generate_metadata_tsv(output_dir: Path, rng: random.Random) -> Path:
+    """Generate a sample metadata TSV with all samples across all runs.
+
+    Returns the path to the written TSV file.
+    """
+    tsv_path = output_dir / "sample_metadata.tsv"
+    fieldnames = [
+        "sample_id",
+        "run",
+        "tissue",
+        "condition",
+        "sex",
+        "species",
+        "batch",
+        "read_length",
+    ]
+
+    batch_idx = 0
+    rows: list[dict[str, str]] = []
+    for run_name in sorted(RUN_SAMPLES):
+        samples = RUN_SAMPLES[run_name]
+        profile = RUN_PROFILES[run_name]
+        batch_idx += 1
+        for sample in samples:
+            meta = SAMPLE_METADATA[sample]
+            rows.append(
+                {
+                    "sample_id": sample,
+                    "run": run_name,
+                    "tissue": meta["tissue"],
+                    "condition": meta["condition"],
+                    "sex": meta["sex"],
+                    "species": meta["species"],
+                    "batch": f"batch_{batch_idx}",
+                    "read_length": str(profile["read_length"]),
+                }
+            )
+
+    rng.shuffle(rows)
+
+    with open(tsv_path, "w", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames, delimiter="\t")
+        writer.writeheader()
+        writer.writerows(rows)
+
+    return tsv_path
 
 
 # ---------------------------------------------------------------------------
@@ -330,6 +447,10 @@ def main() -> None:
             print(f"{run_name:<12} {len(samples):>8} {len(samples) * 2:>11}   FAILED")
 
     print(f"\nDone. Parquet files at: {output_dir}/run_*/multiqc_data/multiqc.parquet")
+
+    # Generate metadata TSV
+    tsv_path = generate_metadata_tsv(output_dir, rng)
+    print(f"\nMetadata TSV: {tsv_path} ({sum(1 for _ in open(tsv_path)) - 1} samples)")
 
     # Quick verification
     try:
