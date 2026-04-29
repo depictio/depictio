@@ -25,6 +25,7 @@ import type {
   InteractiveFilter,
 } from 'depictio-react-core';
 import { Header, Sidebar, SettingsDrawer } from './chrome';
+import { useSidebarOpen } from './hooks/useSidebarOpen';
 
 /**
  * Top-level SPA. Layout:
@@ -50,7 +51,9 @@ const App: React.FC = () => {
   const [cardValues, setCardValues] = useState<Record<string, unknown>>({});
   const [cardsLoading, setCardsLoading] = useState(false);
   const [mobileOpened, { toggle: toggleMobile }] = useDisclosure(false);
-  const [desktopOpened, { toggle: toggleDesktop }] = useDisclosure(false);
+  // Desktop state is persisted across tab/page navigations via the same
+  // `sidebar-collapsed` localStorage key the Dash app writes.
+  const [desktopOpened, toggleDesktop] = useSidebarOpen();
   const [settingsOpened, { open: openSettings, close: closeSettings }] = useDisclosure(false);
 
   const dashboardId = extractDashboardId();
@@ -179,6 +182,8 @@ const App: React.FC = () => {
         collapsed: { mobile: !mobileOpened, desktop: !desktopOpened },
       }}
       padding={0}
+      transitionDuration={300}
+      transitionTimingFunction="ease"
     >
       <AppShell.Header>
         <Header

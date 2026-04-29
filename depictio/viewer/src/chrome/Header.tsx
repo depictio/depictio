@@ -1,15 +1,39 @@
 import React from 'react';
-import { ActionIcon, Box, Button, Group, Loader, Title } from '@mantine/core';
+import { ActionIcon, Box, Button, Group, Loader, Title, useMantineColorScheme } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
 import type { DashboardData, DashboardSummary } from 'depictio-react-core';
 import PoweredBy from './PoweredBy';
+
+/** True for path-like icon values (PNG/SVG file URLs) — these came from the
+ *  Dash YAML and aren't valid Iconify names. */
+function isImagePath(s: string | null | undefined): boolean {
+  if (!s) return false;
+  return /^(\/|https?:\/\/|data:)/.test(s) || /\.(png|svg|jpe?g|webp)$/i.test(s);
+}
+
+function isMultiqcIcon(path: string | null | undefined): boolean {
+  if (!path) return false;
+  return /\/assets\/images\/logos\/multiqc(\.png|_icon_(dark|white|color)\.svg)$/i.test(path);
+}
+
+/** Map any MultiQC logo path (legacy PNG or new SVGs) to the SPA-served
+ *  themed SVG. Mirrors the same helper in Sidebar.tsx. */
+function rewriteMultiqcIcon(path: string, theme: 'light' | 'dark'): string {
+  if (!isMultiqcIcon(path)) return path;
+  return theme === 'dark'
+    ? '/dashboard-beta/logos/multiqc_icon_white.svg'
+    : '/dashboard-beta/logos/multiqc_icon_dark.svg';
+}
 
 /** Dash precedence: `tab.tab_icon || tab.icon`, `tab.tab_icon_color || tab.icon_color`. */
 function resolveTabIcon(tab: DashboardSummary | null | undefined): string | null {
   return (tab?.tab_icon || tab?.icon) ?? null;
 }
 function resolveTabColor(tab: DashboardSummary | null | undefined): string | null {
+  // Match the Sidebar rule: MultiQC tabs render in neutral dark, regardless
+  // of whatever colour the YAML/seed stamped.
+  if (isMultiqcIcon(tab?.tab_icon) || isMultiqcIcon(tab?.icon)) return 'dark';
   return (tab?.tab_icon_color || tab?.icon_color) ?? null;
 }
 
@@ -58,18 +82,47 @@ const Header: React.FC<HeaderProps> = ({
   onAddComponent,
   onSave,
 }) => {
-  const tabIcon = resolveTabIcon(activeTab);
+  const { colorScheme } = useMantineColorScheme();
+  const theme: 'light' | 'dark' = colorScheme === 'dark' ? 'dark' : 'light';
+
+  const tabIconRaw = resolveTabIcon(activeTab);
+  const tabIconIsImage = isImagePath(tabIconRaw);
+  // Image path → swap MultiQC PNG/SVG variants to the SPA-served themed SVG.
+  // Iconify names (mdi:..., bx:...) pass through unchanged.
+  const tabIconImageSrc =
+    tabIconIsImage && tabIconRaw ? rewriteMultiqcIcon(tabIconRaw, theme) : null;
   const resolvedColor = resolveTabColor(activeTab);
   const tabIconColor = resolvedColor || 'gray';
-  const titleColorVar = resolvedColor
-    ? `var(--mantine-color-${resolvedColor}-6)`
-    : undefined;
+  // Title text color:
+  //   - 'dark' (the MultiQC neutral scheme) → page text color (`#1a1b1e`
+  //     light / `#e9ecef` dark) so it stays readable in both schemes.
+  //     `dark.6` is near-black and would be invisible on the dark page.
+  //   - any other named color → shade 6 in light, shade 4 in dark.
+  const titleColorVar = !resolvedColor
+    ? undefined
+    : resolvedColor === 'dark'
+      ? 'var(--mantine-color-text)'
+      : theme === 'dark'
+        ? `var(--mantine-color-${resolvedColor}-4)`
+        : `var(--mantine-color-${resolvedColor}-6)`;
 
+  // Breadcrumb format: `<dashboard name> / <active tab label>` for every tab.
+  // - prefix is the parent dashboard's `title` (e.g. "nf-core/ampliseq")
+  // - active label is the tab's pill label: `main_tab_name` for the parent
+  //   pill (e.g. "MultiQC"), `title` for child pills (e.g. "Variants").
+  // Falls back gracefully if any field is missing.
   const isChild = Boolean(activeTab?.parent_dashboard_id);
-  const parentTitle = parentTab?.title;
-  const childTitle = activeTab?.title || dashboard?.title || dashboardId || 'Dashboard';
-  const titleText =
-    isChild && parentTitle ? `${parentTitle} / ${childTitle}` : childTitle;
+  const dashboardName = parentTab?.title || dashboard?.title;
+  const activeLabel = isChild
+    ? activeTab?.title || dashboardId || 'Dashboard'
+    : activeTab?.main_tab_name ||
+      activeTab?.title ||
+      dashboard?.title ||
+      dashboardId ||
+      'Dashboard';
+  const titleText = dashboardName
+    ? `${dashboardName} / ${activeLabel}`
+    : activeLabel;
 
   const handleEdit = () => {
     if (dashboardId) {
@@ -108,13 +161,26 @@ const Header: React.FC<HeaderProps> = ({
         >
           <Icon icon="mdi:menu" width={22} />
         </ActionIcon>
-        {tabIcon && (
-          <Icon
-            icon={tabIcon}
-            width={20}
-            style={{ color: `var(--mantine-color-${tabIconColor}-6)` }}
+        {tabIconImageSrc ? (
+          <img
+            src={tabIconImageSrc}
+            alt=""
+            style={{ width: 20, height: 20, objectFit: 'contain' }}
           />
-        )}
+        ) : tabIconRaw ? (
+          <Icon
+            icon={tabIconRaw}
+            width={20}
+            style={{
+              color:
+                tabIconColor === 'dark'
+                  ? 'var(--mantine-color-text)'
+                  : theme === 'dark'
+                    ? `var(--mantine-color-${tabIconColor}-4)`
+                    : `var(--mantine-color-${tabIconColor}-6)`,
+            }}
+          />
+        ) : null}
         <Title
           order={3}
           style={{

@@ -9,6 +9,16 @@
  * and any workflow-specific CSS under public/.
  */
 
+/* Virgil — hand-drawn (Excalidraw) display face. Used for page titles and
+ * primary CTAs across the SPA (auth, projects, dashboards). Defined here at
+ * the global level so any subapp can apply `font-family: 'Virgil'` without
+ * loading auth-scoped CSS first. */
+@font-face {
+  font-family: 'Virgil';
+  src: url('../assets/fonts/Virgil.ttf') format('truetype');
+  font-display: swap;
+}
+
 /*
  * The `--app-*` tokens are kept as thin aliases over Mantine's native theme
  * variables so anything still referencing them inherits Mantine's light/dark

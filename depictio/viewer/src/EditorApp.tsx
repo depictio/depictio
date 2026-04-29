@@ -519,8 +519,9 @@ const EditorApp: React.FC = () => {
       typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
         ? crypto.randomUUID()
         : fallbackUuid();
+    // React-side stepper page (was: cross-origin Dash editor).
     window.location.assign(
-      `${dashOrigin()}/dashboard-edit/${dashboardId}/component/add/${newId}`,
+      `/dashboard-beta-edit/${dashboardId}/component/add/${newId}`,
     );
   }, [dashboardId]);
 

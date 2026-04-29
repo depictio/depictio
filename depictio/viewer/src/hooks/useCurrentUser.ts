@@ -11,6 +11,10 @@ import { useEffect, useState } from 'react';
 const ME_URL = '/depictio/api/v1/auth/me/optional';
 
 export interface CurrentUser {
+  /** MongoDB ObjectId of the user. Required for project permissions checks
+   *  (owners/editors/viewers lists store user IDs). Optional for forward
+   *  compat with older backends that didn't stamp it. */
+  id?: string;
   email: string;
   is_admin: boolean;
 }
@@ -61,7 +65,8 @@ export function useCurrentUser(): UseCurrentUserResult {
         const data = (await res.json()) as
           | {
               auth_mode?: AuthMode;
-              user?: { email?: string; is_admin?: boolean } | null;
+              user?: { id?: string; email?: string; is_admin?: boolean } | null;
+              id?: string;
               email?: string;
               is_admin?: boolean;
             }
@@ -70,11 +75,13 @@ export function useCurrentUser(): UseCurrentUserResult {
         const mode: AuthMode = (data?.auth_mode as AuthMode) ?? 'standard';
         const u =
           data?.user ??
-          (data?.email ? { email: data.email, is_admin: data.is_admin } : null);
+          (data?.email
+            ? { id: data.id, email: data.email, is_admin: data.is_admin }
+            : null);
         setAuthMode(mode);
         setUser(
           u && u.email
-            ? { email: u.email, is_admin: Boolean(u.is_admin) }
+            ? { id: u.id, email: u.email, is_admin: Boolean(u.is_admin) }
             : null,
         );
       } catch {

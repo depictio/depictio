@@ -15,11 +15,11 @@ interface PoweredByProps {
 
 const PoweredBy: React.FC<PoweredByProps> = ({ withRightBorder = false }) => {
   const { colorScheme } = useColorScheme();
-  const logoSrc =
-    colorScheme === 'dark'
-      ? '/dashboard-beta/logos/logo_white.svg'
-      : '/dashboard-beta/logos/logo_black.svg';
 
+  // Both `logo_black.svg` and `logo_white.svg` are byte-identical (a base64-
+  // embedded PNG inside an SVG wrapper), so swapping `src` does nothing.
+  // Apply a CSS filter on dark mode to invert the embedded raster while
+  // preserving brand hues — the standard treatment for single-asset wordmarks.
   const groupStyle: React.CSSProperties = withRightBorder
     ? {
         marginRight: 15,
@@ -41,9 +41,14 @@ const PoweredBy: React.FC<PoweredByProps> = ({ withRightBorder = false }) => {
           Powered by
         </Text>
         <img
-          src={logoSrc}
+          src="/dashboard-beta/logos/logo_black.svg"
           alt="Depictio"
-          style={{ height: 20, width: 'auto', display: 'block' }}
+          style={{
+            height: 20,
+            width: 'auto',
+            display: 'block',
+            filter: colorScheme === 'dark' ? 'invert(1) hue-rotate(180deg)' : undefined,
+          }}
         />
       </Group>
     </Anchor>

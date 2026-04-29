@@ -14,8 +14,7 @@ export const depictioTheme = createTheme({
   fontFamilyMonospace: 'Menlo, Monaco, Consolas, "Courier New", monospace',
   defaultRadius: 'md',
   primaryColor: 'blue',
-  headings: {
-    fontFamily:
-      'Virgil, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-  },
+  // Headings use the normal sans stack — the Virgil hand-drawn font is opt-in
+  // per-place (e.g. AuthCard's "Welcome to Depictio") via inline style, not the
+  // global default.
 });

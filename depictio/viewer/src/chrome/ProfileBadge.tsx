@@ -4,20 +4,6 @@ import { Icon } from '@iconify/react';
 
 import { useCurrentUser } from '../hooks/useCurrentUser';
 
-/** Cross-port link target for /profile (Dash app on :5122 in dev). */
-function dashOrigin(): string {
-  const env = (import.meta as unknown as { env?: Record<string, string> }).env;
-  if (env?.VITE_DASH_ORIGIN) return env.VITE_DASH_ORIGIN.replace(/\/$/, '');
-  if (
-    typeof window !== 'undefined' &&
-    window.location.hostname &&
-    window.location.port === '8122'
-  ) {
-    return `${window.location.protocol}//${window.location.hostname}:5122`;
-  }
-  return '';
-}
-
 /**
  * Profile badge — initials avatar + email-name for logged-in users; outlined
  * "Sign In" button otherwise. Mirrors the Dash sidebar footer avatar slot.
@@ -32,7 +18,7 @@ const ProfileBadge: React.FC = () => {
   if (authMode === 'single_user') {
     return (
       <Anchor
-        href={`${dashOrigin()}/profile`}
+        href="/profile-beta"
         underline="never"
         style={{ color: 'inherit' }}
       >
@@ -49,7 +35,7 @@ const ProfileBadge: React.FC = () => {
   if (authMode === 'unauthenticated') {
     return (
       <Anchor
-        href={`${dashOrigin()}/profile`}
+        href="/profile-beta"
         underline="never"
         style={{ color: 'inherit' }}
       >
@@ -83,7 +69,7 @@ const ProfileBadge: React.FC = () => {
 
   return (
     <Anchor
-      href={`${dashOrigin()}/profile`}
+      href="/profile-beta"
       underline="never"
       style={{ color: 'inherit' }}
     >
