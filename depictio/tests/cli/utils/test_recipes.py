@@ -350,6 +350,7 @@ class TestReadSourceFile:
             object.__setattr__(source, "ref", "test")
             object.__setattr__(source, "format", "json")
             object.__setattr__(source, "read_kwargs", None)
+            object.__setattr__(source, "glob_pattern", None)
             with pytest.raises(RecipeError, match="Unsupported format"):
                 _read_source_file(Path(f.name), source)
 
@@ -420,6 +421,7 @@ class TestResolveSources:
             object.__setattr__(source, "dc_ref", None)
             object.__setattr__(source, "format", "csv")
             object.__setattr__(source, "read_kwargs", None)
+            object.__setattr__(source, "glob_pattern", None)
 
             module = self._make_module([source])
             with pytest.raises(RecipeError, match="no path and no dc_ref"):
