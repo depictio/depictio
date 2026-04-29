@@ -1,0 +1,89 @@
+# UpSet Plot Demo Dashboard - Showcases plotly-upset integration
+# Demonstrates set intersection visualizations available via YAML dict_kwargs
+#
+# Import with: depictio dashboard import dashboard_lite.yaml
+#
+# Data requirements: binary (0/1) DataFrame where each column represents set
+# membership. Additional non-binary columns can be used for annotations.
+
+title: "UpSet Plot Showcase"
+subtitle: "Set intersection visualization with sorting, coloring, and annotation tracks"
+project_tag: "UpSet Demo Project"
+
+components:
+
+  # =========================================================================
+  # 1. MINIMAL UPSET — auto-detect binary columns, sort by cardinality
+  # =========================================================================
+  # Simplest UpSet plot: binary columns are auto-detected as sets.
+  # Intersections sorted by size (cardinality) in descending order.
+  - tag: upset-basic
+    component_type: figure
+    workflow_tag: python/upset_workflow
+    data_collection_tag: binary_sets
+    visu_type: upset
+    dict_kwargs:
+      sort_by: cardinality
+      sort_order: descending
+
+  # =========================================================================
+  # 2. EXPLICIT SET COLUMNS — specify which columns are sets
+  # =========================================================================
+  # Use set_columns to explicitly list which DataFrame columns are sets.
+  # Useful when the DataFrame also has non-binary columns (e.g. for annotations).
+  - tag: upset-explicit-sets
+    component_type: figure
+    workflow_tag: python/upset_workflow
+    data_collection_tag: binary_sets
+    visu_type: upset
+    dict_kwargs:
+      set_columns: '["SetA", "SetB", "SetC", "SetD"]'
+      sort_by: degree-cardinality
+      exclude_empty: true
+
+  # =========================================================================
+  # 3. COLORED BY DEGREE — intersection bars colored by intersection degree
+  # =========================================================================
+  # color_intersections_by: degree assigns colors based on the number of
+  # sets participating in each intersection.
+  - tag: upset-colored
+    component_type: figure
+    workflow_tag: python/upset_workflow
+    data_collection_tag: binary_sets
+    visu_type: upset
+    dict_kwargs:
+      sort_by: cardinality
+      color_intersections_by: degree
+      show_values: true
+
+  # =========================================================================
+  # 4. WITH ANNOTATION TRACKS — box plots and categorical tracks
+  # =========================================================================
+  # Annotations add per-intersection data tracks below the bar chart.
+  # Each key is a column name; value configures the track type.
+  # Types: "box", "violin", "bar", "scatter", "categorical", "stacked_bar"
+  - tag: upset-annotated
+    component_type: figure
+    workflow_tag: python/upset_workflow
+    data_collection_tag: binary_sets
+    visu_type: upset
+    dict_kwargs:
+      annotations: '{"score": {"type": "box"}, "category": {"type": "categorical"}}'
+      sort_by: cardinality
+      exclude_empty: true
+
+  # =========================================================================
+  # 5. FILTERING — min_size to hide small intersections
+  # =========================================================================
+  # min_size filters out intersections smaller than the threshold.
+  # Useful for large datasets where many tiny intersections clutter the plot.
+  - tag: upset-filtered
+    component_type: figure
+    workflow_tag: python/upset_workflow
+    data_collection_tag: binary_sets
+    visu_type: upset
+    dict_kwargs:
+      sort_by: cardinality
+      min_size: 5
+      show_values: true
+      color_intersections_by: degree
