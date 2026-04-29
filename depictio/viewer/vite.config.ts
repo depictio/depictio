@@ -1,10 +1,36 @@
-import { defineConfig } from 'vite';
+import { defineConfig, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
 
+// Dev-only: serve the SPA's index.html (under base /dashboard-beta/) for any
+// request to /auth*, /dashboards-beta*, /projects-beta*, /about-beta*, or
+// /admin-beta* so those React routes get HMR. Production has the matching
+// FastAPI catch-alls in depictio/api/main.py — this plugin only runs when
+// `vite dev` is the server. The browser URL stays untouched, so main.tsx
+// still picks the right tree via pathname matching.
+const authDevFallback = (): Plugin => ({
+  name: 'depictio-spa-dev-fallback',
+  apply: 'serve',
+  configureServer(server) {
+    server.middlewares.use((req, _res, next) => {
+      if (
+        req.url &&
+        (/^\/auth(\/|$|\?)/.test(req.url) ||
+          /^\/dashboards-beta(\/|$|\?)/.test(req.url) ||
+          /^\/projects-beta(\/|$|\?)/.test(req.url) ||
+          /^\/about-beta(\/|$|\?)/.test(req.url) ||
+          /^\/admin-beta(\/|$|\?)/.test(req.url))
+      ) {
+        req.url = '/dashboard-beta/';
+      }
+      next();
+    });
+  },
+});
+
 // https://vitejs.dev/config/
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), authDevFallback()],
   // SPA is mounted at /dashboard-beta/ by FastAPI in depictio/api/main.py.
   // The leading slash + trailing slash matter for bundle asset resolution.
   base: '/dashboard-beta/',
@@ -54,6 +80,7 @@ export default defineConfig({
       'ag-grid-community',
       'ag-grid-react',
       'react-grid-layout',
+      'cytoscape',
     ],
   },
 });

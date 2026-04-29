@@ -4,19 +4,80 @@ import { MantineProvider } from '@mantine/core';
 import { Notifications } from '@mantine/notifications';
 import '@mantine/core/styles.css';
 import '@mantine/notifications/styles.css';
+import '@mantine/carousel/styles.css';
 import './styles/app.css';
 
 import App from './App';
 import EditorApp from './EditorApp';
+import AuthApp from './auth/AuthApp';
+import DashboardsApp from './dashboards/DashboardsApp';
+import ProjectsApp from './projects/ProjectsApp';
+import ProjectDetailApp from './projects/detail/ProjectDetailApp';
+import PermissionsApp from './projects/detail/PermissionsApp';
+import AboutApp from './about/AboutApp';
+import AdminApp from './admin/AdminApp';
+import ProfileApp from './profile/ProfileApp';
+import CliAgentsApp from './cli-agents/CliAgentsApp';
+import CreateComponentPage from './builder/CreateComponentPage';
+import EditComponentPage from './builder/EditComponentPage';
+import { matchEditorRoute } from './builder/routeMatch';
 import { ErrorBoundary } from 'depictio-react-core';
 import { depictioTheme } from './theme';
 
-// Client-side routing branch: /dashboard-beta-edit/{id} → editor, else viewer.
-// FastAPI serves index.html for both /dashboard-beta/ and /dashboard-beta-edit/;
-// we pick the right React tree at boot. Keep this a one-liner — no React Router yet.
-const isEditorRoute = /\/dashboard-beta-edit\/[^/?#]+/.test(
-  window.location.pathname,
-);
+// Client-side route resolution. FastAPI serves index.html for all paths under
+// /dashboard-beta/, /dashboard-beta-edit/, /auth, /dashboards-beta,
+// /about-beta, and /admin-beta — we pick the right tree at boot.
+function resolveTree(): React.ReactElement {
+  if (window.location.pathname.startsWith('/auth')) {
+    return <AuthApp />;
+  }
+  if (window.location.pathname.startsWith('/dashboards-beta')) {
+    return <DashboardsApp />;
+  }
+  if (window.location.pathname.startsWith('/projects-beta')) {
+    // /projects-beta                  → list page
+    // /projects-beta/{id}             → data-collections detail
+    // /projects-beta/{id}/permissions → permissions editor
+    if (
+      /\/projects-beta\/[^/]+\/permissions(\/|$)/.test(window.location.pathname)
+    ) {
+      return <PermissionsApp />;
+    }
+    const detailMatch = window.location.pathname.match(/^\/projects-beta\/[^/]+/);
+    return detailMatch ? <ProjectDetailApp /> : <ProjectsApp />;
+  }
+  if (window.location.pathname.startsWith('/about-beta')) {
+    return <AboutApp />;
+  }
+  if (window.location.pathname.startsWith('/admin-beta')) {
+    return <AdminApp />;
+  }
+  if (window.location.pathname.startsWith('/profile-beta')) {
+    return <ProfileApp />;
+  }
+  if (window.location.pathname.startsWith('/cli-agents-beta')) {
+    return <CliAgentsApp />;
+  }
+  const route = matchEditorRoute(window.location.pathname);
+  if (!route) return <App />;
+  if (route.kind === 'create') {
+    return (
+      <CreateComponentPage
+        dashboardId={route.dashboardId}
+        newComponentId={route.newComponentId}
+      />
+    );
+  }
+  if (route.kind === 'edit') {
+    return (
+      <EditComponentPage
+        dashboardId={route.dashboardId}
+        componentId={route.componentId}
+      />
+    );
+  }
+  return <EditorApp />;
+}
 
 // Mirrors depictio/dash/layouts/shared_app_shell.py:create_app_shell MantineProvider config.
 // forceColorScheme initial value comes from localStorage — same key as the Dash app writes.
@@ -37,9 +98,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <MantineProvider theme={depictioTheme} defaultColorScheme={readInitialColorScheme()}>
       <Notifications position="bottom-right" />
-      <ErrorBoundary>
-        {isEditorRoute ? <EditorApp /> : <App />}
-      </ErrorBoundary>
+      <ErrorBoundary>{resolveTree()}</ErrorBoundary>
     </MantineProvider>
   </React.StrictMode>,
 );
