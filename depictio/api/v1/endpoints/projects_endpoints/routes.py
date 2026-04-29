@@ -305,7 +305,7 @@ async def add_or_update_permission(
     if (
         str(current_user.id)
         not in [str(owner["_id"]) for owner in project["permissions"]["owners"]]
-    ) or (not current_user.is_admin):
+    ) and (not current_user.is_admin):
         raise HTTPException(
             status_code=403,
             detail="User does not have permission to update permissions for this project.",
@@ -339,7 +339,7 @@ async def toggle_public_private(
     if (
         str(current_user.id)
         not in [str(owner["_id"]) for owner in project["permissions"]["owners"]]
-        or not current_user.is_admin
+        and not current_user.is_admin
     ):
         raise HTTPException(
             status_code=403,

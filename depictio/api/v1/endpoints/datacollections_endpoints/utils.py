@@ -505,41 +505,51 @@ async def _create_dc_from_upload(
                 detail="Failed to attach workflow to project (no document modified).",
             )
 
-        cli_config = CLIConfig(
-            user=UserBaseCLIConfig(
-                id=current_user.id,
-                email=current_user.email,
-                is_admin=getattr(current_user, "is_admin", False),
-                token=full_token,
-            ),
-            api_base_url=settings.fastapi.url,
-            s3_storage=settings.minio,
-        )
-
-        scan_result = process_data_collection_helper(
-            CLI_config=cli_config,
-            wf=workflow,
-            dc_id=str(data_collection.id),
-            mode="scan",
-        )
-        if (scan_result or {}).get("result") != "success":
-            raise HTTPException(
-                status_code=500,
-                detail=f"Scan failed: {(scan_result or {}).get('message', 'unknown error')}",
+        # From here on, any error must roll back the $push — otherwise a
+        # failed scan/process leaves a ghost workflow in the project doc
+        # with no delta table behind it.
+        try:
+            cli_config = CLIConfig(
+                user=UserBaseCLIConfig(
+                    id=current_user.id,
+                    email=current_user.email,
+                    is_admin=getattr(current_user, "is_admin", False),
+                    token=full_token,
+                ),
+                api_base_url=settings.fastapi.url,
+                s3_storage=settings.minio,
             )
 
-        process_result = process_data_collection_helper(
-            CLI_config=cli_config,
-            wf=workflow,
-            dc_id=str(data_collection.id),
-            mode="process",
-            command_parameters={"overwrite": True},
-        )
-        if (process_result or {}).get("result") != "success":
-            raise HTTPException(
-                status_code=500,
-                detail=f"Processing failed: {(process_result or {}).get('message', 'unknown error')}",
+            scan_result = process_data_collection_helper(
+                CLI_config=cli_config,
+                wf=workflow,
+                dc_id=str(data_collection.id),
+                mode="scan",
             )
+            if (scan_result or {}).get("result") != "success":
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Scan failed: {(scan_result or {}).get('message', 'unknown error')}",
+                )
+
+            process_result = process_data_collection_helper(
+                CLI_config=cli_config,
+                wf=workflow,
+                dc_id=str(data_collection.id),
+                mode="process",
+                command_parameters={"overwrite": True},
+            )
+            if (process_result or {}).get("result") != "success":
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Processing failed: {(process_result or {}).get('message', 'unknown error')}",
+                )
+        except Exception:
+            projects_collection.update_one(
+                {"_id": project_oid},
+                {"$pull": {"workflows": {"_id": ObjectId(str(workflow.id))}}},
+            )
+            raise
 
         return {
             "success": True,
