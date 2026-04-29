@@ -230,6 +230,164 @@ def _apply_conditionals(
     return config, active_dashboards
 
 
+def _file_exists_any(filepath: str, data_root: str) -> bool:
+    """Check if a file exists, trying multiple resolution strategies.
+
+    Tries: absolute path, relative to data_root, relative to CWD.
+    """
+    p = Path(filepath)
+    if p.is_absolute():
+        return p.exists()
+    # Relative: try data_root first, then CWD
+    return (Path(data_root) / p).exists() or p.exists()
+
+
+def _check_dc_source_files(
+    dc: dict[str, Any],
+    data_root: str,
+) -> str | None:
+    """Check if a DC's source files exist. Return missing path or None if all OK."""
+    config = dc.get("config", {})
+    source = config.get("source")
+
+    if source == "transformed":
+        # Recipe DC: load recipe, check SOURCES paths (with source_overrides)
+        transform = config.get("transform", {})
+        recipe_name = transform.get("recipe")
+        if not recipe_name:
+            return None
+        try:
+            from depictio.recipes import load_recipe
+
+            module = load_recipe(recipe_name)
+            overrides = {}
+            if transform.get("source_overrides"):
+                overrides = {
+                    ref: so.get("path", "") if isinstance(so, dict) else so
+                    for ref, so in transform["source_overrides"].items()
+                }
+            for src in module.SOURCES:
+                if src.dc_ref is not None:
+                    continue  # dc_ref sources checked via cascade
+                if src.optional:
+                    continue
+                rel_path = overrides.get(src.ref, src.path)
+                if rel_path and not _file_exists_any(rel_path, data_root):
+                    return rel_path
+        except Exception as exc:
+            logger.warning(f"Could not validate recipe '{recipe_name}': {exc}")
+            return None  # Don't remove on recipe load failure
+    else:
+        # Scan-based DC: check filename or regex pattern
+        scan = config.get("scan", {})
+        params = scan.get("scan_parameters", {})
+        filename = params.get("filename")
+        if filename:
+            if not _file_exists_any(filename, data_root):
+                return str(filename)
+        regex = params.get("regex_config", {}).get("pattern")
+        if regex and not any(c in regex for c in r".*+?[](){}|^$\\"):
+            # Literal path (no regex metacharacters)
+            if not _file_exists_any(regex, data_root):
+                return regex
+
+    return None
+
+
+def _remove_dcs_with_missing_files(
+    config: dict[str, Any],
+    data_root: str,
+) -> tuple[dict[str, Any], list[dict[str, str]]]:
+    """Scan DCs for missing source files and auto-remove them.
+
+    Also cascades removal for DCs whose dc_ref dependencies were removed.
+
+    Args:
+        config: Resolved project config dict (modified in place).
+        data_root: Absolute path to data root directory.
+
+    Returns:
+        Tuple of (modified_config, removal_report).
+    """
+    removal_report: list[dict[str, str]] = []
+    removed_tags: set[str] = set()
+
+    # Pass 1: Check file existence for each DC
+    for workflow in config.get("workflows", []):
+        for dc in workflow.get("data_collections", []):
+            tag = dc.get("data_collection_tag", "")
+            missing = _check_dc_source_files(dc, data_root)
+            if missing:
+                removed_tags.add(tag)
+                removal_report.append(
+                    {
+                        "tag": tag,
+                        "reason": "source file not found",
+                        "missing_path": missing,
+                    }
+                )
+
+    # Pass 2: Cascade dc_ref removals (iterate until stable)
+    changed = True
+    while changed:
+        changed = False
+        for workflow in config.get("workflows", []):
+            for dc in workflow.get("data_collections", []):
+                tag = dc.get("data_collection_tag", "")
+                if tag in removed_tags:
+                    continue
+                transform = dc.get("config", {}).get("transform", {})
+                recipe_name = transform.get("recipe")
+                if not recipe_name:
+                    continue
+                try:
+                    from depictio.recipes import load_recipe
+
+                    module = load_recipe(recipe_name)
+                    for src in module.SOURCES:
+                        if src.dc_ref and not src.optional and src.dc_ref in removed_tags:
+                            removed_tags.add(tag)
+                            removal_report.append(
+                                {
+                                    "tag": tag,
+                                    "reason": f"depends on removed DC '{src.dc_ref}'",
+                                    "missing_path": f"dc_ref:{src.dc_ref}",
+                                }
+                            )
+                            changed = True
+                            break
+                except Exception:
+                    pass
+
+    # Remove DCs and prune links (same pattern as _apply_conditionals)
+    if removed_tags:
+        for workflow in config.get("workflows", []):
+            dcs = workflow.get("data_collections", [])
+            workflow["data_collections"] = [
+                dc for dc in dcs if dc.get("data_collection_tag") not in removed_tags
+            ]
+
+        surviving_links = []
+        for link in config.get("links", []):
+            src = link.get("source_dc_tag", "")
+            tgt = link.get("target_dc_tag", "")
+            if src not in removed_tags and tgt not in removed_tags:
+                surviving_links.append(link)
+        config["links"] = surviving_links
+
+    return config, removal_report
+
+
+def _log_removal_report(report: list[dict[str, str]]) -> None:
+    """Log a summary of auto-removed DCs with actionable messages."""
+    if not report:
+        return
+    logger.warning(f"{len(report)} data collection(s) auto-removed (source files not found):")
+    for entry in report:
+        logger.warning(f"  • {entry['tag']}: {entry['missing_path']} ({entry['reason']})")
+    logger.warning("Dashboard components referencing these will be excluded.")
+
+
 def _auto_detect_metadata_columns(metadata_path: Path, variables: dict[str, str]) -> None:
     """Read metadata file headers and auto-populate GROUP_COL and ANNOTATION_COLS.
 
@@ -254,6 +412,9 @@ def _auto_detect_metadata_columns(metadata_path: Path, variables: dict[str, str]
         annotation_cols = [c for c in cols[1:] if c]
         if annotation_cols:
             variables.setdefault("GROUP_COL", annotation_cols[0])
+            variables.setdefault(
+                "GROUP_COL_DISPLAY", variables["GROUP_COL"].replace("_", " ").title()
+            )
             variables["ANNOTATION_COLS"] = ",".join(annotation_cols)
             logger.info(
                 f"Metadata auto-detect: {len(annotation_cols)} annotation columns "
@@ -323,7 +484,11 @@ def resolve_template(
     if "METADATA_FILE" in variables:
         metadata_path = Path(variables["METADATA_FILE"])
         if not metadata_path.is_absolute():
-            metadata_path = Path(data_root_abs) / metadata_path
+            # Try relative to data_root first, then CWD
+            candidate = Path(data_root_abs) / metadata_path
+            if candidate.is_file():
+                metadata_path = candidate
+            # else keep as-is (relative to CWD)
         if metadata_path.is_file():
             _auto_detect_metadata_columns(metadata_path, variables)
 
@@ -355,6 +520,14 @@ def resolve_template(
         template_dir,
     )
 
+    # 6b. File scanning for missing source files (disabled for now —
+    # conditionals handle base vs extended split; file scanning is too
+    # aggressive with pre-computed reference data).
+    # TODO: Re-enable when running against real pipeline output directories.
+    # resolved_config, removal_report = _remove_dcs_with_missing_files(resolved_config, data_root_abs)
+    # if removal_report:
+    #     _log_removal_report(removal_report)
+
     # 7. Strip hardcoded IDs (fresh project gets new ones)
     resolved_config = _strip_ids(resolved_config)
 
@@ -369,6 +542,7 @@ def resolve_template(
         template_id=template_metadata.template_id,
         template_version=template_metadata.version,
         data_root=data_root_abs,
+        variables=dict(variables),
         applied_at=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         config_snapshot=copy.deepcopy(resolved_config),
     )

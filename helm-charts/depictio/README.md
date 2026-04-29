@@ -109,6 +109,11 @@ These credentials are also stored in the Kubernetes Secret named `<release-name>
 | `minio.service.type` | MinIO service type | `ClusterIP` |
 | `minio.service.httpPort` | MinIO HTTP service port | `9000` |
 | `minio.service.consolePort` | MinIO console service port | `9001` |
+| `minio.ingress.separateRoute` | Split MinIO out of the shared ingress so `/` auth settings do not affect it | `false` |
+| `minio.ingress.annotations` | MinIO-specific ingress annotations; falls back to `ingress.annotations` | `{}` |
+| `minio.ingress.labels` | MinIO-specific ingress labels; falls back to `ingress.labels` | `{}` |
+| `minio.ingress.hosts` | Optional explicit host rules for the dedicated MinIO ingress | `[]` |
+| `minio.ingress.tls` | Optional TLS entries for the dedicated MinIO ingress; falls back to `ingress.tls` | `[]` |
 | `minio.args` | MinIO container arguments | `["server", "/data", "--console-address", ":9001"]` |
 
 ### Backend parameters
@@ -127,6 +132,11 @@ These credentials are also stored in the Kubernetes Secret named `<release-name>
 | `backend.env` | Backend environment variables | Check `values.yaml` |
 | `backend.command` | Backend container command | `["python", "/app/depictio/api/run.py"]` |
 | `backend.securityContext.fsGroup` | Backend pod fsGroup | `2000` |
+| `backend.ingress.separateRoute` | Split the API out of the shared ingress so `/` auth settings do not affect it | `false` |
+| `backend.ingress.annotations` | Backend-specific ingress annotations; falls back to `ingress.annotations` | `{}` |
+| `backend.ingress.labels` | Backend-specific ingress labels; falls back to `ingress.labels` | `{}` |
+| `backend.ingress.hosts` | Optional explicit host rules for the dedicated backend ingress | `[]` |
+| `backend.ingress.tls` | Optional TLS entries for the dedicated backend ingress; falls back to `ingress.tls` | `[]` |
 
 ### Frontend parameters
 

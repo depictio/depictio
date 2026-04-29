@@ -722,10 +722,30 @@ def _process_single_figure(
 
         load_key = figure_to_load_key.get(figure_index)
         if not load_key or load_key not in dc_cache:
-            logger.warning(f"[{task_id}] No cached data for figure {component_id}")
-            return _create_error_figure("Data not available", current_theme), {}
+            from depictio.dash.modules.shared.placeholders import (
+                create_data_unavailable_figure,
+            )
+
+            dc_tag = trigger_data.get("data_collection_tag", "unknown")
+            logger.warning(f"[{task_id}] No cached data for figure {component_id} (dc: {dc_tag})")
+            return create_data_unavailable_figure(dc_tag, theme=current_theme), {}
 
         df = dc_cache[load_key]
+
+        # Extract _col_annotations_json into dict_kwargs BEFORE heatmap column
+        # filtering -- the filter drops non-structural columns, losing the
+        # annotation data.  Placing it in dict_kwargs lets the filter's existing
+        # reindexing logic (lines 639-662) keep annotations aligned with the
+        # filtered sample columns.
+        if visu_type.lower() == "heatmap" and "_col_annotations_json" in df.columns:
+            if "col_annotations" not in dict_kwargs or not dict_kwargs.get("col_annotations"):
+                try:
+                    raw_val = df["_col_annotations_json"][0]
+                    if isinstance(raw_val, str):
+                        dict_kwargs["col_annotations"] = raw_val
+                except Exception:
+                    pass
+            df = df.drop("_col_annotations_json")
 
         # Heatmap column-level filtering: samples are column names, not row values
         if visu_type.lower() == "heatmap" and figure_filters:
@@ -969,17 +989,20 @@ def _extract_required_columns(dict_kwargs: dict, visu_type: str) -> list[str]:
         List of column names required for the figure
     """
     # Heatmap: if value_columns specified, use those + index + annotations;
-    # otherwise return empty list to load all columns (auto-detects numeric)
+    # otherwise return empty list to load ALL columns (auto-detects numeric).
+    # Returning empty list ensures _col_annotations_json and sample columns are preserved.
     if visu_type.lower() == "heatmap":
-        columns: list[str] = []
+        # Only constrain columns when value_columns is explicitly specified
+        if not dict_kwargs.get("value_columns"):
+            return []
 
-        # Scalar column params
+        columns: list[str] = ["_col_annotations_json"]
+
         for param in ("index_column", "split_rows_by"):
             val = dict_kwargs.get(param)
             if val and isinstance(val, str):
                 columns.append(val)
 
-        # List-like column params (value_columns, row_annotations)
         for param in ("value_columns", "row_annotations"):
             val = dict_kwargs.get(param)
             if isinstance(val, str):
@@ -989,7 +1012,7 @@ def _extract_required_columns(dict_kwargs: dict, visu_type: str) -> list[str]:
             elif isinstance(val, dict):
                 columns.extend(val.keys())
 
-        return list(set(columns)) if columns else []
+        return list(set(columns))
 
     columns = []
 
@@ -1105,7 +1128,34 @@ def _create_figure_from_data(
 
             from depictio.dash.modules.figure_component.utils import _collect_heatmap_kwargs
 
+            # Extract dynamic column annotations from recipe-generated column
+            if "_col_annotations_json" in pandas_df.columns:
+                if "col_annotations" not in cleaned_kwargs or not cleaned_kwargs.get(
+                    "col_annotations"
+                ):
+                    try:
+                        raw_val = pandas_df["_col_annotations_json"].iloc[0]
+                        if isinstance(raw_val, str):
+                            cleaned_kwargs["col_annotations"] = raw_val
+                        elif isinstance(raw_val, dict):
+                            cleaned_kwargs["col_annotations"] = raw_val
+                    except Exception as e:
+                        logger.error(f"Failed to extract _col_annotations_json: {e}")
+                pandas_df = pandas_df.drop(columns=["_col_annotations_json"])
+
             heatmap_kwargs = _collect_heatmap_kwargs(cleaned_kwargs)
+
+            # Sanitize col_annotations: remove annotations with None/empty values
+            # (ComplexHeatmap crashes on None in categorical color mapping)
+            if "col_annotations" in heatmap_kwargs and isinstance(
+                heatmap_kwargs["col_annotations"], dict
+            ):
+                heatmap_kwargs["col_annotations"] = {
+                    k: v
+                    for k, v in heatmap_kwargs["col_annotations"].items()
+                    if not any(val is None or val == "" for val in v.get("values", []))
+                }
+
             hm = ComplexHeatmap.from_dataframe(pandas_df, **heatmap_kwargs)
             fig = hm.to_plotly()
             fig.update_layout(

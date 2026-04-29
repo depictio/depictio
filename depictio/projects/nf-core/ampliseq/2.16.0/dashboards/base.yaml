@@ -88,17 +88,54 @@ main_dashboard:
       y: 18
       w: 4
       h: 5
+  - component_type: interactive
+    workflow_tag: ampliseq
+    data_collection_tag: samplesheet
+    interactive_component_type: MultiSelect
+    column_name: sampleID
+    column_type: object
+    display:
+      title_size: md
+      custom_color: '#45B8AC'
+      icon_name: mdi:flask
+    tag: interactive-multiqc-sample-filter-base
+    index: multiqc-sample-filter
+    layout:
+      x: 0
+      y: 0
+      w: 1
+      h: 3
+    title: Sample ID
 tabs:
 - title: Community Analysis
-  subtitle: Alpha Diversity & Taxonomic Composition
+  subtitle: Taxonomic Composition
   tab_order: 1
   tab_icon: mdi:bacteria-outline
   tab_icon_color: teal
   icon: /assets/images/workflows/nf-core.png
   icon_color: green
   workflow_system: nf-core
-  dashboard_id: 646b0f3c1e4a2d7f8e5b8cb3
+  dashboard_id: 646b0f3c1e4a2d7f8e5b8cb5
   components:
+  - component_type: card
+    workflow_tag: ampliseq
+    data_collection_tag: taxonomy_rel_abundance
+    aggregation: nunique
+    column_name: sample
+    column_type: object
+    display:
+      icon_name: mdi:flask
+      icon_color: '#45B8AC'
+      title_color: '#45B8AC'
+      title_font_size: xl
+      value_font_size: xl
+    tag: card-sample_nunique-base-a1b2c3
+    layout:
+      x: 0
+      y: 0
+      w: 2
+      h: 2
+    title: Total Samples
   - component_type: card
     workflow_tag: ampliseq
     data_collection_tag: taxonomy_rel_abundance
@@ -113,84 +150,49 @@ tabs:
       value_font_size: xl
     tag: card-taxonomy_nunique-d2ba1c
     layout:
-      x: 2
-      y: 0
+      x: 0
+      y: 2
       w: 2
       h: 2
     title: Total Taxa
   - component_type: card
     workflow_tag: ampliseq
-    data_collection_tag: alpha_diversity
-    aggregation: average
-    column_name: faith_pd
-    column_type: float64
+    data_collection_tag: taxonomy_rel_abundance
+    aggregation: nunique
+    column_name: Kingdom
+    column_type: object
     display:
-      icon_name: mdi:chart-line
-      icon_color: '#F68B33'
-      title_color: '#F68B33'
+      icon_name: mdi:domain
+      icon_color: '#F8766D'
+      title_color: '#F8766D'
       title_font_size: xl
       value_font_size: xl
-    tag: card-faith_pd_average-66fb50
+    tag: card-kingdom_nunique-base-d4e5f6
     layout:
-      x: 4
-      y: 0
+      x: 0
+      y: 4
       w: 2
       h: 2
-    title: Mean Faith PD
-  - component_type: figure
+    title: Kingdoms
+  - component_type: card
     workflow_tag: ampliseq
-    data_collection_tag: alpha_rarefaction
-    visu_type: line
-    figure_params:
-      x: depth
-      y: faith_pd
-      color: sample
-      title: Alpha Diversity Rarefaction Curves
-      labels:
-        depth: Rarefaction Depth
-        faith_pd: Faith's Phylogenetic Diversity
-    mode: code
-    code_content: "df_modified = df.group_by([\"sample\", \"depth\"]).agg([\n    pl.col(\"\
-      faith_pd\").mean().alias(\"mean\"),\n    pl.col(\"faith_pd\").std().alias(\"\
-      std\")\n]).sort(\"depth\")\n\nfig = px.line(\n    df_modified.to_pandas(),\n\
-      \    x=\"depth\", y=\"mean\", color=\"sample\",\n    error_y=\"std\", markers=True,\n\
-      \    labels={\"depth\": \"Rarefaction Depth\", \"mean\": \"Faith's Phylogenetic\
-      \ Diversity\"},\n    title=\"Alpha Diversity Rarefaction Curves\"\n)\nfig.update_traces(mode=\"\
-      lines+markers\")\nfig.update_layout(yaxis={'rangemode': 'tozero'})"
-    selection_enabled: false
-    tag: figure-line_depth_faith_pd-5d9f17
+    data_collection_tag: taxonomy_rel_abundance
+    aggregation: nunique
+    column_name: Phylum
+    column_type: object
+    display:
+      icon_name: mdi:bacteria-outline
+      icon_color: '#377EB8'
+      title_color: '#377EB8'
+      title_font_size: xl
+      value_font_size: xl
+    tag: card-phylum_nunique-base-g7h8i9
     layout:
       x: 0
-      y: 2
-      w: 8
-      h: 5
-  - component_type: figure
-    workflow_tag: ampliseq
-    data_collection_tag: alpha_diversity
-    visu_type: bar
-    figure_params:
-      x: habitat
-      y: faith_pd
-      color: habitat
-      title: Alpha Diversity by Habitat (Faith PD)
-      labels:
-        habitat: Habitat
-        faith_pd: Faith's Phylogenetic Diversity
-    mode: code
-    code_content: "df_modified = df.to_pandas().groupby('habitat')['faith_pd'].agg(['mean',\
-      \ 'std']).reset_index()\nfig = px.bar(\n    df_modified, x='habitat', y='mean',\
-      \ color='habitat',\n    error_y='std',\n    color_discrete_map={'Riverwater':\
-      \ '#377EB8', 'Groundwater': '#4DAF4A', 'Sediment': '#E41A1C', 'Soil': '#FF7F00'},\n\
-      \    title='Alpha Diversity by Habitat (Faith PD)',\n    labels={'habitat': 'Habitat',\
-      \ 'mean': \"Faith's Phylogenetic Diversity\"}\n)\nfig.update_layout(xaxis={'categoryorder':\
-      \ 'category ascending'}, yaxis={'rangemode': 'tozero'}, showlegend=False)"
-    selection_enabled: false
-    tag: figure-bar_sample_faith_pd-5b8018
-    layout:
-      x: 0
-      y: 7
-      w: 4
-      h: 5
+      y: 6
+      w: 2
+      h: 2
+    title: Unique Phyla
   - component_type: figure
     workflow_tag: ampliseq
     data_collection_tag: taxonomy_rel_abundance
@@ -210,10 +212,11 @@ tabs:
     selection_enabled: false
     tag: figure-sunburst-e651a9
     layout:
-      x: 4
-      y: 7
-      w: 4
-      h: 5
+      x: 2
+      y: 0
+      w: 6
+      h: 8
+    title: Taxonomic Hierarchy
   - component_type: figure
     workflow_tag: ampliseq
     data_collection_tag: taxonomy_rel_abundance
@@ -222,26 +225,26 @@ tabs:
       x: Phylum
       y: mean_rel_abundance
       color: Phylum
-      facet_row: habitat
-      title: Mean Relative Abundance by Habitat
+      title: Mean Relative Abundance by Phylum
       labels:
         Phylum: Phylum
         mean_rel_abundance: Mean Relative Abundance
-        habitat: Habitat
     mode: code
-    code_content: "df_mean = df.group_by(['habitat', 'Phylum']).agg(pl.col('rel_abundance').mean().alias('mean_rel_abundance')).sort('Phylum')\n\
-      fig = px.bar(\n    df_mean.to_pandas(),\n    x='Phylum', y='mean_rel_abundance',\
-      \ color='Phylum',\n    facet_row='habitat',\n    title='Mean Relative Abundance\
-      \ by Habitat',\n    labels={'Phylum': 'Phylum', 'mean_rel_abundance': 'Mean\
-      \ Relative Abundance'}\n)\nfig.update_layout(xaxis={'categoryorder': 'category\
-      \ ascending'})\nfig.update_xaxes(tickangle=-45, tickfont={'size': 9})\nfig.update_layout(showlegend=False)"
+    code_content: "df_stats = df.group_by(['Phylum']).agg([\n    pl.col('rel_abundance').mean().alias('mean_rel_abundance'),\n\
+      \    pl.col('rel_abundance').std().alias('std_rel_abundance')\n]).sort('Phylum')\n\
+      fig = px.bar(\n    df_stats.to_pandas(),\n    x='Phylum', y='mean_rel_abundance',\
+      \ color='Phylum',\n    error_y='std_rel_abundance',\n    title='Mean Relative\
+      \ Abundance by Phylum (± std)',\n    labels={'Phylum': 'Phylum', 'mean_rel_abundance':\
+      \ 'Mean Relative Abundance'}\n)\nfig.update_layout(xaxis={'categoryorder':\
+      \ 'category ascending'})\nfig.update_xaxes(tickangle=-45, tickfont={'size':\
+      \ 9})\nfig.update_layout(showlegend=False)"
     selection_enabled: false
     tag: figure-bar_phylum_rel_abundance-de4c39
     layout:
       x: 0
-      y: 12
+      y: 8
       w: 8
-      h: 8
+      h: 7
   - component_type: figure
     workflow_tag: ampliseq
     data_collection_tag: taxonomy_rel_abundance
@@ -250,7 +253,6 @@ tabs:
       x: sample
       y: rel_abundance
       color: Phylum
-      facet_col: habitat
       title: Taxonomic Composition by Sample (Relative Abundance)
       labels:
         sample: Sample ID
@@ -259,33 +261,76 @@ tabs:
       barmode: stack
     mode: code
     code_content: "df_sorted = df.sort('sample')\nfig = px.bar(\n    df_sorted.to_pandas(),\n\
-      \    x='sample', y='rel_abundance', color='Phylum',\n    facet_col='habitat',\n\
-      \    title='Taxonomic Composition by Sample (Relative Abundance)',\n    labels={'sample':\
-      \ 'Sample ID', 'rel_abundance': 'Relative Abundance', 'Phylum': 'Phylum'},\n\
-      \    barmode='stack',\n    category_orders={'sample': sorted(df_sorted['sample'].unique().to_list())}\n\
-      )\nfig.update_xaxes(matches=None, tickangle=-45, tickfont={'size': 9})\nfig.for_each_xaxis(lambda\
-      \ axis: axis.update(categoryorder='category ascending'))"
+      \    x='sample', y='rel_abundance', color='Phylum',\n    title='Taxonomic Composition\
+      \ by Sample (Relative Abundance)',\n    labels={'sample': 'Sample ID', 'rel_abundance':\
+      \ 'Relative Abundance', 'Phylum': 'Phylum'},\n    barmode='stack',\n    category_orders={'sample':\
+      \ sorted(df_sorted['sample'].unique().to_list())}\n)\nfig.update_xaxes(tickangle=-45,\
+      \ tickfont={'size': 9})"
     selection_enabled: false
     tag: figure-bar_sample_rel_abundance-de4c39
     layout:
       x: 0
-      y: 24
+      y: 15
       w: 8
       h: 8
   - component_type: table
     workflow_tag: ampliseq
     data_collection_tag: taxonomy_rel_abundance
     title: Taxonomy Relative Abundance
-    description: Phylum-level relative abundance per sample with habitat annotations
+    description: Phylum-level relative abundance per sample
     title_size: h2
     title_align: left
     row_selection_enabled: false
     tag: table-table-02f050
     layout:
       x: 0
-      y: 32
+      y: 30
       w: 8
       h: 6
+  - component_type: figure
+    workflow_tag: ampliseq
+    data_collection_tag: taxonomy_heatmap
+    visu_type: heatmap
+    dict_kwargs:
+      index_column: Phylum
+      row_annotations: '{"Kingdom": {"type": "categorical", "colors": {"Bacteria": "#F8766D",
+        "Archaea": "#00BFC4"}}}'
+      cluster_rows: true
+      cluster_cols: true
+      normalize: row
+      colorscale: RdBu_r
+      name: z-score
+      width: 1000
+      height: 700
+    mode: ui
+    selection_enabled: false
+    tag: figure-heatmap-taxonomy-composition-base
+    title: Taxonomic Composition Heatmap
+    description: Row-normalized (z-score) relative abundance of phyla across samples,
+      clustered by similarity with Kingdom annotations
+    layout:
+      x: 0
+      y: 23
+      w: 8
+      h: 7
+  - component_type: interactive
+    workflow_tag: ampliseq
+    data_collection_tag: taxonomy_rel_abundance
+    interactive_component_type: MultiSelect
+    column_name: sample
+    column_type: object
+    display:
+      title_size: md
+      custom_color: '#45B8AC'
+      icon_name: mdi:flask
+    tag: interactive-community-sample-filter-base
+    index: community-sample-filter
+    layout:
+      x: 0
+      y: 0
+      w: 1
+      h: 3
+    title: Sample ID
   - component_type: interactive
     workflow_tag: ampliseq
     data_collection_tag: taxonomy_rel_abundance
@@ -299,7 +344,7 @@ tabs:
     tag: interactive-kingdom-b112bb
     layout:
       x: 0
-      y: 8
+      y: 3
       w: 1
       h: 2
     title: Kingdom
@@ -316,28 +361,10 @@ tabs:
     tag: interactive-phylum-f89384
     layout:
       x: 0
-      y: 10
+      y: 5
       w: 1
       h: 3
     title: Phylum
-  - component_type: interactive
-    workflow_tag: ampliseq
-    data_collection_tag: alpha_rarefaction
-    interactive_component_type: RangeSlider
-    column_name: faith_pd
-    column_type: float64
-    display:
-      title_size: md
-      custom_color: '#9C27B0'
-      icon_name: mdi:chart-box-outline
-    tag: interactive-range-faith-pd-slider-5cf75b
-    index: range-faith-pd-slider
-    layout:
-      x: 0
-      y: 13
-      w: 1
-      h: 3
-    title: Faith PD Range
   - component_type: interactive
     workflow_tag: ampliseq
     data_collection_tag: taxonomy_rel_abundance
@@ -352,7 +379,7 @@ tabs:
     index: range-rel-abundance-slider
     layout:
       x: 0
-      y: 16
+      y: 8
       w: 1
       h: 3
     title: Relative Abundance Range

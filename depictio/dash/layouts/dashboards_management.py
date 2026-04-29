@@ -630,9 +630,10 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
                 badge_template = dmc.Tooltip(
                     label=f"Generated from template: {template_origin_id}",
                     children=dmc.Badge(
-                        f"Template: {template_origin_id}",
+                        template_origin_id,
                         color="indigo",
-                        variant="dot",
+                        variant="light",
+                        leftSection=DashIconify(icon="mdi:layers-outline", width=14),
                     ),
                 )
 
@@ -759,7 +760,7 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
                         align="center",
                     ),
                     dmc.Space(h=10),
-                    dmc.Stack(
+                    dmc.Group(
                         children=[
                             item
                             for item in [
@@ -772,9 +773,8 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
                             ]
                             if item is not None
                         ],
-                        justify="center",
-                        align="flex-start",
-                        gap=4,  # Minimal gap between badges (4px instead of xs=10px)
+                        gap=4,
+                        wrap="wrap",
                     ),
                     dmc.Space(h=10),
                 ]
