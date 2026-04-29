@@ -616,13 +616,9 @@ async def save_dashboard(
 
             user_id = str(getattr(current_user, "id", "") or "")
             generate_dashboard_screenshot_dual.delay(dashboard_id_str, user_id)
-            logger.debug(
-                f"Queued screenshot regeneration for dashboard {dashboard_id_str}"
-            )
+            logger.debug(f"Queued screenshot regeneration for dashboard {dashboard_id_str}")
         except Exception as exc:  # noqa: BLE001 — non-fatal best-effort dispatch
-            logger.warning(
-                f"Could not queue screenshot for {dashboard_id_str}: {exc}"
-            )
+            logger.warning(f"Could not queue screenshot for {dashboard_id_str}: {exc}")
 
         return {"message": message, "dashboard_id": dashboard_id_str}
     else:

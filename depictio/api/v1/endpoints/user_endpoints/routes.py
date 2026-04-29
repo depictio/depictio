@@ -388,9 +388,7 @@ async def get_current_user_info_optional(
     # everything not flagged public/example lands in "Accessed" because the
     # client thinks it's anonymous.
     if user_payload is None and settings.auth.is_single_user_mode:
-        admin_user = await UserBeanie.find_one(
-            {"is_admin": True, "is_anonymous": {"$ne": True}}
-        )
+        admin_user = await UserBeanie.find_one({"is_admin": True, "is_anonymous": {"$ne": True}})
         if admin_user:
             user_payload = {
                 "id": str(admin_user.id),

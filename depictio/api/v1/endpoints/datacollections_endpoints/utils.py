@@ -448,9 +448,7 @@ async def _create_dc_from_upload(
     # flow does the same thing.
     full_token = tokens_collection.find_one({"user_id": current_user.id})
     if not full_token:
-        raise HTTPException(
-            status_code=401, detail="No API token on file for this user."
-        )
+        raise HTTPException(status_code=401, detail="No API token on file for this user.")
 
     temp_dir = tempfile.mkdtemp(prefix="depictio_upload_")
     try:
