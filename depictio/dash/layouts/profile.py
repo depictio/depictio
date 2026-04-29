@@ -207,8 +207,7 @@ layout = dmc.Container(
                                                 variant="filled",
                                                 # color=colors["green"],
                                                 radius=BUTTON_RADIUS,
-                                                disabled=settings.auth.is_public_mode
-                                                or settings.auth.is_single_user_mode,
+                                                disabled=settings.auth.is_public_mode,
                                                 leftSection=DashIconify(
                                                     icon="mdi:console", width=ICON_SIZE
                                                 ),
@@ -226,10 +225,7 @@ layout = dmc.Container(
                                                 },
                                             ),
                                             href="/cli_configs"
-                                            if not (
-                                                settings.auth.is_public_mode
-                                                or settings.auth.is_single_user_mode
-                                            )
+                                            if not settings.auth.is_public_mode
                                             else "#",
                                         ),
                                     ],
