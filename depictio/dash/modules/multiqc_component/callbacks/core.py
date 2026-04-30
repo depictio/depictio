@@ -150,7 +150,10 @@ def _extract_sample_filters(
     return filtered_samples
 
 
-_SAMPLE_SUFFIX_RE = re.compile(r"_(?:R?\d+|REP\d+|TECH\d+)$", re.IGNORECASE)
+# Restricted to suffixes with an explicit prefix letter (R/L/REP/TECH) so we
+# don't over-strip IDs like "Sample_2024" or "Patient_42" — that would silently
+# collapse unrelated samples onto the same base bucket.
+_SAMPLE_SUFFIX_RE = re.compile(r"_(?:R\d+|L\d+|REP\d+|TECH\d+)$", re.IGNORECASE)
 
 
 def expand_canonical_samples_to_variants(
@@ -159,7 +162,7 @@ def expand_canonical_samples_to_variants(
     """Expand canonical sample IDs to all their MultiQC variants using stored mappings.
 
     Lookup tries exact key first, then falls back to base-name match
-    (stripping ``_R1`` / ``_R2`` / ``_1`` / ``_REP1`` style suffixes from
+    (stripping ``_R1`` / ``_R2`` / ``_REP1`` / ``_L001`` style suffixes from
     the mapping keys). Without the fallback, an interactive MultiSelect on
     a sample column emitting a base name like ``HG001`` matches nothing in
     a mapping keyed by ``HG001_R1`` / ``HG001_R2`` (MultiQC's own keying
