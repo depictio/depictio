@@ -148,7 +148,7 @@ minio:
 backend:
   image:
     repository: ghcr.io/depictio/depictio # Corrected repository path with .io
-    tag: "0.9.0"
+    tag: "0.10.0"
     pullPolicy: Always
   replicas: 1 # Balanced for stability and performance
   resources:
@@ -278,7 +278,7 @@ celery:
 frontend:
   image:
     repository: ghcr.io/depictio/depictio # Corrected repository path with .io
-    tag: "0.9.0"
+    tag: "0.10.0"
     pullPolicy: Always
   replicas: 1 # Balanced for stability and performance
   resources:
