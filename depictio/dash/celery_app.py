@@ -204,7 +204,6 @@ def prewarm_multiqc_dashboard(self, dashboard_id: str) -> dict:
     payloads are theme-agnostic so they're warmed once.
     """
     import hashlib
-    import json
 
     from bson import ObjectId
 
@@ -232,7 +231,6 @@ def prewarm_multiqc_dashboard(self, dashboard_id: str) -> dict:
     from depictio.dash.modules.figure_component.multiqc_vis import (
         _get_local_path_for_s3,
         create_multiqc_plot,
-        generate_figure_cache_key,
     )
     from depictio.dash.modules.multiqc_component.callbacks.core import (
         _normalize_multiqc_paths,
@@ -291,27 +289,21 @@ def prewarm_multiqc_dashboard(self, dashboard_id: str) -> dict:
         if not module or not plot:
             continue
 
-        # Regular figure — warm both light and dark, store JSON-safe form
-        # under the filter-aware key (filter_sig=None for the baseline).
+        # ``create_multiqc_plot`` is itself idempotent w.r.t. cache: it
+        # downloads each parquet, computes the figure cache key with real
+        # mtimes, and short-circuits on a cache hit. We just call it for
+        # each theme — a separate cache.get probe with the public
+        # ``generate_figure_cache_key`` would compute the key with mtime=0
+        # before download and never match the renderer's real-mtime key.
         for theme in ("light", "dark"):
             try:
-                key = generate_figure_cache_key(
-                    s3_locations, module, plot, dataset, theme, filter_sig=None
-                )
-                if cache.get(key) is not None:
-                    skipped += 1
-                    continue
-                fig = create_multiqc_plot(
+                create_multiqc_plot(
                     s3_locations=s3_locations,
                     module=module,
                     plot=plot,
                     dataset_id=dataset,
                     theme=theme,
                 )
-                fig_dict = json.loads(fig.to_json()) if hasattr(fig, "to_json") else fig
-                if isinstance(fig_dict, dict) and "layout" in fig_dict:
-                    fig_dict["layout"].setdefault("uirevision", "persistent")
-                cache.set(key, fig_dict, ttl=7200)
                 warmed += 1
             except Exception as e:
                 logger.warning(

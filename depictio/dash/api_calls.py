@@ -3094,37 +3094,65 @@ def api_call_append_to_multiqc_data_collection(
                 _download_parquet_from_s3(s3_location, local_path)
                 fetched_from_s3_count += 1
 
-            # 3. Point workflow at temp dir; wipe Mongo (S3 stays — processor re-uploads).
+            # 3. Capture the old report IDs so we can delete them *after*
+            #    the processor successfully writes the merged set. The previous
+            #    "wipe Mongo first, reprocess second" order meant a processor
+            #    failure left the DC empty (parquets still in S3 but no
+            #    Mongo rows → user sees zero reports). Deferring the delete
+            #    keeps both old and new on partial failure, surfaces a clear
+            #    error, and keeps the DC's data intact.
+            old_report_ids = [
+                str(rid) for r in existing_reports if (rid := r.get("id") or r.get("_id"))
+            ]
+
             workflow.data_location.locations = [temp_dir]
 
-            delete_result = api_call_bulk_delete_multiqc_reports(
-                data_collection_id, token, delete_s3_files=False
-            )
-            if not delete_result or not delete_result.get("success"):
-                return {
-                    "success": False,
-                    "message": (
-                        "Failed to clear existing MultiQC reports before append: "
-                        f"{delete_result.get('message') if delete_result else 'unknown error'}"
-                    ),
-                    "status_code": delete_result.get("status_code", 500) if delete_result else 500,
-                }
-
-            # 4. Re-ingest the merged folder set.
+            # 4. Re-ingest the merged folder set. Processor inserts brand-new
+            #    rows because original_file_path now points at the temp dir
+            #    (different from the originals on disk before).
             process_result = _run_multiqc_processor(workflow, str(dc.id), cli_config)
             if not process_result.get("success", True) and "status_code" in process_result:
+                logger.warning(
+                    "Append processor failed — keeping old reports intact. "
+                    "User retains pre-append state; no data loss."
+                )
                 return process_result
+
+            # 5. Processor succeeded — drop the old report rows. Use the
+            #    single-delete endpoint per id (small N) so we don't risk
+            #    catching the freshly-inserted rows, which is what the
+            #    DC-wide bulk-delete would do.
+            cleanup_failed = 0
+            for rid in old_report_ids:
+                try:
+                    response = httpx.delete(
+                        f"{API_BASE_URL}/depictio/api/v1/multiqc/reports/{rid}",
+                        params={"delete_s3_file": "false"},
+                        headers={"Authorization": f"Bearer {token}"},
+                        timeout=settings.performance.api_request_timeout,
+                    )
+                    if response.status_code != 200:
+                        cleanup_failed += 1
+                        logger.warning(
+                            f"Append cleanup: stale report {rid} delete returned {response.status_code}"
+                        )
+                except Exception as e:
+                    cleanup_failed += 1
+                    logger.warning(f"Append cleanup: stale report {rid} delete raised: {e}")
 
             return {
                 "success": True,
                 "message": (
                     f"MultiQC DC appended ({len(folder_assignments)} new folder(s), "
-                    f"{fetched_from_s3_count} existing folder(s) preserved)"
+                    f"{fetched_from_s3_count} existing folder(s) preserved"
+                    + (f", {cleanup_failed} stale rows left behind" if cleanup_failed else "")
+                    + ")"
                 ),
                 "data_collection_id": str(dc.id),
                 "ingested_folders": sorted(new_folders),
                 "skipped_count": len(skipped_names),
                 "fetched_from_s3_count": fetched_from_s3_count,
+                "cleanup_failed": cleanup_failed,
             }
         finally:
             shutil.rmtree(temp_dir, ignore_errors=True)
