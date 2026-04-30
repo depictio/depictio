@@ -104,17 +104,21 @@ class SampleMappingResolver(BaseLinkResolver):
     def name(self) -> str:
         return "sample_mapping"
 
-    # Common read-pair / replicate suffixes that appear on canonical IDs in
-    # MultiQC's mapping but NOT on the source DC's sample column. Stripping
+    # Common read-pair / replicate / lane suffixes that appear on canonical IDs
+    # in MultiQC's mapping but NOT on the source DC's sample column. Stripping
     # them lets a source value like "HG001" match keys "HG001_R1" + "HG001_R2".
+    # Restricted to suffixes with an explicit prefix letter (R/L/REP/TECH) so
+    # we don't over-strip legit IDs ending in digits like "Sample_2024" or
+    # "Patient_42" — that would silently collapse unrelated samples onto
+    # the same base bucket.
     _SAMPLE_SUFFIX_RE = re.compile(
-        r"_(?:R?\d+|REP\d+|TECH\d+)$",
+        r"_(?:R\d+|L\d+|REP\d+|TECH\d+)$",
         re.IGNORECASE,
     )
 
     @classmethod
     def _strip_sample_suffix(cls, name: str) -> str:
-        """Strip ``_R1`` / ``_R2`` / ``_1`` / ``_REP1`` style suffixes from a sample name."""
+        """Strip ``_R1`` / ``_R2`` / ``_REP1`` / ``_L001`` style suffixes."""
         return cls._SAMPLE_SUFFIX_RE.sub("", name)
 
     def resolve(

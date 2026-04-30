@@ -17,6 +17,8 @@ from depictio.api.v1.celery_dispatch import offload_or_run
 from depictio.api.v1.celery_tasks import build_multiqc_preview as build_multiqc_preview_task
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
+from depictio.api.v1.db import multiqc_collection, projects_collection
+from depictio.api.v1.endpoints.dashboards_endpoints.routes import check_project_permission
 from depictio.api.v1.endpoints.multiqc_endpoints.utils import (
     check_duplicate_multiqc_report,
     create_multiqc_report_in_db,
@@ -34,6 +36,38 @@ from depictio.api.v1.endpoints.user_endpoints.routes import (
 )
 from depictio.models.models.multiqc_reports import MultiQCReport
 from depictio.models.models.users import User
+
+
+def _project_id_for_dc(data_collection_id: str) -> str | None:
+    """Return the owning project's id for a DC, or None if unknown.
+
+    Walks ``projects.workflows[].data_collections[]`` in Mongo to locate
+    the workflow that owns the DC. The shape mirrors what the rest of
+    the codebase already does (see e.g. ``_fetch_s3_locations_from_dc``);
+    we don't have a flat dc → project index.
+    """
+    project = projects_collection.find_one(
+        {"workflows.data_collections._id": ObjectId(data_collection_id)},
+        {"_id": 1},
+    )
+    return str(project["_id"]) if project else None
+
+
+def _require_dc_editor_or_404(data_collection_id: str, user: User) -> None:
+    """Authorize a destructive call against a MultiQC DC.
+
+    Mirrors the project-permission check that the dashboard delete uses
+    so a stolen JWT can't reach across tenants and wipe another user's
+    MultiQC reports + S3 parquets via the bulk endpoint. Returns 404
+    instead of 403 when the DC isn't found OR the user has no rights —
+    don't leak existence to non-members.
+    """
+    project_id = _project_id_for_dc(data_collection_id)
+    if not project_id or not check_project_permission(project_id, user, "editor"):
+        raise HTTPException(
+            status_code=404,
+            detail=f"Data collection {data_collection_id} not found",
+        )
 
 
 class MultiQCReportResponse(BaseModel):
@@ -237,6 +271,17 @@ async def delete_multiqc_report(
     Returns:
         Deletion confirmation
     """
+    try:
+        report_oid = ObjectId(report_id)
+    except (InvalidId, TypeError):
+        raise HTTPException(status_code=400, detail=f"Invalid report id: {report_id}")
+
+    report_doc = multiqc_collection.find_one({"_id": report_oid}, {"data_collection_id": 1})
+    if not report_doc:
+        raise HTTPException(status_code=404, detail=f"Report {report_id} not found")
+
+    _require_dc_editor_or_404(str(report_doc["data_collection_id"]), current_user)
+
     return await delete_multiqc_report_by_id(report_id, delete_s3_file)
 
 
@@ -264,6 +309,8 @@ async def delete_all_reports_for_data_collection(
         raise HTTPException(
             status_code=400, detail=f"Invalid data collection id: {data_collection_id}"
         )
+
+    _require_dc_editor_or_404(data_collection_id, current_user)
 
     result = await delete_all_multiqc_reports_for_dc(data_collection_id, delete_s3_files)
     return {**result, "data_collection_id": data_collection_id}
