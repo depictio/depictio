@@ -918,16 +918,28 @@ def process_recipe_data_collection(
             for run_dir in run_data_dirs:
                 run_tag = os.path.basename(run_dir)
                 try:
-                    run_df = execute_recipe(recipe_name, run_dir, overrides, extra_sources=extra_sources, pipeline_version=pipeline_version)
+                    run_df = execute_recipe(
+                        recipe_name,
+                        run_dir,
+                        overrides,
+                        extra_sources=extra_sources,
+                        pipeline_version=pipeline_version,
+                    )
                     run_df = run_df.with_columns(pl.lit(run_tag).alias("depictio_run_id"))
                     all_dfs.append(run_df)
                 except RecipeError as e:
                     logger.warning(f"Recipe failed for run {run_tag}: {e}")
             if not all_dfs:
-                return {"result": "error", "message": f"Recipe failed for all runs"}
+                return {"result": "error", "message": "Recipe failed for all runs"}
             result_df = pl.concat(all_dfs, how="diagonal_relaxed")
         else:
-            result_df = execute_recipe(recipe_name, data_dir, overrides, extra_sources=extra_sources, pipeline_version=pipeline_version)
+            result_df = execute_recipe(
+                recipe_name,
+                data_dir,
+                overrides,
+                extra_sources=extra_sources,
+                pipeline_version=pipeline_version,
+            )
     except RecipeError as e:
         return {"result": "error", "message": f"Recipe failed: {e}"}
 

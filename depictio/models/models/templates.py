@@ -16,7 +16,7 @@ from datetime import datetime
 from typing import Any
 
 from bson import ObjectId
-from pydantic import BaseModel, Field, field_serializer, field_validator
+from pydantic import BaseModel, Field, field_validator
 
 
 def _require_nonempty(v: str, label: str) -> str:
@@ -177,25 +177,30 @@ class TemplateOrigin(BaseModel):
         default_factory=lambda: datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         description="Timestamp when template was applied",
     )
+    variables: dict[str, str] = Field(
+        default_factory=dict,
+        description="Resolved template variables (DATA_ROOT, SAMPLESHEET_FILE, GROUP_COL, etc.)",
+    )
     config_snapshot: dict[str, Any] = Field(
         default_factory=dict,
         description="Frozen copy of the resolved template config (for reproducibility)",
     )
 
-    @field_serializer("config_snapshot")
-    def serialize_config_snapshot(self, v: dict[str, Any]) -> dict[str, Any]:
-        """Recursively convert ObjectId values to strings for JSON serialization."""
+    @field_validator("config_snapshot", mode="before")
+    @classmethod
+    def sanitize_objectids(cls, v: Any) -> Any:
+        """Recursively convert bson ObjectId values to strings for JSON serialization."""
 
-        def convert(obj: Any) -> Any:
+        def _convert(obj: Any) -> Any:
             if isinstance(obj, ObjectId):
                 return str(obj)
             if isinstance(obj, dict):
-                return {k: convert(val) for k, val in obj.items()}
+                return {k: _convert(val) for k, val in obj.items()}
             if isinstance(obj, list):
-                return [convert(item) for item in obj]
+                return [_convert(item) for item in obj]
             return obj
 
-        return convert(v)
+        return _convert(v)
 
     @field_validator("template_id")
     @classmethod

@@ -16,35 +16,49 @@ main_dashboard:
     -   component_type: interactive
         workflow_tag: ampliseq
         data_collection_tag: metadata
+        interactive_component_type: DateRangePicker
+        column_name: sampling_date
+        column_type: datetime
+        display:
+            title_size: md
+            custom_color: '#FF6B6B'
+            icon_name: mdi:calendar-range
+        tag: interactive-multiqc-daterange-a1b2c3
+        index: multiqc-daterange
+        layout:
+            x: 0
+            y: 0
+            w: 1
+            h: 3
+        title: Sampling Period
+    -   component_type: interactive
+        workflow_tag: ampliseq
+        data_collection_tag: metadata
         interactive_component_type: MultiSelect
         column_name: "{GROUP_COL}"
-        # --- optional ---
         column_type: object
         display:
             title_size: md
             custom_color: '#984EA3'
             icon_name: mdi:tag-multiple
-        # --- generated on export ---
         tag: interactive-multiqc-group-filter-d8ca83
         index: multiqc-group-filter
         layout:
             x: 0
-            y: 0
+            y: 3
             w: 1
             h: 2
-        title: "{GROUP_COL}"
+        title: "{GROUP_COL_DISPLAY}"
     -   component_type: interactive
         workflow_tag: ampliseq
         data_collection_tag: metadata
         interactive_component_type: MultiSelect
-        column_name: sample
-        # --- optional ---
+        column_name: ID
         column_type: object
         display:
             title_size: md
             custom_color: '#45B8AC'
             icon_name: mdi:flask
-        # --- generated on export ---
         tag: interactive-multiqc-sample-filter-78c9c2
         index: multiqc-sample-filter
         layout:
@@ -154,7 +168,7 @@ tabs:
         workflow_tag: ampliseq
         data_collection_tag: metadata
         aggregation: nunique
-        column_name: sample
+        column_name: ID
         # --- optional ---
         column_type: object
         display:
@@ -233,7 +247,7 @@ tabs:
             y: 0
             w: 2
             h: 2
-        title: "{GROUP_COL} Types"
+        title: "{GROUP_COL_DISPLAY} Types"
     -   component_type: figure
         workflow_tag: ampliseq
         data_collection_tag: alpha_rarefaction
@@ -273,7 +287,7 @@ tabs:
             x: "{GROUP_COL}"
             y: faith_pd
             color: "{GROUP_COL}"
-            title: "Alpha Diversity by {GROUP_COL} (Faith PD)"
+            title: "Alpha Diversity by {GROUP_COL_DISPLAY} (Faith PD)"
             labels:
                 "{GROUP_COL}": "{GROUP_COL}"
                 faith_pd: "Faith's Phylogenetic Diversity"
@@ -281,7 +295,7 @@ tabs:
         code_content: "df_modified = df.to_pandas().groupby('{GROUP_COL}')['faith_pd'].agg(['mean',\
             \ 'std']).reset_index()\nfig = px.bar(\n    df_modified, x='{GROUP_COL}',\
             \ y='mean', color='{GROUP_COL}',\n    error_y='std',\n    title='Alpha\
-            \ Diversity by {GROUP_COL} (Faith PD)',\n    labels={'{GROUP_COL}': '{GROUP_COL}',\
+            \ Diversity by {GROUP_COL_DISPLAY} (Faith PD)',\n    labels={'{GROUP_COL}': '{GROUP_COL_DISPLAY}',\
             \ 'mean': \"Faith's Phylogenetic Diversity\"}\n)\nfig.update_layout(xaxis={'categoryorder':\
             \ 'category ascending'}, yaxis={'rangemode': 'tozero'}, showlegend=False)"
         selection_enabled: false
@@ -328,19 +342,21 @@ tabs:
             y: mean_rel_abundance
             color: Phylum
             facet_row: "{GROUP_COL}"
-            title: "Mean Relative Abundance by {GROUP_COL}"
+            title: "Mean Relative Abundance by {GROUP_COL_DISPLAY}"
             labels:
                 Phylum: Phylum
                 mean_rel_abundance: Mean Relative Abundance
                 "{GROUP_COL}": "{GROUP_COL}"
         mode: code
-        code_content: "df_mean = df.group_by(['{GROUP_COL}', 'Phylum']).agg(pl.col('rel_abundance').mean().alias('mean_rel_abundance')).sort('Phylum')\n\
-            fig = px.bar(\n    df_mean.to_pandas(),\n    x='Phylum', y='mean_rel_abundance',\
-            \ color='Phylum',\n    facet_row='{GROUP_COL}',\n    title='Mean Relative\
-            \ Abundance by {GROUP_COL}',\n    labels={'Phylum': 'Phylum', 'mean_rel_abundance':\
-            \ 'Mean Relative Abundance'}\n)\nfig.update_layout(xaxis={'categoryorder':\
-            \ 'category ascending'})\nfig.update_xaxes(tickangle=-45, tickfont={'size':\
-            \ 9})\nfig.update_layout(showlegend=False)"
+        code_content: "df_stats = df.group_by(['{GROUP_COL}', 'Phylum']).agg([\n\
+            \    pl.col('rel_abundance').mean().alias('mean_rel_abundance'),\n    pl.col('rel_abundance').std().alias('std_rel_abundance')\n\
+            ]).sort('Phylum')\nfig = px.bar(\n    df_stats.to_pandas(),\n    x='Phylum',\
+            \ y='mean_rel_abundance', color='Phylum',\n    error_y='std_rel_abundance',\n\
+            \    facet_row='{GROUP_COL}',\n    title='Mean Relative Abundance by {GROUP_COL_DISPLAY}\
+            \ (± std)',\n    labels={'Phylum': 'Phylum', 'mean_rel_abundance': 'Mean\
+            \ Relative Abundance'}\n)\nfig.update_layout(xaxis={'categoryorder': 'category\
+            \ ascending'})\nfig.update_xaxes(tickangle=-45, tickfont={'size': 9})\n\
+            fig.update_layout(showlegend=False)"
         selection_enabled: false
         # --- generated on export ---
         tag: figure-bar_phylum_rel_abundance-de4c39
@@ -414,6 +430,33 @@ tabs:
             y: 45
             w: 8
             h: 6
+    -   component_type: map
+        workflow_tag: ampliseq
+        data_collection_tag: metadata
+        map_type: scatter_map
+        lat_column: latitude
+        lon_column: longitude
+        color_column: "{GROUP_COL}"
+        hover_columns:
+        - ID
+        - name
+        - "{GROUP_COL}"
+        - city
+        - sampling_date
+        map_style: carto-positron
+        default_zoom: 5
+        default_center:
+            lat: 51.0
+            lon: 10.5
+        selection_enabled: true
+        selection_column: ID
+        tag: map-sampling-locations
+        title: Sampling Locations
+        layout:
+            x: 0
+            y: 32
+            w: 8
+            h: 6
     -   component_type: figure
         workflow_tag: ampliseq
         data_collection_tag: taxonomy_heatmap
@@ -434,44 +477,57 @@ tabs:
         tag: figure-heatmap-taxonomy-composition
         title: Taxonomic Composition Heatmap
         description: Row-normalized (z-score) relative abundance of phyla across samples,
-            clustered by similarity with metadata and Kingdom annotations (annotations
-            injected dynamically from metadata when available)
+            clustered by similarity with Kingdom and metadata annotations
         layout:
             x: 0
-            y: 32
+            y: 38
             w: 8
             h: 7
     -   component_type: interactive
         workflow_tag: ampliseq
         data_collection_tag: metadata
+        interactive_component_type: DateRangePicker
+        column_name: sampling_date
+        column_type: datetime
+        display:
+            title_size: md
+            custom_color: '#FF6B6B'
+            icon_name: mdi:calendar-range
+        tag: interactive-community-daterange-d4e5f6
+        index: community-daterange
+        layout:
+            x: 0
+            y: 0
+            w: 1
+            h: 3
+        title: Sampling Period
+    -   component_type: interactive
+        workflow_tag: ampliseq
+        data_collection_tag: metadata
         interactive_component_type: MultiSelect
         column_name: "{GROUP_COL}"
-        # --- optional ---
         column_type: object
         display:
             title_size: md
             custom_color: '#984EA3'
             icon_name: mdi:tag-multiple
-        # --- generated on export ---
         tag: interactive-group-col-d8ca83
         layout:
             x: 0
             y: 3
             w: 1
             h: 2
-        title: "{GROUP_COL}"
+        title: "{GROUP_COL_DISPLAY}"
     -   component_type: interactive
         workflow_tag: ampliseq
         data_collection_tag: metadata
         interactive_component_type: MultiSelect
-        column_name: sample
-        # --- optional ---
+        column_name: ID
         column_type: object
         display:
             title_size: md
             custom_color: '#45B8AC'
             icon_name: mdi:flask
-        # --- generated on export ---
         tag: interactive-sample-78c9c2
         layout:
             x: 0

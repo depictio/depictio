@@ -969,10 +969,17 @@ def register_core_callbacks(app):
                 all_metadata.append(metadata)
 
             except Exception as e:
-                logger.error(f"Card {i + 1}: {component_id} - Error: {e}")
-                all_values.append("Error")
-                all_secondary.append(no_update)
-                all_metadata.append({"error": str(e)})
+                error_str = str(e).lower()
+                if "not found" in error_str or "no delta" in error_str or "no data" in error_str:
+                    logger.warning(f"Card {i + 1}: {component_id} - Data unavailable: {e}")
+                    all_values.append("--")
+                    all_secondary.append(no_update)
+                    all_metadata.append({"unavailable": True})
+                else:
+                    logger.error(f"Card {i + 1}: {component_id} - Error: {e}")
+                    all_values.append("Error")
+                    all_secondary.append(no_update)
+                    all_metadata.append({"error": str(e)})
 
         return all_values, all_secondary, all_metadata
 

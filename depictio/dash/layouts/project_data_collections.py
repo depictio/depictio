@@ -45,6 +45,134 @@ from depictio.dash.layouts.layouts_toolbox import (
 from depictio.models.models.projects import ProjectResponse
 
 
+def _create_template_origin_section(project) -> html.Div:
+    """Create a template origin info section if the project was created from a template."""
+    template_origin = getattr(project, "template_origin", None)
+    if template_origin is None:
+        return html.Div()
+
+    # Handle both Pydantic model and raw dict
+    if isinstance(template_origin, dict):
+        template_id = template_origin.get("template_id", "")
+    else:
+        template_id = template_origin.template_id
+    if not template_id:
+        return html.Div()
+    docs_base = "https://depictio.github.io/depictio-docs/usage/projects/templates"
+    docs_url = f"{docs_base}#{template_id.replace('/', '').replace('.', '')}"
+
+    if hasattr(template_origin, "model_dump"):
+        to_dict = template_origin.model_dump()
+    elif isinstance(template_origin, dict):
+        to_dict = template_origin
+    else:
+        to_dict = {}
+
+    # Template variables (stored explicitly on TemplateOrigin)
+    variables = to_dict.get("variables", {})
+    var_rows = []
+    for var_name, var_value in variables.items():
+        if var_name == "DATA_ROOT":
+            continue  # shown in info section
+        var_rows.append(
+            html.Tr(
+                [
+                    html.Td(
+                        dmc.Code(var_name, style={"fontSize": "12px"}),
+                        style={"paddingRight": "12px", "verticalAlign": "top"},
+                    ),
+                    html.Td(
+                        dmc.Text(str(var_value), size="sm", style={"wordBreak": "break-all"}),
+                    ),
+                ]
+            )
+        )
+
+    return dmc.Paper(
+        children=[
+            # Header: icon + title + badge link
+            dmc.Group(
+                [
+                    DashIconify(
+                        icon="mdi:layers-outline",
+                        width=22,
+                        color=colors.get("indigo", "indigo"),
+                    ),
+                    dmc.Text("Template", fw="bold", size="lg"),
+                    dmc.Anchor(
+                        dmc.Badge(
+                            template_id,
+                            color="indigo",
+                            variant="light",
+                            size="sm",
+                            rightSection=DashIconify(icon="mdi:open-in-new", width=12),
+                            style={"cursor": "pointer"},
+                        ),
+                        href=docs_url,
+                        target="_blank",
+                        style={"textDecoration": "none"},
+                    ),
+                ],
+                gap="sm",
+            ),
+            dmc.Divider(my="xs"),
+            # Two-column layout: info left, variables right
+            dmc.SimpleGrid(
+                cols=2,
+                spacing="xl",
+                children=[
+                    # Left column: template info
+                    dmc.Stack(
+                        [
+                            dmc.Text("Info", size="xs", fw=600, c="dimmed", tt="uppercase"),
+                            dmc.Stack(
+                                gap=2,
+                                children=[
+                                    dmc.Group(
+                                        [
+                                            DashIconify(icon=icon, width=14, color="gray"),
+                                            dmc.Text(f"{label}:", size="sm", c="dimmed"),
+                                            dmc.Text(
+                                                str(to_dict[key]),
+                                                size="sm",
+                                                style={"wordBreak": "break-all"},
+                                            ),
+                                        ],
+                                        gap=4,
+                                    )
+                                    for key, label, icon in [
+                                        ("template_version", "Version", "mdi:tag-outline"),
+                                        ("data_root", "Data root", "mdi:folder-outline"),
+                                        ("applied_at", "Applied", "mdi:clock-outline"),
+                                    ]
+                                    if to_dict.get(key)
+                                ],
+                            ),
+                        ],
+                        gap=4,
+                    ),
+                    # Right column: variables
+                    dmc.Stack(
+                        [
+                            dmc.Text("Variables", size="xs", fw=600, c="dimmed", tt="uppercase"),
+                            html.Table(
+                                html.Tbody(var_rows),
+                                style={"borderCollapse": "collapse"},
+                            )
+                            if var_rows
+                            else dmc.Text("No variables", size="sm", c="dimmed", fs="italic"),
+                        ],
+                        gap=4,
+                    ),
+                ],
+            ),
+        ],
+        withBorder=True,
+        radius="md",
+        p="md",
+    )
+
+
 def calculate_total_storage_size(data_collections):
     """
     Calculate the total storage size across all data collections.
@@ -1686,6 +1814,8 @@ def create_data_collections_landing_ui():
                     ),
                     # Project type indicator
                     html.Div(id="project-type-indicator"),
+                    # Template origin info (populated by callback if project is from a template)
+                    html.Div(id="template-origin-info"),
                     dmc.Divider(),
                 ],
                 gap="lg",
@@ -2326,6 +2456,7 @@ def register_project_data_collections_callbacks(app):
             Output("workflows-manager-section", "children"),
             Output("data-collections-manager-section", "children"),
             Output("project-type-indicator", "children"),
+            Output("template-origin-info", "children"),
         ],
         [
             Input("url", "pathname"),
@@ -2359,12 +2490,24 @@ def register_project_data_collections_callbacks(app):
             try:
                 project_id = project_data_store.get("project_id")
                 if not project_id or not local_data or not local_data.get("access_token"):
-                    return dash.no_update, dash.no_update, dash.no_update, dash.no_update
+                    return (
+                        dash.no_update,
+                        dash.no_update,
+                        dash.no_update,
+                        dash.no_update,
+                        dash.no_update,
+                    )
 
                 # Fetch fresh project data from API
                 project_data = api_call_fetch_project_by_id(project_id, local_data["access_token"])
                 if not project_data:
-                    return dash.no_update, dash.no_update, dash.no_update, dash.no_update
+                    return (
+                        dash.no_update,
+                        dash.no_update,
+                        dash.no_update,
+                        dash.no_update,
+                        dash.no_update,
+                    )
 
                 project = ProjectResponse.model_validate(project_data)
 
@@ -2421,18 +2564,24 @@ def register_project_data_collections_callbacks(app):
 
             except Exception as e:
                 logger.error(f"Error refreshing project data: {e}")
-                return dash.no_update, dash.no_update, dash.no_update, dash.no_update
+                return (
+                    dash.no_update,
+                    dash.no_update,
+                    dash.no_update,
+                    dash.no_update,
+                    dash.no_update,
+                )
 
         # Original logic for URL/local-store changes
         if not pathname or not pathname.startswith("/project/") or not pathname.endswith("/data"):
-            return dash.no_update, dash.no_update, dash.no_update, dash.no_update
+            return dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update
 
         # Extract project ID from URL
         try:
             project_id = pathname.split("/")[-2]
         except IndexError:
             logger.error(f"Could not extract project ID from pathname: {pathname}")
-            return {}, html.Div("Error: Invalid project URL"), html.Div(), html.Div()
+            return {}, html.Div("Error: Invalid project URL"), html.Div(), html.Div(), html.Div()
 
         # Get authentication token
         if not local_data or not local_data.get("access_token"):
@@ -2442,6 +2591,7 @@ def register_project_data_collections_callbacks(app):
                 html.Div("Authentication required"),
                 html.Div(),
                 html.Div(),
+                html.Div(),
             )
 
         try:
@@ -2449,7 +2599,13 @@ def register_project_data_collections_callbacks(app):
             project_data = api_call_fetch_project_by_id(project_id, local_data["access_token"])
             if not project_data:
                 logger.error(f"Failed to fetch project data for {project_id}")
-                return dash.no_update, dash.no_update, dash.no_update
+                return (
+                    dash.no_update,
+                    dash.no_update,
+                    dash.no_update,
+                    dash.no_update,
+                    dash.no_update,
+                )
             project = ProjectResponse.model_validate(project_data)
 
             # Debug project information
@@ -2541,11 +2697,15 @@ def register_project_data_collections_callbacks(app):
             # Create project type indicator
             project_type_indicator = create_project_type_indicator(project.project_type)
 
+            # Create template origin section
+            template_section = _create_template_origin_section(project)
+
             return (
                 project_store_data,
                 workflows_section,
                 data_collections_section,
                 project_type_indicator,
+                template_section,
             )
 
         except Exception as e:
@@ -2560,7 +2720,7 @@ def register_project_data_collections_callbacks(app):
                     )
                 ]
             )
-            return {"project_id": project_id}, error_msg, html.Div(), html.Div()
+            return {"project_id": project_id}, error_msg, html.Div(), html.Div(), html.Div()
 
     @app.callback(
         [
@@ -2811,7 +2971,6 @@ def register_project_data_collections_callbacks(app):
             State("selected-workflow-store", "data"),
             State("local-store", "data"),
         ],
-        prevent_initial_call=True,
     )
     def populate_multiqc_metadata_content(
         selected_dc_tag, project_data, selected_workflow_id, local_data

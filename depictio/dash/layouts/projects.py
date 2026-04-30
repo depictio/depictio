@@ -1283,6 +1283,40 @@ def _create_project_details_paper(project: Project) -> dmc.Paper:
         ),
     ]
 
+    # Template origin row (if project was created from a template)
+    template_origin = getattr(project, "template_origin", None)
+    if template_origin is not None:
+        # TODO: replace with actual docs URL once template pages are published
+        docs_base = "https://depictio.github.io/depictio-docs/usage/projects/templates"
+        template_id = template_origin.template_id
+        docs_url = f"{docs_base}#{template_id.replace('/', '').replace('.', '')}"
+
+        rows.append(
+            dmc.Group(
+                children=[
+                    dmc.Text("Template:", fw="bold", className="label-text"),
+                    dmc.Anchor(
+                        dmc.Badge(
+                            template_id,
+                            color="indigo",
+                            variant="light",
+                            leftSection=DashIconify(icon="mdi:layers-outline", width=14),
+                            rightSection=DashIconify(icon="mdi:open-in-new", width=12),
+                            style={"cursor": "pointer"},
+                        ),
+                        href=docs_url,
+                        target="_blank",
+                        style={"textDecoration": "none"},
+                    ),
+                ],
+                gap="xs",
+            ),
+        )
+        if template_origin.applied_at:
+            rows.append(
+                _create_project_detail_row("Template applied at", template_origin.applied_at),
+            )
+
     return dmc.Paper(
         children=[html.Div(children=rows, className="project-details p-3")],
         radius="md",
@@ -1332,22 +1366,26 @@ def _create_project_badges(project: Project, current_user: UserBase) -> list[dmc
     is_public = getattr(project, "is_public", False)
     role, role_color = _determine_user_role(project, current_user)
 
+    badge_size = "sm"
     badges = [
         dmc.Badge(
             children=project_type.title(),
             color="orange" if project_type == "advanced" else "cyan",
             variant="light",
+            size=badge_size,
             style={"width": "100px", "justifyContent": "center"},
         ),
         dmc.Badge(
             children="Public" if is_public else "Private",
             color="green" if is_public else "violet",
             variant="filled",
+            size=badge_size,
             style={"width": "100px", "justifyContent": "center"},
         ),
         dmc.Badge(
             children=role,
             color=role_color,
+            size=badge_size,
             style={"width": "100px", "justifyContent": "center"},
         ),
     ]
@@ -1355,11 +1393,15 @@ def _create_project_badges(project: Project, current_user: UserBase) -> list[dmc
     template_origin = getattr(project, "template_origin", None)
     if template_origin is not None:
         badges.append(
-            dmc.Badge(
-                children=f"Template: {template_origin.template_id}",
-                color="indigo",
-                variant="dot",
-                style={"width": "auto", "justifyContent": "center"},
+            dmc.Tooltip(
+                label=f"Generated from template: {template_origin.template_id}",
+                children=dmc.Badge(
+                    template_origin.template_id,
+                    color="indigo",
+                    variant="light",
+                    size=badge_size,
+                    leftSection=DashIconify(icon="mdi:layers-outline", width=14),
+                ),
             )
         )
 
