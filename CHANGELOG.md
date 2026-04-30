@@ -6,13 +6,38 @@
 
 
 <details>
-<summary>Click to expand the changelog for 0.10.0</summary>
+<summary>Click to expand the changelog for 0.10.1</summary>
 
 ### Changes 📜
 
 #### New Features ✨
 
-* feat: add permission-based auth annotations and Serve-specific ingress values [778ca9d9]
+* feat: add nf-core/viralrecon 2.6.0 template and multi-tab dashboard [b707229d]
+
+#### Other Changes 📝
+
+* Bump version: 0.10.0 → 0.10.1 [37ef7d5d]
+* fix(test): set glob_pattern=None when bypassing RecipeSource validation [398e7dea]
+* Update CHANGELOG.md for v0.10.0 [f3a6b72b]
+* Bump version: 0.9.0 → 0.10.0 [f8db3b7c]
+* Viralrecon template migration + CLI/Dash enhancements [a0605806]
+* Fix: filter NaN in violin plot values and clean up Template badge [c438619c]
+* Align sidebar tabs: label left, dots menu right in edit mode [47fdf26d]
+* Add glob_pattern support for per-sample pipeline outputs [a043d9e7]
+* Revert download_test_data.sh to original version [74f4a2a2]
+* Fix viralrecon output paths and enhance download script for HPC [2c729d4b]
+* Replace S3 download script with pipeline runner for test data generation [818803a8]
+* Update viralrecon template to v3.0.0 with Aggregated metatype and S3 download script [e4121152]
+* Split Viral Analysis into Lineage Analysis + Variant Landscape tabs [fc90dfba]
+
+
+</details>
+
+### Documentation 📖
+
+For more details, please refer to the [documentation](https://depictio.github.io/depictio-docs/)
+
+otations and Serve-specific ingress values [778ca9d9]
 * feat: add dedicated ingress for MinIO and backend API [45d6d524]
 * feat: integrate recipe system with ampliseq template [5c4b6216]
 * feat: add Python recipe system for bioinformatics data preprocessing [c1821d5b]
