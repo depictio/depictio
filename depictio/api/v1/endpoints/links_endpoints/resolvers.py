@@ -104,34 +104,69 @@ class SampleMappingResolver(BaseLinkResolver):
     def name(self) -> str:
         return "sample_mapping"
 
+    # Common read-pair / replicate suffixes that appear on canonical IDs in
+    # MultiQC's mapping but NOT on the source DC's sample column. Stripping
+    # them lets a source value like "HG001" match keys "HG001_R1" + "HG001_R2".
+    _SAMPLE_SUFFIX_RE = re.compile(
+        r"_(?:R?\d+|REP\d+|TECH\d+)$",
+        re.IGNORECASE,
+    )
+
+    @classmethod
+    def _strip_sample_suffix(cls, name: str) -> str:
+        """Strip ``_R1`` / ``_R2`` / ``_1`` / ``_REP1`` style suffixes from a sample name."""
+        return cls._SAMPLE_SUFFIX_RE.sub("", name)
+
     def resolve(
         self,
         source_values: list[Any],
         link_config: LinkConfig,
         target_known_values: list[str] | None = None,
     ) -> tuple[list[str], list[str]]:
-        """Expand canonical IDs to sample name variants."""
+        """Expand canonical IDs to sample name variants.
+
+        Lookup tries (in order):
+        1. exact key match (honouring ``case_sensitive``)
+        2. base-name match — strips ``_R1`` / ``_R2`` / ``_1`` / ``_REP1`` from
+           every mapping key and aggregates variants from any keys whose base
+           equals the source value. Without this, a link source like ``"HG001"``
+           never matches MultiQC keys like ``"HG001_R1"`` / ``"HG001_R2"``.
+        """
         resolved: list[str] = []
         unmapped: list[str] = []
 
         mappings = link_config.mappings or {}
+        case_sensitive = bool(link_config.case_sensitive)
+
+        # Pre-bucket mapping keys by their stripped base so the per-value
+        # lookup is O(unique-bases) instead of O(keys × source_values).
+        base_to_variants: dict[str, list[str]] = {}
+        for key, variants in mappings.items():
+            base = self._strip_sample_suffix(key)
+            bucket_key = base if case_sensitive else base.lower()
+            base_to_variants.setdefault(bucket_key, []).extend(variants)
 
         for val in source_values:
             str_val = str(val)
+            lookup_val = str_val if case_sensitive else str_val.lower()
 
-            # Handle case sensitivity
-            lookup_val = str_val if link_config.case_sensitive else str_val.lower()
-
-            # Find mapping (case-insensitive lookup if configured)
-            found_mapping = None
-            if link_config.case_sensitive:
+            found_mapping: list[str] | None = None
+            if case_sensitive:
                 found_mapping = mappings.get(str_val)
             else:
-                # Case-insensitive lookup
                 for key, variants in mappings.items():
                     if key.lower() == lookup_val:
                         found_mapping = variants
                         break
+
+            # Fallback: match against suffix-stripped bases. Aggregates variants
+            # from every key sharing the same base (e.g. HG001_R1 + HG001_R2).
+            if not found_mapping:
+                fallback = base_to_variants.get(lookup_val)
+                if fallback:
+                    # Dedup while preserving order — the same variant can show up
+                    # from multiple keys (rare, but possible across reports).
+                    found_mapping = list(dict.fromkeys(fallback))
 
             if found_mapping:
                 resolved.extend(found_mapping)
@@ -139,7 +174,6 @@ class SampleMappingResolver(BaseLinkResolver):
                     f"SampleMappingResolver: Expanded '{str_val}' to {len(found_mapping)} variants"
                 )
             else:
-                # No mapping found - include the original value as fallback
                 resolved.append(str_val)
                 unmapped.append(str_val)
                 logger.debug(f"SampleMappingResolver: No mapping for '{str_val}' - using as-is")

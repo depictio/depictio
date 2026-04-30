@@ -1317,14 +1317,45 @@ def create_data_collection_modal(
     opened: bool = False,
     id_prefix: str = "data-collection-creation",
 ) -> tuple[dmc.Modal, str]:
-    """Create a data collection creation modal with file upload.
+    """Unified data-collection modal with mode-driven section visibility.
 
-    Provides form fields for:
-    - Name and description
-    - Data type and file format selection
-    - Separator and compression options
-    - Header row toggle
-    - File upload (max 5MB)
+    A single mode-agnostic modal that supports three runtime behaviors,
+    selected via a sibling ``dcc.Store(id="data-collection-modal-mode")``:
+
+    - ``create``: name/description/type fields, dropzone, "Create" submit.
+    - ``update``: replace toggle + dropzone, "Append folders" / "Replace all
+      data" submit (label tracks the toggle).
+    - ``clear``: warning banner, folder list preview, typed-name confirm
+      input, red "Clear data collection" submit.
+
+    All sections render unconditionally; the calling layout module wires a
+    callback that toggles each section's ``style.display`` based on the
+    active mode. Section container IDs (used by that callback):
+
+    - ``f"{id_prefix}-name-input-container"``
+    - ``f"{id_prefix}-description-input-container"``
+    - ``f"{id_prefix}-type-select-container"``
+    - ``f"{id_prefix}-table-options-container"``
+    - ``f"{id_prefix}-multiqc-options-container"``
+    - ``f"{id_prefix}-replace-toggle-container"``
+    - ``f"{id_prefix}-dropzone-container"``
+    - ``f"{id_prefix}-clear-warning-container"``
+    - ``f"{id_prefix}-clear-summary-container"``
+    - ``f"{id_prefix}-clear-confirm-container"``
+
+    Other notable IDs:
+
+    - Title text: ``f"{id_prefix}-title-text"``
+    - Title icon: ``f"{id_prefix}-title-icon"`` (DashIconify)
+    - Submit button: ``f"create-{id_prefix}-submit"``
+    - Cancel button: ``f"cancel-{id_prefix}-button"``
+    - Replace toggle: ``f"{id_prefix}-replace-toggle"``
+    - Dropzone: ``f"{id_prefix}-file-upload"``
+    - File info: ``f"{id_prefix}-file-info"``
+    - Clear summary text: ``f"{id_prefix}-clear-summary"``
+    - Clear folder list code block: ``f"{id_prefix}-clear-folder-list"``
+    - Clear typed-name input: ``f"{id_prefix}-clear-confirm-name-input"``
+    - Clear expected-name store: ``f"{id_prefix}-clear-expected-name"``
 
     Args:
         opened: Whether the modal starts open.
@@ -1359,19 +1390,26 @@ def create_data_collection_modal(
             dmc.Stack(
                 gap="lg",
                 children=[
-                    # Header with icon and title
+                    # Header with icon and title (icon + color updated by mode callback)
                     dmc.Group(
                         justify="center",
                         gap="sm",
                         children=[
-                            DashIconify(
-                                icon="mdi:database-plus",
-                                width=40,
-                                height=40,
-                                color=colors["teal"],
+                            html.Div(
+                                id=f"{id_prefix}-title-icon-container",
+                                children=[
+                                    DashIconify(
+                                        id=f"{id_prefix}-title-icon",
+                                        icon="mdi:database-plus",
+                                        width=40,
+                                        height=40,
+                                        color=colors["teal"],
+                                    ),
+                                ],
                             ),
                             dmc.Title(
                                 "Create Data Collection",
+                                id=f"{id_prefix}-title-text",
                                 order=2,
                                 c="teal",
                                 style={"margin": 0},
@@ -1384,42 +1422,62 @@ def create_data_collection_modal(
                     dmc.Stack(
                         gap="md",
                         children=[
-                            # Data collection name
-                            dmc.TextInput(
-                                label="Data Collection Name",
-                                description="Unique identifier for your data collection",
-                                placeholder="Enter data collection name",
-                                id=f"{id_prefix}-name-input",
-                                required=True,
-                                leftSection=DashIconify(icon="mdi:tag", width=16),
+                            # Data collection name (visible only in create mode)
+                            html.Div(
+                                id=f"{id_prefix}-name-input-container",
                                 style={"width": "100%"},
-                            ),
-                            # Description
-                            dmc.Textarea(
-                                label="Description",
-                                description="Optional description of your data collection",
-                                placeholder="Enter description (optional)",
-                                id=f"{id_prefix}-description-input",
-                                autosize=True,
-                                minRows=2,
-                                maxRows=4,
-                                style={"width": "100%"},
-                            ),
-                            # Data type selection
-                            dmc.Select(
-                                label="Data Type",
-                                description="Type of data in your collection",
-                                data=[
-                                    {"value": "table", "label": "Table Data"},
-                                    {"value": "multiqc", "label": "MultiQC Report"},
+                                children=[
+                                    dmc.TextInput(
+                                        label="Data Collection Name",
+                                        description="Unique identifier for your data collection",
+                                        placeholder="Enter data collection name",
+                                        id=f"{id_prefix}-name-input",
+                                        required=True,
+                                        leftSection=DashIconify(icon="mdi:tag", width=16),
+                                        style={"width": "100%"},
+                                    ),
                                 ],
-                                id=f"{id_prefix}-type-select",
-                                placeholder="Select data type",
-                                value="table",  # Default to table
-                                required=True,
-                                leftSection=DashIconify(icon="mdi:format-list-bulleted", width=16),
+                            ),
+                            # Description (visible only in create mode)
+                            html.Div(
+                                id=f"{id_prefix}-description-input-container",
                                 style={"width": "100%"},
-                                comboboxProps={"withinPortal": True, "zIndex": 10001},
+                                children=[
+                                    dmc.Textarea(
+                                        label="Description",
+                                        description="Optional description of your data collection",
+                                        placeholder="Enter description (optional)",
+                                        id=f"{id_prefix}-description-input",
+                                        autosize=True,
+                                        minRows=2,
+                                        maxRows=4,
+                                        style={"width": "100%"},
+                                    ),
+                                ],
+                            ),
+                            # Data type selection (visible only in create mode)
+                            html.Div(
+                                id=f"{id_prefix}-type-select-container",
+                                style={"width": "100%"},
+                                children=[
+                                    dmc.Select(
+                                        label="Data Type",
+                                        description="Type of data in your collection",
+                                        data=[
+                                            {"value": "table", "label": "Table Data"},
+                                            {"value": "multiqc", "label": "MultiQC Report"},
+                                        ],
+                                        id=f"{id_prefix}-type-select",
+                                        placeholder="Select data type",
+                                        value="table",  # Default to table
+                                        required=True,
+                                        leftSection=DashIconify(
+                                            icon="mdi:format-list-bulleted", width=16
+                                        ),
+                                        style={"width": "100%"},
+                                        comboboxProps={"withinPortal": True, "zIndex": 10001},
+                                    ),
+                                ],
                             ),
                             # Table-specific options container
                             html.Div(
@@ -1602,85 +1660,200 @@ def create_data_collection_modal(
                                 ],
                                 style={"display": "none"},
                             ),
-                            # File upload section
-                            dmc.Stack(
-                                gap="sm",
+                            # Action segment (visible only in manage flow — i.e.,
+                            # update + clear modes). Lets the user switch between
+                            # "Modify" (drop folders) and "Clear" (wipe contents)
+                            # in a single modal without leaving it.
+                            html.Div(
+                                id=f"{id_prefix}-action-segment-container",
+                                style={"display": "none"},
                                 children=[
-                                    dmc.Text(
-                                        "File Upload",
-                                        size="sm",
-                                        fw="bold",
-                                        c="gray",
-                                    ),
-                                    dmc.Text(
-                                        "Upload your data file(s) (max 5MB for tables; "
-                                        "for MultiQC: multiple parquet files, 50MB each, 500MB total)",
-                                        size="xs",
-                                        c="gray",
-                                        id=f"{id_prefix}-upload-size-hint",
-                                    ),
-                                    dcc.Loading(
-                                        id=f"{id_prefix}-upload-loading",
-                                        type="default",
-                                        children=[
-                                            dcc.Upload(
-                                                id=f"{id_prefix}-file-upload",
-                                                children=dmc.Paper(
-                                                    children=[
-                                                        dmc.Stack(
-                                                            align="center",
-                                                            gap="sm",
-                                                            children=[
-                                                                DashIconify(
-                                                                    icon="mdi:cloud-upload",
-                                                                    width=48,
-                                                                    height=48,
-                                                                    color="gray",
-                                                                ),
-                                                                dmc.Text(
-                                                                    "Drag and drop file(s) here, or click to select",
-                                                                    ta="center",
-                                                                    size="sm",
-                                                                    c="gray",
-                                                                ),
-                                                                dmc.Text(
-                                                                    "Tables: 1 file, max 5MB | MultiQC: multiple .parquet, 50MB each",
-                                                                    ta="center",
-                                                                    size="xs",
-                                                                    c="gray",
-                                                                ),
-                                                            ],
-                                                        )
-                                                    ],
-                                                    withBorder=True,
-                                                    radius="md",
-                                                    p="xl",
-                                                    style={
-                                                        "borderStyle": "dashed",
-                                                        "borderWidth": "2px",
-                                                        "cursor": "pointer",
-                                                        "minHeight": "120px",
-                                                        "display": "flex",
-                                                        "alignItems": "center",
-                                                        "justifyContent": "center",
-                                                    },
-                                                ),
-                                                style={
-                                                    "width": "100%",
-                                                    "minHeight": "120px",
-                                                },
-                                                multiple=True,  # MultiQC allows multiple parquet files
-                                                max_size=50 * 1024 * 1024,  # 50MB per file
-                                            ),
+                                    dmc.SegmentedControl(
+                                        id=f"{id_prefix}-action-segment",
+                                        value="modify",
+                                        fullWidth=True,
+                                        data=[
+                                            {
+                                                "value": "modify",
+                                                "label": "Modify data",
+                                            },
+                                            {
+                                                "value": "clear",
+                                                "label": "Clear contents",
+                                            },
                                         ],
-                                    ),
-                                    # File info display
-                                    html.Div(
-                                        id=f"{id_prefix}-file-info",
-                                        children=[],
+                                        mb="md",
                                     ),
                                 ],
                             ),
+                            # Replace toggle (visible only in update mode) — controls
+                            # whether the incoming upload appends to or wipes the
+                            # existing DC. Wrapped in a stable container so the
+                            # mode-visibility callback can toggle display.
+                            html.Div(
+                                id=f"{id_prefix}-replace-toggle-container",
+                                style={"display": "none"},
+                                children=[
+                                    dmc.Switch(
+                                        id=f"{id_prefix}-replace-toggle",
+                                        label="Replace existing data",
+                                        description=(
+                                            "When OFF, new folders are appended. "
+                                            "When ON, the entire DC is wiped and re-ingested."
+                                        ),
+                                        checked=False,
+                                        color="red",
+                                        mb="md",
+                                    ),
+                                ],
+                            ),
+                            # File upload section (visible in create + update)
+                            html.Div(
+                                id=f"{id_prefix}-dropzone-container",
+                                children=[
+                                    dmc.Stack(
+                                        gap="sm",
+                                        children=[
+                                            dmc.Text(
+                                                "File Upload",
+                                                size="sm",
+                                                fw="bold",
+                                                c="gray",
+                                            ),
+                                            dmc.Text(
+                                                "Upload your data file(s) (max 5MB for tables; "
+                                                "for MultiQC: drop folders containing multiqc.parquet, "
+                                                "50MB per file, 500MB total)",
+                                                size="xs",
+                                                c="gray",
+                                                id=f"{id_prefix}-upload-size-hint",
+                                            ),
+                                            dcc.Loading(
+                                                id=f"{id_prefix}-upload-loading",
+                                                type="default",
+                                                children=[
+                                                    dcc.Upload(
+                                                        id=f"{id_prefix}-file-upload",
+                                                        # className is toggled by a clientside
+                                                        # callback to enable folder-pick mode
+                                                        # (webkitdirectory) for MultiQC uploads.
+                                                        className="",
+                                                        children=dmc.Paper(
+                                                            children=[
+                                                                dmc.Stack(
+                                                                    align="center",
+                                                                    gap="sm",
+                                                                    children=[
+                                                                        DashIconify(
+                                                                            icon="mdi:cloud-upload",
+                                                                            width=48,
+                                                                            height=48,
+                                                                            color="gray",
+                                                                        ),
+                                                                        dmc.Text(
+                                                                            "Drag and drop file(s) or folder(s) here, or click to select",
+                                                                            ta="center",
+                                                                            size="sm",
+                                                                            c="gray",
+                                                                        ),
+                                                                        dmc.Text(
+                                                                            "Tables: 1 file, max 5MB | MultiQC: drop folder(s); only multiqc.parquet is extracted",
+                                                                            ta="center",
+                                                                            size="xs",
+                                                                            c="gray",
+                                                                        ),
+                                                                    ],
+                                                                )
+                                                            ],
+                                                            withBorder=True,
+                                                            radius="md",
+                                                            p="xl",
+                                                            style={
+                                                                "borderStyle": "dashed",
+                                                                "borderWidth": "2px",
+                                                                "cursor": "pointer",
+                                                                "minHeight": "120px",
+                                                                "display": "flex",
+                                                                "alignItems": "center",
+                                                                "justifyContent": "center",
+                                                            },
+                                                        ),
+                                                        style={
+                                                            "width": "100%",
+                                                            "minHeight": "120px",
+                                                        },
+                                                        # MultiQC allows multiple parquet files.
+                                                        multiple=True,
+                                                        max_size=50 * 1024 * 1024,  # 50MB per file
+                                                    ),
+                                                ],
+                                            ),
+                                            # File info display
+                                            html.Div(
+                                                id=f"{id_prefix}-file-info",
+                                                children=[],
+                                            ),
+                                        ],
+                                    ),
+                                ],
+                            ),
+                            # Clear-mode warning banner (visible only in clear mode)
+                            html.Div(
+                                id=f"{id_prefix}-clear-warning-container",
+                                style={"display": "none"},
+                                children=[
+                                    dmc.Alert(
+                                        (
+                                            "This will permanently delete all reports and "
+                                            "ingested data. The DC itself, its name, and any "
+                                            "links pointing to it will be preserved. This "
+                                            "action cannot be undone."
+                                        ),
+                                        color="red",
+                                        icon=DashIconify(icon="mdi:alert"),
+                                        variant="light",
+                                    ),
+                                ],
+                            ),
+                            # Clear-mode summary + folder list (visible only in clear mode)
+                            html.Div(
+                                id=f"{id_prefix}-clear-summary-container",
+                                style={"display": "none"},
+                                children=[
+                                    dmc.Stack(
+                                        gap="xs",
+                                        children=[
+                                            dmc.Text(
+                                                "",
+                                                id=f"{id_prefix}-clear-summary",
+                                                size="sm",
+                                                fw="bold",
+                                                c="gray",
+                                            ),
+                                            dmc.Code(
+                                                "",
+                                                id=f"{id_prefix}-clear-folder-list",
+                                                block=True,
+                                            ),
+                                        ],
+                                    ),
+                                ],
+                            ),
+                            # Clear-mode typed-name confirmation (visible only in clear mode)
+                            html.Div(
+                                id=f"{id_prefix}-clear-confirm-container",
+                                style={"display": "none"},
+                                children=[
+                                    dmc.TextInput(
+                                        id=f"{id_prefix}-clear-confirm-name-input",
+                                        label="Type the data collection name to confirm:",
+                                        placeholder="data collection name",
+                                        required=True,
+                                    ),
+                                ],
+                            ),
+                            # Hidden store carrying the expected DC name (clear mode).
+                            dcc.Store(id=f"{id_prefix}-clear-expected-name"),
                         ],
                     ),
                     # Error message display (hidden by default)
@@ -1710,8 +1883,12 @@ def create_data_collection_modal(
                                 id=f"create-{id_prefix}-submit",
                                 color="teal",
                                 radius="md",
-                                leftSection=DashIconify(icon="mdi:plus", width=16),
-                                disabled=True,  # Start disabled
+                                leftSection=DashIconify(
+                                    id=f"create-{id_prefix}-submit-icon",
+                                    icon="mdi:plus",
+                                    width=16,
+                                ),
+                                disabled=True,  # Start disabled; mode callback re-evaluates.
                             ),
                         ],
                     ),
