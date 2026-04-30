@@ -329,8 +329,24 @@ def create_multiqc_plot(
     """
     import multiqc
 
-    fig_cache_key = _generate_figure_cache_key(s3_locations, module, plot, dataset_id, theme)
     cache = get_cache()
+
+    # Ensure every parquet is materialised on disk *before* we compute the
+    # figure cache key. ``_generate_figure_cache_key`` includes the local
+    # file's mtime so that a re-uploaded parquet invalidates the cache —
+    # but if we hash on a not-yet-downloaded file, mtime falls back to "0"
+    # and we end up writing under a key that no future request can ever
+    # look up (the next call sees the real mtime and computes a different
+    # key, producing a miss + a re-parse). Ensuring the file is local
+    # first keys both writers and readers off the same mtime. Fast no-op
+    # when the file is already cached locally.
+    for loc in s3_locations:
+        try:
+            _get_local_path_for_s3(loc, use_cache=use_s3_cache)
+        except Exception as e:
+            logger.warning(f"Pre-download failed for {loc}: {e}")
+
+    fig_cache_key = _generate_figure_cache_key(s3_locations, module, plot, dataset_id, theme)
     cached_fig_dict = cache.get(fig_cache_key)
     if cached_fig_dict is not None:
         return go.Figure(cached_fig_dict)
