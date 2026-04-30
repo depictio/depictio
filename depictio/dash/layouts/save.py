@@ -209,8 +209,8 @@ def register_callbacks_save_lite(app):
         State("local-store", "data"),
         State({"type": "stored-metadata-component", "index": ALL}, "data"),
         State({"type": "interactive-stored-metadata", "index": ALL}, "data"),
-        State({"type": "left-panel-grid", "index": ALL}, "itemLayout"),
-        State({"type": "right-panel-grid", "index": ALL}, "itemLayout"),
+        State({"type": "left-panel-grid", "index": ALL}, "currentLayout"),
+        State({"type": "right-panel-grid", "index": ALL}, "currentLayout"),
         State("screenshot-debounce-store", "data"),
         prevent_initial_call=True,
     )

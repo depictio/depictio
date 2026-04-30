@@ -198,6 +198,13 @@ def create_stepper_page(
             storage_type="session",
             data={},  # Empty dict - no interactive components in stepper
         ),
+        # Hidden placeholder for burger-button so header/tab callbacks that Output
+        # to #burger-button don't raise "nonexistent object" at dispatch time.
+        dmc.Burger(
+            id="burger-button",
+            opened=True,
+            style={"display": "none"},
+        ),
     ]
 
     # Create main layout with AppShell

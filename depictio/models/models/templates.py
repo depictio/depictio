@@ -135,6 +135,16 @@ class TemplateMetadata(BaseModel):
             "Each rule fires when its if_var_absent / if_var_present condition matches."
         ),
     )
+    structure: str | None = Field(
+        default=None,
+        description="Data layout structure: 'flat' (files directly under DATA_ROOT) "
+        "or 'sequencing-runs' (files under run directories matching runs_regex)",
+    )
+    runs_regex: str | None = Field(
+        default=None,
+        description="Regex pattern for run directory names (e.g., 'run_*'). "
+        "Only used when structure='sequencing-runs'.",
+    )
 
     @field_validator("template_id")
     @classmethod

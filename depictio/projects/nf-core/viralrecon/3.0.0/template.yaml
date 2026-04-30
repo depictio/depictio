@@ -1,0 +1,340 @@
+# nf-core/viralrecon Template v3.0.0 - Viral Genome Analysis
+# ============================================================================
+# This is a TEMPLATE project configuration. Use with:
+#   depictio run --template nf-core/viralrecon/3.0.0 --data-root /path/to/your/data
+#
+# Tested against nf-core/viralrecon AWS megatest results:
+#   s3://nf-core-awsmegatests/viralrecon/results-395079f1d24dce731ac22e03d7a5e71f110103fc
+#
+# Designed for nf-core/viralrecon amplicon (ivar) workflow outputs.
+# Generic, core-facility compatible — no sensitive metadata required.
+# Data collections use "Aggregated" metatype for time-series aggregation
+# across multiple sequencing runs.
+# ============================================================================
+
+# Template metadata (parsed and removed before Project model validation)
+template:
+  template_id: "nf-core/viralrecon/3.0.0"
+  description: "nf-core/viralrecon viral genome analysis template for amplicon sequencing (ivar variant caller)"
+  version: "1.1.0"
+  variables:
+    - name: "DATA_ROOT"
+      description: "Root directory containing viralrecon pipeline output (multiqc/, variants/)"
+      required: true
+  dashboards:
+    - "dashboards/base.yaml"
+  reference:
+    vars:
+      DATA_ROOT: "/path/to/viralrecon/output"
+
+# ============================================================================
+# PROJECT CONFIGURATION
+# ============================================================================
+
+name: "Viralrecon Viral Genome Analysis"
+project_type: "advanced"
+is_public: true
+workflows:
+  - name: "viralrecon"
+    version: "3.0.0"
+    engine:
+      name: "nextflow"
+      version: "24.10.4"
+    catalog:
+      name: "nf-core"
+      url: "https://nf-co.re"
+    repository_url: "https://github.com/nf-core/viralrecon"
+    data_location:
+      structure: "sequencing-runs"
+      runs_regex: "run_.*"
+      locations:
+        - "{DATA_ROOT}"
+    data_collections:
+      # ----------------------------------------------------------------
+      # MultiQC data collection (native parquet)
+      # ----------------------------------------------------------------
+      - data_collection_tag: "multiqc_data"
+        description: "MultiQC report data with QC metrics from all pipeline tools"
+        config:
+          type: "MultiQC"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "multiqc/multiqc_data/multiqc.parquet"
+          dc_specific_properties:
+            s3_location: null
+            modules:
+              - "fastp"
+              - "bowtie2"
+              - "samtools"
+              - "picard"
+              - "mosdepth"
+              - "ivar"
+              - "bcftools"
+              - "snpeff"
+              - "pangolin"
+              - "nextclade"
+              - "quast"
+              - "freyja"
+            plots:
+              fastp:
+                - "Filtered Reads"
+                - "Insert Sizes"
+              bowtie2:
+                - "SE"
+                - "PE"
+              samtools:
+                - "Alignment Metrics"
+              mosdepth:
+                - "Coverage Distribution"
+                - "Coverage Per Contig"
+              ivar:
+                - "Variants Counts"
+              snpeff:
+                - "Variant Effects by Genomic Region"
+                - "Variant Effects by Impact"
+              quast:
+                - "Assembly Statistics"
+
+      # ----------------------------------------------------------------
+      # Recipe-transformed data collections (Aggregated metatype)
+      # ----------------------------------------------------------------
+
+      - data_collection_tag: "summary_metrics"
+        description: "Per-sample alignment, coverage, and variant calling summary metrics"
+        config:
+          type: "Table"
+          metatype: "Aggregated"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/viralrecon/summary_metrics.py"
+          dc_specific_properties:
+            format: "CSV"
+            columns_description:
+              "sample": "Sample identifier"
+              "num_reads_mapped": "Number of reads mapped to reference"
+              "pct_reads_mapped": "Percentage of reads mapped"
+              "coverage_median": "Median genome coverage depth"
+              "pct_genome_covered_1x": "Percentage of genome covered at >= 1x depth"
+              "pct_genome_covered_10x": "Percentage of genome covered at >= 10x depth"
+              "num_variants_snp": "Number of SNP variants called"
+              "num_variants_indel": "Number of indel variants called"
+              "num_variants_total": "Total number of variants called"
+              "lineage": "Pangolin lineage assignment"
+
+      - data_collection_tag: "variants_long"
+        description: "Per-sample variant calls with functional annotations"
+        config:
+          type: "Table"
+          metatype: "Aggregated"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/viralrecon/variants_long.py"
+          dc_specific_properties:
+            format: "CSV"
+            columns_description:
+              "sample": "Sample identifier"
+              "CHROM": "Chromosome/reference sequence"
+              "POS": "Variant position on reference"
+              "REF": "Reference allele"
+              "ALT": "Alternative allele"
+              "FILTER": "Variant filter status"
+              "DP": "Read depth at position"
+              "REF_DP": "Reference allele read depth"
+              "ALT_DP": "Alternative allele read depth"
+              "AF": "Allele frequency (0-1)"
+              "GENE": "Gene annotation"
+              "AA": "Amino acid change"
+              "EFFECT": "Variant effect (e.g., missense, synonymous)"
+              "FUNCLASS": "Functional class (SILENT, MISSENSE, NONSENSE)"
+              "mutation_label": "Formatted mutation label (GENE:REFposALT)"
+
+      - data_collection_tag: "pangolin_lineages"
+        description: "Pangolin lineage assignments for each sample"
+        config:
+          type: "Table"
+          metatype: "Aggregated"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/viralrecon/pangolin_lineages.py"
+          dc_specific_properties:
+            format: "CSV"
+            columns_description:
+              "sample": "Sample identifier"
+              "lineage": "PANGO lineage designation"
+              "conflict": "Lineage assignment conflict score"
+              "ambiguity_score": "Ambiguity in lineage assignment"
+              "scorpio_call": "Scorpio constellation call"
+              "scorpio_support": "Scorpio support score"
+              "pangolin_version": "Pangolin software version"
+              "pango_version": "PANGO data version"
+              "status": "Assignment status"
+              "qc_status": "QC status (pass/fail)"
+
+      - data_collection_tag: "nextclade_results"
+        description: "Nextclade clade assignments and sequence quality metrics"
+        config:
+          type: "Table"
+          metatype: "Aggregated"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/viralrecon/nextclade_results.py"
+          dc_specific_properties:
+            format: "CSV"
+            columns_description:
+              "sample": "Sample identifier"
+              "clade": "Nextclade clade designation"
+              "Nextclade_pango": "PANGO lineage from Nextclade"
+              "totalSubstitutions": "Total nucleotide substitutions vs reference"
+              "totalDeletions": "Total deletions vs reference"
+              "totalInsertions": "Total insertions vs reference"
+              "totalFrameShifts": "Total frame shifts detected"
+              "totalMissing": "Total missing (N) bases"
+              "totalNonACGTNs": "Total non-ACGTN characters"
+              "alignmentScore": "Alignment quality score"
+              "coverage": "Genome coverage fraction"
+              "qc_overallScore": "Nextclade overall QC score"
+              "qc_overallStatus": "Nextclade QC status (good/mediocre/bad)"
+
+      # ----------------------------------------------------------------
+      # Mosdepth coverage data collections
+      # ----------------------------------------------------------------
+
+      - data_collection_tag: "mosdepth_amplicon_coverage"
+        description: "Per-amplicon coverage depth across all samples (from mosdepth)"
+        config:
+          type: "Table"
+          metatype: "Aggregated"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "variants/bowtie2/mosdepth/amplicon/all_samples.mosdepth.coverage.tsv"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "chrom": "Chromosome/reference sequence"
+              "start": "Amplicon start position on reference"
+              "end": "Amplicon end position on reference"
+              "region": "ARTIC amplicon name (e.g., SARS-CoV-2_1)"
+              "coverage": "Mean read coverage depth for amplicon"
+              "sample": "Sample identifier"
+
+      - data_collection_tag: "mosdepth_genome_coverage"
+        description: "Genome-wide coverage in 200bp windows across all samples (from mosdepth)"
+        config:
+          type: "Table"
+          metatype: "Aggregated"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "variants/bowtie2/mosdepth/genome/all_samples.mosdepth.coverage.tsv"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "chrom": "Chromosome/reference sequence"
+              "start": "Window start position on reference"
+              "end": "Window end position on reference"
+              "coverage": "Mean read coverage depth for window"
+              "sample": "Sample identifier"
+
+      - data_collection_tag: "mosdepth_amplicon_heatmap"
+        description: "Log10 amplicon coverage heatmap matrix (samples × amplicons, from mosdepth)"
+        config:
+          type: "Table"
+          metatype: "Aggregated"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "variants/bowtie2/mosdepth/amplicon/all_samples.mosdepth.heatmap.tsv"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample identifier (row index)"
+
+# ============================================================================
+# RUNTIME LINKS CONFIGURATION
+# ============================================================================
+# Links use data_collection_tag references (resolved to IDs at instantiation)
+# ============================================================================
+
+links:
+  # Link 1: Summary Metrics -> MultiQC (for cross-filtering)
+  - source_dc_tag: "summary_metrics"
+    source_column: "sample"
+    target_dc_tag: "multiqc_data"
+    target_type: "multiqc"
+    link_config:
+      resolver: "sample_mapping"
+      target_field: "sample_name"
+    description: "Filter MultiQC by sample selections from summary metrics"
+    enabled: true
+
+  # Link 2: Summary Metrics -> Variants Long
+  - source_dc_tag: "summary_metrics"
+    source_column: "sample"
+    target_dc_tag: "variants_long"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter variants table by selected samples"
+    enabled: true
+
+  # Link 3: Summary Metrics -> Pangolin Lineages
+  - source_dc_tag: "summary_metrics"
+    source_column: "sample"
+    target_dc_tag: "pangolin_lineages"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter Pangolin lineages by selected samples"
+    enabled: true
+
+  # Link 4: Summary Metrics -> Nextclade Results
+  - source_dc_tag: "summary_metrics"
+    source_column: "sample"
+    target_dc_tag: "nextclade_results"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter Nextclade results by selected samples"
+    enabled: true
+
+  # Link 5: Summary Metrics -> Mosdepth Amplicon Coverage
+  - source_dc_tag: "summary_metrics"
+    source_column: "sample"
+    target_dc_tag: "mosdepth_amplicon_coverage"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter amplicon coverage by selected samples"
+    enabled: true
+
+  # Link 6: Summary Metrics -> Mosdepth Genome Coverage
+  - source_dc_tag: "summary_metrics"
+    source_column: "sample"
+    target_dc_tag: "mosdepth_genome_coverage"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter genome coverage by selected samples"
+    enabled: true
+
+  # Link 7: Summary Metrics -> Mosdepth Amplicon Heatmap
+  - source_dc_tag: "summary_metrics"
+    source_column: "sample"
+    target_dc_tag: "mosdepth_amplicon_heatmap"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter amplicon heatmap by selected samples"
+    enabled: true

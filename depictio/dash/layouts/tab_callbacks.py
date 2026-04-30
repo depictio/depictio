@@ -350,19 +350,10 @@ def _build_tab_item(
         )
 
     return dmc.TabsTab(
-        dmc.Group(
-            [
-                html.Span(tab_label, style={"flex": "1"}),
-                right_section,
-            ]
-            if right_section
-            else tab_label,
-            justify="space-between" if right_section else "flex-start",
-            wrap="nowrap",
-            style={"width": "100%"},
-        ),
+        tab_label,
         value=tab_dashboard_id,
         leftSection=left_section,
+        rightSection=right_section,
         style={
             "width": "100%",
             "fontSize": "16px",

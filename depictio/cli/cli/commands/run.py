@@ -126,7 +126,7 @@ def register_run_command(app: typer.Typer):
         preview_recipes: bool = typer.Option(
             False,
             "--preview-recipes",
-            help="Show recipe input sources and transformed output without writing to Delta Lake",
+            help="Show recipe input sources and transformed output before writing to Delta Lake",
         ),
         # General options
         continue_on_error: bool = typer.Option(
@@ -178,7 +178,7 @@ def register_run_command(app: typer.Typer):
                 "DRY RUN MODE - No actual operations will be performed", "info"
             )
 
-        if sync_files:
+        if sync_files or overwrite:
             rescan_folders = True
 
         # Track whether we're in template mode

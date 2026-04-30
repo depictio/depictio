@@ -1035,6 +1035,9 @@ class DashboardDataLite(BaseModel):
                         "row_selection_column": comp_dict.get("row_selection_column"),
                     }
                 )
+                for f in ["description", "title_size", "title_align"]:
+                    if comp_dict.get(f):
+                        full_comp[f] = comp_dict[f]
 
             elif comp_type == "image":
                 # s3_base_folder regeneration: fetch from DC config if not provided

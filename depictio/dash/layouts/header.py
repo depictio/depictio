@@ -437,17 +437,20 @@ def register_callbacks_header(app) -> None:
         """
         function(is_collapsed) {
             console.log('🍔 CLIENTSIDE BURGER SYNC: collapsed=' + is_collapsed);
+            var burger = document.querySelector('#burger-button');
+            // Stepper / non-dashboard pages don't mount the burger — skip to avoid
+            // Dash's "nonexistent object in Output" warning.
+            if (!burger) {
+                console.log('🚫 Burger not in DOM, skipping update');
+                return window.dash_clientside.no_update;
+            }
             // Burger opened = NOT collapsed
             var new_opened = (is_collapsed !== null && is_collapsed !== undefined) ? !is_collapsed : true;
-            // Guard: check DOM to avoid redundant update that would re-trigger the cycle
-            var burger = document.querySelector('#burger-button');
-            if (burger) {
-                var currentOpened = burger.getAttribute('data-opened') === 'true' ||
-                                   burger.classList.contains('mantine-Burger--opened');
-                if (currentOpened === new_opened) {
-                    console.log('🚫 Burger already in sync, skipping update');
-                    return window.dash_clientside.no_update;
-                }
+            var currentOpened = burger.getAttribute('data-opened') === 'true' ||
+                               burger.classList.contains('mantine-Burger--opened');
+            if (currentOpened === new_opened) {
+                console.log('🚫 Burger already in sync, skipping update');
+                return window.dash_clientside.no_update;
             }
             return new_opened;
         }
@@ -808,7 +811,6 @@ def _create_dashboard_info_section(
                 size="lg",
                 color="indigo",
                 variant="dot",
-                leftSection=DashIconify(icon="mdi:file-document-outline", width=16, color="white"),
                 style={"width": "100%", "justifyContent": "flex-start"},
             ),
         )

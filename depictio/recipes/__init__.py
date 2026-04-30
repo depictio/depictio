@@ -119,6 +119,30 @@ def _read_source_file(file_path: Path, source: RecipeSource) -> pl.DataFrame:
         raise RecipeError(f"Unsupported format: {source.format}")
 
 
+def _resolve_glob_source(data_dir: Path, source: RecipeSource) -> pl.DataFrame:
+    """Glob for multiple files and concatenate into a single DataFrame."""
+    pattern = source.glob_pattern
+    if pattern is None:
+        raise RecipeError(f"Source '{source.ref}' has no glob_pattern")
+
+    matched_files = sorted(data_dir.glob(pattern))
+    if not matched_files:
+        raise RecipeError(f"Source '{source.ref}': no files matched glob '{pattern}' in {data_dir}")
+
+    frames: list[pl.DataFrame] = []
+    for file_path in matched_files:
+        df = _read_source_file(file_path, source)
+        if not df.is_empty():
+            frames.append(df)
+
+    if not frames:
+        raise RecipeError(
+            f"Source '{source.ref}': all {len(matched_files)} matched files were empty"
+        )
+
+    return pl.concat(frames, how="diagonal_relaxed")
+
+
 def resolve_sources(
     module: ModuleType,
     data_dir: str | Path,
@@ -141,6 +165,11 @@ def resolve_sources(
         if source.dc_ref is not None:
             # dc_ref sources are resolved externally (e.g. from another DC)
             # Skip here — caller must inject these
+            continue
+
+        # Glob-based source: match multiple files and concatenate
+        if source.glob_pattern is not None:
+            sources[source.ref] = _resolve_glob_source(data_dir, source)
             continue
 
         # Determine file path (apply override if present)

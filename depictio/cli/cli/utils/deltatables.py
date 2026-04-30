@@ -705,16 +705,26 @@ def _print_recipe_preview(
     console.print()
     console.print(Panel(f"[bold]Recipe Preview: {recipe_name}[/bold]", style="cyan", expand=False))
 
+    MAX_PREVIEW_COLS = 15
+
     for ref, df in sources.items():
         console.print(
             f"\n[bold cyan]Input source '{ref}'[/bold cyan]  ({df.height} rows x {df.width} cols)"
         )
-        # Build a Rich table from the first 5 rows
+        # Limit columns displayed
+        display_cols = df.columns[:MAX_PREVIEW_COLS]
+        extra_cols = df.width - len(display_cols)
+        df_display = df.select(display_cols).head(5)
         t = Table(show_header=True, header_style="bold", show_lines=True)
-        for col in df.columns:
+        for col in display_cols:
             t.add_column(col, style="dim" if col.startswith("_") else "")
-        for row in df.head(5).iter_rows():
-            t.add_row(*(str(v) for v in row))
+        if extra_cols > 0:
+            t.add_column(f"... +{extra_cols} cols", style="dim italic")
+        for row in df_display.iter_rows():
+            values = [str(v) for v in row]
+            if extra_cols > 0:
+                values.append("…")
+            t.add_row(*values)
         console.print(t)
         if df.height > 5:
             console.print(f"  [dim]... and {df.height - 5} more rows[/dim]")
@@ -724,11 +734,19 @@ def _print_recipe_preview(
         f"\n[bold green]Output after transform[/bold green]  "
         f"({result_df.height} rows x {result_df.width} cols)"
     )
+    display_cols = result_df.columns[:MAX_PREVIEW_COLS]
+    extra_cols = result_df.width - len(display_cols)
+    result_display = result_df.select(display_cols).head(10)
     t = Table(show_header=True, header_style="bold green", show_lines=True)
-    for col in result_df.columns:
+    for col in display_cols:
         t.add_column(col)
-    for row in result_df.head(10).iter_rows():
-        t.add_row(*(str(v) for v in row))
+    if extra_cols > 0:
+        t.add_column(f"... +{extra_cols} cols", style="dim italic")
+    for row in result_display.iter_rows():
+        values = [str(v) for v in row]
+        if extra_cols > 0:
+            values.append("…")
+        t.add_row(*values)
     console.print(t)
     if result_df.height > 10:
         console.print(f"  [dim]... and {result_df.height - 10} more rows[/dim]")
@@ -800,12 +818,35 @@ def process_recipe_data_collection(
         overrides = {ref: so.path for ref, so in transform_config.source_overrides.items()}
 
     # Resolve data directory from workflow's data_location
+    # For sequencing-runs structure, collect all run directories
     data_dir = "."
+    run_data_dirs: list[str] = []
     if workflow is not None and hasattr(workflow, "data_location") and workflow.data_location:
         locations = getattr(workflow.data_location, "locations", None)
+        structure = getattr(workflow.data_location, "structure", None)
+        runs_regex = getattr(workflow.data_location, "runs_regex", None)
+
         if locations and len(locations) > 0:
-            data_dir = str(locations[0])
-            rich_print_checked_statement(f"Recipe data dir: {data_dir}", "info")
+            base_location = str(locations[0])
+
+            if structure == "sequencing-runs" and runs_regex:
+                import re as _re
+
+                for entry in sorted(os.listdir(base_location)):
+                    entry_path = os.path.join(base_location, entry)
+                    if os.path.isdir(entry_path) and _re.match(runs_regex, entry):
+                        run_data_dirs.append(entry_path)
+                if run_data_dirs:
+                    data_dir = run_data_dirs[0]
+                    rich_print_checked_statement(
+                        f"Recipe data dir: {base_location} ({len(run_data_dirs)} run(s))", "info"
+                    )
+                else:
+                    data_dir = base_location
+                    rich_print_checked_statement(f"Recipe data dir: {data_dir}", "info")
+            else:
+                data_dir = base_location
+                rich_print_checked_statement(f"Recipe data dir: {data_dir}", "info")
 
     # Resolve dc_ref sources: load referenced DCs from their Delta tables
     extra_sources: dict[str, pl.DataFrame] | None = None
@@ -870,19 +911,35 @@ def process_recipe_data_collection(
         except RecipeError as e:
             return {"result": "error", "message": f"Recipe failed: {e}"}
 
-        return {
-            "result": "success",
-            "message": f"Recipe '{recipe_name}' preview complete (no data written).",
-        }
-
     try:
-        result_df = execute_recipe(
-            recipe_name,
-            data_dir,
-            overrides,
-            extra_sources=extra_sources,
-            pipeline_version=pipeline_version,
-        )
+        if run_data_dirs and len(run_data_dirs) > 1:
+            # Multi-run: execute recipe per run and concatenate
+            all_dfs = []
+            for run_dir in run_data_dirs:
+                run_tag = os.path.basename(run_dir)
+                try:
+                    run_df = execute_recipe(
+                        recipe_name,
+                        run_dir,
+                        overrides,
+                        extra_sources=extra_sources,
+                        pipeline_version=pipeline_version,
+                    )
+                    run_df = run_df.with_columns(pl.lit(run_tag).alias("depictio_run_id"))
+                    all_dfs.append(run_df)
+                except RecipeError as e:
+                    logger.warning(f"Recipe failed for run {run_tag}: {e}")
+            if not all_dfs:
+                return {"result": "error", "message": "Recipe failed for all runs"}
+            result_df = pl.concat(all_dfs, how="diagonal_relaxed")
+        else:
+            result_df = execute_recipe(
+                recipe_name,
+                data_dir,
+                overrides,
+                extra_sources=extra_sources,
+                pipeline_version=pipeline_version,
+            )
     except RecipeError as e:
         return {"result": "error", "message": f"Recipe failed: {e}"}
 

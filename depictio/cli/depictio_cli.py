@@ -41,7 +41,7 @@ def verbose_callback(
     ),
     logo: bool = typer.Option(False, "--logo", help="Display the Depictio CLI logo", is_eager=True),
 ):
-    """Set up logging for all commands"""
+    # """Set up logging for all commands"""
     # Set up both CLI and models logging with the same verbose settings
     setup_cli_logging(verbose, verbose_level)
     setup_models_logging(verbose, verbose_level)

@@ -240,6 +240,13 @@ def create_edit_page(
     page_layout = html.Div(
         [
             hidden_selects,
+            # Hidden placeholder for burger-button so header/tab callbacks that Output
+            # to #burger-button don't raise "nonexistent object" at dispatch time.
+            dmc.Burger(
+                id="burger-button",
+                opened=True,
+                style={"display": "none"},
+            ),
             dmc.AppShell(
                 [
                     header,

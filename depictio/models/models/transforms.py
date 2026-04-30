@@ -10,6 +10,7 @@ class RecipeSource(BaseModel):
 
     ref: str  # Name used as key in sources dict passed to transform()
     path: str | None = None  # Relative path under data_dir (for file-based sources)
+    glob_pattern: str | None = None  # Glob pattern for multi-file sources (e.g. "dir/*.csv")
     dc_ref: str | None = None  # Reference another DC by tag (for joined sources)
     format: str = "CSV"  # CSV, TSV, Parquet
     read_kwargs: dict | None = None  # Extra kwargs passed to polars read function

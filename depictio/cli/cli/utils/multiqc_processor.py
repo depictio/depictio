@@ -306,16 +306,22 @@ def process_multiqc_data_collection(
         created_reports = []
         try:
             import boto3
+            from botocore.config import Config as BotoConfig
 
             from depictio.models.models.multiqc_reports import MultiQCMetadata, MultiQCReport
 
             # Create S3 client with storage options
+            # Use s3v4 signature and path-style addressing for MinIO compatibility
             s3_client = boto3.client(
                 "s3",
                 endpoint_url=storage_options.endpoint_url,
                 aws_access_key_id=storage_options.aws_access_key_id,
                 aws_secret_access_key=storage_options.aws_secret_access_key,
                 region_name=storage_options.region,
+                config=BotoConfig(
+                    signature_version="s3v4",
+                    s3={"addressing_style": "path"},
+                ),
             )
 
             logger.info(f"Processing {len(individual_file_metadata)} files individually...")
@@ -407,7 +413,13 @@ def process_multiqc_data_collection(
                                 logger.info(f"Using new S3 key (hash-based): {s3_key}")
 
                             logger.info(f"Uploading file to S3: {file_path} -> {s3_key}")
-                            s3_client.upload_file(file_path, CLI_config.s3_storage.bucket, s3_key)
+                            # Use put_object to avoid multipart upload issues with MinIO
+                            with open(file_path, "rb") as f:
+                                s3_client.put_object(
+                                    Bucket=CLI_config.s3_storage.bucket,
+                                    Key=s3_key,
+                                    Body=f,
+                                )
                             s3_location = f"s3://{CLI_config.s3_storage.bucket}/{s3_key}"
                             logger.info(f"Successfully uploaded {file_path} to {s3_location}")
 
