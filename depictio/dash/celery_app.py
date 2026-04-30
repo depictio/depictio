@@ -212,11 +212,8 @@ def prewarm_multiqc_dashboard(self, dashboard_id: str) -> dict:
     + plot rendering in a Celery worker so the user's request thread is
     free.
     """
-    import json
-
     from bson import ObjectId
 
-    from depictio.api.cache import get_cache
     from depictio.api.v1.configs.logging_init import logger
     from depictio.api.v1.db import dashboards_collection
 
@@ -234,13 +231,10 @@ def prewarm_multiqc_dashboard(self, dashboard_id: str) -> dict:
     if not components:
         return {"status": "no_multiqc", "dashboard_id": dashboard_id}
 
-    cache = get_cache()
-
     # Lazy imports — multiqc + plotly are heavy, only pay the cost when
     # we actually have MultiQC components to warm.
     from depictio.api.v1.db import multiqc_collection
     from depictio.dash.modules.figure_component.multiqc_vis import (
-        _generate_figure_cache_key,
         create_multiqc_plot,
     )
     from depictio.dash.modules.multiqc_component.models import _fetch_s3_locations_from_dc
@@ -301,26 +295,21 @@ def prewarm_multiqc_dashboard(self, dashboard_id: str) -> dict:
         if not module or not plot:
             continue
 
+        # ``create_multiqc_plot`` is itself idempotent w.r.t. cache: it
+        # downloads each parquet, computes the figure cache key with real
+        # mtimes, and short-circuits on a cache hit. We just call it for
+        # each theme — counters reflect call success, not a separate
+        # cache.get probe (which used to compute the key with mtime=0
+        # before download and never matched the renderer's real-mtime key).
         for theme in ("light", "dark"):
             try:
-                key = _generate_figure_cache_key(s3_locations, module, plot, dataset, theme)
-                if cache.get(key) is not None:
-                    skipped += 1
-                    continue
-                fig = create_multiqc_plot(
+                create_multiqc_plot(
                     s3_locations=s3_locations,
                     module=module,
                     plot=plot,
                     dataset_id=dataset,
                     theme=theme,
                 )
-                # create_multiqc_plot already writes fig.to_dict() to cache,
-                # but we double-check here in case cache.set raised inside it
-                # and was swallowed.
-                fig_dict = json.loads(fig.to_json()) if hasattr(fig, "to_json") else fig
-                if isinstance(fig_dict, dict) and "layout" in fig_dict:
-                    fig_dict["layout"].setdefault("uirevision", "persistent")
-                cache.set(key, fig_dict, ttl=7200)
                 warmed += 1
             except Exception as e:
                 logger.warning(
