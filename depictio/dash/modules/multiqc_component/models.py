@@ -18,23 +18,43 @@ def _fetch_s3_locations_from_dc(
     """
     Fetch S3 locations from data collection config.
 
-    Regenerates s3_locations from data collection's dc_specific_properties,
-    ensuring YAML export is minimal and data is always fresh.
+    Walks the ``multiqc_reports`` collection for the DC and returns every
+    report's S3 parquet location. The ``dc_specific_properties.s3_location``
+    field on the DC config only stores the *first* parquet captured by the
+    processor — using it alone caused MultiQC plot rendering to ignore N-1
+    reports after appends. The reports collection is the source of truth.
+
+    Falls back to the singular ``dc_specific_properties.s3_location`` if the
+    reports collection lookup yields nothing (covers minimal YAML imports
+    that ship that field but no per-report rows).
 
     Args:
-        data_collection_id: Data collection ID
-        project_id: Optional project ID for nested lookup
+        data_collection_id: Data collection ID.
+        project_id: Optional project ID for the YAML-minimal fallback path.
 
     Returns:
-        List of S3 locations (usually single-element list)
+        List of S3 locations — one per ingested report, or single-element
+        from the DC config fallback, or empty if nothing is found.
     """
     try:
-        # Import here to avoid circular dependencies
-        from depictio.api.v1.db import projects_collection
+        # Primary path: walk multiqc_reports — this is where every appended
+        # report's S3 location lives.
+        from depictio.api.v1.db import multiqc_collection
 
-        # Search in projects for nested data collections
+        cursor = multiqc_collection.find(
+            {"data_collection_id": str(data_collection_id)},
+            {"s3_location": 1},
+        )
+        s3_locations: List[str] = [loc for doc in cursor if (loc := doc.get("s3_location"))]
+        if s3_locations:
+            return s3_locations
+
+        # Fallback: the DC config's singular s3_location field. Useful for
+        # minimal YAML imports that don't ship per-report documents.
         if project_id:
             from bson import ObjectId
+
+            from depictio.api.v1.db import projects_collection
 
             project_doc = projects_collection.find_one({"_id": ObjectId(project_id)})
             if project_doc and "workflows" in project_doc:

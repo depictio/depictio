@@ -298,6 +298,67 @@ async def delete_multiqc_report_by_id(report_id: str, delete_s3_file: bool = Fal
         raise HTTPException(status_code=500, detail=f"Failed to delete MultiQC report: {str(e)}")
 
 
+async def delete_all_multiqc_reports_for_dc(
+    data_collection_id: str,
+    delete_s3_files: bool = False,
+) -> dict:
+    """
+    Delete every MultiQC report for a data collection in one Mongo delete_many call.
+
+    Optionally also deletes the source parquet objects from S3. Individual S3
+    failures are logged and do not block the bulk Mongo delete.
+
+    Returns: {"deleted_count": int, "deleted_s3_count": int}
+    """
+    deleted_s3_count = 0
+
+    if delete_s3_files:
+        bucket_name = settings.minio.bucket
+        cursor = multiqc_collection.find({"data_collection_id": data_collection_id})
+        for report_doc in cursor:
+            s3_location = report_doc.get("s3_location")
+            if not s3_location:
+                continue
+            try:
+                # Format: s3://bucket/data_collection_id/timestamp_id/multiqc.parquet
+                s3_path = s3_location.replace("s3://", "")
+                if "/" not in s3_path:
+                    logger.warning(f"Invalid S3 location format: {s3_location}")
+                    continue
+                s3_key_prefix = s3_path.split("/", 1)[1]
+
+                paginator = s3_client.get_paginator("list_objects_v2")
+                pages = paginator.paginate(Bucket=bucket_name, Prefix=s3_key_prefix)
+                objects_to_delete = [
+                    {"Key": obj["Key"]} for page in pages for obj in page.get("Contents", [])
+                ]
+
+                if not objects_to_delete:
+                    logger.warning(f"No S3 objects found at: {s3_location}")
+                    continue
+                batch_size = 1000
+                for i in range(0, len(objects_to_delete), batch_size):
+                    batch = objects_to_delete[i : i + batch_size]
+                    s3_client.delete_objects(Bucket=bucket_name, Delete={"Objects": batch})
+                logger.info(f"Deleted {len(objects_to_delete)} S3 objects from: {s3_location}")
+                deleted_s3_count += 1
+            except Exception as s3_error:
+                logger.warning(f"Failed to delete S3 file at {s3_location}: {s3_error}")
+
+    try:
+        result = multiqc_collection.delete_many({"data_collection_id": data_collection_id})
+        deleted_count = int(result.deleted_count)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to delete MultiQC reports: {str(e)}")
+
+    logger.info(
+        f"Bulk-deleted {deleted_count} MultiQC reports for data collection "
+        f"{data_collection_id} (S3 deletions: {deleted_s3_count})"
+    )
+
+    return {"deleted_count": deleted_count, "deleted_s3_count": deleted_s3_count}
+
+
 async def get_multiqc_report_metadata_by_id(report_id: str) -> dict:
     """
     Get the extracted metadata from a MultiQC report.

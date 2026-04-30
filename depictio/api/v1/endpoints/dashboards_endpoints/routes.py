@@ -214,6 +214,22 @@ async def get_dashboard(
     if parent_title:
         dashboard_dict["parent_dashboard_title"] = parent_title
 
+    # Fire-and-forget Celery prewarm for MultiQC components — pre-renders
+    # every figure into Redis so the user's first plot request hits a
+    # warm cache instead of paying the multi-minute parse+render cost.
+    # Idempotent: cached entries are skipped, so repeated GETs from the
+    # same/multiple users mostly no-op. Backported from PR #743.
+    has_multiqc = any(
+        m.get("component_type") == "multiqc" for m in (dashboard_dict.get("stored_metadata") or [])
+    )
+    if has_multiqc:
+        try:
+            from depictio.dash.celery_app import prewarm_multiqc_dashboard
+
+            prewarm_multiqc_dashboard.delay(str(dashboard_id))
+        except Exception as e:
+            logger.warning(f"get_dashboard: prewarm dispatch failed for {dashboard_id}: {e}")
+
     return convert_objectid_to_str(dashboard_dict)
 
 
