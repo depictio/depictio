@@ -16,26 +16,32 @@ def _fetch_s3_locations_from_dc(
     data_collection_id: str, project_id: Optional[str] = None
 ) -> List[str]:
     """
-    Fetch S3 locations from data collection config.
+    Fetch S3 locations for a MultiQC data collection.
 
-    Regenerates s3_locations from data collection's dc_specific_properties,
-    ensuring YAML export is minimal and data is always fresh.
+    Resolution order (both via direct MongoDB queries — works from any process
+    with DB access; no HTTP loop-back needed):
+      1. project_doc.workflows[].data_collections[].config.dc_specific_properties.s3_location
+         (from the YAML/seed; usually null until the deployment-init script
+         populates it).
+      2. multiqc_collection — the deployed MultiQC reports collection,
+         queried by data_collection_id. This is where pipelines actually
+         publish their s3_location after a run.
 
     Args:
         data_collection_id: Data collection ID
-        project_id: Optional project ID for nested lookup
+        project_id: Optional project ID for nested lookup (used by step 1)
 
     Returns:
         List of S3 locations (usually single-element list)
     """
     try:
         # Import here to avoid circular dependencies
-        from depictio.api.v1.db import projects_collection
+        from bson import ObjectId
 
-        # Search in projects for nested data collections
+        from depictio.api.v1.db import multiqc_collection, projects_collection
+
+        # Pass 1: project's dc_specific_properties.s3_location
         if project_id:
-            from bson import ObjectId
-
             project_doc = projects_collection.find_one({"_id": ObjectId(project_id)})
             if project_doc and "workflows" in project_doc:
                 for wf in project_doc.get("workflows", []):
@@ -47,6 +53,22 @@ def _fetch_s3_locations_from_dc(
                                 s3_location = dc_specific_props.get("s3_location")
                                 if s3_location:
                                     return [s3_location]
+
+        # Pass 2: multiqc_collection — deployed reports for this DC
+        try:
+            cursor = (
+                multiqc_collection.find({"data_collection_id": str(data_collection_id)})
+                .sort("processed_at", -1)
+                .limit(50)
+            )
+            locations = [doc.get("s3_location") for doc in cursor if doc.get("s3_location")]
+            if locations:
+                return locations
+        except Exception as e:
+            logger.warning(
+                f"_fetch_s3_locations_from_dc: multiqc_collection lookup failed for "
+                f"DC {data_collection_id}: {e}"
+            )
 
         return []
 

@@ -20,6 +20,9 @@ Usage:
     celery -A depictio.dash.celery_worker:celery_app worker --loglevel=info
 """
 
+# Register FastAPI-side tasks (preview / render offload). Importing the module
+# triggers `@celery_app.task` decorators so the worker can pick them up.
+from depictio.api.v1 import celery_tasks  # noqa: E402, F401
 from depictio.api.v1.configs.logging_init import logger
 
 # Import the Celery app instance

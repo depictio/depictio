@@ -36,8 +36,13 @@ def create_minimal_header(
     if not dashboard_title:
         dashboard_title = "Dashboard"
 
-    # Determine back URL based on edit mode
-    back_url = f"/dashboard-edit/{dashboard_id}" if is_edit_mode else f"/dashboard/{dashboard_id}"
+    # Determine back URL based on edit mode.
+    # In edit mode, the legacy Dash editor (/dashboard-edit/{id}) has been
+    # migrated to the React SPA at /dashboard-beta/{id}/edit, so post-stepper
+    # navigation must land users back in the React editor.
+    back_url = (
+        f"/dashboard-beta/{dashboard_id}/edit" if is_edit_mode else f"/dashboard/{dashboard_id}"
+    )
 
     header_content = html.Div(
         [

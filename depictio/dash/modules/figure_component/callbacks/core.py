@@ -46,6 +46,15 @@ LoadKey = tuple[str, str, str]  # (wf_id, dc_id, filters_hash)
 LoadKeyExtended = tuple[str, str, str, str]  # (wf_id, dc_id, filters_hash, columns_hash)
 
 
+def _stable_hash(value: Any) -> str:
+    """Deterministic short hash of any JSON-serialisable value; falls back to repr()."""
+    try:
+        raw = json.dumps(value, sort_keys=True, default=str).encode()
+    except (TypeError, ValueError):
+        raw = repr(value).encode()
+    return hashlib.md5(raw).hexdigest()[:16]
+
+
 def _build_metadata_index(
     interactive_metadata_list: list | None,
     interactive_metadata_ids: list | None,

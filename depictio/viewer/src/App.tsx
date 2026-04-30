@@ -1,0 +1,314 @@
+import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react';
+import {
+  AppShell,
+  Group,
+  Text,
+  Loader,
+  Anchor,
+  Stack,
+  Title,
+  Paper,
+  Box,
+} from '@mantine/core';
+import { useDisclosure } from '@mantine/hooks';
+
+import {
+  fetchDashboard,
+  fetchAllDashboards,
+  bulkComputeCards,
+  ComponentRenderer,
+  DashboardGrid,
+} from 'depictio-react-core';
+import type {
+  DashboardData,
+  DashboardSummary,
+  InteractiveFilter,
+} from 'depictio-react-core';
+import { Header, Sidebar, SettingsDrawer } from './chrome';
+import { useSidebarOpen } from './hooks/useSidebarOpen';
+
+/**
+ * Top-level SPA. Layout:
+ *
+ *   ┌──────── Header (65px) ─────────────────┐
+ *   │ Burger | tab-icon | Title  | PoweredBy | Edit | Reset | Settings │
+ *   ├──────────┬─────────────────────────────┤
+ *   │ Sidebar  │ Main: 1/3 + 2/3             │
+ *   │ (tabs    │ ┌─────┬───────────────────┐ │
+ *   │  theme   │ │ 1/3 │  Cards row        │ │
+ *   │  status  │ │ inter│──────────────────│ │
+ *   │  profile)│ │ active│ figures/tables  │ │
+ *
+ * The chrome (Header + Sidebar + per-component action icons) mirrors the Dash
+ * viewer's UI for cross-app parity.
+ */
+const App: React.FC = () => {
+  const [dashboard, setDashboard] = useState<DashboardData | null>(null);
+  const [allDashboards, setAllDashboards] = useState<DashboardSummary[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [filters, setFilters] = useState<InteractiveFilter[]>([]);
+  const [cardValues, setCardValues] = useState<Record<string, unknown>>({});
+  const [cardsLoading, setCardsLoading] = useState(false);
+  const [mobileOpened, { toggle: toggleMobile }] = useDisclosure(false);
+  // Desktop state is persisted across tab/page navigations via the same
+  // `sidebar-collapsed` localStorage key the Dash app writes.
+  const [desktopOpened, toggleDesktop] = useSidebarOpen();
+  const [settingsOpened, { open: openSettings, close: closeSettings }] = useDisclosure(false);
+
+  const dashboardId = extractDashboardId();
+  const bulkCtrl = useRef<AbortController | null>(null);
+
+  // Keep the browser tab title in sync with the dashboard name.
+  useEffect(() => {
+    if (dashboard?.title) {
+      document.title = `Depictio — ${dashboard.title}`;
+    } else if (dashboardId) {
+      document.title = `Depictio — ${dashboardId}`;
+    }
+  }, [dashboard?.title, dashboardId]);
+
+  // Fetch dashboard + tab list in parallel
+  useEffect(() => {
+    if (!dashboardId) {
+      setError('No dashboard ID in URL. Expected /dashboard-beta/<id>.');
+      setLoading(false);
+      return;
+    }
+    Promise.all([fetchDashboard(dashboardId), fetchAllDashboards()])
+      .then(([dash, all]) => {
+        setDashboard(dash);
+        setAllDashboards(all);
+      })
+      .catch((err) => {
+        setError(`Failed to load dashboard: ${err.message || err}`);
+      })
+      .finally(() => setLoading(false));
+  }, [dashboardId]);
+
+  // Bulk-compute card values whenever filters change
+  useEffect(() => {
+    if (!dashboard || !dashboardId) return;
+    const cardIds = (dashboard.stored_metadata || [])
+      .filter((m) => m.component_type === 'card')
+      .map((m) => m.index);
+    if (cardIds.length === 0) return;
+
+    const timer = setTimeout(() => {
+      setCardsLoading(true);
+      // Reset card values so each card shows its individual loader while the
+      // bulk-compute round-trip is in flight.
+      setCardValues({});
+      if (bulkCtrl.current) bulkCtrl.current.abort();
+      bulkCtrl.current = new AbortController();
+      bulkComputeCards(dashboardId, filters, cardIds)
+        .then((res) => setCardValues(res.values))
+        .catch((err) => {
+          if (err?.name !== 'AbortError') console.warn('[App] bulk-compute failed:', err);
+        })
+        .finally(() => setCardsLoading(false));
+    }, 150);
+    return () => clearTimeout(timer);
+  }, [dashboard, dashboardId, stableFilterKey(filters)]);
+
+  const handleFilterChange = useCallback((update: InteractiveFilter) => {
+    setFilters((prev) => {
+      const without = prev.filter((f) => f.index !== update.index);
+      const hasValue = Array.isArray(update.value)
+        ? update.value.length > 0
+        : update.value != null && update.value !== '';
+      return hasValue ? [...without, update] : without;
+    });
+  }, []);
+
+  const handleResetAllFilters = useCallback(() => setFilters([]), []);
+
+  // Group tabs: parent dashboard + all its child tabs.
+  const tabSiblings = useMemo(() => {
+    if (!dashboard || !allDashboards.length) return [] as DashboardSummary[];
+    const dashId = String(dashboard.dashboard_id || dashboard._id || dashboardId || '');
+    const current = allDashboards.find((d) => d.dashboard_id === dashId);
+    const parentId = current?.parent_dashboard_id || dashId;
+    const family = allDashboards.filter(
+      (d) => d.dashboard_id === parentId || d.parent_dashboard_id === parentId,
+    );
+    return family.sort((a, b) => {
+      // Parent first, then children alphabetically by title
+      if (!a.parent_dashboard_id && b.parent_dashboard_id) return -1;
+      if (a.parent_dashboard_id && !b.parent_dashboard_id) return 1;
+      return (a.title || '').localeCompare(b.title || '');
+    });
+  }, [dashboard, allDashboards, dashboardId]);
+
+  const activeTab = useMemo(
+    () => tabSiblings.find((d) => d.dashboard_id === dashboardId) || null,
+    [tabSiblings, dashboardId],
+  );
+  const parentTab = useMemo(
+    () => tabSiblings.find((d) => !d.parent_dashboard_id) || null,
+    [tabSiblings],
+  );
+
+  const interactiveComponents = useMemo(
+    () => (dashboard?.stored_metadata || []).filter((m) => m.component_type === 'interactive'),
+    [dashboard],
+  );
+  const cardComponents = useMemo(
+    () => (dashboard?.stored_metadata || []).filter((m) => m.component_type === 'card'),
+    [dashboard],
+  );
+  const otherComponents = useMemo(
+    () =>
+      (dashboard?.stored_metadata || []).filter(
+        (m) => m.component_type !== 'card' && m.component_type !== 'interactive',
+      ),
+    [dashboard],
+  );
+
+  // View mode uses the SAME DashboardGrid + saved-layout source as the editor;
+  // only `editMode`/`isDraggable`/`isResizable` differ. Identical visual output
+  // for any given dashboard, regardless of which URL the user lands on.
+  const rightComponents = useMemo(
+    () => [...cardComponents, ...otherComponents],
+    [cardComponents, otherComponents],
+  );
+
+  return (
+    <AppShell
+      header={{ height: 50 }}
+      navbar={{
+        width: 250,
+        breakpoint: 'sm',
+        collapsed: { mobile: !mobileOpened, desktop: !desktopOpened },
+      }}
+      padding={0}
+      transitionDuration={300}
+      transitionTimingFunction="ease"
+    >
+      <AppShell.Header>
+        <Header
+          dashboardId={dashboardId}
+          dashboard={dashboard}
+          activeTab={activeTab}
+          parentTab={parentTab}
+          mobileOpened={mobileOpened}
+          desktopOpened={desktopOpened}
+          onToggleMobile={toggleMobile}
+          onToggleDesktop={toggleDesktop}
+          onReset={handleResetAllFilters}
+          onOpenSettings={openSettings}
+          cardsLoading={cardsLoading}
+        />
+      </AppShell.Header>
+
+      <AppShell.Navbar p="md">
+        <Sidebar tabs={tabSiblings} activeId={dashboardId} />
+      </AppShell.Navbar>
+
+      <AppShell.Main style={{ height: 'calc(100vh - 50px)' }}>
+        {loading && (
+          <Group p="lg">
+            <Loader size="sm" />
+            <Text>Loading dashboard…</Text>
+          </Group>
+        )}
+        {error && <Text c="red" p="lg">{error}</Text>}
+        {dashboard && !loading && !error && (
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: '20vw 1fr',
+              height: '100%',
+              width: '100%',
+              gap: 4,
+              overflow: 'hidden',
+            }}
+          >
+            <Box
+              px={4}
+              py={4}
+              style={{
+                height: '100%',
+                minWidth: 0,
+                overflowY: 'auto',
+                overflowX: 'hidden',
+              }}
+            >
+              <Paper p="md" withBorder radius="md" style={{ height: '100%' }}>
+                <Title order={5} mb="sm">
+                  Filters
+                </Title>
+                <Stack gap="sm">
+                  {interactiveComponents.length === 0 && (
+                    <Text size="sm" c="dimmed">No interactive components.</Text>
+                  )}
+                  {interactiveComponents.map((m) => (
+                    <ComponentRenderer
+                      key={m.index}
+                      metadata={m}
+                      filters={filters}
+                      onFilterChange={handleFilterChange}
+                    />
+                  ))}
+                  {filters.length > 0 && (
+                    <Anchor
+                      component="button"
+                      onClick={handleResetAllFilters}
+                      size="xs"
+                      mt="xs"
+                    >
+                      Reset all filters
+                    </Anchor>
+                  )}
+                </Stack>
+              </Paper>
+            </Box>
+            <Box
+              px={4}
+              py={4}
+              style={{
+                height: '100%',
+                minWidth: 0,
+                overflowY: 'auto',
+                overflowX: 'hidden',
+              }}
+            >
+              <DashboardGrid
+                dashboardId={dashboardId!}
+                metadataList={rightComponents}
+                layoutData={dashboard.right_panel_layout_data}
+                filters={filters}
+                cardValues={cardValues}
+                cardValuesLoading={cardsLoading}
+                isDraggable={false}
+                isResizable={false}
+                editMode={false}
+              />
+            </Box>
+          </div>
+        )}
+      </AppShell.Main>
+
+      <SettingsDrawer
+        opened={settingsOpened}
+        onClose={closeSettings}
+        dashboard={dashboard}
+      />
+    </AppShell>
+  );
+};
+
+export default App;
+
+// ---------------------------------------------------------------------------
+
+function extractDashboardId(): string | null {
+  const path = window.location.pathname;
+  const match = path.match(/\/dashboard-beta\/([^/?#]+)/);
+  return match?.[1] || null;
+}
+
+function stableFilterKey(filters: InteractiveFilter[]): string {
+  const sorted = [...filters].sort((a, b) => a.index.localeCompare(b.index));
+  return JSON.stringify(sorted.map((f) => [f.index, f.value]));
+}

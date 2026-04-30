@@ -13,8 +13,10 @@ import boto3
 import polars as pl
 from botocore.exceptions import ClientError
 from bson import ObjectId
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response
 
+from depictio.api.v1.celery_dispatch import offload_or_run
+from depictio.api.v1.celery_tasks import preview_deltatable as preview_deltatable_task
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.db import deltatables_collection, projects_collection, users_collection
@@ -382,6 +384,85 @@ async def specs(
     return convert_objectid_to_str(aggregation[-1]["aggregation_columns_specs"])
 
 
+@deltatables_endpoint_router.get("/unique_values/{data_collection_id}")
+async def get_unique_values(
+    data_collection_id: PyObjectId,
+    column: str,
+    limit: int = 1000,
+    current_user: str = Depends(get_user_or_anonymous),
+):
+    """Return the sorted unique values of ``column`` within a data collection.
+
+    Backs the React viewer's MultiSelect options fetch. Mirrors the code path
+    Dash uses via ``load_deltatable_lite(..., load_for_options=True)`` so both
+    viewers see identical option lists.
+
+    Args:
+        data_collection_id: Target data collection.
+        column: Column name whose unique values to return.
+        limit: Max values to return (default 1000). Prevents unbounded payloads
+            on high-cardinality columns; MultiSelect's UX caps at 100 anyway.
+        current_user: Authenticated or anonymous user (permission-checked).
+
+    Returns:
+        ``{"column": str, "values": list[str]}`` — strings for MultiSelect UI.
+
+    Raises:
+        HTTPException: 404 if DC not found / not accessible, 500 on read error.
+    """
+    # Find the project that owns this data collection. Doing a full MongoDB
+    # permission filter via _build_permission_pipeline rejects the anonymous
+    # admin user (no explicit owner entry) — use the same admin-aware
+    # check_project_permission as /dashboards/get/{id}.
+    from depictio.api.v1.endpoints.dashboards_endpoints.routes import check_project_permission
+
+    project = projects_collection.find_one(
+        {"workflows.data_collections._id": ObjectId(data_collection_id)},
+        {"_id": 1},
+    )
+    if not project:
+        raise HTTPException(status_code=404, detail="Data collection not found.")
+
+    if not check_project_permission(project["_id"], current_user, "viewer"):  # type: ignore[arg-type]
+        raise HTTPException(
+            status_code=403,
+            detail="You don't have permission to access this data collection.",
+        )
+
+    deltatables_list = list(deltatables_collection.find({"data_collection_id": data_collection_id}))
+    if not deltatables_list:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No DeltaTable found for Data Collection ID {data_collection_id}.",
+        )
+
+    delta_table_location = deltatables_list[-1].get("delta_table_location")
+    if not delta_table_location:
+        raise HTTPException(
+            status_code=404, detail="Delta table location not found in deltatable document."
+        )
+
+    try:
+        lazy = pl.scan_delta(delta_table_location, storage_options=polars_s3_config)
+        try:
+            df = lazy.select(column).unique().limit(limit).collect()
+        except pl.exceptions.ColumnNotFoundError:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Column '{column}' not found in data collection {data_collection_id}.",
+            )
+
+        values = df[column].drop_nulls().to_list()
+        # Stable ordering — MultiSelect UX expects sorted strings.
+        values_str = sorted({str(v) for v in values})
+        return {"column": column, "values": values_str}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error fetching unique values for column {column}: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to read unique values: {e}")
+
+
 @deltatables_endpoint_router.get("/shape/{data_collection_id}")
 async def get_shape(
     data_collection_id: PyObjectId,
@@ -425,6 +506,57 @@ async def get_shape(
     except Exception as e:
         logger.error(f"Error reading delta table shape: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to read delta table shape: {e}")
+
+
+@deltatables_endpoint_router.get("/preview/{data_collection_id}")
+async def get_preview(
+    response: Response,
+    data_collection_id: PyObjectId,
+    limit: int = 100,
+    current_user: str = Depends(get_user_or_anonymous),
+):
+    """
+    Return the first `limit` rows + column names for a data collection's
+    delta table, for the React stepper data-source preview pane.
+
+    Mirrors what the Dash stepper builds via
+    ``load_deltatable_lite(..., limit_rows=100, load_for_preview=True)``.
+
+    Heavy work (Polars scan + collect) runs on Celery when
+    `settings.celery.offload_preview` is true (default).
+    """
+    pipeline = _build_permission_pipeline(data_collection_id, current_user.id)  # type: ignore[possibly-unbound-attribute]
+    project_result = list(projects_collection.aggregate(pipeline))
+    if not project_result:
+        raise HTTPException(status_code=404, detail="Data collection not found or access denied.")
+
+    deltatables_list = list(deltatables_collection.find({"data_collection_id": data_collection_id}))
+    if not deltatables_list:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No DeltaTable found for Data Collection ID {data_collection_id}.",
+        )
+
+    delta_table_location = deltatables_list[-1].get("delta_table_location")
+    if not delta_table_location:
+        raise HTTPException(
+            status_code=404, detail="Delta table location not found in deltatable document."
+        )
+
+    offload = settings.celery.offload_preview
+    response.headers["X-Celery-Path"] = "offloaded" if offload else "inline"
+    try:
+        return await offload_or_run(
+            preview_deltatable_task,
+            ({"delta_table_location": delta_table_location, "limit": limit},),
+            offload=offload,
+            label=f"deltatable_preview dc={data_collection_id}",
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error reading delta table preview: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to read delta table preview: {e}")
 
 
 @deltatables_endpoint_router.delete("/delete/{deltatable_id}")

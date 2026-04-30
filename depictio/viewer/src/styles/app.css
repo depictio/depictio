@@ -1,0 +1,158 @@
+/*
+ * Depictio viewer app styles.
+ *
+ * CSS custom properties declared here match what the Dash app serves from
+ * depictio/dash/assets/css/*.css (see theme_utils.py). Replicated here so the
+ * React viewer can ship standalone without loading Dash's assets directory.
+ *
+ * For full visual parity, also bundle the Dash app's logo SVGs, Virgil font,
+ * and any workflow-specific CSS under public/.
+ */
+
+/* Virgil — hand-drawn (Excalidraw) display face. Used for page titles and
+ * primary CTAs across the SPA (auth, projects, dashboards). Defined here at
+ * the global level so any subapp can apply `font-family: 'Virgil'` without
+ * loading auth-scoped CSS first. */
+@font-face {
+  font-family: 'Virgil';
+  src: url('../assets/fonts/Virgil.ttf') format('truetype');
+  font-display: swap;
+}
+
+/*
+ * The `--app-*` tokens are kept as thin aliases over Mantine's native theme
+ * variables so anything still referencing them inherits Mantine's light/dark
+ * flip for free. New code should reach for `--mantine-color-*` directly.
+ *
+ * `--combobox-chevron-color` overrides Mantine's default (`gray.6` light /
+ * `dark.3` dark) — the dark default is a low-contrast `#a6a7ab` that the
+ * user perceives as too dim. Pinning to `--mantine-color-text` gives a
+ * proper white in dark mode and near-black in light, and is read by
+ * Mantine's chevron element via the cascade (no class-name targeting).
+ */
+:root {
+  --app-bg-color: var(--mantine-color-body);
+  --app-surface-color: var(--mantine-color-body);
+  --app-text-color: var(--mantine-color-text);
+  --app-border-color: var(--mantine-color-default-border);
+  --app-subtle-bg: var(--mantine-color-default-hover);
+  --app-accent: var(--mantine-primary-color-filled);
+
+  --combobox-chevron-color: var(--mantine-color-text);
+}
+
+/* `react-resizable` corner-handles ship with a hard-coded near-black SVG
+ * `background-image` (a small triangle indicator). On the dark page surface
+ * the triangle effectively disappears — user perceives them as black. In
+ * dark mode invert the handle so the same SVG renders white-on-dark. */
+[data-mantine-color-scheme='dark'] .react-resizable-handle {
+  filter: invert(1);
+}
+
+/* Ensure resize handles always paint above any inner content that creates
+ * a stacking context (Plotly's `position: absolute` modebar, Mantine
+ * Paper's `box-shadow`, etc.). Without this the top-row handles
+ * (nw/n/ne) can be visually obscured by content that sits flush with the
+ * top edge. */
+.react-grid-item > .react-resizable-handle {
+  z-index: 5;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: var(--app-bg-color);
+  color: var(--app-text-color);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  /* Hard cap horizontal overflow at the document root — anything that bleeds
+   * beyond viewport (Plotly's modebar, AG Grid's scroll shadow, etc.) gets
+   * clipped here instead of forcing the page to scroll horizontally. */
+  overflow-x: hidden;
+  width: 100%;
+  max-width: 100vw;
+}
+
+/* Dashboard component hover animation — matches depictio/dash/assets/css/draggable-grid.css */
+.dashboard-component-hover {
+  transition: all 0.3s ease;
+  border: 1px solid transparent;
+}
+
+.dashboard-component-hover:hover {
+  border-color: var(--app-border-color);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+/* react-grid-layout default styles — pulled from Dash's dashboard-grid.css */
+.react-grid-layout {
+  position: relative;
+  transition: height 200ms ease;
+}
+
+.react-grid-item {
+  transition: all 200ms ease;
+  transition-property: left, top, width, height;
+  box-sizing: border-box;
+}
+
+.react-grid-item.react-grid-placeholder {
+  background: var(--app-accent);
+  opacity: 0.2;
+  transition-duration: 100ms;
+  z-index: 2;
+  user-select: none;
+  border-radius: 8px;
+}
+
+.dashboard-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+  color: var(--app-text-color);
+  font-size: 0.875rem;
+}
+
+.dashboard-error {
+  padding: 2rem;
+  color: #fa5252;
+  text-align: center;
+}
+
+/* Hide the per-cell border/shadow in viewer mode. The grid root carries
+ * `.depictio-edit-mode` only when the editor is active (set in
+ * DashboardGrid.tsx), so this selector targets viewer mode only. Mantine v7
+ * still emits the `mantine-Paper-root` class alongside its hashed class name,
+ * which keeps this selector stable. */
+.depictio-dashboard-grid:not(.depictio-edit-mode) .mantine-Paper-root {
+  border: none;
+  box-shadow: none;
+}
+
+/* Brief highlight pulse on a freshly duplicated grid cell so the user can see
+ * where it landed. Uses an INSET box-shadow so the effect stays within the
+ * grid cell — left panel ancestors set `overflow: hidden`, which would clip
+ * an outer outline / outer box-shadow. Removed from the DOM after ~1.5s by
+ * EditorApp. */
+@keyframes depictio-duplicate-flash {
+  0% {
+    box-shadow:
+      inset 0 0 0 0 rgba(56, 217, 169, 0),
+      inset 0 0 0 0 rgba(56, 217, 169, 0);
+  }
+  20% {
+    box-shadow:
+      inset 0 0 0 3px rgba(56, 217, 169, 0.95),
+      inset 0 0 24px rgba(56, 217, 169, 0.45);
+  }
+  100% {
+    box-shadow:
+      inset 0 0 0 0 rgba(56, 217, 169, 0),
+      inset 0 0 0 0 rgba(56, 217, 169, 0);
+  }
+}
+.depictio-duplicate-flash {
+  animation: depictio-duplicate-flash 1.5s ease-out;
+  border-radius: 6px;
+}

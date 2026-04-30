@@ -43,7 +43,12 @@ def _fetch_table_columns(child_metadata: dict, token: str) -> dict:
 
 
 def _fetch_multiqc_metadata_from_dc(
-    project_id: str, workflow_id: str, data_collection_id: str, token: str
+    project_id: str,
+    workflow_id: str,
+    data_collection_id: str,
+    token: str,
+    project_cache: dict | None = None,
+    dc_result_cache: dict | None = None,
 ) -> dict:
     """Fetch MultiQC metadata from data collection's dc_specific_properties.
 
@@ -52,6 +57,13 @@ def _fetch_multiqc_metadata_from_dc(
         workflow_id: Workflow ID
         data_collection_id: Data collection ID
         token: Access token for API authentication
+        project_cache: Optional per-render cache of project_id → project_data.
+            Lets a single render_dashboard call fetch each project once even if
+            multiple MultiQC components reference it. None disables caching.
+        dc_result_cache: Optional per-render cache keyed by
+            (project_id, workflow_id, data_collection_id) → final result dict.
+            Skips project scan + /multiqc/reports fallback when the same DC is
+            referenced by multiple components in one render. None disables.
 
     Returns:
         Dict with s3_locations and metadata fields, empty dict on failure
@@ -59,12 +71,21 @@ def _fetch_multiqc_metadata_from_dc(
     if not all([project_id, workflow_id, data_collection_id]):
         return {}
 
+    cache_key = (project_id, workflow_id, data_collection_id)
+    if dc_result_cache is not None and cache_key in dc_result_cache:
+        return dc_result_cache[cache_key]
+
     try:
-        # Fetch project data to get dc_specific_properties
-        # Use skip_enrichment=True to get simple structure without delta_location aggregation
-        project_data = api_call_fetch_project_by_id(project_id, token, skip_enrichment=True)
+        project_data = project_cache.get(project_id) if project_cache is not None else None
+        if project_data is None:
+            # skip_enrichment=True skips the delta_location aggregation pipeline
+            project_data = api_call_fetch_project_by_id(project_id, token, skip_enrichment=True)
+            if project_cache is not None:
+                project_cache[project_id] = project_data
         if not project_data:
             logger.debug(f"No project data for {project_id}")
+            if dc_result_cache is not None:
+                dc_result_cache[cache_key] = {}
             return {}
 
         # Find the data collection in the project
@@ -173,9 +194,13 @@ def _fetch_multiqc_metadata_from_dc(
                                 f"{len(metadata.get('samples', []))} samples"
                             )
 
+                        if dc_result_cache is not None:
+                            dc_result_cache[cache_key] = result
                         return result
 
         logger.debug(f"Data collection {data_collection_id} not found in project {project_id}")
+        if dc_result_cache is not None:
+            dc_result_cache[cache_key] = {}
         return {}
 
     except Exception as e:
@@ -236,6 +261,14 @@ def render_dashboard(
     if init_data:
         delta_locations = init_data.get("delta_locations", {})
 
+    # Per-render project cache. _fetch_multiqc_metadata_from_dc reads dc_specific_properties
+    # off the project document, so without this every MultiQC component re-fetches the whole
+    # project (N+1 — the top backend hotspot at ~50-100 ms each).
+    project_cache: dict = {}
+    # Per-render per-DC result cache. Many dashboards reference the same DC from multiple
+    # MultiQC components — dedupes both the project scan and the /multiqc/reports fallback.
+    dc_result_cache: dict = {}
+
     children = []
     for child_metadata in stored_metadata:
         # Add required fields
@@ -295,7 +328,12 @@ def render_dashboard(
                         f"Enriching MultiQC component from dc_specific_properties for DC {data_collection_id}"
                     )
                     enriched_data = _fetch_multiqc_metadata_from_dc(
-                        str(project_id), str(workflow_id), str(data_collection_id), TOKEN
+                        str(project_id),
+                        str(workflow_id),
+                        str(data_collection_id),
+                        TOKEN,
+                        project_cache=project_cache,
+                        dc_result_cache=dc_result_cache,
                     )
 
                     if enriched_data:
@@ -789,6 +827,7 @@ def load_depictio_data(
     theme: str = "light",
     cached_user_data: dict | None = None,
     init_data: dict | None = None,
+    is_editor_app: bool = False,
 ) -> dict | None:
     """Load the dashboard data from the API and render it.
 
@@ -893,6 +932,13 @@ def load_depictio_data(
                     "unified_edit_mode",
                     dashboard_data.buttons_data.get("edit_components_button", False),
                 )
+
+            # Viewer app (read-only URL): force edit buttons off regardless of stored flag.
+            # Cuts ~32 pattern-matched DOM instances per viewer load (drag/remove/edit/duplicate
+            # per component × N components). Editor app passes is_editor_app=True and keeps
+            # the stored flag behavior.
+            if not is_editor_app:
+                edit_components_button_checked = False
 
             # Disable edit_components_button for anonymous users and temporary users on public dashboards in unauthenticated mode
             if settings.auth.unauthenticated_mode:

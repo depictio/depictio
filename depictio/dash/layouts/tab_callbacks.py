@@ -601,6 +601,14 @@ def register_tab_callbacks(app):
                 # Legacy edit mode: append /edit suffix
                 new_pathname += "/edit"
 
+        # No-op: sidebar-tabs.value is re-populated by populate_sidebar_tabs on every
+        # pathname change, which fires this callback even though the URL is already
+        # correct. Without this guard, that no-op write ripples back through
+        # route_dashboard and causes ~4–6 redundant full dashboard re-renders per cold
+        # load (measured bab3↔bab4 oscillation).
+        if new_pathname == current_pathname:
+            raise PreventUpdate
+
         return new_pathname
 
     @app.callback(

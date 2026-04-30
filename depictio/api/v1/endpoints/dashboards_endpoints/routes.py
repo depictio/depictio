@@ -10,6 +10,8 @@ from bson import ObjectId
 from fastapi import APIRouter, Body, Depends, HTTPException
 from fastapi.responses import Response
 
+from depictio.api.v1.celery_dispatch import offload_or_run
+from depictio.api.v1.celery_tasks import build_figure_preview as build_figure_preview_task
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.db import dashboards_collection, projects_collection
@@ -213,6 +215,22 @@ async def get_dashboard(
     parent_title = get_parent_dashboard_title(dashboard_dict)
     if parent_title:
         dashboard_dict["parent_dashboard_title"] = parent_title
+
+    # Fire-and-forget prewarm: if this dashboard has any MultiQC components,
+    # dispatch a Celery task that pre-renders them all into Redis. The task
+    # is idempotent (skips already-cached entries), so repeated GETs from
+    # multiple users don't pile up real work — they each enqueue a task that
+    # mostly no-ops. Cold viewer load drops from ~14 s to <1 s once warm.
+    has_multiqc = any(
+        m.get("component_type") == "multiqc" for m in (dashboard_data.get("stored_metadata") or [])
+    )
+    if has_multiqc:
+        try:
+            from depictio.dash.celery_app import prewarm_multiqc_dashboard
+
+            prewarm_multiqc_dashboard.delay(str(dashboard_id))
+        except Exception as e:
+            logger.warning(f"get_dashboard: prewarm dispatch failed for {dashboard_id}: {e}")
 
     return convert_objectid_to_str(dashboard_dict)
 
@@ -534,7 +552,7 @@ async def edit_dashboard(
 async def save_dashboard(
     dashboard_id: PyObjectId,
     data: DashboardData,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_user_or_anonymous),
 ):
     """Check if an entry with the same dashboard_id exists, if not, insert, if yes, update."""
     # Allow anonymous users in single-user mode (they have admin privileges)
@@ -582,6 +600,25 @@ async def save_dashboard(
 
         # Convert dashboard_id to string to ensure proper JSON serialization
         dashboard_id_str = str(dashboard_id)
+
+        # Auto-queue screenshot regeneration so /dashboards-beta and any
+        # other listing surface picks up the latest dashboard state without
+        # the user needing to navigate to the viewer first. Mirrors the
+        # explicit `.delay(...)` call the Dash editor's save callback makes
+        # at depictio/dash/layouts/save.py:367 — moving the dispatch here
+        # means every client (Dash editor, React editor, the React component
+        # builder's upsertComponent flow) gets screenshots queued by default.
+        # Lazy import to keep API startup independent of the Dash worker
+        # module, and a broad except so a Celery/broker outage never breaks
+        # the save response itself.
+        try:
+            from depictio.dash.celery_app import generate_dashboard_screenshot_dual
+
+            user_id = str(getattr(current_user, "id", "") or "")
+            generate_dashboard_screenshot_dual.delay(dashboard_id_str, user_id)
+            logger.debug(f"Queued screenshot regeneration for dashboard {dashboard_id_str}")
+        except Exception as exc:  # noqa: BLE001 — non-fatal best-effort dispatch
+            logger.warning(f"Could not queue screenshot for {dashboard_id_str}: {exc}")
 
         return {"message": message, "dashboard_id": dashboard_id_str}
     else:
@@ -866,7 +903,7 @@ async def delete_dashboard(
 async def update_tab(
     dashboard_id: PyObjectId,
     data: dict,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_user_or_anonymous),
 ):
     """
     Update tab properties (title, icon, icon_color, main_tab_name).
@@ -948,7 +985,7 @@ async def update_tab(
 @dashboards_endpoint_router.delete("/tab/{dashboard_id}")
 async def delete_tab(
     dashboard_id: PyObjectId,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_user_or_anonymous),
 ):
     """
     Delete a child tab.
@@ -1009,7 +1046,7 @@ async def delete_tab(
 @dashboards_endpoint_router.post("/tabs/reorder")
 async def reorder_tabs(
     data: dict,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_user_or_anonymous),
 ):
     """
     Reorder child tabs by updating their tab_order values.
@@ -1232,7 +1269,7 @@ async def get_component_data_endpoint(
 
 
 @dashboards_endpoint_router.post("/bulk_component_data/{dashboard_id}")
-async def bulk_get_component_data_endpoint(
+def bulk_get_component_data_endpoint(
     dashboard_id: PyObjectId,
     request: dict,  # {"component_ids": [uuid1, uuid2, ...]}
     current_user: User = Depends(get_user_or_anonymous),
@@ -1338,6 +1375,1268 @@ async def bulk_get_component_data_endpoint(
         logger.warning(f"⚠️ Missing components: {missing_ids}")
 
     return bulk_data
+
+
+# ============================================================================
+# React viewer: bulk card value computation with filters
+# ============================================================================
+
+
+def _agg_value(col: Any, aggregation: str) -> Any:
+    """Compute a scalar aggregation over a Polars Series.
+
+    Covers the aggregations used by Depictio card components. Matches the
+    subset of ``depictio.dash.modules.card_component.utils.compute_value``
+    but avoids pulling any Dash imports into the FastAPI process.
+    """
+    agg = (aggregation or "").lower()
+    try:
+        if agg == "count":
+            return int(col.drop_nulls().len())
+        if agg in ("average", "mean"):
+            mean = col.mean()
+            return float(mean) if mean is not None else None
+        if agg == "sum":
+            s = col.sum()
+            return float(s) if s is not None else None
+        if agg == "median":
+            m = col.median()
+            return float(m) if m is not None else None
+        if agg == "min":
+            mn = col.min()
+            return (
+                float(mn) if isinstance(mn, (int, float)) else (str(mn) if mn is not None else None)
+            )
+        if agg == "max":
+            mx = col.max()
+            return (
+                float(mx) if isinstance(mx, (int, float)) else (str(mx) if mx is not None else None)
+            )
+        if agg in ("std", "std_dev"):
+            return float(col.std()) if col.std() is not None else None
+        if agg in ("variance", "var"):
+            return float(col.var()) if col.var() is not None else None
+        if agg in ("nunique", "unique"):
+            return int(col.n_unique())
+        if agg == "range":
+            mn, mx = col.min(), col.max()
+            if mn is None or mx is None:
+                return None
+            return float(mx) - float(mn) if isinstance(mn, (int, float)) else None
+        if agg == "mode":
+            m = col.mode()
+            return (
+                None
+                if len(m) == 0
+                else (float(m[0]) if isinstance(m[0], (int, float)) else str(m[0]))
+            )
+    except Exception as e:
+        logger.warning(f"Aggregation {agg!r} failed on column: {e}")
+        return None
+    return None
+
+
+@dashboards_endpoint_router.post("/bulk_compute_cards/{dashboard_id}")
+def bulk_compute_cards(
+    dashboard_id: PyObjectId,
+    request: dict,
+    current_user: User = Depends(get_user_or_anonymous),
+):
+    """Compute card values with interactive filters applied.
+
+    Called by the React viewer whenever the filter state changes. Dedupes
+    Delta-table loads: multiple cards referencing the same (wf_id, dc_id, filter
+    fingerprint) share one load. Returns a map keyed by component index.
+
+    Request body:
+        {
+            "filters": [
+                {"index": "...", "value": ..., "column_name": "...",
+                 "interactive_component_type": "MultiSelect"},
+                ...
+            ],
+            "component_ids": ["...", ...]   # optional; defaults to all cards
+        }
+
+    Response:
+        {
+            "values": {"<component_index>": <scalar or null>, ...},
+            "filter_applied": bool,
+            "filter_count": int
+        }
+
+    Notes:
+        - Uses load_deltatable_lite with the same metadata format as Dash so
+          the filter semantics match the Dash viewer exactly.
+        - The Dash callback render_card_value_background in
+          card_component/callbacks/core.py remains the source of truth for the
+          edit path; this endpoint mirrors its math.
+    """
+    from depictio.api.v1.deltatables_utils import load_deltatable_lite
+
+    filters = request.get("filters") or []
+    requested_ids: list[str] | None = request.get("component_ids")
+
+    dashboard_data = dashboards_collection.find_one({"dashboard_id": dashboard_id})
+    if not dashboard_data:
+        raise HTTPException(status_code=404, detail=f"Dashboard '{dashboard_id}' not found.")
+
+    project_id = dashboard_data.get("project_id")
+    if not project_id or not check_project_permission(project_id, current_user, "viewer"):
+        raise HTTPException(status_code=403, detail="Permission denied.")
+
+    stored_metadata = dashboard_data.get("stored_metadata") or []
+
+    # Collect card components (optionally filtered by component_ids)
+    requested = set(requested_ids) if requested_ids else None
+    cards = [
+        m
+        for m in stored_metadata
+        if m.get("component_type") == "card"
+        and (requested is None or str(m.get("index")) in requested)
+    ]
+
+    if not cards:
+        return {"values": {}, "filter_applied": bool(filters), "filter_count": len(filters)}
+
+    # Build init_data mapping for load_deltatable_lite to avoid per-card API calls
+    init_data: dict[str, dict] = {}
+    for m in cards:
+        dc_id = str(m.get("dc_id"))
+        if not dc_id or dc_id in init_data:
+            continue
+        dc_config = m.get("dc_config") or {}
+        delta_loc = dc_config.get("delta_location")
+        if not delta_loc:
+            # Fallback: look up via deltatables_collection
+            from depictio.api.v1.db import deltatables_collection
+
+            dt = deltatables_collection.find_one({"data_collection_id": ObjectId(dc_id)})
+            if dt:
+                delta_loc = dt.get("delta_table_location")
+        if delta_loc:
+            init_data[dc_id] = {
+                "delta_location": delta_loc,
+                "dc_type": dc_config.get("type") or "table",
+                "size_bytes": dc_config.get("size_bytes", 0),
+            }
+
+    # Filters are global (applied to any card whose DC contains the filter column).
+    # Wrap into the shape process_metadata_and_filter expects.
+    filter_metadata = [
+        {
+            "interactive_component_type": f.get("interactive_component_type"),
+            "column_name": f.get("column_name"),
+            "value": f.get("value"),
+        }
+        for f in filters
+        if f.get("column_name") and f.get("value") not in (None, [], "")
+    ]
+
+    # Dedupe Delta loads per (wf_id, dc_id). One load can serve N cards.
+    df_cache: dict[tuple, Any] = {}
+    # Per-DC precomputed aggregation specs cache (one DB hit per unique dc_id).
+    # Mirrors `/deltatables/specs/{dc_id}` shape: {column: {aggregation: value}}.
+    specs_cache: dict[str, dict] = {}
+    values: dict[str, Any] = {}
+
+    has_filters = len(filter_metadata) > 0
+    logger.debug(
+        f"bulk_compute_cards: dashboard={dashboard_id} cards={len(cards)} "
+        f"init_data_keys={list(init_data.keys())} filters={len(filter_metadata)}"
+    )
+
+    def _get_specs(dc_id_str: str) -> dict[str, dict]:
+        """Return precomputed column aggregations as ``{column_name: specs_dict}``.
+
+        The Mongo schema stores ``aggregation_columns_specs`` as a list of
+        ``{name, type, description, specs}`` entries — flatten to a name-keyed
+        dict for O(1) lookup. Also handle the legacy dict shape for safety.
+        """
+        if dc_id_str in specs_cache:
+            return specs_cache[dc_id_str]
+        from depictio.api.v1.db import deltatables_collection as _dt_coll
+
+        dt = _dt_coll.find_one({"data_collection_id": ObjectId(dc_id_str)})
+        agg_list = (dt or {}).get("aggregation") or []
+        raw = (agg_list[-1] or {}).get("aggregation_columns_specs") if agg_list else None
+
+        flat: dict[str, dict] = {}
+        if isinstance(raw, list):
+            for entry in raw:
+                if isinstance(entry, dict) and entry.get("name"):
+                    flat[entry["name"]] = entry.get("specs") or {}
+        elif isinstance(raw, dict):
+            flat = raw  # legacy
+
+        specs_cache[dc_id_str] = flat
+        return flat
+
+    for card in cards:
+        idx = str(card.get("index"))
+        wf_id = card.get("wf_id")
+        dc_id = card.get("dc_id")
+        column = card.get("column_name")
+        aggregation = card.get("aggregation")
+
+        if not (wf_id and dc_id and column and aggregation):
+            logger.warning(
+                f"bulk_compute_cards: skipping {idx}: wf_id={wf_id} dc_id={dc_id} "
+                f"column={column} aggregation={aggregation}"
+            )
+            values[idx] = None
+            continue
+
+        # Fast path (no filters): read precomputed aggregation from
+        # aggregation_columns_specs. Mirrors what the Dash callback does via
+        # compute_value's `cols_json` short-circuit. Avoids touching raw Delta
+        # data — necessary for DCs whose Delta file has corrupted columns.
+        if not has_filters:
+            specs = _get_specs(str(dc_id))
+            col_specs = specs.get(column) or {}
+            specs_value = col_specs.get(aggregation)
+            if specs_value is not None:
+                values[idx] = (
+                    float(specs_value) if isinstance(specs_value, (int, float)) else specs_value
+                )
+                logger.debug(
+                    f"bulk_compute_cards: {idx} ({aggregation}/{column}) = {values[idx]} (specs)"
+                )
+                continue
+
+        # Slow path: load Delta and compute. Required when filters change the
+        # input set, or when the precomputed aggregation isn't available.
+        cache_key = (str(wf_id), str(dc_id))
+        df = df_cache.get(cache_key)
+        if df is None:
+            try:
+                df = load_deltatable_lite(
+                    workflow_id=ObjectId(str(wf_id)) if not isinstance(wf_id, ObjectId) else wf_id,
+                    data_collection_id=str(dc_id),
+                    metadata=filter_metadata if filter_metadata else None,
+                    init_data=init_data,
+                )
+                logger.debug(
+                    f"bulk_compute_cards: loaded {cache_key}: shape={df.shape if df is not None else None}"
+                )
+            except Exception as e:
+                logger.warning(
+                    f"bulk_compute_cards: DC load failed for {cache_key}: {e}", exc_info=True
+                )
+                values[idx] = None
+                continue
+            df_cache[cache_key] = df
+
+        if column not in df.columns:
+            logger.warning(
+                f"bulk_compute_cards: column {column!r} not in df for {idx}; "
+                f"available cols (first 10): {df.columns[:10]}"
+            )
+            values[idx] = None
+            continue
+
+        values[idx] = _agg_value(df[column], aggregation)
+        logger.debug(f"bulk_compute_cards: {idx} ({aggregation}/{column}) = {values[idx]}")
+
+    return {
+        "values": values,
+        "filter_applied": len(filter_metadata) > 0,
+        "filter_count": len(filter_metadata),
+    }
+
+
+# ============================================================================
+# React viewer: figure rendering
+# ============================================================================
+
+
+@dashboards_endpoint_router.post("/render_figure/{dashboard_id}/{component_id}")
+async def render_figure_endpoint(
+    dashboard_id: PyObjectId,
+    component_id: str,
+    request: dict,
+    response: Response,
+    current_user: User = Depends(get_user_or_anonymous),
+):
+    """Render a Plotly figure component as JSON for the React viewer.
+
+    Mirrors what `_process_single_figure` does in the Dash callback at
+    ``depictio.dash.modules.figure_component.callbacks.core.py:676`` — loads
+    the data collection, applies filters, calls `_create_figure_from_data`
+    (UI mode) or `_process_code_mode_figure` (code mode), and returns the
+    Plotly figure dict ready for ``react-plotly.js``.
+
+    Heavy work (delta load + Plotly build) runs on Celery when
+    `settings.celery.offload_rendering` is true. Reuses the
+    `build_figure_preview` task — preview and render share the exact same
+    code path on the worker.
+
+    Request body:
+        {"filters": [...], "theme": "light" | "dark"}
+
+    Response:
+        {"figure": <plotly fig dict>, "metadata": {visu_type, ...}}
+    """
+    filters = request.get("filters") or []
+    theme = request.get("theme") or "light"
+
+    dashboard_data = dashboards_collection.find_one({"dashboard_id": dashboard_id})
+    if not dashboard_data:
+        raise HTTPException(status_code=404, detail=f"Dashboard '{dashboard_id}' not found.")
+
+    project_id = dashboard_data.get("project_id")
+    if not project_id or not check_project_permission(project_id, current_user, "viewer"):
+        raise HTTPException(status_code=403, detail="Permission denied.")
+
+    component = next(
+        (
+            m
+            for m in (dashboard_data.get("stored_metadata") or [])
+            if str(m.get("index")) == component_id and m.get("component_type") == "figure"
+        ),
+        None,
+    )
+    if component is None:
+        raise HTTPException(status_code=404, detail=f"Figure component '{component_id}' not found.")
+
+    wf_id = component.get("wf_id")
+    dc_id = component.get("dc_id")
+    if not wf_id or not dc_id:
+        raise HTTPException(status_code=400, detail="Component missing wf_id/dc_id.")
+
+    filter_metadata = [
+        {
+            "interactive_component_type": f.get("interactive_component_type"),
+            "column_name": f.get("column_name"),
+            "value": f.get("value"),
+        }
+        for f in filters
+        if f.get("column_name") and f.get("value") not in (None, [], "")
+    ]
+
+    # Build a JSON-safe payload for the task. ObjectIds in the component dict
+    # are normalized to strings so the JSON serializer doesn't choke; the task
+    # body re-coerces wf_id back to ObjectId for `load_deltatable_lite`.
+    metadata = {
+        "wf_id": str(wf_id),
+        "dc_id": str(dc_id),
+        "dc_config": convert_objectid_to_str(component.get("dc_config") or {}),
+        "visu_type": component.get("visu_type", "scatter"),
+        "dict_kwargs": component.get("dict_kwargs") or {},
+        "mode": component.get("mode", "ui"),
+        "code_content": component.get("code_content", ""),
+        "selection_enabled": bool(component.get("selection_enabled", False)),
+        "selection_column": component.get("selection_column"),
+    }
+
+    offload = settings.celery.offload_rendering
+    response.headers["X-Celery-Path"] = "offloaded" if offload else "inline"
+
+    payload = {"metadata": metadata, "filter_metadata": filter_metadata, "theme": theme}
+    try:
+        return await offload_or_run(
+            build_figure_preview_task,
+            (payload,),
+            offload=offload,
+            label=f"render_figure cid={component_id} dc={dc_id}",
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"render_figure: build failed for {component_id}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Figure render failed: {e}")
+
+
+# ============================================================================
+# React viewer: table data (lazy rows for AG Grid)
+# ============================================================================
+
+
+@dashboards_endpoint_router.post("/render_table/{dashboard_id}/{component_id}")
+def render_table_endpoint(
+    dashboard_id: PyObjectId,
+    component_id: str,
+    request: dict,
+    current_user: User = Depends(get_user_or_anonymous),
+):
+    """Return table rows + column definitions for the React viewer's AG Grid.
+
+    Request body:
+        {"filters": [...], "start": 0, "limit": 100}
+
+    Response:
+        {"columns": [{"field", "headerName", "type"}, ...],
+         "rows":    [{...}, ...],
+         "total":   <int>}
+    """
+    from depictio.api.v1.deltatables_utils import load_deltatable_lite
+
+    filters = request.get("filters") or []
+    start = int(request.get("start") or 0)
+    limit = int(request.get("limit") or 100)
+    limit = max(1, min(limit, 500))
+
+    dashboard_data = dashboards_collection.find_one({"dashboard_id": dashboard_id})
+    if not dashboard_data:
+        raise HTTPException(status_code=404, detail=f"Dashboard '{dashboard_id}' not found.")
+
+    project_id = dashboard_data.get("project_id")
+    if not project_id or not check_project_permission(project_id, current_user, "viewer"):
+        raise HTTPException(status_code=403, detail="Permission denied.")
+
+    component = next(
+        (
+            m
+            for m in (dashboard_data.get("stored_metadata") or [])
+            if str(m.get("index")) == component_id and m.get("component_type") == "table"
+        ),
+        None,
+    )
+    if component is None:
+        raise HTTPException(status_code=404, detail=f"Table component '{component_id}' not found.")
+
+    wf_id = component.get("wf_id")
+    dc_id = component.get("dc_id")
+    if not wf_id or not dc_id:
+        raise HTTPException(status_code=400, detail="Component missing wf_id/dc_id.")
+
+    filter_metadata = [
+        {
+            "interactive_component_type": f.get("interactive_component_type"),
+            "column_name": f.get("column_name"),
+            "value": f.get("value"),
+        }
+        for f in filters
+        if f.get("column_name") and f.get("value") not in (None, [], "")
+    ]
+
+    dc_config = component.get("dc_config") or {}
+    init_data: dict[str, dict] = {}
+    delta_loc = dc_config.get("delta_location")
+    if not delta_loc:
+        from depictio.api.v1.db import deltatables_collection
+
+        dt = deltatables_collection.find_one({"data_collection_id": ObjectId(str(dc_id))})
+        if dt:
+            delta_loc = dt.get("delta_table_location")
+    if delta_loc:
+        init_data[str(dc_id)] = {
+            "delta_location": delta_loc,
+            "dc_type": dc_config.get("type") or "table",
+            "size_bytes": dc_config.get("size_bytes", 0),
+        }
+
+    try:
+        df = load_deltatable_lite(
+            workflow_id=ObjectId(str(wf_id)) if not isinstance(wf_id, ObjectId) else wf_id,
+            data_collection_id=str(dc_id),
+            metadata=filter_metadata or None,
+            init_data=init_data,
+        )
+    except Exception as e:
+        logger.error(f"render_table: DC load failed: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to load data: {e}")
+
+    total = df.height
+    sliced = df.slice(start, limit)
+    rows = sliced.to_dicts()
+
+    columns = []
+    for name, dtype in zip(df.columns, df.dtypes):
+        type_str = str(dtype).lower()
+        ag_type = (
+            "numericColumn"
+            if any(t in type_str for t in ("int", "float", "double"))
+            else "textColumn"
+        )
+        columns.append({"field": name, "headerName": name, "type": ag_type})
+
+    return {"columns": columns, "rows": rows, "total": total}
+
+
+@dashboards_endpoint_router.get("/render_image_paths/{dashboard_id}/{component_id}")
+def render_image_paths_endpoint(
+    dashboard_id: PyObjectId,
+    component_id: str,
+    max: int = 50,
+    current_user: User = Depends(get_user_or_anonymous),
+):
+    """Return up to `max` non-null values of an image component's `image_column`.
+
+    Mirrors the auth/permission/lookup logic of `render_table_endpoint`. The
+    React viewer's ImageRenderer uses these paths to build URLs against
+    `/files/serve/image?s3_path=...` for thumbnail rendering.
+    """
+    from depictio.api.v1.deltatables_utils import load_deltatable_lite
+
+    limit = max if max and max > 0 else 50
+    if limit > 500:
+        limit = 500
+
+    dashboard_data = dashboards_collection.find_one({"dashboard_id": dashboard_id})
+    if not dashboard_data:
+        raise HTTPException(status_code=404, detail=f"Dashboard '{dashboard_id}' not found.")
+
+    project_id = dashboard_data.get("project_id")
+    if not project_id or not check_project_permission(project_id, current_user, "viewer"):
+        raise HTTPException(status_code=403, detail="Permission denied.")
+
+    component = next(
+        (
+            m
+            for m in (dashboard_data.get("stored_metadata") or [])
+            if str(m.get("index")) == component_id and m.get("component_type") == "image"
+        ),
+        None,
+    )
+    if component is None:
+        raise HTTPException(status_code=404, detail=f"Image component '{component_id}' not found.")
+
+    wf_id = component.get("wf_id")
+    dc_id = component.get("dc_id")
+    image_column = component.get("image_column")
+    if not (wf_id and dc_id and image_column):
+        raise HTTPException(status_code=400, detail="Component missing wf_id/dc_id/image_column.")
+
+    try:
+        df = load_deltatable_lite(
+            workflow_id=ObjectId(str(wf_id)) if not isinstance(wf_id, ObjectId) else wf_id,
+            data_collection_id=str(dc_id),
+        )
+    except Exception as e:
+        logger.error(f"render_image_paths: DC load failed: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to load data: {e}")
+
+    if image_column not in df.columns:
+        raise HTTPException(
+            status_code=400, detail=f"Column '{image_column}' missing from Delta table."
+        )
+
+    paths = df.select(image_column).drop_nulls().head(limit).to_series().to_list()
+    return {"paths": [str(p) for p in paths]}
+
+
+# ============================================================================
+# React viewer: map rendering (Plotly px.scatter_map / density_map / choropleth_map)
+# ============================================================================
+
+
+@dashboards_endpoint_router.post("/render_map/{dashboard_id}/{component_id}")
+def render_map_endpoint(
+    dashboard_id: PyObjectId,
+    component_id: str,
+    request: dict,
+    current_user: User = Depends(get_user_or_anonymous),
+):
+    """Render a Plotly map component as JSON for the React viewer.
+
+    Mirrors `render_figure_endpoint` but delegates to
+    `depictio.dash.modules.map_component.utils.render_map`. The full map
+    `stored_metadata` already carries every trigger_data field (map_type,
+    lat_column, lon_column, color_column, geojson_*, etc.) — the Dash callback
+    just rebuilds it from kwargs at create time — so we pass `component`
+    directly as `trigger_data`. `render_map` reads what it needs via `.get()`.
+    """
+    from depictio.api.v1.deltatables_utils import load_deltatable_lite
+    from depictio.dash.modules.map_component.utils import render_map
+
+    filters = request.get("filters") or []
+    theme = request.get("theme") or "light"
+
+    dashboard_data = dashboards_collection.find_one({"dashboard_id": dashboard_id})
+    if not dashboard_data:
+        raise HTTPException(status_code=404, detail=f"Dashboard '{dashboard_id}' not found.")
+
+    project_id = dashboard_data.get("project_id")
+    if not project_id or not check_project_permission(project_id, current_user, "viewer"):
+        raise HTTPException(status_code=403, detail="Permission denied.")
+
+    component = next(
+        (
+            m
+            for m in (dashboard_data.get("stored_metadata") or [])
+            if str(m.get("index")) == component_id and m.get("component_type") == "map"
+        ),
+        None,
+    )
+    if component is None:
+        raise HTTPException(status_code=404, detail=f"Map component '{component_id}' not found.")
+
+    wf_id = component.get("wf_id")
+    dc_id = component.get("dc_id")
+    if not wf_id or not dc_id:
+        raise HTTPException(status_code=400, detail="Component missing wf_id/dc_id.")
+
+    filter_metadata = [
+        {
+            "interactive_component_type": f.get("interactive_component_type"),
+            "column_name": f.get("column_name"),
+            "value": f.get("value"),
+        }
+        for f in filters
+        if f.get("column_name") and f.get("value") not in (None, [], "")
+    ]
+
+    dc_config = component.get("dc_config") or {}
+    init_data: dict[str, dict] = {}
+    delta_loc = dc_config.get("delta_location")
+    if not delta_loc:
+        from depictio.api.v1.db import deltatables_collection
+
+        dt = deltatables_collection.find_one({"data_collection_id": ObjectId(str(dc_id))})
+        if dt:
+            delta_loc = dt.get("delta_table_location")
+    if delta_loc:
+        init_data[str(dc_id)] = {
+            "delta_location": delta_loc,
+            "dc_type": dc_config.get("type") or "table",
+            "size_bytes": dc_config.get("size_bytes", 0),
+        }
+
+    try:
+        df = load_deltatable_lite(
+            workflow_id=ObjectId(str(wf_id)) if not isinstance(wf_id, ObjectId) else wf_id,
+            data_collection_id=str(dc_id),
+            metadata=filter_metadata or None,
+            init_data=init_data,
+        )
+    except Exception as e:
+        logger.error(f"render_map: DC load failed for {dc_id}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to load data: {e}")
+
+    import plotly.io as pio
+
+    if "mantine_light" not in pio.templates or "mantine_dark" not in pio.templates:
+        try:
+            import dash_mantine_components as dmc
+
+            dmc.add_figure_templates()
+        except Exception as e:
+            logger.warning(f"render_map: failed to register mantine templates: {e}")
+
+    try:
+        fig, data_info = render_map(
+            df=df,
+            trigger_data=component,
+            theme=theme,
+            existing_metadata=None,
+            active_selection_values=None,
+            access_token=None,
+        )
+
+        if hasattr(fig, "to_json"):
+            fig_dict = json.loads(fig.to_json())
+        elif hasattr(fig, "to_plotly_json"):
+            fig_dict = fig.to_plotly_json()
+        else:
+            fig_dict = fig
+
+        if isinstance(fig_dict, dict) and "layout" in fig_dict:
+            fig_dict["layout"].setdefault("uirevision", "persistent")
+
+        return {
+            "figure": fig_dict,
+            "metadata": {
+                "map_type": component.get("map_type", "scatter_map"),
+                "filter_applied": bool(filter_metadata),
+                "displayed_count": data_info.get("displayed_count"),
+                "total_count": data_info.get("total_count"),
+            },
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"render_map: build failed for {component_id}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Map render failed: {e}")
+
+
+# ============================================================================
+# React viewer: JBrowse session URL
+# ============================================================================
+
+
+@dashboards_endpoint_router.post("/render_jbrowse/{dashboard_id}/{component_id}")
+async def render_jbrowse_endpoint(
+    dashboard_id: PyObjectId,
+    component_id: str,
+    request: dict,
+    current_user: User = Depends(get_user_or_anonymous),
+):
+    """Synthesise the JBrowse 2 iframe URL for the React viewer.
+
+    JBrowse 2 must be running at ``localhost:3000`` and its session config
+    server at ``localhost:9010/sessions/...``; if either is unreachable,
+    returns 503 (no silent fallback).
+    """
+    import httpx
+
+    from depictio.api.v1.configs.config import API_BASE_URL
+
+    JBROWSE_HOST = "http://localhost:3000"
+    JBROWSE_SESSIONS_HOST = "http://localhost:9010"
+
+    filters = request.get("filters") or []
+
+    dashboard_data = dashboards_collection.find_one({"dashboard_id": dashboard_id})
+    if not dashboard_data:
+        raise HTTPException(status_code=404, detail=f"Dashboard '{dashboard_id}' not found.")
+
+    project_id = dashboard_data.get("project_id")
+    if not project_id or not check_project_permission(project_id, current_user, "viewer"):
+        raise HTTPException(status_code=403, detail="Permission denied.")
+
+    component = next(
+        (
+            m
+            for m in (dashboard_data.get("stored_metadata") or [])
+            if str(m.get("index")) == component_id and m.get("component_type") == "jbrowse"
+        ),
+        None,
+    )
+    if component is None:
+        raise HTTPException(
+            status_code=404, detail=f"JBrowse component '{component_id}' not found."
+        )
+
+    wf_id = component.get("wf_id")
+    dc_id = component.get("dc_id")
+    if not wf_id or not dc_id:
+        raise HTTPException(status_code=400, detail="Component missing wf_id/dc_id.")
+
+    dc_config = component.get("dc_config") or {}
+    jbrowse_params = dc_config.get("jbrowse_params") or {}
+    assembly = jbrowse_params.get("assemblyName") or "hg38"
+    default_loc = jbrowse_params.get("default_location") or "chr1:1-248956422"
+
+    user_id = str(getattr(current_user, "id", "anonymous"))
+    session = f"{user_id}_{dc_id}_lite.json"
+
+    track_ids: list[str] = []
+    filter_applied = bool(filters)
+
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            try:
+                last_status_resp = await client.get(
+                    f"{API_BASE_URL}/depictio/api/v1/jbrowse/last_status"
+                )
+                if last_status_resp.status_code == 200:
+                    last_status = last_status_resp.json()
+                    assembly = last_status.get("assembly") or assembly
+                    if last_status.get("loc"):
+                        default_loc = last_status["loc"]
+            except httpx.HTTPError as e:
+                logger.warning(f"render_jbrowse: last_status unreachable: {e}")
+
+            if filters:
+                try:
+                    map_resp = await client.get(
+                        f"{API_BASE_URL}/depictio/api/v1/jbrowse/map_tracks_using_wildcards/"
+                        f"{wf_id}/{dc_id}",
+                    )
+                    if map_resp.status_code == 200:
+                        mapping = map_resp.json() or {}
+                        dc_map = mapping.get(str(dc_id), {})
+                        for f in filters:
+                            col = f.get("column_name")
+                            value = f.get("value")
+                            if not col or value in (None, [], ""):
+                                continue
+                            values = value if isinstance(value, list) else [value]
+                            col_map = dc_map.get(col, {})
+                            for v in values:
+                                tid = col_map.get(str(v))
+                                if tid:
+                                    track_ids.append(tid)
+                except httpx.HTTPError as e:
+                    logger.warning(f"render_jbrowse: map_tracks unreachable: {e}")
+
+                if track_ids and len(track_ids) <= 100:
+                    try:
+                        filter_resp = await client.post(
+                            f"{API_BASE_URL}/depictio/api/v1/jbrowse/filter_config",
+                            json={
+                                "tracks": track_ids,
+                                "dashboard_id": str(dashboard_id),
+                                "data_collection_id": str(dc_id),
+                            },
+                        )
+                        if filter_resp.status_code == 200:
+                            body = filter_resp.json() or {}
+                            if body.get("session"):
+                                session = body["session"]
+                    except httpx.HTTPError as e:
+                        logger.warning(f"render_jbrowse: filter_config unreachable: {e}")
+    except Exception as e:
+        logger.error(f"render_jbrowse: internal jbrowse routing failed: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=503,
+            detail=f"JBrowse internal services unreachable: {e}",
+        )
+
+    qs = f"assembly={assembly}&loc={default_loc}"
+    if track_ids and len(track_ids) <= 100:
+        qs += f"&tracks={','.join(track_ids)}"
+    iframe_url = f"{JBROWSE_HOST}?config={JBROWSE_SESSIONS_HOST}/sessions/{session}&{qs}"
+
+    return {
+        "iframe_url": iframe_url,
+        "assembly": assembly,
+        "location": default_loc,
+        "tracks": track_ids or None,
+        "metadata": {"filter_applied": filter_applied},
+    }
+
+
+# ============================================================================
+# React viewer: MultiQC rendering
+# ============================================================================
+
+
+def _resolve_multiqc_sample_filter(
+    dashboard_data: dict,
+    component: dict,
+    filters: list[dict],
+) -> list[str]:
+    """Resolve a list of dashboard interactive filters into a sample-name list.
+
+    Mirrors the simple branch of ``patch_multiqc_plot_with_interactive_filtering``:
+      - filters on the MultiQC DC's own ``sample`` column → values used directly
+      - filters on a different metadata DC → load the metadata DC with the
+        filters applied, take unique values of its ``sample`` column
+
+    Returns an empty list when no resolvable filters are present. Logs but does
+    not raise on metadata-DC load failures.
+    """
+    if not filters:
+        return []
+
+    wf_id = component.get("wf_id")
+    if not wf_id:
+        return []
+
+    multiqc_dc_id_str = str(component.get("dc_id") or component.get("data_collection_id") or "")
+    stored_meta_index = {
+        str(m.get("index")): m for m in (dashboard_data.get("stored_metadata") or [])
+    }
+
+    metadata_dc_id: str | None = None
+    direct_sample_values: list[str] = []
+    indirect_filter_metadata: list[dict] = []
+
+    for f in filters:
+        value = f.get("value")
+        if value in (None, [], ""):
+            continue
+        fdx = str(f.get("index") or "")
+        comp_meta = stored_meta_index.get(fdx) or {}
+        comp_dc = str(comp_meta.get("dc_id") or comp_meta.get("data_collection_id") or "")
+        column_name = f.get("column_name") or comp_meta.get("column_name")
+
+        if comp_dc == multiqc_dc_id_str and column_name == "sample":
+            values_list = value if isinstance(value, list) else [value]
+            direct_sample_values.extend(str(v) for v in values_list)
+            continue
+
+        if comp_dc and comp_dc != multiqc_dc_id_str:
+            if metadata_dc_id is None:
+                metadata_dc_id = comp_dc
+            if comp_dc == metadata_dc_id:
+                indirect_filter_metadata.append(
+                    {
+                        "interactive_component_type": f.get("interactive_component_type")
+                        or comp_meta.get("interactive_component_type"),
+                        "column_name": column_name,
+                        "value": value,
+                    }
+                )
+
+    selected_samples: list[str] = list(direct_sample_values)
+
+    if metadata_dc_id and indirect_filter_metadata:
+        from depictio.api.v1.deltatables_utils import load_deltatable_lite
+
+        try:
+            meta_df = load_deltatable_lite(
+                workflow_id=ObjectId(str(wf_id)) if not isinstance(wf_id, ObjectId) else wf_id,
+                data_collection_id=str(metadata_dc_id),
+                metadata=indirect_filter_metadata,
+            )
+            if meta_df is not None and not meta_df.is_empty():
+                if "sample" in meta_df.columns:
+                    selected_samples.extend(str(s) for s in meta_df["sample"].unique().to_list())
+                else:
+                    logger.warning(
+                        f"_resolve_multiqc_sample_filter: metadata DC {metadata_dc_id} has no "
+                        f"'sample' column; columns={meta_df.columns}"
+                    )
+        except Exception as e:
+            logger.warning(
+                f"_resolve_multiqc_sample_filter: filter resolution on DC {metadata_dc_id} "
+                f"failed: {e}",
+                exc_info=True,
+            )
+
+    return list(dict.fromkeys(selected_samples))
+
+
+@dashboards_endpoint_router.post("/render_multiqc/{dashboard_id}/{component_id}")
+def render_multiqc_endpoint(
+    dashboard_id: PyObjectId,
+    component_id: str,
+    request: dict,
+    current_user: User = Depends(get_user_or_anonymous),
+):
+    """Render a MultiQC Plotly figure as JSON for the React viewer.
+
+    Wraps the pure ``create_multiqc_plot()`` helper in
+    ``depictio.dash.modules.figure_component.multiqc_vis`` — same function the
+    Dash callback uses. Reads ``selected_module``, ``selected_plot``,
+    ``selected_dataset`` and ``s3_locations`` from the component's
+    stored_metadata (with a DC-config fallback for ``s3_locations`` if missing,
+    matching the Dash restoration path).
+
+    Filters: applied via ``patch_multiqc_figures()`` after sample resolution.
+    Filters that target a metadata DC different from the MultiQC DC are
+    resolved by loading the metadata DC with the filters applied, then
+    pulling the unique values of the ``sample`` join column. Filters that
+    target the MultiQC DC's own ``sample`` column are used directly.
+    """
+    filters = request.get("filters") or []
+    theme = request.get("theme") or "light"
+
+    dashboard_data = dashboards_collection.find_one({"dashboard_id": dashboard_id})
+    if not dashboard_data:
+        raise HTTPException(status_code=404, detail=f"Dashboard '{dashboard_id}' not found.")
+
+    project_id = dashboard_data.get("project_id")
+    if not project_id or not check_project_permission(project_id, current_user, "viewer"):
+        raise HTTPException(status_code=403, detail="Permission denied.")
+
+    component = next(
+        (
+            m
+            for m in (dashboard_data.get("stored_metadata") or [])
+            if str(m.get("index")) == component_id and m.get("component_type") == "multiqc"
+        ),
+        None,
+    )
+    if component is None:
+        raise HTTPException(
+            status_code=404, detail=f"MultiQC component '{component_id}' not found."
+        )
+
+    selected_module = component.get("selected_module")
+    selected_plot = component.get("selected_plot")
+    selected_dataset = component.get("selected_dataset")
+    s3_locations = component.get("s3_locations") or []
+
+    dc_id = component.get("dc_id") or component.get("data_collection_id")
+
+    # Direct MongoDB lookup via the process-agnostic helper. It covers both:
+    # (1) project_doc.workflows[].data_collections[].config.dc_specific_properties.s3_location
+    # (2) multiqc_collection (deployed reports), queried by data_collection_id.
+    # No HTTP loop-back, no token needed — both Dash's restore path and this
+    # API route share the same resolution.
+    if not s3_locations and dc_id:
+        from depictio.dash.modules.multiqc_component.models import _fetch_s3_locations_from_dc
+
+        s3_locations = _fetch_s3_locations_from_dc(str(dc_id), str(project_id))
+        logger.info(
+            f"render_multiqc: _fetch_s3_locations_from_dc"
+            f"(dc={dc_id!s}, project={project_id!s})"
+            f" → {len(s3_locations)} s3_location(s)"
+        )
+
+    if not selected_module or not selected_plot or not s3_locations:
+        missing = []
+        if not selected_module:
+            missing.append("selected_module")
+        if not selected_plot:
+            missing.append("selected_plot")
+        if not s3_locations:
+            missing.append(
+                f"s3_locations (dc_id={dc_id!s}; tried project_doc.workflows[]"
+                f".data_collections[].config.dc_specific_properties.s3_location AND "
+                f"multiqc_collection.find({{data_collection_id: '{dc_id!s}'}}) — "
+                f"both empty)"
+            )
+        raise HTTPException(
+            status_code=400,
+            detail=f"MultiQC component is missing: {', '.join(missing)}.",
+        )
+
+    import plotly.io as pio
+
+    if "mantine_light" not in pio.templates or "mantine_dark" not in pio.templates:
+        try:
+            import dash_mantine_components as dmc
+
+            dmc.add_figure_templates()
+        except Exception as e:
+            logger.warning(f"render_multiqc: failed to register mantine templates: {e}")
+
+    # Per-stage timing instrumentation. Stripped to a single TIMING log line
+    # so it's easy to grep `docker logs` for per-stage cost on warm vs cold
+    # requests. Drop once perf is satisfactory.
+    import time as _time
+
+    from depictio.api.cache import get_cache
+    from depictio.dash.modules.figure_component.multiqc_vis import (
+        create_multiqc_plot,
+        generate_figure_cache_key,
+    )
+
+    t0 = _time.perf_counter()
+    timings: dict[str, float] = {}
+
+    try:
+        selected_samples = _resolve_multiqc_sample_filter(dashboard_data, component, filters)
+        timings["resolve_filter_ms"] = (_time.perf_counter() - t0) * 1000
+        filter_applied = bool(selected_samples)
+        filter_sig: str | None = None
+        if filter_applied:
+            sorted_samples = sorted({str(s) for s in selected_samples})
+            filter_sig = "|".join(sorted_samples)
+
+        cache = get_cache()
+        filter_aware_key = generate_figure_cache_key(
+            s3_locations,
+            selected_module,
+            selected_plot,
+            selected_dataset,
+            theme,
+            filter_sig=filter_sig,
+        )
+
+        t1 = _time.perf_counter()
+        cached = cache.get(filter_aware_key)
+        timings["cache_get_ms"] = (_time.perf_counter() - t1) * 1000
+        cache_hit = cached is not None
+
+        if cached is not None:
+            fig_dict = cached
+        else:
+            t2 = _time.perf_counter()
+            fig = create_multiqc_plot(
+                s3_locations=s3_locations,
+                module=selected_module,
+                plot=selected_plot,
+                dataset_id=selected_dataset,
+                theme=theme,
+            )
+            timings["create_plot_ms"] = (_time.perf_counter() - t2) * 1000
+
+            t3 = _time.perf_counter()
+            if hasattr(fig, "to_json"):
+                fig_dict = json.loads(fig.to_json())
+            else:
+                fig_dict = fig
+            timings["to_json_ms"] = (_time.perf_counter() - t3) * 1000
+
+            if isinstance(fig_dict, dict) and "layout" in fig_dict:
+                fig_dict["layout"].setdefault("uirevision", "persistent")
+
+            if filter_applied:
+                from depictio.dash.modules.multiqc_component.callbacks.core import (
+                    patch_multiqc_figures,
+                )
+
+                t4 = _time.perf_counter()
+                patched = patch_multiqc_figures([fig_dict], selected_samples)
+                timings["patch_filter_ms"] = (_time.perf_counter() - t4) * 1000
+                if patched:
+                    fig_dict = patched[0]
+                    if isinstance(fig_dict, dict):
+                        fig_dict.setdefault("layout", {})
+                        fig_dict["layout"]["_depictio_filter_applied"] = True
+
+            try:
+                t5 = _time.perf_counter()
+                cache.set(filter_aware_key, fig_dict, ttl=7200)
+                timings["cache_set_ms"] = (_time.perf_counter() - t5) * 1000
+            except Exception as cache_err:
+                logger.warning(f"render_multiqc: cache.set failed: {cache_err}")
+
+        timings["total_ms"] = (_time.perf_counter() - t0) * 1000
+        timings_str = " ".join(f"{k}={v:.1f}" for k, v in timings.items())
+        logger.info(
+            f"TIMING render_multiqc cid={component_id} hit={cache_hit} "
+            f"filter={'y' if filter_applied else 'n'} {timings_str}"
+        )
+
+        return {
+            "figure": fig_dict,
+            "metadata": {
+                "module": selected_module,
+                "plot": selected_plot,
+                "dataset_id": selected_dataset,
+                "filter_applied": filter_applied,
+                "selected_sample_count": len(selected_samples) if filter_applied else None,
+            },
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"render_multiqc: build failed for {component_id}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"MultiQC render failed: {e}")
+
+
+@dashboards_endpoint_router.post("/render_multiqc_general_stats/{dashboard_id}/{component_id}")
+def render_multiqc_general_stats_endpoint(
+    dashboard_id: PyObjectId,
+    component_id: str,
+    request: dict,
+    current_user: User = Depends(get_user_or_anonymous),
+):
+    """JSON-safe payload for the React MultiQC General Statistics renderer.
+
+    Wraps ``build_general_stats_payload()`` (the JSON-safe sibling of
+    ``build_general_stats_content()``). Resolves ``s3_locations`` the same way
+    the regular ``render_multiqc`` endpoint does, then converts the first
+    location into a local parquet path via ``_get_local_path_for_s3`` (matching
+    the Dash dispatcher in ``multiqc_component/callbacks/core.py``). Reuses the
+    same Redis cache key shape so warm Dash sessions also warm the React route.
+    """
+    import hashlib
+
+    dashboard_data = dashboards_collection.find_one({"dashboard_id": dashboard_id})
+    if not dashboard_data:
+        raise HTTPException(status_code=404, detail=f"Dashboard '{dashboard_id}' not found.")
+
+    project_id = dashboard_data.get("project_id")
+    if not project_id or not check_project_permission(project_id, current_user, "viewer"):
+        raise HTTPException(status_code=403, detail="Permission denied.")
+
+    component = next(
+        (
+            m
+            for m in (dashboard_data.get("stored_metadata") or [])
+            if str(m.get("index")) == component_id and m.get("component_type") == "multiqc"
+        ),
+        None,
+    )
+    if component is None:
+        raise HTTPException(
+            status_code=404, detail=f"MultiQC component '{component_id}' not found."
+        )
+
+    s3_locations = component.get("s3_locations") or []
+    dc_id = component.get("dc_id") or component.get("data_collection_id")
+
+    if not s3_locations and dc_id:
+        from depictio.dash.modules.multiqc_component.models import _fetch_s3_locations_from_dc
+
+        s3_locations = _fetch_s3_locations_from_dc(str(dc_id), str(project_id))
+
+    if not s3_locations:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"MultiQC component is missing s3_locations (dc_id={dc_id!s}); "
+                f"both stored_metadata and DC config lookup returned empty."
+            ),
+        )
+
+    show_hidden = bool(request.get("show_hidden", True))
+    filters = request.get("filters") or []
+
+    selected_samples = _resolve_multiqc_sample_filter(dashboard_data, component, filters)
+
+    # The violin figure built by `_create_violin_plot` uses the `mantine_light`
+    # / `mantine_dark` Plotly templates. Register them on cold workers — same
+    # guard the regular `render_multiqc_endpoint` uses just above.
+    import plotly.io as pio
+
+    if "mantine_light" not in pio.templates or "mantine_dark" not in pio.templates:
+        try:
+            import dash_mantine_components as dmc
+
+            dmc.add_figure_templates()
+        except Exception as e:
+            logger.warning(
+                f"render_multiqc_general_stats: failed to register mantine templates: {e}"
+            )
+
+    import time as _time
+
+    _t0 = _time.perf_counter()
+    timings: dict[str, float] = {}
+
+    try:
+        from depictio.api.cache import get_cache
+        from depictio.dash.modules.figure_component.multiqc_vis import (
+            _get_local_path_for_s3,
+        )
+        from depictio.dash.modules.multiqc_component.callbacks.core import (
+            _normalize_multiqc_paths,
+        )
+        from depictio.dash.modules.multiqc_component.general_stats import (
+            build_general_stats_payload,
+        )
+
+        normalized = _normalize_multiqc_paths(s3_locations)
+        raw_path = normalized[0] if normalized else s3_locations[0]
+
+        # React-side cache key — distinct from Dash's `multiqc:gs:` so the two
+        # callers don't trample each other's payload shape. Filter signature is
+        # part of the key so each filter combination caches independently.
+        # Mtime stat removed — same rationale as the figure cache: it fired a
+        # filesystem stat on every request (even cache hits) and any S3-cache
+        # refresh cold-evicted the payload. TTL handles invalidation.
+        filter_sig = "|".join(sorted(selected_samples)) if selected_samples else "all"
+        cache_key_str = f"{raw_path}::{filter_sig}::general_stats_payload"
+        cache_key = f"multiqc:gs_payload:{hashlib.sha256(cache_key_str.encode()).hexdigest()[:16]}"
+
+        cache = get_cache()
+        _t_get0 = _time.perf_counter()
+        cached = cache.get(cache_key)
+        timings["cache_get_ms"] = (_time.perf_counter() - _t_get0) * 1000
+        cache_hit = cached is not None
+        if cached is not None:
+            timings["total_ms"] = (_time.perf_counter() - _t0) * 1000
+            timings_str = " ".join(f"{k}={v:.1f}" for k, v in timings.items())
+            logger.info(
+                f"TIMING render_gs cid={component_id} hit=True "
+                f"filter={'y' if selected_samples else 'n'} {timings_str}"
+            )
+            return cached
+
+        _t_build0 = _time.perf_counter()
+        parquet_path = _get_local_path_for_s3(raw_path)
+        payload = build_general_stats_payload(
+            parquet_path=parquet_path,
+            show_hidden=show_hidden,
+            selected_samples=selected_samples or None,
+        )
+        timings["build_payload_ms"] = (_time.perf_counter() - _t_build0) * 1000
+        if selected_samples:
+            payload["filter_applied"] = True
+            payload["selected_sample_count"] = len(selected_samples)
+
+        try:
+            _t_set0 = _time.perf_counter()
+            cache.set(cache_key, payload, ttl=7200)
+            timings["cache_set_ms"] = (_time.perf_counter() - _t_set0) * 1000
+        except Exception as cache_err:
+            logger.warning(f"render_multiqc_general_stats: cache.set failed: {cache_err}")
+
+        timings["total_ms"] = (_time.perf_counter() - _t0) * 1000
+        timings_str = " ".join(f"{k}={v:.1f}" for k, v in timings.items())
+        logger.info(
+            f"TIMING render_gs cid={component_id} hit={cache_hit} "
+            f"filter={'y' if selected_samples else 'n'} {timings_str}"
+        )
+
+        return payload
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(
+            f"render_multiqc_general_stats: build failed for {component_id}: {e}",
+            exc_info=True,
+        )
+        raise HTTPException(status_code=500, detail=f"MultiQC general_stats render failed: {e}")
 
 
 # ============================================================================

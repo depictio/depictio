@@ -13,6 +13,7 @@ from depictio.api.v1.endpoints.analytics_data_endpoints.routes import (
 from depictio.api.v1.endpoints.analytics_endpoints.routes import router as analytics_router
 from depictio.api.v1.endpoints.auth_endpoints.google_oauth_routes import google_oauth_router
 from depictio.api.v1.endpoints.backup_endpoints.routes import backup_endpoint_router
+from depictio.api.v1.endpoints.celery_endpoints.routes import celery_endpoint_router
 from depictio.api.v1.endpoints.cli_endpoints.routes import cli_endpoint_router
 from depictio.api.v1.endpoints.dashboards_endpoints.routes import dashboards_endpoint_router
 from depictio.api.v1.endpoints.datacollections_endpoints.routes import (
@@ -20,6 +21,7 @@ from depictio.api.v1.endpoints.datacollections_endpoints.routes import (
 )
 from depictio.api.v1.endpoints.deltatables_endpoints.routes import deltatables_endpoint_router
 from depictio.api.v1.endpoints.events_endpoints.routes import events_router
+from depictio.api.v1.endpoints.figure_endpoints.routes import figure_endpoint_router
 from depictio.api.v1.endpoints.files_endpoints.routes import files_endpoint_router
 from depictio.api.v1.endpoints.jbrowse_endpoints.routes import jbrowse_endpoints_router
 from depictio.api.v1.endpoints.links_endpoints.routes import links_endpoint_router
@@ -108,6 +110,18 @@ router.include_router(
     dashboards_endpoint_router,
     prefix="/dashboards",
     tags=["Dashboards"],
+)
+
+router.include_router(
+    figure_endpoint_router,
+    prefix="/figure",
+    tags=["Figure Builder"],
+)
+
+router.include_router(
+    celery_endpoint_router,
+    prefix="/celery",
+    tags=["Celery"],
 )
 
 
