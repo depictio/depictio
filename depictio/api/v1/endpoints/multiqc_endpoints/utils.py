@@ -314,7 +314,12 @@ async def delete_all_multiqc_reports_for_dc(
 
     if delete_s3_files:
         bucket_name = settings.minio.bucket
-        cursor = multiqc_collection.find({"data_collection_id": data_collection_id})
+        # Project to s3_location only — report docs carry full plots/sample
+        # mappings payloads which can be large; we just need the location.
+        cursor = multiqc_collection.find(
+            {"data_collection_id": data_collection_id},
+            {"s3_location": 1},
+        )
         for report_doc in cursor:
             s3_location = report_doc.get("s3_location")
             if not s3_location:
