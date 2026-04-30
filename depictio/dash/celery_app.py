@@ -192,6 +192,145 @@ def generate_dashboard_screenshot_dual(self, dashboard_id: str, user_id: str) ->
         return {"status": "error", "dashboard_id": dashboard_id, "error": str(e)}
 
 
+@celery_app.task(bind=True, name="prewarm_multiqc_dashboard", soft_time_limit=300, time_limit=600)
+def prewarm_multiqc_dashboard(self, dashboard_id: str) -> dict:
+    """Pre-render every MultiQC figure in a dashboard so subsequent renders
+    hit the warm Redis cache.
+
+    Backport of the task introduced in PR #743 (commit db16e88e), trimmed
+    to figures only — General Stats prewarming requires
+    ``build_general_stats_payload`` which doesn't exist on this branch.
+
+    Triggered fire-and-forget from ``GET /dashboards/get/{id}``. Idempotent:
+    each rendered figure is checked against Redis and skipped if already
+    cached. Both light and dark themes are warmed because the viewer can
+    render either depending on the user's theme setting.
+
+    The slow path here is ``multiqc.parse_logs`` running serially over the
+    DC's parquets (the global mutates a single state and is locked). We
+    can't parallelise that — but we *can* run the whole sequential parse
+    + plot rendering in a Celery worker so the user's request thread is
+    free.
+    """
+    from bson import ObjectId
+
+    from depictio.api.v1.configs.logging_init import logger
+    from depictio.api.v1.db import dashboards_collection
+
+    try:
+        dashboard = dashboards_collection.find_one({"dashboard_id": ObjectId(str(dashboard_id))})
+    except Exception:
+        dashboard = dashboards_collection.find_one({"dashboard_id": dashboard_id})
+    if not dashboard:
+        return {"status": "not_found", "dashboard_id": dashboard_id}
+
+    project_id = dashboard.get("project_id")
+    components = [
+        m for m in (dashboard.get("stored_metadata") or []) if m.get("component_type") == "multiqc"
+    ]
+    if not components:
+        return {"status": "no_multiqc", "dashboard_id": dashboard_id}
+
+    # Lazy imports — multiqc + plotly are heavy, only pay the cost when
+    # we actually have MultiQC components to warm.
+    from depictio.api.v1.db import multiqc_collection
+    from depictio.dash.modules.figure_component.multiqc_vis import (
+        create_multiqc_plot,
+    )
+    from depictio.dash.modules.multiqc_component.models import _fetch_s3_locations_from_dc
+
+    def _live_s3_locations(dc_id_str: str) -> list[str]:
+        """Direct DB read of every report's s3_location for the DC.
+
+        Avoids going through the HTTP API from inside the worker — the worker
+        can hit MongoDB directly. Mirrors the live-fetch the view-mode
+        renderer does, so the cache keys we warm match the keys actually
+        looked up at render time.
+        """
+        cursor = multiqc_collection.find(
+            {"data_collection_id": dc_id_str},
+            {"s3_location": 1},
+        )
+        return [loc for doc in cursor if (loc := doc.get("s3_location"))]
+
+    warmed = 0
+    skipped = 0
+    failed = 0
+
+    for comp in components:
+        dc_id = comp.get("dc_id") or comp.get("data_collection_id")
+
+        # Live fetch first so we warm the cache keys the renderer will
+        # actually look up. Fall back to the snapshot only if the DB
+        # query returns nothing or errors.
+        s3_locations: list[str] = []
+        if dc_id:
+            try:
+                s3_locations = _live_s3_locations(str(dc_id))
+            except Exception as e:
+                logger.warning(f"prewarm: live s3_locations fetch failed for {dc_id}: {e}")
+
+        if not s3_locations:
+            s3_locations = comp.get("s3_locations") or []
+
+        if not s3_locations and dc_id and project_id:
+            try:
+                s3_locations = _fetch_s3_locations_from_dc(str(dc_id), str(project_id))
+            except Exception as e:
+                logger.warning(f"prewarm: _fetch_s3_locations_from_dc failed for {dc_id}: {e}")
+        if not s3_locations:
+            failed += 1
+            continue
+
+        module = comp.get("selected_module")
+        plot = comp.get("selected_plot")
+        dataset = comp.get("selected_dataset")
+
+        # General Stats components depend on build_general_stats_payload
+        # (PR #704 in upstream) which isn't on this branch yet — skip.
+        if module == "general_stats" or plot == "general_stats":
+            skipped += 1
+            continue
+
+        if not module or not plot:
+            continue
+
+        # ``create_multiqc_plot`` is itself idempotent w.r.t. cache: it
+        # downloads each parquet, computes the figure cache key with real
+        # mtimes, and short-circuits on a cache hit. We just call it for
+        # each theme — counters reflect call success, not a separate
+        # cache.get probe (which used to compute the key with mtime=0
+        # before download and never matched the renderer's real-mtime key).
+        for theme in ("light", "dark"):
+            try:
+                create_multiqc_plot(
+                    s3_locations=s3_locations,
+                    module=module,
+                    plot=plot,
+                    dataset_id=dataset,
+                    theme=theme,
+                )
+                warmed += 1
+            except Exception as e:
+                logger.warning(
+                    f"prewarm: figure build failed for {comp.get('index')} "
+                    f"({module}/{plot}, {theme}): {e}"
+                )
+                failed += 1
+
+    logger.info(
+        f"prewarm_multiqc_dashboard {dashboard_id}: "
+        f"warmed={warmed} skipped={skipped} failed={failed}"
+    )
+    return {
+        "status": "ok",
+        "dashboard_id": dashboard_id,
+        "warmed": warmed,
+        "skipped": skipped,
+        "failed": failed,
+    }
+
+
 # NOTE: Dash apps will import celery_app when they're created in flask_dispatcher.py
 # Background callbacks are registered automatically when apps are initialized
 # No need to import apps here - that would create a circular dependency:

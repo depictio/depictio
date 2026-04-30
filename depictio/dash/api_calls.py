@@ -2211,50 +2211,1071 @@ def api_call_check_project_permission(
 @validate_call(validate_return=True)
 def api_call_fetch_multiqc_report(data_collection_id: str, token: str) -> dict[str, Any] | None:
     """
-    Fetch MultiQC report metadata for a specific data collection.
+    Fetch a DC-level union of MultiQC metadata across all stored reports.
+
+    Originally returned only the first report's metadata, which made the DC
+    card show only one run's stats even when many were ingested. This now
+    walks every report under the DC and merges samples / canonical_samples /
+    modules / plots so the card reflects the whole set.
 
     Args:
-        data_collection_id: Data collection ID to fetch MultiQC report for
-        token: Authentication token
+        data_collection_id: Data collection ID to summarise.
+        token: Authentication token.
 
     Returns:
-        MultiQC report metadata (first report found) or None if not found
+        ``{"metadata": {...}}``-shaped dict (mirrors a single MultiQCReport)
+        with merged metadata fields, or None if no reports exist or the
+        request fails.
     """
     try:
-        # Use the correct endpoint: /multiqc/reports/data-collection/{data_collection_id}
         response = httpx.get(
             f"{API_BASE_URL}/depictio/api/v1/multiqc/reports/data-collection/{data_collection_id}",
             headers={"Authorization": f"Bearer {token}"},
             timeout=settings.performance.api_request_timeout,
         )
 
-        if response.status_code == 200:
-            response_data = response.json()
-            # Response is MultiQCReportsListResponse with reports list
-            reports = response_data.get("reports", [])
-            if reports:
-                # Return the first report's data (report field contains the actual MultiQCReport)
-                first_report = reports[0].get("report", {})
-                logger.debug(f"MultiQC report fetched successfully for {data_collection_id}")
-                return first_report
-            else:
-                logger.debug(f"No MultiQC reports found for data collection {data_collection_id}")
-                return None
-        elif response.status_code == 404:
+        if response.status_code == 404:
             logger.debug(f"No MultiQC report found for data collection {data_collection_id}")
             return None
-        else:
+        if response.status_code != 200:
             logger.warning(
                 f"Failed to fetch MultiQC report for {data_collection_id}: {response.status_code}"
             )
             return None
+
+        response_data = response.json()
+        reports = response_data.get("reports", []) or []
+        if not reports:
+            logger.debug(f"No MultiQC reports found for data collection {data_collection_id}")
+            return None
+
+        import json
+
+        # Merge metadata across every report. Use dicts as ordered sets to
+        # preserve first-seen ordering; ``plots`` is a {module: [plot, ...]}
+        # mapping so we union the per-module plot lists.
+        merged_samples: dict[str, None] = {}
+        merged_canonical: dict[str, None] = {}
+        merged_modules: dict[str, None] = {}
+        merged_plots: dict[str, dict[Any, None]] = {}
+        latest_version: str | None = None
+
+        for entry in reports:
+            report = (entry or {}).get("report", {}) or {}
+            metadata = report.get("metadata", {}) or {}
+            for s in metadata.get("samples", []) or []:
+                merged_samples.setdefault(s, None)
+            for s in metadata.get("canonical_samples", []) or []:
+                merged_canonical.setdefault(s, None)
+            for m in metadata.get("modules", []) or []:
+                merged_modules.setdefault(m, None)
+            for module, plot_list in (metadata.get("plots", {}) or {}).items():
+                bucket = merged_plots.setdefault(module, {})
+                # Plot entries can be plain strings or {label: [variants]} dicts;
+                # JSON-serialise dict entries to get a hashable dedup key.
+                for plot in plot_list or []:
+                    key = plot if isinstance(plot, str) else json.dumps(plot, sort_keys=True)
+                    if key not in bucket:
+                        bucket[key] = plot
+            ver = report.get("multiqc_version")
+            if ver:
+                latest_version = ver
+
+        logger.debug(
+            f"MultiQC merged across {len(reports)} report(s) for {data_collection_id}: "
+            f"{len(merged_canonical)} canonical samples, {len(merged_modules)} modules"
+        )
+
+        return {
+            "metadata": {
+                "samples": list(merged_samples.keys()),
+                "canonical_samples": list(merged_canonical.keys()),
+                "modules": list(merged_modules.keys()),
+                "plots": {module: list(items.values()) for module, items in merged_plots.items()},
+            },
+            "multiqc_version": latest_version,
+            "report_count": len(reports),
+        }
 
     except Exception as e:
         logger.error(f"Error fetching MultiQC report for {data_collection_id}: {e}")
         return None
 
 
+# =============================================================================
+# DC Link API Functions
+# =============================================================================
+
+
 @validate_call(validate_return=True)
+def api_call_get_project_links(project_id: str, token: str) -> list[dict[str, Any]]:
+    """
+    Get all DC links for a project.
+
+    Args:
+        project_id: Project ID
+        token: Authentication token
+
+    Returns:
+        List of link dictionaries
+    """
+    try:
+        response = httpx.get(
+            f"{API_BASE_URL}/depictio/api/v1/links/{project_id}",
+            headers={"Authorization": f"Bearer {token}"},
+            timeout=30.0,
+        )
+
+        if response.status_code == 200:
+            return response.json()
+        else:
+            logger.warning(
+                f"Failed to fetch links for project {project_id}: {response.status_code}"
+            )
+            return []
+
+    except Exception as e:
+        logger.error(f"Error fetching project links: {e}")
+        return []
+
+
+def api_call_create_link(
+    project_id: str,
+    source_dc_id: str,
+    source_column: str,
+    target_dc_id: str,
+    target_type: str,
+    resolver: str = "direct",
+    description: str | None = None,
+    token: str = "",
+) -> dict[str, Any] | None:
+    """
+    Create a new DC link for a project.
+
+    Args:
+        project_id: Project ID
+        source_dc_id: Source data collection ID
+        source_column: Column name in source DC
+        target_dc_id: Target data collection ID
+        target_type: Target DC type (table, multiqc, image)
+        resolver: Resolver strategy (direct, sample_mapping, pattern, regex, wildcard)
+        description: Optional description
+        token: Authentication token
+
+    Returns:
+        Created link dict or None on failure
+    """
+    try:
+        payload = {
+            "source_dc_id": source_dc_id,
+            "source_column": source_column,
+            "target_dc_id": target_dc_id,
+            "target_type": target_type,
+            "link_config": {"resolver": resolver},
+            "description": description,
+            "enabled": True,
+        }
+
+        response = httpx.post(
+            f"{API_BASE_URL}/depictio/api/v1/links/{project_id}",
+            headers={"Authorization": f"Bearer {token}"},
+            json=payload,
+            timeout=30.0,
+        )
+
+        if response.status_code == 201:
+            logger.info(f"Created link: {source_dc_id} -> {target_dc_id}")
+            return {"success": True, "link": response.json()}
+        else:
+            error_detail = response.text
+            logger.error(f"Failed to create link: {response.status_code} - {error_detail}")
+            return {"success": False, "message": f"API error: {error_detail}"}
+
+    except Exception as e:
+        logger.error(f"Error creating link: {e}")
+        return {"success": False, "message": f"Internal error: {str(e)}"}
+
+
+def api_call_delete_link(project_id: str, link_id: str, token: str) -> dict[str, Any] | None:
+    """
+    Delete a DC link.
+
+    Args:
+        project_id: Project ID
+        link_id: Link ID to delete
+        token: Authentication token
+
+    Returns:
+        Dict with success status
+    """
+    try:
+        response = httpx.delete(
+            f"{API_BASE_URL}/depictio/api/v1/links/{project_id}/{link_id}",
+            headers={"Authorization": f"Bearer {token}"},
+            timeout=30.0,
+        )
+
+        if response.status_code == 204:
+            logger.info(f"Deleted link {link_id}")
+            return {"success": True}
+        else:
+            error_detail = response.text
+            logger.error(f"Failed to delete link: {response.status_code}")
+            return {"success": False, "message": f"API error: {error_detail}"}
+
+    except Exception as e:
+        logger.error(f"Error deleting link: {e}")
+        return {"success": False, "message": f"Internal error: {str(e)}"}
+
+
+def api_call_get_dc_columns(data_collection_id: str, token: str) -> list[str]:
+    """
+    Get column names for a table data collection by fetching its specs.
+
+    Args:
+        data_collection_id: Data collection ID
+        token: Authentication token
+
+    Returns:
+        List of column names, or empty list on failure
+    """
+    try:
+        response = httpx.get(
+            f"{API_BASE_URL}/depictio/api/v1/deltatables/specs/{data_collection_id}",
+            headers={"Authorization": f"Bearer {token}"},
+            timeout=30.0,
+        )
+
+        if response.status_code == 200:
+            specs = response.json()
+            # specs is a dict with column names as keys (aggregation_columns_specs format)
+            if isinstance(specs, dict):
+                return list(specs.keys())
+            elif isinstance(specs, list):
+                return [s.get("name", s.get("label", "")) for s in specs if isinstance(s, dict)]
+        return []
+    except Exception as e:
+        logger.error(f"Error fetching DC columns: {e}")
+        return []
+
+
+# =============================================================================
+# MultiQC DC Creation API Function
+# =============================================================================
+
+
+def _extract_multiqc_folder_name(filename: str, fallback_idx: int) -> str:
+    """Derive a folder identifier from a multiqc.parquet relative path.
+
+    `dcc.Upload` normally returns only basenames, but the folder-upload JS
+    hook rewrites `file.name` to the browser-provided `webkitRelativePath`,
+    so paths like ``run_01/multiqc_data/multiqc.parquet`` or
+    ``test_data/run_01/multiqc_data/multiqc.parquet`` reach Python.
+
+    Rule: prefer the parent of ``multiqc_data/`` (skips the conventional
+    sibling dir), else the immediate parent, else an ordinal fallback.
+    """
+    parts = [p for p in filename.replace("\\", "/").split("/") if p]
+    if len(parts) >= 3 and parts[-2] == "multiqc_data":
+        return parts[-3]
+    if len(parts) >= 2:
+        return parts[-2]
+    return f"report_{fallback_idx}"
+
+
+def _save_uploads_to_temp_dir(
+    file_contents_list: list[str],
+    filenames_list: list[str],
+    temp_dir: str,
+) -> tuple[list[tuple[str, str]], list[str], dict | None]:
+    """Filter, validate, and save multiqc.parquet uploads under per-folder subdirs.
+
+    Returns (folder_assignments, skipped_names, error_response). On validation
+    failure, error_response is populated and the caller should return it directly.
+    """
+    import os
+
+    kept: list[tuple[int, str, bytes]] = []
+    skipped_names: list[str] = []
+    for i, (file_contents, fname) in enumerate(zip(file_contents_list, filenames_list)):
+        basename = os.path.basename(fname.replace("\\", "/"))
+        if basename != "multiqc.parquet":
+            skipped_names.append(fname)
+            continue
+        decoded, error = _validate_upload_file(file_contents, max_size_mb=50.0)
+        if error:
+            return (
+                [],
+                skipped_names,
+                {
+                    "success": False,
+                    "message": f"File '{fname}': {error}",
+                    "status_code": 400,
+                },
+            )
+        kept.append((i, fname, decoded))
+
+    if not kept:
+        return (
+            [],
+            skipped_names,
+            {
+                "success": False,
+                "message": (
+                    "No files named 'multiqc.parquet' found in the upload. "
+                    "Drop one or more folders that each contain a multiqc.parquet file."
+                ),
+                "status_code": 400,
+            },
+        )
+
+    total_size = sum(len(decoded) for _, _, decoded in kept)
+    max_total = 500 * 1024 * 1024
+    if total_size > max_total:
+        return (
+            [],
+            skipped_names,
+            {
+                "success": False,
+                "message": f"Total file size ({total_size / (1024 * 1024):.1f}MB) exceeds 500MB limit",
+                "status_code": 400,
+            },
+        )
+
+    used_folders: set[str] = set()
+    folder_assignments: list[tuple[str, str]] = []
+    for i, fname, decoded in kept:
+        base_folder = _extract_multiqc_folder_name(fname, i)
+        folder = base_folder
+        suffix = 1
+        while folder in used_folders:
+            folder = f"{base_folder}_{suffix}"
+            suffix += 1
+        used_folders.add(folder)
+        subdir = os.path.join(temp_dir, folder, "multiqc_data")
+        os.makedirs(subdir, exist_ok=True)
+        temp_file_path = os.path.join(subdir, "multiqc.parquet")
+        with open(temp_file_path, "wb") as f:
+            f.write(decoded)
+        logger.debug(
+            f"Saved uploaded MultiQC file '{fname}' as folder '{folder}' to: {temp_file_path}"
+        )
+        folder_assignments.append((folder, fname))
+
+    logger.info(
+        f"Ingested {len(folder_assignments)} multiqc.parquet across folders: "
+        f"{sorted(used_folders)}; skipped {len(skipped_names)} non-multiqc files"
+    )
+    return folder_assignments, skipped_names, None
+
+
+def _run_multiqc_processor(workflow, dc_id: str, cli_config) -> dict:
+    """Invoke the MultiQC processor in process+overwrite mode and normalize result."""
+    from depictio.cli.cli.utils.helpers import process_data_collection_helper
+
+    process_result = process_data_collection_helper(
+        CLI_config=cli_config,
+        wf=workflow,
+        dc_id=dc_id,
+        mode="process",
+        command_parameters={"overwrite": True},
+    )
+    logger.info(f"MultiQC process result: {process_result}")
+
+    if not isinstance(process_result, dict) or process_result.get("result") != "success":
+        message = "Unknown error"
+        if isinstance(process_result, dict):
+            message = process_result.get("message", message)
+        return {
+            "success": False,
+            "message": f"MultiQC data processing failed: {message}",
+            "status_code": 500,
+        }
+    return process_result
+
+
+def _load_dc_and_workflow(project_id: str, dc_id: str, token: str):
+    """Locate (workflow, data_collection) Pydantic models for an existing DC.
+
+    Traverses ``project.workflows[].data_collections[]`` and reconstructs the
+    matching Workflow as a Pydantic model. Returns (None, None) if not found.
+    """
+    from depictio.models.models.workflows import Workflow
+
+    project = api_call_fetch_project_by_id(project_id, token, skip_enrichment=True)
+    if not project:
+        return None, None
+
+    if hasattr(project, "model_dump"):
+        project_dict = project.model_dump()
+    elif isinstance(project, dict):
+        project_dict = project
+    else:
+        return None, None
+
+    workflows = project_dict.get("workflows", []) or []
+    for wf_dict in workflows:
+        for dc_dict in wf_dict.get("data_collections", []) or []:
+            current_id = dc_dict.get("id") or dc_dict.get("_id")
+            if current_id and str(current_id) == str(dc_id):
+                try:
+                    workflow = Workflow(**wf_dict)
+                except Exception as e:
+                    logger.error(f"Failed to parse workflow for DC {dc_id}: {e}")
+                    return None, None
+                # Find the matching DataCollection within the parsed Workflow
+                for dc in workflow.data_collections:
+                    if str(dc.id) == str(dc_id):
+                        return workflow, dc
+                return workflow, None
+    return None, None
+
+
+def _download_parquet_from_s3(s3_location: str, local_path: str) -> None:
+    """Download s3://bucket/key to local_path, creating parent dirs as needed."""
+    import os
+
+    from depictio.api.v1.s3 import s3_client
+
+    if not s3_location.startswith("s3://"):
+        raise ValueError(f"Invalid S3 location: {s3_location!r} (expected s3://bucket/key)")
+    rest = s3_location[len("s3://") :]
+    if "/" not in rest:
+        raise ValueError(f"Invalid S3 location: {s3_location!r} (missing key)")
+    bucket, key = rest.split("/", 1)
+    if not bucket or not key:
+        raise ValueError(f"Invalid S3 location: {s3_location!r}")
+    os.makedirs(os.path.dirname(local_path), exist_ok=True)
+    try:
+        s3_client.download_file(bucket, key, local_path)
+    except Exception as e:
+        raise RuntimeError(f"Failed to download {s3_location} -> {local_path}: {e}") from e
+
+
+def _delete_s3_prefix(bucket: str, prefix: str) -> int:
+    """Recursively delete all objects under prefix; tolerant of empty prefix."""
+    from depictio.api.v1.s3 import s3_client
+
+    deleted = 0
+    continuation_token: str | None = None
+    while True:
+        list_kwargs: dict[str, Any] = {"Bucket": bucket, "Prefix": prefix, "MaxKeys": 1000}
+        if continuation_token:
+            list_kwargs["ContinuationToken"] = continuation_token
+        try:
+            response = s3_client.list_objects_v2(**list_kwargs)
+        except Exception as e:
+            logger.error(f"Failed to list s3://{bucket}/{prefix}: {e}")
+            raise
+
+        contents = response.get("Contents", []) or []
+        if contents:
+            objects = [{"Key": obj["Key"]} for obj in contents]
+            try:
+                s3_client.delete_objects(Bucket=bucket, Delete={"Objects": objects, "Quiet": True})
+            except Exception as e:
+                logger.error(f"Failed to delete batch under s3://{bucket}/{prefix}: {e}")
+                raise
+            deleted += len(objects)
+
+        if response.get("IsTruncated"):
+            continuation_token = response.get("NextContinuationToken")
+            if not continuation_token:
+                break
+        else:
+            break
+    return deleted
+
+
+def api_call_create_multiqc_data_collection(
+    name: str,
+    description: str,
+    file_contents_list: list[str],
+    filenames_list: list[str],
+    project_id: str,
+    token: str,
+) -> dict[str, Any] | None:
+    """
+    Create a MultiQC data collection by processing uploaded parquet file(s).
+
+    This function handles the complete MultiQC DC creation workflow:
+    1. Validates and decodes the uploaded parquet file(s)
+    2. Creates temporary storage
+    3. Creates MultiQC data collection and workflow models
+    4. Processes the data using the existing CLI infrastructure
+
+    Args:
+        name: Data collection name
+        description: Data collection description
+        file_contents_list: List of base64 encoded file contents
+        filenames_list: List of original filenames
+        project_id: Target project ID
+        token: Authentication token
+
+    Returns:
+        Response with success/failure status and details
+    """
+    try:
+        import shutil
+        import tempfile
+
+        from depictio.api.v1.configs.config import settings
+        from depictio.models.models.cli import CLIConfig, UserBaseCLIConfig
+        from depictio.models.models.data_collections import (
+            DataCollection,
+            DataCollectionConfig,
+        )
+        from depictio.models.models.data_collections_types.multiqc import DCMultiQC
+        from depictio.models.models.workflows import (
+            Workflow,
+            WorkflowConfig,
+            WorkflowDataLocation,
+            WorkflowEngine,
+        )
+
+        logger.debug(f"Creating MultiQC data collection: {name}")
+
+        # Get user information from token
+        current_user = api_call_fetch_user_from_token(token)
+        if not current_user:
+            return {
+                "success": False,
+                "message": "Invalid authentication token",
+                "status_code": 401,
+            }
+
+        # Fetch current project
+        project = api_call_fetch_project_by_id(project_id, token, skip_enrichment=True)
+        if not project:
+            return {
+                "success": False,
+                "message": f"Project {project_id} not found",
+                "status_code": 404,
+            }
+
+        # Create temporary directory for files
+        temp_dir = tempfile.mkdtemp(prefix="depictio_multiqc_upload_")
+
+        try:
+            # Save the uploaded files under folder-name-based subdirectories so the
+            # MultiQC processor's `*/multiqc_data/multiqc.parquet` glob still
+            # finds them.
+            folder_assignments, skipped_names, error_response = _save_uploads_to_temp_dir(
+                file_contents_list, filenames_list, temp_dir
+            )
+            if error_response:
+                return error_response
+
+            used_folders = {folder for folder, _ in folder_assignments}
+
+            # Create MultiQC data collection configuration
+            dc_multiqc_config = DCMultiQC()
+
+            dc_config = DataCollectionConfig(
+                type="multiqc",
+                metatype="metadata",
+                dc_specific_properties=dc_multiqc_config,
+            )
+
+            # Create the data collection
+            data_collection = DataCollection(
+                data_collection_tag=name,
+                description=description,
+                config=dc_config,
+            )
+
+            logger.debug(f"Created MultiQC data collection: {data_collection}")
+
+            # Create a workflow to contain this data collection
+            workflow_config = WorkflowConfig()
+
+            workflow_data_location = WorkflowDataLocation(
+                structure="flat",
+                locations=[temp_dir],
+            )
+
+            # Unique workflow tag
+            import time
+
+            timestamp = int(time.time() * 1000)
+            workflow_name = f"{name}_workflow_{timestamp}"
+            workflow_tag = f"{name}_workflow_{timestamp}"
+
+            workflow = Workflow(
+                name=workflow_name,
+                engine=WorkflowEngine(name="python", version="3.12"),
+                workflow_tag=workflow_tag,
+                config=workflow_config,
+                data_location=workflow_data_location,
+                data_collections=[data_collection],
+            )
+
+            # Get the full token object from database
+            import pymongo
+
+            from depictio.api.v1.configs.config import MONGODB_URL
+            from depictio.api.v1.configs.config import settings as api_settings
+
+            mongo_client = pymongo.MongoClient(MONGODB_URL)
+            db = mongo_client[api_settings.mongodb.db_name]
+            tokens_collection = db["tokens"]
+
+            full_token = tokens_collection.find_one({"user_id": current_user.id})
+            if not full_token:
+                return {
+                    "success": False,
+                    "message": "Token not found in database",
+                    "status_code": 401,
+                }
+
+            # Create CLI config for processing
+            cli_config = CLIConfig(
+                user=UserBaseCLIConfig(
+                    id=current_user.id,
+                    email=current_user.email,
+                    is_admin=current_user.is_admin,
+                    token=full_token,
+                ),
+                api_base_url=settings.fastapi.url,
+                s3_storage=settings.minio,
+            )
+
+            # Add the new workflow to the project
+            if hasattr(project, "model_dump"):
+                project_dict = project.model_dump()
+            else:
+                project_dict = project.copy()
+
+            project_dict["workflows"].append(workflow.model_dump())
+
+            update_result = api_call_update_project(project_dict, token)
+            if not update_result or not update_result.get("success"):
+                return {
+                    "success": False,
+                    "message": f"Failed to add MultiQC DC to project: {update_result.get('message', 'Unknown error') if update_result else 'API call failed'}",
+                    "status_code": 500,
+                }
+
+            logger.debug("MultiQC data collection added to project successfully!")
+
+            # MultiQC does NOT use the scan step (no scan config needed).
+            # Go directly to process, which calls process_multiqc_data_collection
+            # that discovers parquet files from workflow data locations.
+            process_result = _run_multiqc_processor(workflow, str(data_collection.id), cli_config)
+            if not process_result.get("success", True) and "status_code" in process_result:
+                # _run_multiqc_processor returned an error envelope
+                return process_result
+
+            logger.debug("MultiQC data collection created and processed successfully!")
+
+            success_message = (
+                f"MultiQC data collection '{name}' created and processed successfully "
+                f"({len(folder_assignments)} folder(s) ingested"
+            )
+            if skipped_names:
+                success_message += f", {len(skipped_names)} non-multiqc file(s) ignored"
+            success_message += ")"
+
+            return {
+                "success": True,
+                "message": success_message,
+                "data_collection_id": str(data_collection.id),
+                "workflow_id": str(workflow.id),
+                "ingested_folders": sorted(used_folders),
+                "skipped_count": len(skipped_names),
+            }
+
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+            logger.info(f"Cleaned up temporary directory: {temp_dir}")
+
+    except Exception as e:
+        logger.error(f"Error creating MultiQC data collection: {str(e)}")
+        import traceback
+
+        traceback.print_exc()
+        return {
+            "success": False,
+            "message": f"Internal error: {str(e)}",
+            "status_code": 500,
+        }
+
+
+def _build_cli_config_for_token(token: str):
+    """Build a CLIConfig for the user owning the token. Returns (cli_config, error)."""
+    from depictio.api.v1.configs.config import MONGODB_URL
+    from depictio.api.v1.configs.config import settings as api_settings
+    from depictio.models.models.cli import CLIConfig, UserBaseCLIConfig
+
+    current_user = api_call_fetch_user_from_token(token)
+    if not current_user:
+        return None, {
+            "success": False,
+            "message": "Invalid authentication token",
+            "status_code": 401,
+        }
+
+    import pymongo
+
+    mongo_client = pymongo.MongoClient(MONGODB_URL)
+    db = mongo_client[api_settings.mongodb.db_name]
+    full_token = db["tokens"].find_one({"user_id": current_user.id})
+    if not full_token:
+        return None, {
+            "success": False,
+            "message": "Token not found in database",
+            "status_code": 401,
+        }
+
+    cli_config = CLIConfig(
+        user=UserBaseCLIConfig(
+            id=current_user.id,
+            email=current_user.email,
+            is_admin=current_user.is_admin,
+            token=full_token,
+        ),
+        api_base_url=settings.fastapi.url,
+        s3_storage=settings.minio,
+    )
+    return cli_config, None
+
+
+def api_call_bulk_delete_multiqc_reports(
+    data_collection_id: str,
+    token: str,
+    delete_s3_files: bool = False,
+) -> dict[str, Any] | None:
+    """Bulk-delete all MultiQC reports for a DC; optionally also delete their S3 parquets."""
+    try:
+        response = httpx.delete(
+            f"{API_BASE_URL}/depictio/api/v1/multiqc/reports/data-collection/{data_collection_id}",
+            params={"delete_s3_files": delete_s3_files},
+            headers={"Authorization": f"Bearer {token}"},
+            timeout=settings.performance.api_request_timeout,
+        )
+
+        if response.status_code == 200:
+            data = response.json()
+            logger.info(
+                f"Bulk-deleted MultiQC reports for DC {data_collection_id}: "
+                f"{data.get('deleted_count', 0)} mongo, {data.get('deleted_s3_count', 0)} s3"
+            )
+            return {
+                "success": True,
+                "deleted_count": data.get("deleted_count", 0),
+                "deleted_s3_count": data.get("deleted_s3_count", 0),
+                "data_collection_id": data.get("data_collection_id", data_collection_id),
+            }
+        else:
+            error_detail = response.text
+            logger.error(
+                f"Failed to bulk-delete MultiQC reports: {response.status_code} - {error_detail}"
+            )
+            return {
+                "success": False,
+                "message": f"API error: {error_detail}",
+                "status_code": response.status_code,
+            }
+
+    except Exception as e:
+        logger.error(f"Error bulk-deleting MultiQC reports: {e}")
+        return {"success": False, "message": f"Internal error: {str(e)}", "status_code": 500}
+
+
+def api_call_overwrite_multiqc_data_collection(
+    project_id: str,
+    data_collection_id: str,
+    file_contents_list: list[str],
+    filenames_list: list[str],
+    token: str,
+) -> dict[str, Any] | None:
+    """Replace an existing MultiQC DC's contents with the new uploads."""
+    try:
+        import shutil
+        import tempfile
+
+        workflow, dc = _load_dc_and_workflow(project_id, data_collection_id, token)
+        if workflow is None or dc is None:
+            return {
+                "success": False,
+                "message": (
+                    f"Data collection {data_collection_id} not found in project {project_id}"
+                ),
+                "status_code": 404,
+            }
+
+        cli_config, error = _build_cli_config_for_token(token)
+        if error:
+            return error
+
+        temp_dir = tempfile.mkdtemp(prefix="depictio_multiqc_overwrite_")
+        try:
+            folder_assignments, skipped_names, error_response = _save_uploads_to_temp_dir(
+                file_contents_list, filenames_list, temp_dir
+            )
+            if error_response:
+                return error_response
+
+            # Point the workflow at the temp dir so the processor finds the new files.
+            workflow.data_location.locations = [temp_dir]
+
+            # Wipe Mongo + S3 parquets atomically before re-ingesting.
+            delete_result = api_call_bulk_delete_multiqc_reports(
+                data_collection_id, token, delete_s3_files=True
+            )
+            if not delete_result or not delete_result.get("success"):
+                return {
+                    "success": False,
+                    "message": (
+                        "Failed to clear existing MultiQC reports before overwrite: "
+                        f"{delete_result.get('message') if delete_result else 'unknown error'}"
+                    ),
+                    "status_code": delete_result.get("status_code", 500) if delete_result else 500,
+                }
+            deleted_count = delete_result.get("deleted_count", 0)
+
+            process_result = _run_multiqc_processor(workflow, str(dc.id), cli_config)
+            if not process_result.get("success", True) and "status_code" in process_result:
+                return process_result
+
+            ingested_folders = sorted({folder for folder, _ in folder_assignments})
+            return {
+                "success": True,
+                "message": (
+                    f"MultiQC DC overwritten ({len(folder_assignments)} folder(s) ingested, "
+                    f"{deleted_count} previous report(s) removed)"
+                ),
+                "data_collection_id": str(dc.id),
+                "ingested_folders": ingested_folders,
+                "skipped_count": len(skipped_names),
+                "deleted_count": deleted_count,
+            }
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+            logger.info(f"Cleaned up temporary directory: {temp_dir}")
+
+    except Exception as e:
+        logger.error(f"Error overwriting MultiQC data collection: {e}")
+        import traceback
+
+        traceback.print_exc()
+        return {"success": False, "message": f"Internal error: {str(e)}", "status_code": 500}
+
+
+def api_call_append_to_multiqc_data_collection(
+    project_id: str,
+    data_collection_id: str,
+    file_contents_list: list[str],
+    filenames_list: list[str],
+    token: str,
+) -> dict[str, Any] | None:
+    """Append new folders to an existing MultiQC DC; new uploads win on collision."""
+    try:
+        import os
+        import shutil
+        import tempfile
+
+        workflow, dc = _load_dc_and_workflow(project_id, data_collection_id, token)
+        if workflow is None or dc is None:
+            return {
+                "success": False,
+                "message": (
+                    f"Data collection {data_collection_id} not found in project {project_id}"
+                ),
+                "status_code": 404,
+            }
+
+        cli_config, error = _build_cli_config_for_token(token)
+        if error:
+            return error
+
+        temp_dir = tempfile.mkdtemp(prefix="depictio_multiqc_append_")
+        try:
+            # 1. Save new uploads first — this claims folder slots.
+            folder_assignments, skipped_names, error_response = _save_uploads_to_temp_dir(
+                file_contents_list, filenames_list, temp_dir
+            )
+            if error_response:
+                return error_response
+            new_folders = {folder for folder, _ in folder_assignments}
+
+            # 2. Fetch existing reports and download their parquets for any folder
+            #    name that was NOT claimed by the new uploads (new wins on collision).
+            fetched_from_s3_count = 0
+            existing = api_call_fetch_all_multiqc_reports(data_collection_id, token)
+            existing_reports = (existing or {}).get("reports", []) or []
+            used_existing_folders: set[str] = set(new_folders)
+            for idx, report in enumerate(existing_reports):
+                original_path = report.get("original_file_path") or ""
+                base_folder = _extract_multiqc_folder_name(original_path, idx)
+                if not base_folder or base_folder == f"report_{idx}":
+                    fallback = report.get("id") or report.get("_id") or f"report_{idx}"
+                    base_folder = str(fallback)
+                # If this name collides with a new upload, skip (new wins).
+                if base_folder in new_folders:
+                    logger.info(
+                        f"Append: skipping existing report (folder '{base_folder}' replaced by new upload)"
+                    )
+                    continue
+                # Dedup against other existing reports.
+                folder = base_folder
+                suffix = 1
+                while folder in used_existing_folders:
+                    folder = f"{base_folder}_{suffix}"
+                    suffix += 1
+                used_existing_folders.add(folder)
+
+                s3_location = report.get("s3_location")
+                if not s3_location:
+                    logger.warning(
+                        f"Append: existing report {report.get('id')} has no s3_location; skipping"
+                    )
+                    continue
+                local_path = os.path.join(temp_dir, folder, "multiqc_data", "multiqc.parquet")
+                _download_parquet_from_s3(s3_location, local_path)
+                fetched_from_s3_count += 1
+
+            # 3. Capture the old report IDs so we can delete them *after*
+            #    the processor successfully writes the merged set. The previous
+            #    "wipe Mongo first, reprocess second" order meant a processor
+            #    failure left the DC empty (parquets still in S3 but no
+            #    Mongo rows → user sees zero reports). Deferring the delete
+            #    keeps both old and new on partial failure, surfaces a clear
+            #    error, and keeps the DC's data intact.
+            old_report_ids = [
+                str(rid) for r in existing_reports if (rid := r.get("id") or r.get("_id"))
+            ]
+
+            workflow.data_location.locations = [temp_dir]
+
+            # 4. Re-ingest the merged folder set. Processor inserts brand-new
+            #    rows because original_file_path now points at the temp dir
+            #    (different from the originals on disk before).
+            process_result = _run_multiqc_processor(workflow, str(dc.id), cli_config)
+            if not process_result.get("success", True) and "status_code" in process_result:
+                logger.warning(
+                    "Append processor failed — keeping old reports intact. "
+                    "User retains pre-append state; no data loss."
+                )
+                return process_result
+
+            # 5. Processor succeeded — drop the old report rows. Use the
+            #    single-delete endpoint per id (small N) so we don't risk
+            #    catching the freshly-inserted rows, which is what the
+            #    DC-wide bulk-delete would do.
+            cleanup_failed = 0
+            for rid in old_report_ids:
+                try:
+                    response = httpx.delete(
+                        f"{API_BASE_URL}/depictio/api/v1/multiqc/reports/{rid}",
+                        params={"delete_s3_file": "false"},
+                        headers={"Authorization": f"Bearer {token}"},
+                        timeout=settings.performance.api_request_timeout,
+                    )
+                    if response.status_code != 200:
+                        cleanup_failed += 1
+                        logger.warning(
+                            f"Append cleanup: stale report {rid} delete returned {response.status_code}"
+                        )
+                except Exception as e:
+                    cleanup_failed += 1
+                    logger.warning(f"Append cleanup: stale report {rid} delete raised: {e}")
+
+            return {
+                "success": True,
+                "message": (
+                    f"MultiQC DC appended ({len(folder_assignments)} new folder(s), "
+                    f"{fetched_from_s3_count} existing folder(s) preserved"
+                    + (f", {cleanup_failed} stale rows left behind" if cleanup_failed else "")
+                    + ")"
+                ),
+                "data_collection_id": str(dc.id),
+                "ingested_folders": sorted(new_folders),
+                "skipped_count": len(skipped_names),
+                "fetched_from_s3_count": fetched_from_s3_count,
+                "cleanup_failed": cleanup_failed,
+            }
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+            logger.info(f"Cleaned up temporary directory: {temp_dir}")
+
+    except Exception as e:
+        logger.error(f"Error appending to MultiQC data collection: {e}")
+        import traceback
+
+        traceback.print_exc()
+        return {"success": False, "message": f"Internal error: {str(e)}", "status_code": 500}
+
+
+def api_call_clear_multiqc_data_collection(
+    project_id: str,
+    data_collection_id: str,
+    token: str,
+) -> dict[str, Any] | None:
+    """Wipe all reports + the Delta table for a DC, leaving the DC itself intact."""
+    try:
+        workflow, dc = _load_dc_and_workflow(project_id, data_collection_id, token)
+        if workflow is None or dc is None:
+            return {
+                "success": False,
+                "message": (
+                    f"Data collection {data_collection_id} not found in project {project_id}"
+                ),
+                "status_code": 404,
+            }
+
+        delete_result = api_call_bulk_delete_multiqc_reports(
+            data_collection_id, token, delete_s3_files=True
+        )
+        if not delete_result or not delete_result.get("success"):
+            return {
+                "success": False,
+                "message": (
+                    "Failed to clear MultiQC reports: "
+                    f"{delete_result.get('message') if delete_result else 'unknown error'}"
+                ),
+                "status_code": delete_result.get("status_code", 500) if delete_result else 500,
+            }
+
+        deleted_count = delete_result.get("deleted_count", 0)
+        deleted_s3_count = delete_result.get("deleted_s3_count", 0)
+
+        # Wipe the Delta table at s3://{bucket}/{dc_id}/ (per processor convention).
+        try:
+            deleted_delta_objects = _delete_s3_prefix(
+                settings.minio.bucket, f"{data_collection_id}/"
+            )
+        except Exception as e:
+            logger.error(f"Failed to delete Delta table for DC {data_collection_id}: {e}")
+            return {
+                "success": False,
+                "message": f"Failed to delete Delta table: {str(e)}",
+                "status_code": 500,
+                "deleted_count": deleted_count,
+                "deleted_s3_count": deleted_s3_count,
+            }
+
+        return {
+            "success": True,
+            "message": (
+                f"MultiQC DC cleared ({deleted_count} report(s), "
+                f"{deleted_s3_count} report parquet(s), "
+                f"{deleted_delta_objects} Delta object(s) removed)"
+            ),
+            "data_collection_id": data_collection_id,
+            "deleted_count": deleted_count,
+            "deleted_s3_count": deleted_s3_count,
+            "deleted_delta_objects": deleted_delta_objects,
+        }
+
+    except Exception as e:
+        logger.error(f"Error clearing MultiQC data collection: {e}")
+        import traceback
+
+        traceback.print_exc()
+        return {"success": False, "message": f"Internal error: {str(e)}", "status_code": 500}
+
+
 def api_call_fetch_all_multiqc_reports(
     data_collection_id: str, token: str
 ) -> dict[str, Any] | None:
@@ -2295,3 +3316,20 @@ def api_call_fetch_all_multiqc_reports(
     except Exception as e:
         logger.error(f"Error fetching MultiQC reports for {data_collection_id}: {e}")
         return None
+
+
+def api_call_fetch_dc_s3_locations(data_collection_id: str, token: str) -> list[str]:
+    """Return every current S3 parquet location for a MultiQC DC.
+
+    Plot rendering needs the *live* set of report locations (not the snapshot
+    baked into a dashboard component at creation time), otherwise plots drift
+    against each other after the DC has been appended/cleared/replaced.
+    """
+    payload = api_call_fetch_all_multiqc_reports(data_collection_id, token)
+    if not payload:
+        return []
+    return [
+        r["s3_location"]
+        for r in payload.get("reports", []) or []
+        if isinstance(r, dict) and r.get("s3_location")
+    ]
