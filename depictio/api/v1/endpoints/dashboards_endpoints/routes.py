@@ -240,7 +240,7 @@ async def get_dashboard(
     # multiple users don't pile up real work — they each enqueue a task that
     # mostly no-ops. Cold viewer load drops from ~14 s to <1 s once warm.
     has_multiqc = any(
-        m.get("component_type") == "multiqc" for m in (dashboard_data.get("stored_metadata") or [])
+        m.get("component_type") == "multiqc" for m in (dashboard_dict.get("stored_metadata") or [])
     )
     if has_multiqc:
         try:

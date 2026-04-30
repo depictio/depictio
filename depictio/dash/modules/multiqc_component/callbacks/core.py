@@ -7,6 +7,7 @@ Design-mode callbacks (module/plot/dataset selectors) are in design.py.
 import copy
 import hashlib
 import os
+import re
 from datetime import datetime
 from typing import Any
 
@@ -149,23 +150,47 @@ def _extract_sample_filters(
     return filtered_samples
 
 
+_SAMPLE_SUFFIX_RE = re.compile(r"_(?:R?\d+|REP\d+|TECH\d+)$", re.IGNORECASE)
+
+
 def expand_canonical_samples_to_variants(
     canonical_samples: list[str], sample_mappings: dict[str, list[str]]
 ) -> list[str]:
     """Expand canonical sample IDs to all their MultiQC variants using stored mappings.
+
+    Lookup tries exact key first, then falls back to base-name match
+    (stripping ``_R1`` / ``_R2`` / ``_1`` / ``_REP1`` style suffixes from
+    the mapping keys). Without the fallback, an interactive MultiSelect on
+    a sample column emitting a base name like ``HG001`` matches nothing in
+    a mapping keyed by ``HG001_R1`` / ``HG001_R2`` (MultiQC's own keying
+    when read-pair suffixes are present), so plot patching shows nothing.
 
     When no mappings are available, returns canonical samples unchanged.
     """
     if not sample_mappings:
         return canonical_samples
 
-    expanded_samples = []
+    # Pre-bucket keys by suffix-stripped base. Mappings come pre-aggregated
+    # across reports, so the same base can show up in multiple suffixed
+    # keys (HG001_R1 + HG001_R2) — union their variants.
+    base_to_variants: dict[str, list[str]] = {}
+    for key, variants in sample_mappings.items():
+        base = _SAMPLE_SUFFIX_RE.sub("", key).lower()
+        base_to_variants.setdefault(base, []).extend(variants)
+
+    expanded_samples: list[str] = []
     for canonical_id in canonical_samples:
-        variants = sample_mappings.get(canonical_id, [])
+        variants = sample_mappings.get(canonical_id)
         if variants:
             expanded_samples.extend(variants)
-        else:
-            expanded_samples.append(canonical_id)
+            continue
+
+        fallback = base_to_variants.get(canonical_id.lower())
+        if fallback:
+            expanded_samples.extend(dict.fromkeys(fallback))
+            continue
+
+        expanded_samples.append(canonical_id)
 
     return expanded_samples
 
@@ -381,10 +406,11 @@ def register_core_callbacks(app):
         Output({"type": "general-stats-wrapper", "index": MATCH}, "children"),
         Input({"type": "multiqc-trigger", "index": MATCH}, "data"),
         State({"type": "multiqc-trace-metadata", "index": MATCH}, "data"),
+        State("local-store", "data"),
         background=False,
         prevent_initial_call="initial_duplicate",  # Allow duplicate + initial call
     )
-    def render_multiqc_from_trigger(trigger_data, existing_trace_metadata):
+    def render_multiqc_from_trigger(trigger_data, existing_trace_metadata, local_data):
         """Render MultiQC plot for view mode, toggling between regular plot and general stats."""
         no_update_all = (
             dash.no_update,
@@ -400,12 +426,33 @@ def register_core_callbacks(app):
         if not trigger_data:
             return no_update_all
 
-        s3_locations = trigger_data.get("s3_locations", [])
+        snapshot_s3_locations = trigger_data.get("s3_locations", [])
         selected_module = trigger_data.get("module")
         selected_plot = trigger_data.get("plot")
         selected_dataset = trigger_data.get("dataset_id")
         theme = trigger_data.get("theme", "light")
         component_id = trigger_data.get("component_id", "unknown")
+        data_collection_id = trigger_data.get("data_collection_id")
+
+        # Live-fetch the DC's current s3_locations so plots stay consistent
+        # with the latest reports after appends/replaces. The snapshot in
+        # trigger_data is only a fallback (older dashboards or fetch
+        # failures). Without this two plots on the same dashboard rendered
+        # against different historical S3 hashes after a series of uploads.
+        access_token = (local_data or {}).get("access_token")
+        s3_locations = snapshot_s3_locations
+        if data_collection_id and access_token:
+            try:
+                from depictio.dash.api_calls import api_call_fetch_dc_s3_locations
+
+                live = api_call_fetch_dc_s3_locations(str(data_collection_id), access_token)
+                if live:
+                    s3_locations = live
+            except Exception as e:
+                logger.warning(
+                    f"render_multiqc_from_trigger: live s3_locations fetch failed for "
+                    f"{data_collection_id}: {e} — falling back to snapshot"
+                )
 
         if not selected_module or not selected_plot or not s3_locations:
             return (
@@ -619,6 +666,35 @@ def register_core_callbacks(app):
         )
         if not multiqc_dc_id:
             return dash.no_update
+
+        # Replace the snapshot's sample_mappings with the current union from
+        # MongoDB. Without this, two interaction paths (filter / unfilter)
+        # fall back to the stale snapshot's mappings, so canonical→variant
+        # expansion misses every report appended after the dashboard
+        # component was first saved. After several appends, different
+        # components on the same dashboard each revert to a different stale
+        # subset (one shows SRR-only, another HG-only).
+        try:
+            project_id_for_mappings = stored_metadata.get("project_id")
+            if not project_id_for_mappings and project_metadata:
+                project_data_for_mappings = project_metadata.get("project", {}) or {}
+                project_id_for_mappings = project_data_for_mappings.get(
+                    "_id"
+                ) or project_data_for_mappings.get("id")
+            if project_id_for_mappings:
+                live_mappings = get_multiqc_sample_mappings(
+                    project_id=str(project_id_for_mappings),
+                    dc_id=str(multiqc_dc_id),
+                    token=token,
+                )
+                if live_mappings:
+                    # Shallow-copy + override so we don't mutate the trigger State.
+                    metadata = {**metadata, "sample_mappings": live_mappings}
+        except Exception as e:
+            logger.warning(
+                f"patch: live sample_mappings fetch failed for {multiqc_dc_id}: {e} — "
+                f"using snapshot mappings"
+            )
 
         result_dc_id = get_result_dc_for_workflow(workflow_id, token)
         use_link_resolution = not result_dc_id

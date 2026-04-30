@@ -9,7 +9,8 @@ This module provides REST API endpoints for managing MultiQC reports:
 """
 
 from bson import ObjectId
-from fastapi import APIRouter, Depends, Query, Response
+from bson.errors import InvalidId
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from pydantic import BaseModel
 
 from depictio.api.v1.celery_dispatch import offload_or_run
@@ -19,6 +20,7 @@ from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.endpoints.multiqc_endpoints.utils import (
     check_duplicate_multiqc_report,
     create_multiqc_report_in_db,
+    delete_all_multiqc_reports_for_dc,
     delete_multiqc_report_by_id,
     generate_multiqc_download_url,
     get_multiqc_report_by_id,
@@ -236,6 +238,35 @@ async def delete_multiqc_report(
         Deletion confirmation
     """
     return await delete_multiqc_report_by_id(report_id, delete_s3_file)
+
+
+@router.delete(
+    "/reports/data-collection/{data_collection_id}",
+    response_model=dict,
+    summary="Bulk-delete all MultiQC reports for a data collection",
+)
+async def delete_all_reports_for_data_collection(
+    data_collection_id: str,
+    delete_s3_files: bool = Query(
+        False, description="Whether to also delete the associated S3 parquet objects"
+    ),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Delete all MultiQC reports linked to a data collection in a single Mongo call.
+
+    Optionally also deletes the underlying S3 parquet objects. Returns counts for
+    both Mongo and S3 deletions.
+    """
+    try:
+        ObjectId(data_collection_id)
+    except (InvalidId, TypeError):
+        raise HTTPException(
+            status_code=400, detail=f"Invalid data collection id: {data_collection_id}"
+        )
+
+    result = await delete_all_multiqc_reports_for_dc(data_collection_id, delete_s3_files)
+    return {**result, "data_collection_id": data_collection_id}
 
 
 @router.get(
