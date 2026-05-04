@@ -175,7 +175,9 @@ const TimelineRenderer: React.FC<{
   metadata: StoredMetadata;
   filters: InteractiveFilter[];
   onChange?: (filter: InteractiveFilter) => void;
-}> = ({ metadata, filters, onChange }) => {
+  /** Compact rendering — tightens spacing and defaults marks to hidden. */
+  compact?: boolean;
+}> = ({ metadata, filters, onChange, compact }) => {
   const [bounds, setBounds] = useState<{ min: Date | null; max: Date | null } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -254,7 +256,10 @@ const TimelineRenderer: React.FC<{
   const hi = maxMs as number;
   const value: [number, number] = selected ?? [lo, hi];
   const ctx = buildFormatContext(lo, hi);
-  const marks = buildMarks(lo, hi, scale, ctx);
+  // YAML wins; otherwise compact mode hides marks for higher density.
+  const marksVisible =
+    typeof metadata.show_marks === 'boolean' ? metadata.show_marks : !compact;
+  const marks = marksVisible ? buildMarks(lo, hi, scale, ctx) : undefined;
 
   const stepFor = (s: Timescale): number => {
     const SEC = 1000;
@@ -308,10 +313,10 @@ const TimelineRenderer: React.FC<{
           onChange={(v) => setScale(v as Timescale)}
         />
       </Group>
-      <Box pt={4} pb={28} px={8}>
+      <Box pt={4} pb={marksVisible ? 28 : 4} px={8}>
         <RangeSlider
           size="sm"
-          thumbSize={14}
+          thumbSize={compact ? 12 : 14}
           min={lo}
           max={hi}
           step={sliderStep}
