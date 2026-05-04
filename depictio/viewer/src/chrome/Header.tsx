@@ -57,6 +57,8 @@ interface HeaderProps {
   onAddComponent?: () => void;
   /** Edit-mode only: invoked when the user clicks "Save". Should force-flush any pending debounced save. */
   onSave?: () => void;
+  /** Optional element rendered next to the action group (e.g. RealtimeIndicator). */
+  rightExtras?: React.ReactNode;
 }
 
 /**
@@ -81,6 +83,7 @@ const Header: React.FC<HeaderProps> = ({
   mode = 'view',
   onAddComponent,
   onSave,
+  rightExtras,
 }) => {
   const { colorScheme } = useMantineColorScheme();
   const theme: 'light' | 'dark' = colorScheme === 'dark' ? 'dark' : 'light';
@@ -267,6 +270,7 @@ const Header: React.FC<HeaderProps> = ({
         >
           Settings
         </Button>
+        {rightExtras}
       </Group>
     </Group>
   );

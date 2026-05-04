@@ -26,6 +26,7 @@ import React, {
   useCallback,
   useRef,
   useMemo,
+  useDeferredValue,
 } from 'react';
 import {
   AppShell,
@@ -53,18 +54,27 @@ import {
   reorderTabs,
   updateTab,
   DashboardGrid,
+  mergeFiltersBySource,
+  useDataCollectionUpdates,
+  RealtimeIndicator,
+  useRealtimeJournal,
 } from 'depictio-react-core';
 import type {
   DashboardData,
   DashboardSummary,
   InteractiveFilter,
   StoredMetadata,
+  RealtimeMode,
 } from 'depictio-react-core';
 
 import LeftFilterPanel from './components/LeftFilterPanel';
 import GridItemEditOverlay from './components/GridItemEditOverlay';
 import { Header, Sidebar, SettingsDrawer, TabModal } from './chrome';
 import type { TabModalSubmitPayload } from './chrome';
+import { useAuthMode } from './auth/hooks/useAuthMode';
+import DemoTour from './demo/DemoTour';
+import DemoModeBanner from './components/DemoModeBanner';
+import UpgradeToTemporaryButton from './components/UpgradeToTemporaryButton';
 import './chrome/chrome.css';
 
 const API_BASE = '/depictio/api/v1';
@@ -135,13 +145,21 @@ const EditorApp: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState<InteractiveFilter[]>([]);
+  // Deferred copy for heavy renderers (figures / tables / maps / image grid)
+  // so a slider drag doesn't refetch on every step. See App.tsx for context.
+  const deferredFilters = useDeferredValue(filters);
   const [cardValues, setCardValues] = useState<Record<string, unknown>>({});
+  const [cardSecondaryValues, setCardSecondaryValues] = useState<
+    Record<string, Record<string, unknown>>
+  >({});
   const [cardsLoading, setCardsLoading] = useState(false);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
   const [mobileOpened, { toggle: toggleMobile }] = useDisclosure(false);
   // Persist across tab/page navigations (matches App.tsx + Dash app).
   const [desktopOpened, toggleDesktop] = useSidebarOpen();
   const [settingsOpened, { open: openSettings, close: closeSettings }] = useDisclosure(false);
+  const auth = useAuthMode();
+  const isDemoMode = auth.status?.is_demo_mode === true;
   // Tab modal state — `mode` decides between create vs edit. `target` is the
   // tab being edited (or null for create). `submitting` blocks Save while a
   // request is in flight.
@@ -202,32 +220,28 @@ const EditorApp: React.FC = () => {
 
     const timer = setTimeout(() => {
       setCardsLoading(true);
-      // Reset card values so each card shows its individual loader while the
-      // bulk-compute round-trip is in flight (instead of keeping stale values
-      // visible until the response).
-      setCardValues({});
+      // Keep previous card values mounted while the new bulk-compute is in
+      // flight; CardRenderer dims the value via ``cardLoading`` instead of
+      // snapping to ``…``. See App.tsx for the matching change.
       if (bulkCtrl.current) bulkCtrl.current.abort();
       bulkCtrl.current = new AbortController();
       bulkComputeCards(dashboardId, filters, cardIds)
-        .then((res) => setCardValues(res.values))
+        .then((res) => {
+          setCardValues(res.values);
+          setCardSecondaryValues(res.secondary_values || {});
+        })
         .catch((err) => {
           if (err?.name !== 'AbortError') {
             console.warn('[EditorApp] bulk-compute failed:', err);
           }
         })
         .finally(() => setCardsLoading(false));
-    }, 150);
+    }, 250);
     return () => clearTimeout(timer);
   }, [dashboard, dashboardId, stableFilterKey(filters)]);
 
   const handleFilterChange = useCallback((update: InteractiveFilter) => {
-    setFilters((prev) => {
-      const without = prev.filter((f) => f.index !== update.index);
-      const hasValue = Array.isArray(update.value)
-        ? update.value.length > 0
-        : update.value != null && update.value !== '';
-      return hasValue ? [...without, update] : without;
-    });
+    setFilters((prev) => mergeFiltersBySource(prev, update));
   }, []);
 
   /** Debounced save: schedule a POST 500ms after the last layout mutation. */
@@ -513,6 +527,75 @@ const EditorApp: React.FC = () => {
 
   const handleResetAllFilters = useCallback(() => setFilters([]), []);
 
+  // ---- Realtime: WebSocket subscription mirrors App.tsx ---------------------
+  const [realtimeMode, setRealtimeMode] = useState<RealtimeMode>(() => {
+    try {
+      const v = localStorage.getItem('depictio.realtime.mode');
+      return v === 'auto' ? 'auto' : 'manual';
+    } catch {
+      return 'manual';
+    }
+  });
+  const [realtimePaused, setRealtimePaused] = useState(false);
+  const persistRealtimeMode = useCallback((next: RealtimeMode) => {
+    setRealtimeMode(next);
+    try {
+      localStorage.setItem('depictio.realtime.mode', next);
+    } catch {
+      // ignore quota / private mode
+    }
+  }, []);
+  const triggerRealtimeRefresh = useCallback(() => {
+    setFilters((prev) => [...prev]);
+  }, []);
+  const [journal, appendJournal, clearJournal] = useRealtimeJournal(50);
+  const onRealtimeUpdate = useCallback(
+    (
+      event: {
+        event_type: string;
+        data_collection_id?: string;
+        dashboard_id?: string;
+        payload?: Record<string, unknown>;
+      },
+      auto: boolean,
+    ) => {
+      const payload = event.payload || {};
+      const op = payload.operation as string | undefined;
+      const tag = payload.data_collection_tag as string | undefined;
+      const summary =
+        [op && `op=${op}`, tag && `tag=${tag}`].filter(Boolean).join(' ') ||
+        event.event_type;
+      appendJournal({
+        eventType: event.event_type,
+        dataCollectionId: event.data_collection_id,
+        dashboardId: event.dashboard_id,
+        summary,
+        payload,
+      });
+      if (auto) {
+        triggerRealtimeRefresh();
+        return;
+      }
+      notifications.show({
+        title: 'Data updated',
+        message: 'A linked data collection just changed. Click to refresh.',
+        color: 'blue',
+        autoClose: 8000,
+        onClick: () => triggerRealtimeRefresh(),
+      });
+    },
+    [triggerRealtimeRefresh, appendJournal],
+  );
+  // Gated on the project's ``realtime.enabled`` flag (project.yaml). Static
+  // projects never mount the WebSocket / indicator.
+  const realtimeEnabled = Boolean(dashboard?.project_realtime?.enabled);
+  const realtime = useDataCollectionUpdates(dashboardId, {
+    enabled: realtimeEnabled && Boolean(dashboardId),
+    mode: realtimeMode,
+    paused: realtimePaused,
+    onUpdate: onRealtimeUpdate,
+  });
+
   const handleAddComponent = useCallback(() => {
     if (!dashboardId) return;
     const newId =
@@ -771,6 +854,9 @@ const EditorApp: React.FC = () => {
   }, [dashboardId]);
 
   return (
+    <>
+      {isDemoMode && <DemoModeBanner />}
+      <DemoTour active={isDemoMode} />
     <AppShell
       header={{ height: 50 }}
       navbar={{
@@ -782,7 +868,7 @@ const EditorApp: React.FC = () => {
       transitionDuration={300}
       transitionTimingFunction="ease"
     >
-      <AppShell.Header>
+      <AppShell.Header data-tour-id="header-title">
         <Header
           dashboardId={dashboardId}
           dashboard={dashboard}
@@ -798,10 +884,33 @@ const EditorApp: React.FC = () => {
           mode="edit"
           onAddComponent={handleAddComponent}
           onSave={handleForceSave}
+          rightExtras={
+            <>
+              <UpgradeToTemporaryButton />
+              {realtimeEnabled && (
+                <span data-tour-id="realtime-indicator" style={{ display: 'inline-flex' }}>
+                  <RealtimeIndicator
+                    status={realtime.status}
+                    mode={realtimeMode}
+                    paused={realtimePaused}
+                    pendingUpdate={realtime.pendingUpdate}
+                    onModeChange={persistRealtimeMode}
+                    onPausedChange={setRealtimePaused}
+                    onAcknowledgePending={() => {
+                      realtime.acknowledgePending();
+                      triggerRealtimeRefresh();
+                    }}
+                    journal={journal}
+                    onClearJournal={clearJournal}
+                  />
+                </span>
+              )}
+            </>
+          }
         />
       </AppShell.Header>
 
-      <AppShell.Navbar p="md">
+      <AppShell.Navbar p="md" data-tour-id="sidebar">
         <Sidebar
           tabs={tabSiblings}
           activeId={dashboardId}
@@ -876,8 +985,10 @@ const EditorApp: React.FC = () => {
                 cardComponents={cardComponents}
                 otherComponents={otherComponents}
                 layoutData={dashboard.right_panel_layout_data}
-                filters={filters}
+                filters={deferredFilters}
+                onFilterChange={handleFilterChange}
                 cardValues={cardValues}
+                cardSecondaryValues={cardSecondaryValues}
                 cardsLoading={cardsLoading}
                 onLayoutChange={handleRightLayoutChange}
                 onDeleteComponent={handleDeleteComponent}
@@ -903,6 +1014,7 @@ const EditorApp: React.FC = () => {
         submitting={tabModalState.submitting}
       />
     </AppShell>
+    </>
   );
 };
 
@@ -918,7 +1030,9 @@ interface RightComponentGridProps {
   otherComponents: StoredMetadata[];
   layoutData: unknown;
   filters: InteractiveFilter[];
+  onFilterChange: (filter: InteractiveFilter) => void;
   cardValues: Record<string, unknown>;
+  cardSecondaryValues: Record<string, Record<string, unknown>>;
   cardsLoading: boolean;
   onLayoutChange: (newLayout: Layout[]) => void;
   onDeleteComponent: (componentId: string) => void;
@@ -939,7 +1053,9 @@ const RightComponentGrid: React.FC<RightComponentGridProps> = ({
   otherComponents,
   layoutData,
   filters,
+  onFilterChange,
   cardValues,
+  cardSecondaryValues,
   cardsLoading,
   onLayoutChange,
   onDeleteComponent,
@@ -971,7 +1087,9 @@ const RightComponentGrid: React.FC<RightComponentGridProps> = ({
       metadataList={allComponents}
       layoutData={layoutData}
       filters={filters}
+      onFilterChange={onFilterChange}
       cardValues={cardValues}
+      cardSecondaryValues={cardSecondaryValues}
       cardValuesLoading={cardsLoading}
       isDraggable={true}
       isResizable={true}
@@ -1002,8 +1120,14 @@ function extractDashboardId(): string | null {
 }
 
 function stableFilterKey(filters: InteractiveFilter[]): string {
-  const sorted = [...filters].sort((a, b) => a.index.localeCompare(b.index));
-  return JSON.stringify(sorted.map((f) => [f.index, f.value]));
+  // Key on (index, source, value) so chart selections coexist with regular
+  // filters under the same component index — switching only the ``source``
+  // still triggers the bulk-compute re-run.
+  const sorted = [...filters].sort((a, b) => {
+    if (a.index !== b.index) return a.index.localeCompare(b.index);
+    return (a.source ?? '').localeCompare(b.source ?? '');
+  });
+  return JSON.stringify(sorted.map((f) => [f.index, f.source ?? null, f.value]));
 }
 
 function stripBoxPrefix(id: string): string {

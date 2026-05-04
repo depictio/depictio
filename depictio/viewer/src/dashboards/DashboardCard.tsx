@@ -70,8 +70,19 @@ function formatLastSaved(raw: string): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-function screenshotUrl(dashboardId: string, theme: 'light' | 'dark'): string {
-  return `/static/screenshots/${dashboardId}_${theme}.png`;
+function screenshotUrl(
+  dashboardId: string,
+  theme: 'light' | 'dark',
+  lastSavedTs?: string,
+): string {
+  // Cache-bust on every save: the auto-screenshot job overwrites the file
+  // in place, so without a versioned URL the browser keeps showing the old
+  // image until a hard reload. ``last_saved_ts`` changes whenever the
+  // dashboard is saved (and the screenshot job runs as part of save), so
+  // it's the right version key.
+  const base = `/static/screenshots/${dashboardId}_${theme}.png`;
+  if (!lastSavedTs) return base;
+  return `${base}?v=${encodeURIComponent(lastSavedTs)}`;
 }
 
 const SingleThumbnail: React.FC<{
@@ -95,8 +106,8 @@ const SingleThumbnail: React.FC<{
   }
   return (
     <img
-      key={theme}
-      src={screenshotUrl(dashboard.dashboard_id, theme)}
+      key={`${theme}-${dashboard.last_saved_ts ?? ''}`}
+      src={screenshotUrl(dashboard.dashboard_id, theme, dashboard.last_saved_ts)}
       alt={dashboard.title || dashboard.dashboard_id}
       loading="lazy"
       decoding="async"

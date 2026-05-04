@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react';
+import React, { useEffect, useState, useCallback, useRef, useMemo, useDeferredValue } from 'react';
 import {
   AppShell,
   Group,
@@ -18,14 +18,28 @@ import {
   bulkComputeCards,
   ComponentRenderer,
   DashboardGrid,
+  InteractiveGroupCard,
+  TopPanel,
+  groupInteractiveComponents,
+  mergeFiltersBySource,
+  hasSelectionFilters,
+  useDataCollectionUpdates,
+  RealtimeIndicator,
+  useRealtimeJournal,
 } from 'depictio-react-core';
 import type {
   DashboardData,
   DashboardSummary,
   InteractiveFilter,
+  RealtimeMode,
 } from 'depictio-react-core';
+import { notifications } from '@mantine/notifications';
 import { Header, Sidebar, SettingsDrawer } from './chrome';
 import { useSidebarOpen } from './hooks/useSidebarOpen';
+import { useAuthMode } from './auth/hooks/useAuthMode';
+import DemoTour from './demo/DemoTour';
+import DemoModeBanner from './components/DemoModeBanner';
+import UpgradeToTemporaryButton from './components/UpgradeToTemporaryButton';
 
 /**
  * Top-level SPA. Layout:
@@ -48,13 +62,24 @@ const App: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState<InteractiveFilter[]>([]);
+  // Heavy renderers (figures / tables / maps / image grid) consume a deferred
+  // copy of the filter array — React batches updates while the user is still
+  // interacting (slider drag, multi-select typing) so the figure/table fetch
+  // doesn't re-fire on every intermediate value. Interactive controls keep
+  // using the live ``filters`` so they stay snappy under input.
+  const deferredFilters = useDeferredValue(filters);
   const [cardValues, setCardValues] = useState<Record<string, unknown>>({});
+  const [cardSecondaryValues, setCardSecondaryValues] = useState<
+    Record<string, Record<string, unknown>>
+  >({});
   const [cardsLoading, setCardsLoading] = useState(false);
   const [mobileOpened, { toggle: toggleMobile }] = useDisclosure(false);
   // Desktop state is persisted across tab/page navigations via the same
   // `sidebar-collapsed` localStorage key the Dash app writes.
   const [desktopOpened, toggleDesktop] = useSidebarOpen();
   const [settingsOpened, { open: openSettings, close: closeSettings }] = useDisclosure(false);
+  const auth = useAuthMode();
+  const isDemoMode = auth.status?.is_demo_mode === true;
 
   const dashboardId = extractDashboardId();
   const bulkCtrl = useRef<AbortController | null>(null);
@@ -86,6 +111,13 @@ const App: React.FC = () => {
       .finally(() => setLoading(false));
   }, [dashboardId]);
 
+  // Bumping a counter is the only signal effects can key off — every
+  // data-fetching effect uses ``stableFilterKey(filters)`` / ``JSON.stringify(filters)``
+  // as its dep, so a new ARRAY reference with identical contents is a no-op.
+  // ``refreshTick`` is wired into bulk-compute here and into every per-component
+  // fetch via ``DashboardGrid`` → ``ComponentRenderer``.
+  const [refreshTick, setRefreshTick] = useState(0);
+
   // Bulk-compute card values whenever filters change
   useEffect(() => {
     if (!dashboard || !dashboardId) return;
@@ -96,32 +128,118 @@ const App: React.FC = () => {
 
     const timer = setTimeout(() => {
       setCardsLoading(true);
-      // Reset card values so each card shows its individual loader while the
-      // bulk-compute round-trip is in flight.
-      setCardValues({});
+      // Keep the previous card values mounted while the new bulk-compute
+      // round-trip is in flight. ``cardsLoading`` is what CardRenderer
+      // already consults to dim the value — clearing the values here would
+      // snap every card back to ``…`` on every keystroke / drag step.
       if (bulkCtrl.current) bulkCtrl.current.abort();
       bulkCtrl.current = new AbortController();
       bulkComputeCards(dashboardId, filters, cardIds)
-        .then((res) => setCardValues(res.values))
+        .then((res) => {
+          setCardValues(res.values);
+          setCardSecondaryValues(res.secondary_values || {});
+        })
         .catch((err) => {
           if (err?.name !== 'AbortError') console.warn('[App] bulk-compute failed:', err);
         })
         .finally(() => setCardsLoading(false));
-    }, 150);
+    }, 250);
     return () => clearTimeout(timer);
-  }, [dashboard, dashboardId, stableFilterKey(filters)]);
+  }, [dashboard, dashboardId, stableFilterKey(filters), refreshTick]);
 
   const handleFilterChange = useCallback((update: InteractiveFilter) => {
-    setFilters((prev) => {
-      const without = prev.filter((f) => f.index !== update.index);
-      const hasValue = Array.isArray(update.value)
-        ? update.value.length > 0
-        : update.value != null && update.value !== '';
-      return hasValue ? [...without, update] : without;
-    });
+    // Dedupe by (index, source) so chart selections coexist with the same
+    // component's other filters. Mirrors mergeFiltersBySource in
+    // packages/depictio-react-core/src/selection.ts.
+    setFilters((prev) => mergeFiltersBySource(prev, update));
   }, []);
 
   const handleResetAllFilters = useCallback(() => setFilters([]), []);
+
+  // ---- Realtime: WebSocket subscription + UI toggle -------------------------
+  // Mode toggle persisted to localStorage so the user's choice survives
+  // reloads. Defaults to ``auto`` (silent re-fetch on update) — users who
+  // prefer notification-then-click can opt out via RealtimeIndicator.
+  const [realtimeMode, setRealtimeMode] = useState<RealtimeMode>(() => {
+    try {
+      const v = localStorage.getItem('depictio.realtime.mode');
+      return v === 'manual' ? 'manual' : 'auto';
+    } catch {
+      return 'auto';
+    }
+  });
+  const [realtimePaused, setRealtimePaused] = useState(false);
+  const persistMode = useCallback((next: RealtimeMode) => {
+    setRealtimeMode(next);
+    try {
+      localStorage.setItem('depictio.realtime.mode', next);
+    } catch {
+      // ignore quota / private mode
+    }
+  }, []);
+
+  // Persistent log of captured WS events (visible in the RealtimeIndicator
+  // dropdown). Survives page reload via localStorage. Cleared on demand via
+  // the "Reset" button on the dropdown.
+  const [journal, appendJournal, clearJournal] = useRealtimeJournal(50);
+
+  const triggerRefresh = useCallback(() => {
+    setRefreshTick((t) => t + 1);
+  }, []);
+
+  const onRealtimeUpdate = useCallback(
+    (
+      event: {
+        event_type: string;
+        data_collection_id?: string;
+        dashboard_id?: string;
+        payload?: Record<string, unknown>;
+      },
+      auto: boolean,
+    ) => {
+      // Always log the event — auto vs. manual only changes the visual UX,
+      // not whether the user wants to see it in the journal afterwards.
+      const payload = event.payload || {};
+      const op = payload.operation as string | undefined;
+      const tag = payload.data_collection_tag as string | undefined;
+      const summary = [
+        op && `op=${op}`,
+        tag && `tag=${tag}`,
+      ]
+        .filter(Boolean)
+        .join(' ') || event.event_type;
+      appendJournal({
+        eventType: event.event_type,
+        dataCollectionId: event.data_collection_id,
+        dashboardId: event.dashboard_id,
+        summary,
+        payload,
+      });
+      if (auto) {
+        triggerRefresh();
+        return;
+      }
+      notifications.show({
+        title: 'Data updated',
+        message: 'A linked data collection just changed. Click to refresh.',
+        color: 'blue',
+        autoClose: 8000,
+        onClick: () => triggerRefresh(),
+      });
+    },
+    [triggerRefresh, appendJournal],
+  );
+
+  // Only subscribe + render the indicator when the dashboard's project has
+  // ``realtime.enabled === true`` in its YAML. Projects without that flag
+  // never see live-update UI — keeps the chrome quiet for static dashboards.
+  const realtimeEnabled = Boolean(dashboard?.project_realtime?.enabled);
+  const realtime = useDataCollectionUpdates(dashboardId, {
+    enabled: realtimeEnabled && Boolean(dashboardId),
+    mode: realtimeMode,
+    paused: realtimePaused,
+    onUpdate: onRealtimeUpdate,
+  });
 
   // Group tabs: parent dashboard + all its child tabs.
   const tabSiblings = useMemo(() => {
@@ -153,6 +271,18 @@ const App: React.FC = () => {
     () => (dashboard?.stored_metadata || []).filter((m) => m.component_type === 'interactive'),
     [dashboard],
   );
+  const topComponents = useMemo(
+    () => interactiveComponents.filter((m) => m.placement === 'top'),
+    [interactiveComponents],
+  );
+  const leftComponents = useMemo(
+    () => interactiveComponents.filter((m) => m.placement !== 'top'),
+    [interactiveComponents],
+  );
+  const leftGroups = useMemo(
+    () => groupInteractiveComponents(leftComponents),
+    [leftComponents],
+  );
   const cardComponents = useMemo(
     () => (dashboard?.stored_metadata || []).filter((m) => m.component_type === 'card'),
     [dashboard],
@@ -174,7 +304,10 @@ const App: React.FC = () => {
   );
 
   return (
-    <AppShell
+    <>
+      {isDemoMode && <DemoModeBanner />}
+      <DemoTour active={isDemoMode} />
+      <AppShell
       header={{ height: 50 }}
       navbar={{
         width: 250,
@@ -185,7 +318,7 @@ const App: React.FC = () => {
       transitionDuration={300}
       transitionTimingFunction="ease"
     >
-      <AppShell.Header>
+      <AppShell.Header data-tour-id="header-title">
         <Header
           dashboardId={dashboardId}
           dashboard={dashboard}
@@ -198,10 +331,33 @@ const App: React.FC = () => {
           onReset={handleResetAllFilters}
           onOpenSettings={openSettings}
           cardsLoading={cardsLoading}
+          rightExtras={
+            <>
+              <UpgradeToTemporaryButton />
+              {realtimeEnabled && (
+                <span data-tour-id="realtime-indicator" style={{ display: 'inline-flex' }}>
+                  <RealtimeIndicator
+                    status={realtime.status}
+                    mode={realtimeMode}
+                    paused={realtimePaused}
+                    pendingUpdate={realtime.pendingUpdate}
+                    onModeChange={persistMode}
+                    onPausedChange={setRealtimePaused}
+                    onAcknowledgePending={() => {
+                      realtime.acknowledgePending();
+                      triggerRefresh();
+                    }}
+                    journal={journal}
+                    onClearJournal={clearJournal}
+                  />
+                </span>
+              )}
+            </>
+          }
         />
       </AppShell.Header>
 
-      <AppShell.Navbar p="md">
+      <AppShell.Navbar p="md" data-tour-id="sidebar">
         <Sidebar tabs={tabSiblings} activeId={dashboardId} />
       </AppShell.Navbar>
 
@@ -234,22 +390,50 @@ const App: React.FC = () => {
                 overflowX: 'hidden',
               }}
             >
-              <Paper p="md" withBorder radius="md" style={{ height: '100%' }}>
+              <Paper
+                p="md"
+                withBorder
+                radius="md"
+                style={{ height: '100%' }}
+                data-tour-id="filter-panel"
+              >
                 <Title order={5} mb="sm">
                   Filters
                 </Title>
                 <Stack gap="sm">
-                  {interactiveComponents.length === 0 && (
+                  {leftComponents.length === 0 && (
                     <Text size="sm" c="dimmed">No interactive components.</Text>
                   )}
-                  {interactiveComponents.map((m) => (
-                    <ComponentRenderer
-                      key={m.index}
-                      metadata={m}
-                      filters={filters}
-                      onFilterChange={handleFilterChange}
-                    />
-                  ))}
+                  {leftGroups.map((g) =>
+                    g.groupName ? (
+                      <InteractiveGroupCard
+                        key={g.key}
+                        groupName={g.groupName}
+                        members={g.members}
+                        filters={filters}
+                        onFilterChange={handleFilterChange}
+                      />
+                    ) : (
+                      <ComponentRenderer
+                        key={g.key}
+                        metadata={g.members[0]}
+                        filters={filters}
+                        onFilterChange={handleFilterChange}
+                      />
+                    ),
+                  )}
+                  {hasSelectionFilters(filters) && (
+                    <Anchor
+                      component="button"
+                      onClick={() =>
+                        setFilters((prev) => prev.filter((f) => f.source === undefined))
+                      }
+                      size="xs"
+                      mt="xs"
+                    >
+                      Clear chart selections
+                    </Anchor>
+                  )}
                   {filters.length > 0 && (
                     <Anchor
                       component="button"
@@ -271,19 +455,33 @@ const App: React.FC = () => {
                 minWidth: 0,
                 overflowY: 'auto',
                 overflowX: 'hidden',
+                display: 'flex',
+                flexDirection: 'column',
               }}
             >
-              <DashboardGrid
-                dashboardId={dashboardId!}
-                metadataList={rightComponents}
-                layoutData={dashboard.right_panel_layout_data}
-                filters={filters}
-                cardValues={cardValues}
-                cardValuesLoading={cardsLoading}
-                isDraggable={false}
-                isResizable={false}
-                editMode={false}
-              />
+              {topComponents.length > 0 && (
+                <TopPanel
+                  components={topComponents}
+                  filters={filters}
+                  onFilterChange={handleFilterChange}
+                />
+              )}
+              <Box style={{ flex: 1, minHeight: 0 }}>
+                <DashboardGrid
+                  dashboardId={dashboardId!}
+                  metadataList={rightComponents}
+                  layoutData={dashboard.right_panel_layout_data}
+                  filters={deferredFilters}
+                  onFilterChange={handleFilterChange}
+                  cardValues={cardValues}
+                  cardSecondaryValues={cardSecondaryValues}
+                  cardValuesLoading={cardsLoading}
+                  refreshTick={refreshTick}
+                  isDraggable={false}
+                  isResizable={false}
+                  editMode={false}
+                />
+              </Box>
             </Box>
           </div>
         )}
@@ -295,6 +493,7 @@ const App: React.FC = () => {
         dashboard={dashboard}
       />
     </AppShell>
+    </>
   );
 };
 
@@ -309,6 +508,12 @@ function extractDashboardId(): string | null {
 }
 
 function stableFilterKey(filters: InteractiveFilter[]): string {
-  const sorted = [...filters].sort((a, b) => a.index.localeCompare(b.index));
-  return JSON.stringify(sorted.map((f) => [f.index, f.value]));
+  // Key on (index, source, value) so chart selections coexist with regular
+  // filters under the same component index — switching only the ``source``
+  // still triggers the bulk-compute re-run.
+  const sorted = [...filters].sort((a, b) => {
+    if (a.index !== b.index) return a.index.localeCompare(b.index);
+    return (a.source ?? '').localeCompare(b.source ?? '');
+  });
+  return JSON.stringify(sorted.map((f) => [f.index, f.source ?? null, f.value]));
 }

@@ -25,6 +25,9 @@ interface SlideData {
   title: string;
   icon: string;
   color: string;
+  /** Cache-bust key — flips whenever the dashboard is saved, so the
+   *  thumbnail re-fetches after the auto-screenshot job overwrites it. */
+  version?: string;
 }
 
 function toSlide(d: DashboardListEntry, isParent: boolean): SlideData {
@@ -40,7 +43,7 @@ function toSlide(d: DashboardListEntry, isParent: boolean): SlideData {
     (isParent && typeof d.main_tab_name === 'string' && d.main_tab_name) ||
     (typeof d.title === 'string' && d.title) ||
     d.dashboard_id;
-  return { id: d.dashboard_id, title, icon, color };
+  return { id: d.dashboard_id, title, icon, color, version: d.last_saved_ts };
 }
 
 const SlideImage: React.FC<{
@@ -58,10 +61,11 @@ const SlideImage: React.FC<{
       </Center>
     );
   }
+  const versionQuery = slide.version ? `?v=${encodeURIComponent(slide.version)}` : '';
   return (
     <img
-      key={theme}
-      src={`/static/screenshots/${slide.id}_${theme}.png`}
+      key={`${theme}-${slide.version ?? ''}`}
+      src={`/static/screenshots/${slide.id}_${theme}.png${versionQuery}`}
       alt={slide.title}
       loading="lazy"
       decoding="async"

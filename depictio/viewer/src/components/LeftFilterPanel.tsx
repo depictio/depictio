@@ -35,9 +35,10 @@ interface LeftFilterPanelProps {
   width?: number;
 }
 
-// Compact filter rows: rowHeight=40, h=2 → 80 px per filter (tighter than
-// Dash's default 100 px). User asked for more compaction so more filters fit
-// without scrolling.
+// Compact filter rows: rowHeight=40, h=2 → 80 px per filter. Tighter than
+// Dash's default 100 px so more filters fit without scrolling. All
+// interactive components — including DateRangePicker — share the same
+// height for visual uniformity in the panel.
 const ROW_HEIGHT = 40;
 const DEFAULT_H = 2;
 
@@ -47,9 +48,6 @@ function normalizeLeftLayout(
 ): Layout[] {
   const items = extractLayoutItems(layoutData);
   const indexSet = new Set(components.map((c) => c.index));
-  // All interactive components share the SAME height (DEFAULT_H). User asked
-  // for visual uniformity in the filter panel — preserve only the user's
-  // chosen ORDER (y position), not per-item heights.
   const matched = items
     .map((it) => ({ ...it, i: stripBoxPrefix(it.i), w: 1, h: DEFAULT_H }))
     .filter((it) => indexSet.has(it.i));
@@ -133,6 +131,7 @@ const LeftFilterPanel: React.FC<LeftFilterPanelProps> = ({
       withBorder
       radius="md"
       style={{ height: '100%', overflow: 'hidden' }}
+      data-tour-id="filter-panel"
     >
       <Title order={5} mb="sm">
         Filters
