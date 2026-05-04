@@ -27,6 +27,23 @@ export function useInView<T extends Element>(
       setInView(true);
       return;
     }
+    // Synchronous viewport check first: if the element is already on-screen
+    // (or within ``rootMargin`` of it) we can flip ``inView`` immediately
+    // without waiting for the observer's first callback. Some environments
+    // (background tabs, embedded iframes, headless automation) throttle
+    // IntersectionObserver such that the initial entry never fires —
+    // without this fast path the component stays stuck in its loader state.
+    const margin = parseInt(rootMargin, 10) || 0;
+    const rect = node.getBoundingClientRect();
+    if (
+      rect.bottom > -margin &&
+      rect.top < window.innerHeight + margin &&
+      rect.right > -margin &&
+      rect.left < window.innerWidth + margin
+    ) {
+      setInView(true);
+      return;
+    }
     const obs = new IntersectionObserver(
       ([entry]) => {
         if (entry.isIntersecting) {

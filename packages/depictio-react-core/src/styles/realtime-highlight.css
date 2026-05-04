@@ -1,0 +1,38 @@
+/**
+ * Transient highlight animations for newly-arrived data after a realtime
+ * `data_collection_updated` event. Each animation is one-shot and fades to
+ * transparent / no-shadow so the class can stay on the element after it
+ * completes — no JS cleanup needed.
+ *
+ * Default duration is 3s to match `ComponentRealtimeOptions.highlight_duration_ms`
+ * in `depictio/models/models/realtime.py`. Components that want a different
+ * duration can override via inline `style={{ animationDuration: '...' }}`.
+ */
+
+@keyframes depictio-row-flash {
+  0%   { background-color: rgba(255, 235, 59, 0.55); }
+  60%  { background-color: rgba(255, 235, 59, 0.25); }
+  100% { background-color: transparent; }
+}
+
+@keyframes depictio-card-glow {
+  0% {
+    box-shadow: 0 0 0 3px rgba(255, 152, 0, 0.85),
+                0 0 16px 4px rgba(255, 193, 7, 0.55);
+  }
+  60% {
+    box-shadow: 0 0 0 2px rgba(255, 152, 0, 0.4),
+                0 0 8px 2px rgba(255, 193, 7, 0.25);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(255, 152, 0, 0), 0 0 0 0 rgba(255, 193, 7, 0);
+  }
+}
+
+.depictio-row-new {
+  animation: depictio-row-flash 3s ease-out;
+}
+
+.depictio-card-new {
+  animation: depictio-card-glow 3s ease-out;
+}
