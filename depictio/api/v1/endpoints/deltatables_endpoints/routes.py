@@ -222,6 +222,22 @@ async def upsert_deltatable(
             )
         deltatables_collection.insert_one(deltatable.mongo())
 
+    # The CLI just rewrote the delta — drop every cached DataFrame for this DC
+    # so subsequent ``render_*`` calls see fresh rows. Without this the in-process
+    # memory cache + Redis cache continue to serve the pre-rewrite DataFrame even
+    # after the on-disk delta is gone.
+    try:
+        from depictio.api.v1.deltatables_utils import invalidate_data_collection_cache
+
+        dropped = invalidate_data_collection_cache(str(data_collection_oid))
+        if dropped:
+            logger.info(
+                f"upsert_deltatable: invalidated {dropped} cached DataFrame(s) for "
+                f"dc_id={data_collection_oid}"
+            )
+    except Exception as e:
+        logger.warning(f"upsert_deltatable: cache invalidation failed: {e}")
+
         # Add size to deltatable's flexible_metadata if provided
         if payload.deltatable_size_bytes is not None and not is_multiqc:
             # First ensure flexible_metadata is not null (MongoDB can't set nested fields on null)
@@ -389,6 +405,7 @@ async def get_unique_values(
     data_collection_id: PyObjectId,
     column: str,
     limit: int = 1000,
+    filter_expr: str | None = None,
     current_user: str = Depends(get_user_or_anonymous),
 ):
     """Return the sorted unique values of ``column`` within a data collection.
@@ -402,6 +419,9 @@ async def get_unique_values(
         column: Column name whose unique values to return.
         limit: Max values to return (default 1000). Prevents unbounded payloads
             on high-cardinality columns; MultiSelect's UX caps at 100 anyway.
+        filter_expr: Optional Polars filter expression (string) applied before
+            collecting unique values. Validated through the safe-eval pipeline
+            in ``depictio.models.components.filter_expr``.
         current_user: Authenticated or anonymous user (permission-checked).
 
     Returns:
@@ -444,6 +464,23 @@ async def get_unique_values(
 
     try:
         lazy = pl.scan_delta(delta_table_location, storage_options=polars_s3_config)
+
+        if filter_expr:
+            from depictio.models.components.filter_expr import (
+                build_filter_expr,
+                validate_filter_expr,
+            )
+
+            try:
+                validate_filter_expr(filter_expr)
+                expr = build_filter_expr(filter_expr)
+            except Exception as exc:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Invalid filter_expr: {exc}",
+                )
+            lazy = lazy.filter(expr)
+
         try:
             df = lazy.select(column).unique().limit(limit).collect()
         except pl.exceptions.ColumnNotFoundError:
