@@ -2,7 +2,7 @@ import asyncio
 import json
 import uuid
 from datetime import datetime
-from typing import Any
+from typing import Annotated, Any
 from uuid import UUID
 
 import yaml
@@ -22,7 +22,12 @@ from depictio.api.v1.endpoints.dashboards_endpoints.core_functions import (
     reorder_child_tabs,
     sync_tab_family_permissions,
 )
-from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user, get_user_or_anonymous
+from depictio.api.v1.endpoints.user_endpoints.routes import (
+    get_current_user,
+    get_user_or_anonymous,
+    oauth2_scheme_optional,
+)
+from depictio.api.v1.filter_links import extend_filters_via_links
 from depictio.models.models.base import PyObjectId, convert_objectid_to_str
 from depictio.models.models.dashboards import DashboardData, DashboardDataLite
 from depictio.models.models.users import TokenBeanie, User, UserBeanie
@@ -215,6 +220,19 @@ async def get_dashboard(
     parent_title = get_parent_dashboard_title(dashboard_dict)
     if parent_title:
         dashboard_dict["parent_dashboard_title"] = parent_title
+
+    # Surface the project's realtime config so the React viewer can decide
+    # whether to mount the RealtimeIndicator. A project without
+    # ``realtime.enabled = true`` should never show live-update UI.
+    project_doc = projects_collection.find_one({"_id": ObjectId(project_id)})
+    realtime_cfg = (project_doc or {}).get("realtime")
+    if realtime_cfg:
+        dashboard_dict["project_realtime"] = {
+            "enabled": bool(realtime_cfg.get("enabled", False)),
+            "debounce_ms": int(realtime_cfg.get("debounce_ms", 1000)),
+        }
+    else:
+        dashboard_dict["project_realtime"] = {"enabled": False, "debounce_ms": 1000}
 
     # Fire-and-forget prewarm: if this dashboard has any MultiQC components,
     # dispatch a Celery task that pre-renders them all into Redis. The task
@@ -1436,11 +1454,143 @@ def _agg_value(col: Any, aggregation: str) -> Any:
     return None
 
 
+def _resolve_link_filters(
+    filters: list[dict],
+    target_dc_id: str,
+    project_id: Any,
+    access_token: str | None,
+    component_type: str,
+) -> list[dict]:
+    """Append synthetic filters resolved via DC links to the React-supplied list.
+
+    Mirrors what ``_extract_filters_for_image`` (and the Dash figure/table
+    callbacks) do. Each React-supplied filter exposes ``metadata.dc_id``; we
+    group them by source DC, fetch project metadata, and ask
+    ``extend_filters_via_links`` to derive any extra filters that should apply
+    to the target DC. The returned list is the original filters plus any link-
+    resolved synthetic filters, all in the same payload shape that the existing
+    ``filter_metadata`` builders consume.
+    """
+    if not filters or not target_dc_id or not project_id or not access_token:
+        return list(filters)
+
+    filters_by_dc: dict[str, list[dict]] = {}
+    for f in filters:
+        meta = f.get("metadata") or {}
+        dc_id = str(meta.get("dc_id") or f.get("dc_id") or "")
+        if not dc_id:
+            continue
+        entry = {
+            "index": f.get("index"),
+            "value": f.get("value"),
+            "source": f.get("source") or meta.get("source"),
+            "metadata": {
+                "dc_id": dc_id,
+                "column_name": meta.get("column_name") or f.get("column_name"),
+                "interactive_component_type": meta.get("interactive_component_type")
+                or f.get("interactive_component_type"),
+                "selection_column": meta.get("selection_column"),
+            },
+        }
+        filters_by_dc.setdefault(dc_id, []).append(entry)
+
+    try:
+        project_doc = projects_collection.find_one({"_id": ObjectId(str(project_id))})
+    except Exception as e:
+        logger.warning(f"link-resolve: project fetch failed for {project_id}: {e}")
+        return list(filters)
+    if not project_doc:
+        return list(filters)
+
+    project_metadata = {"project": convert_objectid_to_str(project_doc)}
+    extra = extend_filters_via_links(
+        target_dc_id=str(target_dc_id),
+        filters_by_dc=filters_by_dc,
+        project_metadata=project_metadata,
+        access_token=access_token,
+        component_type=component_type,
+    )
+    if not extra:
+        return list(filters)
+
+    flattened: list[dict] = []
+    for ef in extra:
+        meta = ef.get("metadata") or {}
+        flattened.append(
+            {
+                "index": ef.get("index"),
+                "value": ef.get("value"),
+                "column_name": meta.get("column_name"),
+                "interactive_component_type": meta.get("interactive_component_type")
+                or "MultiSelect",
+                "metadata": {
+                    "dc_id": str(target_dc_id),
+                    "column_name": meta.get("column_name"),
+                    "interactive_component_type": meta.get("interactive_component_type")
+                    or "MultiSelect",
+                },
+            }
+        )
+    return list(filters) + flattened
+
+
+def _own_selection_values(filters: list[dict], component: dict, source: str) -> list | None:
+    """Pluck the values for this component's own active selection, if any.
+
+    The React viewer stores selection emits as filters with
+    ``source="scatter_selection"|"table_selection"|"map_selection"`` and
+    ``index`` set to the emitting component's index. When we re-render that
+    component, we pass the matching values back as ``active_selection_values``
+    so the figure/map re-highlights the user's selection.
+    """
+    target_idx = str(component.get("index"))
+    for f in filters:
+        if str(f.get("index")) != target_idx:
+            continue
+        if (f.get("source") or (f.get("metadata") or {}).get("source")) != source:
+            continue
+        value = f.get("value")
+        if not value:
+            return None
+        return value if isinstance(value, list) else [value]
+    return None
+
+
+def _build_filter_metadata(filters: list[dict]) -> list[dict]:
+    """Convert React filter payloads into the shape ``load_deltatable_lite`` expects.
+
+    Skips entries that are missing a ``column_name`` or whose value is empty;
+    those wouldn't survive ``process_metadata_and_filter`` anyway.
+
+    Carries ``filter_expr`` through (top-level or under ``metadata``) so the
+    server-side pipeline can AND the source's row-scoping expression alongside
+    the user-supplied value.
+    """
+    out: list[dict] = []
+    for f in filters:
+        meta = f.get("metadata") or {}
+        column_name = f.get("column_name") or meta.get("column_name")
+        if not column_name or f.get("value") in (None, [], ""):
+            continue
+        entry: dict = {
+            "interactive_component_type": f.get("interactive_component_type")
+            or meta.get("interactive_component_type"),
+            "column_name": column_name,
+            "value": f.get("value"),
+        }
+        filter_expr = f.get("filter_expr") or meta.get("filter_expr")
+        if filter_expr:
+            entry["filter_expr"] = filter_expr
+        out.append(entry)
+    return out
+
+
 @dashboards_endpoint_router.post("/bulk_compute_cards/{dashboard_id}")
 def bulk_compute_cards(
     dashboard_id: PyObjectId,
     request: dict,
     current_user: User = Depends(get_user_or_anonymous),
+    access_token: Annotated[str | None, Depends(oauth2_scheme_optional)] = None,
 ):
     """Compute card values with interactive filters applied.
 
@@ -1461,9 +1611,17 @@ def bulk_compute_cards(
     Response:
         {
             "values": {"<component_index>": <scalar or null>, ...},
+            "secondary_values": {
+                "<component_index>": {"<aggregation>": <scalar or null>, ...},
+                ...
+            },
+            "aggregations": {"<component_index>": ["<aggregation>", ...], ...},
             "filter_applied": bool,
             "filter_count": int
         }
+
+        ``secondary_values`` and ``aggregations`` are only populated for cards
+        that declare ``aggregations`` in YAML (multi-metrics card).
 
     Notes:
         - Uses load_deltatable_lite with the same metadata format as Dash so
@@ -1522,16 +1680,11 @@ def bulk_compute_cards(
             }
 
     # Filters are global (applied to any card whose DC contains the filter column).
-    # Wrap into the shape process_metadata_and_filter expects.
-    filter_metadata = [
-        {
-            "interactive_component_type": f.get("interactive_component_type"),
-            "column_name": f.get("column_name"),
-            "value": f.get("value"),
-        }
-        for f in filters
-        if f.get("column_name") and f.get("value") not in (None, [], "")
-    ]
+    # The base list is what the React viewer sent. Per card we additionally
+    # apply DC-link resolution so cards on a target DC pick up filters from
+    # source DCs they're linked to (mirrors the Dash callback path via
+    # extend_filters_via_links).
+    base_filter_metadata = _build_filter_metadata(filters)
 
     # Dedupe Delta loads per (wf_id, dc_id). One load can serve N cards.
     df_cache: dict[tuple, Any] = {}
@@ -1539,12 +1692,33 @@ def bulk_compute_cards(
     # Mirrors `/deltatables/specs/{dc_id}` shape: {column: {aggregation: value}}.
     specs_cache: dict[str, dict] = {}
     values: dict[str, Any] = {}
+    # Multi-metrics card: per-card map of secondary aggregation results.
+    secondary_values: dict[str, dict[str, Any]] = {}
+    aggregations_per_card: dict[str, list[str]] = {}
 
-    has_filters = len(filter_metadata) > 0
+    has_filters = len(base_filter_metadata) > 0
     logger.debug(
         f"bulk_compute_cards: dashboard={dashboard_id} cards={len(cards)} "
-        f"init_data_keys={list(init_data.keys())} filters={len(filter_metadata)}"
+        f"init_data_keys={list(init_data.keys())} filters={len(base_filter_metadata)}"
     )
+
+    # Per-DC link-resolved filter cache so we only call the link API once per
+    # target DC. The result already includes the original React-supplied
+    # filters, so it can be passed straight to load_deltatable_lite.
+    resolved_per_dc: dict[str, list[dict]] = {}
+
+    def _resolved_filters_for(dc_id_str: str) -> list[dict]:
+        if dc_id_str in resolved_per_dc:
+            return resolved_per_dc[dc_id_str]
+        merged = _resolve_link_filters(
+            filters=filters,
+            target_dc_id=dc_id_str,
+            project_id=project_id,
+            access_token=access_token,
+            component_type="card",
+        )
+        resolved_per_dc[dc_id_str] = _build_filter_metadata(merged)
+        return resolved_per_dc[dc_id_str]
 
     def _get_specs(dc_id_str: str) -> dict[str, dict]:
         """Return precomputed column aggregations as ``{column_name: specs_dict}``.
@@ -1578,6 +1752,10 @@ def bulk_compute_cards(
         dc_id = card.get("dc_id")
         column = card.get("column_name")
         aggregation = card.get("aggregation")
+        secondary_aggs_raw = card.get("aggregations") or []
+        secondary_aggs = [a for a in secondary_aggs_raw if a and a != aggregation]
+        if secondary_aggs:
+            aggregations_per_card[idx] = secondary_aggs
 
         if not (wf_id and dc_id and column and aggregation):
             logger.warning(
@@ -1602,18 +1780,45 @@ def bulk_compute_cards(
                 logger.debug(
                     f"bulk_compute_cards: {idx} ({aggregation}/{column}) = {values[idx]} (specs)"
                 )
-                continue
+                if secondary_aggs:
+                    sec: dict[str, Any] = {}
+                    all_specs_present = True
+                    for sa in secondary_aggs:
+                        sv = col_specs.get(sa)
+                        if sv is None:
+                            all_specs_present = False
+                            break
+                        sec[sa] = float(sv) if isinstance(sv, (int, float)) else sv
+                    if all_specs_present:
+                        secondary_values[idx] = sec
+                        continue
+                    # Fall through to slow path to compute secondary values
+                else:
+                    continue
 
         # Slow path: load Delta and compute. Required when filters change the
         # input set, or when the precomputed aggregation isn't available.
-        cache_key = (str(wf_id), str(dc_id))
+        # Cache key includes the filter signature so two cards on the same DC
+        # with different (link-resolved) filter sets don't collide.
+        card_filters = _resolved_filters_for(str(dc_id))
+        filter_sig = tuple(
+            sorted(
+                (
+                    str(fm.get("column_name")),
+                    str(fm.get("interactive_component_type")),
+                    repr(fm.get("value")),
+                )
+                for fm in card_filters
+            )
+        )
+        cache_key = (str(wf_id), str(dc_id), filter_sig)
         df = df_cache.get(cache_key)
         if df is None:
             try:
                 df = load_deltatable_lite(
                     workflow_id=ObjectId(str(wf_id)) if not isinstance(wf_id, ObjectId) else wf_id,
                     data_collection_id=str(dc_id),
-                    metadata=filter_metadata if filter_metadata else None,
+                    metadata=card_filters if card_filters else None,
                     init_data=init_data,
                 )
                 logger.debug(
@@ -1638,10 +1843,18 @@ def bulk_compute_cards(
         values[idx] = _agg_value(df[column], aggregation)
         logger.debug(f"bulk_compute_cards: {idx} ({aggregation}/{column}) = {values[idx]}")
 
+        if secondary_aggs:
+            sec_results: dict[str, Any] = {}
+            for sa in secondary_aggs:
+                sec_results[sa] = _agg_value(df[column], sa)
+            secondary_values[idx] = sec_results
+
     return {
         "values": values,
-        "filter_applied": len(filter_metadata) > 0,
-        "filter_count": len(filter_metadata),
+        "secondary_values": secondary_values,
+        "aggregations": aggregations_per_card,
+        "filter_applied": len(base_filter_metadata) > 0,
+        "filter_count": len(base_filter_metadata),
     }
 
 
@@ -1657,6 +1870,7 @@ async def render_figure_endpoint(
     request: dict,
     response: Response,
     current_user: User = Depends(get_user_or_anonymous),
+    access_token: Annotated[str | None, Depends(oauth2_scheme_optional)] = None,
 ):
     """Render a Plotly figure component as JSON for the React viewer.
 
@@ -1704,15 +1918,14 @@ async def render_figure_endpoint(
     if not wf_id or not dc_id:
         raise HTTPException(status_code=400, detail="Component missing wf_id/dc_id.")
 
-    filter_metadata = [
-        {
-            "interactive_component_type": f.get("interactive_component_type"),
-            "column_name": f.get("column_name"),
-            "value": f.get("value"),
-        }
-        for f in filters
-        if f.get("column_name") and f.get("value") not in (None, [], "")
-    ]
+    merged_filters = _resolve_link_filters(
+        filters=filters,
+        target_dc_id=str(dc_id),
+        project_id=project_id,
+        access_token=access_token,
+        component_type="figure",
+    )
+    filter_metadata = _build_filter_metadata(merged_filters)
 
     # Build a JSON-safe payload for the task. ObjectIds in the component dict
     # are normalized to strings so the JSON serializer doesn't choke; the task
@@ -1758,6 +1971,7 @@ def render_table_endpoint(
     component_id: str,
     request: dict,
     current_user: User = Depends(get_user_or_anonymous),
+    access_token: Annotated[str | None, Depends(oauth2_scheme_optional)] = None,
 ):
     """Return table rows + column definitions for the React viewer's AG Grid.
 
@@ -1800,15 +2014,14 @@ def render_table_endpoint(
     if not wf_id or not dc_id:
         raise HTTPException(status_code=400, detail="Component missing wf_id/dc_id.")
 
-    filter_metadata = [
-        {
-            "interactive_component_type": f.get("interactive_component_type"),
-            "column_name": f.get("column_name"),
-            "value": f.get("value"),
-        }
-        for f in filters
-        if f.get("column_name") and f.get("value") not in (None, [], "")
-    ]
+    merged_filters = _resolve_link_filters(
+        filters=filters,
+        target_dc_id=str(dc_id),
+        project_id=project_id,
+        access_token=access_token,
+        component_type="table",
+    )
+    filter_metadata = _build_filter_metadata(merged_filters)
 
     dc_config = component.get("dc_config") or {}
     init_data: dict[str, dict] = {}
@@ -1854,22 +2067,35 @@ def render_table_endpoint(
     return {"columns": columns, "rows": rows, "total": total}
 
 
-@dashboards_endpoint_router.get("/render_image_paths/{dashboard_id}/{component_id}")
+@dashboards_endpoint_router.post("/render_image_paths/{dashboard_id}/{component_id}")
 def render_image_paths_endpoint(
     dashboard_id: PyObjectId,
     component_id: str,
-    max: int = 50,
+    request: dict | None = Body(default=None),
+    max: int | None = None,
     current_user: User = Depends(get_user_or_anonymous),
+    access_token: Annotated[str | None, Depends(oauth2_scheme_optional)] = None,
 ):
-    """Return up to `max` non-null values of an image component's `image_column`.
+    """Return non-null values of an image component's ``image_column``.
 
-    Mirrors the auth/permission/lookup logic of `render_table_endpoint`. The
-    React viewer's ImageRenderer uses these paths to build URLs against
-    `/files/serve/image?s3_path=...` for thumbnail rendering.
+    Request body (optional):
+        {"filters": [...], "max": 50}
+
+    The ``?max=`` query string is still honored as a backwards-compatible alias
+    when callers don't supply a body. ``filters`` follows the same payload
+    shape used by ``bulk_compute_cards``/``render_figure``/``render_table`` and
+    can include selection-source filters (``source: "scatter_selection"``,
+    ``"table_selection"``, ``"map_selection"``). Cross-DC link filters are
+    applied via ``extend_filters_via_links`` so an image grid narrows when a
+    linked DC is filtered (mirrors Dash ``_extract_filters_for_image``).
     """
     from depictio.api.v1.deltatables_utils import load_deltatable_lite
 
-    limit = max if max and max > 0 else 50
+    body = request or {}
+    filters = body.get("filters") or []
+    body_max = body.get("max")
+    chosen_max = body_max if body_max is not None else max
+    limit = int(chosen_max) if chosen_max and int(chosen_max) > 0 else 50
     if limit > 500:
         limit = 500
 
@@ -1898,10 +2124,37 @@ def render_image_paths_endpoint(
     if not (wf_id and dc_id and image_column):
         raise HTTPException(status_code=400, detail="Component missing wf_id/dc_id/image_column.")
 
+    merged_filters = _resolve_link_filters(
+        filters=filters,
+        target_dc_id=str(dc_id),
+        project_id=project_id,
+        access_token=access_token,
+        component_type="image",
+    )
+    filter_metadata = _build_filter_metadata(merged_filters)
+
+    dc_config = component.get("dc_config") or {}
+    init_data: dict[str, dict] = {}
+    delta_loc = dc_config.get("delta_location")
+    if not delta_loc:
+        from depictio.api.v1.db import deltatables_collection
+
+        dt = deltatables_collection.find_one({"data_collection_id": ObjectId(str(dc_id))})
+        if dt:
+            delta_loc = dt.get("delta_table_location")
+    if delta_loc:
+        init_data[str(dc_id)] = {
+            "delta_location": delta_loc,
+            "dc_type": dc_config.get("type") or "table",
+            "size_bytes": dc_config.get("size_bytes", 0),
+        }
+
     try:
         df = load_deltatable_lite(
             workflow_id=ObjectId(str(wf_id)) if not isinstance(wf_id, ObjectId) else wf_id,
             data_collection_id=str(dc_id),
+            metadata=filter_metadata or None,
+            init_data=init_data,
         )
     except Exception as e:
         logger.error(f"render_image_paths: DC load failed: {e}", exc_info=True)
@@ -1913,7 +2166,11 @@ def render_image_paths_endpoint(
         )
 
     paths = df.select(image_column).drop_nulls().head(limit).to_series().to_list()
-    return {"paths": [str(p) for p in paths]}
+    return {
+        "paths": [str(p) for p in paths],
+        "filter_applied": bool(filter_metadata),
+        "filter_count": len(filter_metadata),
+    }
 
 
 # ============================================================================
@@ -1927,6 +2184,7 @@ def render_map_endpoint(
     component_id: str,
     request: dict,
     current_user: User = Depends(get_user_or_anonymous),
+    access_token: Annotated[str | None, Depends(oauth2_scheme_optional)] = None,
 ):
     """Render a Plotly map component as JSON for the React viewer.
 
@@ -1967,15 +2225,14 @@ def render_map_endpoint(
     if not wf_id or not dc_id:
         raise HTTPException(status_code=400, detail="Component missing wf_id/dc_id.")
 
-    filter_metadata = [
-        {
-            "interactive_component_type": f.get("interactive_component_type"),
-            "column_name": f.get("column_name"),
-            "value": f.get("value"),
-        }
-        for f in filters
-        if f.get("column_name") and f.get("value") not in (None, [], "")
-    ]
+    merged_filters = _resolve_link_filters(
+        filters=filters,
+        target_dc_id=str(dc_id),
+        project_id=project_id,
+        access_token=access_token,
+        component_type="map",
+    )
+    filter_metadata = _build_filter_metadata(merged_filters)
 
     dc_config = component.get("dc_config") or {}
     init_data: dict[str, dict] = {}
@@ -2014,14 +2271,16 @@ def render_map_endpoint(
         except Exception as e:
             logger.warning(f"render_map: failed to register mantine templates: {e}")
 
+    selection_values = _own_selection_values(filters, component, source="map_selection")
+
     try:
         fig, data_info = render_map(
             df=df,
             trigger_data=component,
             theme=theme,
             existing_metadata=None,
-            active_selection_values=None,
-            access_token=None,
+            active_selection_values=selection_values,
+            access_token=access_token,
         )
 
         if hasattr(fig, "to_json"):
