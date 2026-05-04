@@ -107,6 +107,19 @@ app.mount(
     StaticFiles(directory=str(_SCREENSHOTS_DIR)),
     name="dashboard-screenshots",
 )
+
+# Dash workflow logos / icons (used by both viewers). The React viewer
+# references them as ``/assets/images/...`` — same path as the Dash app —
+# so we mount the same dir on the FastAPI origin to avoid cross-port hops.
+# Without this, ``/assets/images/icons/favicon.png`` 404s on port 8055
+# (FastAPI) and the dashboard cards lose their workflow logos.
+_DASH_ASSETS_DIR = Path(__file__).resolve().parent.parent / "dash" / "assets"
+if _DASH_ASSETS_DIR.is_dir():
+    app.mount(
+        "/assets",
+        StaticFiles(directory=str(_DASH_ASSETS_DIR)),
+        name="dash-assets",
+    )
 # Require both index.html and assets/ — `dist/` alone may exist as an empty
 # leftover from an interrupted build and would crash StaticFiles at startup.
 if _VIEWER_DIST.is_dir() and _VIEWER_ASSETS.is_dir() and _VIEWER_INDEX.is_file():

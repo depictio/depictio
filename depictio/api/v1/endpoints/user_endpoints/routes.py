@@ -197,6 +197,48 @@ async def create_token(
     return token
 
 
+@auth_endpoint_router.post("/refresh", include_in_schema=True)
+async def refresh_token_browser(request: dict) -> dict:
+    """Browser-safe refresh: uses the refresh token as the only credential.
+
+    Mirrors ``/auth/refresh_token`` but without the internal-api-key
+    requirement so SPAs (the React viewer) can call it directly. The refresh
+    token itself is treated as the authenticating secret.
+
+    Args:
+        request: Dict containing 'refresh_token' key.
+
+    Returns:
+        Dict with new access_token and expire_datetime.
+
+    Raises:
+        HTTPException: 401 if refresh token is invalid or expired.
+    """
+    refresh_token = request.get("refresh_token")
+    if not refresh_token:
+        raise HTTPException(status_code=400, detail="Missing refresh_token")
+
+    token_doc = await TokenBeanie.find_one(
+        {"refresh_token": refresh_token, "refresh_expire_datetime": {"$gt": datetime.now()}}
+    )
+    if not token_doc:
+        raise HTTPException(401, "Invalid refresh token")
+
+    user = await UserBeanie.find_one({"_id": token_doc.user_id})
+    token_data = TokenData(name=token_doc.name, sub=user.id)
+    new_access_token, expire_datetime = await create_access_token(token_data, expiry_hours=1)
+
+    token_doc.access_token = new_access_token
+    token_doc.expire_datetime = expire_datetime
+    await token_doc.save()
+
+    return {
+        "access_token": new_access_token,
+        "expire_datetime": token_doc.expire_datetime,
+        "token_type": "bearer",
+    }
+
+
 @auth_endpoint_router.post("/refresh_token", include_in_schema=True)
 async def refresh_token_endpoint(
     request: dict,

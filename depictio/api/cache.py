@@ -106,6 +106,31 @@ class SimpleCache:
 
         return None
 
+    def delete_pattern(self, pattern: str) -> int:
+        """Delete every cached key whose unprefixed name contains ``pattern``.
+
+        Returns the number of keys removed (Redis + memory). Used by the
+        realtime-events path to invalidate every filter variant for a DC after
+        a ``data_collection_updated`` event.
+        """
+        full_pattern = f"{self.cache_config.cache_key_prefix}*{pattern}*"
+        removed = 0
+
+        if self._redis_available and self._redis is not None:
+            try:
+                keys_result = self._redis.keys(full_pattern)
+                if isinstance(keys_result, list) and keys_result:
+                    self._redis.delete(*keys_result)
+                    removed += len(keys_result)
+            except Exception as e:
+                logger.warning(f"Redis delete_pattern failed: {pattern} - {e}")
+
+        for key in [k for k in self._memory_cache if pattern in k]:
+            del self._memory_cache[key]
+            removed += 1
+
+        return removed
+
     def exists(self, key: str) -> bool:
         """Check if key exists in cache."""
         cache_key = f"{self.cache_config.cache_key_prefix}{key}"
@@ -154,6 +179,11 @@ def get_cached_dataframe(key: str) -> Optional[pl.DataFrame]:
 def cached_dataframe_exists(key: str) -> bool:
     """Check if DataFrame is cached."""
     return get_cache().exists(key)
+
+
+def invalidate_dataframe_cache_pattern(pattern: str) -> int:
+    """Drop every cached DataFrame whose unprefixed key contains ``pattern``."""
+    return get_cache().delete_pattern(pattern)
 
 
 def get_cache_stats() -> dict[str, Any]:
