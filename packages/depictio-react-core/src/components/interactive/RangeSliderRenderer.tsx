@@ -13,7 +13,11 @@ const RangeSliderRenderer: React.FC<{
   metadata: StoredMetadata;
   filters: InteractiveFilter[];
   onChange?: (filter: InteractiveFilter) => void;
-}> = ({ metadata, filters, onChange }) => {
+  /** When true (e.g. inside an InteractiveGroupCard), drop the inner Paper
+   *  and default tick marks to hidden — relies on the parent to provide the
+   *  visual frame. */
+  compact?: boolean;
+}> = ({ metadata, filters, onChange, compact }) => {
   const [bounds, setBounds] = useState<{ min: number; max: number } | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -85,6 +89,14 @@ const RangeSliderRenderer: React.FC<{
         'md'
       }
       marks_number={(metadata.default_state as Record<string, unknown> | undefined)?.marks_number as number | undefined}
+      show_marks={
+        // YAML wins; otherwise compact mode hides marks for higher density,
+        // ungrouped renders show them.
+        typeof metadata.show_marks === 'boolean'
+          ? metadata.show_marks
+          : !compact
+      }
+      compact={compact}
       onChange={(next) =>
         onChange?.({
           index: metadata.index,

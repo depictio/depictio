@@ -23,7 +23,9 @@ const SliderRenderer: React.FC<{
   metadata: StoredMetadata;
   filters: InteractiveFilter[];
   onChange?: (filter: InteractiveFilter) => void;
-}> = ({ metadata, filters, onChange }) => {
+  /** Compact rendering — drops the inner Paper, defaults marks to hidden. */
+  compact?: boolean;
+}> = ({ metadata, filters, onChange, compact }) => {
   const [bounds, setBounds] = useState<{ min: number; max: number } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -88,8 +90,11 @@ const SliderRenderer: React.FC<{
   const selectedValue =
     typeof filterEntry?.value === 'number' ? (filterEntry!.value as number) : null;
 
+  // YAML wins; otherwise compact mode hides marks for higher density.
+  const marksVisible =
+    typeof metadata.show_marks === 'boolean' ? metadata.show_marks : !compact;
   const marks = useMemo(() => {
-    if (!bounds) return [];
+    if (!bounds || !marksVisible) return undefined;
     const n = Math.max(2, marksNumber);
     const stepSize = (bounds.max - bounds.min) / (n - 1);
     return Array.from({ length: n }, (_, i) => {
@@ -99,7 +104,7 @@ const SliderRenderer: React.FC<{
       const labelVal = useLogScale ? 10 ** v : v;
       return { value: v, label: formatMark(labelVal) };
     });
-  }, [bounds, marksNumber, useLogScale]);
+  }, [bounds, marksNumber, useLogScale, marksVisible]);
 
   // Hook order is fixed for every render — keep useCallback BEFORE any
   // early returns. Otherwise React's hook-count check (error #310) trips on
@@ -142,6 +147,46 @@ const SliderRenderer: React.FC<{
   const iconCol = metadata.icon_color || 'var(--mantine-color-blue-6)';
   const stepSize = (bounds.max - bounds.min) / 100;
 
+  const inner = (
+    <Stack gap={compact ? 2 : 'md'}>
+      {displayTitle && (
+        <Group gap="xs" align="center" wrap="nowrap" justify="space-between">
+          <Group gap="xs" align="center" wrap="nowrap" style={{ minWidth: 0, flex: 1 }}>
+            {metadata.icon_name && (
+              <Icon
+                icon={metadata.icon_name}
+                width={compact ? 14 : 18}
+                height={compact ? 14 : 18}
+                style={{ color: iconCol, flexShrink: 0 }}
+              />
+            )}
+            <Text fw={600} size={compact ? 'xs' : 'sm'} truncate>
+              {displayTitle}
+            </Text>
+          </Group>
+          <Text size="xs" c="dimmed">
+            {formatMark(useLogScale ? 10 ** value : value)}
+          </Text>
+        </Group>
+      )}
+      <Slider
+        min={bounds.min}
+        max={bounds.max}
+        step={stepSize}
+        value={value}
+        onChangeEnd={handleChange}
+        marks={marks}
+        size={compact ? 'sm' : 'md'}
+        thumbSize={compact ? 12 : undefined}
+        color={metadata.icon_color || undefined}
+        label={(v) => formatMark(useLogScale ? 10 ** v : v)}
+        mb={compact ? 0 : 'xs'}
+      />
+    </Stack>
+  );
+
+  if (compact) return inner;
+
   return (
     <Paper
       p="md"
@@ -153,39 +198,7 @@ const SliderRenderer: React.FC<{
         boxSizing: 'border-box',
       }}
     >
-      <Stack gap="md">
-        {displayTitle && (
-          <Group gap="xs" align="center" wrap="nowrap" justify="space-between">
-            <Group gap="xs" align="center" wrap="nowrap">
-              {metadata.icon_name && (
-                <Icon
-                  icon={metadata.icon_name}
-                  width={18}
-                  height={18}
-                  style={{ color: iconCol, flexShrink: 0 }}
-                />
-              )}
-              <Text fw={600} size="sm">
-                {displayTitle}
-              </Text>
-            </Group>
-            <Text size="xs" c="dimmed">
-              {formatMark(useLogScale ? 10 ** value : value)}
-            </Text>
-          </Group>
-        )}
-        <Slider
-          min={bounds.min}
-          max={bounds.max}
-          step={stepSize}
-          value={value}
-          onChangeEnd={handleChange}
-          marks={marks}
-          color={metadata.icon_color || undefined}
-          label={(v) => formatMark(useLogScale ? 10 ** v : v)}
-          mb="xs"
-        />
-      </Stack>
+      {inner}
     </Paper>
   );
 };

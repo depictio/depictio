@@ -212,6 +212,10 @@ export interface StoredMetadata {
   placement?: 'left' | 'top';
   /** Default timescale for the Timeline interactive component. */
   timescale?: 'year' | 'month' | 'day' | 'hour' | 'minute';
+  /** When set, controls tick-mark visibility on Slider / RangeSlider / Timeline.
+   *  When omitted, the renderer defaults to visible for ungrouped components and
+   *  hidden for components inside a group (compact mode). */
+  show_marks?: boolean;
   [key: string]: unknown;
 }
 

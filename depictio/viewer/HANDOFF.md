@@ -1,5 +1,81 @@
 # MVP handoff — React viewer + shared components
 
+## Closed gaps (2026-05-04)
+
+The following parity gaps versus the Dash viewer were closed in the
+`feat/react-viewer-mvp` branch. Each item lists the resolution path so a
+reviewer can verify the change without re-tracing the implementation.
+
+- **Cross-DC link filtering on every render endpoint.** `extend_filters_via_links`
+  moved from `depictio/dash/utils.py` to `depictio/api/v1/filter_links.py`;
+  Dash callers continue working via a re-export shim. The React-facing
+  endpoints (`bulk_compute_cards`, `render_figure`, `render_table`,
+  `render_map`, `render_image_paths`) now resolve link filters server-side via
+  the new `_resolve_link_filters` helper in `dashboards_endpoints/routes.py`.
+- **Selection-as-filter for scatter, table, and map.** `FigureRenderer`,
+  `TableRenderer`, and `MapRenderer` emit selection events back to filter
+  state via a new `onFilterChange` prop. `InteractiveFilter.source` carries a
+  `scatter_selection|table_selection|map_selection` discriminator (mirrors
+  Dash `interactive-values-store`). App-level merge logic lives in
+  `mergeFiltersBySource` (`packages/depictio-react-core/src/selection.ts`).
+- **Image-grid filter integration.** `ImageRenderer` now consumes a `filters`
+  prop; `/render_image_paths` accepts a POST body `{ filters, max }` and
+  applies the same filter pipeline (regular + selection sources + cross-DC
+  links) used by the other endpoints.
+- **GeoJSON access token + map selection.** `/render_map` plumbs the request's
+  access token through to `render_map(...)` so `geojson_url` choropleth flows
+  resolve server-side. The endpoint also passes back the user's own
+  `map_selection` values as `active_selection_values` so the highlighted
+  state survives re-renders.
+- **JWT refresh lifecycle in React.** `packages/depictio-react-core/src/api.ts`
+  adds `refreshAccessToken`, `authFetch` (single 401-retry), and
+  `validateSession` (proactive refresh inside a 60 s window). The viewer
+  calls `validateSession` in `main.tsx` before mounting routes. Backend gains
+  a browser-safe `POST /auth/refresh` endpoint (no internal-api-key
+  required — the refresh token is itself the credential).
+- **WebSocket realtime updates.** `useDataCollectionUpdates`
+  (`packages/depictio-react-core/src/realtime.ts`) subscribes to
+  `/depictio/api/v1/events/ws?token=…&dashboard_id=…` with auto-reconnect
+  (capped exponential backoff). `RealtimeIndicator` exposes a Manual ↔ Auto
+  refresh toggle (persisted to `localStorage['depictio.realtime.mode']`) and
+  Pause/Resume. Mounted in both `App.tsx` (viewer) and `EditorApp.tsx`
+  (editor). `settings.events.enabled` now defaults to true.
+- **Demo-mode guided tour.** `depictio/viewer/src/demo/DemoTour.tsx` runs a
+  4-step Mantine Popover tour the first time a user visits in demo mode
+  (gated on `is_demo_mode === true` and a `localStorage['depictio.tour.seen']
+  !== 'v1'` flag). `DemoModeBanner` adds a sticky "Demo mode — your changes
+  won't be saved" alert. Shipped with no extra dependency — built on
+  Mantine's existing primitives.
+- **`UpgradeToTemporaryModal` surfaced on viewer routes.** A new
+  `UpgradeToTemporaryButton` lives in the AppShell header and shows when
+  `unauthenticated_mode && is_anonymous && !is_temporary`. The modal already
+  existed in `/profile-beta`; this lifts the affordance to the dashboard
+  viewer + editor so anonymous users can upgrade without leaving the page.
+- **Per-source `ResetButton` on figure / table / map.** Action chrome shows a
+  reset chip when the component owns an active selection; the button clears
+  only that source via `onFilterChange({ value: [], source })` — mirrors
+  `depictio/dash/modules/shared/selection_utils.py:handle_reset_button`. A
+  parent-rendered "Clear chart selections" link appears in the filter panel
+  when ≥1 selection is active.
+
+Verification (code-level greps):
+
+```bash
+grep -n "onSelected\|onClick" packages/depictio-react-core/src/components/{Figure,Map}Renderer.tsx
+grep -n "onSelectionChanged" packages/depictio-react-core/src/components/TableRenderer.tsx
+grep -n "_resolve_link_filters" depictio/api/v1/endpoints/dashboards_endpoints/routes.py
+grep -rn "useDataCollectionUpdates" depictio/viewer/src/
+grep -n "authFetch\|validateSession" packages/depictio-react-core/src/api.ts
+```
+
+Build status: `pnpm build` in `depictio/viewer/` succeeds; `tsc --noEmit`
+clean across both packages; `ruff check` and `ruff format` clean. The 22
+pre-existing `ty` diagnostics are unchanged (down from 23) — none introduced
+by this branch.
+
+---
+
+
 Session deliverable: the split-architecture MVP from the plan is **built and imports cleanly end-to-end**. A fresh container rebuild or `uv sync` will make it live. This doc tells you exactly what to do next.
 
 ## What was built

@@ -37,6 +37,10 @@ interface ComponentRendererProps {
   extraActions?: React.ReactNode;
   /** Show the drag handle (3×3 grip) on the chrome — typically only in editor mode. */
   showDragHandle?: boolean;
+  /** Compact rendering — used by InteractiveGroupCard so grouped slider /
+   *  rangeslider / timeline children drop their own Paper and tighten internal
+   *  spacing. Marks default to hidden unless the metadata sets show_marks=true. */
+  compact?: boolean;
 }
 
 /**
@@ -54,6 +58,7 @@ const ComponentRenderer: React.FC<ComponentRendererProps> = ({
   refreshTick,
   extraActions,
   showDragHandle,
+  compact,
 }) => {
   if (metadata.component_type === 'card') {
     return wrapWithChrome(
@@ -83,10 +88,22 @@ const ComponentRenderer: React.FC<ComponentRendererProps> = ({
       );
     } else if (subType === 'RangeSlider') {
       inner = (
-        <RangeSliderRenderer metadata={metadata} filters={filters} onChange={onFilterChange} />
+        <RangeSliderRenderer
+          metadata={metadata}
+          filters={filters}
+          onChange={onFilterChange}
+          compact={compact}
+        />
       );
     } else if (subType === 'Slider') {
-      inner = <SliderRenderer metadata={metadata} filters={filters} onChange={onFilterChange} />;
+      inner = (
+        <SliderRenderer
+          metadata={metadata}
+          filters={filters}
+          onChange={onFilterChange}
+          compact={compact}
+        />
+      );
     } else if (subType === 'DatePicker' || subType === 'DateRangePicker') {
       inner = (
         <DatePickerRenderer metadata={metadata} filters={filters} onChange={onFilterChange} />
@@ -105,7 +122,12 @@ const ComponentRenderer: React.FC<ComponentRendererProps> = ({
       );
     } else if (subType === 'Timeline') {
       inner = (
-        <TimelineRenderer metadata={metadata} filters={filters} onChange={onFilterChange} />
+        <TimelineRenderer
+          metadata={metadata}
+          filters={filters}
+          onChange={onFilterChange}
+          compact={compact}
+        />
       );
     } else {
       inner = (
