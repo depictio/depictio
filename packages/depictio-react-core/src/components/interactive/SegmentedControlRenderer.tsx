@@ -47,10 +47,10 @@ const SegmentedControlRenderer: React.FC<{
       setLoading(false);
       return;
     }
-    const cacheKey = `${metadata.dc_id}|${metadata.column_name}`;
+    const cacheKey = `${metadata.dc_id}|${metadata.column_name}|${metadata.filter_expr || ''}`;
     let p = uniqueValuesCache.get(cacheKey);
     if (!p) {
-      p = fetchUniqueValues(metadata.dc_id, metadata.column_name);
+      p = fetchUniqueValues(metadata.dc_id, metadata.column_name, metadata.filter_expr);
       uniqueValuesCache.set(cacheKey, p);
     }
     p.then((values) => {
@@ -71,7 +71,7 @@ const SegmentedControlRenderer: React.FC<{
     return () => {
       mountedRef.current = false;
     };
-  }, [metadata.dc_id, metadata.column_name]);
+  }, [metadata.dc_id, metadata.column_name, metadata.filter_expr]);
 
   const filterEntry = filters.find((f) => f.index === metadata.index);
   const selectedValue =
@@ -96,9 +96,10 @@ const SegmentedControlRenderer: React.FC<{
         value: next,
         column_name: metadata.column_name,
         interactive_component_type: 'SegmentedControl',
+        filter_expr: metadata.filter_expr,
       });
     },
-    [onChange, metadata.index, metadata.column_name],
+    [onChange, metadata.index, metadata.column_name, metadata.filter_expr],
   );
 
   const Header = displayTitle ? (

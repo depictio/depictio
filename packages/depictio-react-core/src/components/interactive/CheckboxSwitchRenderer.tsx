@@ -55,6 +55,7 @@ const CheckboxSwitchRenderer: React.FC<CheckboxSwitchRendererProps> = ({
       value: next,
       column_name: metadata.column_name,
       interactive_component_type: subType,
+      filter_expr: metadata.filter_expr,
     });
   };
 

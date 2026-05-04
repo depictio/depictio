@@ -27,10 +27,11 @@ const MultiSelectRenderer: React.FC<{
       setLoading(false);
       return;
     }
-    const cacheKey = `${metadata.dc_id}|${metadata.column_name}`;
+    // filter_expr varies the option set, so include it in the cache key.
+    const cacheKey = `${metadata.dc_id}|${metadata.column_name}|${metadata.filter_expr || ''}`;
     let p = uniqueValuesCache.get(cacheKey);
     if (!p) {
-      p = fetchUniqueValues(metadata.dc_id, metadata.column_name);
+      p = fetchUniqueValues(metadata.dc_id, metadata.column_name, metadata.filter_expr);
       uniqueValuesCache.set(cacheKey, p);
     }
     p.then((values) => {
@@ -48,7 +49,7 @@ const MultiSelectRenderer: React.FC<{
     return () => {
       mountedRef.current = false;
     };
-  }, [metadata.dc_id, metadata.column_name]);
+  }, [metadata.dc_id, metadata.column_name, metadata.filter_expr]);
 
   const selected =
     (filters.find((f) => f.index === metadata.index)?.value as string[]) || [];
@@ -93,6 +94,7 @@ const MultiSelectRenderer: React.FC<{
           value: next,
           column_name: metadata.column_name,
           interactive_component_type: metadata.interactive_component_type,
+          filter_expr: metadata.filter_expr,
         })
       }
     />

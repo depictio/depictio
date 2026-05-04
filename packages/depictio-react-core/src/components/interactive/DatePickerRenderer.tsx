@@ -87,7 +87,7 @@ const DatePickerRenderer: React.FC<{
   filters: InteractiveFilter[];
   onChange?: (filter: InteractiveFilter) => void;
 }> = ({ metadata, filters, onChange }) => {
-  const [bounds, setBounds] = useState<{ min: Date; max: Date } | null>(null);
+  const [bounds, setBounds] = useState<{ min: Date | null; max: Date | null } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -106,12 +106,11 @@ const DatePickerRenderer: React.FC<{
     let cancelled = false;
     p.then((res) => {
       if (cancelled) return;
-      if (!res.min || !res.max) {
-        setError(
-          `No date bounds available for column "${metadata.column_name}"`,
-        );
-        return;
-      }
+      // Render the picker even when one or both bounds are missing — the
+      // user can still pick dates, we just skip the min/max constraints.
+      // This used to error out ("No date bounds available for column …")
+      // for any DC ingested before precompute_columns_specs learned to
+      // honor normalized dtype keys for datetime columns.
       setBounds({ min: res.min, max: res.max });
     })
       .catch((err) => {
@@ -158,24 +157,29 @@ const DatePickerRenderer: React.FC<{
     );
   }
 
-  // Default the picker to the full bounds when no filter is set.
+  // Default the picker to the full bounds when no filter is set. When bounds
+  // are missing (older DC without precomputed datetime specs), leave the
+  // initial value empty — the user can still pick a range, just without
+  // min/max constraints on the calendar.
   const value: [Date | null, Date | null] = [
-    selected[0] ?? bounds.min,
-    selected[1] ?? bounds.max,
+    selected[0] ?? bounds.min ?? null,
+    selected[1] ?? bounds.max ?? null,
   ];
 
   return (
     <Paper
-      p="md"
+      p="sm"
       radius="md"
       shadow="xs"
       className="dashboard-component-hover"
       style={{
         height: '100%',
         boxSizing: 'border-box',
+        display: 'flex',
+        flexDirection: 'column',
       }}
     >
-      <Stack gap="md">
+      <Stack gap="xs" style={{ flex: 1, minHeight: 0 }}>
         {displayTitle && (
           <Group gap="xs" align="center" wrap="nowrap">
             {metadata.icon_name && (
@@ -186,7 +190,7 @@ const DatePickerRenderer: React.FC<{
                 style={{ color: iconCol, flexShrink: 0 }}
               />
             )}
-            <Text fw={600} size="sm">
+            <Text fw={600} size="sm" lineClamp={1}>
               {displayTitle}
             </Text>
           </Group>
@@ -194,10 +198,14 @@ const DatePickerRenderer: React.FC<{
         <DatePickerInput
           type="range"
           value={value}
-          minDate={bounds.min}
-          maxDate={bounds.max}
+          minDate={bounds.min ?? undefined}
+          maxDate={bounds.max ?? undefined}
           clearable={false}
           w="100%"
+          // Match DMC's ``DatePickerInput type="range"`` defaults — same
+          // ``size="sm"`` the Dash builder uses (title_size="sm" maps
+          // straight through). No custom valueFormat: the default Mantine
+          // range string is what users see in the Dash viewer.
           size="sm"
           allowSingleDateInRange
           onChange={(next: [Date | null, Date | null] | null) => {
@@ -208,6 +216,8 @@ const DatePickerRenderer: React.FC<{
             const isoA = toIsoDateString(a);
             const isoB = toIsoDateString(b);
             const isFull =
+              !!bounds.min &&
+              !!bounds.max &&
               isoA === toIsoDateString(bounds.min) &&
               isoB === toIsoDateString(bounds.max);
             onChange?.({
@@ -218,6 +228,7 @@ const DatePickerRenderer: React.FC<{
               value: isFull ? null : [isoA, isoB],
               column_name: metadata.column_name,
               interactive_component_type: 'DateRangePicker',
+              filter_expr: metadata.filter_expr,
             });
           }}
           styles={{

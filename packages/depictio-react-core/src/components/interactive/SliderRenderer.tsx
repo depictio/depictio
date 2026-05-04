@@ -111,9 +111,10 @@ const SliderRenderer: React.FC<{
         value: next,
         column_name: metadata.column_name,
         interactive_component_type: 'Slider',
+        filter_expr: metadata.filter_expr,
       });
     },
-    [onChange, metadata.index, metadata.column_name],
+    [onChange, metadata.index, metadata.column_name, metadata.filter_expr],
   );
 
   if (error) {

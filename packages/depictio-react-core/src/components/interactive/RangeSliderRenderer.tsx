@@ -91,6 +91,7 @@ const RangeSliderRenderer: React.FC<{
           value: next,
           column_name: metadata.column_name,
           interactive_component_type: 'RangeSlider',
+          filter_expr: metadata.filter_expr,
         })
       }
     />
