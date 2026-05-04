@@ -6,13 +6,89 @@
 
 
 <details>
-<summary>Click to expand the changelog for 0.10.2</summary>
+<summary>Click to expand the changelog for 0.10.3</summary>
 
 ### Changes 📜
 
 #### New Features ✨
 
 * feat: add permission-based auth annotations and Serve-specific ingress values [778ca9d9]
+* feat: add dedicated ingress for MinIO and backend API [45d6d524]
+
+#### Bug Fixes 🐛
+
+* fix: remove unused inheritDefaultAnnotations — dead code after annotation refactor [9876e82a]
+* fix: always render base nginx annotations on dedicated backend/minio ingresses [81215227]
+
+#### Improvements 🚀
+
+* refactor: remove hardcoded Serve annotations from dedicated ingress templates [53811b8c]
+* refactor: simplify separate ingress config — drop redundant enabled flag [21163c9e]
+
+#### Chores 🧹
+
+* ci: add manual workflow to add additional OCI tag to Helm chart [05989ada]
+* ci: skip ghcr-dependent jobs on fork PRs [05c5bbf9]
+
+#### Other Changes 📝
+
+* Bump version: 0.10.2 → 0.10.3 [d850e6dc]
+* Update CHANGELOG.md for v0.10.2 [e00c8c61]
+* Bump version: 0.10.1 → 0.10.2 [d6992f1d]
+* feat(deployment): add annotations for config checksum in backend and frontend [59768b20]
+* Update CHANGELOG.md for v0.10.1 [ca160d30]
+* Bump version: 0.10.0 → 0.10.1 [b72b35a8]
+* fix(test): set glob_pattern=None when bypassing RecipeSource validation [398e7dea]
+* Update CHANGELOG.md for v0.10.0 [f3a6b72b]
+* Bump version: 0.9.0 → 0.10.0 [f8db3b7c]
+* fix(profile): enable CLI Agents button in single-user mode [05ce615e]
+* revert: remove Serve-specific permission/auth logic from generic chart template [a87bfe10]
+* Fix cross-DC link filtering + heatmap annotations on filter [503a4d01]
+* Fix metadata links: source_column sample→ID (matches actual metadata column name) [0de966f6]
+* Fix heatmap annotations disappearing on filter + add metadata→heatmap link [b19a625e]
+* Consistent auto-coloring: use Plotly palette for heatmap annotations [5fb51f16]
+* Add samplesheet->taxonomy_heatmap link for cross-DC filtering (works for base+extended) [2e5f7e12]
+* Heatmap annotations: only habitat + city, skip name/dates/coordinates [78b0fc0d]
+* Fix heatmap: sanitize annotations at render time to handle stale delta data with None [89a4351e]
+* Fix heatmap: skip annotations with empty values (ComplexHeatmap KeyError) [25177e1b]
+* Fix heatmap recipe: convert None values to empty string in annotations [78174f91]
+* Fix heatmap annotations: extract _col_annotations_json in core.py rendering path [feac5185]
+* Disable component filter + add heatmap annotation debug logging [54ddbbd1]
+* Fix heatmap column loading: return empty list (all columns) when no value_columns specified [b313fdc6]
+* Fix heatmap: include _col_annotations_json in required columns for data loading [b24950d7]
+* Fix map component filtering, reorder DatePicker first in sidebar [8f726f03]
+* Add sampling locations map + fix heatmap date serialization [4077866a]
+* Fix heatmap recipe: convert date objects to strings for JSON serialization [4654b589]
+* Add GROUP_COL_DISPLAY for title-cased labels, fix sampling_date [fd787d23]
+* Fix Total Samples card: use ID column instead of sample for metadata DC [a17d357d]
+* Add DatePicker to both tabs, fix sample column refs in full_analysis [023be969]
+* Fix full_analysis dashboard: use ID column for metadata sample filter [f18a60fa]
+* Remove base project variant, add template_origin to ampliseq reference [95449b60]
+* Fix MultiQC metadata: remove prevent_initial_call so content loads on first click [5f4f60fe]
+* Use inline key:value groups for tighter template info layout [5d288c8b]
+* Reduce spacing between key/value in template info column [97080bfc]
+* Redesign template origin section: two-column layout with icons [f1531297]
+* Fix template_origin display: handle both dict and model types [10a9a4d5]
+* Store template variables in TemplateOrigin + show in data manager [4dde1873]
+* Add template origin section to Project Data Manager page [3034cf69]
+* Consistent badge size (sm) across all project badges [782cf04c]
+* Make template badge clickable with docs link + open-in-new icon [eb38a3a1]
+* Show template docs URL as separate clickable link in project details [6bec3486]
+* Add template info to project details + fix ObjectId serialization [3cfbbf80]
+* Fix /projects 500 error and unify template badge styling [009900d8]
+* Filter unresolved dashboard components + fix path resolution [f7c5a8d4]
+* Fix file scanner path resolution and dashboard DC tag scoping [7635fdfb]
+* Graceful handling of missing data collections [7b434454]
+* Remove alpha diversity/rarefaction from base dashboard [cf633c1a]
+
+
+</details>
+
+### Documentation 📖
+
+For more details, please refer to the [documentation](https://depictio.github.io/depictio-docs/)
+
+otations and Serve-specific ingress values [778ca9d9]
 * feat: add dedicated ingress for MinIO and backend API [45d6d524]
 
 #### Bug Fixes 🐛
