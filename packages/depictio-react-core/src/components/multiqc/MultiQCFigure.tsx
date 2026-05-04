@@ -9,6 +9,7 @@ interface MultiQCFigureProps {
   dashboardId: string;
   metadata: StoredMetadata;
   filters: InteractiveFilter[];
+  refreshTick?: number;
 }
 
 // Plotly config / style passed by reference to keep <Plot> stable across renders.
@@ -31,6 +32,7 @@ const MultiQCFigure: React.FC<MultiQCFigureProps> = ({
   dashboardId,
   metadata,
   filters,
+  refreshTick,
 }) => {
   const [figure, setFigure] = useState<
     { data?: unknown[]; layout?: Record<string, unknown> } | null
@@ -62,7 +64,7 @@ const MultiQCFigure: React.FC<MultiQCFigureProps> = ({
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dashboardId, metadata.index, JSON.stringify(filters), theme, inView]);
+  }, [dashboardId, metadata.index, JSON.stringify(filters), theme, inView, refreshTick]);
 
   const titleText =
     (metadata.title as string | undefined) ||
@@ -165,7 +167,9 @@ const MultiQCFigure: React.FC<MultiQCFigureProps> = ({
 // React.memo with a custom comparator: filters are array-shaped, so a
 // reference check would re-render whenever the parent re-creates the array
 // even when the contents are identical. Stringifying mirrors the comparison
-// the useEffect dep already uses.
+// the useEffect dep already uses. ``refreshTick`` MUST be in the comparator —
+// otherwise realtime updates from the parent are memoized away and the fetch
+// effect never re-runs.
 export default React.memo(MultiQCFigure, (prev, next) => {
   return (
     prev.dashboardId === next.dashboardId &&
@@ -173,6 +177,7 @@ export default React.memo(MultiQCFigure, (prev, next) => {
     prev.metadata.title === next.metadata.title &&
     prev.metadata.selected_module === next.metadata.selected_module &&
     prev.metadata.selected_plot === next.metadata.selected_plot &&
+    prev.refreshTick === next.refreshTick &&
     JSON.stringify(prev.filters) === JSON.stringify(next.filters)
   );
 });

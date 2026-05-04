@@ -27,6 +27,7 @@ interface MultiQCGeneralStatsProps {
   dashboardId: string;
   metadata: StoredMetadata;
   filters: InteractiveFilter[];
+  refreshTick?: number;
 }
 
 type ReadMode = 'mean' | 'r1' | 'r2' | 'all';
@@ -144,6 +145,7 @@ const MultiQCGeneralStats: React.FC<MultiQCGeneralStatsProps> = ({
   dashboardId,
   metadata,
   filters,
+  refreshTick,
 }) => {
   const [payload, setPayload] = useState<GeneralStatsPayload | null>(null);
   const [loading, setLoading] = useState(true);
@@ -181,7 +183,7 @@ const MultiQCGeneralStats: React.FC<MultiQCGeneralStatsProps> = ({
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dashboardId, metadata.index, filtersSig, inView]);
+  }, [dashboardId, metadata.index, filtersSig, inView, refreshTick]);
 
   const titleText = (metadata.title as string | undefined) || 'MultiQC General Statistics';
 
