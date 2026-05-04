@@ -289,7 +289,8 @@ def register_callbacks_stepper_part_one(app: dash.Dash) -> None:
                                     dc_specs["config"]["type"].capitalize(),
                                     # Add MultiQC logo if this is a MultiQC data collection
                                     html.Img(
-                                        src="/assets/images/logos/multiqc.png",
+                                        src="/assets/images/logos/multiqc_icon_dark.svg",
+                                        className="multiqc-icon-themed",
                                         style={
                                             "height": "20px",
                                             "marginLeft": "8px",
