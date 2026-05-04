@@ -15,6 +15,8 @@ import SliderRenderer from './interactive/SliderRenderer';
 import DatePickerRenderer from './interactive/DatePickerRenderer';
 import CheckboxSwitchRenderer from './interactive/CheckboxSwitchRenderer';
 import SegmentedControlRenderer from './interactive/SegmentedControlRenderer';
+import TimelineRenderer from './interactive/TimelineRenderer';
+import SecondaryMetrics from './card/SecondaryMetrics';
 import { wrapWithChrome } from './chrome';
 
 interface ComponentRendererProps {
@@ -23,10 +25,14 @@ interface ComponentRendererProps {
   onFilterChange?: (filter: InteractiveFilter) => void;
   /** Computed value from bulk compute endpoint. Parent manages the state. */
   cardValue?: unknown;
+  /** Secondary aggregations for multi-metric cards (keyed by aggregation name). */
+  cardSecondaryValues?: Record<string, unknown>;
   /** True while the parent's bulk compute is in flight. */
   cardLoading?: boolean;
   /** Required for figure/table fetches. */
   dashboardId?: string;
+  /** Counter to invalidate data-fetching effects on realtime updates. */
+  refreshTick?: number;
   /** Extra action-icon nodes appended to the chrome row. Editor uses this to inject the per-cell "..." edit menu. */
   extraActions?: React.ReactNode;
   /** Show the drag handle (3×3 grip) on the chrome — typically only in editor mode. */
@@ -42,8 +48,10 @@ const ComponentRenderer: React.FC<ComponentRendererProps> = ({
   filters,
   onFilterChange,
   cardValue,
+  cardSecondaryValues,
   cardLoading,
   dashboardId,
+  refreshTick,
   extraActions,
   showDragHandle,
 }) => {
@@ -55,6 +63,7 @@ const ComponentRenderer: React.FC<ComponentRendererProps> = ({
       <CardRenderer
         metadata={metadata}
         value={cardValue}
+        secondaryValues={cardSecondaryValues}
         loading={cardLoading}
         filterApplied={filters.length > 0}
       />,
@@ -94,6 +103,10 @@ const ComponentRenderer: React.FC<ComponentRendererProps> = ({
           onChange={onFilterChange}
         />
       );
+    } else if (subType === 'Timeline') {
+      inner = (
+        <TimelineRenderer metadata={metadata} filters={filters} onChange={onFilterChange} />
+      );
     } else {
       inner = (
         <div className="dashboard-error" style={{ fontSize: '0.75rem' }}>
@@ -105,12 +118,28 @@ const ComponentRenderer: React.FC<ComponentRendererProps> = ({
   }
 
   if (metadata.component_type === 'figure' && dashboardId) {
+    const selectionEnabled = Boolean(metadata.selection_enabled) && !!onFilterChange;
+    const onResetSelection =
+      selectionEnabled && onFilterChange
+        ? () =>
+            onFilterChange({
+              index: metadata.index,
+              value: [],
+              source: 'scatter_selection',
+            })
+        : undefined;
     return wrapWithChrome(
       'figure',
       metadata,
       undefined,
-      <FigureRenderer dashboardId={dashboardId} metadata={metadata} filters={filters} />,
-      { extraActions, showDragHandle },
+      <FigureRenderer
+        dashboardId={dashboardId}
+        metadata={metadata}
+        filters={filters}
+        onFilterChange={onFilterChange}
+        refreshTick={refreshTick}
+      />,
+      { onResetFilter: onResetSelection, extraActions, showDragHandle },
     );
   }
 
@@ -120,6 +149,8 @@ const ComponentRenderer: React.FC<ComponentRendererProps> = ({
         dashboardId={dashboardId}
         metadata={metadata}
         filters={filters}
+        onFilterChange={onFilterChange}
+        refreshTick={refreshTick}
         extraActions={extraActions}
         showDragHandle={showDragHandle}
       />
@@ -127,22 +158,58 @@ const ComponentRenderer: React.FC<ComponentRendererProps> = ({
   }
 
   if (metadata.component_type === 'image' && dashboardId) {
+    const selectionEnabled = !!metadata.image_column && !!onFilterChange;
+    const onResetSelection =
+      selectionEnabled && onFilterChange
+        ? () =>
+            onFilterChange({
+              index: metadata.index,
+              value: [],
+              source: 'image_selection',
+            })
+        : undefined;
     return wrapWithChrome(
       'image',
       metadata,
       undefined,
-      <ImageRenderer dashboardId={dashboardId} metadata={metadata} />,
-      { extraActions, showDragHandle },
+      <ImageRenderer
+        dashboardId={dashboardId}
+        metadata={metadata}
+        filters={filters}
+        onFilterChange={onFilterChange}
+        refreshTick={refreshTick}
+      />,
+      { onResetFilter: onResetSelection, extraActions, showDragHandle },
     );
   }
 
   if (metadata.component_type === 'map' && dashboardId) {
+    const mapType = (metadata.map_type as string) || 'scatter_map';
+    const selectionEnabled =
+      Boolean(metadata.selection_enabled) &&
+      mapType !== 'choropleth_map' &&
+      !!onFilterChange;
+    const onResetSelection =
+      selectionEnabled && onFilterChange
+        ? () =>
+            onFilterChange({
+              index: metadata.index,
+              value: [],
+              source: 'map_selection',
+            })
+        : undefined;
     return wrapWithChrome(
       'map',
       metadata,
       undefined,
-      <MapRenderer dashboardId={dashboardId} metadata={metadata} filters={filters} />,
-      { extraActions, showDragHandle },
+      <MapRenderer
+        dashboardId={dashboardId}
+        metadata={metadata}
+        filters={filters}
+        onFilterChange={onFilterChange}
+        refreshTick={refreshTick}
+      />,
+      { onResetFilter: onResetSelection, extraActions, showDragHandle },
     );
   }
 
@@ -151,7 +218,12 @@ const ComponentRenderer: React.FC<ComponentRendererProps> = ({
       'jbrowse',
       metadata,
       undefined,
-      <JBrowseRenderer dashboardId={dashboardId} metadata={metadata} filters={filters} />,
+      <JBrowseRenderer
+        dashboardId={dashboardId}
+        metadata={metadata}
+        filters={filters}
+        refreshTick={refreshTick}
+      />,
       { extraActions, showDragHandle },
     );
   }
@@ -161,7 +233,12 @@ const ComponentRenderer: React.FC<ComponentRendererProps> = ({
       'multiqc',
       metadata,
       undefined,
-      <MultiQCRenderer dashboardId={dashboardId} metadata={metadata} filters={filters} />,
+      <MultiQCRenderer
+        dashboardId={dashboardId}
+        metadata={metadata}
+        filters={filters}
+        refreshTick={refreshTick}
+      />,
       { extraActions, showDragHandle },
     );
   }
@@ -183,10 +260,32 @@ const TableBlock: React.FC<{
   dashboardId: string;
   metadata: StoredMetadata;
   filters: InteractiveFilter[];
+  onFilterChange?: (filter: InteractiveFilter) => void;
+  refreshTick?: number;
   extraActions?: React.ReactNode;
   showDragHandle?: boolean;
-}> = ({ dashboardId, metadata, filters, extraActions, showDragHandle }) => {
+}> = ({
+  dashboardId,
+  metadata,
+  filters,
+  onFilterChange,
+  refreshTick,
+  extraActions,
+  showDragHandle,
+}) => {
   const agGridApiRef = useRef<GridApi | null>(null);
+  const selectionEnabled = Boolean(metadata.row_selection_enabled) && !!onFilterChange;
+  const onResetSelection =
+    selectionEnabled && onFilterChange
+      ? () => {
+          agGridApiRef.current?.deselectAll();
+          onFilterChange({
+            index: metadata.index,
+            value: [],
+            source: 'table_selection',
+          });
+        }
+      : undefined;
   return wrapWithChrome(
     'table',
     metadata,
@@ -196,17 +295,20 @@ const TableBlock: React.FC<{
       metadata={metadata}
       filters={filters}
       agGridApiRef={agGridApiRef}
+      onFilterChange={onFilterChange}
+      refreshTick={refreshTick}
     />,
-    { agGridApiRef, extraActions, showDragHandle },
+    { agGridApiRef, onResetFilter: onResetSelection, extraActions, showDragHandle },
   );
 };
 
 const CardRenderer: React.FC<{
   metadata: StoredMetadata;
   value?: unknown;
+  secondaryValues?: Record<string, unknown>;
   loading?: boolean;
   filterApplied: boolean;
-}> = ({ metadata, value, loading, filterApplied }) => {
+}> = ({ metadata, value, secondaryValues, loading, filterApplied }) => {
   const displayValue =
     loading && value == null
       ? '…'
@@ -214,21 +316,49 @@ const CardRenderer: React.FC<{
       ? formatValue(value)
       : '—';
 
+  // Preserve the YAML-declared order; fall back to the keys returned by the
+  // server. Drop the hero aggregation if it appears in the list (the API
+  // already strips it but defend in depth).
+  const aggregationOrder = (metadata.aggregations || Object.keys(secondaryValues || {})).filter(
+    (a) => a && a !== metadata.aggregation,
+  );
+  const orderedSecondary = aggregationOrder
+    .map((a) => ({ name: a, value: secondaryValues?.[a] }))
+    .filter((row) => row.value !== undefined);
+
+  // While the next bulk-compute is in flight we keep the previous value
+  // visible (App.tsx no longer clears `cardValues`), but slightly dim the
+  // card to signal "refreshing". 0.6 opacity is enough to read as stale
+  // without flicker. Brief transitions smooth out the dim/restore swing.
+  const dimming = loading && value != null;
   return (
-    <DepictioCard
-      title={metadata.title || inferCardTitle(metadata)}
-      value={displayValue}
-      icon_name={metadata.icon_name}
-      icon_color={metadata.icon_color}
-      title_color={metadata.title_color}
-      background_color={metadata.background_color}
-      title_font_size={metadata.title_font_size || 'md'}
-      value_font_size={metadata.value_font_size || 'xl'}
-      aggregation_description={
-        metadata.aggregation ? `(${capitalize(metadata.aggregation)})` : undefined
-      }
-      filter_applied={filterApplied}
-    />
+    <div
+      style={{
+        opacity: dimming ? 0.6 : 1,
+        transition: 'opacity 120ms ease-out',
+        height: '100%',
+        display: 'flex',
+        flexDirection: 'column',
+      }}
+    >
+      <DepictioCard
+        title={metadata.title || inferCardTitle(metadata)}
+        value={displayValue}
+        icon_name={metadata.icon_name}
+        icon_color={metadata.icon_color}
+        title_color={metadata.title_color}
+        background_color={metadata.background_color}
+        title_font_size={metadata.title_font_size || 'md'}
+        value_font_size={metadata.value_font_size || 'xl'}
+        aggregation_description={
+          metadata.aggregation ? `(${capitalize(metadata.aggregation)})` : undefined
+        }
+        filter_applied={filterApplied}
+      />
+      {orderedSecondary.length > 0 ? (
+        <SecondaryMetrics rows={orderedSecondary} />
+      ) : null}
+    </div>
   );
 };
 

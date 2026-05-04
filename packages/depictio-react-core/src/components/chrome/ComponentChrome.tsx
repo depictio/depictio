@@ -35,15 +35,17 @@ export interface ComponentChromeProps {
 
 /** View-accessible action visibility per component type. Mirrors the
  *  view-accessible subset of `_create_component_buttons` in
- *  `depictio/dash/layouts/edit.py:236-428`. */
+ *  `depictio/dash/layouts/edit.py:236-428`. ``reset`` is always last in the
+ *  list so the chrome can hide it when ``onResetFilter`` isn't provided. */
 export function actionsFor(componentType: string): ChromeAction[] {
   switch (componentType) {
     case 'figure':
     case 'map':
+      return ['metadata', 'fullscreen', 'download', 'reset'];
     case 'multiqc':
       return ['metadata', 'fullscreen', 'download'];
     case 'table':
-      return ['metadata', 'fullscreen', 'download'];
+      return ['metadata', 'fullscreen', 'download', 'reset'];
     case 'interactive':
       return ['metadata', 'reset'];
     case 'card':
@@ -119,6 +121,9 @@ const ComponentChrome: React.FC<ComponentChromeProps> = ({
           />
         );
       case 'reset':
+        // Skip reset entirely when the host didn't wire one up — keeps the
+        // figure/table/map chrome clean for components without selection.
+        if (!onResetFilter) return null;
         return <ResetButton key="reset" onResetFilter={onResetFilter} />;
     }
   };

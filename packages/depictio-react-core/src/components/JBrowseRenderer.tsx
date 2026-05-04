@@ -7,6 +7,8 @@ interface JBrowseRendererProps {
   dashboardId: string;
   metadata: StoredMetadata;
   filters: InteractiveFilter[];
+  /** Counter to force refetch on realtime updates even when filters are unchanged. */
+  refreshTick?: number;
 }
 
 interface JBrowseSession {
@@ -30,6 +32,7 @@ const JBrowseRenderer: React.FC<JBrowseRendererProps> = ({
   dashboardId,
   metadata,
   filters,
+  refreshTick,
 }) => {
   const [session, setSession] = useState<JBrowseSession | null>(null);
   const [loading, setLoading] = useState(true);
@@ -67,7 +70,7 @@ const JBrowseRenderer: React.FC<JBrowseRendererProps> = ({
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dashboardId, metadata.index, JSON.stringify(filters)]);
+  }, [dashboardId, metadata.index, JSON.stringify(filters), refreshTick]);
 
   const iframeStyle: React.CSSProperties = scaleEnabled
     ? {

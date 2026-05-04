@@ -8,6 +8,8 @@ interface MultiQCRendererProps {
   dashboardId: string;
   metadata: StoredMetadata;
   filters: InteractiveFilter[];
+  /** Counter to force refetch on realtime updates even when filters are unchanged. */
+  refreshTick?: number;
 }
 
 /**
@@ -23,6 +25,7 @@ const MultiQCRenderer: React.FC<MultiQCRendererProps> = ({
   dashboardId,
   metadata,
   filters,
+  refreshTick,
 }) => {
   const selectedModule = metadata.selected_module as string | undefined;
   const selectedPlot = metadata.selected_plot as string | undefined;
@@ -35,6 +38,7 @@ const MultiQCRenderer: React.FC<MultiQCRendererProps> = ({
         dashboardId={dashboardId}
         metadata={metadata}
         filters={filters}
+        refreshTick={refreshTick}
       />
     );
   }
@@ -44,6 +48,7 @@ const MultiQCRenderer: React.FC<MultiQCRendererProps> = ({
       dashboardId={dashboardId}
       metadata={metadata}
       filters={filters}
+      refreshTick={refreshTick}
     />
   );
 };

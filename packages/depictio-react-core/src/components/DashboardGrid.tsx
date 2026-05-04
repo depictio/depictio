@@ -14,8 +14,16 @@ interface DashboardGridProps {
   onFilterChange?: (filter: InteractiveFilter) => void;
   /** Precomputed card values keyed by component index. */
   cardValues?: Record<string, unknown>;
+  /** Precomputed secondary aggregations keyed by component index → aggregation name. */
+  cardSecondaryValues?: Record<string, Record<string, unknown>>;
   /** True while the bulk compute is pending. */
   cardValuesLoading?: boolean;
+  /**
+   * Counter incremented to force per-component data fetches to re-run even
+   * when ``filters`` is reference-equal (e.g. on a realtime ``data_collection_updated``
+   * event). Renderers include this in their effect deps; ``undefined`` is a no-op.
+   */
+  refreshTick?: number;
   /** Allow users to drag grid items. Defaults to false (viewer-safe). */
   isDraggable?: boolean;
   /** Allow users to resize grid items. Defaults to false (viewer-safe). */
@@ -57,7 +65,9 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
   filters,
   onFilterChange,
   cardValues,
+  cardSecondaryValues,
   cardValuesLoading,
+  refreshTick,
   isDraggable = false,
   isResizable = false,
   editMode = false,
@@ -105,6 +115,17 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
       isResizable={isResizable}
       compactType="vertical"
       onLayoutChange={onLayoutChange}
+      // Live-resize: Plotly's useResizeHandler and AG Grid only listen to
+      // the WINDOW ``resize`` event, not container size changes. While the
+      // user is dragging a resize handle the cell DIM changes but the
+      // window doesn't, so Plotly/AG Grid never re-flow until release.
+      // Dispatch a synthetic resize event on every onResize tick so the
+      // figure / table tracks the cell size live.
+      onResize={() => {
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new Event('resize'));
+        }
+      }}
       // Drag is gated to a dedicated handle (see ComponentChrome's
       // `react-grid-dragHandle` action). Cells themselves are NOT draggable
       // — the user can interact with content (Plotly modebar, AG Grid
@@ -141,7 +162,9 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
               filters={filters}
               onFilterChange={onFilterChange}
               cardValue={cardValues?.[m.index]}
+              cardSecondaryValues={cardSecondaryValues?.[m.index]}
               cardLoading={cardValuesLoading}
+              refreshTick={refreshTick}
               extraActions={showOverlays ? renderItemOverlay!(m.index, m) : undefined}
               showDragHandle={editMode && isDraggable}
             />
