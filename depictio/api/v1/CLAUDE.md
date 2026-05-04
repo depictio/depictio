@@ -7,5 +7,6 @@
 
 | ID | Time | T | Title | Read |
 |----|------|---|-------|------|
+| #11692 | 10:26 PM | ✅ | Backend API infrastructure for React viewer mounting and demo user workflows | ~638 |
 | #11551 | 5:05 PM | 🔵 | WebSocket notifications working but auto-refresh failing due to incomplete refreshTick wiring | ~761 |
 </claude-mem-context>
