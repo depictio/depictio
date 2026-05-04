@@ -44,6 +44,7 @@ dependencies = [
   "gunicorn==23.0.0",
   "httpx==0.28.1",
   "uvicorn==0.34.0",
+  "websockets==14.2",
   # Database
   "motor==3.7.1",
   "pymongo==4.13.0",
