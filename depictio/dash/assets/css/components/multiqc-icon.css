@@ -1,0 +1,16 @@
+/* =============================================================================
+   MULTIQC ICON THEMING
+   The new official MultiQC icon (https://github.com/MultiQC/logo) ships a
+   dark variant for light backgrounds and a white variant for dark
+   backgrounds. We default to the dark icon and swap to white when the
+   Mantine color scheme is dark.
+   ============================================================================= */
+
+img.multiqc-icon-themed {
+    /* Dark icon by default — readable on light backgrounds. */
+    content: url("/assets/images/logos/multiqc_icon_dark.svg");
+}
+
+[data-mantine-color-scheme="dark"] img.multiqc-icon-themed {
+    content: url("/assets/images/logos/multiqc_icon_white.svg");
+}

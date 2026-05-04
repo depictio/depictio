@@ -1,0 +1,17 @@
+/* =============================================================================
+   DEPICTIO LOGO THEMING
+   `logo_black.svg` and `logo_white.svg` are byte-identical (a base64-embedded
+   PNG inside an SVG wrapper), so the clientside `src` swap in
+   `dash/simple_theme.py` is a no-op. Until proper light/dark assets are
+   shipped, apply a CSS filter on dark mode to invert the embedded raster
+   while preserving brand hues — the same treatment used in the React
+   viewer's `PoweredBy.tsx`.
+   ============================================================================= */
+
+[data-mantine-color-scheme="dark"] #header-powered-by-logo,
+[data-mantine-color-scheme="dark"] #navbar-logo-content,
+[data-mantine-color-scheme="dark"] #auth-modal-logo-login,
+[data-mantine-color-scheme="dark"] #auth-modal-logo-register,
+[data-mantine-color-scheme="dark"] #auth-modal-logo-public {
+    filter: invert(1) hue-rotate(180deg);
+}
