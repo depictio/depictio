@@ -6,22 +6,142 @@
 
 const API_BASE = '/depictio/api/v1';
 
+/** localStorage key shared with the Dash app — same payload shape. */
+const SESSION_KEY = 'local-store';
+
+/** Refresh proactively when the access token has less than this many ms left.
+ *  Chosen to comfortably cover the 60–120 ms latency of the round-trip plus
+ *  the 1 h access-token lifetime upstream — i.e. a single page session never
+ *  surfaces an unexpected 401 from clock drift. */
+const REFRESH_WINDOW_MS = 60_000;
+
+function readStoredSession(): Record<string, unknown> | null {
+  try {
+    const raw = localStorage.getItem(SESSION_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
 function authHeaders(): Record<string, string> {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
   };
-  try {
-    const stored = localStorage.getItem('local-store');
-    if (stored) {
-      const parsed = JSON.parse(stored);
-      if (parsed?.access_token) {
-        headers.Authorization = `Bearer ${parsed.access_token}`;
-      }
-    }
-  } catch {
-    // ignore malformed localStorage
+  const session = readStoredSession();
+  const token = session?.access_token;
+  if (typeof token === 'string' && token) {
+    headers.Authorization = `Bearer ${token}`;
   }
   return headers;
+}
+
+/** Trade a refresh token for a new access token via the public `/auth/refresh`
+ *  endpoint (no api-key required — the refresh token is itself the credential).
+ *  Mirrors the Dash-side ``refresh_access_token`` helper.
+ *
+ *  Returns the updated access_token + expire_datetime, or null on failure
+ *  (expired / invalidated refresh token, server error, etc.). */
+async function refreshAccessToken(refreshToken: string): Promise<{
+  access_token: string;
+  expire_datetime: string;
+} | null> {
+  try {
+    const res = await fetch(`${API_BASE}/auth/refresh`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refresh_token: refreshToken }),
+    });
+    if (!res.ok) return null;
+    const body = (await res.json()) as { access_token: string; expire_datetime: string };
+    return body;
+  } catch {
+    return null;
+  }
+}
+
+/** In-flight refresh promise — multiple parallel ``authFetch`` callers share
+ *  one refresh round-trip so we don't fire N refreshes at once on a stale
+ *  cache. Reset to null when the refresh resolves. */
+let pendingRefresh: Promise<string | null> | null = null;
+
+async function ensureFreshAccessToken(): Promise<string | null> {
+  const session = readStoredSession();
+  const access = typeof session?.access_token === 'string' ? session.access_token : null;
+  const refresh = typeof session?.refresh_token === 'string' ? session.refresh_token : null;
+  const expireIso = typeof session?.expire_datetime === 'string' ? session.expire_datetime : null;
+
+  if (!access || !refresh) return access;
+
+  const expireMs = expireIso ? Date.parse(expireIso) : NaN;
+  if (Number.isFinite(expireMs) && expireMs - Date.now() > REFRESH_WINDOW_MS) {
+    return access;
+  }
+
+  if (!pendingRefresh) {
+    pendingRefresh = (async () => {
+      try {
+        const refreshed = await refreshAccessToken(refresh);
+        if (!refreshed) return null;
+        const next = { ...session, ...refreshed };
+        try {
+          localStorage.setItem(SESSION_KEY, JSON.stringify(next));
+        } catch {
+          // ignore quota / private mode
+        }
+        return refreshed.access_token;
+      } finally {
+        pendingRefresh = null;
+      }
+    })();
+  }
+  const next = await pendingRefresh;
+  return next ?? access;
+}
+
+/**
+ * Fetch wrapper that injects the Bearer token, proactively refreshes the
+ * access token when it's near expiry, and on a 401 retries once with a freshly
+ * minted access token. After persistent 401s the session is cleared so the
+ * SPA falls back to the unauthenticated path on the next route resolution.
+ */
+async function authFetch(url: string, init: RequestInit = {}): Promise<Response> {
+  await ensureFreshAccessToken();
+
+  const headers = new Headers(init.headers || {});
+  if (!headers.has('Content-Type') && init.body && typeof init.body === 'string') {
+    headers.set('Content-Type', 'application/json');
+  }
+  const existing = readStoredSession();
+  const token = typeof existing?.access_token === 'string' ? existing.access_token : null;
+  if (token && !headers.has('Authorization')) {
+    headers.set('Authorization', `Bearer ${token}`);
+  }
+
+  const first = await fetch(url, { ...init, headers });
+  if (first.status !== 401) return first;
+
+  // Single retry: force a refresh, then re-issue.
+  const refresh = typeof existing?.refresh_token === 'string' ? existing.refresh_token : null;
+  if (!refresh) return first;
+  const refreshed = await refreshAccessToken(refresh);
+  if (!refreshed) {
+    clearSession();
+    return first;
+  }
+  try {
+    localStorage.setItem(SESSION_KEY, JSON.stringify({ ...existing, ...refreshed }));
+  } catch {
+    // ignore
+  }
+  const retryHeaders = new Headers(init.headers || {});
+  retryHeaders.set('Authorization', `Bearer ${refreshed.access_token}`);
+  if (!retryHeaders.has('Content-Type') && init.body && typeof init.body === 'string') {
+    retryHeaders.set('Content-Type', 'application/json');
+  }
+  return fetch(url, { ...init, headers: retryHeaders });
 }
 
 /** Throw `Error("<prefix>: <status> <body-text>")` after reading the body as
@@ -84,6 +204,14 @@ export interface StoredMetadata {
   // Interactive
   interactive_component_type?: string;
   default_state?: { default_value?: unknown; default_range?: unknown; options?: unknown[] };
+  /** Visual grouping — interactive components sharing the same `group` are
+   *  rendered together inside one Mantine Paper. Up to 3 per group. */
+  group?: string;
+  /** Layout placement: 'left' (default — Filters sidebar) or 'top' (top panel
+   *  above the dashboard grid). Currently only 'Timeline' may use 'top'. */
+  placement?: 'left' | 'top';
+  /** Default timescale for the Timeline interactive component. */
+  timescale?: 'year' | 'month' | 'day' | 'hour' | 'minute';
   [key: string]: unknown;
 }
 
@@ -96,6 +224,9 @@ export interface DashboardData {
   stored_layout_data?: unknown;
   left_panel_layout_data?: unknown;
   right_panel_layout_data?: unknown;
+  /** Project-level realtime config — only when ``enabled === true`` should
+   *  the viewer mount the WebSocket subscription / live-updates indicator. */
+  project_realtime?: { enabled: boolean; debounce_ms: number };
   [key: string]: unknown;
 }
 
@@ -151,13 +282,20 @@ export async function fetchSpecs(dcId: string): Promise<Record<string, unknown>>
  *  This hits /deltatables/unique_values/{dc_id}?column=... which the viewer
  *  branch adds as a thin wrapper around
  *  `load_deltatable_lite(..., load_for_options=True)`.
+ *
+ *  When `filterExpr` is provided, the server pre-filters the underlying data
+ *  with the supplied Polars expression so the returned options reflect only
+ *  the rows matching that scope.
  */
 export async function fetchUniqueValues(
   dcId: string,
   columnName: string,
+  filterExpr?: string | null,
 ): Promise<string[]> {
+  const params = new URLSearchParams({ column: columnName });
+  if (filterExpr) params.set('filter_expr', filterExpr);
   const res = await fetch(
-    `${API_BASE}/deltatables/unique_values/${dcId}?column=${encodeURIComponent(columnName)}`,
+    `${API_BASE}/deltatables/unique_values/${dcId}?${params.toString()}`,
     { headers: authHeaders() },
   );
   if (!res.ok) throw new Error(`Failed to fetch unique values: ${res.status}`);
@@ -193,12 +331,40 @@ export async function fetchColumnRange(
   };
 }
 
-/** Per-component computed data (current value under the given filter state). */
+/** Discriminator for filters produced by selection events on a chart/table/map.
+ *  Regular interactive components (MultiSelect, Slider, …) leave `source`
+ *  unset so the backend treats them like normal filters.
+ */
+export type InteractiveFilterSource =
+  | 'scatter_selection'
+  | 'table_selection'
+  | 'map_selection'
+  | 'image_selection';
+
+/** Per-component computed data (current value under the given filter state).
+ *  `metadata.dc_id` is required for cross-DC link resolution server-side; any
+ *  filter without it is treated as global. The optional `source` tags filters
+ *  emitted by chart/table/map selection so passive components can merge them
+ *  separately from regular interactive controls.
+ */
 export interface InteractiveFilter {
   index: string;
   value: unknown;
   column_name?: string;
   interactive_component_type?: string;
+  source?: InteractiveFilterSource;
+  /** Optional Polars filter expression carried with the user-supplied value.
+   *  When set, the server ANDs it onto the value-based filter so the source's
+   *  row scoping (e.g. `col('depth') >= 30`) propagates to downstream cards/
+   *  figures/tables. */
+  filter_expr?: string;
+  metadata?: {
+    dc_id?: string;
+    column_name?: string;
+    interactive_component_type?: string;
+    selection_column?: string;
+    filter_expr?: string;
+  };
 }
 
 export async function fetchComponentData(
@@ -223,10 +389,17 @@ export async function fetchComponentData(
  * in the dashboard — the backend dedupes Delta loads per unique (wf_id, dc_id)
  * so cost scales with distinct data collections, not with card count.
  *
- * Returns { values: { componentIndex: value, ... }, filter_applied, filter_count }.
+ * Returns { values, secondary_values, aggregations, filter_applied, filter_count }.
+ *  - `values` — hero scalar per component (existing behavior).
+ *  - `secondary_values` — populated for cards that declare `aggregations`;
+ *     map of componentId → { aggregationName: value }.
+ *  - `aggregations` — ordered list of secondary aggregation names per component
+ *     so the renderer can preserve the YAML order.
  */
 export interface BulkComputeResponse {
   values: Record<string, unknown>;
+  secondary_values?: Record<string, Record<string, unknown>>;
+  aggregations?: Record<string, string[]>;
   filter_applied: boolean;
   filter_count: number;
 }
@@ -299,8 +472,10 @@ export async function renderTable(
 }
 
 /** Fetch up to `max` non-null values of an image component's image_column.
- *  `dcId`, `imageColumn`, `s3BaseFolder` accepted for call-site symmetry but
- *  resolved server-side from the component's `stored_metadata`.
+ *  Filters narrow the grid the same way they narrow figures/tables —
+ *  including selection-source filters and cross-DC link filters resolved
+ *  server-side. `dcId`, `imageColumn`, `s3BaseFolder` accepted for call-site
+ *  symmetry but resolved server-side from the component's `stored_metadata`.
  */
 export async function fetchImagePaths(
   dashboardId: string,
@@ -309,10 +484,15 @@ export async function fetchImagePaths(
   _imageColumn: string,
   _s3BaseFolder: string,
   max = 50,
+  filters: InteractiveFilter[] = [],
 ): Promise<string[]> {
   const res = await fetch(
-    `${API_BASE}/dashboards/render_image_paths/${dashboardId}/${componentId}?max=${max}`,
-    { headers: authHeaders() },
+    `${API_BASE}/dashboards/render_image_paths/${dashboardId}/${componentId}`,
+    {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify({ filters, max }),
+    },
   );
   if (!res.ok) throw new Error(`Failed to fetch image paths: ${res.status}`);
   const body = (await res.json()) as { paths?: string[] };
@@ -1213,7 +1393,7 @@ export async function handleGoogleCallback(code: string, state: string): Promise
 /** Persist a session payload to localStorage under the same key Dash uses. */
 export function persistSession(session: SessionPayload): void {
   try {
-    localStorage.setItem('local-store', JSON.stringify(session));
+    localStorage.setItem(SESSION_KEY, JSON.stringify(session));
   } catch (err) {
     console.error('Failed to persist auth session:', err);
   }
@@ -1222,11 +1402,25 @@ export function persistSession(session: SessionPayload): void {
 /** Clear the persisted session — used for logout. */
 export function clearSession(): void {
   try {
-    localStorage.removeItem('local-store');
+    localStorage.removeItem(SESSION_KEY);
   } catch {
     // ignore — quota / private mode
   }
 }
+
+/** Proactively refresh the access token if it's within ``REFRESH_WINDOW_MS``
+ *  of expiring. Safe to call at SPA boot or before mounting the auth UI.
+ *  Returns true if the session is still valid (or successfully refreshed),
+ *  false if there is no session at all. Does NOT raise on refresh failure —
+ *  callers can fall back to the unauthenticated path. */
+export async function validateSession(): Promise<boolean> {
+  const session = readStoredSession();
+  if (!session?.access_token) return false;
+  await ensureFreshAccessToken();
+  return readStoredSession()?.access_token != null;
+}
+
+export { authFetch, refreshAccessToken };
 
 // ---- Dashboard management (list / create / edit / delete / import / export)
 //

@@ -5,6 +5,10 @@
  * are also exported in case a host wants to wire one up directly.
  */
 
+// Realtime highlight keyframes (depictio-row-new / depictio-card-new). Imported
+// once here so consumers don't need to add the stylesheet manually.
+import './styles/realtime-highlight.css';
+
 // Grid + top-level renderer
 export { default as DashboardGrid } from './components/DashboardGrid';
 export { default as ComponentRenderer } from './components/ComponentRenderer';
@@ -25,6 +29,13 @@ export { default as SliderRenderer } from './components/interactive/SliderRender
 export { default as DatePickerRenderer } from './components/interactive/DatePickerRenderer';
 export { default as CheckboxSwitchRenderer } from './components/interactive/CheckboxSwitchRenderer';
 export { default as SegmentedControlRenderer } from './components/interactive/SegmentedControlRenderer';
+export { default as TimelineRenderer } from './components/interactive/TimelineRenderer';
+
+// Layout helpers (filter sidebar grouping + top panel)
+export { default as InteractiveGroupCard } from './components/InteractiveGroupCard';
+export { default as TopPanel } from './components/TopPanel';
+export { groupInteractiveComponents } from './utils/groupInteractive';
+export type { InteractiveGroup } from './utils/groupInteractive';
 
 // MultiQC sub-renderers
 export { default as MultiQCFigure } from './components/multiqc/MultiQCFigure';
@@ -90,6 +101,9 @@ export {
   handleGoogleCallback,
   persistSession,
   clearSession,
+  validateSession,
+  authFetch,
+  refreshAccessToken,
   // Dashboard management
   listDashboards,
   listProjects,
@@ -130,11 +144,28 @@ export {
   generateAgentConfig,
   upgradeToTemporaryUser,
 } from './api';
+// Selection-as-filter helpers (Plotly/AG Grid → InteractiveFilter)
+export {
+  extractScatterSelection,
+  extractRowSelection,
+  mergeFiltersBySource,
+  clearFiltersBySource,
+  hasSelectionFilters,
+} from './selection';
+
+// Real-time event subscription (WebSocket /events/ws)
+export { useDataCollectionUpdates } from './realtime';
+export type { RealtimeStatus, RealtimeMode, RealtimeEvent } from './realtime';
+export { default as RealtimeIndicator } from './components/RealtimeIndicator';
+export { useRealtimeJournal } from './hooks/useRealtimeJournal';
+export type { RealtimeJournalEntry } from './hooks/useRealtimeJournal';
+
 export type {
   StoredMetadata,
   DashboardData,
   DashboardSummary,
   InteractiveFilter,
+  InteractiveFilterSource,
   BulkComputeResponse,
   FigureResponse,
   TableResponse,
