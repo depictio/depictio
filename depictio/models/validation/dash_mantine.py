@@ -24,6 +24,7 @@ InteractiveComponentType = Literal[
     "Slider",
     "RangeSlider",
     "DateRangePicker",
+    "Timeline",
     "Switch",
 ]
 
@@ -34,6 +35,7 @@ SUPPORTED_INTERACTIVE_TYPES: list[str] = [
     "Slider",
     "RangeSlider",
     "DateRangePicker",
+    "Timeline",
     "Switch",
 ]
 
@@ -48,6 +50,8 @@ COMPONENT_COLUMN_COMPATIBILITY: dict[str, set[str]] = {
     "RangeSlider": {"int64", "int32", "float64", "float32"},
     # Date picker needs datetime
     "DateRangePicker": {"datetime", "date"},
+    # Timeline scrubber needs datetime
+    "Timeline": {"datetime", "date"},
     # Switch is for boolean filtering
     "Switch": {"bool", "object", "string", "category"},
 }

@@ -174,6 +174,47 @@ def validate_filter_expr(expr_str: str) -> None:
         raise ValueError("filter_expr has unbalanced parentheses")
 
 
+def build_filter_expr(expr_str: str) -> "pl.Expr":
+    """Validate and compile a filter expression string into a Polars Expr.
+
+    Useful for callers that want to apply the expression to a ``LazyFrame``
+    via ``.filter(expr)`` without materializing a ``DataFrame`` first.
+
+    Args:
+        expr_str: A Polars filter expression string.
+
+    Returns:
+        A Polars ``Expr`` object.
+
+    Raises:
+        ValueError: If the expression is invalid or doesn't evaluate to a
+            Polars ``Expr``.
+        RuntimeError: If expression evaluation fails.
+    """
+    import polars as pl
+
+    validate_filter_expr(expr_str)
+
+    safe_namespace: dict[str, object] = {
+        "col": pl.col,
+        "lit": pl.lit,
+        "True": True,
+        "False": False,
+        "None": None,
+        "__builtins__": {},
+    }
+
+    try:
+        expr = eval(expr_str, safe_namespace)  # noqa: S307
+    except Exception as e:
+        raise RuntimeError(f"Failed to evaluate filter_expr '{expr_str}': {e}") from e
+
+    if not isinstance(expr, pl.Expr):
+        raise ValueError(f"filter_expr must evaluate to a Polars Expr, got {type(expr).__name__}")
+
+    return expr
+
+
 def apply_filter_expr(df: "pl.DataFrame", expr_str: str) -> "pl.DataFrame":
     """Apply a validated Polars filter expression to a DataFrame.
 
@@ -192,27 +233,7 @@ def apply_filter_expr(df: "pl.DataFrame", expr_str: str) -> "pl.DataFrame":
         ValueError: If the expression is invalid or unsafe.
         RuntimeError: If expression evaluation fails at runtime.
     """
-    import polars as pl
-
-    validate_filter_expr(expr_str)
-
-    # Restricted namespace: only col() and lit() are available
-    safe_namespace: dict[str, object] = {
-        "col": pl.col,
-        "lit": pl.lit,
-        "True": True,
-        "False": False,
-        "None": None,
-        "__builtins__": {},
-    }
-
-    try:
-        expr = eval(expr_str, safe_namespace)  # noqa: S307
-    except Exception as e:
-        raise RuntimeError(f"Failed to evaluate filter_expr '{expr_str}': {e}") from e
-
-    if not isinstance(expr, pl.Expr):
-        raise ValueError(f"filter_expr must evaluate to a Polars Expr, got {type(expr).__name__}")
+    expr = build_filter_expr(expr_str)
 
     try:
         return df.filter(expr)

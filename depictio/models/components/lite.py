@@ -25,8 +25,11 @@ from depictio.models.components.constants import (
     AGGREGATION_COMPATIBILITY,
     COLUMN_TYPES,
     INTERACTIVE_COMPATIBILITY,
+    INTERACTIVE_PLACEMENTS,
     MAP_STYLES,
     MAP_TYPES,
+    TIMELINE_TIMESCALES,
+    TOP_PANEL_INTERACTIVE_TYPES,
     VISU_TYPES,
 )
 
@@ -301,6 +304,36 @@ class InteractiveLiteComponent(BaseLiteComponent):
         "component options/ranges (e.g. \"col('sepal.length') > 5\")",
     )
 
+    # Layout & grouping
+    placement: str = Field(
+        default="left",
+        description="Where to render this component in the React viewer: "
+        "'left' (default — left filters sidebar) or 'top' (top panel above the grid). "
+        "Only specific component types (e.g. 'Timeline') support 'top'.",
+    )
+    group: str | None = Field(
+        default=None,
+        description="Optional group identifier. Interactive components sharing the same "
+        "group are rendered together inside one card. Up to 3 components per group.",
+    )
+
+    # Timeline-specific
+    timescale: str | None = Field(
+        default=None,
+        description="Default timescale for the Timeline component "
+        "('year' | 'month' | 'day' | 'hour' | 'minute'). Required when "
+        "interactive_component_type='Timeline'.",
+    )
+
+    # Display density
+    show_marks: bool | None = Field(
+        default=None,
+        description="Whether the component renders tick marks (Slider / RangeSlider / "
+        "Timeline). When omitted, the renderer picks a sensible default — visible for "
+        "ungrouped components, hidden for components inside a 'group' for higher "
+        "compaction. Set explicitly to True/False to override.",
+    )
+
     # Styling (optional)
     title_size: str | None = Field(default=None, description="Title size")
     custom_color: str | None = Field(default=None, description="Custom accent color")
@@ -340,6 +373,39 @@ class InteractiveLiteComponent(BaseLiteComponent):
             from depictio.models.components.filter_expr import validate_filter_expr
 
             validate_filter_expr(self.filter_expr)
+        return self
+
+    @model_validator(mode="after")
+    def validate_placement(self) -> "InteractiveLiteComponent":
+        """Validate placement value and that only allow-listed types use 'top'."""
+        if self.placement not in INTERACTIVE_PLACEMENTS:
+            valid = ", ".join(INTERACTIVE_PLACEMENTS)
+            raise ValueError(f"Invalid placement '{self.placement}'. Valid values: {valid}")
+        if (
+            self.placement == "top"
+            and self.interactive_component_type not in TOP_PANEL_INTERACTIVE_TYPES
+        ):
+            allowed = ", ".join(TOP_PANEL_INTERACTIVE_TYPES)
+            raise ValueError(
+                f"placement='top' is only supported for interactive_component_type "
+                f"in [{allowed}], got '{self.interactive_component_type}'"
+            )
+        return self
+
+    @model_validator(mode="after")
+    def validate_timescale(self) -> "InteractiveLiteComponent":
+        """Timeline requires a timescale; other types must not set one."""
+        if self.interactive_component_type == "Timeline":
+            if self.timescale is None:
+                valid = ", ".join(TIMELINE_TIMESCALES)
+                raise ValueError(
+                    f"timescale is required for Timeline components. Valid values: {valid}"
+                )
+            if self.timescale not in TIMELINE_TIMESCALES:
+                valid = ", ".join(TIMELINE_TIMESCALES)
+                raise ValueError(f"Invalid timescale '{self.timescale}'. Valid values: {valid}")
+        elif self.timescale is not None:
+            raise ValueError("timescale is only valid for interactive_component_type='Timeline'")
         return self
 
 
