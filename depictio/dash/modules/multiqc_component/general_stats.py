@@ -951,6 +951,156 @@ def build_general_stats_content(
 
 
 # ---------------------------------------------------------------------------
+# Public API: JSON-safe payload for the React viewer
+# ---------------------------------------------------------------------------
+
+
+def _column_format_to_json(
+    column_name: str, percentage_columns: list[str], column_formats: dict
+) -> dict | None:
+    """JSON-safe mirror of `_get_column_format`.
+
+    Returns a primitive dict the React side can consume (Intl.NumberFormat).
+    Mirrors the same branching as the Dash `Format`-returning version.
+    """
+    if column_name == "Sample Name":
+        return None
+    if column_name in percentage_columns:
+        return {"precision": 1, "suffix": "%", "group": True}
+    if "(M)" in column_name:
+        return {"precision": 2, "suffix": " M", "group": True}
+    if "bp" in column_name:
+        return {"precision": 0, "suffix": " bp", "group": True}
+    if column_name in column_formats:
+        format_info = column_formats[column_name]
+        format_str = format_info.get("format") or "{:,.1f}"
+        suffix = format_info.get("suffix") or ""
+        if suffix and suffix.strip() == "M":
+            return {"precision": 2, "suffix": " M", "group": True}
+        if suffix and "bp" in suffix:
+            if ".0f" in format_str:
+                return {"precision": 0, "suffix": " bp", "group": True}
+            if ".1f" in format_str:
+                return {"precision": 1, "suffix": " bp", "group": True}
+        if ".0f" in format_str:
+            return {"precision": 0, "suffix": "", "group": True}
+        if ".1f" in format_str:
+            return {"precision": 1, "suffix": "", "group": True}
+        if ".2f" in format_str:
+            return {"precision": 2, "suffix": "", "group": True}
+    if "len" in column_name.lower():
+        return {"precision": 0, "suffix": "", "group": True}
+    return {"precision": 1, "suffix": "", "group": True}
+
+
+def _build_mode_payload(
+    parquet_path: str,
+    show_hidden: bool,
+    read_mode: str,
+    selected_samples: list[str] | None = None,
+) -> dict:
+    """Build a fully JSON-safe payload for one read mode (table + violin).
+
+    When ``selected_samples`` is provided, the dataframe is filtered before
+    style + violin generation so data bars span the filtered range only.
+    """
+    result = _process_multiqc_data(parquet_path, show_hidden=show_hidden, read_mode=read_mode)
+    (
+        _df_multiqc_real,
+        df_for_display,
+        internal_to_display,
+        tools,
+        column_metadata,
+        percentage_columns,
+        _sample_groups,
+    ) = result
+
+    if selected_samples:
+        df_for_display = df_for_display[
+            df_for_display["Sample Name"].astype(str).isin([str(s) for s in selected_samples])
+        ].reset_index(drop=True)
+
+    all_styles, column_formats = _generate_data_bar_styles(
+        df_for_display, tools, column_metadata, internal_to_display, percentage_columns
+    )
+
+    columns = [
+        {
+            "id": col,
+            "name": internal_to_display.get(col, col),
+            "type": "numeric" if col != "Sample Name" else "text",
+            "format": _column_format_to_json(
+                internal_to_display.get(col, col), percentage_columns, column_formats
+            ),
+        }
+        for col in df_for_display.columns
+    ]
+
+    violin_fig = _create_violin_plot(
+        df_for_display,
+        {col: tool for tool, cols in column_metadata.items() for col in cols},
+        {v: k for k, v in internal_to_display.items()} if internal_to_display else None,
+    )
+
+    return {
+        "table_data": df_for_display.to_dict("records"),
+        "table_columns": columns,
+        "table_styles": all_styles,
+        "violin_figure": violin_fig.to_dict(),
+    }
+
+
+def build_general_stats_payload(
+    parquet_path: str,
+    show_hidden: bool = True,
+    selected_samples: list[str] | None = None,
+) -> dict:
+    """JSON-safe payload mirroring `build_general_stats_content` for the React viewer.
+
+    Returns:
+        {
+          "is_paired_end": bool,
+          "all_samples": [str, ...],
+          "modes": {
+            "mean":  {table_data, table_columns, table_styles, violin_figure},
+            "r1":    same shape — only when is_paired_end,
+            "r2":    same shape — only when is_paired_end,
+            "all":   same shape — only when is_paired_end,
+          },
+        }
+
+    The Dash `Format` objects in `table_columns[].format` are replaced by plain
+    `{precision, suffix, group}` dicts; everything else is already JSON-safe.
+
+    When ``selected_samples`` is provided, the table is filtered to those
+    samples (and the violin recomputed from the filtered slice). ``is_paired_end``
+    and ``all_samples`` are still derived from the *unfiltered* probe so the
+    React-side toggle remains coherent across filter changes.
+    """
+    probe = _process_multiqc_data(parquet_path, show_hidden=show_hidden, read_mode="mean")
+    is_paired_end = probe[6] is not None
+
+    read_modes = ["mean", "r1", "r2", "all"] if is_paired_end else ["mean"]
+    modes = {
+        mode: _build_mode_payload(parquet_path, show_hidden, mode, selected_samples)
+        for mode in read_modes
+    }
+
+    all_samples: set[str] = set()
+    for mdata in modes.values():
+        for rec in mdata["table_data"]:
+            sample = rec.get("Sample Name")
+            if sample:
+                all_samples.add(sample)
+
+    return {
+        "is_paired_end": is_paired_end,
+        "all_samples": sorted(all_samples),
+        "modes": modes,
+    }
+
+
+# ---------------------------------------------------------------------------
 # Public API: rebuild from cached store data
 # ---------------------------------------------------------------------------
 

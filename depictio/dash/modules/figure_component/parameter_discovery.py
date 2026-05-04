@@ -43,38 +43,53 @@ class ParameterInspector:
         TYPE_MAPPING: Maps Python types to ParameterType enum values.
     """
 
-    # Core parameters that are essential for most visualizations
+    # Core parameters that are essential for most visualizations.
+    # Each entry has a `label` (human-friendly name shown in the form), a
+    # short `description` (what it does + when to use), and an explicit `type`
+    # (so the React ParameterField renders the matching control).
+    # `x*`/`y*`/`z*` carry the `*` suffix because at least one is required.
     CORE_PARAMETERS = {
         "x": {
             "type": ParameterType.COLUMN,
             "required": False,
-            "label": "x*",
-            "description": "X-axis column (at least one * parameter is required)",
+            "label": "X axis*",
+            "description": "Column whose values map to the horizontal axis. At least one of X / Y is required.",
         },
         "y": {
             "type": ParameterType.COLUMN,
             "required": False,
-            "label": "y*",
-            "description": "Y-axis column (at least one * parameter is required)",
+            "label": "Y axis*",
+            "description": "Column whose values map to the vertical axis. At least one of X / Y is required.",
         },
         "color": {
             "type": ParameterType.COLUMN,
             "required": False,
-            "description": "Color encoding column",
+            "label": "Color by",
+            "description": "Column whose values map to point color. Categorical → discrete palette; numeric → continuous scale.",
         },
         "z": {
             "type": ParameterType.COLUMN,
             "required": False,
-            "label": "z*",
-            "description": "Z-axis column for 3D plots (at least one * parameter is required)",
+            "label": "Z axis*",
+            "description": "Column whose values map to the depth axis (3D plots). At least one * parameter is required.",
         },
     }
 
-    # Common parameters shared across many visualizations
+    # Common parameters shared across many visualizations.
     COMMON_PARAMETERS = {
-        "title": {"type": ParameterType.STRING, "description": "Figure title"},
+        "title": {
+            "type": ParameterType.STRING,
+            "label": "Title",
+            "description": "Headline shown above the figure.",
+        },
+        "subtitle": {
+            "type": ParameterType.STRING,
+            "label": "Subtitle",
+            "description": "Sub-line shown under the title.",
+        },
         "template": {
             "type": ParameterType.SELECT,
+            "label": "Theme",
             "options": [
                 "mantine_light",
                 "mantine_dark",
@@ -87,35 +102,41 @@ class ParameterInspector:
                 "presentation",
                 "none",
             ],
-            "description": "Plotly template",
+            "description": "Plotly template that controls the plot's overall look (background, fonts, gridlines).",
             "default": None,
         },
         "opacity": {
             "type": ParameterType.FLOAT,
+            "label": "Opacity",
             "min_value": 0.0,
             "max_value": 1.0,
-            "description": "Marker opacity",
+            "description": "Marker / line transparency. 0 = invisible, 1 = solid (default).",
         },
         "hover_name": {
             "type": ParameterType.COLUMN,
-            "description": "Column for hover tooltip names",
+            "label": "Hover title",
+            "description": "Column whose values appear bolded as the tooltip title on hover.",
         },
         "hover_data": {
             "type": ParameterType.MULTI_SELECT,
-            "description": "Columns to show on hover",
+            "label": "Hover fields",
+            "description": "Extra columns to surface in the hover tooltip alongside the default x/y values.",
             "options": [],  # Will be populated with column names by component builder
         },
         "custom_data": {
             "type": ParameterType.MULTI_SELECT,
-            "description": "Custom data for interactions",
+            "label": "Custom data",
+            "description": "Columns kept as customdata for downstream interactions (selection events, callbacks).",
             "options": [],  # Will be populated with column names by component builder
         },
         "labels": {
             "type": ParameterType.STRING,
-            "description": 'Custom axis labels dictionary. Format: {"column": "Custom Label"} or JSON string. Example: {"x": "Time (hours)", "y": "Temperature (°C)"}',
+            "label": "Axis labels (JSON)",
+            "description": 'Override axis / legend labels. JSON dict, e.g. {"x": "Time (hours)", "y": "Temperature (°C)"}.',
         },
         "color_discrete_sequence": {
             "type": ParameterType.SELECT,
+            "label": "Discrete palette",
             "options": [
                 "Plotly",
                 "Set1",
@@ -127,10 +148,11 @@ class ParameterInspector:
                 "Vivid",
                 "Custom",
             ],
-            "description": "Discrete color sequence for categorical data. Choose from predefined palettes or select 'Custom' to enter a list like ['red', 'blue', 'green']",
+            "description": "Palette used when Color by is a categorical column. Pick a named palette or 'Custom' to supply your own list.",
         },
         "color_continuous_scale": {
             "type": ParameterType.SELECT,
+            "label": "Continuous scale",
             "options": [
                 "Viridis",
                 "Plasma",
@@ -147,113 +169,224 @@ class ParameterInspector:
                 "Turbo",
                 "Custom",
             ],
-            "description": "Continuous color scale for numerical data. Choose from predefined scales or select 'Custom' to enter a scale name",
+            "description": "Scale used when Color by is a numeric column. Diverging scales (RdBu, Spectral) shine when values cross a midpoint.",
+        },
+        "color_continuous_midpoint": {
+            "type": ParameterType.FLOAT,
+            "label": "Color midpoint",
+            "description": "Value to center the diverging color scale on (e.g. 0 for signed deltas).",
+        },
+        "range_color": {
+            "type": ParameterType.RANGE,
+            "label": "Color range",
+            "description": "Min / max bounds for the continuous color scale. Useful for clipping outliers.",
         },
         "category_orders": {
             "type": ParameterType.STRING,
-            "description": 'Category ordering dictionary. Format: {"column": ["value1", "value2"]} or JSON string. Example: {"day": ["Mon", "Tue", "Wed"]}',
+            "label": "Category order (JSON)",
+            "description": 'Force the order of categorical values. JSON dict, e.g. {"day": ["Mon", "Tue", "Wed"]}.',
         },
         "color_discrete_map": {
             "type": ParameterType.STRING,
-            "description": 'Color mapping for discrete values. Format: {"value": "color"} or JSON string. Example: {"A": "red", "B": "blue"}',
+            "label": "Color map (JSON)",
+            "description": 'Pin specific values to specific colors. JSON dict, e.g. {"A": "red", "B": "blue"}.',
         },
     }
 
-    # Advanced parameters for expert users
+    # Advanced parameters for expert users.
     ADVANCED_PARAMETERS = {
         "log_x": {
             "type": ParameterType.BOOLEAN,
-            "description": "Use logarithmic scale for x-axis",
+            "label": "Log X axis",
+            "description": "Plot the X axis on a logarithmic scale. Useful for values spanning multiple orders of magnitude.",
             "default": False,
         },
         "log_y": {
             "type": ParameterType.BOOLEAN,
-            "description": "Use logarithmic scale for y-axis",
+            "label": "Log Y axis",
+            "description": "Plot the Y axis on a logarithmic scale.",
             "default": False,
         },
-        "range_x": {"type": ParameterType.RANGE, "description": "X-axis range"},
-        "range_y": {"type": ParameterType.RANGE, "description": "Y-axis range"},
+        "range_x": {
+            "type": ParameterType.RANGE,
+            "label": "X axis range",
+            "description": "Min / max bounds for the X axis. Leave blank to autoscale.",
+        },
+        "range_y": {
+            "type": ParameterType.RANGE,
+            "label": "Y axis range",
+            "description": "Min / max bounds for the Y axis. Leave blank to autoscale.",
+        },
         "boxmode": {
             "type": ParameterType.SELECT,
+            "label": "Box mode",
             "options": ["group", "overlay"],
-            "description": "Box plot display mode. 'group': boxes are placed beside each other, 'overlay': boxes are drawn on top of one another",
+            "description": "How to lay out boxes when Color is set. 'group' = side-by-side, 'overlay' = stacked.",
             "default": "group",
-        },
-        "animation_frame": {
-            "type": ParameterType.COLUMN,
-            "description": "Column for animation frames",
-        },
-        "animation_group": {
-            "type": ParameterType.COLUMN,
-            "description": "Column for animation grouping",
-        },
-        "facet_row": {"type": ParameterType.COLUMN, "description": "Column for faceting rows"},
-        "facet_col": {"type": ParameterType.COLUMN, "description": "Column for faceting columns"},
-        "facet_col_wrap": {
-            "type": ParameterType.INTEGER,
-            "min_value": 1,
-            "description": "Number of facet columns before wrapping",
-        },
-        "orientation": {
-            "type": ParameterType.SELECT,
-            "options": ["v", "h"],
-            "description": "Plot orientation. 'v': vertical (default), 'h': horizontal. Swaps X and Y axes",
-            "default": "v",
-        },
-        "barmode": {
-            "type": ParameterType.SELECT,
-            "options": ["relative", "group", "overlay", "stack"],
-            "description": "Bar display mode. 'group': bars are placed beside each other, 'stack': bars are stacked on top of each other, 'overlay': bars overlap, 'relative': bars are stacked with negative values below zero",
-            "default": "relative",
-        },
-        "histnorm": {
-            "type": ParameterType.SELECT,
-            "options": ["", "percent", "probability", "density", "probability density"],
-            "description": "Histogram normalization mode. '': count, 'percent': percentage, 'probability': probability, 'density': density, 'probability density': probability density",
-            "default": "",
-        },
-        "points": {
-            "type": ParameterType.SELECT,
-            "options": ["outliers", "suspectedoutliers", "all", False],
-            "description": "Show individual points in box/violin plots. 'outliers': show only outliers, 'suspectedoutliers': show suspected outliers, 'all': show all points, False: hide all points",
-            "default": "outliers",
         },
         "violinmode": {
             "type": ParameterType.SELECT,
+            "label": "Violin mode",
             "options": ["group", "overlay"],
-            "description": "Violin plot display mode. 'group': violins are placed beside each other, 'overlay': violins are drawn on top of one another",
+            "description": "How to lay out violins when Color is set. 'group' = side-by-side, 'overlay' = stacked.",
             "default": "group",
+        },
+        "barmode": {
+            "type": ParameterType.SELECT,
+            "label": "Bar mode",
+            "options": ["relative", "group", "overlay", "stack"],
+            "description": "How multi-series bars are arranged. 'group' = side-by-side, 'stack' = stacked totals, 'overlay' = drawn on top, 'relative' = stacked with negatives below 0.",
+            "default": "relative",
+        },
+        "animation_frame": {
+            "type": ParameterType.COLUMN,
+            "label": "Animation frame",
+            "description": "Column whose distinct values become animation frames (one frame per value).",
+        },
+        "animation_group": {
+            "type": ParameterType.COLUMN,
+            "label": "Animation group",
+            "description": "Column linking the same item across frames so transitions animate smoothly.",
+        },
+        "facet_row": {
+            "type": ParameterType.COLUMN,
+            "label": "Facet rows by",
+            "description": "Split the figure into a row of subplots, one per distinct value of this column.",
+        },
+        "facet_col": {
+            "type": ParameterType.COLUMN,
+            "label": "Facet columns by",
+            "description": "Split the figure into a column of subplots, one per distinct value of this column.",
+        },
+        "facet_col_wrap": {
+            "type": ParameterType.INTEGER,
+            "label": "Facet wrap",
+            "min_value": 1,
+            "description": "Number of facet columns before wrapping to a new row.",
+        },
+        "orientation": {
+            "type": ParameterType.SELECT,
+            "label": "Orientation",
+            "options": ["v", "h"],
+            "description": "Plot orientation. 'v' = vertical (default), 'h' = horizontal (X and Y swap roles).",
+            "default": "v",
+        },
+        "histnorm": {
+            "type": ParameterType.SELECT,
+            "label": "Normalization",
+            "options": ["", "percent", "probability", "density", "probability density"],
+            "description": "How to normalize bin counts. '' = raw count, 'percent' = % of total, 'density' = count divided by bin width.",
+            "default": "",
+        },
+        "histfunc": {
+            "type": ParameterType.SELECT,
+            "label": "Aggregation",
+            "options": ["count", "sum", "avg", "min", "max"],
+            "description": "Aggregation function applied to bin contents. 'count' (default) tallies rows; others aggregate Y values per bin.",
+            "default": "count",
+        },
+        "nbins": {
+            "type": ParameterType.INTEGER,
+            "label": "Bin count",
+            "min_value": 1,
+            "description": "Target number of bins. Higher = finer resolution. Leave blank for Plotly's auto-binning.",
+        },
+        "nbinsx": {
+            "type": ParameterType.INTEGER,
+            "label": "Bins (X)",
+            "min_value": 1,
+            "description": "Target number of bins along the X axis (2D density plots).",
+        },
+        "nbinsy": {
+            "type": ParameterType.INTEGER,
+            "label": "Bins (Y)",
+            "min_value": 1,
+            "description": "Target number of bins along the Y axis (2D density plots).",
+        },
+        "cumulative": {
+            "type": ParameterType.BOOLEAN,
+            "label": "Cumulative",
+            "description": "Plot the running cumulative count instead of per-bin counts.",
+            "default": False,
+        },
+        "ecdfnorm": {
+            "type": ParameterType.SELECT,
+            "label": "ECDF normalization",
+            "options": ["probability", "percent"],
+            "description": "How to scale the cumulative axis. 'probability' = 0…1, 'percent' = 0…100. Leave blank for raw counts.",
+        },
+        "ecdfmode": {
+            "type": ParameterType.SELECT,
+            "label": "ECDF direction",
+            "options": ["standard", "complementary", "reversed"],
+            "description": "'standard' = P(X ≤ x), 'complementary' = P(X > x), 'reversed' = same as standard but right-to-left.",
+            "default": "standard",
+        },
+        "points": {
+            "type": ParameterType.SELECT,
+            "label": "Show points",
+            "options": ["outliers", "suspectedoutliers", "all", False],
+            "description": "Which individual observations to overlay on box / violin plots. False hides all points.",
+            "default": "outliers",
+        },
+        "notched": {
+            "type": ParameterType.BOOLEAN,
+            "label": "Notched box",
+            "description": "Draw confidence-interval notches around the median. Non-overlapping notches suggest a real difference.",
+            "default": False,
         },
         "line_shape": {
             "type": ParameterType.SELECT,
+            "label": "Line shape",
             "options": ["linear", "spline", "vhv", "hvh", "vh", "hv"],
-            "description": "Line shape interpolation. 'linear': straight lines, 'spline': smooth curved lines, 'vhv': vertical-horizontal-vertical, 'hvh': horizontal-vertical-horizontal, 'vh': vertical-horizontal, 'hv': horizontal-vertical",
+            "description": "Line interpolation. 'linear' = straight, 'spline' = smooth curve, the rest are stepwise.",
             "default": "linear",
+        },
+        "markers": {
+            "type": ParameterType.BOOLEAN,
+            "label": "Show markers",
+            "description": "Draw a marker at each line point in addition to the line itself.",
+            "default": False,
         },
         "trendline": {
             "type": ParameterType.SELECT,
+            "label": "Trendline",
             "options": ["ols", "lowess", "rolling", "expanding", "ewm"],
-            "description": "Trendline type. 'ols': ordinary least squares regression, 'lowess': locally weighted regression, 'rolling': rolling average, 'expanding': expanding window average, 'ewm': exponentially weighted moving average",
+            "description": "Overlay a fitted trend. 'ols' = linear regression, 'lowess' = locally weighted, others are moving-window aggregates.",
         },
         "marginal_x": {
             "type": ParameterType.SELECT,
+            "label": "Marginal X",
             "options": ["histogram", "rug", "box", "violin"],
-            "description": "Marginal plot type for X-axis. Adds a small plot above the main plot showing the distribution of X values",
+            "description": "Add a marginal subplot above the main chart showing the X distribution.",
         },
         "marginal_y": {
             "type": ParameterType.SELECT,
+            "label": "Marginal Y",
             "options": ["histogram", "rug", "box", "violin"],
-            "description": "Marginal plot type for Y-axis. Adds a small plot to the right of the main plot showing the distribution of Y values",
+            "description": "Add a marginal subplot to the right showing the Y distribution.",
+        },
+        "size": {
+            "type": ParameterType.COLUMN,
+            "label": "Size by",
+            "description": "Column whose numeric values map to marker size. Rows with NaN are dropped.",
         },
         "size_max": {
             "type": ParameterType.INTEGER,
+            "label": "Max size",
             "min_value": 1,
             "max_value": 100,
-            "description": "Maximum marker size when using size mapping in scatter plots",
+            "description": "Pixel diameter of the largest marker when using Size by.",
             "default": 20,
+        },
+        "text": {
+            "type": ParameterType.COLUMN,
+            "label": "Text by",
+            "description": "Column whose values appear as text labels next to each marker.",
         },
         "mode": {
             "type": ParameterType.SELECT,
+            "label": "Trace mode",
             "options": [
                 "lines",
                 "markers",
@@ -263,11 +396,12 @@ class ParameterInspector:
                 "markers+text",
                 "lines+markers+text",
             ],
-            "description": "Line plot display mode. 'lines': show only lines, 'markers': show only points, 'lines+markers': show both lines and points",
+            "description": "What to draw for each trace: lines, markers, text, or any combination.",
             "default": "lines",
         },
         "symbol": {
             "type": ParameterType.SELECT,
+            "label": "Marker symbol",
             "options": [
                 "circle",
                 "square",
@@ -282,15 +416,67 @@ class ParameterInspector:
                 "hexagon",
                 "star",
             ],
-            "description": "Marker symbol (applied uniformly to all points). To vary symbols by category, select a column from your data.",
+            "description": "Fixed marker shape applied to all points. Pick a column instead to vary by category.",
             # "default": "circle",
         },
         "line_dash": {
             "type": ParameterType.SELECT,
+            "label": "Line dash",
             "options": ["solid", "dot", "dash", "longdash", "dashdot", "longdashdot"],
-            "description": "Line dash pattern (applied uniformly to all lines). To vary dash patterns by category, select a column from your data.",
+            "description": "Fixed dash pattern applied to all lines. Pick a column instead to vary by category.",
             "default": "solid",
         },
+        "dimensions": {
+            # Populated with the dataset's numeric column names by the React
+            # ParameterField when it sees `name == 'dimensions'`. Pinned to
+            # SPECIFIC so it surfaces under the per-viz Specialized accordion
+            # rather than the generic Advanced one.
+            "type": ParameterType.MULTI_SELECT,
+            "category": ParameterCategory.SPECIFIC,
+            "label": "Dimensions",
+            "options": [],
+            "description": "Numeric columns to include in the scatter matrix. Pick at least two.",
+            "required": True,
+        },
+    }
+
+    # Per-visualization Specialized parameter sets. These params live in the
+    # ADVANCED knowledge base (so they share labels/descriptions across viz)
+    # but are *promoted* to the SPECIFIC category for the listed viz types so
+    # they surface in the per-viz "{Viz} Options" accordion alongside truly
+    # bespoke params (like `dimensions` for scatter_matrix). This keeps the
+    # generic Advanced accordion focused on cross-cutting tweaks (log axes,
+    # range, faceting, animation) and the Specialized accordion focused on
+    # the knobs that meaningfully change *this* viz type.
+    VIZ_SPECIFIC_PARAMS: Dict[str, set] = {
+        "scatter": {"size", "size_max", "text", "trendline", "marginal_x", "marginal_y", "symbol"},
+        "line": {"line_shape", "markers", "line_dash", "text"},
+        "bar": {"barmode", "text"},
+        "box": {"points", "notched", "boxmode"},
+        "violin": {"points", "violinmode"},
+        "histogram": {"histfunc", "histnorm", "nbins", "cumulative", "barmode", "marginal_x"},
+        "density_heatmap": {
+            "histfunc",
+            "histnorm",
+            "nbinsx",
+            "nbinsy",
+            "marginal_x",
+            "marginal_y",
+        },
+        "density_contour": {
+            "trendline",
+            "histfunc",
+            "histnorm",
+            "nbinsx",
+            "nbinsy",
+            "marginal_x",
+            "marginal_y",
+        },
+        "funnel": {"text"},
+        "ecdf": {"ecdfnorm", "ecdfmode", "markers"},
+        "strip": {"points"},
+        "area": {"line_shape"},
+        "scatter_matrix": {"size", "symbol"},
     }
 
     # Type mapping from Python types to our ParameterType enum
@@ -449,21 +635,25 @@ class ParameterInspector:
     def categorize_parameter(self, param_name: str, func_name: str) -> ParameterCategory:
         """Categorize a parameter based on its name and function context.
 
-        Args:
-            param_name: Parameter name
-            func_name: Function name
-
-        Returns:
-            Parameter category
+        Order:
+        1. CORE (x/y/z/color) — always.
+        2. COMMON — generic across viz types (title, theme, hover, palette).
+        3. **Per-viz SPECIFIC promotion** — params in `VIZ_SPECIFIC_PARAMS[func_name]`
+           are pulled out of ADVANCED into the Specialized accordion so the
+           per-viz "{Viz} Options" panel surfaces the most relevant knobs.
+        4. ADVANCED — cross-cutting expert tweaks (log axes, range, faceting).
+        5. SPECIFIC — anything we didn't explicitly categorize (auto-discovered).
         """
         if param_name in self.CORE_PARAMETERS:
             return ParameterCategory.CORE
         elif param_name in self.COMMON_PARAMETERS:
             return ParameterCategory.COMMON
+        elif param_name in self.VIZ_SPECIFIC_PARAMS.get(func_name, set()):
+            return ParameterCategory.SPECIFIC
         elif param_name in self.ADVANCED_PARAMETERS:
             return ParameterCategory.ADVANCED
         else:
-            # Function-specific parameters
+            # Function-specific parameters (auto-discovered, no overrides)
             return ParameterCategory.SPECIFIC
 
     def get_parameter_metadata(self, param_name: str) -> Dict[str, Any]:
@@ -511,42 +701,44 @@ class ParameterInspector:
         return None
 
     def _create_violin_parameters(self) -> List[ParameterDefinition]:
-        """Create proper parameters for violin plots."""
+        """Hand-curated parameter set for violin plots.
+
+        Returns a focused subset of Plotly's full violin signature — just the
+        knobs that meaningfully change the violin output. Labels and copy
+        match the knowledge-base conventions so the form reads consistently.
+        """
         return [
-            # Core parameters - y is semi-required for violin plots
             ParameterDefinition(
                 name="y",
                 type=ParameterType.COLUMN,
                 category=ParameterCategory.CORE,
-                label="y*",
-                description="Values for violin plot distribution (at least one * parameter is required)",
-                required=False,  # Semi-required
+                label="Y axis*",
+                description="Numeric column whose distribution is drawn as the violin shape. At least one of X / Y is required.",
+                required=False,
             ),
             ParameterDefinition(
                 name="x",
                 type=ParameterType.COLUMN,
                 category=ParameterCategory.CORE,
-                label="x",
-                description="Categories for grouping violins",
+                label="X axis",
+                description="Categorical column to group violins side-by-side.",
                 required=False,
             ),
             ParameterDefinition(
                 name="color",
                 type=ParameterType.COLUMN,
                 category=ParameterCategory.CORE,
-                label="color",
-                description="Column for color encoding",
+                label="Color by",
+                description="Column whose values map to violin color (categorical → discrete palette).",
                 required=False,
             ),
-            # Common parameters
             *self._get_common_plot_parameters(),
-            # Specific violin parameters
             ParameterDefinition(
                 name="box",
                 type=ParameterType.BOOLEAN,
                 category=ParameterCategory.SPECIFIC,
-                label="box",
-                description="Whether to show box plot inside violin",
+                label="Show inner box",
+                description="Embed a thin box plot inside each violin for quick median + IQR reference.",
                 default=False,
                 required=False,
             ),
@@ -554,10 +746,30 @@ class ParameterInspector:
                 name="points",
                 type=ParameterType.SELECT,
                 category=ParameterCategory.SPECIFIC,
-                label="points",
-                description="How to display points",
+                label="Show points",
+                description="Which observations to overlay on each violin. False hides all points.",
                 options=["outliers", "suspectedoutliers", "all", False],
                 default=False,
+                required=False,
+            ),
+            ParameterDefinition(
+                name="violinmode",
+                type=ParameterType.SELECT,
+                category=ParameterCategory.SPECIFIC,
+                label="Violin mode",
+                description="Layout when Color by is set. 'group' = side-by-side, 'overlay' = stacked.",
+                options=["group", "overlay"],
+                default="group",
+                required=False,
+            ),
+            ParameterDefinition(
+                name="orientation",
+                type=ParameterType.SELECT,
+                category=ParameterCategory.ADVANCED,
+                label="Orientation",
+                description="'v' = vertical (default), 'h' = horizontal (X and Y swap roles).",
+                options=["v", "h"],
+                default="v",
                 required=False,
             ),
         ]
@@ -765,30 +977,35 @@ class ParameterInspector:
         ]
 
     def _get_common_plot_parameters(self) -> List[ParameterDefinition]:
-        """Get common parameters that apply to most visualizations."""
+        """Get common parameters that apply to most visualizations.
+
+        Labels and copy mirror the knowledge-base entries in
+        `COMMON_PARAMETERS` so curated overrides (violin, sunburst, …) read
+        consistently with the auto-introspected viz types.
+        """
         return [
             ParameterDefinition(
                 name="title",
                 type=ParameterType.STRING,
                 category=ParameterCategory.COMMON,
-                label="title",
-                description="Plot title",
+                label="Title",
+                description="Headline shown above the figure.",
                 required=False,
             ),
             ParameterDefinition(
                 name="hover_name",
                 type=ParameterType.COLUMN,
                 category=ParameterCategory.COMMON,
-                label="hover_name",
-                description="Column for hover tooltip names",
+                label="Hover title",
+                description="Column whose values appear bolded as the tooltip title on hover.",
                 required=False,
             ),
             ParameterDefinition(
                 name="hover_data",
                 type=ParameterType.MULTI_SELECT,
                 category=ParameterCategory.COMMON,
-                label="hover_data",
-                description="Columns to show on hover",
+                label="Hover fields",
+                description="Extra columns to surface in the hover tooltip alongside the default x/y values.",
                 required=False,
                 options=[],
             ),
@@ -826,11 +1043,21 @@ class ParameterInspector:
             # Get parameter metadata
             metadata = self.get_parameter_metadata(param_name)
 
-            # Infer parameter type
-            param_type = self.infer_parameter_type(param)
+            # Infer parameter type from the Plotly Express signature, then let
+            # the metadata override it. This ensures that params like
+            # `template`, `color_continuous_scale`, `line_dash`, `histfunc`
+            # — declared as `select` in COMMON/ADVANCED_PARAMETERS — surface
+            # to the React ParameterField as Selects rather than free-form
+            # TextInputs even though Plotly's signature types them as `str`.
+            inferred_type = self.infer_parameter_type(param)
+            param_type = metadata.get("type", inferred_type)
 
-            # Categorize parameter
-            category = self.categorize_parameter(param_name, func_name)
+            # Categorize parameter. Knowledge-base entries can pin their own
+            # category via `metadata["category"]` — otherwise fall back to the
+            # name-based default. This lets `dimensions` (Scatter Matrix) sit
+            # under the per-viz Specialized accordion instead of Advanced.
+            inferred_category = self.categorize_parameter(param_name, func_name)
+            category = metadata.get("category", inferred_category)
 
             # Create parameter definition
             param_def = ParameterDefinition(
@@ -991,16 +1218,18 @@ _VISUALIZATION_ICONS: Dict[str, str] = {
     "parallel_categories": "mdi:chart-sankey",
     "umap": "mdi:scatter-plot",
     "heatmap": "mdi:grid-large",
+    "ecdf": "mdi:chart-bell-curve-cumulative",
+    "scatter_matrix": "mdi:view-grid-outline",
 }
 
-# Visualizations temporarily disabled from the UI
+# Visualizations temporarily disabled from the UI. `ecdf` and `strip` were
+# previously disabled — they're now part of the curated 2D set and must remain
+# enabled for the React builder dropdown to populate them.
 _DISABLED_VISUALIZATIONS: set[str] = {
-    "ecdf",
     "funnel_area",
     "icicle",
     "parallel_categories",
     "parallel_coordinates",
-    "strip",
     "umap",
     "pie",
     "sunburst",

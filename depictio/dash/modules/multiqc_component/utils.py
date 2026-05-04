@@ -113,13 +113,22 @@ def analyze_multiqc_plot_structure(fig: go.Figure) -> dict:
     return {"original_data": original_data, "summary": summary}
 
 
-def add_multiqc_logo_overlay(fig, logo_size_px=45):
-    """Add MultiQC logo overlay to any plotly figure using Dash assets"""
+def add_multiqc_logo_overlay(fig, logo_size_px=45, theme: str = "light"):
+    """Add MultiQC logo overlay to any plotly figure using Dash assets.
+
+    ``theme`` selects the dark icon (default — black on light backgrounds)
+    or the white icon for dark backgrounds. Mirrors the new official MultiQC
+    icon set: https://github.com/MultiQC/logo
+    """
 
     try:
         # Use Dash assets URL - this will work in web deployment
         # Dash automatically serves files from assets/ directory
-        logo_url = "/assets/images/logos/multiqc.png"
+        logo_url = (
+            "/assets/images/logos/multiqc_icon_white.svg"
+            if str(theme).lower() == "dark"
+            else "/assets/images/logos/multiqc_icon_dark.svg"
+        )
 
         # Get figure dimensions
         width = fig.layout.width or 700
@@ -348,7 +357,8 @@ def build_multiqc(**kwargs: Any):
             wrapper_children.insert(
                 1,
                 html.Img(
-                    src="/assets/images/logos/multiqc.png",
+                    src="/assets/images/logos/multiqc_icon_dark.svg",
+                    className="multiqc-icon-themed",
                     style={
                         "position": "absolute",
                         "top": "10px",
