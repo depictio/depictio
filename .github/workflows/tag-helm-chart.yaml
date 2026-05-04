@@ -1,0 +1,47 @@
+name: Tag Helm Chart (additional OCI tag)
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_tag:
+        description: "Existing chart tag in GHCR (e.g. 20260321.1)"
+        required: true
+        type: string
+      additional_tag:
+        description: "New tag to point at the same manifest (e.g. 0.10.2)"
+        required: true
+        type: string
+
+env:
+  REGISTRY: ghcr.io
+  CHART_NAME: depictio-helm
+
+jobs:
+  retag:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Set up oras
+        uses: oras-project/setup-oras@v1
+
+      - name: Log in to Container Registry
+        run: |
+          echo "${{ secrets.GHCR_PAT }}" | oras login "${{ env.REGISTRY }}" \
+            --username "${{ github.repository_owner }}" \
+            --password-stdin
+
+      - name: Add additional tag
+        run: |
+          REPO_OWNER_LOWER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          SRC="${{ env.REGISTRY }}/${REPO_OWNER_LOWER}/${{ env.CHART_NAME }}/depictio:${{ inputs.source_tag }}"
+          DST_TAG="${{ inputs.additional_tag }}"
+
+          echo "Adding tag '${DST_TAG}' → ${SRC}"
+          oras tag "${SRC}" "${DST_TAG}"
+
+          echo "Resolved tags:"
+          oras resolve "${SRC}"
+          oras resolve "${{ env.REGISTRY }}/${REPO_OWNER_LOWER}/${{ env.CHART_NAME }}/depictio:${DST_TAG}"
