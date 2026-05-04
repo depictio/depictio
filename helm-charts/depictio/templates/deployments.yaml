@@ -262,6 +262,8 @@ spec:
         app: depictio-backend
         project: {{ .Values.project.slug }}
         type: app
+      annotations:
+        checksum/config: {{ .Values.backend.env | toJson | sha256sum }}
     spec:
       {{- if gt (.Values.backend.replicas | int) 1 }}
       affinity:
@@ -542,6 +544,8 @@ spec:
         app: depictio-frontend
         project: {{ .Values.project.slug }}
         type: app
+      annotations:
+        checksum/config: {{ .Values.frontend.env | toJson | sha256sum }}
     spec:
       {{- if gt (.Values.frontend.replicas | int) 1 }}
       affinity:
