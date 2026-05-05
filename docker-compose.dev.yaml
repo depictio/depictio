@@ -133,20 +133,22 @@ services:
   # frontend edits land in <1s instead of the ~28s `pnpm build` cycle the
   # production path requires (FastAPI serves the prebuilt `dist/`).
   #
-  # Reuses the depictio backend image (it now ships with Node.js + corepack
-  # for exactly this purpose) and just overrides `command:` to launch vite
-  # instead of uvicorn. node_modules paths get anonymous-volume overrides
-  # so the host's macOS-built modules don't leak into the linux container.
+  # Builds the `dev-viewer` Dockerfile target — same as the backend image
+  # plus Node.js + corepack on top — and tags it separately so the leaner
+  # prod image used by backend/frontend/celery stays unaffected. Anonymous
+  # node_modules volumes prevent the host's macOS-built modules from
+  # leaking into the linux container.
   #
   # Browser entry: http://localhost:${VIEWER_DEV_PORT:-5173}/dashboard-beta/<id>
   # ─────────────────────────────────────────────────────────────────────
   depictio-viewer-dev:
     container_name: depictio-viewer-dev
     profiles: ["dev"]
-    image: ${DEPICTIO_VERSION:-depictio:dev}
+    image: ${DEPICTIO_VERSION:-depictio:dev-viewer}
     build:
       dockerfile: docker-images/Dockerfile_depictio_uv.dockerfile
       context: .
+      target: dev-viewer
     ports:
       - ${VIEWER_DEV_PORT:-5173}:5173
     volumes:
