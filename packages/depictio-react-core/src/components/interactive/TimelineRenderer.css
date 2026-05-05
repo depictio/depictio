@@ -1,0 +1,24 @@
+/**
+ * Timeline / RangeSlider tick-label clipping fix.
+ *
+ * Mantine renders each mark label with `transform: translateX(-50%)` so the
+ * label is centered under the mark line. For the FIRST and LAST marks
+ * (positioned at 0% and 100% of the slider track) this means half the label
+ * width extends BEYOND the slider's bounding box on the left and right —
+ * which then gets clipped by the parent grid cell or filter panel.
+ *
+ * Override: anchor the first label's left edge to the mark, and the last
+ * label's right edge to the mark. Middle marks keep Mantine's default
+ * centering. Wrappers share a parent `<div>` so :first/:last-of-type
+ * resolve correctly.
+ */
+.depictio-timeline-slider .mantine-Slider-markWrapper:first-of-type
+  .mantine-Slider-markLabel {
+  transform: translate(0, calc(0.25rem)) !important;
+  text-align: left;
+}
+.depictio-timeline-slider .mantine-Slider-markWrapper:last-of-type
+  .mantine-Slider-markLabel {
+  transform: translate(-100%, calc(0.25rem)) !important;
+  text-align: right;
+}

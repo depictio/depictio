@@ -50,8 +50,14 @@ const DataPreviewTable: React.FC<Props> = ({ dcId, dcType, shape }) => {
   const columnDefs = useMemo<ColDef[]>(() => {
     if (!data?.columns) return [];
     return data.columns.map((c) => ({
-      field: c,
+      // AG Grid treats "." in `field` as a path separator into nested objects
+      // (so "FastQC.total_sequences" resolves to row.FastQC.total_sequences and
+      // returns undefined). Use a `valueGetter` that does flat key access to
+      // keep dotted column names — common in MultiQC / nf-core outputs — working.
+      colId: c,
       headerName: c,
+      valueGetter: (params) =>
+        params.data ? (params.data as Record<string, unknown>)[c] : undefined,
       sortable: true,
       filter: true,
       resizable: true,

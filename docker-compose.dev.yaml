@@ -128,6 +128,61 @@ services:
       - redis
       - minio
 
+  # ─────────────────────────────────────────────────────────────────────
+  # Vite dev server for the React viewer SPA. Runs `pnpm dev` with HMR so
+  # frontend edits land in <1s instead of the ~28s `pnpm build` cycle the
+  # production path requires (FastAPI serves the prebuilt `dist/`).
+  #
+  # Reuses the depictio backend image (it now ships with Node.js + corepack
+  # for exactly this purpose) and just overrides `command:` to launch vite
+  # instead of uvicorn. node_modules paths get anonymous-volume overrides
+  # so the host's macOS-built modules don't leak into the linux container.
+  #
+  # Browser entry: http://localhost:${VIEWER_DEV_PORT:-5173}/dashboard-beta/<id>
+  # ─────────────────────────────────────────────────────────────────────
+  depictio-viewer-dev:
+    container_name: depictio-viewer-dev
+    profiles: ["dev"]
+    image: ${DEPICTIO_VERSION:-depictio:dev}
+    build:
+      dockerfile: docker-images/Dockerfile_depictio_uv.dockerfile
+      context: .
+    ports:
+      - ${VIEWER_DEV_PORT:-5173}:5173
+    volumes:
+      - ./depictio:/app/depictio
+      - ./packages:/app/packages
+      - ./pnpm-workspace.yaml:/app/pnpm-workspace.yaml
+      - ./pnpm-lock.yaml:/app/pnpm-lock.yaml
+      - ./package.json:/app/package.json
+      # Anonymous volumes shadow the bind mount's node_modules so Linux
+      # binaries (esbuild, sass, etc.) don't get clobbered by macOS builds
+      # the host's `pnpm install` produced.
+      - viewer_node_modules:/app/depictio/viewer/node_modules
+      - core_node_modules:/app/packages/depictio-react-core/node_modules
+      - components_node_modules:/app/packages/depictio-components/node_modules
+      - root_node_modules:/app/node_modules
+    environment:
+      # Vite proxy target — backend's internal port inside the docker
+      # network. The production-only `0.0.0.0:8122` default in vite.config
+      # is overridden by this when set.
+      VITE_API_TARGET: "http://depictio-backend:8058"
+      # HMR client port — what the BROWSER uses to connect back. When the
+      # user hits :5173 directly this is the same; if proxied through
+      # FastAPI later, override this to the FastAPI port.
+      VITE_HMR_CLIENT_PORT: "${VIEWER_DEV_PORT:-5173}"
+    working_dir: /app
+    command:
+      - sh
+      - -c
+      - |
+        corepack prepare pnpm@latest --activate &&
+        pnpm install --frozen-lockfile &&
+        pnpm --filter depictio-viewer dev --host 0.0.0.0 --port 5173
+    user: "${UID:-1000}:${GID:-1000}"
+    depends_on:
+      - depictio-backend
+
   depictio-celery-worker:
     container_name: depictio-celery-worker
     # Use the same image as backend
@@ -177,3 +232,13 @@ services:
     depends_on:
       - redis
       - depictio-celery-worker
+
+# Named volumes for the viewer dev container's node_modules paths.
+# Anonymous volumes work for the bind-mount shadow trick but named volumes
+# survive `docker compose down` (without `-v`), so the slow first-start
+# `pnpm install` doesn't replay every time the stack is recreated.
+volumes:
+  viewer_node_modules:
+  core_node_modules:
+  components_node_modules:
+  root_node_modules:

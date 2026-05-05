@@ -91,8 +91,13 @@ const MultiQCFigure: React.FC<MultiQCFigureProps> = ({
         b: 50,
         ...((figure?.layout?.margin as Record<string, unknown>) || {}),
       },
+      // Bump uirevision per refreshTick so realtime updates produce a unique
+      // value and force Plotly to repaint. The server bakes in
+      // `uirevision: "persistent"`; without overwriting it, identical
+      // uirevision means Plotly skips repaint even on data changes.
+      uirevision: `tick-${refreshTick ?? 0}`,
     }),
-    [figure],
+    [figure, refreshTick],
   );
 
   return (
@@ -131,6 +136,7 @@ const MultiQCFigure: React.FC<MultiQCFigureProps> = ({
           <Plot
             data={plotData as any[]}
             layout={plotLayout}
+            revision={refreshTick ?? 0}
             config={PLOT_CONFIG}
             style={PLOT_STYLE}
             useResizeHandler

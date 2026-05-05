@@ -35,7 +35,7 @@ from depictio.api.v1.db import (
     users_collection,
 )
 from depictio.api.v1.endpoints.backup_endpoints.routes import _convert_complex_objects_to_strings
-from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user
+from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user, get_user_or_anonymous
 from depictio.models.models.users import User
 
 migrate_endpoint_router = APIRouter()
@@ -564,13 +564,16 @@ async def import_project_zip(
     file: UploadFile = File(...),
     dry_run: bool = False,
     overwrite: bool = False,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_user_or_anonymous),
 ) -> MigrateImportResponse:
     """
     Import a project bundle from a ZIP file (for UI use).
 
     Accepts a .zip file containing bundle.json and migrate_metadata.json.
     Always remaps all owners to the calling user (force_owner_remap=True).
+
+    Tolerates missing tokens (single-user / public mode); the inline
+    ``is_admin`` gate below still rejects non-admin callers.
     """
     if not current_user.is_admin:
         raise HTTPException(status_code=403, detail="Only administrators can import projects")

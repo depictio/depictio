@@ -57,12 +57,24 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
       ? (metadata.selection_column_index as number)
       : 0;
 
+  // The figure must NOT filter itself by its own scatter selection — otherwise
+  // a lasso shrinks the chart to the selected points and the user can't lasso
+  // again. Strip our own ``scatter_selection`` entry before fetching. Other
+  // components still see it in their filters[] and narrow accordingly.
+  const filtersForFetch = useMemo(
+    () =>
+      filters.filter(
+        (f) => !(f.index === metadata.index && f.source === 'scatter_selection'),
+      ),
+    [filters, metadata.index],
+  );
+
   useEffect(() => {
     if (!inView) return;
     let cancelled = false;
     setLoading(true);
     setError(null);
-    renderFigure(dashboardId, metadata.index, filters, theme)
+    renderFigure(dashboardId, metadata.index, filtersForFetch, theme)
       .then((res) => {
         if (cancelled) return;
         // Keep the previous figure mounted while the next response is in
@@ -82,7 +94,7 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dashboardId, metadata.index, JSON.stringify(filters), theme, inView, refreshTick]);
+  }, [dashboardId, metadata.index, JSON.stringify(filtersForFetch), theme, inView, refreshTick]);
 
   // First-paint loader vs refetch overlay: only show the big "Rendering…"
   // block until we have something to show; subsequent fetches keep the
@@ -219,11 +231,14 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
         typeof metadata.selection_mode === 'string' ? metadata.selection_mode : 'lasso';
       base.dragmode = mode;
     }
-    // Preserve zoom / pan / legend state across data refreshes triggered by
-    // filter changes. Without uirevision, swapping `figure.data` resets the
-    // view, which reads as flicker. Bumping uirevision per refreshTick forces
-    // Plotly to repaint on realtime updates even when data shape is identical.
-    if (!base.uirevision) base.uirevision = `tick-${refreshTick ?? 0}`;
+    // uirevision controls when Plotly preserves zoom/pan/legend state. The
+    // server bakes in `uirevision: "persistent"` so filter-driven refetches
+    // keep the view stable, but that also makes realtime ticks invisible:
+    // identical uirevision → Plotly assumes "same view" and skips repaint
+    // even when data changes. Always overwrite per refreshTick so a true
+    // realtime update produces a unique uirevision and a fresh draw. Filter
+    // changes don't bump refreshTick, so zoom/pan still survive those.
+    base.uirevision = `tick-${refreshTick ?? 0}`;
     return base;
   }, [figure, selectionEnabled, metadata.selection_mode, refreshTick]);
 
@@ -262,6 +277,7 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
           <Plot
             data={figureData as any[]}
             layout={layout}
+            revision={refreshTick ?? 0}
             config={{ displaylogo: false, responsive: true }}
             style={{ width: '100%', height: '100%' }}
             useResizeHandler

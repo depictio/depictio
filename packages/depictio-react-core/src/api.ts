@@ -454,6 +454,10 @@ export interface TableResponse {
   columns: Array<{ field: string; headerName: string; type: string }>;
   rows: Record<string, unknown>[];
   total: number;
+  /** Column the server actually sorted by (or null if unsorted). */
+  sort_by?: string | null;
+  /** Effective sort direction. */
+  sort_dir?: 'asc' | 'desc';
 }
 
 export async function renderTable(
@@ -462,13 +466,21 @@ export async function renderTable(
   filters: InteractiveFilter[],
   start = 0,
   limit = 100,
+  sortBy?: string | null,
+  sortDir: 'asc' | 'desc' = 'desc',
 ): Promise<TableResponse> {
   const res = await fetch(
     `${API_BASE}/dashboards/render_table/${dashboardId}/${componentId}`,
     {
       method: 'POST',
       headers: authHeaders(),
-      body: JSON.stringify({ filters, start, limit }),
+      body: JSON.stringify({
+        filters,
+        start,
+        limit,
+        sort_by: sortBy ?? null,
+        sort_dir: sortDir,
+      }),
     },
   );
   if (!res.ok) throw new Error(`Failed to render table: ${res.status}`);
@@ -478,29 +490,45 @@ export async function renderTable(
 /** Fetch up to `max` non-null values of an image component's image_column.
  *  Filters narrow the grid the same way they narrow figures/tables —
  *  including selection-source filters and cross-DC link filters resolved
- *  server-side. `dcId`, `imageColumn`, `s3BaseFolder` accepted for call-site
- *  symmetry but resolved server-side from the component's `stored_metadata`.
+ *  server-side. ``sortBy``/``sortDir`` map onto the body of the same name —
+ *  when ``sortBy`` is omitted the server picks an ``acquisition*`` column
+ *  if one exists.
  */
+export interface ImageGridResponse {
+  /** One row per image; keys are the underlying DC's column names. */
+  rows: Record<string, unknown>[];
+  /** The component's image_column (so renderers can read the right field). */
+  image_column: string;
+  /** The column the server actually sorted by (or null). */
+  sort_by: string | null;
+  /** Effective sort direction. */
+  sort_dir: 'asc' | 'desc';
+  /** Every column on the underlying DC — for client-side sort dropdown options. */
+  sortable_columns: string[];
+  /** Bare path list — preserved for older callers. */
+  paths: string[];
+  filter_applied: boolean;
+  filter_count: number;
+}
+
 export async function fetchImagePaths(
   dashboardId: string,
   componentId: string,
-  _dcId: string,
-  _imageColumn: string,
-  _s3BaseFolder: string,
   max = 50,
   filters: InteractiveFilter[] = [],
-): Promise<string[]> {
+  sortBy?: string | null,
+  sortDir: 'asc' | 'desc' = 'desc',
+): Promise<ImageGridResponse> {
   const res = await fetch(
     `${API_BASE}/dashboards/render_image_paths/${dashboardId}/${componentId}`,
     {
       method: 'POST',
       headers: authHeaders(),
-      body: JSON.stringify({ filters, max }),
+      body: JSON.stringify({ filters, max, sort_by: sortBy ?? null, sort_dir: sortDir }),
     },
   );
   if (!res.ok) throw new Error(`Failed to fetch image paths: ${res.status}`);
-  const body = (await res.json()) as { paths?: string[] };
-  return body.paths || [];
+  return (await res.json()) as ImageGridResponse;
 }
 
 /** Server-rendered Plotly map (px.scatter_map / density_map / choropleth_map). */

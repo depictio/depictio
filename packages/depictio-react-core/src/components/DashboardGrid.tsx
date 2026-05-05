@@ -83,14 +83,91 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
   const [containerWidth, setContainerWidth] = useState<number>(() =>
     typeof window !== 'undefined' ? window.innerWidth - 40 : 1200,
   );
+  // Non-null while a sidebar collapse/expand transition is in flight. While
+  // locked, the ResizeObserver suppresses its updates so the predicted final
+  // `containerWidth` (set once at toggle time) doesn't get stomped on by the
+  // 60+ in-flight RO firings as the parent CSS-animates its width.
+  const lockedWidthRef = useRef<number | null>(null);
   useEffect(() => {
     if (!wrapperRef.current || typeof ResizeObserver === 'undefined') return;
     const ro = new ResizeObserver((entries) => {
+      if (lockedWidthRef.current !== null) return;
       const next = entries[0]?.contentRect.width;
       if (next && next > 0) setContainerWidth(Math.floor(next));
     });
     ro.observe(wrapperRef.current);
     return () => ro.disconnect();
+  }, []);
+
+  // When the sidebar toggles, jump `containerWidth` to its predicted final
+  // value in one shot. RGL re-renders item transforms once with that final
+  // value, and the existing CSS transition (bumped to 300ms during the
+  // sidebar slide via `body.sidebar-transitioning`) animates each item from
+  // its current transform to the new one — perfectly in sync with Mantine's
+  // own 300ms ease width transition on the navbar.
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    let rafId: number | null = null;
+    const onSidebarToggle = (event: Event) => {
+      const detail = (event as CustomEvent).detail as
+        | { willBeOpen: boolean; navbarWidthPx: number; durationMs: number }
+        | undefined;
+      if (!detail) return;
+      // Use the locked width if a previous toggle is still in flight (rapid
+      // re-toggle); otherwise read the live DOM width before applying delta.
+      const baseWidth =
+        lockedWidthRef.current !== null
+          ? lockedWidthRef.current
+          : wrapperRef.current?.getBoundingClientRect().width ?? 0;
+      if (baseWidth <= 0) return;
+      const delta = detail.willBeOpen ? -detail.navbarWidthPx : detail.navbarWidthPx;
+      const final = Math.max(100, Math.floor(baseWidth + delta));
+      lockedWidthRef.current = final;
+      setContainerWidth(final);
+
+      // Plotly's `useResizeHandler` and AG Grid both listen to the WINDOW
+      // resize event, not the per-cell ResizeObserver. As the navbar slides,
+      // each grid item's CSS transition smoothly grows/shrinks its outer
+      // div, but Plotly's <canvas>/<svg> stays pinned at its pre-toggle
+      // pixel size — producing the clipped / stretched look the user sees.
+      // Dispatch synthetic window resize events on each animation frame for
+      // the transition's duration so Plotly + AG Grid re-flow in lockstep.
+      // Both internally throttle, so 60Hz dispatch is cheap.
+      const transitionEnd = performance.now() + detail.durationMs + 50;
+      const tickResize = () => {
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new Event('resize'));
+        }
+        if (performance.now() < transitionEnd) {
+          rafId = requestAnimationFrame(tickResize);
+        } else {
+          rafId = null;
+        }
+      };
+      if (rafId == null) rafId = requestAnimationFrame(tickResize);
+
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => {
+        lockedWidthRef.current = null;
+        timer = null;
+        // Reconcile with reality after the transition (handles browser-resize
+        // mid-toggle, sub-pixel rounding, etc.).
+        if (wrapperRef.current) {
+          const w = wrapperRef.current.getBoundingClientRect().width;
+          if (w > 0) setContainerWidth(Math.floor(w));
+        }
+        // One final resize so figures/tables snap to exact final dims.
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new Event('resize'));
+        }
+      }, detail.durationMs + 50);
+    };
+    window.addEventListener('depictio:sidebar-toggle', onSidebarToggle as EventListener);
+    return () => {
+      window.removeEventListener('depictio:sidebar-toggle', onSidebarToggle as EventListener);
+      if (timer) clearTimeout(timer);
+      if (rafId != null) cancelAnimationFrame(rafId);
+    };
   }, []);
 
   const showOverlays = editMode && typeof renderItemOverlay === 'function';

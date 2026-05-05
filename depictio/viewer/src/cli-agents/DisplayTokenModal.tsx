@@ -1,15 +1,5 @@
-import React, { useState } from 'react';
-import {
-  ActionIcon,
-  Alert,
-  Code,
-  Group,
-  Modal,
-  Paper,
-  Stack,
-  Title,
-  Tooltip,
-} from '@mantine/core';
+import React from 'react';
+import { Alert, Code, Group, Modal, Stack, Title } from '@mantine/core';
 import { CodeHighlight } from '@mantine/code-highlight';
 import '@mantine/code-highlight/styles.css';
 import { Icon } from '@iconify/react';
@@ -32,18 +22,7 @@ interface DisplayTokenModalProps {
  *  + `_create_config_display`. Uses `@mantine/code-highlight` for syntax
  *  highlighting (Dash uses `dmc.CodeHighlight`). */
 const DisplayTokenModal: React.FC<DisplayTokenModalProps> = ({ opened, onClose, config }) => {
-  const [copied, setCopied] = useState(false);
   const yamlText = config ? yaml.dump(config, { lineWidth: 120 }) : '';
-
-  const handleCopy = async () => {
-    try {
-      await navigator.clipboard.writeText(yamlText);
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 1500);
-    } catch {
-      // ignore clipboard errors — UI shows no toast in the Dash version either
-    }
-  };
 
   return (
     <Modal opened={opened} onClose={onClose} centered size="lg">
@@ -76,23 +55,8 @@ const DisplayTokenModal: React.FC<DisplayTokenModalProps> = ({ opened, onClose, 
               configuration again once you close this dialog.
             </Alert>
 
-            <Paper p="sm" withBorder radius="md" pos="relative">
-              <Tooltip label={copied ? 'Copied!' : 'Copy to clipboard'} position="left">
-                <ActionIcon
-                  variant="light"
-                  color={copied ? 'green' : 'gray'}
-                  onClick={handleCopy}
-                  pos="absolute"
-                  top={8}
-                  right={8}
-                  style={{ zIndex: 1 }}
-                  aria-label="Copy YAML"
-                >
-                  <Icon icon={copied ? 'mdi:check' : 'mdi:content-copy'} width={16} />
-                </ActionIcon>
-              </Tooltip>
-              <CodeHighlight code={yamlText} language="yaml" />
-            </Paper>
+            <CodeHighlight code={yamlText} language="yaml" />
+
           </>
         )}
       </Stack>

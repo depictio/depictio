@@ -31,11 +31,15 @@ projects_endpoint_router = APIRouter()
 
 # Endpoints
 @projects_endpoint_router.get("/get/all", response_model=list[Project])
-async def get_all_projects(current_user=Depends(get_current_user)) -> list:
+async def get_all_projects(current_user=Depends(get_user_or_anonymous)) -> list:
     """Get all projects accessible for the current user.
 
+    Uses ``get_user_or_anonymous`` so single-user / public mode works without a
+    persisted token: the anonymous user (admin in single-user mode) hits the
+    ``is_admin`` bypass in ``_async_get_all_projects`` and sees seed projects.
+
     Args:
-        current_user (User, optional): _description_. Defaults to Depends(get_current_user).
+        current_user (User, optional): Defaults to ``Depends(get_user_or_anonymous)``.
 
     Returns:
         List: List of projects.
@@ -77,15 +81,19 @@ async def get_project_from_id(
 
 
 @projects_endpoint_router.get("/get/from_name/{project_name}", response_model=Project)
-async def get_project_from_name(project_name: str, current_user=Depends(get_current_user)):
+async def get_project_from_name(project_name: str, current_user=Depends(get_user_or_anonymous)):
     """Get a project by name.
 
+    Uses ``get_user_or_anonymous`` for parity with ``get/all`` so single-user /
+    public mode resolves to the anonymous (admin) user and the admin bypass in
+    ``_async_get_project_from_name`` returns the project.
+
     Args:
-        project_name (str): _Description of the project name to be retrieved.
-        current_user (User, optional): _description_. Defaults to Depends(get_current_user).
+        project_name (str): The project name to be retrieved.
+        current_user (User, optional): Defaults to ``Depends(get_user_or_anonymous)``.
 
     Returns:
-        _type_: Project: The project object retrieved from the database.
+        Project: The project object retrieved from the database.
     """
     return _async_get_project_from_name(project_name, current_user, projects_collection)
 
@@ -141,8 +149,13 @@ async def get_project_from_dashboard_id(
 
 
 @projects_endpoint_router.post("/create")
-async def create_project(project: Project, current_user=Depends(get_current_user)):
-    """Create a new project."""
+async def create_project(project: Project, current_user=Depends(get_user_or_anonymous)):
+    """Create a new project.
+
+    Tolerates missing tokens so single-user / public mode can create projects
+    without a persisted token — the inline owner / ``is_admin`` gate below
+    still rejects callers who aren't listed as owners and aren't admins.
+    """
     try:
         if (
             current_user.id not in [owner.id for owner in project.permissions.owners]

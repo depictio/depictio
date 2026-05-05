@@ -190,13 +190,33 @@ def add_filter(
                 # Utf8 columns. ``cast(pl.Datetime)`` alone fails at
                 # evaluation when the column is stored as a string (which
                 # ampliseq's ``sampling_date`` is). Casting to Utf8 first
-                # then parsing covers all three dtypes.
-                date_col = (
-                    pl.col(column_name)
-                    .cast(pl.Utf8, strict=False)
-                    .str.strptime(pl.Datetime, "%Y-%m-%d", strict=False)
+                # then coalesce-parsing across formats covers all three
+                # dtypes plus full ISO timestamps (``2026-05-05T16:10:27Z``,
+                # which the React Timeline emits and earlier code rejected
+                # because it only tried the date-only ``%Y-%m-%d`` format).
+                col_str = pl.col(column_name).cast(pl.Utf8, strict=False)
+                # Strip any inferred timezone so the `pl.lit(start_dt)`
+                # comparison literals (naive Python `datetime`s) match.
+                # Polars treats `datetime[μs, UTC]` and `datetime[μs]` as
+                # incompatible for `>=` even when the wall-clock values are
+                # identical — strings like `2026-05-05T16:10:27Z` parse with
+                # tz, plain `2026-05-05` parses without. Coalescing requires
+                # both branches to share a dtype, so we normalize.
+                parsed_iso = col_str.str.to_datetime(strict=False).dt.replace_time_zone(None)
+                parsed_date = col_str.str.strptime(pl.Datetime, "%Y-%m-%d", strict=False)
+                date_col = pl.coalesce([parsed_iso, parsed_date])
+                # Strip tz from the literals too in case some caller hands
+                # us tz-aware datetimes (DateRangePicker historically sent
+                # date-only strings, but Timeline now emits ISO with `Z`).
+                start_naive = (
+                    start_dt.replace(tzinfo=None) if getattr(start_dt, "tzinfo", None) else start_dt
                 )
-                filter_list.append((date_col >= pl.lit(start_dt)) & (date_col <= pl.lit(end_dt)))
+                end_naive = (
+                    end_dt.replace(tzinfo=None) if getattr(end_dt, "tzinfo", None) else end_dt
+                )
+                filter_list.append(
+                    (date_col >= pl.lit(start_naive)) & (date_col <= pl.lit(end_naive))
+                )
 
             except Exception as e:
                 logger.warning(
@@ -386,6 +406,7 @@ def _generate_cache_keys(
     select_columns: list[str] | None,
     metadata: list[dict] | None,
     load_for_options: bool,
+    version_salt: str | int | None = None,
 ) -> tuple[str, str | None, str | None]:
     """
     Generate cache keys for DataFrame caching.
@@ -393,16 +414,24 @@ def _generate_cache_keys(
     Returns:
         Tuple of (base_cache_key, filtered_cache_key, filter_hash).
         filtered_cache_key and filter_hash are None if no filters apply.
+
+    ``version_salt`` is an optional discriminator embedded in the key — typically
+    the deltatable's latest ``aggregation_version``. Including it means that
+    when realtime ingest bumps the version, every worker's next lookup uses a
+    new key and naturally bypasses any stale per-process memory cache. Without
+    this salt, multi-worker deployments serve stale data after a WS update
+    because cache invalidation only reaches one worker process.
     """
     cache_suffix = "preview" if load_for_preview else "base"
+    salt = f"_v{version_salt}" if version_salt is not None else ""
 
     if select_columns:
         columns_key = "_".join(sorted(select_columns))
         base_cache_key = (
-            f"{workflow_id_str}_{data_collection_id_str}_{cache_suffix}_cols_{columns_key}"
+            f"{workflow_id_str}_{data_collection_id_str}_{cache_suffix}_cols_{columns_key}{salt}"
         )
     else:
-        base_cache_key = f"{workflow_id_str}_{data_collection_id_str}_{cache_suffix}"
+        base_cache_key = f"{workflow_id_str}_{data_collection_id_str}_{cache_suffix}{salt}"
 
     filter_hash = None
     filtered_cache_key = None
@@ -412,6 +441,33 @@ def _generate_cache_keys(
         filtered_cache_key = f"{base_cache_key}_filters_{filter_hash}"
 
     return base_cache_key, filtered_cache_key, filter_hash
+
+
+def _get_aggregation_version(data_collection_id_str: str) -> str | None:
+    """Fetch latest aggregation_version for a DC from MongoDB.
+
+    Used as a cache-key salt so multi-worker API deployments don't serve
+    stale data after a realtime ingest: invalidating one worker's in-process
+    dataframe cache leaves the other workers still pointing at the old key,
+    so we discriminate the keys by version instead.
+
+    Returns ``None`` on lookup failure so callers can fall back to unsalted
+    keys (preserves prior behavior on errors).
+    """
+    try:
+        from depictio.api.v1.db import deltatables_collection as _dt_coll
+
+        dt = _dt_coll.find_one(
+            {"data_collection_id": ObjectId(data_collection_id_str)},
+            {"aggregation": 1},
+        )
+        agg_list = (dt or {}).get("aggregation") or []
+        if not agg_list:
+            return None
+        return str(agg_list[-1].get("aggregation_version") or "")
+    except Exception as e:
+        logger.debug(f"_get_aggregation_version({data_collection_id_str}) failed: {e}")
+        return None
 
 
 def _get_dc_type_from_db(data_collection_id: ObjectId) -> str | None:
@@ -988,6 +1044,14 @@ def load_deltatable_lite(
     # CACHING ENABLED PATH
     _log_cache_status()
 
+    # Salt the cache keys with the latest aggregation_version so realtime
+    # ingest naturally invalidates this worker's per-process memory cache —
+    # `invalidate_data_collection_cache` from the WS handler only reaches the
+    # one worker that received the event, so without a per-version key the
+    # other 3 default workers keep serving the stale dataframe. The version
+    # bumps on every CLI rewrite, so the new fetch lands on a new key.
+    version_salt = _get_aggregation_version(data_collection_id_str)
+
     # Generate cache keys
     base_cache_key, filtered_cache_key, filter_hash = _generate_cache_keys(
         workflow_id_str,
@@ -996,6 +1060,7 @@ def load_deltatable_lite(
         select_columns,
         metadata,
         load_for_options,
+        version_salt=version_salt,
     )
 
     # Check Redis cache

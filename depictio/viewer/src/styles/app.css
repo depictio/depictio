@@ -96,6 +96,26 @@ body {
   box-sizing: border-box;
 }
 
+/* While the sidebar is sliding (set by `useSidebarOpen.toggle`), bump the
+ * per-item transition duration from 200ms to 300ms so it matches Mantine
+ * AppShell's `transitionDuration={300}` width animation. Combined with
+ * `DashboardGrid`'s sidebar-toggle event handler (which sets containerWidth
+ * to the predicted final value once at the start of the slide), each item
+ * runs a single 300ms CSS transition from its current transform to the new
+ * one — in lockstep with the parent. The `lockedWidthRef` in DashboardGrid
+ * also suppresses ResizeObserver updates during the slide so this single
+ * CSS transition isn't restarted mid-flight by per-frame width measurements.
+ *
+ * Targets `transition-duration` only (not the shorthand) so RGL's
+ * `transition-property: transform, width, height` rule from its bundled
+ * stylesheet still applies — without this, the override would clobber
+ * transform animation and items wouldn't slide at all. */
+body.sidebar-transitioning .react-grid-item,
+body.sidebar-transitioning .react-grid-layout {
+  transition-duration: 300ms !important;
+  transition-timing-function: ease !important;
+}
+
 .react-grid-item.react-grid-placeholder {
   background: var(--app-accent);
   opacity: 0.2;

@@ -376,7 +376,7 @@ def _user_can_edit_project(project_dict: dict, user_id: ObjectId, is_admin: bool
     return False
 
 
-async def _create_dc_from_upload(
+def _create_dc_from_upload(
     *,
     project_id: str,
     name: str,
@@ -393,10 +393,10 @@ async def _create_dc_from_upload(
 ) -> dict:
     """Create a basic-project data collection from an uploaded file.
 
-    Mirrors the legacy Dash flow at dash/api_calls.py:api_call_create_data_collection
-    but runs entirely server-side: no base64 round-trip, no second API hop.
-    Steps: validate → build models → push workflow into project doc →
-    scan files → process (aggregate to delta) → return ids.
+    Synchronous on purpose: the CLI helpers it calls (process_data_collection_helper)
+    use a sync httpx client to talk back to this same FastAPI process. Running this
+    on the event loop would deadlock — the loop would be parked awaiting its own
+    response. Callers must dispatch via `asyncio.to_thread`.
     """
     if not file_bytes:
         raise HTTPException(status_code=400, detail="Empty file upload.")

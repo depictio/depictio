@@ -27,19 +27,30 @@ export default function AuthApp() {
   const { loading, status, error } = useAuthMode();
   const [singleUserError, setSingleUserError] = useState<string | null>(null);
 
-  // Single-user mode: skip the form, fetch the anonymous session and bounce
-  // straight to /dashboards. The page never renders any UI in this case.
+  // Auto-redirect on /auth load. Two cases:
+  // 1. Single-user mode — always fetch a fresh admin session and persist it
+  //    before navigating. /auth/me/optional resolves the admin via fallback
+  //    so `status.user` is truthy here, but we MUST persist the token first
+  //    so /dashboards' API calls carry `Authorization: Bearer <admin>`.
+  //    Without this, save_dashboard's get_user_or_anonymous falls back to
+  //    the anonymous user and dashboards land in "Accessed" with the wrong
+  //    owner.
+  // 2. Standard / public mode with an already-resolved session — bounce
+  //    straight through without touching localStorage.
   useEffect(() => {
     if (view === 'oauth-callback') return;
     if (loading || !status) return;
-    if (!status.is_single_user_mode) return;
 
     let cancelled = false;
     (async () => {
       try {
-        const session = await getAnonymousSession();
-        if (cancelled) return;
-        persistSession(session);
+        if (status.is_single_user_mode) {
+          const session = await getAnonymousSession();
+          if (cancelled) return;
+          persistSession(session);
+        } else if (!status.user) {
+          return; // let the login form render
+        }
         window.location.assign(POST_AUTH_REDIRECT);
       } catch (err) {
         console.error(err);
@@ -52,16 +63,6 @@ export default function AuthApp() {
     })();
 
     return () => { cancelled = true; };
-  }, [loading, status, view]);
-
-  // If the user is already authenticated (token in local-store resolved to a
-  // user), bounce to /dashboards rather than re-rendering the login form.
-  useEffect(() => {
-    if (view === 'oauth-callback') return;
-    if (loading || !status) return;
-    if (status.user) {
-      window.location.assign(POST_AUTH_REDIRECT);
-    }
   }, [loading, status, view]);
 
   const handleSuccess = () => window.location.assign(POST_AUTH_REDIRECT);

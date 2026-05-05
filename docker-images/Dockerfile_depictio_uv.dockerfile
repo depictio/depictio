@@ -36,6 +36,14 @@ RUN apt-get update && apt-get install --no-install-recommends -y \
     xauth \
     curl \
     netcat-openbsd \
+    # Node.js + corepack: needed only for the dev viewer container which
+    # runs Vite via `pnpm dev` (HMR). The prod backend container doesn't
+    # use either, but sharing one image keeps the compose stack simple —
+    # the cost is ~150MB of unused tooling in non-dev images, accepted
+    # while the React SPA still ships as a `dist/` artifact served by
+    # FastAPI. NodeSource setup script pulls a current LTS line.
+    ca-certificates \
+    gnupg \
     # Playwright chromium dependencies (common ones)
     libnss3 \
     libnspr4 \
@@ -53,6 +61,9 @@ RUN apt-get update && apt-get install --no-install-recommends -y \
     libasound2 \
     libpango-1.0-0 \
     libcairo2 \
+    && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && apt-get install --no-install-recommends -y nodejs \
+    && corepack enable \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 

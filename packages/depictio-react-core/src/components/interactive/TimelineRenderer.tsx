@@ -14,6 +14,7 @@ import {
   InteractiveFilter,
   StoredMetadata,
 } from '../../api';
+import './TimelineRenderer.css';
 
 /**
  * Timeline scrubber for datetime columns.
@@ -302,18 +303,20 @@ const TimelineRenderer: React.FC<{
 
   return (
     <Stack gap="xs">
-      <Group gap="xs" wrap="nowrap" align="center" justify="space-between">
-        <Text size="xs" fw={600} truncate style={{ flex: 1, minWidth: 0 }}>
-          {title}
-        </Text>
-        <SegmentedControl
-          size="xs"
-          data={TIMESCALES.map((s) => ({ value: s, label: TIMESCALE_LABELS[s] }))}
-          value={scale}
-          onChange={(v) => setScale(v as Timescale)}
-        />
-      </Group>
-      <Box pt={4} pb={marksVisible ? 28 : 4} px={8}>
+      {/* Title is `md` so its line-height pushes the slider track well
+       * below the chrome's hover-floating action icons (MetadataPopover /
+       * Reset / etc., positioned at top: 12px / right: 12px in chrome.css).
+       * Smaller sizes left the right RangeSlider thumb in the same vertical
+       * band as the icons and they overlapped on hover. */}
+      <Text size="md" fw={600} truncate>
+        {title}
+      </Text>
+      <Box
+        pt={4}
+        pb={marksVisible ? 28 : 4}
+        px={8}
+        className="depictio-timeline-slider"
+      >
         <RangeSlider
           size="sm"
           thumbSize={compact ? 12 : 14}
@@ -327,9 +330,20 @@ const TimelineRenderer: React.FC<{
           label={(v) => formatAt(scale, v, ctx)}
         />
       </Box>
-      <Text size="xs" c="dimmed" ta="center">
-        {formatAt(scale, value[0], ctx)} → {formatAt(scale, value[1], ctx)}
-      </Text>
+      {/* Footer row: selected-range readout left, timescale picker right.
+       * Moved out of the header so the long readout doesn't push the
+       * SegmentedControl off-screen on narrow grid cells. */}
+      <Group gap="xs" wrap="nowrap" align="center" justify="space-between">
+        <Text size="xs" c="dimmed" truncate style={{ minWidth: 0 }}>
+          {formatAt(scale, value[0], ctx)} → {formatAt(scale, value[1], ctx)}
+        </Text>
+        <SegmentedControl
+          size="xs"
+          data={TIMESCALES.map((s) => ({ value: s, label: TIMESCALE_LABELS[s] }))}
+          value={scale}
+          onChange={(v) => setScale(v as Timescale)}
+        />
+      </Group>
     </Stack>
   );
 };

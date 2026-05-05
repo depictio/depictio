@@ -2,20 +2,50 @@ import React, { useState } from 'react';
 import {
   Accordion,
   Anchor,
-  Avatar,
   Badge,
   Box,
   Button,
   Group,
+  Paper,
   Stack,
   Text,
-  Tooltip,
 } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { Icon } from '@iconify/react';
 
 import { exportProjectZip } from 'depictio-react-core';
 import type { ProjectListEntry } from 'depictio-react-core';
+
+import { parseTemplate, TemplateChip, type ParsedTemplate } from './template';
+
+/** Single-line row that navigates on click. Replaces the previous
+ *  collapsible Workflows & Data / Roles and permissions accordion items —
+ *  the panels were stub redirect copy, so a flat clickable row is clearer
+ *  and saves a click. */
+const NavRow: React.FC<{
+  icon: string;
+  iconColor: string;
+  label: string;
+  href: string;
+}> = ({ icon, iconColor, label, href }) => (
+  <Paper
+    component="a"
+    href={href}
+    withBorder
+    radius="sm"
+    px="md"
+    py="sm"
+    style={{ display: 'block', textDecoration: 'none', color: 'inherit', cursor: 'pointer' }}
+  >
+    <Group justify="space-between" wrap="nowrap">
+      <Group gap="sm" wrap="nowrap">
+        <Icon icon={icon} width={20} color={iconColor} />
+        <Text fw={500}>{label}</Text>
+      </Group>
+      <Icon icon="mdi:chevron-right" width={20} color="var(--mantine-color-gray-5)" />
+    </Group>
+  </Paper>
+);
 
 interface ProjectCardProps {
   project: ProjectListEntry;
@@ -44,231 +74,6 @@ const ROLE_COLOR: Record<Role, string> = {
   Owner: 'blue',
   Editor: 'cyan',
   Viewer: 'gray',
-};
-
-interface ParsedTemplate {
-  /** Original full identifier, e.g. `nf-core/viralrecon/3.0.0` */
-  full: string;
-  /** First slash-separated segment, e.g. `nf-core` */
-  source: string;
-  /** Middle segment if present, e.g. `viralrecon` */
-  repo: string;
-  /** Trailing segment if it looks like a semver, otherwise empty */
-  version: string;
-}
-
-/** Parse `template_origin.template_id` (e.g. `nf-core/viralrecon/3.0.0`)
- *  into source/repo/version. Backwards-compatible with `template_origin`
- *  passed as a plain string and with shorter ids that omit the version
- *  segment. Returns null when the project wasn't created from a template. */
-function parseTemplate(project: ProjectListEntry): ParsedTemplate | null {
-  const origin = project.template_origin as
-    | { template_id?: string }
-    | string
-    | undefined;
-  let raw: string | null = null;
-  if (typeof origin === 'string') raw = origin.trim();
-  else if (origin && typeof origin === 'object' && origin.template_id) {
-    raw = origin.template_id.trim();
-  }
-  if (!raw) return null;
-  const parts = raw.split('/').map((s) => s.trim()).filter(Boolean);
-  // Last segment is treated as the version when it looks numeric/semver.
-  const looksVersion = (s: string) => /^v?\d/.test(s);
-  let version = '';
-  if (parts.length >= 2 && looksVersion(parts[parts.length - 1])) {
-    version = parts.pop() || '';
-  }
-  const source = parts[0] || raw;
-  const repo = parts[1] || '';
-  return { full: raw, source, repo, version };
-}
-
-/** Brand marks for the well-known template sources. The PNG/SVG files come
- *  from the canonical workflow logos already in `depictio/dash/assets/images/
- *  workflows/` (mirrored into `depictio/viewer/public/logos/workflows/` so
- *  Vite copies them into the bundle). FastAPI serves them at
- *  `/dashboard-beta/logos/workflows/<name>.png`; we resolve via Vite's
- *  base URL to stay correct under any deployment prefix. */
-const LOGO = (name: string) => `${import.meta.env.BASE_URL}logos/workflows/${name}`;
-
-const BrandImg: React.FC<{ src: string; alt: string; size?: number }> = ({
-  src,
-  alt,
-  size = 22,
-}) => (
-  <img
-    src={src}
-    alt={alt}
-    width={size}
-    height={size}
-    style={{ objectFit: 'contain', display: 'block' }}
-  />
-);
-
-const NfCoreLogo: React.FC<{ size?: number }> = ({ size = 22 }) => (
-  <BrandImg src={LOGO('nf-core.png')} alt="nf-core" size={size} />
-);
-const SnakemakeLogo: React.FC<{ size?: number }> = ({ size = 22 }) => (
-  <BrandImg src={LOGO('snakemake.svg')} alt="Snakemake" size={size} />
-);
-const GalaxyLogo: React.FC<{ size?: number }> = ({ size = 22 }) => (
-  <BrandImg src={LOGO('galaxy.png')} alt="Galaxy" size={size} />
-);
-const IwcLogo: React.FC<{ size?: number }> = ({ size = 22 }) => (
-  <BrandImg src={LOGO('iwc.png')} alt="IWC" size={size} />
-);
-
-interface SourceMeta {
-  /** Mantine color name for the version pill */
-  color: string;
-  /** Inline SVG component for the avatar slot — undefined → letter fallback */
-  Logo?: React.FC<{ size?: number }>;
-  /** Two-letter fallback for the avatar when no Logo is registered */
-  initials?: string;
-  /** Build a homepage URL from the parsed template (clickable chip) */
-  homepage?: (parsed: ParsedTemplate) => string;
-}
-
-/** Registry of well-known template sources. New sources slot in here and
- *  inherit the chip rendering — no changes to ProjectCard needed. */
-const TEMPLATE_SOURCES: Record<string, SourceMeta> = {
-  'nf-core': {
-    color: 'green',
-    Logo: NfCoreLogo,
-    initials: 'NF',
-    homepage: (t) =>
-      t.repo
-        ? `https://nf-co.re/${t.repo}` + (t.version ? `/${t.version.replace(/^v/i, '')}` : '')
-        : 'https://nf-co.re/',
-  },
-  'snakemake-workflows': {
-    color: 'blue',
-    Logo: SnakemakeLogo,
-    initials: 'SW',
-    homepage: (t) =>
-      t.repo
-        ? `https://github.com/snakemake-workflows/${t.repo}`
-        : 'https://github.com/snakemake-workflows',
-  },
-  galaxy: {
-    color: 'orange',
-    Logo: GalaxyLogo,
-    initials: 'GX',
-    homepage: () => 'https://galaxyproject.org/',
-  },
-  iwc: {
-    color: 'grape',
-    Logo: IwcLogo,
-    initials: 'IW',
-    homepage: () => 'https://iwc.galaxyproject.org/',
-  },
-  bioconda: { color: 'teal', initials: 'BC' },
-  depictio: { color: 'grape', initials: 'DE' },
-};
-
-function sourceMeta(source: string): SourceMeta {
-  return (
-    TEMPLATE_SOURCES[source.toLowerCase()] || {
-      color: 'gray',
-      initials: source.replace(/[^a-zA-Z0-9]/g, '').slice(0, 2).toUpperCase() || '??',
-    }
-  );
-}
-
-/** Shared chip that renders a template's brand mark (or letter fallback)
- *  + version pill, optionally wrapped in a homepage link. Used in both the
- *  project row header and the inline Details panel. The Anchor stops click
- *  propagation so opening the link doesn't toggle the accordion. */
-const TemplateChip: React.FC<{
-  parsed: ParsedTemplate;
-  /** Verbose mode renders the source/repo text alongside the chip. */
-  verbose?: boolean;
-}> = ({ parsed, verbose }) => {
-  const meta = sourceMeta(parsed.source);
-  const Logo = meta.Logo;
-  const homepage = meta.homepage?.(parsed);
-  const tooltipLabel = (
-    <Stack gap={2}>
-      <Text size="xs" fw={600}>
-        Template
-      </Text>
-      <Text size="xs" ff="monospace">
-        {parsed.full}
-      </Text>
-      {homepage && (
-        <Text size="xs" c="dimmed">
-          Click to open homepage
-        </Text>
-      )}
-    </Stack>
-  );
-
-  const chip = (
-    <Group gap={4} wrap="nowrap" style={{ flexShrink: 0 }}>
-      {Logo ? (
-        <Box
-          w={22}
-          h={22}
-          style={{
-            borderRadius: '50%',
-            overflow: 'hidden',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
-        >
-          <Logo size={22} />
-        </Box>
-      ) : (
-        <Avatar
-          size={22}
-          radius="xl"
-          color={meta.color}
-          variant="filled"
-          style={{ fontSize: 10, fontWeight: 700 }}
-        >
-          {meta.initials}
-        </Avatar>
-      )}
-      {parsed.version && (
-        <Badge
-          color={meta.color}
-          variant="light"
-          size="xs"
-          radius="sm"
-          style={{ textTransform: 'none', fontWeight: 600 }}
-        >
-          v{parsed.version.replace(/^v/i, '')}
-        </Badge>
-      )}
-      {verbose && (
-        <Text size="xs" c="dimmed" ff="monospace" truncate>
-          {parsed.repo ? `${parsed.source}/${parsed.repo}` : parsed.source}
-        </Text>
-      )}
-    </Group>
-  );
-
-  return (
-    <Tooltip label={tooltipLabel} withArrow position="top">
-      {homepage ? (
-        <Anchor
-          href={homepage}
-          target="_blank"
-          rel="noreferrer"
-          underline="never"
-          // Stop the click from bubbling to the Accordion.Control so opening
-          // the homepage doesn't also toggle the row.
-          onClick={(e) => e.stopPropagation()}
-        >
-          {chip}
-        </Anchor>
-      ) : (
-        chip
-      )}
-    </Tooltip>
-  );
 };
 
 const ProjectCard: React.FC<ProjectCardProps> = ({
@@ -384,62 +189,19 @@ const ProjectCard: React.FC<ProjectCardProps> = ({
               </Accordion.Panel>
             </Accordion.Item>
 
-            <Accordion.Item value="data-collections">
-              <Accordion.Control
-                icon={
-                  <Icon
-                    icon="mdi:database-outline"
-                    width={20}
-                    color="var(--mantine-color-cyan-6)"
-                  />
-                }
-              >
-                <Group justify="space-between" wrap="nowrap" pr="md">
-                  <Text fw={500}>Workflows & Data</Text>
-                  <Anchor
-                    component="a"
-                    href={`/projects-beta/${projectId}`}
-                    size="sm"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    Open manager →
-                  </Anchor>
-                </Group>
-              </Accordion.Control>
-              <Accordion.Panel>
-                <Text size="sm" c="dimmed">
-                  Open the project's manager to browse workflows, add, rename,
-                  preview, or remove data collections.
-                </Text>
-              </Accordion.Panel>
-            </Accordion.Item>
+            <NavRow
+              icon="mdi:database-outline"
+              iconColor="var(--mantine-color-cyan-6)"
+              label="Workflows & Data"
+              href={`/projects-beta/${projectId}`}
+            />
 
-            <Accordion.Item value="permissions">
-              <Accordion.Control
-                icon={
-                  <Icon
-                    icon="mdi:shield-account-outline"
-                    width={20}
-                    color="var(--mantine-color-blue-6)"
-                  />
-                }
-              >
-                <Group justify="space-between" wrap="nowrap" pr="md">
-                  <Text fw={500}>Roles and permissions</Text>
-                  <Anchor
-                    component="a"
-                    href={`/projects-beta/${projectId}/permissions`}
-                    size="sm"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    Manage →
-                  </Anchor>
-                </Group>
-              </Accordion.Control>
-              <Accordion.Panel>
-                <PermissionsSummary project={project} />
-              </Accordion.Panel>
-            </Accordion.Item>
+            <NavRow
+              icon="mdi:shield-account-outline"
+              iconColor="var(--mantine-color-blue-6)"
+              label="Roles and permissions"
+              href={`/projects-beta/${projectId}/permissions`}
+            />
 
             <Accordion.Item value="management">
               <Accordion.Control
@@ -603,19 +365,5 @@ const DetailRow: React.FC<{
     )}
   </Group>
 );
-
-const PermissionsSummary: React.FC<{ project: ProjectListEntry }> = ({ project }) => {
-  const fmt = (list?: Array<{ email?: string; _id?: string; id?: string }>) =>
-    !list || list.length === 0
-      ? 'None'
-      : list.map((u) => u.email || u._id || u.id || '').filter(Boolean).join(', ');
-  return (
-    <Stack gap={4}>
-      <DetailRow label="Owners" value={fmt(project.permissions?.owners)} />
-      <DetailRow label="Editors" value={fmt(project.permissions?.editors)} />
-      <DetailRow label="Viewers" value={fmt(project.permissions?.viewers)} />
-    </Stack>
-  );
-};
 
 export default ProjectCard;

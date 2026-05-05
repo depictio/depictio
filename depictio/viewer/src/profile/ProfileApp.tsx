@@ -77,7 +77,7 @@ function buttonStates(
   return {
     logoutDisabled: isPublic || isSingle,
     editPasswordDisabled: isSingle || isPublic || isDemo,
-    cliAgentsDisabled: isPublic || isSingle,
+    cliAgentsDisabled: isPublic,
     showUpgrade: isUnauth && Boolean(user?.is_anonymous) && !user?.is_temporary,
   };
 }

@@ -69,15 +69,9 @@ async def upsert_deltatable(
     """
     data_collection_oid = payload.data_collection_id
 
-    query = {
-        "$or": [
-            {"permissions.owners._id": current_user.id},
-            {"permissions.is_admin": True},
-        ],
-        "workflows.data_collections._id": data_collection_oid,
-    }
-
-    project = projects_collection.find_one(query)
+    project = projects_collection.find_one(
+        _owned_or_admin_query(current_user, {"workflows.data_collections._id": data_collection_oid})
+    )
     if not project:
         raise HTTPException(
             status_code=404,
@@ -262,20 +256,35 @@ async def upsert_deltatable(
     return {"message": "DeltaTableAggregated upserted successfully", "result": "success"}
 
 
-def _build_permission_pipeline(data_collection_id: PyObjectId, user_id) -> list[dict]:
-    """Build MongoDB aggregation pipeline for permission checking."""
+def _owned_or_admin_query(current_user: User, base: dict) -> dict:
+    """Add an owner filter to ``base`` unless the caller is an admin.
+
+    Admins (including the anonymous-admin used in single-user mode) wouldn't
+    appear in the project's permissions list, so the explicit-membership
+    check would reject them.
+    """
+    if current_user.is_admin:
+        return base
+    return {**base, "permissions.owners._id": current_user.id}
+
+
+def _build_permission_pipeline(data_collection_id: PyObjectId, current_user: User) -> list[dict]:
+    """Build MongoDB aggregation pipeline for permission checking.
+
+    Admins (including the anonymous-admin used in single-user mode) skip the
+    owner/viewer filter — they wouldn't appear in the project's permissions
+    list, so the explicit-membership check would otherwise reject them.
+    """
+    match_clause: dict = {"workflows.data_collections._id": ObjectId(data_collection_id)}
+    if not current_user.is_admin:
+        match_clause["$or"] = [
+            {"permissions.owners._id": current_user.id},
+            {"permissions.viewers._id": current_user.id},
+            {"permissions.viewers": "*"},
+            {"is_public": True},
+        ]
     return [
-        {
-            "$match": {
-                "workflows.data_collections._id": ObjectId(data_collection_id),
-                "$or": [
-                    {"permissions.owners._id": user_id},
-                    {"permissions.viewers._id": user_id},
-                    {"permissions.viewers": "*"},
-                    {"is_public": True},
-                ],
-            }
-        },
+        {"$match": match_clause},
         {"$unwind": "$workflows"},
         {"$unwind": "$workflows.data_collections"},
         {"$match": {"workflows.data_collections._id": ObjectId(data_collection_id)}},
@@ -286,7 +295,7 @@ def _build_permission_pipeline(data_collection_id: PyObjectId, user_id) -> list[
 @deltatables_endpoint_router.get("/get/{data_collection_id}")
 async def get_deltatable(
     data_collection_id: PyObjectId,
-    current_user: str = Depends(get_user_or_anonymous),
+    current_user: User = Depends(get_user_or_anonymous),
 ):
     """
     Fetch a DeltaTableAggregated object by data collection ID.
@@ -301,7 +310,7 @@ async def get_deltatable(
     Raises:
         HTTPException: If data collection not found or access denied.
     """
-    pipeline = _build_permission_pipeline(data_collection_id, current_user.id)  # type: ignore[possibly-unbound-attribute]
+    pipeline = _build_permission_pipeline(data_collection_id, current_user)
     project_result = list(projects_collection.aggregate(pipeline))
     if not project_result:
         raise HTTPException(status_code=404, detail="Data collection not found or access denied.")
@@ -357,7 +366,7 @@ async def batch_check_deltatables_exist(
 @deltatables_endpoint_router.get("/specs/{data_collection_id}")
 async def specs(
     data_collection_id: PyObjectId,
-    current_user: str = Depends(get_user_or_anonymous),
+    current_user: User = Depends(get_user_or_anonymous),
 ):
     """
     Fetch columns list and specs from data collection.
@@ -375,7 +384,7 @@ async def specs(
     Note:
         Currently returns the last aggregation; versioning support planned.
     """
-    pipeline = _build_permission_pipeline(data_collection_id, current_user.id)  # type: ignore[possibly-unbound-attribute]
+    pipeline = _build_permission_pipeline(data_collection_id, current_user)
     project_result = list(projects_collection.aggregate(pipeline))
     if not project_result:
         raise HTTPException(status_code=404, detail="Data collection not found or access denied.")
@@ -503,7 +512,7 @@ async def get_unique_values(
 @deltatables_endpoint_router.get("/shape/{data_collection_id}")
 async def get_shape(
     data_collection_id: PyObjectId,
-    current_user: str = Depends(get_user_or_anonymous),
+    current_user: User = Depends(get_user_or_anonymous),
 ):
     """
     Get shape information (number of rows and columns) for a data collection.
@@ -518,7 +527,7 @@ async def get_shape(
     Raises:
         HTTPException: If data collection not found or delta table read fails.
     """
-    pipeline = _build_permission_pipeline(data_collection_id, current_user.id)  # type: ignore[possibly-unbound-attribute]
+    pipeline = _build_permission_pipeline(data_collection_id, current_user)
     project_result = list(projects_collection.aggregate(pipeline))
     if not project_result:
         raise HTTPException(status_code=404, detail="Data collection not found or access denied.")
@@ -550,7 +559,7 @@ async def get_preview(
     response: Response,
     data_collection_id: PyObjectId,
     limit: int = 100,
-    current_user: str = Depends(get_user_or_anonymous),
+    current_user: User = Depends(get_user_or_anonymous),
 ):
     """
     Return the first `limit` rows + column names for a data collection's
@@ -562,7 +571,7 @@ async def get_preview(
     Heavy work (Polars scan + collect) runs on Celery when
     `settings.celery.offload_preview` is true (default).
     """
-    pipeline = _build_permission_pipeline(data_collection_id, current_user.id)  # type: ignore[possibly-unbound-attribute]
+    pipeline = _build_permission_pipeline(data_collection_id, current_user)
     project_result = list(projects_collection.aggregate(pipeline))
     if not project_result:
         raise HTTPException(status_code=404, detail="Data collection not found or access denied.")
@@ -620,7 +629,6 @@ async def delete_deltatable(
         raise HTTPException(status_code=400, detail="Data Collection ID is required")
 
     deltatable_oid = ObjectId(deltatable_id)
-    user_oid = ObjectId(current_user.id)
 
     deltatable = deltatables_collection.find_one({"_id": deltatable_oid})
     if not deltatable:
@@ -649,11 +657,9 @@ async def delete_deltatable(
         logger.error(f"Failed to delete S3 objects: {e}")
         raise HTTPException(status_code=500, detail="Failed to delete S3 objects.")
 
-    query = {
-        "$or": [{"permissions.owners._id": user_oid}, {"permissions.is_admin": True}],
-        "data_collections._id": data_collection_oid,
-    }
-    if not projects_collection.find_one(query):
+    if not projects_collection.find_one(
+        _owned_or_admin_query(current_user, {"data_collections._id": data_collection_oid})
+    ):
         raise HTTPException(
             status_code=404,
             detail=f"No workflows with id {deltatable_oid} found for the current user.",

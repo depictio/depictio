@@ -55,11 +55,21 @@ const MapRenderer: React.FC<MapRendererProps> = ({
       ? (metadata.selection_column_index as number)
       : 0;
 
+  // Strip our own ``map_selection`` filter before fetching — see the matching
+  // comment in FigureRenderer / TableRenderer.
+  const filtersForFetch = useMemo(
+    () =>
+      filters.filter(
+        (f) => !(f.index === metadata.index && f.source === 'map_selection'),
+      ),
+    [filters, metadata.index],
+  );
+
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
     setError(null);
-    renderMap(dashboardId, metadata.index, filters, theme)
+    renderMap(dashboardId, metadata.index, filtersForFetch, theme)
       .then((res) => {
         if (cancelled) return;
         // Keep the previous map mounted while the next response is in
@@ -78,7 +88,7 @@ const MapRenderer: React.FC<MapRendererProps> = ({
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dashboardId, metadata.index, JSON.stringify(filters), theme, refreshTick]);
+  }, [dashboardId, metadata.index, JSON.stringify(filtersForFetch), theme, refreshTick]);
 
   const isInitialLoad = figure === null;
   const showInitialLoader = isInitialLoad && loading;
@@ -135,9 +145,12 @@ const MapRenderer: React.FC<MapRendererProps> = ({
         typeof metadata.selection_mode === 'string' ? metadata.selection_mode : 'lasso';
       base.dragmode = mode;
     }
-    if (!base.uirevision) base.uirevision = 'persistent';
+    // Bump uirevision per refreshTick so realtime updates produce a unique
+    // value and force Plotly to repaint. Filter changes don't increment
+    // refreshTick, so user pan/zoom/bearing still survives those.
+    base.uirevision = `tick-${refreshTick ?? 0}`;
     return base;
-  }, [figure, selectionEnabled, metadata.selection_mode]);
+  }, [figure, selectionEnabled, metadata.selection_mode, refreshTick]);
 
   return (
     <Paper p="sm" withBorder radius="md" style={{ minHeight: 320 }}>
@@ -162,6 +175,7 @@ const MapRenderer: React.FC<MapRendererProps> = ({
           <Plot
             data={(figure.data as any[]) || []}
             layout={layout}
+            revision={refreshTick ?? 0}
             config={{ displaylogo: false, responsive: true, scrollZoom: true }}
             style={{ width: '100%', height: 320 }}
             useResizeHandler

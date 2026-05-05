@@ -28,7 +28,13 @@ import CliAgentsApp from './cli-agents/CliAgentsApp';
 import CreateComponentPage from './builder/CreateComponentPage';
 import EditComponentPage from './builder/EditComponentPage';
 import { matchEditorRoute } from './builder/routeMatch';
-import { ErrorBoundary, validateSession } from 'depictio-react-core';
+import {
+  ErrorBoundary,
+  fetchAuthStatus,
+  getAnonymousSession,
+  persistSession,
+  validateSession,
+} from 'depictio-react-core';
 import { depictioTheme } from './theme';
 
 // Client-side route resolution. FastAPI serves index.html for all paths under
@@ -101,23 +107,41 @@ function readInitialColorScheme(): 'light' | 'dark' | 'auto' {
   }
 }
 
-// Proactively refresh the JWT before mounting so the first network request
-// of the session never carries a near-expired token. Failure is non-fatal —
-// authFetch will retry on 401 (and the unauthenticated middleware handles
-// public mode). Mirrors the Dash ``shared_auth.validate_and_refresh_session``
-// pre-page-load hook.
-void validateSession();
+// Boot-time session bootstrap. Two jobs:
+//   1. Refresh the JWT if it's near expiry, so the first network request of
+//      the session never carries a stale token.
+//   2. In single-user mode, mint+persist an admin session if one isn't in
+//      localStorage yet — covers direct navigation to auth-required routes
+//      like /cli-agents-beta or /profile-beta without first visiting /auth.
+// Public/demo mode is intentionally NOT auto-bootstrapped: those flows
+// require the user to pick "Temporary user" or Google on /auth.
+async function bootstrapSession(): Promise<void> {
+  const valid = await validateSession();
+  if (valid) return;
+  if (window.location.pathname.startsWith('/auth')) return;
+  try {
+    const status = await fetchAuthStatus();
+    if (status.is_single_user_mode) {
+      const session = await getAnonymousSession();
+      persistSession(session);
+    }
+  } catch (err) {
+    console.error('Auth bootstrap failed:', err);
+  }
+}
 
-ReactDOM.createRoot(document.getElementById('root')!).render(
-  <React.StrictMode>
-    <MantineProvider theme={depictioTheme} defaultColorScheme={readInitialColorScheme()}>
-      {/* DatesProvider is required for @mantine/dates components to pick up
-          locale + first-day-of-week settings. Matches what DMC does
-          internally for ``dmc.DatePickerInput``. */}
-      <DatesProvider settings={{ locale: 'en', firstDayOfWeek: 1 }}>
-        <Notifications position="bottom-right" />
-        <ErrorBoundary>{resolveTree()}</ErrorBoundary>
-      </DatesProvider>
-    </MantineProvider>
-  </React.StrictMode>,
-);
+bootstrapSession().finally(() => {
+  ReactDOM.createRoot(document.getElementById('root')!).render(
+    <React.StrictMode>
+      <MantineProvider theme={depictioTheme} defaultColorScheme={readInitialColorScheme()}>
+        {/* DatesProvider is required for @mantine/dates components to pick up
+            locale + first-day-of-week settings. Matches what DMC does
+            internally for ``dmc.DatePickerInput``. */}
+        <DatesProvider settings={{ locale: 'en', firstDayOfWeek: 1 }}>
+          <Notifications position="bottom-right" />
+          <ErrorBoundary>{resolveTree()}</ErrorBoundary>
+        </DatesProvider>
+      </MantineProvider>
+    </React.StrictMode>,
+  );
+});

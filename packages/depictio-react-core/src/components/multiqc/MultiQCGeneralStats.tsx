@@ -359,7 +359,9 @@ const MultiQCGeneralStats: React.FC<MultiQCGeneralStatsProps> = ({
             b: 50,
             ...((m.violin_figure?.layout?.margin as Record<string, unknown>) || {}),
           },
+          uirevision: `tick-${refreshTick ?? 0}`,
         }}
+        revision={refreshTick ?? 0}
         config={{ displaylogo: false, responsive: true }}
         style={{ width: '100%', height: '100%' }}
         useResizeHandler

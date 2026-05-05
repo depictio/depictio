@@ -383,9 +383,14 @@ async def list_dashboards(
 
 @dashboards_endpoint_router.get("/list_all")
 async def list_all_dashboards(
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_user_or_anonymous),
 ):
-    """Fetch a list of all dashboards (admin only)."""
+    """Fetch a list of all dashboards (admin only).
+
+    Tolerates missing tokens (single-user / public mode) so the React admin
+    "Dashboards" tab loads — the inline ``is_admin`` gate below still blocks
+    non-admin users.
+    """
     if not current_user.is_admin:
         raise HTTPException(status_code=401, detail="Current user is not an admin.")
 
@@ -1976,12 +1981,20 @@ def render_table_endpoint(
     """Return table rows + column definitions for the React viewer's AG Grid.
 
     Request body:
-        {"filters": [...], "start": 0, "limit": 100}
+        {"filters": [...], "start": 0, "limit": 100,
+         "sort_by": <col|null>, "sort_dir": "asc"|"desc"}
 
     Response:
         {"columns": [{"field", "headerName", "type"}, ...],
          "rows":    [{...}, ...],
-         "total":   <int>}
+         "total":   <int>,
+         "sort_by": <col|null>, "sort_dir": "asc"|"desc"}
+
+    Sort runs server-side because the React grid uses AG Grid's *infinite*
+    row model — only the visible page is loaded, so client-side header sort
+    can't reorder unloaded rows. When ``sort_by`` is null the server picks
+    any ``acquisition*`` column (newest first) so realtime ingests land at
+    the top of the visible table; users can override via header click.
     """
     from depictio.api.v1.deltatables_utils import load_deltatable_lite
 
@@ -1989,6 +2002,10 @@ def render_table_endpoint(
     start = int(request.get("start") or 0)
     limit = int(request.get("limit") or 100)
     limit = max(1, min(limit, 500))
+    sort_by = request.get("sort_by")
+    sort_dir = (request.get("sort_dir") or "desc").lower()
+    if sort_dir not in {"asc", "desc"}:
+        sort_dir = "desc"
 
     dashboard_data = dashboards_collection.find_one({"dashboard_id": dashboard_id})
     if not dashboard_data:
@@ -2051,7 +2068,29 @@ def render_table_endpoint(
         raise HTTPException(status_code=500, detail=f"Failed to load data: {e}")
 
     total = df.height
-    sliced = df.slice(start, limit)
+
+    # Pick a default sort if the client didn't ask for one — first column
+    # whose name reads like an acquisition timestamp. Mirrors the image
+    # endpoint's logic so both components show "newest first" out of the box.
+    chosen_sort = sort_by
+    if not chosen_sort:
+        for cand in df.columns:
+            if "acquisition" in cand.lower() and (
+                "time" in cand.lower() or "date" in cand.lower() or "stamp" in cand.lower()
+            ):
+                chosen_sort = cand
+                break
+    if chosen_sort and chosen_sort not in df.columns:
+        # Unknown column from a stale client cache — silently drop the sort
+        # rather than 500ing for a UI race.
+        chosen_sort = None
+
+    if chosen_sort:
+        df_sorted = df.sort(chosen_sort, descending=(sort_dir == "desc"), nulls_last=True)
+    else:
+        df_sorted = df
+
+    sliced = df_sorted.slice(start, limit)
     rows = sliced.to_dicts()
 
     columns = []
@@ -2064,7 +2103,13 @@ def render_table_endpoint(
         )
         columns.append({"field": name, "headerName": name, "type": ag_type})
 
-    return {"columns": columns, "rows": rows, "total": total}
+    return {
+        "columns": columns,
+        "rows": rows,
+        "total": total,
+        "sort_by": chosen_sort,
+        "sort_dir": sort_dir,
+    }
 
 
 @dashboards_endpoint_router.post("/render_image_paths/{dashboard_id}/{component_id}")
@@ -2079,7 +2124,7 @@ def render_image_paths_endpoint(
     """Return non-null values of an image component's ``image_column``.
 
     Request body (optional):
-        {"filters": [...], "max": 50}
+        {"filters": [...], "max": 50, "sort_by": <col|null>, "sort_dir": "asc"|"desc"}
 
     The ``?max=`` query string is still honored as a backwards-compatible alias
     when callers don't supply a body. ``filters`` follows the same payload
@@ -2088,6 +2133,11 @@ def render_image_paths_endpoint(
     ``"table_selection"``, ``"map_selection"``). Cross-DC link filters are
     applied via ``extend_filters_via_links`` so an image grid narrows when a
     linked DC is filtered (mirrors Dash ``_extract_filters_for_image``).
+
+    Response now carries one row per image (``rows: [{path, ...all columns}]``)
+    so the React viewer can drive sort dropdowns / metadata popovers without a
+    second round-trip. ``paths`` is preserved as a derived shortcut for
+    older callers.
     """
     from depictio.api.v1.deltatables_utils import load_deltatable_lite
 
@@ -2098,6 +2148,10 @@ def render_image_paths_endpoint(
     limit = int(chosen_max) if chosen_max and int(chosen_max) > 0 else 50
     if limit > 500:
         limit = 500
+    sort_by = body.get("sort_by")
+    sort_dir = (body.get("sort_dir") or "desc").lower()
+    if sort_dir not in {"asc", "desc"}:
+        sort_dir = "desc"
 
     dashboard_data = dashboards_collection.find_one({"dashboard_id": dashboard_id})
     if not dashboard_data:
@@ -2165,9 +2219,51 @@ def render_image_paths_endpoint(
             status_code=400, detail=f"Column '{image_column}' missing from Delta table."
         )
 
-    paths = df.select(image_column).drop_nulls().head(limit).to_series().to_list()
+    # Pick a default sort column when the caller didn't ask for one. Prefer the
+    # first column whose name contains "acquisition" (covers the Adaptive
+    # Feedback Microscopy `acquisition_timestamp` column and similar) so that
+    # newest images land first without per-project config. Fall back to the
+    # image_column itself for stable, user-visible ordering.
+    available = set(df.columns)
+    chosen_sort = sort_by
+    if not chosen_sort:
+        for cand in df.columns:
+            if "acquisition" in cand.lower() and ("time" in cand.lower() or "date" in cand.lower()):
+                chosen_sort = cand
+                break
+    if chosen_sort and chosen_sort not in available:
+        # Caller asked to sort by an unknown column — silently skip (don't 500
+        # for a UI-driven sort dropdown that may race a schema change).
+        chosen_sort = None
+
+    df_filtered = df.filter(df[image_column].is_not_null())
+    if chosen_sort:
+        df_filtered = df_filtered.sort(
+            chosen_sort, descending=(sort_dir == "desc"), nulls_last=True
+        )
+    df_top = df_filtered.head(limit)
+
+    # Serialize to JSON-safe dicts. Polars' default `to_dicts()` returns
+    # native Python types but doesn't coerce datetimes / Decimal — convert
+    # those to strings so the React side gets stable scalar values.
+    def _to_jsonable(v: Any) -> Any:
+        if v is None:
+            return None
+        if isinstance(v, (str, bool, int, float)):
+            return v
+        return str(v)
+
+    rows = [{k: _to_jsonable(val) for k, val in row.items()} for row in df_top.to_dicts()]
+    paths = [str(r.get(image_column)) for r in rows]
     return {
-        "paths": [str(p) for p in paths],
+        "rows": rows,
+        "image_column": image_column,
+        "sort_by": chosen_sort,
+        "sort_dir": sort_dir,
+        "sortable_columns": list(df.columns),
+        # Backwards-compatible: callers that haven't been updated still see
+        # the bare path list. Drop after every front-end caller migrates.
+        "paths": paths,
         "filter_applied": bool(filter_metadata),
         "filter_count": len(filter_metadata),
     }
@@ -2658,6 +2754,25 @@ def render_multiqc_endpoint(
             sorted_samples = sorted({str(s) for s in selected_samples})
             filter_sig = "|".join(sorted_samples)
 
+        # Salt the cache key with the latest aggregation_version for this DC
+        # so realtime updates (which bump the version after the CLI rewrites
+        # the delta) produce a fresh key. Without this, the cache returns the
+        # pre-update figure even after invalidate_data_collection_cache fires
+        # on the dataframe layer — the figure dict is keyed only on inputs
+        # that don't change when the underlying data does.
+        agg_version: str | None = None
+        if dc_id:
+            try:
+                from depictio.api.v1.db import deltatables_collection as _dt_coll
+
+                dt_doc = _dt_coll.find_one({"data_collection_id": ObjectId(str(dc_id))})
+                agg_list = (dt_doc or {}).get("aggregation") or []
+                if agg_list:
+                    agg_version = str(agg_list[-1].get("aggregation_version") or "")
+            except Exception as e:
+                logger.debug(f"render_multiqc: aggregation_version lookup failed: {e}")
+        version_filter_sig = f"v={agg_version or '0'}|{filter_sig or ''}"
+
         cache = get_cache()
         filter_aware_key = generate_figure_cache_key(
             s3_locations,
@@ -2665,7 +2780,7 @@ def render_multiqc_endpoint(
             selected_plot,
             selected_dataset,
             theme,
-            filter_sig=filter_sig,
+            filter_sig=version_filter_sig,
         )
 
         t1 = _time.perf_counter()

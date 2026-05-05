@@ -54,6 +54,7 @@ import type {
 import { useCurrentUser } from '../../hooks/useCurrentUser';
 import { AppSidebar } from '../../chrome';
 import JoinsGraph from './JoinsGraph';
+import { parseTemplate, TemplateChip, templateDocsUrl } from '../template';
 
 interface DataCollectionShape {
   _id?: string;
@@ -423,6 +424,7 @@ const ProjectDetailApp: React.FC = () => {
               {projectType === 'advanced' && workflows.length > 0 && (
                 <WorkflowsPanel
                   workflows={workflows}
+                  templateSource={parseTemplate(project)?.source.toLowerCase() || null}
                   selectedWorkflowId={selectedWorkflowId}
                   onSelect={(id) => {
                     setSelectedWorkflowId(id);
@@ -981,6 +983,7 @@ const ProjectHeader: React.FC<{
   project: ProjectListEntry;
   projectType: 'basic' | 'advanced';
 }> = ({ project, projectType }) => {
+  const tmpl = parseTemplate(project);
   return (
     <Paper withBorder radius="md" p="lg">
       <Stack gap="xs">
@@ -1022,6 +1025,27 @@ const ProjectHeader: React.FC<{
               : 'Simple project with direct data collection management'}
           </Text>
         </Group>
+        {tmpl && (
+          <Group gap="xs" mt="xs" wrap="nowrap">
+            <Icon
+              icon="mdi:puzzle-outline"
+              width={18}
+              color="var(--mantine-color-grape-6)"
+            />
+            <Text fw={600} size="sm">
+              Template:
+            </Text>
+            <TemplateChip parsed={tmpl} verbose />
+            <Anchor
+              href={templateDocsUrl(tmpl)}
+              target="_blank"
+              rel="noreferrer"
+              size="sm"
+            >
+              View documentation →
+            </Anchor>
+          </Group>
+        )}
         {project.name && (
           <Text size="xs" c="dimmed" mt={4}>
             {project.name}
@@ -1039,11 +1063,26 @@ interface DcStats {
   totalBytes: number;
 }
 
+/** Template-source → workflow brand image. Maps to PNGs already shipped in
+ *  ``depictio/viewer/public/logos/workflows/``. Returns null for sources we
+ *  don't have a brand mark for (the card falls back to a generic icon). */
+const WORKFLOW_BRAND_IMAGE: Record<string, string> = {
+  'nf-core': 'nf-core.png',
+  'snakemake-workflows': 'snakemake.png',
+  galaxy: 'galaxy.png',
+  iwc: 'iwc.png',
+};
+
 const WorkflowsPanel: React.FC<{
   workflows: WorkflowShape[];
+  /** Lower-cased project template source (e.g. ``'nf-core'``) — when set we
+   *  render the matching brand mark on each workflow card and drop the
+   *  redundant engine badge. */
+  templateSource: string | null;
   selectedWorkflowId: string | null;
   onSelect: (id: string | null) => void;
-}> = ({ workflows, selectedWorkflowId, onSelect }) => {
+}> = ({ workflows, templateSource, selectedWorkflowId, onSelect }) => {
+  const brandImage = templateSource ? WORKFLOW_BRAND_IMAGE[templateSource] : undefined;
   return (
     <Stack gap="md">
       <Group gap="xs">
@@ -1096,11 +1135,21 @@ const WorkflowsPanel: React.FC<{
             >
               <Stack gap={6}>
                 <Group gap="xs" wrap="nowrap">
-                  <Icon
-                    icon="mdi:cube-outline"
-                    width={20}
-                    color="var(--mantine-color-orange-6)"
-                  />
+                  {brandImage ? (
+                    <img
+                      src={`${import.meta.env.BASE_URL}logos/workflows/${brandImage}`}
+                      alt={templateSource ?? 'workflow'}
+                      width={20}
+                      height={20}
+                      style={{ objectFit: 'contain', display: 'block' }}
+                    />
+                  ) : (
+                    <Icon
+                      icon="mdi:cube-outline"
+                      width={20}
+                      color="var(--mantine-color-orange-6)"
+                    />
+                  )}
                   <Text fw={600} truncate>
                     {workflowLabel(wf)}
                   </Text>
@@ -1110,7 +1159,9 @@ const WorkflowsPanel: React.FC<{
                     Version {wf.version}
                   </Text>
                 )}
-                {engine && (
+                {/* Engine badge omitted when we already render the
+                 *  workflow's brand mark — it's redundant. */}
+                {!brandImage && engine && (
                   <Group gap={4}>
                     <Text size="xs" c="dimmed">
                       Engine:
@@ -1318,6 +1369,10 @@ const DataCollectionRow: React.FC<{
   const type = (dc.config?.type as string | undefined) || 'unknown';
   const metatype = (dc.config?.metatype as string | undefined) || null;
   const isTable = type === 'table';
+  const isMultiQC = type.toLowerCase() === 'multiqc';
+  // Tables that aren't metadata are aggregates — surface that with a badge so
+  // the user can tell at a glance which collection is the joined fact table.
+  const isAggregate = isTable && (metatype || '').toLowerCase() !== 'metadata';
   // Stop propagation on action-icon clicks so the row's onClick doesn't toggle
   // selection underneath the modal trigger.
   const guard = (fn: () => void) => (e: React.MouseEvent) => {
@@ -1339,11 +1394,21 @@ const DataCollectionRow: React.FC<{
     >
       <Group justify="space-between" wrap="nowrap">
         <Group gap="sm" wrap="nowrap" style={{ flex: 1, minWidth: 0 }}>
-          <Icon
-            icon={isTable ? 'mdi:table' : 'mdi:file-document-outline'}
-            width={20}
-            color="var(--mantine-color-teal-6)"
-          />
+          {isMultiQC ? (
+            <img
+              src={`${import.meta.env.BASE_URL}logos/multiqc_icon_color.svg`}
+              alt="MultiQC"
+              width={20}
+              height={20}
+              style={{ objectFit: 'contain', display: 'block' }}
+            />
+          ) : (
+            <Icon
+              icon={isTable ? 'mdi:table' : 'mdi:file-document-outline'}
+              width={20}
+              color="var(--mantine-color-teal-6)"
+            />
+          )}
           {type && (
             <Badge color="blue" variant="filled" size="sm" radius="sm">
               {type.toUpperCase()}
@@ -1352,6 +1417,11 @@ const DataCollectionRow: React.FC<{
           {metatype && (
             <Badge color="gray" variant="light" size="sm" radius="sm">
               {metatype.toUpperCase()}
+            </Badge>
+          )}
+          {isAggregate && !metatype && (
+            <Badge color="orange" variant="light" size="sm" radius="sm">
+              AGGREGATE
             </Badge>
           )}
           <Text fw={500} truncate>
@@ -1688,7 +1758,7 @@ const MultiQCSummaryCard: React.FC<{ dc: DataCollectionShape }> = ({ dc }) => {
           width={20}
           color="var(--mantine-color-blue-6)"
         />
-        <Text fw={600}>S3 Storage Details</Text>
+        <Text fw={600}>Reports & S3 Storage Details</Text>
       </Group>
       {loading ? (
         <Center py="md">
@@ -2072,8 +2142,14 @@ const DataPreviewPanel: React.FC<{ dcId: string }> = ({ dcId }) => {
   const isDark = colorScheme === 'dark';
 
   const colDefs: ColDef[] = columns.map((col) => ({
-    field: col,
+    // AG Grid's `field` treats "." as a path separator into nested objects, so
+    // a column named "FastQC.total_sequences" would resolve to row.FastQC.total_sequences.
+    // Use `valueGetter` with flat key access so dotted column names render
+    // their actual values.
+    colId: col,
     headerName: col,
+    valueGetter: (params) =>
+      params.data ? (params.data as Record<string, unknown>)[col] : undefined,
     sortable: true,
     filter: true,
     resizable: true,

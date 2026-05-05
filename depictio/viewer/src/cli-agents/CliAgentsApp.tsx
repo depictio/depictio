@@ -106,7 +106,7 @@ const CliAgentsApp: React.FC = () => {
 
   const refresh = useCallback(() => setRefreshKey((k) => k + 1), []);
 
-  const isAddDisabled = Boolean(status?.is_public_mode || status?.is_single_user_mode);
+  const isAddDisabled = Boolean(status?.is_public_mode);
 
   const handleCreate = useCallback(
     async (name: string) => {

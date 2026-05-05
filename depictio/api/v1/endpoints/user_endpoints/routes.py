@@ -19,7 +19,6 @@ from depictio.api.v1.endpoints.user_endpoints.core_functions import (
     _check_if_token_is_valid,
     _check_password,
     _cleanup_expired_temporary_users,
-    _create_permanent_token,
     _create_temporary_user,
     _create_temporary_user_session,
     _create_user_in_db,
@@ -140,11 +139,16 @@ async def login(login_request: OAuth2PasswordRequestForm = Depends()) -> TokenBe
     Raises:
         HTTPException: 401 if credentials are invalid.
     """
-    if settings.auth.is_public_mode or settings.auth.is_single_user_mode:
-        anon = await UserBeanie.find_one({"email": settings.auth.anonymous_user_email})
-        token = await TokenBeanie.find_one({"user_id": anon.id, "token_lifetime": "permanent"})
-        if not token:
-            token = await _create_permanent_token(anon)
+    if settings.auth.is_single_user_mode:
+        admin = await UserBeanie.find_one({"is_admin": True, "is_anonymous": {"$ne": True}})
+        if not admin:
+            raise HTTPException(status_code=500, detail="Admin user not found in single-user mode")
+        token_name = f"{admin.email}_{datetime.now().strftime('%Y%m%d%H%M%S')}"
+        token_data = TokenData(name=token_name, token_lifetime="short-lived", sub=admin.id)
+        token = await _add_token(token_data)
+        if token is None:
+            raise HTTPException(status_code=500, detail="Failed to create session token")
+        token.logged_in = True
         return token
 
     password_valid = await _check_password(login_request.username, login_request.password)
@@ -364,17 +368,19 @@ async def api_fetch_user_from_id(
 
 
 @auth_endpoint_router.get("/me", include_in_schema=True)
-async def get_current_user_info(current_user: User = Depends(get_current_user)) -> User:
-    """Get current user information using Bearer token authentication.
+async def get_current_user_info(current_user: User = Depends(get_user_or_anonymous)) -> User:
+    """Get current user information for the React profile page.
 
-    This endpoint is designed for frontend authentication and uses Bearer tokens
-    instead of internal API keys, making it suitable for user-facing applications.
+    Uses ``get_user_or_anonymous`` so single-user / public mode works without a
+    persisted token: the React /profile route resolves to the anonymous user
+    (admin in single-user mode) instead of rendering "No authenticated user."
 
     Args:
-        current_user: Current authenticated user from Bearer token
+        current_user: User resolved from Bearer token, or the anonymous user
+            in single-user / public mode when no valid token is supplied.
 
     Returns:
-        User: Current user information
+        User: Current user information.
     """
     logger.debug(f"Returning current user info for: {current_user.email}")
     return current_user
@@ -876,10 +882,10 @@ async def create_my_token(
     Replaces the internal-API-key-gated /create_token for browser callers.
     Always issues a long-lived bearer token scoped to ``current_user``.
     """
-    if settings.auth.is_public_mode or settings.auth.is_single_user_mode:
+    if settings.auth.is_public_mode:
         raise HTTPException(
             status_code=403,
-            detail="CLI token creation is disabled in public/single-user mode",
+            detail="CLI token creation is disabled in public mode",
         )
 
     name = (request.name or "").strip()
@@ -1035,7 +1041,12 @@ async def list_tokens_(
 
 
 @auth_endpoint_router.get("/list", response_model=list[UserBaseUI], include_in_schema=True)
-async def list_users(current_user: UserBase = Depends(get_current_user)):
+async def list_users(current_user: UserBase = Depends(get_user_or_anonymous)):
+    """List all users for the React admin Users tab.
+
+    Uses ``get_user_or_anonymous`` for parity with the projects list — the
+    anonymous user in single-user mode is admin, so no token is required.
+    """
     users = await UserBeanie.find_all().to_list()
     logger.debug(f"Users: {users}")
     users = [user.turn_to_userbaseui() for user in users]

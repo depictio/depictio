@@ -28,6 +28,21 @@ const authDevFallback = (): Plugin => ({
   },
 });
 
+// API proxy target — defaults to the FastAPI port for host-side `pnpm dev`,
+// but can be overridden via `VITE_API_TARGET` so the dockerised dev viewer
+// proxies to the `depictio-backend` service on the docker network instead
+// of trying (and failing) to reach `0.0.0.0:8122` from inside the container.
+const API_TARGET = process.env.VITE_API_TARGET || 'http://0.0.0.0:8122';
+
+// HMR client port — what the BROWSER's HMR WebSocket connects back to.
+// Must match the host-facing port the user opened. When the dev viewer is
+// reached at ``http://localhost:5173/...`` (default) Vite picks this up
+// automatically; the override is only needed if the dev server is fronted
+// by a different port (e.g. an outer reverse proxy).
+const HMR_CLIENT_PORT = process.env.VITE_HMR_CLIENT_PORT
+  ? Number(process.env.VITE_HMR_CLIENT_PORT)
+  : undefined;
+
 // https://vitejs.dev/config/
 export default defineConfig({
   plugins: [react(), authDevFallback()],
@@ -41,13 +56,20 @@ export default defineConfig({
   },
   server: {
     port: 5173,
+    // Bind 0.0.0.0 so the container's exposed port is reachable from the
+    // host (and the FastAPI proxy, if/when wired). Default `localhost`
+    // binds only to the container's loopback and refuses outside traffic.
+    host: '0.0.0.0',
     proxy: {
-      // When running `vite dev`, forward API calls to FastAPI backend.
       '/depictio/api': {
-        target: 'http://0.0.0.0:8122',
+        target: API_TARGET,
         changeOrigin: true,
+        // Required for the realtime WebSocket endpoint
+        // (/depictio/api/v1/events/ws). Without it the upgrade fails.
+        ws: true,
       },
     },
+    hmr: HMR_CLIENT_PORT ? { clientPort: HMR_CLIENT_PORT } : undefined,
   },
   resolve: {
     alias: {

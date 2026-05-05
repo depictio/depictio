@@ -233,9 +233,7 @@ def _build_event_payload(dc_id: str, operation: str = "update") -> dict[str, Any
 
             from depictio.api.v1.s3 import polars_s3_config
 
-            current_df = pl.scan_delta(
-                delta_location, storage_options=polars_s3_config
-            ).collect()
+            current_df = pl.scan_delta(delta_location, storage_options=polars_s3_config).collect()
             payload["row_count"] = int(current_df.height)
 
             # Diff against the previous Delta Lake version to surface what
@@ -273,9 +271,7 @@ def _build_event_payload(dc_id: str, operation: str = "update") -> dict[str, Any
                         except Exception:
                             pass
             except Exception as diff_err:
-                logger.debug(
-                    f"_build_event_payload: prev-version diff failed: {diff_err}"
-                )
+                logger.debug(f"_build_event_payload: prev-version diff failed: {diff_err}")
         except Exception as e:
             logger.debug(f"_build_event_payload: row-count scan failed: {e}")
 

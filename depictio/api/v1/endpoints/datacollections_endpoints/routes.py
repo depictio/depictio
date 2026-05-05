@@ -1,3 +1,5 @@
+import asyncio
+
 from bson import ObjectId
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 
@@ -190,16 +192,19 @@ async def create_data_collection_from_upload(
     has_header: bool = Form(True),
     description: str = Form(""),
     file: UploadFile = File(...),
-    current_user=Depends(get_current_user),
+    current_user=Depends(get_user_or_anonymous),
 ):
     """Create a data collection from an uploaded file (basic projects).
 
     Wraps the same scan + process pipeline used by depictio-cli, exposing
     it directly to the React UI so we don't need to round-trip through
-    Dash anymore.
+    Dash anymore. Tolerates missing tokens (single-user / public mode); the
+    project-permission check inside ``_create_dc_from_upload`` still gates
+    write access.
     """
     file_bytes = await file.read()
-    return await _create_dc_from_upload(
+    return await asyncio.to_thread(
+        _create_dc_from_upload,
         project_id=project_id,
         name=name,
         description=description,

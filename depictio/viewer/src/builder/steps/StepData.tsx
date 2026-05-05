@@ -153,6 +153,19 @@ const StepData: React.FC = () => {
       }));
   }, [workflows, wfId, allowedDcTypes]);
 
+  /** True when no workflow in the project has a DC compatible with the
+   *  selected component type. Surfaces a friendly empty-state instead of an
+   *  empty Data Collection dropdown. */
+  const noCompatibleDc = useMemo(() => {
+    if (!allowedDcTypes || workflows.length === 0) return false;
+    return !workflows.some((w) =>
+      (w.data_collections || []).some((dc) => {
+        const t = (dc.config?.type as string | undefined)?.toLowerCase();
+        return t ? allowedDcTypes.includes(t) : false;
+      }),
+    );
+  }, [workflows, allowedDcTypes]);
+
   // If the currently selected DC is no longer compatible with the component
   // type (e.g. user backed out and changed the type), reset the picker.
   useEffect(() => {
@@ -332,6 +345,20 @@ const StepData: React.FC = () => {
           <Text size="sm">
             This dashboard's project has no workflows yet, or you don't have
             access to them.
+          </Text>
+        </Alert>
+      )}
+      {!loadingWorkflows && !workflowsError && noCompatibleDc && componentMeta && (
+        <Alert
+          color="yellow"
+          icon={<Icon icon="mdi:database-off-outline" width={20} />}
+          title={`No data collection registered for ${componentMeta.label} components`}
+        >
+          <Text size="sm">
+            This component type needs a data collection of type{' '}
+            <strong>{(allowedDcTypes ?? []).join(' or ')}</strong>, but none have
+            been registered for this project yet. Open the Project Data Manager
+            to add one, then come back here.
           </Text>
         </Alert>
       )}
