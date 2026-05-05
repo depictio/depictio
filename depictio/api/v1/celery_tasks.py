@@ -232,6 +232,44 @@ def build_multiqc_preview(payload: dict) -> dict:
     theme = payload.get("theme") or "light"
 
     started = time.monotonic()
+
+    # General Stats Table preview branch — ``general_stats`` is not a real
+    # MultiQC module so ``create_multiqc_plot`` would raise. Mirror the Dash
+    # design callback (multiqc_component/callbacks/design.py:299): build the
+    # JSON payload and return its violin figure so the React preview renders
+    # the same Plotly trace the runtime ``MultiQCGeneralStats`` shows.
+    if module == "general_stats" or plot == "general_stats":
+        from depictio.dash.modules.figure_component.multiqc_vis import _get_local_path_for_s3
+        from depictio.dash.modules.multiqc_component.general_stats import (
+            build_general_stats_payload,
+        )
+
+        if not s3_locations:
+            raise ValueError("No s3_locations resolved for general_stats preview.")
+        parquet_path = _get_local_path_for_s3(s3_locations[0])
+        gs_payload = build_general_stats_payload(parquet_path=parquet_path, show_hidden=True)
+        violin = gs_payload.get("modes", {}).get("mean", {}).get("violin_figure") or {
+            "data": [],
+            "layout": {},
+        }
+        if isinstance(violin, dict) and "layout" in violin:
+            violin["layout"].setdefault("uirevision", "persistent")
+        build_ms = int((time.monotonic() - started) * 1000)
+        logger.info(
+            f"celery_tasks.build_multiqc_preview general_stats "
+            f"samples={len(gs_payload.get('all_samples', []))} build_ms={build_ms}"
+        )
+        return {
+            "figure": violin,
+            "metadata": {
+                "module": module,
+                "plot": plot,
+                "dataset_id": dataset,
+                "is_general_stats": True,
+                "sample_count": len(gs_payload.get("all_samples", [])),
+            },
+        }
+
     fig = create_multiqc_plot(
         s3_locations=s3_locations,
         module=module,

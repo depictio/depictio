@@ -171,6 +171,7 @@ const DatePickerRenderer: React.FC<{
       p="sm"
       radius="md"
       shadow="xs"
+      withBorder
       className="dashboard-component-hover"
       style={{
         height: '100%',

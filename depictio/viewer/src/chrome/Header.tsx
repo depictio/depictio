@@ -249,7 +249,7 @@ const Header: React.FC<HeaderProps> = ({
             onClick={handleViewMode}
             disabled={!dashboardId}
           >
-            View
+            Exit Edit
           </Button>
         )}
         <Button

@@ -177,7 +177,23 @@ const DashboardCard: React.FC<DashboardCardProps> = ({
       <Card.Section>
         <AspectRatio ratio={16 / 10}>
           {hasMultipleTabs ? (
-            <MultiTabPreview parent={dashboard} childTabs={childTabs} theme={theme} />
+            <MultiTabPreview
+              parent={dashboard}
+              childTabs={childTabs}
+              theme={theme}
+              // Route each slide click to its OWN tab's dashboard ID, not
+              // the parent's. The parent slide (index 0) routes via its own
+              // ``slide.id`` which equals ``dashboard.dashboard_id``.
+              onTabClick={(tabDashboardId) => {
+                const target =
+                  tabDashboardId === dashboard.dashboard_id
+                    ? dashboard
+                    : (childTabs.find(
+                        (t) => t.dashboard_id === tabDashboardId,
+                      ) ?? dashboard);
+                onView(target);
+              }}
+            />
           ) : (
             <UnstyledButton
               onClick={() => onView(dashboard)}

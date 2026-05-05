@@ -150,6 +150,26 @@ body.sidebar-transitioning .react-grid-layout {
   box-shadow: none;
 }
 
+/* Edit mode: make the per-cell border visible by default. The
+ * `.dashboard-component-hover` class otherwise sets `border: 1px solid
+ * transparent` so the border only appears on hover. Use the shorthand
+ * (not just border-color) to defeat any later `border: none` cascade,
+ * and bump to !important to win over Mantine's own withBorder runtime
+ * style that resets border-color via CSS custom properties. View mode
+ * keeps the borderless look via the rule above. */
+.depictio-dashboard-grid.depictio-edit-mode .dashboard-component-hover {
+  border: 1px solid var(--app-border-color) !important;
+}
+
+/* Same target — also paint Mantine's Paper root border in edit mode. The
+ * shared `DepictioRangeSlider` / `DepictioMultiSelect` wrappers in the
+ * `depictio-components` package apply `withBorder` directly and skip the
+ * `.dashboard-component-hover` class on some configurations, so this
+ * second selector is the safety net. */
+.depictio-dashboard-grid.depictio-edit-mode .mantine-Paper-root {
+  border: 1px solid var(--app-border-color) !important;
+}
+
 /* Brief highlight pulse on a freshly duplicated grid cell so the user can see
  * where it landed. Uses an INSET box-shadow so the effect stays within the
  * grid cell — left panel ancestors set `overflow: hidden`, which would clip

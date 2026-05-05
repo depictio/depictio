@@ -143,7 +143,18 @@ const LeftFilterPanel: React.FC<LeftFilterPanelProps> = ({
           </Text>
         </Stack>
       ) : (
-        <div ref={wrapperRef} style={{ width: '100%', overflowX: 'hidden' }}>
+        <div
+          ref={wrapperRef}
+          // Mirror the marker classes DashboardGrid sets on its own root so
+          // the global edit-mode CSS rules (visible Paper border in editor,
+          // borderless in viewer — see styles/app.css) apply here too. The
+          // left panel uses its own GridLayout, not DashboardGrid, so we
+          // have to opt in manually.
+          className={
+            'depictio-dashboard-grid' + (editMode ? ' depictio-edit-mode' : '')
+          }
+          style={{ width: '100%', overflowX: 'hidden' }}
+        >
         <GridLayout
           className="layout left-filter-grid"
           layout={layout}

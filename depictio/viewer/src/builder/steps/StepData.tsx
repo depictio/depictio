@@ -69,7 +69,7 @@ const StepData: React.FC = () => {
       case 'table':
         return ['table'];
       case 'map':
-        return ['table', 'geojson'];
+        return ['geojson'];
       case 'multiqc':
         return ['multiqc'];
       case 'image':

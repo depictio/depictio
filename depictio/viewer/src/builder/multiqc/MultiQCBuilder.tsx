@@ -15,7 +15,6 @@ import {
   Loader,
   Select,
   Stack,
-  Switch,
   Text,
   Title,
 } from '@mantine/core';
@@ -88,7 +87,17 @@ const MultiQCBuilder: React.FC = () => {
       .finally(() => setLoading(false));
   }, [dcId, config.s3_locations, patchConfig]);
 
-  const moduleOptions = opts?.modules ?? [];
+  // Always offer "General Stats Table" at the top of the module list — this
+  // mirrors the Dash design callback (depictio/dash/modules/multiqc_component/
+  // callbacks/design.py:124) which prepends it unconditionally. The MultiQC
+  // report's ``modules`` array doesn't include ``general_stats`` even when the
+  // table is available, so we synthesise the entry client-side.
+  const moduleOptions = [
+    { value: 'general_stats', label: '⊞ General Stats Table' },
+    ...(opts?.modules ?? [])
+      .filter((m) => m !== 'general_stats')
+      .map((m) => ({ value: m, label: m })),
+  ];
   const plotOptions = opts?.plots[config.multiqc_module || ''] ?? [];
   const datasetOptions =
     opts?.datasets[config.multiqc_plot || ''] ?? [];
@@ -131,32 +140,44 @@ const MultiQCBuilder: React.FC = () => {
         placeholder="Pick a MultiQC module"
         data={moduleOptions}
         value={config.multiqc_module ?? null}
-        onChange={(val) =>
+        onChange={(val) => {
+          // "General Stats Table" is one click — module and plot are both
+          // ``general_stats``, no further drill-down needed.
+          if (val === 'general_stats') {
+            patchConfig({
+              multiqc_module: 'general_stats',
+              multiqc_plot: 'general_stats',
+              multiqc_dataset: undefined,
+            });
+            return;
+          }
           patchConfig({
             multiqc_module: val,
             multiqc_plot: undefined,
             multiqc_dataset: undefined,
-          })
-        }
+          });
+        }}
         searchable
         disabled={!opts || !moduleOptions.length}
       />
 
-      <Select
-        label="Plot"
-        placeholder={
-          !config.multiqc_module ? 'Pick a module first' : 'Pick a plot'
-        }
-        data={plotOptions}
-        value={config.multiqc_plot ?? null}
-        onChange={(val) =>
-          patchConfig({ multiqc_plot: val, multiqc_dataset: undefined })
-        }
-        searchable
-        disabled={!plotOptions.length}
-      />
+      {config.multiqc_module !== 'general_stats' && (
+        <Select
+          label="Plot"
+          placeholder={
+            !config.multiqc_module ? 'Pick a module first' : 'Pick a plot'
+          }
+          data={plotOptions}
+          value={config.multiqc_plot ?? null}
+          onChange={(val) =>
+            patchConfig({ multiqc_plot: val, multiqc_dataset: undefined })
+          }
+          searchable
+          disabled={!plotOptions.length}
+        />
+      )}
 
-      {datasetOptions.length > 0 && (
+      {datasetOptions.length > 0 && config.multiqc_module !== 'general_stats' && (
         <Select
           label="Dataset"
           placeholder="Pick a dataset"
@@ -166,17 +187,6 @@ const MultiQCBuilder: React.FC = () => {
           searchable
         />
       )}
-
-      <Switch
-        label="Render as general stats table"
-        checked={Boolean(config.is_general_stats)}
-        onChange={(e) => patchConfig({ is_general_stats: e.currentTarget.checked })}
-        description={
-          isGeneralStats
-            ? 'Auto-detected — the selected module is the general stats table.'
-            : 'Override only if you know this plot should render as a table.'
-        }
-      />
     </Stack>
   );
 

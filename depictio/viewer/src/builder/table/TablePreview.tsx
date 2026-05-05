@@ -23,6 +23,7 @@ const TablePreview: React.FC = () => {
   const config = useBuilderStore((s) => s.config) as {
     cols_json?: Record<string, ColCfg>;
     striped?: boolean;
+    compact?: boolean;
   };
 
   const [preview, setPreview] = useState<PreviewResult | null>(null);
@@ -91,6 +92,9 @@ const TablePreview: React.FC = () => {
           highlightOnHover
           withTableBorder
           withColumnBorders
+          verticalSpacing={config.compact ? 4 : 'sm'}
+          horizontalSpacing={config.compact ? 'xs' : 'md'}
+          fz={config.compact ? 'xs' : 'sm'}
         >
           <Table.Thead>
             <Table.Tr>

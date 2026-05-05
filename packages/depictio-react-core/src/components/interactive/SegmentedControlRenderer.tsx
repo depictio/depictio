@@ -123,6 +123,7 @@ const SegmentedControlRenderer: React.FC<{
       p="md"
       radius="md"
       shadow="xs"
+      withBorder
       className="dashboard-component-hover"
       style={{
         height: '100%',

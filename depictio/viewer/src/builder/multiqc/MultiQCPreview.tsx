@@ -7,6 +7,7 @@
  * Debounced 400ms so rapid cascade picks don't thrash the backend.
  */
 import React, { useEffect, useState } from 'react';
+import { useMantineColorScheme } from '@mantine/core';
 import { previewMultiQC } from 'depictio-react-core';
 import Plot from 'react-plotly.js';
 import { useBuilderStore } from '../store/useBuilderStore';
@@ -24,6 +25,7 @@ const MultiQCPreview: React.FC = () => {
     multiqc_plot?: string;
     multiqc_dataset?: string;
   };
+  const { colorScheme } = useMantineColorScheme();
   const [fig, setFig] = useState<FigureData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -85,17 +87,40 @@ const MultiQCPreview: React.FC = () => {
   return (
     <PreviewPanel minHeight={360} loading={loading} error={error}>
       {fig && (
-        <Plot
-          data={fig.data}
-          layout={{
-            ...fig.layout,
-            autosize: true,
-            margin: { l: 40, r: 20, t: 30, b: 40 },
-          }}
-          config={{ displaylogo: false, responsive: true }}
-          useResizeHandler
-          style={{ width: '100%', height: 360 }}
-        />
+        <div style={{ position: 'relative', width: '100%', height: 360 }}>
+          <Plot
+            data={fig.data}
+            layout={{
+              ...fig.layout,
+              autosize: true,
+              margin: { l: 40, r: 20, t: 30, b: 40 },
+            }}
+            config={{ displaylogo: false, responsive: true }}
+            useResizeHandler
+            style={{ width: '100%', height: '100%' }}
+          />
+          {/* MultiQC logo overlay — mirrors MultiQCFigure.tsx so the builder
+            preview reads visually the same as the dashboard runtime. */}
+          <img
+            src={
+              colorScheme === 'dark'
+                ? '/dashboard-beta/logos/multiqc_icon_white.svg'
+                : '/dashboard-beta/logos/multiqc_icon_dark.svg'
+            }
+            title="Generated with MultiQC"
+            alt="MultiQC"
+            style={{
+              position: 'absolute',
+              top: 10,
+              right: 10,
+              width: 40,
+              height: 40,
+              opacity: 0.6,
+              pointerEvents: 'none',
+              zIndex: 1000,
+            }}
+          />
+        </div>
       )}
     </PreviewPanel>
   );

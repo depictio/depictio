@@ -6,6 +6,7 @@ import {
   Stack,
   Text,
   ThemeIcon,
+  UnstyledButton,
   useMantineColorScheme,
 } from '@mantine/core';
 import { Carousel } from '@mantine/carousel';
@@ -18,6 +19,11 @@ interface MultiTabPreviewProps {
   childTabs: DashboardListEntry[];
   /** When omitted, falls back to the current Mantine color scheme. */
   theme?: 'light' | 'dark';
+  /** Click handler for a slide — receives that tab's ``dashboard_id`` so
+   *  the parent can route to the correct child tab (not just the parent
+   *  dashboard). Both the in-card carousel and the hover-popover carousel
+   *  trigger this. */
+  onTabClick?: (dashboardId: string) => void;
 }
 
 interface SlideData {
@@ -79,6 +85,7 @@ const MultiTabPreview: React.FC<MultiTabPreviewProps> = ({
   parent,
   childTabs,
   theme: themeProp,
+  onTabClick,
 }) => {
   const { colorScheme } = useMantineColorScheme();
   const theme: 'light' | 'dark' =
@@ -114,9 +121,16 @@ const MultiTabPreview: React.FC<MultiTabPreviewProps> = ({
           >
             {slides.map((slide) => (
               <Carousel.Slide key={slide.id}>
-                <AspectRatio ratio={16 / 10}>
-                  <SlideImage slide={slide} theme={theme} iconSize={48} />
-                </AspectRatio>
+                <UnstyledButton
+                  onClick={() => onTabClick?.(slide.id)}
+                  disabled={!onTabClick}
+                  aria-label={`Open ${slide.title}`}
+                  style={{ display: 'block', width: '100%', height: '100%' }}
+                >
+                  <AspectRatio ratio={16 / 10}>
+                    <SlideImage slide={slide} theme={theme} iconSize={48} />
+                  </AspectRatio>
+                </UnstyledButton>
               </Carousel.Slide>
             ))}
           </Carousel>
@@ -127,21 +141,28 @@ const MultiTabPreview: React.FC<MultiTabPreviewProps> = ({
           <Carousel slideSize="100%" slideGap={0} withIndicators controlSize={24}>
             {slides.map((slide) => (
               <Carousel.Slide key={slide.id}>
-                <Stack gap={4}>
-                  <AspectRatio ratio={16 / 10}>
-                    <SlideImage slide={slide} theme={theme} iconSize={64} />
-                  </AspectRatio>
-                  <Text
-                    size="sm"
-                    fw={500}
-                    ta="center"
-                    p="xs"
-                    bg={captionBg}
-                    style={{ borderRadius: 'var(--mantine-radius-sm)' }}
-                  >
-                    {slide.title}
-                  </Text>
-                </Stack>
+                <UnstyledButton
+                  onClick={() => onTabClick?.(slide.id)}
+                  disabled={!onTabClick}
+                  aria-label={`Open ${slide.title}`}
+                  style={{ display: 'block', width: '100%' }}
+                >
+                  <Stack gap={4}>
+                    <AspectRatio ratio={16 / 10}>
+                      <SlideImage slide={slide} theme={theme} iconSize={64} />
+                    </AspectRatio>
+                    <Text
+                      size="sm"
+                      fw={500}
+                      ta="center"
+                      p="xs"
+                      bg={captionBg}
+                      style={{ borderRadius: 'var(--mantine-radius-sm)' }}
+                    >
+                      {slide.title}
+                    </Text>
+                  </Stack>
+                </UnstyledButton>
               </Carousel.Slide>
             ))}
           </Carousel>
