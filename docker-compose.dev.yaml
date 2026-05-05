@@ -154,7 +154,10 @@ services:
       - ./packages:/app/packages
       - ./pnpm-workspace.yaml:/app/pnpm-workspace.yaml
       - ./pnpm-lock.yaml:/app/pnpm-lock.yaml
-      - ./package.json:/app/package.json
+      # NOTE: this repo has no root `package.json` (pnpm workspace works
+      # without one — each workspace package has its own). Mounting a non-
+      # existent host file would make Docker silently create an empty host
+      # directory, which then breaks `pnpm` everywhere.
       # Anonymous volumes shadow the bind mount's node_modules so Linux
       # binaries (esbuild, sass, etc.) don't get clobbered by macOS builds
       # the host's `pnpm install` produced.

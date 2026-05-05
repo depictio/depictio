@@ -11,6 +11,7 @@ import {
   Center,
   Group,
   Loader,
+  Modal,
   Paper,
   Stack,
   Switch,
@@ -105,6 +106,43 @@ function rowsToPermissions(rows: UserRow[]): {
   };
 }
 
+/** Big public/private state badge for the visibility-change confirm modal.
+ *  Two side-by-side instances visualise the from→to transition. */
+const VisibilityCard: React.FC<{
+  kind: 'public' | 'private';
+  role: 'from' | 'to';
+}> = ({ kind, role }) => {
+  const isPublic = kind === 'public';
+  const color = isPublic ? 'teal' : 'violet';
+  const icon = isPublic ? 'mdi:earth' : 'mdi:lock';
+  const isFrom = role === 'from';
+  return (
+    <Stack gap={4} align="center" miw={120}>
+      <Text size="xs" c="dimmed" fw={500}>
+        {isFrom ? 'FROM' : 'TO'}
+      </Text>
+      <Paper
+        withBorder
+        radius="md"
+        p="md"
+        style={{
+          borderColor: `var(--mantine-color-${color}-6)`,
+          borderWidth: 2,
+          opacity: isFrom ? 0.6 : 1,
+          minWidth: 120,
+        }}
+      >
+        <Stack gap={4} align="center">
+          <Icon icon={icon} width={28} color={`var(--mantine-color-${color}-6)`} />
+          <Badge color={color} variant="light" size="md" fw={600}>
+            {isPublic ? 'Public' : 'Private'}
+          </Badge>
+        </Stack>
+      </Paper>
+    </Stack>
+  );
+};
+
 const PermissionsApp: React.FC = () => {
   const projectId = readProjectIdFromPath();
   const { user } = useCurrentUser();
@@ -125,6 +163,11 @@ const PermissionsApp: React.FC = () => {
 
   const [mobileOpened, { toggle: toggleMobile }] = useDisclosure(false);
   const [desktopOpened, { toggle: toggleDesktop }] = useDisclosure(true);
+  // Pending public/private flip awaiting modal confirmation. Mirrors the
+  // Dash flow (`make-project-public-modal`): toggling the Switch only opens
+  // the modal; the API call fires on confirm.
+  const [pendingPublic, setPendingPublic] = useState<boolean | null>(null);
+  const [visibilityBusy, setVisibilityBusy] = useState(false);
 
   useEffect(() => {
     document.title = 'Depictio — Project Permissions';
@@ -195,7 +238,20 @@ const PermissionsApp: React.FC = () => {
     const next = [...rows];
     const idx = next.findIndex((r) => r._id === e.data._id);
     if (idx < 0) return;
-    next[idx] = { ...e.data };
+    // Roles are mutually exclusive on the server (Pydantic validator). When
+    // the user enables one role, clear the others on the same row — otherwise
+    // the API rejects with "User cannot be both an X and a Y".
+    const updated: UserRow = { ...e.data };
+    const flippedOn = e.colDef.field as 'Owner' | 'Editor' | 'Viewer' | undefined;
+    if (flippedOn && updated[flippedOn]) {
+      const others = (['Owner', 'Editor', 'Viewer'] as const).filter(
+        (r) => r !== flippedOn,
+      );
+      others.forEach((r) => {
+        updated[r] = false;
+      });
+    }
+    next[idx] = updated;
     try {
       await persist(next);
       notifications.show({
@@ -297,8 +353,10 @@ const PermissionsApp: React.FC = () => {
     }
   };
 
-  const handleToggleVisibility = async (nextPublic: boolean) => {
-    if (!projectId) return;
+  const confirmToggleVisibility = async () => {
+    if (!projectId || pendingPublic === null) return;
+    const nextPublic = pendingPublic;
+    setVisibilityBusy(true);
     try {
       await toggleProjectVisibility(projectId, nextPublic);
       notifications.show({
@@ -309,6 +367,7 @@ const PermissionsApp: React.FC = () => {
           : 'Only listed members can view this project.',
         autoClose: 2500,
       });
+      setPendingPublic(null);
       refresh();
     } catch (err) {
       notifications.show({
@@ -316,6 +375,8 @@ const PermissionsApp: React.FC = () => {
         title: 'Visibility update failed',
         message: (err as Error).message,
       });
+    } finally {
+      setVisibilityBusy(false);
     }
   };
 
@@ -526,13 +587,33 @@ const PermissionsApp: React.FC = () => {
                       </Title>
                     </Group>
                     <Switch
-                      label={project.is_public ? 'Public' : 'Private'}
-                      checked={Boolean(project.is_public)}
-                      color="teal"
-                      onChange={(e) =>
-                        handleToggleVisibility(e.currentTarget.checked)
+                      label={
+                        (pendingPublic !== null ? pendingPublic : project.is_public)
+                          ? 'Public'
+                          : 'Private'
                       }
-                      disabled={!canManage}
+                      checked={
+                        pendingPublic !== null
+                          ? pendingPublic
+                          : Boolean(project.is_public)
+                      }
+                      // Switch color reflects the *off* (private) state in
+                      // Mantine — Mantine swaps to `color` only when checked
+                      // (= public). For the unchecked private state we set
+                      // a violet thumb via styles to match the Dash badge.
+                      color="teal"
+                      styles={{
+                        track: !(pendingPublic !== null
+                          ? pendingPublic
+                          : project.is_public)
+                          ? {
+                              backgroundColor: 'var(--mantine-color-violet-6)',
+                              borderColor: 'var(--mantine-color-violet-6)',
+                            }
+                          : undefined,
+                      }}
+                      onChange={(e) => setPendingPublic(e.currentTarget.checked)}
+                      disabled={!canManage || visibilityBusy}
                     />
                   </Group>
                   <Text size="sm" c="dimmed">
@@ -637,6 +718,55 @@ const PermissionsApp: React.FC = () => {
           )}
         </Box>
       </AppShell.Main>
+
+      <Modal
+        opened={pendingPublic !== null}
+        onClose={() => {
+          if (!visibilityBusy) setPendingPublic(null);
+        }}
+        title={<Text fw={600}>Change Project Visibility</Text>}
+        centered
+        size="md"
+      >
+        <Stack gap="lg">
+          <Group justify="center" gap="md" wrap="nowrap">
+            <VisibilityCard kind={project?.is_public ? 'public' : 'private'} role="from" />
+            <Icon
+              icon="mdi:arrow-right-bold"
+              width={28}
+              color="var(--mantine-color-dimmed)"
+            />
+            <VisibilityCard kind={pendingPublic ? 'public' : 'private'} role="to" />
+          </Group>
+          <Text size="sm" ta="center" c="dimmed">
+            {pendingPublic
+              ? 'Anyone signed in will be able to view this project.'
+              : 'Only listed members will be able to view this project.'}
+          </Text>
+          <Group justify="flex-end" gap="xs">
+            <Button
+              variant="default"
+              onClick={() => setPendingPublic(null)}
+              disabled={visibilityBusy}
+            >
+              Cancel
+            </Button>
+            <Button
+              color={pendingPublic ? 'teal' : 'violet'}
+              leftSection={
+                <Icon
+                  icon={pendingPublic ? 'mdi:earth' : 'mdi:lock'}
+                  width={16}
+                />
+              }
+              onClick={confirmToggleVisibility}
+              loading={visibilityBusy}
+            >
+              {pendingPublic ? 'Make Public' : 'Make Private'}
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
     </AppShell>
   );
 };
