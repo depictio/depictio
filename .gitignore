@@ -329,3 +329,8 @@ docker-compose.override.yaml
 
 # Superseded skill definitions (now lives in .claude/)
 .claude-code/
+
+# AI session handoff / continuation prompt scratch
+**/CONTINUATION_PROMPT*.md
+**/HANDOFF.md
+**/*_HANDOFF.md
