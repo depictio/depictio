@@ -70,6 +70,19 @@ const empty = (): AISession => ({
   abort: null,
 });
 
+/** Stable singleton returned by `useAISession` when no session has been
+ *  created yet for a dashboard id. Returning a fresh `empty()` literal here
+ *  would change the selector's referential identity on every render and
+ *  trigger React error #185 ("Maximum update depth exceeded") because
+ *  Zustand's default equality is `Object.is`. */
+const EMPTY_SESSION: AISession = Object.freeze({
+  llmKey: '',
+  model: '',
+  messages: [],
+  pending: false,
+  abort: null,
+}) as AISession;
+
 export const useAIStore = create<State & Actions>((set, get) => ({
   sessions: {},
 
@@ -142,11 +155,9 @@ export const useAIStore = create<State & Actions>((set, get) => ({
     set((s) => ({ sessions: { ...s.sessions, [dashboardId]: empty() } })),
 }));
 
-/** Selector helper: returns the session for a given dashboard, creating
- *  an empty one if it doesn't exist yet. Use inside a component to read
- *  the current session reactively. */
+/** Selector helper: returns the session for a given dashboard, or a stable
+ *  frozen empty object when none exists. Do NOT inline a fresh literal
+ *  here — it would re-trigger renders every cycle (see EMPTY_SESSION). */
 export function useAISession(dashboardId: string): AISession {
-  return useAIStore(
-    (s) => s.sessions[dashboardId] ?? empty(),
-  );
+  return useAIStore((s) => s.sessions[dashboardId] ?? EMPTY_SESSION);
 }
