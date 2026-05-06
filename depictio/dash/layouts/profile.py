@@ -528,4 +528,3 @@ def register_profile_callbacks(app: dash.Dash) -> None:
             return dash.no_update, dash.no_update
 
         return "/auth", logout_user()
-

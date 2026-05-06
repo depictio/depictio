@@ -286,5 +286,3 @@ class TestApiCallCleanupExpiredTemporaryUsers:
         # Assert
         assert result is None
         self.mock_httpx_post.assert_called_once()
-
-
