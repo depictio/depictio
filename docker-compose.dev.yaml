@@ -82,6 +82,13 @@ services:
         DEPICTIO_FASTAPI_EXTERNAL_HOST: "${DEPICTIO_FASTAPI_EXTERNAL_HOST:-localhost}"
         DEPICTIO_DASH_EXTERNAL_PORT: "${DEPICTIO_DASH_EXTERNAL_PORT:-5080}"
         DEPICTIO_DASH_EXTERNAL_HOST: "${DEPICTIO_DASH_EXTERNAL_HOST:-localhost}"
+        # Realtime event system — opt-in. Set DEPICTIO_EVENTS_ENABLED=true in
+        # your shell or docker-compose/.env to turn on the WebSocket / SSE
+        # endpoints and the MongoDB change-stream watcher. Dev compose's mongo
+        # is standalone, so the change-stream watcher will fail-fast with a
+        # warning even when enabled — but WebSocket and direct event publishing
+        # still work.
+        DEPICTIO_EVENTS_ENABLED: "${DEPICTIO_EVENTS_ENABLED:-false}"
     command: ["/app/run_dash.sh"]
     user: "${UID:-1000}:${GID:-1000}"
     depends_on:
@@ -121,6 +128,10 @@ services:
         DEPICTIO_DASH_EXTERNAL_HOST: "${DEPICTIO_DASH_EXTERNAL_HOST:-localhost}"
         DEPICTIO_MINIO_EXTERNAL_PORT: "${DEPICTIO_MINIO_EXTERNAL_PORT:-9000}"
         DEPICTIO_MINIO_EXTERNAL_HOST: "${DEPICTIO_MINIO_EXTERNAL_HOST:-localhost}"
+        # Realtime event system — opt-in. See the depictio-frontend env block
+        # above for the full note. Backend hosts the MongoDB watcher and the
+        # WebSocket / SSE endpoints — both gated on this flag.
+        DEPICTIO_EVENTS_ENABLED: "${DEPICTIO_EVENTS_ENABLED:-false}"
     command: ["/app/run_fastapi.sh"]
     user: "${UID:-1000}:${GID:-1000}"
     depends_on:
@@ -209,6 +220,9 @@ services:
         DEPICTIO_LOGGING_VERBOSITY_LEVEL: "${DEPICTIO_LOGGING_VERBOSITY_LEVEL:-DEBUG}"
         DEPICTIO_AUTH_SINGLE_USER_MODE: "${DEPICTIO_AUTH_SINGLE_USER_MODE:-false}"
         DEPICTIO_CONTEXT: "server"
+        # Match the backend / dash flag — keeps event publishers consistent
+        # whether the work runs on the API process or the celery worker.
+        DEPICTIO_EVENTS_ENABLED: "${DEPICTIO_EVENTS_ENABLED:-false}"
     command: ["/app/run_celery_worker.sh"]
     user: "${UID:-1000}:${GID:-1000}"
     depends_on:

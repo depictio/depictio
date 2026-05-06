@@ -528,7 +528,7 @@ class EventsConfig(BaseSettings):
     Supports MongoDB change streams for data_collection updates.
     """
 
-    enabled: bool = Field(default=True, description="Enable real-time event system")
+    enabled: bool = Field(default=False, description="Enable real-time event system")
     redis_host: str = Field(default="redis", description="Redis server hostname for pub/sub")
     redis_port: int = Field(default=6379, description="Redis server port")
     redis_password: Optional[str] = Field(default=None, description="Redis password")
