@@ -10,6 +10,7 @@ from depictio.api.v1.configs.config import settings
 from depictio.api.v1.endpoints.analytics_data_endpoints.routes import (
     router as analytics_data_router,
 )
+from depictio.api.v1.endpoints.ai_endpoints.routes import ai_endpoint_router
 from depictio.api.v1.endpoints.analytics_endpoints.routes import router as analytics_router
 from depictio.api.v1.endpoints.auth_endpoints.google_oauth_routes import google_oauth_router
 from depictio.api.v1.endpoints.backup_endpoints.routes import backup_endpoint_router
@@ -116,6 +117,12 @@ router.include_router(
     figure_endpoint_router,
     prefix="/figure",
     tags=["Figure Builder"],
+)
+
+router.include_router(
+    ai_endpoint_router,
+    prefix="/ai",
+    tags=["AI Assistant"],
 )
 
 router.include_router(

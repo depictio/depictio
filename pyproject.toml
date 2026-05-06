@@ -41,6 +41,8 @@ dependencies = [
   "diskcache==5.6.3",
   "fastapi==0.115.8",
   "flask-caching>=2.3.1,<3",
+  # LLM client (provider-agnostic; ports prototype at dev/litellm-prototype)
+  "litellm>=1.50,<2",
   "gunicorn==23.0.0",
   "httpx==0.28.1",
   "uvicorn==0.34.0",
