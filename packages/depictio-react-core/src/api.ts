@@ -4,7 +4,7 @@
  * fallback that relies on get_user_or_anonymous middleware for anonymous mode.
  */
 
-const API_BASE = '/depictio/api/v1';
+export const API_BASE = '/depictio/api/v1';
 
 /** localStorage key shared with the Dash app — same payload shape. */
 const SESSION_KEY = 'local-store';
@@ -116,7 +116,7 @@ async function ensureFreshAccessToken(): Promise<string | null> {
  * minted access token. After persistent 401s the session is cleared so the
  * SPA falls back to the unauthenticated path on the next route resolution.
  */
-async function authFetch(url: string, init: RequestInit = {}): Promise<Response> {
+export async function authFetch(url: string, init: RequestInit = {}): Promise<Response> {
   await ensureFreshAccessToken();
 
   const headers = new Headers(init.headers || {});

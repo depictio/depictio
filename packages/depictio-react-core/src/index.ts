@@ -104,6 +104,7 @@ export {
   validateSession,
   authFetch,
   refreshAccessToken,
+  API_BASE,
   // Dashboard management
   listDashboards,
   listProjects,
