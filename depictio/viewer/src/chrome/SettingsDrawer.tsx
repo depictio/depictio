@@ -15,6 +15,7 @@ import { Icon } from '@iconify/react';
 
 import type { DashboardData } from 'depictio-react-core';
 import { fetchProject } from 'depictio-react-core';
+import { AIKeySection } from 'depictio-react-ai';
 
 interface SettingsDrawerProps {
   opened: boolean;
@@ -204,6 +205,13 @@ const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
           {dashboardId && <CopyableId label="Dashboard ID" value={dashboardId} />}
           {projectId && <CopyableId label="Project ID" value={projectId} />}
         </Stack>
+
+        {dashboardId && (
+          <>
+            <Divider label="AI assistant" labelPosition="left" my="xs" />
+            <AIKeySection dashboardId={dashboardId} />
+          </>
+        )}
       </Stack>
     </Drawer>
   );

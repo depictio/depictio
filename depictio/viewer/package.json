@@ -26,6 +26,7 @@
     "cytoscape": "^3.29.0",
     "dayjs": "^1.11.10",
     "depictio-components": "file:../../packages/depictio-components",
+    "depictio-react-ai": "file:../../packages/depictio-react-ai",
     "depictio-react-core": "file:../../packages/depictio-react-core",
     "monaco-editor": "^0.52.0",
     "plotly.js": "^2.35.0",

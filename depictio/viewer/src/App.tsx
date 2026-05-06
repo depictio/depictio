@@ -1,14 +1,16 @@
 import React, { useEffect, useState, useCallback, useRef, useMemo, useDeferredValue } from 'react';
 import {
+  ActionIcon,
   AppShell,
-  Group,
-  Text,
-  Loader,
   Anchor,
-  Stack,
-  Title,
-  Paper,
   Box,
+  Group,
+  Loader,
+  Paper,
+  Stack,
+  Text,
+  Title,
+  Tooltip,
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 
@@ -34,6 +36,9 @@ import type {
   RealtimeMode,
 } from 'depictio-react-core';
 import { notifications } from '@mantine/notifications';
+import { Icon } from '@iconify/react';
+import { AIDrawer } from 'depictio-react-ai';
+import type { DashboardActions } from 'depictio-react-ai';
 import { Header, Sidebar, SettingsDrawer } from './chrome';
 import { useSidebarOpen } from './hooks/useSidebarOpen';
 import { useAuthMode } from './auth/hooks/useAuthMode';
@@ -77,6 +82,7 @@ const App: React.FC = () => {
   // `sidebar-collapsed` localStorage key the Dash app writes.
   const [desktopOpened, toggleDesktop] = useSidebarOpen();
   const [settingsOpened, { open: openSettings, close: closeSettings }] = useDisclosure(false);
+  const [aiOpened, { open: openAI, close: closeAI }] = useDisclosure(false);
   const auth = useAuthMode();
   const isDemoMode = auth.status?.is_demo_mode === true;
 
@@ -154,6 +160,75 @@ const App: React.FC = () => {
   }, []);
 
   const handleResetAllFilters = useCallback(() => setFilters([]), []);
+
+  // Primary DC for the AI drawer's "New figure" mode — first DC referenced
+  // by any stored component. Mirrors the heuristic the analyze backend uses.
+  const primaryDcId = useMemo(() => {
+    for (const m of dashboard?.stored_metadata || []) {
+      const dc =
+        (m as { dc_id?: string }).dc_id ??
+        ((m as { metadata?: { dc_id?: string } }).metadata?.dc_id);
+      if (typeof dc === 'string' && dc) return dc;
+    }
+    return undefined;
+  }, [dashboard?.stored_metadata]);
+
+  // Index → component_type lookup so AI-driven filter mutations can be
+  // converted to the correct InteractiveFilter shape downstream.
+  const interactiveTypeByIndex = useMemo(() => {
+    const out: Record<string, string> = {};
+    for (const m of dashboard?.stored_metadata || []) {
+      const meta = m as {
+        index?: string;
+        component_type?: string;
+        interactive_component_type?: string;
+        metadata?: { interactive_component_type?: string };
+      };
+      if (!meta.index) continue;
+      const t =
+        meta.interactive_component_type ??
+        meta.metadata?.interactive_component_type ??
+        meta.component_type ??
+        '';
+      out[meta.index] = String(t);
+    }
+    return out;
+  }, [dashboard?.stored_metadata]);
+
+  // Translate an LLM-proposed DashboardActions plan into the viewer's
+  // existing filter store. Figure mutations are surfaced to the user but
+  // not applied — the viewer is read-only; figure editing lives in the
+  // (future) editor app.
+  const handleApplyActions = useCallback(
+    (actions: DashboardActions) => {
+      let filterCount = 0;
+      for (const f of actions.filters) {
+        const componentType = interactiveTypeByIndex[f.component_id];
+        handleFilterChange({
+          index: f.component_id,
+          value: f.value,
+          interactive_component_type: componentType,
+        });
+        filterCount += 1;
+      }
+      if (filterCount) {
+        notifications.show({
+          color: 'teal',
+          title: 'AI applied filters',
+          message: `${filterCount} filter${filterCount === 1 ? '' : 's'} updated.`,
+        });
+      }
+      if (actions.figure_mutations.length) {
+        notifications.show({
+          color: 'yellow',
+          title: 'Figure changes need the editor',
+          message:
+            'Open the dashboard in edit mode to apply figure-parameter changes proposed by the AI.',
+        });
+      }
+    },
+    [handleFilterChange, interactiveTypeByIndex],
+  );
 
   // ---- Realtime: WebSocket subscription + UI toggle -------------------------
   // Mode toggle persisted to localStorage so the user's choice survives
@@ -332,6 +407,19 @@ const App: React.FC = () => {
           cardsLoading={cardsLoading}
           rightExtras={
             <>
+              {dashboardId && (
+                <Tooltip label="AI assistant">
+                  <ActionIcon
+                    variant="subtle"
+                    color="violet"
+                    onClick={openAI}
+                    aria-label="Open AI assistant"
+                    data-tour-id="ai-button"
+                  >
+                    <Icon icon="material-symbols:smart-toy-outline" width={18} />
+                  </ActionIcon>
+                </Tooltip>
+              )}
               {realtimeEnabled && (
                 <span data-tour-id="realtime-indicator" style={{ display: 'inline-flex' }}>
                   <RealtimeIndicator
@@ -490,6 +578,16 @@ const App: React.FC = () => {
         onClose={closeSettings}
         dashboard={dashboard}
       />
+
+      {dashboardId && (
+        <AIDrawer
+          opened={aiOpened}
+          onClose={closeAI}
+          dashboardId={dashboardId}
+          primaryDataCollectionId={primaryDcId}
+          onApplyActions={handleApplyActions}
+        />
+      )}
     </AppShell>
     </>
   );
