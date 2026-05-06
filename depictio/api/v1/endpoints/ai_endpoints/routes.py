@@ -22,10 +22,15 @@ from collections.abc import AsyncIterator
 from fastapi import APIRouter, Depends, Header, HTTPException
 from fastapi.responses import StreamingResponse
 
+from pydantic import ValidationError
+
+from depictio.api.v1.endpoints.ai_endpoints import llm_client, prompts
+from depictio.api.v1.endpoints.ai_endpoints.context import build_data_context
 from depictio.api.v1.endpoints.ai_endpoints.schemas import (
     AnalyzeRequest,
     FigureFromPromptRequest,
     FigureFromPromptResponse,
+    PlotSuggestion,
     StreamEvent,
     SuggestFiguresRequest,
     SuggestFiguresResponse,
@@ -43,17 +48,46 @@ def _llm_key(x_llm_api_key: str | None = Header(default=None)) -> str | None:
     return x_llm_api_key
 
 
+def _try_plot_suggestion(payload: dict) -> PlotSuggestion | None:
+    try:
+        return PlotSuggestion.model_validate(payload)
+    except ValidationError as e:
+        logger.warning("PlotSuggestion validation failed: %s", e)
+        return None
+
+
 @ai_endpoint_router.post("/suggest-figures", response_model=SuggestFiguresResponse)
 async def suggest_figures(
     body: SuggestFiguresRequest,
     current_user: User = Depends(get_user_or_anonymous),
     user_api_key: str | None = Depends(_llm_key),
 ) -> SuggestFiguresResponse:
-    """Data-driven: propose N figures for a data collection.
+    """Data-driven flow: propose N figures for a data collection.
 
-    Implementation lands in Layer 2 (executor + context builder).
+    Loads the DC, builds a schema/sample/metadata prompt, asks the LLM for a
+    JSON envelope of suggestions, validates each through `PlotSuggestion`,
+    drops any that fail (and logs them) so a single bad item never blocks
+    the whole response.
     """
-    raise HTTPException(status_code=501, detail="suggest-figures: not yet implemented")
+    ctx = await build_data_context(body.data_collection_id, current_user)
+    messages = prompts.suggest_figures_messages(ctx, body.n)
+    raw = llm_client.completion(messages, user_api_key=user_api_key)
+
+    try:
+        parsed = llm_client.parse_json(raw)
+    except Exception as e:  # noqa: BLE001
+        logger.error("suggest-figures: JSON parse failed: %s", e)
+        raise HTTPException(status_code=502, detail="LLM returned invalid JSON.")
+
+    raw_items = parsed.get("suggestions", []) if isinstance(parsed, dict) else []
+    suggestions = [s for s in (_try_plot_suggestion(item) for item in raw_items) if s]
+
+    if not suggestions:
+        raise HTTPException(
+            status_code=502,
+            detail="LLM produced no usable suggestions (all failed schema validation).",
+        )
+    return SuggestFiguresResponse(suggestions=suggestions)
 
 
 @ai_endpoint_router.post("/figure-from-prompt", response_model=FigureFromPromptResponse)
@@ -62,8 +96,31 @@ async def figure_from_prompt(
     current_user: User = Depends(get_user_or_anonymous),
     user_api_key: str | None = Depends(_llm_key),
 ) -> FigureFromPromptResponse:
-    """Prompt-driven viz creation. Implementation lands in Layer 2."""
-    raise HTTPException(status_code=501, detail="figure-from-prompt: not yet implemented")
+    """Prompt-driven viz creation. Single suggestion, retried once on parse fail."""
+    ctx = await build_data_context(body.data_collection_id, current_user)
+    messages = prompts.figure_from_prompt_messages(ctx, body.prompt)
+
+    last_error: str | None = None
+    for attempt in range(2):
+        raw = llm_client.completion(
+            messages,
+            user_api_key=user_api_key,
+            response_format=PlotSuggestion if attempt == 0 else None,
+        )
+        try:
+            payload = llm_client.parse_json(raw)
+        except Exception as e:  # noqa: BLE001
+            last_error = f"json: {e}"
+            continue
+        suggestion = _try_plot_suggestion(payload)
+        if suggestion:
+            return FigureFromPromptResponse(suggestion=suggestion)
+        last_error = "schema validation failed"
+
+    raise HTTPException(
+        status_code=502,
+        detail=f"LLM did not return a valid suggestion: {last_error}",
+    )
 
 
 async def _analyze_stream(
