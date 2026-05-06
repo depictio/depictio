@@ -99,6 +99,18 @@ class EventService:
             event: The event message
             dashboard_ids: List of dashboard IDs to notify
         """
+        # Drop cached DataFrames for the changed DC before broadcasting — clients
+        # will refetch on the event, and they need to see the new data, not the
+        # stale in-memory copy keyed off the pre-update delta version.
+        if event.data_collection_id:
+            from depictio.api.v1.deltatables_utils import invalidate_data_collection_cache
+
+            dropped = invalidate_data_collection_cache(event.data_collection_id)
+            if dropped:
+                logger.info(
+                    f"Invalidated {dropped} cached DataFrame(s) for dc_id={event.data_collection_id}"
+                )
+
         for dashboard_id in dashboard_ids:
             # Set the dashboard_id in the event for this broadcast
             event_copy = event.model_copy(update={"dashboard_id": dashboard_id})

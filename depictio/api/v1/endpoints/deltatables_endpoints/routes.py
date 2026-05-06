@@ -13,8 +13,10 @@ import boto3
 import polars as pl
 from botocore.exceptions import ClientError
 from bson import ObjectId
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response
 
+from depictio.api.v1.celery_dispatch import offload_or_run
+from depictio.api.v1.celery_tasks import preview_deltatable as preview_deltatable_task
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.db import deltatables_collection, projects_collection, users_collection
@@ -67,15 +69,9 @@ async def upsert_deltatable(
     """
     data_collection_oid = payload.data_collection_id
 
-    query = {
-        "$or": [
-            {"permissions.owners._id": current_user.id},
-            {"permissions.is_admin": True},
-        ],
-        "workflows.data_collections._id": data_collection_oid,
-    }
-
-    project = projects_collection.find_one(query)
+    project = projects_collection.find_one(
+        _owned_or_admin_query(current_user, {"workflows.data_collections._id": data_collection_oid})
+    )
     if not project:
         raise HTTPException(
             status_code=404,
@@ -220,6 +216,22 @@ async def upsert_deltatable(
             )
         deltatables_collection.insert_one(deltatable.mongo())
 
+    # The CLI just rewrote the delta — drop every cached DataFrame for this DC
+    # so subsequent ``render_*`` calls see fresh rows. Without this the in-process
+    # memory cache + Redis cache continue to serve the pre-rewrite DataFrame even
+    # after the on-disk delta is gone.
+    try:
+        from depictio.api.v1.deltatables_utils import invalidate_data_collection_cache
+
+        dropped = invalidate_data_collection_cache(str(data_collection_oid))
+        if dropped:
+            logger.info(
+                f"upsert_deltatable: invalidated {dropped} cached DataFrame(s) for "
+                f"dc_id={data_collection_oid}"
+            )
+    except Exception as e:
+        logger.warning(f"upsert_deltatable: cache invalidation failed: {e}")
+
         # Add size to deltatable's flexible_metadata if provided
         if payload.deltatable_size_bytes is not None and not is_multiqc:
             # First ensure flexible_metadata is not null (MongoDB can't set nested fields on null)
@@ -244,20 +256,35 @@ async def upsert_deltatable(
     return {"message": "DeltaTableAggregated upserted successfully", "result": "success"}
 
 
-def _build_permission_pipeline(data_collection_id: PyObjectId, user_id) -> list[dict]:
-    """Build MongoDB aggregation pipeline for permission checking."""
+def _owned_or_admin_query(current_user: User, base: dict) -> dict:
+    """Add an owner filter to ``base`` unless the caller is an admin.
+
+    Admins (including the anonymous-admin used in single-user mode) wouldn't
+    appear in the project's permissions list, so the explicit-membership
+    check would reject them.
+    """
+    if current_user.is_admin:
+        return base
+    return {**base, "permissions.owners._id": current_user.id}
+
+
+def _build_permission_pipeline(data_collection_id: PyObjectId, current_user: User) -> list[dict]:
+    """Build MongoDB aggregation pipeline for permission checking.
+
+    Admins (including the anonymous-admin used in single-user mode) skip the
+    owner/viewer filter — they wouldn't appear in the project's permissions
+    list, so the explicit-membership check would otherwise reject them.
+    """
+    match_clause: dict = {"workflows.data_collections._id": ObjectId(data_collection_id)}
+    if not current_user.is_admin:
+        match_clause["$or"] = [
+            {"permissions.owners._id": current_user.id},
+            {"permissions.viewers._id": current_user.id},
+            {"permissions.viewers": "*"},
+            {"is_public": True},
+        ]
     return [
-        {
-            "$match": {
-                "workflows.data_collections._id": ObjectId(data_collection_id),
-                "$or": [
-                    {"permissions.owners._id": user_id},
-                    {"permissions.viewers._id": user_id},
-                    {"permissions.viewers": "*"},
-                    {"is_public": True},
-                ],
-            }
-        },
+        {"$match": match_clause},
         {"$unwind": "$workflows"},
         {"$unwind": "$workflows.data_collections"},
         {"$match": {"workflows.data_collections._id": ObjectId(data_collection_id)}},
@@ -268,7 +295,7 @@ def _build_permission_pipeline(data_collection_id: PyObjectId, user_id) -> list[
 @deltatables_endpoint_router.get("/get/{data_collection_id}")
 async def get_deltatable(
     data_collection_id: PyObjectId,
-    current_user: str = Depends(get_user_or_anonymous),
+    current_user: User = Depends(get_user_or_anonymous),
 ):
     """
     Fetch a DeltaTableAggregated object by data collection ID.
@@ -283,7 +310,7 @@ async def get_deltatable(
     Raises:
         HTTPException: If data collection not found or access denied.
     """
-    pipeline = _build_permission_pipeline(data_collection_id, current_user.id)  # type: ignore[possibly-unbound-attribute]
+    pipeline = _build_permission_pipeline(data_collection_id, current_user)
     project_result = list(projects_collection.aggregate(pipeline))
     if not project_result:
         raise HTTPException(status_code=404, detail="Data collection not found or access denied.")
@@ -339,7 +366,7 @@ async def batch_check_deltatables_exist(
 @deltatables_endpoint_router.get("/specs/{data_collection_id}")
 async def specs(
     data_collection_id: PyObjectId,
-    current_user: str = Depends(get_user_or_anonymous),
+    current_user: User = Depends(get_user_or_anonymous),
 ):
     """
     Fetch columns list and specs from data collection.
@@ -357,7 +384,7 @@ async def specs(
     Note:
         Currently returns the last aggregation; versioning support planned.
     """
-    pipeline = _build_permission_pipeline(data_collection_id, current_user.id)  # type: ignore[possibly-unbound-attribute]
+    pipeline = _build_permission_pipeline(data_collection_id, current_user)
     project_result = list(projects_collection.aggregate(pipeline))
     if not project_result:
         raise HTTPException(status_code=404, detail="Data collection not found or access denied.")
@@ -382,10 +409,110 @@ async def specs(
     return convert_objectid_to_str(aggregation[-1]["aggregation_columns_specs"])
 
 
+@deltatables_endpoint_router.get("/unique_values/{data_collection_id}")
+async def get_unique_values(
+    data_collection_id: PyObjectId,
+    column: str,
+    limit: int = 1000,
+    filter_expr: str | None = None,
+    current_user: str = Depends(get_user_or_anonymous),
+):
+    """Return the sorted unique values of ``column`` within a data collection.
+
+    Backs the React viewer's MultiSelect options fetch. Mirrors the code path
+    Dash uses via ``load_deltatable_lite(..., load_for_options=True)`` so both
+    viewers see identical option lists.
+
+    Args:
+        data_collection_id: Target data collection.
+        column: Column name whose unique values to return.
+        limit: Max values to return (default 1000). Prevents unbounded payloads
+            on high-cardinality columns; MultiSelect's UX caps at 100 anyway.
+        filter_expr: Optional Polars filter expression (string) applied before
+            collecting unique values. Validated through the safe-eval pipeline
+            in ``depictio.models.components.filter_expr``.
+        current_user: Authenticated or anonymous user (permission-checked).
+
+    Returns:
+        ``{"column": str, "values": list[str]}`` — strings for MultiSelect UI.
+
+    Raises:
+        HTTPException: 404 if DC not found / not accessible, 500 on read error.
+    """
+    # Find the project that owns this data collection. Doing a full MongoDB
+    # permission filter via _build_permission_pipeline rejects the anonymous
+    # admin user (no explicit owner entry) — use the same admin-aware
+    # check_project_permission as /dashboards/get/{id}.
+    from depictio.api.v1.endpoints.dashboards_endpoints.routes import check_project_permission
+
+    project = projects_collection.find_one(
+        {"workflows.data_collections._id": ObjectId(data_collection_id)},
+        {"_id": 1},
+    )
+    if not project:
+        raise HTTPException(status_code=404, detail="Data collection not found.")
+
+    if not check_project_permission(project["_id"], current_user, "viewer"):  # type: ignore[arg-type]
+        raise HTTPException(
+            status_code=403,
+            detail="You don't have permission to access this data collection.",
+        )
+
+    deltatables_list = list(deltatables_collection.find({"data_collection_id": data_collection_id}))
+    if not deltatables_list:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No DeltaTable found for Data Collection ID {data_collection_id}.",
+        )
+
+    delta_table_location = deltatables_list[-1].get("delta_table_location")
+    if not delta_table_location:
+        raise HTTPException(
+            status_code=404, detail="Delta table location not found in deltatable document."
+        )
+
+    try:
+        lazy = pl.scan_delta(delta_table_location, storage_options=polars_s3_config)
+
+        if filter_expr:
+            from depictio.models.components.filter_expr import (
+                build_filter_expr,
+                validate_filter_expr,
+            )
+
+            try:
+                validate_filter_expr(filter_expr)
+                expr = build_filter_expr(filter_expr)
+            except Exception as exc:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Invalid filter_expr: {exc}",
+                )
+            lazy = lazy.filter(expr)
+
+        try:
+            df = lazy.select(column).unique().limit(limit).collect()
+        except pl.exceptions.ColumnNotFoundError:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Column '{column}' not found in data collection {data_collection_id}.",
+            )
+
+        values = df[column].drop_nulls().to_list()
+        # Stable ordering — MultiSelect UX expects sorted strings.
+        values_str = sorted({str(v) for v in values})
+        return {"column": column, "values": values_str}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error fetching unique values for column {column}: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to read unique values: {e}")
+
+
 @deltatables_endpoint_router.get("/shape/{data_collection_id}")
 async def get_shape(
     data_collection_id: PyObjectId,
-    current_user: str = Depends(get_user_or_anonymous),
+    current_user: User = Depends(get_user_or_anonymous),
 ):
     """
     Get shape information (number of rows and columns) for a data collection.
@@ -400,7 +527,7 @@ async def get_shape(
     Raises:
         HTTPException: If data collection not found or delta table read fails.
     """
-    pipeline = _build_permission_pipeline(data_collection_id, current_user.id)  # type: ignore[possibly-unbound-attribute]
+    pipeline = _build_permission_pipeline(data_collection_id, current_user)
     project_result = list(projects_collection.aggregate(pipeline))
     if not project_result:
         raise HTTPException(status_code=404, detail="Data collection not found or access denied.")
@@ -427,6 +554,57 @@ async def get_shape(
         raise HTTPException(status_code=500, detail=f"Failed to read delta table shape: {e}")
 
 
+@deltatables_endpoint_router.get("/preview/{data_collection_id}")
+async def get_preview(
+    response: Response,
+    data_collection_id: PyObjectId,
+    limit: int = 100,
+    current_user: User = Depends(get_user_or_anonymous),
+):
+    """
+    Return the first `limit` rows + column names for a data collection's
+    delta table, for the React stepper data-source preview pane.
+
+    Mirrors what the Dash stepper builds via
+    ``load_deltatable_lite(..., limit_rows=100, load_for_preview=True)``.
+
+    Heavy work (Polars scan + collect) runs on Celery when
+    `settings.celery.offload_preview` is true (default).
+    """
+    pipeline = _build_permission_pipeline(data_collection_id, current_user)
+    project_result = list(projects_collection.aggregate(pipeline))
+    if not project_result:
+        raise HTTPException(status_code=404, detail="Data collection not found or access denied.")
+
+    deltatables_list = list(deltatables_collection.find({"data_collection_id": data_collection_id}))
+    if not deltatables_list:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No DeltaTable found for Data Collection ID {data_collection_id}.",
+        )
+
+    delta_table_location = deltatables_list[-1].get("delta_table_location")
+    if not delta_table_location:
+        raise HTTPException(
+            status_code=404, detail="Delta table location not found in deltatable document."
+        )
+
+    offload = settings.celery.offload_preview
+    response.headers["X-Celery-Path"] = "offloaded" if offload else "inline"
+    try:
+        return await offload_or_run(
+            preview_deltatable_task,
+            ({"delta_table_location": delta_table_location, "limit": limit},),
+            offload=offload,
+            label=f"deltatable_preview dc={data_collection_id}",
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error reading delta table preview: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to read delta table preview: {e}")
+
+
 @deltatables_endpoint_router.delete("/delete/{deltatable_id}")
 async def delete_deltatable(
     deltatable_id: str,
@@ -451,7 +629,6 @@ async def delete_deltatable(
         raise HTTPException(status_code=400, detail="Data Collection ID is required")
 
     deltatable_oid = ObjectId(deltatable_id)
-    user_oid = ObjectId(current_user.id)
 
     deltatable = deltatables_collection.find_one({"_id": deltatable_oid})
     if not deltatable:
@@ -480,11 +657,9 @@ async def delete_deltatable(
         logger.error(f"Failed to delete S3 objects: {e}")
         raise HTTPException(status_code=500, detail="Failed to delete S3 objects.")
 
-    query = {
-        "$or": [{"permissions.owners._id": user_oid}, {"permissions.is_admin": True}],
-        "data_collections._id": data_collection_oid,
-    }
-    if not projects_collection.find_one(query):
+    if not projects_collection.find_one(
+        _owned_or_admin_query(current_user, {"data_collections._id": data_collection_oid})
+    ):
         raise HTTPException(
             status_code=404,
             detail=f"No workflows with id {deltatable_oid} found for the current user.",

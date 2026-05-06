@@ -42,6 +42,7 @@ InteractiveType = Literal[
     "Slider",
     "RangeSlider",
     "DateRangePicker",
+    "Timeline",
     "Switch",
 ]
 

@@ -350,6 +350,7 @@ class TestReadSourceFile:
             object.__setattr__(source, "ref", "test")
             object.__setattr__(source, "format", "json")
             object.__setattr__(source, "read_kwargs", None)
+            object.__setattr__(source, "glob_pattern", None)
             with pytest.raises(RecipeError, match="Unsupported format"):
                 _read_source_file(Path(f.name), source)
 

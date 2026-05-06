@@ -1,0 +1,3 @@
+packages:
+  - 'packages/*'
+  - 'depictio/viewer'

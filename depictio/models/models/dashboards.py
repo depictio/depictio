@@ -236,6 +236,33 @@ class DashboardDataLite(BaseModel):
 
         return self
 
+    @model_validator(mode="after")
+    def validate_interactive_groups(self) -> "DashboardDataLite":
+        """Enforce that no `group` exceeds MAX_INTERACTIVE_GROUP_SIZE members."""
+        from depictio.models.components.constants import MAX_INTERACTIVE_GROUP_SIZE
+
+        counts: dict[str, int] = {}
+        for comp in self.components:
+            if isinstance(comp, dict):
+                if comp.get("component_type") != "interactive":
+                    continue
+                group = comp.get("group")
+            else:
+                if getattr(comp, "component_type", None) != "interactive":
+                    continue
+                group = getattr(comp, "group", None)
+            if group:
+                counts[group] = counts.get(group, 0) + 1
+
+        oversized = {g: n for g, n in counts.items() if n > MAX_INTERACTIVE_GROUP_SIZE}
+        if oversized:
+            details = ", ".join(f"'{g}' has {n} members" for g, n in oversized.items())
+            raise ValueError(
+                f"Interactive component groups exceed the maximum size of "
+                f"{MAX_INTERACTIVE_GROUP_SIZE}: {details}"
+            )
+        return self
+
     # Sentinel key names used to inject YAML comment separators between sections.
     # After yaml.dump(), these are replaced by comment lines via _apply_section_comments().
     SENTINEL_OPTIONAL: ClassVar[str] = "__section_optional__"
@@ -1017,6 +1044,13 @@ class DashboardDataLite(BaseModel):
                         "value": None,
                         "default_state": None,
                         "filter_expr": comp_dict.get("filter_expr"),
+                        # Layout / grouping carried through from the lite model so
+                        # the React viewer can bucket components into the top panel
+                        # or grouped Paper. Default placement is 'left'.
+                        "placement": comp_dict.get("placement", "left"),
+                        "group": comp_dict.get("group"),
+                        "timescale": comp_dict.get("timescale"),
+                        "show_marks": comp_dict.get("show_marks"),
                     }
                 )
                 for f in ["title_size", "custom_color", "icon_name"]:
@@ -1162,6 +1196,10 @@ class DashboardDataLite(BaseModel):
                 layout_item["resizeHandles"] = ["se", "s", "e", "sw", "w"]
 
             if comp_type == "interactive":
+                # Top-placement components (e.g. Timeline) live in the React
+                # TopPanel, which lays them out inline — no grid entry needed.
+                if comp.get("placement") == "top":
+                    continue
                 left_panel_layout_data.append(layout_item)
             else:
                 right_panel_layout_data.append(layout_item)
@@ -1225,6 +1263,9 @@ class DashboardData(MongoModel):
     tab_icon_color: Optional[str] = None  # Color for tab icon
     parent_dashboard_title: Optional[str] = (
         None  # Populated at runtime for child tabs (header display)
+    )
+    project_realtime: Optional[dict] = (
+        None  # Populated at runtime from the parent project's realtime config
     )
 
     model_config = ConfigDict(

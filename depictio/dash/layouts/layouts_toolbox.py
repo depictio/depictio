@@ -88,6 +88,11 @@ def create_dashboard_modal(
     - Create New: Title, subtitle, project selection, icon customization
     - Import: JSON file upload with validation
 
+    The Import tab is disabled in public/demo deployments — letting an
+    anonymous visitor write user-supplied JSON into shared projects would
+    bypass the project-permission model. Mirrored in the React equivalent at
+    `depictio/viewer/src/dashboards/CreateDashboardModal.tsx`.
+
     Args:
         dashboard_title: Pre-filled dashboard title.
         projects: List of project options for dropdown (unused, populated by callback).
@@ -98,6 +103,9 @@ def create_dashboard_modal(
     Returns:
         Tuple of (modal component, modal ID string).
     """
+    from depictio.api.v1.configs.config import settings
+
+    import_disabled = bool(settings.auth.is_public_mode)
     modal_id = f"{id_prefix}-modal"
 
     # Create New tab content
@@ -535,6 +543,7 @@ def create_dashboard_modal(
                                         value="import",
                                         leftSection=DashIconify(icon="mdi:import", width=18),
                                         color="orange",
+                                        disabled=import_disabled,
                                     ),
                                 ],
                                 justify="center",

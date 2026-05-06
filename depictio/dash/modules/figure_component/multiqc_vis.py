@@ -194,31 +194,34 @@ def _generate_figure_cache_key(
     plot: str,
     dataset_id: Optional[str] = None,
     theme: str = "light",
+    filter_sig: Optional[str] = None,
 ) -> str:
-    """Generate cache key for a rendered figure, including file mtimes for invalidation."""
+    """Generate cache key for a rendered figure.
+
+    Invalidation is driven by the cache TTL (7200 s in `create_multiqc_plot`),
+    not by per-file mtime. We removed the os.path.getmtime() probe because it
+    fired N filesystem stats on every request — even on cache hits — and any
+    background S3-cache refresh would change an mtime and cold-evict the
+    figure. `filter_sig`, when provided, distinguishes filtered renders from
+    the unfiltered baseline so that repeated filter combos can hit cache.
+    """
     sorted_locations = sorted(s3_locations)
-
-    mtimes = []
-    for loc in sorted_locations:
-        local_path = _resolve_local_cache_path(loc)
-        if local_path and os.path.exists(local_path):
-            mtimes.append(str(os.path.getmtime(local_path)))
-        elif not loc.startswith("s3://") and os.path.exists(loc):
-            mtimes.append(str(os.path.getmtime(loc)))
-        else:
-            mtimes.append("0")
-
     key_parts = [
         "|".join(sorted_locations),
-        "|".join(mtimes),
         module,
         plot,
         str(dataset_id),
         theme,
+        filter_sig or "",
     ]
     key_str = "::".join(key_parts)
     hash_digest = hashlib.sha256(key_str.encode()).hexdigest()[:16]
     return f"multiqc:figure:{hash_digest}"
+
+
+# Public alias so callers (e.g. FastAPI endpoints) can layer filter-aware
+# caching on top of the unfiltered baseline that `create_multiqc_plot` caches.
+generate_figure_cache_key = _generate_figure_cache_key
 
 
 def _get_or_parse_multiqc_logs(s3_locations: List[str], use_s3_cache: bool = True) -> bool:
@@ -230,25 +233,35 @@ def _get_or_parse_multiqc_logs(s3_locations: List[str], use_s3_cache: bool = Tru
 
     cache_key = _generate_cache_key(s3_locations)
     cache = get_cache()
-    cached_report = cache.get(cache_key)
 
+    def _restore_from_cache_value(value: Any) -> bool:
+        """Restore multiqc.report from a cache hit. Handles both the legacy
+        in-memory shape (raw report object) and the new cloudpickle envelope
+        produced below — `{"__cloudpickle__": <bytes>}`.
+        """
+        try:
+            if isinstance(value, dict) and "__cloudpickle__" in value:
+                import cloudpickle  # noqa: PLC0415
+
+                multiqc.report = cloudpickle.loads(value["__cloudpickle__"])
+            else:
+                multiqc.report = value
+            return True
+        except Exception as e:
+            logger.warning(f"Failed to restore cached multiqc.report: {e}")
+            return False
+
+    cached_report = cache.get(cache_key)
     if cached_report is not None:
         with _multiqc_lock:
-            try:
-                multiqc.report = cached_report
+            if _restore_from_cache_value(cached_report):
                 return True
-            except Exception as e:
-                logger.warning(f"Failed to restore cached report: {e}")
 
     with _multiqc_lock:
         # Double-check cache inside lock (another thread may have parsed while we waited)
         cached_report = cache.get(cache_key)
-        if cached_report is not None:
-            try:
-                multiqc.report = cached_report
-                return True
-            except Exception as e:
-                logger.warning(f"Failed to restore cached report after lock: {e}")
+        if cached_report is not None and _restore_from_cache_value(cached_report):
+            return True
 
         multiqc.reset()
 
@@ -266,15 +279,34 @@ def _get_or_parse_multiqc_logs(s3_locations: List[str], use_s3_cache: bool = Tru
             logger.error("No files could be parsed")
             return False
 
-        # Memory-only cache: multiqc.report contains Python modules that fail pickle
+        # Try to persist `multiqc.report` to Redis (or whatever backend
+        # cache.set() points at) via cloudpickle, which tolerates the module
+        # references that plain pickle chokes on. This lets the parsed report
+        # survive uvicorn dev-mode reloads and worker restarts. Fall back to
+        # the in-process memory dict if cloudpickle is unavailable or fails
+        # for an unforeseen reason — same behaviour as before this change.
+        cached_via_cloudpickle = False
         try:
-            cache._memory_cache[cache_key] = {
-                "data": multiqc.report,
-                "cached_at": time.time(),
-                "ttl": 7200,
-            }
+            import cloudpickle  # noqa: PLC0415
+
+            payload = cloudpickle.dumps(multiqc.report)
+            cache.set(cache_key, {"__cloudpickle__": payload}, ttl=7200)
+            cached_via_cloudpickle = True
         except Exception as e:
-            logger.warning(f"Failed to cache report: {e}")
+            logger.info(
+                f"multiqc.report cloudpickle persist skipped ({e!r}); "
+                f"falling back to in-process memory cache"
+            )
+
+        if not cached_via_cloudpickle:
+            try:
+                cache._memory_cache[cache_key] = {
+                    "data": multiqc.report,
+                    "cached_at": time.time(),
+                    "ttl": 7200,
+                }
+            except Exception as e:
+                logger.warning(f"Failed to cache report: {e}")
 
     return True
 
@@ -290,6 +322,10 @@ def create_multiqc_plot(
     """Create a Plotly figure from MultiQC data with figure-level Redis caching.
 
     Cache layers: Redis figure cache -> in-memory report cache -> full parse.
+
+    Filter-aware caching is layered on top by callers via
+    :func:`generate_figure_cache_key` — this helper only caches the unfiltered
+    baseline.
     """
     import multiqc
 

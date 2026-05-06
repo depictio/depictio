@@ -362,17 +362,13 @@ class TestInitializationProcess:
                             mock_create_anon.return_value = mock_anon_user
 
                             with patch(
-                                "depictio.api.v1.initialization._create_permanent_token"
-                            ) as mock_create_token:
-                                with patch(
-                                    "depictio.api.v1.db.initialization_collection"
-                                ) as mock_collection:
-                                    mock_collection.insert_one = MagicMock()
+                                "depictio.api.v1.db.initialization_collection"
+                            ) as mock_collection:
+                                mock_collection.insert_one = MagicMock()
 
-                                    await run_initialization()
+                                await run_initialization()
 
-                                    mock_create_anon.assert_called_once()
-                                    mock_create_token.assert_called_once_with(mock_anon_user)
+                                mock_create_anon.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_initialization_skips_anonymous_user_in_authenticated_mode(self):
@@ -400,14 +396,10 @@ class TestInitializationProcess:
                             "depictio.api.v1.initialization._create_anonymous_user"
                         ) as mock_create_anon:
                             with patch(
-                                "depictio.api.v1.initialization._create_permanent_token"
-                            ) as mock_create_token:
-                                with patch(
-                                    "depictio.api.v1.db.initialization_collection"
-                                ) as mock_collection:
-                                    mock_collection.insert_one = MagicMock()
+                                "depictio.api.v1.db.initialization_collection"
+                            ) as mock_collection:
+                                mock_collection.insert_one = MagicMock()
 
-                                    await run_initialization()
+                                await run_initialization()
 
-                                    mock_create_anon.assert_not_called()
-                                    mock_create_token.assert_not_called()
+                                mock_create_anon.assert_not_called()

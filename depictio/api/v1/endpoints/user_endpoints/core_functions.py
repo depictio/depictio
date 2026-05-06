@@ -130,43 +130,22 @@ async def _create_temporary_user(
 async def _create_temporary_user_session(temp_user: UserBeanie) -> dict:
     """Create a session token for a temporary user.
 
-    Args:
-        temp_user: The temporary user to create a session for
-
-    Returns:
-        Session data dictionary with access token and user info
+    Uses the same short-lived + refresh mechanism as a standard /login. The
+    refresh window naturally clamps at the temp-user's expiration because the
+    user record (and all its tokens) are deleted on cleanup.
     """
-    # Create a temporary token with same expiration as user
     token_data = TokenData(
         sub=temp_user.id,  # type: ignore[invalid-argument-type]
         name=f"temp_session_{temp_user.id}",
-        token_lifetime="long-lived",  # type: ignore[invalid-argument-type]
+        token_lifetime="short-lived",
     )
-
-    # Calculate hours until expiration
-    if temp_user.expiration_time:
-        expiry_hours = max(
-            1, int((temp_user.expiration_time - datetime.now()).total_seconds() / 3600)
+    token = await _add_token(token_data)
+    if token is None:
+        raise HTTPException(
+            status_code=500, detail="Failed to issue session token for temporary user"
         )
-    else:
-        expiry_hours = 24
 
-    access_token, expire_datetime = await create_access_token(token_data, expiry_hours=expiry_hours)
-
-    token = TokenBeanie(
-        access_token=access_token,
-        refresh_token="",
-        expire_datetime=expire_datetime,
-        refresh_expire_datetime=expire_datetime,
-        name=token_data.name,
-        token_lifetime="long-lived",
-        user_id=temp_user.id,  # type: ignore[invalid-argument-type]
-        logged_in=True,
-    )
-    await token.save()
-
-    # Convert to session data format expected by frontend
-    session_data = {
+    return {
         "logged_in": True,
         "email": temp_user.email,
         "user_id": str(temp_user.id),
@@ -182,8 +161,6 @@ async def _create_temporary_user_session(temp_user: UserBeanie) -> dict:
         "token_lifetime": token.token_lifetime,
         "token_type": token.token_type or "bearer",
     }
-
-    return session_data
 
 
 async def _cleanup_expired_temporary_users() -> dict:
@@ -464,16 +441,11 @@ async def _list_tokens(
 
 @validate_call(validate_return=True)
 async def _get_anonymous_user_session() -> dict:
-    """
-    Fetch the session for auto-login depending on authentication mode.
+    """Auto-login session for single-user mode (returns the admin user).
 
-    In single-user mode, returns the real admin user session.
-    In public/demo mode, returns the anonymous user session.
-
-    Returns:
-        dict: Session data compatible with frontend authentication
+    Public/demo mode does NOT use this — those flows mint a temporary user
+    via ``_create_temporary_user_session`` instead.
     """
-    # In single-user mode, return the default admin user session (not anonymous)
     if settings.auth.is_single_user_mode:
         admin_user = await UserBeanie.find_one({"is_admin": True, "is_anonymous": {"$ne": True}})
         if not admin_user:
@@ -497,68 +469,41 @@ async def _get_anonymous_user_session() -> dict:
                 raise HTTPException(
                     status_code=500, detail=f"Failed to create admin user: {str(e)}"
                 )
-        # Look for an existing permanent token; create one if none exists
-        permanent_tokens = await _list_tokens(user_id=admin_user.id, token_lifetime="permanent")
-        if permanent_tokens:
-            permanent_token = permanent_tokens[0]
-        else:
-            logger.info(f"No permanent token for admin user {admin_user.email} — creating one")
-            permanent_token = await _create_permanent_token(admin_user)
+        # Mint a standard short-lived + refresh token (same mechanism as /login).
+        token_name = f"{admin_user.email}_{datetime.now().strftime('%Y%m%d%H%M%S')}"
+        token_data = TokenData(
+            name=token_name,
+            token_lifetime="short-lived",
+            sub=admin_user.id,  # type: ignore[invalid-argument-type]
+        )
+        token = await _add_token(token_data)
+        if token is None:
+            raise HTTPException(
+                status_code=500, detail="Failed to issue session token for admin user"
+            )
         return {
             "logged_in": True,
             "email": admin_user.email,
             "user_id": str(admin_user.id),
-            "access_token": permanent_token.access_token,
-            "refresh_token": permanent_token.refresh_token,
-            "expire_datetime": permanent_token.expire_datetime.isoformat()
-            if permanent_token.expire_datetime
+            "access_token": token.access_token,
+            "refresh_token": token.refresh_token,
+            "expire_datetime": token.expire_datetime.isoformat()
+            if token.expire_datetime
             else "9999-12-31T23:59:59",
-            "refresh_expire_datetime": permanent_token.refresh_expire_datetime.isoformat()
-            if permanent_token.refresh_expire_datetime
+            "refresh_expire_datetime": token.refresh_expire_datetime.isoformat()
+            if token.refresh_expire_datetime
             else "9999-12-31T23:59:59",
             "is_anonymous": False,
-            "name": permanent_token.name,
-            "token_lifetime": permanent_token.token_lifetime,
-            "token_type": permanent_token.token_type or "bearer",
+            "name": token.name,
+            "token_lifetime": token.token_lifetime,
+            "token_type": token.token_type or "bearer",
         }
 
-    # Public/demo mode: return anonymous user session
-    anonymous_user = await UserBeanie.find_one({"email": settings.auth.anonymous_user_email})
-    if not anonymous_user:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Anonymous user not found: {settings.auth.anonymous_user_email}",
-        )
-
-    # Get the permanent token for the anonymous user
-    permanent_tokens = await _list_tokens(user_id=anonymous_user.id, token_lifetime="permanent")
-
-    if not permanent_tokens:
-        raise HTTPException(
-            status_code=404,
-            detail=f"No permanent token found for anonymous user: {anonymous_user.email}",
-        )
-
-    # Use the first permanent token (there should only be one)
-    permanent_token = permanent_tokens[0]
-
-    return {
-        "logged_in": True,
-        "email": anonymous_user.email,
-        "user_id": str(anonymous_user.id),
-        "access_token": permanent_token.access_token,
-        "refresh_token": permanent_token.refresh_token,
-        "expire_datetime": permanent_token.expire_datetime.isoformat()
-        if permanent_token.expire_datetime
-        else "9999-12-31T23:59:59",
-        "refresh_expire_datetime": permanent_token.refresh_expire_datetime.isoformat()
-        if permanent_token.refresh_expire_datetime
-        else "9999-12-31T23:59:59",
-        "is_anonymous": True,
-        "name": permanent_token.name,
-        "token_lifetime": permanent_token.token_lifetime,
-        "token_type": permanent_token.token_type or "bearer",
-    }
+    raise HTTPException(
+        status_code=400,
+        detail="Anonymous session is only available in single-user mode; "
+        "public/demo mode mints a temporary user instead.",
+    )
 
 
 @validate_call(validate_return=True)

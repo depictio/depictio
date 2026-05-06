@@ -47,11 +47,26 @@ INTERACTIVE_COMPATIBILITY: dict[str, list[str]] = {
     "float64": ["Slider", "RangeSlider"],
     # "bool": ["Checkbox", "Switch"],  # Not yet implemented in frontend
     "bool": [],
-    "datetime": ["DateRangePicker"],
+    "datetime": ["DateRangePicker", "Timeline"],
     "timedelta": [],  # No interactive component supported for timedelta
     "category": ["Select", "MultiSelect", "SegmentedControl"],
     "object": ["Select", "MultiSelect", "SegmentedControl"],
 }
+
+# ---------------------------------------------------------------------------
+# Interactive component placement options
+# ---------------------------------------------------------------------------
+
+INTERACTIVE_PLACEMENTS: tuple[str, ...] = ("left", "top")
+
+# Interactive component types that may opt into the top panel.
+TOP_PANEL_INTERACTIVE_TYPES: tuple[str, ...] = ("Timeline",)
+
+# Valid timescales for the Timeline interactive component.
+TIMELINE_TIMESCALES: tuple[str, ...] = ("year", "month", "day", "hour", "minute")
+
+# Maximum number of interactive components that may share the same `group`.
+MAX_INTERACTIVE_GROUP_SIZE: int = 3
 
 # ---------------------------------------------------------------------------
 # Valid map types and styles

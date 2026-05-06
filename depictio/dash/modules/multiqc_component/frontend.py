@@ -1252,7 +1252,8 @@ def register_callbacks_multiqc_component(app):
                 dcc.Graph(figure=fig, style={"flex": "1", "minHeight": "0"}),
                 # MultiQC logo overlay - CSS positioned for consistent size
                 html.Img(
-                    src="/assets/images/logos/multiqc.png",
+                    src="/assets/images/logos/multiqc_icon_dark.svg",
+                    className="multiqc-icon-themed",
                     style={
                         "position": "absolute",
                         "top": "10px",

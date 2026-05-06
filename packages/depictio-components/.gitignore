@@ -1,0 +1,9 @@
+node_modules/
+dist/
+*.log
+.DS_Store
+
+# Build output — js bundle committed so pip install works without npm, but
+# dev builds + sourcemaps are ignored.
+depictio_components/*.dev.js
+depictio_components/*.map

@@ -11,10 +11,15 @@ from typing import Any
 
 from bson import ObjectId
 from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorCollection, AsyncIOMotorDatabase
+from pymongo.errors import OperationFailure
 
 from depictio.api.v1.configs.config import MONGODB_URL, settings
 from depictio.api.v1.configs.logging_init import logger
 from depictio.models.models.realtime import EventMessage, EventSourceType, EventType
+
+# MongoDB error code raised when $changeStream runs against a standalone mongod.
+# Permanent for the topology — retrying will never succeed.
+_CHANGE_STREAM_UNSUPPORTED_CODE = 40573
 
 # Type alias for the change callback
 ChangeCallback = Callable[[EventMessage, list[str]], Awaitable[None]]
@@ -55,6 +60,18 @@ class MongoDBChangeWatcher:
             # Verify connection
             await self._client.admin.command("ping")
             logger.info("MongoDB change watcher connected")
+
+            # Change streams require a replica set or sharded cluster.
+            # Skip standalone mongod up front to avoid an unrecoverable retry loop.
+            # `isMaster` (not `hello`) so this works on mongod < 5.0 too — same
+            # response shape for `setName` / `msg`.
+            hello = await self._client.admin.command("isMaster")
+            if not hello.get("setName") and hello.get("msg") != "isdbgrid":
+                logger.warning(
+                    "MongoDB change streams require a replica set or sharded "
+                    "cluster; standalone mongod detected. Watcher disabled."
+                )
+                return
 
             self._running = True
             self._watch_task = asyncio.create_task(self._watch_data_collections())
@@ -110,6 +127,16 @@ class MongoDBChangeWatcher:
         except asyncio.CancelledError:
             logger.info("MongoDB change stream cancelled")
         except Exception as e:
+            # Reactive guard for standalone mongod, in case start()'s proactive
+            # check missed it (e.g. topology changed under us).
+            if isinstance(e, OperationFailure) and e.code == _CHANGE_STREAM_UNSUPPORTED_CODE:
+                logger.warning(
+                    "MongoDB change streams unsupported on this topology "
+                    "(standalone mongod). Watcher disabled for this process."
+                )
+                self._running = False
+                return
+
             logger.error(f"MongoDB change stream error: {e}")
             # Attempt to reconnect after a delay
             if self._running:

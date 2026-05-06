@@ -940,7 +940,8 @@ def create_unified_data_collections_manager_section(
                 )
             elif dc_type == "multiqc":
                 dc_icon = html.Img(
-                    src="/assets/images/logos/multiqc.png",
+                    src="/assets/images/logos/multiqc_icon_dark.svg",
+                    className="multiqc-icon-themed",
                     style={"width": "20px", "height": "20px"},
                 )
             elif dc_type == "image":
@@ -1328,7 +1329,8 @@ def _get_dc_icon(dc_type: str):
         return DashIconify(icon="mdi:table", width=32, color=colors["teal"])
     elif dc_type.lower() == "multiqc":
         return html.Img(
-            src="/assets/images/logos/multiqc.png",
+            src="/assets/images/logos/multiqc_icon_dark.svg",
+            className="multiqc-icon-themed",
             style={"width": "32px", "height": "32px"},
         )
     else:
@@ -1621,7 +1623,8 @@ def _create_data_preview_card(dc_type: str, dc_id: str) -> dmc.Card:
                 dmc.Group(
                     [
                         html.Img(
-                            src="/assets/images/logos/multiqc.png",
+                            src="/assets/images/logos/multiqc_icon_dark.svg",
+                            className="multiqc-icon-themed",
                             style={"width": "20px", "height": "20px"},
                         ),
                         dmc.Text("MultiQC Report Metadata", fw="bold", size="md"),

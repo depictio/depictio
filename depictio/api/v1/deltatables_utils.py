@@ -126,9 +126,14 @@ def add_filter(
             if not isinstance(value, list):
                 value = [value]
 
-            # Use native type filtering - Polars handles type coercion automatically
-            # Join type mismatches are handled separately by normalize_join_column_types()
-            filter_list.append(pl.col(column_name).is_in(value))
+            # Cast both column and values to Utf8 so the filter is dtype-agnostic.
+            # The unique_values endpoint stringifies values for the React MultiSelect
+            # (and scatter/table selections round-trip through the same code path),
+            # so an int64 column compared against ["1", "2"] would otherwise
+            # silently return zero rows. Only safe for categorical (`is_in`) filters.
+            filter_list.append(
+                pl.col(column_name).cast(pl.Utf8, strict=False).is_in([str(v) for v in value])
+            )
 
     elif interactive_component_type == "TextInput":
         if value:
@@ -144,48 +149,107 @@ def add_filter(
                 (pl.col(column_name) >= value[0]) & (pl.col(column_name) <= value[1])
             )
 
-    elif interactive_component_type == "DateRangePicker":
+    elif interactive_component_type in ("DateRangePicker", "Timeline"):
         logger.info(
-            f"[DEBUG] DateRangePicker filter: column={column_name}, value={value}, type={type(value)}"
+            f"[DEBUG] {interactive_component_type} filter: column={column_name}, value={value}, type={type(value)}"
         )
 
         if value and isinstance(value, list) and len(value) == 2:
-            logger.info("[DEBUG] DateRangePicker validation passed, applying filter")
+            logger.info(f"[DEBUG] {interactive_component_type} validation passed, applying filter")
             try:
-                # Convert date strings to datetime if needed
-                start_date = value[0]
-                end_date = value[1]
+                from datetime import date as _date
+                from datetime import datetime as _dt
 
-                # Handle string dates - convert to datetime
-                if isinstance(start_date, str):
-                    start_date = pl.lit(start_date).str.strptime(pl.Datetime, "%Y-%m-%d")
-                if isinstance(end_date, str):
-                    end_date = pl.lit(end_date).str.strptime(pl.Datetime, "%Y-%m-%d")
+                # Parse the React-supplied ISO strings (or pass through if
+                # already a date/datetime) into Python ``datetime`` objects.
+                # Timeline accepts richer ISO formats (yyyy-mm-ddTHH:MM:SS) so
+                # try a list of formats; DateRangePicker historically used
+                # day-precision strings.
+                def _parse_iso(raw: object) -> object:
+                    if isinstance(raw, (_dt, _date)):
+                        return raw
+                    if not isinstance(raw, str):
+                        return raw
+                    for fmt in (
+                        "%Y-%m-%dT%H:%M:%S.%f",
+                        "%Y-%m-%dT%H:%M:%S",
+                        "%Y-%m-%d %H:%M:%S",
+                        "%Y-%m-%d",
+                    ):
+                        try:
+                            return _dt.strptime(raw, fmt)
+                        except ValueError:
+                            continue
+                    # Fall back to ISO 8601 parser (handles trailing 'Z' etc).
+                    return _dt.fromisoformat(raw.rstrip("Z"))
 
-                # Apply date range filter
-                # Cast column to datetime if it's not already
-                date_col = pl.col(column_name).cast(pl.Datetime)
-                filter_list.append((date_col >= start_date) & (date_col <= end_date))
+                start_dt = _parse_iso(value[0])
+                end_dt = _parse_iso(value[1])
+
+                # Robust column expression: works for Date, Datetime, AND
+                # Utf8 columns. ``cast(pl.Datetime)`` alone fails at
+                # evaluation when the column is stored as a string (which
+                # ampliseq's ``sampling_date`` is). Casting to Utf8 first
+                # then coalesce-parsing across formats covers all three
+                # dtypes plus full ISO timestamps (``2026-05-05T16:10:27Z``,
+                # which the React Timeline emits and earlier code rejected
+                # because it only tried the date-only ``%Y-%m-%d`` format).
+                col_str = pl.col(column_name).cast(pl.Utf8, strict=False)
+                # Strip any inferred timezone so the `pl.lit(start_dt)`
+                # comparison literals (naive Python `datetime`s) match.
+                # Polars treats `datetime[μs, UTC]` and `datetime[μs]` as
+                # incompatible for `>=` even when the wall-clock values are
+                # identical — strings like `2026-05-05T16:10:27Z` parse with
+                # tz, plain `2026-05-05` parses without. Coalescing requires
+                # both branches to share a dtype, so we normalize.
+                parsed_iso = col_str.str.to_datetime(strict=False).dt.replace_time_zone(None)
+                parsed_date = col_str.str.strptime(pl.Datetime, "%Y-%m-%d", strict=False)
+                date_col = pl.coalesce([parsed_iso, parsed_date])
+                # Strip tz from the literals too in case some caller hands
+                # us tz-aware datetimes (DateRangePicker historically sent
+                # date-only strings, but Timeline now emits ISO with `Z`).
+                start_naive = (
+                    start_dt.replace(tzinfo=None) if getattr(start_dt, "tzinfo", None) else start_dt
+                )
+                end_naive = (
+                    end_dt.replace(tzinfo=None) if getattr(end_dt, "tzinfo", None) else end_dt
+                )
+                filter_list.append(
+                    (date_col >= pl.lit(start_naive)) & (date_col <= pl.lit(end_naive))
+                )
 
             except Exception as e:
-                logger.warning(f"Failed to apply date range filter on column '{column_name}': {e}")
+                logger.warning(
+                    f"Failed to apply {interactive_component_type} filter on column '{column_name}': {e}"
+                )
         else:
             logger.warning(
-                f"[DEBUG] DateRangePicker validation FAILED: value={value}, is_list={isinstance(value, list)}, len={len(value) if isinstance(value, list) else 'N/A'}"
+                f"[DEBUG] {interactive_component_type} validation FAILED: value={value}, "
+                f"is_list={isinstance(value, list)}, "
+                f"len={len(value) if isinstance(value, list) else 'N/A'}"
             )
 
 
 def process_metadata_and_filter(metadata: list) -> list:
-    """Process metadata and build a list of Polars filter expressions."""
+    """Process metadata and build a list of Polars filter expressions.
+
+    If a component carries ``filter_expr`` (either at the top level or under
+    ``metadata.filter_expr``), the compiled expression is appended alongside
+    the value-based filter so downstream consumers see the source's row
+    scoping in addition to the user's selection.
+    """
     filter_list = []
 
     for component in metadata:
         if "metadata" in component:
-            interactive_component_type = component["metadata"]["interactive_component_type"]
-            column_name = component["metadata"]["column_name"]
+            meta = component["metadata"]
+            interactive_component_type = meta["interactive_component_type"]
+            column_name = meta["column_name"]
+            filter_expr = meta.get("filter_expr") or component.get("filter_expr")
         else:
             interactive_component_type = component["interactive_component_type"]
             column_name = component["column_name"]
+            filter_expr = component.get("filter_expr")
 
         add_filter(
             filter_list,
@@ -193,6 +257,17 @@ def process_metadata_and_filter(metadata: list) -> list:
             column_name=column_name,
             value=component["value"],
         )
+
+        if filter_expr:
+            try:
+                from depictio.models.components.filter_expr import build_filter_expr
+
+                filter_list.append(build_filter_expr(filter_expr))
+            except Exception as e:
+                logger.warning(
+                    f"Skipping invalid filter_expr {filter_expr!r} on component "
+                    f"column={column_name}: {e}"
+                )
 
     return filter_list
 
@@ -331,6 +406,7 @@ def _generate_cache_keys(
     select_columns: list[str] | None,
     metadata: list[dict] | None,
     load_for_options: bool,
+    version_salt: str | int | None = None,
 ) -> tuple[str, str | None, str | None]:
     """
     Generate cache keys for DataFrame caching.
@@ -338,16 +414,24 @@ def _generate_cache_keys(
     Returns:
         Tuple of (base_cache_key, filtered_cache_key, filter_hash).
         filtered_cache_key and filter_hash are None if no filters apply.
+
+    ``version_salt`` is an optional discriminator embedded in the key — typically
+    the deltatable's latest ``aggregation_version``. Including it means that
+    when realtime ingest bumps the version, every worker's next lookup uses a
+    new key and naturally bypasses any stale per-process memory cache. Without
+    this salt, multi-worker deployments serve stale data after a WS update
+    because cache invalidation only reaches one worker process.
     """
     cache_suffix = "preview" if load_for_preview else "base"
+    salt = f"_v{version_salt}" if version_salt is not None else ""
 
     if select_columns:
         columns_key = "_".join(sorted(select_columns))
         base_cache_key = (
-            f"{workflow_id_str}_{data_collection_id_str}_{cache_suffix}_cols_{columns_key}"
+            f"{workflow_id_str}_{data_collection_id_str}_{cache_suffix}_cols_{columns_key}{salt}"
         )
     else:
-        base_cache_key = f"{workflow_id_str}_{data_collection_id_str}_{cache_suffix}"
+        base_cache_key = f"{workflow_id_str}_{data_collection_id_str}_{cache_suffix}{salt}"
 
     filter_hash = None
     filtered_cache_key = None
@@ -357,6 +441,33 @@ def _generate_cache_keys(
         filtered_cache_key = f"{base_cache_key}_filters_{filter_hash}"
 
     return base_cache_key, filtered_cache_key, filter_hash
+
+
+def _get_aggregation_version(data_collection_id_str: str) -> str | None:
+    """Fetch latest aggregation_version for a DC from MongoDB.
+
+    Used as a cache-key salt so multi-worker API deployments don't serve
+    stale data after a realtime ingest: invalidating one worker's in-process
+    dataframe cache leaves the other workers still pointing at the old key,
+    so we discriminate the keys by version instead.
+
+    Returns ``None`` on lookup failure so callers can fall back to unsalted
+    keys (preserves prior behavior on errors).
+    """
+    try:
+        from depictio.api.v1.db import deltatables_collection as _dt_coll
+
+        dt = _dt_coll.find_one(
+            {"data_collection_id": ObjectId(data_collection_id_str)},
+            {"aggregation": 1},
+        )
+        agg_list = (dt or {}).get("aggregation") or []
+        if not agg_list:
+            return None
+        return str(agg_list[-1].get("aggregation_version") or "")
+    except Exception as e:
+        logger.debug(f"_get_aggregation_version({data_collection_id_str}) failed: {e}")
+        return None
 
 
 def _get_dc_type_from_db(data_collection_id: ObjectId) -> str | None:
@@ -933,6 +1044,14 @@ def load_deltatable_lite(
     # CACHING ENABLED PATH
     _log_cache_status()
 
+    # Salt the cache keys with the latest aggregation_version so realtime
+    # ingest naturally invalidates this worker's per-process memory cache —
+    # `invalidate_data_collection_cache` from the WS handler only reaches the
+    # one worker that received the event, so without a per-version key the
+    # other 3 default workers keep serving the stale dataframe. The version
+    # bumps on every CLI rewrite, so the new fetch lands on a new key.
+    version_salt = _get_aggregation_version(data_collection_id_str)
+
     # Generate cache keys
     base_cache_key, filtered_cache_key, filter_hash = _generate_cache_keys(
         workflow_id_str,
@@ -941,6 +1060,7 @@ def load_deltatable_lite(
         select_columns,
         metadata,
         load_for_options,
+        version_salt=version_salt,
     )
 
     # Check Redis cache
@@ -1270,6 +1390,37 @@ def clear_memory_cache():
     _dataframe_memory_cache.clear()
     _cache_metadata.clear()
     _total_memory_usage = 0
+
+
+def invalidate_data_collection_cache(data_collection_id: str) -> int:
+    """Drop every cached DataFrame whose key references the given DC.
+
+    Cache keys are formed as ``{wf_id}_{dc_id}_{...}`` (see _generate_cache_keys),
+    so a substring match on the DC id captures the base entry and every filter
+    variant. Clears BOTH the in-process memory cache AND the Redis-backed
+    cache in ``depictio.api.cache`` — without the Redis pass, ``render_*``
+    endpoints continue to read the stale DataFrame after the CLI rewrites the
+    delta. Called from the realtime event path so that a re-fetch after a
+    ``data_collection_updated`` event sees the newly written delta rows.
+    """
+    global _total_memory_usage
+
+    affected = [k for k in list(_dataframe_memory_cache.keys()) if data_collection_id in k]
+    for key in affected:
+        meta = _cache_metadata.pop(key, None)
+        if meta is not None:
+            _total_memory_usage = max(0, _total_memory_usage - int(meta.get("size_bytes", 0)))
+        _dataframe_memory_cache.pop(key, None)
+
+    redis_dropped = 0
+    try:
+        from depictio.api.cache import invalidate_dataframe_cache_pattern
+
+        redis_dropped = invalidate_dataframe_cache_pattern(data_collection_id)
+    except Exception as e:
+        logger.warning(f"Redis cache invalidation failed for dc_id={data_collection_id}: {e}")
+
+    return len(affected) + redis_dropped
 
 
 def join_deltatables_dev(

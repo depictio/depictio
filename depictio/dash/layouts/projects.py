@@ -683,7 +683,9 @@ def render_data_collection(dc: DataCollection, workflow_id: str, token: str) -> 
     if dc.config.type.lower() == "table":
         icon = "mdi:table"
     elif dc.config.type.lower() == "multiqc":
-        icon = "/assets/images/logos/multiqc.png"  # Use MultiQC logo
+        # Theme-aware: CSS swaps the dark icon to white in dark mode
+        # (see depictio/dash/assets/css/components/multiqc-icon.css).
+        icon = "/assets/images/logos/multiqc_icon_dark.svg"
     else:
         icon = "mdi:file-document"
     dc_config = yaml.dump(dc.config.model_dump(), default_flow_style=False)
@@ -736,7 +738,13 @@ def render_data_collection(dc: DataCollection, workflow_id: str, token: str) -> 
                                     ]
                                 ),
                                 icon=(
-                                    html.Img(src=icon, style={"width": "20px", "height": "20px"})
+                                    html.Img(
+                                        src=icon,
+                                        className="multiqc-icon-themed"
+                                        if icon.startswith("/assets/images/logos/multiqc")
+                                        else None,
+                                        style={"width": "20px", "height": "20px"},
+                                    )
                                     if icon.startswith("/assets/")
                                     else DashIconify(icon=icon, width=20)
                                 ),

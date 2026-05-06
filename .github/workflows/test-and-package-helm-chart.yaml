@@ -58,7 +58,12 @@ jobs:
           minikube-version: "1.35.0"
           kubernetes-version: "v1.32.0"
           driver: docker
-          start-args: "--memory=4096 --cpus=2"
+          # Bumped from 4G/2 CPU — the prior budget left no headroom for the
+          # backend (Playwright/Chromium for screenshots) plus celery worker
+          # plus mongo/redis/minio, and the docker-driver apiserver intermittently
+          # times out under load (kubectl exec / get pods → TLS handshake timeout).
+          # GitHub-hosted ubuntu-latest has 4 vCPU / 16 GiB RAM, so 6G/4 CPU is safe.
+          start-args: "--memory=6144 --cpus=4"
 
       - name: Log in to Container Registry
         uses: docker/login-action@v3

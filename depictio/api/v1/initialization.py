@@ -11,10 +11,7 @@ from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.configs.settings_models import S3DepictioCLIConfig
 from depictio.api.v1.db_init import initialize_db
-from depictio.api.v1.endpoints.user_endpoints.core_functions import (
-    _create_anonymous_user,
-    _create_permanent_token,
-)
+from depictio.api.v1.endpoints.user_endpoints.core_functions import _create_anonymous_user
 from depictio.api.v1.endpoints.utils_endpoints.core_functions import create_bucket
 from depictio.models.s3_utils import S3_storage_checks
 
@@ -67,13 +64,15 @@ async def run_initialization(
 
     initialization_collection.insert_one(init_data)
 
-    # Create anonymous user for single-user mode, public mode, or unauthenticated mode
+    # Anonymous user record exists only as the `get_user_or_anonymous` fallback
+    # identity for unauthed requests in single-user / public mode. No token is
+    # provisioned for it — single-user mints a fresh short-lived token for the
+    # admin on /auth, and public/demo mints a temporary user.
     if settings.auth.requires_anonymous_user:
         anon = await _create_anonymous_user()
         if anon:
-            await _create_permanent_token(anon)
             logger.info(
-                f"Anonymous user setup complete (single_user={settings.auth.is_single_user_mode}, "
+                f"Anonymous user record ready (single_user={settings.auth.is_single_user_mode}, "
                 f"public={settings.auth.is_public_mode}, admin={anon.is_admin})"
             )
 

@@ -1,10 +1,13 @@
+import asyncio
+
 from bson import ObjectId
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.db import db, projects_collection
 from depictio.api.v1.endpoints.datacollections_endpoints.utils import (
+    _create_dc_from_upload,
     _delete_data_collection_by_id,
     _get_data_collection_specs,
     _update_data_collection_name,
@@ -175,3 +178,43 @@ async def delete_data_collection_by_id(
 ):
     """Delete a data collection by its ID."""
     return await _delete_data_collection_by_id(data_collection_id, current_user)
+
+
+@datacollections_endpoint_router.post("/create_from_upload")
+async def create_data_collection_from_upload(
+    project_id: str = Form(...),
+    name: str = Form(...),
+    data_type: str = Form("table"),
+    file_format: str = Form("csv"),
+    separator: str = Form(","),
+    custom_separator: str | None = Form(None),
+    compression: str = Form("none"),
+    has_header: bool = Form(True),
+    description: str = Form(""),
+    file: UploadFile = File(...),
+    current_user=Depends(get_user_or_anonymous),
+):
+    """Create a data collection from an uploaded file (basic projects).
+
+    Wraps the same scan + process pipeline used by depictio-cli, exposing
+    it directly to the React UI so we don't need to round-trip through
+    Dash anymore. Tolerates missing tokens (single-user / public mode); the
+    project-permission check inside ``_create_dc_from_upload`` still gates
+    write access.
+    """
+    file_bytes = await file.read()
+    return await asyncio.to_thread(
+        _create_dc_from_upload,
+        project_id=project_id,
+        name=name,
+        description=description,
+        data_type=data_type,
+        file_format=file_format,
+        separator=separator,
+        custom_separator=custom_separator,
+        compression=compression,
+        has_header=has_header,
+        file_bytes=file_bytes,
+        filename=file.filename or "upload.dat",
+        current_user=current_user,
+    )

@@ -991,7 +991,7 @@ class TestCreateTemporaryUserSession:
         assert session_data["user_id"] == str(temp_user.id)
         assert session_data["is_temporary"] is True
         assert session_data["access_token"] is not None
-        assert session_data["token_lifetime"] == "long-lived"
+        assert session_data["token_lifetime"] == "short-lived"
         assert session_data["token_type"] == "bearer"
 
     @pytest.mark.asyncio
@@ -1148,125 +1148,23 @@ class TestCleanupExpiredTemporaryUsers:
 class TestGetAnonymousUserSession:
     @pytest.mark.asyncio
     @beanie_setup(models=[UserBeanie, TokenBeanie])
-    async def test_get_anonymous_user_session_success(self):
-        """Test successful retrieval of anonymous user session."""
-        # Arrange - Create anonymous user and permanent token
-        anonymous_email = "anon@depictio.io"
-
-        anon_user = UserBeanie(
-            email=anonymous_email,
-            password=_hash_password("hashed_empty_password"),
-            is_anonymous=True,
-            is_admin=False,
-        )
-        await anon_user.create()
-
-        # Create permanent token
-        assert anon_user.id is not None, "Anonymous user ID should be set after creation"
-        user_id_pydantic = (
-            anon_user.id
-            if isinstance(anon_user.id, PydanticObjectId)
-            else PydanticObjectId(str(anon_user.id))
-        )
-        permanent_token = TokenBeanie(
-            user_id=user_id_pydantic,
-            access_token="permanent_access_token",
-            refresh_token="permanent_refresh_token",
-            expire_datetime=datetime.max,
-            refresh_expire_datetime=datetime.max,
-            name="anonymous_permanent_token",
-            token_lifetime="permanent",
-            logged_in=True,
-            token_type="bearer",
-        )
-        await permanent_token.save()
-
-        # Mock settings to return our test email (public/demo mode, not single-user)
+    async def test_get_anonymous_user_session_rejects_public_mode(self):
+        """Public/demo mode mints a temporary user, so anonymous-session is disabled."""
         with patch(
             "depictio.api.v1.endpoints.user_endpoints.core_functions.settings"
         ) as mock_settings:
-            mock_settings.auth.anonymous_user_email = anonymous_email
             mock_settings.auth.is_single_user_mode = False
 
-            # Act
-            session_data = await _get_anonymous_user_session()
-
-        # Assert session data structure
-        assert isinstance(session_data, dict)
-        assert session_data["logged_in"] is True
-        assert session_data["email"] == anonymous_email
-        assert session_data["is_anonymous"] is True
-        assert session_data["access_token"] == "permanent_access_token"
-        assert session_data["token_lifetime"] == "permanent"
-
-    @pytest.mark.asyncio
-    @beanie_setup(models=[UserBeanie, TokenBeanie])
-    async def test_get_anonymous_user_session_user_not_found(self):
-        """Test error when anonymous user doesn't exist (public mode)."""
-        # Mock settings with non-existent user email
-        with patch(
-            "depictio.api.v1.endpoints.user_endpoints.core_functions.settings"
-        ) as mock_settings:
-            mock_settings.auth.anonymous_user_email = "nonexistent@example.com"
-            mock_settings.auth.is_single_user_mode = False
-
-            # Act & Assert
             with pytest.raises(HTTPException) as exc_info:
                 await _get_anonymous_user_session()
 
-            assert exc_info.value.status_code == 404  # type: ignore[unresolved-attribute]
-            assert "Anonymous user not found" in str(exc_info.value.detail)  # type: ignore[unresolved-attribute]
-
-    @pytest.mark.asyncio
-    @beanie_setup(models=[UserBeanie, TokenBeanie])
-    async def test_get_anonymous_user_session_no_permanent_token(self):
-        """Test error when anonymous user has no permanent token (public mode)."""
-        # Arrange - Create anonymous user without permanent token
-        anonymous_email = "anon@depictio.io"
-
-        anon_user = UserBeanie(
-            email=anonymous_email,
-            password=_hash_password("hashed_empty_password"),
-            is_anonymous=True,
-            is_admin=False,
-        )
-        await anon_user.create()
-
-        # Create only short-lived token (not permanent)
-        assert anon_user.id is not None, "Anonymous user ID should be set after creation"
-        user_id_pydantic = (
-            anon_user.id
-            if isinstance(anon_user.id, PydanticObjectId)
-            else PydanticObjectId(str(anon_user.id))
-        )
-        short_token = TokenBeanie(
-            user_id=user_id_pydantic,
-            access_token="short_lived_token",
-            refresh_token="short_lived_refresh_token",
-            expire_datetime=datetime.now() + timedelta(hours=1),
-            refresh_expire_datetime=datetime.now() + timedelta(days=1),
-            name="short_lived_token",
-            token_lifetime="short-lived",
-        )
-        await short_token.save()
-
-        with patch(
-            "depictio.api.v1.endpoints.user_endpoints.core_functions.settings"
-        ) as mock_settings:
-            mock_settings.auth.anonymous_user_email = anonymous_email
-            mock_settings.auth.is_single_user_mode = False
-
-            # Act & Assert
-            with pytest.raises(HTTPException) as exc_info:
-                await _get_anonymous_user_session()
-
-            assert exc_info.value.status_code == 404  # type: ignore[unresolved-attribute]
-            assert "No permanent token found" in str(exc_info.value.detail)  # type: ignore[unresolved-attribute]
+            assert exc_info.value.status_code == 400  # type: ignore[unresolved-attribute]
+            assert "single-user mode" in str(exc_info.value.detail)  # type: ignore[unresolved-attribute]
 
     @pytest.mark.asyncio
     @beanie_setup(models=[UserBeanie, TokenBeanie])
     async def test_get_anonymous_user_session_single_user_mode_success(self):
-        """Test single-user mode returns real admin user session with is_anonymous=False."""
+        """Single-user mode mints a fresh short-lived + refresh token for the admin."""
         admin_user = UserBeanie(
             email="admin@example.com",
             password=_hash_password("admin_password"),
@@ -1274,25 +1172,6 @@ class TestGetAnonymousUserSession:
             is_anonymous=False,
         )
         await admin_user.create()
-
-        assert admin_user.id is not None
-        user_id_pydantic = (
-            admin_user.id
-            if isinstance(admin_user.id, PydanticObjectId)
-            else PydanticObjectId(str(admin_user.id))
-        )
-        permanent_token = TokenBeanie(
-            user_id=user_id_pydantic,
-            access_token="admin_permanent_token",
-            refresh_token="",
-            expire_datetime=datetime.max,
-            refresh_expire_datetime=datetime.max,
-            name="anonymous_permanent_token",
-            token_lifetime="permanent",
-            logged_in=True,
-            token_type="bearer",
-        )
-        await permanent_token.save()
 
         with patch(
             "depictio.api.v1.endpoints.user_endpoints.core_functions.settings"
@@ -1304,39 +1183,11 @@ class TestGetAnonymousUserSession:
         assert session_data["logged_in"] is True
         assert session_data["email"] == "admin@example.com"
         assert session_data["is_anonymous"] is False
-        assert session_data["access_token"] == "admin_permanent_token"
-        assert session_data["token_lifetime"] == "permanent"
+        assert session_data["token_lifetime"] == "short-lived"
+        assert session_data["access_token"]
+        assert session_data["refresh_token"]
 
-    # NOTE: Test removed - behavior changed from raising 404 to auto-creating admin user
-    # The self-healing behavior (auto-creating admin from initial_users.yaml) is tested
-    # by E2E tests in depictio/tests/e2e-tests/cypress/e2e/auth/single-user/
-    # Unit testing this would require complex mocking of MongoDB connections and file I/O
-
-    @pytest.mark.asyncio
-    @beanie_setup(models=[UserBeanie, TokenBeanie])
-    async def test_get_anonymous_user_session_single_user_mode_creates_permanent_token(self):
-        """Test single-user mode creates a permanent token when admin has none."""
-        admin_user = UserBeanie(
-            email="admin@example.com",
-            password=_hash_password("admin_password"),
-            is_admin=True,
-            is_anonymous=False,
-        )
-        await admin_user.create()
-
-        # No permanent token exists for admin
-        with patch(
-            "depictio.api.v1.endpoints.user_endpoints.core_functions.settings"
-        ) as mock_settings:
-            mock_settings.auth.is_single_user_mode = True
-
-            session_data = await _get_anonymous_user_session()
-
-        assert session_data["logged_in"] is True
-        assert session_data["email"] == "admin@example.com"
-        assert session_data["is_anonymous"] is False
-        assert session_data["token_lifetime"] == "permanent"
-        # Verify permanent token was persisted in DB
+        # Verify the token landed in the DB
         assert admin_user.id is not None
         user_id_pydantic = (
             admin_user.id
@@ -1344,6 +1195,6 @@ class TestGetAnonymousUserSession:
             else PydanticObjectId(str(admin_user.id))
         )
         saved_token = await TokenBeanie.find_one(
-            {"user_id": user_id_pydantic, "token_lifetime": "permanent"}
+            {"user_id": user_id_pydantic, "token_lifetime": "short-lived"}
         )
         assert saved_token is not None

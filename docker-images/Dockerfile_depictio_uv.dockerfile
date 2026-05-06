@@ -36,6 +36,7 @@ RUN apt-get update && apt-get install --no-install-recommends -y \
     xauth \
     curl \
     netcat-openbsd \
+    ca-certificates \
     # Playwright chromium dependencies (common ones)
     libnss3 \
     libnspr4 \
@@ -122,3 +123,27 @@ EXPOSE 5080 8058
 # Default Command
 # -----------------------------
 CMD ["/bin/bash"]
+
+# -----------------------------
+# Dev-Viewer Stage (Node.js + corepack)
+# -----------------------------
+# Only the docker-compose `depictio-viewer-dev` service needs Node to run
+# Vite/HMR (`pnpm dev`). Keeping it out of `base` keeps the prod backend/
+# frontend image ~150MB lighter, which matters on minikube CI where the
+# extra layer load was stressing the apiserver enough to break
+# `kubectl exec` connectivity tests. Build with `--target dev-viewer`.
+FROM base AS dev-viewer
+USER root
+RUN apt-get update && apt-get install --no-install-recommends -y \
+        gnupg \
+    && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && apt-get install --no-install-recommends -y nodejs \
+    && corepack enable \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+USER depictio
+
+# Default target = lean prod (alias of `base`). Without this, the last
+# stage in the file (`dev-viewer`) would be the implicit default and CI
+# builds with no `target:` would pick up Node.js again.
+FROM base AS final

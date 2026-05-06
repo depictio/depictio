@@ -113,13 +113,22 @@ def analyze_multiqc_plot_structure(fig: go.Figure) -> dict:
     return {"original_data": original_data, "summary": summary}
 
 
-def add_multiqc_logo_overlay(fig, logo_size_px=45):
-    """Add MultiQC logo overlay to any plotly figure using Dash assets"""
+def add_multiqc_logo_overlay(fig, logo_size_px=45, theme: str = "light"):
+    """Add MultiQC logo overlay to any plotly figure using Dash assets.
+
+    ``theme`` selects the dark icon (default — black on light backgrounds)
+    or the white icon for dark backgrounds. Mirrors the new official MultiQC
+    icon set: https://github.com/MultiQC/logo
+    """
 
     try:
         # Use Dash assets URL - this will work in web deployment
         # Dash automatically serves files from assets/ directory
-        logo_url = "/assets/images/logos/multiqc.png"
+        logo_url = (
+            "/assets/images/logos/multiqc_icon_white.svg"
+            if str(theme).lower() == "dark"
+            else "/assets/images/logos/multiqc_icon_dark.svg"
+        )
 
         # Get figure dimensions
         width = fig.layout.width or 700
@@ -190,6 +199,17 @@ def build_multiqc(**kwargs: Any):
     dc_id_str = resolve_bson_id(kwargs.get("data_collection_id") or kwargs.get("dc_id"))
     project_id_str = resolve_bson_id(kwargs.get("project_id"))
 
+    # Replace the full samples list with just its count — the list can grow to tens of
+    # thousands of entries and is not read during view-mode rendering. Design-mode callbacks
+    # detect the missing list and re-fetch via get_multiqc_reports_for_data_collection.
+    raw_metadata = kwargs.get("metadata", {}) or {}
+    if isinstance(raw_metadata, dict) and isinstance(raw_metadata.get("samples"), list):
+        samples_list = raw_metadata["samples"]
+        raw_metadata = {
+            **{k: v for k, v in raw_metadata.items() if k != "samples"},
+            "sample_count": len(samples_list),
+        }
+
     # Create comprehensive metadata for the component including interactive filtering support
     component_metadata = {
         "index": str(data_index),
@@ -203,8 +223,8 @@ def build_multiqc(**kwargs: Any):
         "selected_plot": selected_plot,
         "selected_dataset": selected_dataset,
         "s3_locations": s3_locations,
-        # Additional metadata needed for interactive filtering
-        "metadata": kwargs.get("metadata", {}),  # MultiQC metadata (modules, plots, samples)
+        # MultiQC metadata (modules, plots, sample_count — samples list stripped above)
+        "metadata": raw_metadata,
         "interactive_patching_enabled": True,  # Flag to enable interactive patching
     }
 
@@ -337,7 +357,8 @@ def build_multiqc(**kwargs: Any):
             wrapper_children.insert(
                 1,
                 html.Img(
-                    src="/assets/images/logos/multiqc.png",
+                    src="/assets/images/logos/multiqc_icon_dark.svg",
+                    className="multiqc-icon-themed",
                     style={
                         "position": "absolute",
                         "top": "10px",

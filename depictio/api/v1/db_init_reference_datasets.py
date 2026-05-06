@@ -271,14 +271,26 @@ class ReferenceDatasetRegistry:
                 and lnk.get("target_dc_tag") not in skipped_dc_tags
             ]
 
-        # 5. Convert recipe DCs → file-scan DCs
+        # 5. Convert recipe DCs → file-scan DCs (skipping any whose seed file is missing)
+        missing_seed_dc_tags: set[str] = set()
         for workflow in config.get("workflows", []):
+            surviving = []
             for dc in workflow.get("data_collections", []):
                 dc_config = dc.get("config", {})
                 if dc_config.get("source") == "transformed" and "transform" in dc_config:
                     dc_tag = dc["data_collection_tag"]
                     # Convention: pre-computed files are named {dc_tag}.tsv
                     pre_computed_path = os.path.join(data_root, f"{dc_tag}.tsv")
+                    if not os.path.exists(pre_computed_path):
+                        # Drop the DC rather than letting the workflow scan abort on a
+                        # missing recipe seed (one missing file otherwise sinks every
+                        # other DC in the workflow — see scan_files_for_data_collection).
+                        missing_seed_dc_tags.add(dc_tag)
+                        logger.warning(
+                            f"Init resolver: skipping recipe DC '{dc_tag}' — "
+                            f"pre-computed seed not found at {pre_computed_path}"
+                        )
+                        continue
                     dc_config.pop("source", None)
                     dc_config.pop("transform", None)
                     dc_config["scan"] = {
@@ -288,6 +300,16 @@ class ReferenceDatasetRegistry:
                     logger.debug(
                         f"Init resolver: converted recipe DC '{dc_tag}' → file scan: {pre_computed_path}"
                     )
+                surviving.append(dc)
+            workflow["data_collections"] = surviving
+
+        if missing_seed_dc_tags:
+            config["links"] = [
+                lnk
+                for lnk in config.get("links", [])
+                if lnk.get("source_dc_tag") not in missing_seed_dc_tags
+                and lnk.get("target_dc_tag") not in missing_seed_dc_tags
+            ]
 
         return config
 

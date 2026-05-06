@@ -74,6 +74,21 @@ services:
         # Use mounted volume for S3 cache persistence across container restarts
         DEPICTIO_S3_CACHE_DIR: "/app/cache/s3_files"
         DEPICTIO_DELTA_CACHE_DIR: "/app/cache/delta_cache"
+        # Browser-facing URLs the Dash app needs to know about. Without these,
+        # settings.fastapi.external_url falls back to the default port and
+        # cross-port links (e.g. the sidebar's beta switcher pointing at the
+        # FastAPI-served React SPA) point at the wrong host:port.
+        DEPICTIO_FASTAPI_EXTERNAL_PORT: "${DEPICTIO_FASTAPI_EXTERNAL_PORT:-8058}"
+        DEPICTIO_FASTAPI_EXTERNAL_HOST: "${DEPICTIO_FASTAPI_EXTERNAL_HOST:-localhost}"
+        DEPICTIO_DASH_EXTERNAL_PORT: "${DEPICTIO_DASH_EXTERNAL_PORT:-5080}"
+        DEPICTIO_DASH_EXTERNAL_HOST: "${DEPICTIO_DASH_EXTERNAL_HOST:-localhost}"
+        # Realtime event system — opt-in. Set DEPICTIO_EVENTS_ENABLED=true in
+        # your shell or docker-compose/.env to turn on the WebSocket / SSE
+        # endpoints and the MongoDB change-stream watcher. Dev compose's mongo
+        # is standalone, so the change-stream watcher will fail-fast with a
+        # warning even when enabled — but WebSocket and direct event publishing
+        # still work.
+        DEPICTIO_EVENTS_ENABLED: "${DEPICTIO_EVENTS_ENABLED:-false}"
     command: ["/app/run_dash.sh"]
     user: "${UID:-1000}:${GID:-1000}"
     depends_on:
@@ -113,12 +128,76 @@ services:
         DEPICTIO_DASH_EXTERNAL_HOST: "${DEPICTIO_DASH_EXTERNAL_HOST:-localhost}"
         DEPICTIO_MINIO_EXTERNAL_PORT: "${DEPICTIO_MINIO_EXTERNAL_PORT:-9000}"
         DEPICTIO_MINIO_EXTERNAL_HOST: "${DEPICTIO_MINIO_EXTERNAL_HOST:-localhost}"
+        # Realtime event system — opt-in. See the depictio-frontend env block
+        # above for the full note. Backend hosts the MongoDB watcher and the
+        # WebSocket / SSE endpoints — both gated on this flag.
+        DEPICTIO_EVENTS_ENABLED: "${DEPICTIO_EVENTS_ENABLED:-false}"
     command: ["/app/run_fastapi.sh"]
     user: "${UID:-1000}:${GID:-1000}"
     depends_on:
       - mongo
       - redis
       - minio
+
+  # ─────────────────────────────────────────────────────────────────────
+  # Vite dev server for the React viewer SPA. Runs `pnpm dev` with HMR so
+  # frontend edits land in <1s instead of the ~28s `pnpm build` cycle the
+  # production path requires (FastAPI serves the prebuilt `dist/`).
+  #
+  # Builds the `dev-viewer` Dockerfile target — same as the backend image
+  # plus Node.js + corepack on top — and tags it separately so the leaner
+  # prod image used by backend/frontend/celery stays unaffected. Anonymous
+  # node_modules volumes prevent the host's macOS-built modules from
+  # leaking into the linux container.
+  #
+  # Browser entry: http://localhost:${VIEWER_DEV_PORT:-5173}/dashboard-beta/<id>
+  # ─────────────────────────────────────────────────────────────────────
+  depictio-viewer-dev:
+    container_name: depictio-viewer-dev
+    profiles: ["dev"]
+    image: ${DEPICTIO_VERSION:-depictio:dev-viewer}
+    build:
+      dockerfile: docker-images/Dockerfile_depictio_uv.dockerfile
+      context: .
+      target: dev-viewer
+    ports:
+      - ${VIEWER_DEV_PORT:-5173}:5173
+    volumes:
+      - ./depictio:/app/depictio
+      - ./packages:/app/packages
+      - ./pnpm-workspace.yaml:/app/pnpm-workspace.yaml
+      - ./pnpm-lock.yaml:/app/pnpm-lock.yaml
+      # NOTE: this repo has no root `package.json` (pnpm workspace works
+      # without one — each workspace package has its own). Mounting a non-
+      # existent host file would make Docker silently create an empty host
+      # directory, which then breaks `pnpm` everywhere.
+      # Anonymous volumes shadow the bind mount's node_modules so Linux
+      # binaries (esbuild, sass, etc.) don't get clobbered by macOS builds
+      # the host's `pnpm install` produced.
+      - viewer_node_modules:/app/depictio/viewer/node_modules
+      - core_node_modules:/app/packages/depictio-react-core/node_modules
+      - components_node_modules:/app/packages/depictio-components/node_modules
+      - root_node_modules:/app/node_modules
+    environment:
+      # Vite proxy target — backend's internal port inside the docker
+      # network. The production-only `0.0.0.0:8122` default in vite.config
+      # is overridden by this when set.
+      VITE_API_TARGET: "http://depictio-backend:8058"
+      # HMR client port — what the BROWSER uses to connect back. When the
+      # user hits :5173 directly this is the same; if proxied through
+      # FastAPI later, override this to the FastAPI port.
+      VITE_HMR_CLIENT_PORT: "${VIEWER_DEV_PORT:-5173}"
+    working_dir: /app
+    command:
+      - sh
+      - -c
+      - |
+        corepack prepare pnpm@latest --activate &&
+        pnpm install --frozen-lockfile &&
+        pnpm --filter depictio-viewer dev --host 0.0.0.0 --port 5173
+    user: "${UID:-1000}:${GID:-1000}"
+    depends_on:
+      - depictio-backend
 
   depictio-celery-worker:
     container_name: depictio-celery-worker
@@ -141,6 +220,9 @@ services:
         DEPICTIO_LOGGING_VERBOSITY_LEVEL: "${DEPICTIO_LOGGING_VERBOSITY_LEVEL:-DEBUG}"
         DEPICTIO_AUTH_SINGLE_USER_MODE: "${DEPICTIO_AUTH_SINGLE_USER_MODE:-false}"
         DEPICTIO_CONTEXT: "server"
+        # Match the backend / dash flag — keeps event publishers consistent
+        # whether the work runs on the API process or the celery worker.
+        DEPICTIO_EVENTS_ENABLED: "${DEPICTIO_EVENTS_ENABLED:-false}"
     command: ["/app/run_celery_worker.sh"]
     user: "${UID:-1000}:${GID:-1000}"
     depends_on:
@@ -148,3 +230,34 @@ services:
       - redis
       - depictio-backend
       - minio
+
+  # Optional Celery monitoring UI. Enable with `docker compose --profile monitoring up`.
+  # Bound to 127.0.0.1 only — do not expose without auth.
+  flower:
+    image: mher/flower:2.0
+    container_name: depictio-flower
+    profiles: ["monitoring"]
+    command:
+      - celery
+      - --broker=redis://redis:6379/1
+      - flower
+      - --port=5555
+      - --persistent=True
+      - --db=/data/flower.db
+    ports:
+      - "127.0.0.1:${FLOWER_PORT:-5555}:5555"
+    volumes:
+      - ./${DATA_DIR:-data}/flower:/data
+    depends_on:
+      - redis
+      - depictio-celery-worker
+
+# Named volumes for the viewer dev container's node_modules paths.
+# Anonymous volumes work for the bind-mount shadow trick but named volumes
+# survive `docker compose down` (without `-v`), so the slow first-start
+# `pnpm install` doesn't replay every time the stack is recreated.
+volumes:
+  viewer_node_modules:
+  core_node_modules:
+  components_node_modules:
+  root_node_modules:

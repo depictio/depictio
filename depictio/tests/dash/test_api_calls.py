@@ -1,4 +1,3 @@
-from datetime import datetime, timedelta
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -7,7 +6,6 @@ from depictio.dash.api_calls import (
     api_call_cleanup_expired_temporary_users,
     api_call_create_temporary_user,
     api_call_get_anonymous_user_session,
-    api_call_upgrade_to_temporary_user,
 )
 
 # Mark all tests in this module to skip database setup
@@ -288,119 +286,3 @@ class TestApiCallCleanupExpiredTemporaryUsers:
         # Assert
         assert result is None
         self.mock_httpx_post.assert_called_once()
-
-
-# ------------------------------------------------------
-# Test api_call_upgrade_to_temporary_user function
-# ------------------------------------------------------
-
-
-class TestApiCallUpgradeToTemporaryUser:
-    def setup_method(self):
-        """Set up test fixtures."""
-        # Mock httpx.post
-        self.httpx_post_patcher = patch("depictio.dash.api_calls.httpx.post")
-        self.mock_httpx_post = self.httpx_post_patcher.start()
-
-        # Mock API_BASE_URL
-        self.api_base_url_patcher = patch("depictio.dash.api_calls.API_BASE_URL", "http://test-api")
-        self.api_base_url_patcher.start()
-
-    def teardown_method(self):
-        """Clean up test fixtures."""
-        self.httpx_post_patcher.stop()
-        self.api_base_url_patcher.stop()
-
-    def test_upgrade_to_temporary_user_success(self):
-        """Test successful upgrade from anonymous to temporary user."""
-        # Arrange
-        mock_response = MagicMock()
-        mock_response.status_code = 200
-        mock_response.json.return_value = {
-            "logged_in": True,
-            "email": "temp_user_upgraded@depictio.temp",
-            "is_temporary": True,
-            "access_token": "new_temp_token",
-            "expiration_time": "2024-01-02T12:00:00",
-        }
-        self.mock_httpx_post.return_value = mock_response
-
-        # Act
-        result = api_call_upgrade_to_temporary_user("anon_token", expiry_hours=72)
-
-        # Assert
-        assert result is not None
-        assert result["is_temporary"] is True
-        assert "temp_user_" in result["email"]
-
-        # Verify HTTP call was made correctly
-        self.mock_httpx_post.assert_called_once_with(
-            "http://test-api/depictio/api/v1/auth/upgrade_to_temporary_user",
-            params={"expiry_hours": 72},
-            headers={"Authorization": "Bearer anon_token"},
-            timeout=30.0,
-        )
-
-    def test_upgrade_to_temporary_user_already_temporary(self):
-        """Test upgrade when user is already temporary (400 status)."""
-        # Arrange
-        mock_response = MagicMock()
-        mock_response.status_code = 400
-        self.mock_httpx_post.return_value = mock_response
-
-        # Act
-        result = api_call_upgrade_to_temporary_user("temp_token")
-
-        # Assert
-        assert result is None
-        self.mock_httpx_post.assert_called_once()
-
-        # Verify default expiry_hours parameter
-        called_args = self.mock_httpx_post.call_args
-        assert called_args[1]["params"]["expiry_hours"] == 24
-
-    def test_upgrade_to_temporary_user_api_error(self):
-        """Test handling of API errors during upgrade."""
-        # Arrange
-        mock_response = MagicMock()
-        mock_response.status_code = 500
-        mock_response.text = "Upgrade failed"
-        self.mock_httpx_post.return_value = mock_response
-
-        # Act
-        result = api_call_upgrade_to_temporary_user("valid_token")
-
-        # Assert
-        assert result is None
-        self.mock_httpx_post.assert_called_once()
-
-    def test_upgrade_to_temporary_user_one_minute_expiry(self):
-        """Test upgrade with one minute expiry."""
-        # Arrange
-        mock_response = MagicMock()
-        mock_response.status_code = 200
-        mock_response.json.return_value = {
-            "logged_in": True,
-            "email": "temp_user_upgraded@depictio.temp",
-            "is_temporary": True,
-            "access_token": "new_temp_token",
-            "expiration_time": datetime.now() + timedelta(minutes=1),
-        }
-        self.mock_httpx_post.return_value = mock_response
-
-        # Act
-        result = api_call_upgrade_to_temporary_user("anon_token", expiry_hours=0)
-        # Assert
-        assert result is not None
-        assert result["is_temporary"] is True
-        assert "temp_user_" in result["email"]
-        assert result["expiration_time"] > datetime.now() and result[
-            "expiration_time"
-        ] < datetime.now() + timedelta(minutes=2)
-        # Verify HTTP call was made correctly
-        self.mock_httpx_post.assert_called_once_with(
-            "http://test-api/depictio/api/v1/auth/upgrade_to_temporary_user",
-            params={"expiry_hours": 0},
-            headers={"Authorization": "Bearer anon_token"},
-            timeout=30.0,
-        )

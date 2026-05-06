@@ -3,9 +3,9 @@ from typing import Annotated, Any
 
 from beanie import PydanticObjectId
 from bson import ObjectId
-from fastapi import APIRouter, Depends, Header, HTTPException, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
-from pydantic import EmailStr
+from pydantic import BaseModel, EmailStr
 
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
@@ -19,7 +19,6 @@ from depictio.api.v1.endpoints.user_endpoints.core_functions import (
     _check_if_token_is_valid,
     _check_password,
     _cleanup_expired_temporary_users,
-    _create_permanent_token,
     _create_temporary_user,
     _create_temporary_user_session,
     _create_user_in_db,
@@ -54,8 +53,17 @@ from depictio.models.utils import convert_model_to_dict
 auth_endpoint_router = APIRouter()
 
 
-# OAuth2 scheme
+# OAuth2 scheme — strict (raises 401 if Authorization header is missing)
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/depictio/api/v1/auth/login")
+
+# Optional OAuth2 scheme for anonymous-tolerant endpoints. ``auto_error=False``
+# lets missing/invalid Authorization headers reach the dependent function so
+# its single-user / public-mode anonymous fallback can run instead of FastAPI
+# returning 401 before the function executes.
+oauth2_scheme_optional = OAuth2PasswordBearer(
+    tokenUrl="/depictio/api/v1/auth/login",
+    auto_error=False,
+)
 
 
 async def get_current_user(token: Annotated[str, Depends(oauth2_scheme)]) -> User:
@@ -81,7 +89,7 @@ async def get_current_user(token: Annotated[str, Depends(oauth2_scheme)]) -> Use
 
 
 async def get_user_or_anonymous(
-    token: Annotated[str | None, Depends(oauth2_scheme)] = None,
+    token: Annotated[str | None, Depends(oauth2_scheme_optional)] = None,
 ) -> User:
     """Get the authenticated user or anonymous user if unauthenticated mode is enabled.
 
@@ -131,11 +139,16 @@ async def login(login_request: OAuth2PasswordRequestForm = Depends()) -> TokenBe
     Raises:
         HTTPException: 401 if credentials are invalid.
     """
-    if settings.auth.is_public_mode or settings.auth.is_single_user_mode:
-        anon = await UserBeanie.find_one({"email": settings.auth.anonymous_user_email})
-        token = await TokenBeanie.find_one({"user_id": anon.id, "token_lifetime": "permanent"})
-        if not token:
-            token = await _create_permanent_token(anon)
+    if settings.auth.is_single_user_mode:
+        admin = await UserBeanie.find_one({"is_admin": True, "is_anonymous": {"$ne": True}})
+        if not admin:
+            raise HTTPException(status_code=500, detail="Admin user not found in single-user mode")
+        token_name = f"{admin.email}_{datetime.now().strftime('%Y%m%d%H%M%S')}"
+        token_data = TokenData(name=token_name, token_lifetime="short-lived", sub=admin.id)
+        token = await _add_token(token_data)
+        if token is None:
+            raise HTTPException(status_code=500, detail="Failed to create session token")
+        token.logged_in = True
         return token
 
     password_valid = await _check_password(login_request.username, login_request.password)
@@ -186,6 +199,48 @@ async def create_token(
         )
 
     return token
+
+
+@auth_endpoint_router.post("/refresh", include_in_schema=True)
+async def refresh_token_browser(request: dict) -> dict:
+    """Browser-safe refresh: uses the refresh token as the only credential.
+
+    Mirrors ``/auth/refresh_token`` but without the internal-api-key
+    requirement so SPAs (the React viewer) can call it directly. The refresh
+    token itself is treated as the authenticating secret.
+
+    Args:
+        request: Dict containing 'refresh_token' key.
+
+    Returns:
+        Dict with new access_token and expire_datetime.
+
+    Raises:
+        HTTPException: 401 if refresh token is invalid or expired.
+    """
+    refresh_token = request.get("refresh_token")
+    if not refresh_token:
+        raise HTTPException(status_code=400, detail="Missing refresh_token")
+
+    token_doc = await TokenBeanie.find_one(
+        {"refresh_token": refresh_token, "refresh_expire_datetime": {"$gt": datetime.now()}}
+    )
+    if not token_doc:
+        raise HTTPException(401, "Invalid refresh token")
+
+    user = await UserBeanie.find_one({"_id": token_doc.user_id})
+    token_data = TokenData(name=token_doc.name, sub=user.id)
+    new_access_token, expire_datetime = await create_access_token(token_data, expiry_hours=1)
+
+    token_doc.access_token = new_access_token
+    token_doc.expire_datetime = expire_datetime
+    await token_doc.save()
+
+    return {
+        "access_token": new_access_token,
+        "expire_datetime": token_doc.expire_datetime,
+        "token_type": "bearer",
+    }
 
 
 @auth_endpoint_router.post("/refresh_token", include_in_schema=True)
@@ -313,20 +368,91 @@ async def api_fetch_user_from_id(
 
 
 @auth_endpoint_router.get("/me", include_in_schema=True)
-async def get_current_user_info(current_user: User = Depends(get_current_user)) -> User:
-    """Get current user information using Bearer token authentication.
+async def get_current_user_info(current_user: User = Depends(get_user_or_anonymous)) -> User:
+    """Get current user information for the React profile page.
 
-    This endpoint is designed for frontend authentication and uses Bearer tokens
-    instead of internal API keys, making it suitable for user-facing applications.
+    Uses ``get_user_or_anonymous`` so single-user / public mode works without a
+    persisted token: the React /profile route resolves to the anonymous user
+    (admin in single-user mode) instead of rendering "No authenticated user."
 
     Args:
-        current_user: Current authenticated user from Bearer token
+        current_user: User resolved from Bearer token, or the anonymous user
+            in single-user / public mode when no valid token is supplied.
 
     Returns:
-        User: Current user information
+        User: Current user information.
     """
     logger.debug(f"Returning current user info for: {current_user.email}")
     return current_user
+
+
+@auth_endpoint_router.get("/me/optional", include_in_schema=True)
+async def get_current_user_info_optional(
+    token: Annotated[str | None, Depends(oauth2_scheme_optional)] = None,
+) -> dict:
+    """Get current user identity + server auth mode for the React viewer.
+
+    Unlike ``/me``, this endpoint does NOT 401 when the Authorization header is
+    missing or invalid. It always returns 200 with an ``auth_mode`` field so the
+    React UI can render the right profile badge variant ("Single user mode",
+    "Anonymous", or the actual user). The ``user`` field is ``null`` when no
+    valid token is supplied.
+
+    Backward compatible: existing callers that read ``auth_mode`` and ``user``
+    keep working. The React /auth page additionally consumes ``is_public_mode``,
+    ``is_single_user_mode``, and ``google_oauth_enabled`` to decide which UI to
+    render with a single round-trip on page load.
+
+    Args:
+        token: Optional JWT access token from the Authorization header.
+
+    Returns:
+        Dict with ``auth_mode`` ('single_user' | 'unauthenticated' | 'standard'),
+        ``user`` (minimal user identity or ``null``), plus mode flags.
+    """
+    auth_mode: str = "standard"
+    if settings.auth.is_single_user_mode:
+        auth_mode = "single_user"
+    elif getattr(settings.auth, "unauthenticated_mode", False):
+        auth_mode = "unauthenticated"
+
+    user_payload: dict | None = None
+    if token:
+        try:
+            user = await _async_fetch_user_from_token(token)
+        except Exception as exc:  # noqa: BLE001 - tolerate any auth failure
+            logger.debug(f"/me/optional: token resolution failed ({exc}); returning anonymous")
+            user = None
+        if user:
+            user_payload = {
+                "id": str(user.id),
+                "email": user.email,
+                "is_admin": getattr(user, "is_admin", False),
+            }
+
+    # Single-user mode: the data endpoints (`get_user_or_anonymous`) auto-resolve
+    # to the admin even without a token. Mirror that here so the React
+    # `/dashboards-beta` page knows who owns the seed dashboards — otherwise
+    # everything not flagged public/example lands in "Accessed" because the
+    # client thinks it's anonymous.
+    if user_payload is None and settings.auth.is_single_user_mode:
+        admin_user = await UserBeanie.find_one({"is_admin": True, "is_anonymous": {"$ne": True}})
+        if admin_user:
+            user_payload = {
+                "id": str(admin_user.id),
+                "email": admin_user.email,
+                "is_admin": True,
+            }
+
+    return {
+        "auth_mode": auth_mode,
+        "user": user_payload,
+        "is_public_mode": settings.auth.is_public_mode,
+        "is_single_user_mode": settings.auth.is_single_user_mode,
+        "is_demo_mode": getattr(settings.auth, "is_demo_mode", False),
+        "unauthenticated_mode": getattr(settings.auth, "unauthenticated_mode", False),
+        "google_oauth_enabled": settings.auth.google_oauth_enabled,
+    }
 
 
 @auth_endpoint_router.get("/get_anonymous_user_session", include_in_schema=True)
@@ -343,10 +469,11 @@ async def api_get_anonymous_user_session(
             detail="Invalid API key",
         )
 
-    if not (settings.auth.is_public_mode or settings.auth.is_single_user_mode):
+    if not settings.auth.is_single_user_mode:
         raise HTTPException(
             status_code=403,
-            detail="Anonymous user session only available in public mode or single-user mode",
+            detail="Anonymous user session only available in single-user mode; "
+            "public/demo mode mints a temporary user instead.",
         )
 
     session_data = await _get_anonymous_user_session()
@@ -421,48 +548,86 @@ async def cleanup_expired_temporary_users_endpoint(
     return cleanup_results
 
 
-@auth_endpoint_router.post("/upgrade_to_temporary_user", include_in_schema=True)
-async def upgrade_to_temporary_user_endpoint(
-    expiry_hours: int = 24,
-    expiry_minutes: int = 0,
-    current_user: User = Depends(get_user_or_anonymous),
-) -> dict:
-    """Upgrade from anonymous user to temporary user for interactive features.
+# ---------------------------------------------------------------------------
+# Public-facing auth endpoints (no internal API key required).
+#
+# These mirror /create_temporary_user and /get_anonymous_user_session but are
+# callable by the React /auth SPA, which can't carry the internal API key.
+# Gated by mode flag so they 404 in standard mode (i.e. the only mode where
+# user accounts exist), with a small per-IP rate limiter to discourage abuse.
+# ---------------------------------------------------------------------------
 
-    Args:
-        expiry_hours: Number of hours until the temporary user expires (default: 24)
-        current_user: Current user (should be anonymous in unauthenticated mode)
+# Per-IP timestamps for the public auth endpoints. In-memory (single-process)
+# rate limiter — sufficient for the development setup. Production hardening
+# would move this to Redis.
+_PUBLIC_AUTH_RATE_LIMIT: dict[str, list[float]] = {}
+_PUBLIC_AUTH_RATE_WINDOW_SECS = 60.0
+_PUBLIC_AUTH_RATE_MAX_CALLS = 10
 
-    Returns:
-        Session data for the new temporary user
+
+def _enforce_public_auth_rate_limit(request: Request) -> None:
+    """Rate-limit the /auth/public/* endpoints per client IP.
+
+    Allows up to ``_PUBLIC_AUTH_RATE_MAX_CALLS`` calls per
+    ``_PUBLIC_AUTH_RATE_WINDOW_SECS`` window. Raises 429 when exceeded.
     """
-    logger.debug(f"Upgrading user to temporary user with expiry: {expiry_hours} hours")
+    import time
 
+    client_ip = request.client.host if request.client else "unknown"
+    now = time.monotonic()
+    window_start = now - _PUBLIC_AUTH_RATE_WINDOW_SECS
+    history = [ts for ts in _PUBLIC_AUTH_RATE_LIMIT.get(client_ip, []) if ts >= window_start]
+    if len(history) >= _PUBLIC_AUTH_RATE_MAX_CALLS:
+        raise HTTPException(
+            status_code=429,
+            detail="Too many authentication requests; please wait before retrying.",
+        )
+    history.append(now)
+    _PUBLIC_AUTH_RATE_LIMIT[client_ip] = history
+
+
+@auth_endpoint_router.post("/public/create_temporary_user", include_in_schema=True)
+async def create_temporary_user_public(request: Request) -> dict:
+    """Create a temporary user for the React /auth SPA in public mode.
+
+    Public-facing variant of ``/create_temporary_user`` (no API key). Disabled
+    outside public mode and rate-limited per IP. Expiry is taken from settings
+    so the SPA doesn't need to (and shouldn't be able to) override it.
+    """
     if not settings.auth.is_public_mode:
         raise HTTPException(
-            status_code=403,
-            detail="User upgrade only available in public mode",
+            status_code=404,
+            detail="Temporary users only available in public mode",
         )
 
-    # Check if user is already temporary (no need to upgrade)
-    if hasattr(current_user, "is_temporary") and current_user.is_temporary:
-        logger.info(f"User {current_user.email} is already temporary, no upgrade needed")
-        raise HTTPException(
-            status_code=400,
-            detail="User is already a temporary user",
-        )
+    _enforce_public_auth_rate_limit(request)
 
-    # Create new temporary user
     temp_user = await _create_temporary_user(
-        expiry_hours=expiry_hours,
-        expiry_minutes=expiry_minutes,
+        expiry_hours=settings.auth.temporary_user_expiry_hours,
+        expiry_minutes=settings.auth.temporary_user_expiry_minutes,
     )
-
-    # Create session for the temporary user
     session_data = await _create_temporary_user_session(temp_user)
-
-    logger.info(f"Upgraded anonymous user to temporary user: {temp_user.email}")
+    logger.info(f"Created temporary user via public endpoint: {temp_user.email}")
     return session_data
+
+
+@auth_endpoint_router.get("/public/get_anonymous_user_session", include_in_schema=True)
+async def get_anonymous_user_session_public(request: Request) -> dict:
+    """Anonymous-user session for the React /auth SPA in single-user mode.
+
+    Public-facing variant of ``/get_anonymous_user_session`` (no API key).
+    Disabled outside single-user mode and rate-limited per IP. Public/demo
+    mode mints a temporary user via ``/auth/public/create_temporary_user``.
+    """
+    if not settings.auth.is_single_user_mode:
+        raise HTTPException(
+            status_code=404,
+            detail="Anonymous user session only available in single-user mode",
+        )
+
+    _enforce_public_auth_rate_limit(request)
+
+    return await _get_anonymous_user_session()
 
 
 @auth_endpoint_router.post("/register")
@@ -651,6 +816,84 @@ async def delete_token(
     return {"success": result, "message": "Token deleted successfully"}
 
 
+# ---------------------------------------------------------------------------
+# Bearer-authed, user-scoped token endpoints for the React /profile-beta and
+# /cli-agents-beta SPA. These mirror /create_token and /delete_token but use
+# the caller's Bearer token instead of the internal API key — safe to call
+# from a browser. Only operate on the current user's tokens.
+# ---------------------------------------------------------------------------
+
+
+class _CreateMeTokenRequest(BaseModel):
+    """Body for POST /auth/me/tokens — only the human-readable name is required."""
+
+    name: str
+
+
+@auth_endpoint_router.post("/me/tokens", include_in_schema=True)
+async def create_my_token(
+    request: _CreateMeTokenRequest,
+    current_user: UserBeanie = Depends(get_current_user),
+) -> TokenBeanie:
+    """Create a long-lived CLI token for the current authenticated user.
+
+    Replaces the internal-API-key-gated /create_token for browser callers.
+    Always issues a long-lived bearer token scoped to ``current_user``.
+    """
+    if settings.auth.is_public_mode:
+        raise HTTPException(
+            status_code=403,
+            detail="CLI token creation is disabled in public mode",
+        )
+
+    name = (request.name or "").strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Token name is required")
+
+    existing = await TokenBeanie.find_one(
+        {"user_id": current_user.id, "name": name, "token_lifetime": "long-lived"}
+    )
+    if existing is not None:
+        raise HTTPException(
+            status_code=400,
+            detail="Token with the same name already exists",
+        )
+
+    token_data = TokenData(
+        name=name,
+        token_lifetime="long-lived",
+        token_type="bearer",
+        sub=current_user.id,  # type: ignore[invalid-argument-type]
+    )
+    token = await _add_token(token_data)
+    if token is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Token with the same name already exists",
+        )
+    return token
+
+
+@auth_endpoint_router.delete("/me/tokens/{token_id}", include_in_schema=True)
+async def delete_my_token(
+    token_id: PydanticObjectId,
+    current_user: UserBeanie = Depends(get_current_user),
+) -> dict:
+    """Delete one of the current user's tokens.
+
+    Replaces the internal-API-key-gated /delete_token for browser callers.
+    Refuses to delete tokens that don't belong to the caller.
+    """
+    token = await TokenBeanie.get(token_id)
+    if token is None:
+        raise HTTPException(status_code=404, detail="Token not found")
+    if token.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Token does not belong to current user")
+
+    result = await _delete_token(token_id)
+    return {"success": result, "message": "Token deleted successfully"}
+
+
 # @auth_endpoint_router.post("/delete_token")
 # async def delete_token(request: dict, current_user=Depends(get_current_user)):
 #     if not request:
@@ -756,7 +999,12 @@ async def list_tokens_(
 
 
 @auth_endpoint_router.get("/list", response_model=list[UserBaseUI], include_in_schema=True)
-async def list_users(current_user: UserBase = Depends(get_current_user)):
+async def list_users(current_user: UserBase = Depends(get_user_or_anonymous)):
+    """List all users for the React admin Users tab.
+
+    Uses ``get_user_or_anonymous`` for parity with the projects list — the
+    anonymous user in single-user mode is admin, so no token is required.
+    """
     users = await UserBeanie.find_all().to_list()
     logger.debug(f"Users: {users}")
     users = [user.turn_to_userbaseui() for user in users]

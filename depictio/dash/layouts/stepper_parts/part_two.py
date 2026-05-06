@@ -57,7 +57,8 @@ def _create_component_card(comp_type: str, n: str) -> html.Div:
     # Icon: image for MultiQC, DashIconify for others
     if comp_type == "multiqc":
         icon_element = html.Img(
-            src="/assets/images/logos/multiqc.png",
+            src="/assets/images/logos/multiqc_icon_dark.svg",
+            className="multiqc-icon-themed",
             style={"width": "44px", "height": "44px", "objectFit": "contain"},
         )
     else:

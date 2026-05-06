@@ -46,6 +46,15 @@ LoadKey = tuple[str, str, str]  # (wf_id, dc_id, filters_hash)
 LoadKeyExtended = tuple[str, str, str, str]  # (wf_id, dc_id, filters_hash, columns_hash)
 
 
+def _stable_hash(value: Any) -> str:
+    """Deterministic short hash of any JSON-serialisable value; falls back to repr()."""
+    try:
+        raw = json.dumps(value, sort_keys=True, default=str).encode()
+    except (TypeError, ValueError):
+        raw = repr(value).encode()
+    return hashlib.md5(raw).hexdigest()[:16]
+
+
 def _build_metadata_index(
     interactive_metadata_list: list | None,
     interactive_metadata_ids: list | None,
@@ -1161,6 +1170,22 @@ def _create_figure_from_data(
         if visu_type not in ["scatter", "line", "bar", "box", "histogram"]:
             logger.warning(f"Unsupported visualization type: {visu_type}, defaulting to scatter")
             visu_type = "scatter"
+
+        # Plotly rejects NaN in the marker `size` property with a hard
+        # ValueError. When the user picks a column that has missing values for
+        # some rows (common in viralrecon summary metrics where unassigned
+        # samples have null variant counts), drop those rows so the rest of
+        # the dataset still renders.
+        size_col = cleaned_kwargs.get("size")
+        if isinstance(size_col, str) and size_col in pandas_df.columns:
+            nan_mask = pandas_df[size_col].isna()
+            if nan_mask.any():
+                dropped = int(nan_mask.sum())
+                pandas_df = pandas_df.loc[~nan_mask]
+                logger.info(
+                    f"_create_figure_from_data: dropped {dropped} row(s) with "
+                    f"NaN in size column '{size_col}'"
+                )
 
         plot_func = getattr(px, visu_type)
         fig = plot_func(pandas_df, **cleaned_kwargs)

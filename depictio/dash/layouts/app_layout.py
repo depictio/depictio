@@ -42,41 +42,34 @@ from depictio.dash.layouts.users_management import layout as users_management_la
 
 def return_create_dashboard_button(email, is_anonymous=False):
     """
-    Create a dashboard creation button with user-appropriate styling.
+    Create a dashboard creation button.
 
-    For anonymous users, shows "Login to Create Dashboards" button.
-    For authenticated users, shows normal "+ New Dashboard" button.
-    In single-user mode, anonymous user has admin access and gets normal button.
-    In demo mode, the global tour popover (created in management_app.py) handles the tour.
+    Always enabled under the unified mode model: standard requires login,
+    single-user's anonymous account has admin privileges, public/demo
+    auto-mints a temporary user at boot. ``is_anonymous`` is retained for
+    caller convention but no longer affects gating.
 
     Args:
         email: User email address for button ID.
-        is_anonymous: Whether the user is anonymous (not fully authenticated).
+        is_anonymous: Reserved for caller convention; does not affect gating.
 
     Returns:
         dmc.Button: Styled button component for dashboard creation.
     """
-    from depictio.api.v1.configs.config import settings
-
-    # In single-user mode, anonymous user has admin access
-    should_show_login = is_anonymous and not settings.auth.is_single_user_mode
-    button_text = "+ New Dashboard" if not should_show_login else "Login to Create Dashboards"
-    button_color = (
-        "orange" if not should_show_login else "blue"
-    )  # Use blue to match temporary user button
+    del is_anonymous  # gating removed under unified model
 
     create_button = dmc.Button(
-        button_text,
+        "+ New Dashboard",
         id={"type": "create-dashboard-button", "index": email},
         n_clicks=0,
-        color=button_color,
+        color="orange",
         style={
             "fontFamily": "Virgil",
             "marginRight": "10px",
         },
         size="lg",  # Changed from xl to lg for better proportions
         radius="md",
-        disabled=False,  # Always enabled - behavior changes based on user type
+        disabled=False,
     )
 
     # The global popover (created in management_app.py stores) will handle the tour
@@ -86,41 +79,40 @@ def return_create_dashboard_button(email, is_anonymous=False):
 
 def return_create_project_button(email, is_anonymous=False):
     """
-    Create a project creation button with user-appropriate styling.
+    Create a project creation button.
 
-    For anonymous users, shows "Login to Create Projects" button.
-    For authenticated users, shows normal "+ Create Project" button.
-    In single-user mode, anonymous user has admin access and gets normal button.
+    Disabled in public/demo mode (no file upload allowed for security).
+    Otherwise always enabled — single-user's anonymous account has admin
+    privileges and standard mode requires login.
 
     Args:
         email: User email address (unused, kept for API consistency).
-        is_anonymous: Whether the user is anonymous (not fully authenticated).
+        is_anonymous: Reserved for caller convention; does not affect gating.
 
     Returns:
         dmc.Button: Styled button component for project creation.
     """
     from depictio.api.v1.configs.config import settings
 
-    # In single-user mode, anonymous user has admin access
-    should_show_login = is_anonymous and not settings.auth.is_single_user_mode
-    button_text = "+ Create Project" if not should_show_login else "Login to Create Projects"
-    button_color = (
-        "teal" if not should_show_login else "blue"  # Use teal color matching colors.py
-    )  # Use blue to match temporary user button
+    del is_anonymous  # gating removed under unified model
+    is_public = settings.auth.is_public_mode
 
+    # Public/demo mode: render the button visibly disabled instead of hiding
+    # it — visitors should still discover that "Create Project" exists, with
+    # the disabled state signalling that login/elevated permissions are
+    # required. Mirrored in `depictio/viewer/src/projects/ProjectsApp.tsx`.
     create_button = dmc.Button(
-        button_text,
+        "+ Create Project",
         id="create-project-button",
         n_clicks=0,
-        color=button_color,
-        # leftSection=DashIconify(icon="mdi:plus", width=16),
+        color="teal",
         style={
             "fontFamily": "Virgil",
             "marginRight": "10px",
         },
-        size="lg",  # Changed from xl to lg for better proportions
+        size="lg",
         radius="md",
-        disabled=False,  # Always enabled - behavior changes based on user type
+        disabled=is_public,
     )
     return create_button
 
@@ -292,6 +284,7 @@ def handle_authenticated_user(
             local_data=local_data,
             theme=theme,
             init_data=dashboard_init_data,  # Pass consolidated init data for components
+            is_editor_app=is_edit_mode,
         )
 
         # # Create dashboard layout

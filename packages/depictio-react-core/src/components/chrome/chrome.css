@@ -1,0 +1,80 @@
+/**
+ * Per-component chrome: a hover-only floating action toolbar layered over the
+ * rendered component. The renderers (FigureRenderer, TableRenderer, etc.)
+ * already wrap themselves in <Paper withBorder/>, so the chrome stays
+ * background-less to avoid nested-paper visual noise.
+ */
+.depictio-component-chrome {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+/* Direct child of chrome (the wrapped renderer's root) must also fill so the
+ * Plotly/AG Grid div inside can size to the cell — mirrors Dash's
+ * .react-grid-item flex chain. */
+.depictio-component-chrome > .mantine-Paper-root,
+.depictio-component-chrome > .depictio-fill {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.depictio-component-actions {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 5;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  pointer-events: none;
+  /* Stay inside the Paper border at narrow widths (e.g. interactive
+   * components in the 1/4-width left panel) — no overflow past the frame. */
+  max-width: calc(100% - 24px);
+  background: var(--mantine-color-body);
+  border-radius: var(--mantine-radius-sm);
+  padding: 2px;
+}
+.depictio-component-chrome:hover .depictio-component-actions,
+.depictio-component-chrome:focus-within .depictio-component-actions {
+  opacity: 1;
+  pointer-events: auto;
+}
+/* Vertical stack for figure/multiqc/map — mirrors the Dash editor's
+ * `button_configs[type].orientation == "vertical"` from layouts/edit.py. */
+.depictio-component-actions.depictio-actions-vertical {
+  flex-direction: column;
+  max-width: none;
+  max-height: calc(100% - 24px);
+}
+.depictio-component-chrome.fullscreen-active {
+  background: var(--mantine-color-body);
+  padding: 1rem;
+}
+.depictio-component-chrome.fullscreen-active > * {
+  height: 100%;
+}
+
+/* Drag handle — sits inside the chrome action row alongside the other
+ * icons. Show the closed-hand "grabbing" cursor on hover so it's obvious
+ * this icon initiates a drag (vs. the click affordance the other action
+ * icons signal with the default pointer cursor).
+ *
+ * The selector also targets the inner Mantine ActionIcon button, which
+ * otherwise sets `cursor: pointer` at higher specificity and wins over
+ * the wrapper rule. */
+.depictio-drag-handle,
+.depictio-drag-handle .mantine-ActionIcon-root,
+.depictio-drag-handle button {
+  cursor: grabbing;
+}
+
+/* Drop placeholder during drag — mirrors
+ * depictio/dash/assets/css/components/draggable-grid.css:546 */
+.react-grid-layout .react-grid-placeholder {
+  background: rgba(0, 0, 0, 0.08) !important;
+  border: 4px dashed #737373 !important;
+  border-radius: 4px !important;
+  opacity: 1 !important;
+}

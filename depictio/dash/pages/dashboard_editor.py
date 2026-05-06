@@ -185,9 +185,14 @@ def register_routing_callback(app):
         Main routing callback for Editor App.
 
         Routes:
-        - /dashboard-edit/{id} - Edit dashboard
+        - /dashboard-edit/{id} - Edit dashboard (Dash editor)
         - /dashboard-edit/{id}/component/add/{uuid} - Create component
         - /dashboard-edit/{id}/component/edit/{uuid} - Edit component
+
+        The React SPA editor at /dashboard-beta/{id}/edit is served by
+        FastAPI on a separate origin and is reachable only via the explicit
+        "Try new mode" affordance — never as an automatic redirect from
+        this Dash route.
 
         Args:
             pathname: Current URL pathname
@@ -261,7 +266,7 @@ def register_routing_callback(app):
                 return error_content, html.Div(), no_update, updated_local_data, no_update
             return error_content, html.Div(), pathname, updated_local_data, no_update
 
-        # Load dashboard data in edit mode
+        # Load dashboard data in edit mode (legacy Dash editor).
         content, header_content = load_and_render_dashboard(
             dashboard_id=dashboard_id,
             local_data=updated_local_data,
@@ -271,12 +276,9 @@ def register_routing_callback(app):
         )
 
         # If triggered by local-store, preserve current URL
-        # Don't update edit-page-context - use no_update to avoid triggering pattern-matching callbacks
-        # that reference design form components (which don't exist on the dashboard page)
         if triggered_by_local_store:
             return content, header_content, no_update, updated_local_data, no_update
-        else:
-            return content, header_content, pathname, updated_local_data, no_update
+        return content, header_content, pathname, updated_local_data, no_update
 
 
 def route_component_creation(pathname: str, local_data: dict, theme: str):
@@ -455,6 +457,7 @@ def load_and_render_dashboard(
         local_data=local_data,
         theme=theme,
         init_data=dashboard_init_data,
+        is_editor_app=True,
     )
 
     if not depictio_dash_data:

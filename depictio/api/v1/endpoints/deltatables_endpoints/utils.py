@@ -153,8 +153,16 @@ def precompute_columns_specs(aggregated_df: pl.DataFrame, agg_functions: dict, d
 
         tmp_dict["type"] = normalized_type
 
-        if col_type in agg_functions:
-            methods = agg_functions[col_type]["card_methods"]
+        # ``agg_functions`` is keyed by *normalized* type names (``int64``,
+        # ``float64``, ``datetime``, ``bool``, …) — not the raw pandas dtype.
+        # Looking up by ``col_type`` worked for int64/float64/object only by
+        # coincidence (their normalized names happen to equal the raw dtype);
+        # ``datetime64[ns]`` / ``int32`` etc. silently fell off the path so
+        # min/max never landed in specs and the React DatePicker showed
+        # "No date bounds available". Use ``normalized_type`` instead.
+        lookup_key = normalized_type if normalized_type in agg_functions else col_type
+        if lookup_key in agg_functions:
+            methods = agg_functions[lookup_key]["card_methods"]
 
             for method_name, method_info in methods.items():
                 pandas_method = method_info["pandas"]
