@@ -57,11 +57,16 @@
 }
 
 /* Drag handle — sits inside the chrome action row alongside the other
- * icons. Only the cursor + grab styling differ from siblings. */
-.depictio-drag-handle {
-  cursor: grab;
-}
-.depictio-drag-handle:active {
+ * icons. Show the closed-hand "grabbing" cursor on hover so it's obvious
+ * this icon initiates a drag (vs. the click affordance the other action
+ * icons signal with the default pointer cursor).
+ *
+ * The selector also targets the inner Mantine ActionIcon button, which
+ * otherwise sets `cursor: pointer` at higher specificity and wins over
+ * the wrapper rule. */
+.depictio-drag-handle,
+.depictio-drag-handle .mantine-ActionIcon-root,
+.depictio-drag-handle button {
   cursor: grabbing;
 }
 

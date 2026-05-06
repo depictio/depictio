@@ -1,5 +1,5 @@
-import React from 'react';
-import { Alert, Code, Group, Modal, Stack, Title } from '@mantine/core';
+import React, { useState } from 'react';
+import { Alert, Button, Code, Group, Modal, Stack, Title } from '@mantine/core';
 import { CodeHighlight } from '@mantine/code-highlight';
 import '@mantine/code-highlight/styles.css';
 import { Icon } from '@iconify/react';
@@ -8,6 +8,35 @@ import yaml from 'js-yaml';
 import type { CliAgentConfig } from 'depictio-react-core';
 
 import { brandColors } from '../profile/colors';
+
+/** Copy text to clipboard with a fallback for non-secure contexts.
+ *  navigator.clipboard requires a secure origin (HTTPS or localhost). When
+ *  the SPA is served over an IP like 0.0.0.0:8055 the API is unavailable
+ *  and Mantine's built-in copy button silently fails — this fallback uses
+ *  the legacy execCommand path so the button works regardless of origin. */
+async function copyText(text: string): Promise<boolean> {
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch {
+    // fall through
+  }
+  try {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    const ok = document.execCommand('copy');
+    document.body.removeChild(ta);
+    return ok;
+  } catch {
+    return false;
+  }
+}
 
 interface DisplayTokenModalProps {
   opened: boolean;
@@ -23,6 +52,15 @@ interface DisplayTokenModalProps {
  *  highlighting (Dash uses `dmc.CodeHighlight`). */
 const DisplayTokenModal: React.FC<DisplayTokenModalProps> = ({ opened, onClose, config }) => {
   const yamlText = config ? yaml.dump(config, { lineWidth: 120 }) : '';
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = async () => {
+    const ok = await copyText(yamlText);
+    if (ok) {
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 2000);
+    }
+  };
 
   return (
     <Modal opened={opened} onClose={onClose} centered size="lg">
@@ -55,8 +93,29 @@ const DisplayTokenModal: React.FC<DisplayTokenModalProps> = ({ opened, onClose, 
               configuration again once you close this dialog.
             </Alert>
 
-            <CodeHighlight code={yamlText} language="yaml" />
-
+            <Group justify="space-between" align="center">
+              <span /> {/* spacer so the button right-aligns above the code block */}
+              <Button
+                size="xs"
+                variant="light"
+                leftSection={
+                  <Icon
+                    icon={copied ? 'mdi:check' : 'mdi:content-copy'}
+                    width={16}
+                  />
+                }
+                color={copied ? 'green' : 'blue'}
+                onClick={handleCopy}
+              >
+                {copied ? 'Copied' : 'Copy YAML'}
+              </Button>
+            </Group>
+            {/* Mantine's built-in copy button uses navigator.clipboard, which
+                only works in secure contexts. On http://0.0.0.0:8055 it
+                silently fails — disable it via withCopyButton={false} and
+                rely on the explicit "Copy YAML" button above which falls
+                back to document.execCommand('copy'). */}
+            <CodeHighlight code={yamlText} language="yaml" withCopyButton={false} />
           </>
         )}
       </Stack>

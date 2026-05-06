@@ -142,7 +142,6 @@ export {
   createLongLivedToken,
   deleteLongLivedToken,
   generateAgentConfig,
-  upgradeToTemporaryUser,
 } from './api';
 // Selection-as-filter helpers (Plotly/AG Grid → InteractiveFilter)
 export {

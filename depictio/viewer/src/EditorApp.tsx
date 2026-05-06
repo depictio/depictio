@@ -74,7 +74,6 @@ import type { TabModalSubmitPayload } from './chrome';
 import { useAuthMode } from './auth/hooks/useAuthMode';
 import DemoTour from './demo/DemoTour';
 import DemoModeBanner from './components/DemoModeBanner';
-import UpgradeToTemporaryButton from './components/UpgradeToTemporaryButton';
 import './chrome/chrome.css';
 
 const API_BASE = '/depictio/api/v1';
@@ -886,7 +885,6 @@ const EditorApp: React.FC = () => {
           onSave={handleForceSave}
           rightExtras={
             <>
-              <UpgradeToTemporaryButton />
               {realtimeEnabled && (
                 <span data-tour-id="realtime-indicator" style={{ display: 'inline-flex' }}>
                   <RealtimeIndicator

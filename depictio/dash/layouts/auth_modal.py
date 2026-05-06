@@ -1,23 +1,22 @@
 """Auth sign-in modal for public mode.
 
-This module provides a modal component for public Depictio instances that allows users to:
-- Sign in as a temporary user (24-hour session)
-- Sign in with Google (when OAuth is enabled)
+This module provides a modal component for public Depictio instances that
+allows users to sign in with Google (when OAuth is enabled). Public-mode
+visitors automatically receive a temporary user session at boot, so the
+"Sign in as Temporary User" affordance has been removed — Google OAuth is
+the only remaining path to a persistent account.
 
 The modal is displayed when users click "Sign in" in public mode.
 """
 
 import dash_mantine_components as dmc
-from dash import Input, Output, State, dcc, html
+from dash import Input, Output, dcc, html
 from dash.exceptions import PreventUpdate
 from dash_iconify import DashIconify
 
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
-from depictio.dash.api_calls import (
-    api_call_create_temporary_user,
-    api_call_get_google_oauth_login_url,
-)
+from depictio.dash.api_calls import api_call_get_google_oauth_login_url
 from depictio.dash.colors import colors
 
 
@@ -27,61 +26,7 @@ def create_auth_sign_in_modal() -> dmc.Modal:
     Returns:
         Modal component with sign-in options.
     """
-    # Calculate expiry display text
-    hours = settings.auth.temporary_user_expiry_hours
-    minutes = settings.auth.temporary_user_expiry_minutes
-    if hours == 24 and minutes == 0:
-        expiry_text = "24-hour session"
-    elif hours > 0 and minutes > 0:
-        expiry_text = f"{hours}h {minutes}m session"
-    elif hours > 0:
-        expiry_text = f"{hours}-hour session"
-    else:
-        expiry_text = f"{minutes}-minute session"
-
-    # Build sign-in options
-    sign_in_options = [
-        # Temporary user option (always available in public mode)
-        dmc.Paper(
-            children=[
-                dmc.Group(
-                    [
-                        DashIconify(
-                            icon="mdi:clock-outline",
-                            height=28,
-                            color=colors["blue"],
-                        ),
-                        dmc.Stack(
-                            [
-                                dmc.Text(
-                                    "Sign in as Temporary User",
-                                    fw=500,
-                                    size="md",
-                                ),
-                                dmc.Text(
-                                    f"{expiry_text}, no account required",
-                                    size="sm",
-                                    c="dimmed",
-                                ),
-                            ],
-                            gap=2,
-                        ),
-                    ],
-                    gap="md",
-                ),
-            ],
-            id="auth-modal-temp-user-button",
-            p="md",
-            radius="md",
-            withBorder=True,
-            style={
-                "cursor": "pointer",
-                "transition": "all 0.2s ease",
-                "borderColor": "var(--app-border-color, #ddd)",
-            },
-            className="auth-option-card",
-        ),
-    ]
+    sign_in_options: list = []
 
     # Google OAuth option (only if enabled)
     if settings.auth.google_oauth_enabled:
@@ -199,42 +144,6 @@ def register_auth_modal_callbacks(app) -> None:
         if not n_clicks:
             raise PreventUpdate
         return True
-
-    @app.callback(
-        [
-            Output("local-store", "data", allow_duplicate=True),
-            Output("public-auth-modal", "opened", allow_duplicate=True),
-            Output("url", "pathname", allow_duplicate=True),
-        ],
-        Input("auth-modal-temp-user-button", "n_clicks"),
-        State("local-store", "data"),
-        prevent_initial_call=True,
-    )
-    def handle_temp_user_sign_in(n_clicks, local_data):
-        """Create a temporary user and sign them in."""
-        if not n_clicks:
-            raise PreventUpdate
-
-        logger.info("Creating temporary user from auth modal")
-
-        try:
-            # Call API to create temporary user
-            session_data = api_call_create_temporary_user(
-                expiry_hours=settings.auth.temporary_user_expiry_hours,
-                expiry_minutes=settings.auth.temporary_user_expiry_minutes,
-            )
-
-            if session_data:
-                logger.info(f"Temporary user created: {session_data.get('email')}")
-                # Close modal and redirect to dashboards
-                return session_data, False, "/dashboards"
-            else:
-                logger.error("Failed to create temporary user")
-                raise PreventUpdate
-
-        except Exception as e:
-            logger.error(f"Error creating temporary user: {e}")
-            raise PreventUpdate
 
     # Google OAuth button handler (only if enabled)
     if settings.auth.google_oauth_enabled:

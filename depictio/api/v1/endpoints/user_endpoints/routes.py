@@ -469,10 +469,11 @@ async def api_get_anonymous_user_session(
             detail="Invalid API key",
         )
 
-    if not (settings.auth.is_public_mode or settings.auth.is_single_user_mode):
+    if not settings.auth.is_single_user_mode:
         raise HTTPException(
             status_code=403,
-            detail="Anonymous user session only available in public mode or single-user mode",
+            detail="Anonymous user session only available in single-user mode; "
+            "public/demo mode mints a temporary user instead.",
         )
 
     session_data = await _get_anonymous_user_session()
@@ -547,50 +548,6 @@ async def cleanup_expired_temporary_users_endpoint(
     return cleanup_results
 
 
-@auth_endpoint_router.post("/upgrade_to_temporary_user", include_in_schema=True)
-async def upgrade_to_temporary_user_endpoint(
-    expiry_hours: int = 24,
-    expiry_minutes: int = 0,
-    current_user: User = Depends(get_user_or_anonymous),
-) -> dict:
-    """Upgrade from anonymous user to temporary user for interactive features.
-
-    Args:
-        expiry_hours: Number of hours until the temporary user expires (default: 24)
-        current_user: Current user (should be anonymous in unauthenticated mode)
-
-    Returns:
-        Session data for the new temporary user
-    """
-    logger.debug(f"Upgrading user to temporary user with expiry: {expiry_hours} hours")
-
-    if not settings.auth.is_public_mode:
-        raise HTTPException(
-            status_code=403,
-            detail="User upgrade only available in public mode",
-        )
-
-    # Check if user is already temporary (no need to upgrade)
-    if hasattr(current_user, "is_temporary") and current_user.is_temporary:
-        logger.info(f"User {current_user.email} is already temporary, no upgrade needed")
-        raise HTTPException(
-            status_code=400,
-            detail="User is already a temporary user",
-        )
-
-    # Create new temporary user
-    temp_user = await _create_temporary_user(
-        expiry_hours=expiry_hours,
-        expiry_minutes=expiry_minutes,
-    )
-
-    # Create session for the temporary user
-    session_data = await _create_temporary_user_session(temp_user)
-
-    logger.info(f"Upgraded anonymous user to temporary user: {temp_user.email}")
-    return session_data
-
-
 # ---------------------------------------------------------------------------
 # Public-facing auth endpoints (no internal API key required).
 #
@@ -656,15 +613,16 @@ async def create_temporary_user_public(request: Request) -> dict:
 
 @auth_endpoint_router.get("/public/get_anonymous_user_session", include_in_schema=True)
 async def get_anonymous_user_session_public(request: Request) -> dict:
-    """Anonymous-user session for the React /auth SPA in public/single-user mode.
+    """Anonymous-user session for the React /auth SPA in single-user mode.
 
     Public-facing variant of ``/get_anonymous_user_session`` (no API key).
-    Disabled outside public/single-user mode and rate-limited per IP.
+    Disabled outside single-user mode and rate-limited per IP. Public/demo
+    mode mints a temporary user via ``/auth/public/create_temporary_user``.
     """
-    if not (settings.auth.is_public_mode or settings.auth.is_single_user_mode):
+    if not settings.auth.is_single_user_mode:
         raise HTTPException(
             status_code=404,
-            detail="Anonymous user session only available in public or single-user mode",
+            detail="Anonymous user session only available in single-user mode",
         )
 
     _enforce_public_auth_rate_limit(request)

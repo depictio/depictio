@@ -38,6 +38,15 @@ function authHeaders(): Record<string, string> {
   return headers;
 }
 
+/** Send the user back to the login page when their session can no longer be
+ *  refreshed. Skipped if we're already on /auth so we don't loop the redirect
+ *  while the login page itself is loading. */
+function redirectToAuth(): void {
+  if (typeof window === 'undefined') return;
+  if (window.location.pathname.startsWith('/auth')) return;
+  window.location.replace('/auth');
+}
+
 /** Trade a refresh token for a new access token via the public `/auth/refresh`
  *  endpoint (no api-key required — the refresh token is itself the credential).
  *  Mirrors the Dash-side ``refresh_access_token`` helper.
@@ -125,10 +134,14 @@ async function authFetch(url: string, init: RequestInit = {}): Promise<Response>
 
   // Single retry: force a refresh, then re-issue.
   const refresh = typeof existing?.refresh_token === 'string' ? existing.refresh_token : null;
-  if (!refresh) return first;
+  if (!refresh) {
+    redirectToAuth();
+    return first;
+  }
   const refreshed = await refreshAccessToken(refresh);
   if (!refreshed) {
     clearSession();
+    redirectToAuth();
     return first;
   }
   try {
@@ -2305,17 +2318,3 @@ export async function generateAgentConfig(token: CreatedToken): Promise<CliAgent
   return (await res.json()) as CliAgentConfig;
 }
 
-/** Upgrade an anonymous user (in unauthenticated mode) to a temporary user.
- *  Returns a fresh session payload that the caller persists to localStorage
- *  and then reloads the page so the rest of the SPA picks up the new token.
- *  Returns `null` when already temporary or when the mode disallows upgrade. */
-export async function upgradeToTemporaryUser(expiryHours = 24): Promise<SessionPayload | null> {
-  const params = new URLSearchParams({ expiry_hours: String(expiryHours) });
-  const res = await fetch(`${API_BASE}/auth/upgrade_to_temporary_user?${params.toString()}`, {
-    method: 'POST',
-    headers: authHeaders(),
-  });
-  if (res.status === 400) return null; // already temporary
-  if (!res.ok) await throwHttpError(res, 'Upgrade failed');
-  return (await res.json()) as SessionPayload;
-}

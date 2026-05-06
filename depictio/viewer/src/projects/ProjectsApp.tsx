@@ -29,6 +29,7 @@ import type {
 } from 'depictio-react-core';
 
 import { useCurrentUser } from '../hooks/useCurrentUser';
+import { useAuthMode } from '../auth/hooks/useAuthMode';
 import { AppSidebar } from '../chrome';
 import ProjectsList from './ProjectsList';
 import CreateProjectModal from './CreateProjectModal';
@@ -77,6 +78,8 @@ const ProjectsApp: React.FC = () => {
   const [mobileOpened, { toggle: toggleMobile }] = useDisclosure(false);
   const [desktopOpened, toggleDesktop] = useProjectsSidebar();
   const { user } = useCurrentUser();
+  const { status: authStatus } = useAuthMode();
+  const isPublic = Boolean(authStatus?.is_public_mode);
 
   useEffect(() => {
     document.title = 'Depictio — Projects';
@@ -94,8 +97,6 @@ const ProjectsApp: React.FC = () => {
   }, [refreshKey]);
 
   const refresh = useCallback(() => setRefreshKey((k) => k + 1), []);
-
-  const isAnonymous = !user;
 
   const handleCreate = useCallback(
     async (input: CreateProjectInput) => {
@@ -201,18 +202,7 @@ const ProjectsApp: React.FC = () => {
               Projects
             </Title>
           </Group>
-          {isAnonymous ? (
-            <Button
-              component="a"
-              href="/auth"
-              color="blue"
-              variant="filled"
-              size="md"
-              style={{ fontFamily: 'Virgil' }}
-            >
-              + Login to Create Projects
-            </Button>
-          ) : (
+          {!isPublic && (
             <Button
               color="teal"
               variant="filled"
@@ -255,6 +245,7 @@ const ProjectsApp: React.FC = () => {
               projects={projects}
               currentUserId={user?.id ?? null}
               isAdmin={Boolean(user?.is_admin)}
+              canCreate={!isPublic}
               onCreateClick={openCreate}
               onEdit={(p) => setEditTarget(p)}
               onDelete={(p) => setDeleteTarget(p)}

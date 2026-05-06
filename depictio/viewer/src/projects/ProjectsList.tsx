@@ -10,6 +10,8 @@ interface ProjectsListProps {
   projects: ProjectListEntry[];
   currentUserId: string | null;
   isAdmin: boolean;
+  /** False in public/demo mode — hides the empty-state Create Project button. */
+  canCreate: boolean;
   onCreateClick: () => void;
   onEdit: (project: ProjectListEntry) => void;
   onDelete: (project: ProjectListEntry) => void;
@@ -30,6 +32,7 @@ const ProjectsList: React.FC<ProjectsListProps> = ({
   projects,
   currentUserId,
   isAdmin,
+  canCreate,
   onCreateClick,
   onEdit,
   onDelete,
@@ -48,19 +51,27 @@ const ProjectsList: React.FC<ProjectsListProps> = ({
             <Title order={3} c="dimmed">
               No projects available
             </Title>
-            <Text c="dimmed" ta="center">
-              Create your first project to start organizing data collections
-              and dashboards.
-            </Text>
-            <Button
-              color="teal"
-              variant="filled"
-              onClick={onCreateClick}
-              leftSection={<Icon icon="mdi:plus" width={18} />}
-              style={{ fontFamily: 'Virgil' }}
-            >
-              Create Project
-            </Button>
+            {canCreate ? (
+              <>
+                <Text c="dimmed" ta="center">
+                  Create your first project to start organizing data
+                  collections and dashboards.
+                </Text>
+                <Button
+                  color="teal"
+                  variant="filled"
+                  onClick={onCreateClick}
+                  leftSection={<Icon icon="mdi:plus" width={18} />}
+                  style={{ fontFamily: 'Virgil' }}
+                >
+                  Create Project
+                </Button>
+              </>
+            ) : (
+              <Text c="dimmed" ta="center">
+                No projects are available on this instance.
+              </Text>
+            )}
           </Stack>
         </Paper>
       </Center>

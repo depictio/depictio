@@ -30,6 +30,8 @@ import EditComponentPage from './builder/EditComponentPage';
 import { matchEditorRoute } from './builder/routeMatch';
 import {
   ErrorBoundary,
+  clearSession,
+  createTemporaryUser,
   fetchAuthStatus,
   getAnonymousSession,
   persistSession,
@@ -107,26 +109,63 @@ function readInitialColorScheme(): 'light' | 'dark' | 'auto' {
   }
 }
 
-// Boot-time session bootstrap. Two jobs:
+// Boot-time session bootstrap. Four jobs:
 //   1. Refresh the JWT if it's near expiry, so the first network request of
 //      the session never carries a stale token.
-//   2. In single-user mode, mint+persist an admin session if one isn't in
-//      localStorage yet — covers direct navigation to auth-required routes
-//      like /cli-agents-beta or /profile-beta without first visiting /auth.
-// Public/demo mode is intentionally NOT auto-bootstrapped: those flows
-// require the user to pick "Temporary user" or Google on /auth.
+//   2. Mint+persist a session if one isn't in localStorage yet:
+//      - Single-user mode: anonymous-but-admin session.
+//      - Public/demo mode: a fresh temporary user (no anonymous intermediate).
+//      Covers direct navigation to auth-required routes without first
+//      visiting /auth.
+//   3. Verify the locally-stored token actually authenticates against the
+//      backend — ``validateSession`` only checks the access_token isn't
+//      expired locally, so a token revoked server-side (e.g. JWT secret
+//      rotated by a docker rebuild) would otherwise pass. We confirm by
+//      asking ``/auth/me/optional`` and re-mint or redirect when the
+//      backend doesn't recognize the user.
+//   4. Standard mode without a valid session — redirect to /auth so the
+//      user lands on the login form instead of a broken /dashboards-beta
+//      where every API call 401s.
 async function bootstrapSession(): Promise<void> {
-  const valid = await validateSession();
-  if (valid) return;
   if (window.location.pathname.startsWith('/auth')) return;
+
+  const localValid = await validateSession();
+  let status;
   try {
-    const status = await fetchAuthStatus();
+    status = await fetchAuthStatus();
+  } catch (err) {
+    console.error('Auth bootstrap: failed to read /auth/me/optional', err);
+    window.location.replace('/auth');
+    return;
+  }
+
+  // Has a local token AND backend resolved a user → session is good.
+  if (localValid && status.user) return;
+
+  // Either no local token, or local token is stale/revoked. Drop it before
+  // re-establishing so the next call doesn't reuse the bad token.
+  if (!status.user) {
+    try { clearSession(); } catch { /* ignore */ }
+  }
+
+  try {
     if (status.is_single_user_mode) {
       const session = await getAnonymousSession();
       persistSession(session);
+      return;
     }
+    if (status.is_public_mode) {
+      const session = await createTemporaryUser();
+      persistSession(session);
+      return;
+    }
+    // Standard mode, no valid session — send to login.
+    window.location.replace('/auth');
   } catch (err) {
     console.error('Auth bootstrap failed:', err);
+    // Fail safe: when bootstrap can't recover, route to /auth so the user
+    // sees an actionable login form rather than a silently broken SPA.
+    window.location.replace('/auth');
   }
 }
 

@@ -258,8 +258,7 @@ layout = dmc.Container(
                                         },
                                     }
                                 },
-                                disabled=settings.auth.is_public_mode
-                                or settings.auth.is_single_user_mode,
+                                disabled=settings.auth.is_public_mode,
                             ),
                         ],
                         align="center",

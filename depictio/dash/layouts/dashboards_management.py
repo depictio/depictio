@@ -266,21 +266,23 @@ def render_welcome_section(email: str, is_anonymous: bool = False) -> dmc.Grid:
     """
     Render the welcome section with user avatar and create dashboard button.
 
+    The Create Dashboard button is enabled in all reachable user states:
+    standard requires login (so anonymous never reaches here), single-user's
+    anonymous account has admin privileges, and public/demo mints a
+    temporary user at boot. ``is_anonymous`` is retained for callers but
+    no longer gates the button.
+
     Args:
         email: User's email address for display and avatar.
-        is_anonymous: Whether the user is anonymous (disables create button).
+        is_anonymous: Reserved for caller convention; does not affect gating.
 
     Returns:
         dmc.Grid: Welcome section layout component.
     """
-    # Check if user is anonymous and disable button accordingly
-    # In single-user mode, anonymous user has admin access and can create dashboards
-    # In public mode, anonymous users cannot create dashboards (they need to upgrade to temp user)
-    should_disable = is_anonymous and not settings.auth.is_single_user_mode
-    button_disabled = should_disable
-    button_text = "+ New Dashboard" if not should_disable else "Login to Create Dashboards"
-    button_variant = "gradient" if not should_disable else "outline"
-    button_color = {"from": "black", "to": "grey", "deg": 135} if not should_disable else "gray"
+    del is_anonymous  # gating removed under unified model
+    button_text = "+ New Dashboard"
+    button_variant = "gradient"
+    button_color = {"from": "black", "to": "grey", "deg": 135}
 
     return dmc.Grid(
         children=[
@@ -311,11 +313,9 @@ def render_welcome_section(email: str, is_anonymous: bool = False) -> dmc.Grid:
                             id={"type": "create-dashboard-button", "index": email},
                             n_clicks=0,
                             variant=button_variant,
-                            gradient=button_color if not is_anonymous else None,
-                            color="gray" if is_anonymous else None,
+                            gradient=button_color,
                             style={"fontFamily": "Virgil"},
                             size="xl",
-                            disabled=button_disabled,
                         ),
                         style={"margin": "20px 0"},
                     ),

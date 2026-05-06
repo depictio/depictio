@@ -277,8 +277,19 @@ function normalizeLayout(
       const x = Math.max(0, Math.min(it.x ?? 0, COLS - w));
       const h = Math.max(1, it.h ?? 1);
       const y = Math.max(0, it.y ?? 0);
+      // Strip the per-item ``resizeHandles`` override. Older editor passes
+      // baked an incomplete handle list (missing the top edges — n/nw/ne)
+      // into stored_layout_data for figure/table cells, which permanently
+      // disabled the top resize handles regardless of the GridLayout
+      // global default. Card cells never had it set, which is why they
+      // always rendered all 8 handles. Removing it lets the global
+      // ``resizeHandles`` prop on <GridLayout> apply uniformly.
+      const {
+        resizeHandles: _strippedHandles,
+        ...rest
+      } = it as Layout & { resizeHandles?: string[] };
       return {
-        ...it,
+        ...rest,
         i: stripBoxPrefix(it.i),
         x,
         y,

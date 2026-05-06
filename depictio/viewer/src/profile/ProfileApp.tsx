@@ -29,7 +29,6 @@ import {
 
 import { AppSidebar } from '../chrome';
 import EditPasswordModal from './EditPasswordModal';
-import UpgradeToTemporaryModal from './UpgradeToTemporaryModal';
 import { brandColors } from './colors';
 
 const SIDEBAR_KEY = 'profile-sidebar-collapsed';
@@ -58,27 +57,19 @@ function useProfileSidebar(): [boolean, () => void] {
   return [opened, toggle];
 }
 
-/** Mirrors `depictio/dash/layouts/profile.py` button enable/disable rules.
- *  All four flags come from `/auth/me/optional` plus `is_anonymous` /
- *  `is_temporary` from the strict `/auth/me` (the badge endpoint omits them). */
-function buttonStates(
-  status: AuthStatusResponse | null,
-  user: ProfileUser | null,
-): {
+/** Mirrors `depictio/dash/layouts/profile.py` button enable/disable rules. */
+function buttonStates(status: AuthStatusResponse | null): {
   logoutDisabled: boolean;
   editPasswordDisabled: boolean;
   cliAgentsDisabled: boolean;
-  showUpgrade: boolean;
 } {
   const isPublic = Boolean(status?.is_public_mode);
   const isSingle = Boolean(status?.is_single_user_mode);
   const isDemo = Boolean(status?.is_demo_mode);
-  const isUnauth = Boolean(status?.unauthenticated_mode);
   return {
     logoutDisabled: isPublic || isSingle,
     editPasswordDisabled: isSingle || isPublic || isDemo,
     cliAgentsDisabled: isPublic,
-    showUpgrade: isUnauth && Boolean(user?.is_anonymous) && !user?.is_temporary,
   };
 }
 
@@ -88,7 +79,6 @@ const ProfileApp: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [editPasswordOpened, { open: openEditPassword, close: closeEditPassword }] =
     useDisclosure(false);
-  const [upgradeOpened, { open: openUpgrade, close: closeUpgrade }] = useDisclosure(false);
 
   const [mobileOpened, { toggle: toggleMobile }] = useDisclosure(false);
   const [desktopOpened, toggleDesktop] = useProfileSidebar();
@@ -119,7 +109,7 @@ const ProfileApp: React.FC = () => {
     window.location.assign('/auth');
   }, []);
 
-  const states = buttonStates(status, user);
+  const states = buttonStates(status);
 
   return (
     <AppShell
@@ -238,20 +228,6 @@ const ProfileApp: React.FC = () => {
                       Logout
                     </Button>
 
-                    {states.showUpgrade && (
-                      <Button
-                        variant="filled"
-                        radius="md"
-                        onClick={openUpgrade}
-                        leftSection={
-                          <Icon icon="mdi:account-arrow-up" width={20} />
-                        }
-                        styles={{ root: { backgroundColor: brandColors.blue } }}
-                      >
-                        Login as a temporary user
-                      </Button>
-                    )}
-
                     <Button
                       variant="filled"
                       radius="md"
@@ -297,7 +273,6 @@ const ProfileApp: React.FC = () => {
       </AppShell.Main>
 
       <EditPasswordModal opened={editPasswordOpened} onClose={closeEditPassword} />
-      <UpgradeToTemporaryModal opened={upgradeOpened} onClose={closeUpgrade} />
     </AppShell>
   );
 };

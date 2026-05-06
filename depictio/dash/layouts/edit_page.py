@@ -38,12 +38,11 @@ def create_minimal_edit_header(
     if not dashboard_title:
         dashboard_title = f"Dashboard {dashboard_id[:8]}..."
 
-    # Determine back URL based on edit mode.
-    # In edit mode, the legacy Dash editor (/dashboard-edit/{id}) has been
-    # migrated to the React SPA at /dashboard-beta/{id}/edit, so post-edit
-    # navigation must land users back in the React editor.
+    # Determine back URL based on edit mode. Edit mode → Dash editor;
+    # view mode → Dash viewer. The React SPA editor is a separate path
+    # reachable only via the explicit "Try new mode" affordance.
     back_url = (
-        f"/dashboard-beta/{dashboard_id}/edit" if is_edit_mode else f"/dashboard/{dashboard_id}"
+        f"/dashboard-edit/{dashboard_id}" if is_edit_mode else f"/dashboard/{dashboard_id}"
     )
 
     header_content = dmc.Group(

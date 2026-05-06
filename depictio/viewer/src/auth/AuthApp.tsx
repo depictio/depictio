@@ -1,17 +1,16 @@
 import { Loader, Stack, Text } from '@mantine/core';
 import { useEffect, useMemo, useState } from 'react';
-import { getAnonymousSession, persistSession } from 'depictio-react-core';
+import { createTemporaryUser, getAnonymousSession, persistSession } from 'depictio-react-core';
 
 import AuthBackground from './components/AuthBackground';
 import AuthCard from './components/AuthCard';
 import GoogleOAuthCallback from './components/GoogleOAuthCallback';
 import LoginForm from './components/LoginForm';
-import PublicModeOptions from './components/PublicModeOptions';
 import RegisterForm from './components/RegisterForm';
 import { useAuthMode } from './hooks/useAuthMode';
 import './styles/auth.css';
 
-const POST_AUTH_REDIRECT = '/dashboards';
+const POST_AUTH_REDIRECT = '/dashboards-beta';
 
 type View = 'login' | 'register' | 'oauth-callback';
 
@@ -25,9 +24,9 @@ export default function AuthApp() {
   const initialView = useMemo<View>(() => detectView(window.location.pathname), []);
   const [view, setView] = useState<View>(initialView);
   const { loading, status, error } = useAuthMode();
-  const [singleUserError, setSingleUserError] = useState<string | null>(null);
+  const [autoSessionError, setAutoSessionError] = useState<string | null>(null);
 
-  // Auto-redirect on /auth load. Two cases:
+  // Auto-redirect on /auth load. Three cases:
   // 1. Single-user mode — always fetch a fresh admin session and persist it
   //    before navigating. /auth/me/optional resolves the admin via fallback
   //    so `status.user` is truthy here, but we MUST persist the token first
@@ -35,8 +34,11 @@ export default function AuthApp() {
   //    Without this, save_dashboard's get_user_or_anonymous falls back to
   //    the anonymous user and dashboards land in "Accessed" with the wrong
   //    owner.
-  // 2. Standard / public mode with an already-resolved session — bounce
-  //    straight through without touching localStorage.
+  // 2. Public/demo mode — mint a fresh temporary user (no anonymous
+  //    intermediate) and persist before navigating. Mirrors single-user
+  //    behavior so visitors land directly in /dashboards.
+  // 3. Standard mode with an already-resolved session — bounce straight
+  //    through without touching localStorage.
   useEffect(() => {
     if (view === 'oauth-callback') return;
     if (loading || !status) return;
@@ -48,6 +50,10 @@ export default function AuthApp() {
           const session = await getAnonymousSession();
           if (cancelled) return;
           persistSession(session);
+        } else if (status.is_public_mode) {
+          const session = await createTemporaryUser();
+          if (cancelled) return;
+          persistSession(session);
         } else if (!status.user) {
           return; // let the login form render
         }
@@ -55,8 +61,8 @@ export default function AuthApp() {
       } catch (err) {
         console.error(err);
         if (!cancelled) {
-          setSingleUserError(
-            'Failed to start single-user session. Check the backend configuration.',
+          setAutoSessionError(
+            'Failed to start session. Check the backend configuration.',
           );
         }
       }
@@ -84,27 +90,22 @@ export default function AuthApp() {
           <AuthCard heading="Welcome to Depictio :">
             <Text c="red" ta="center">{error}</Text>
           </AuthCard>
-        ) : status?.is_single_user_mode ? (
+        ) : status?.is_single_user_mode || status?.is_public_mode ? (
           <AuthCard heading="Welcome to Depictio :">
             <Stack align="center" gap="md">
-              {singleUserError ? (
-                <Text c="red" ta="center">{singleUserError}</Text>
+              {autoSessionError ? (
+                <Text c="red" ta="center">{autoSessionError}</Text>
               ) : (
                 <>
                   <Loader />
-                  <Text c="dimmed">Starting single-user session…</Text>
+                  <Text c="dimmed">
+                    {status.is_single_user_mode
+                      ? 'Starting single-user session…'
+                      : 'Starting temporary session…'}
+                  </Text>
                 </>
               )}
             </Stack>
-          </AuthCard>
-        ) : status?.is_public_mode ? (
-          <AuthCard heading="Welcome to Depictio">
-            <PublicModeOptions
-              googleEnabled={status.google_oauth_enabled}
-              expiryHours={24}
-              expiryMinutes={0}
-              onSuccess={handleSuccess}
-            />
           </AuthCard>
         ) : view === 'register' ? (
           <AuthCard heading="Please register :">

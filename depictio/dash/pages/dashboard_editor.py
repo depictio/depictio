@@ -185,9 +185,14 @@ def register_routing_callback(app):
         Main routing callback for Editor App.
 
         Routes:
-        - /dashboard-edit/{id} - Redirect to React SPA editor (/dashboard-beta/{id}/edit)
-        - /dashboard-edit/{id}/component/add/{uuid} - Create component (Dash stepper)
-        - /dashboard-edit/{id}/component/edit/{uuid} - Edit component (Dash edit page)
+        - /dashboard-edit/{id} - Edit dashboard (Dash editor)
+        - /dashboard-edit/{id}/component/add/{uuid} - Create component
+        - /dashboard-edit/{id}/component/edit/{uuid} - Edit component
+
+        The React SPA editor at /dashboard-beta/{id}/edit is served by
+        FastAPI on a separate origin and is reachable only via the explicit
+        "Try new mode" affordance — never as an automatic redirect from
+        this Dash route.
 
         Args:
             pathname: Current URL pathname
@@ -261,38 +266,19 @@ def register_routing_callback(app):
                 return error_content, html.Div(), no_update, updated_local_data, no_update
             return error_content, html.Div(), pathname, updated_local_data, no_update
 
-        # MIGRATION: The main editor page is now served by the React SPA at
-        # /dashboard-beta/{id}/edit. Render a tiny placeholder containing a
-        # dcc.Location that triggers an immediate client-side redirect, while
-        # leaving the component creation/editing routes (handled above) untouched.
-        react_editor_url = f"/dashboard-beta/{dashboard_id}/edit"
-        logger.info(
-            f"Redirecting legacy Dash editor /dashboard-edit/{dashboard_id} -> {react_editor_url}"
-        )
-        redirect_content = html.Div(
-            [
-                dcc.Location(
-                    id="editor-redirect",
-                    href=react_editor_url,
-                    refresh=True,
-                ),
-                dmc.Center(
-                    dmc.Text(
-                        "Redirecting to dashboard editor...",
-                        size="lg",
-                        c="gray",
-                    ),
-                    style={"height": "calc(100vh - 60px)"},
-                ),
-            ]
+        # Load dashboard data in edit mode (legacy Dash editor).
+        content, header_content = load_and_render_dashboard(
+            dashboard_id=dashboard_id,
+            local_data=updated_local_data,
+            theme=theme,
+            cached_project_data=cached_project_data,
+            dashboard_init_data=dashboard_init_data,
         )
 
-        # Preserve URL on local-store-triggered runs to avoid clobbering the
-        # browser history; otherwise emit no_update for pathname so the
-        # client-side dcc.Location performs the navigation.
+        # If triggered by local-store, preserve current URL
         if triggered_by_local_store:
-            return redirect_content, html.Div(), no_update, updated_local_data, no_update
-        return redirect_content, html.Div(), no_update, updated_local_data, no_update
+            return content, header_content, no_update, updated_local_data, no_update
+        return content, header_content, pathname, updated_local_data, no_update
 
 
 def route_component_creation(pathname: str, local_data: dict, theme: str):

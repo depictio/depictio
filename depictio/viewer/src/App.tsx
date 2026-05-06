@@ -39,7 +39,6 @@ import { useSidebarOpen } from './hooks/useSidebarOpen';
 import { useAuthMode } from './auth/hooks/useAuthMode';
 import DemoTour from './demo/DemoTour';
 import DemoModeBanner from './components/DemoModeBanner';
-import UpgradeToTemporaryButton from './components/UpgradeToTemporaryButton';
 
 /**
  * Top-level SPA. Layout:
@@ -333,7 +332,6 @@ const App: React.FC = () => {
           cardsLoading={cardsLoading}
           rightExtras={
             <>
-              <UpgradeToTemporaryButton />
               {realtimeEnabled && (
                 <span data-tour-id="realtime-indicator" style={{ display: 'inline-flex' }}>
                   <RealtimeIndicator

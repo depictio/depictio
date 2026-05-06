@@ -58,6 +58,26 @@
   z-index: 5;
 }
 
+/* In edit mode, resize handles fade in on cell hover — same UX as the
+ * floating action-icon row. Outside edit mode the grid is non-resizable so
+ * react-grid-layout doesn't render handles at all (no rule needed). */
+.depictio-dashboard-grid.depictio-edit-mode
+  .react-grid-item
+  > .react-resizable-handle {
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  pointer-events: none;
+}
+.depictio-dashboard-grid.depictio-edit-mode
+  .react-grid-item:hover
+  > .react-resizable-handle,
+.depictio-dashboard-grid.depictio-edit-mode
+  .react-grid-item.react-resizable-resizing
+  > .react-resizable-handle {
+  opacity: 1;
+  pointer-events: auto;
+}
+
 html,
 body {
   margin: 0;
