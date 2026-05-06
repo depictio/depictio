@@ -1465,7 +1465,7 @@ export async function validateSession(): Promise<boolean> {
   return readStoredSession()?.access_token != null;
 }
 
-export { authFetch, refreshAccessToken };
+export { refreshAccessToken };
 
 // ---- Dashboard management (list / create / edit / delete / import / export)
 //
