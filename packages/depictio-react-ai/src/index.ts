@@ -1,10 +1,13 @@
 /**
  * Public surface of depictio-react-ai.
- *
- * Components are added in Layer 5; this barrel currently exports the
- * client + state primitives so other packages can start consuming the
- * AI endpoints without waiting for the chrome to land.
  */
+
+// Components
+export { default as AIDrawer } from './components/AIDrawer';
+export { default as AIKeySection } from './components/AIKeySection';
+export { default as ActionsPreview } from './components/ActionsPreview';
+export { default as ExecutionTrace } from './components/ExecutionTrace';
+export { default as SuggestionsPanel } from './components/SuggestionsPanel';
 
 export {
   figureFromPrompt,
