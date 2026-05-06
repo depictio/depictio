@@ -163,15 +163,26 @@ const App: React.FC = () => {
 
   // Primary DC for the AI drawer's "New figure" mode — first DC referenced
   // by any stored component. Mirrors the heuristic the analyze backend uses.
-  const primaryDcId = useMemo(() => {
+  // Captures the matching workflow id at the same time so /figure/preview
+  // can resolve the right Delta location without a second lookup.
+  const primaryRef = useMemo(() => {
     for (const m of dashboard?.stored_metadata || []) {
-      const dc =
-        (m as { dc_id?: string }).dc_id ??
-        ((m as { metadata?: { dc_id?: string } }).metadata?.dc_id);
-      if (typeof dc === 'string' && dc) return dc;
+      const meta = m as {
+        dc_id?: string;
+        wf_id?: string;
+        metadata?: { dc_id?: string; wf_id?: string };
+      };
+      const dc = meta.dc_id ?? meta.metadata?.dc_id;
+      const wf = meta.wf_id ?? meta.metadata?.wf_id;
+      if (typeof dc === 'string' && dc) {
+        return { dcId: dc, wfId: typeof wf === 'string' ? wf : undefined };
+      }
     }
-    return undefined;
+    return { dcId: undefined, wfId: undefined };
   }, [dashboard?.stored_metadata]);
+  const primaryDcId = primaryRef.dcId;
+  const primaryWfId = primaryRef.wfId;
+  const projectId = (dashboard?.project_id as string | undefined) || undefined;
 
   // Index → component_type lookup so AI-driven filter mutations can be
   // converted to the correct InteractiveFilter shape downstream.
@@ -585,6 +596,8 @@ const App: React.FC = () => {
           onClose={closeAI}
           dashboardId={dashboardId}
           primaryDataCollectionId={primaryDcId}
+          primaryWorkflowId={primaryWfId}
+          projectId={projectId}
           onApplyActions={handleApplyActions}
         />
       )}

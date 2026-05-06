@@ -20,6 +20,7 @@ import { useAISession, useAIStore } from '../store';
 import type { DashboardActions, PlotSuggestion } from '../types';
 import ActionsPreview from './ActionsPreview';
 import ExecutionTrace from './ExecutionTrace';
+import FigurePreview from './FigurePreview';
 
 interface Props {
   opened: boolean;
@@ -29,6 +30,12 @@ interface Props {
    *  flow. The host typically derives this from the dashboard's first
    *  figure component. */
   primaryDataCollectionId?: string;
+  /** Workflow id paired with the primary DC. Forwarded to FigurePreview so
+   *  the /figure/preview endpoint resolves the right Delta location. */
+  primaryWorkflowId?: string;
+  /** Project id of the current dashboard. Forwarded to FigurePreview so the
+   *  preview metadata matches what the figure builder would send. */
+  projectId?: string;
   /** Optional component the user is currently focused on; passed to
    *  /ai/analyze so the LLM can reason about it specifically. */
   selectedComponentId?: string;
@@ -52,6 +59,8 @@ const AIDrawer: React.FC<Props> = ({
   onClose,
   dashboardId,
   primaryDataCollectionId,
+  primaryWorkflowId,
+  projectId,
   selectedComponentId,
   onApplyActions,
   onAddSuggestion,
@@ -177,32 +186,42 @@ const AIDrawer: React.FC<Props> = ({
                   <ExecutionTrace steps={m.steps} />
                 )}
                 {m.suggestion && (
-                  <Alert color="blue" variant="light">
-                    <Stack gap={4}>
-                      <Group gap="xs">
-                        <Badge size="xs" variant="light" color="blue">
-                          {m.suggestion.visu_type}
-                        </Badge>
-                        <Text size="sm" fw={600}>
-                          {m.suggestion.title}
+                  <Stack gap={6}>
+                    <Alert color="blue" variant="light">
+                      <Stack gap={4}>
+                        <Group gap="xs">
+                          <Badge size="xs" variant="light" color="blue">
+                            {m.suggestion.visu_type}
+                          </Badge>
+                          <Text size="sm" fw={600}>
+                            {m.suggestion.title}
+                          </Text>
+                        </Group>
+                        <Text size="xs" c="dimmed">
+                          {m.suggestion.explanation}
                         </Text>
-                      </Group>
-                      <Text size="xs" c="dimmed">
-                        {m.suggestion.explanation}
-                      </Text>
-                      {onAddSuggestion && (
-                        <Button
-                          size="xs"
-                          variant="filled"
-                          mt={4}
-                          leftSection={<Icon icon="material-symbols:add" width={14} />}
-                          onClick={() => onAddSuggestion(m.suggestion!)}
-                        >
-                          Add to dashboard
-                        </Button>
-                      )}
-                    </Stack>
-                  </Alert>
+                        {onAddSuggestion && (
+                          <Button
+                            size="xs"
+                            variant="filled"
+                            mt={4}
+                            leftSection={<Icon icon="material-symbols:add" width={14} />}
+                            onClick={() => onAddSuggestion(m.suggestion!)}
+                          >
+                            Add to dashboard
+                          </Button>
+                        )}
+                      </Stack>
+                    </Alert>
+                    {primaryDataCollectionId && (
+                      <FigurePreview
+                        suggestion={m.suggestion}
+                        dataCollectionId={primaryDataCollectionId}
+                        workflowId={primaryWorkflowId}
+                        projectId={projectId}
+                      />
+                    )}
+                  </Stack>
                 )}
                 {m.result?.actions && (
                   <ActionsPreview

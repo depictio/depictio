@@ -49,7 +49,7 @@ importers:
         version: link:../../packages/depictio-components
       depictio-react-ai:
         specifier: file:../../packages/depictio-react-ai
-        version: file:packages/depictio-react-ai(@iconify/react@5.2.1(react@18.3.1))(@mantine/core@7.17.8(@mantine/hooks@7.17.8(react@18.3.1))(@types/react@18.3.28)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(@mantine/hooks@7.17.8(react@18.3.1))(@mantine/notifications@7.17.8(@mantine/core@7.17.8(@mantine/hooks@7.17.8(react@18.3.1))(@types/react@18.3.28)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(@mantine/hooks@7.17.8(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(depictio-react-core@file:packages/depictio-react-core(zuivctj76h3d365dcjs7ogpole))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(zustand@5.0.12(@types/react@18.3.28)(react@18.3.1))
+        version: file:packages/depictio-react-ai(@iconify/react@5.2.1(react@18.3.1))(@mantine/core@7.17.8(@mantine/hooks@7.17.8(react@18.3.1))(@types/react@18.3.28)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(@mantine/hooks@7.17.8(react@18.3.1))(@mantine/notifications@7.17.8(@mantine/core@7.17.8(@mantine/hooks@7.17.8(react@18.3.1))(@types/react@18.3.28)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(@mantine/hooks@7.17.8(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(depictio-react-core@file:packages/depictio-react-core(zuivctj76h3d365dcjs7ogpole))(plotly.js@2.35.3(mapbox-gl@1.13.3)(webpack@5.106.2))(react-dom@18.3.1(react@18.3.1))(react-plotly.js@2.6.0(plotly.js@2.35.3(mapbox-gl@1.13.3)(webpack@5.106.2))(react@18.3.1))(react@18.3.1)(zustand@5.0.12(@types/react@18.3.28)(react@18.3.1))
       depictio-react-core:
         specifier: file:../../packages/depictio-react-core
         version: link:../../packages/depictio-react-core
@@ -198,18 +198,27 @@ importers:
       '@types/react-dom':
         specifier: ^18.3.0
         version: 18.3.7(@types/react@18.3.28)
+      '@types/react-plotly.js':
+        specifier: ^2.6.3
+        version: 2.6.4
       depictio-components:
         specifier: workspace:*
         version: link:../depictio-components
       depictio-react-core:
         specifier: workspace:*
         version: link:../depictio-react-core
+      plotly.js:
+        specifier: ^2.35.0
+        version: 2.35.3(mapbox-gl@1.13.3)(webpack@5.106.2)
       react:
         specifier: ^18.3.0
         version: 18.3.1
       react-dom:
         specifier: ^18.3.0
         version: 18.3.1(react@18.3.1)
+      react-plotly.js:
+        specifier: ^2.6.0
+        version: 2.6.0(plotly.js@2.35.3(mapbox-gl@1.13.3)(webpack@5.106.2))(react@18.3.1)
       typescript:
         specifier: ^5.3.0
         version: 5.9.3
@@ -1820,8 +1829,10 @@ packages:
       '@mantine/hooks': ^7.14.0
       '@mantine/notifications': ^7.14.0
       depictio-react-core: workspace:*
+      plotly.js: ^2.35.0
       react: ^18.0.0
       react-dom: ^18.0.0
+      react-plotly.js: ^2.6.0
       zustand: ^5.0.0
 
   depictio-react-core@file:packages/depictio-react-core:
@@ -4830,15 +4841,17 @@ snapshots:
       react: 18.3.1
       react-dom: 18.3.1(react@18.3.1)
 
-  depictio-react-ai@file:packages/depictio-react-ai(@iconify/react@5.2.1(react@18.3.1))(@mantine/core@7.17.8(@mantine/hooks@7.17.8(react@18.3.1))(@types/react@18.3.28)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(@mantine/hooks@7.17.8(react@18.3.1))(@mantine/notifications@7.17.8(@mantine/core@7.17.8(@mantine/hooks@7.17.8(react@18.3.1))(@types/react@18.3.28)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(@mantine/hooks@7.17.8(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(depictio-react-core@file:packages/depictio-react-core(zuivctj76h3d365dcjs7ogpole))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(zustand@5.0.12(@types/react@18.3.28)(react@18.3.1)):
+  depictio-react-ai@file:packages/depictio-react-ai(@iconify/react@5.2.1(react@18.3.1))(@mantine/core@7.17.8(@mantine/hooks@7.17.8(react@18.3.1))(@types/react@18.3.28)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(@mantine/hooks@7.17.8(react@18.3.1))(@mantine/notifications@7.17.8(@mantine/core@7.17.8(@mantine/hooks@7.17.8(react@18.3.1))(@types/react@18.3.28)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(@mantine/hooks@7.17.8(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(depictio-react-core@file:packages/depictio-react-core(zuivctj76h3d365dcjs7ogpole))(plotly.js@2.35.3(mapbox-gl@1.13.3)(webpack@5.106.2))(react-dom@18.3.1(react@18.3.1))(react-plotly.js@2.6.0(plotly.js@2.35.3(mapbox-gl@1.13.3)(webpack@5.106.2))(react@18.3.1))(react@18.3.1)(zustand@5.0.12(@types/react@18.3.28)(react@18.3.1)):
     dependencies:
       '@iconify/react': 5.2.1(react@18.3.1)
       '@mantine/core': 7.17.8(@mantine/hooks@7.17.8(react@18.3.1))(@types/react@18.3.28)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       '@mantine/hooks': 7.17.8(react@18.3.1)
       '@mantine/notifications': 7.17.8(@mantine/core@7.17.8(@mantine/hooks@7.17.8(react@18.3.1))(@types/react@18.3.28)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(@mantine/hooks@7.17.8(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       depictio-react-core: file:packages/depictio-react-core(zuivctj76h3d365dcjs7ogpole)
+      plotly.js: 2.35.3(mapbox-gl@1.13.3)(webpack@5.106.2)
       react: 18.3.1
       react-dom: 18.3.1(react@18.3.1)
+      react-plotly.js: 2.6.0(plotly.js@2.35.3(mapbox-gl@1.13.3)(webpack@5.106.2))(react@18.3.1)
       zustand: 5.0.12(@types/react@18.3.28)(react@18.3.1)
 
   depictio-react-core@file:packages/depictio-react-core(zuivctj76h3d365dcjs7ogpole):

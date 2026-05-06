@@ -7,6 +7,7 @@ export { default as AIDrawer } from './components/AIDrawer';
 export { default as AIKeySection } from './components/AIKeySection';
 export { default as ActionsPreview } from './components/ActionsPreview';
 export { default as ExecutionTrace } from './components/ExecutionTrace';
+export { default as FigurePreview } from './components/FigurePreview';
 export { default as SuggestionsPanel } from './components/SuggestionsPanel';
 
 export {
