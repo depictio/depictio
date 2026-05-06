@@ -21,7 +21,7 @@ import polars as pl
 from bson import ObjectId
 from fastapi import HTTPException
 
-from depictio.api.v1.db import projects_collection
+from depictio.api.v1.db import dashboards_collection, projects_collection
 from depictio.api.v1.deltatables_utils import load_deltatable_lite
 
 logger = logging.getLogger(__name__)
@@ -258,4 +258,146 @@ async def build_data_context(
         columns=_summarize_columns(df),
         sample_rows=_sample_rows(df, n=sample_n),
         row_count=df.height,
+    )
+
+
+# ---------- Dashboard context ----------
+
+# Component types that the analyze flow may target with FilterAction.
+INTERACTIVE_TYPES: frozenset[str] = frozenset(
+    {
+        "interactive",
+        "MultiSelect",
+        "Slider",
+        "RangeSlider",
+        "DatePicker",
+        "Switch",
+        "SegmentedControl",
+        "TimelineSlider",
+    }
+)
+
+FIGURE_TYPES: frozenset[str] = frozenset({"figure", "Figure"})
+
+
+def _component_id(meta: dict[str, Any]) -> str | None:
+    """Best-effort component id resolver across the various store shapes."""
+    for k in ("id", "component_id", "index"):
+        v = meta.get(k)
+        if isinstance(v, str) and v:
+            return v
+        if isinstance(v, dict):
+            inner = v.get("index") or v.get("value")
+            if isinstance(inner, str) and inner:
+                return inner
+    return None
+
+
+def _summarize_dashboard(dashboard_doc: dict[str, Any]) -> tuple[
+    list[FigureSummary], list[FilterSummary], str | None
+]:
+    """Extract figures + interactive filter values + best-guess primary DC."""
+    figures: list[FigureSummary] = []
+    filters: list[FilterSummary] = []
+    primary_dc: str | None = None
+
+    for meta in dashboard_doc.get("stored_metadata", []) or []:
+        comp_type = meta.get("component_type") or meta.get("type") or ""
+        cid = _component_id(meta) or ""
+
+        # Track the first DC we encounter — gives us a default for analyze
+        # when the request body does not specify one.
+        dc_id = meta.get("dc_id") or (meta.get("metadata") or {}).get("dc_id")
+        if isinstance(dc_id, str) and dc_id and primary_dc is None:
+            primary_dc = dc_id
+
+        if comp_type in FIGURE_TYPES or comp_type.lower() == "figure":
+            dict_kwargs = (
+                meta.get("dict_kwargs")
+                or (meta.get("metadata") or {}).get("dict_kwargs")
+                or {}
+            )
+            visu = (
+                meta.get("visu_type")
+                or (meta.get("metadata") or {}).get("visu_type")
+                or "figure"
+            )
+            figures.append(
+                FigureSummary(
+                    component_id=cid,
+                    visu_type=str(visu),
+                    dict_kwargs=dict_kwargs if isinstance(dict_kwargs, dict) else {},
+                    title=meta.get("title") or (meta.get("metadata") or {}).get("title"),
+                )
+            )
+        elif comp_type in INTERACTIVE_TYPES or "interactive" in comp_type.lower():
+            value = meta.get("value")
+            if value is None:
+                value = (meta.get("metadata") or {}).get("value")
+            column = meta.get("column_name") or (meta.get("metadata") or {}).get(
+                "column_name"
+            )
+            filters.append(
+                FilterSummary(
+                    component_id=cid,
+                    component_type=str(comp_type),
+                    column=column if isinstance(column, str) else None,
+                    value=value,
+                )
+            )
+
+    return figures, filters, primary_dc
+
+
+async def build_dashboard_context(
+    dashboard_id: str, current_user: Any
+) -> tuple[DashboardContext, str | None]:
+    """Return (dashboard context, primary DC id) or raise 404/403.
+
+    Reuses the same permission gate as `/dashboards/get/{id}` (project-based
+    viewer access). The primary DC id is the first one referenced by any
+    stored component, used as the analyze flow's default data source.
+    """
+    from bson import ObjectId as _OID  # local — avoid widening top-level imports
+
+    try:
+        d_oid = _OID(dashboard_id)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"invalid dashboard_id: {e}")
+
+    doc = dashboards_collection.find_one({"dashboard_id": d_oid})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Dashboard not found.")
+
+    project_id = doc.get("project_id")
+    if not project_id:
+        raise HTTPException(
+            status_code=500, detail="Dashboard is not associated with a project."
+        )
+
+    project = projects_collection.find_one({"_id": _OID(project_id)})
+    if not project:
+        raise HTTPException(status_code=404, detail="Dashboard's project not found.")
+
+    is_public = bool(project.get("is_public"))
+    perms = project.get("permissions") or {}
+    user_id = getattr(current_user, "id", None)
+    allowed = is_public or any(
+        (p.get("_id") == user_id)
+        for p in (perms.get("owners") or []) + (perms.get("viewers") or [])
+    ) or "*" in (perms.get("viewers") or [])
+    if not allowed:
+        raise HTTPException(
+            status_code=403,
+            detail="You don't have permission to access this dashboard.",
+        )
+
+    figures, filters, primary_dc = _summarize_dashboard(doc)
+    return (
+        DashboardContext(
+            dashboard_id=dashboard_id,
+            figures=figures,
+            filters=filters,
+        ),
+        primary_dc,
     )

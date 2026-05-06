@@ -22,12 +22,21 @@ from collections.abc import AsyncIterator
 from fastapi import APIRouter, Depends, Header, HTTPException
 from fastapi.responses import StreamingResponse
 
+import asyncio
+
 from pydantic import ValidationError
 
 from depictio.api.v1.endpoints.ai_endpoints import llm_client, prompts
-from depictio.api.v1.endpoints.ai_endpoints.context import build_data_context
+from depictio.api.v1.endpoints.ai_endpoints.context import (
+    build_dashboard_context,
+    build_data_context,
+)
+from depictio.api.v1.endpoints.ai_endpoints.executor import execute_polars
 from depictio.api.v1.endpoints.ai_endpoints.schemas import (
+    AnalysisResult,
     AnalyzeRequest,
+    DashboardActions,
+    ExecutionStep,
     FigureFromPromptRequest,
     FigureFromPromptResponse,
     PlotSuggestion,
@@ -123,20 +132,177 @@ async def figure_from_prompt(
     )
 
 
-async def _analyze_stream(
+def _sse(event: StreamEvent) -> bytes:
+    """Format a StreamEvent as one SSE-style chunk (event + data + blank)."""
+    payload = event.model_dump_json(exclude={"type"})
+    return f"event: {event.type}\ndata: {payload}\n\n".encode()
+
+
+MAX_ANALYZE_STEPS = 4
+
+
+async def _run_analyze(
     body: AnalyzeRequest,
     current_user: User,
     user_api_key: str | None,
 ) -> AsyncIterator[bytes]:
-    """SSE-formatted async generator for the analyze flow.
+    """Drive the analyze loop and yield SSE-formatted events.
 
-    Layer 3 fills in the actual analysis loop. This stub emits a single
-    `error` + `done` pair so the React client wiring can be exercised.
+    Single-pass for v1: ask the LLM for {thought, code, answer, actions},
+    optionally execute one Polars expression, return the resulting answer
+    and DashboardActions. Multi-step ReAct loop (re-prompt with the
+    observation) is gated behind MAX_ANALYZE_STEPS for the future.
     """
-    err = StreamEvent(type="error", data={"detail": "analyze: not yet implemented"})
-    yield f"event: {err.type}\ndata: {err.model_dump_json(exclude={'type'})}\n\n".encode()
-    done = StreamEvent(type="done")
-    yield f"event: {done.type}\ndata: {{}}\n\n".encode()
+    yield _sse(StreamEvent(type="status", data={"message": "loading dashboard"}))
+
+    try:
+        dashboard_ctx, primary_dc = await build_dashboard_context(
+            body.dashboard_id, current_user
+        )
+    except Exception as e:  # noqa: BLE001
+        yield _sse(StreamEvent(type="error", data={"detail": str(e)}))
+        yield _sse(StreamEvent(type="done"))
+        return
+
+    if not primary_dc:
+        yield _sse(
+            StreamEvent(
+                type="error",
+                data={"detail": "Dashboard has no data collection to analyze yet."},
+            )
+        )
+        yield _sse(StreamEvent(type="done"))
+        return
+
+    yield _sse(StreamEvent(type="status", data={"message": "loading data"}))
+
+    try:
+        data_ctx = await build_data_context(primary_dc, current_user)
+    except Exception as e:  # noqa: BLE001
+        yield _sse(StreamEvent(type="error", data={"detail": str(e)}))
+        yield _sse(StreamEvent(type="done"))
+        return
+
+    yield _sse(StreamEvent(type="status", data={"message": "thinking"}))
+
+    messages = prompts.analyze_messages(
+        data_ctx, dashboard_ctx, body.prompt, body.selected_component_id
+    )
+
+    steps: list[ExecutionStep] = []
+    answer = ""
+    actions = DashboardActions()
+
+    for i in range(MAX_ANALYZE_STEPS):
+        try:
+            raw = await asyncio.to_thread(
+                llm_client.completion,
+                messages,
+                user_api_key=user_api_key,
+            )
+        except Exception as e:  # noqa: BLE001
+            yield _sse(StreamEvent(type="error", data={"detail": f"LLM error: {e}"}))
+            yield _sse(StreamEvent(type="done"))
+            return
+
+        try:
+            payload = llm_client.parse_json(raw)
+        except Exception as e:  # noqa: BLE001
+            yield _sse(
+                StreamEvent(
+                    type="error",
+                    data={"detail": f"LLM returned invalid JSON: {e}"},
+                )
+            )
+            yield _sse(StreamEvent(type="done"))
+            return
+
+        thought = str(payload.get("thought", "")).strip()
+        code = str(payload.get("code", "")).strip()
+        candidate_answer = str(payload.get("answer", "")).strip()
+        actions_payload = payload.get("actions") or {}
+
+        if code:
+            yield _sse(
+                StreamEvent(
+                    type="step",
+                    data={"thought": thought, "code": code, "status": "running"},
+                )
+            )
+            df = await asyncio.to_thread(
+                _load_df_for_analyze, data_ctx
+            )
+            step = await asyncio.to_thread(execute_polars, code, df)
+            step.thought = thought
+            steps.append(step)
+            yield _sse(
+                StreamEvent(
+                    type="step",
+                    data=step.model_dump(),
+                )
+            )
+            # If this was the final pass (the LLM also gave an answer)
+            # or we've run out of steps, stop looping.
+            if candidate_answer or i == MAX_ANALYZE_STEPS - 1:
+                answer = candidate_answer or "(no answer provided)"
+                try:
+                    actions = DashboardActions.model_validate(actions_payload)
+                except ValidationError as e:
+                    logger.warning("DashboardActions validation: %s", e)
+                    actions = DashboardActions()
+                break
+            # Otherwise, feed the observation back and ask again.
+            messages = messages + [
+                {"role": "assistant", "content": raw},
+                {
+                    "role": "user",
+                    "content": (
+                        "Observation:\n"
+                        + step.output
+                        + "\n\nNow respond with the same JSON envelope. "
+                        + "Set 'code' to '' and fill 'answer'."
+                    ),
+                },
+            ]
+            continue
+
+        # No code requested — terminal step.
+        steps.append(
+            ExecutionStep(
+                thought=thought, code="", output="", status="success"
+            )
+        )
+        answer = candidate_answer or "(no answer provided)"
+        try:
+            actions = DashboardActions.model_validate(actions_payload)
+        except ValidationError as e:
+            logger.warning("DashboardActions validation: %s", e)
+            actions = DashboardActions()
+        break
+
+    result = AnalysisResult(answer=answer, steps=steps, actions=actions)
+    yield _sse(StreamEvent(type="answer", data={"answer": answer}))
+    yield _sse(StreamEvent(type="actions", data=actions.model_dump()))
+    yield _sse(StreamEvent(type="result", data=result.model_dump()))
+    yield _sse(StreamEvent(type="done"))
+
+
+def _load_df_for_analyze(data_ctx):
+    """Re-load the DataFrame for the executor.
+
+    Kept as a tiny wrapper so `asyncio.to_thread` only sees a sync function.
+    The DataContext already holds row counts/columns; we re-load to keep
+    the executor's `df` up to date and to avoid serializing it across
+    coroutine boundaries.
+    """
+    from bson import ObjectId as _OID
+
+    from depictio.api.v1.deltatables_utils import load_deltatable_lite
+
+    return load_deltatable_lite(
+        workflow_id=_OID(data_ctx.workflow_id),
+        data_collection_id=_OID(data_ctx.data_collection_id),
+    )
 
 
 @ai_endpoint_router.post("/analyze")
@@ -147,7 +313,7 @@ async def analyze(
 ) -> StreamingResponse:
     """Prompt-driven analysis. Streams `StreamEvent` chunks as SSE."""
     return StreamingResponse(
-        _analyze_stream(body, current_user, user_api_key),
+        _run_analyze(body, current_user, user_api_key),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",
