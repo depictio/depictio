@@ -10,6 +10,7 @@ import {
   Stack,
   Text,
   Title,
+  Tooltip,
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { notifications } from '@mantine/notifications';
@@ -78,8 +79,13 @@ const ProjectsApp: React.FC = () => {
   const [mobileOpened, { toggle: toggleMobile }] = useDisclosure(false);
   const [desktopOpened, toggleDesktop] = useProjectsSidebar();
   const { user } = useCurrentUser();
-  const { status: authStatus } = useAuthMode();
-  const isPublic = Boolean(authStatus?.is_public_mode);
+  const { status: authStatus, loading: authLoading } = useAuthMode();
+  // Fail closed while the auth status is still loading — on the very first
+  // frame `authStatus` is null so `is_public_mode` would silently evaluate
+  // to false, letting a fast clicker open the create-project modal before
+  // the gate engages. Treat unknown auth as "assume restricted" until we've
+  // seen the response.
+  const isPublic = authLoading || Boolean(authStatus?.is_public_mode);
 
   useEffect(() => {
     document.title = 'Depictio — Projects';
@@ -202,17 +208,27 @@ const ProjectsApp: React.FC = () => {
               Projects
             </Title>
           </Group>
-          {!isPublic && (
+          {/* Visitors in public/demo mode see the button visibly disabled
+              rather than hidden — keeps the affordance discoverable while
+              making it obvious that login/elevated permissions are needed.
+              Mirrors `app_layout.return_create_project_button` in Dash. */}
+          <Tooltip
+            label="Project creation is disabled in public/demo mode"
+            disabled={!isPublic}
+            withArrow
+          >
             <Button
               color="teal"
               variant="filled"
               size="md"
               onClick={openCreate}
+              disabled={isPublic}
+              data-disabled={isPublic ? true : undefined}
               style={{ fontFamily: 'Virgil' }}
             >
               + New Project
             </Button>
-          )}
+          </Tooltip>
         </Group>
       </AppShell.Header>
 
@@ -245,7 +261,7 @@ const ProjectsApp: React.FC = () => {
               projects={projects}
               currentUserId={user?.id ?? null}
               isAdmin={Boolean(user?.is_admin)}
-              canCreate={!isPublic}
+              createDisabled={isPublic}
               onCreateClick={openCreate}
               onEdit={(p) => setEditTarget(p)}
               onDelete={(p) => setDeleteTarget(p)}

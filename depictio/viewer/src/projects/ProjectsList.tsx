@@ -1,5 +1,15 @@
 import React from 'react';
-import { Accordion, Box, Button, Center, Paper, Stack, Text, Title } from '@mantine/core';
+import {
+  Accordion,
+  Box,
+  Button,
+  Center,
+  Paper,
+  Stack,
+  Text,
+  Title,
+  Tooltip,
+} from '@mantine/core';
 import { Icon } from '@iconify/react';
 
 import type { ProjectListEntry } from 'depictio-react-core';
@@ -10,8 +20,9 @@ interface ProjectsListProps {
   projects: ProjectListEntry[];
   currentUserId: string | null;
   isAdmin: boolean;
-  /** False in public/demo mode — hides the empty-state Create Project button. */
-  canCreate: boolean;
+  /** True in public/demo mode — keeps the empty-state Create Project button
+   *  visible but disabled, with a tooltip explaining why. */
+  createDisabled: boolean;
   onCreateClick: () => void;
   onEdit: (project: ProjectListEntry) => void;
   onDelete: (project: ProjectListEntry) => void;
@@ -32,7 +43,7 @@ const ProjectsList: React.FC<ProjectsListProps> = ({
   projects,
   currentUserId,
   isAdmin,
-  canCreate,
+  createDisabled,
   onCreateClick,
   onEdit,
   onDelete,
@@ -51,27 +62,27 @@ const ProjectsList: React.FC<ProjectsListProps> = ({
             <Title order={3} c="dimmed">
               No projects available
             </Title>
-            {canCreate ? (
-              <>
-                <Text c="dimmed" ta="center">
-                  Create your first project to start organizing data
-                  collections and dashboards.
-                </Text>
-                <Button
-                  color="teal"
-                  variant="filled"
-                  onClick={onCreateClick}
-                  leftSection={<Icon icon="mdi:plus" width={18} />}
-                  style={{ fontFamily: 'Virgil' }}
-                >
-                  Create Project
-                </Button>
-              </>
-            ) : (
-              <Text c="dimmed" ta="center">
-                No projects are available on this instance.
-              </Text>
-            )}
+            <Text c="dimmed" ta="center">
+              {createDisabled
+                ? 'Project creation is disabled on this public/demo instance.'
+                : 'Create your first project to start organizing data collections and dashboards.'}
+            </Text>
+            <Tooltip
+              label="Project creation is disabled in public/demo mode"
+              disabled={!createDisabled}
+              withArrow
+            >
+              <Button
+                color="teal"
+                variant="filled"
+                onClick={onCreateClick}
+                disabled={createDisabled}
+                leftSection={<Icon icon="mdi:plus" width={18} />}
+                style={{ fontFamily: 'Virgil' }}
+              >
+                Create Project
+              </Button>
+            </Tooltip>
           </Stack>
         </Paper>
       </Center>

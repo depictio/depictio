@@ -18,6 +18,7 @@ import type { DashboardSummary } from 'depictio-react-core';
 import ThemeToggle from './ThemeToggle';
 import ServerStatusBadge from './ServerStatusBadge';
 import ProfileBadge from './ProfileBadge';
+import AuthModeBadge from './AuthModeBadge';
 import './chrome.css';
 
 /** True for path-like icon values (PNG/SVG file URLs) — these came from the
@@ -343,11 +344,14 @@ const Sidebar: React.FC<SidebarProps> = ({
       </ScrollArea>
 
       {/* Bottom region — centered stack, original Dash order: theme,
-        server, profile. */}
+        server, profile. AuthModeBadge sits above the avatar to surface the
+        active server mode (Demo / Public / Single User), matching
+        `depictio/dash/layouts/sidebar.py:create_sidebar_footer`. */}
       <Stack gap="xs" align="center">
         <Divider w="100%" />
         <ThemeToggle />
         <ServerStatusBadge />
+        <AuthModeBadge />
         <ProfileBadge />
       </Stack>
     </Stack>

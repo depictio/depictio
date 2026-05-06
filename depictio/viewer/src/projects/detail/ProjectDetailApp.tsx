@@ -1489,6 +1489,12 @@ const DataCollectionViewer: React.FC<{
   const format =
     (dc.config?.dc_specific_properties?.format as string | undefined) || null;
   const isMultiQC = type.toLowerCase() === 'multiqc';
+  // Backend stamps `metatype: "Metadata"` on metadata tables but leaves
+  // aggregate tables with `metatype: null` (see project YAMLs and
+  // `/projects/get/all` payload). Mirror the row's fallback so the viewer
+  // surfaces the implicit "AGGREGATE" classification too.
+  const isTable = type.toLowerCase() === 'table';
+  const isAggregate = isTable && (metatype || '').toLowerCase() !== 'metadata';
 
   return (
     <Paper withBorder radius="md" p="lg">
@@ -1540,7 +1546,7 @@ const DataCollectionViewer: React.FC<{
                   </Badge>
                 }
               />
-              {metatype && (
+              {metatype ? (
                 <DetailRow
                   label="Metatype"
                   badge={
@@ -1549,7 +1555,16 @@ const DataCollectionViewer: React.FC<{
                     </Badge>
                   }
                 />
-              )}
+              ) : isAggregate ? (
+                <DetailRow
+                  label="Metatype"
+                  badge={
+                    <Badge color="orange" variant="light" size="sm" radius="sm">
+                      AGGREGATE
+                    </Badge>
+                  }
+                />
+              ) : null}
             </Stack>
           </Card>
           {isMultiQC ? (

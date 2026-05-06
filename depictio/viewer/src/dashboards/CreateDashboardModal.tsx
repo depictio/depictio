@@ -68,6 +68,10 @@ interface CreateDashboardModalProps {
     jsonContent: Record<string, unknown>,
     opts: ImportDashboardOptions,
   ) => Promise<void>;
+  /** When true, the Import tab is disabled and the import button stays
+   *  inert. Set in public/demo deployments where importing user-supplied
+   *  YAML/JSON would let an anonymous visitor write into shared projects. */
+  disableImport?: boolean;
 }
 
 const projectOptions = (projects: ProjectListEntry[]) =>
@@ -113,6 +117,7 @@ const CreateDashboardModal: React.FC<CreateDashboardModalProps> = ({
   onClose,
   onCreate,
   onImport,
+  disableImport = false,
 }) => {
   const [tab, setTab] = useState<'create' | 'import'>('create');
 
@@ -260,6 +265,12 @@ const CreateDashboardModal: React.FC<CreateDashboardModalProps> = ({
             <Tabs.Tab
               value="import"
               leftSection={<Icon icon="mdi:import" width={18} />}
+              disabled={disableImport}
+              title={
+                disableImport
+                  ? 'Dashboard import is disabled in public/demo mode'
+                  : undefined
+              }
             >
               <Text size="md" fw={500} style={{ fontFamily: 'Virgil' }}>
                 Import
@@ -537,7 +548,7 @@ const CreateDashboardModal: React.FC<CreateDashboardModalProps> = ({
                 radius="md"
                 leftSection={<Icon icon="mdi:import" width={16} />}
                 loading={importSubmitting}
-                disabled={!importJson || importSubmitting}
+                disabled={disableImport || !importJson || importSubmitting}
                 onClick={handleImport}
               >
                 Import Dashboard

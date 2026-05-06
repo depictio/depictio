@@ -155,7 +155,20 @@ async def create_project(project: Project, current_user=Depends(get_user_or_anon
     Tolerates missing tokens so single-user / public mode can create projects
     without a persisted token — the inline owner / ``is_admin`` gate below
     still rejects callers who aren't listed as owners and aren't admins.
+
+    Public/demo mode hard-blocks creation regardless of token: visitors are
+    auto-minted as authenticated temp users, so the standard owner/admin gate
+    wouldn't stop them from POSTing here directly. The frontend disables the
+    "Create Project" button in public mode (see Dash
+    `app_layout.return_create_project_button` and React `ProjectsApp.tsx`),
+    and this check is the matching server-side enforcement.
     """
+    if settings.auth.is_public_mode:
+        raise HTTPException(
+            status_code=403,
+            detail="Project creation is disabled in public/demo mode",
+        )
+
     try:
         if (
             current_user.id not in [owner.id for owner in project.permissions.owners]

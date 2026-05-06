@@ -14,6 +14,7 @@ import { Icon } from '@iconify/react';
 import ThemeToggle from './ThemeToggle';
 import ServerStatusBadge from './ServerStatusBadge';
 import ProfileBadge from './ProfileBadge';
+import AuthModeBadge from './AuthModeBadge';
 import { useCurrentUser } from '../hooks/useCurrentUser';
 
 export type SidebarSection =
@@ -138,6 +139,7 @@ const AppSidebar: React.FC<AppSidebarProps> = ({ active }) => {
         <Divider w="100%" />
         <ThemeToggle />
         <ServerStatusBadge />
+        <AuthModeBadge />
         <ProfileBadge />
       </Stack>
     </Stack>

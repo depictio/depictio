@@ -3359,6 +3359,15 @@ async def import_dashboard_from_yaml(
     Returns:
         Created/updated dashboard information including dashboard_id
     """
+    # Public/demo mode hard-blocks imports — visitors are auto-minted temp
+    # users that pass `get_current_user`, so the frontend disable on the
+    # Import tab is the only client-side gate. Mirror it here.
+    if settings.auth.is_public_mode:
+        raise HTTPException(
+            status_code=403,
+            detail="Dashboard import is disabled in public/demo mode",
+        )
+
     # Allow anonymous users in single-user mode (they have admin privileges)
     if hasattr(current_user, "is_anonymous") and current_user.is_anonymous:
         if not settings.auth.is_single_user_mode:
@@ -4013,6 +4022,12 @@ async def import_dashboard_from_json(
     Creates a new dashboard from the provided JSON configuration.
     Optionally validates that data collection schemas match the export.
 
+    Public/demo mode hard-blocks imports: visitors are auto-minted as
+    authenticated temp users, so `get_current_user` doesn't stop them from
+    POSTing user-supplied JSON that bypasses the project-permission model.
+    The frontend disables the Import tab in `CreateDashboardModal` and the
+    Dash equivalent — this check is the matching server-side enforcement.
+
     Args:
         json_content: The JSON content defining the dashboard
         project_id: Target project ID (required if not in JSON)
@@ -4022,6 +4037,12 @@ async def import_dashboard_from_json(
     Returns:
         Import result with dashboard ID and any validation warnings
     """
+    if settings.auth.is_public_mode:
+        raise HTTPException(
+            status_code=403,
+            detail="Dashboard import is disabled in public/demo mode",
+        )
+
     # Validate export version
     export_version = json_content.get("_depictio_export_version")
     if not export_version:

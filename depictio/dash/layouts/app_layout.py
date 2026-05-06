@@ -97,6 +97,10 @@ def return_create_project_button(email, is_anonymous=False):
     del is_anonymous  # gating removed under unified model
     is_public = settings.auth.is_public_mode
 
+    # Public/demo mode: render the button visibly disabled instead of hiding
+    # it — visitors should still discover that "Create Project" exists, with
+    # the disabled state signalling that login/elevated permissions are
+    # required. Mirrored in `depictio/viewer/src/projects/ProjectsApp.tsx`.
     create_button = dmc.Button(
         "+ Create Project",
         id="create-project-button",
@@ -105,9 +109,8 @@ def return_create_project_button(email, is_anonymous=False):
         style={
             "fontFamily": "Virgil",
             "marginRight": "10px",
-            **({"display": "none"} if is_public else {}),
         },
-        size="lg",  # Changed from xl to lg for better proportions
+        size="lg",
         radius="md",
         disabled=is_public,
     )

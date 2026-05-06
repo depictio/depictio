@@ -82,7 +82,13 @@ const DashboardsApp: React.FC = () => {
 
   const [mobileOpened, { toggle: toggleMobile }] = useDisclosure(false);
   const [desktopOpened, toggleDesktop] = useDashboardsSidebar();
-  const { user } = useCurrentUser();
+  const { user, isPublicMode, isDemoMode, loading: authLoading } = useCurrentUser();
+  // Public/demo deployments don't allow importing user-supplied dashboard
+  // JSON — that would let an anonymous visitor write into shared projects.
+  // Mirrors the Dash gate added in `layouts_toolbox.create_dashboard_modal`.
+  // Fail closed while auth is loading so the import tab can't be reached on
+  // the first frame before `/auth/me/optional` resolves.
+  const importDisabled = authLoading || isPublicMode || isDemoMode;
 
   useEffect(() => {
     document.title = 'Depictio — Dashboards';
@@ -317,6 +323,7 @@ const DashboardsApp: React.FC = () => {
         onClose={closeCreate}
         onCreate={handleCreate}
         onImport={handleImport}
+        disableImport={importDisabled}
       />
       <EditDashboardModal
         opened={Boolean(editTarget)}

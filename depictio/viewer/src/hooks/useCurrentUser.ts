@@ -24,6 +24,16 @@ export type AuthMode = 'standard' | 'single_user' | 'unauthenticated';
 export interface UseCurrentUserResult {
   user: CurrentUser | null;
   authMode: AuthMode;
+  /** True when the server is configured for unauthenticated public access
+   *  (`DEPICTIO_AUTH_PUBLIC_MODE=true`). Visitors are auto-minted temp users
+   *  on boot, so `authMode` stays 'standard' — this flag is the only signal
+   *  we get that the server is in a special public deployment. */
+  isPublicMode: boolean;
+  /** True when the server is in demo mode (a public_mode variant with a
+   *  curated set of read-only example dashboards). */
+  isDemoMode: boolean;
+  /** True when the server runs in single-admin mode (no login UI). */
+  isSingleUserMode: boolean;
   loading: boolean;
 }
 
@@ -46,6 +56,9 @@ function authHeaders(): Record<string, string> {
 export function useCurrentUser(): UseCurrentUserResult {
   const [user, setUser] = useState<CurrentUser | null>(null);
   const [authMode, setAuthMode] = useState<AuthMode>('standard');
+  const [isPublicMode, setIsPublicMode] = useState<boolean>(false);
+  const [isDemoMode, setIsDemoMode] = useState<boolean>(false);
+  const [isSingleUserMode, setIsSingleUserMode] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(true);
 
   useEffect(() => {
@@ -60,8 +73,9 @@ export function useCurrentUser(): UseCurrentUserResult {
           }
           return;
         }
-        // Backend now returns { auth_mode, user }. Older shape (just user) is
-        // tolerated for forward/backward compat during rollout.
+        // Backend now returns { auth_mode, user, is_public_mode, is_demo_mode,
+        // is_single_user_mode }. Older shape (just user) is tolerated for
+        // forward/backward compat during rollout.
         const data = (await res.json()) as
           | {
               auth_mode?: AuthMode;
@@ -69,6 +83,9 @@ export function useCurrentUser(): UseCurrentUserResult {
               id?: string;
               email?: string;
               is_admin?: boolean;
+              is_public_mode?: boolean;
+              is_demo_mode?: boolean;
+              is_single_user_mode?: boolean;
             }
           | null;
         if (cancelled) return;
@@ -79,6 +96,9 @@ export function useCurrentUser(): UseCurrentUserResult {
             ? { id: data.id, email: data.email, is_admin: data.is_admin }
             : null);
         setAuthMode(mode);
+        setIsPublicMode(Boolean(data?.is_public_mode));
+        setIsDemoMode(Boolean(data?.is_demo_mode));
+        setIsSingleUserMode(Boolean(data?.is_single_user_mode));
         setUser(
           u && u.email
             ? { id: u.id, email: u.email, is_admin: Boolean(u.is_admin) }
@@ -95,5 +115,5 @@ export function useCurrentUser(): UseCurrentUserResult {
     };
   }, []);
 
-  return { user, authMode, loading };
+  return { user, authMode, isPublicMode, isDemoMode, isSingleUserMode, loading };
 }
