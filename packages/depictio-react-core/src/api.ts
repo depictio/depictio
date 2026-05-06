@@ -2318,3 +2318,216 @@ export async function generateAgentConfig(token: CreatedToken): Promise<CliAgent
   return (await res.json()) as CliAgentConfig;
 }
 
+// =============================================================================
+// Cross-DC links (project-level link CRUD + resolver list)
+// =============================================================================
+
+/** Resolver kinds the backend supports. Mirrors
+ *  `depictio.api.v1.endpoints.links_endpoints.resolvers`. */
+export type LinkResolverName =
+  | 'direct'
+  | 'sample_mapping'
+  | 'pattern'
+  | 'regex'
+  | 'wildcard';
+
+export interface DCLinkConfig {
+  resolver: LinkResolverName;
+  /** Canonical → variant map for ``sample_mapping``. */
+  mappings?: Record<string, string[]>;
+  /** Template like ``{sample}.bam`` for ``pattern``. */
+  pattern?: string;
+  /** Field in the target DC that the resolved values should match. */
+  target_field?: string;
+  case_sensitive?: boolean;
+}
+
+export type LinkTargetType = 'table' | 'multiqc' | 'image';
+
+export interface DCLink {
+  id: string;
+  source_dc_id: string;
+  source_column: string;
+  target_dc_id: string;
+  target_type: LinkTargetType;
+  link_config: DCLinkConfig;
+  description?: string | null;
+  enabled: boolean;
+}
+
+export interface CreateLinkInput {
+  source_dc_id: string;
+  source_column: string;
+  target_dc_id: string;
+  target_type: LinkTargetType;
+  link_config?: DCLinkConfig;
+  description?: string;
+  enabled?: boolean;
+}
+
+export type UpdateLinkInput = Partial<CreateLinkInput>;
+
+export interface ResolverInfo {
+  name: LinkResolverName;
+  label: string;
+  description: string;
+}
+
+export async function listProjectLinks(projectId: string): Promise<DCLink[]> {
+  const res = await fetch(`${API_BASE}/links/${projectId}`, {
+    headers: authHeaders(),
+  });
+  if (!res.ok) await throwHttpError(res, 'Failed to list project links');
+  const body = await res.json();
+  // Backend returns either {links: [...]} or [...]; accept both.
+  if (Array.isArray(body)) return body as DCLink[];
+  return (body?.links ?? []) as DCLink[];
+}
+
+export async function createProjectLink(
+  projectId: string,
+  input: CreateLinkInput,
+): Promise<DCLink> {
+  const res = await authFetch(`${API_BASE}/links/${projectId}`, {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to create link');
+  return (await res.json()) as DCLink;
+}
+
+export async function updateProjectLink(
+  projectId: string,
+  linkId: string,
+  input: UpdateLinkInput,
+): Promise<DCLink> {
+  const res = await authFetch(`${API_BASE}/links/${projectId}/${linkId}`, {
+    method: 'PUT',
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to update link');
+  return (await res.json()) as DCLink;
+}
+
+export async function deleteProjectLink(projectId: string, linkId: string): Promise<void> {
+  const res = await authFetch(`${API_BASE}/links/${projectId}/${linkId}`, {
+    method: 'DELETE',
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to delete link');
+}
+
+export async function listLinkResolvers(projectId: string): Promise<ResolverInfo[]> {
+  const res = await fetch(`${API_BASE}/links/${projectId}/resolvers`, {
+    headers: authHeaders(),
+  });
+  if (!res.ok) await throwHttpError(res, 'Failed to list resolvers');
+  const body = await res.json();
+  if (Array.isArray(body)) return body as ResolverInfo[];
+  return (body?.resolvers ?? []) as ResolverInfo[];
+}
+
+/** Aggregated canonical → variants map for a MultiQC DC's reports. Used to
+ *  populate the ``sample_mapping`` resolver editor. */
+export async function fetchMultiQCSampleMappings(
+  projectId: string,
+  dcId: string,
+): Promise<Record<string, string[]>> {
+  const res = await fetch(
+    `${API_BASE}/links/${projectId}/multiqc/${dcId}/sample-mappings`,
+    { headers: authHeaders() },
+  );
+  if (!res.ok) await throwHttpError(res, 'Failed to fetch sample mappings');
+  const body = await res.json();
+  if (body?.sample_mappings && typeof body.sample_mappings === 'object') {
+    return body.sample_mappings as Record<string, string[]>;
+  }
+  return (body ?? {}) as Record<string, string[]>;
+}
+
+// =============================================================================
+// MultiQC DC creation + management (multipart uploads)
+// =============================================================================
+
+export interface CreateMultiQCDCInput {
+  projectId: string;
+  name: string;
+  description?: string;
+  /** Each File's `name` is expected to carry the ``webkitRelativePath`` so
+   *  the backend can group reports by parent folder. The
+   *  ``useFolderDropzone`` hook patches this for us. */
+  files: File[];
+}
+
+export interface MultiQCMutationResult {
+  success: boolean;
+  message?: string;
+  data_collection_id?: string;
+  workflow_id?: string;
+  ingested_folders?: string[];
+  skipped_count?: number;
+  deleted_count?: number;
+  fetched_from_s3_count?: number;
+  cleanup_failed?: number;
+}
+
+async function postMultiQCUpload(
+  url: string,
+  files: File[],
+  extraFields: Record<string, string> = {},
+): Promise<MultiQCMutationResult> {
+  const fd = new FormData();
+  for (const [key, value] of Object.entries(extraFields)) fd.append(key, value);
+  for (const file of files) fd.append('files', file, file.name);
+
+  const headers = authHeaders();
+  delete headers['Content-Type'];
+
+  const res = await fetch(url, { method: 'POST', headers, body: fd });
+  if (!res.ok) await throwHttpDetailError(res, 'MultiQC upload failed');
+  return (await res.json()) as MultiQCMutationResult;
+}
+
+export async function createMultiQCDataCollection(
+  input: CreateMultiQCDCInput,
+): Promise<MultiQCMutationResult> {
+  return postMultiQCUpload(
+    `${API_BASE}/datacollections/create_multiqc_from_upload`,
+    input.files,
+    {
+      project_id: input.projectId,
+      name: input.name,
+      description: input.description ?? '',
+    },
+  );
+}
+
+export async function appendMultiQCFiles(
+  dcId: string,
+  files: File[],
+): Promise<MultiQCMutationResult> {
+  return postMultiQCUpload(
+    `${API_BASE}/multiqc/reports/data-collection/${dcId}/append`,
+    files,
+  );
+}
+
+export async function replaceMultiQCFiles(
+  dcId: string,
+  files: File[],
+): Promise<MultiQCMutationResult> {
+  return postMultiQCUpload(
+    `${API_BASE}/multiqc/reports/data-collection/${dcId}/replace`,
+    files,
+  );
+}
+
+/** Wipe every MultiQC report for a DC. Defaults to also deleting the S3
+ *  parquets — the manage modal's Clear flow uses this. */
+export async function clearMultiQCDC(dcId: string, deleteS3 = true): Promise<void> {
+  const url =
+    `${API_BASE}/multiqc/reports/data-collection/${dcId}` +
+    `?delete_s3_files=${deleteS3 ? 'true' : 'false'}`;
+  const res = await authFetch(url, { method: 'DELETE' });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to clear MultiQC DC');
+}
+

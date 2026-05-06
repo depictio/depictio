@@ -4,7 +4,6 @@ import {
   Alert,
   Box,
   Button,
-  Center,
   Checkbox,
   Divider,
   FileButton,
@@ -27,6 +26,8 @@ import type {
   ImportDashboardOptions,
   ProjectListEntry,
 } from 'depictio-react-core';
+
+import { UnstyledDropZone } from '../components/UnstyledDropZone';
 
 const COLOR_OPTIONS: { value: string; label: string }[] = [
   { value: 'gray', label: 'Gray' },
@@ -81,34 +82,6 @@ const projectOptions = (projects: ProjectListEntry[]) =>
       return value ? { value, label: p.name } : null;
     })
     .filter((o): o is { value: string; label: string } => o !== null);
-
-/** Dashed-border drop zone mirroring the Dash dcc.Upload at
- *  layouts_toolbox.py:374-386. Mantine has no built-in dropzone shipped with
- *  @mantine/core; the styled <button> wrapper is enough for click-to-upload. */
-const UnstyledDropZone = React.forwardRef<
-  HTMLButtonElement,
-  React.ButtonHTMLAttributes<HTMLButtonElement> & { children: React.ReactNode }
->(({ children, ...rest }, ref) => (
-  <button
-    type="button"
-    ref={ref}
-    {...rest}
-    style={{
-      width: '100%',
-      borderWidth: 2,
-      borderStyle: 'dashed',
-      borderRadius: 8,
-      borderColor: 'var(--mantine-color-default-border)',
-      padding: '40px 20px',
-      cursor: 'pointer',
-      background: 'transparent',
-      color: 'inherit',
-    }}
-  >
-    <Center>{children}</Center>
-  </button>
-));
-UnstyledDropZone.displayName = 'UnstyledDropZone';
 
 const CreateDashboardModal: React.FC<CreateDashboardModalProps> = ({
   opened,

@@ -44,12 +44,19 @@ import {
   renameDataCollection,
   deleteDataCollection,
   createDataCollectionFromUpload,
+  createMultiQCDataCollection,
 } from 'depictio-react-core';
 import type {
   ProjectListEntry,
   PreviewResult,
   MultiQCReportSummary,
+  DCLink,
 } from 'depictio-react-core';
+import { SegmentedControl } from '@mantine/core';
+import LinksSection from './LinksSection';
+import ManageMultiQCModal from './ManageMultiQCModal';
+import { UnstyledDropZone } from '../../components/UnstyledDropZone';
+import { useFolderDropzone } from '../../hooks/useFolderDropzone';
 
 import { useCurrentUser } from '../../hooks/useCurrentUser';
 import { AppSidebar } from '../../chrome';
@@ -235,8 +242,13 @@ const ProjectDetailApp: React.FC = () => {
   const [refreshKey, setRefreshKey] = useState(0);
   const [renameTarget, setRenameTarget] = useState<DataCollectionShape | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<DataCollectionShape | null>(null);
+  const [manageTarget, setManageTarget] = useState<DataCollectionShape | null>(null);
   const [selectedWorkflowId, setSelectedWorkflowId] = useState<string | null>(null);
   const [createDcOpened, setCreateDcOpened] = useState(false);
+  /** Cross-DC links for this project. Fetched alongside the project doc and
+   *  refreshed when the user creates / edits / deletes a link from the
+   *  Links section. Wired into the JoinsGraph for visualization. */
+  const [projectLinks, setProjectLinks] = useState<DCLink[]>([]);
 
   const [mobileOpened, { toggle: toggleMobile }] = useDisclosure(false);
   const [desktopOpened, { toggle: toggleDesktop }] = useDisclosure(true);
@@ -441,8 +453,21 @@ const ProjectDetailApp: React.FC = () => {
                 onSelect={setSelectedDcId}
                 onRename={setRenameTarget}
                 onDelete={setDeleteTarget}
+                onManage={setManageTarget}
                 onCreate={() => setCreateDcOpened(true)}
               />
+              {projectId && (
+                <LinksSection
+                  projectId={projectId}
+                  dataCollections={allDataCollections.map((d) => ({
+                    id: (d._id ?? d.id) as string,
+                    tag: d.data_collection_tag || ((d._id ?? d.id) as string),
+                    type: (d.config?.type as string | undefined) || 'unknown',
+                  }))}
+                  canMutate={canMutate}
+                  onLinksChange={setProjectLinks}
+                />
+              )}
               {selectedDc && (
                 <DataCollectionViewer
                   dc={selectedDc}
@@ -456,16 +481,7 @@ const ProjectDetailApp: React.FC = () => {
                         }>
                       | undefined) || []
                   }
-                  links={
-                    ((project as Record<string, unknown>).links as
-                      | Array<{
-                          source_dc_id?: string;
-                          target_dc_id?: string;
-                          source_column?: string;
-                          enabled?: boolean;
-                        }>
-                      | undefined) || []
-                  }
+                  links={projectLinks}
                 />
               )}
             </Stack>
@@ -502,6 +518,18 @@ const ProjectDetailApp: React.FC = () => {
           refresh();
         }}
       />
+      {manageTarget && (
+        <ManageMultiQCModal
+          opened={!!manageTarget}
+          dcId={(manageTarget._id ?? manageTarget.id) as string}
+          dcName={manageTarget.data_collection_tag || 'data collection'}
+          onClose={() => setManageTarget(null)}
+          onSuccess={() => {
+            setManageTarget(null);
+            refresh();
+          }}
+        />
+      )}
     </AppShell>
   );
 };
@@ -546,6 +574,7 @@ const CreateDataCollectionModal: React.FC<{
   onClose: () => void;
   onSuccess: () => void;
 }> = ({ opened, projectType, projectId, onClose, onSuccess }) => {
+  const [dcType, setDcType] = useState<'table' | 'multiqc'>('table');
   const [file, setFile] = useState<File | null>(null);
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
@@ -557,10 +586,18 @@ const CreateDataCollectionModal: React.FC<{
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // MultiQC folder dropzone — owned by the modal so close-and-reopen clears it.
+  const multiqcDropzone = useFolderDropzone({
+    filterFilename: 'multiqc.parquet',
+    maxPerFile: 50 * 1024 * 1024,
+    maxTotal: 500 * 1024 * 1024,
+  });
+
   // Reset everything when the modal closes — otherwise re-opening shows stale
   // state from the previous attempt.
   useEffect(() => {
     if (!opened) {
+      setDcType('table');
       setFile(null);
       setName('');
       setDescription('');
@@ -571,7 +608,10 @@ const CreateDataCollectionModal: React.FC<{
       setHasHeader(true);
       setError(null);
       setSubmitting(false);
+      multiqcDropzone.clear();
     }
+    // multiqcDropzone is recreated on each render but its `clear` is stable.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [opened]);
 
   // Auto-fill format + name from picked filename. Don't clobber a name the
@@ -634,39 +674,62 @@ const CreateDataCollectionModal: React.FC<{
       setError('Project ID missing from URL.');
       return;
     }
-    if (!file) {
-      setError('Pick a file to upload.');
-      return;
-    }
     if (!name.trim()) {
       setError('Data collection name is required.');
       return;
     }
-    if (separator === 'custom' && !customSeparator) {
-      setError('Custom separator cannot be empty.');
-      return;
-    }
+
     setSubmitting(true);
     setError(null);
     try {
-      const result = await createDataCollectionFromUpload({
-        projectId,
-        name: name.trim(),
-        description: description.trim(),
-        dataType: 'table',
-        fileFormat,
-        separator,
-        customSeparator: separator === 'custom' ? customSeparator : null,
-        compression,
-        hasHeader,
-        file,
-      });
-      notifications.show({
-        color: 'teal',
-        title: 'Data collection created',
-        message: result.message || `"${name.trim()}" is ready.`,
-        autoClose: 2500,
-      });
+      if (dcType === 'multiqc') {
+        if (multiqcDropzone.files.length === 0) {
+          setError('Drop one or more folders containing multiqc.parquet.');
+          setSubmitting(false);
+          return;
+        }
+        const result = await createMultiQCDataCollection({
+          projectId,
+          name: name.trim(),
+          description: description.trim(),
+          files: multiqcDropzone.files,
+        });
+        notifications.show({
+          color: 'teal',
+          title: 'MultiQC data collection created',
+          message: result.message || `"${name.trim()}" is ready.`,
+          autoClose: 4000,
+        });
+      } else {
+        if (!file) {
+          setError('Pick a file to upload.');
+          setSubmitting(false);
+          return;
+        }
+        if (separator === 'custom' && !customSeparator) {
+          setError('Custom separator cannot be empty.');
+          setSubmitting(false);
+          return;
+        }
+        const result = await createDataCollectionFromUpload({
+          projectId,
+          name: name.trim(),
+          description: description.trim(),
+          dataType: 'table',
+          fileFormat,
+          separator,
+          customSeparator: separator === 'custom' ? customSeparator : null,
+          compression,
+          hasHeader,
+          file,
+        });
+        notifications.show({
+          color: 'teal',
+          title: 'Data collection created',
+          message: result.message || `"${name.trim()}" is ready.`,
+          autoClose: 2500,
+        });
+      }
       onSuccess();
     } catch (err) {
       setError((err as Error).message || 'Upload failed.');
@@ -694,24 +757,86 @@ const CreateDataCollectionModal: React.FC<{
             width={26}
             color="var(--mantine-color-teal-6)"
           />
-          <Text fw={500}>Upload a file to register a new data collection.</Text>
+          <Text fw={500}>Add a new data collection.</Text>
         </Group>
 
-        <FileInput
-          label="File"
-          placeholder="Select a CSV, TSV, Parquet, or Feather file"
-          required
-          accept=".csv,.tsv,.tab,.parquet,.pq,.feather,.arrow"
-          value={file}
-          onChange={setFile}
+        <SegmentedControl
+          data={[
+            { label: 'Table (CSV / TSV / Parquet)', value: 'table' },
+            { label: 'MultiQC report(s)', value: 'multiqc' },
+          ]}
+          value={dcType}
+          onChange={(v) => setDcType(v as 'table' | 'multiqc')}
           disabled={submitting}
-          leftSection={<Icon icon="mdi:file-upload-outline" width={16} />}
-          description="Maximum size: 50 MB"
         />
+
+        {dcType === 'table' ? (
+          <FileInput
+            label="File"
+            placeholder="Select a CSV, TSV, Parquet, or Feather file"
+            required
+            accept=".csv,.tsv,.tab,.parquet,.pq,.feather,.arrow"
+            value={file}
+            onChange={setFile}
+            disabled={submitting}
+            leftSection={<Icon icon="mdi:file-upload-outline" width={16} />}
+            description="Maximum size: 50 MB"
+          />
+        ) : (
+          <Stack gap="xs">
+            <Text size="sm" fw={500}>
+              MultiQC reports
+            </Text>
+            <div ref={multiqcDropzone.rootRef}>
+              <UnstyledDropZone
+                onClick={() => !submitting && multiqcDropzone.openPicker()}
+                disabled={submitting}
+                active={multiqcDropzone.isDragOver}
+              >
+                <Stack gap={4} align="center">
+                  <Icon icon="mdi:folder-upload" width={28} />
+                  <Text fw={500}>
+                    Drop folder(s) containing multiqc_data/multiqc.parquet
+                  </Text>
+                  <Text size="xs" c="dimmed">
+                    or click to choose. Per-file 50 MB · total 500 MB.
+                  </Text>
+                </Stack>
+              </UnstyledDropZone>
+              <input
+                ref={multiqcDropzone.inputRef}
+                type="file"
+                multiple
+                style={{ display: 'none' }}
+                // @ts-expect-error — webkitdirectory is non-standard but
+                // widely supported (Chromium, Firefox, Safari).
+                webkitdirectory=""
+              />
+            </div>
+            {multiqcDropzone.error && (
+              <Alert
+                color="orange"
+                variant="light"
+                icon={<Icon icon="mdi:alert" width={16} />}
+              >
+                {multiqcDropzone.error}
+              </Alert>
+            )}
+            {multiqcDropzone.files.length > 0 && (
+              <Text size="xs" c="dimmed">
+                {multiqcDropzone.files.length} file
+                {multiqcDropzone.files.length === 1 ? '' : 's'} ·{' '}
+                {(multiqcDropzone.totalBytes / (1024 * 1024)).toFixed(1)} MB
+              </Text>
+            )}
+          </Stack>
+        )}
 
         <TextInput
           label="Name"
-          placeholder="e.g. samples_metadata"
+          placeholder={
+            dcType === 'multiqc' ? 'e.g. multiqc_qc' : 'e.g. samples_metadata'
+          }
           required
           value={name}
           onChange={(e) => setName(e.currentTarget.value)}
@@ -729,57 +854,61 @@ const CreateDataCollectionModal: React.FC<{
           disabled={submitting}
         />
 
-        <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
-          <Select
-            label="Format"
-            data={FORMAT_OPTIONS}
-            value={fileFormat}
-            onChange={(v) => v && setFileFormat(v)}
-            allowDeselect={false}
-            disabled={submitting}
-          />
-          {isDelimited && (
-            <Select
-              label="Separator"
-              data={SEPARATOR_OPTIONS}
-              value={separator}
-              onChange={(v) => v && setSeparator(v)}
-              allowDeselect={false}
-              disabled={submitting}
-            />
-          )}
-        </SimpleGrid>
+        {dcType === 'table' && (
+          <>
+            <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
+              <Select
+                label="Format"
+                data={FORMAT_OPTIONS}
+                value={fileFormat}
+                onChange={(v) => v && setFileFormat(v)}
+                allowDeselect={false}
+                disabled={submitting}
+              />
+              {isDelimited && (
+                <Select
+                  label="Separator"
+                  data={SEPARATOR_OPTIONS}
+                  value={separator}
+                  onChange={(v) => v && setSeparator(v)}
+                  allowDeselect={false}
+                  disabled={submitting}
+                />
+              )}
+            </SimpleGrid>
 
-        {isDelimited && separator === 'custom' && (
-          <TextInput
-            label="Custom separator"
-            placeholder="e.g. ::"
-            value={customSeparator}
-            onChange={(e) => setCustomSeparator(e.currentTarget.value)}
-            required
-            disabled={submitting}
-          />
+            {isDelimited && separator === 'custom' && (
+              <TextInput
+                label="Custom separator"
+                placeholder="e.g. ::"
+                value={customSeparator}
+                onChange={(e) => setCustomSeparator(e.currentTarget.value)}
+                required
+                disabled={submitting}
+              />
+            )}
+
+            <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
+              <Select
+                label="Compression"
+                data={COMPRESSION_OPTIONS}
+                value={compression}
+                onChange={(v) => v && setCompression(v)}
+                allowDeselect={false}
+                disabled={submitting}
+              />
+              {isDelimited && (
+                <Switch
+                  mt="lg"
+                  label="File has header row"
+                  checked={hasHeader}
+                  onChange={(e) => setHasHeader(e.currentTarget.checked)}
+                  disabled={submitting}
+                />
+              )}
+            </SimpleGrid>
+          </>
         )}
-
-        <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
-          <Select
-            label="Compression"
-            data={COMPRESSION_OPTIONS}
-            value={compression}
-            onChange={(v) => v && setCompression(v)}
-            allowDeselect={false}
-            disabled={submitting}
-          />
-          {isDelimited && (
-            <Switch
-              mt="lg"
-              label="File has header row"
-              checked={hasHeader}
-              onChange={(e) => setHasHeader(e.currentTarget.checked)}
-              disabled={submitting}
-            />
-          )}
-        </SimpleGrid>
 
         {error && (
           <Alert
@@ -819,7 +948,12 @@ const CreateDataCollectionModal: React.FC<{
             color="teal"
             onClick={handleSubmit}
             loading={submitting}
-            disabled={!file || !name.trim()}
+            disabled={
+              !name.trim() ||
+              (dcType === 'table'
+                ? !file
+                : multiqcDropzone.files.length === 0)
+            }
             leftSection={<Icon icon="mdi:cloud-upload-outline" width={16} />}
           >
             Create
@@ -1199,6 +1333,9 @@ const DataCollectionsManagerSection: React.FC<{
   onSelect: (id: string | null) => void;
   onRename: (dc: DataCollectionShape) => void;
   onDelete: (dc: DataCollectionShape) => void;
+  /** Open the manage-data modal for a MultiQC DC. Optional so non-MultiQC
+   *  callers don't have to wire it. */
+  onManage?: (dc: DataCollectionShape) => void;
   onCreate: () => void;
 }> = ({
   projectType,
@@ -1209,6 +1346,7 @@ const DataCollectionsManagerSection: React.FC<{
   onSelect,
   onRename,
   onDelete,
+  onManage,
   onCreate,
 }) => {
   return (
@@ -1306,6 +1444,11 @@ const DataCollectionsManagerSection: React.FC<{
                 onClick={() => onSelect(isSelected ? null : id)}
                 onRename={() => onRename(dc)}
                 onDelete={() => onDelete(dc)}
+                onManage={
+                  onManage && dc.config?.type === 'multiqc'
+                    ? () => onManage(dc)
+                    : undefined
+                }
               />
             );
           })}
@@ -1365,7 +1508,9 @@ const DataCollectionRow: React.FC<{
   onClick: () => void;
   onRename: () => void;
   onDelete: () => void;
-}> = ({ dc, selected, canMutate, onClick, onRename, onDelete }) => {
+  /** Set for MultiQC DCs only — opens the Manage Data modal. */
+  onManage?: () => void;
+}> = ({ dc, selected, canMutate, onClick, onRename, onDelete, onManage }) => {
   const type = (dc.config?.type as string | undefined) || 'unknown';
   const metatype = (dc.config?.metatype as string | undefined) || null;
   const isTable = type === 'table';
@@ -1429,16 +1574,31 @@ const DataCollectionRow: React.FC<{
           </Text>
         </Group>
         <Group gap={4}>
-          <ActionIcon
-            variant="subtle"
-            color="gray"
-            size="sm"
-            disabled
-            title="Overwrite (coming soon)"
-            onClick={guard(() => undefined)}
-          >
-            <Icon icon="mdi:database-arrow-up-outline" width={16} />
-          </ActionIcon>
+          {onManage ? (
+            <ActionIcon
+              variant="subtle"
+              color="teal"
+              size="sm"
+              disabled={!canMutate}
+              onClick={guard(onManage)}
+              title={
+                canMutate ? 'Manage data (append / replace / clear)' : 'Owner permission required'
+              }
+            >
+              <Icon icon="mdi:database-cog-outline" width={16} />
+            </ActionIcon>
+          ) : (
+            <ActionIcon
+              variant="subtle"
+              color="gray"
+              size="sm"
+              disabled
+              title="Manage available for MultiQC DCs only"
+              onClick={guard(() => undefined)}
+            >
+              <Icon icon="mdi:database-arrow-up-outline" width={16} />
+            </ActionIcon>
+          )}
           <ActionIcon
             variant="subtle"
             color="blue"

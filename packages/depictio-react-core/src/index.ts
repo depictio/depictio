@@ -142,6 +142,18 @@ export {
   createLongLivedToken,
   deleteLongLivedToken,
   generateAgentConfig,
+  // Cross-DC links
+  listProjectLinks,
+  createProjectLink,
+  updateProjectLink,
+  deleteProjectLink,
+  listLinkResolvers,
+  fetchMultiQCSampleMappings,
+  // MultiQC management (multipart uploads)
+  createMultiQCDataCollection,
+  appendMultiQCFiles,
+  replaceMultiQCFiles,
+  clearMultiQCDC,
 } from './api';
 // Selection-as-filter helpers (Plotly/AG Grid → InteractiveFilter)
 export {
@@ -219,4 +231,15 @@ export type {
   CliToken,
   CreatedToken,
   CliAgentConfig,
+  // Link types
+  LinkResolverName,
+  LinkTargetType,
+  DCLink,
+  DCLinkConfig,
+  CreateLinkInput,
+  UpdateLinkInput,
+  ResolverInfo,
+  // MultiQC management types
+  CreateMultiQCDCInput,
+  MultiQCMutationResult,
 } from './api';
