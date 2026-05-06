@@ -6,13 +6,154 @@
 
 
 <details>
-<summary>Click to expand the changelog for 0.10.3</summary>
+<summary>Click to expand the changelog for 0.11.0</summary>
 
 ### Changes 📜
 
 #### New Features ✨
 
 * feat: add permission-based auth annotations and Serve-specific ingress values [778ca9d9]
+* feat: add dedicated ingress for MinIO and backend API [45d6d524]
+
+#### Bug Fixes 🐛
+
+* fix: permission-guard logic + roll back workflow on upload failure [30cb692d]
+* fix: remove unused inheritDefaultAnnotations — dead code after annotation refactor [9876e82a]
+* fix: always render base nginx annotations on dedicated backend/minio ingresses [81215227]
+
+#### Improvements 🚀
+
+* style: ruff format drift in 4 unrelated dash files [5909d6ae]
+* refactor: remove hardcoded Serve annotations from dedicated ingress templates [53811b8c]
+* refactor: simplify separate ingress config — drop redundant enabled flag [21163c9e]
+
+#### Chores 🧹
+
+* ci: add manual workflow to add additional OCI tag to Helm chart [05989ada]
+* ci: fix pixi resolution + ruff format [ca1a896d]
+* ci: skip ghcr-dependent jobs on fork PRs [05c5bbf9]
+
+#### Documentation Updates 📚
+
+* docs: sync claude-mem auto-generated activity logs [56068a62]
+
+#### Other Changes 📝
+
+* Bump version: 0.10.3 → 0.11.0 [b4218cc5]
+* viewer: gate write actions in public/demo mode (UI + API) [6f1645e8]
+* viewer: unify per-mode button gating, drop anonymous public flow, fix resize handles [49f19fcd]
+* ci(helm): bump minikube to 6G/4 CPU for inter-service test headroom [8c24c691]
+* viewer(events): make realtime opt-in, fix standalone-mongo retry loop [c1e23fff]
+* docker: split Node.js into dev-viewer stage to unblock CI [e12ecd95]
+* viewer: settings drawer rewrite, edit-mode borders, multi-tab nav [5e890674]
+* viewer: permissions modal + role exclusivity, fix dev compose mount [6d2471ac]
+* viewer: selection UX, realtime refresh, dev container, admin dedup [1e4d2226]
+* projects(adapt_feedb_ms): yaml + simulation scripts for realtime testing [20a0daac]
+* dash(assets): multiqc icon SVGs + depictio-logo / multiqc-icon CSS [718a3430]
+* dash(modules): figure parameter discovery + multiqc general-stats [268141a1]
+* dash: layout cleanups and utils.py slim-down [f2354f54]
+* deps: add websockets + enable realtime event flags [4f93017e]
+* react(timeline): honor compact prop for marks visibility [d68be46b]
+* api(core): viewer-static-mount, anon-user gate, and user-by-email lookup [cf508e9f]
+* api(dashboards): bulk-compute, image, and figure endpoints for react viewer [1c7fe96a]
+* api(filters): dtype-agnostic is_in + cross-DC link filter resolution [8256abaf]
+* api(events): WebSocket + SSE endpoints for realtime dashboard refresh [35a67629]
+* models: shared types for image / timeline / row-selection / cross-DC links [9924ab44]
+* react(layout): compact mode for grouped slider/rangeslider/timeline [b643a506]
+* react(viewer): demo mode banner, upgrade flow, and guided tour [fec371b6]
+* react(viewer): app shell wires realtime, selections, and filter sidebar [1b261a62]
+* react(multiqc): figure + general-stats refetch on realtime tick [6db4b14a]
+* react(interactive): renderer updates + Timeline [dd18dec4]
+* react(renderers): figure/table/image/map selection + realtime refetch [7c3491a7]
+* react(layout): InteractiveGroupCard, TopPanel, secondary metrics [376c910e]
+* react(realtime): WebSocket-driven dashboard refresh + new-item highlight [dcf4aace]
+* react(selection): add chart/table cross-filter helpers [8377eca7]
+* react(api): add types and exports for selection, realtime, layout helpers [30ad983e]
+* Update CHANGELOG.md for v0.10.3 [70b96886]
+* Bump version: 0.10.2 → 0.10.3 [e9a56022]
+* Update CHANGELOG.md for v0.10.2 [e00c8c61]
+* Bump version: 0.10.1 → 0.10.2 [d6992f1d]
+* feat(deployment): add annotations for config checksum in backend and frontend [59768b20]
+* Update CHANGELOG.md for v0.10.1 [ca160d30]
+* Bump version: 0.10.0 → 0.10.1 [b72b35a8]
+* fix(test): set glob_pattern=None when bypassing RecipeSource validation [398e7dea]
+* Update CHANGELOG.md for v0.10.0 [f3a6b72b]
+* Bump version: 0.9.0 → 0.10.0 [f8db3b7c]
+* fix(profile): enable CLI Agents button in single-user mode [05ce615e]
+* Reduce duplication in depictio-react-core api.ts [361eab4e]
+* test: set glob_pattern on bypassed RecipeSource instances [28a376e0]
+* feat(api+react): create data collection from upload [7d56c1f7]
+* Use real workflow logos for template chip in projects list [6c5ccaa2]
+* Add Try the new version switcher in Dash sidebar → React beta [a81da716]
+* Add React component builder (/dashboard-beta-edit/{id}) [5911c36a]
+* Add /projects-beta React sub-app with detail + permissions [f00b0e10]
+* Add /about-beta, /admin-beta, /profile-beta, /cli-agents-beta sub-apps [06d1b396]
+* Add /auth and /dashboards-beta React sub-apps [419ddf5d]
+* Add viewer chrome: AppSidebar, Header, ProfileBadge, TabModal [4530ce17]
+* Extend depictio-react-core for projects + figure builder [49fb381a]
+* Add API endpoints for React viewer (figures, multiqc, projects, users) [60d9ebc6]
+* Wire React SPA serving + multi-route mounts in FastAPI [d725ab88]
+* fix(editor): use inset shadow for duplicate flash so left panel renders identically [9660a50b]
+* fix(editor): duplicate component visibility + ref staleness [46c0c34e]
+* perf(multiqc): filter-aware caching + Celery prewarm + cloudpickle [db16e88e]
+* Add React editor at /dashboard-beta-edit/{id} [acf7a587]
+* Add UI chrome to React viewer: header, sidebar, action icons [e129a16d]
+* Wire interactive sample-filter into render_multiqc [7f5ee350]
+* Extend _fetch_s3_locations_from_dc with multiqc_collection fallback [c74d8418]
+* Fix render_multiqc: use the richer fallback to resolve s3_locations [a9cea175]
+* Add Phase 2 handoff doc with smoke-test checklist [0e6dc14e]
+* Add Map, JBrowse, and MultiQC ports to React viewer [31ce40a1]
+* Add 5 component renderers + AG Grid SSRM to React viewer [66252941]
+* React viewer MVP + shared component library [cfc283ce]
+* Perf fixes: SVG re-encode, MultiQC samples strip + N+1 cache, route guard [424af6f0]
+* Bump Dash 3.2 → 4.1 for pattern-matching callback perf fix [6a810507]
+* revert: remove Serve-specific permission/auth logic from generic chart template [a87bfe10]
+* Fix cross-DC link filtering + heatmap annotations on filter [503a4d01]
+* Fix metadata links: source_column sample→ID (matches actual metadata column name) [0de966f6]
+* Fix heatmap annotations disappearing on filter + add metadata→heatmap link [b19a625e]
+* Consistent auto-coloring: use Plotly palette for heatmap annotations [5fb51f16]
+* Add samplesheet->taxonomy_heatmap link for cross-DC filtering (works for base+extended) [2e5f7e12]
+* Heatmap annotations: only habitat + city, skip name/dates/coordinates [78b0fc0d]
+* Fix heatmap: sanitize annotations at render time to handle stale delta data with None [89a4351e]
+* Fix heatmap: skip annotations with empty values (ComplexHeatmap KeyError) [25177e1b]
+* Fix heatmap recipe: convert None values to empty string in annotations [78174f91]
+* Fix heatmap annotations: extract _col_annotations_json in core.py rendering path [feac5185]
+* Disable component filter + add heatmap annotation debug logging [54ddbbd1]
+* Fix heatmap column loading: return empty list (all columns) when no value_columns specified [b313fdc6]
+* Fix heatmap: include _col_annotations_json in required columns for data loading [b24950d7]
+* Fix map component filtering, reorder DatePicker first in sidebar [8f726f03]
+* Add sampling locations map + fix heatmap date serialization [4077866a]
+* Fix heatmap recipe: convert date objects to strings for JSON serialization [4654b589]
+* Add GROUP_COL_DISPLAY for title-cased labels, fix sampling_date [fd787d23]
+* Fix Total Samples card: use ID column instead of sample for metadata DC [a17d357d]
+* Add DatePicker to both tabs, fix sample column refs in full_analysis [023be969]
+* Fix full_analysis dashboard: use ID column for metadata sample filter [f18a60fa]
+* Remove base project variant, add template_origin to ampliseq reference [95449b60]
+* Fix MultiQC metadata: remove prevent_initial_call so content loads on first click [5f4f60fe]
+* Use inline key:value groups for tighter template info layout [5d288c8b]
+* Reduce spacing between key/value in template info column [97080bfc]
+* Redesign template origin section: two-column layout with icons [f1531297]
+* Fix template_origin display: handle both dict and model types [10a9a4d5]
+* Store template variables in TemplateOrigin + show in data manager [4dde1873]
+* Add template origin section to Project Data Manager page [3034cf69]
+* Consistent badge size (sm) across all project badges [782cf04c]
+* Make template badge clickable with docs link + open-in-new icon [eb38a3a1]
+* Show template docs URL as separate clickable link in project details [6bec3486]
+* Add template info to project details + fix ObjectId serialization [3cfbbf80]
+* Fix /projects 500 error and unify template badge styling [009900d8]
+* Filter unresolved dashboard components + fix path resolution [f7c5a8d4]
+* Fix file scanner path resolution and dashboard DC tag scoping [7635fdfb]
+* Graceful handling of missing data collections [7b434454]
+* Remove alpha diversity/rarefaction from base dashboard [cf633c1a]
+
+
+</details>
+
+### Documentation 📖
+
+For more details, please refer to the [documentation](https://depictio.github.io/depictio-docs/)
+
+otations and Serve-specific ingress values [778ca9d9]
 * feat: add dedicated ingress for MinIO and backend API [45d6d524]
 
 #### Bug Fixes 🐛
