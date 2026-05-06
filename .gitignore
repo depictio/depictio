@@ -319,3 +319,13 @@ docker-compose.override.yaml
 # depictioDB/
 # minio_data/
 # cache/
+
+# Auto-generated claude-mem session context (per-directory CLAUDE.md)
+# Only curated CLAUDE.md files are tracked — opt-in via negation below.
+**/CLAUDE.md
+!/CLAUDE.md
+!/depictio/dash/CLAUDE.md
+!/depictio/api/v1/endpoints/utils_endpoints/CLAUDE.md
+
+# Superseded skill definitions (now lives in .claude/)
+.claude-code/
