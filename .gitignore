@@ -334,3 +334,6 @@ docker-compose.override.yaml
 **/CONTINUATION_PROMPT*.md
 **/HANDOFF.md
 **/*_HANDOFF.md
+
+# Dashboard YAML exports — auto-generated/instance-specific, dir created on-demand by loader.py
+depictio/dashboards_yaml/
