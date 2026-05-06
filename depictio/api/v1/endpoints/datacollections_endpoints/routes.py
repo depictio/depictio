@@ -8,6 +8,7 @@ from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.db import db, projects_collection
 from depictio.api.v1.endpoints.datacollections_endpoints.utils import (
     _create_dc_from_upload,
+    _create_multiqc_dc_from_uploads,
     _delete_data_collection_by_id,
     _get_data_collection_specs,
     _update_data_collection_name,
@@ -216,5 +217,48 @@ async def create_data_collection_from_upload(
         has_header=has_header,
         file_bytes=file_bytes,
         filename=file.filename or "upload.dat",
+        current_user=current_user,
+    )
+
+
+@datacollections_endpoint_router.post("/create_multiqc_from_upload")
+async def create_multiqc_data_collection_from_upload(
+    project_id: str = Form(...),
+    name: str = Form(...),
+    description: str = Form(""),
+    files: list[UploadFile] = File(...),
+    current_user=Depends(get_user_or_anonymous),
+):
+    """Create a MultiQC data collection from one or more uploaded multiqc.parquet files.
+
+    Each file's effective name is the browser-provided ``webkitRelativePath``
+    (``run_01/multiqc_data/multiqc.parquet``) so the helper can group reports
+    by parent folder. Per-file cap 50MB, total cap 500MB; per-file cap is
+    enforced inside the helper, total is enforced here against the headers
+    so we can fail fast before reading bodies.
+    """
+    if not files:
+        raise HTTPException(status_code=400, detail="No files uploaded.")
+
+    decoded_files: list[tuple[bytes, str]] = []
+    running_total = 0
+    for upload in files:
+        body = await upload.read()
+        running_total += len(body)
+        if running_total > 500 * 1024 * 1024:
+            raise HTTPException(
+                status_code=413,
+                detail=(
+                    f"Total upload size {running_total / (1024 * 1024):.1f}MB exceeds 500MB limit."
+                ),
+            )
+        decoded_files.append((body, upload.filename or "upload.parquet"))
+
+    return await asyncio.to_thread(
+        _create_multiqc_dc_from_uploads,
+        project_id=project_id,
+        name=name,
+        description=description,
+        decoded_files=decoded_files,
         current_user=current_user,
     )

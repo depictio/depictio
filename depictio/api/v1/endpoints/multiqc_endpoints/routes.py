@@ -8,9 +8,11 @@ This module provides REST API endpoints for managing MultiQC reports:
 - Get MultiQC report metadata and plots
 """
 
+import asyncio
+
 from bson import ObjectId
 from bson.errors import InvalidId
-from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile
 from pydantic import BaseModel
 
 from depictio.api.v1.celery_dispatch import offload_or_run
@@ -20,6 +22,8 @@ from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.db import multiqc_collection, projects_collection
 from depictio.api.v1.endpoints.dashboards_endpoints.routes import check_project_permission
 from depictio.api.v1.endpoints.multiqc_endpoints.utils import (
+    _append_multiqc_dc_uploads,
+    _replace_multiqc_dc_uploads,
     check_duplicate_multiqc_report,
     create_multiqc_report_in_db,
     delete_all_multiqc_reports_for_dc,
@@ -314,6 +318,95 @@ async def delete_all_reports_for_data_collection(
 
     result = await delete_all_multiqc_reports_for_dc(data_collection_id, delete_s3_files)
     return {**result, "data_collection_id": data_collection_id}
+
+
+async def _read_multiqc_uploads_with_caps(files: list[UploadFile]) -> list[tuple[bytes, str]]:
+    """Read all UploadFiles into memory while enforcing the 500MB total cap.
+
+    The per-file 50MB cap is enforced inside the helper so we keep one
+    source of truth.
+    """
+    if not files:
+        raise HTTPException(status_code=400, detail="No files uploaded.")
+
+    decoded_files: list[tuple[bytes, str]] = []
+    running_total = 0
+    for upload in files:
+        body = await upload.read()
+        running_total += len(body)
+        if running_total > 500 * 1024 * 1024:
+            raise HTTPException(
+                status_code=413,
+                detail=(
+                    f"Total upload size {running_total / (1024 * 1024):.1f}MB exceeds 500MB limit."
+                ),
+            )
+        decoded_files.append((body, upload.filename or "upload.parquet"))
+    return decoded_files
+
+
+@router.post(
+    "/reports/data-collection/{data_collection_id}/replace",
+    response_model=dict,
+    summary="Replace all reports for a MultiQC DC with the uploaded set",
+)
+async def replace_multiqc_reports(
+    data_collection_id: str,
+    files: list[UploadFile] = File(...),
+    current_user: User = Depends(get_current_user),
+):
+    """Bulk-delete every existing report (Mongo + S3) and reprocess from the uploads.
+
+    Editor permission check happens inside the helper; returns 404 (not 403)
+    on permission failure to avoid leaking DC existence.
+    """
+    try:
+        ObjectId(data_collection_id)
+    except (InvalidId, TypeError):
+        raise HTTPException(
+            status_code=400, detail=f"Invalid data collection id: {data_collection_id}"
+        )
+
+    decoded_files = await _read_multiqc_uploads_with_caps(files)
+    return await asyncio.to_thread(
+        _replace_multiqc_dc_uploads,
+        data_collection_id=data_collection_id,
+        decoded_files=decoded_files,
+        current_user=current_user,
+    )
+
+
+@router.post(
+    "/reports/data-collection/{data_collection_id}/append",
+    response_model=dict,
+    summary="Append new reports to a MultiQC DC, preserving existing reports",
+)
+async def append_multiqc_reports(
+    data_collection_id: str,
+    files: list[UploadFile] = File(...),
+    current_user: User = Depends(get_current_user),
+):
+    """Add new uploads to an existing MultiQC DC.
+
+    Existing reports' parquets are pulled back from S3 so the processor
+    sees the full file set. Old report rows are dropped only after the
+    reprocess succeeds — partial failure leaves the DC at its pre-append
+    state.
+    """
+    try:
+        ObjectId(data_collection_id)
+    except (InvalidId, TypeError):
+        raise HTTPException(
+            status_code=400, detail=f"Invalid data collection id: {data_collection_id}"
+        )
+
+    decoded_files = await _read_multiqc_uploads_with_caps(files)
+    return await asyncio.to_thread(
+        _append_multiqc_dc_uploads,
+        data_collection_id=data_collection_id,
+        decoded_files=decoded_files,
+        current_user=current_user,
+    )
 
 
 @router.get(

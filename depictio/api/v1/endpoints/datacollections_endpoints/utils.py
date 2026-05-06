@@ -559,3 +559,258 @@ def _create_dc_from_upload(
         }
     finally:
         shutil.rmtree(temp_dir, ignore_errors=True)
+
+
+# =============================================================================
+# MultiQC DC creation helpers (in-process, used by both Dash and the React API)
+# =============================================================================
+
+_MULTIQC_MAX_PER_FILE_BYTES = 50 * 1024 * 1024
+_MULTIQC_MAX_TOTAL_BYTES = 500 * 1024 * 1024
+
+
+def _extract_multiqc_folder_name(filename: str, fallback_idx: int) -> str:
+    """Derive a folder identifier from a multiqc.parquet relative path.
+
+    Browsers preserve the directory structure under ``webkitRelativePath`` for
+    folder-mode uploads. The frontend forwards that as the file's effective
+    name so paths like ``run_01/multiqc_data/multiqc.parquet`` reach Python
+    here. The MultiQC processor's discovery glob is
+    ``*/multiqc_data/multiqc.parquet`` — keying each report by the parent of
+    ``multiqc_data/`` (else the immediate parent, else an ordinal) gives each
+    report a stable, unique folder slot under the temp dir.
+    """
+    parts = [p for p in filename.replace("\\", "/").split("/") if p]
+    if len(parts) >= 3 and parts[-2] == "multiqc_data":
+        return parts[-3]
+    if len(parts) >= 2:
+        return parts[-2]
+    return f"report_{fallback_idx}"
+
+
+def _save_multiqc_uploads_to_temp_dir(
+    decoded_files: list[tuple[bytes, str]],
+    temp_dir: str,
+) -> tuple[list[tuple[str, str]], list[str]]:
+    """Filter, validate, and save multiqc.parquet uploads under per-folder subdirs.
+
+    ``decoded_files`` is a list of (raw_bytes, original_filename). Returns
+    (folder_assignments, skipped_names). Raises HTTPException on validation
+    failure so callers don't have to thread error envelopes manually.
+    """
+    kept: list[tuple[int, str, bytes]] = []
+    skipped_names: list[str] = []
+    for i, (decoded, fname) in enumerate(decoded_files):
+        basename = os.path.basename(fname.replace("\\", "/"))
+        if basename != "multiqc.parquet":
+            skipped_names.append(fname)
+            continue
+        if not decoded:
+            raise HTTPException(status_code=400, detail=f"File '{fname}' is empty.")
+        if len(decoded) > _MULTIQC_MAX_PER_FILE_BYTES:
+            raise HTTPException(
+                status_code=413,
+                detail=(
+                    f"File '{fname}' is {len(decoded) / (1024 * 1024):.1f}MB; per-file cap is 50MB."
+                ),
+            )
+        kept.append((i, fname, decoded))
+
+    if not kept:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "No files named 'multiqc.parquet' found in the upload. "
+                "Drop one or more folders that each contain a multiqc.parquet file."
+            ),
+        )
+
+    total_size = sum(len(decoded) for _, _, decoded in kept)
+    if total_size > _MULTIQC_MAX_TOTAL_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail=(f"Total upload size {total_size / (1024 * 1024):.1f}MB exceeds 500MB limit."),
+        )
+
+    used_folders: set[str] = set()
+    folder_assignments: list[tuple[str, str]] = []
+    for i, fname, decoded in kept:
+        base_folder = _extract_multiqc_folder_name(fname, i)
+        folder = base_folder
+        suffix = 1
+        while folder in used_folders:
+            folder = f"{base_folder}_{suffix}"
+            suffix += 1
+        used_folders.add(folder)
+        subdir = os.path.join(temp_dir, folder, "multiqc_data")
+        os.makedirs(subdir, exist_ok=True)
+        target = os.path.join(subdir, "multiqc.parquet")
+        with open(target, "wb") as fh:
+            fh.write(decoded)
+        folder_assignments.append((folder, fname))
+
+    logger.info(
+        f"Ingested {len(folder_assignments)} multiqc.parquet across folders: "
+        f"{sorted(used_folders)}; skipped {len(skipped_names)} non-multiqc files"
+    )
+    return folder_assignments, skipped_names
+
+
+def _build_multiqc_workflow(name: str, description: str, temp_dir: str):
+    """Construct a single-DC Workflow wrapping a MultiQC DC pointed at temp_dir."""
+    from depictio.models.models.data_collections import (
+        DataCollection,
+        DataCollectionConfig,
+    )
+    from depictio.models.models.data_collections_types.multiqc import DCMultiQC
+    from depictio.models.models.workflows import (
+        Workflow,
+        WorkflowConfig,
+        WorkflowDataLocation,
+        WorkflowEngine,
+    )
+
+    dc_config = DataCollectionConfig(
+        type="multiqc",
+        metatype="metadata",
+        dc_specific_properties=DCMultiQC(),
+    )
+    data_collection = DataCollection(
+        data_collection_tag=name.strip(),
+        description=description or "",
+        config=dc_config,
+    )
+    timestamp_ms = int(time.time() * 1000)
+    workflow_tag = f"{name.strip()}_workflow_{timestamp_ms}"
+    workflow = Workflow(
+        name=workflow_tag,
+        workflow_tag=workflow_tag,
+        engine=WorkflowEngine(name="python", version="3.12"),
+        config=WorkflowConfig(),
+        data_location=WorkflowDataLocation(structure="flat", locations=[temp_dir]),
+        data_collections=[data_collection],
+    )
+    return workflow, data_collection
+
+
+def _build_cli_config_for_user(current_user):
+    """Build a CLIConfig for in-process processor calls.
+
+    The CLI helpers expect a stored token doc (they call back into the API
+    over httpx). Mirrors the table-DC flow at ``_create_dc_from_upload``.
+    """
+    from depictio.models.models.cli import CLIConfig, UserBaseCLIConfig
+
+    full_token = tokens_collection.find_one({"user_id": current_user.id})
+    if not full_token:
+        raise HTTPException(status_code=401, detail="No API token on file for this user.")
+
+    return CLIConfig(
+        user=UserBaseCLIConfig(
+            id=current_user.id,
+            email=current_user.email,
+            is_admin=getattr(current_user, "is_admin", False),
+            token=full_token,
+        ),
+        api_base_url=settings.fastapi.url,
+        s3_storage=settings.minio,
+    )
+
+
+def _create_multiqc_dc_from_uploads(
+    *,
+    project_id: str,
+    name: str,
+    description: str,
+    decoded_files: list[tuple[bytes, str]],
+    current_user,
+) -> dict:
+    """Create a MultiQC data collection from a list of (bytes, filename) uploads.
+
+    Synchronous on purpose — ``process_data_collection_helper`` uses a sync
+    httpx client back to this same FastAPI process. Callers MUST dispatch
+    via ``asyncio.to_thread``.
+    """
+    if not name or not name.strip():
+        raise HTTPException(status_code=400, detail="Data collection name is required.")
+    if not decoded_files:
+        raise HTTPException(status_code=400, detail="No files uploaded.")
+
+    from depictio.cli.cli.utils.helpers import process_data_collection_helper
+
+    try:
+        project_oid = ObjectId(project_id)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Invalid project_id: {exc}")
+
+    project_dict = projects_collection.find_one({"_id": project_oid})
+    if not project_dict:
+        raise HTTPException(status_code=404, detail="Project not found.")
+
+    if not _user_can_edit_project(
+        project_dict, current_user.id, getattr(current_user, "is_admin", False)
+    ):
+        raise HTTPException(
+            status_code=403,
+            detail="You don't have edit permission on this project.",
+        )
+
+    cli_config = _build_cli_config_for_user(current_user)
+
+    temp_dir = tempfile.mkdtemp(prefix="depictio_multiqc_upload_")
+    try:
+        folder_assignments, skipped_names = _save_multiqc_uploads_to_temp_dir(
+            decoded_files, temp_dir
+        )
+        workflow, data_collection = _build_multiqc_workflow(name, description, temp_dir)
+
+        # Atomically attach the new workflow before processing so the API can
+        # locate the DC via its $push'd entry. Roll back on processor failure.
+        push_result = projects_collection.update_one(
+            {"_id": project_oid},
+            {"$push": {"workflows": workflow.mongo()}},
+        )
+        if push_result.modified_count == 0:
+            raise HTTPException(
+                status_code=500,
+                detail="Failed to attach workflow to project (no document modified).",
+            )
+
+        try:
+            # MultiQC has no scan step — process discovers parquets via the
+            # workflow's data_location glob.
+            process_result = process_data_collection_helper(
+                CLI_config=cli_config,
+                wf=workflow,
+                dc_id=str(data_collection.id),
+                mode="process",
+                command_parameters={"overwrite": True},
+            )
+            if (process_result or {}).get("result") != "success":
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"MultiQC processing failed: "
+                    f"{(process_result or {}).get('message', 'unknown error')}",
+                )
+        except Exception:
+            projects_collection.update_one(
+                {"_id": project_oid},
+                {"$pull": {"workflows": {"_id": ObjectId(str(workflow.id))}}},
+            )
+            raise
+
+        return {
+            "success": True,
+            "message": (
+                f"MultiQC data collection '{name.strip()}' created "
+                f"({len(folder_assignments)} folder(s) ingested"
+                + (f", {len(skipped_names)} non-multiqc file(s) ignored" if skipped_names else "")
+                + ")."
+            ),
+            "data_collection_id": str(data_collection.id),
+            "workflow_id": str(workflow.id),
+            "ingested_folders": sorted({folder for folder, _ in folder_assignments}),
+            "skipped_count": len(skipped_names),
+        }
+    finally:
+        shutil.rmtree(temp_dir, ignore_errors=True)
