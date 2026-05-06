@@ -271,8 +271,10 @@ dashboards/local/
 !sample_metadata.csv
 !test_data.csv
 
+# Node / pnpm workspace modules (root + per-package)
+node_modules/
+
 # Cypress
-depictio/tests/e2e-tests/node_modules/
 depictio/tests/e2e-tests/cypress/screenshots/
 # depictio/tests/e2e-tests/package-lock.json
 
