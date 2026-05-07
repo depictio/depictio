@@ -71,7 +71,7 @@ const AIKeySection: React.FC<Props> = ({ dashboardId, modelOptions }) => {
 
       <PasswordInput
         label="LLM API key"
-        description="Used only for this dashboard, kept in memory, never sent anywhere except your chosen provider."
+        description="Saved in your browser (localStorage) per dashboard so you don't need to re-enter it after a refresh. Sent only to your chosen provider."
         placeholder="sk-or-... / sk-ant-... / sk-..."
         value={session.llmKey}
         onChange={(e) => setKey(dashboardId, e.currentTarget.value)}

@@ -34,18 +34,21 @@ def figure_python_code(visu_type: str, dict_kwargs: dict[str, Any]) -> str:
     The DataFrame is referenced as `df` — matches what the analyze
     executor exposes and what an end-user would type in a notebook after
     `df = pl.read_parquet(...)`.
+
+    No `import` statement is emitted: the depictio code-mode runtime
+    already exposes `px`, `pl`, `pd`, `np`, `go` in the executor's
+    safe globals (RestrictedPython rejects `import` anyway). That makes
+    the same string usable for *both* display in the AI drawer and as
+    the persisted ``code_content`` of a code-mode figure component.
     """
     items = list(dict_kwargs.items())
     if not items:
-        body = "df"
-    elif len(items) <= 2:
+        return f"fig = px.{visu_type}(df)"
+    if len(items) <= 2:
         kwargs_str = ", ".join(f"{k}={_format_value(v)}" for k, v in items)
-        body = f"df, {kwargs_str}"
-    else:
-        lines = ["    df,"]
-        for k, v in items:
-            lines.append(f"    {k}={_format_value(v)},")
-        body = "\n".join(lines)
-        return f"import plotly.express as px\n\nfig = px.{visu_type}(\n{body}\n)"
-
-    return f"import plotly.express as px\n\nfig = px.{visu_type}({body})"
+        return f"fig = px.{visu_type}(df, {kwargs_str})"
+    lines = ["    df,"]
+    for k, v in items:
+        lines.append(f"    {k}={_format_value(v)},")
+    body = "\n".join(lines)
+    return f"fig = px.{visu_type}(\n{body}\n)"

@@ -174,9 +174,7 @@ def _validate(node: ast.AST) -> None:
         # Names: only df, pl, True/False/None
         if isinstance(child, ast.Name):
             if child.id not in ALLOWED_NAMES:
-                raise ValidationError(
-                    reason=f"unknown name '{child.id}'", node_lineno=child.lineno
-                )
+                raise ValidationError(reason=f"unknown name '{child.id}'", node_lineno=child.lineno)
 
         # Attribute: block dunder access at all depths
         if isinstance(child, ast.Attribute):

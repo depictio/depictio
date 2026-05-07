@@ -611,6 +611,14 @@ const EditorApp: React.FC = () => {
           ? crypto.randomUUID()
           : fallbackUuid();
 
+      // Persist as a CODE-MODE figure so the saved component carries the
+      // exact Python the LLM produced. /render_figure routes code-mode
+      // components through SimpleCodeExecutor (RestrictedPython) which
+      // already exposes `px`, `pl`, `pd`, `np`, `go` — no import line is
+      // needed and `figure_python_code` is emitted accordingly. Keeping
+      // visu_type + dict_kwargs alongside means the editor's UI mode
+      // can reconstruct the form if the user later switches modes.
+      const codeContent = (suggestion.code || '').trim();
       const newMeta: StoredMetadata = {
         index: newId,
         component_type: 'figure',
@@ -620,7 +628,8 @@ const EditorApp: React.FC = () => {
         dc_id: primaryDcId,
         wf_id: primaryWfId,
         project_id: projectId,
-        mode: 'ui',
+        mode: 'code',
+        code_content: codeContent,
         panel: 'right',
         // Tag the metadata so we can later distinguish AI-authored
         // figures (e.g. for analytics or a "rebuild" affordance).
@@ -668,7 +677,8 @@ const EditorApp: React.FC = () => {
         notifications.show({
           color: 'teal',
           title: 'AI figure added',
-          message: 'Figure saved — it will respond to dashboard filters.',
+          message:
+            'Saved as code mode — open the figure editor to view / tweak the Python.',
           autoClose: 3500,
         });
         // Scroll the new component into view + brief flash, mirroring

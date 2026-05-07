@@ -139,7 +139,14 @@ async def figure_from_prompt(
 
 def _sse(event: StreamEvent) -> bytes:
     """Format a StreamEvent as one SSE-style chunk (event + data + blank)."""
-    payload = event.model_dump_json(exclude={"type"})
+    # Emit the inner ``data`` dict directly. `model_dump_json(exclude={"type"})`
+    # wraps it in `{"data": {...}}` because StreamEvent has both `type` and
+    # `data` fields, which forces the React parser to read
+    # ``event.data.detail`` as ``event.data.data.detail`` — every error event
+    # silently surfaces "unknown error" in the UI.
+    import json
+
+    payload = json.dumps(event.data, default=str)
     return f"event: {event.type}\ndata: {payload}\n\n".encode()
 
 

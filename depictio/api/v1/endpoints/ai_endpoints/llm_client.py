@@ -179,5 +179,5 @@ def parse_json(content: str) -> Any:
         if first_nl != -1:
             text = text[first_nl + 1 :]
         if text.endswith("```"):
-            text = text[: -3]
+            text = text[:-3]
     return json.loads(text.strip())

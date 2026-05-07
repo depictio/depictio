@@ -52,10 +52,7 @@ class ColumnSummary:
     nunique: int
 
     def to_prompt_line(self) -> str:
-        return (
-            f"- {self.name} ({self.dtype}, null={self.null_pct:.0%}, "
-            f"distinct={self.nunique})"
-        )
+        return f"- {self.name} ({self.dtype}, null={self.null_pct:.0%}, distinct={self.nunique})"
 
 
 @dataclass
@@ -253,8 +250,7 @@ async def build_data_context(
         project_name=project_doc.get("name"),
         project_description=project_doc.get("description"),
         dc_name=dc_doc.get("data_collection_tag") or dc_doc.get("name"),
-        dc_description=(dc_doc.get("config") or {}).get("description")
-        or dc_doc.get("description"),
+        dc_description=(dc_doc.get("config") or {}).get("description") or dc_doc.get("description"),
         columns=_summarize_columns(df),
         sample_rows=_sample_rows(df, n=sample_n),
         row_count=df.height,
@@ -293,9 +289,9 @@ def _component_id(meta: dict[str, Any]) -> str | None:
     return None
 
 
-def _summarize_dashboard(dashboard_doc: dict[str, Any]) -> tuple[
-    list[FigureSummary], list[FilterSummary], str | None
-]:
+def _summarize_dashboard(
+    dashboard_doc: dict[str, Any],
+) -> tuple[list[FigureSummary], list[FilterSummary], str | None]:
     """Extract figures + interactive filter values + best-guess primary DC."""
     figures: list[FigureSummary] = []
     filters: list[FilterSummary] = []
@@ -313,14 +309,10 @@ def _summarize_dashboard(dashboard_doc: dict[str, Any]) -> tuple[
 
         if comp_type in FIGURE_TYPES or comp_type.lower() == "figure":
             dict_kwargs = (
-                meta.get("dict_kwargs")
-                or (meta.get("metadata") or {}).get("dict_kwargs")
-                or {}
+                meta.get("dict_kwargs") or (meta.get("metadata") or {}).get("dict_kwargs") or {}
             )
             visu = (
-                meta.get("visu_type")
-                or (meta.get("metadata") or {}).get("visu_type")
-                or "figure"
+                meta.get("visu_type") or (meta.get("metadata") or {}).get("visu_type") or "figure"
             )
             figures.append(
                 FigureSummary(
@@ -334,9 +326,7 @@ def _summarize_dashboard(dashboard_doc: dict[str, Any]) -> tuple[
             value = meta.get("value")
             if value is None:
                 value = (meta.get("metadata") or {}).get("value")
-            column = meta.get("column_name") or (meta.get("metadata") or {}).get(
-                "column_name"
-            )
+            column = meta.get("column_name") or (meta.get("metadata") or {}).get("column_name")
             filters.append(
                 FilterSummary(
                     component_id=cid,
@@ -371,9 +361,7 @@ async def build_dashboard_context(
 
     project_id = doc.get("project_id")
     if not project_id:
-        raise HTTPException(
-            status_code=500, detail="Dashboard is not associated with a project."
-        )
+        raise HTTPException(status_code=500, detail="Dashboard is not associated with a project.")
 
     project = projects_collection.find_one({"_id": _OID(project_id)})
     if not project:
@@ -382,10 +370,14 @@ async def build_dashboard_context(
     is_public = bool(project.get("is_public"))
     perms = project.get("permissions") or {}
     user_id = getattr(current_user, "id", None)
-    allowed = is_public or any(
-        (p.get("_id") == user_id)
-        for p in (perms.get("owners") or []) + (perms.get("viewers") or [])
-    ) or "*" in (perms.get("viewers") or [])
+    allowed = (
+        is_public
+        or any(
+            (p.get("_id") == user_id)
+            for p in (perms.get("owners") or []) + (perms.get("viewers") or [])
+        )
+        or "*" in (perms.get("viewers") or [])
+    )
     if not allowed:
         raise HTTPException(
             status_code=403,
