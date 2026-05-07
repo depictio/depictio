@@ -29,15 +29,18 @@ import React, {
   useDeferredValue,
 } from 'react';
 import {
+  ActionIcon,
   AppShell,
-  Group,
-  Text,
-  Loader,
   Box,
+  Group,
+  Loader,
   Paper,
   Stack,
+  Text,
   Title,
+  Tooltip,
 } from '@mantine/core';
+import { Icon } from '@iconify/react';
 import { useDisclosure } from '@mantine/hooks';
 import { notifications } from '@mantine/notifications';
 import { useSidebarOpen } from './hooks/useSidebarOpen';
@@ -66,6 +69,8 @@ import type {
   StoredMetadata,
   RealtimeMode,
 } from 'depictio-react-core';
+import { AIAnalyzePanel, AIDrawer } from 'depictio-react-ai';
+import type { DashboardActions, PlotSuggestion } from 'depictio-react-ai';
 
 import LeftFilterPanel from './components/LeftFilterPanel';
 import GridItemEditOverlay from './components/GridItemEditOverlay';
@@ -157,6 +162,7 @@ const EditorApp: React.FC = () => {
   // Persist across tab/page navigations (matches App.tsx + Dash app).
   const [desktopOpened, toggleDesktop] = useSidebarOpen();
   const [settingsOpened, { open: openSettings, close: closeSettings }] = useDisclosure(false);
+  const [aiOpened, { open: openAI, close: closeAI }] = useDisclosure(false);
   const auth = useAuthMode();
   const isDemoMode = auth.status?.is_demo_mode === true;
   // Tab modal state — `mode` decides between create vs edit. `target` is the
@@ -492,6 +498,209 @@ const EditorApp: React.FC = () => {
           m.component_type !== 'card' && m.component_type !== 'interactive',
       ),
     [dashboard],
+  );
+
+  // Primary DC + WF for AI flows. First DC referenced by any stored
+  // component — same heuristic as App.tsx and the analyze backend so
+  // the editor and viewer agree on which DC the LLM reasons about.
+  const primaryRef = useMemo(() => {
+    for (const m of dashboard?.stored_metadata || []) {
+      const meta = m as {
+        dc_id?: unknown;
+        wf_id?: unknown;
+        metadata?: { dc_id?: unknown; wf_id?: unknown };
+      };
+      const dcRaw = meta.dc_id ?? meta.metadata?.dc_id;
+      const wfRaw = meta.wf_id ?? meta.metadata?.wf_id;
+      const dc = oidString(dcRaw);
+      const wf = oidString(wfRaw);
+      if (dc) return { dcId: dc, wfId: wf };
+    }
+    return { dcId: undefined as string | undefined, wfId: undefined as string | undefined };
+  }, [dashboard?.stored_metadata]);
+  const primaryDcId = primaryRef.dcId;
+  const primaryWfId = primaryRef.wfId;
+  const projectId = (dashboard?.project_id as string | undefined) || undefined;
+
+  // Index → component_type lookup so AI-driven filter mutations can be
+  // converted to the correct InteractiveFilter shape (mirrors App.tsx).
+  const interactiveTypeByIndex = useMemo(() => {
+    const out: Record<string, string> = {};
+    for (const m of dashboard?.stored_metadata || []) {
+      const meta = m as {
+        index?: string;
+        component_type?: string;
+        interactive_component_type?: string;
+        metadata?: { interactive_component_type?: string };
+      };
+      if (!meta.index) continue;
+      const t =
+        meta.interactive_component_type ??
+        meta.metadata?.interactive_component_type ??
+        meta.component_type ??
+        '';
+      out[meta.index] = String(t);
+    }
+    return out;
+  }, [dashboard?.stored_metadata]);
+
+  const handleApplyActions = useCallback(
+    (actions: DashboardActions) => {
+      let filterCount = 0;
+      for (const f of actions.filters) {
+        const componentType = interactiveTypeByIndex[f.component_id];
+        handleFilterChange({
+          index: f.component_id,
+          value: f.value,
+          interactive_component_type: componentType,
+        });
+        filterCount += 1;
+      }
+      if (filterCount) {
+        notifications.show({
+          color: 'teal',
+          title: 'AI applied filters',
+          message: `${filterCount} filter${filterCount === 1 ? '' : 's'} updated.`,
+        });
+      }
+      // Figure mutations of existing components: we have edit access here, but
+      // the v1 mutation surface is intentionally narrow — surface them as a
+      // notification so the user can hand-apply via the figure editor.
+      if (actions.figure_mutations.length) {
+        notifications.show({
+          color: 'yellow',
+          title: 'Figure changes proposed',
+          message: `${actions.figure_mutations.length} figure mutation${
+            actions.figure_mutations.length === 1 ? '' : 's'
+          } proposed — open the figure editor to apply.`,
+        });
+      }
+    },
+    [handleFilterChange, interactiveTypeByIndex],
+  );
+
+  /**
+   * Persist an AI-suggested figure as a real dashboard component.
+   *
+   * Builds a StoredMetadata that mirrors the shape produced by the
+   * figure builder (see /api/v1/configs/projects/init/iris seed:
+   * component_type='figure', visu_type, dict_kwargs, dc_id, wf_id,
+   * mode='ui', panel='right'). Once saved, the existing FigureRenderer
+   * pipeline picks it up — that gives the user persistence AND
+   * interactive-filter responsiveness for free, since /render_figure
+   * already takes the active filters into account on every fetch.
+   */
+  const handleAddSuggestion = useCallback(
+    async (suggestion: PlotSuggestion) => {
+      if (!dashboardId) return;
+      const cur = dashboardRef.current;
+      if (!cur) return;
+      if (!primaryDcId) {
+        notifications.show({
+          color: 'yellow',
+          title: 'No data collection',
+          message:
+            'Cannot add the figure — this dashboard has no DC referenced yet.',
+        });
+        return;
+      }
+
+      const newId =
+        typeof crypto !== 'undefined' &&
+        typeof crypto.randomUUID === 'function'
+          ? crypto.randomUUID()
+          : fallbackUuid();
+
+      const newMeta: StoredMetadata = {
+        index: newId,
+        component_type: 'figure',
+        visu_type: suggestion.visu_type,
+        dict_kwargs: suggestion.dict_kwargs as Record<string, unknown>,
+        title: suggestion.title,
+        dc_id: primaryDcId,
+        wf_id: primaryWfId,
+        project_id: projectId,
+        mode: 'ui',
+        panel: 'right',
+        // Tag the metadata so we can later distinguish AI-authored
+        // figures (e.g. for analytics or a "rebuild" affordance).
+        ai_origin: 'figure-from-prompt',
+      } as StoredMetadata;
+
+      // Stack new figure below the lowest-bottom existing right entry so
+      // it doesn't collide with anything already on the grid. compactType
+      // resolves overlap, but a sane y avoids a visible jump.
+      const existing = eachLayoutEntry(cur.right_panel_layout_data);
+      const bottomY = existing.reduce(
+        (acc, it) => Math.max(acc, (it.y ?? 0) + (it.h ?? 4)),
+        0,
+      );
+      const newLayoutEntry: Layout = {
+        i: `box-${newId}`,
+        x: 0,
+        y: bottomY,
+        w: 6,
+        h: 6,
+      };
+
+      const next: DashboardData = {
+        ...cur,
+        stored_metadata: [...(cur.stored_metadata || []), newMeta],
+        right_panel_layout_data: appendToLayout(
+          cur.right_panel_layout_data,
+          newLayoutEntry,
+        ),
+      };
+
+      // Cancel any pending debounced save — we save synchronously here
+      // so the refetch returns a dashboard that includes the new figure.
+      if (saveTimer.current) {
+        clearTimeout(saveTimer.current);
+        saveTimer.current = null;
+      }
+      applyDashboard(next);
+      setSaveStatus('saving');
+      try {
+        await saveDashboard(dashboardId, next);
+        const fresh = await fetchDashboard(dashboardId);
+        applyDashboard(fresh);
+        setSaveStatus('saved');
+        notifications.show({
+          color: 'teal',
+          title: 'AI figure added',
+          message: 'Figure saved — it will respond to dashboard filters.',
+          autoClose: 3500,
+        });
+        // Scroll the new component into view + brief flash, mirroring
+        // the duplicate flow's UX.
+        const flash = () => {
+          const inner = document.querySelector(
+            `[data-component-id="${newId}"]`,
+          ) as HTMLElement | null;
+          const el =
+            (inner?.closest('.react-grid-item') as HTMLElement | null) ||
+            inner;
+          if (!el) return;
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          el.classList.add('depictio-duplicate-flash');
+          window.setTimeout(
+            () => el.classList.remove('depictio-duplicate-flash'),
+            1500,
+          );
+        };
+        requestAnimationFrame(() => requestAnimationFrame(flash));
+      } catch (err) {
+        console.error('[EditorApp] add AI figure failed:', err);
+        setSaveStatus('error');
+        notifications.show({
+          color: 'red',
+          title: 'Add figure failed',
+          message: err instanceof Error ? err.message : String(err),
+          autoClose: 5000,
+        });
+      }
+    },
+    [dashboardId, primaryDcId, primaryWfId, projectId, applyDashboard],
   );
 
   // Tab family: parent dashboard + its child tabs (mirrors App.tsx).
@@ -885,6 +1094,19 @@ const EditorApp: React.FC = () => {
           onSave={handleForceSave}
           rightExtras={
             <>
+              {dashboardId && (
+                <Tooltip label="New AI figure">
+                  <ActionIcon
+                    variant="subtle"
+                    color="violet"
+                    onClick={openAI}
+                    aria-label="Build a new figure with AI"
+                    data-tour-id="ai-button"
+                  >
+                    <Icon icon="material-symbols:add-chart" width={18} />
+                  </ActionIcon>
+                </Tooltip>
+              )}
               {realtimeEnabled && (
                 <span data-tour-id="realtime-indicator" style={{ display: 'inline-flex' }}>
                   <RealtimeIndicator
@@ -976,8 +1198,17 @@ const EditorApp: React.FC = () => {
                 minWidth: 0,
                 overflowY: 'auto',
                 overflowX: 'hidden',
+                display: 'flex',
+                flexDirection: 'column',
               }}
             >
+              {dashboardId && (
+                <AIAnalyzePanel
+                  dashboardId={dashboardId}
+                  onApplyActions={handleApplyActions}
+                />
+              )}
+              <Box style={{ flex: 1, minHeight: 0 }}>
               <RightComponentGrid
                 dashboardId={dashboardId!}
                 cardComponents={cardComponents}
@@ -992,6 +1223,7 @@ const EditorApp: React.FC = () => {
                 onDeleteComponent={handleDeleteComponent}
                 onDuplicateComponent={handleDuplicateComponent}
               />
+              </Box>
             </Box>
           </div>
         )}
@@ -1002,6 +1234,18 @@ const EditorApp: React.FC = () => {
         onClose={closeSettings}
         dashboard={dashboard}
       />
+
+      {dashboardId && (
+        <AIDrawer
+          opened={aiOpened}
+          onClose={closeAI}
+          dashboardId={dashboardId}
+          primaryDataCollectionId={primaryDcId}
+          primaryWorkflowId={primaryWfId}
+          projectId={projectId}
+          onAddSuggestion={handleAddSuggestion}
+        />
+      )}
 
       <TabModal
         opened={tabModalState.open}
@@ -1207,6 +1451,21 @@ function eachLayoutEntry(layoutData: unknown): Layout[] {
     return out;
   }
   return [];
+}
+
+/**
+ * Coerce an id field to its string form. The save endpoint round-trips
+ * dc_id / wf_id as `{$oid: "..."}` for some sources and as bare strings
+ * for others; the AI surface always wants a flat string for the
+ * /figure/preview metadata.
+ */
+function oidString(value: unknown): string | undefined {
+  if (typeof value === 'string' && value) return value;
+  if (value && typeof value === 'object' && '$oid' in value) {
+    const v = (value as { $oid?: unknown }).$oid;
+    if (typeof v === 'string' && v) return v;
+  }
+  return undefined;
 }
 
 function layoutContains(layoutData: unknown, componentId: string): boolean {
