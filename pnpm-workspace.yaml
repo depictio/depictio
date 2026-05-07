@@ -1,3 +1,12 @@
 packages:
   - 'packages/*'
   - 'depictio/viewer'
+
+# pnpm v10+ doesn't run lifecycle/postinstall scripts unless explicitly
+# approved. esbuild's postinstall is what installs the platform-specific
+# native binary; without it Vite's esbuild service dies on first transform
+# ("The service is no longer running"). es5-ext just prints a donation
+# notice, but allowlisting it silences the warning.
+onlyBuiltDependencies:
+  - esbuild
+  - es5-ext

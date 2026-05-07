@@ -52,7 +52,11 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     emptyOutDir: true,
-    sourcemap: true,
+    // Sourcemaps balloon peak memory during chunk rendering and aren't
+    // shipped to end users. Default ON for host/dev builds; explicitly
+    // turned OFF in the Docker viewer-builder stage via VITE_NO_SOURCEMAP
+    // so the image build fits inside typical container memory caps.
+    sourcemap: process.env.VITE_NO_SOURCEMAP !== 'true',
   },
   server: {
     port: 5173,
@@ -68,8 +72,28 @@ export default defineConfig({
         // (/depictio/api/v1/events/ws). Without it the upgrade fails.
         ws: true,
       },
+      // FastAPI serves these at :8058 (StaticFiles mounts in main.py for
+      // dashboard thumbnails and Dash-shared assets like the nf-core /
+      // depictio logos). Vite owns /dashboard-beta/ but everything else
+      // needs to forward to the backend.
+      '/static': {
+        target: API_TARGET,
+        changeOrigin: true,
+      },
+      '/assets': {
+        target: API_TARGET,
+        changeOrigin: true,
+      },
     },
     hmr: HMR_CLIENT_PORT ? { clientPort: HMR_CLIENT_PORT } : undefined,
+    // Native fs.watch events don't reliably cross the macOS → Colima/Docker
+    // Desktop VM boundary on bind mounts, so HMR misses host-side saves.
+    // Polling adds a small CPU cost (~1–2%) but is the standard fix —
+    // gated on VITE_USE_POLLING so host-only `pnpm dev` keeps native watch.
+    watch:
+      process.env.VITE_USE_POLLING === 'true'
+        ? { usePolling: true, interval: 300 }
+        : undefined,
   },
   resolve: {
     alias: {

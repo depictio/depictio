@@ -1,4 +1,12 @@
 # -----------------------------
+# Viewer build output
+# -----------------------------
+# Produced inside the image by the viewer-builder stage in
+# Dockerfile_depictio_uv.dockerfile. Excluding it from the docker context
+# prevents a stale host bundle from clobbering the freshly-built one.
+depictio/viewer/dist/
+
+# -----------------------------
 # Exclude Legacy Directories
 # -----------------------------
 depictioDB_K8S/

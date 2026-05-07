@@ -160,6 +160,14 @@ services:
       dockerfile: docker-images/Dockerfile_depictio_uv.dockerfile
       context: .
       target: dev-viewer
+      # Build the image's `depictio` user with the host's UID/GID so it
+      # matches the `user:` override below. Without this the image bakes
+      # depictio as 1000:1000; on macOS the host is typically 501:20, and
+      # the named-volume node_modules dirs (pre-created in the Dockerfile
+      # as `depictio:depictio`) end up unwritable by the runtime UID.
+      args:
+        UID: "${UID:-1000}"
+        GID: "${GID:-1000}"
     ports:
       - ${VIEWER_DEV_PORT:-5173}:5173
     volumes:
@@ -187,13 +195,18 @@ services:
       # user hits :5173 directly this is the same; if proxied through
       # FastAPI later, override this to the FastAPI port.
       VITE_HMR_CLIENT_PORT: "${VIEWER_DEV_PORT:-5173}"
+      # Force chokidar/Vite to poll the bind-mounted source. macOS →
+      # Colima/Docker Desktop VMs don't deliver inotify events reliably
+      # for host bind mounts, so native fs.watch silently misses host
+      # saves and HMR appears frozen. Polling is the standard workaround.
+      VITE_USE_POLLING: "true"
     working_dir: /app
     command:
       - sh
       - -c
       - |
         corepack prepare pnpm@latest --activate &&
-        pnpm install --frozen-lockfile &&
+        pnpm install --frozen-lockfile --prefer-offline --child-concurrency=2 --network-concurrency=4 &&
         pnpm --filter depictio-viewer dev --host 0.0.0.0 --port 5173
     user: "${UID:-1000}:${GID:-1000}"
     depends_on:
