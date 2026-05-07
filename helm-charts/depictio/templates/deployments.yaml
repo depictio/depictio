@@ -263,7 +263,8 @@ spec:
         project: {{ .Values.project.slug }}
         type: app
       annotations:
-        checksum/config: {{ .Values.backend.env | toJson | sha256sum }}
+        checksum/config: {{ include (print $.Template.BasePath "/configmaps.yaml") . | sha256sum }}
+        checksum/secrets: {{ include (print $.Template.BasePath "/secrets.yaml") . | sha256sum }}
     spec:
       {{- if gt (.Values.backend.replicas | int) 1 }}
       affinity:
@@ -545,7 +546,8 @@ spec:
         project: {{ .Values.project.slug }}
         type: app
       annotations:
-        checksum/config: {{ .Values.frontend.env | toJson | sha256sum }}
+        checksum/config: {{ include (print $.Template.BasePath "/configmaps.yaml") . | sha256sum }}
+        checksum/secrets: {{ include (print $.Template.BasePath "/secrets.yaml") . | sha256sum }}
     spec:
       {{- if gt (.Values.frontend.replicas | int) 1 }}
       affinity:
@@ -889,6 +891,9 @@ spec:
         app: celery-worker
         project: {{ .Values.project.slug }}
         type: app
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmaps.yaml") . | sha256sum }}
+        checksum/secrets: {{ include (print $.Template.BasePath "/secrets.yaml") . | sha256sum }}
     spec:
       securityContext:
         {{- toYaml .Values.celery.podSecurityContext | nindent 8 }}
