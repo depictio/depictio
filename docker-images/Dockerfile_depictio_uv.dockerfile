@@ -171,7 +171,7 @@ USER depictio
 # initialize from these populated dirs on first mount, so the runtime
 # `pnpm install --frozen-lockfile --prefer-offline` is a fast integrity
 # check rather than a full extract.
-RUN corepack prepare pnpm@latest --activate && \
+RUN corepack prepare pnpm@10 --activate && \
     pnpm install --frozen-lockfile --child-concurrency=2 --network-concurrency=4
 
 # -----------------------------
@@ -183,7 +183,10 @@ RUN corepack prepare pnpm@latest --activate && \
 # but no runtime image size impact (intermediate stages are dropped).
 FROM node:20-slim AS viewer-builder
 WORKDIR /build
-RUN corepack enable && corepack prepare pnpm@latest --activate
+# Pinned: pnpm 11+ requires Node 22.13+ (uses node:sqlite builtin). Stay on
+# pnpm 10's tip until we bump the base image; `@latest` rolled forward and
+# broke the build mid-day on 2026-05-07.
+RUN corepack enable && corepack prepare pnpm@10 --activate
 COPY pnpm-workspace.yaml pnpm-lock.yaml ./
 COPY packages ./packages/
 COPY depictio/viewer ./depictio/viewer/
