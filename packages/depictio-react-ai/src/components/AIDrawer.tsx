@@ -19,7 +19,6 @@ import { useFigureFromPrompt } from '../hooks';
 import { useAISession, useAIStore } from '../store';
 import type { PlotSuggestion } from '../types';
 import FigurePreview from './FigurePreview';
-import PythonCodeBlock from './PythonCodeBlock';
 
 interface Props {
   opened: boolean;
@@ -53,14 +52,24 @@ const AIDrawer: React.FC<Props> = ({
 }) => {
   const session = useAISession(dashboardId);
   const reset = useAIStore((s) => s.reset);
+  const patchMessage = useAIStore((s) => s.patchMessage);
   const { run: runFigure } = useFigureFromPrompt(dashboardId);
   const [prompt, setPrompt] = useState('');
   const scrollRef = useRef<HTMLDivElement>(null);
   const [addedIds, setAddedIds] = useState<Set<string>>(new Set());
+  const [refinePrompts, setRefinePrompts] = useState<Record<string, string>>({});
 
   // Only figure messages render here — analyze messages flow into the
   // AIAnalyzePanel. Filtering keeps the drawer focused on charts.
   const figureMessages = session.messages.filter((m) => m.suggestion);
+
+  async function refine(messageId: string, previous: PlotSuggestion) {
+    const text = (refinePrompts[messageId] || '').trim();
+    if (!text || session.pending || !primaryDataCollectionId) return;
+    if (!session.llmKey) return;
+    setRefinePrompts((s) => ({ ...s, [messageId]: '' }));
+    await runFigure(primaryDataCollectionId, text, previous);
+  }
 
   useEffect(() => {
     if (!scrollRef.current) return;
@@ -200,21 +209,65 @@ const AIDrawer: React.FC<Props> = ({
                         )}
                       </Stack>
                     </Alert>
-                    {m.suggestion.code && (
-                      <PythonCodeBlock
-                        code={m.suggestion.code}
-                        flavor="Plotly Express"
-                        tone="figure"
-                      />
-                    )}
                     {primaryDataCollectionId && (
                       <FigurePreview
                         suggestion={m.suggestion}
                         dataCollectionId={primaryDataCollectionId}
                         workflowId={primaryWorkflowId}
                         projectId={projectId}
+                        onCodeChange={(nextCode) => {
+                          // Persist the edited code on the transcript
+                          // message so refinement / "Add to dashboard"
+                          // see the latest version.
+                          patchMessage(dashboardId, m.id, {
+                            suggestion: { ...m.suggestion!, code: nextCode },
+                          });
+                        }}
                       />
                     )}
+                    {/* Refine: feed the previous suggestion back into
+                        figure-from-prompt as a delta so users can iterate
+                        without restating the whole chart. */}
+                    <Group gap="xs" align="flex-start" wrap="nowrap" mt={4}>
+                      <Textarea
+                        placeholder='Refine — e.g. "make it horizontal", "color by sample"'
+                        value={refinePrompts[m.id] || ''}
+                        onChange={(e) =>
+                          setRefinePrompts((s) => ({
+                            ...s,
+                            [m.id]: e.currentTarget.value,
+                          }))
+                        }
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                            e.preventDefault();
+                            void refine(m.id, m.suggestion!);
+                          }
+                        }}
+                        autosize
+                        minRows={1}
+                        maxRows={3}
+                        disabled={session.pending}
+                        style={{ flex: 1 }}
+                      />
+                      <Button
+                        size="compact-sm"
+                        variant="light"
+                        color="violet"
+                        leftSection={
+                          <Icon icon="material-symbols:auto-fix" width={14} />
+                        }
+                        onClick={() => void refine(m.id, m.suggestion!)}
+                        disabled={
+                          session.pending ||
+                          !(refinePrompts[m.id] || '').trim() ||
+                          !session.llmKey ||
+                          !primaryDataCollectionId
+                        }
+                      >
+                        Refine
+                      </Button>
+                    </Group>
                   </Stack>
                 )}
               </Stack>

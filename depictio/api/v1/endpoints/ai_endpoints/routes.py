@@ -112,7 +112,13 @@ async def figure_from_prompt(
 ) -> FigureFromPromptResponse:
     """Prompt-driven viz creation. Single suggestion, retried once on parse fail."""
     ctx = await build_data_context(body.data_collection_id, current_user)
-    messages = prompts.figure_from_prompt_messages(ctx, body.prompt)
+    messages = prompts.figure_from_prompt_messages(
+        ctx,
+        body.prompt,
+        previous_visu_type=body.previous_visu_type,
+        previous_dict_kwargs=body.previous_dict_kwargs,
+        previous_code=body.previous_code,
+    )
 
     last_error: str | None = None
     for attempt in range(2):

@@ -5,6 +5,8 @@ Kept in one place so prompt iteration is decoupled from route handlers.
 
 from __future__ import annotations
 
+import json
+
 from depictio.api.v1.endpoints.ai_endpoints.context import (
     DashboardContext,
     DataContext,
@@ -32,7 +34,27 @@ _FIGURE_KWARGS_RULES = """RULES FOR dict_kwargs (very important):
 """
 
 
-def figure_from_prompt_messages(ctx: DataContext, prompt: str) -> list[dict]:
+def figure_from_prompt_messages(
+    ctx: DataContext,
+    prompt: str,
+    previous_visu_type: str | None = None,
+    previous_dict_kwargs: dict | None = None,
+    previous_code: str | None = None,
+) -> list[dict]:
+    refine_block = ""
+    if previous_visu_type or previous_dict_kwargs or previous_code:
+        refine_block = f"""
+
+ITERATIVE REFINEMENT MODE:
+The user is iterating on a previous chart. Treat their new prompt as a
+DELTA against this prior suggestion — keep everything they don't ask to
+change, change only what they describe.
+
+Previous chart:
+- visu_type: {previous_visu_type or "(unknown)"}
+- dict_kwargs: {json.dumps(previous_dict_kwargs or {}, default=str)}
+- code: {previous_code or "(none)"}
+"""
     system = f"""You are a data visualization expert. Given a dataset description and a user request,
 suggest a single Plotly Express plot configuration that mirrors the user's request EXACTLY,
 without inventing extra encoding channels.
@@ -45,7 +67,7 @@ DATASET SCHEMA:
 
 SAMPLE ROWS:
 {ctx.sample_block()}
-
+{refine_block}
 {_FIGURE_KWARGS_RULES}
 {_FIGURE_SCHEMA_BLOCK}"""
     return [

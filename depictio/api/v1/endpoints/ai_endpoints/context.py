@@ -289,6 +289,29 @@ def _component_id(meta: dict[str, Any]) -> str | None:
     return None
 
 
+def _coerce_id(value: Any) -> str | None:
+    """Reduce a Mongo-fetched id (ObjectId, str, or {"$oid": "..."}) to a
+    bare string suitable for ``ObjectId(s)`` round-tripping. Returns None
+    on empty / unrecognized input.
+
+    The dashboard doc loaded directly from MongoDB hands us ``ObjectId``
+    instances — the analyze flow's prior ``isinstance(v, str)`` gate
+    silently rejected those and produced "Dashboard has no data
+    collection to analyze yet."
+    """
+    if value is None:
+        return None
+    if isinstance(value, str):
+        return value or None
+    if isinstance(value, ObjectId):
+        return str(value)
+    if isinstance(value, dict):
+        inner = value.get("$oid")
+        if isinstance(inner, str) and inner:
+            return inner
+    return None
+
+
 def _summarize_dashboard(
     dashboard_doc: dict[str, Any],
 ) -> tuple[list[FigureSummary], list[FilterSummary], str | None]:
@@ -303,8 +326,8 @@ def _summarize_dashboard(
 
         # Track the first DC we encounter — gives us a default for analyze
         # when the request body does not specify one.
-        dc_id = meta.get("dc_id") or (meta.get("metadata") or {}).get("dc_id")
-        if isinstance(dc_id, str) and dc_id and primary_dc is None:
+        dc_id = _coerce_id(meta.get("dc_id") or (meta.get("metadata") or {}).get("dc_id"))
+        if dc_id and primary_dc is None:
             primary_dc = dc_id
 
         if comp_type in FIGURE_TYPES or comp_type.lower() == "figure":

@@ -88,6 +88,11 @@ export interface SuggestFiguresRequest {
 export interface FigureFromPromptRequest {
   data_collection_id: string;
   prompt: string;
+  /** Optional refinement context — when set, the prompt is interpreted
+   *  as a delta against this prior suggestion. */
+  previous_visu_type?: string;
+  previous_dict_kwargs?: Record<string, unknown>;
+  previous_code?: string;
 }
 
 export interface AnalyzeRequest {

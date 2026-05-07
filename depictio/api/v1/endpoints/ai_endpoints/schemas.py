@@ -118,6 +118,13 @@ class SuggestFiguresRequest(BaseModel):
 class FigureFromPromptRequest(BaseModel):
     data_collection_id: str
     prompt: str = Field(min_length=1, max_length=2000)
+    # Optional context for iterative refinement: when set, the prompt is
+    # interpreted as a *delta* against this previous suggestion rather
+    # than a fresh request, so users can say "make it horizontal" or
+    # "color by sample" without restating the whole chart.
+    previous_visu_type: str | None = None
+    previous_dict_kwargs: dict[str, Any] | None = None
+    previous_code: str | None = None
 
 
 class AnalyzeRequest(BaseModel):

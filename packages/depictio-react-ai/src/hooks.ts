@@ -36,19 +36,30 @@ export function useFigureFromPrompt(dashboardId: string) {
     async (
       dataCollectionId: string,
       prompt: string,
+      previous?: PlotSuggestion,
     ): Promise<PlotSuggestion> => {
       const userMsgId = newId();
       const assistantId = newId();
       appendMessage(dashboardId, {
         id: userMsgId,
         role: 'user',
-        content: prompt,
+        content: previous ? `(refine) ${prompt}` : prompt,
         ts: Date.now(),
       });
       setPending(dashboardId, true);
       try {
         const res = await apiFigureFromPrompt(
-          { data_collection_id: dataCollectionId, prompt },
+          {
+            data_collection_id: dataCollectionId,
+            prompt,
+            ...(previous
+              ? {
+                  previous_visu_type: previous.visu_type,
+                  previous_dict_kwargs: previous.dict_kwargs,
+                  previous_code: previous.code,
+                }
+              : {}),
+          },
           session.llmKey || null,
         );
         appendMessage(dashboardId, {
