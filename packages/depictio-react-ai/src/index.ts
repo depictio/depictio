@@ -3,8 +3,11 @@
  */
 
 // Components
+export { default as AIAnalyzePanel } from './components/AIAnalyzePanel';
 export { default as AIDrawer } from './components/AIDrawer';
 export { default as AIKeySection } from './components/AIKeySection';
+export { default as AISuggestedFigures } from './components/AISuggestedFigures';
+export type { AISuggestedFigure } from './components/AISuggestedFigures';
 export { default as ActionsPreview } from './components/ActionsPreview';
 export { default as ExecutionTrace } from './components/ExecutionTrace';
 export { default as FigurePreview } from './components/FigurePreview';

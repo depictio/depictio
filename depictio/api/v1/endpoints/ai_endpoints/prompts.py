@@ -13,7 +13,7 @@ from depictio.api.v1.endpoints.ai_endpoints.context import (
 _FIGURE_SCHEMA_BLOCK = """Respond with valid JSON matching this exact schema:
 {
     "visu_type": "scatter|bar|line|histogram|box|violin|heatmap",
-    "dict_kwargs": {"x": "column_name", "y": "column_name", "color": "column_name", ...},
+    "dict_kwargs": {"x": "column_name", "y": "column_name", ...},
     "title": "Chart title",
     "explanation": "Why this plot is useful"
 }
@@ -23,9 +23,19 @@ _FIGURE_SCHEMA_BLOCK = """Respond with valid JSON matching this exact schema:
 """
 
 
+_FIGURE_KWARGS_RULES = """RULES FOR dict_kwargs (very important):
+- Include ONLY the kwargs the user explicitly asked for. If the user said "x is A, y is B", emit ONLY x and y.
+- Do NOT add color, facet_row, facet_col, size, symbol, hover_data, animation_frame, log_x, log_y, marginal_x,
+  marginal_y, trendline, opacity, barmode, points, notched, etc. unless the user explicitly mentioned them.
+- The user's intent is the source of truth — if it's a minimal request ("box of X by Y"), produce a minimal plot.
+- The 'title' field can describe the chart richly, but dict_kwargs stays minimal.
+"""
+
+
 def figure_from_prompt_messages(ctx: DataContext, prompt: str) -> list[dict]:
     system = f"""You are a data visualization expert. Given a dataset description and a user request,
-suggest a single Plotly Express plot configuration.
+suggest a single Plotly Express plot configuration that mirrors the user's request EXACTLY,
+without inventing extra encoding channels.
 
 CONTEXT:
 {ctx.metadata_block()}
@@ -36,6 +46,7 @@ DATASET SCHEMA:
 SAMPLE ROWS:
 {ctx.sample_block()}
 
+{_FIGURE_KWARGS_RULES}
 {_FIGURE_SCHEMA_BLOCK}"""
     return [
         {"role": "system", "content": system},

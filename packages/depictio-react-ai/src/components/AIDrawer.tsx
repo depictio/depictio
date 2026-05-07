@@ -15,11 +15,9 @@ import {
 } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
-import { useAnalyze, useFigureFromPrompt } from '../hooks';
+import { useFigureFromPrompt } from '../hooks';
 import { useAISession, useAIStore } from '../store';
-import type { DashboardActions, PlotSuggestion } from '../types';
-import ActionsPreview from './ActionsPreview';
-import ExecutionTrace from './ExecutionTrace';
+import type { PlotSuggestion } from '../types';
 import FigurePreview from './FigurePreview';
 import PythonCodeBlock from './PythonCodeBlock';
 
@@ -27,33 +25,22 @@ interface Props {
   opened: boolean;
   onClose: () => void;
   dashboardId: string;
-  /** Best-guess primary data collection id used by the figure-from-prompt
-   *  flow. The host typically derives this from the dashboard's first
-   *  figure component. */
+  /** Best-guess primary data collection id. The drawer is disabled
+   *  without it, since "New figure" needs a DC to render against. */
   primaryDataCollectionId?: string;
-  /** Workflow id paired with the primary DC. Forwarded to FigurePreview so
-   *  the /figure/preview endpoint resolves the right Delta location. */
   primaryWorkflowId?: string;
-  /** Project id of the current dashboard. Forwarded to FigurePreview so the
-   *  preview metadata matches what the figure builder would send. */
   projectId?: string;
-  /** Optional component the user is currently focused on; passed to
-   *  /ai/analyze so the LLM can reason about it specifically. */
-  selectedComponentId?: string;
-  /** Apply a DashboardActions plan to the host's stores (filters,
-   *  existing figures). When omitted, ActionsPreview becomes read-only. */
-  onApplyActions?: (actions: DashboardActions) => void;
-  /** Insert a new figure suggestion onto the dashboard grid. */
+  /** Insert a new figure suggestion onto the dashboard. The host owns
+   *  what "add" means — append to a session-only list, or persist via
+   *  the editor app. */
   onAddSuggestion?: (suggestion: PlotSuggestion) => void;
 }
 
-type Mode = 'analyze' | 'figure';
-
 /**
- * Right-side AI assistant drawer. Composes the prompt-driven analysis
- * flow (default) and the prompt-driven figure-creation flow into a
- * single chat-style transcript so the user can switch fluidly between
- * "explain something" and "build me a chart".
+ * Right-side drawer focused exclusively on figure creation. Analyze
+ * lives in the always-visible AIAnalyzePanel above the grid — keeping
+ * the drawer narrow so the user can compose a prompt + see the chart
+ * preview side-by-side with the dashboard.
  */
 const AIDrawer: React.FC<Props> = ({
   opened,
@@ -62,35 +49,31 @@ const AIDrawer: React.FC<Props> = ({
   primaryDataCollectionId,
   primaryWorkflowId,
   projectId,
-  selectedComponentId,
-  onApplyActions,
   onAddSuggestion,
 }) => {
   const session = useAISession(dashboardId);
   const reset = useAIStore((s) => s.reset);
-  const { run: runAnalyze, cancel } = useAnalyze(dashboardId);
   const { run: runFigure } = useFigureFromPrompt(dashboardId);
   const [prompt, setPrompt] = useState('');
-  const [mode, setMode] = useState<Mode>('analyze');
   const scrollRef = useRef<HTMLDivElement>(null);
-  const [appliedIds, setAppliedIds] = useState<Set<string>>(new Set());
+  const [addedIds, setAddedIds] = useState<Set<string>>(new Set());
 
-  // Auto-scroll the transcript when new messages arrive.
+  // Only figure messages render here — analyze messages flow into the
+  // AIAnalyzePanel. Filtering keeps the drawer focused on charts.
+  const figureMessages = session.messages.filter((m) => m.suggestion);
+
   useEffect(() => {
     if (!scrollRef.current) return;
     scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-  }, [session.messages.length, session.pending]);
+  }, [figureMessages.length, session.pending]);
 
   async function send() {
     const text = prompt.trim();
     if (!text || session.pending) return;
     if (!session.llmKey) return;
+    if (!primaryDataCollectionId) return;
     setPrompt('');
-    if (mode === 'analyze') {
-      await runAnalyze(text, { selectedComponentId });
-    } else if (primaryDataCollectionId) {
-      await runFigure(primaryDataCollectionId, text);
-    }
+    await runFigure(primaryDataCollectionId, text);
   }
 
   return (
@@ -101,8 +84,8 @@ const AIDrawer: React.FC<Props> = ({
       size="md"
       title={
         <Group gap="xs" align="center">
-          <Icon icon="material-symbols:smart-toy-outline" width={20} />
-          <Text fw={600}>AI Assistant</Text>
+          <Icon icon="material-symbols:add-chart" width={20} />
+          <Text fw={600}>New figure</Text>
           {session.model && (
             <Badge size="xs" variant="light" color="blue">
               {session.model.split('/').pop()}
@@ -118,28 +101,18 @@ const AIDrawer: React.FC<Props> = ({
             Set an LLM API key from the dashboard settings drawer to start.
           </Alert>
         )}
+        {!primaryDataCollectionId && (
+          <Alert color="yellow" variant="light">
+            This dashboard has no data collection yet — add a figure / table
+            first so the AI knows what to plot against.
+          </Alert>
+        )}
 
         <Group justify="space-between" align="center">
-          <Group gap="xs">
-            <Button
-              size="xs"
-              variant={mode === 'analyze' ? 'filled' : 'light'}
-              onClick={() => setMode('analyze')}
-              leftSection={<Icon icon="material-symbols:psychology" width={14} />}
-            >
-              Analyze
-            </Button>
-            <Button
-              size="xs"
-              variant={mode === 'figure' ? 'filled' : 'light'}
-              onClick={() => setMode('figure')}
-              leftSection={<Icon icon="material-symbols:add-chart" width={14} />}
-              disabled={!primaryDataCollectionId}
-            >
-              New figure
-            </Button>
-          </Group>
-          {session.messages.length > 0 && (
+          <Text size="xs" c="dimmed">
+            Describe a chart and the AI will build it for you.
+          </Text>
+          {figureMessages.length > 0 && (
             <Tooltip label="Clear conversation">
               <ActionIcon
                 variant="subtle"
@@ -158,12 +131,12 @@ const AIDrawer: React.FC<Props> = ({
           offsetScrollbars
         >
           <Stack gap="md" pr="xs">
-            {session.messages.length === 0 && (
+            {figureMessages.length === 0 && (
               <Text size="sm" c="dimmed" ta="center" mt="lg">
-                Ask a question about your data, or describe a chart you want.
+                Ask for a chart — e.g. "Boxplot of sepal width per variety".
               </Text>
             )}
-            {session.messages.map((m) => (
+            {figureMessages.map((m) => (
               <Stack key={m.id} gap={4}>
                 <Group gap={6}>
                   <Icon
@@ -183,9 +156,6 @@ const AIDrawer: React.FC<Props> = ({
                     {m.content}
                   </Text>
                 )}
-                {m.steps && m.steps.length > 0 && (
-                  <ExecutionTrace steps={m.steps} />
-                )}
                 {m.suggestion && (
                   <Stack gap={6}>
                     <Alert color="blue" variant="light">
@@ -204,12 +174,28 @@ const AIDrawer: React.FC<Props> = ({
                         {onAddSuggestion && (
                           <Button
                             size="xs"
-                            variant="filled"
+                            variant={addedIds.has(m.id) ? 'light' : 'filled'}
+                            color={addedIds.has(m.id) ? 'teal' : 'violet'}
                             mt={4}
-                            leftSection={<Icon icon="material-symbols:add" width={14} />}
-                            onClick={() => onAddSuggestion(m.suggestion!)}
+                            leftSection={
+                              <Icon
+                                icon={
+                                  addedIds.has(m.id)
+                                    ? 'material-symbols:check'
+                                    : 'material-symbols:add'
+                                }
+                                width={14}
+                              />
+                            }
+                            disabled={addedIds.has(m.id)}
+                            onClick={() => {
+                              onAddSuggestion(m.suggestion!);
+                              setAddedIds((s) => new Set(s).add(m.id));
+                            }}
                           >
-                            Add to dashboard
+                            {addedIds.has(m.id)
+                              ? 'Added to dashboard'
+                              : 'Add to dashboard'}
                           </Button>
                         )}
                       </Stack>
@@ -231,31 +217,14 @@ const AIDrawer: React.FC<Props> = ({
                     )}
                   </Stack>
                 )}
-                {m.result?.actions && (
-                  <ActionsPreview
-                    actions={m.result.actions}
-                    onApply={
-                      onApplyActions
-                        ? (actions) => {
-                            onApplyActions(actions);
-                            setAppliedIds((s) => new Set(s).add(m.id));
-                          }
-                        : undefined
-                    }
-                    applied={appliedIds.has(m.id)}
-                  />
-                )}
               </Stack>
             ))}
             {session.pending && (
               <Group gap="xs" align="center">
                 <Loader size="xs" />
                 <Text size="xs" c="dimmed">
-                  Working...
+                  Building chart…
                 </Text>
-                <Button size="xs" variant="subtle" color="gray" onClick={cancel}>
-                  Cancel
-                </Button>
               </Group>
             )}
           </Stack>
@@ -263,11 +232,7 @@ const AIDrawer: React.FC<Props> = ({
 
         <Stack gap={4}>
           <Textarea
-            placeholder={
-              mode === 'analyze'
-                ? 'e.g. Which samples have the highest read count? Filter by Run > 2024-01.'
-                : 'e.g. Boxplot of read length per sample, colored by run.'
-            }
+            placeholder="e.g. Boxplot of sepal width per variety."
             value={prompt}
             onChange={(e) => setPrompt(e.currentTarget.value)}
             onKeyDown={(e) => {
@@ -293,11 +258,11 @@ const AIDrawer: React.FC<Props> = ({
                 session.pending ||
                 !prompt.trim() ||
                 !session.llmKey ||
-                (mode === 'figure' && !primaryDataCollectionId)
+                !primaryDataCollectionId
               }
               rightSection={<Icon icon="material-symbols:send" width={14} />}
             >
-              Send
+              Build
             </Button>
           </Group>
         </Stack>

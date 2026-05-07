@@ -37,8 +37,16 @@ import type {
 } from 'depictio-react-core';
 import { notifications } from '@mantine/notifications';
 import { Icon } from '@iconify/react';
-import { AIDrawer } from 'depictio-react-ai';
-import type { DashboardActions } from 'depictio-react-ai';
+import {
+  AIAnalyzePanel,
+  AIDrawer,
+  AISuggestedFigures,
+} from 'depictio-react-ai';
+import type {
+  AISuggestedFigure,
+  DashboardActions,
+  PlotSuggestion,
+} from 'depictio-react-ai';
 import { Header, Sidebar, SettingsDrawer } from './chrome';
 import { useSidebarOpen } from './hooks/useSidebarOpen';
 import { useAuthMode } from './auth/hooks/useAuthMode';
@@ -83,6 +91,11 @@ const App: React.FC = () => {
   const [desktopOpened, toggleDesktop] = useSidebarOpen();
   const [settingsOpened, { open: openSettings, close: closeSettings }] = useDisclosure(false);
   const [aiOpened, { open: openAI, close: closeAI }] = useDisclosure(false);
+  // Session-only list of AI-suggested figures the user accepted via
+  // "Add to dashboard". The viewer can't persist (read-only), so they
+  // live in client state and render above the grid until the page
+  // reloads or the user removes them.
+  const [aiFigures, setAiFigures] = useState<AISuggestedFigure[]>([]);
   const auth = useAuthMode();
   const isDemoMode = auth.status?.is_demo_mode === true;
 
@@ -240,6 +253,42 @@ const App: React.FC = () => {
     },
     [handleFilterChange, interactiveTypeByIndex],
   );
+
+  const handleAddSuggestion = useCallback(
+    (suggestion: PlotSuggestion) => {
+      if (!primaryDcId) {
+        notifications.show({
+          color: 'yellow',
+          title: 'No data collection',
+          message: 'Cannot add the figure — this dashboard has no DC.',
+        });
+        return;
+      }
+      const id = `ai-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      setAiFigures((prev) => [
+        ...prev,
+        {
+          id,
+          suggestion,
+          dataCollectionId: primaryDcId,
+          workflowId: primaryWfId,
+          projectId,
+        },
+      ]);
+      notifications.show({
+        color: 'teal',
+        title: 'Figure added',
+        message:
+          'AI figure added to this session. Open the editor to persist it.',
+        autoClose: 4000,
+      });
+    },
+    [primaryDcId, primaryWfId, projectId],
+  );
+
+  const handleRemoveAiFigure = useCallback((id: string) => {
+    setAiFigures((prev) => prev.filter((f) => f.id !== id));
+  }, []);
 
   // ---- Realtime: WebSocket subscription + UI toggle -------------------------
   // Mode toggle persisted to localStorage so the user's choice survives
@@ -419,15 +468,15 @@ const App: React.FC = () => {
           rightExtras={
             <>
               {dashboardId && (
-                <Tooltip label="AI assistant">
+                <Tooltip label="New AI figure">
                   <ActionIcon
                     variant="subtle"
                     color="violet"
                     onClick={openAI}
-                    aria-label="Open AI assistant"
+                    aria-label="Build a new figure with AI"
                     data-tour-id="ai-button"
                   >
-                    <Icon icon="material-symbols:smart-toy-outline" width={18} />
+                    <Icon icon="material-symbols:add-chart" width={18} />
                   </ActionIcon>
                 </Tooltip>
               )}
@@ -563,6 +612,16 @@ const App: React.FC = () => {
                   onFilterChange={handleFilterChange}
                 />
               )}
+              {dashboardId && (
+                <AIAnalyzePanel
+                  dashboardId={dashboardId}
+                  onApplyActions={handleApplyActions}
+                />
+              )}
+              <AISuggestedFigures
+                figures={aiFigures}
+                onRemove={handleRemoveAiFigure}
+              />
               <Box style={{ flex: 1, minHeight: 0 }}>
                 <DashboardGrid
                   dashboardId={dashboardId!}
@@ -598,7 +657,7 @@ const App: React.FC = () => {
           primaryDataCollectionId={primaryDcId}
           primaryWorkflowId={primaryWfId}
           projectId={projectId}
-          onApplyActions={handleApplyActions}
+          onAddSuggestion={handleAddSuggestion}
         />
       )}
     </AppShell>
