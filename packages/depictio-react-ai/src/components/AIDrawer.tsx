@@ -21,6 +21,7 @@ import type { DashboardActions, PlotSuggestion } from '../types';
 import ActionsPreview from './ActionsPreview';
 import ExecutionTrace from './ExecutionTrace';
 import FigurePreview from './FigurePreview';
+import PythonCodeBlock from './PythonCodeBlock';
 
 interface Props {
   opened: boolean;
@@ -213,6 +214,13 @@ const AIDrawer: React.FC<Props> = ({
                         )}
                       </Stack>
                     </Alert>
+                    {m.suggestion.code && (
+                      <PythonCodeBlock
+                        code={m.suggestion.code}
+                        flavor="Plotly Express"
+                        tone="figure"
+                      />
+                    )}
                     {primaryDataCollectionId && (
                       <FigurePreview
                         suggestion={m.suggestion}

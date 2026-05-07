@@ -4,7 +4,6 @@ import {
   Badge,
   Button,
   Card,
-  Code,
   Group,
   Loader,
   Stack,
@@ -15,6 +14,7 @@ import { Icon } from '@iconify/react';
 import type { PlotSuggestion } from '../types';
 import { useAISession } from '../store';
 import { useSuggestFigures } from '../hooks';
+import PythonCodeBlock from './PythonCodeBlock';
 
 interface Props {
   dashboardId: string;
@@ -106,9 +106,14 @@ const SuggestionsPanel: React.FC<Props> = ({
               <Text size="xs" c="dimmed">
                 {s.explanation}
               </Text>
-              <Code block style={{ fontSize: 11, marginTop: 4 }}>
-                {JSON.stringify(s.dict_kwargs, null, 2)}
-              </Code>
+              {s.code && (
+                <PythonCodeBlock
+                  code={s.code}
+                  flavor="Plotly Express"
+                  tone="figure"
+                  defaultOpen={false}
+                />
+              )}
             </Stack>
             {onAdd && (
               <Button

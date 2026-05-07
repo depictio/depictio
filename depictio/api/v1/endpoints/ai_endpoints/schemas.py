@@ -29,6 +29,11 @@ class PlotSuggestion(BaseModel):
     dict_kwargs: dict[str, Any] = Field(default_factory=dict)
     title: str
     explanation: str
+    # Synthesized server-side from (visu_type, dict_kwargs) so the React
+    # drawer can show users the Python that would render the chart they
+    # asked for. Display-only; never eval'd. Empty when not yet computed
+    # (e.g. when validating raw LLM output).
+    code: str = ""
 
     @field_validator("dict_kwargs")
     @classmethod

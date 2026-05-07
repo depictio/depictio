@@ -18,6 +18,9 @@ export interface PlotSuggestion {
   dict_kwargs: Record<string, unknown>;
   title: string;
   explanation: string;
+  /** Server-synthesized Plotly Express code that would reproduce the
+   *  chart. Display-only — never eval'd by the client. */
+  code?: string;
 }
 
 export interface SuggestFiguresResponse {

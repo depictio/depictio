@@ -16,17 +16,16 @@ model — see PR description).
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from collections.abc import AsyncIterator
 
 from fastapi import APIRouter, Depends, Header, HTTPException
 from fastapi.responses import StreamingResponse
-
-import asyncio
-
 from pydantic import ValidationError
 
 from depictio.api.v1.endpoints.ai_endpoints import llm_client, prompts
+from depictio.api.v1.endpoints.ai_endpoints.code_gen import figure_python_code
 from depictio.api.v1.endpoints.ai_endpoints.context import (
     build_dashboard_context,
     build_data_context,
@@ -59,10 +58,16 @@ def _llm_key(x_llm_api_key: str | None = Header(default=None)) -> str | None:
 
 def _try_plot_suggestion(payload: dict) -> PlotSuggestion | None:
     try:
-        return PlotSuggestion.model_validate(payload)
+        suggestion = PlotSuggestion.model_validate(payload)
     except ValidationError as e:
         logger.warning("PlotSuggestion validation failed: %s", e)
         return None
+    # Synthesize the Plotly Express code so the React drawer can show
+    # the user how they'd reproduce the chart in Python.
+    suggestion = suggestion.model_copy(
+        update={"code": figure_python_code(suggestion.visu_type, suggestion.dict_kwargs)}
+    )
+    return suggestion
 
 
 @ai_endpoint_router.post("/suggest-figures", response_model=SuggestFiguresResponse)
@@ -156,9 +161,7 @@ async def _run_analyze(
     yield _sse(StreamEvent(type="status", data={"message": "loading dashboard"}))
 
     try:
-        dashboard_ctx, primary_dc = await build_dashboard_context(
-            body.dashboard_id, current_user
-        )
+        dashboard_ctx, primary_dc = await build_dashboard_context(body.dashboard_id, current_user)
     except Exception as e:  # noqa: BLE001
         yield _sse(StreamEvent(type="error", data={"detail": str(e)}))
         yield _sse(StreamEvent(type="done"))
@@ -229,9 +232,7 @@ async def _run_analyze(
                     data={"thought": thought, "code": code, "status": "running"},
                 )
             )
-            df = await asyncio.to_thread(
-                _load_df_for_analyze, data_ctx
-            )
+            df = await asyncio.to_thread(_load_df_for_analyze, data_ctx)
             step = await asyncio.to_thread(execute_polars, code, df)
             step.thought = thought
             steps.append(step)
@@ -267,11 +268,7 @@ async def _run_analyze(
             continue
 
         # No code requested — terminal step.
-        steps.append(
-            ExecutionStep(
-                thought=thought, code="", output="", status="success"
-            )
-        )
+        steps.append(ExecutionStep(thought=thought, code="", output="", status="success"))
         answer = candidate_answer or "(no answer provided)"
         try:
             actions = DashboardActions.model_validate(actions_payload)

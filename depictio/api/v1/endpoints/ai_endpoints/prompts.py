@@ -10,7 +10,6 @@ from depictio.api.v1.endpoints.ai_endpoints.context import (
     DataContext,
 )
 
-
 _FIGURE_SCHEMA_BLOCK = """Respond with valid JSON matching this exact schema:
 {
     "visu_type": "scatter|bar|line|histogram|box|violin|heatmap",

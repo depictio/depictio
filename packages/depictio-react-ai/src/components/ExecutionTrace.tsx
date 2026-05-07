@@ -11,6 +11,7 @@ import {
 import { Icon } from '@iconify/react';
 
 import type { ExecutionStep } from '../types';
+import PythonCodeBlock from './PythonCodeBlock';
 
 interface Props {
   steps: ExecutionStep[];
@@ -120,18 +121,25 @@ const ExecutionTrace: React.FC<Props> = ({ steps, defaultOpen = false }) => {
                     </Text>
                   )}
                   {step.code && (
-                    <Code block style={{ fontSize: 12, whiteSpace: 'pre-wrap' }}>
-                      {step.code}
-                    </Code>
+                    <PythonCodeBlock
+                      code={step.code}
+                      flavor="Polars"
+                      tone="code"
+                    />
                   )}
                   {step.output && (
-                    <Code
-                      block
-                      color={step.status === 'error' ? 'red' : undefined}
-                      style={{ fontSize: 12, whiteSpace: 'pre-wrap' }}
-                    >
-                      {step.output}
-                    </Code>
+                    <Stack gap={4}>
+                      <Badge size="xs" variant="light" color="gray">
+                        Output
+                      </Badge>
+                      <Code
+                        block
+                        color={step.status === 'error' ? 'red' : undefined}
+                        style={{ fontSize: 12, whiteSpace: 'pre-wrap' }}
+                      >
+                        {step.output}
+                      </Code>
+                    </Stack>
                   )}
                 </Stack>
               </Accordion.Panel>
