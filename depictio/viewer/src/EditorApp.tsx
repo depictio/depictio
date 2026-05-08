@@ -76,6 +76,9 @@ import DemoTour from './demo/DemoTour';
 import DemoModeBanner from './components/DemoModeBanner';
 import './chrome/chrome.css';
 
+// Demo onboarding UI temporarily disabled — flip to true to re-enable.
+const ENABLE_DEMO_UI = false;
+
 const API_BASE = '/depictio/api/v1';
 const SAVE_DEBOUNCE_MS = 500;
 
@@ -854,8 +857,8 @@ const EditorApp: React.FC = () => {
 
   return (
     <>
-      {isDemoMode && <DemoModeBanner />}
-      <DemoTour active={isDemoMode} />
+      {ENABLE_DEMO_UI && isDemoMode && <DemoModeBanner />}
+      <DemoTour active={ENABLE_DEMO_UI && isDemoMode} />
     <AppShell
       header={{ height: 50 }}
       navbar={{
