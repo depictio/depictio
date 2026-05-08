@@ -40,6 +40,9 @@ import { useAuthMode } from './auth/hooks/useAuthMode';
 import DemoTour from './demo/DemoTour';
 import DemoModeBanner from './components/DemoModeBanner';
 
+// Demo onboarding UI temporarily disabled — flip to true to re-enable.
+const ENABLE_DEMO_UI = false;
+
 /**
  * Top-level SPA. Layout:
  *
@@ -304,8 +307,8 @@ const App: React.FC = () => {
 
   return (
     <>
-      {isDemoMode && <DemoModeBanner />}
-      <DemoTour active={isDemoMode} />
+      {ENABLE_DEMO_UI && isDemoMode && <DemoModeBanner />}
+      <DemoTour active={ENABLE_DEMO_UI && isDemoMode} />
       <AppShell
       header={{ height: 50 }}
       navbar={{
