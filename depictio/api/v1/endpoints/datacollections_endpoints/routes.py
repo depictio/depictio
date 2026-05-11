@@ -201,6 +201,8 @@ async def create_data_collection_from_upload(
     compression: str = Form("none"),
     has_header: bool = Form(True),
     description: str = Form(""),
+    lat_column: str | None = Form(None),
+    lon_column: str | None = Form(None),
     file: UploadFile = File(...),
     current_user=Depends(get_user_or_anonymous),
 ):
@@ -211,6 +213,10 @@ async def create_data_collection_from_upload(
     Dash anymore. Tolerates missing tokens (single-user / public mode); the
     project-permission check inside ``_create_dc_from_upload`` still gates
     write access.
+
+    When ``lat_column`` and ``lon_column`` are provided, the resulting DC
+    config is a ``DCTableCoordinatesConfig`` (still ``dc_type='table'``) —
+    consumed by Map components for geographic data.
     """
     file_bytes = await file.read()
     return await asyncio.to_thread(
@@ -227,6 +233,8 @@ async def create_data_collection_from_upload(
         file_bytes=file_bytes,
         filename=file.filename or "upload.dat",
         current_user=current_user,
+        lat_column=lat_column,
+        lon_column=lon_column,
     )
 
 

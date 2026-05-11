@@ -386,6 +386,54 @@ def _build_polars_kwargs(
     return polars_kwargs
 
 
+def _validate_coord_columns_in_file(
+    file_path: str,
+    file_format: str,
+    polars_kwargs: dict[str, Any],
+    lat_column: str,
+    lon_column: str,
+) -> None:
+    """Raise HTTPException(400) if `lat_column` / `lon_column` aren't in the file header.
+
+    Reads only the schema (no full table load) — cheap even on large uploads.
+    """
+    import polars as pl
+
+    fmt = file_format.lower()
+    try:
+        if fmt in ("csv", "tsv"):
+            # `pl.scan_csv` doesn't accept `compression`; filter to the kwargs
+            # it understands so a gzipped CSV upload still validates.
+            csv_kwargs = {
+                k: v for k, v in polars_kwargs.items() if k in ("separator", "has_header")
+            }
+            columns = pl.scan_csv(file_path, **csv_kwargs).collect_schema().names()
+        elif fmt == "parquet":
+            columns = list(pl.read_parquet_schema(file_path).keys())
+        elif fmt == "feather":
+            columns = pl.scan_ipc(file_path).collect_schema().names()
+        else:
+            # xls/xlsx — fall back to a header read; rare path
+            columns = list(pl.read_excel(file_path).columns)
+    except Exception as exc:
+        # Log full context server-side, return a sanitized message to the client
+        # so we don't leak temp filesystem paths.
+        logger.warning(f"Coord column read failed for {file_path}: {exc}")
+        raise HTTPException(
+            status_code=400,
+            detail="Could not read column names from the uploaded file.",
+        )
+
+    missing = [c for c in (lat_column, lon_column) if c not in columns]
+    if missing:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Column(s) {missing} not found in uploaded file. Available columns: {columns}"
+            ),
+        )
+
+
 def _user_can_edit_project(project_dict: dict, user_id: ObjectId, is_admin: bool) -> bool:
     if is_admin:
         return True
@@ -414,6 +462,8 @@ def _create_dc_from_upload(
     file_bytes: bytes,
     filename: str,
     current_user,
+    lat_column: str | None = None,
+    lon_column: str | None = None,
 ) -> dict:
     """Create a basic-project data collection from an uploaded file.
 
@@ -443,6 +493,9 @@ def _create_dc_from_upload(
         ScanSingle,
     )
     from depictio.models.models.data_collections_types.table import DCTableConfig
+    from depictio.models.models.data_collections_types.table_coordinates import (
+        DCTableCoordinatesConfig,
+    )
     from depictio.models.models.workflows import (
         Workflow,
         WorkflowConfig,
@@ -485,12 +538,25 @@ def _create_dc_from_upload(
             file_format, separator, custom_separator, compression, has_header
         )
 
-        dc_table_config = DCTableConfig(
-            format=file_format,
-            polars_kwargs=polars_kwargs,
-            keep_columns=[],
-            columns_description={},
-        )
+        if lat_column and lon_column:
+            _validate_coord_columns_in_file(
+                temp_file_path, file_format, polars_kwargs, lat_column, lon_column
+            )
+            dc_table_config: DCTableConfig = DCTableCoordinatesConfig(
+                format=file_format,
+                polars_kwargs=polars_kwargs,
+                keep_columns=[],
+                columns_description={},
+                lat_column=lat_column,
+                lon_column=lon_column,
+            )
+        else:
+            dc_table_config = DCTableConfig(
+                format=file_format,
+                polars_kwargs=polars_kwargs,
+                keep_columns=[],
+                columns_description={},
+            )
         scan_config = Scan(mode="single", scan_parameters=ScanSingle(filename=temp_file_path))
         dc_config = DataCollectionConfig(
             type=data_type,
