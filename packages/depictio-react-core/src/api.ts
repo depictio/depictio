@@ -2416,14 +2416,62 @@ export async function deleteProjectLink(projectId: string, linkId: string): Prom
   if (!res.ok) await throwHttpDetailError(res, 'Failed to delete link');
 }
 
+// Static label/description so the dropdown stays readable even when the
+// backend returns the bare-name list shape from
+// /links/{project_id}/resolvers (response_model=list[str]). Without this,
+// the FE indexed `.name` on a plain string and Mantine Select crashed with
+// "Each option must have value property".
+const RESOLVER_LABELS: Record<string, { label: string; description: string }> = {
+  direct: { label: 'Direct', description: 'Pass source value through unchanged.' },
+  sample_mapping: {
+    label: 'Sample mapping',
+    description: 'Expand a canonical sample ID to all of its MultiQC variants.',
+  },
+  pattern: {
+    label: 'Pattern',
+    description: 'Substitute the source value into a template like {sample}.bam.',
+  },
+  regex: {
+    label: 'Regex',
+    description: 'Match target rows whose target_field matches a regex.',
+  },
+  wildcard: {
+    label: 'Wildcard',
+    description: 'Glob-style * / ? match against the target_field.',
+  },
+};
+
+function normalizeResolver(item: unknown): ResolverInfo | null {
+  if (typeof item === 'string') {
+    const meta = RESOLVER_LABELS[item] || { label: item, description: '' };
+    return { name: item as ResolverInfo['name'], ...meta };
+  }
+  if (item && typeof item === 'object' && 'name' in item) {
+    const o = item as Partial<ResolverInfo>;
+    if (!o.name) return null;
+    const meta = RESOLVER_LABELS[o.name] || {
+      label: o.label || o.name,
+      description: o.description || '',
+    };
+    return {
+      name: o.name,
+      label: o.label || meta.label,
+      description: o.description || meta.description,
+    };
+  }
+  return null;
+}
+
 export async function listLinkResolvers(projectId: string): Promise<ResolverInfo[]> {
   const res = await fetch(`${API_BASE}/links/${projectId}/resolvers`, {
     headers: authHeaders(),
   });
   if (!res.ok) await throwHttpError(res, 'Failed to list resolvers');
   const body = await res.json();
-  if (Array.isArray(body)) return body as ResolverInfo[];
-  return (body?.resolvers ?? []) as ResolverInfo[];
+  const raw: unknown[] = Array.isArray(body) ? body : (body?.resolvers ?? []);
+  return raw
+    .map(normalizeResolver)
+    .filter((r): r is ResolverInfo => r !== null);
 }
 
 /** Aggregated canonical → variants map for a MultiQC DC's reports. Used to

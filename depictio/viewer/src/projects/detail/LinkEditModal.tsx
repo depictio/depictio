@@ -20,6 +20,7 @@ import { Icon } from '@iconify/react';
 import {
   createProjectLink,
   fetchMultiQCSampleMappings,
+  fetchSpecs,
   updateProjectLink,
 } from 'depictio-react-core';
 import type {
@@ -153,14 +154,85 @@ const LinkEditModal: React.FC<LinkEditModalProps> = ({
     [dataCollections, targetDcId],
   );
   const targetType = inferTargetType(targetDc);
+
+  // Mantine Select crashes on options with falsy `value`, so filter ids
+  // defensively at every site.
+  const toDcOption = (d: DataCollectionOption) => ({
+    value: d.id,
+    label: `${d.tag}${d.type ? ` · ${d.type}` : ''}`,
+  });
+
+  // Source MUST be a table DC — only tables expose tabular columns that can
+  // be filtered. MultiQC / image / etc. as the source side has no clean
+  // "column to filter on" semantic.
   const sourceDcOptions = useMemo(
-    () =>
-      dataCollections.map((d) => ({
-        value: d.id,
-        label: `${d.tag}${d.type ? ` · ${d.type}` : ''}`,
-      })),
+    () => dataCollections.filter((d) => d.id && d.type === 'table').map(toDcOption),
     [dataCollections],
   );
+
+  // Target DCs: any DC type, but exclude whichever DC the user picked as
+  // source so they can't link a DC to itself.
+  const targetDcOptions = useMemo(
+    () => dataCollections.filter((d) => d.id && d.id !== sourceDcId).map(toDcOption),
+    [dataCollections, sourceDcId],
+  );
+
+  // Source column dropdown: load the source DC's column specs and surface
+  // them as options. Free-text was error-prone — users would mistype the
+  // column name and the link would silently match nothing at runtime.
+  const [sourceColumns, setSourceColumns] = useState<string[]>([]);
+  const [sourceColumnsLoading, setSourceColumnsLoading] = useState(false);
+  useEffect(() => {
+    if (!sourceDcId) {
+      setSourceColumns([]);
+      return;
+    }
+    let cancelled = false;
+    setSourceColumnsLoading(true);
+    fetchSpecs(sourceDcId)
+      .then((specs) => {
+        if (cancelled) return;
+        // /deltatables/specs/{dcId} returns either an array of
+        // {name, type, specs} entries or a dict keyed by column name.
+        let cols: string[] = [];
+        if (Array.isArray(specs)) {
+          cols = (specs as Array<{ name?: string }>)
+            .map((s) => s?.name || '')
+            .filter(Boolean);
+        } else if (specs && typeof specs === 'object') {
+          cols = Object.keys(specs);
+        }
+        setSourceColumns(cols);
+      })
+      .catch(() => {
+        if (!cancelled) setSourceColumns([]);
+      })
+      .finally(() => {
+        if (!cancelled) setSourceColumnsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [sourceDcId]);
+
+  const sourceColumnOptions = useMemo(
+    () => sourceColumns.map((c) => ({ value: c, label: c })),
+    [sourceColumns],
+  );
+
+  // Auto-pick a sensible resolver only when the target *type* transitions.
+  // If we keyed this on `targetDcId` too, switching between two MultiQC DCs
+  // would clobber whatever resolver the user picked manually — same DC type,
+  // different DC, no reason to overwrite. Skip in edit mode so saved links
+  // retain their stored resolver until the user explicitly changes it.
+  useEffect(() => {
+    if (editing) return;
+    if (!targetDcId) return;
+    const auto: LinkResolverName =
+      targetType === 'multiqc' ? 'sample_mapping' : 'direct';
+    setResolver(auto);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [targetType]);
 
   // Auto-load aggregated sample mappings for sample_mapping + multiqc.
   useEffect(() => {
@@ -270,7 +342,9 @@ const LinkEditModal: React.FC<LinkEditModalProps> = ({
     }
   };
 
-  const resolverOptions = resolverList.map((r) => ({ value: r.name, label: r.label }));
+  const resolverOptions = resolverList
+    .filter((r) => r && r.name)
+    .map((r) => ({ value: r.name, label: r.label || r.name }));
   const resolverInfo = resolverList.find((r) => r.name === resolver);
 
   return (
@@ -292,28 +366,50 @@ const LinkEditModal: React.FC<LinkEditModalProps> = ({
         <Group grow align="flex-start">
           <Select
             label="Source data collection"
-            placeholder="Select a DC"
+            placeholder="Pick a table DC"
             data={sourceDcOptions}
             value={sourceDcId}
-            onChange={(v) => setSourceDcId(v || '')}
+            onChange={(v) => {
+              const next = v || '';
+              setSourceDcId(next);
+              // Drop the source column when the source DC changes so we
+              // don't carry over a column name that doesn't exist on the
+              // new source. Also clear the target if it just became the
+              // same DC (Mantine Select can race state momentarily).
+              setSourceColumn('');
+              if (next && next === targetDcId) setTargetDcId('');
+            }}
             searchable
             required
+            description="Only table DCs can act as a filter source."
+            nothingFoundMessage="No table data collections in this project."
           />
-          <TextInput
+          <Select
             label="Source column"
-            placeholder="e.g. sample_id"
-            value={sourceColumn}
-            onChange={(e) => setSourceColumn(e.currentTarget.value)}
+            placeholder={
+              !sourceDcId
+                ? 'Pick a source DC first'
+                : sourceColumnsLoading
+                  ? 'Loading columns…'
+                  : 'Pick a column'
+            }
+            data={sourceColumnOptions}
+            value={sourceColumn || null}
+            onChange={(v) => setSourceColumn(v || '')}
+            disabled={!sourceDcId || sourceColumnsLoading}
+            searchable
             required
+            nothingFoundMessage="No columns available."
           />
         </Group>
 
         <Select
           label="Target data collection"
-          placeholder="Select a DC"
-          data={sourceDcOptions}
+          placeholder={!sourceDcId ? 'Pick a source DC first' : 'Select a DC'}
+          data={targetDcOptions}
           value={targetDcId}
           onChange={(v) => setTargetDcId(v || '')}
+          disabled={!sourceDcId}
           searchable
           required
           description={`Detected target type: ${targetType}`}
