@@ -256,9 +256,7 @@ def start_multiqc_prewarm(should_initialize: bool) -> None:
     except Exception as exc:
         # Never fail boot because of prewarm — caches will simply be cold
         # for the first request, exactly the pre-fix behaviour.
-        logger.warning(
-            f"Worker {WORKER_ID}: MultiQC startup prewarm dispatch failed: {exc}"
-        )
+        logger.warning(f"Worker {WORKER_ID}: MultiQC startup prewarm dispatch failed: {exc}")
 
 
 def stop_background_services(background_task, should_initialize: bool) -> None:

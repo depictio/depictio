@@ -624,10 +624,15 @@ async def multiqc_preview(
         "dc_id": str(dc_id),
     }
     try:
+        # Match the Celery task's soft_time_limit (120s) so a cold-path render
+        # — Polars scan + plotly.get_plot on the first hit for a parquet — has
+        # time to complete. The 30s default in `offload_timeout_seconds` is
+        # tuned for fast figure previews and is too tight for MultiQC.
         return await offload_or_run(
             build_multiqc_preview_task,
             (payload,),
             offload=offload,
+            timeout=120.0,
             label=f"multiqc_preview dc={dc_id} module={selected_module} plot={selected_plot}",
         )
     except HTTPException:
