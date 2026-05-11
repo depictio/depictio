@@ -14,6 +14,7 @@ import {
   ScrollArea,
   SimpleGrid,
   Stack,
+  Tabs,
   Text,
   Title,
   useMantineColorScheme,
@@ -29,7 +30,6 @@ import { notifications } from '@mantine/notifications';
 import {
   Alert,
   Anchor,
-  FileInput,
   Modal,
   Select,
   Switch,
@@ -52,9 +52,10 @@ import type {
   MultiQCReportSummary,
   DCLink,
 } from 'depictio-react-core';
-import { SegmentedControl } from '@mantine/core';
 import LinksSection from './LinksSection';
-import ManageMultiQCModal from './ManageMultiQCModal';
+import ManageDataCollectionModal, {
+  type ManageDcType,
+} from './ManageDataCollectionModal';
 import { UnstyledDropZone } from '../../components/UnstyledDropZone';
 import { useFolderDropzone } from '../../hooks/useFolderDropzone';
 
@@ -519,10 +520,19 @@ const ProjectDetailApp: React.FC = () => {
         }}
       />
       {manageTarget && (
-        <ManageMultiQCModal
+        <ManageDataCollectionModal
           opened={!!manageTarget}
           dcId={(manageTarget._id ?? manageTarget.id) as string}
           dcName={manageTarget.data_collection_tag || 'data collection'}
+          dcType={
+            (((manageTarget.config?.type as string | undefined) || '').toLowerCase() ===
+            'multiqc'
+              ? 'multiqc'
+              : 'table') as ManageDcType
+          }
+          tableFormat={
+            (manageTarget.config?.dc_specific_properties?.format as string | undefined) || null
+          }
           onClose={() => setManageTarget(null)}
           onSuccess={() => {
             setManageTarget(null);
@@ -556,6 +566,188 @@ const COMPRESSION_OPTIONS = [
   { value: 'bz2', label: 'bz2' },
 ];
 
+type MultiQCMismatchKind = 'modules' | 'plots' | 'version' | 'samples';
+type MultiQCMismatch = {
+  code: 'multiqc_report_mismatch';
+  kind: MultiQCMismatchKind;
+  summary: string;
+  details: Record<string, unknown>;
+};
+
+/** Try to recover the structured 422 detail the server raised from a
+ *  `multiqc_report_mismatch`. `throwHttpDetailError` JSON-stringifies the
+ *  detail into the Error message, so we parse it back out here. */
+function tryParseMultiQCMismatch(message: string): MultiQCMismatch | null {
+  try {
+    const parsed = JSON.parse(message);
+    if (parsed && parsed.code === 'multiqc_report_mismatch') {
+      return parsed as MultiQCMismatch;
+    }
+  } catch {
+    /* not JSON; not a structured mismatch */
+  }
+  return null;
+}
+
+const MULTIQC_CHECKS: ReadonlyArray<{
+  kind: MultiQCMismatchKind;
+  label: string;
+  desc: string;
+}> = [
+  {
+    kind: 'modules',
+    label: 'Modules',
+    desc: 'All reports include the same MultiQC modules.',
+  },
+  {
+    kind: 'plots',
+    label: 'Plot keys',
+    desc: 'All reports expose the same set of plots.',
+  },
+  {
+    kind: 'version',
+    label: 'MultiQC version',
+    desc: 'All reports share the same major.minor version.',
+  },
+  {
+    kind: 'samples',
+    label: 'Sample uniqueness',
+    desc: 'No sample name appears in more than one report.',
+  },
+];
+
+const MultiQCMismatchDetails: React.FC<{ mismatch: MultiQCMismatch }> = ({
+  mismatch,
+}) => {
+  const d = mismatch.details || {};
+  const list = (xs: unknown): string[] => (Array.isArray(xs) ? (xs as string[]) : []);
+  const added = list(d.added_in_compared);
+  const removed = list(d.removed_in_compared);
+  const dupes =
+    mismatch.kind === 'samples' && d.duplicate_samples
+      ? (d.duplicate_samples as Record<string, string[]>)
+      : {};
+  const dupeEntries = Object.entries(dupes);
+  return (
+    <Paper
+      withBorder
+      p={8}
+      radius="xs"
+      ml={26}
+      bg="var(--mantine-color-red-0)"
+    >
+      <Text size="xs" c="red" mb={4}>
+        {mismatch.summary}
+      </Text>
+      {(mismatch.kind === 'modules' || mismatch.kind === 'plots') && (
+        <Stack gap={2}>
+          {added.length > 0 && (
+            <Text size="xs" c="dimmed">
+              Added in <code>{String(d.compared_report ?? '?')}</code>:{' '}
+              {added.join(', ')}
+            </Text>
+          )}
+          {removed.length > 0 && (
+            <Text size="xs" c="dimmed">
+              Missing in <code>{String(d.compared_report ?? '?')}</code>:{' '}
+              {removed.join(', ')}
+            </Text>
+          )}
+        </Stack>
+      )}
+      {mismatch.kind === 'version' && (
+        <Text size="xs" c="dimmed">
+          <code>{String(d.baseline_report ?? '?')}</code> ={' '}
+          {String(d.baseline_version ?? '?')} ·{' '}
+          <code>{String(d.compared_report ?? '?')}</code> ={' '}
+          {String(d.compared_version ?? '?')}
+        </Text>
+      )}
+      {mismatch.kind === 'samples' && dupeEntries.length > 0 && (
+        <Stack gap={2}>
+          {dupeEntries.slice(0, 5).map(([sample, reports]) => (
+            <Text key={sample} size="xs" c="dimmed">
+              <code>{sample}</code> in {reports.join(', ')}
+            </Text>
+          ))}
+          {dupeEntries.length > 5 && (
+            <Text size="xs" c="dimmed">
+              …and {dupeEntries.length - 5} more
+            </Text>
+          )}
+        </Stack>
+      )}
+    </Paper>
+  );
+};
+
+const MultiQCUniformityChecklist: React.FC<{
+  fileCount: number;
+  submitting: boolean;
+  mismatch: MultiQCMismatch | null;
+}> = ({ fileCount, submitting, mismatch }) => {
+  const hasMultiple = fileCount >= 2;
+  return (
+    <Paper withBorder p="sm" radius="sm">
+      <Group justify="space-between" mb={6} wrap="nowrap">
+        <Group gap={6} wrap="nowrap">
+          <Icon
+            icon="mdi:clipboard-check-outline"
+            width={16}
+            color="var(--mantine-color-teal-6)"
+          />
+          <Text size="sm" fw={500}>
+            Uniformity checks
+          </Text>
+        </Group>
+        <Text size="xs" c="dimmed">
+          {hasMultiple
+            ? submitting
+              ? 'running…'
+              : 'will run on Create'
+            : 'activated with 2+ reports'}
+        </Text>
+      </Group>
+      <Stack gap={4}>
+        {MULTIQC_CHECKS.map((c) => {
+          const failed = mismatch?.kind === c.kind;
+          const iconName = failed
+            ? 'mdi:close-circle'
+            : submitting && hasMultiple
+              ? 'mdi:dots-horizontal-circle-outline'
+              : hasMultiple
+                ? 'mdi:check-circle-outline'
+                : 'mdi:circle-outline';
+          const iconColor = failed
+            ? 'var(--mantine-color-red-6)'
+            : hasMultiple
+              ? 'var(--mantine-color-teal-6)'
+              : 'var(--mantine-color-gray-5)';
+          return (
+            <Stack gap={2} key={c.kind}>
+              <Group gap="xs" wrap="nowrap" align="flex-start">
+                <Icon icon={iconName} width={18} color={iconColor} />
+                <Text
+                  size="sm"
+                  c={failed ? 'red' : undefined}
+                  fw={failed ? 500 : 400}
+                  style={{ minWidth: 140 }}
+                >
+                  {c.label}
+                </Text>
+                <Text size="xs" c="dimmed" style={{ flex: 1 }}>
+                  {c.desc}
+                </Text>
+              </Group>
+              {failed && mismatch && <MultiQCMismatchDetails mismatch={mismatch} />}
+            </Stack>
+          );
+        })}
+      </Stack>
+    </Paper>
+  );
+};
+
 /** Guess the file format from extension. Lets the user override afterwards. */
 function guessFormat(name: string | undefined): string | null {
   if (!name) return null;
@@ -585,6 +777,7 @@ const CreateDataCollectionModal: React.FC<{
   const [hasHeader, setHasHeader] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [mismatch, setMismatch] = useState<MultiQCMismatch | null>(null);
 
   // MultiQC folder dropzone — owned by the modal so close-and-reopen clears it.
   const multiqcDropzone = useFolderDropzone({
@@ -592,6 +785,21 @@ const CreateDataCollectionModal: React.FC<{
     maxPerFile: 50 * 1024 * 1024,
     maxTotal: 500 * 1024 * 1024,
   });
+
+  // Single-file dropzone for the table DC flow. Same drag-anywhere UX as the
+  // MultiQC dropzone — we just take the first file and pipe it into `file`.
+  const tableDropzone = useFolderDropzone({
+    maxPerFile: 50 * 1024 * 1024,
+  });
+  // Sync the first dropped/picked file into the existing `file` state so the
+  // rest of the table flow (auto-fill, submit) keeps working unchanged.
+  useEffect(() => {
+    if (dcType !== 'table') return;
+    const first = tableDropzone.files[0];
+    if (!first) return;
+    if (file && first === file) return;
+    setFile(first);
+  }, [dcType, tableDropzone.files, file]);
 
   // Reset everything when the modal closes — otherwise re-opening shows stale
   // state from the previous attempt.
@@ -609,6 +817,7 @@ const CreateDataCollectionModal: React.FC<{
       setError(null);
       setSubmitting(false);
       multiqcDropzone.clear();
+      tableDropzone.clear();
     }
     // multiqcDropzone is recreated on each render but its `clear` is stable.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -629,6 +838,42 @@ const CreateDataCollectionModal: React.FC<{
       setName(stem);
     }
   }, [file, name]);
+
+  // Clear any prior uniformity mismatch when the user changes the dropped
+  // file set — the previous failure refers to a different set of reports.
+  useEffect(() => {
+    setMismatch(null);
+  }, [multiqcDropzone.files, dcType]);
+
+  // Auto-fill name when the user drops MultiQC files, so the Create button
+  // doesn't sit silently disabled. Picks the deepest shared parent directory
+  // across all dropped files so multi-run drops get a representative name.
+  useEffect(() => {
+    if (dcType !== 'multiqc') return;
+    if (name.trim()) return;
+    if (multiqcDropzone.files.length === 0) return;
+
+    const splitPaths = multiqcDropzone.files.map((f) =>
+      f.name.replace(/\\/g, '/').split('/').filter(Boolean),
+    );
+    // Drop the trailing filename segment so we compare directories only.
+    const dirPaths = splitPaths.map((p) => p.slice(0, -1));
+    const common: string[] = [];
+    const minLen = Math.min(...dirPaths.map((p) => p.length));
+    for (let i = 0; i < minLen; i++) {
+      const seg = dirPaths[0][i];
+      if (dirPaths.every((p) => p[i] === seg)) common.push(seg);
+      else break;
+    }
+    // The deepest shared dir is usually wrapper-ish (e.g. `multiqc_data`)
+    // when only one run was dropped; prefer its parent for >1 run so the
+    // wrapper folder (`mysamples`) wins over the per-run `multiqc_data`.
+    const deepest =
+      common.length > 0 && common[common.length - 1] === 'multiqc_data'
+        ? common[common.length - 2]
+        : common[common.length - 1];
+    setName(deepest || 'multiqc_reports');
+  }, [dcType, multiqcDropzone.files, name]);
 
   if (projectType === 'advanced') {
     return (
@@ -681,6 +926,7 @@ const CreateDataCollectionModal: React.FC<{
 
     setSubmitting(true);
     setError(null);
+    setMismatch(null);
     try {
       if (dcType === 'multiqc') {
         if (multiqcDropzone.files.length === 0) {
@@ -732,7 +978,14 @@ const CreateDataCollectionModal: React.FC<{
       }
       onSuccess();
     } catch (err) {
-      setError((err as Error).message || 'Upload failed.');
+      const rawMessage = (err as Error).message || 'Upload failed.';
+      const parsed = tryParseMultiQCMismatch(rawMessage);
+      if (parsed) {
+        setMismatch(parsed);
+        setError(parsed.summary);
+      } else {
+        setError(rawMessage);
+      }
     } finally {
       setSubmitting(false);
     }
@@ -744,46 +997,126 @@ const CreateDataCollectionModal: React.FC<{
     <Modal
       opened={opened}
       onClose={onClose}
-      title="Create data collection"
+      title={null}
       centered
       size="lg"
       closeOnClickOutside={!submitting}
       withCloseButton={!submitting}
     >
       <Stack gap="md">
-        <Group gap="xs">
+        <Group justify="center" gap="sm">
           <Icon
             icon="mdi:database-plus-outline"
-            width={26}
+            width={32}
             color="var(--mantine-color-teal-6)"
           />
-          <Text fw={500}>Add a new data collection.</Text>
+          <Title order={3} c="teal" m={0}>
+            Create a Data Collection
+          </Title>
         </Group>
 
-        <SegmentedControl
-          data={[
-            { label: 'Table (CSV / TSV / Parquet)', value: 'table' },
-            { label: 'MultiQC report(s)', value: 'multiqc' },
-          ]}
+        <Tabs
           value={dcType}
-          onChange={(v) => setDcType(v as 'table' | 'multiqc')}
-          disabled={submitting}
-        />
+          onChange={(v) => v && setDcType(v as 'table' | 'multiqc')}
+          variant="default"
+        >
+          <Tabs.List grow>
+            <Tabs.Tab
+              value="table"
+              leftSection={<Icon icon="mdi:table" width={18} />}
+              disabled={submitting}
+            >
+              Table (CSV / TSV / Parquet)
+            </Tabs.Tab>
+            <Tabs.Tab
+              value="multiqc"
+              leftSection={
+                <img
+                  src={`${import.meta.env.BASE_URL}logos/multiqc_icon_color.svg`}
+                  alt=""
+                  width={18}
+                  height={18}
+                  style={{ objectFit: 'contain', display: 'block' }}
+                />
+              }
+              disabled={submitting}
+            >
+              MultiQC report(s)
+            </Tabs.Tab>
+          </Tabs.List>
 
-        {dcType === 'table' ? (
-          <FileInput
-            label="File"
-            placeholder="Select a CSV, TSV, Parquet, or Feather file"
-            required
-            accept=".csv,.tsv,.tab,.parquet,.pq,.feather,.arrow"
-            value={file}
-            onChange={setFile}
-            disabled={submitting}
-            leftSection={<Icon icon="mdi:file-upload-outline" width={16} />}
-            description="Maximum size: 50 MB"
-          />
-        ) : (
-          <Stack gap="xs">
+          <Tabs.Panel value="table" pt="md">
+            <Stack gap="xs">
+            <Text size="sm" fw={500}>
+              File <span style={{ color: 'var(--mantine-color-red-6)' }}>*</span>
+            </Text>
+            <div ref={tableDropzone.rootRef}>
+              <UnstyledDropZone
+                onClick={() => !submitting && tableDropzone.openPicker()}
+                disabled={submitting}
+                active={tableDropzone.isDragOver}
+              >
+                <Stack gap={4} align="center">
+                  <Icon icon="mdi:file-upload-outline" width={28} />
+                  <Text fw={500}>
+                    Drop a CSV, TSV, Parquet, or Feather file
+                  </Text>
+                  <Text size="xs" c="dimmed">
+                    or click to pick · max 50 MB
+                  </Text>
+                </Stack>
+              </UnstyledDropZone>
+              <input
+                ref={tableDropzone.inputRef}
+                type="file"
+                accept=".csv,.tsv,.tab,.parquet,.pq,.feather,.arrow"
+                style={{ display: 'none' }}
+              />
+            </div>
+            {tableDropzone.error && (
+              <Alert
+                color="orange"
+                variant="light"
+                icon={<Icon icon="mdi:alert" width={16} />}
+              >
+                {tableDropzone.error}
+              </Alert>
+            )}
+            {file && (
+              <Paper withBorder p="xs" radius="sm">
+                <Group justify="space-between" wrap="nowrap" gap="xs">
+                  <Group gap="xs" wrap="nowrap">
+                    <Icon icon="mdi:file-outline" width={16} />
+                    <Text size="sm" ff="monospace" lineClamp={1}>
+                      {file.name}
+                    </Text>
+                  </Group>
+                  <Group gap={4} wrap="nowrap">
+                    <Text size="xs" c="dimmed">
+                      {(file.size / (1024 * 1024)).toFixed(1)} MB
+                    </Text>
+                    <ActionIcon
+                      size="xs"
+                      variant="subtle"
+                      color="red"
+                      onClick={() => {
+                        setFile(null);
+                        tableDropzone.clear();
+                      }}
+                      disabled={submitting}
+                      aria-label="Remove file"
+                    >
+                      <Icon icon="mdi:close" width={14} />
+                    </ActionIcon>
+                  </Group>
+                </Group>
+              </Paper>
+            )}
+            </Stack>
+          </Tabs.Panel>
+
+          <Tabs.Panel value="multiqc" pt="md">
+            <Stack gap="xs">
             <Text size="sm" fw={500}>
               MultiQC reports
             </Text>
@@ -796,10 +1129,10 @@ const CreateDataCollectionModal: React.FC<{
                 <Stack gap={4} align="center">
                   <Icon icon="mdi:folder-upload" width={28} />
                   <Text fw={500}>
-                    Drop folder(s) containing multiqc_data/multiqc.parquet
+                    Drop a multiqc.parquet file or a folder of runs
                   </Text>
                   <Text size="xs" c="dimmed">
-                    or click to choose. Per-file 50 MB · total 500 MB.
+                    Only multiqc.parquet files are kept · run folder name is preserved
                   </Text>
                 </Stack>
               </UnstyledDropZone>
@@ -807,10 +1140,8 @@ const CreateDataCollectionModal: React.FC<{
                 ref={multiqcDropzone.inputRef}
                 type="file"
                 multiple
+                accept=".parquet"
                 style={{ display: 'none' }}
-                // @ts-expect-error — webkitdirectory is non-standard but
-                // widely supported (Chromium, Firefox, Safari).
-                webkitdirectory=""
               />
             </div>
             {multiqcDropzone.error && (
@@ -823,14 +1154,71 @@ const CreateDataCollectionModal: React.FC<{
               </Alert>
             )}
             {multiqcDropzone.files.length > 0 && (
-              <Text size="xs" c="dimmed">
-                {multiqcDropzone.files.length} file
-                {multiqcDropzone.files.length === 1 ? '' : 's'} ·{' '}
-                {(multiqcDropzone.totalBytes / (1024 * 1024)).toFixed(1)} MB
-              </Text>
+              <Paper withBorder p="xs" radius="sm">
+                <Group justify="space-between" mb={6}>
+                  <Text size="sm" fw={500}>
+                    {multiqcDropzone.files.length} file
+                    {multiqcDropzone.files.length === 1 ? '' : 's'} ·{' '}
+                    {(multiqcDropzone.totalBytes / (1024 * 1024)).toFixed(1)} MB
+                  </Text>
+                  <Button
+                    size="xs"
+                    variant="subtle"
+                    onClick={multiqcDropzone.clear}
+                    disabled={submitting}
+                  >
+                    Clear list
+                  </Button>
+                </Group>
+                <ScrollArea h={Math.min(multiqcDropzone.files.length * 28 + 8, 200)}>
+                  <Stack gap={2}>
+                    {multiqcDropzone.files.map((f, i) => (
+                      <Group
+                        key={`${f.name}-${i}`}
+                        justify="space-between"
+                        wrap="nowrap"
+                        gap="xs"
+                      >
+                        <Text size="xs" ff="monospace" lineClamp={1}>
+                          {f.name}
+                        </Text>
+                        <Group gap={4} wrap="nowrap">
+                          <Text size="xs" c="dimmed">
+                            {(f.size / (1024 * 1024)).toFixed(1)} MB
+                          </Text>
+                          <ActionIcon
+                            size="xs"
+                            variant="subtle"
+                            color="red"
+                            onClick={() => multiqcDropzone.removeFile(f)}
+                            disabled={submitting}
+                            aria-label="Remove file"
+                          >
+                            <Icon icon="mdi:close" width={14} />
+                          </ActionIcon>
+                        </Group>
+                      </Group>
+                    ))}
+                  </Stack>
+                </ScrollArea>
+                {multiqcDropzone.skipped.length > 0 && (
+                  <Text size="xs" c="dimmed" mt={6}>
+                    Skipped {multiqcDropzone.skipped.length} non-multiqc file
+                    {multiqcDropzone.skipped.length === 1 ? '' : 's'}.
+                  </Text>
+                )}
+              </Paper>
             )}
-          </Stack>
-        )}
+            {multiqcDropzone.files.length > 0 && (
+              <MultiQCUniformityChecklist
+                fileCount={multiqcDropzone.files.length}
+                submitting={submitting}
+                mismatch={mismatch}
+              />
+            )}
+            </Stack>
+          </Tabs.Panel>
+        </Tabs>
 
         <TextInput
           label="Name"
