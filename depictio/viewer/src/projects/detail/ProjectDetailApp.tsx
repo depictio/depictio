@@ -57,6 +57,8 @@ import LinksSection from './LinksSection';
 import ManageDataCollectionModal, {
   type ManageDcType,
 } from './ManageDataCollectionModal';
+import MultiQCViewerPreview from './MultiQCViewerPreview';
+import CoordinatesMapPreview from './CoordinatesMapPreview';
 import { UnstyledDropZone } from '../../components/UnstyledDropZone';
 import { useFolderDropzone } from '../../hooks/useFolderDropzone';
 
@@ -132,6 +134,18 @@ function getDcSizeBytes(dc: DataCollectionShape): number {
     );
   }
   return (flex.deltatable_size_bytes as number | undefined) ?? 0;
+}
+
+/** A DC is a "coordinates table" when its config carries explicit lat/lon
+ *  column hints — backed by DCTableCoordinatesConfig server-side, but the
+ *  dc_type stays "table". Mirrors validation.py:dc_has_coordinates. */
+function dcHasCoordinates(dc: DataCollectionShape): boolean {
+  const type = (dc.config?.type as string | undefined)?.toLowerCase();
+  if (type !== 'table') return false;
+  const props = dc.config?.dc_specific_properties as
+    | Record<string, unknown>
+    | undefined;
+  return Boolean(props?.lat_column) && Boolean(props?.lon_column);
 }
 
 /** Pick the right "where is this data stored" string for a DC. */
@@ -810,6 +824,81 @@ function guessFormat(name: string | undefined): string | null {
   return null;
 }
 
+/** Single-file dropzone + selected-file chip shared by the Table and Coordinates
+ *  tabs in the create-DC modal. Both flows use the same dropzone + file state;
+ *  only the headline icon/copy differs. */
+const TableFileDropZone: React.FC<{
+  dropzone: ReturnType<typeof useFolderDropzone>;
+  file: File | null;
+  submitting: boolean;
+  icon: string;
+  title: string;
+  onRemove: () => void;
+}> = ({ dropzone, file, submitting, icon, title, onRemove }) => (
+  <>
+    <Text size="sm" fw={500}>
+      File <span style={{ color: 'var(--mantine-color-red-6)' }}>*</span>
+    </Text>
+    <div ref={dropzone.rootRef}>
+      <UnstyledDropZone
+        onClick={() => !submitting && dropzone.openPicker()}
+        disabled={submitting}
+        active={dropzone.isDragOver}
+      >
+        <Stack gap={4} align="center">
+          <Icon icon={icon} width={28} />
+          <Text fw={500}>{title}</Text>
+          <Text size="xs" c="dimmed">
+            or click to pick · max 50 MB
+          </Text>
+        </Stack>
+      </UnstyledDropZone>
+      <input
+        ref={dropzone.inputRef}
+        type="file"
+        accept=".csv,.tsv,.tab,.parquet,.pq,.feather,.arrow"
+        style={{ display: 'none' }}
+      />
+    </div>
+    {dropzone.error && (
+      <Alert
+        color="orange"
+        variant="light"
+        icon={<Icon icon="mdi:alert" width={16} />}
+      >
+        {dropzone.error}
+      </Alert>
+    )}
+    {file && (
+      <Paper withBorder p="xs" radius="sm">
+        <Group justify="space-between" wrap="nowrap" gap="xs">
+          <Group gap="xs" wrap="nowrap">
+            <Icon icon="mdi:file-outline" width={16} />
+            <Text size="sm" ff="monospace" lineClamp={1}>
+              {file.name}
+            </Text>
+          </Group>
+          <Group gap={4} wrap="nowrap">
+            <Text size="xs" c="dimmed">
+              {(file.size / (1024 * 1024)).toFixed(1)} MB
+            </Text>
+            <ActionIcon
+              size="xs"
+              variant="subtle"
+              color="red"
+              onClick={onRemove}
+              disabled={submitting}
+              aria-label="Remove file"
+            >
+              <Icon icon="mdi:close" width={14} />
+            </ActionIcon>
+          </Group>
+        </Group>
+      </Paper>
+    )}
+  </>
+);
+
 const CreateDataCollectionModal: React.FC<{
   opened: boolean;
   projectType: 'basic' | 'advanced';
@@ -817,7 +906,7 @@ const CreateDataCollectionModal: React.FC<{
   onClose: () => void;
   onSuccess: () => void;
 }> = ({ opened, projectType, projectId, onClose, onSuccess }) => {
-  const [dcType, setDcType] = useState<'table' | 'multiqc'>('table');
+  const [dcType, setDcType] = useState<'table' | 'multiqc' | 'coordinates'>('table');
   const [file, setFile] = useState<File | null>(null);
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
@@ -831,6 +920,13 @@ const CreateDataCollectionModal: React.FC<{
   const [lastCheckPassed, setLastCheckPassed] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [mismatch, setMismatch] = useState<MultiQCMismatch | null>(null);
+  // Coordinates-tab state: header columns parsed from the dropped file, plus
+  // user-selected lat/lon columns. Auto-detected when the column names match
+  // /^lat(itude)?$/i / /^lon(g(itude)?)?$/i.
+  const [csvColumns, setCsvColumns] = useState<string[]>([]);
+  const [parsingHeader, setParsingHeader] = useState(false);
+  const [latColumn, setLatColumn] = useState<string | null>(null);
+  const [lonColumn, setLonColumn] = useState<string | null>(null);
 
   // MultiQC folder dropzone — owned by the modal so close-and-reopen clears it.
   const multiqcDropzone = useFolderDropzone({
@@ -846,13 +942,55 @@ const CreateDataCollectionModal: React.FC<{
   });
   // Sync the first dropped/picked file into the existing `file` state so the
   // rest of the table flow (auto-fill, submit) keeps working unchanged.
+  // Same picker is used for the Coordinates tab.
   useEffect(() => {
-    if (dcType !== 'table') return;
+    if (dcType !== 'table' && dcType !== 'coordinates') return;
     const first = tableDropzone.files[0];
     if (!first) return;
     if (file && first === file) return;
     setFile(first);
   }, [dcType, tableDropzone.files, file]);
+
+  // Parse the dropped file's header for the Coordinates tab so the lat/lon
+  // dropdowns can populate. Reads the first ~64KB client-side — enough for any
+  // reasonable single-line header without paying the cost of the whole file.
+  // Parquet/feather headers aren't accessible without a wasm parser; we defer
+  // to the API's `_validate_coord_columns_in_file` for those.
+  useEffect(() => {
+    if (dcType !== 'coordinates' || !file) {
+      setCsvColumns([]);
+      return;
+    }
+    const fmt = fileFormat.toLowerCase();
+    if (fmt !== 'csv' && fmt !== 'tsv') {
+      setCsvColumns([]);
+      return;
+    }
+    let cancelled = false;
+    setParsingHeader(true);
+    const sep = separator === 'custom' ? customSeparator || ',' : separator;
+    file
+      .slice(0, 65536)
+      .text()
+      .then((text) => {
+        if (cancelled) return;
+        const firstLine = text.split(/\r?\n/).find((l) => l.length > 0) ?? '';
+        const cols = firstLine.split(sep).map((c) => c.trim()).filter(Boolean);
+        setCsvColumns(cols);
+        // Auto-detect on first parse — don't clobber a manual choice.
+        setLatColumn((prev) => prev ?? cols.find((c) => /^lat(itude)?$/i.test(c)) ?? null);
+        setLonColumn((prev) => prev ?? cols.find((c) => /^lon(g(itude)?)?$/i.test(c)) ?? null);
+      })
+      .catch(() => {
+        if (!cancelled) setCsvColumns([]);
+      })
+      .finally(() => {
+        if (!cancelled) setParsingHeader(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [dcType, file, fileFormat, separator, customSeparator]);
 
   // Reset everything when the modal closes — otherwise re-opening shows stale
   // state from the previous attempt.
@@ -869,6 +1007,10 @@ const CreateDataCollectionModal: React.FC<{
       setHasHeader(true);
       setError(null);
       setSubmitting(false);
+      setCsvColumns([]);
+      setLatColumn(null);
+      setLonColumn(null);
+      setParsingHeader(false);
       multiqcDropzone.clear();
       tableDropzone.clear();
     }
@@ -1034,6 +1176,18 @@ const CreateDataCollectionModal: React.FC<{
           setSubmitting(false);
           return;
         }
+        if (dcType === 'coordinates') {
+          if (!latColumn || !lonColumn) {
+            setError('Pick the latitude and longitude columns.');
+            setSubmitting(false);
+            return;
+          }
+          if (latColumn === lonColumn) {
+            setError('Latitude and longitude columns must differ.');
+            setSubmitting(false);
+            return;
+          }
+        }
         const result = await createDataCollectionFromUpload({
           projectId,
           name: name.trim(),
@@ -1045,6 +1199,8 @@ const CreateDataCollectionModal: React.FC<{
           compression,
           hasHeader,
           file,
+          latColumn: dcType === 'coordinates' ? latColumn : null,
+          lonColumn: dcType === 'coordinates' ? lonColumn : null,
         });
         notifications.show({
           color: 'teal',
@@ -1094,7 +1250,9 @@ const CreateDataCollectionModal: React.FC<{
 
         <Tabs
           value={dcType}
-          onChange={(v) => v && setDcType(v as 'table' | 'multiqc')}
+          onChange={(v) =>
+            v && setDcType(v as 'table' | 'multiqc' | 'coordinates')
+          }
           variant="default"
         >
           <Tabs.List grow>
@@ -1104,6 +1262,15 @@ const CreateDataCollectionModal: React.FC<{
               disabled={submitting}
             >
               Table (CSV / TSV / Parquet)
+            </Tabs.Tab>
+            <Tabs.Tab
+              value="coordinates"
+              leftSection={
+                <Icon icon="mdi:map-marker-radius-outline" width={18} />
+              }
+              disabled={submitting}
+            >
+              Coordinates table
             </Tabs.Tab>
             <Tabs.Tab
               value="multiqc"
@@ -1124,71 +1291,102 @@ const CreateDataCollectionModal: React.FC<{
 
           <Tabs.Panel value="table" pt="md">
             <Stack gap="xs">
-            <Text size="sm" fw={500}>
-              File <span style={{ color: 'var(--mantine-color-red-6)' }}>*</span>
-            </Text>
-            <div ref={tableDropzone.rootRef}>
-              <UnstyledDropZone
-                onClick={() => !submitting && tableDropzone.openPicker()}
-                disabled={submitting}
-                active={tableDropzone.isDragOver}
-              >
-                <Stack gap={4} align="center">
-                  <Icon icon="mdi:file-upload-outline" width={28} />
-                  <Text fw={500}>
-                    Drop a CSV, TSV, Parquet, or Feather file
-                  </Text>
-                  <Text size="xs" c="dimmed">
-                    or click to pick · max 50 MB
-                  </Text>
-                </Stack>
-              </UnstyledDropZone>
-              <input
-                ref={tableDropzone.inputRef}
-                type="file"
-                accept=".csv,.tsv,.tab,.parquet,.pq,.feather,.arrow"
-                style={{ display: 'none' }}
+              <TableFileDropZone
+                dropzone={tableDropzone}
+                file={file}
+                submitting={submitting}
+                icon="mdi:file-upload-outline"
+                title="Drop a CSV, TSV, Parquet, or Feather file"
+                onRemove={() => {
+                  setFile(null);
+                  tableDropzone.clear();
+                }}
               />
-            </div>
-            {tableDropzone.error && (
-              <Alert
-                color="orange"
-                variant="light"
-                icon={<Icon icon="mdi:alert" width={16} />}
-              >
-                {tableDropzone.error}
-              </Alert>
-            )}
-            {file && (
-              <Paper withBorder p="xs" radius="sm">
-                <Group justify="space-between" wrap="nowrap" gap="xs">
-                  <Group gap="xs" wrap="nowrap">
-                    <Icon icon="mdi:file-outline" width={16} />
-                    <Text size="sm" ff="monospace" lineClamp={1}>
-                      {file.name}
-                    </Text>
-                  </Group>
-                  <Group gap={4} wrap="nowrap">
-                    <Text size="xs" c="dimmed">
-                      {(file.size / (1024 * 1024)).toFixed(1)} MB
-                    </Text>
-                    <ActionIcon
-                      size="xs"
-                      variant="subtle"
-                      color="red"
-                      onClick={() => {
-                        setFile(null);
-                        tableDropzone.clear();
-                      }}
-                      disabled={submitting}
-                      aria-label="Remove file"
-                    >
-                      <Icon icon="mdi:close" width={14} />
-                    </ActionIcon>
-                  </Group>
-                </Group>
-              </Paper>
-            )}
+            </Stack>
+          </Tabs.Panel>
+
+          <Tabs.Panel value="coordinates" pt="md">
+            <Stack gap="xs">
+              <Text size="sm" c="dimmed">
+                Upload a CSV / TSV / Parquet table with latitude &amp; longitude
+                columns. The resulting data collection becomes selectable as the
+                data source for Map components.
+              </Text>
+              <TableFileDropZone
+                dropzone={tableDropzone}
+                file={file}
+                submitting={submitting}
+                icon="mdi:map-marker-radius-outline"
+                title="Drop a CSV / TSV / Parquet with lat & lon columns"
+                onRemove={() => {
+                  setFile(null);
+                  setCsvColumns([]);
+                  setLatColumn(null);
+                  setLonColumn(null);
+                  tableDropzone.clear();
+                }}
+              />
+              {file && (fileFormat === 'csv' || fileFormat === 'tsv') && (() => {
+                let placeholder: string;
+                if (parsingHeader) placeholder = 'Reading header…';
+                else if (csvColumns.length) placeholder = 'Pick column';
+                else placeholder = 'No columns found';
+                const colsDisabled =
+                  submitting || parsingHeader || csvColumns.length === 0;
+                return (
+                  <SimpleGrid cols={2} spacing="sm">
+                    <Select
+                      label="Latitude column"
+                      placeholder={placeholder}
+                      data={csvColumns}
+                      value={latColumn}
+                      onChange={setLatColumn}
+                      disabled={colsDisabled}
+                      required
+                      leftSection={
+                        parsingHeader ? <Loader size="xs" /> : undefined
+                      }
+                      searchable
+                      nothingFoundMessage="No matching columns"
+                    />
+                    <Select
+                      label="Longitude column"
+                      placeholder={placeholder}
+                      data={csvColumns}
+                      value={lonColumn}
+                      onChange={setLonColumn}
+                      disabled={colsDisabled}
+                      required
+                      searchable
+                      nothingFoundMessage="No matching columns"
+                    />
+                  </SimpleGrid>
+                );
+              })()}
+              {file && fileFormat !== 'csv' && fileFormat !== 'tsv' && (
+                <SimpleGrid cols={2} spacing="sm">
+                  <TextInput
+                    label="Latitude column"
+                    placeholder="e.g. latitude"
+                    value={latColumn ?? ''}
+                    onChange={(e) =>
+                      setLatColumn(e.currentTarget.value || null)
+                    }
+                    disabled={submitting}
+                    required
+                  />
+                  <TextInput
+                    label="Longitude column"
+                    placeholder="e.g. longitude"
+                    value={lonColumn ?? ''}
+                    onChange={(e) =>
+                      setLonColumn(e.currentTarget.value || null)
+                    }
+                    disabled={submitting}
+                    required
+                  />
+                </SimpleGrid>
+              )}
             </Stack>
           </Tabs.Panel>
 
@@ -1322,7 +1520,7 @@ const CreateDataCollectionModal: React.FC<{
           disabled={submitting}
         />
 
-        {dcType === 'table' && (
+        {(dcType === 'table' || dcType === 'coordinates') && (
           <>
             <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
               <Select
@@ -1418,9 +1616,10 @@ const CreateDataCollectionModal: React.FC<{
             loading={submitting}
             disabled={
               !name.trim() ||
-              (dcType === 'table'
-                ? !file
-                : multiqcDropzone.files.length === 0)
+              (dcType === 'multiqc'
+                ? multiqcDropzone.files.length === 0
+                : !file ||
+                  (dcType === 'coordinates' && (!latColumn || !lonColumn)))
             }
             leftSection={<Icon icon="mdi:cloud-upload-outline" width={16} />}
           >
@@ -1979,6 +2178,7 @@ const DataCollectionRow: React.FC<{
   const metatype = (dc.config?.metatype as string | undefined) || null;
   const isTable = type === 'table';
   const isMultiQC = type.toLowerCase() === 'multiqc';
+  const isCoordTable = dcHasCoordinates(dc);
   // Tables that aren't metadata are aggregates — surface that with a badge so
   // the user can tell at a glance which collection is the joined fact table.
   const isAggregate = isTable && (metatype || '').toLowerCase() !== 'metadata';
@@ -2013,9 +2213,19 @@ const DataCollectionRow: React.FC<{
             />
           ) : (
             <Icon
-              icon={isTable ? 'mdi:table' : 'mdi:file-document-outline'}
+              icon={
+                isCoordTable
+                  ? 'mdi:map-marker-radius-outline'
+                  : isTable
+                    ? 'mdi:table'
+                    : 'mdi:file-document-outline'
+              }
               width={20}
-              color="var(--mantine-color-teal-6)"
+              color={
+                isCoordTable
+                  ? 'var(--mantine-color-grape-6)'
+                  : 'var(--mantine-color-teal-6)'
+              }
             />
           )}
           {type && (
@@ -2023,12 +2233,17 @@ const DataCollectionRow: React.FC<{
               {type.toUpperCase()}
             </Badge>
           )}
+          {isCoordTable && (
+            <Badge color="grape" variant="light" size="sm" radius="sm">
+              COORDINATES
+            </Badge>
+          )}
           {metatype && (
             <Badge color="gray" variant="light" size="sm" radius="sm">
               {metatype.toUpperCase()}
             </Badge>
           )}
-          {isAggregate && !metatype && (
+          {isAggregate && !metatype && !isCoordTable && (
             <Badge color="orange" variant="light" size="sm" radius="sm">
               AGGREGATE
             </Badge>
@@ -2107,6 +2322,7 @@ const DataCollectionViewer: React.FC<{
   // `/projects/get/all` payload). Mirror the row's fallback so the viewer
   // surfaces the implicit "AGGREGATE" classification too.
   const isTable = type.toLowerCase() === 'table';
+  const isCoordTable = dcHasCoordinates(dc);
   const isAggregate = isTable && (metatype || '').toLowerCase() !== 'metadata';
 
   return (
@@ -2121,22 +2337,37 @@ const DataCollectionViewer: React.FC<{
           <Title order={4}>Data Collection Viewer</Title>
         </Group>
         <Group gap="sm">
-          <Icon
-            icon={
-              isMultiQC
-                ? 'mdi:chart-bar'
-                : type === 'table'
-                  ? 'mdi:table'
-                  : 'mdi:file-document-outline'
-            }
-            width={22}
-            color={
-              isMultiQC
-                ? 'var(--mantine-color-blue-6)'
-                : 'var(--mantine-color-teal-6)'
-            }
-          />
+          {isMultiQC ? (
+            <img
+              src={`${import.meta.env.BASE_URL}logos/multiqc_icon_color.svg`}
+              alt="MultiQC"
+              width={22}
+              height={22}
+              style={{ objectFit: 'contain', display: 'block' }}
+            />
+          ) : (
+            <Icon
+              icon={
+                isCoordTable
+                  ? 'mdi:map-marker-radius-outline'
+                  : type === 'table'
+                    ? 'mdi:table'
+                    : 'mdi:file-document-outline'
+              }
+              width={22}
+              color={
+                isCoordTable
+                  ? 'var(--mantine-color-grape-6)'
+                  : 'var(--mantine-color-teal-6)'
+              }
+            />
+          )}
           <Title order={4}>{dc.data_collection_tag || dcId}</Title>
+          {isCoordTable && (
+            <Badge color="grape" variant="light" size="sm" radius="sm">
+              COORDINATES
+            </Badge>
+          )}
         </Group>
 
         <SimpleGrid cols={{ base: 1, md: 2 }} spacing="md">
@@ -2154,9 +2385,16 @@ const DataCollectionViewer: React.FC<{
               <DetailRow
                 label="Type"
                 badge={
-                  <Badge color="blue" size="sm" radius="sm">
-                    {type.toUpperCase()}
-                  </Badge>
+                  <Group gap={4} wrap="nowrap">
+                    <Badge color="blue" size="sm" radius="sm">
+                      {type.toUpperCase()}
+                    </Badge>
+                    {isCoordTable && (
+                      <Badge color="grape" variant="light" size="sm" radius="sm">
+                        COORDINATES
+                      </Badge>
+                    )}
+                  </Group>
                 }
               />
               {metatype ? (
@@ -2168,7 +2406,7 @@ const DataCollectionViewer: React.FC<{
                     </Badge>
                   }
                 />
-              ) : isAggregate ? (
+              ) : isAggregate && !isCoordTable ? (
                 <DetailRow
                   label="Metatype"
                   badge={
@@ -2178,6 +2416,28 @@ const DataCollectionViewer: React.FC<{
                   }
                 />
               ) : null}
+              {isCoordTable && (
+                <>
+                  <DetailRow
+                    label="Latitude column"
+                    value={
+                      ((dc.config?.dc_specific_properties as
+                        | Record<string, unknown>
+                        | undefined)?.lat_column as string | undefined) || '—'
+                    }
+                    mono
+                  />
+                  <DetailRow
+                    label="Longitude column"
+                    value={
+                      ((dc.config?.dc_specific_properties as
+                        | Record<string, unknown>
+                        | undefined)?.lon_column as string | undefined) || '—'
+                    }
+                    mono
+                  />
+                </>
+              )}
             </Stack>
           </Card>
           {isMultiQC ? (
@@ -2222,6 +2482,31 @@ const DataCollectionViewer: React.FC<{
             </Card>
           )}
         </SimpleGrid>
+
+        {(isMultiQC || isCoordTable) && (
+          <Accordion variant="separated" radius="md" defaultValue="preview">
+            <Accordion.Item value="preview">
+              <Accordion.Control
+                icon={
+                  <Icon
+                    icon="mdi:eye-outline"
+                    width={18}
+                    color="var(--mantine-color-blue-6)"
+                  />
+                }
+              >
+                <Text fw={600}>Preview</Text>
+              </Accordion.Control>
+              <Accordion.Panel>
+                {isMultiQC ? (
+                  <MultiQCViewerPreview dcId={dcId} />
+                ) : (
+                  <CoordinatesMapPreview dc={dc} />
+                )}
+              </Accordion.Panel>
+            </Accordion.Item>
+          </Accordion>
+        )}
 
         <Card withBorder radius="md" p="md">
           <Group gap="xs" mb="xs">

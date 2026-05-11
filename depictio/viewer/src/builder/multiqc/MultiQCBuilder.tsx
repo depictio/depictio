@@ -21,44 +21,14 @@ import {
   Title,
 } from '@mantine/core';
 import { Icon } from '@iconify/react';
-import { readMultiqcSelection } from 'depictio-react-core';
+import {
+  fetchMultiQCBuilderOptions,
+  readMultiqcSelection,
+} from 'depictio-react-core';
+import type { MultiQCBuilderOptions } from 'depictio-react-core';
 import { useBuilderStore } from '../store/useBuilderStore';
 import DesignShell from '../shared/DesignShell';
 import MultiQCPreview from './MultiQCPreview';
-
-interface BuilderOptions {
-  modules: string[];
-  plots: Record<string, string[]>; // module → plots
-  datasets: Record<string, string[]>; // plot → datasets
-  s3_locations: string[];
-  /** Module + plot pairs that map to general_stats (rendered as table). */
-  general_stats?: Array<{ module: string; plot: string }>;
-}
-
-async function fetchBuilderOptions(dcId: string): Promise<BuilderOptions> {
-  const res = await fetch(
-    `/depictio/api/v1/multiqc/builder_options?data_collection_id=${dcId}`,
-    {
-      headers: (() => {
-        const headers: Record<string, string> = {};
-        try {
-          const stored = localStorage.getItem('local-store');
-          if (stored) {
-            const parsed = JSON.parse(stored);
-            if (parsed?.access_token) {
-              headers.Authorization = `Bearer ${parsed.access_token}`;
-            }
-          }
-        } catch {
-          // ignore
-        }
-        return headers;
-      })(),
-    },
-  );
-  if (!res.ok) throw new Error(`Failed to fetch MultiQC options: ${res.status}`);
-  return res.json();
-}
 
 const MultiQCBuilder: React.FC = () => {
   const dcId = useBuilderStore((s) => s.dcId);
@@ -77,7 +47,7 @@ const MultiQCBuilder: React.FC = () => {
   };
   const patchConfig = useBuilderStore((s) => s.patchConfig);
 
-  const [opts, setOpts] = useState<BuilderOptions | null>(null);
+  const [opts, setOpts] = useState<MultiQCBuilderOptions | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -85,7 +55,7 @@ const MultiQCBuilder: React.FC = () => {
     if (!dcId) return;
     setLoading(true);
     setError(null);
-    fetchBuilderOptions(dcId)
+    fetchMultiQCBuilderOptions(dcId)
       .then((data) => {
         setOpts(data);
         if (!config.s3_locations) {

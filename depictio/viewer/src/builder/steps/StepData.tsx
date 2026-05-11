@@ -50,6 +50,11 @@ const StepData: React.FC = () => {
   const [workflows, setWorkflows] = useState<WorkflowEntry[]>([]);
   const [loadingWorkflows, setLoadingWorkflows] = useState(true);
   const [workflowsError, setWorkflowsError] = useState<string | null>(null);
+  // Basic projects synthesize one workflow per uploaded DC (named
+  // `{tag}_workflow_{ts}`). Showing that picker is noise — for basic projects
+  // we render a flat DC select and stamp wfId under the hood. Mirrors the
+  // pattern used in projects/detail/ProjectDetailApp.tsx.
+  const [projectType, setProjectType] = useState<'basic' | 'advanced'>('basic');
 
   const [shape, setShape] = useState<{
     num_rows?: number;
@@ -69,7 +74,10 @@ const StepData: React.FC = () => {
       case 'table':
         return ['table'];
       case 'map':
-        return ['geojson'];
+        // Map binds to a table DC; the further coord requirement is enforced
+        // by `dcHasCoordinates` below, since a "table with lat/lon" is still
+        // dc_type='table' (DCTableCoordinatesConfig is a DCTableConfig subclass).
+        return ['table'];
       case 'multiqc':
         return ['multiqc'];
       case 'image':
@@ -78,6 +86,20 @@ const StepData: React.FC = () => {
         return null;
     }
   }, [componentType]);
+
+  // Filter DCs by component compatibility. For Map components this also enforces
+  // the lat/lon hint requirement (mirrors validation.py:dc_has_coordinates) —
+  // dc_type='table' alone isn't enough since regular and geographic tables share it.
+  const isDcCompatible = (dc: { config?: Record<string, unknown> }): boolean => {
+    if (!allowedDcTypes) return true;
+    const t = (dc.config?.type as string | undefined)?.toLowerCase();
+    if (!t || !allowedDcTypes.includes(t)) return false;
+    if (componentType !== 'map') return true;
+    const props = dc.config?.dc_specific_properties as
+      | Record<string, unknown>
+      | undefined;
+    return Boolean(props?.lat_column) && Boolean(props?.lon_column);
+  };
 
   useEffect(() => {
     if (!dashboardId) {
@@ -90,29 +112,24 @@ const StepData: React.FC = () => {
         const wfs = project.workflows || [];
         setWorkflows(wfs);
         setWorkflowsError(null);
+        const rawType = project.project_type;
+        setProjectType(rawType === 'advanced' ? 'advanced' : 'basic');
         if (!wfId && wfs.length > 0) {
           // Pick the first workflow that has at least one DC compatible with
           // the chosen componentType, then auto-select that compatible DC.
-          // This avoids landing the user on a multiqc DC after picking Card.
+          // This avoids landing the user on a multiqc DC after picking Card,
+          // and (for Map) avoids landing on a table without lat/lon.
           const wfWithDc =
-            wfs.find((w) => {
-              const dcs = w.data_collections || [];
-              return dcs.some((dc) => {
-                if (!allowedDcTypes) return true;
-                const t = (dc.config?.type as string | undefined)?.toLowerCase();
-                return t ? allowedDcTypes.includes(t) : false;
-              });
-            }) || wfs[0];
+            wfs.find((w) =>
+              (w.data_collections || []).some((dc) => isDcCompatible(dc)),
+            ) || wfs[0];
           setWorkflow(
             wfWithDc._id,
             (wfWithDc.project_id as string) || (project._id as string) || null,
           );
           const compatDc =
-            (wfWithDc.data_collections || []).find((dc) => {
-              if (!allowedDcTypes) return true;
-              const t = (dc.config?.type as string | undefined)?.toLowerCase();
-              return t ? allowedDcTypes.includes(t) : false;
-            }) || wfWithDc.data_collections?.[0];
+            (wfWithDc.data_collections || []).find((dc) => isDcCompatible(dc)) ||
+            wfWithDc.data_collections?.[0];
           if (compatDc) {
             setDataCollection(
               compatDc._id,
@@ -142,29 +159,51 @@ const StepData: React.FC = () => {
     const wf = workflows.find((w) => w._id === wfId);
     if (!wf) return [];
     return (wf.data_collections || [])
-      .filter((dc) => {
-        if (!allowedDcTypes) return true;
-        const t = (dc.config?.type as string | undefined)?.toLowerCase();
-        return t ? allowedDcTypes.includes(t) : false;
-      })
+      .filter((dc) => isDcCompatible(dc))
       .map((dc) => ({
         value: dc._id,
         label: dc.data_collection_tag || dc._id,
       }));
-  }, [workflows, wfId, allowedDcTypes]);
+    // isDcCompatible captures componentType/allowedDcTypes; deps cover both.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workflows, wfId, allowedDcTypes, componentType]);
+
+  /** Flat DC list across all (synthetic) workflows. Used for basic projects
+   *  where the per-workflow grouping is meaningless — every DC sits in its
+   *  own `{tag}_workflow_{ts}` wrapper. Each entry carries its parent's
+   *  workflow id so handleDcChange can still set wfId under the hood. */
+  const allFlatDcs = useMemo(() => {
+    type Dc = NonNullable<WorkflowEntry['data_collections']>[number];
+    type Entry = Dc & { __wfId: string; __projectId: string | null };
+    const entries: Entry[] = [];
+    for (const w of workflows) {
+      for (const dc of w.data_collections || []) {
+        if (!isDcCompatible(dc)) continue;
+        entries.push({
+          ...dc,
+          __wfId: w._id,
+          __projectId: (w.project_id as string) || null,
+        });
+      }
+    }
+    return entries;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workflows, allowedDcTypes, componentType]);
+
+  const flatDcOptions = useMemo(
+    () =>
+      allFlatDcs.map((dc) => ({
+        value: dc._id,
+        label: dc.data_collection_tag || dc._id,
+      })),
+    [allFlatDcs],
+  );
 
   /** True when no workflow in the project has a DC compatible with the
    *  selected component type. Surfaces a friendly empty-state instead of an
    *  empty Data Collection dropdown. */
-  const noCompatibleDc = useMemo(() => {
-    if (!allowedDcTypes || workflows.length === 0) return false;
-    return !workflows.some((w) =>
-      (w.data_collections || []).some((dc) => {
-        const t = (dc.config?.type as string | undefined)?.toLowerCase();
-        return t ? allowedDcTypes.includes(t) : false;
-      }),
-    );
-  }, [workflows, allowedDcTypes]);
+  const noCompatibleDc =
+    !!allowedDcTypes && workflows.length > 0 && allFlatDcs.length === 0;
 
   // If the currently selected DC is no longer compatible with the component
   // type (e.g. user backed out and changed the type), reset the picker.
@@ -172,34 +211,25 @@ const StepData: React.FC = () => {
     if (!dcId || !allowedDcTypes) return;
     const wf = workflows.find((w) => w._id === wfId);
     const dc = wf?.data_collections?.find((d) => d._id === dcId);
-    const t = (dc?.config?.type as string | undefined)?.toLowerCase();
-    if (!t || !allowedDcTypes.includes(t)) {
+    if (!dc || !isDcCompatible(dc)) {
       setDataCollection(null, null);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [allowedDcTypes, dcId, wfId, workflows]);
+  }, [allowedDcTypes, dcId, wfId, workflows, componentType]);
 
   // After workflows are loaded and the user has chosen a component type, if no
   // DC is selected (either fresh load or just-reset by the effect above), pick
   // the first compatible DC across all workflows.
   useEffect(() => {
     if (dcId || !workflows.length || !allowedDcTypes) return;
-    const wf = workflows.find((w) => w._id === wfId) || workflows[0];
-    const dc = (wf.data_collections || []).find((d) => {
-      const t = (d.config?.type as string | undefined)?.toLowerCase();
-      return t ? allowedDcTypes.includes(t) : false;
-    });
-    if (dc) {
-      if (wf._id !== wfId) {
-        setWorkflow(
-          wf._id,
-          (wf.project_id as string) || null,
-        );
-      }
-      setDataCollection(dc._id, (dc.config?.type as string) || null);
+    const entry = allFlatDcs[0];
+    if (!entry) return;
+    if (entry.__wfId !== wfId) {
+      setWorkflow(entry.__wfId, entry.__projectId);
     }
+    setDataCollection(entry._id, (entry.config?.type as string) || null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [allowedDcTypes, dcId, workflows]);
+  }, [allowedDcTypes, dcId, workflows, allFlatDcs]);
 
   // Re-fetch shape + columns + DC config when DC changes.
   useEffect(() => {
@@ -293,10 +323,24 @@ const StepData: React.FC = () => {
   };
 
   const handleDcChange = (val: string | null) => {
+    if (val === null) {
+      setDataCollection(null, null);
+      return;
+    }
+    // Find the DC via the flat list first — for basic projects this is the
+    // only path that carries the parent workflow id. Falls back to the
+    // currently-picked workflow for advanced flows.
+    const flat = allFlatDcs.find((d) => d._id === val);
+    if (flat) {
+      if (flat.__wfId !== wfId) {
+        setWorkflow(flat.__wfId, flat.__projectId);
+      }
+      setDataCollection(val, (flat.config?.type as string) || null);
+      return;
+    }
     const wf = workflows.find((w) => w._id === wfId);
     const dc = wf?.data_collections?.find((d) => d._id === val);
-    const cfgType = (dc?.config?.type as string) || null;
-    setDataCollection(val, cfgType);
+    setDataCollection(val, (dc?.config?.type as string) || null);
   };
 
   const componentMeta = componentType ? getComponentTypeMeta(componentType) : null;
@@ -363,30 +407,49 @@ const StepData: React.FC = () => {
         </Alert>
       )}
 
-      <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="lg">
-        <Select
-          label="Workflow"
-          placeholder={loadingWorkflows ? 'Loading…' : 'Select workflow...'}
-          data={wfOptions}
-          value={wfId}
-          onChange={handleWfChange}
-          searchable
-          disabled={loadingWorkflows}
-          leftSection={<Icon icon="mdi:source-branch" width={16} />}
-        />
-        <Select
-          label="Data Collection"
-          placeholder={
-            !wfId ? 'Pick a workflow first' : 'Select data collection...'
-          }
-          data={dcOptions}
-          value={dcId}
-          onChange={handleDcChange}
-          searchable
-          disabled={!wfId}
-          leftSection={<Icon icon="mdi:database" width={16} />}
-        />
-      </SimpleGrid>
+      {projectType === 'advanced' ? (
+        <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="lg">
+          <Select
+            label="Workflow"
+            placeholder={loadingWorkflows ? 'Loading…' : 'Select workflow...'}
+            data={wfOptions}
+            value={wfId}
+            onChange={handleWfChange}
+            searchable
+            disabled={loadingWorkflows}
+            leftSection={<Icon icon="mdi:source-branch" width={16} />}
+          />
+          <Select
+            label="Data Collection"
+            placeholder={
+              !wfId ? 'Pick a workflow first' : 'Select data collection...'
+            }
+            data={dcOptions}
+            value={dcId}
+            onChange={handleDcChange}
+            searchable
+            disabled={!wfId}
+            leftSection={<Icon icon="mdi:database" width={16} />}
+          />
+        </SimpleGrid>
+      ) : (() => {
+        let dcPlaceholder: string;
+        if (loadingWorkflows) dcPlaceholder = 'Loading…';
+        else if (flatDcOptions.length === 0) dcPlaceholder = 'No compatible data collection';
+        else dcPlaceholder = 'Select data collection...';
+        return (
+          <Select
+            label="Data Collection"
+            placeholder={dcPlaceholder}
+            data={flatDcOptions}
+            value={dcId}
+            onChange={handleDcChange}
+            searchable
+            disabled={loadingWorkflows || flatDcOptions.length === 0}
+            leftSection={<Icon icon="mdi:database" width={16} />}
+          />
+        );
+      })()}
 
       {dcId && (
         <Stack gap="sm" mt="md">

@@ -4,7 +4,7 @@
  * scatter_map / density_map / choropleth_map with lat/lon/color/size pickers,
  * hover columns, map style, opacity, and cross-filter selection toggle.
  */
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Group,
   MultiSelect,
@@ -17,6 +17,7 @@ import {
   TextInput,
   Title,
 } from '@mantine/core';
+import { fetchDataCollectionConfig } from 'depictio-react-core';
 import { useBuilderStore } from '../store/useBuilderStore';
 import ColumnSelect from '../shared/ColumnSelect';
 import DesignShell from '../shared/DesignShell';
@@ -57,6 +58,44 @@ const MapBuilder: React.FC = () => {
   };
   const patchConfig = useBuilderStore((s) => s.patchConfig);
   const cols = useBuilderStore((s) => s.cols);
+  const dcId = useBuilderStore((s) => s.dcId);
+
+  // When the picked DC has lat_column / lon_column hints (because it was
+  // created via the Coordinates tab in CreateDataCollectionModal), pre-fill
+  // the Latitude / Longitude pickers — only if the user hasn't already chosen
+  // values. Mirrors how the MultiQC builder reads DC-level config defaults.
+  const [autofilledFromDc, setAutofilledFromDc] = useState(false);
+  useEffect(() => {
+    setAutofilledFromDc(false);
+    if (!dcId) return;
+    let cancelled = false;
+    fetchDataCollectionConfig(dcId).then((cfg) => {
+      if (cancelled) return;
+      const props = cfg?.dc_specific_properties as
+        | Record<string, unknown>
+        | undefined;
+      const latHint = props?.lat_column as string | undefined;
+      const lonHint = props?.lon_column as string | undefined;
+      // Re-read fresh config from the store so a column the user picked while
+      // this fetch was in flight isn't clobbered by the stale closure value.
+      const current = useBuilderStore.getState().config as {
+        lat?: string;
+        lon?: string;
+      };
+      const updates: { lat?: string; lon?: string } = {};
+      if (latHint && !current.lat) updates.lat = latHint;
+      if (lonHint && !current.lon) updates.lon = lonHint;
+      if (Object.keys(updates).length > 0) {
+        patchConfig(updates);
+        setAutofilledFromDc(true);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+    // Intentionally key only on `dcId` so we don't loop after patching `config`.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dcId]);
 
   const mapType = config.map_type ?? 'scatter_map';
   const mapStyle = config.map_style ?? 'carto-positron';
@@ -102,6 +141,12 @@ const MapBuilder: React.FC = () => {
         numericOnly
         required
       />
+
+      {autofilledFromDc && (
+        <Text size="xs" c="dimmed" mt={-8}>
+          Pre-filled from data collection metadata
+        </Text>
+      )}
 
       <ColumnSelect
         label="Color Column"
