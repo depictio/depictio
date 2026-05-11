@@ -2501,6 +2501,33 @@ export async function createMultiQCDataCollection(
   );
 }
 
+export interface MultiQCUniformityCheckResult {
+  success: boolean;
+  message?: string;
+  report_count: number;
+  skipped_count: number;
+}
+
+/** Dry-run the MultiQC uniformity validator on a list of parquets without
+ *  creating a DC. Returns success on uniform; throws an Error whose `.message`
+ *  is the stringified 422 detail (parseable with the same helper the Create
+ *  modal uses) when the checks find a mismatch. */
+export async function checkMultiQCUniformity(
+  files: File[],
+): Promise<MultiQCUniformityCheckResult> {
+  const fd = new FormData();
+  for (const file of files) fd.append('files', file, file.name);
+  const headers = authHeaders();
+  delete headers['Content-Type'];
+  const res = await fetch(`${API_BASE}/datacollections/multiqc_uniformity_check`, {
+    method: 'POST',
+    headers,
+    body: fd,
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'MultiQC uniformity check failed');
+  return (await res.json()) as MultiQCUniformityCheckResult;
+}
+
 export async function appendMultiQCFiles(
   dcId: string,
   files: File[],

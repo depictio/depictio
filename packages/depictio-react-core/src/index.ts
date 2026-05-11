@@ -151,6 +151,7 @@ export {
   fetchMultiQCSampleMappings,
   // MultiQC management (multipart uploads)
   createMultiQCDataCollection,
+  checkMultiQCUniformity,
   appendMultiQCFiles,
   replaceMultiQCFiles,
   clearMultiQCDC,
@@ -242,4 +243,5 @@ export type {
   // MultiQC management types
   CreateMultiQCDCInput,
   MultiQCMutationResult,
+  MultiQCUniformityCheckResult,
 } from './api';

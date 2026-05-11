@@ -741,6 +741,62 @@ def _build_cli_config_for_user(current_user):
     )
 
 
+def _check_multiqc_uniformity_from_uploads(
+    decoded_files: list[tuple[bytes, str]],
+) -> dict:
+    """Dry-run uniformity check: extract metadata from each parquet and validate.
+
+    Mirrors the validation half of :func:`_create_multiqc_dc_from_uploads` but
+    does **no** mongo writes and **no** S3 uploads. Lets the modal preview
+    `Check now` without creating (and rolling back) a DC. Raises the same
+    ``HTTPException(422, code="multiqc_report_mismatch")`` on failure so the
+    React parser handles it uniformly with the create path.
+    """
+    if not decoded_files:
+        raise HTTPException(status_code=400, detail="No files uploaded.")
+
+    from depictio.api.v1.endpoints.multiqc_endpoints.uniformity import (
+        validate_multiqc_reports_uniform,
+    )
+    from depictio.cli.cli.utils.multiqc_processor import extract_multiqc_metadata
+
+    temp_dir = tempfile.mkdtemp(prefix="depictio_multiqc_check_")
+    try:
+        folder_assignments, skipped_names = _save_multiqc_uploads_to_temp_dir(
+            decoded_files, temp_dir
+        )
+
+        # Build report-like dicts the validator can normalize. Each report's
+        # metadata is what ``extract_multiqc_metadata`` returns (modules / plots
+        # / samples / multiqc_version). We give each a ``report_name`` so
+        # mismatch payloads can reference the folder.
+        reports: list[dict[str, Any]] = []
+        for folder, _orig in folder_assignments:
+            parquet_path = os.path.join(temp_dir, folder, "multiqc_data", "multiqc.parquet")
+            metadata = extract_multiqc_metadata(parquet_path)
+            reports.append(
+                {
+                    "report_name": folder,
+                    "multiqc_version": metadata.get("multiqc_version"),
+                    "metadata": metadata,
+                }
+            )
+
+        validate_multiqc_reports_uniform(reports)
+
+        return {
+            "success": True,
+            "message": (
+                f"Uniformity check passed across {len(reports)} report(s)."
+                + (f" Skipped {len(skipped_names)} non-multiqc file(s)." if skipped_names else "")
+            ),
+            "report_count": len(reports),
+            "skipped_count": len(skipped_names),
+        }
+    finally:
+        shutil.rmtree(temp_dir, ignore_errors=True)
+
+
 def _create_multiqc_dc_from_uploads(
     *,
     project_id: str,

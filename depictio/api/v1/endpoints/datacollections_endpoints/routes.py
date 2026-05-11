@@ -7,6 +7,7 @@ from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.db import db, projects_collection
 from depictio.api.v1.endpoints.datacollections_endpoints.utils import (
+    _check_multiqc_uniformity_from_uploads,
     _create_dc_from_upload,
     _create_multiqc_dc_from_uploads,
     _delete_data_collection_by_id,
@@ -227,6 +228,36 @@ async def create_data_collection_from_upload(
         filename=file.filename or "upload.dat",
         current_user=current_user,
     )
+
+
+@datacollections_endpoint_router.post("/multiqc_uniformity_check")
+async def multiqc_uniformity_check(
+    files: list[UploadFile] = File(...),
+    current_user=Depends(get_user_or_anonymous),
+):
+    """Dry-run MultiQC uniformity check (no DC created, no S3 writes).
+
+    Lets the React Create DC modal preview the same checks the create flow
+    runs (modules, plots, version, samples) before the user commits to Create.
+    """
+    if not files:
+        raise HTTPException(status_code=400, detail="No files uploaded.")
+
+    decoded_files: list[tuple[bytes, str]] = []
+    running_total = 0
+    for upload in files:
+        body = await upload.read()
+        running_total += len(body)
+        if running_total > 500 * 1024 * 1024:
+            raise HTTPException(
+                status_code=413,
+                detail=(
+                    f"Total upload size {running_total / (1024 * 1024):.1f}MB exceeds 500MB limit."
+                ),
+            )
+        decoded_files.append((body, upload.filename or "upload.parquet"))
+
+    return await asyncio.to_thread(_check_multiqc_uniformity_from_uploads, decoded_files)
 
 
 @datacollections_endpoint_router.post("/create_multiqc_from_upload")

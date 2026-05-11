@@ -45,6 +45,7 @@ import {
   deleteDataCollection,
   createDataCollectionFromUpload,
   createMultiQCDataCollection,
+  checkMultiQCUniformity,
 } from 'depictio-react-core';
 import type {
   ProjectListEntry,
@@ -684,9 +685,24 @@ const MultiQCMismatchDetails: React.FC<{ mismatch: MultiQCMismatch }> = ({
 const MultiQCUniformityChecklist: React.FC<{
   fileCount: number;
   submitting: boolean;
+  validating: boolean;
+  lastCheckPassed: boolean;
   mismatch: MultiQCMismatch | null;
-}> = ({ fileCount, submitting, mismatch }) => {
+  onCheck: () => void;
+}> = ({ fileCount, submitting, validating, lastCheckPassed, mismatch, onCheck }) => {
   const hasMultiple = fileCount >= 2;
+  const busy = submitting || validating;
+  const statusText = !hasMultiple
+    ? 'activated with 2+ reports'
+    : submitting
+      ? 'running on Create…'
+      : validating
+        ? 'checking…'
+        : mismatch
+          ? 'failed'
+          : lastCheckPassed
+            ? 'all uniform'
+            : 'not checked yet';
   return (
     <Paper withBorder p="sm" radius="sm">
       <Group justify="space-between" mb={6} wrap="nowrap">
@@ -700,29 +716,44 @@ const MultiQCUniformityChecklist: React.FC<{
             Uniformity checks
           </Text>
         </Group>
-        <Text size="xs" c="dimmed">
-          {hasMultiple
-            ? submitting
-              ? 'running…'
-              : 'will run on Create'
-            : 'activated with 2+ reports'}
-        </Text>
+        <Group gap={8} wrap="nowrap">
+          <Text size="xs" c="dimmed">
+            {statusText}
+          </Text>
+          <Button
+            size="compact-xs"
+            variant="light"
+            color="teal"
+            onClick={onCheck}
+            disabled={!hasMultiple || busy}
+            loading={validating}
+            leftSection={<Icon icon="mdi:check-decagram-outline" width={14} />}
+          >
+            Check now
+          </Button>
+        </Group>
       </Group>
       <Stack gap={4}>
         {MULTIQC_CHECKS.map((c) => {
+          // 1) red X if this row is the failing kind in mismatch
+          // 2) animated dots while validating or submitting
+          // 3) green check if the last check passed (and no mismatch since)
+          // 4) gray pending dot otherwise (never checked, files just staged)
           const failed = mismatch?.kind === c.kind;
           const iconName = failed
             ? 'mdi:close-circle'
-            : submitting && hasMultiple
+            : busy && hasMultiple
               ? 'mdi:dots-horizontal-circle-outline'
-              : hasMultiple
-                ? 'mdi:check-circle-outline'
+              : lastCheckPassed && hasMultiple
+                ? 'mdi:check-circle'
                 : 'mdi:circle-outline';
           const iconColor = failed
             ? 'var(--mantine-color-red-6)'
-            : hasMultiple
+            : busy && hasMultiple
               ? 'var(--mantine-color-teal-6)'
-              : 'var(--mantine-color-gray-5)';
+              : lastCheckPassed && hasMultiple
+                ? 'var(--mantine-color-teal-6)'
+                : 'var(--mantine-color-gray-5)';
           return (
             <Stack gap={2} key={c.kind}>
               <Group gap="xs" wrap="nowrap" align="flex-start">
@@ -776,6 +807,8 @@ const CreateDataCollectionModal: React.FC<{
   const [compression, setCompression] = useState<string>('none');
   const [hasHeader, setHasHeader] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [validating, setValidating] = useState(false);
+  const [lastCheckPassed, setLastCheckPassed] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [mismatch, setMismatch] = useState<MultiQCMismatch | null>(null);
 
@@ -839,10 +872,11 @@ const CreateDataCollectionModal: React.FC<{
     }
   }, [file, name]);
 
-  // Clear any prior uniformity mismatch when the user changes the dropped
-  // file set — the previous failure refers to a different set of reports.
+  // Clear any prior uniformity mismatch (and stale pass state) when the user
+  // changes the dropped file set — both refer to a different set of reports.
   useEffect(() => {
     setMismatch(null);
+    setLastCheckPassed(false);
   }, [multiqcDropzone.files, dcType]);
 
   // Auto-fill name when the user drops MultiQC files, so the Create button
@@ -913,6 +947,29 @@ const CreateDataCollectionModal: React.FC<{
       </Modal>
     );
   }
+
+  const handleCheckUniformity = async () => {
+    if (multiqcDropzone.files.length < 2) return;
+    setValidating(true);
+    setError(null);
+    setMismatch(null);
+    setLastCheckPassed(false);
+    try {
+      await checkMultiQCUniformity(multiqcDropzone.files);
+      setLastCheckPassed(true);
+    } catch (err) {
+      const raw = (err as Error).message || 'Uniformity check failed.';
+      const parsed = tryParseMultiQCMismatch(raw);
+      if (parsed) {
+        setMismatch(parsed);
+        setError(parsed.summary);
+      } else {
+        setError(raw);
+      }
+    } finally {
+      setValidating(false);
+    }
+  };
 
   const handleSubmit = async () => {
     if (!projectId) {
@@ -1213,7 +1270,10 @@ const CreateDataCollectionModal: React.FC<{
               <MultiQCUniformityChecklist
                 fileCount={multiqcDropzone.files.length}
                 submitting={submitting}
+                validating={validating}
+                lastCheckPassed={lastCheckPassed}
                 mismatch={mismatch}
+                onCheck={handleCheckUniformity}
               />
             )}
             </Stack>
