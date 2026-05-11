@@ -816,6 +816,28 @@ def _create_multiqc_dc_from_uploads(
                     detail=f"MultiQC processing failed: "
                     f"{(process_result or {}).get('message', 'unknown error')}",
                 )
+
+            # Same uniformity check the replace/append flows run — without it,
+            # the processor's union-merge silently produces half-populated
+            # figures when modules / plots / versions disagree across reports.
+            from depictio.api.v1.endpoints.multiqc_endpoints.uniformity import (
+                validate_multiqc_reports_uniform,
+            )
+            from depictio.api.v1.endpoints.multiqc_endpoints.utils import (
+                _fetch_dc_reports_raw,
+            )
+
+            new_reports = _fetch_dc_reports_raw(str(data_collection.id))
+            logger.info(
+                f"MultiQC create: running uniformity checks on {len(new_reports)} report(s) "
+                f"(DC '{name.strip()}')"
+            )
+            validate_multiqc_reports_uniform(new_reports)
+            if len(new_reports) > 1:
+                logger.info(
+                    f"MultiQC create: uniformity checks passed — modules, plots, "
+                    f"version, samples consistent across {len(new_reports)} reports"
+                )
         except Exception:
             projects_collection.update_one(
                 {"_id": project_oid},
