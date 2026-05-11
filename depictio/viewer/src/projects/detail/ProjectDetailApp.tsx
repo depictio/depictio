@@ -208,10 +208,30 @@ function flattenDataCollections(
   return workflows.flatMap((wf) => wf.data_collections ?? []);
 }
 
-/** Best-effort column extraction matching the Dash version's priority:
- *  config.columns > config.dc_specific_properties.columns_description (keys)
+/** Best-effort column extraction matching the Dash version's priority
+ *  (depictio/dash/components/depictio_cytoscape_joins.py:948-989):
+ *  last_aggregation.aggregation_columns_specs > config.columns
+ *  > config.dc_specific_properties.columns_description (keys)
  *  > delta_table_schema (keys or field names). Falls back to []. */
 function extractColumns(dc: DataCollectionShape): string[] {
+  // Priority 1: aggregation_columns_specs from the latest aggregation entry.
+  // For DCs ingested through the React table-create / append flow this is
+  // the only populated source — without it the cytoscape table-DC node
+  // renders an empty box.
+  const lastAggRaw = dc.last_aggregation;
+  const lastAgg = Array.isArray(lastAggRaw)
+    ? lastAggRaw[lastAggRaw.length - 1]
+    : lastAggRaw;
+  const specs = (lastAgg as
+    | { aggregation_columns_specs?: Array<{ name?: unknown }> }
+    | undefined)?.aggregation_columns_specs;
+  if (Array.isArray(specs) && specs.length > 0) {
+    const names = specs
+      .map((s) => (typeof s?.name === 'string' ? s.name : null))
+      .filter((n): n is string => !!n);
+    if (names.length > 0) return names;
+  }
+
   const config = (dc.config ?? {}) as Record<string, unknown>;
   const direct = config.columns;
   if (Array.isArray(direct)) return direct.map(String);
@@ -1892,11 +1912,7 @@ const DataCollectionsManagerSection: React.FC<{
                 onClick={() => onSelect(isSelected ? null : id)}
                 onRename={() => onRename(dc)}
                 onDelete={() => onDelete(dc)}
-                onManage={
-                  onManage && dc.config?.type === 'multiqc'
-                    ? () => onManage(dc)
-                    : undefined
-                }
+                onManage={onManage ? () => onManage(dc) : undefined}
               />
             );
           })}
@@ -1956,7 +1972,7 @@ const DataCollectionRow: React.FC<{
   onClick: () => void;
   onRename: () => void;
   onDelete: () => void;
-  /** Set for MultiQC DCs only — opens the Manage Data modal. */
+  /** Set for both MultiQC and Table DCs — opens the unified Manage Data modal. */
   onManage?: () => void;
 }> = ({ dc, selected, canMutate, onClick, onRename, onDelete, onManage }) => {
   const type = (dc.config?.type as string | undefined) || 'unknown';
@@ -2022,7 +2038,7 @@ const DataCollectionRow: React.FC<{
           </Text>
         </Group>
         <Group gap={4}>
-          {onManage ? (
+          {onManage && (
             <ActionIcon
               variant="subtle"
               color="teal"
@@ -2034,17 +2050,6 @@ const DataCollectionRow: React.FC<{
               }
             >
               <Icon icon="mdi:database-cog-outline" width={16} />
-            </ActionIcon>
-          ) : (
-            <ActionIcon
-              variant="subtle"
-              color="gray"
-              size="sm"
-              disabled
-              title="Manage available for MultiQC DCs only"
-              onClick={guard(() => undefined)}
-            >
-              <Icon icon="mdi:database-arrow-up-outline" width={16} />
             </ActionIcon>
           )}
           <ActionIcon
@@ -2256,7 +2261,7 @@ const DataCollectionViewer: React.FC<{
               />
               <Text fw={600}>Data Preview</Text>
             </Group>
-            <DataPreviewPanel dcId={dcId} />
+            <DataPreviewPanel key={dcId} dcId={dcId} />
           </Card>
         )}
 

@@ -2558,3 +2558,51 @@ export async function clearMultiQCDC(dcId: string, deleteS3 = true): Promise<voi
   if (!res.ok) await throwHttpDetailError(res, 'Failed to clear MultiQC DC');
 }
 
+// =============================================================================
+// Table DC manage helpers — append/replace/clear, mirroring the MultiQC ones
+// against /datacollections/{dc_id}/append|replace|data
+// =============================================================================
+
+export interface TableMutationResult {
+  success: boolean;
+  message?: string;
+  data_collection_id: string;
+  rows_total?: number;
+  rows_added?: number;
+  aggregation_version?: number;
+}
+
+async function postTableUpload(url: string, files: File[]): Promise<TableMutationResult> {
+  const fd = new FormData();
+  for (const file of files) fd.append('files', file, file.name);
+
+  const headers = authHeaders();
+  delete headers['Content-Type'];
+
+  const res = await fetch(url, { method: 'POST', headers, body: fd });
+  if (!res.ok) await throwHttpDetailError(res, 'Table upload failed');
+  return (await res.json()) as TableMutationResult;
+}
+
+export async function appendTableFiles(
+  dcId: string,
+  files: File[],
+): Promise<TableMutationResult> {
+  return postTableUpload(`${API_BASE}/datacollections/${dcId}/append`, files);
+}
+
+export async function replaceTableFiles(
+  dcId: string,
+  files: File[],
+): Promise<TableMutationResult> {
+  return postTableUpload(`${API_BASE}/datacollections/${dcId}/replace`, files);
+}
+
+/** Wipe every row for a Table DC while keeping the DC definition. */
+export async function clearTableDC(dcId: string): Promise<TableMutationResult> {
+  const res = await authFetch(`${API_BASE}/datacollections/${dcId}/data`, {
+    method: 'DELETE',
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to clear Table DC');
+  return (await res.json()) as TableMutationResult;
+}

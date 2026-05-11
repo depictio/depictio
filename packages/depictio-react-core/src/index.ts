@@ -155,7 +155,12 @@ export {
   appendMultiQCFiles,
   replaceMultiQCFiles,
   clearMultiQCDC,
+  // Table DC management (multipart uploads)
+  appendTableFiles,
+  replaceTableFiles,
+  clearTableDC,
 } from './api';
+export type { TableMutationResult } from './api';
 // Selection-as-filter helpers (Plotly/AG Grid → InteractiveFilter)
 export {
   extractScatterSelection,
