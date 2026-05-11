@@ -6,6 +6,8 @@
 export { default as AIAnalyzePanel } from './components/AIAnalyzePanel';
 export { default as AIKeySection } from './components/AIKeySection';
 export { default as ActionsPreview } from './components/ActionsPreview';
+export { default as AddWithAIModal } from './components/AddWithAIModal';
+export type { AvailableDataCollection } from './components/AddWithAIModal';
 export { default as AiFillModal } from './components/AiFillModal';
 export { default as ExecutionTrace } from './components/ExecutionTrace';
 

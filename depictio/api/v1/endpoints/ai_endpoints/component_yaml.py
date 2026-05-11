@@ -25,10 +25,11 @@ from depictio.models.models.dashboards import DashboardDataLite
 
 # Keys that only make sense at the dashboard level (not on a single
 # component). Stripped if the LLM accidentally emits them inside a
-# component block.
-_DASHBOARD_LEVEL_KEYS = frozenset(
-    {"title", "subtitle", "dashboard_id", "project_tag", "components"}
-)
+# component block. NOTE: `title` is intentionally NOT in this set —
+# CardLiteComponent / MapLiteComponent and the base lite component
+# all carry their own `title` field, and routes.py reads `parsed.title`
+# for the response's explanation.
+_DASHBOARD_LEVEL_KEYS = frozenset({"subtitle", "dashboard_id", "project_tag", "components"})
 
 
 def _strip_yaml_fences(text: str) -> str:

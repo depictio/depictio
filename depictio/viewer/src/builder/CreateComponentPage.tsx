@@ -21,9 +21,62 @@ import {
 } from '@mantine/core';
 import { Icon } from '@iconify/react';
 import { useBuilderStore } from './store/useBuilderStore';
+import type { ComponentType, FigureMode } from './store/useBuilderStore';
 import StepType from './steps/StepType';
 import StepData from './steps/StepData';
 import StepDesign from './steps/StepDesign';
+
+/** Apply an AI-generated component spec stashed by the editor's
+ *  "Add with AI" flow. Called once on mount (after `init()` has reset
+ *  the store) when sessionStorage holds a pending fill keyed by the
+ *  new component's id.
+ *
+ *  Mirrors `applyAiFill` in `StepDesign.tsx` for the figure-specific
+ *  top-level fields (visuType / dictKwargs / figureMode / codeContent)
+ *  while also setting componentType / wfId / dcId so the stepper can
+ *  jump straight to the Design step. */
+function consumePendingFill(newComponentId: string): boolean {
+  const key = `depictio.ai.pending-fill.${newComponentId}`;
+  let raw: string | null = null;
+  try {
+    raw = sessionStorage.getItem(key);
+  } catch {
+    return false;
+  }
+  if (!raw) return false;
+  try {
+    sessionStorage.removeItem(key);
+  } catch {
+    // best effort
+  }
+  let payload: {
+    componentType?: string;
+    dcId?: string | null;
+    wfId?: string | null;
+    parsed?: Record<string, unknown>;
+  };
+  try {
+    payload = JSON.parse(raw);
+  } catch {
+    return false;
+  }
+  const parsed = payload.parsed ?? {};
+  const ct = payload.componentType as ComponentType | undefined;
+  const figureMode: FigureMode =
+    parsed.mode === 'code' ? 'code' : parsed.mode === 'ui' ? 'ui' : 'ui';
+  useBuilderStore.setState((s) => ({
+    componentType: ct ?? s.componentType,
+    wfId: payload.wfId ?? s.wfId,
+    dcId: payload.dcId ?? s.dcId,
+    visuType: (parsed.visu_type as string | undefined) ?? s.visuType,
+    dictKwargs:
+      (parsed.dict_kwargs as Record<string, unknown> | undefined) ?? s.dictKwargs,
+    figureMode,
+    codeContent: (parsed.code_content as string | undefined) ?? s.codeContent,
+    config: { ...s.config, ...parsed },
+  }));
+  return true;
+}
 
 export interface CreateComponentPageProps {
   dashboardId: string;
@@ -44,8 +97,16 @@ const CreateComponentPage: React.FC<CreateComponentPageProps> = ({
 
   useEffect(() => {
     init({ mode: 'create', dashboardId, componentId: newComponentId });
+    // If the editor's "Add with AI" flow stashed a proposal for this
+    // new component id, hydrate the store and jump straight to Design.
+    // The user lands on a pre-filled form with the live preview already
+    // rendering, ready to review / tweak / save.
+    if (consumePendingFill(newComponentId)) {
+      setStep(2);
+    }
     return () => reset();
-  }, [dashboardId, newComponentId, init, reset]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dashboardId, newComponentId]);
 
   // Step 0 → 1 needs componentType. Step 1 → 2 needs wfId+dcId. Step 2 always
   // allowed once reached.

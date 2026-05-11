@@ -1,5 +1,5 @@
 import React from 'react';
-import { ActionIcon, Box, Button, Group, Loader, Title, useMantineColorScheme } from '@mantine/core';
+import { ActionIcon, Box, Button, Group, Loader, Menu, Title, useMantineColorScheme } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
 import type { DashboardData, DashboardSummary } from 'depictio-react-core';
@@ -55,6 +55,10 @@ interface HeaderProps {
   mode?: 'view' | 'edit';
   /** Edit-mode only: invoked when the user clicks "Add component". */
   onAddComponent?: () => void;
+  /** Edit-mode only: invoked when the user picks "With AI" from the
+   *  Add-component dropdown. When omitted, the dropdown isn't shown
+   *  (button reverts to a plain "Add component"). */
+  onAddWithAI?: () => void;
   /** Edit-mode only: invoked when the user clicks "Save". Should force-flush any pending debounced save. */
   onSave?: () => void;
   /** Optional element rendered next to the action group (e.g. RealtimeIndicator). */
@@ -82,6 +86,7 @@ const Header: React.FC<HeaderProps> = ({
   cardsLoading = false,
   mode = 'view',
   onAddComponent,
+  onAddWithAI,
   onSave,
   rightExtras,
 }) => {
@@ -205,7 +210,45 @@ const Header: React.FC<HeaderProps> = ({
       {/* Right region — colors mirror depictio/dash/layouts/header.py */}
       <Group gap={8} wrap="nowrap" style={{ flexShrink: 0 }}>
         <PoweredBy withRightBorder />
-        {mode === 'edit' && onAddComponent && (
+        {mode === 'edit' && onAddComponent && onAddWithAI && (
+          <Menu shadow="md" position="bottom-end" withinPortal>
+            <Menu.Target>
+              <Button
+                leftSection={<Icon icon="mdi:plus-circle" width={14} />}
+                rightSection={<Icon icon="mdi:chevron-down" width={14} />}
+                color="green"
+                variant="filled"
+                size="xs"
+                disabled={!dashboardId}
+                data-tour-id="add-component-button"
+              >
+                Add component
+              </Button>
+            </Menu.Target>
+            <Menu.Dropdown>
+              <Menu.Item
+                leftSection={<Icon icon="mdi:plus-circle" width={14} />}
+                onClick={onAddComponent}
+              >
+                Manually
+              </Menu.Item>
+              <Menu.Item
+                leftSection={
+                  <Icon
+                    icon="material-symbols:auto-fix"
+                    width={14}
+                    color="var(--mantine-color-violet-6)"
+                  />
+                }
+                onClick={onAddWithAI}
+                data-tour-id="add-with-ai-button"
+              >
+                With AI…
+              </Menu.Item>
+            </Menu.Dropdown>
+          </Menu>
+        )}
+        {mode === 'edit' && onAddComponent && !onAddWithAI && (
           <Button
             leftSection={<Icon icon="mdi:plus-circle" width={14} />}
             color="green"

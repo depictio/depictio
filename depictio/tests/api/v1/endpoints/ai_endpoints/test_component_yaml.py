@@ -174,6 +174,24 @@ def test_validate_single_extracts_from_full_envelope() -> None:
     assert result["aggregation"] == "count"
 
 
+def test_validate_single_preserves_component_title() -> None:
+    """Regression: card / map / base lite components have a `title`
+    field, which must survive the dashboard-key strip. Routes.py reads
+    `parsed.title` for the response's explanation, and the user loses
+    the AI-suggested name if we drop it."""
+    yaml_text = (
+        "component_type: card\n"
+        "workflow_tag: wf\n"
+        "data_collection_tag: dc\n"
+        "aggregation: count\n"
+        "column_name: x\n"
+        "column_type: object\n"
+        "title: Sample summary\n"
+    )
+    result = component_yaml.validate_single(yaml_text)
+    assert result["title"] == "Sample summary"
+
+
 # ---------------------------------------------------------------------------
 # dump_single — drops runtime-only fields, keeps user-authored ones
 # ---------------------------------------------------------------------------

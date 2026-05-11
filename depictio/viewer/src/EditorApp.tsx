@@ -69,8 +69,8 @@ import type {
   StoredMetadata,
   RealtimeMode,
 } from 'depictio-react-core';
-import { AIAnalyzePanel } from 'depictio-react-ai';
-import type { DashboardActions } from 'depictio-react-ai';
+import { AIAnalyzePanel, AddWithAIModal } from 'depictio-react-ai';
+import type { AvailableDataCollection, DashboardActions } from 'depictio-react-ai';
 
 import LeftFilterPanel from './components/LeftFilterPanel';
 import GridItemEditOverlay from './components/GridItemEditOverlay';
@@ -162,6 +162,7 @@ const EditorApp: React.FC = () => {
   // Persist across tab/page navigations (matches App.tsx + Dash app).
   const [desktopOpened, toggleDesktop] = useSidebarOpen();
   const [settingsOpened, { open: openSettings, close: closeSettings }] = useDisclosure(false);
+  const [addAIOpened, { open: openAddAI, close: closeAddAI }] = useDisclosure(false);
   const auth = useAuthMode();
   const isDemoMode = auth.status?.is_demo_mode === true;
   // Tab modal state — `mode` decides between create vs edit. `target` is the
@@ -669,6 +670,76 @@ const EditorApp: React.FC = () => {
     );
   }, [dashboardId]);
 
+  /** Unique DCs already referenced anywhere on this dashboard. Surface
+   *  these to the AI modal so the user can pick which DC to author
+   *  against — for v1 we only support DCs already attached (lifting that
+   *  would require a separate project-DC fetch). */
+  const availableDcs = useMemo<AvailableDataCollection[]>(() => {
+    const seen = new Set<string>();
+    const out: AvailableDataCollection[] = [];
+    for (const m of dashboard?.stored_metadata || []) {
+      const meta = m as {
+        dc_id?: unknown;
+        wf_id?: unknown;
+        data_collection_tag?: string;
+        workflow_tag?: string;
+        metadata?: {
+          dc_id?: unknown;
+          wf_id?: unknown;
+          data_collection_tag?: string;
+          workflow_tag?: string;
+        };
+      };
+      const dcId = oidString(meta.dc_id ?? meta.metadata?.dc_id);
+      if (!dcId || seen.has(dcId)) continue;
+      seen.add(dcId);
+      out.push({
+        dcId,
+        dcTag: meta.data_collection_tag ?? meta.metadata?.data_collection_tag ?? dcId,
+        wfId: oidString(meta.wf_id ?? meta.metadata?.wf_id) ?? undefined,
+        wfTag: meta.workflow_tag ?? meta.metadata?.workflow_tag,
+      });
+    }
+    return out;
+  }, [dashboard?.stored_metadata]);
+
+  /** Stash the AI proposal in sessionStorage under a key tied to the new
+   *  component id, then navigate to the stepper page. CreateComponentPage
+   *  picks it up on mount, hydrates the builder store, and jumps to the
+   *  Design step. Keyed-by-id so two parallel tabs don't collide. */
+  const handleAddWithAI = useCallback(
+    (
+      parsed: Record<string, unknown>,
+      componentType: string,
+      dc: AvailableDataCollection,
+    ) => {
+      if (!dashboardId) return;
+      const newId =
+        typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+          ? crypto.randomUUID()
+          : fallbackUuid();
+      try {
+        sessionStorage.setItem(
+          `depictio.ai.pending-fill.${newId}`,
+          JSON.stringify({
+            componentType,
+            dcId: dc.dcId,
+            wfId: dc.wfId ?? null,
+            parsed,
+          }),
+        );
+      } catch {
+        // sessionStorage can throw under quota / privacy modes — fall
+        // through to navigate anyway; the page will show the empty stepper.
+      }
+      closeAddAI();
+      window.location.assign(
+        `/dashboard-beta-edit/${dashboardId}/component/add/${newId}`,
+      );
+    },
+    [dashboardId, closeAddAI],
+  );
+
   /** Refetch the global dashboard list so tab edits show up in the sidebar
    *  without a full page reload. */
   const refreshTabList = useCallback(async () => {
@@ -944,6 +1015,7 @@ const EditorApp: React.FC = () => {
           cardsLoading={cardsLoading}
           mode="edit"
           onAddComponent={handleAddComponent}
+          onAddWithAI={openAddAI}
           onSave={handleForceSave}
           rightExtras={
             <>
@@ -1084,6 +1156,16 @@ const EditorApp: React.FC = () => {
         onSubmit={handleTabModalSubmit}
         submitting={tabModalState.submitting}
       />
+
+      {dashboardId && (
+        <AddWithAIModal
+          opened={addAIOpened}
+          onClose={closeAddAI}
+          dashboardId={dashboardId}
+          availableDataCollections={availableDcs}
+          onApply={handleAddWithAI}
+        />
+      )}
     </AppShell>
     </>
   );

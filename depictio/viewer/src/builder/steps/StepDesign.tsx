@@ -32,8 +32,15 @@ const StepDesign: React.FC = () => {
       visuType: (parsed.visu_type as string) ?? s.visuType,
       dictKwargs:
         (parsed.dict_kwargs as Record<string, unknown>) ?? s.dictKwargs,
+      // If the AI emitted `mode` (only figures do), honor it. Otherwise
+      // preserve the existing store value — non-figure payloads must not
+      // silently flip the figure builder's mode.
       figureMode:
-        ((parsed.mode as FigureMode) ?? s.figureMode) === 'code' ? 'code' : 'ui',
+        parsed.mode === 'code'
+          ? 'code'
+          : parsed.mode === 'ui'
+            ? 'ui'
+            : s.figureMode,
       codeContent: (parsed.code_content as string) ?? s.codeContent,
       // Each per-type builder reads what it needs from `config`. Merge so
       // tag / dc / wf / index already in the store survive.
