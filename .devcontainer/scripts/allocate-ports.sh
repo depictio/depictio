@@ -80,6 +80,7 @@ FASTAPI_PORT=$((8000 + PORT_OFFSET))
 DASH_PORT=$((5000 + PORT_OFFSET))
 MINIO_PORT=$((9000 + PORT_OFFSET))
 MINIO_CONSOLE_PORT=$((9001 + PORT_OFFSET))
+VIEWER_DEV_PORT=$((5200 + PORT_OFFSET))
 
 # Generate instance ID for display
 INSTANCE_ID="${SANITIZED_BRANCH}-${PORT_OFFSET}"
@@ -97,6 +98,7 @@ echo "   FastAPI:      ${FASTAPI_PORT}"
 echo "   Dash:         ${DASH_PORT}"
 echo "   MinIO API:    ${MINIO_PORT}"
 echo "   MinIO Console: ${MINIO_CONSOLE_PORT}"
+echo "   Vite (viewer-dev): ${VIEWER_DEV_PORT}"
 echo ""
 echo "⚙️  Development Settings:"
 echo "   Dev Mode:     ✅ enabled"
@@ -128,6 +130,7 @@ FASTAPI_PORT=${FASTAPI_PORT}
 DASH_PORT=${DASH_PORT}
 MINIO_PORT=${MINIO_PORT}
 MINIO_CONSOLE_PORT=${MINIO_CONSOLE_PORT}
+VIEWER_DEV_PORT=${VIEWER_DEV_PORT}
 
 # Internal service URLs (for container-to-container communication)
 DEPICTIO_MONGODB_PORT=${MONGO_PORT}
@@ -199,6 +202,9 @@ services:
     environment:
       - DEPICTIO_DEV_MODE=true
       - DEPICTIO_MONGODB_WIPE=${MONGODB_WIPE}
+
+  depictio-viewer-dev:
+    container_name: ${COMPOSE_PROJECT_NAME}-depictio-viewer-dev
 EOF
 
 echo "✅ Generated docker-compose.override.yaml for multi-instance setup"
@@ -215,4 +221,5 @@ export FASTAPI_PORT
 export DASH_PORT
 export MINIO_PORT
 export MINIO_CONSOLE_PORT
+export VIEWER_DEV_PORT
 export DATA_DIR="data/${COMPOSE_PROJECT_NAME}"
