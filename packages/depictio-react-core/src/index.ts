@@ -36,6 +36,8 @@ export { default as InteractiveGroupCard } from './components/InteractiveGroupCa
 export { default as TopPanel } from './components/TopPanel';
 export { groupInteractiveComponents } from './utils/groupInteractive';
 export type { InteractiveGroup } from './utils/groupInteractive';
+export { readMultiqcSelection } from './utils/multiqcSelection';
+export type { MultiqcSelection } from './utils/multiqcSelection';
 
 // MultiQC sub-renderers
 export { default as MultiQCFigure } from './components/multiqc/MultiQCFigure';

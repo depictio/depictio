@@ -594,13 +594,31 @@ export async function fetchJBrowseSession(
   return res.json();
 }
 
-/** Server-rendered MultiQC Plotly figure (wraps create_multiqc_plot). */
+/** Backend signals "figure cache is being warmed" via HTTP 202. The viewer
+ *  should show a skeleton + progress and poll until the figure is ready. */
+export interface MultiQCPreparingResponse {
+  status: 'preparing';
+  dc_id: string;
+  component_id: string;
+  message: string;
+}
+
+export type MultiQCRenderResult =
+  | (FigureResponse & { status: 'ready' })
+  | MultiQCPreparingResponse;
+
+/** Server-rendered MultiQC Plotly figure (wraps create_multiqc_plot).
+ *
+ *  Returns a discriminated union: ``status: 'ready'`` when the figure is
+ *  available, ``status: 'preparing'`` when the backend is rebuilding caches
+ *  (HTTP 202). Callers should re-issue the request after a short delay on
+ *  ``preparing``. */
 export async function renderMultiQC(
   dashboardId: string,
   componentId: string,
   filters: InteractiveFilter[],
   theme: 'light' | 'dark' = 'light',
-): Promise<FigureResponse> {
+): Promise<MultiQCRenderResult> {
   const res = await fetch(
     `${API_BASE}/dashboards/render_multiqc/${dashboardId}/${componentId}`,
     {
@@ -609,8 +627,13 @@ export async function renderMultiQC(
       body: JSON.stringify({ filters, theme }),
     },
   );
-  if (!res.ok) throw new Error(`Failed to render MultiQC: ${res.status}`);
-  return res.json();
+  if (res.status === 202) {
+    const body = (await res.json()) as MultiQCPreparingResponse;
+    return { ...body, status: 'preparing' };
+  }
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to render MultiQC');
+  const body = (await res.json()) as FigureResponse;
+  return { ...body, status: 'ready' };
 }
 
 // ---- MultiQC General Statistics ------------------------------------------

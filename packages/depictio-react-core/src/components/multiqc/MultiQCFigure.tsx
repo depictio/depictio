@@ -4,6 +4,8 @@ import Plot from 'react-plotly.js';
 
 import { renderMultiQC, InteractiveFilter, StoredMetadata } from '../../api';
 import { useInView } from '../../hooks/useInView';
+import { readMultiqcSelection } from '../../utils/multiqcSelection';
+import MultiQCGeneralStats from './MultiQCGeneralStats';
 
 interface MultiQCFigureProps {
   dashboardId: string;
@@ -28,7 +30,29 @@ const PLOT_STYLE = { width: '100%', height: '100%' } as const;
  * Mirrors FigureRenderer; the MultiQC overlay logo is a small absolutely
  * positioned image in the top-right corner (matches the Dash viewer chrome).
  */
-const MultiQCFigure: React.FC<MultiQCFigureProps> = ({
+// Defensive routing: when a General Stats component lands here (e.g. a stale
+// HMR bundle of the parent dispatcher routes it as a regular figure), calling
+// renderMultiQC 500s with `Module "general_stats" is not found`. Detect at
+// the wrapper layer so the heavy hooks/effects of MultiQCFigureBody never
+// mount in that case. Reads both `selected_*` and the legacy `multiqc_*`
+// keys so pre-rename dashboards work without a re-save.
+const MultiQCFigure: React.FC<MultiQCFigureProps> = (props) => {
+  if (readMultiqcSelection(props.metadata as Record<string, unknown>).isGeneralStats) {
+    return <MultiQCGeneralStats {...props} />;
+  }
+  return <MultiQCFigureBody {...props} />;
+};
+
+// Backend returns 202 when the figure cache is being prebuilt. The viewer
+// polls every PREPARE_POLL_INTERVAL_MS until the figure is ready or
+// PREPARE_POLL_MAX_MS elapses (then gives up with an error). 1.5s feels
+// responsive without hammering the backend. 5 min covers worst-case
+// rebuilds (large reports, many modules, slow workers) with margin — if
+// it actually trips, something upstream is wrong and we want a clear error.
+const PREPARE_POLL_INTERVAL_MS = 1500;
+const PREPARE_POLL_MAX_MS = 300_000;
+
+const MultiQCFigureBody: React.FC<MultiQCFigureProps> = ({
   dashboardId,
   metadata,
   filters,
@@ -38,6 +62,7 @@ const MultiQCFigure: React.FC<MultiQCFigureProps> = ({
     { data?: unknown[]; layout?: Record<string, unknown> } | null
   >(null);
   const [loading, setLoading] = useState(true);
+  const [preparing, setPreparing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { colorScheme } = useMantineColorScheme();
   const theme: 'light' | 'dark' = colorScheme === 'dark' ? 'dark' : 'light';
@@ -46,22 +71,40 @@ const MultiQCFigure: React.FC<MultiQCFigureProps> = ({
   useEffect(() => {
     if (!inView) return;
     let cancelled = false;
-    setLoading(true);
-    setError(null);
-    renderMultiQC(dashboardId, metadata.index, filters, theme)
-      .then((res) => {
-        if (cancelled) return;
-        setFigure(res.figure);
-      })
-      .catch((err) => {
-        if (cancelled) return;
-        setError(err?.message || String(err));
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+    const startedAt = Date.now();
+
+    const attempt = (): void => {
+      setLoading(true);
+      setError(null);
+      renderMultiQC(dashboardId, metadata.index, filters, theme)
+        .then((res) => {
+          if (cancelled) return;
+          if (res.status === 'preparing') {
+            setPreparing(true);
+            if (Date.now() - startedAt >= PREPARE_POLL_MAX_MS) {
+              setError('MultiQC figures took too long to build.');
+              setLoading(false);
+              return;
+            }
+            timeoutId = setTimeout(attempt, PREPARE_POLL_INTERVAL_MS);
+            return;
+          }
+          setPreparing(false);
+          setFigure(res.figure);
+          setLoading(false);
+        })
+        .catch((err) => {
+          if (cancelled) return;
+          setError(err?.message || String(err));
+          setLoading(false);
+        });
+    };
+
+    attempt();
     return () => {
       cancelled = true;
+      if (timeoutId !== null) clearTimeout(timeoutId);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dashboardId, metadata.index, JSON.stringify(filters), theme, inView, refreshTick]);
@@ -123,7 +166,9 @@ const MultiQCFigure: React.FC<MultiQCFigureProps> = ({
       {(!inView || loading) && (
         <Stack align="center" justify="center" gap="xs" style={{ flex: 1 }}>
           <Loader size="sm" />
-          <Text size="xs" c="dimmed">Rendering MultiQC plot…</Text>
+          <Text size="xs" c="dimmed">
+            {preparing ? 'Preparing MultiQC figures…' : 'Rendering MultiQC plot…'}
+          </Text>
         </Stack>
       )}
       {error && !loading && (

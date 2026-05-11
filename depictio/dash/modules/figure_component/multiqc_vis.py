@@ -24,6 +24,13 @@ from depictio.dash.modules.figure_component.utils import _get_theme_template
 # Global lock to prevent concurrent MultiQC operations (MultiQC global state is not thread-safe)
 _multiqc_lock = threading.RLock()
 
+# Multi-day TTL: explicit `_invalidate_multiqc_caches_for_dc` on append/replace
+# is the source of truth for staleness. The previous 2 h TTL caused silent
+# re-parses every two hours under no real change, which masked the prewarm
+# race: even a warm cache would go cold mid-day. 30 d covers typical project
+# work cycles; entries get rebuilt on demand if they ever do expire.
+MULTIQC_CACHE_TTL_SECONDS = 30 * 24 * 3600
+
 
 def _get_s3_filesystem_config() -> Dict[str, Any]:
     """Get S3 filesystem configuration from settings."""
@@ -195,15 +202,13 @@ def _generate_figure_cache_key(
     dataset_id: Optional[str] = None,
     theme: str = "light",
     filter_sig: Optional[str] = None,
+    dc_id: Optional[str] = None,
 ) -> str:
     """Generate cache key for a rendered figure.
 
-    Invalidation is driven by the cache TTL (7200 s in `create_multiqc_plot`),
-    not by per-file mtime. We removed the os.path.getmtime() probe because it
-    fired N filesystem stats on every request — even on cache hits — and any
-    background S3-cache refresh would change an mtime and cold-evict the
-    figure. `filter_sig`, when provided, distinguishes filtered renders from
-    the unfiltered baseline so that repeated filter combos can hit cache.
+    `dc_id` is embedded literally in the key so a DC-scoped invalidation
+    (`cache.delete_pattern(f"dc={dc_id}")`) can drop every figure variant for
+    that DC after an append/replace/clear, regardless of theme/filter combo.
     """
     sorted_locations = sorted(s3_locations)
     key_parts = [
@@ -216,7 +221,7 @@ def _generate_figure_cache_key(
     ]
     key_str = "::".join(key_parts)
     hash_digest = hashlib.sha256(key_str.encode()).hexdigest()[:16]
-    return f"multiqc:figure:{hash_digest}"
+    return f"multiqc:figure:dc={dc_id or 'none'}:{hash_digest}"
 
 
 # Public alias so callers (e.g. FastAPI endpoints) can layer filter-aware
@@ -290,7 +295,7 @@ def _get_or_parse_multiqc_logs(s3_locations: List[str], use_s3_cache: bool = Tru
             import cloudpickle  # noqa: PLC0415
 
             payload = cloudpickle.dumps(multiqc.report)
-            cache.set(cache_key, {"__cloudpickle__": payload}, ttl=7200)
+            cache.set(cache_key, {"__cloudpickle__": payload}, ttl=MULTIQC_CACHE_TTL_SECONDS)
             cached_via_cloudpickle = True
         except Exception as e:
             logger.info(
@@ -303,12 +308,61 @@ def _get_or_parse_multiqc_logs(s3_locations: List[str], use_s3_cache: bool = Tru
                 cache._memory_cache[cache_key] = {
                     "data": multiqc.report,
                     "cached_at": time.time(),
-                    "ttl": 7200,
+                    "ttl": MULTIQC_CACHE_TTL_SECONDS,
                 }
             except Exception as e:
                 logger.warning(f"Failed to cache report: {e}")
 
     return True
+
+
+def _force_reparse(
+    s3_locations: List[str],
+    use_s3_cache: bool = True,
+    ve: Optional[Exception] = None,
+) -> None:
+    """Drop the cached ``multiqc.report`` for ``s3_locations`` and re-parse
+    from scratch, then write the fresh report back to cache so subsequent
+    requests don't re-trigger the same expensive re-parse.
+
+    Caller MUST hold ``_multiqc_lock``. Used by ``create_multiqc_plot`` when
+    ``multiqc.get_plot`` raises "Module X is not found" against a restored
+    report — the cloudpickle round-trip can land a report with
+    ``report.modules`` silently empty.
+    """
+    import multiqc
+
+    cache = get_cache()
+    state_cache_key = _generate_cache_key(s3_locations)
+    try:
+        cache.delete(state_cache_key)
+    except Exception as del_err:
+        logger.debug(f"cache.delete failed (non-fatal): {del_err}")
+    multiqc.reset()
+    parsed = 0
+    for loc in s3_locations:
+        try:
+            local_file = _get_local_path_for_s3(loc, use_cache=use_s3_cache)
+            multiqc.parse_logs(local_file)
+            parsed += 1
+        except Exception as e:
+            logger.warning(f"Re-parse error for {loc}: {e}")
+    if parsed == 0:
+        raise ValueError("Failed to parse any MultiQC data files") from ve
+    # Persist the freshly parsed report under the same cache key the original
+    # parse used, so the next request lands a hit. Without this, every request
+    # for this DC re-takes the lock and re-parses until the underlying
+    # cloudpickle issue resolves on its own.
+    try:
+        import cloudpickle
+
+        payload = cloudpickle.dumps(multiqc.report)
+        cache.set(state_cache_key, {"__cloudpickle__": payload}, ttl=MULTIQC_CACHE_TTL_SECONDS)
+    except Exception as e:
+        logger.info(
+            f"_force_reparse: cloudpickle persist after retry skipped ({e!r}); "
+            f"in-process state still good"
+        )
 
 
 def create_multiqc_plot(
@@ -318,6 +372,7 @@ def create_multiqc_plot(
     dataset_id: Optional[str] = None,
     use_s3_cache: bool = True,
     theme: str = "light",
+    dc_id: Optional[str] = None,
 ) -> go.Figure:
     """Create a Plotly figure from MultiQC data with figure-level Redis caching.
 
@@ -346,21 +401,59 @@ def create_multiqc_plot(
         except Exception as e:
             logger.warning(f"Pre-download failed for {loc}: {e}")
 
-    fig_cache_key = _generate_figure_cache_key(s3_locations, module, plot, dataset_id, theme)
+    fig_cache_key = _generate_figure_cache_key(
+        s3_locations, module, plot, dataset_id, theme, dc_id=dc_id
+    )
     cached_fig_dict = cache.get(fig_cache_key)
     if cached_fig_dict is not None:
         return go.Figure(cached_fig_dict)
 
-    parse_success = _get_or_parse_multiqc_logs(s3_locations, use_s3_cache=use_s3_cache)
+    # Hold _multiqc_lock across BOTH parse and get_plot so concurrent renders
+    # of different DCs don't trample each other's `multiqc.report` global
+    # state. _get_or_parse_multiqc_logs uses an RLock so the inner acquire is
+    # a no-op recursive lock. Without this, three multiqc components added in
+    # the same dashboard render in parallel: the parse-lock releases, another
+    # thread restores its own cached report, and the first thread's
+    # multiqc.get_plot then sees the wrong report → "Module X is not found".
+    with _multiqc_lock:
+        parse_success = _get_or_parse_multiqc_logs(s3_locations, use_s3_cache=use_s3_cache)
 
-    if not parse_success:
-        raise ValueError("Failed to parse any MultiQC data files")
+        if not parse_success:
+            raise ValueError("Failed to parse any MultiQC data files")
 
-    plot_obj = multiqc.get_plot(module, plot)
-    if not plot_obj or not hasattr(plot_obj, "get_figure"):
-        raise ValueError(f"Failed to get plot object for {module}/{plot}")
+        # Cloudpickle round-trips the parsed `multiqc.report` for cross-worker
+        # reuse, but the restored object can come back without populated
+        # `report.modules` (silent loss of `Module` instances). When that
+        # happens, get_plot raises "Module X is not found" even though the
+        # underlying parquet contains the module. Detect, drop the bad cache
+        # entry, force a fresh parse, and retry once.
+        try:
+            plot_obj = multiqc.get_plot(module, plot)
+        except ValueError as ve:
+            if "is not found" not in str(ve):
+                raise
+            logger.warning(
+                f"create_multiqc_plot: get_plot('{module}','{plot}') failed "
+                f"after parse — invalidating cached multiqc.report and re-parsing"
+            )
+            _force_reparse(s3_locations, use_s3_cache=use_s3_cache, ve=ve)
+            try:
+                plot_obj = multiqc.get_plot(module, plot)
+            except ValueError as retry_err:
+                available: list[str] = []
+                try:
+                    available = multiqc.list_modules()
+                except Exception:
+                    pass
+                raise ValueError(
+                    f"MultiQC module '{module}' not in parsed report after re-parse. "
+                    f"s3_locations={s3_locations}, available_modules={available}"
+                ) from retry_err
 
-    fig = plot_obj.get_figure(dataset_id=dataset_id if dataset_id else 0)
+        if not plot_obj or not hasattr(plot_obj, "get_figure"):
+            raise ValueError(f"Failed to get plot object for {module}/{plot}")
+
+        fig = plot_obj.get_figure(dataset_id=dataset_id if dataset_id else 0)
 
     fig.update_layout(
         title=f"{module.upper()}: {plot}",
@@ -372,7 +465,7 @@ def create_multiqc_plot(
     )
 
     try:
-        cache.set(fig_cache_key, fig.to_dict(), ttl=7200)
+        cache.set(fig_cache_key, fig.to_dict(), ttl=MULTIQC_CACHE_TTL_SECONDS)
     except Exception as e:
         logger.warning(f"Failed to cache figure: {e}")
 

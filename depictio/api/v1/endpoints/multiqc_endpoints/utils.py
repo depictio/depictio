@@ -19,6 +19,87 @@ from depictio.models.models.multiqc_reports import MultiQCReport
 __all__ = ["build_sample_mapping"]
 
 
+def _invalidate_multiqc_caches_for_dc(dc_id: str) -> None:
+    """Drop every cached figure + DataFrame entry for a MultiQC DC.
+
+    Called after a successful append/replace so the next dashboard render
+    rebuilds against the new file set instead of returning the pre-mutation
+    plot. Failures are logged but never propagated — Redis / disk hiccups must
+    not fail the user-facing mutation.
+
+    Phase 2: also wipes the disk-persistent prerender directory and resets the
+    ledger doc to ``pending`` so the next ``build_multiqc_prerender`` run
+    treats this DC as stale.
+    """
+    try:
+        from depictio.api.cache import get_cache
+
+        # Figure cache: keys carry a literal `dc=<id>` segment (see
+        # `_generate_figure_cache_key`), so a substring match drops every
+        # theme/filter/module/plot variant for this DC at once.
+        dropped_figs = get_cache().delete_pattern(f"dc={dc_id}")
+        logger.info(f"MultiQC cache invalidate dc={dc_id}: dropped {dropped_figs} figure key(s)")
+    except Exception as exc:
+        logger.warning(f"Figure cache invalidation failed for dc={dc_id}: {exc}")
+
+    try:
+        from depictio.api.v1.deltatables_utils import invalidate_data_collection_cache
+
+        dropped_dfs = invalidate_data_collection_cache(dc_id)
+        logger.info(f"MultiQC cache invalidate dc={dc_id}: dropped {dropped_dfs} dataframe key(s)")
+    except Exception as exc:
+        logger.warning(f"Dataframe cache invalidation failed for dc={dc_id}: {exc}")
+
+    try:
+        from depictio.api.v1.services import multiqc_prerender_store
+
+        dropped_files = multiqc_prerender_store.delete_dc_dir(str(dc_id))
+        logger.info(
+            f"MultiQC prerender invalidate dc={dc_id}: dropped {dropped_files} on-disk figure(s)"
+        )
+    except Exception as exc:
+        logger.warning(f"Prerender disk invalidation failed for dc={dc_id}: {exc}")
+
+    try:
+        from datetime import datetime
+
+        from depictio.api.v1.db import multiqc_prerender_collection
+
+        multiqc_prerender_collection.update_one(
+            {"dc_id": str(dc_id)},
+            {
+                "$set": {
+                    "status": "pending",
+                    "s3_locations_hash": "",
+                    "figure_count": 0,
+                    "last_error": None,
+                    "updated_at": datetime.now(),
+                }
+            },
+        )
+    except Exception as exc:
+        logger.warning(f"Prerender ledger reset failed for dc={dc_id}: {exc}")
+
+
+def _invalidate_and_prewarm_for_dc(dc_id: str) -> dict:
+    """Drop the DC's caches then enqueue an async disk-persistent rebuild.
+
+    Called from append/replace right before returning success. Phase 2: the
+    rebuild runs in the Celery worker (``build_multiqc_prerender``) so the
+    upload modal no longer blocks 30-75s — disk persistence happens in the
+    background, and the render endpoint serves 202s + then disk reads.
+    """
+    _invalidate_multiqc_caches_for_dc(dc_id)
+    try:
+        from depictio.dash.celery_app import build_multiqc_prerender
+
+        build_multiqc_prerender.delay(str(dc_id))
+        return {"status": "build_enqueued", "dc_id": str(dc_id)}
+    except Exception as exc:
+        logger.warning(f"build_multiqc_prerender enqueue failed for dc={dc_id} (non-fatal): {exc}")
+        return {"status": "enqueue_failed", "dc_id": str(dc_id), "error": str(exc)}
+
+
 async def check_duplicate_multiqc_report(
     data_collection_id: str, original_file_path: str
 ) -> Optional[MultiQCReport]:
@@ -477,6 +558,31 @@ def _load_workflow_and_dc(project_doc: dict, dc_id: str):
     return None, None
 
 
+def _fetch_dc_reports_raw(data_collection_id: str) -> list[dict]:
+    """Pull every MultiQC report doc for a DC as raw mongo dicts.
+
+    Used by the uniformity check post-process. Returns the doc as stored —
+    callers normalize the nested metadata.
+    """
+    return list(multiqc_collection.find({"data_collection_id": str(data_collection_id)}))
+
+
+def _rollback_reports(report_ids: list[str], *, context: str) -> int:
+    """Best-effort delete of newly-inserted reports after a failed uniformity
+    check. Returns the count successfully removed. Per-id failures are logged
+    but not propagated — we're already on the error path; secondary failure
+    shouldn't mask the original 422.
+    """
+    deleted = 0
+    for rid in report_ids:
+        try:
+            multiqc_collection.delete_one({"_id": ObjectId(rid)})
+            deleted += 1
+        except Exception as exc:
+            logger.warning(f"{context}: failed to roll back report {rid}: {exc}")
+    return deleted
+
+
 def _download_parquet_from_s3(s3_location: str, local_path: str) -> None:
     """Download s3://bucket/key to local_path, creating parent dirs.
 
@@ -570,6 +676,26 @@ def _replace_multiqc_dc_uploads(
                 ),
             )
 
+        # Uniformity check: the processor merges multiple reports by union, so
+        # mismatched module/plot sets silently produce half-populated figures.
+        # Validate the newly-ingested reports against each other before we
+        # acknowledge the upload. Old reports were already wiped above, so a
+        # failure here leaves the DC empty — the alternative (process to a
+        # staging area first) is a bigger refactor we can do later if needed.
+        from depictio.api.v1.endpoints.multiqc_endpoints.uniformity import (
+            validate_multiqc_reports_uniform,
+        )
+
+        new_reports = _fetch_dc_reports_raw(data_collection_id)
+        try:
+            validate_multiqc_reports_uniform(new_reports)
+        except HTTPException:
+            rollback_ids = [str(r.get("_id")) for r in new_reports if r.get("_id")]
+            _rollback_reports(rollback_ids, context="replace uniformity rollback")
+            raise
+
+        prewarm_stats = _invalidate_and_prewarm_for_dc(str(dc.id))
+
         return {
             "success": True,
             "message": (
@@ -580,6 +706,7 @@ def _replace_multiqc_dc_uploads(
             "ingested_folders": sorted({folder for folder, _ in folder_assignments}),
             "skipped_count": len(skipped_names),
             "deleted_count": int(delete_result.get("deleted_count", 0)),
+            "prewarm": prewarm_stats,
         }
     finally:
         shutil.rmtree(temp_dir, ignore_errors=True)
@@ -696,6 +823,25 @@ def _append_multiqc_dc_uploads(
                 ),
             )
 
+        # Uniformity check: validate the merged set (new + existing) before we
+        # delete the old report rows. A failure here drops only the NEW
+        # reports, leaving the user's prior data intact — much less destructive
+        # than the equivalent replace failure mode.
+        from depictio.api.v1.endpoints.multiqc_endpoints.uniformity import (
+            validate_multiqc_reports_uniform,
+        )
+
+        merged_reports = _fetch_dc_reports_raw(data_collection_id)
+        old_id_set = {str(rid) for rid in old_report_ids}
+        new_report_ids = [
+            str(r.get("_id")) for r in merged_reports if str(r.get("_id")) not in old_id_set
+        ]
+        try:
+            validate_multiqc_reports_uniform(merged_reports)
+        except HTTPException:
+            _rollback_reports(new_report_ids, context="append uniformity rollback")
+            raise
+
         # 5. Drop the old report rows (one-by-one — bulk-delete would catch
         #    the freshly-inserted rows). Don't delete S3 here; the reprocess
         #    already wrote new parquets at fresh keys.
@@ -706,6 +852,8 @@ def _append_multiqc_dc_uploads(
             except Exception as exc:
                 cleanup_failed += 1
                 logger.warning(f"Append cleanup: stale report {rid} delete failed: {exc}")
+
+        prewarm_stats = _invalidate_and_prewarm_for_dc(str(dc.id))
 
         return {
             "success": True,
@@ -720,6 +868,7 @@ def _append_multiqc_dc_uploads(
             "skipped_count": len(skipped_names),
             "fetched_from_s3_count": fetched_from_s3,
             "cleanup_failed": cleanup_failed,
+            "prewarm": prewarm_stats,
         }
     finally:
         shutil.rmtree(temp_dir, ignore_errors=True)

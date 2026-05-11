@@ -41,10 +41,15 @@ def _fetch_s3_locations_from_dc(
         # report's S3 location lives.
         from depictio.api.v1.db import multiqc_collection
 
+        # Sort by _id ascending so insertion order is stable across mutations
+        # — append/replace can shuffle MongoDB's default cursor order, and the
+        # GS endpoint cache key derives from s3_locations[0]. Without this,
+        # `[0]` could keep pointing to the same parquet after an append, hiding
+        # the new reports behind a stale cached payload.
         cursor = multiqc_collection.find(
             {"data_collection_id": str(data_collection_id)},
             {"s3_location": 1},
-        )
+        ).sort([("_id", 1)])
         s3_locations: List[str] = [loc for doc in cursor if (loc := doc.get("s3_location"))]
         if s3_locations:
             return s3_locations

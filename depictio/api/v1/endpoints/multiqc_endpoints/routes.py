@@ -317,6 +317,9 @@ async def delete_all_reports_for_data_collection(
     _require_dc_editor_or_404(data_collection_id, current_user)
 
     result = await delete_all_multiqc_reports_for_dc(data_collection_id, delete_s3_files)
+    from depictio.api.v1.endpoints.multiqc_endpoints.utils import _invalidate_multiqc_caches_for_dc
+
+    _invalidate_multiqc_caches_for_dc(data_collection_id)
     return {**result, "data_collection_id": data_collection_id}
 
 
@@ -618,6 +621,7 @@ async def multiqc_preview(
         "plot": str(selected_plot),
         "dataset": str(selected_dataset) if selected_dataset else None,
         "theme": theme,
+        "dc_id": str(dc_id),
     }
     try:
         return await offload_or_run(

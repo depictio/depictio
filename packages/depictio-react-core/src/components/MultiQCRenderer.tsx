@@ -1,6 +1,7 @@
 import React from 'react';
 
 import { InteractiveFilter, StoredMetadata } from '../api';
+import { readMultiqcSelection } from '../utils/multiqcSelection';
 import MultiQCFigure from './multiqc/MultiQCFigure';
 import MultiQCGeneralStats from './multiqc/MultiQCGeneralStats';
 
@@ -27,12 +28,7 @@ const MultiQCRenderer: React.FC<MultiQCRendererProps> = ({
   filters,
   refreshTick,
 }) => {
-  const selectedModule = metadata.selected_module as string | undefined;
-  const selectedPlot = metadata.selected_plot as string | undefined;
-  const isGeneralStats =
-    selectedModule === 'general_stats' || selectedPlot === 'general_stats';
-
-  if (isGeneralStats) {
+  if (readMultiqcSelection(metadata as Record<string, unknown>).isGeneralStats) {
     return (
       <MultiQCGeneralStats
         dashboardId={dashboardId}

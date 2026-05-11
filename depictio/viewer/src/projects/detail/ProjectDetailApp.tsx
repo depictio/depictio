@@ -2615,13 +2615,17 @@ const MultiQCReportBlock: React.FC<{
   );
 };
 
-/** Wrapper that fetches reports for a MultiQC DC and renders one block per
- *  report. The Samples/Modules/Plots accordions live inside each block. */
+/** Wrapper that fetches reports for a MultiQC DC and renders ONE block at a
+ *  time, picked via a Select dropdown. Mirrors Dash's
+ *  `_build_multiqc_section` (project_data_collections.py L3308+) which uses
+ *  a `dmc.Select` to keep the panel scannable when the DC has many reports.
+ *  When there's only a single report the dropdown is hidden. */
 const MultiQCReportsCard: React.FC<{ dcId: string }> = ({ dcId }) => {
   const [reports, setReports] = useState<MultiQCReportSummary[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [selectedIdx, setSelectedIdx] = useState<string>('0');
 
   useEffect(() => {
     let cancelled = false;
@@ -2643,15 +2647,37 @@ const MultiQCReportsCard: React.FC<{ dcId: string }> = ({ dcId }) => {
     };
   }, [dcId]);
 
+  // Reset selection when the DC changes or the report set shrinks below the
+  // current index — otherwise we'd render `reports[undefined]` after a clear.
+  useEffect(() => {
+    setSelectedIdx('0');
+  }, [dcId, reports.length]);
+
+  const reportOptions = useMemo(
+    () =>
+      reports.map((r, i) => ({
+        value: String(i),
+        label: r.report?.report_name || `Report ${i + 1}`,
+      })),
+    [reports],
+  );
+
+  const activeIdx = Math.min(Number(selectedIdx) || 0, reports.length - 1);
+  const activeReport = reports[activeIdx];
+
   return (
     <Card withBorder radius="md" p="md">
       <Group gap="xs" mb="xs">
-        <Icon
-          icon="mdi:file-document-multiple"
+        <img
+          src={`${import.meta.env.BASE_URL}logos/multiqc_icon_color.svg`}
+          alt="MultiQC"
           width={20}
-          color="var(--mantine-color-blue-6)"
+          height={20}
+          style={{ objectFit: 'contain', display: 'block' }}
         />
-        <Text fw={600}>
+        <Text fw={600}>MultiQC Report Metadata</Text>
+        <Text size="sm" c="dimmed">
+          ·{' '}
           {total} report{total === 1 ? '' : 's'} available
         </Text>
       </Group>
@@ -2669,13 +2695,25 @@ const MultiQCReportsCard: React.FC<{ dcId: string }> = ({ dcId }) => {
         </Text>
       ) : (
         <Stack gap="md">
-          {reports.map((r, i) => (
-            <MultiQCReportBlock
-              key={r.report?.report_id || r.report?.id || i}
-              report={r}
-              index={i}
+          {reports.length > 1 && (
+            <Select
+              label="Select Report"
+              data={reportOptions}
+              value={selectedIdx}
+              onChange={(v) => v != null && setSelectedIdx(v)}
+              size="xs"
+              w={280}
+              leftSection={<Icon icon="mdi:file-document-outline" width={14} />}
+              comboboxProps={{ withinPortal: true }}
             />
-          ))}
+          )}
+          {activeReport && (
+            <MultiQCReportBlock
+              key={activeReport.report?.report_id || activeReport.report?.id || activeIdx}
+              report={activeReport}
+              index={activeIdx}
+            />
+          )}
         </Stack>
       )}
     </Card>

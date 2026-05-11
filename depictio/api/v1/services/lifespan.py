@@ -205,6 +205,62 @@ async def stop_event_services() -> None:
         await event_service.stop()
 
 
+def start_multiqc_prewarm(should_initialize: bool) -> None:
+    """Fire-and-forget MultiQC prewarm for every dashboard at startup.
+
+    Without this, the FIRST user to navigate to each dashboard pays the full
+    parse + figure-build cost (~75s for 10 reports × 4 figures). After this
+    runs at boot, the Celery worker chews through every MultiQC dashboard
+    in the background; by the time real users navigate, caches are warm.
+
+    Only runs on the initializing worker so we don't dispatch N copies of
+    every task across multiple FastAPI workers. The prewarm task itself is
+    idempotent (cache.get probe per figure, skipped if already warm) — so a
+    second dispatch by mistake would be a near-zero cost no-op.
+
+    Tasks dispatched here land in the Redis broker. They are picked up as
+    soon as the Celery worker is ready, regardless of API worker readiness.
+    """
+    if not should_initialize:
+        return
+
+    try:
+        from depictio.api.v1.db import dashboards_collection
+        from depictio.dash.celery_app import prewarm_multiqc_dashboard
+
+        cursor = dashboards_collection.find(
+            {"stored_metadata.component_type": "multiqc"},
+            {"_id": 0, "dashboard_id": 1},
+        )
+        dispatched = 0
+        skipped = 0
+        for doc in cursor:
+            dashboard_id = doc.get("dashboard_id")
+            if dashboard_id is None:
+                skipped += 1
+                continue
+            try:
+                prewarm_multiqc_dashboard.delay(str(dashboard_id))
+                dispatched += 1
+            except Exception as exc:
+                logger.warning(
+                    f"Worker {WORKER_ID}: prewarm dispatch failed for "
+                    f"dashboard {dashboard_id}: {exc}"
+                )
+                skipped += 1
+        if dispatched or skipped:
+            logger.info(
+                f"Worker {WORKER_ID}: MultiQC startup prewarm — "
+                f"dispatched={dispatched} skipped={skipped}"
+            )
+    except Exception as exc:
+        # Never fail boot because of prewarm — caches will simply be cold
+        # for the first request, exactly the pre-fix behaviour.
+        logger.warning(
+            f"Worker {WORKER_ID}: MultiQC startup prewarm dispatch failed: {exc}"
+        )
+
+
 def stop_background_services(background_task, should_initialize: bool) -> None:
     """
     Stop background services and tasks.
@@ -241,6 +297,7 @@ async def lifespan(_app: FastAPI):
     background_task = start_background_services(should_initialize)
     start_yaml_services(should_initialize)
     await start_event_services(should_initialize)
+    start_multiqc_prewarm(should_initialize)
 
     yield
 
