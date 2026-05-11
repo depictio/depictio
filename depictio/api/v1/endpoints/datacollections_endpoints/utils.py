@@ -121,6 +121,24 @@ async def _get_data_collection_specs(data_collection_id: PyObjectId, current_use
     return convert_objectid_to_str(result[0])
 
 
+def _delete_orphan_links_for_dc(data_collection_id: str) -> int:
+    """Remove any project.links[] entry referencing this DC as source/target.
+
+    Returns the number of projects whose links array was modified.
+    """
+    orphan_query = {
+        "$or": [
+            {"source_dc_id": data_collection_id},
+            {"target_dc_id": data_collection_id},
+        ]
+    }
+    result = projects_collection.update_many(
+        {"links": {"$elemMatch": orphan_query}},
+        {"$pull": {"links": orphan_query}},
+    )
+    return result.modified_count
+
+
 async def _delete_data_collection_by_id(data_collection_id: str, current_user) -> dict:
     """Core function to delete a data collection by its ID.
 
@@ -161,6 +179,12 @@ async def _delete_data_collection_by_id(data_collection_id: str, current_user) -
 
     if result.modified_count == 0:
         raise HTTPException(status_code=404, detail="Data collection not found")
+
+    links_pulled = _delete_orphan_links_for_dc(data_collection_id)
+    if links_pulled:
+        logger.info(
+            f"Removed orphan cross-DC links from {links_pulled} project(s) after deleting DC {data_collection_id}"
+        )
 
     # Cleanup associated S3 data and Delta tables
     await _cleanup_s3_delta_table(data_collection_id)

@@ -10,6 +10,7 @@ from depictio.api.v1.endpoints.datacollections_endpoints.utils import (
     _create_dc_from_upload,
     _create_multiqc_dc_from_uploads,
     _delete_data_collection_by_id,
+    _delete_orphan_links_for_dc,
     _get_data_collection_specs,
     _update_data_collection_name,
     _update_dc_specific_properties,
@@ -57,6 +58,13 @@ async def delete_datacollection(
         {"_id": workflow_oid},
         {"$pull": {"data_collections": data_collection}},
     )
+
+    links_pulled = _delete_orphan_links_for_dc(data_collection_id)
+    if links_pulled:
+        logger.info(
+            f"Removed orphan cross-DC links from {links_pulled} project(s) after deleting DC {data_collection_id} (workflow {workflow_id})"
+        )
+
     return {"message": "Data collection deleted successfully."}
 
 
