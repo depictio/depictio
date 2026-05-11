@@ -68,6 +68,12 @@ class DataContext:
     columns: list[ColumnSummary]
     sample_rows: list[dict[str, Any]]
     row_count: int
+    # The user-facing tags required to write a valid YAML component.
+    # Resolved alongside the DC at load time so the LLM can emit
+    # `workflow_tag` / `data_collection_tag` that round-trip through
+    # `DashboardDataLite.from_yaml`.
+    workflow_tag: str | None = None
+    data_collection_tag: str | None = None
 
     def schema_block(self) -> str:
         return "\n".join(c.to_prompt_line() for c in self.columns)
@@ -148,8 +154,8 @@ class DashboardContext:
 
 async def _resolve_dc_and_project(
     data_collection_id: str, current_user: Any
-) -> tuple[str, dict[str, Any], dict[str, Any]]:
-    """Return (workflow_id, dc_doc, project_doc) for a DC id.
+) -> tuple[str, str | None, dict[str, Any], dict[str, Any]]:
+    """Return (workflow_id, workflow_tag, dc_doc, project_doc) for a DC id.
 
     Performs the same permission gate as `_get_data_collection_specs` but
     keeps the workflow + project around so we can build the metadata block.
@@ -179,6 +185,7 @@ async def _resolve_dc_and_project(
                 "project_name": "$name",
                 "project_description": "$description",
                 "workflow_id": "$workflows._id",
+                "workflow_tag": "$workflows.workflow_tag",
                 "dc": "$workflows.data_collections",
             }
         },
@@ -194,7 +201,8 @@ async def _resolve_dc_and_project(
         "name": row.get("project_name"),
         "description": row.get("project_description"),
     }
-    return str(row["workflow_id"]), row["dc"], project_doc
+    workflow_tag = row.get("workflow_tag")
+    return str(row["workflow_id"]), workflow_tag, row["dc"], project_doc
 
 
 def _summarize_columns(df: pl.DataFrame) -> list[ColumnSummary]:
@@ -232,8 +240,8 @@ async def build_data_context(
     *,
     sample_n: int = 5,
 ) -> DataContext:
-    """Loader for the suggest / figure-from-prompt flows."""
-    workflow_id, dc_doc, project_doc = await _resolve_dc_and_project(
+    """Loader for the suggest / component-from-prompt flows."""
+    workflow_id, workflow_tag, dc_doc, project_doc = await _resolve_dc_and_project(
         data_collection_id, current_user
     )
 
@@ -244,16 +252,19 @@ async def build_data_context(
     if df is None:
         raise HTTPException(status_code=404, detail="Failed to load data collection.")
 
+    dc_tag = dc_doc.get("data_collection_tag") or dc_doc.get("name")
     return DataContext(
         data_collection_id=data_collection_id,
         workflow_id=workflow_id,
         project_name=project_doc.get("name"),
         project_description=project_doc.get("description"),
-        dc_name=dc_doc.get("data_collection_tag") or dc_doc.get("name"),
+        dc_name=dc_tag,
         dc_description=(dc_doc.get("config") or {}).get("description") or dc_doc.get("description"),
         columns=_summarize_columns(df),
         sample_rows=_sample_rows(df, n=sample_n),
         row_count=df.height,
+        workflow_tag=workflow_tag,
+        data_collection_tag=dc_tag,
     )
 
 

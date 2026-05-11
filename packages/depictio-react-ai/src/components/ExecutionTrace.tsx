@@ -11,7 +11,6 @@ import {
 import { Icon } from '@iconify/react';
 
 import type { ExecutionStep } from '../types';
-import PythonCodeBlock from './PythonCodeBlock';
 
 interface Props {
   steps: ExecutionStep[];
@@ -121,11 +120,14 @@ const ExecutionTrace: React.FC<Props> = ({ steps, defaultOpen = false }) => {
                     </Text>
                   )}
                   {step.code && (
-                    <PythonCodeBlock
-                      code={step.code}
-                      flavor="Polars"
-                      tone="code"
-                    />
+                    <Stack gap={4}>
+                      <Badge size="xs" variant="light" color="violet">
+                        Polars
+                      </Badge>
+                      <Code block style={{ fontSize: 12, whiteSpace: 'pre' }}>
+                        {step.code}
+                      </Code>
+                    </Stack>
                   )}
                   {step.output && (
                     <Stack gap={4}>

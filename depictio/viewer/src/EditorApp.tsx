@@ -69,8 +69,8 @@ import type {
   StoredMetadata,
   RealtimeMode,
 } from 'depictio-react-core';
-import { AIAnalyzePanel, AIDrawer } from 'depictio-react-ai';
-import type { DashboardActions, PlotSuggestion } from 'depictio-react-ai';
+import { AIAnalyzePanel } from 'depictio-react-ai';
+import type { DashboardActions } from 'depictio-react-ai';
 
 import LeftFilterPanel from './components/LeftFilterPanel';
 import GridItemEditOverlay from './components/GridItemEditOverlay';
@@ -162,7 +162,6 @@ const EditorApp: React.FC = () => {
   // Persist across tab/page navigations (matches App.tsx + Dash app).
   const [desktopOpened, toggleDesktop] = useSidebarOpen();
   const [settingsOpened, { open: openSettings, close: closeSettings }] = useDisclosure(false);
-  const [aiOpened, { open: openAI, close: closeAI }] = useDisclosure(false);
   const auth = useAuthMode();
   const isDemoMode = auth.status?.is_demo_mode === true;
   // Tab modal state — `mode` decides between create vs edit. `target` is the
@@ -500,28 +499,6 @@ const EditorApp: React.FC = () => {
     [dashboard],
   );
 
-  // Primary DC + WF for AI flows. First DC referenced by any stored
-  // component — same heuristic as App.tsx and the analyze backend so
-  // the editor and viewer agree on which DC the LLM reasons about.
-  const primaryRef = useMemo(() => {
-    for (const m of dashboard?.stored_metadata || []) {
-      const meta = m as {
-        dc_id?: unknown;
-        wf_id?: unknown;
-        metadata?: { dc_id?: unknown; wf_id?: unknown };
-      };
-      const dcRaw = meta.dc_id ?? meta.metadata?.dc_id;
-      const wfRaw = meta.wf_id ?? meta.metadata?.wf_id;
-      const dc = oidString(dcRaw);
-      const wf = oidString(wfRaw);
-      if (dc) return { dcId: dc, wfId: wf };
-    }
-    return { dcId: undefined as string | undefined, wfId: undefined as string | undefined };
-  }, [dashboard?.stored_metadata]);
-  const primaryDcId = primaryRef.dcId;
-  const primaryWfId = primaryRef.wfId;
-  const projectId = (dashboard?.project_id as string | undefined) || undefined;
-
   // Index → component_type lookup so AI-driven filter mutations can be
   // converted to the correct InteractiveFilter shape (mirrors App.tsx).
   const interactiveTypeByIndex = useMemo(() => {
@@ -577,140 +554,6 @@ const EditorApp: React.FC = () => {
       }
     },
     [handleFilterChange, interactiveTypeByIndex],
-  );
-
-  /**
-   * Persist an AI-suggested figure as a real dashboard component.
-   *
-   * Builds a StoredMetadata that mirrors the shape produced by the
-   * figure builder (see /api/v1/configs/projects/init/iris seed:
-   * component_type='figure', visu_type, dict_kwargs, dc_id, wf_id,
-   * mode='ui', panel='right'). Once saved, the existing FigureRenderer
-   * pipeline picks it up — that gives the user persistence AND
-   * interactive-filter responsiveness for free, since /render_figure
-   * already takes the active filters into account on every fetch.
-   */
-  const handleAddSuggestion = useCallback(
-    async (suggestion: PlotSuggestion) => {
-      if (!dashboardId) return;
-      const cur = dashboardRef.current;
-      if (!cur) return;
-      if (!primaryDcId) {
-        notifications.show({
-          color: 'yellow',
-          title: 'No data collection',
-          message:
-            'Cannot add the figure — this dashboard has no DC referenced yet.',
-        });
-        return;
-      }
-
-      const newId =
-        typeof crypto !== 'undefined' &&
-        typeof crypto.randomUUID === 'function'
-          ? crypto.randomUUID()
-          : fallbackUuid();
-
-      // Persist as a CODE-MODE figure so the saved component carries the
-      // exact Python the LLM produced. /render_figure routes code-mode
-      // components through SimpleCodeExecutor (RestrictedPython) which
-      // already exposes `px`, `pl`, `pd`, `np`, `go` — no import line is
-      // needed and `figure_python_code` is emitted accordingly. Keeping
-      // visu_type + dict_kwargs alongside means the editor's UI mode
-      // can reconstruct the form if the user later switches modes.
-      const codeContent = (suggestion.code || '').trim();
-      const newMeta: StoredMetadata = {
-        index: newId,
-        component_type: 'figure',
-        visu_type: suggestion.visu_type,
-        dict_kwargs: suggestion.dict_kwargs as Record<string, unknown>,
-        title: suggestion.title,
-        dc_id: primaryDcId,
-        wf_id: primaryWfId,
-        project_id: projectId,
-        mode: 'code',
-        code_content: codeContent,
-        panel: 'right',
-        // Tag the metadata so we can later distinguish AI-authored
-        // figures (e.g. for analytics or a "rebuild" affordance).
-        ai_origin: 'figure-from-prompt',
-      } as StoredMetadata;
-
-      // Stack new figure below the lowest-bottom existing right entry so
-      // it doesn't collide with anything already on the grid. compactType
-      // resolves overlap, but a sane y avoids a visible jump.
-      const existing = eachLayoutEntry(cur.right_panel_layout_data);
-      const bottomY = existing.reduce(
-        (acc, it) => Math.max(acc, (it.y ?? 0) + (it.h ?? 4)),
-        0,
-      );
-      const newLayoutEntry: Layout = {
-        i: `box-${newId}`,
-        x: 0,
-        y: bottomY,
-        w: 6,
-        h: 6,
-      };
-
-      const next: DashboardData = {
-        ...cur,
-        stored_metadata: [...(cur.stored_metadata || []), newMeta],
-        right_panel_layout_data: appendToLayout(
-          cur.right_panel_layout_data,
-          newLayoutEntry,
-        ),
-      };
-
-      // Cancel any pending debounced save — we save synchronously here
-      // so the refetch returns a dashboard that includes the new figure.
-      if (saveTimer.current) {
-        clearTimeout(saveTimer.current);
-        saveTimer.current = null;
-      }
-      applyDashboard(next);
-      setSaveStatus('saving');
-      try {
-        await saveDashboard(dashboardId, next);
-        const fresh = await fetchDashboard(dashboardId);
-        applyDashboard(fresh);
-        setSaveStatus('saved');
-        notifications.show({
-          color: 'teal',
-          title: 'AI figure added',
-          message:
-            'Saved as code mode — open the figure editor to view / tweak the Python.',
-          autoClose: 3500,
-        });
-        // Scroll the new component into view + brief flash, mirroring
-        // the duplicate flow's UX.
-        const flash = () => {
-          const inner = document.querySelector(
-            `[data-component-id="${newId}"]`,
-          ) as HTMLElement | null;
-          const el =
-            (inner?.closest('.react-grid-item') as HTMLElement | null) ||
-            inner;
-          if (!el) return;
-          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          el.classList.add('depictio-duplicate-flash');
-          window.setTimeout(
-            () => el.classList.remove('depictio-duplicate-flash'),
-            1500,
-          );
-        };
-        requestAnimationFrame(() => requestAnimationFrame(flash));
-      } catch (err) {
-        console.error('[EditorApp] add AI figure failed:', err);
-        setSaveStatus('error');
-        notifications.show({
-          color: 'red',
-          title: 'Add figure failed',
-          message: err instanceof Error ? err.message : String(err),
-          autoClose: 5000,
-        });
-      }
-    },
-    [dashboardId, primaryDcId, primaryWfId, projectId, applyDashboard],
   );
 
   // Tab family: parent dashboard + its child tabs (mirrors App.tsx).
@@ -1104,19 +947,7 @@ const EditorApp: React.FC = () => {
           onSave={handleForceSave}
           rightExtras={
             <>
-              {dashboardId && (
-                <Tooltip label="New AI figure">
-                  <ActionIcon
-                    variant="subtle"
-                    color="violet"
-                    onClick={openAI}
-                    aria-label="Build a new figure with AI"
-                    data-tour-id="ai-button"
-                  >
-                    <Icon icon="material-symbols:add-chart" width={18} />
-                  </ActionIcon>
-                </Tooltip>
-              )}
+
               {realtimeEnabled && (
                 <span data-tour-id="realtime-indicator" style={{ display: 'inline-flex' }}>
                   <RealtimeIndicator
@@ -1244,18 +1075,6 @@ const EditorApp: React.FC = () => {
         onClose={closeSettings}
         dashboard={dashboard}
       />
-
-      {dashboardId && (
-        <AIDrawer
-          opened={aiOpened}
-          onClose={closeAI}
-          dashboardId={dashboardId}
-          primaryDataCollectionId={primaryDcId}
-          primaryWorkflowId={primaryWfId}
-          projectId={projectId}
-          onAddSuggestion={handleAddSuggestion}
-        />
-      )}
 
       <TabModal
         opened={tabModalState.open}

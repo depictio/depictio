@@ -55,10 +55,10 @@ const AIAnalyzePanel: React.FC<Props> = ({
   const scrollRef = useRef<HTMLDivElement>(null);
   const [appliedIds, setAppliedIds] = useState<Set<string>>(new Set());
 
-  // Only analyze messages render here — figure suggestions are handled
-  // by the drawer / inline figure list. This filters the shared session
-  // transcript so the panel stays focused on Q&A.
-  const analyzeMessages = session.messages.filter((m) => !m.suggestion);
+  // All messages in the store are analyze messages; component-creation
+  // requests go through the builder's AI fill modal, which doesn't
+  // append to this transcript.
+  const analyzeMessages = session.messages;
 
   useEffect(() => {
     if (!scrollRef.current) return;

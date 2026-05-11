@@ -23,7 +23,7 @@
 
 import { create } from 'zustand';
 
-import type { AnalysisResult, ExecutionStep, PlotSuggestion } from './types';
+import type { AnalysisResult, ExecutionStep } from './types';
 
 const STORAGE_KEY = 'depictio.ai.creds';
 
@@ -121,8 +121,6 @@ export interface AIChatMessage {
   steps?: ExecutionStep[];
   /** Filled in once the analyze stream produces a final result. */
   result?: AnalysisResult;
-  /** Filled in for prompt-driven figure-creation messages. */
-  suggestion?: PlotSuggestion;
   ts: number;
 }
 

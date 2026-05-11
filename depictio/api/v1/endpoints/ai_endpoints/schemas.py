@@ -52,10 +52,31 @@ class SuggestFiguresResponse(BaseModel):
     suggestions: list[PlotSuggestion]
 
 
-class FigureFromPromptResponse(BaseModel):
-    """Returned by `/ai/figure-from-prompt` (prompt-driven viz creation)."""
+ComponentType = Literal[
+    "figure",
+    "card",
+    "interactive",
+    "table",
+    "image",
+    "multiqc",
+    "map",
+]
 
-    suggestion: PlotSuggestion
+
+class ComponentFromPromptResponse(BaseModel):
+    """Returned by `/ai/component-from-prompt` (prompt → single typed component).
+
+    The LLM emits YAML (verbatim CLI grammar); we validate it through
+    `DashboardDataLite.from_yaml(...)` and hand the React side both the
+    raw YAML (for "show your work") and the validated dict the builder
+    store consumes.
+    """
+
+    component_type: ComponentType
+    yaml: str
+    parsed: dict[str, Any]
+    explanation: str = ""
+    validation_attempts: int = 1
 
 
 class ExecutionStep(BaseModel):
@@ -115,16 +136,19 @@ class SuggestFiguresRequest(BaseModel):
     n: int = Field(default=4, ge=1, le=8)
 
 
-class FigureFromPromptRequest(BaseModel):
+class ComponentFromPromptRequest(BaseModel):
+    """Body for `/ai/component-from-prompt`.
+
+    `current` is set in the "modify existing component" flow — when the
+    user clicks the AI fill button on an already-loaded component, we
+    pass its current StoredMetadata so the LLM produces a revision
+    rather than a fresh component.
+    """
+
     data_collection_id: str
     prompt: str = Field(min_length=1, max_length=2000)
-    # Optional context for iterative refinement: when set, the prompt is
-    # interpreted as a *delta* against this previous suggestion rather
-    # than a fresh request, so users can say "make it horizontal" or
-    # "color by sample" without restating the whole chart.
-    previous_visu_type: str | None = None
-    previous_dict_kwargs: dict[str, Any] | None = None
-    previous_code: str | None = None
+    component_type: ComponentType
+    current: dict[str, Any] | None = None
 
 
 class AnalyzeRequest(BaseModel):

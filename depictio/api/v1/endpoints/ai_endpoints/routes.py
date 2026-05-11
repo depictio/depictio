@@ -4,14 +4,17 @@ Three flows, all consume the user's LLM API key from the `X-LLM-API-Key`
 header (set per-dashboard from the React Settings Drawer; not persisted).
 
 * `POST /ai/suggest-figures` — data-driven figure suggestions
-* `POST /ai/figure-from-prompt` — prompt-driven viz creation
+* `POST /ai/component-from-prompt` — prompt-driven typed component
+  creation (any of the 7 component types). Emits YAML validated through
+  `DashboardDataLite.from_yaml(...)` — the same offline validator the
+  CLI uses for `depictio-cli dashboard import`.
 * `POST /ai/analyze` — prompt-driven analysis with execution trace and
   optional dashboard mutations (filters + existing-figure patches)
 
-The analyze endpoint streams; suggest/figure-from-prompt are single-shot
-JSON responses. Streaming is HTTP chunked + SSE-formatted events so the
-realtime WebSocket is left alone (different lifecycle, different auth
-model — see PR description).
+The analyze endpoint streams; suggest / component-from-prompt are
+single-shot JSON responses. Streaming is HTTP chunked + SSE-formatted
+events so the realtime WebSocket is left alone (different lifecycle,
+different auth model — see PR description).
 """
 
 from __future__ import annotations
@@ -24,7 +27,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import ValidationError
 
-from depictio.api.v1.endpoints.ai_endpoints import llm_client, prompts
+from depictio.api.v1.endpoints.ai_endpoints import component_yaml, llm_client, prompts
 from depictio.api.v1.endpoints.ai_endpoints.code_gen import figure_python_code
 from depictio.api.v1.endpoints.ai_endpoints.context import (
     build_dashboard_context,
@@ -34,10 +37,10 @@ from depictio.api.v1.endpoints.ai_endpoints.executor import execute_polars
 from depictio.api.v1.endpoints.ai_endpoints.schemas import (
     AnalysisResult,
     AnalyzeRequest,
+    ComponentFromPromptRequest,
+    ComponentFromPromptResponse,
     DashboardActions,
     ExecutionStep,
-    FigureFromPromptRequest,
-    FigureFromPromptResponse,
     PlotSuggestion,
     StreamEvent,
     SuggestFiguresRequest,
@@ -104,42 +107,69 @@ async def suggest_figures(
     return SuggestFiguresResponse(suggestions=suggestions)
 
 
-@ai_endpoint_router.post("/figure-from-prompt", response_model=FigureFromPromptResponse)
-async def figure_from_prompt(
-    body: FigureFromPromptRequest,
+MAX_COMPONENT_ATTEMPTS = 2
+
+
+@ai_endpoint_router.post("/component-from-prompt", response_model=ComponentFromPromptResponse)
+async def component_from_prompt(
+    body: ComponentFromPromptRequest,
     current_user: User = Depends(get_user_or_anonymous),
     user_api_key: str | None = Depends(_llm_key),
-) -> FigureFromPromptResponse:
-    """Prompt-driven viz creation. Single suggestion, retried once on parse fail."""
+) -> ComponentFromPromptResponse:
+    """Prompt-driven typed component creation.
+
+    The LLM emits one YAML component block; we run it through the same
+    offline validator the CLI uses for `dashboard import`
+    (`DashboardDataLite.from_yaml`). On validation failure we feed the
+    error back into the conversation and retry once before bailing out.
+    """
     ctx = await build_data_context(body.data_collection_id, current_user)
-    messages = prompts.figure_from_prompt_messages(
+    messages = prompts.component_from_prompt_messages(
         ctx,
         body.prompt,
-        previous_visu_type=body.previous_visu_type,
-        previous_dict_kwargs=body.previous_dict_kwargs,
-        previous_code=body.previous_code,
+        component_type=body.component_type,
+        current=body.current,
     )
 
     last_error: str | None = None
-    for attempt in range(2):
-        raw = llm_client.completion(
-            messages,
-            user_api_key=user_api_key,
-            response_format=PlotSuggestion if attempt == 0 else None,
-        )
+    for attempt in range(MAX_COMPONENT_ATTEMPTS):
         try:
-            payload = llm_client.parse_json(raw)
+            raw = await asyncio.to_thread(
+                llm_client.completion,
+                messages,
+                user_api_key=user_api_key,
+            )
         except Exception as e:  # noqa: BLE001
-            last_error = f"json: {e}"
+            raise HTTPException(status_code=502, detail=f"LLM error: {e}") from e
+
+        try:
+            parsed = await asyncio.to_thread(component_yaml.validate_single, raw)
+        except (ValidationError, ValueError) as e:
+            last_error = component_yaml.format_validation_error_for_llm(e)
+            logger.warning("component_from_prompt attempt %d failed: %s", attempt + 1, last_error)
+            messages = messages + [
+                {"role": "assistant", "content": raw},
+                {
+                    "role": "user",
+                    "content": (
+                        f"{last_error}\n\nRe-emit the corrected YAML only — no prose, no fences."
+                    ),
+                },
+            ]
             continue
-        suggestion = _try_plot_suggestion(payload)
-        if suggestion:
-            return FigureFromPromptResponse(suggestion=suggestion)
-        last_error = "schema validation failed"
+
+        title = parsed.get("title")
+        return ComponentFromPromptResponse(
+            component_type=parsed.get("component_type", body.component_type),
+            yaml=component_yaml.dump_single(parsed),
+            parsed=parsed,
+            explanation=title.strip() if isinstance(title, str) else "",
+            validation_attempts=attempt + 1,
+        )
 
     raise HTTPException(
-        status_code=502,
-        detail=f"LLM did not return a valid suggestion: {last_error}",
+        status_code=422,
+        detail=f"LLM did not produce a valid component: {last_error or '(unknown)'}",
     )
 
 

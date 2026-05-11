@@ -1,34 +1,39 @@
 /**
- * Wire types for the FastAPI /ai endpoints. These mirror the Pydantic
- * schemas in depictio/api/v1/endpoints/ai_endpoints/schemas.py — keep
- * the two in sync when adding fields.
+ * Wire types for the FastAPI /ai endpoints. Mirror the Pydantic schemas
+ * in depictio/api/v1/endpoints/ai_endpoints/schemas.py — keep the two
+ * in sync when adding fields.
  */
 
-export type VisuType =
-  | 'scatter'
-  | 'bar'
-  | 'line'
-  | 'histogram'
-  | 'box'
-  | 'violin'
-  | 'heatmap';
+export type ComponentType =
+  | 'figure'
+  | 'card'
+  | 'interactive'
+  | 'table'
+  | 'image'
+  | 'multiqc'
+  | 'map';
 
-export interface PlotSuggestion {
-  visu_type: VisuType;
-  dict_kwargs: Record<string, unknown>;
-  title: string;
+export interface ComponentFromPromptRequest {
+  data_collection_id: string;
+  prompt: string;
+  component_type: ComponentType;
+  /** Set in edit-mode to ask the LLM to revise an existing component
+   *  rather than build one from scratch. Pass the current
+   *  `StoredMetadata` dict. */
+  current?: Record<string, unknown> | null;
+}
+
+export interface ComponentFromPromptResponse {
+  component_type: ComponentType;
+  /** YAML the LLM produced (canonicalized — re-dumped from the
+   *  validated dict). Display-only, used for "show your work". */
+  yaml: string;
+  /** Validated component dict ready to drop into the builder store's
+   *  `config` field. Field names match the lite-model / StoredMetadata
+   *  shape, so no translation layer is needed in the React host. */
+  parsed: Record<string, unknown>;
   explanation: string;
-  /** Server-synthesized Plotly Express code that would reproduce the
-   *  chart. Display-only — never eval'd by the client. */
-  code?: string;
-}
-
-export interface SuggestFiguresResponse {
-  suggestions: PlotSuggestion[];
-}
-
-export interface FigureFromPromptResponse {
-  suggestion: PlotSuggestion;
+  validation_attempts: number;
 }
 
 export interface ExecutionStep {
@@ -76,23 +81,6 @@ export type AIStreamEventType =
 export interface AIStreamEvent {
   type: AIStreamEventType;
   data: Record<string, unknown>;
-}
-
-// Request bodies
-
-export interface SuggestFiguresRequest {
-  data_collection_id: string;
-  n?: number;
-}
-
-export interface FigureFromPromptRequest {
-  data_collection_id: string;
-  prompt: string;
-  /** Optional refinement context — when set, the prompt is interpreted
-   *  as a delta against this prior suggestion. */
-  previous_visu_type?: string;
-  previous_dict_kwargs?: Record<string, unknown>;
-  previous_code?: string;
 }
 
 export interface AnalyzeRequest {

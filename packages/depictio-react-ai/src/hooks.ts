@@ -1,112 +1,69 @@
 /**
- * High-level hooks for the three AI flows.
+ * High-level hooks for the AI flows.
  *
- * Each hook is responsible for: reading the per-dashboard key from the
- * store, calling the API client, threading streaming events into the
- * session transcript, and exposing imperative `run()` / `cancel()`
- * functions to the UI.
+ * Each hook reads the per-dashboard key from the store, calls the API
+ * client, and exposes an imperative `run()` (plus `cancel()` for the
+ * streaming analyze flow).
  */
 
-import { useCallback, useMemo } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 
 import {
-  figureFromPrompt as apiFigureFromPrompt,
+  componentFromPrompt as apiComponentFromPrompt,
   streamAnalyze as apiStreamAnalyze,
-  suggestFigures as apiSuggestFigures,
 } from './api';
 import { useAISession, useAIStore } from './store';
 import type {
   AIStreamEvent,
   AnalysisResult,
+  ComponentFromPromptRequest,
+  ComponentFromPromptResponse,
   DashboardActions,
   ExecutionStep,
-  PlotSuggestion,
 } from './types';
 
 function newId(): string {
   return `m_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
-/** Prompt-driven viz creation. */
-export function useFigureFromPrompt(dashboardId: string) {
+/** Prompt-driven typed component creation.
+ *
+ *  Returns the validated component dict (plus YAML for "show your
+ *  work" displays). Callers are expected to drop `parsed` into the
+ *  builder store's `config` and let the existing builder + per-type
+ *  preview render the result.
+ */
+export function useComponentFromPrompt(dashboardId: string) {
   const session = useAISession(dashboardId);
-  const { setPending, appendMessage } = useAIStore.getState();
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [lastResponse, setLastResponse] =
+    useState<ComponentFromPromptResponse | null>(null);
 
   const run = useCallback(
     async (
-      dataCollectionId: string,
-      prompt: string,
-      previous?: PlotSuggestion,
-    ): Promise<PlotSuggestion> => {
-      const userMsgId = newId();
-      const assistantId = newId();
-      appendMessage(dashboardId, {
-        id: userMsgId,
-        role: 'user',
-        content: previous ? `(refine) ${prompt}` : prompt,
-        ts: Date.now(),
-      });
-      setPending(dashboardId, true);
+      body: ComponentFromPromptRequest,
+    ): Promise<ComponentFromPromptResponse> => {
+      setPending(true);
+      setError(null);
       try {
-        const res = await apiFigureFromPrompt(
-          {
-            data_collection_id: dataCollectionId,
-            prompt,
-            ...(previous
-              ? {
-                  previous_visu_type: previous.visu_type,
-                  previous_dict_kwargs: previous.dict_kwargs,
-                  previous_code: previous.code,
-                }
-              : {}),
-          },
-          session.llmKey || null,
-        );
-        appendMessage(dashboardId, {
-          id: assistantId,
-          role: 'assistant',
-          content: res.suggestion.explanation,
-          suggestion: res.suggestion,
-          ts: Date.now(),
-        });
-        return res.suggestion;
+        const res = await apiComponentFromPrompt(body, session.llmKey || null);
+        setLastResponse(res);
+        return res;
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        setError(msg);
+        throw e;
       } finally {
-        setPending(dashboardId, false);
+        setPending(false);
       }
     },
-    [dashboardId, session.llmKey, appendMessage, setPending],
+    [session.llmKey],
   );
 
   return useMemo(
-    () => ({ run, pending: session.pending }),
-    [run, session.pending],
-  );
-}
-
-/** Data-driven viz suggestion: ask for N proposals at once. */
-export function useSuggestFigures(dashboardId: string) {
-  const session = useAISession(dashboardId);
-  const { setPending } = useAIStore.getState();
-
-  const run = useCallback(
-    async (dataCollectionId: string, n = 4): Promise<PlotSuggestion[]> => {
-      setPending(dashboardId, true);
-      try {
-        const res = await apiSuggestFigures(
-          { data_collection_id: dataCollectionId, n },
-          session.llmKey || null,
-        );
-        return res.suggestions;
-      } finally {
-        setPending(dashboardId, false);
-      }
-    },
-    [dashboardId, session.llmKey, setPending],
-  );
-
-  return useMemo(
-    () => ({ run, pending: session.pending }),
-    [run, session.pending],
+    () => ({ run, pending, error, lastResponse }),
+    [run, pending, error, lastResponse],
   );
 }
 

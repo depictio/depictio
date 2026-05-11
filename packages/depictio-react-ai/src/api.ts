@@ -3,7 +3,8 @@
  *
  * Reuses depictio-react-core's authFetch so JWT refresh + retry-on-401
  * stays in one place. The user's LLM API key is layered on top as a
- * per-request `X-LLM-API-Key` header — never persisted, never logged.
+ * per-request `X-LLM-API-Key` header — never persisted on the server,
+ * never logged.
  *
  * /analyze streams SSE-formatted chunks; we parse them in the browser
  * using a small state machine over the response body's ReadableStream
@@ -17,10 +18,8 @@ import type {
   AIStreamEvent,
   AIStreamEventType,
   AnalyzeRequest,
-  FigureFromPromptRequest,
-  FigureFromPromptResponse,
-  SuggestFiguresRequest,
-  SuggestFiguresResponse,
+  ComponentFromPromptRequest,
+  ComponentFromPromptResponse,
 } from './types';
 
 function llmKeyHeaders(llmKey: string | null | undefined): Record<string, string> {
@@ -44,18 +43,15 @@ async function postJson<T>(
   return (await res.json()) as T;
 }
 
-export function suggestFigures(
-  body: SuggestFiguresRequest,
+export function componentFromPrompt(
+  body: ComponentFromPromptRequest,
   llmKey: string | null | undefined,
-): Promise<SuggestFiguresResponse> {
-  return postJson<SuggestFiguresResponse>('/ai/suggest-figures', body, llmKey);
-}
-
-export function figureFromPrompt(
-  body: FigureFromPromptRequest,
-  llmKey: string | null | undefined,
-): Promise<FigureFromPromptResponse> {
-  return postJson<FigureFromPromptResponse>('/ai/figure-from-prompt', body, llmKey);
+): Promise<ComponentFromPromptResponse> {
+  return postJson<ComponentFromPromptResponse>(
+    '/ai/component-from-prompt',
+    body,
+    llmKey,
+  );
 }
 
 export interface AnalyzeStreamHandlers {

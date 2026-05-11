@@ -1,6 +1,5 @@
 import React, { useEffect, useState, useCallback, useRef, useMemo, useDeferredValue } from 'react';
 import {
-  ActionIcon,
   AppShell,
   Anchor,
   Box,
@@ -10,7 +9,6 @@ import {
   Stack,
   Text,
   Title,
-  Tooltip,
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 
@@ -36,17 +34,8 @@ import type {
   RealtimeMode,
 } from 'depictio-react-core';
 import { notifications } from '@mantine/notifications';
-import { Icon } from '@iconify/react';
-import {
-  AIAnalyzePanel,
-  AIDrawer,
-  AISuggestedFigures,
-} from 'depictio-react-ai';
-import type {
-  AISuggestedFigure,
-  DashboardActions,
-  PlotSuggestion,
-} from 'depictio-react-ai';
+import { AIAnalyzePanel } from 'depictio-react-ai';
+import type { DashboardActions } from 'depictio-react-ai';
 import { Header, Sidebar, SettingsDrawer } from './chrome';
 import { useSidebarOpen } from './hooks/useSidebarOpen';
 import { useAuthMode } from './auth/hooks/useAuthMode';
@@ -90,12 +79,6 @@ const App: React.FC = () => {
   // `sidebar-collapsed` localStorage key the Dash app writes.
   const [desktopOpened, toggleDesktop] = useSidebarOpen();
   const [settingsOpened, { open: openSettings, close: closeSettings }] = useDisclosure(false);
-  const [aiOpened, { open: openAI, close: closeAI }] = useDisclosure(false);
-  // Session-only list of AI-suggested figures the user accepted via
-  // "Add to dashboard". The viewer can't persist (read-only), so they
-  // live in client state and render above the grid until the page
-  // reloads or the user removes them.
-  const [aiFigures, setAiFigures] = useState<AISuggestedFigure[]>([]);
   const auth = useAuthMode();
   const isDemoMode = auth.status?.is_demo_mode === true;
 
@@ -174,29 +157,6 @@ const App: React.FC = () => {
 
   const handleResetAllFilters = useCallback(() => setFilters([]), []);
 
-  // Primary DC for the AI drawer's "New figure" mode — first DC referenced
-  // by any stored component. Mirrors the heuristic the analyze backend uses.
-  // Captures the matching workflow id at the same time so /figure/preview
-  // can resolve the right Delta location without a second lookup.
-  const primaryRef = useMemo(() => {
-    for (const m of dashboard?.stored_metadata || []) {
-      const meta = m as {
-        dc_id?: string;
-        wf_id?: string;
-        metadata?: { dc_id?: string; wf_id?: string };
-      };
-      const dc = meta.dc_id ?? meta.metadata?.dc_id;
-      const wf = meta.wf_id ?? meta.metadata?.wf_id;
-      if (typeof dc === 'string' && dc) {
-        return { dcId: dc, wfId: typeof wf === 'string' ? wf : undefined };
-      }
-    }
-    return { dcId: undefined, wfId: undefined };
-  }, [dashboard?.stored_metadata]);
-  const primaryDcId = primaryRef.dcId;
-  const primaryWfId = primaryRef.wfId;
-  const projectId = (dashboard?.project_id as string | undefined) || undefined;
-
   // Index → component_type lookup so AI-driven filter mutations can be
   // converted to the correct InteractiveFilter shape downstream.
   const interactiveTypeByIndex = useMemo(() => {
@@ -253,42 +213,6 @@ const App: React.FC = () => {
     },
     [handleFilterChange, interactiveTypeByIndex],
   );
-
-  const handleAddSuggestion = useCallback(
-    (suggestion: PlotSuggestion) => {
-      if (!primaryDcId) {
-        notifications.show({
-          color: 'yellow',
-          title: 'No data collection',
-          message: 'Cannot add the figure — this dashboard has no DC.',
-        });
-        return;
-      }
-      const id = `ai-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-      setAiFigures((prev) => [
-        ...prev,
-        {
-          id,
-          suggestion,
-          dataCollectionId: primaryDcId,
-          workflowId: primaryWfId,
-          projectId,
-        },
-      ]);
-      notifications.show({
-        color: 'teal',
-        title: 'Figure added',
-        message:
-          'AI figure added to this session. Open the editor to persist it.',
-        autoClose: 4000,
-      });
-    },
-    [primaryDcId, primaryWfId, projectId],
-  );
-
-  const handleRemoveAiFigure = useCallback((id: string) => {
-    setAiFigures((prev) => prev.filter((f) => f.id !== id));
-  }, []);
 
   // ---- Realtime: WebSocket subscription + UI toggle -------------------------
   // Mode toggle persisted to localStorage so the user's choice survives
@@ -467,19 +391,6 @@ const App: React.FC = () => {
           cardsLoading={cardsLoading}
           rightExtras={
             <>
-              {dashboardId && (
-                <Tooltip label="New AI figure">
-                  <ActionIcon
-                    variant="subtle"
-                    color="violet"
-                    onClick={openAI}
-                    aria-label="Build a new figure with AI"
-                    data-tour-id="ai-button"
-                  >
-                    <Icon icon="material-symbols:add-chart" width={18} />
-                  </ActionIcon>
-                </Tooltip>
-              )}
               {realtimeEnabled && (
                 <span data-tour-id="realtime-indicator" style={{ display: 'inline-flex' }}>
                   <RealtimeIndicator
@@ -618,10 +529,6 @@ const App: React.FC = () => {
                   onApplyActions={handleApplyActions}
                 />
               )}
-              <AISuggestedFigures
-                figures={aiFigures}
-                onRemove={handleRemoveAiFigure}
-              />
               <Box style={{ flex: 1, minHeight: 0 }}>
                 <DashboardGrid
                   dashboardId={dashboardId!}
@@ -648,18 +555,6 @@ const App: React.FC = () => {
         onClose={closeSettings}
         dashboard={dashboard}
       />
-
-      {dashboardId && (
-        <AIDrawer
-          opened={aiOpened}
-          onClose={closeAI}
-          dashboardId={dashboardId}
-          primaryDataCollectionId={primaryDcId}
-          primaryWorkflowId={primaryWfId}
-          projectId={projectId}
-          onAddSuggestion={handleAddSuggestion}
-        />
-      )}
     </AppShell>
     </>
   );
