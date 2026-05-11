@@ -169,18 +169,29 @@ async function bootstrapSession(): Promise<void> {
   }
 }
 
-bootstrapSession().finally(() => {
-  ReactDOM.createRoot(document.getElementById('root')!).render(
-    <React.StrictMode>
-      <MantineProvider theme={depictioTheme} defaultColorScheme={readInitialColorScheme()}>
-        {/* DatesProvider is required for @mantine/dates components to pick up
-            locale + first-day-of-week settings. Matches what DMC does
-            internally for ``dmc.DatePickerInput``. */}
-        <DatesProvider settings={{ locale: 'en', firstDayOfWeek: 1 }}>
-          <Notifications position="bottom-right" />
-          <ErrorBoundary>{resolveTree()}</ErrorBoundary>
-        </DatesProvider>
-      </MantineProvider>
-    </React.StrictMode>,
-  );
-});
+// Bare SPA root → dashboards list. Vite/FastAPI mount the SPA at
+// `/dashboard-beta/` so asset URLs resolve correctly, but that path on its
+// own has no dashboard id to render. Bounce unparameterized hits (`/`,
+// `/dashboard-beta`, `/dashboard-beta/`) to the list page; if the visitor
+// isn't logged in, `bootstrapSession` on the next load routes them through
+// `/auth`, and `AuthApp.POST_AUTH_REDIRECT` brings them back here.
+const isBareRoot = /^\/(dashboard-beta\/?)?$/.test(window.location.pathname);
+if (isBareRoot) {
+  window.location.replace('/dashboards-beta');
+} else {
+  bootstrapSession().finally(() => {
+    ReactDOM.createRoot(document.getElementById('root')!).render(
+      <React.StrictMode>
+        <MantineProvider theme={depictioTheme} defaultColorScheme={readInitialColorScheme()}>
+          {/* DatesProvider is required for @mantine/dates components to pick up
+              locale + first-day-of-week settings. Matches what DMC does
+              internally for ``dmc.DatePickerInput``. */}
+          <DatesProvider settings={{ locale: 'en', firstDayOfWeek: 1 }}>
+            <Notifications position="bottom-right" />
+            <ErrorBoundary>{resolveTree()}</ErrorBoundary>
+          </DatesProvider>
+        </MantineProvider>
+      </React.StrictMode>,
+    );
+  });
+}

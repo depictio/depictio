@@ -21,6 +21,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 interface UseFolderDropzoneOptions {
   /** Only retain files whose basename matches. */
   filterFilename?: string;
+  /** Only retain files whose lowercase extension is in this list (e.g.
+   *  ['csv', 'tsv']). Tested after `filterFilename` if both are set, so the
+   *  combined filter is intersection. */
+  filterExtensions?: string[];
   /** Per-file size cap (bytes). Files exceeding it are dropped + reported. */
   maxPerFile?: number;
   /** Total size cap (bytes). Hook reports an error and clears the batch on exceed. */
@@ -30,7 +34,8 @@ interface UseFolderDropzoneOptions {
 interface UseFolderDropzoneResult {
   /** Bind to the visible drop target (`<div ref={rootRef} ...>`). */
   rootRef: React.MutableRefObject<HTMLDivElement | null>;
-  /** Bind to the hidden `<input type="file" multiple webkitdirectory>`. */
+  /** Bind to the hidden `<input>` used by the click-to-pick path. The owner
+   *  controls whether it's a file picker or folder picker via attributes. */
   inputRef: React.MutableRefObject<HTMLInputElement | null>;
   files: File[];
   totalBytes: number;
@@ -42,7 +47,7 @@ interface UseFolderDropzoneResult {
   skipped: string[];
   removeFile: (file: File) => void;
   clear: () => void;
-  /** Programmatically open the OS folder picker. */
+  /** Programmatically open the OS picker bound to `inputRef`. */
   openPicker: () => void;
   /** Accept a `FileList` directly (e.g. from a parent `<input>`). Useful for tests. */
   addFromFileList: (files: FileList | File[] | null) => void;
@@ -111,11 +116,15 @@ async function traverseEntry(
     const dirEntry = entry as FileSystemDirectoryEntry;
     const reader = dirEntry.createReader();
     const children = await readDirEntries(reader);
-    const out: File[] = [];
-    for (const child of children) {
-      out.push(...(await traverseEntry(child, prefix + entry.name + '/')));
-    }
-    return out;
+    // Kick off every child read in parallel. Sequential awaits leave sibling
+    // FileSystemEntry handles pending while we wait on the first; on macOS
+    // Chrome those handles can go stale before we get to them, so a drop of
+    // ten run folders only ingests one. Promise.all forces all reads to
+    // start synchronously.
+    const childResults = await Promise.all(
+      children.map((child) => traverseEntry(child, prefix + entry.name + '/')),
+    );
+    return childResults.flat();
   }
   return [];
 }
@@ -123,7 +132,11 @@ async function traverseEntry(
 export function useFolderDropzone(
   options: UseFolderDropzoneOptions = {},
 ): UseFolderDropzoneResult {
-  const { filterFilename, maxPerFile, maxTotal } = options;
+  const { filterFilename, filterExtensions, maxPerFile, maxTotal } = options;
+  const normalizedExtensions = useMemo(
+    () => filterExtensions?.map((e) => e.toLowerCase().replace(/^\./, '')),
+    [filterExtensions],
+  );
   const rootRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [files, setFiles] = useState<File[]>([]);
@@ -146,6 +159,14 @@ export function useFolderDropzone(
         if (filterFilename && basename !== filterFilename) {
           skippedNames.push(f.name);
           continue;
+        }
+        if (normalizedExtensions && normalizedExtensions.length > 0) {
+          const dotIdx = basename.lastIndexOf('.');
+          const ext = dotIdx >= 0 ? basename.slice(dotIdx + 1).toLowerCase() : '';
+          if (!normalizedExtensions.includes(ext)) {
+            skippedNames.push(f.name);
+            continue;
+          }
         }
         if (maxPerFile && f.size > maxPerFile) {
           oversized.push(`${f.name} (${(f.size / (1024 * 1024)).toFixed(1)}MB)`);
@@ -179,7 +200,7 @@ export function useFolderDropzone(
       setFiles(merged);
       setSkipped((prev) => [...prev, ...skippedNames]);
     },
-    [filterFilename, files, maxPerFile, maxTotal],
+    [filterFilename, normalizedExtensions, files, maxPerFile, maxTotal],
   );
 
   const handleDrop = useCallback(
@@ -190,23 +211,38 @@ export function useFolderDropzone(
 
       const items = event.dataTransfer?.items;
       if (items?.length) {
-        const collected: File[] = [];
+        // The DataTransferItemList is only valid for the synchronous lifetime
+        // of this drop event. Snapshot every entry / fallback File NOW —
+        // awaiting before extracting them silently drops everything past the
+        // first item (the bug behind "only one folder shows up when dropping
+        // run_01..run_10 at once").
+        const entries: FileSystemEntry[] = [];
+        const flatFiles: File[] = [];
         for (let i = 0; i < items.length; i++) {
           const item = items[i];
           if (item.kind !== 'file') continue;
           const entry =
-            typeof item.webkitGetAsEntry === 'function' ? item.webkitGetAsEntry() : null;
+            typeof item.webkitGetAsEntry === 'function'
+              ? item.webkitGetAsEntry()
+              : null;
           if (entry) {
-            try {
-              collected.push(...(await traverseEntry(entry, '')));
-            } catch (err) {
-              console.warn('useFolderDropzone: traverseEntry failed', err);
-            }
+            entries.push(entry);
           } else {
             const file = item.getAsFile();
-            if (file) collected.push(file);
+            if (file) flatFiles.push(file);
           }
         }
+
+        const collected: File[] = [...flatFiles];
+        const traversed = await Promise.all(
+          entries.map((entry) =>
+            traverseEntry(entry, '').catch((err) => {
+              console.warn('useFolderDropzone: traverseEntry failed', err);
+              return [] as File[];
+            }),
+          ),
+        );
+        for (const files of traversed) collected.push(...files);
         if (collected.length) ingest(collected);
         return;
       }
@@ -219,36 +255,68 @@ export function useFolderDropzone(
     [ingest],
   );
 
+  // Document-level drop handler: while this hook is mounted (i.e. while the
+  // upload modal is open), file drops anywhere in this hook's enclosing
+  // modal are captured — landing on the small dropzone target is fragile
+  // and missing it lets Chrome navigate away. preventDefault on document-
+  // level dragover is required so the browser allows the drop at all.
+  //
+  // Modal-scoped guard: if two dropzone hooks are mounted simultaneously
+  // (e.g. Manage and Create modals open in the same render cycle), both
+  // document listeners would otherwise ingest the same File once each.
+  // Restrict each hook's drop to its own enclosing dialog so cross-modal
+  // drops don't double-fire. Drops outside any modal (with no enclosing
+  // dialog) fall back to the original "anywhere on the page" behavior.
   useEffect(() => {
-    const node = rootRef.current;
-    if (!node) return;
-    const onDragOver = (e: DragEvent) => {
+    const onDocDragOver = (e: DragEvent) => {
+      if (!e.dataTransfer?.types?.includes('Files')) return;
       e.preventDefault();
-      setDragOver(true);
     };
-    const onDragLeave = (e: DragEvent) => {
-      // Only flip off when leaving the root, not a child.
-      if (e.target === node) setDragOver(false);
+    const onDocDrop = (e: DragEvent) => {
+      if (!e.dataTransfer?.types?.includes('Files')) return;
+      const node = rootRef.current;
+      const target = e.target as HTMLElement | null;
+      if (node && target) {
+        const modal = node.closest('[role="dialog"]');
+        if (modal && !modal.contains(target)) return;
+      }
+      handleDrop(e);
     };
-    node.addEventListener('dragover', onDragOver);
-    node.addEventListener('dragleave', onDragLeave);
-    node.addEventListener('drop', handleDrop);
+    document.addEventListener('dragover', onDocDragOver);
+    document.addEventListener('drop', onDocDrop);
     return () => {
-      node.removeEventListener('dragover', onDragOver);
-      node.removeEventListener('dragleave', onDragLeave);
-      node.removeEventListener('drop', handleDrop);
+      document.removeEventListener('dragover', onDocDragOver);
+      document.removeEventListener('drop', onDocDrop);
     };
   }, [handleDrop]);
 
-  // Hook the click-to-pick input — owner attaches via `inputRef`. We listen
-  // for change events so the parent doesn't have to wire its own handler.
+  // Root-level drag tracking just for the visual highlight.
+  useEffect(() => {
+    const node = rootRef.current;
+    if (!node) return;
+    const onDragEnter = (e: DragEvent) => {
+      if (!e.dataTransfer?.types?.includes('Files')) return;
+      setDragOver(true);
+    };
+    const onDragLeave = (e: DragEvent) => {
+      if (e.target === node) setDragOver(false);
+    };
+    node.addEventListener('dragenter', onDragEnter);
+    node.addEventListener('dragleave', onDragLeave);
+    return () => {
+      node.removeEventListener('dragenter', onDragEnter);
+      node.removeEventListener('dragleave', onDragLeave);
+    };
+  }, []);
+
+  // Hook the click-to-pick input — owner attaches via `inputRef` and chooses
+  // file-picker vs folder-picker semantics by setting `webkitdirectory`.
   useEffect(() => {
     const input = inputRef.current;
     if (!input) return;
     const onChange = (event: Event) => {
       const target = event.target as HTMLInputElement;
       if (target.files?.length) ingest(Array.from(target.files));
-      // Allow re-picking the same folder.
       target.value = '';
     };
     input.addEventListener('change', onChange);

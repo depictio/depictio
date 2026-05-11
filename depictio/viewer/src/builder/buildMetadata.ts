@@ -7,6 +7,7 @@
  * so no Pydantic validation regressions on POST /dashboards/save.
  */
 import type { StoredMetadata } from 'depictio-react-core';
+import { readMultiqcSelection } from 'depictio-react-core';
 import type { BuilderState } from './store/useBuilderStore';
 import { autoCardTitle } from './card/cardTitle';
 
@@ -168,19 +169,20 @@ function buildMultiqc(
   base: StoredMetadata,
   existing: Record<string, unknown>,
 ): StoredMetadata {
-  const c = as<{
-    multiqc_module?: string;
-    multiqc_plot?: string;
-    multiqc_dataset?: string;
-    s3_locations?: string[];
-    is_general_stats?: boolean;
-  }>(state.config);
+  // Persist with `selected_*` keys — the backend's render_multiqc endpoint
+  // and depictio.dash.modules.multiqc_component.models.MultiQCState read
+  // `selected_module`/`selected_plot`/`selected_dataset`. Earlier the
+  // builder used `multiqc_*` here, which silently produced 400s at render.
+  const c = as<{ s3_locations?: string[]; is_general_stats?: boolean }>(state.config);
+  const sel = readMultiqcSelection(state.config as Record<string, unknown>);
   return {
     ...existing,
     ...base,
-    multiqc_module: c.multiqc_module,
-    multiqc_plot: c.multiqc_plot,
-    multiqc_dataset: c.multiqc_dataset,
+    // `|| null` normalizes `undefined` to an explicit null so the wire
+    // shape doesn't depend on JSON's `undefined`-stripping behavior.
+    selected_module: sel.module || null,
+    selected_plot: sel.plot || null,
+    selected_dataset: sel.dataset || null,
     s3_locations: c.s3_locations || [],
     is_general_stats: Boolean(c.is_general_stats),
   };

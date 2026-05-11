@@ -8,7 +8,7 @@
  */
 import React, { useEffect, useState } from 'react';
 import { useMantineColorScheme } from '@mantine/core';
-import { previewMultiQC } from 'depictio-react-core';
+import { previewMultiQC, readMultiqcSelection } from 'depictio-react-core';
 import Plot from 'react-plotly.js';
 import { useBuilderStore } from '../store/useBuilderStore';
 import PreviewPanel from '../shared/PreviewPanel';
@@ -20,19 +20,17 @@ interface FigureData {
 
 const MultiQCPreview: React.FC = () => {
   const dcId = useBuilderStore((s) => s.dcId);
-  const config = useBuilderStore((s) => s.config) as {
-    multiqc_module?: string;
-    multiqc_plot?: string;
-    multiqc_dataset?: string;
-  };
+  const config = useBuilderStore((s) => s.config) as Record<string, unknown>;
   const { colorScheme } = useMantineColorScheme();
   const [fig, setFig] = useState<FigureData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const moduleName = config.multiqc_module;
-  const plotName = config.multiqc_plot;
-  const datasetName = config.multiqc_dataset;
+  // Read with legacy `multiqc_*` fallback for in-flight builder state.
+  const sel = readMultiqcSelection(config);
+  const moduleName = sel.module;
+  const plotName = sel.plot;
+  const datasetName = sel.dataset;
 
   useEffect(() => {
     if (!dcId || !moduleName || !plotName) {
