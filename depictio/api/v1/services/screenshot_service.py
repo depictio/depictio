@@ -25,11 +25,21 @@ from depictio.models.models.users import TokenBeanie, UserBeanie
 class ScreenshotResult(TypedDict):
     """Result of dual-theme screenshot generation."""
 
-    status: str  # "success" or "error"
+    status: str  # "success", "skipped", "forbidden", or "error"
     dashboard_id: str
     light_screenshot: str | None
     dark_screenshot: str | None
     error: str | None
+
+
+# Playwright error substrings that mean "the Dash frontend host isn't reachable"
+# (typically: this worktree didn't start the depictio-frontend container).
+# Treat them as "skip screenshot" rather than "task failed".
+_HOST_UNREACHABLE_MARKERS = (
+    "ERR_NAME_NOT_RESOLVED",
+    "ERR_CONNECTION_REFUSED",
+    "ERR_CONNECTION_TIMED_OUT",
+)
 
 
 def check_dashboard_owner_permission_sync(dashboard_id: str, user_id: str) -> bool:
@@ -233,8 +243,31 @@ async def generate_dual_theme_screenshots(
             browser = await p.chromium.launch(headless=True)
             page = await browser.new_page(viewport={"width": 1920, "height": 1080})
 
-            # Set authentication token before navigation
-            await page.goto(settings.dash.internal_url)
+            # Set authentication token before navigation. The very first goto
+            # is also our probe: if the Dash frontend container isn't running
+            # in this compose project, Playwright surfaces ERR_NAME_NOT_RESOLVED
+            # (or ERR_CONNECTION_*) — skip rather than failing the Celery task.
+            try:
+                await page.goto(settings.dash.internal_url)
+            except Exception as nav_err:
+                msg = str(nav_err)
+                if any(m in msg for m in _HOST_UNREACHABLE_MARKERS):
+                    logger.warning(
+                        f"Dash frontend ({settings.dash.internal_url}) is unreachable "
+                        f"from this worker — skipping screenshot for {dashboard_id}. "
+                        "Start the depictio-frontend container or set "
+                        "DEPICTIO_DASH_SERVICE_NAME to a reachable host."
+                    )
+                    await browser.close()
+                    skip_result: ScreenshotResult = {
+                        "status": "skipped",
+                        "light_screenshot": None,
+                        "dark_screenshot": None,
+                        "dashboard_id": dashboard_id,
+                        "error": None,
+                    }
+                    return skip_result
+                raise
             await page.evaluate(f"localStorage.setItem('local-store', '{token_data_json}')")
 
             # Capture both themes in sequence

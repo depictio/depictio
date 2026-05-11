@@ -46,10 +46,10 @@ const MapBuilder: React.FC = () => {
   const config = useBuilderStore((s) => s.config) as {
     map_type?: string;
     title?: string;
-    lat?: string;
-    lon?: string;
-    color?: string;
-    size?: string;
+    lat_column?: string;
+    lon_column?: string;
+    color_column?: string;
+    size_column?: string;
     hover_columns?: string[];
     map_style?: string;
     opacity?: number;
@@ -79,12 +79,12 @@ const MapBuilder: React.FC = () => {
       // Re-read fresh config from the store so a column the user picked while
       // this fetch was in flight isn't clobbered by the stale closure value.
       const current = useBuilderStore.getState().config as {
-        lat?: string;
-        lon?: string;
+        lat_column?: string;
+        lon_column?: string;
       };
-      const updates: { lat?: string; lon?: string } = {};
-      if (latHint && !current.lat) updates.lat = latHint;
-      if (lonHint && !current.lon) updates.lon = lonHint;
+      const updates: { lat_column?: string; lon_column?: string } = {};
+      if (latHint && !current.lat_column) updates.lat_column = latHint;
+      if (lonHint && !current.lon_column) updates.lon_column = lonHint;
       if (Object.keys(updates).length > 0) {
         patchConfig(updates);
         setAutofilledFromDc(true);
@@ -128,16 +128,16 @@ const MapBuilder: React.FC = () => {
 
       <ColumnSelect
         label="Latitude Column"
-        value={config.lat}
-        onChange={(name) => patchConfig({ lat: name })}
+        value={config.lat_column}
+        onChange={(name) => patchConfig({ lat_column: name })}
         numericOnly
         required
       />
 
       <ColumnSelect
         label="Longitude Column"
-        value={config.lon}
-        onChange={(name) => patchConfig({ lon: name })}
+        value={config.lon_column}
+        onChange={(name) => patchConfig({ lon_column: name })}
         numericOnly
         required
       />
@@ -150,16 +150,16 @@ const MapBuilder: React.FC = () => {
 
       <ColumnSelect
         label="Color Column"
-        value={config.color}
-        onChange={(name) => patchConfig({ color: name })}
+        value={config.color_column}
+        onChange={(name) => patchConfig({ color_column: name })}
         clearable
       />
 
       {mapType === 'scatter_map' && (
         <ColumnSelect
           label="Size Column"
-          value={config.size}
-          onChange={(name) => patchConfig({ size: name })}
+          value={config.size_column}
+          onChange={(name) => patchConfig({ size_column: name })}
           numericOnly
           clearable
         />

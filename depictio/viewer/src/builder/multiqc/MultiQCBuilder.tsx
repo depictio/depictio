@@ -20,7 +20,6 @@ import {
   Text,
   Title,
 } from '@mantine/core';
-import { Icon } from '@iconify/react';
 import {
   fetchMultiQCBuilderOptions,
   readMultiqcSelection,
@@ -98,7 +97,13 @@ const MultiQCBuilder: React.FC = () => {
   const form = (
     <Stack gap="md">
       <Group gap="xs" align="center">
-        <Icon icon="mdi:chart-line" width={20} color="var(--mantine-color-orange-6)" />
+        <img
+          src={`${import.meta.env.BASE_URL}logos/multiqc_icon_color.svg`}
+          alt=""
+          width={20}
+          height={20}
+          style={{ objectFit: 'contain', display: 'block' }}
+        />
         <Title order={6}>MultiQC Report</Title>
       </Group>
 

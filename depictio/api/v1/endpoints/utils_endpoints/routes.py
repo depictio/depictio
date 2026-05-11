@@ -847,7 +847,7 @@ async def screenshot_dash_dual(dashboard_id: str, current_user=Depends(get_curre
 
     result = await generate_dual_theme_screenshots(dashboard_id)
 
-    if result["status"] == "success":
+    if result["status"] in ("success", "skipped"):
         return result
     else:
         raise HTTPException(status_code=500, detail=result.get("error", "Screenshot failed"))
