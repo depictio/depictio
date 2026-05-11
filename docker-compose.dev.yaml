@@ -192,7 +192,7 @@ services:
       - sh
       - -c
       - |
-        corepack prepare pnpm@latest --activate &&
+        corepack prepare pnpm@11 --activate &&
         pnpm install --frozen-lockfile &&
         pnpm --filter depictio-viewer dev --host 0.0.0.0 --port 5173
     user: "${UID:-1000}:${GID:-1000}"

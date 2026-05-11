@@ -134,9 +134,12 @@ CMD ["/bin/bash"]
 # `kubectl exec` connectivity tests. Build with `--target dev-viewer`.
 FROM base AS dev-viewer
 USER root
+# Node 22+ required: pnpm 11.x (pinned in docker-compose.dev.yaml) uses
+# the `node:sqlite` built-in module, which is only available starting in
+# Node 22. Earlier Node 20 base crashed at corepack-prepared pnpm startup.
 RUN apt-get update && apt-get install --no-install-recommends -y \
         gnupg \
-    && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
     && apt-get install --no-install-recommends -y nodejs \
     && corepack enable \
     && apt-get clean \
