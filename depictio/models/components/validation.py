@@ -9,7 +9,11 @@ The validation rules ensure that:
 - Image components only work with Image DCs
 - MultiQC components only work with MultiQC DCs
 - JBrowse2 components only work with JBrowse2 DCs
+- Map components only work with Table DCs whose config carries lat/lon column hints
+  (enforced via `dc_has_coordinates`)
 """
+
+from typing import Any
 
 # Component type to allowed DC types mapping
 COMPONENT_DC_TYPE_MAPPING: dict[str, list[str]] = {
@@ -81,3 +85,43 @@ def validate_component_dc_type_compatibility(component_type: str, dc_type: str) 
         )
 
     return True, ""
+
+
+def _get(obj: Any, key: str) -> Any:
+    """Read `key` from either a dict or an attribute-bearing object."""
+    if isinstance(obj, dict):
+        return obj.get(key)
+    return getattr(obj, key, None)
+
+
+def dc_has_coordinates(dc_config: Any) -> bool:
+    """Return True if a DC config is a table DC with `lat_column` and `lon_column` set.
+
+    Accepts either a `DataCollectionConfig` instance or a plain dict (the shape used
+    when configs are persisted in MongoDB or transferred over the wire). Map components
+    require this — the dc_type alone is not enough since `table` covers both regular
+    tables and geographic ones.
+    """
+    if dc_config is None:
+        return False
+    if _get(dc_config, "type") != "table":
+        return False
+    props = _get(dc_config, "dc_specific_properties")
+    if props is None:
+        return False
+    return bool(_get(props, "lat_column")) and bool(_get(props, "lon_column"))
+
+
+def validate_map_component_dc(dc_config: Any) -> tuple[bool, str]:
+    """Strict check for Map components: the DC must be a coordinates-bearing table.
+
+    Returns (True, "") on success or (False, reason) when the DC lacks lat/lon hints.
+    Use after `validate_component_dc_type_compatibility` for Map components.
+    """
+    if dc_has_coordinates(dc_config):
+        return True, ""
+    return (
+        False,
+        "Map components require a table data collection with 'lat_column' and "
+        "'lon_column' set on its dc_specific_properties.",
+    )
