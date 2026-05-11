@@ -1021,6 +1021,31 @@ export async function previewMultiQC(
   return res.json();
 }
 
+/** Cascading module → plot → dataset options for a MultiQC DC.
+ *  Mirrors GET /api/v1/multiqc/builder_options — the same shape consumed by
+ *  the Component Designer's MultiQCBuilder, lifted here for reuse by the
+ *  Project Data Manager's inline DC viewer preview. */
+export interface MultiQCBuilderOptions {
+  modules: string[];
+  plots: Record<string, string[]>;
+  datasets: Record<string, string[]>;
+  s3_locations: string[];
+  general_stats?: Array<{ module: string; plot: string }>;
+}
+
+export async function fetchMultiQCBuilderOptions(
+  dcId: string,
+): Promise<MultiQCBuilderOptions> {
+  const res = await fetch(
+    `${API_BASE}/multiqc/builder_options?data_collection_id=${dcId}`,
+    { headers: authHeaders() },
+  );
+  if (!res.ok) {
+    throw new Error(`Failed to fetch MultiQC options: ${res.status}`);
+  }
+  return res.json();
+}
+
 /** Wraps figure_component/code_mode.py:analyze_constrained_code so the React
  *  builder can validate code mode and round-trip params↔code on mode switch. */
 export interface CodeAnalysis {
@@ -1868,6 +1893,10 @@ export interface CreateDataCollectionUploadInput {
   compression: string;
   hasHeader: boolean;
   file: File;
+  // When both are set, the resulting DC is created with a
+  // DCTableCoordinatesConfig payload so Map components can bind to it.
+  latColumn?: string | null;
+  lonColumn?: string | null;
 }
 
 export interface CreateDataCollectionResult {
@@ -1892,6 +1921,8 @@ export async function createDataCollectionFromUpload(
   if (input.customSeparator) fd.append('custom_separator', input.customSeparator);
   fd.append('compression', input.compression);
   fd.append('has_header', input.hasHeader ? 'true' : 'false');
+  if (input.latColumn) fd.append('lat_column', input.latColumn);
+  if (input.lonColumn) fd.append('lon_column', input.lonColumn);
   fd.append('file', input.file, input.file.name);
 
   // Strip Content-Type so the browser sets the multipart boundary itself.
