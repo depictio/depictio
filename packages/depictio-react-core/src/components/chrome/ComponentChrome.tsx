@@ -48,6 +48,12 @@ export function actionsFor(componentType: string): ChromeAction[] {
       return ['metadata', 'fullscreen', 'download', 'reset'];
     case 'interactive':
       return ['metadata', 'reset'];
+    case 'advanced_viz':
+      // Same action surface as figure: metadata / fullscreen / download
+      // (PNG snapshot of the plotly canvas) / reset. The per-viz controls
+      // (sliders, dropdowns, search) are surfaced as an EXTRA ActionIcon
+      // popover via `extraActions` from ComponentRenderer.
+      return ['metadata', 'fullscreen', 'download', 'reset'];
     case 'card':
     case 'image':
     case 'jbrowse':
@@ -65,6 +71,7 @@ export function orientationFor(componentType: string): 'horizontal' | 'vertical'
     case 'figure':
     case 'multiqc':
     case 'map':
+    case 'advanced_viz':
       return 'vertical';
     default:
       return 'horizontal';

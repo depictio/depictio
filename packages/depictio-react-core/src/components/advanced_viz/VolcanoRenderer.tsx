@@ -276,10 +276,13 @@ const VolcanoRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =>
   return (
     <AdvancedVizFrame
       title={metadata.title || 'Volcano plot'}
+      subtitle={(metadata as any).description || (metadata as any).subtitle}
       controls={controls}
       loading={loading}
       error={error}
       emptyMessage={rows && Object.values(rows)[0]?.length === 0 ? 'No data' : undefined}
+      dataRows={rows ?? undefined}
+      dataColumns={requiredCols}
     >
       {figure ? (
         <Plot

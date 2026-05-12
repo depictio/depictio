@@ -1,9 +1,13 @@
 {
-  "_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d13" },
+  "_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d13"
+  },
   "description": null,
   "flexible_metadata": null,
   "hash": null,
-  "dashboard_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d13" },
+  "dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d13"
+  },
   "version": 1,
   "tmp_children_data": [],
   "stored_layout_data": [],
@@ -15,21 +19,34 @@
       "title": "Chromosome",
       "workflow_tag": "advanced_viz_demo",
       "data_collection_tag": "manhattan_demo",
-      "wf_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d01" },
-      "dc_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d04" },
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d04"
+      },
       "dc_config": {
-        "type": null, "metatype": null,
+        "type": null,
+        "metatype": null,
         "description": "Synthetic Manhattan fixture",
         "data_collection_tag": "manhattan_demo",
         "dc_specific_properties": null,
-        "_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d04" }
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d04"
+        }
       },
-      "cols_json": {}, "parent_index": null,
+      "cols_json": {},
+      "parent_index": null,
       "last_updated": "2026-05-12T00:00:00.000000",
       "interactive_component_type": "MultiSelect",
-      "column_name": "chr", "column_type": "object",
-      "value": null, "default_state": null, "filter_expr": null,
-      "title_size": "md", "custom_color": "#D35400", "icon_name": "mdi:dna",
+      "column_name": "chr",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "title_size": "md",
+      "custom_color": "#D35400",
+      "icon_name": "mdi:dna",
       "wf_tag": "python/advanced_viz_demo"
     },
     {
@@ -38,21 +55,34 @@
       "title": "Score range",
       "workflow_tag": "advanced_viz_demo",
       "data_collection_tag": "manhattan_demo",
-      "wf_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d01" },
-      "dc_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d04" },
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d04"
+      },
       "dc_config": {
-        "type": null, "metatype": null,
+        "type": null,
+        "metatype": null,
         "description": "Synthetic Manhattan fixture",
         "data_collection_tag": "manhattan_demo",
         "dc_specific_properties": null,
-        "_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d04" }
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d04"
+        }
       },
-      "cols_json": {}, "parent_index": null,
+      "cols_json": {},
+      "parent_index": null,
       "last_updated": "2026-05-12T00:00:00.000000",
       "interactive_component_type": "RangeSlider",
-      "column_name": "score", "column_type": "float64",
-      "value": null, "default_state": null, "filter_expr": null,
-      "title_size": "md", "custom_color": "#E67E22", "icon_name": "mdi:chart-line-variant",
+      "column_name": "score",
+      "column_type": "float64",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "title_size": "md",
+      "custom_color": "#E67E22",
+      "icon_name": "mdi:chart-line-variant",
       "wf_tag": "python/advanced_viz_demo"
     },
     {
@@ -61,21 +91,36 @@
       "title": "Total loci",
       "workflow_tag": "advanced_viz_demo",
       "data_collection_tag": "manhattan_demo",
-      "wf_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d01" },
-      "dc_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d04" },
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d04"
+      },
       "dc_config": {
-        "type": null, "metatype": null,
+        "type": null,
+        "metatype": null,
         "description": "Synthetic Manhattan fixture",
         "data_collection_tag": "manhattan_demo",
         "dc_specific_properties": null,
-        "_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d04" }
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d04"
+        }
       },
-      "cols_json": {}, "parent_index": null,
+      "cols_json": {},
+      "parent_index": null,
       "last_updated": "2026-05-12T00:00:00.000000",
-      "aggregation": "count", "column_name": "pos", "column_type": "int64",
-      "value": null, "aggregations": null, "filter_expr": null,
-      "icon_name": "mdi:format-list-numbered", "icon_color": "#D35400",
-      "title_color": "#D35400", "title_font_size": "lg", "value_font_size": "xl",
+      "aggregation": "count",
+      "column_name": "pos",
+      "column_type": "int64",
+      "value": null,
+      "aggregations": null,
+      "filter_expr": null,
+      "icon_name": "mdi:format-list-numbered",
+      "icon_color": "#D35400",
+      "title_color": "#D35400",
+      "title_font_size": "lg",
+      "value_font_size": "xl",
       "wf_tag": "python/advanced_viz_demo"
     },
     {
@@ -84,22 +129,36 @@
       "title": "Above threshold (score>5)",
       "workflow_tag": "advanced_viz_demo",
       "data_collection_tag": "manhattan_demo",
-      "wf_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d01" },
-      "dc_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d04" },
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d04"
+      },
       "dc_config": {
-        "type": null, "metatype": null,
+        "type": null,
+        "metatype": null,
         "description": "Synthetic Manhattan fixture",
         "data_collection_tag": "manhattan_demo",
         "dc_specific_properties": null,
-        "_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d04" }
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d04"
+        }
       },
-      "cols_json": {}, "parent_index": null,
+      "cols_json": {},
+      "parent_index": null,
       "last_updated": "2026-05-12T00:00:00.000000",
-      "aggregation": "count", "column_name": "pos", "column_type": "int64",
-      "value": null, "aggregations": null,
+      "aggregation": "count",
+      "column_name": "pos",
+      "column_type": "int64",
+      "value": null,
+      "aggregations": null,
       "filter_expr": "col('score') > 5.0",
-      "icon_name": "mdi:alert-circle", "icon_color": "#E74C3C",
-      "title_color": "#E74C3C", "title_font_size": "lg", "value_font_size": "xl",
+      "icon_name": "mdi:alert-circle",
+      "icon_color": "#E74C3C",
+      "title_color": "#E74C3C",
+      "title_font_size": "lg",
+      "value_font_size": "xl",
       "wf_tag": "python/advanced_viz_demo"
     },
     {
@@ -108,39 +167,62 @@
       "title": "Top score",
       "workflow_tag": "advanced_viz_demo",
       "data_collection_tag": "manhattan_demo",
-      "wf_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d01" },
-      "dc_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d04" },
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d04"
+      },
       "dc_config": {
-        "type": null, "metatype": null,
+        "type": null,
+        "metatype": null,
         "description": "Synthetic Manhattan fixture",
         "data_collection_tag": "manhattan_demo",
         "dc_specific_properties": null,
-        "_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d04" }
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d04"
+        }
       },
-      "cols_json": {}, "parent_index": null,
+      "cols_json": {},
+      "parent_index": null,
       "last_updated": "2026-05-12T00:00:00.000000",
-      "aggregation": "max", "column_name": "score", "column_type": "float64",
-      "value": null, "aggregations": null, "filter_expr": null,
-      "icon_name": "mdi:trophy", "icon_color": "#F1C40F",
-      "title_color": "#F1C40F", "title_font_size": "lg", "value_font_size": "xl",
+      "aggregation": "max",
+      "column_name": "score",
+      "column_type": "float64",
+      "value": null,
+      "aggregations": null,
+      "filter_expr": null,
+      "icon_name": "mdi:trophy",
+      "icon_color": "#F1C40F",
+      "title_color": "#F1C40F",
+      "title_font_size": "lg",
+      "value_font_size": "xl",
       "wf_tag": "python/advanced_viz_demo"
     },
     {
       "index": "man-manhattan",
       "component_type": "advanced_viz",
-      "title": "Manhattan (synthetic)",
+      "title": "Manhattan plot \u2014 chr \u00d7 score",
       "workflow_tag": "advanced_viz_demo",
       "data_collection_tag": "manhattan_demo",
-      "wf_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d01" },
-      "dc_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d04" },
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d04"
+      },
       "dc_config": {
-        "type": null, "metatype": null,
+        "type": null,
+        "metatype": null,
         "description": "Synthetic Manhattan fixture",
         "data_collection_tag": "manhattan_demo",
         "dc_specific_properties": null,
-        "_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d04" }
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d04"
+        }
       },
-      "cols_json": {}, "parent_index": null,
+      "cols_json": {},
+      "parent_index": null,
       "last_updated": "2026-05-12T00:00:00.000000",
       "viz_kind": "manhattan",
       "config": {
@@ -153,7 +235,8 @@
         "score_threshold": 5.0,
         "top_n_labels": 8
       },
-      "wf_tag": "python/advanced_viz_demo"
+      "wf_tag": "python/advanced_viz_demo",
+      "description": "Per-chromosome significance with alternating bands and top-N locus labels. Tune the threshold line in Settings \u2699."
     },
     {
       "index": "man-score-histogram",
@@ -161,23 +244,39 @@
       "title": "Score distribution",
       "workflow_tag": "advanced_viz_demo",
       "data_collection_tag": "manhattan_demo",
-      "wf_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d01" },
-      "dc_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d04" },
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d04"
+      },
       "dc_config": {
-        "type": null, "metatype": null,
+        "type": null,
+        "metatype": null,
         "description": "Synthetic Manhattan fixture",
         "data_collection_tag": "manhattan_demo",
         "dc_specific_properties": null,
-        "_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d04" }
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d04"
+        }
       },
-      "cols_json": {}, "parent_index": null,
+      "cols_json": {},
+      "parent_index": null,
       "last_updated": "2026-05-12T00:00:00.000000",
       "visu_type": "histogram",
-      "dict_kwargs": { "x": "score", "title": "Score distribution", "nbins": 40 },
-      "mode": "ui", "code_content": null,
-      "displayed_data_count": 0, "total_data_count": 0,
-      "was_sampled": false, "filter_applied": false,
-      "selection_enabled": false, "selection_column": null,
+      "dict_kwargs": {
+        "x": "score",
+        "title": "Score distribution",
+        "nbins": 40
+      },
+      "mode": "ui",
+      "code_content": null,
+      "displayed_data_count": 0,
+      "total_data_count": 0,
+      "was_sampled": false,
+      "filter_applied": false,
+      "selection_enabled": false,
+      "selection_column": null,
       "wf_tag": "python/advanced_viz_demo"
     },
     {
@@ -186,38 +285,138 @@
       "title": "All loci",
       "workflow_tag": "advanced_viz_demo",
       "data_collection_tag": "manhattan_demo",
-      "wf_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d01" },
-      "dc_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d04" },
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d04"
+      },
       "dc_config": {
-        "type": null, "metatype": null,
+        "type": null,
+        "metatype": null,
         "description": "Synthetic Manhattan fixture",
         "data_collection_tag": "manhattan_demo",
         "dc_specific_properties": null,
-        "_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d04" }
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d04"
+        }
       },
-      "cols_json": {}, "parent_index": null,
+      "cols_json": {},
+      "parent_index": null,
       "last_updated": "2026-05-12T00:00:00.000000",
-      "columns": ["chr","pos","score","feature"],
-      "page_size": 10, "sortable": true, "filterable": true,
-      "row_selection_enabled": false, "row_selection_column": null,
+      "columns": [
+        "chr",
+        "pos",
+        "score",
+        "feature"
+      ],
+      "page_size": 10,
+      "sortable": true,
+      "filterable": true,
+      "row_selection_enabled": false,
+      "row_selection_column": null,
       "wf_tag": "python/advanced_viz_demo"
     }
   ],
   "stored_edit_dashboard_mode_button": [],
   "left_panel_layout_data": [
-    { "i": "box-man-chr-filter",   "x": 0, "y": 0, "w": 1, "h": 5, "static": false },
-    { "i": "box-man-score-slider", "x": 0, "y": 5, "w": 1, "h": 4, "static": false }
+    {
+      "i": "box-man-chr-filter",
+      "x": 0,
+      "y": 0,
+      "w": 1,
+      "h": 5,
+      "static": false
+    },
+    {
+      "i": "box-man-score-slider",
+      "x": 0,
+      "y": 5,
+      "w": 1,
+      "h": 4,
+      "static": false
+    }
   ],
   "right_panel_layout_data": [
-    { "i": "box-man-card-total",           "x": 0, "y": 0, "w": 2, "h": 2, "static": true },
-    { "i": "box-man-card-above-threshold", "x": 2, "y": 0, "w": 3, "h": 2, "static": true },
-    { "i": "box-man-card-max-score",       "x": 5, "y": 0, "w": 3, "h": 2, "static": true },
-    { "i": "box-man-manhattan",            "x": 0, "y": 2, "w": 8, "h": 8, "static": false, "resizeHandles": ["se","s","e","sw","w"] },
-    { "i": "box-man-score-histogram",      "x": 0, "y": 10, "w": 4, "h": 5, "static": false, "resizeHandles": ["se","s","e","sw","w"] },
-    { "i": "box-man-table",                "x": 4, "y": 10, "w": 4, "h": 5, "static": false, "resizeHandles": ["se","s","e","sw","w"] }
+    {
+      "i": "box-man-card-total",
+      "x": 0,
+      "y": 0,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-man-card-above-threshold",
+      "x": 2,
+      "y": 0,
+      "w": 3,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-man-card-max-score",
+      "x": 5,
+      "y": 0,
+      "w": 3,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-man-manhattan",
+      "x": 0,
+      "y": 2,
+      "w": 8,
+      "h": 8,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-man-score-histogram",
+      "x": 0,
+      "y": 10,
+      "w": 4,
+      "h": 5,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-man-table",
+      "x": 4,
+      "y": 10,
+      "w": 4,
+      "h": 5,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    }
   ],
-  "buttons_data": { "unified_edit_mode": true, "add_components_button": { "count": 0 } },
-  "stored_add_button": { "count": 0 },
+  "buttons_data": {
+    "unified_edit_mode": true,
+    "add_components_button": {
+      "count": 0
+    }
+  },
+  "stored_add_button": {
+    "count": 0
+  },
   "title": "Manhattan",
   "subtitle": "Generic chr/pos/score with threshold line, alternating bands and top-N locus labels",
   "icon": "mdi:chart-line-stacked",
@@ -228,18 +427,31 @@
   "permissions": {
     "owners": [
       {
-        "_id": { "$oid": "67658ba033c8b59ad489d7c7" },
-        "description": null, "flexible_metadata": null, "hash": null,
-        "email": "admin@example.com", "is_admin": true,
-        "is_anonymous": false, "is_temporary": false, "expiration_time": null
+        "_id": {
+          "$oid": "67658ba033c8b59ad489d7c7"
+        },
+        "description": null,
+        "flexible_metadata": null,
+        "hash": null,
+        "email": "admin@example.com",
+        "is_admin": true,
+        "is_anonymous": false,
+        "is_temporary": false,
+        "expiration_time": null
       }
-    ], "editors": [], "viewers": []
+    ],
+    "editors": [],
+    "viewers": []
   },
   "is_public": true,
   "last_saved_ts": "2026-05-12 00:00:00",
-  "project_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d00" },
+  "project_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d00"
+  },
   "is_main_tab": false,
-  "parent_dashboard_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d00" },
+  "parent_dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d00"
+  },
   "tab_order": 2,
   "main_tab_name": null,
   "tab_icon": "mdi:chart-line-stacked",

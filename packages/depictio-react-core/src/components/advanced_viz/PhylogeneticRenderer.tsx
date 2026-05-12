@@ -527,10 +527,13 @@ const PhylogeneticRenderer: React.FC<Props> = ({ metadata, filters, refreshTick 
   return (
     <AdvancedVizFrame
       title={metadata.title || 'Phylogeny'}
+      subtitle={(metadata as any).description || (metadata as any).subtitle}
       controls={controls}
       loading={loading}
       error={error}
       emptyMessage={tree && tree.leaves.length === 0 ? 'Empty tree' : undefined}
+      dataRows={meta ?? undefined}
+      dataColumns={metaCols}
     >
       <div style={{ display: 'flex', flexDirection: 'column', width: '100%', height: '100%' }}>
         {legend}

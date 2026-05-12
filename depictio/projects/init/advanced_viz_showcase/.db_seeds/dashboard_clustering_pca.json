@@ -1,9 +1,13 @@
 {
-  "_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d12" },
+  "_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d12"
+  },
   "description": null,
   "flexible_metadata": null,
   "hash": null,
-  "dashboard_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d12" },
+  "dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d12"
+  },
   "version": 1,
   "tmp_children_data": [],
   "stored_layout_data": [],
@@ -15,21 +19,34 @@
       "title": "Cluster",
       "workflow_tag": "advanced_viz_demo",
       "data_collection_tag": "embedding_pca",
-      "wf_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d01" },
-      "dc_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d03" },
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d03"
+      },
       "dc_config": {
-        "type": null, "metatype": null,
+        "type": null,
+        "metatype": null,
         "description": "PCA embedding",
         "data_collection_tag": "embedding_pca",
         "dc_specific_properties": null,
-        "_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d03" }
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d03"
+        }
       },
-      "cols_json": {}, "parent_index": null,
+      "cols_json": {},
+      "parent_index": null,
       "last_updated": "2026-05-12T00:00:00.000000",
       "interactive_component_type": "MultiSelect",
-      "column_name": "cluster", "column_type": "object",
-      "value": null, "default_state": null, "filter_expr": null,
-      "title_size": "md", "custom_color": "#16A085", "icon_name": "mdi:group",
+      "column_name": "cluster",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "title_size": "md",
+      "custom_color": "#16A085",
+      "icon_name": "mdi:group",
       "wf_tag": "python/advanced_viz_demo"
     },
     {
@@ -38,21 +55,36 @@
       "title": "Samples",
       "workflow_tag": "advanced_viz_demo",
       "data_collection_tag": "embedding_pca",
-      "wf_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d01" },
-      "dc_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d03" },
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d03"
+      },
       "dc_config": {
-        "type": null, "metatype": null,
+        "type": null,
+        "metatype": null,
         "description": "PCA embedding",
         "data_collection_tag": "embedding_pca",
         "dc_specific_properties": null,
-        "_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d03" }
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d03"
+        }
       },
-      "cols_json": {}, "parent_index": null,
+      "cols_json": {},
+      "parent_index": null,
       "last_updated": "2026-05-12T00:00:00.000000",
-      "aggregation": "count", "column_name": "sample_id", "column_type": "object",
-      "value": null, "aggregations": null, "filter_expr": null,
-      "icon_name": "mdi:account-multiple", "icon_color": "#16A085",
-      "title_color": "#16A085", "title_font_size": "lg", "value_font_size": "xl",
+      "aggregation": "count",
+      "column_name": "sample_id",
+      "column_type": "object",
+      "value": null,
+      "aggregations": null,
+      "filter_expr": null,
+      "icon_name": "mdi:account-multiple",
+      "icon_color": "#16A085",
+      "title_color": "#16A085",
+      "title_font_size": "lg",
+      "value_font_size": "xl",
       "wf_tag": "python/advanced_viz_demo"
     },
     {
@@ -61,39 +93,62 @@
       "title": "Distinct clusters",
       "workflow_tag": "advanced_viz_demo",
       "data_collection_tag": "embedding_pca",
-      "wf_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d01" },
-      "dc_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d03" },
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d03"
+      },
       "dc_config": {
-        "type": null, "metatype": null,
+        "type": null,
+        "metatype": null,
         "description": "PCA embedding",
         "data_collection_tag": "embedding_pca",
         "dc_specific_properties": null,
-        "_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d03" }
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d03"
+        }
       },
-      "cols_json": {}, "parent_index": null,
+      "cols_json": {},
+      "parent_index": null,
       "last_updated": "2026-05-12T00:00:00.000000",
-      "aggregation": "nunique", "column_name": "cluster", "column_type": "object",
-      "value": null, "aggregations": null, "filter_expr": null,
-      "icon_name": "mdi:dots-grid", "icon_color": "#2E86C1",
-      "title_color": "#2E86C1", "title_font_size": "lg", "value_font_size": "xl",
+      "aggregation": "nunique",
+      "column_name": "cluster",
+      "column_type": "object",
+      "value": null,
+      "aggregations": null,
+      "filter_expr": null,
+      "icon_name": "mdi:dots-grid",
+      "icon_color": "#2E86C1",
+      "title_color": "#2E86C1",
+      "title_font_size": "lg",
+      "value_font_size": "xl",
       "wf_tag": "python/advanced_viz_demo"
     },
     {
       "index": "pca-embedding",
       "component_type": "advanced_viz",
-      "title": "PCA (synthetic)",
+      "title": "PCA projection",
       "workflow_tag": "advanced_viz_demo",
       "data_collection_tag": "embedding_pca",
-      "wf_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d01" },
-      "dc_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d03" },
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d03"
+      },
       "dc_config": {
-        "type": null, "metatype": null,
+        "type": null,
+        "metatype": null,
         "description": "PCA embedding",
         "data_collection_tag": "embedding_pca",
         "dc_specific_properties": null,
-        "_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d03" }
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d03"
+        }
       },
-      "cols_json": {}, "parent_index": null,
+      "cols_json": {},
+      "parent_index": null,
       "last_updated": "2026-05-12T00:00:00.000000",
       "viz_kind": "embedding",
       "config": {
@@ -106,7 +161,8 @@
         "point_size": 9,
         "show_density": false
       },
-      "wf_tag": "python/advanced_viz_demo"
+      "wf_tag": "python/advanced_viz_demo",
+      "description": "Principal Component Analysis on the synthetic 90\u00d780 sample\u00d7feature matrix. Pre-computed (instant render)."
     },
     {
       "index": "pca-cluster-bar",
@@ -114,23 +170,39 @@
       "title": "Cluster sizes",
       "workflow_tag": "advanced_viz_demo",
       "data_collection_tag": "embedding_pca",
-      "wf_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d01" },
-      "dc_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d03" },
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d03"
+      },
       "dc_config": {
-        "type": null, "metatype": null,
+        "type": null,
+        "metatype": null,
         "description": "PCA embedding",
         "data_collection_tag": "embedding_pca",
         "dc_specific_properties": null,
-        "_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d03" }
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d03"
+        }
       },
-      "cols_json": {}, "parent_index": null,
+      "cols_json": {},
+      "parent_index": null,
       "last_updated": "2026-05-12T00:00:00.000000",
       "visu_type": "histogram",
-      "dict_kwargs": { "x": "cluster", "color": "cluster", "title": "Cluster sizes" },
-      "mode": "ui", "code_content": null,
-      "displayed_data_count": 0, "total_data_count": 0,
-      "was_sampled": false, "filter_applied": false,
-      "selection_enabled": false, "selection_column": null,
+      "dict_kwargs": {
+        "x": "cluster",
+        "color": "cluster",
+        "title": "Cluster sizes"
+      },
+      "mode": "ui",
+      "code_content": null,
+      "displayed_data_count": 0,
+      "total_data_count": 0,
+      "was_sampled": false,
+      "filter_applied": false,
+      "selection_enabled": false,
+      "selection_column": null,
       "wf_tag": "python/advanced_viz_demo"
     },
     {
@@ -139,38 +211,125 @@
       "title": "Samples",
       "workflow_tag": "advanced_viz_demo",
       "data_collection_tag": "embedding_pca",
-      "wf_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d01" },
-      "dc_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d03" },
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d03"
+      },
       "dc_config": {
-        "type": null, "metatype": null,
+        "type": null,
+        "metatype": null,
         "description": "PCA embedding",
         "data_collection_tag": "embedding_pca",
         "dc_specific_properties": null,
-        "_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d03" }
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d03"
+        }
       },
-      "cols_json": {}, "parent_index": null,
+      "cols_json": {},
+      "parent_index": null,
       "last_updated": "2026-05-12T00:00:00.000000",
-      "columns": ["sample_id", "cluster", "dim_1", "dim_2", "color"],
-      "page_size": 10, "sortable": true, "filterable": true,
-      "row_selection_enabled": false, "row_selection_column": null,
+      "columns": [
+        "sample_id",
+        "cluster",
+        "dim_1",
+        "dim_2",
+        "color"
+      ],
+      "page_size": 10,
+      "sortable": true,
+      "filterable": true,
+      "row_selection_enabled": false,
+      "row_selection_column": null,
       "wf_tag": "python/advanced_viz_demo"
     }
   ],
   "stored_edit_dashboard_mode_button": [],
   "left_panel_layout_data": [
-    { "i": "box-pca-cluster-filter", "x": 0, "y": 0, "w": 1, "h": 4, "static": false }
+    {
+      "i": "box-pca-cluster-filter",
+      "x": 0,
+      "y": 0,
+      "w": 1,
+      "h": 4,
+      "static": false
+    }
   ],
   "right_panel_layout_data": [
-    { "i": "box-pca-card-samples",  "x": 0, "y": 0, "w": 2, "h": 2, "static": true },
-    { "i": "box-pca-card-clusters", "x": 2, "y": 0, "w": 2, "h": 2, "static": true },
-    { "i": "box-pca-embedding",     "x": 0, "y": 2, "w": 8, "h": 8, "static": false, "resizeHandles": ["se","s","e","sw","w"] },
-    { "i": "box-pca-cluster-bar",   "x": 0, "y": 10, "w": 4, "h": 5, "static": false, "resizeHandles": ["se","s","e","sw","w"] },
-    { "i": "box-pca-table",         "x": 4, "y": 10, "w": 4, "h": 5, "static": false, "resizeHandles": ["se","s","e","sw","w"] }
+    {
+      "i": "box-pca-card-samples",
+      "x": 0,
+      "y": 0,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-pca-card-clusters",
+      "x": 2,
+      "y": 0,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-pca-embedding",
+      "x": 0,
+      "y": 2,
+      "w": 8,
+      "h": 8,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-pca-cluster-bar",
+      "x": 0,
+      "y": 10,
+      "w": 4,
+      "h": 5,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-pca-table",
+      "x": 4,
+      "y": 10,
+      "w": 4,
+      "h": 5,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    }
   ],
-  "buttons_data": { "unified_edit_mode": true, "add_components_button": { "count": 0 } },
-  "stored_add_button": { "count": 0 },
+  "buttons_data": {
+    "unified_edit_mode": true,
+    "add_components_button": {
+      "count": 0
+    }
+  },
+  "stored_add_button": {
+    "count": 0
+  },
   "title": "Clustering: PCA",
-  "subtitle": "Principal Component Analysis on the synthetic 90×200 feature matrix",
+  "subtitle": "Principal Component Analysis on the synthetic 90\u00d7200 feature matrix",
   "icon": "mdi:atom",
   "icon_color": "teal",
   "icon_variant": "filled",
@@ -179,18 +338,31 @@
   "permissions": {
     "owners": [
       {
-        "_id": { "$oid": "67658ba033c8b59ad489d7c7" },
-        "description": null, "flexible_metadata": null, "hash": null,
-        "email": "admin@example.com", "is_admin": true,
-        "is_anonymous": false, "is_temporary": false, "expiration_time": null
+        "_id": {
+          "$oid": "67658ba033c8b59ad489d7c7"
+        },
+        "description": null,
+        "flexible_metadata": null,
+        "hash": null,
+        "email": "admin@example.com",
+        "is_admin": true,
+        "is_anonymous": false,
+        "is_temporary": false,
+        "expiration_time": null
       }
-    ], "editors": [], "viewers": []
+    ],
+    "editors": [],
+    "viewers": []
   },
   "is_public": true,
   "last_saved_ts": "2026-05-12 00:00:00",
-  "project_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d00" },
+  "project_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d00"
+  },
   "is_main_tab": false,
-  "parent_dashboard_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d00" },
+  "parent_dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d00"
+  },
   "tab_order": 4,
   "main_tab_name": null,
   "tab_icon": "mdi:atom",
