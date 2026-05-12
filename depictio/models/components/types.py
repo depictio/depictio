@@ -31,6 +31,9 @@ AdvancedVizKind = Literal[
     "manhattan",
     "stacked_taxonomy",
     "phylogenetic",
+    "rarefaction",
+    "ancombc_differentials",
+    "da_barplot",
 ]
 
 # Map visualization types
