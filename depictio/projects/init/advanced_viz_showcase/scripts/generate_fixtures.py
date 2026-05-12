@@ -313,3 +313,85 @@ write_tsv(
     ["sample_id", "taxon", "rank", "abundance", "lineage"],
     rows,
 )
+
+
+# ---------------------------------------------------------------------------
+# 5. Rarefaction: alpha-diversity (faith_pd, observed_features) over 12
+#    sequencing depths, 10 iterations per (sample, depth). Same 18 samples
+#    as the taxonomy fixture for visual continuity.
+# columns: sample_id, depth, iter, faith_pd, observed_features, habitat
+# ---------------------------------------------------------------------------
+HABITAT_BY_SAMPLE = {s: s.split("_")[1] for s in SAMPLES}  # gut / skin / soil
+DEPTHS = [500, 1000, 2000, 4000, 6000, 8000, 12000, 16000, 22000, 30000, 40000, 50000]
+ITERS = list(range(10))
+
+# Per-sample asymptote + saturation rate so curves look biologically plausible
+# — gut samples saturate at higher diversity than skin / soil.
+ASYMPTOTE = {"gut": 28.0, "skin": 14.0, "soil": 20.0}
+SATURATION = {"gut": 6000.0, "skin": 3500.0, "soil": 5000.0}
+
+rows = []
+for s in SAMPLES:
+    hab = HABITAT_BY_SAMPLE[s]
+    asym = ASYMPTOTE[hab] * R.uniform(0.85, 1.15)
+    sat = SATURATION[hab] * R.uniform(0.85, 1.15)
+    for d in DEPTHS:
+        # Asymptotic curve: y = asym * (1 - exp(-d / sat)) + noise.
+        # Using `math` for exp keeps the script's only ML dep (numpy) for the
+        # embedding block.
+        import math as _math
+
+        expected = asym * (1.0 - _math.exp(-d / sat))
+        # observed_features rises faster than faith_pd typically; scale.
+        feat_factor = 8.0
+        for it in ITERS:
+            faith = max(0.0, expected + R.gauss(0, 0.4))
+            obs = max(0.0, expected * feat_factor + R.gauss(0, 4.0))
+            rows.append([s, d, it, round(faith, 3), round(obs, 1), hab])
+
+write_tsv(
+    OUT / "rarefaction_demo.tsv",
+    ["sample_id", "depth", "iter", "faith_pd", "observed_features", "habitat"],
+    rows,
+)
+
+
+# ---------------------------------------------------------------------------
+# 6. ANCOM-BC differentials: 200 taxa across 3 contrasts. Drives both the
+#    ANCOMBCDifferentialsRenderer (ranked horizontal bar for one contrast)
+#    and the DaBarplotRenderer (faceted top-N per contrast).
+# columns: feature_id, contrast, lfc, significance, label, neg_log10_q
+# ---------------------------------------------------------------------------
+TAXA = [f"OTU{i:04d}" for i in range(200)]
+CONTRASTS_BC = ["gut_vs_skin", "gut_vs_soil", "skin_vs_soil"]
+PHYLA = ["Firmicutes", "Bacteroidetes", "Proteobacteria", "Actinobacteria", "Verrucomicrobia"]
+
+rows = []
+for taxon in TAXA:
+    phylum = R.choice(PHYLA)
+    for contrast in CONTRASTS_BC:
+        is_hit = R.random() < 0.18
+        if is_hit:
+            lfc = R.gauss(0, 0.5) + (R.choice([-1, 1]) * R.uniform(1.5, 4.0))
+            sig = 10 ** R.uniform(-8, -2)
+        else:
+            lfc = R.gauss(0, 0.6)
+            sig = 10 ** R.uniform(-2, 0)
+        import math as _math
+
+        rows.append(
+            [
+                taxon,
+                contrast,
+                round(lfc, 3),
+                f"{sig:.6e}",
+                f"{phylum};{taxon}",
+                round(-_math.log10(max(sig, 1e-300)), 3),
+            ]
+        )
+
+write_tsv(
+    OUT / "ancombc_demo.tsv",
+    ["feature_id", "contrast", "lfc", "significance", "label", "neg_log10_q"],
+    rows,
+)

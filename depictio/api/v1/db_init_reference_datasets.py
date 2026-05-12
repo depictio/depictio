@@ -108,6 +108,9 @@ STATIC_IDS = {
             "bacterial_metadata": "646b0f3c1e4a2d7f8e5b8d0a",
             # Raw sample × feature matrix — input for live Celery clustering.
             "embedding_features": "646b0f3c1e4a2d7f8e5b8d0b",
+            # Microbiome alpha-rarefaction + ANCOM-BC differentials fixtures.
+            "rarefaction_demo": "646b0f3c1e4a2d7f8e5b8d20",
+            "ancombc_demo": "646b0f3c1e4a2d7f8e5b8d21",
         },
         "dashboards": {
             # Main tab reuses the project_id so get_child_tabs(main_id) finds
@@ -122,8 +125,10 @@ STATIC_IDS = {
             "advanced_viz_clustering_umap": "646b0f3c1e4a2d7f8e5b8d15",
             "advanced_viz_clustering_tsne": "646b0f3c1e4a2d7f8e5b8d16",
             "advanced_viz_clustering_pcoa": "646b0f3c1e4a2d7f8e5b8d17",
-            "advanced_viz_phylogeny": "646b0f3c1e4a2d7f8e5b8d18",
-            "advanced_viz_clustering_live": "646b0f3c1e4a2d7f8e5b8d19",
+            "advanced_viz_phylogeny": "646b0f3c1e4a2d7f8e5b8d18",            "advanced_viz_clustering_live": "646b0f3c1e4a2d7f8e5b8d19",
+            "advanced_viz_rarefaction": "646b0f3c1e4a2d7f8e5b8d22",
+            "advanced_viz_ancombc": "646b0f3c1e4a2d7f8e5b8d23",
+            "advanced_viz_da_barplot": "646b0f3c1e4a2d7f8e5b8d24",
         },
     },
 }
