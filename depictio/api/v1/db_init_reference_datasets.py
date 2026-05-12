@@ -111,6 +111,7 @@ STATIC_IDS = {
             # Microbiome alpha-rarefaction + ANCOM-BC differentials fixtures.
             "rarefaction_demo": "646b0f3c1e4a2d7f8e5b8d20",
             "ancombc_demo": "646b0f3c1e4a2d7f8e5b8d21",
+            "gsea_demo": "646b0f3c1e4a2d7f8e5b8d25",
         },
         "dashboards": {
             # Main tab reuses the project_id so get_child_tabs(main_id) finds
@@ -129,6 +130,7 @@ STATIC_IDS = {
             "advanced_viz_rarefaction": "646b0f3c1e4a2d7f8e5b8d22",
             "advanced_viz_ancombc": "646b0f3c1e4a2d7f8e5b8d23",
             "advanced_viz_da_barplot": "646b0f3c1e4a2d7f8e5b8d24",
+            "advanced_viz_enrichment": "646b0f3c1e4a2d7f8e5b8d26",
         },
     },
 }

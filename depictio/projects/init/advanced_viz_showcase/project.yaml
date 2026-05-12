@@ -253,6 +253,29 @@ workflows:
               label: "Phylum;taxon — display label"
               neg_log10_q: "-log10(significance), precomputed for convenience"
 
+      # GSEA / GO / KEGG / Reactome pathway-enrichment dot plot.
+      - id: "646b0f3c1e4a2d7f8e5b8d25"
+        data_collection_tag: "gsea_demo"
+        description: "Synthetic pathway-enrichment results across 5 ontologies (GO_BP / GO_CC / KEGG / Reactome / Hallmark)"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "/app/depictio/projects/init/advanced_viz_showcase/data/gsea_demo.tsv"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+            columns_description:
+              term: "Pathway / GO term name (with ontology prefix)"
+              source: "Ontology source — GO_BP / GO_CC / KEGG / Reactome / Hallmark"
+              nes: "Normalised enrichment score (signed)"
+              padj: "FDR-adjusted p-value"
+              gene_count: "Gene-set size"
+              leading_edge: "Comma-separated leading-edge gene IDs"
+
       - id: "646b0f3c1e4a2d7f8e5b8d09"
         data_collection_tag: "bacterial_tree"
         description: "Bacterial phylogeny (21 taxa) — Newick file for the phylogenetic viz"
