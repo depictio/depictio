@@ -175,6 +175,8 @@ export {
   pollComputeEmbedding,
   dispatchComplexHeatmap,
   pollComplexHeatmap,
+  dispatchUpset,
+  pollUpset,
 } from './api';
 export type { TableMutationResult } from './api';
 // Selection-as-filter helpers (Plotly/AG Grid → InteractiveFilter)
