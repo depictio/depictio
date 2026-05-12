@@ -3,8 +3,7 @@ import react from '@vitejs/plugin-react';
 import path from 'path';
 
 // Dev-only: serve the SPA's index.html (under base /dashboard-beta/) for any
-// request to /auth*, /dashboards-beta*, /projects-beta*, /about-beta*, or
-// /admin-beta* so those React routes get HMR. Production has the matching
+// SPA route that lives outside the Vite `base`. Production has the matching
 // FastAPI catch-alls in depictio/api/main.py — this plugin only runs when
 // `vite dev` is the server. The browser URL stays untouched, so main.tsx
 // still picks the right tree via pathname matching.
@@ -17,9 +16,12 @@ const authDevFallback = (): Plugin => ({
         req.url &&
         (/^\/auth(\/|$|\?)/.test(req.url) ||
           /^\/dashboards-beta(\/|$|\?)/.test(req.url) ||
+          /^\/dashboard-beta-edit(\/|$|\?)/.test(req.url) ||
           /^\/projects-beta(\/|$|\?)/.test(req.url) ||
           /^\/about-beta(\/|$|\?)/.test(req.url) ||
-          /^\/admin-beta(\/|$|\?)/.test(req.url))
+          /^\/admin-beta(\/|$|\?)/.test(req.url) ||
+          /^\/profile-beta(\/|$|\?)/.test(req.url) ||
+          /^\/cli-agents-beta(\/|$|\?)/.test(req.url))
       ) {
         req.url = '/dashboard-beta/';
       }
