@@ -453,3 +453,31 @@ write_tsv(
     ["term", "source", "nes", "padj", "gene_count", "leading_edge"],
     rows,
 )
+
+
+# ---------------------------------------------------------------------------
+# 8. UpSet plot input: 400 features × membership in 5 differential-expression
+#    contrasts. Binary 0/1 columns — the plotly-upset task auto-detects them.
+#    Some features participate in multiple contrasts (overlapping sets), some
+#    are exclusive — exactly the kind of pattern UpSet visualises well.
+# columns: feature_id, contrastA, contrastB, contrastC, contrastD, contrastE
+# ---------------------------------------------------------------------------
+UPSET_SETS = ["contrastA", "contrastB", "contrastC", "contrastD", "contrastE"]
+# Per-set probability a feature belongs to it (asymmetric → diverse overlaps).
+SET_PROB = {"contrastA": 0.30, "contrastB": 0.25, "contrastC": 0.18, "contrastD": 0.12, "contrastE": 0.08}
+
+rows = []
+for i in range(400):
+    feat = f"FEAT{i:04d}"
+    memberships = [1 if R.random() < SET_PROB[s] else 0 for s in UPSET_SETS]
+    # Guarantee a few "all five" features so the highest-degree intersection
+    # is visible — otherwise random sampling rarely produces them.
+    if i < 5:
+        memberships = [1, 1, 1, 1, 1]
+    rows.append([feat] + memberships)
+
+write_tsv(
+    OUT / "upset_demo.tsv",
+    ["feature_id"] + UPSET_SETS,
+    rows,
+)
