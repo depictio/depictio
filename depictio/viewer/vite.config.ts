@@ -19,7 +19,8 @@ const authDevFallback = (): Plugin => ({
           /^\/dashboards-beta(\/|$|\?)/.test(req.url) ||
           /^\/projects-beta(\/|$|\?)/.test(req.url) ||
           /^\/about-beta(\/|$|\?)/.test(req.url) ||
-          /^\/admin-beta(\/|$|\?)/.test(req.url))
+          /^\/admin-beta(\/|$|\?)/.test(req.url) ||
+          /^\/dashboard-beta-edit(\/|$|\?)/.test(req.url))
       ) {
         req.url = '/dashboard-beta/';
       }

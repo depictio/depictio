@@ -2,8 +2,13 @@
 # Note: intentionally no `set -e` — this script is sourced by pre_create_setup.sh
 # and set -e would leak into the interactive shell, breaking readline (Esc, Ctrl+R, etc.).
 
-# Port allocation script for git worktree-based multi-instance setup
-# Uses branch naming convention to assign deterministic port offsets
+# Port allocation for git worktree-based multi-instance dev setups.
+#
+# Strategy: scan offsets 100..250 and pick the first one whose 8-port window
+# (mongo, redis, fastapi, dash, minio-api, minio-console, viewer, flower) is
+# entirely free on the host. No persistence — every `source` re-allocates,
+# so ports may shift between runs if neighbours boot first. Acceptable for
+# pure dev worktrees; if you need stable URLs, pin them by hand.
 
 # Parse command-line arguments
 MONGODB_WIPE="false"
@@ -29,49 +34,52 @@ echo "🔍 Detecting instance configuration..."
 BRANCH_NAME=$(git branch --show-current 2>/dev/null || echo "unknown")
 
 # Sanitize branch name for use in container/project names
-# Replace / with - and remove other special characters
 SANITIZED_BRANCH=$(echo "$BRANCH_NAME" | sed 's/\//-/g' | sed 's/[^a-zA-Z0-9-]/-/g' | tr '[:upper:]' '[:lower:]')
 
 # Create unique project name
 COMPOSE_PROJECT_NAME="depictio-${SANITIZED_BRANCH}"
 
-# Assign port offset based on branch type
-# This ensures deterministic port allocation
-case "$BRANCH_NAME" in
-  "main")
-    PORT_OFFSET=0
-    echo "📌 Branch: main (production baseline)"
-    ;;
-  feat/*)
-    # Extract feature name and create hash for deterministic offset
-    FEATURE_NAME=$(echo "$BRANCH_NAME" | sed 's/feat\///')
-    # Use first characters of md5 hash to generate number between 10-99
-    HASH_NUM=$(echo -n "$FEATURE_NAME" | md5sum | tr -cd '0-9' | head -c 2)
-    # Ensure it's between 10-89 (allows up to 90 feature branches)
-    PORT_OFFSET=$((10 + (HASH_NUM % 80)))
-    echo "🚀 Branch: $BRANCH_NAME (feature branch, offset: $PORT_OFFSET)"
-    ;;
-  hotfix/*)
-    # Hotfixes get 90-99 range for quick identification
-    HOTFIX_NAME=$(echo "$BRANCH_NAME" | sed 's/hotfix\///')
-    HASH_NUM=$(echo -n "$HOTFIX_NAME" | md5sum | tr -cd '0-9' | head -c 2)
-    PORT_OFFSET=$((90 + (HASH_NUM % 10)))
-    echo "🔥 Branch: $BRANCH_NAME (hotfix branch, offset: $PORT_OFFSET)"
-    ;;
-  release/*)
-    # Releases get 100-109 range
-    RELEASE_NAME=$(echo "$BRANCH_NAME" | sed 's/release\///')
-    HASH_NUM=$(echo -n "$RELEASE_NAME" | md5sum | tr -cd '0-9' | head -c 2)
-    PORT_OFFSET=$((100 + (HASH_NUM % 10)))
-    echo "📦 Branch: $BRANCH_NAME (release branch, offset: $PORT_OFFSET)"
-    ;;
-  *)
-    # Unknown branch types get 110+ range
-    HASH_NUM=$(echo -n "$BRANCH_NAME" | md5sum | tr -cd '0-9' | head -c 2)
-    PORT_OFFSET=$((110 + (HASH_NUM % 40)))
-    echo "❓ Branch: $BRANCH_NAME (unknown type, offset: $PORT_OFFSET)"
-    ;;
-esac
+# Returns 0 if something is LISTENing on the TCP port, 1 otherwise.
+# lsof is present on macOS by default and in most Linux dev images; the
+# /dev/tcp probe is a fallback that catches anything accepting connections.
+port_in_use() {
+  local port=$1
+  if command -v lsof >/dev/null 2>&1; then
+    lsof -nP -iTCP:"$port" -sTCP:LISTEN >/dev/null 2>&1
+    return $?
+  fi
+  (exec 3<>/dev/tcp/127.0.0.1/"$port") >/dev/null 2>&1 && { exec 3<&-; exec 3>&-; return 0; }
+  return 1
+}
+
+# Host-side port bases. Each instance binds (base + offset) for each entry.
+PORT_BASES=(27000 6000 8000 5000 9000 9500 5500 7000)
+
+PORT_OFFSET=""
+for candidate in $(seq 100 250); do
+  collision=0
+  for base in "${PORT_BASES[@]}"; do
+    if port_in_use $((base + candidate)); then
+      collision=1
+      break
+    fi
+  done
+  if [ "$collision" -eq 0 ]; then
+    PORT_OFFSET=$candidate
+    break
+  fi
+done
+
+if [ -z "$PORT_OFFSET" ]; then
+  echo "❌ No free 8-port window found in offsets 100-250."
+  echo "   Stop some containers or other listeners and re-source this script."
+  # Dual-mode bail: `return` works when this script is sourced, `exit` runs
+  # when it's executed directly. shellcheck can't tell `return` may fail.
+  # shellcheck disable=SC2317
+  return 1 2>/dev/null || exit 1
+fi
+
+echo "🎯 Branch: $BRANCH_NAME (allocated offset: $PORT_OFFSET)"
 
 # Calculate actual ports with offset
 MONGO_PORT=$((27000 + PORT_OFFSET))
@@ -79,12 +87,12 @@ REDIS_PORT=$((6000 + PORT_OFFSET))
 FASTAPI_PORT=$((8000 + PORT_OFFSET))
 DASH_PORT=$((5000 + PORT_OFFSET))
 MINIO_PORT=$((9000 + PORT_OFFSET))
-MINIO_CONSOLE_PORT=$((9001 + PORT_OFFSET))
+MINIO_CONSOLE_PORT=$((9500 + PORT_OFFSET))
+VIEWER_DEV_PORT=$((5500 + PORT_OFFSET))
+FLOWER_PORT=$((7000 + PORT_OFFSET))
 
-# Generate instance ID for display
 INSTANCE_ID="${SANITIZED_BRANCH}-${PORT_OFFSET}"
 
-# Display configuration
 echo ""
 echo "📋 Instance Configuration:"
 echo "   Project Name: ${COMPOSE_PROJECT_NAME}"
@@ -97,6 +105,8 @@ echo "   FastAPI:      ${FASTAPI_PORT}"
 echo "   Dash:         ${DASH_PORT}"
 echo "   MinIO API:    ${MINIO_PORT}"
 echo "   MinIO Console: ${MINIO_CONSOLE_PORT}"
+echo "   Viewer (Vite): ${VIEWER_DEV_PORT}"
+echo "   Flower:       ${FLOWER_PORT}"
 echo ""
 echo "⚙️  Development Settings:"
 echo "   Dev Mode:     ✅ enabled"
@@ -128,6 +138,8 @@ FASTAPI_PORT=${FASTAPI_PORT}
 DASH_PORT=${DASH_PORT}
 MINIO_PORT=${MINIO_PORT}
 MINIO_CONSOLE_PORT=${MINIO_CONSOLE_PORT}
+VIEWER_DEV_PORT=${VIEWER_DEV_PORT}
+FLOWER_PORT=${FLOWER_PORT}
 
 # Internal service URLs (for container-to-container communication)
 DEPICTIO_MONGODB_PORT=${MONGO_PORT}
@@ -199,6 +211,12 @@ services:
     environment:
       - DEPICTIO_DEV_MODE=true
       - DEPICTIO_MONGODB_WIPE=${MONGODB_WIPE}
+
+  depictio-viewer-dev:
+    container_name: ${COMPOSE_PROJECT_NAME}-depictio-viewer-dev
+
+  flower:
+    container_name: ${COMPOSE_PROJECT_NAME}-flower
 EOF
 
 echo "✅ Generated docker-compose.override.yaml for multi-instance setup"
@@ -215,4 +233,6 @@ export FASTAPI_PORT
 export DASH_PORT
 export MINIO_PORT
 export MINIO_CONSOLE_PORT
+export VIEWER_DEV_PORT
+export FLOWER_PORT
 export DATA_DIR="data/${COMPOSE_PROJECT_NAME}"
