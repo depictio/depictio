@@ -243,6 +243,58 @@ workflows:
               "neg_log10_qval": "-log10(q-value) for volcano plot"
               "significant": "q < 0.05"
 
+      # ====================================================================
+      # Advanced-viz canonical-schema DCs (consume the upstream typed DCs
+      # above via dc_ref and rename to the role-based schema required by
+      # depictio/models/components/advanced_viz/schemas.py).
+      # ====================================================================
+
+      - data_collection_tag: "volcano_canonical"
+        description: "Volcano-ready ANCOM-BC results (feature_id/effect_size/significance)"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/ampliseq/volcano_canonical.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "feature_id": "Taxon identifier"
+              "effect_size": "Log-fold change (lfc)"
+              "significance": "FDR-adjusted p-value (q_val)"
+              "label": "Display label (Phylum)"
+              "category": "Contrast group for colouring"
+
+      - data_collection_tag: "stacked_taxonomy_canonical"
+        description: "Stacked-taxonomy-ready relative abundance (sample/taxon/rank/abundance)"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/ampliseq/stacked_taxonomy_canonical.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample_id": "Sample identifier"
+              "taxon": "Taxon name"
+              "rank": "Taxonomic rank (Phylum here)"
+              "abundance": "Relative abundance (0-1)"
+              "lineage": "Full taxonomy string"
+
+      - data_collection_tag: "embedding_pcoa"
+        description: "Sample embedding (PCoA on Bray-Curtis) for the advanced-viz embedding"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/ampliseq/embedding_pcoa.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample_id": "Sample identifier"
+              "dim_1": "PCoA component 1"
+              "dim_2": "PCoA component 2"
+
 # ============================================================================
 # RUNTIME LINKS CONFIGURATION
 # ============================================================================

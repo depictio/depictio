@@ -60,11 +60,18 @@ STATIC_IDS = {
             "taxonomy_rel_abundance": "646b0f3c1e4a2d7f8e5b8ca9",
             "taxonomy_heatmap": "646b0f3c1e4a2d7f8e5b8caf",
             "ancombc_results": "646b0f3c1e4a2d7f8e5b8caa",
+            # Canonical-schema DCs feeding the advanced_viz components — see
+            # depictio/projects/nf-core/ampliseq/recipes/{volcano,stacked_
+            # taxonomy,embedding_pcoa}_canonical.py.
+            "volcano_canonical": "646b0f3c1e4a2d7f8e5b8cb0",
+            "stacked_taxonomy_canonical": "646b0f3c1e4a2d7f8e5b8cb1",
+            "embedding_pcoa": "646b0f3c1e4a2d7f8e5b8cb2",
         },
         "dashboards": {
             "ampliseq_multiqc": "646b0f3c1e4a2d7f8e5b8cb7",
             "ampliseq_community": "646b0f3c1e4a2d7f8e5b8cb3",
             "ampliseq_differential": "646b0f3c1e4a2d7f8e5b8cb4",
+            "ampliseq_advanced_viz": "646b0f3c1e4a2d7f8e5b8cc2",
         },
     },
     "ampliseq_base": {
