@@ -26,6 +26,7 @@ from depictio.models.components.advanced_viz.configs import (
     PhylogeneticConfig,
     RarefactionConfig,
     StackedTaxonomyConfig,
+    UpsetPlotConfig,
     VizConfig,
     VolcanoConfig,
 )
@@ -49,6 +50,7 @@ __all__ = [
     "PhylogeneticConfig",
     "RarefactionConfig",
     "StackedTaxonomyConfig",
+    "UpsetPlotConfig",
     "VizConfig",
     "VolcanoConfig",
     "validate_binding",

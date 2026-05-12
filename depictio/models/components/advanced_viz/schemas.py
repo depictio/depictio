@@ -91,6 +91,9 @@ CANONICAL_SCHEMAS: dict[AdvancedVizKind, dict[str, frozenset[str]]] = {
     "complex_heatmap": {
         "index": _STRING,
     },
+    # UpSet — no canonical column-role schema; the renderer enumerates
+    # binary columns at compute time. Editor validation is a no-op.
+    "upset_plot": {},
 }
 
 # Optional roles — validated only if the user has bound a column for them.
@@ -128,6 +131,7 @@ _OPTIONAL_ROLES: dict[AdvancedVizKind, dict[str, frozenset[str]]] = {
         "source": _STRING,
     },
     "complex_heatmap": {},
+    "upset_plot": {},
 }
 
 
