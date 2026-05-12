@@ -39,6 +39,7 @@ const EmbeddingRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) 
   const [colorBy, setColorBy] = useState<string | null>(
     config.color_col || config.cluster_col || null,
   );
+  const [showDensity, setShowDensity] = useState<boolean>(Boolean(config.show_density));
 
   const requiredCols = useMemo(() => {
     const cols = [config.sample_id_col, config.dim_1_col, config.dim_2_col].filter(Boolean) as string[];
@@ -83,24 +84,41 @@ const EmbeddingRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) 
     const ids = (rows[config.sample_id_col] || []) as (string | number)[];
     const colorValues = colorBy ? (rows[colorBy] as unknown[]) : null;
 
+    const traces: any[] = [];
+    if (showDensity && x.length > 1) {
+      // Plotly's built-in 2D KDE: histogram2dcontour. Rendered below the
+      // scatter so points stay visible.
+      traces.push({
+        type: 'histogram2dcontour' as const,
+        x,
+        y,
+        colorscale: colorScheme === 'dark' ? 'Greys' : 'Blues',
+        reversescale: false,
+        showscale: false,
+        opacity: 0.55,
+        contours: { coloring: 'fill', showlines: false },
+        hoverinfo: 'skip',
+        ncontours: 14,
+      });
+    }
+    traces.push({
+      type: 'scattergl' as const,
+      mode: 'markers' as const,
+      x,
+      y,
+      text: ids.map((v) => String(v ?? '')),
+      hovertemplate: `<b>%{text}</b><br>${config.dim_1_col}: %{x}<br>${config.dim_2_col}: %{y}<extra></extra>`,
+      marker: {
+        size: pointSize,
+        color: colorValues || '#1c7ed6',
+        colorscale: colorValues && typeof colorValues[0] === 'number' ? 'Viridis' : undefined,
+        showscale: Boolean(colorValues && typeof colorValues[0] === 'number'),
+        opacity: 0.85,
+      },
+    });
+
     return {
-      data: [
-        {
-          type: 'scattergl' as const,
-          mode: 'markers' as const,
-          x,
-          y,
-          text: ids.map((v) => String(v ?? '')),
-          hovertemplate: `<b>%{text}</b><br>${config.dim_1_col}: %{x}<br>${config.dim_2_col}: %{y}<extra></extra>`,
-          marker: {
-            size: pointSize,
-            color: colorValues || '#1c7ed6',
-            colorscale: colorValues && typeof colorValues[0] === 'number' ? 'Viridis' : undefined,
-            showscale: Boolean(colorValues && typeof colorValues[0] === 'number'),
-            opacity: 0.85,
-          },
-        },
-      ],
+      data: traces,
       layout: {
         template: colorScheme === 'dark' ? 'plotly_dark' : 'plotly_white',
         margin: { l: 50, r: 20, t: 30, b: 40 },
@@ -110,7 +128,7 @@ const EmbeddingRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) 
         autosize: true,
       },
     };
-  }, [rows, config, pointSize, colorBy, colorScheme]);
+  }, [rows, config, pointSize, colorBy, showDensity, colorScheme]);
 
   const colorOptions: { value: string; label: string }[] = useMemo(() => {
     const opts: { value: string; label: string }[] = [];
@@ -145,9 +163,9 @@ const EmbeddingRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) 
       ) : null}
       <Switch
         size="xs"
-        checked={Boolean(config.show_density)}
+        checked={showDensity}
+        onChange={(e) => setShowDensity(e.currentTarget.checked)}
         label="Density"
-        disabled
       />
     </Group>
   );
