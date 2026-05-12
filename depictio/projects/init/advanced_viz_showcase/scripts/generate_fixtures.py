@@ -103,15 +103,28 @@ write_tsv(
 
 
 # ---------------------------------------------------------------------------
-# 2. Embedding: real PCA / UMAP / t-SNE / PCoA on a shared 90×200 feature
-#    matrix with three Gaussian clusters separated in feature space. Each
-#    method writes its own TSV so the four "Clustering" dashboard tabs each
-#    show a different projection of the SAME underlying data.
+# 2. Embedding: real PCA / UMAP / t-SNE / PCoA on a shared 90×80 feature
+#    matrix with three well-separated Gaussian clusters. Each method writes
+#    its own TSV so the four "Clustering" dashboard tabs show a different
+#    projection of the SAME underlying data.
+#
+#    Signal/noise tuning:
+#      - 80 features (was 200) → less noise dimensionality
+#      - 20 SIGNAL features per cluster (out of 80) with mean +4.0
+#      - σ=0.5 inside each cluster
+#    With this configuration PCA explains >40% variance on the first two
+#    components and UMAP/t-SNE find three crisp islands rather than blurred
+#    clouds — the previous weaker signal (200 features, mean +2.0) drowned
+#    the structure under noise.
+#
 # columns (each file): sample_id, dim_1, dim_2, cluster, color
 # ---------------------------------------------------------------------------
-N_FEATURES = 200
+N_FEATURES = 80
 SAMPLES_PER_CLUSTER = 30
 CLUSTER_NAMES = ["control", "treatment", "recovery"]
+SIGNATURE_SIZE = 20
+SIGNAL_STRENGTH = 4.0
+NOISE_SIGMA = 0.5
 
 # 1) Build the feature matrix.
 sample_ids: list[str] = []
@@ -119,17 +132,15 @@ cluster_labels: list[str] = []
 feature_rows: list[np.ndarray] = []
 
 for cluster_idx, cluster_name in enumerate(CLUSTER_NAMES):
-    # Each cluster's signature: a unique random set of ~30 features lifted by
-    # +2.0 in mean. The rest are noise, shared across clusters.
-    signature = NP_RNG.choice(N_FEATURES, size=30, replace=False)
+    signature = NP_RNG.choice(N_FEATURES, size=SIGNATURE_SIZE, replace=False)
     mean = np.zeros(N_FEATURES)
-    mean[signature] = 2.0
+    mean[signature] = SIGNAL_STRENGTH
     for _ in range(SAMPLES_PER_CLUSTER):
         sample_ids.append(f"S{len(sample_ids):03d}")
         cluster_labels.append(cluster_name)
-        feature_rows.append(NP_RNG.normal(loc=mean, scale=0.6))
+        feature_rows.append(NP_RNG.normal(loc=mean, scale=NOISE_SIGMA))
 
-feature_matrix_np = np.stack(feature_rows)  # (90, 200)
+feature_matrix_np = np.stack(feature_rows)  # (90, N_FEATURES)
 
 # Pack as a polars wide DataFrame for the dim-reduction helpers.
 feature_df = pl.DataFrame(

@@ -35,9 +35,14 @@ interface Props {
 const EmbeddingRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => {
   const { colorScheme } = useMantineColorScheme();
   const config = (metadata.config || {}) as EmbeddingConfig;
-  const [pointSize, setPointSize] = useState<number>(config.point_size ?? 6);
+  const [pointSize, setPointSize] = useState<number>(config.point_size ?? 10);
+  // Default to the discrete cluster column (clearer cluster separation),
+  // falling back to the continuous color column. Either can be toggled in
+  // the controls — picking the cluster column triggers a categorical legend
+  // with one trace per cluster; picking the color column uses a Viridis
+  // gradient with a colourbar.
   const [colorBy, setColorBy] = useState<string | null>(
-    config.color_col || config.cluster_col || null,
+    config.cluster_col || config.color_col || null,
   );
   const [showDensity, setShowDensity] = useState<boolean>(Boolean(config.show_density));
 
@@ -83,49 +88,140 @@ const EmbeddingRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) 
     const y = (rows[config.dim_2_col] || []) as number[];
     const ids = (rows[config.sample_id_col] || []) as (string | number)[];
     const colorValues = colorBy ? (rows[colorBy] as unknown[]) : null;
+    const isDark = colorScheme === 'dark';
+    const isCategorical =
+      colorValues != null &&
+      colorValues.length > 0 &&
+      typeof colorValues[0] !== 'number';
 
     const traces: any[] = [];
+
+    // Optional 2D KDE under the scatter (does NOT contribute to the legend).
     if (showDensity && x.length > 1) {
-      // Plotly's built-in 2D KDE: histogram2dcontour. Rendered below the
-      // scatter so points stay visible.
       traces.push({
         type: 'histogram2dcontour' as const,
         x,
         y,
-        colorscale: colorScheme === 'dark' ? 'Greys' : 'Blues',
+        colorscale: isDark ? 'Greys' : 'Blues',
         reversescale: false,
         showscale: false,
-        opacity: 0.55,
+        opacity: 0.45,
         contours: { coloring: 'fill', showlines: false },
         hoverinfo: 'skip',
         ncontours: 14,
+        showlegend: false,
       });
     }
-    traces.push({
-      type: 'scattergl' as const,
-      mode: 'markers' as const,
-      x,
-      y,
-      text: ids.map((v) => String(v ?? '')),
-      hovertemplate: `<b>%{text}</b><br>${config.dim_1_col}: %{x}<br>${config.dim_2_col}: %{y}<extra></extra>`,
-      marker: {
-        size: pointSize,
-        color: colorValues || '#1c7ed6',
-        colorscale: colorValues && typeof colorValues[0] === 'number' ? 'Viridis' : undefined,
-        showscale: Boolean(colorValues && typeof colorValues[0] === 'number'),
-        opacity: 0.85,
-      },
-    });
+
+    // Paper-figure-friendly marker style.
+    const markerOutline = isDark ? 'rgba(20,20,20,0.85)' : 'rgba(255,255,255,0.95)';
+    const baseMarker = {
+      size: pointSize,
+      opacity: 0.95,
+      line: { color: markerOutline, width: 1.2 },
+    };
+
+    if (isCategorical && colorValues) {
+      // Categorical: one trace per cluster so plotly renders a clean legend
+      // and discrete colours instead of one rainbow blob.
+      const palette = [
+        '#4C72B0', // muted blue
+        '#DD8452', // muted orange
+        '#55A868', // muted green
+        '#C44E52', // muted red
+        '#8172B3', // muted purple
+        '#937860', // muted brown
+        '#DA8BC3', // muted pink
+        '#8C8C8C', // grey
+      ];
+      const categories = Array.from(new Set(colorValues.map((v) => String(v))));
+      categories.sort();
+      for (let ci = 0; ci < categories.length; ci++) {
+        const cat = categories[ci];
+        const idx: number[] = [];
+        for (let i = 0; i < colorValues.length; i++) {
+          if (String(colorValues[i]) === cat) idx.push(i);
+        }
+        traces.push({
+          type: 'scattergl' as const,
+          mode: 'markers' as const,
+          name: cat,
+          x: idx.map((i) => x[i]),
+          y: idx.map((i) => y[i]),
+          text: idx.map((i) => String(ids[i] ?? '')),
+          hovertemplate:
+            `<b>%{text}</b><br>${cat}<br>${config.dim_1_col}: %{x:.3f}` +
+            `<br>${config.dim_2_col}: %{y:.3f}<extra></extra>`,
+          marker: { ...baseMarker, color: palette[ci % palette.length] },
+        });
+      }
+    } else {
+      // Continuous gradient OR no colour binding.
+      traces.push({
+        type: 'scattergl' as const,
+        mode: 'markers' as const,
+        x,
+        y,
+        text: ids.map((v) => String(v ?? '')),
+        hovertemplate:
+          `<b>%{text}</b><br>${config.dim_1_col}: %{x:.3f}` +
+          `<br>${config.dim_2_col}: %{y:.3f}<extra></extra>`,
+        marker: {
+          ...baseMarker,
+          color: (colorValues as number[] | undefined) ?? '#4C72B0',
+          colorscale: colorValues ? 'Viridis' : undefined,
+          showscale: Boolean(colorValues),
+          colorbar: colorValues
+            ? { title: { text: colorBy ?? '', side: 'right' }, thickness: 12, len: 0.85 }
+            : undefined,
+        },
+        showlegend: false,
+      });
+    }
+
+    // Paper-figure layout: clean white/dark background, no zero lines, light
+    // grid, square aspect (UMAP/t-SNE/PCoA have no preferred aspect; PCA
+    // technically does but a square plot reads more cleanly in a grid item).
+    const axisCommon = {
+      zeroline: false,
+      showgrid: true,
+      gridcolor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)',
+      showline: true,
+      linecolor: isDark ? 'rgba(255,255,255,0.25)' : 'rgba(0,0,0,0.25)',
+      ticks: 'outside',
+      ticklen: 4,
+      mirror: true,
+    };
 
     return {
       data: traces,
       layout: {
-        template: colorScheme === 'dark' ? 'plotly_dark' : 'plotly_white',
-        margin: { l: 50, r: 20, t: 30, b: 40 },
-        xaxis: { title: { text: config.dim_1_col }, zeroline: true },
-        yaxis: { title: { text: config.dim_2_col }, zeroline: true },
-        showlegend: false,
+        template: isDark ? 'plotly_dark' : 'plotly_white',
+        margin: { l: 56, r: 16, t: 16, b: 48 },
+        xaxis: { ...axisCommon, title: { text: config.dim_1_col } },
+        yaxis: {
+          ...axisCommon,
+          title: { text: config.dim_2_col },
+          // Lock aspect ratio to 1:1 so cluster shapes look identical
+          // regardless of the underlying method (PCA can have very different
+          // scales between dims otherwise).
+          scaleanchor: 'x',
+          scaleratio: 1,
+        },
+        showlegend: isCategorical,
+        legend: isCategorical
+          ? {
+              orientation: 'v',
+              x: 1.02,
+              y: 1,
+              bgcolor: 'rgba(0,0,0,0)',
+              borderwidth: 0,
+              font: { size: 11 },
+            }
+          : undefined,
         autosize: true,
+        plot_bgcolor: isDark ? 'rgba(0,0,0,0)' : 'rgba(255,255,255,0)',
+        paper_bgcolor: isDark ? 'rgba(0,0,0,0)' : 'rgba(255,255,255,0)',
       },
     };
   }, [rows, config, pointSize, colorBy, showDensity, colorScheme]);
