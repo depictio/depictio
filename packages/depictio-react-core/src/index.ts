@@ -176,13 +176,19 @@ export {
 } from './api';
 export type { TableMutationResult } from './api';
 
-// Cross-tab merge helper (synthesizes global filters into the InteractiveFilter array)
-export { mergeWithGlobal } from './utils/globalFilters';
+// Cross-tab merge helpers (synthesizes global filters into the InteractiveFilter array
+// + builds synthetic interactive-component cards for the unified left rail)
+export {
+  mergeWithGlobal,
+  buildSyntheticInteractiveComponents,
+  isSyntheticComponentIndex,
+  filterIdFromSyntheticIndex,
+} from './utils/globalFilters';
 
 // Cross-tab global filters & stories — UI
 export { default as GlobeToggle } from './components/global/GlobeToggle';
-export { default as GlobalFilterPill } from './components/global/GlobalFilterPill';
-export { default as GlobalFilterSection } from './components/global/GlobalFilterSection';
+export { default as GlobalFilterDecoration } from './components/global/GlobalFilterDecoration';
+export type { GlobalDecorationInfo } from './components/global/GlobalFilterDecoration';
 export { default as FunnelWidget } from './components/global/FunnelWidget';
 export { default as StoryPicker } from './components/global/StoryPicker';
 export { default as StoryStepper } from './components/global/StoryStepper';

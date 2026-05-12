@@ -9,7 +9,10 @@ import {
   Title,
   Paper,
   Box,
+  Collapse,
+  UnstyledButton,
 } from '@mantine/core';
+import { Icon } from '@iconify/react';
 import { useDisclosure } from '@mantine/hooks';
 
 import {
@@ -23,20 +26,28 @@ import {
   groupInteractiveComponents,
   mergeFiltersBySource,
   mergeWithGlobal,
+  buildSyntheticInteractiveComponents,
+  isSyntheticComponentIndex,
+  filterIdFromSyntheticIndex,
   hasSelectionFilters,
   useDataCollectionUpdates,
   RealtimeIndicator,
   useRealtimeJournal,
-  GlobalFilterSection,
   GlobeToggle,
   StoryPicker,
   StoryStepper,
+  FunnelWidget,
+  GlobalFilterDecoration,
 } from 'depictio-react-core';
 import type {
   DashboardData,
   DashboardSummary,
   InteractiveFilter,
   RealtimeMode,
+  GlobalDecorationInfo,
+  StoredMetadata,
+  FunnelStep,
+  FunnelTargetDC,
 } from 'depictio-react-core';
 import { notifications } from '@mantine/notifications';
 import { Header, Sidebar, SettingsDrawer } from './chrome';
@@ -185,6 +196,26 @@ const App: React.FC = () => {
     () => mergeWithGlobal(deferredFilters, globalDefinitions, globalValues, dcIdsOnTab),
     [deferredFilters, globalDefinitions, globalValues, dcIdsOnTab],
   );
+
+  // Rail-only filter array: per-tab local filters + one entry per synthetic
+  // global card, keyed on its synthetic-component index, carrying the current
+  // global filter value so MultiSelect/RangeSlider/etc. render the selected
+  // state. Distinct from `effectiveFilters`, which is for backend queries
+  // (those go through mergeWithGlobal's `__global_${id}__${dc}` synthetic
+  // filters scoped per DC link).
+  const railFilters = useMemo<InteractiveFilter[]>(() => {
+    const extras: InteractiveFilter[] = [];
+    for (const def of globalDefinitions) {
+      const v = globalValues[def.id];
+      if (v === null || v === undefined) continue;
+      if (Array.isArray(v) && v.length === 0) continue;
+      extras.push({
+        index: `__global_card_${def.id}`,
+        value: v,
+      });
+    }
+    return [...filters, ...extras];
+  }, [filters, globalDefinitions, globalValues]);
 
   // Bulk-compute card values whenever filters change
   useEffect(() => {
@@ -347,10 +378,93 @@ const App: React.FC = () => {
     () => interactiveComponents.filter((m) => m.placement !== 'top'),
     [interactiveComponents],
   );
-  const leftGroups = useMemo(
-    () => groupInteractiveComponents(leftComponents),
-    [leftComponents],
+
+  // Source-tab title lookup for "From [tab]" captions on synthetic cards.
+  const tabTitleById = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const t of allDashboards) {
+      if (t.dashboard_id && t.title) m.set(t.dashboard_id, t.title);
+    }
+    return m;
+  }, [allDashboards]);
+
+  // For globals whose source component isn't on this tab, synthesize a
+  // StoredMetadata so the same ComponentRenderer pipeline can render an
+  // editable card. For globals whose source IS on this tab (native
+  // promotion), record def→component index so the rail can decorate it.
+  const { synthetic: syntheticLeftComponents, promotedIndexByDefId } = useMemo(
+    () => buildSyntheticInteractiveComponents(globalDefinitions, leftComponents, dcIdsOnTab),
+    [globalDefinitions, leftComponents, dcIdsOnTab],
   );
+
+  // Unified rail: native per-tab interactive components + synthetic cards
+  // surfacing globals defined on other tabs. ONE list — no separate "Global"
+  // section.
+  const effectiveLeftComponents = useMemo<StoredMetadata[]>(
+    () => [...leftComponents, ...syntheticLeftComponents],
+    [leftComponents, syntheticLeftComponents],
+  );
+
+  const leftGroups = useMemo(
+    () => groupInteractiveComponents(effectiveLeftComponents),
+    [effectiveLeftComponents],
+  );
+
+  // Funnel inputs derived from the active global filter values + every DC
+  // referenced by at least one link. Empty arrays → the footer is hidden.
+  const funnelSteps = useMemo<FunnelStep[]>(
+    () =>
+      globalDefinitions
+        .filter((d) => {
+          const v = globalValues[d.id];
+          if (v === null || v === undefined) return false;
+          if (Array.isArray(v) && v.length === 0) return false;
+          if (v === '') return false;
+          return true;
+        })
+        .map((d) => ({ filter_id: d.id, value: globalValues[d.id] })),
+    [globalDefinitions, globalValues],
+  );
+  const funnelTargetDcs = useMemo<FunnelTargetDC[]>(() => {
+    const seen = new Set<string>();
+    const out: FunnelTargetDC[] = [];
+    for (const def of globalDefinitions) {
+      for (const link of def.links) {
+        const key = `${link.wf_id}::${link.dc_id}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        out.push({ wf_id: link.wf_id, dc_id: link.dc_id });
+      }
+    }
+    return out;
+  }, [globalDefinitions]);
+  // Collapsible footer: open by default whenever the funnel has work to show.
+  const [funnelOpen, setFunnelOpen] = useState(true);
+
+  // Decoration map: which cards in the rail are global, and (for synthetics)
+  // which tab they originated on. Drives the blue stripe + globe badge + the
+  // optional "From [Tab]" caption.
+  const globalByIndex = useMemo<Record<string, GlobalDecorationInfo>>(() => {
+    const map: Record<string, GlobalDecorationInfo> = {};
+    for (const def of globalDefinitions) {
+      const nativeIdx = promotedIndexByDefId.get(def.id);
+      if (nativeIdx) {
+        map[nativeIdx] = { isSynthetic: false, label: def.label };
+      }
+    }
+    for (const synth of syntheticLeftComponents) {
+      const fid = filterIdFromSyntheticIndex(synth.index);
+      if (!fid) continue;
+      const def = globalDefinitions.find((d) => d.id === fid);
+      if (!def) continue;
+      map[synth.index] = {
+        isSynthetic: true,
+        label: def.label,
+        sourceTabName: tabTitleById.get(String(def.source_tab_id)) ?? undefined,
+      };
+    }
+    return map;
+  }, [globalDefinitions, promotedIndexByDefId, syntheticLeftComponents, tabTitleById]);
   const cardComponents = useMemo(
     () => (dashboard?.stored_metadata || []).filter((m) => m.component_type === 'card'),
     [dashboard],
@@ -373,16 +487,29 @@ const App: React.FC = () => {
 
   const promoteGlobal = useGlobalFiltersStore((s) => s.promote);
 
-  // Map of component index → GlobeToggle, so each interactive component in
-  // the left rail gets a "promote to global" affordance in its chrome row.
-  // Clicking when off → builds a GlobalFilterDef from the component's
-  // metadata + current value and persists it via the store; clicking when on
-  // → demotes the corresponding global filter back to per-tab scope.
+  // Map of component index → GlobeToggle, so each card in the unified left
+  // rail gets a "promote ↔ demote" affordance in its chrome row.
+  //   - Native per-tab card not yet global  → globe off, click promotes.
+  //   - Native per-tab card already global  → globe on,  click demotes.
+  //   - Synthetic card (from another tab)   → globe on,  click demotes.
   const extraActionsByIndex = useMemo(() => {
     const map: Record<string, React.ReactNode> = {};
     if (!dashboardId) return map;
-    for (const m of leftComponents) {
+    for (const m of effectiveLeftComponents) {
       const idx = m.index;
+      // Synthetic card path — already global by construction; click demotes.
+      if (isSyntheticComponentIndex(idx)) {
+        const defId = filterIdFromSyntheticIndex(idx)!;
+        map[idx] = (
+          <GlobeToggle
+            active
+            onClick={() => {
+              void demoteGlobal(defId);
+            }}
+          />
+        );
+        continue;
+      }
       const meta = m as {
         index: string;
         interactive_component_type?: string;
@@ -435,7 +562,23 @@ const App: React.FC = () => {
       map[idx] = <GlobeToggle active={isGlobal} onClick={handleClick} />;
     }
     return map;
-  }, [leftComponents, globalDefinitions, demoteGlobal, promoteGlobal, dashboardId]);
+  }, [effectiveLeftComponents, globalDefinitions, demoteGlobal, promoteGlobal, dashboardId]);
+
+  // Filter-change interceptor: when the change comes from a synthetic card,
+  // route the value to setGlobalValue (per-user state) instead of mixing it
+  // into the per-tab `filters` array. Native per-tab filters keep using
+  // handleFilterChange unchanged.
+  const handleRailFilterChange = useCallback(
+    (update: InteractiveFilter) => {
+      if (isSyntheticComponentIndex(update.index)) {
+        const fid = filterIdFromSyntheticIndex(update.index);
+        if (fid) setGlobalValue(fid, update.value);
+        return;
+      }
+      handleFilterChange(update);
+    },
+    [setGlobalValue, handleFilterChange],
+  );
 
   return (
     <>
@@ -547,19 +690,7 @@ const App: React.FC = () => {
                       }
                     }}
                   />
-                  <GlobalFilterSection
-                    parentDashboardId={globalParentId}
-                    definitions={globalDefinitions}
-                    values={globalValues}
-                    onValueChange={setGlobalValue}
-                    onDemote={(fid) => {
-                      void demoteGlobal(fid);
-                    }}
-                    onGoToSource={(srcTabId) => {
-                      window.location.assign(`/dashboard-beta/${srcTabId}`);
-                    }}
-                  />
-                  {leftComponents.length === 0 && (
+                  {effectiveLeftComponents.length === 0 && (
                     <Text size="sm" c="dimmed">No interactive components.</Text>
                   )}
                   {leftGroups.map((g) =>
@@ -568,18 +699,23 @@ const App: React.FC = () => {
                         key={g.key}
                         groupName={g.groupName}
                         members={g.members}
-                        filters={filters}
-                        onFilterChange={handleFilterChange}
+                        filters={railFilters}
+                        onFilterChange={handleRailFilterChange}
                         extraActionsByIndex={extraActionsByIndex}
+                        globalByIndex={globalByIndex}
                       />
                     ) : (
-                      <ComponentRenderer
+                      <GlobalFilterDecoration
                         key={g.key}
-                        metadata={g.members[0]}
-                        filters={filters}
-                        onFilterChange={handleFilterChange}
-                        extraActions={extraActionsByIndex[g.members[0].index]}
-                      />
+                        decoration={globalByIndex[g.members[0].index]}
+                      >
+                        <ComponentRenderer
+                          metadata={g.members[0]}
+                          filters={railFilters}
+                          onFilterChange={handleRailFilterChange}
+                          extraActions={extraActionsByIndex[g.members[0].index]}
+                        />
+                      </GlobalFilterDecoration>
                     ),
                   )}
                   {hasSelectionFilters(filters) && (
@@ -603,6 +739,38 @@ const App: React.FC = () => {
                     >
                       Reset all filters
                     </Anchor>
+                  )}
+                  {/* Collapsible funnel footer — visible when ≥1 global filter
+                   *  has a non-empty value. Shows per-DC `N → N₁ → …` so the
+                   *  user can see how the chain narrows the underlying data. */}
+                  {funnelSteps.length > 0 && globalParentId && funnelTargetDcs.length > 0 && (
+                    <Box mt="md">
+                      <UnstyledButton
+                        onClick={() => setFunnelOpen((o) => !o)}
+                        style={{ width: '100%' }}
+                      >
+                        <Group gap={6} wrap="nowrap" align="center">
+                          <Icon
+                            icon={funnelOpen ? 'tabler:chevron-down' : 'tabler:chevron-right'}
+                            width={14}
+                            color="var(--mantine-color-dimmed)"
+                          />
+                          <Text size="xs" fw={600} c="dimmed" tt="uppercase" style={{ letterSpacing: 0.4 }}>
+                            Filter funnel
+                          </Text>
+                        </Group>
+                      </UnstyledButton>
+                      <Collapse in={funnelOpen}>
+                        <Box mt={6}>
+                          <FunnelWidget
+                            parentDashboardId={globalParentId}
+                            definitions={globalDefinitions}
+                            steps={funnelSteps}
+                            targetDcs={funnelTargetDcs}
+                          />
+                        </Box>
+                      </Collapse>
+                    </Box>
                   )}
                 </Stack>
               </Paper>

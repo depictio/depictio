@@ -14,7 +14,95 @@
  * tuned for that view and wants it to override the dashboard-wide value.
  */
 
-import type { GlobalFilterDef, InteractiveFilter } from '../api';
+import type { GlobalFilterDef, InteractiveFilter, StoredMetadata } from '../api';
+
+/**
+ * Stable index for a synthetic StoredMetadata that surfaces a global filter
+ * on a tab whose `stored_metadata` doesn't contain the source component.
+ * Distinct from `syntheticIndex` (which keys synthetic InteractiveFilters):
+ * those identify a (def, dc) pair for the backend, while this identifies a
+ * single editable card for the rail.
+ */
+export const SYNTHETIC_COMPONENT_INDEX_PREFIX = '__global_card_';
+
+export function syntheticComponentIndex(filterId: string): string {
+  return `${SYNTHETIC_COMPONENT_INDEX_PREFIX}${filterId}`;
+}
+
+export function isSyntheticComponentIndex(index: string): boolean {
+  return index.startsWith(SYNTHETIC_COMPONENT_INDEX_PREFIX);
+}
+
+export function filterIdFromSyntheticIndex(index: string): string | null {
+  if (!isSyntheticComponentIndex(index)) return null;
+  return index.slice(SYNTHETIC_COMPONENT_INDEX_PREFIX.length);
+}
+
+export interface SyntheticBuildResult {
+  /** Synthetic interactive-component StoredMetadata entries to splice into the
+   *  rail. One per global filter whose source component isn't on this tab AND
+   *  which has at least one link targeting a DC present on this tab. */
+  synthetic: StoredMetadata[];
+  /** def.id → tabComponent.index for global filters whose source DOES live on
+   *  this tab (native promotion). The rail uses this to decorate the existing
+   *  card rather than emit a synthetic copy. */
+  promotedIndexByDefId: Map<string, string>;
+}
+
+/**
+ * Compute the inline-promotion view model for the left rail.
+ *
+ * For each `def` in `definitions`:
+ *   - If a component in `tabComponents` has `index === def.source_component_index`,
+ *     record `promotedIndexByDefId.set(def.id, comp.index)` — the rail keeps
+ *     that component as-is and decorates it (blue stripe + globe badge).
+ *   - Otherwise, if any of `def.links[].dc_id` is in `dcIdsOnTab`, emit one
+ *     synthetic StoredMetadata using the first matching link's
+ *     `(wf_id, dc_id, column_name)`. The synthetic shares the def's
+ *     `interactive_component_type`, `column_type`, and `default_state` so the
+ *     existing ComponentRenderer pipeline can render it identically to a
+ *     native filter card.
+ *   - Otherwise (no source component AND no matching DC on this tab), skip
+ *     — the filter still applies via mergeWithGlobal but has no UI here.
+ */
+export function buildSyntheticInteractiveComponents(
+  definitions: GlobalFilterDef[],
+  tabComponents: StoredMetadata[],
+  dcIdsOnTab: Iterable<string>,
+): SyntheticBuildResult {
+  const tabDcSet = new Set<string>();
+  for (const d of dcIdsOnTab) tabDcSet.add(d);
+  const componentsByIndex = new Map<string, StoredMetadata>();
+  for (const c of tabComponents) componentsByIndex.set(c.index, c);
+
+  const synthetic: StoredMetadata[] = [];
+  const promotedIndexByDefId = new Map<string, string>();
+
+  for (const def of definitions) {
+    const native = componentsByIndex.get(def.source_component_index);
+    if (native) {
+      promotedIndexByDefId.set(def.id, native.index);
+      continue;
+    }
+    const link = def.links.find((l) => tabDcSet.has(l.dc_id));
+    if (!link) continue;
+    synthetic.push({
+      index: syntheticComponentIndex(def.id),
+      component_type: 'interactive',
+      interactive_component_type: def.interactive_component_type,
+      column_name: link.column_name,
+      column_type: def.column_type,
+      wf_id: link.wf_id,
+      dc_id: link.dc_id,
+      default_state: def.default_state,
+      // `title` is rendered by ComponentRenderer's chrome; the def.label is
+      // the user-facing name picked at promotion time.
+      title: def.label,
+    } as unknown as StoredMetadata);
+  }
+
+  return { synthetic, promotedIndexByDefId };
+}
 
 /**
  * `__global_<filterId>__<dcId>` — unique per (definition, target DC) so two
