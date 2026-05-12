@@ -142,6 +142,75 @@ class StackedTaxonomyConfig(_BaseVizConfig):
     )
 
 
+class RarefactionConfig(_BaseVizConfig):
+    """Multi-sample alpha-rarefaction curve.
+
+    Input: a long-format table with one row per (sample, depth, iter) where
+    `metric_col` holds the alpha-diversity value at that subsampling depth.
+    The renderer aggregates over iter (mean ± CI) and draws one line per
+    sample, optionally coloured by a metadata `group_col`.
+    """
+
+    viz_kind: Literal["rarefaction"] = "rarefaction"
+
+    sample_id_col: str = Field(..., description="Sample identifier column")
+    depth_col: str = Field(..., description="Subsampling depth (x axis)")
+    metric_col: str = Field(..., description="Alpha-diversity metric value (y axis)")
+    iter_col: str | None = Field(
+        default=None,
+        description="Iteration column to aggregate over (mean / CI). Omit if already averaged.",
+    )
+    group_col: str | None = Field(
+        default=None, description="Optional categorical column for line colour grouping"
+    )
+    show_ci: bool = Field(default=True, description="Shade ±1 SE band around each sample's curve")
+
+
+class ANCOMBCDifferentialsConfig(_BaseVizConfig):
+    """Ranked horizontal bar of ANCOM-BC log-fold-changes.
+
+    Long-format input: one row per (feature, contrast) with lfc + significance.
+    Renders top-N features by |lfc| for the selected contrast as a signed
+    horizontal bar (up = enriched in the contrast's numerator, down = depleted).
+    Orthogonal to the volcano viz — same data, different question.
+    """
+
+    viz_kind: Literal["ancombc_differentials"] = "ancombc_differentials"
+
+    feature_id_col: str = Field(..., description="Feature / taxon identifier")
+    contrast_col: str = Field(..., description="Contrast name (used for the dropdown)")
+    lfc_col: str = Field(..., description="Log-fold-change (signed)")
+    significance_col: str = Field(..., description="FDR-adjusted p-value (used to bold significant bars)")
+    label_col: str | None = Field(
+        default=None, description="Optional column for the bar's display label"
+    )
+    significance_threshold: float = Field(default=0.05, ge=0.0, le=1.0)
+    top_n: int = Field(default=25, ge=1)
+
+
+class DaBarplotConfig(_BaseVizConfig):
+    """Per-contrast differential-abundance barplot.
+
+    Faceted variant of the ANCOM-BC differentials viz: one small-multiples
+    panel per contrast, top-N features ordered by signed lfc within each
+    panel. Useful for comparing multiple contrasts side by side.
+    """
+
+    viz_kind: Literal["da_barplot"] = "da_barplot"
+
+    feature_id_col: str = Field(..., description="Feature / taxon identifier")
+    contrast_col: str = Field(..., description="Faceting column (one panel per contrast)")
+    lfc_col: str = Field(..., description="Log-fold-change (signed)")
+    significance_col: str | None = Field(
+        default=None, description="FDR-adjusted p-value (for highlighting significant bars)"
+    )
+    label_col: str | None = Field(
+        default=None, description="Optional display label"
+    )
+    significance_threshold: float = Field(default=0.05, ge=0.0, le=1.0)
+    top_n: int = Field(default=15, ge=1, description="Top features (by |lfc|) shown per contrast")
+
+
 class PhylogeneticConfig(_BaseVizConfig):
     """Phylogenetic tree (Microreact-style) — Newick tree + tip metadata.
 
@@ -199,6 +268,9 @@ VizConfig = Annotated[
     | EmbeddingConfig
     | ManhattanConfig
     | StackedTaxonomyConfig
-    | PhylogeneticConfig,
+    | PhylogeneticConfig
+    | RarefactionConfig
+    | ANCOMBCDifferentialsConfig
+    | DaBarplotConfig,
     Field(discriminator="viz_kind"),
 ]

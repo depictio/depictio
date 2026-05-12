@@ -63,6 +63,22 @@ CANONICAL_SCHEMAS: dict[AdvancedVizKind, dict[str, frozenset[str]]] = {
     "phylogenetic": {
         "taxon": _STRING,
     },
+    "rarefaction": {
+        "sample_id": _STRING,
+        "depth": _NUMERIC,
+        "metric": _NUMERIC,
+    },
+    "ancombc_differentials": {
+        "feature_id": _STRING,
+        "contrast": _STRING,
+        "lfc": _FLOAT,
+        "significance": _FLOAT,
+    },
+    "da_barplot": {
+        "feature_id": _STRING,
+        "contrast": _STRING,
+        "lfc": _FLOAT,
+    },
 }
 
 # Optional roles — validated only if the user has bound a column for them.
@@ -83,6 +99,17 @@ _OPTIONAL_ROLES: dict[AdvancedVizKind, dict[str, frozenset[str]]] = {
     "stacked_taxonomy": {},
     "phylogenetic": {
         "color": _NUMERIC | _STRING,
+        "label": _STRING,
+    },
+    "rarefaction": {
+        "iter": _NUMERIC,
+        "group": _STRING,
+    },
+    "ancombc_differentials": {
+        "label": _STRING,
+    },
+    "da_barplot": {
+        "significance": _FLOAT,
         "label": _STRING,
     },
 }

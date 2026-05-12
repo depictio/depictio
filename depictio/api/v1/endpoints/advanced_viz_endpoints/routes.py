@@ -59,6 +59,21 @@ _KIND_METADATA: dict[AdvancedVizKind, dict[str, Any]] = {
         "description": "Per-sample stacked relative-abundance bar with rank dropdown.",
         "icon": "tabler:chart-pie",
     },
+    "rarefaction": {
+        "label": "Rarefaction curves",
+        "description": "Alpha-diversity vs sequencing depth — one line per sample with ±SE band and group colouring.",
+        "icon": "tabler:chart-line",
+    },
+    "ancombc_differentials": {
+        "label": "ANCOM-BC differentials",
+        "description": "Ranked signed-LFC horizontal bar of differentially-abundant features for the selected contrast.",
+        "icon": "tabler:chart-bar",
+    },
+    "da_barplot": {
+        "label": "DA barplot (per contrast)",
+        "description": "Faceted top-N differentially-abundant features, one panel per contrast.",
+        "icon": "tabler:chart-bar-popular",
+    },
 }
 
 

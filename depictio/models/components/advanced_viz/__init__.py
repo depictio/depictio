@@ -17,9 +17,12 @@ from depictio.models.components.advanced_viz.component import (
     AdvancedVizLiteComponent,
 )
 from depictio.models.components.advanced_viz.configs import (
+    ANCOMBCDifferentialsConfig,
+    DaBarplotConfig,
     EmbeddingConfig,
     ManhattanConfig,
     PhylogeneticConfig,
+    RarefactionConfig,
     StackedTaxonomyConfig,
     VizConfig,
     VolcanoConfig,
@@ -31,13 +34,16 @@ from depictio.models.components.advanced_viz.schemas import (
 )
 
 __all__ = [
+    "ANCOMBCDifferentialsConfig",
     "AdvancedVizComponent",
     "AdvancedVizLiteComponent",
     "BindingError",
     "CANONICAL_SCHEMAS",
+    "DaBarplotConfig",
     "EmbeddingConfig",
     "ManhattanConfig",
     "PhylogeneticConfig",
+    "RarefactionConfig",
     "StackedTaxonomyConfig",
     "VizConfig",
     "VolcanoConfig",
