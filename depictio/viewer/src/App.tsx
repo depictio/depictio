@@ -189,6 +189,20 @@ const App: React.FC = () => {
     return set;
   }, [dashboard]);
 
+  // dc_id → data_collection_tag map for human-readable labels in the funnel
+  // widget. Falls back to the last 6 hex of the id if a tag isn't found
+  // (shouldn't happen in practice — every interactive/card/figure carries it).
+  const dcTagsById = useMemo<Record<string, string>>(() => {
+    const map: Record<string, string> = {};
+    for (const m of dashboard?.stored_metadata || []) {
+      const meta = m as { dc_id?: string; data_collection_tag?: string };
+      if (meta.dc_id && meta.data_collection_tag && !map[meta.dc_id]) {
+        map[meta.dc_id] = meta.data_collection_tag;
+      }
+    }
+    return map;
+  }, [dashboard]);
+
   /** Per-tab local filters AUGMENTED with synthetic entries for every active
    *  global filter targeting a DC on this tab. This is what every backend
    *  fetch (bulk-compute, figures, tables, maps) must consume — the backend
@@ -830,6 +844,7 @@ const App: React.FC = () => {
                         definitions={globalDefinitions}
                         liveSteps={funnelSteps}
                         targetDcs={funnelTargetDcs}
+                        dcTagsById={dcTagsById}
                         journey={activeJourney}
                         activeStopId={activeJourneyStopId}
                         onApplyStop={(stop) => {

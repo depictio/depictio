@@ -1,37 +1,41 @@
 /**
  * JourneyFunnel — filter-rail footer widget for the cross-tab Journey feature.
  *
- * Two modes, picked based on whether a journey is currently active:
+ * Renders a real Plotly funnel chart visualizing the row-count narrowing
+ * across either:
  *
- *  - **Live mode** (no active journey) — shows cumulative row counts for the
- *    current global-filter chain (`N → N₁ → N₂`), plus a "Save current as
- *    new journey…" CTA. This is the original FunnelWidget behavior.
+ *  - **Live mode** (no active journey) — the current global filter chain
+ *    (`baseline → after filter A → after filter A+B → …`) + a "Save as
+ *    new journey…" CTA.
  *
- *  - **Active-journey mode** — renders the active journey's stops as a
- *    vertical list (●─ Stop 1 · count │ ●─ Stop 2 · count …). Each row is
- *    clickable to apply that stop's snapshot. The active stop is highlighted
- *    and shows its live row count (the only stop with a count fetched —
- *    saves N-1 round-trips per render). Bottom: "+ Save current as next
- *    stop" CTA, and an "Exit journey" link in the header.
+ *  - **Active-journey mode** — the active journey's stops, one bar per
+ *    stop, labelled by name. Bars are clickable to jump to that stop. The
+ *    active stop is highlighted. Below: "+ Save current as next stop"
+ *    + "Exit journey".
+ *
+ * For multi-DC dashboards, the inline funnel shows the first target DC
+ * (labelled by its data_collection_tag) and a "View per data collection"
+ * link opens a modal with one funnel per DC.
  */
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   ActionIcon,
   Box,
   Button,
+  Divider,
   Group,
   Modal,
   Paper,
   Skeleton,
   Stack,
-  Tabs,
   Text,
   TextInput,
   Tooltip,
   UnstyledButton,
 } from '@mantine/core';
 import { Icon } from '@iconify/react';
+import Plot from 'react-plotly.js';
 
 import {
   computeFunnel,
@@ -45,22 +49,116 @@ import {
 
 const FETCH_DEBOUNCE_MS = 300;
 
-function formatCount(n: number): string {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
-  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}k`;
-  return String(n);
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+function dcLabel(dcId: string, dcTagsById?: Record<string, string>): string {
+  return dcTagsById?.[dcId] || dcId.slice(-6);
 }
 
+/** A single point on a funnel chart — label + per-DC count map. */
+interface FunnelPoint {
+  label: string;
+  /** Stable id for click handling (stop id in journey mode, step index in
+   *  live mode). Optional because live-mode points aren't clickable. */
+  clickId?: string;
+  /** Per-DC row counts after applying everything up to and including this
+   *  point. `null` = data load failed for that DC. */
+  countsByDc: Record<string, number | null>;
+}
+
+/**
+ * Render a Plotly funnel for one DC. Active label (when set) gets a deeper
+ * shade; everything else uses the same blue. `onClickPoint` is called with
+ * the clicked point's `clickId` so the host can apply the matching stop.
+ */
+interface FunnelChartProps {
+  dcId: string;
+  dcTag: string;
+  points: FunnelPoint[];
+  activeClickId?: string | null;
+  onClickPoint?: (clickId: string) => void;
+  height?: number;
+}
+
+const FunnelChart: React.FC<FunnelChartProps> = ({
+  dcId,
+  dcTag,
+  points,
+  activeClickId,
+  onClickPoint,
+  height = 200,
+}) => {
+  const labels = points.map((p) => p.label);
+  // Plotly orientation: vertical funnel (default) wants y=labels (top→bottom),
+  // x=values. We reverse so the widest slice is at the top, matching the
+  // canonical funnel shape.
+  const values = points.map((p) => p.countsByDc[dcId] ?? 0);
+  const colors = points.map((p) =>
+    p.clickId && p.clickId === activeClickId
+      ? 'rgba(34, 110, 215, 1)'
+      : 'rgba(34, 110, 215, 0.55)',
+  );
+
+  return (
+    <Plot
+      data={[
+        {
+          type: 'funnel',
+          y: labels,
+          x: values,
+          textinfo: 'value+percent initial',
+          textposition: 'inside',
+          marker: { color: colors },
+          connector: { line: { color: 'rgba(34, 110, 215, 0.3)', width: 1 } },
+          hovertemplate: '<b>%{y}</b><br>%{x} rows<br>%{percentInitial:.0%} of start<extra></extra>',
+        } as Plotly.Data,
+      ]}
+      layout={{
+        height,
+        margin: { l: 110, r: 16, t: 8, b: 8 },
+        font: { size: 11 },
+        showlegend: false,
+        title: { text: dcTag, x: 0, font: { size: 11, color: '#868e96' } },
+        plot_bgcolor: 'rgba(0,0,0,0)',
+        paper_bgcolor: 'rgba(0,0,0,0)',
+      }}
+      config={{ displayModeBar: false, responsive: true }}
+      style={{ width: '100%' }}
+      onClick={(evt) => {
+        if (!onClickPoint) return;
+        const pointIdx = evt.points?.[0]?.pointIndex;
+        if (typeof pointIdx !== 'number') return;
+        const clickId = points[pointIdx]?.clickId;
+        if (clickId) onClickPoint(clickId);
+      }}
+    />
+  );
+};
+
 // ---------------------------------------------------------------------------
-// Shared row-count computation hook
+// Live mode — current filter chain, no journey active
 // ---------------------------------------------------------------------------
 
-function useFunnelData(
-  parentDashboardId: string,
-  steps: FunnelStep[],
-  targetDcs: FunnelTargetDC[],
-  refreshTick: number | undefined,
-): { data: FunnelResponse | null; loading: boolean } {
+interface LiveFunnelViewProps {
+  parentDashboardId: string;
+  definitions: GlobalFilterDef[];
+  steps: FunnelStep[];
+  targetDcs: FunnelTargetDC[];
+  dcTagsById?: Record<string, string>;
+  refreshTick?: number;
+}
+
+const LiveFunnelView: React.FC<LiveFunnelViewProps> = ({
+  parentDashboardId,
+  definitions,
+  steps,
+  targetDcs,
+  dcTagsById,
+  refreshTick,
+}) => {
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const [data, setData] = useState<FunnelResponse | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -74,13 +172,12 @@ function useFunnelData(
       computeFunnel(parentDashboardId, steps, targetDcs)
         .then((res) => setData(res))
         .catch((err) => {
-          console.warn('JourneyFunnel: computeFunnel failed:', err);
+          console.warn('LiveFunnelView: computeFunnel failed:', err);
           setData(null);
         })
         .finally(() => setLoading(false));
     }, FETCH_DEBOUNCE_MS);
     return () => clearTimeout(handle);
-    // stringify to debounce identity churn without re-running on shape-equal arrays
   }, [
     parentDashboardId,
     JSON.stringify(steps),
@@ -88,115 +185,233 @@ function useFunnelData(
     refreshTick,
   ]);
 
-  return { data, loading };
-}
+  // Build the point list. Index 0 = baseline (no filters); index k = after
+  // step k-1 applied. Labels use the filter's def label for clarity.
+  const points: FunnelPoint[] = useMemo(() => {
+    if (!data) return [];
+    const result: FunnelPoint[] = [];
+    const stepCount = steps.length;
+    for (let i = 0; i <= stepCount; i++) {
+      const label =
+        i === 0
+          ? 'All rows'
+          : `After ${
+              definitions.find((d) => d.id === steps[i - 1]?.filter_id)?.label ?? 'filter'
+            }`;
+      const countsByDc: Record<string, number | null> = {};
+      for (const [dcId, counts] of Object.entries(data.counts)) {
+        countsByDc[dcId] = counts ? counts[i] ?? null : null;
+      }
+      result.push({ label, countsByDc });
+    }
+    return result;
+  }, [data, steps, definitions]);
 
-// ---------------------------------------------------------------------------
-// Live mode — current filter chain, no journey active
-// ---------------------------------------------------------------------------
-
-interface LiveFunnelViewProps {
-  parentDashboardId: string;
-  definitions: GlobalFilterDef[];
-  steps: FunnelStep[];
-  targetDcs: FunnelTargetDC[];
-  refreshTick?: number;
-}
-
-const LiveFunnelView: React.FC<LiveFunnelViewProps> = ({
-  parentDashboardId,
-  definitions,
-  steps,
-  targetDcs,
-  refreshTick,
-}) => {
-  const { data, loading } = useFunnelData(parentDashboardId, steps, targetDcs, refreshTick);
   if (targetDcs.length === 0) return null;
+  if (loading && !data) return <Skeleton height={140} radius="sm" />;
+  if (!data || points.length === 0) return null;
 
-  const renderSeries = (counts: number[] | null) => {
-    if (counts === null) return <Text size="xs" c="dimmed">unavailable</Text>;
-    return (
-      <Group gap={6} wrap="nowrap">
-        {counts.map((n, idx) => {
-          const label =
-            idx === 0
-              ? 'Starting rows'
-              : `After: ${
-                  definitions.find((d) => d.id === steps[idx - 1]?.filter_id)?.label ??
-                  'filter'
-                }`;
-          return (
-            <React.Fragment key={idx}>
-              {idx > 0 && (
-                <Icon icon="tabler:chevron-right" width={12} color="var(--mantine-color-dimmed)" />
-              )}
-              <Tooltip label={label} withArrow>
-                <Text
-                  size="xs"
-                  fw={idx === counts.length - 1 ? 700 : 500}
-                  c={idx === counts.length - 1 ? 'blue' : 'dimmed'}
-                  style={{ fontVariantNumeric: 'tabular-nums' }}
-                >
-                  {formatCount(n)}
-                </Text>
-              </Tooltip>
-            </React.Fragment>
-          );
-        })}
-      </Group>
-    );
-  };
+  const dcEntries = Object.entries(data.counts);
+  const primaryDcId = dcEntries[0][0];
+  const primaryTag = dcLabel(primaryDcId, dcTagsById);
 
-  if (loading && !data) return <Skeleton height={20} radius="sm" />;
-  if (!data) return null;
-
-  const entries: Array<[string, number[] | null]> = Object.entries(data.counts) as Array<
-    [string, number[] | null]
-  >;
-  if (entries.length === 0) return null;
-
-  if (entries.length === 1) {
-    const [, counts] = entries[0];
-    return renderSeries(counts);
-  }
   return (
-    <Tabs defaultValue={entries[0]?.[0]} variant="pills" radius="sm">
-      <Tabs.List>
-        {entries.map(([dcId]) => (
-          <Tabs.Tab key={dcId} value={dcId}>
-            <Text size="xs">{dcId.slice(-6)}</Text>
-          </Tabs.Tab>
-        ))}
-      </Tabs.List>
-      {entries.map(([dcId, counts]) => (
-        <Tabs.Panel key={dcId} value={dcId} pt={6}>
-          {renderSeries(counts)}
-        </Tabs.Panel>
-      ))}
-    </Tabs>
+    <>
+      <FunnelChart dcId={primaryDcId} dcTag={primaryTag} points={points} />
+      {dcEntries.length > 1 && (
+        <UnstyledButton
+          onClick={() => setDetailsOpen(true)}
+          style={{ width: 'fit-content' }}
+        >
+          <Group gap={4} wrap="nowrap" align="center">
+            <Icon icon="tabler:layout-list" width={12} color="var(--mantine-color-blue-6)" />
+            <Text size="xs" c="blue.6" fw={500}>
+              View {dcEntries.length} data collections
+            </Text>
+          </Group>
+        </UnstyledButton>
+      )}
+      <Modal
+        opened={detailsOpen}
+        onClose={() => setDetailsOpen(false)}
+        title="Funnel per data collection"
+        size="lg"
+      >
+        <Stack gap="lg">
+          {dcEntries.map(([dcId], idx) => (
+            <React.Fragment key={dcId}>
+              {idx > 0 && <Divider />}
+              <FunnelChart
+                dcId={dcId}
+                dcTag={dcLabel(dcId, dcTagsById)}
+                points={points}
+                height={240}
+              />
+            </React.Fragment>
+          ))}
+        </Stack>
+      </Modal>
+    </>
   );
 };
 
 // ---------------------------------------------------------------------------
-// JourneyFunnel — the top-level widget
+// Journey mode — bars = stops, click a bar to apply
+// ---------------------------------------------------------------------------
+
+interface JourneyFunnelViewProps {
+  parentDashboardId: string;
+  journey: Journey;
+  activeStopId: string | null;
+  targetDcs: FunnelTargetDC[];
+  dcTagsById?: Record<string, string>;
+  onClickStop: (stopId: string) => void;
+  refreshTick?: number;
+}
+
+const JourneyFunnelView: React.FC<JourneyFunnelViewProps> = ({
+  parentDashboardId,
+  journey,
+  activeStopId,
+  targetDcs,
+  dcTagsById,
+  onClickStop,
+  refreshTick,
+}) => {
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  // perStopCounts[i] = result of /funnel for stops[i].global_filter_state.
+  // Stored as Record<dcId, number|null> per stop. null = fetch failed.
+  const [perStopCounts, setPerStopCounts] = useState<Record<string, number | null>[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (targetDcs.length === 0 || journey.stops.length === 0) {
+      setPerStopCounts([]);
+      return;
+    }
+    let cancelled = false;
+    setLoading(true);
+    // One /funnel call per stop in parallel. Each stop's filter_state is
+    // converted to a single-step funnel — we want counts[1] (the after-
+    // filter value), or counts[0] (baseline) when the stop has no filters.
+    Promise.all(
+      journey.stops.map(async (stop) => {
+        const stepEntries = Object.entries(stop.global_filter_state || {});
+        const stepsForStop: FunnelStep[] = stepEntries.map(([filter_id, value]) => ({
+          filter_id,
+          value,
+        }));
+        try {
+          const res = await computeFunnel(parentDashboardId, stepsForStop, targetDcs);
+          const out: Record<string, number | null> = {};
+          for (const [dcId, counts] of Object.entries(res.counts)) {
+            if (!counts) {
+              out[dcId] = null;
+              continue;
+            }
+            // Empty step → take baseline (counts[0]); else take post-filter.
+            out[dcId] = counts[stepsForStop.length] ?? counts[0] ?? null;
+          }
+          return out;
+        } catch (err) {
+          console.warn(`JourneyFunnel: stop "${stop.name}" count failed:`, err);
+          return Object.fromEntries(targetDcs.map((d) => [d.dc_id, null]));
+        }
+      }),
+    ).then((all) => {
+      if (!cancelled) {
+        setPerStopCounts(all);
+        setLoading(false);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    parentDashboardId,
+    JSON.stringify(targetDcs),
+    JSON.stringify(journey.stops.map((s) => ({ id: s.id, gfs: s.global_filter_state }))),
+    refreshTick,
+  ]);
+
+  const points: FunnelPoint[] = useMemo(
+    () =>
+      journey.stops.map((stop, i) => ({
+        label: `${i + 1}. ${stop.name}`,
+        clickId: stop.id,
+        countsByDc: perStopCounts[i] || {},
+      })),
+    [journey.stops, perStopCounts],
+  );
+
+  if (loading && perStopCounts.length === 0) return <Skeleton height={180} radius="sm" />;
+  if (points.length === 0) return null;
+
+  const dcIds = targetDcs.map((d) => d.dc_id);
+  if (dcIds.length === 0) return null;
+  const primaryDcId = dcIds[0];
+  const primaryTag = dcLabel(primaryDcId, dcTagsById);
+
+  return (
+    <>
+      <FunnelChart
+        dcId={primaryDcId}
+        dcTag={primaryTag}
+        points={points}
+        activeClickId={activeStopId}
+        onClickPoint={onClickStop}
+        height={Math.max(140, journey.stops.length * 50)}
+      />
+      {dcIds.length > 1 && (
+        <UnstyledButton onClick={() => setDetailsOpen(true)} style={{ width: 'fit-content' }}>
+          <Group gap={4} wrap="nowrap" align="center">
+            <Icon icon="tabler:layout-list" width={12} color="var(--mantine-color-blue-6)" />
+            <Text size="xs" c="blue.6" fw={500}>
+              View {dcIds.length} data collections
+            </Text>
+          </Group>
+        </UnstyledButton>
+      )}
+      <Modal
+        opened={detailsOpen}
+        onClose={() => setDetailsOpen(false)}
+        title="Journey funnel per data collection"
+        size="lg"
+      >
+        <Stack gap="lg">
+          {dcIds.map((dcId, idx) => (
+            <React.Fragment key={dcId}>
+              {idx > 0 && <Divider />}
+              <FunnelChart
+                dcId={dcId}
+                dcTag={dcLabel(dcId, dcTagsById)}
+                points={points}
+                activeClickId={activeStopId}
+                onClickPoint={onClickStop}
+                height={240}
+              />
+            </React.Fragment>
+          ))}
+        </Stack>
+      </Modal>
+    </>
+  );
+};
+
+// ---------------------------------------------------------------------------
+// JourneyFunnel — top-level widget
 // ---------------------------------------------------------------------------
 
 export interface JourneyFunnelProps {
   parentDashboardId: string;
   definitions: GlobalFilterDef[];
-  /** Live funnel steps — used when no journey is active. */
   liveSteps: FunnelStep[];
-  /** Target DCs for both live and active-stop count computation. */
   targetDcs: FunnelTargetDC[];
-  /** Active journey (null = live mode). */
+  dcTagsById?: Record<string, string>;
   journey: Journey | null;
   activeStopId: string | null;
-  /** Apply a stop's snapshot. Caller handles navigation + per-tab filter reset. */
   onApplyStop: (stop: JourneyStop) => void;
-  /** Exit the active journey (clears active state, keeps current filters). */
   onExitJourney: () => void;
-  /** Save the current dashboard state. If `journeyId` is null, opens a "name
-   *  the new journey" flow; otherwise appends as next stop. */
   onSaveAsStop: (args: { journeyId: string | null; journeyName?: string; stopName: string }) => void;
   refreshTick?: number;
 }
@@ -206,6 +421,7 @@ const JourneyFunnel: React.FC<JourneyFunnelProps> = ({
   definitions,
   liveSteps,
   targetDcs,
+  dcTagsById,
   journey,
   activeStopId,
   onApplyStop,
@@ -226,7 +442,7 @@ const JourneyFunnel: React.FC<JourneyFunnelProps> = ({
   const openSaveAsNewJourney = () => {
     setSavingAsNewJourney(true);
     setNewJourneyName('');
-    setNewStopName('All samples');
+    setNewStopName('All rows');
     setSaveModalOpen(true);
   };
   const handleSave = () => {
@@ -277,72 +493,38 @@ const JourneyFunnel: React.FC<JourneyFunnelProps> = ({
           </Tooltip>
         </Group>
         {activeIndex >= 0 && (
-          <Text size="xs" c="dimmed" mb={6}>
-            Stop {activeIndex + 1} of {journey.stops.length}
+          <Text size="xs" c="dimmed" mb={4}>
+            Stop {activeIndex + 1} of {journey.stops.length} · click a bar to jump
           </Text>
         )}
-        <Stack gap={4}>
-          {journey.stops.map((stop, idx) => {
-            const isActive = stop.id === activeStopId;
-            return (
-              <UnstyledButton
-                key={stop.id}
-                onClick={() => !isActive && onApplyStop(stop)}
-                disabled={isActive}
-                style={{
-                  padding: '4px 6px',
-                  borderRadius: 4,
-                  backgroundColor: isActive
-                    ? 'var(--mantine-color-blue-1)'
-                    : 'transparent',
-                  cursor: isActive ? 'default' : 'pointer',
-                }}
-              >
-                <Group gap={6} wrap="nowrap" align="center">
-                  <Icon
-                    icon={isActive ? 'tabler:point-filled' : 'tabler:point'}
-                    width={14}
-                    color={
-                      isActive
-                        ? 'var(--mantine-color-blue-filled)'
-                        : 'var(--mantine-color-dimmed)'
-                    }
-                  />
-                  <Text size="xs" fw={isActive ? 700 : 500} truncate>
-                    {idx + 1}. {stop.name}
-                  </Text>
-                  {isActive && targetDcs.length > 0 && (
-                    <Box style={{ marginLeft: 'auto' }}>
-                      <LiveFunnelView
-                        parentDashboardId={parentDashboardId}
-                        definitions={definitions}
-                        steps={liveSteps}
-                        targetDcs={targetDcs}
-                        refreshTick={refreshTick}
-                      />
-                    </Box>
-                  )}
-                </Group>
-              </UnstyledButton>
-            );
-          })}
-          <UnstyledButton
-            onClick={openSaveAsStop}
-            style={{
-              padding: '4px 6px',
-              borderRadius: 4,
-              borderTop: '1px dashed var(--mantine-color-blue-3)',
-              marginTop: 4,
-            }}
-          >
-            <Group gap={6} wrap="nowrap">
-              <Icon icon="tabler:plus" width={14} color="var(--mantine-color-blue-7)" />
-              <Text size="xs" c="blue.7" fw={600}>
-                Save current as next stop
-              </Text>
-            </Group>
-          </UnstyledButton>
-        </Stack>
+        <JourneyFunnelView
+          parentDashboardId={parentDashboardId}
+          journey={journey}
+          activeStopId={activeStopId}
+          targetDcs={targetDcs}
+          dcTagsById={dcTagsById}
+          onClickStop={(stopId) => {
+            const stop = journey.stops.find((s) => s.id === stopId);
+            if (stop) onApplyStop(stop);
+          }}
+          refreshTick={refreshTick}
+        />
+        <UnstyledButton
+          onClick={openSaveAsStop}
+          mt={6}
+          style={{
+            padding: '4px 6px',
+            borderRadius: 4,
+            borderTop: '1px dashed var(--mantine-color-blue-3)',
+          }}
+        >
+          <Group gap={6} wrap="nowrap">
+            <Icon icon="tabler:plus" width={14} color="var(--mantine-color-blue-7)" />
+            <Text size="xs" c="blue.7" fw={600}>
+              Save current as next stop
+            </Text>
+          </Group>
+        </UnstyledButton>
 
         <Modal opened={saveModalOpen} onClose={() => setSaveModalOpen(false)} title="Save stop" size="sm">
           <Stack gap="sm">
@@ -381,6 +563,7 @@ const JourneyFunnel: React.FC<JourneyFunnelProps> = ({
         definitions={definitions}
         steps={liveSteps}
         targetDcs={targetDcs}
+        dcTagsById={dcTagsById}
         refreshTick={refreshTick}
       />
       <UnstyledButton onClick={openSaveAsNewJourney} mt={8} style={{ width: '100%' }}>
@@ -408,7 +591,7 @@ const JourneyFunnel: React.FC<JourneyFunnelProps> = ({
           />
           <TextInput
             label="First stop name"
-            placeholder="e.g. All samples"
+            placeholder="e.g. All rows"
             value={newStopName}
             onChange={(e) => setNewStopName(e.currentTarget.value)}
           />
