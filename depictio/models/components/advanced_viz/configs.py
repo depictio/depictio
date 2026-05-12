@@ -211,6 +211,30 @@ class DaBarplotConfig(_BaseVizConfig):
     top_n: int = Field(default=15, ge=1, description="Top features (by |lfc|) shown per contrast")
 
 
+class EnrichmentConfig(_BaseVizConfig):
+    """GSEA / GO / KEGG / Reactome pathway-enrichment dot plot.
+
+    Canonical layout: pathway/term name on the y-axis, NES (or signed
+    enrichment score) on the x-axis, dot size encoding gene-set size,
+    dot colour encoding -log10(padj). Filters: source MultiSelect
+    (GO_BP / KEGG / ...), padj threshold, top-N pathways shown.
+    """
+
+    viz_kind: Literal["enrichment"] = "enrichment"
+
+    term_col: str = Field(..., description="Pathway / GO-term name column")
+    nes_col: str = Field(..., description="Normalised enrichment score (signed) — x axis")
+    padj_col: str = Field(..., description="FDR-adjusted p-value")
+    gene_count_col: str = Field(..., description="Gene-set size column — dot size")
+    source_col: str | None = Field(
+        default=None,
+        description="Optional ontology / source column (GO_BP / KEGG / Reactome / Hallmark / ...).",
+    )
+
+    padj_threshold: float = Field(default=0.05, ge=0.0, le=1.0)
+    top_n: int = Field(default=20, ge=1)
+
+
 class PhylogeneticConfig(_BaseVizConfig):
     """Phylogenetic tree (Microreact-style) — Newick tree + tip metadata.
 
@@ -271,6 +295,7 @@ VizConfig = Annotated[
     | PhylogeneticConfig
     | RarefactionConfig
     | ANCOMBCDifferentialsConfig
-    | DaBarplotConfig,
+    | DaBarplotConfig
+    | EnrichmentConfig,
     Field(discriminator="viz_kind"),
 ]

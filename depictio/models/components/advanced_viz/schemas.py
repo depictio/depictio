@@ -79,6 +79,12 @@ CANONICAL_SCHEMAS: dict[AdvancedVizKind, dict[str, frozenset[str]]] = {
         "contrast": _STRING,
         "lfc": _FLOAT,
     },
+    "enrichment": {
+        "term": _STRING,
+        "nes": _FLOAT,
+        "padj": _FLOAT,
+        "gene_count": _NUMERIC,
+    },
 }
 
 # Optional roles — validated only if the user has bound a column for them.
@@ -111,6 +117,9 @@ _OPTIONAL_ROLES: dict[AdvancedVizKind, dict[str, frozenset[str]]] = {
     "da_barplot": {
         "significance": _FLOAT,
         "label": _STRING,
+    },
+    "enrichment": {
+        "source": _STRING,
     },
 }
 
