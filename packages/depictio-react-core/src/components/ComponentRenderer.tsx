@@ -17,6 +17,7 @@ import PhylogeneticRenderer from './advanced_viz/PhylogeneticRenderer';
 import RarefactionRenderer from './advanced_viz/RarefactionRenderer';
 import ANCOMBCDifferentialsRenderer from './advanced_viz/ANCOMBCDifferentialsRenderer';
 import DaBarplotRenderer from './advanced_viz/DaBarplotRenderer';
+import EnrichmentRenderer from './advanced_viz/EnrichmentRenderer';
 import { AdvancedVizExtrasProvider } from './advanced_viz/AdvancedVizExtras';
 import MultiSelectRenderer from './interactive/MultiSelectRenderer';
 import RangeSliderRenderer from './interactive/RangeSliderRenderer';
@@ -469,6 +470,8 @@ const AdvancedVizDispatch: React.FC<AdvancedVizDispatchProps> = ({
     inner = <ANCOMBCDifferentialsRenderer {...(advProps as any)} />;
   } else if (vizKind === 'da_barplot') {
     inner = <DaBarplotRenderer {...(advProps as any)} />;
+  } else if (vizKind === 'enrichment') {
+    inner = <EnrichmentRenderer {...(advProps as any)} />;
   } else {
     inner = (
       <div className="dashboard-error" style={{ fontSize: '0.75rem' }}>
