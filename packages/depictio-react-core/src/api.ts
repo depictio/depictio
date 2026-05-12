@@ -643,6 +643,55 @@ export async function pollComplexHeatmap(jobId: string): Promise<ComplexHeatmapJ
   return res.json();
 }
 
+export interface UpsetPayload {
+  wf_id: string;
+  dc_id: string;
+  set_columns?: string[] | null;
+  sort_by?: 'cardinality' | 'degree' | 'degree-cardinality' | 'input';
+  sort_order?: 'descending' | 'ascending';
+  min_size?: number;
+  max_degree?: number | null;
+  show_set_sizes?: boolean;
+  color_intersections_by?: 'none' | 'set' | 'degree';
+  filter_metadata: InteractiveFilter[];
+}
+
+export interface UpsetResult {
+  figure: { data: unknown[]; layout: Record<string, unknown> };
+  row_count: number;
+  set_count?: number | null;
+  load_ms?: number;
+  compute_ms?: number;
+}
+
+export interface UpsetJob {
+  job_id: string;
+  status: 'pending' | 'done' | 'failed';
+  result?: UpsetResult | null;
+  error?: string | null;
+  from_cache?: boolean;
+}
+
+/** Dispatch an UpSet-plot Celery task. */
+export async function dispatchUpset(payload: UpsetPayload): Promise<UpsetJob> {
+  const res = await fetch(`${API_BASE}/advanced_viz/compute_upset`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw new Error(`Failed to dispatch compute_upset: ${res.status}`);
+  return res.json();
+}
+
+/** Poll an UpSet-plot Celery task. */
+export async function pollUpset(jobId: string): Promise<UpsetJob> {
+  const res = await fetch(`${API_BASE}/advanced_viz/compute_upset/${jobId}`, {
+    headers: authHeaders(),
+  });
+  if (!res.ok) throw new Error(`Failed to poll compute_upset: ${res.status}`);
+  return res.json();
+}
+
 
 /** Fetch the raw Newick string for a phylogeny-type DC. */
 export async function fetchPhylogenyNewick(dcId: string): Promise<string> {

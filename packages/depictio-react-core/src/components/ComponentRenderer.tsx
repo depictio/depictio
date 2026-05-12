@@ -19,6 +19,7 @@ import ANCOMBCDifferentialsRenderer from './advanced_viz/ANCOMBCDifferentialsRen
 import DaBarplotRenderer from './advanced_viz/DaBarplotRenderer';
 import EnrichmentRenderer from './advanced_viz/EnrichmentRenderer';
 import ComplexHeatmapRenderer from './advanced_viz/ComplexHeatmapRenderer';
+import UpsetRenderer from './advanced_viz/UpsetRenderer';
 import { AdvancedVizExtrasProvider } from './advanced_viz/AdvancedVizExtras';
 import MultiSelectRenderer from './interactive/MultiSelectRenderer';
 import RangeSliderRenderer from './interactive/RangeSliderRenderer';
@@ -475,6 +476,8 @@ const AdvancedVizDispatch: React.FC<AdvancedVizDispatchProps> = ({
     inner = <EnrichmentRenderer {...(advProps as any)} />;
   } else if (vizKind === 'complex_heatmap') {
     inner = <ComplexHeatmapRenderer {...(advProps as any)} />;
+  } else if (vizKind === 'upset_plot') {
+    inner = <UpsetRenderer {...(advProps as any)} />;
   } else {
     inner = (
       <div className="dashboard-error" style={{ fontSize: '0.75rem' }}>
