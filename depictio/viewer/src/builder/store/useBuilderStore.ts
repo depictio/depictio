@@ -23,7 +23,8 @@ export type ComponentType =
   | 'table'
   | 'multiqc'
   | 'image'
-  | 'map';
+  | 'map'
+  | 'advanced_viz';
 
 export type FigureMode = 'ui' | 'code';
 

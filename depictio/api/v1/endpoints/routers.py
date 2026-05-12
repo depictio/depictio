@@ -7,6 +7,9 @@ Aggregates all endpoint routers into a single router instance.
 from fastapi import APIRouter
 
 from depictio.api.v1.configs.config import settings
+from depictio.api.v1.endpoints.advanced_viz_endpoints.routes import (
+    advanced_viz_endpoint_router,
+)
 from depictio.api.v1.endpoints.analytics_data_endpoints.routes import (
     router as analytics_data_router,
 )
@@ -116,6 +119,12 @@ router.include_router(
     figure_endpoint_router,
     prefix="/figure",
     tags=["Figure Builder"],
+)
+
+router.include_router(
+    advanced_viz_endpoint_router,
+    prefix="/advanced_viz",
+    tags=["Advanced Viz"],
 )
 
 router.include_router(

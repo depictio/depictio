@@ -25,6 +25,11 @@ COMPONENT_DC_TYPE_MAPPING: dict[str, list[str]] = {
     "Image": ["image"],
     "JBrowse2": ["jbrowse2"],
     "Map": ["table"],
+    # Advanced viz consumes tabular DCs whose columns satisfy one of the
+    # canonical viz schemas (see advanced_viz/schemas.py). The viz-side
+    # binding validator enforces the exact column shape; this entry only
+    # gates DC-type compatibility.
+    "AdvancedViz": ["table"],
     # Text component doesn't use data collections (no entry needed)
     # Note: Map components also use "geojson" DCs for choropleth boundaries,
     # but the geojson DC is referenced via geojson_dc_id, not the primary DC binding.
@@ -36,7 +41,7 @@ GEOJSON_DC_ALLOWED_COMPONENTS: list[str] = ["Map"]
 # Reverse mapping: DC type to allowed component types
 # Used for UI filtering in stepper (shows which components are valid for a DC type)
 DC_COMPONENT_TYPE_MAPPING: dict[str, list[str]] = {
-    "table": ["Figure", "Card", "Interactive", "Table", "Map"],
+    "table": ["Figure", "Card", "Interactive", "Table", "Map", "AdvancedViz"],
     "multiqc": ["MultiQC"],
     "image": ["Image"],
     "jbrowse2": ["JBrowse2"],

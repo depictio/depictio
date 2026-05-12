@@ -462,6 +462,74 @@ export async function renderFigure(
   return res.json();
 }
 
+/* -------------------------------------------------------------------------
+ * Advanced visualisations (volcano / embedding / manhattan / stacked_taxonomy)
+ * ------------------------------------------------------------------------- */
+
+export type AdvancedVizKind =
+  | 'volcano'
+  | 'embedding'
+  | 'manhattan'
+  | 'stacked_taxonomy';
+
+export interface AdvancedVizKindDescriptor {
+  viz_kind: AdvancedVizKind;
+  label: string;
+  description: string;
+  icon: string;
+  required_roles: string[];
+}
+
+/** Metadata used by the builder's viz-kind picker. Cached on first load. */
+export async function fetchAdvancedVizKinds(): Promise<AdvancedVizKindDescriptor[]> {
+  const res = await fetch(`${API_BASE}/advanced_viz/kinds`, { headers: authHeaders() });
+  if (!res.ok) throw new Error(`Failed to fetch advanced viz kinds: ${res.status}`);
+  return res.json();
+}
+
+/** Polars schema for a DC ({col -> dtype-name}). Used at editor time to
+ *  validate that the user's role→column binding matches the canonical
+ *  schema declared in depictio/models/components/advanced_viz/schemas.py. */
+export async function fetchPolarsSchema(dcId: string): Promise<Record<string, string>> {
+  const res = await fetch(`${API_BASE}/datacollections/polars_schema/${dcId}`, {
+    headers: authHeaders(),
+  });
+  if (!res.ok) throw new Error(`Failed to fetch polars schema: ${res.status}`);
+  return res.json();
+}
+
+export interface AdvancedVizDataResponse {
+  columns: string[];
+  rows: Record<string, unknown[]>;
+  row_count: number;
+  filter_applied: boolean;
+}
+
+/** Project a column subset from a DC + apply global filters. Rendering is
+ *  done entirely on the client so intra-viz controls (thresholds, top-N,
+ *  rank dropdown) don't round-trip to the server. */
+export async function fetchAdvancedVizData(
+  wfId: string,
+  dcId: string,
+  columns: string[],
+  filters: InteractiveFilter[],
+  limitRows?: number,
+): Promise<AdvancedVizDataResponse> {
+  const res = await fetch(`${API_BASE}/advanced_viz/data`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: JSON.stringify({
+      wf_id: wfId,
+      dc_id: dcId,
+      columns,
+      filter_metadata: filters,
+      limit_rows: limitRows,
+    }),
+  });
+  if (!res.ok) throw new Error(`Failed to fetch advanced viz data: ${res.status}`);
+  return res.json();
+}
+
 /** Paginated table rows + AG Grid column definitions. */
 export interface TableResponse {
   columns: Array<{ field: string; headerName: string; type: string }>;

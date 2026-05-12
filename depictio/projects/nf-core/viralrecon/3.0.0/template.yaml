@@ -150,6 +150,24 @@ workflows:
               "FUNCLASS": "Functional class (SILENT, MISSENSE, NONSENSE)"
               "mutation_label": "Formatted mutation label (GENE:REFposALT)"
 
+      - data_collection_tag: "manhattan_variants_canonical"
+        description: "Manhattan-ready variant calls (chr/pos/score) for the advanced viz family"
+        config:
+          type: "Table"
+          metatype: "Aggregated"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/viralrecon/manhattan_variants_canonical.py"
+          dc_specific_properties:
+            format: "CSV"
+            columns_description:
+              "chr": "Chromosome / reference sequence (renamed from CHROM)"
+              "pos": "Genomic position"
+              "score": "-log10(1 - AF) clipped; high = high-AF variant"
+              "feature": "Gene annotation"
+              "effect": "Allele frequency (signed effect proxy)"
+              "sample": "Sample identifier"
+
       - data_collection_tag: "pangolin_lineages"
         description: "Pangolin lineage assignments for each sample"
         config:

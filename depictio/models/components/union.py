@@ -9,6 +9,7 @@ from typing import Annotated, Union
 
 from pydantic import Discriminator
 
+from depictio.models.components.advanced_viz import AdvancedVizComponent
 from depictio.models.components.card import CardComponent
 from depictio.models.components.figure import FigureComponent
 from depictio.models.components.interactive import InteractiveComponent
@@ -18,6 +19,13 @@ from depictio.models.components.table import TableComponent
 # Discriminated union of all component types
 # The discriminator uses "component_type" field to determine the correct model
 ComponentMetadata = Annotated[
-    Union[CardComponent, FigureComponent, InteractiveComponent, MapComponent, TableComponent],
+    Union[
+        AdvancedVizComponent,
+        CardComponent,
+        FigureComponent,
+        InteractiveComponent,
+        MapComponent,
+        TableComponent,
+    ],
     Discriminator("component_type"),
 ]

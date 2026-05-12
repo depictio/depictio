@@ -9,6 +9,10 @@ import ImageRenderer from './ImageRenderer';
 import MapRenderer from './MapRenderer';
 import JBrowseRenderer from './JBrowseRenderer';
 import MultiQCRenderer from './MultiQCRenderer';
+import VolcanoRenderer from './advanced_viz/VolcanoRenderer';
+import EmbeddingRenderer from './advanced_viz/EmbeddingRenderer';
+import ManhattanRenderer from './advanced_viz/ManhattanRenderer';
+import StackedTaxonomyRenderer from './advanced_viz/StackedTaxonomyRenderer';
 import MultiSelectRenderer from './interactive/MultiSelectRenderer';
 import RangeSliderRenderer from './interactive/RangeSliderRenderer';
 import SliderRenderer from './interactive/SliderRenderer';
@@ -263,6 +267,31 @@ const ComponentRenderer: React.FC<ComponentRendererProps> = ({
       />,
       { extraActions, showDragHandle },
     );
+  }
+
+  if (metadata.component_type === 'advanced_viz') {
+    const vizKind = (metadata.viz_kind as string) || '';
+    const advProps = { metadata, filters, refreshTick };
+    let inner: React.ReactNode;
+    if (vizKind === 'volcano') {
+      inner = <VolcanoRenderer {...(advProps as any)} />;
+    } else if (vizKind === 'embedding') {
+      inner = <EmbeddingRenderer {...(advProps as any)} />;
+    } else if (vizKind === 'manhattan') {
+      inner = <ManhattanRenderer {...(advProps as any)} />;
+    } else if (vizKind === 'stacked_taxonomy') {
+      inner = <StackedTaxonomyRenderer {...(advProps as any)} />;
+    } else {
+      inner = (
+        <div className="dashboard-error" style={{ fontSize: '0.75rem' }}>
+          Unknown advanced viz kind: "{vizKind}"
+        </div>
+      );
+    }
+    return wrapWithChrome('advanced_viz', metadata, undefined, inner, {
+      extraActions,
+      showDragHandle,
+    });
   }
 
   return (

@@ -139,6 +139,86 @@ def _delete_orphan_links_for_dc(data_collection_id: str) -> int:
     return result.modified_count
 
 
+async def _get_data_collection_polars_schema(
+    data_collection_id: PyObjectId, current_user
+) -> dict[str, str]:
+    """Return the polars/Delta schema of a data collection as ``{column: dtype_name}``.
+
+    Reads the schema directly from the Delta-table metadata without scanning
+    rows (cheap, suitable for editor-time binding validation in
+    depictio/models/components/advanced_viz/schemas.py).
+    """
+    # Auth + existence: reuse the existing specs path to enforce permissions.
+    await _get_data_collection_specs(data_collection_id, current_user)
+
+    from depictio.api.v1.db import deltatables_collection
+
+    try:
+        dc_oid = ObjectId(data_collection_id)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    dt_doc = deltatables_collection.find_one({"data_collection_id": dc_oid})
+    if not dt_doc:
+        raise HTTPException(
+            status_code=404,
+            detail="Data collection has no materialised Delta table yet.",
+        )
+    delta_location = dt_doc.get("delta_table_location")
+    if not delta_location:
+        raise HTTPException(status_code=404, detail="Delta-table location is missing.")
+
+    from deltalake import DeltaTable
+
+    from depictio.api.v1.s3 import polars_s3_config
+
+    try:
+        dt = DeltaTable(delta_location, storage_options=polars_s3_config)
+    except Exception as exc:
+        logger.warning(f"polars_schema: cannot open delta at {delta_location}: {exc}")
+        raise HTTPException(status_code=500, detail="Unable to open Delta table.") from exc
+
+    arrow_schema = dt.schema().to_pyarrow()
+    # Stringify pyarrow dtypes into the polars naming convention expected by
+    # validate_binding(): polars uses CamelCase ("Float64", "Int64", "Utf8"/"String").
+    return {field.name: _pyarrow_to_polars_dtype_name(field.type) for field in arrow_schema}
+
+
+def _pyarrow_to_polars_dtype_name(pa_type) -> str:
+    """Map a pyarrow DataType to the polars dtype string."""
+    import pyarrow as pa
+
+    if pa.types.is_string(pa_type) or pa.types.is_large_string(pa_type):
+        return "String"
+    if pa.types.is_int8(pa_type):
+        return "Int8"
+    if pa.types.is_int16(pa_type):
+        return "Int16"
+    if pa.types.is_int32(pa_type):
+        return "Int32"
+    if pa.types.is_int64(pa_type):
+        return "Int64"
+    if pa.types.is_uint8(pa_type):
+        return "UInt8"
+    if pa.types.is_uint16(pa_type):
+        return "UInt16"
+    if pa.types.is_uint32(pa_type):
+        return "UInt32"
+    if pa.types.is_uint64(pa_type):
+        return "UInt64"
+    if pa.types.is_float32(pa_type):
+        return "Float32"
+    if pa.types.is_float64(pa_type):
+        return "Float64"
+    if pa.types.is_boolean(pa_type):
+        return "Boolean"
+    if pa.types.is_date(pa_type):
+        return "Date"
+    if pa.types.is_timestamp(pa_type):
+        return "Datetime"
+    return str(pa_type)
+
+
 async def _delete_data_collection_by_id(data_collection_id: str, current_user) -> dict:
     """Core function to delete a data collection by its ID.
 
