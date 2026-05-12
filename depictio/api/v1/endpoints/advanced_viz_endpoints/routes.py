@@ -84,6 +84,11 @@ _KIND_METADATA: dict[AdvancedVizKind, dict[str, Any]] = {
         "description": "Clustered heatmap with dendrograms + annotation tracks. Server-side clustering via plotly-complexheatmap, dispatched as a Celery task.",
         "icon": "tabler:grid-pattern",
     },
+    "upset_plot": {
+        "label": "UpSet plot",
+        "description": "Set-intersection visualisation (alternative to Venn diagrams). Server-side compute via plotly-upset, dispatched as a Celery task.",
+        "icon": "tabler:chart-bar-popular",
+    },
 }
 
 
@@ -435,6 +440,106 @@ def poll_compute_complex_heatmap(
     """Poll a previously-dispatched ComplexHeatmap compute. Returns
     {status: 'done', result: {figure, row_count, col_count, ...}} or
     {status: 'pending'} / {status: 'failed', error: '...'}."""
+    from datetime import datetime, timezone
+
+    from celery.result import AsyncResult
+
+    from depictio.api.v1.db import db
+    from depictio.dash.celery_app import celery_app
+
+    cache = db["compute_results"]
+    doc = cache.find_one({"_id": job_id})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if doc.get("status") in ("done", "failed"):
+        return {
+            "job_id": job_id,
+            "status": doc["status"],
+            "result": doc.get("result"),
+            "error": doc.get("error"),
+        }
+    task_id = doc.get("celery_task_id")
+    if not task_id:
+        return {"job_id": job_id, "status": doc.get("status", "pending")}
+    async_result = AsyncResult(task_id, app=celery_app)
+    if async_result.ready():
+        if async_result.successful():
+            result = async_result.result
+            cache.update_one(
+                {"_id": job_id},
+                {"$set": {"status": "done", "result": result, "completed_at": datetime.now(timezone.utc)}},
+            )
+            return {"job_id": job_id, "status": "done", "result": result}
+        err = str(async_result.result)[:500]
+        cache.update_one(
+            {"_id": job_id},
+            {"$set": {"status": "failed", "error": err, "completed_at": datetime.now(timezone.utc)}},
+        )
+        return {"job_id": job_id, "status": "failed", "error": err}
+    return {"job_id": job_id, "status": "pending"}
+
+
+@advanced_viz_endpoint_router.post("/compute_upset")
+def dispatch_compute_upset(
+    payload: dict = Body(...),
+    current_user=Depends(get_user_or_anonymous),
+) -> dict[str, Any]:
+    """Dispatch an UpSet-plot Celery task. Same dispatch + poll + cache
+    contract as ``compute_complex_heatmap`` (cache namespace = upset_plot)."""
+    import time
+    from datetime import datetime, timezone
+
+    from depictio.api.v1.db import db
+    from depictio.api.v1.celery_tasks import compute_upset as compute_task
+
+    if not payload.get("wf_id") or not payload.get("dc_id"):
+        raise HTTPException(status_code=400, detail="wf_id and dc_id are required")
+
+    cache = db["compute_results"]
+    payload_for_key = dict(payload)
+    payload_for_key.setdefault("method", "upset_plot")
+    cache_key = _compute_cache_key(payload_for_key)
+    existing = cache.find_one({"_id": cache_key})
+    if existing:
+        return {
+            "job_id": cache_key,
+            "status": existing.get("status", "pending"),
+            "result": existing.get("result"),
+            "error": existing.get("error"),
+            "from_cache": True,
+        }
+
+    cache.insert_one(
+        {
+            "_id": cache_key,
+            "status": "pending",
+            "method": "upset_plot",
+            "created_at": datetime.now(timezone.utc),
+            "payload": {
+                "wf_id": str(payload["wf_id"]),
+                "dc_id": str(payload["dc_id"]),
+                "method": "upset_plot",
+            },
+        }
+    )
+    started = time.monotonic()
+    async_result = compute_task.apply_async(args=[payload])
+    cache.update_one({"_id": cache_key}, {"$set": {"celery_task_id": async_result.id}})
+    logger.info(
+        "compute_upset dispatched: cache_key=%s task_id=%s (%.2fs)",
+        cache_key,
+        async_result.id,
+        time.monotonic() - started,
+    )
+    return {"job_id": cache_key, "status": "pending", "from_cache": False}
+
+
+@advanced_viz_endpoint_router.get("/compute_upset/{job_id}")
+def poll_compute_upset(
+    job_id: str,
+    current_user=Depends(get_user_or_anonymous),
+) -> dict[str, Any]:
+    """Poll a previously-dispatched UpSet compute."""
     from datetime import datetime, timezone
 
     from celery.result import AsyncResult

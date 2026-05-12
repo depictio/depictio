@@ -112,6 +112,7 @@ STATIC_IDS = {
             "rarefaction_demo": "646b0f3c1e4a2d7f8e5b8d20",
             "ancombc_demo": "646b0f3c1e4a2d7f8e5b8d21",
             "gsea_demo": "646b0f3c1e4a2d7f8e5b8d25",
+            "upset_demo": "646b0f3c1e4a2d7f8e5b8d28",
         },
         "dashboards": {
             # Main tab reuses the project_id so get_child_tabs(main_id) finds
@@ -132,6 +133,7 @@ STATIC_IDS = {
             "advanced_viz_da_barplot": "646b0f3c1e4a2d7f8e5b8d24",
             "advanced_viz_enrichment": "646b0f3c1e4a2d7f8e5b8d26",
             "advanced_viz_complex_heatmap": "646b0f3c1e4a2d7f8e5b8d27",
+            "advanced_viz_upset": "646b0f3c1e4a2d7f8e5b8d29",
         },
     },
 }
