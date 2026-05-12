@@ -237,6 +237,22 @@ async def create_initial_dashboards(admin_user: UserBeanie) -> list[dict | None]
             # the recipe-derived canonical-schema DCs.
             "static_dc_id": None,
         },
+        # Standalone advanced-viz showcase project: five tabs (overview +
+        # one per viz_kind) backed by synthetic TSV fixtures. Decoupled from
+        # any real pipeline so the demo never breaks if upstream data shifts.
+        *(
+            {
+                "name": f"advanced_viz_{slug}",
+                "json_path": os.path.join(
+                    projects_base,
+                    ReferenceDatasetRegistry.DATASET_PATHS["advanced_viz_showcase"],
+                    ".db_seeds",
+                    f"dashboard_{slug}.json",
+                ),
+                "static_dc_id": None,
+            }
+            for slug in ("overview", "volcano", "embedding", "manhattan", "stacked_taxonomy")
+        ),
     ]
 
     results = []

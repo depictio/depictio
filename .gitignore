@@ -156,6 +156,8 @@ dump.rdb
 !depictio/projects/nf-core/ampliseq/2.16.0/*.tsv
 !depictio/projects/nf-core/ampliseq/2.16.0/input/*.tsv
 !depictio/projects/nf-core/ampliseq/2.16.0/input/samplesheet.csv
+# Allow advanced_viz_showcase synthetic fixtures
+!depictio/projects/init/advanced_viz_showcase/data/*.tsv
 
 # Local-only projects (not version controlled)
 depictio/projects/reference/pools/

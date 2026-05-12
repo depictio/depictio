@@ -84,6 +84,26 @@ STATIC_IDS = {
             "ampliseq_base_differential": "646b0f3c1e4a2d7f8e5b8cc1",
         },
     },
+    # Dedicated showcase for the advanced_viz component family — one project
+    # with four synthetic-fixture DCs (one per viz_kind) and five dashboards
+    # (overview + one tab per viz). See projects/init/advanced_viz_showcase/.
+    "advanced_viz_showcase": {
+        "project": "646b0f3c1e4a2d7f8e5b8d00",
+        "workflows": {"advanced_viz_demo": "646b0f3c1e4a2d7f8e5b8d01"},
+        "data_collections": {
+            "volcano_demo": "646b0f3c1e4a2d7f8e5b8d02",
+            "embedding_demo": "646b0f3c1e4a2d7f8e5b8d03",
+            "manhattan_demo": "646b0f3c1e4a2d7f8e5b8d04",
+            "stacked_taxonomy_demo": "646b0f3c1e4a2d7f8e5b8d05",
+        },
+        "dashboards": {
+            "advanced_viz_overview": "646b0f3c1e4a2d7f8e5b8d10",
+            "advanced_viz_volcano": "646b0f3c1e4a2d7f8e5b8d11",
+            "advanced_viz_embedding": "646b0f3c1e4a2d7f8e5b8d12",
+            "advanced_viz_manhattan": "646b0f3c1e4a2d7f8e5b8d13",
+            "advanced_viz_stacked_taxonomy": "646b0f3c1e4a2d7f8e5b8d14",
+        },
+    },
 }
 
 
@@ -217,6 +237,7 @@ class ReferenceDatasetRegistry:
         "iris": os.path.join("init", "iris"),
         "penguins": os.path.join("init", "penguins"),
         "ampliseq": os.path.join("nf-core", "ampliseq", "2.16.0"),
+        "advanced_viz_showcase": os.path.join("init", "advanced_viz_showcase"),
     }
 
     @classmethod
@@ -520,8 +541,8 @@ async def create_reference_datasets(
     """
     created_projects = []
 
-    # Create reference datasets (iris, penguins, ampliseq)
-    for dataset_name in ["iris", "penguins", "ampliseq"]:
+    # Create reference datasets (iris, penguins, ampliseq, advanced_viz_showcase)
+    for dataset_name in ["iris", "penguins", "ampliseq", "advanced_viz_showcase"]:
         logger.info(f"Creating reference dataset: {dataset_name}")
 
         result = await ReferenceDatasetRegistry.create_reference_project(

@@ -1,0 +1,129 @@
+{
+  "_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d12" },
+  "description": null,
+  "flexible_metadata": null,
+  "hash": null,
+  "dashboard_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d12" },
+  "version": 1,
+  "tmp_children_data": [],
+  "stored_layout_data": [],
+  "stored_children_data": [],
+  "stored_metadata": [
+    {
+      "index": "emb-cluster-filter",
+      "component_type": "interactive",
+      "title": "Cluster",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "embedding_demo",
+      "wf_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d01" },
+      "dc_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d03" },
+      "dc_config": {
+        "type": null, "metatype": null,
+        "description": "Synthetic embedding fixture",
+        "data_collection_tag": "embedding_demo",
+        "dc_specific_properties": null,
+        "_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d03" }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "cluster",
+      "column_type": "object",
+      "value": null, "default_state": null, "filter_expr": null,
+      "title_size": "md", "custom_color": "#16A085", "icon_name": "mdi:group",
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "emb-embedding",
+      "component_type": "advanced_viz",
+      "title": "Embedding (synthetic)",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "embedding_demo",
+      "wf_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d01" },
+      "dc_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d03" },
+      "dc_config": {
+        "type": null, "metatype": null,
+        "description": "Synthetic embedding fixture",
+        "data_collection_tag": "embedding_demo",
+        "dc_specific_properties": null,
+        "_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d03" }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "viz_kind": "embedding",
+      "config": {
+        "viz_kind": "embedding",
+        "sample_id_col": "sample_id",
+        "dim_1_col": "dim_1",
+        "dim_2_col": "dim_2",
+        "cluster_col": "cluster",
+        "color_col": "color",
+        "point_size": 9,
+        "show_density": false
+      },
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "emb-table",
+      "component_type": "table",
+      "title": "Samples",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "embedding_demo",
+      "wf_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d01" },
+      "dc_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d03" },
+      "dc_config": {
+        "type": null, "metatype": null,
+        "description": "Synthetic embedding fixture",
+        "data_collection_tag": "embedding_demo",
+        "dc_specific_properties": null,
+        "_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d03" }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "columns": ["sample_id","cluster","dim_1","dim_2","color"],
+      "page_size": 10, "sortable": true, "filterable": true,
+      "row_selection_enabled": false, "row_selection_column": null,
+      "wf_tag": "python/advanced_viz_demo"
+    }
+  ],
+  "stored_edit_dashboard_mode_button": [],
+  "left_panel_layout_data": [
+    { "i": "box-emb-cluster-filter", "x": 0, "y": 0, "w": 1, "h": 4, "static": false }
+  ],
+  "right_panel_layout_data": [
+    { "i": "box-emb-embedding", "x": 0, "y": 0, "w": 8, "h": 9, "static": false, "resizeHandles": ["se","s","e","sw","w"] },
+    { "i": "box-emb-table",     "x": 0, "y": 9, "w": 8, "h": 5, "static": false, "resizeHandles": ["se","s","e","sw","w"] }
+  ],
+  "buttons_data": { "unified_edit_mode": true, "add_components_button": { "count": 0 } },
+  "stored_add_button": { "count": 0 },
+  "title": "Embedding",
+  "subtitle": "2D embedding with cluster filter and colour-by-expression",
+  "icon": "mdi:dots-grid",
+  "icon_color": "teal",
+  "icon_variant": "filled",
+  "workflow_system": "python",
+  "notes_content": "",
+  "permissions": {
+    "owners": [
+      {
+        "_id": { "$oid": "67658ba033c8b59ad489d7c7" },
+        "description": null, "flexible_metadata": null, "hash": null,
+        "email": "admin@example.com", "is_admin": true,
+        "is_anonymous": false, "is_temporary": false, "expiration_time": null
+      }
+    ], "editors": [], "viewers": []
+  },
+  "is_public": true,
+  "last_saved_ts": "2026-05-12 00:00:00",
+  "project_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d00" },
+  "is_main_tab": false,
+  "parent_dashboard_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d00" },
+  "tab_order": 2,
+  "main_tab_name": null,
+  "tab_icon": "mdi:dots-grid",
+  "tab_icon_color": "teal",
+  "parent_dashboard_title": null
+}
