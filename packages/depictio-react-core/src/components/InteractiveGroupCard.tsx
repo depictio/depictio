@@ -9,6 +9,10 @@ interface InteractiveGroupCardProps {
   members: StoredMetadata[];
   filters: InteractiveFilter[];
   onFilterChange?: (filter: InteractiveFilter) => void;
+  /** Optional per-member chrome extras keyed by `metadata.index` — used by the
+   *  viewer to inject a {@link GlobeToggle} into each interactive component's
+   *  chrome row so users can promote that filter to global scope. */
+  extraActionsByIndex?: Record<string, React.ReactNode>;
 }
 
 /**
@@ -24,6 +28,7 @@ const InteractiveGroupCard: React.FC<InteractiveGroupCardProps> = ({
   members,
   filters,
   onFilterChange,
+  extraActionsByIndex,
 }) => {
   return (
     <Paper withBorder p="xs" radius="md" shadow="xs">
@@ -39,6 +44,7 @@ const InteractiveGroupCard: React.FC<InteractiveGroupCardProps> = ({
               filters={filters}
               onFilterChange={onFilterChange}
               compact
+              extraActions={extraActionsByIndex?.[m.index]}
             />
           </React.Fragment>
         ))}

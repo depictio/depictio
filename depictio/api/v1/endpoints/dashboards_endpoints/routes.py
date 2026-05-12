@@ -22,6 +22,19 @@ from depictio.api.v1.endpoints.dashboards_endpoints.core_functions import (
     reorder_child_tabs,
     sync_tab_family_permissions,
 )
+from depictio.api.v1.endpoints.dashboards_endpoints.global_filters import (
+    ActiveStoryPatch,
+    FilterValuePatch,
+    FunnelRequest,
+    compute_funnel,
+    delete_global_filter,
+    delete_story,
+    get_global_state,
+    patch_active_story,
+    patch_filter_value,
+    upsert_global_filter,
+    upsert_story,
+)
 from depictio.api.v1.endpoints.user_endpoints.routes import (
     get_current_user,
     get_user_or_anonymous,
@@ -29,7 +42,12 @@ from depictio.api.v1.endpoints.user_endpoints.routes import (
 )
 from depictio.api.v1.filter_links import extend_filters_via_links
 from depictio.models.models.base import PyObjectId, convert_objectid_to_str
-from depictio.models.models.dashboards import DashboardData, DashboardDataLite
+from depictio.models.models.dashboards import (
+    DashboardData,
+    DashboardDataLite,
+    GlobalFilterDef,
+    Story,
+)
 from depictio.models.models.users import TokenBeanie, User, UserBeanie
 
 dashboards_endpoint_router = APIRouter()
@@ -4566,3 +4584,80 @@ async def validate_json_import(
             )
 
     return validation_result
+
+
+# ============================================================================
+# Global filters & stories (cross-tab story feature)
+# ============================================================================
+
+
+@dashboards_endpoint_router.get("/global_filters/{parent_dashboard_id}")
+async def route_get_global_state(
+    parent_dashboard_id: PyObjectId,
+    current_user: User = Depends(get_user_or_anonymous),
+):
+    return await get_global_state(parent_dashboard_id, current_user)
+
+
+@dashboards_endpoint_router.post("/global_filters/{parent_dashboard_id}")
+async def route_upsert_global_filter(
+    parent_dashboard_id: PyObjectId,
+    filter_def: GlobalFilterDef,
+    current_user: User = Depends(get_current_user),
+):
+    return await upsert_global_filter(parent_dashboard_id, filter_def, current_user)
+
+
+@dashboards_endpoint_router.delete("/global_filters/{parent_dashboard_id}/{filter_id}")
+async def route_delete_global_filter(
+    parent_dashboard_id: PyObjectId,
+    filter_id: str,
+    current_user: User = Depends(get_current_user),
+):
+    return await delete_global_filter(parent_dashboard_id, filter_id, current_user)
+
+
+@dashboards_endpoint_router.patch("/global_filters/{parent_dashboard_id}/{filter_id}/value")
+async def route_patch_filter_value(
+    parent_dashboard_id: PyObjectId,
+    filter_id: str,
+    body: FilterValuePatch,
+    current_user: User = Depends(get_current_user),
+):
+    return await patch_filter_value(parent_dashboard_id, filter_id, body, current_user)
+
+
+@dashboards_endpoint_router.post("/global_filters/{parent_dashboard_id}/funnel")
+async def route_compute_funnel(
+    parent_dashboard_id: PyObjectId,
+    body: FunnelRequest,
+    current_user: User = Depends(get_user_or_anonymous),
+):
+    return await compute_funnel(parent_dashboard_id, body, current_user)
+
+
+@dashboards_endpoint_router.post("/stories/{parent_dashboard_id}")
+async def route_upsert_story(
+    parent_dashboard_id: PyObjectId,
+    story: Story,
+    current_user: User = Depends(get_current_user),
+):
+    return await upsert_story(parent_dashboard_id, story, current_user)
+
+
+@dashboards_endpoint_router.delete("/stories/{parent_dashboard_id}/{story_id}")
+async def route_delete_story(
+    parent_dashboard_id: PyObjectId,
+    story_id: str,
+    current_user: User = Depends(get_current_user),
+):
+    return await delete_story(parent_dashboard_id, story_id, current_user)
+
+
+@dashboards_endpoint_router.patch("/stories/{parent_dashboard_id}/active")
+async def route_patch_active_story(
+    parent_dashboard_id: PyObjectId,
+    body: ActiveStoryPatch,
+    current_user: User = Depends(get_current_user),
+):
+    return await patch_active_story(parent_dashboard_id, body, current_user)

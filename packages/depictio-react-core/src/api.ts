@@ -2733,3 +2733,163 @@ export async function clearTableDC(dcId: string): Promise<TableMutationResult> {
   if (!res.ok) await throwHttpDetailError(res, 'Failed to clear Table DC');
   return (await res.json()) as TableMutationResult;
 }
+
+// ============================================================================
+// Global filters & stories (cross-tab story feature)
+// ============================================================================
+
+/** One (workflow, data collection, column) target of a global filter. */
+export interface GlobalFilterLink {
+  wf_id: string;
+  dc_id: string;
+  column_name: string;
+}
+
+/** A global filter promoted from an in-tab interactive component. The value
+ *  is stored per-user in {@link GlobalFiltersState.user_values}, not on the
+ *  definition. */
+export interface GlobalFilterDef {
+  id: string;
+  label: string;
+  source_component_index: string;
+  source_tab_id: string;
+  interactive_component_type: string;
+  column_type: string;
+  default_state?: unknown;
+  links: GlobalFilterLink[];
+}
+
+/** A named directional path through a subset of dashboard tabs. */
+export interface Story {
+  id: string;
+  name: string;
+  description?: string | null;
+  icon?: string | null;
+  color?: string | null;
+  tab_order: string[];
+  default_global_filter_ids: string[];
+  pinned: boolean;
+}
+
+/** Hydration shape returned by `GET /dashboards/global_filters/{parentId}`. */
+export interface GlobalFiltersState {
+  definitions: GlobalFilterDef[];
+  stories: Story[];
+  user_values: Record<string, unknown>;
+  last_active_story_id: string | null;
+}
+
+export async function fetchGlobalFiltersState(
+  parentDashboardId: string,
+): Promise<GlobalFiltersState> {
+  const res = await authFetch(
+    `${API_BASE}/dashboards/global_filters/${parentDashboardId}`,
+  );
+  if (!res.ok) await throwHttpError(res, 'Failed to fetch global filters state');
+  return (await res.json()) as GlobalFiltersState;
+}
+
+export async function upsertGlobalFilter(
+  parentDashboardId: string,
+  def: GlobalFilterDef,
+): Promise<void> {
+  const res = await authFetch(
+    `${API_BASE}/dashboards/global_filters/${parentDashboardId}`,
+    { method: 'POST', body: JSON.stringify(def) },
+  );
+  if (!res.ok) await throwHttpError(res, 'Failed to upsert global filter');
+}
+
+export async function deleteGlobalFilter(
+  parentDashboardId: string,
+  filterId: string,
+): Promise<void> {
+  const res = await authFetch(
+    `${API_BASE}/dashboards/global_filters/${parentDashboardId}/${filterId}`,
+    { method: 'DELETE' },
+  );
+  if (!res.ok) await throwHttpError(res, 'Failed to delete global filter');
+}
+
+export async function patchGlobalFilterValue(
+  parentDashboardId: string,
+  filterId: string,
+  value: unknown,
+): Promise<void> {
+  const res = await authFetch(
+    `${API_BASE}/dashboards/global_filters/${parentDashboardId}/${filterId}/value`,
+    { method: 'PATCH', body: JSON.stringify({ value }) },
+  );
+  if (!res.ok) await throwHttpError(res, 'Failed to persist global filter value');
+}
+
+export interface FunnelTargetDC {
+  wf_id: string;
+  dc_id: string;
+}
+
+export interface FunnelStep {
+  filter_id: string;
+  value: unknown;
+}
+
+/** Returns one cumulative row-count series per target DC. The length of each
+ *  series is `steps.length + 1` (N₀ at index 0). A target DC that failed to
+ *  load returns `null` in place of its series so the rest of the widget can
+ *  still render. */
+export interface FunnelResponse {
+  counts: Record<string, number[] | null>;
+}
+
+export async function computeFunnel(
+  parentDashboardId: string,
+  steps: FunnelStep[],
+  targetDcs: FunnelTargetDC[],
+): Promise<FunnelResponse> {
+  const res = await authFetch(
+    `${API_BASE}/dashboards/global_filters/${parentDashboardId}/funnel`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ steps, target_dcs: targetDcs }),
+    },
+  );
+  if (!res.ok) await throwHttpError(res, 'Failed to compute funnel');
+  return (await res.json()) as FunnelResponse;
+}
+
+export async function upsertStory(
+  parentDashboardId: string,
+  story: Story,
+): Promise<void> {
+  const res = await authFetch(
+    `${API_BASE}/dashboards/stories/${parentDashboardId}`,
+    { method: 'POST', body: JSON.stringify(story) },
+  );
+  if (!res.ok) await throwHttpError(res, 'Failed to upsert story');
+}
+
+export async function deleteStory(
+  parentDashboardId: string,
+  storyId: string,
+): Promise<void> {
+  const res = await authFetch(
+    `${API_BASE}/dashboards/stories/${parentDashboardId}/${storyId}`,
+    { method: 'DELETE' },
+  );
+  if (!res.ok) await throwHttpError(res, 'Failed to delete story');
+}
+
+export async function patchActiveStory(
+  parentDashboardId: string,
+  storyId: string | null,
+): Promise<void> {
+  const res = await authFetch(
+    `${API_BASE}/dashboards/stories/${parentDashboardId}/active`,
+    {
+      method: 'PATCH',
+      body: JSON.stringify({ story_id: storyId }),
+    },
+  );
+  if (!res.ok) await throwHttpError(res, 'Failed to persist active story');
+}
+

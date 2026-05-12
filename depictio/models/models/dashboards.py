@@ -1217,6 +1217,79 @@ class DashboardDataLite(BaseModel):
         return full_dict
 
 
+# ============================================================================
+# Global Filters & Stories (cross-tab / multi-directional filtering)
+# ============================================================================
+
+
+class GlobalFilterLink(BaseModel):
+    """One (workflow, data collection, column) target of a global filter.
+
+    A single global filter may carry multiple links so its value applies to
+    different DCs/columns across tabs (e.g. ``sample_id`` in DC1 maps to
+    ``sample`` in DC2). Link resolution against project-level link maps is
+    handled server-side by ``depictio.api.v1.filter_links``.
+    """
+
+    wf_id: str
+    dc_id: str
+    column_name: str
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class GlobalFilterDef(BaseModel):
+    """A global filter promoted from an in-tab interactive component.
+
+    Persisted on the parent ``DashboardData`` (``is_main_tab=True``).
+    The current per-user value is stored separately in
+    :class:`depictio.models.models.user_dashboard_state.UserDashboardState`
+    so collaborators on the same dashboard do not overwrite each other.
+    """
+
+    id: str
+    label: str
+    source_component_index: str
+    source_tab_id: PyObjectId
+    interactive_component_type: str
+    column_type: str
+    default_state: Any = None
+    links: list[GlobalFilterLink] = Field(default_factory=list)
+
+    model_config = ConfigDict(arbitrary_types_allowed=True, extra="forbid")
+
+    @field_serializer("source_tab_id")
+    def serialize_source_tab_id(self, source_tab_id: PyObjectId) -> str:
+        return str(source_tab_id)
+
+
+class Story(BaseModel):
+    """A named ordered path through a subset of dashboard tabs.
+
+    Multiple stories may coexist on the same dashboard, each defining a
+    directional analytical narrative (e.g. ``genes → locations`` vs.
+    ``locations → genes``). Stories are independent of the per-tab
+    ``tab_order`` field — the same tab can appear at different positions
+    in different stories. A dashboard with no stories simply renders in
+    Free Explore mode.
+    """
+
+    id: str
+    name: str
+    description: str | None = None
+    icon: str | None = None
+    color: str | None = None
+    tab_order: list[PyObjectId] = Field(default_factory=list)
+    default_global_filter_ids: list[str] = Field(default_factory=list)
+    pinned: bool = False
+
+    model_config = ConfigDict(arbitrary_types_allowed=True, extra="forbid")
+
+    @field_serializer("tab_order")
+    def serialize_tab_order(self, tab_order: list[PyObjectId]) -> list[str]:
+        return [str(t) for t in tab_order]
+
+
 class DashboardData(MongoModel):
     """Full dashboard model with MongoDB and auth fields.
 
@@ -1267,6 +1340,11 @@ class DashboardData(MongoModel):
     project_realtime: Optional[dict] = (
         None  # Populated at runtime from the parent project's realtime config
     )
+
+    # Cross-tab global filters & stories (meaningful only when is_main_tab=True;
+    # ignored on child tabs). Defaults keep older documents loading unchanged.
+    global_filters: list[GlobalFilterDef] = Field(default_factory=list)
+    stories: list[Story] = Field(default_factory=list)
 
     model_config = ConfigDict(
         arbitrary_types_allowed=True,

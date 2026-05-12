@@ -164,8 +164,28 @@ export {
   appendTableFiles,
   replaceTableFiles,
   clearTableDC,
+  // Global filters & stories (cross-tab feature)
+  fetchGlobalFiltersState,
+  upsertGlobalFilter,
+  deleteGlobalFilter,
+  patchGlobalFilterValue,
+  computeFunnel,
+  upsertStory,
+  deleteStory,
+  patchActiveStory,
 } from './api';
 export type { TableMutationResult } from './api';
+
+// Cross-tab merge helper (synthesizes global filters into the InteractiveFilter array)
+export { mergeWithGlobal } from './utils/globalFilters';
+
+// Cross-tab global filters & stories — UI
+export { default as GlobeToggle } from './components/global/GlobeToggle';
+export { default as GlobalFilterPill } from './components/global/GlobalFilterPill';
+export { default as GlobalFilterSection } from './components/global/GlobalFilterSection';
+export { default as FunnelWidget } from './components/global/FunnelWidget';
+export { default as StoryPicker } from './components/global/StoryPicker';
+export { default as StoryStepper } from './components/global/StoryStepper';
 // Selection-as-filter helpers (Plotly/AG Grid → InteractiveFilter)
 export {
   extractScatterSelection,
@@ -256,4 +276,12 @@ export type {
   CreateMultiQCDCInput,
   MultiQCMutationResult,
   MultiQCUniformityCheckResult,
+  // Global filters & stories
+  GlobalFilterDef,
+  GlobalFilterLink,
+  Story,
+  GlobalFiltersState,
+  FunnelStep,
+  FunnelTargetDC,
+  FunnelResponse,
 } from './api';

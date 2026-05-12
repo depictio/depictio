@@ -22,10 +22,15 @@ import {
   TopPanel,
   groupInteractiveComponents,
   mergeFiltersBySource,
+  mergeWithGlobal,
   hasSelectionFilters,
   useDataCollectionUpdates,
   RealtimeIndicator,
   useRealtimeJournal,
+  GlobalFilterSection,
+  GlobeToggle,
+  StoryPicker,
+  StoryStepper,
 } from 'depictio-react-core';
 import type {
   DashboardData,
@@ -35,6 +40,7 @@ import type {
 } from 'depictio-react-core';
 import { notifications } from '@mantine/notifications';
 import { Header, Sidebar, SettingsDrawer } from './chrome';
+import { useGlobalFiltersStore } from './stores/useGlobalFiltersStore';
 import { useSidebarOpen } from './hooks/useSidebarOpen';
 import { useAuthMode } from './auth/hooks/useAuthMode';
 import DemoTour from './demo/DemoTour';
@@ -120,6 +126,66 @@ const App: React.FC = () => {
   // fetch via ``DashboardGrid`` → ``ComponentRenderer``.
   const [refreshTick, setRefreshTick] = useState(0);
 
+  // Global filters store — survives tab navigation within the same dashboard
+  // family. Hydrated on the parent dashboard ID below.
+  const globalDefinitions = useGlobalFiltersStore((s) => s.definitions);
+  const globalValues = useGlobalFiltersStore((s) => s.values);
+  const globalStories = useGlobalFiltersStore((s) => s.stories);
+  const activeStoryId = useGlobalFiltersStore((s) => s.activeStoryId);
+  const globalParentId = useGlobalFiltersStore((s) => s.parentDashboardId);
+  const hydrateGlobal = useGlobalFiltersStore((s) => s.hydrate);
+  const resetGlobal = useGlobalFiltersStore((s) => s.reset);
+  const setGlobalValue = useGlobalFiltersStore((s) => s.setValue);
+  const demoteGlobal = useGlobalFiltersStore((s) => s.demote);
+  const setActiveStory = useGlobalFiltersStore((s) => s.setActiveStory);
+
+  // Hydrate the store when we know which parent dashboard the active tab
+  // belongs to. The store internally short-circuits if the same parent is
+  // already hydrated — so navigating between sibling tabs is a no-op here.
+  const parentDashboardIdForStore = useMemo(() => {
+    if (!dashboard) return null;
+    return (
+      (dashboard.parent_dashboard_id as string | undefined) ||
+      (dashboard.dashboard_id as string | undefined) ||
+      dashboardId
+    );
+  }, [dashboard, dashboardId]);
+
+  useEffect(() => {
+    if (!parentDashboardIdForStore) return;
+    if (globalParentId && globalParentId !== parentDashboardIdForStore) {
+      // Switched to a different dashboard family — drop the previous family's
+      // global filters before hydrating the new one.
+      resetGlobal();
+    }
+    void hydrateGlobal(parentDashboardIdForStore);
+  }, [parentDashboardIdForStore, globalParentId, hydrateGlobal, resetGlobal]);
+
+  // DC IDs referenced on the currently-rendered tab. Used by `mergeWithGlobal`
+  // to decide which links to expand into synthetic filters.
+  const dcIdsOnTab = useMemo(() => {
+    const set = new Set<string>();
+    for (const m of dashboard?.stored_metadata || []) {
+      const dc = (m as { dc_id?: string }).dc_id;
+      if (dc) set.add(dc);
+    }
+    return set;
+  }, [dashboard]);
+
+  /** Per-tab local filters AUGMENTED with synthetic entries for every active
+   *  global filter targeting a DC on this tab. This is what every backend
+   *  fetch (bulk-compute, figures, tables, maps) must consume — the backend
+   *  treats `InteractiveFilter[]` uniformly so no API-shape changes needed.
+   */
+  const effectiveFilters = useMemo(
+    () => mergeWithGlobal(filters, globalDefinitions, globalValues, dcIdsOnTab),
+    [filters, globalDefinitions, globalValues, dcIdsOnTab],
+  );
+  const effectiveDeferredFilters = useMemo(
+    () => mergeWithGlobal(deferredFilters, globalDefinitions, globalValues, dcIdsOnTab),
+    [deferredFilters, globalDefinitions, globalValues, dcIdsOnTab],
+  );
+
   // Bulk-compute card values whenever filters change
   useEffect(() => {
     if (!dashboard || !dashboardId) return;
@@ -136,7 +202,7 @@ const App: React.FC = () => {
       // snap every card back to ``…`` on every keystroke / drag step.
       if (bulkCtrl.current) bulkCtrl.current.abort();
       bulkCtrl.current = new AbortController();
-      bulkComputeCards(dashboardId, filters, cardIds)
+      bulkComputeCards(dashboardId, effectiveFilters, cardIds)
         .then((res) => {
           setCardValues(res.values);
           setCardSecondaryValues(res.secondary_values || {});
@@ -147,7 +213,7 @@ const App: React.FC = () => {
         .finally(() => setCardsLoading(false));
     }, 250);
     return () => clearTimeout(timer);
-  }, [dashboard, dashboardId, stableFilterKey(filters), refreshTick]);
+  }, [dashboard, dashboardId, stableFilterKey(effectiveFilters), refreshTick]);
 
   const handleFilterChange = useCallback((update: InteractiveFilter) => {
     // Dedupe by (index, source) so chart selections coexist with the same
@@ -305,6 +371,72 @@ const App: React.FC = () => {
     [cardComponents, otherComponents],
   );
 
+  const promoteGlobal = useGlobalFiltersStore((s) => s.promote);
+
+  // Map of component index → GlobeToggle, so each interactive component in
+  // the left rail gets a "promote to global" affordance in its chrome row.
+  // Clicking when off → builds a GlobalFilterDef from the component's
+  // metadata + current value and persists it via the store; clicking when on
+  // → demotes the corresponding global filter back to per-tab scope.
+  const extraActionsByIndex = useMemo(() => {
+    const map: Record<string, React.ReactNode> = {};
+    if (!dashboardId) return map;
+    for (const m of leftComponents) {
+      const idx = m.index;
+      const meta = m as {
+        index: string;
+        interactive_component_type?: string;
+        column_name?: string;
+        column_type?: string;
+        wf_id?: string;
+        dc_id?: string;
+        default_state?: unknown;
+      };
+      const existing = globalDefinitions.find((d) => d.source_component_index === idx);
+      const isGlobal = Boolean(existing);
+      const handleClick = () => {
+        if (isGlobal && existing) {
+          void demoteGlobal(existing.id);
+          return;
+        }
+        if (!meta.interactive_component_type || !meta.column_name || !meta.dc_id || !meta.wf_id) {
+          notifications.show({
+            title: 'Cannot promote',
+            message:
+              'This interactive component is missing the (workflow, data collection, column) metadata needed to promote it.',
+            color: 'orange',
+          });
+          return;
+        }
+        const newId = `gf_${idx}`;
+        void promoteGlobal({
+          id: newId,
+          label: `${meta.column_name}`,
+          source_component_index: idx,
+          source_tab_id: dashboardId,
+          interactive_component_type: meta.interactive_component_type,
+          column_type: meta.column_type || 'object',
+          default_state: meta.default_state,
+          links: [
+            {
+              wf_id: meta.wf_id,
+              dc_id: meta.dc_id,
+              column_name: meta.column_name,
+            },
+          ],
+        }).catch((err) => {
+          notifications.show({
+            title: 'Failed to promote',
+            message: String((err as Error).message ?? err),
+            color: 'red',
+          });
+        });
+      };
+      map[idx] = <GlobeToggle active={isGlobal} onClick={handleClick} />;
+    }
+    return map;
+  }, [leftComponents, globalDefinitions, demoteGlobal, promoteGlobal, dashboardId]);
+
   return (
     <>
       {ENABLE_DEMO_UI && isDemoMode && <DemoModeBanner />}
@@ -402,6 +534,28 @@ const App: React.FC = () => {
                   Filters
                 </Title>
                 <Stack gap="sm">
+                  <StoryPicker
+                    stories={globalStories}
+                    activeStoryId={activeStoryId}
+                    onChange={setActiveStory}
+                    onNavigateToFirstStep={(firstTabId) => {
+                      if (firstTabId) {
+                        window.location.assign(`/dashboard-beta/${firstTabId}`);
+                      }
+                    }}
+                  />
+                  <GlobalFilterSection
+                    parentDashboardId={globalParentId}
+                    definitions={globalDefinitions}
+                    values={globalValues}
+                    onValueChange={setGlobalValue}
+                    onDemote={(fid) => {
+                      void demoteGlobal(fid);
+                    }}
+                    onGoToSource={(srcTabId) => {
+                      window.location.assign(`/dashboard-beta/${srcTabId}`);
+                    }}
+                  />
                   {leftComponents.length === 0 && (
                     <Text size="sm" c="dimmed">No interactive components.</Text>
                   )}
@@ -413,6 +567,7 @@ const App: React.FC = () => {
                         members={g.members}
                         filters={filters}
                         onFilterChange={handleFilterChange}
+                        extraActionsByIndex={extraActionsByIndex}
                       />
                     ) : (
                       <ComponentRenderer
@@ -420,6 +575,7 @@ const App: React.FC = () => {
                         metadata={g.members[0]}
                         filters={filters}
                         onFilterChange={handleFilterChange}
+                        extraActions={extraActionsByIndex[g.members[0].index]}
                       />
                     ),
                   )}
@@ -460,6 +616,24 @@ const App: React.FC = () => {
                 flexDirection: 'column',
               }}
             >
+              {activeStoryId && (() => {
+                const story = globalStories.find((s) => s.id === activeStoryId);
+                if (!story || !dashboardId) return null;
+                const childTabs = tabSiblings.filter(
+                  (t) => t.dashboard_id !== parentTab?.dashboard_id,
+                );
+                // Include the parent itself if it's part of the story order
+                const allTabs = parentTab ? [parentTab, ...childTabs] : childTabs;
+                return (
+                  <StoryStepper
+                    story={story}
+                    childTabs={allTabs}
+                    currentTabId={dashboardId}
+                    onNavigate={(tabId) => window.location.assign(`/dashboard-beta/${tabId}`)}
+                    onExitStory={() => setActiveStory(null)}
+                  />
+                );
+              })()}
               {topComponents.length > 0 && (
                 <TopPanel
                   components={topComponents}
@@ -472,7 +646,7 @@ const App: React.FC = () => {
                   dashboardId={dashboardId!}
                   metadataList={rightComponents}
                   layoutData={dashboard.right_panel_layout_data}
-                  filters={deferredFilters}
+                  filters={effectiveDeferredFilters}
                   onFilterChange={handleFilterChange}
                   cardValues={cardValues}
                   cardSecondaryValues={cardSecondaryValues}
