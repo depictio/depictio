@@ -131,6 +131,7 @@ STATIC_IDS = {
             "advanced_viz_ancombc": "646b0f3c1e4a2d7f8e5b8d23",
             "advanced_viz_da_barplot": "646b0f3c1e4a2d7f8e5b8d24",
             "advanced_viz_enrichment": "646b0f3c1e4a2d7f8e5b8d26",
+            "advanced_viz_complex_heatmap": "646b0f3c1e4a2d7f8e5b8d27",
         },
     },
 }
