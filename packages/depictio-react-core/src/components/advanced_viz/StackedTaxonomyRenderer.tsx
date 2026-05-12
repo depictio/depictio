@@ -206,12 +206,11 @@ const StackedTaxonomyRenderer: React.FC<Props> = ({ metadata, filters, refreshTi
 
   return (
     <AdvancedVizFrame
+      title={metadata.title || 'Stacked taxonomy'}
       controls={controls}
       loading={loading}
       error={error}
       emptyMessage={rows && Object.values(rows)[0]?.length === 0 ? 'No data' : undefined}
-      dataRows={rows ?? undefined}
-      dataColumns={requiredCols}
     >
       {figure ? (
         <Plot
