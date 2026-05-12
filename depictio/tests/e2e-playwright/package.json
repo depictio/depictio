@@ -1,0 +1,23 @@
+{
+  "name": "depictio-e2e-playwright",
+  "private": true,
+  "version": "0.0.1",
+  "description": "Parallel Playwright e2e test suite for Depictio. Coexists with the Cypress suite at ../e2e-tests/.",
+  "scripts": {
+    "test": "playwright test",
+    "test:ui": "playwright test --ui",
+    "test:headed": "playwright test --headed",
+    "test:debug": "playwright test --debug",
+    "test:auth": "playwright test tests/auth",
+    "test:dashboards": "playwright test tests/dashboards",
+    "codegen": "playwright codegen http://localhost:5080",
+    "show-report": "playwright show-report",
+    "show-trace": "playwright show-trace",
+    "install-browsers": "playwright install --with-deps chromium"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.47.2",
+    "@types/node": "^20.16.5",
+    "typescript": "^5.5.4"
+  }
+}
