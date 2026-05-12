@@ -208,12 +208,19 @@ export const useGlobalFiltersStore = create<GlobalFiltersState>((set, get) => ({
     }
     set({ activeStoryId: storyId, values: nextValues });
     if (!parentDashboardId) return;
-    if (_timers.activeStory) clearTimeout(_timers.activeStory);
-    _timers.activeStory = setTimeout(() => {
-      void patchActiveStory(parentDashboardId, storyId).catch((err) => {
-        console.warn('Failed to persist active story:', err);
-      });
-    }, DEBOUNCE_MS);
+    // Fire PATCH immediately (no debounce). Stories change one click at a
+    // time, so debouncing buys nothing, and the caller typically follows up
+    // with a `window.location.assign(...)` to navigate into the story's
+    // first tab — a pending setTimeout would never fire across the reload.
+    // `patchActiveStory` sets `keepalive: true` so the request commits even
+    // as the page unloads.
+    if (_timers.activeStory) {
+      clearTimeout(_timers.activeStory);
+      _timers.activeStory = undefined;
+    }
+    void patchActiveStory(parentDashboardId, storyId).catch((err) => {
+      console.warn('Failed to persist active story:', err);
+    });
   },
 
   reset: () => {

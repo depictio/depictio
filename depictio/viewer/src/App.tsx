@@ -539,7 +539,10 @@ const App: React.FC = () => {
                     activeStoryId={activeStoryId}
                     onChange={setActiveStory}
                     onNavigateToFirstStep={(firstTabId) => {
-                      if (firstTabId) {
+                      // Same-tab guard: if the story starts on the tab we're
+                      // already viewing, skip the full-page reload — the
+                      // stepper appears in-place via the Zustand state update.
+                      if (firstTabId && firstTabId !== dashboardId) {
                         window.location.assign(`/dashboard-beta/${firstTabId}`);
                       }
                     }}

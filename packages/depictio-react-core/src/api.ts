@@ -2883,11 +2883,16 @@ export async function patchActiveStory(
   parentDashboardId: string,
   storyId: string | null,
 ): Promise<void> {
+  // `keepalive: true` so the browser commits this PATCH even when the caller
+  // immediately triggers a full-page navigation (StoryPicker → window.location.assign).
+  // Without it, the in-flight request is cancelled at unload, and the server
+  // never records the active story; on hydration the user lands back in Free Explore.
   const res = await authFetch(
     `${API_BASE}/dashboards/stories/${parentDashboardId}/active`,
     {
       method: 'PATCH',
       body: JSON.stringify({ story_id: storyId }),
+      keepalive: true,
     },
   );
   if (!res.ok) await throwHttpError(res, 'Failed to persist active story');
