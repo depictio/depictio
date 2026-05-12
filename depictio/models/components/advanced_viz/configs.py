@@ -235,6 +235,37 @@ class EnrichmentConfig(_BaseVizConfig):
     top_n: int = Field(default=20, ge=1)
 
 
+class ComplexHeatmapConfig(_BaseVizConfig):
+    """ComplexHeatmap-style clustered heatmap with dendrograms + annotations.
+
+    Wraps the in-tree ``packages/plotly-complexheatmap`` library. The Celery
+    worker calls ``ComplexHeatmap.from_dataframe(...).to_plotly()`` and the
+    React renderer hands the resulting Plotly figure dict to react-plotly.js.
+    Heavy compute (clustering, dendrogram, layout) stays on the server;
+    cached by (DC, params hash) like the live-clustering path.
+    """
+
+    viz_kind: Literal["complex_heatmap"] = "complex_heatmap"
+
+    matrix_wf_id: str = Field(..., description="Workflow id of the matrix DC")
+    matrix_dc_id: str = Field(..., description="DC id — wide matrix (row id + numeric cols)")
+    index_column: str = Field(default="sample_id", description="Row-label column in the DC")
+    value_columns: list[str] | None = Field(
+        default=None,
+        description="Subset of numeric columns to include in the heatmap. None → all numeric.",
+    )
+    row_annotation_cols: list[str] = Field(
+        default_factory=list,
+        description="Categorical columns from the DC rendered as a right-side annotation strip",
+    )
+    cluster_rows: bool = Field(default=True)
+    cluster_cols: bool = Field(default=True)
+    cluster_method: Literal["ward", "single", "complete", "average"] = Field(default="ward")
+    cluster_metric: Literal["euclidean", "correlation", "cosine"] = Field(default="euclidean")
+    normalize: Literal["none", "row_z", "col_z", "log1p"] = Field(default="none")
+    colorscale: str | None = Field(default=None, description="Plotly colorscale name override")
+
+
 class PhylogeneticConfig(_BaseVizConfig):
     """Phylogenetic tree (Microreact-style) — Newick tree + tip metadata.
 
@@ -296,6 +327,7 @@ VizConfig = Annotated[
     | RarefactionConfig
     | ANCOMBCDifferentialsConfig
     | DaBarplotConfig
-    | EnrichmentConfig,
+    | EnrichmentConfig
+    | ComplexHeatmapConfig,
     Field(discriminator="viz_kind"),
 ]

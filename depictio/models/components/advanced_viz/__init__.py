@@ -18,6 +18,7 @@ from depictio.models.components.advanced_viz.component import (
 )
 from depictio.models.components.advanced_viz.configs import (
     ANCOMBCDifferentialsConfig,
+    ComplexHeatmapConfig,
     DaBarplotConfig,
     EmbeddingConfig,
     EnrichmentConfig,
@@ -40,6 +41,7 @@ __all__ = [
     "AdvancedVizLiteComponent",
     "BindingError",
     "CANONICAL_SCHEMAS",
+    "ComplexHeatmapConfig",
     "DaBarplotConfig",
     "EmbeddingConfig",
     "EnrichmentConfig",
