@@ -85,6 +85,12 @@ CANONICAL_SCHEMAS: dict[AdvancedVizKind, dict[str, frozenset[str]]] = {
         "padj": _FLOAT,
         "gene_count": _NUMERIC,
     },
+    # ComplexHeatmap doesn't follow the column-role pattern — its only
+    # required column is the row-id (index_column). Numeric matrix columns
+    # are inferred from the rest of the DC schema by the Celery worker.
+    "complex_heatmap": {
+        "index": _STRING,
+    },
 }
 
 # Optional roles — validated only if the user has bound a column for them.
@@ -121,6 +127,7 @@ _OPTIONAL_ROLES: dict[AdvancedVizKind, dict[str, frozenset[str]]] = {
     "enrichment": {
         "source": _STRING,
     },
+    "complex_heatmap": {},
 }
 
 

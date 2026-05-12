@@ -35,6 +35,7 @@ AdvancedVizKind = Literal[
     "ancombc_differentials",
     "da_barplot",
     "enrichment",
+    "complex_heatmap",
 ]
 
 # Map visualization types
