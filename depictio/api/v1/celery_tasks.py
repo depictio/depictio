@@ -694,6 +694,95 @@ def compute_complex_heatmap(payload: dict) -> dict:
     }
 
 
+@celery_app.task(
+    name="depictio.advanced_viz.compute_upset",
+    soft_time_limit=300,
+    time_limit=600,
+)
+def compute_upset(payload: dict) -> dict:
+    """Build an UpSet plot figure server-side via plotly-upset.
+
+    Input payload:
+        {
+          "wf_id": str, "dc_id": str,
+          "set_columns": [str] | null,
+          "sort_by": "cardinality" | "degree" | "degree-cardinality" | "input",
+          "sort_order": "descending" | "ascending",
+          "min_size": int, "max_degree": int | null,
+          "show_set_sizes": bool,
+          "color_intersections_by": "none" | "set" | "degree",
+          "filter_metadata": [...],
+        }
+    """
+    from depictio.api.v1.db import deltatables_collection
+    from depictio.api.v1.deltatables_utils import load_deltatable_lite
+
+    wf_id = payload.get("wf_id")
+    dc_id = payload.get("dc_id")
+    set_columns = payload.get("set_columns")
+    sort_by = str(payload.get("sort_by") or "cardinality")
+    sort_order = str(payload.get("sort_order") or "descending")
+    min_size = int(payload.get("min_size", 1))
+    max_degree = payload.get("max_degree")
+    show_set_sizes = bool(payload.get("show_set_sizes", True))
+    color_intersections_by = payload.get("color_intersections_by") or "none"
+    filter_metadata = payload.get("filter_metadata") or []
+
+    if not wf_id or not dc_id:
+        raise ValueError("compute_upset: wf_id and dc_id are required")
+
+    dt_doc = deltatables_collection.find_one({"data_collection_id": ObjectId(str(dc_id))})
+    if not dt_doc or not dt_doc.get("delta_table_location"):
+        raise ValueError("compute_upset: DC has no materialised Delta table")
+    init_data = {
+        str(dc_id): {
+            "delta_location": dt_doc["delta_table_location"],
+            "dc_type": "table",
+            "size_bytes": 0,
+        }
+    }
+
+    started = time.monotonic()
+    df = load_deltatable_lite(
+        workflow_id=ObjectId(str(wf_id)),
+        data_collection_id=str(dc_id),
+        metadata=filter_metadata or None,
+        init_data=init_data,
+    )
+    load_ms = int((time.monotonic() - started) * 1000)
+    logger.info("compute_upset: loaded %d rows in %dms", df.height, load_ms)
+
+    pdf = df.to_pandas()
+    compute_started = time.monotonic()
+    from plotly_upset import UpSetPlot
+
+    kwargs: dict = {
+        "sort_by": sort_by,
+        "sort_order": sort_order,
+        "min_size": min_size,
+        "show_set_sizes": show_set_sizes,
+    }
+    if set_columns:
+        kwargs["set_columns"] = list(set_columns)
+    if max_degree is not None:
+        kwargs["max_degree"] = int(max_degree)
+    if color_intersections_by in ("set", "degree"):
+        kwargs["color_intersections_by"] = color_intersections_by
+
+    upset = UpSetPlot(pdf, **kwargs)
+    fig_dict = upset.to_plotly().to_dict()
+    compute_ms = int((time.monotonic() - compute_started) * 1000)
+    logger.info("compute_upset: built figure in %dms", compute_ms)
+
+    return {
+        "figure": fig_dict,
+        "row_count": len(pdf),
+        "set_count": len(set_columns) if set_columns else None,
+        "load_ms": load_ms,
+        "compute_ms": compute_ms,
+    }
+
+
 __all__: list[str] = [
     "build_figure_preview",
     "analyze_figure_code",
@@ -701,4 +790,5 @@ __all__: list[str] = [
     "preview_deltatable",
     "compute_embedding",
     "compute_complex_heatmap",
+    "compute_upset",
 ]
