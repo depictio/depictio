@@ -82,6 +82,12 @@ const StepData: React.FC = () => {
         return ['multiqc'];
       case 'image':
         return ['image'];
+      case 'advanced_viz':
+        // Advanced viz consumes tabular DCs whose schema matches one of the
+        // canonical viz schemas (volcano / embedding / manhattan / stacked
+        // taxonomy). Compatibility is enforced column-by-column inside
+        // AdvancedVizBuilder, not at the DC-type level.
+        return ['table'];
       default:
         return null;
     }

@@ -666,6 +666,12 @@ class MapLiteComponent(BaseLiteComponent):
         return self
 
 
+# Lazy import so advanced_viz can depend on lite.BaseLiteComponent without
+# a circular import; the union itself is fine to reference after definition.
+from depictio.models.components.advanced_viz.component import (  # noqa: E402
+    AdvancedVizLiteComponent,
+)
+
 # Union type for any lite component
 LiteComponent = (
     FigureLiteComponent
@@ -675,4 +681,5 @@ LiteComponent = (
     | ImageLiteComponent
     | MultiQCLiteComponent
     | MapLiteComponent
+    | AdvancedVizLiteComponent
 )

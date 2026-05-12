@@ -24,7 +24,8 @@ export type ComponentType =
   | 'multiqc'
   | 'image'
   | 'map'
-  | 'text';
+  | 'text'
+  | 'advanced_viz';
 
 export type FigureMode = 'ui' | 'code';
 

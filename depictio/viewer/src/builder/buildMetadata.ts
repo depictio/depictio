@@ -46,6 +46,8 @@ export function buildMetadata(state: BuilderState): StoredMetadata {
       return buildMap(state, base, existing);
     case 'text':
       return buildText(state, base, existing);
+    case 'advanced_viz':
+      return buildAdvancedViz(state, base, existing);
     default:
       return { ...existing, ...base };
   }
@@ -243,6 +245,32 @@ function buildText(
     alignment:
       c.alignment === 'center' || c.alignment === 'right' ? c.alignment : 'left',
     body: c.body ?? '',
+  };
+}
+
+function buildAdvancedViz(
+  state: BuilderState,
+  base: StoredMetadata,
+  existing: Record<string, unknown>,
+): StoredMetadata {
+  const c = as<{
+    viz_kind?: 'volcano' | 'embedding' | 'manhattan' | 'stacked_taxonomy';
+    column_mapping?: Record<string, string>;
+  }>(state.config);
+  const kind = c.viz_kind;
+  const cm = c.column_mapping || {};
+  // Translate role→column mapping into the per-kind Pydantic config shape
+  // (each role becomes `<role>_col`). This mirrors what
+  // depictio/models/components/advanced_viz/configs.py expects.
+  const configBlob: Record<string, unknown> = { viz_kind: kind };
+  for (const [role, col] of Object.entries(cm)) {
+    configBlob[`${role}_col`] = col;
+  }
+  return {
+    ...existing,
+    ...base,
+    viz_kind: kind,
+    config: configBlob,
   };
 }
 
