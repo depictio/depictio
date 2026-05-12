@@ -589,6 +589,60 @@ export async function pollComputeEmbedding(jobId: string): Promise<ComputeEmbedd
   return res.json();
 }
 
+export interface ComplexHeatmapPayload {
+  wf_id: string;
+  dc_id: string;
+  index_column: string;
+  value_columns?: string[] | null;
+  row_annotation_cols?: string[];
+  cluster_rows?: boolean;
+  cluster_cols?: boolean;
+  cluster_method?: string;
+  cluster_metric?: string;
+  normalize?: string;
+  colorscale?: string | null;
+  filter_metadata: InteractiveFilter[];
+}
+
+export interface ComplexHeatmapResult {
+  figure: { data: unknown[]; layout: Record<string, unknown> };
+  row_count: number;
+  col_count: number;
+  load_ms?: number;
+  compute_ms?: number;
+}
+
+export interface ComplexHeatmapJob {
+  job_id: string;
+  status: 'pending' | 'done' | 'failed';
+  result?: ComplexHeatmapResult | null;
+  error?: string | null;
+  from_cache?: boolean;
+}
+
+/** Dispatch a ComplexHeatmap Celery task (server-side clustering + figure
+ *  build via packages/plotly-complexheatmap). Cache-hit returns inline. */
+export async function dispatchComplexHeatmap(
+  payload: ComplexHeatmapPayload,
+): Promise<ComplexHeatmapJob> {
+  const res = await fetch(`${API_BASE}/advanced_viz/compute_complex_heatmap`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw new Error(`Failed to dispatch compute_complex_heatmap: ${res.status}`);
+  return res.json();
+}
+
+/** Poll the ComplexHeatmap Celery task. */
+export async function pollComplexHeatmap(jobId: string): Promise<ComplexHeatmapJob> {
+  const res = await fetch(`${API_BASE}/advanced_viz/compute_complex_heatmap/${jobId}`, {
+    headers: authHeaders(),
+  });
+  if (!res.ok) throw new Error(`Failed to poll compute_complex_heatmap: ${res.status}`);
+  return res.json();
+}
+
 
 /** Fetch the raw Newick string for a phylogeny-type DC. */
 export async function fetchPhylogenyNewick(dcId: string): Promise<string> {

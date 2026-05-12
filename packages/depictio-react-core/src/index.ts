@@ -171,6 +171,8 @@ export {
   fetchPhylogenyNewick,
   dispatchComputeEmbedding,
   pollComputeEmbedding,
+  dispatchComplexHeatmap,
+  pollComplexHeatmap,
 } from './api';
 export type { TableMutationResult } from './api';
 // Selection-as-filter helpers (Plotly/AG Grid → InteractiveFilter)
