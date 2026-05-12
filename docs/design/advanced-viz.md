@@ -17,7 +17,11 @@ Out of scope for v1: heavy image processing (pyramidal WSI, Vitessce/Viv), large
 
 ---
 
-## 2. Catalogue (10 viz, 4 domains)
+## 2. Catalogue (10 viz, 4 domains) and per-viz input schemas
+
+Each advanced viz declares the **input shape** its data binding must satisfy. A binding maps DC columns to viz roles via a `ColumnMapping` (concept carried over from the previous Dash design). Validation runs at **two points**: (1) editor-time when the user wires a viz to a DC (warn + block save if required roles unmappable), and (2) render-time as a defensive check (return a structured error the renderer surfaces, not a stack trace).
+
+Schemas are deliberately small and additive — extra columns are always allowed and surface in tooltips / hover.
 
 Curated from a 14-item survey across nf-core pipelines, Bioconductor Shiny apps, Plotly Dash Bio, cBioPortal, UCSC Cell Browser, Vitessce, igv.js. Each row picks a distinct *interaction shape* so that building them in order forces the framework through different stress tests.
 
@@ -35,6 +39,49 @@ Curated from a 14-item survey across nf-core pipelines, Bioconductor Shiny apps,
 | 10 | Pathway / network (STRING/KEGG) | enrichment, sc, multi-omic | layout algo, edge-confidence slider, colour-by logFC, expand neighbours | gene-set from #1/#3 | selected node → drill-back | cytoscape.js |
 
 **Note on #9:** kept deliberately lightweight. Single image (PNG/JPG) as background, scatter overlay, lasso ROI. No pyramid / no zarr / no Vitessce. If imaging requirements grow later, swap the renderer for deck.gl + viv without touching the coordination contract.
+
+### 2.1 Input schema per viz (required vs optional roles)
+
+`req` = required role; `opt` = optional. `*` = repeating (one column per axis/dim/track).
+
+| # | Viz | Required roles | Optional roles | DC shape (long/wide/file-manifest) | Notes |
+|---|---|---|---|---|---|
+| 1 | Volcano | `feature_id: str`, `effect_size: float`, `significance: float` (raw p or padj) | `label: str`, `category: str`, `mean_expr: float` | long, one row per feature | Toggle `-log10` applied client-side; if both p and padj present user picks. |
+| 2 | Embedding | `sample_id: str`, `dim_1: float`, `dim_2: float` | `dim_3*`, `meta.*: any`, `cluster_id: str` | long, one row per sample/cell | If DC has no `dim_*`: must bind to a `compute` step (§8). |
+| 3 | Clustergram | `feature_id: str`, `sample_id: str`, `value: float` (long) **or** wide matrix with first col = feature_id | `feature_meta.*`, `sample_meta.*` | long preferred; wide accepted with auto-detection | Heavy clustering computed server-side (§9). |
+| 4 | Stacked taxonomy bar | `sample_id: str`, `taxon_id: str`, `rank: str`, `abundance: float` | `parent_taxon_id: str`, `lineage: str` | long, one row per (sample, taxon) | `rank` enum: phylum/class/order/family/genus/species. |
+| 5 | OncoPrint | `sample_id: str`, `gene: str`, `alteration_type: str` | `clinical.*: any` (per-sample) | long, one row per (sample, gene, alteration) | Clinical sidebar tracks via secondary DC join. |
+| 6 | Lollipop / needle | `gene: str`, `position: int`, `mutation_type: str` | `count: int`, `domain.start/end/name`, `cohort: str` | long, one row per mutation event | Domain track is a separate DC (gene → domains). |
+| 7 | Manhattan / GWAS | `chr: str`, `pos: int`, `pvalue: float` | `snp_id: str`, `trait: str`, `effect: float` | long, one row per locus | `chr` ordering enforced (1..22, X, Y, MT). |
+| 8 | Genome browser | DC = **manifest** of tracks: `track_id`, `kind` (BAM/VCF/BigWig/BED), `uri`, `index_uri`, optional `genome` | `display: dict` (track height, colour) | manifest (one row per track) | `uri` resolved server-side to signed S3 URL before frontend fetch. |
+| 9 | Spatial scatter + image | `cell_id: str`, `x: float`, `y: float` + DC-level `image_uri: str` (in DC config, not rows) | `value: float`, `cluster_id: str`, `image_scale: float` | long, one row per cell + image referenced from DC config | No pyramid; image must fit `< ~20 MB` for v1. |
+| 10 | Pathway / network | DC = **graph**: edge table `source: str`, `target: str` + node table `id: str`, `label: str` | `weight: float`, `node_attr.*`, `edge_attr.*` | two-table DC (nodes + edges) — needs new DC kind | First viz that requires extending the DC kind list. |
+
+### 2.2 The `ColumnMapping` and `BindingSpec` types
+
+Per-viz Pydantic submodel pairs a **role** with a **DC column path**. Lives in `depictio/models/components/advanced_viz/<viz_kind>.py`:
+
+```python
+class VolcanoColumnMapping(BaseModel):
+    feature_id: str               # column name in the DC
+    effect_size: str
+    significance: str
+    label: str | None = None
+    category: str | None = None
+
+class VolcanoBindingSpec(BaseModel):
+    wf_id: str
+    dc_id: str
+    columns: VolcanoColumnMapping
+    significance_kind: Literal["pvalue", "padj"] = "padj"
+```
+
+The editor reads the DC schema, presents the user with column dropdowns per role, and writes a `BindingSpec` into the component config. At render time, the API uses the binding to project only the required columns out of the Delta table — keeps payloads small.
+
+### 2.3 What this implies for DC authors / pipeline integrators
+
+- Existing recipes (`depictio/projects/.../recipes/*.py`, see `TransformConfig`) gain a small **schema-tag convention**: a recipe can declare which advanced viz kinds its output is consumable by, e.g. `# advanced_viz: volcano, embedding`.
+- Pipeline templates (the YAML side) can pre-fill `BindingSpec` so users see correctly-wired advanced viz on first dashboard load. If columns don't match the schema, the editor surfaces the mismatch with a "remap" UI rather than failing silently.
 
 ---
 
@@ -138,18 +185,173 @@ Each viz becomes essentially `(props: { data, controls, coordination, theme }) =
 
 ---
 
-## 5. MVP — two viz, one PR
+## 4.5 New class: `compute` (clustering & dimensionality reduction)
 
-Build **#1 Volcano + #2 Embedding** together. Reasons:
+PCA / UMAP / t-SNE are not visualisations — they are **transformations** that produce a derived DC the Embedding viz (#2) then renders. Today Depictio has no first-class concept of "run an algorithm and produce a derived DC with parameter-tuneable UI"; it has the lower-level `TransformConfig` recipe system (see `depictio/models/models/transforms.py`) and the `DataCollectionSource.TRANSFORMED` enum (see `depictio/models/models/data_collections.py:18-22`). The new `compute` class layers a typed, UI-driven, parameter-tunable façade over those.
 
-- They prove all three layers (new type, coordination store, frame).
-- They demonstrate the full cross-talk loop:
-  - Selecting a gene in Volcano → publishes to `selections.feature` → Embedding recolours by that gene (via `contexts.colorBy`).
-  - Lasso in Embedding → publishes to `selections.sample` → toggle "publish to dashboard" promotes it to a global sidebar filter → Volcano re-fetches with that sample subset.
-- Both render with plotly.js — no new heavy dependencies for v1.
-- Both are universally relevant (all four omics domains use them).
+### 4.5.1 Why a separate class (not just "another viz_kind")
 
-Once stable, viz #3–#10 in the catalogue are mechanical adds: each is a new Pydantic submodel + a new React renderer file. Genome browser (#8) is the only one needing a new top-level dependency (igv.js).
+- A compute step has **no rendering** — it produces data, not pixels. Letting it pretend to be a viz blurs the chart-vs-pipeline boundary and breaks the discriminated-union semantics for `advanced_viz`.
+- It is the **only kind of node that legitimately mutates the dashboard's data graph** at view time. That deserves explicit modelling so caching, invalidation, and re-runs are first-class concerns.
+- Its lifecycle is async (Celery → poll/WebSocket → render) where a viz is sync (props in → element out). Conflating them complicates both renderers.
+
+### 4.5.2 Class shape
+
+New top-level `component_type: "compute"`, hybrid pattern again — single React dispatch entry, Pydantic discriminated union by `compute_kind`:
+
+```python
+class ComputeKind(str, Enum):
+    PCA  = "pca"
+    UMAP = "umap"
+    TSNE = "tsne"
+    PCOA = "pcoa"           # microbiome / distance-based
+    HCLUST = "hclust"       # hierarchical clustering — also feeds Clustergram (#3)
+    KMEANS = "kmeans"
+    LEIDEN = "leiden"       # graph-based, sc-style
+    LOUVAIN = "louvain"
+
+class ComputeJobSpec(BaseModel):
+    input: BindingSpec                 # which DC + which columns are the input matrix
+    compute_kind: ComputeKind
+    params: ComputePCAParams | ComputeUMAPParams | ...   # discriminated by kind
+    feature_subset: list[str] | None   # optional: restrict to these features (cross-talk hook)
+    sample_subset: list[str] | None    # optional: from sidebar / coordination
+    output_dc_tag: str                 # human-readable tag for the produced derived DC
+```
+
+Per-kind param submodels (each tight, validated):
+
+```python
+class ComputePCAParams(BaseModel):
+    n_components: int = 10
+    scale: bool = True
+    svd_solver: Literal["auto", "arpack", "randomized"] = "auto"
+
+class ComputeUMAPParams(BaseModel):
+    n_neighbors: int = 15
+    min_dist: float = 0.1
+    n_components: int = 2
+    metric: Literal["euclidean", "cosine", "correlation"] = "euclidean"
+    random_state: int = 42
+
+class ComputeTSNEParams(BaseModel):
+    perplexity: float = 30.0
+    n_iter: int = 1000
+    learning_rate: float | Literal["auto"] = "auto"
+    metric: Literal["euclidean", "cosine"] = "euclidean"
+    random_state: int = 42
+
+class ComputeLeidenParams(BaseModel):
+    resolution: float = 1.0
+    n_neighbors: int = 15      # for the kNN graph
+    random_state: int = 42
+```
+
+### 4.5.3 Output: a derived `TRANSFORMED` Data Collection
+
+The result is materialised as a regular DC with `source = TRANSFORMED`, slotting into Depictio's existing model. The output schema depends on `compute_kind`:
+
+| Kind | Output DC columns |
+|---|---|
+| PCA / PCoA | `sample_id`, `dim_1..dim_N`, plus `variance_explained` table as DC sidecar |
+| UMAP / t-SNE | `sample_id`, `dim_1`, `dim_2` (or `dim_1..3`) |
+| hclust | `sample_id`, `linkage_order: int`, `cluster_id_at_k_*: str`; sidecar dendrogram (Newick or linkage matrix) |
+| kmeans / leiden / louvain | `sample_id`, `cluster_id: str` |
+
+Embedding viz (#2) and Clustergram (#3) bind to these derived DCs the same way they bind to any other DC — no special case in the renderer.
+
+### 4.5.4 Caching & invalidation
+
+Cache key = `(input_dc_id, input_dc_version, compute_kind, hash(params), hash(feature_subset), hash(sample_subset))`. Stored in MongoDB (`compute_jobs` collection) with status, result_dc_id, error, timestamps.
+
+- Cache hit → return existing result_dc_id immediately, no Celery dispatch.
+- Cache miss → enqueue Celery task, return `job_id` and status `PENDING`. Frontend subscribes via existing WebSocket (already used for `useDataCollectionUpdates()` per the React viewer audit).
+- Input DC invalidation (re-scan, new version) → existing compute jobs stay valid for the old version; new lookups re-compute. We never auto-delete to avoid losing work; provide a "clear cached results" admin action.
+
+### 4.5.5 Where in the dashboard does a `compute` node live?
+
+Two options:
+
+- **A. Visible card on the canvas** — appears as a small panel showing kind, params, status, and a "Re-run" button. Pro: explicit and discoverable. Con: clutter for users who just want results.
+- **B. Hidden / sidebar-only** — added in the editor via a "Compute" tab, never rendered in the canvas; viz panels reference its output by id. Pro: clean canvas. Con: harder to debug ("why is my embedding empty?").
+
+**Recommendation: A for v1.** The status/Re-run affordance is high value while the system is new. Once stable, add a "collapse to header chip" toggle.
+
+### 4.5.6 Cross-talk into compute
+
+A compute node *reads* coordination state (so e.g. UMAP can be re-run on a sample subset chosen via lasso in another viz), but it should **never auto-rerun on every selection change** — recompute is expensive. Two policies:
+
+- **Manual re-run** (default): selection changes set the node "dirty"; user clicks Re-run.
+- **Debounced auto-run**: opt-in per node, with a debounce (e.g. 5 s) and a configurable upper bound on dataset size to avoid runaway costs.
+
+---
+
+## 4.6 Heavy compute → Celery (no inline blocking work)
+
+Depictio already has Celery wired (`depictio/dash/celery_worker.py`, `depictio/dash/celery_app.py`, `depictio/api/v1/celery_tasks.py`). The advanced viz family extends this with two new task families and a uniform offload contract.
+
+### 4.6.1 What goes on Celery
+
+Anything where p99 latency could exceed ~500ms or memory could spike beyond ~250 MB:
+
+| Workload | Why heavy | Task |
+|---|---|---|
+| `compute` node execution (PCA/UMAP/t-SNE/clustering) | matrix ops, neighbor graphs, gradient descent | `depictio.compute.run` |
+| Clustergram (#3) clustering of large matrices | O(n²) distance + linkage | `depictio.advanced_viz.cluster_matrix` |
+| OncoPrint (#5) cohort×gene matrix assembly | wide pivot over many samples | `depictio.advanced_viz.oncoprint_matrix` |
+| Pathway (#10) network expansion via STRING/KEGG | external API + graph traversal | `depictio.advanced_viz.pathway_expand` |
+| Volcano label-top-N when N is large (>1000) | layout / collision avoidance | client-side; only server-side if requested as PNG/PDF |
+| Embedding (#2) initial render with >100k points | server-side downsampling / tiling | `depictio.advanced_viz.embedding_tile` |
+
+Light operations (threshold filtering on already-loaded data, axis flips, hover formatting) stay in the browser. The principle: **pre-compute on the server, react in the browser.**
+
+### 4.6.2 Task contract (mirrors existing `celery_tasks.py` style)
+
+```python
+@celery_app.task(name="depictio.compute.run", soft_time_limit=600, time_limit=900)
+def compute_run(payload: dict) -> dict:
+    """
+    Input:  {"job_spec": <ComputeJobSpec serialized>, "user_id": "...", "dashboard_id": "..."}
+    Output: {"status": "ok"|"error",
+             "result_dc_id": "...",        # on ok
+             "result_summary": {...},      # variance explained, cluster sizes, etc.
+             "error": {"kind": "...", "message": "..."}}  # on error
+    Side effects: writes derived DC to Delta + registers in MongoDB.
+    """
+```
+
+Tasks remain JSON-in / JSON-out (matches existing convention noted in `celery_tasks.py:13`). No raw DataFrames over the wire.
+
+### 4.6.3 Offload helper and frontend lifecycle
+
+- API endpoint `POST /advanced_viz/compute` accepts a `ComputeJobSpec`, looks up cache, returns either `{status: "cached", result_dc_id}` or `{status: "pending", job_id}`.
+- Frontend tracks pending jobs in a Zustand slice, subscribes to existing WebSocket channel, swaps the panel skeleton for the rendered viz when `job.status` flips to ok.
+- Failed jobs surface in `<AdvancedVizFrame>`'s error boundary with retry + "view logs" affordances.
+- Worker queues split: `default` (existing), `compute` (new — long-running, low concurrency, can be scaled independently). Helm chart already enumerates worker deployments per `helm-charts/depictio/templates/deployments.yaml`; we add one entry.
+
+### 4.6.4 Resource limits
+
+- `soft_time_limit` per kind (PCA: 60s, UMAP: 300s, leiden on >50k samples: 600s).
+- Per-user concurrency cap (configurable, default 2 simultaneous compute jobs).
+- Hard memory cap via worker container limits.
+- Result size cap: derived DC must be <50 MB Parquet; jobs that would exceed this are rejected with a clear error pointing the user at sample/feature subsetting.
+
+---
+
+## 5. MVP — two viz + one compute kind, one PR
+
+Build **#1 Volcano + #2 Embedding + `compute_kind = umap`** together. Reasons:
+
+- Proves all four layers (new `advanced_viz` type, new `compute` type, coordination store, frame).
+- Proves the **full pipeline**: raw matrix DC → UMAP compute (Celery) → derived DC → Embedding viz binds to it → cross-talk with Volcano.
+- Demonstrates cross-talk:
+  - Volcano selects a gene → `selections.feature` → Embedding recolours by that gene (via `contexts.colorBy`).
+  - Embedding lasso → `selections.sample` → toggle "publish to dashboard" promotes to a sidebar filter → Volcano re-fetches with that subset.
+  - Optional: Embedding lasso also marks the UMAP compute node "dirty" (sample subset changed); user clicks Re-run to recompute on the subset.
+- Volcano + Embedding render with plotly.js; UMAP runs in Celery via the existing `umap-learn` package (single new Python dep on the worker side).
+- Schema-validated bindings exercised end-to-end: Volcano needs `feature_id/effect_size/significance`; Embedding either reads `dim_1/dim_2` directly OR (the demo) binds to the UMAP compute output.
+
+Once this MVP is stable, the rest of the catalogue is incremental: each new viz is a Pydantic submodel + React renderer file; each new compute kind is a Pydantic submodel + a Celery task body. Genome browser (#8) and Pathway/network (#10) are the only items that bring new top-level dependencies (igv.js, cytoscape.js).
 
 ---
 
@@ -160,6 +362,11 @@ Once stable, viz #3–#10 in the catalogue are mechanical adds: each is a new Py
 3. **TypeScript type generation** — extend the existing Pydantic→TS pipeline (if any) to emit the discriminated union, or hand-write TS mirrors for v1?
 4. **Coordination store persistence** — does selection state survive a dashboard reload? (Recommendation: no for v1; selections are session-only. Easy to add later.)
 5. **Editor UX for coordination** — should the builder expose `coordination.reads`/`writes` as a UI, or are these fixed per viz_kind (recommended for v1)?
+6. **`compute` node placement on the canvas** — visible card vs hidden/sidebar-only. Recommendation A above; confirm.
+7. **Compute caching scope** — per-user, per-project, or global? Sharing across users speeds collaboration but raises permission questions; recommend per-project for v1.
+8. **Recipe vs first-class compute** — should clustering/DR kinds be implemented as recipes under the existing `TransformConfig` system (pro: leverages existing scan/materialise pipeline) or as standalone Celery tasks bypassing recipes (pro: tighter typing, no `.py` recipe file per kind)? Recommendation: **standalone Celery tasks** for the eight builtin kinds, while leaving `TransformConfig` available for user-authored custom transforms.
+9. **Worker queue topology** — separate `compute` queue from default? Yes (long jobs shouldn't block previews). Helm chart needs an additional worker deployment.
+10. **DC schema-validation surface** — surface mismatches in editor only, or also at runtime? Recommend both, but editor-time should block save while runtime should display a non-fatal banner.
 
 ---
 
