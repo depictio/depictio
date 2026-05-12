@@ -49,11 +49,12 @@ export function actionsFor(componentType: string): ChromeAction[] {
     case 'interactive':
       return ['metadata', 'reset'];
     case 'advanced_viz':
-      // Same action surface as figure: metadata / fullscreen / download
-      // (PNG snapshot of the plotly canvas) / reset. The per-viz controls
-      // (sliders, dropdowns, search) are surfaced as an EXTRA ActionIcon
-      // popover via `extraActions` from ComponentRenderer.
-      return ['metadata', 'fullscreen', 'download', 'reset'];
+      // metadata + fullscreen + reset. Download is dropped — advanced viz
+      // export is handled by the Settings popover (Newick export for trees,
+      // PNG snapshots are out-of-scope for the multi-trace plotly figures).
+      // The Settings + Show-data ActionIcons are injected via extraActions
+      // from ComponentRenderer's advanced_viz dispatch.
+      return ['metadata', 'fullscreen', 'reset'];
     case 'card':
     case 'image':
     case 'jbrowse':

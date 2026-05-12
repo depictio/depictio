@@ -14,6 +14,7 @@ import EmbeddingRenderer from './advanced_viz/EmbeddingRenderer';
 import ManhattanRenderer from './advanced_viz/ManhattanRenderer';
 import StackedTaxonomyRenderer from './advanced_viz/StackedTaxonomyRenderer';
 import PhylogeneticRenderer from './advanced_viz/PhylogeneticRenderer';
+import { AdvancedVizExtrasProvider } from './advanced_viz/AdvancedVizExtras';
 import MultiSelectRenderer from './interactive/MultiSelectRenderer';
 import RangeSliderRenderer from './interactive/RangeSliderRenderer';
 import SliderRenderer from './interactive/SliderRenderer';
@@ -271,30 +272,15 @@ const ComponentRenderer: React.FC<ComponentRendererProps> = ({
   }
 
   if (metadata.component_type === 'advanced_viz') {
-    const vizKind = (metadata.viz_kind as string) || '';
-    const advProps = { metadata, filters, refreshTick };
-    let inner: React.ReactNode;
-    if (vizKind === 'volcano') {
-      inner = <VolcanoRenderer {...(advProps as any)} />;
-    } else if (vizKind === 'embedding') {
-      inner = <EmbeddingRenderer {...(advProps as any)} />;
-    } else if (vizKind === 'manhattan') {
-      inner = <ManhattanRenderer {...(advProps as any)} />;
-    } else if (vizKind === 'stacked_taxonomy') {
-      inner = <StackedTaxonomyRenderer {...(advProps as any)} />;
-    } else if (vizKind === 'phylogenetic') {
-      inner = <PhylogeneticRenderer {...(advProps as any)} />;
-    } else {
-      inner = (
-        <div className="dashboard-error" style={{ fontSize: '0.75rem' }}>
-          Unknown advanced viz kind: "{vizKind}"
-        </div>
-      );
-    }
-    return wrapWithChrome('advanced_viz', metadata, undefined, inner, {
-      extraActions,
-      showDragHandle,
-    });
+    return (
+      <AdvancedVizDispatch
+        metadata={metadata}
+        filters={filters}
+        refreshTick={refreshTick}
+        extraActions={extraActions}
+        showDragHandle={showDragHandle}
+      />
+    );
   }
 
   return (
@@ -434,3 +420,67 @@ function formatValue(v: unknown): string | number {
   }
   return String(v);
 }
+
+interface AdvancedVizDispatchProps {
+  metadata: StoredMetadata;
+  filters: InteractiveFilter[];
+  refreshTick?: number;
+  extraActions?: React.ReactNode;
+  showDragHandle?: boolean;
+}
+
+/**
+ * Per-component sub-renderer for the advanced_viz family.
+ *
+ * Holds a useState for the Settings + Show-data popovers the framed renderer
+ * publishes via AdvancedVizExtrasContext. The published JSX is appended to
+ * the standard chrome icons (metadata + fullscreen + reset) via the
+ * `extraActions` slot so all the action icons land in the same hover-revealed
+ * row with matching Mantine styling.
+ */
+const AdvancedVizDispatch: React.FC<AdvancedVizDispatchProps> = ({
+  metadata,
+  filters,
+  refreshTick,
+  extraActions,
+  showDragHandle,
+}) => {
+  const [publishedExtras, setPublishedExtras] = React.useState<React.ReactNode>(null);
+
+  const vizKind = (metadata.viz_kind as string) || '';
+  const advProps = { metadata, filters, refreshTick };
+  let inner: React.ReactNode;
+  if (vizKind === 'volcano') {
+    inner = <VolcanoRenderer {...(advProps as any)} />;
+  } else if (vizKind === 'embedding') {
+    inner = <EmbeddingRenderer {...(advProps as any)} />;
+  } else if (vizKind === 'manhattan') {
+    inner = <ManhattanRenderer {...(advProps as any)} />;
+  } else if (vizKind === 'stacked_taxonomy') {
+    inner = <StackedTaxonomyRenderer {...(advProps as any)} />;
+  } else if (vizKind === 'phylogenetic') {
+    inner = <PhylogeneticRenderer {...(advProps as any)} />;
+  } else {
+    inner = (
+      <div className="dashboard-error" style={{ fontSize: '0.75rem' }}>
+        Unknown advanced viz kind: "{vizKind}"
+      </div>
+    );
+  }
+
+  const combinedExtras = publishedExtras || extraActions ? (
+    <>
+      {publishedExtras}
+      {extraActions}
+    </>
+  ) : undefined;
+
+  return wrapWithChrome(
+    'advanced_viz',
+    metadata,
+    undefined,
+    <AdvancedVizExtrasProvider onChange={setPublishedExtras}>{inner}</AdvancedVizExtrasProvider>,
+    { extraActions: combinedExtras, showDragHandle },
+  );
+};
+
