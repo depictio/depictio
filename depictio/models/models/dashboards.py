@@ -1272,15 +1272,40 @@ class GlobalFilterDef(BaseModel):
         return str(source_tab_id)
 
 
-class Story(BaseModel):
-    """A named ordered path through a subset of dashboard tabs.
+class JourneyStop(BaseModel):
+    """A single analytical "stop" in a saved Journey.
 
-    Multiple stories may coexist on the same dashboard, each defining a
-    directional analytical narrative (e.g. ``genes → locations`` vs.
-    ``locations → genes``). Stories are independent of the per-tab
-    ``tab_order`` field — the same tab can appear at different positions
-    in different stories. A dashboard with no stories simply renders in
-    Free Explore mode.
+    Captures the snapshot needed to replay an analytical state: which tab
+    the user was on, the global filter values at the time, and a snapshot
+    of the per-tab interactive filters on that tab. Applying a stop
+    navigates to ``anchor_tab_id`` and replays both filter snapshots.
+    """
+
+    id: str
+    name: str
+    description: str | None = None
+    anchor_tab_id: PyObjectId
+    global_filter_state: dict[str, Any] = Field(default_factory=dict)
+    local_filter_state: list[dict[str, Any]] = Field(default_factory=list)
+
+    model_config = ConfigDict(arbitrary_types_allowed=True, extra="forbid")
+
+    @field_serializer("anchor_tab_id")
+    def serialize_anchor_tab_id(self, anchor_tab_id: PyObjectId) -> str:
+        return str(anchor_tab_id)
+
+
+class Journey(BaseModel):
+    """A named, ordered sequence of analytical stops.
+
+    Each stop is a saved snapshot of (tab + global filters + per-tab
+    filters). Stepping into a stop replays its filter state on its anchor
+    tab — driving the funnel-narrowing view in the React viewer.
+
+    Multiple journeys may coexist on the same dashboard. They are
+    dashboard-scoped (definitions live on the parent ``DashboardData``);
+    per-user state — which stop the user was last on for each journey —
+    lives in :class:`UserDashboardState`.
     """
 
     id: str
@@ -1288,15 +1313,10 @@ class Story(BaseModel):
     description: str | None = None
     icon: str | None = None
     color: str | None = None
-    tab_order: list[PyObjectId] = Field(default_factory=list)
-    default_global_filter_ids: list[str] = Field(default_factory=list)
+    stops: list[JourneyStop] = Field(default_factory=list)
     pinned: bool = False
 
     model_config = ConfigDict(arbitrary_types_allowed=True, extra="forbid")
-
-    @field_serializer("tab_order")
-    def serialize_tab_order(self, tab_order: list[PyObjectId]) -> list[str]:
-        return [str(t) for t in tab_order]
 
 
 class DashboardData(MongoModel):
@@ -1350,10 +1370,10 @@ class DashboardData(MongoModel):
         None  # Populated at runtime from the parent project's realtime config
     )
 
-    # Cross-tab global filters & stories (meaningful only when is_main_tab=True;
+    # Cross-tab global filters & journeys (meaningful only when is_main_tab=True;
     # ignored on child tabs). Defaults keep older documents loading unchanged.
     global_filters: list[GlobalFilterDef] = Field(default_factory=list)
-    stories: list[Story] = Field(default_factory=list)
+    journeys: list[Journey] = Field(default_factory=list)
 
     model_config = ConfigDict(
         arbitrary_types_allowed=True,

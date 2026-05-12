@@ -23,17 +23,17 @@ from depictio.api.v1.endpoints.dashboards_endpoints.core_functions import (
     sync_tab_family_permissions,
 )
 from depictio.api.v1.endpoints.dashboards_endpoints.global_filters import (
-    ActiveStoryPatch,
+    ActiveJourneyPatch,
     FilterValuePatch,
     FunnelRequest,
     compute_funnel,
     delete_global_filter,
-    delete_story,
+    delete_journey,
     get_global_state,
-    patch_active_story,
+    patch_active_journey,
     patch_filter_value,
     upsert_global_filter,
-    upsert_story,
+    upsert_journey,
 )
 from depictio.api.v1.endpoints.user_endpoints.routes import (
     get_current_user,
@@ -46,7 +46,7 @@ from depictio.models.models.dashboards import (
     DashboardData,
     DashboardDataLite,
     GlobalFilterDef,
-    Story,
+    Journey,
 )
 from depictio.models.models.users import TokenBeanie, User, UserBeanie
 
@@ -4587,7 +4587,7 @@ async def validate_json_import(
 
 
 # ============================================================================
-# Global filters & stories (cross-tab story feature)
+# Global filters & journeys (cross-tab funnel feature)
 # ============================================================================
 
 
@@ -4636,28 +4636,28 @@ async def route_compute_funnel(
     return await compute_funnel(parent_dashboard_id, body, current_user)
 
 
-@dashboards_endpoint_router.post("/stories/{parent_dashboard_id}")
-async def route_upsert_story(
+@dashboards_endpoint_router.post("/journeys/{parent_dashboard_id}")
+async def route_upsert_journey(
     parent_dashboard_id: PyObjectId,
-    story: Story,
+    journey: Journey,
     current_user: User = Depends(get_current_user),
 ):
-    return await upsert_story(parent_dashboard_id, story, current_user)
+    return await upsert_journey(parent_dashboard_id, journey, current_user)
 
 
-@dashboards_endpoint_router.delete("/stories/{parent_dashboard_id}/{story_id}")
-async def route_delete_story(
+@dashboards_endpoint_router.delete("/journeys/{parent_dashboard_id}/{journey_id}")
+async def route_delete_journey(
     parent_dashboard_id: PyObjectId,
-    story_id: str,
+    journey_id: str,
     current_user: User = Depends(get_current_user),
 ):
-    return await delete_story(parent_dashboard_id, story_id, current_user)
+    return await delete_journey(parent_dashboard_id, journey_id, current_user)
 
 
-@dashboards_endpoint_router.patch("/stories/{parent_dashboard_id}/active")
-async def route_patch_active_story(
+@dashboards_endpoint_router.patch("/journeys/{parent_dashboard_id}/active")
+async def route_patch_active_journey(
     parent_dashboard_id: PyObjectId,
-    body: ActiveStoryPatch,
+    body: ActiveJourneyPatch,
     current_user: User = Depends(get_current_user),
 ):
-    return await patch_active_story(parent_dashboard_id, body, current_user)
+    return await patch_active_journey(parent_dashboard_id, body, current_user)

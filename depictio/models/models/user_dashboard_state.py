@@ -1,9 +1,9 @@
-"""Per-user, per-dashboard state for cross-tab global filters and stories.
+"""Per-user, per-dashboard state for cross-tab global filters and journeys.
 
 Stored in the ``user_dashboard_state`` MongoDB collection. A document is
 keyed by ``(user_id, parent_dashboard_id)`` so two users on the same
-dashboard maintain independent last-used filter values and last-active
-story. Documents are created lazily on first write; their absence is
+dashboard maintain independent last-used filter values and active journey
+position. Documents are created lazily on first write; their absence is
 equivalent to "no overrides — use definition defaults".
 """
 
@@ -19,7 +19,15 @@ class UserDashboardState(MongoModel):
     user_id: PyObjectId
     parent_dashboard_id: PyObjectId
     global_filter_values: dict[str, Any] = Field(default_factory=dict)
-    last_active_story_id: Optional[str] = None
+
+    # Currently-active journey + which stop within it the user is on.
+    # `journey_stops` records the last-active stop *per* journey so picking a
+    # journey the user has used before resumes them at that journey's last
+    # stop rather than always at stop 0.
+    last_active_journey_id: Optional[str] = None
+    last_active_journey_stop_id: Optional[str] = None
+    journey_stops: dict[str, str] = Field(default_factory=dict)
+
     last_active_tab_id: Optional[PyObjectId] = None
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 

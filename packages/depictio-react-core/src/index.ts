@@ -170,9 +170,9 @@ export {
   deleteGlobalFilter,
   patchGlobalFilterValue,
   computeFunnel,
-  upsertStory,
-  deleteStory,
-  patchActiveStory,
+  upsertJourney,
+  deleteJourney,
+  patchActiveJourney,
 } from './api';
 export type { TableMutationResult } from './api';
 
@@ -189,9 +189,8 @@ export {
 
 // Cross-tab global filters & stories — UI
 export { default as GlobeToggle } from './components/global/GlobeToggle';
-export { default as FunnelWidget } from './components/global/FunnelWidget';
-export { default as StoryPicker } from './components/global/StoryPicker';
-export { default as StoryStepper } from './components/global/StoryStepper';
+export { default as JourneyMenu } from './components/global/JourneyMenu';
+export { default as JourneyFunnel } from './components/global/JourneyFunnel';
 // Selection-as-filter helpers (Plotly/AG Grid → InteractiveFilter)
 export {
   extractScatterSelection,
@@ -282,11 +281,12 @@ export type {
   CreateMultiQCDCInput,
   MultiQCMutationResult,
   MultiQCUniformityCheckResult,
-  // Global filters & stories
+  // Global filters & journeys
   GlobalFilterDef,
   GlobalFilterDisplay,
   GlobalFilterLink,
-  Story,
+  Journey,
+  JourneyStop,
   GlobalFiltersState,
   FunnelStep,
   FunnelTargetDC,

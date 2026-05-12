@@ -1,4 +1,4 @@
-"""Schema-level tests for the cross-tab Global Filters & Stories feature.
+"""Schema-level tests for the cross-tab Global Filters & Journeys feature.
 
 These exercise the new Pydantic models in isolation — they don't touch the
 ``user_dashboard_state`` MongoDB collection or the API routes. End-to-end
@@ -16,7 +16,8 @@ from depictio.models.models.base import PyObjectId
 from depictio.models.models.dashboards import (
     GlobalFilterDef,
     GlobalFilterLink,
-    Story,
+    Journey,
+    JourneyStop,
 )
 from depictio.models.models.user_dashboard_state import UserDashboardState
 
@@ -99,44 +100,102 @@ class TestGlobalFilterDef:
             _make_filter(unrelated="value")
 
 
-class TestStory:
+class TestJourneyStop:
+    def test_construct_minimal(self):
+        stop = JourneyStop(
+            id="stop_1",
+            name="All samples",
+            anchor_tab_id=PyObjectId(),
+        )
+        assert stop.global_filter_state == {}
+        assert stop.local_filter_state == []
+        assert stop.description is None
+
+    def test_serialize_anchor_tab_id_as_str(self):
+        stop = JourneyStop(id="s", name="n", anchor_tab_id=PyObjectId())
+        dumped = stop.model_dump(mode="json")
+        assert isinstance(dumped["anchor_tab_id"], str)
+        assert len(dumped["anchor_tab_id"]) == 24
+
+    def test_filter_state_round_trip(self):
+        """`global_filter_state` and `local_filter_state` are opaque
+        payloads — verify both survive JSON round-trip without coercion."""
+        stop = JourneyStop(
+            id="s",
+            name="n",
+            anchor_tab_id=PyObjectId(),
+            global_filter_state={"gf_a": ["x", "y"], "gf_b": [0.5, 100]},
+            local_filter_state=[
+                {"index": "comp-1", "value": ["foo"], "column_name": "name"},
+                {"index": "comp-2", "value": [10, 20]},
+            ],
+        )
+        dumped = stop.model_dump(mode="json")
+        rebuilt = JourneyStop(**dumped)
+        assert rebuilt.global_filter_state == stop.global_filter_state
+        assert rebuilt.local_filter_state == stop.local_filter_state
+
+
+class TestJourney:
     def test_construct_and_serialize(self):
-        story = Story(
-            id="story_1",
+        tab_a = PyObjectId()
+        tab_b = PyObjectId()
+        journey = Journey(
+            id="journey_1",
             name="Genes → Locations",
-            description="Walk from a gene of interest to its spatial footprint.",
-            icon="tabler:dna",
+            description="From gene-level filter to spatial footprint.",
+            icon="tabler:route",
             color="blue",
-            tab_order=[PyObjectId(), PyObjectId()],
-            default_global_filter_ids=["gf_abc"],
+            stops=[
+                JourneyStop(id="s1", name="Start", anchor_tab_id=tab_a),
+                JourneyStop(id="s2", name="Spatial", anchor_tab_id=tab_b),
+            ],
             pinned=True,
         )
-        dumped = story.model_dump(mode="json")
+        dumped = journey.model_dump(mode="json")
         assert dumped["name"] == "Genes → Locations"
         assert dumped["pinned"] is True
-        assert isinstance(dumped["tab_order"], list)
-        assert all(isinstance(x, str) for x in dumped["tab_order"])
+        assert len(dumped["stops"]) == 2
+        assert isinstance(dumped["stops"][0]["anchor_tab_id"], str)
 
     def test_defaults(self):
-        story = Story(id="s1", name="bare")
-        assert story.tab_order == []
-        assert story.default_global_filter_ids == []
-        assert story.pinned is False
-        assert story.icon is None
-        assert story.color is None
+        journey = Journey(id="j", name="bare")
+        assert journey.stops == []
+        assert journey.pinned is False
+        assert journey.icon is None
+        assert journey.color is None
 
-    def test_same_tab_can_appear_in_two_stories_at_different_positions(self):
-        """Stories.tab_order is independent of DashboardData.tab_order — the
-        same child tab id can appear at position 0 in story A and position 2
-        in story B. This test asserts the model doesn't accidentally
-        deduplicate or canonicalize the order."""
-        shared_tab = PyObjectId()
-        other_a = PyObjectId()
-        other_b = PyObjectId()
-        story_a = Story(id="A", name="A", tab_order=[shared_tab, other_a])
-        story_b = Story(id="B", name="B", tab_order=[other_b, shared_tab])
-        assert story_a.tab_order[0] == shared_tab
-        assert story_b.tab_order[1] == shared_tab
+    def test_single_tab_journey_supported(self):
+        """A journey with every stop anchored to the same tab is a
+        within-tab funnel — this is the user's "narrow from top list to
+        short list" case."""
+        anchor = PyObjectId()
+        journey = Journey(
+            id="j",
+            name="Cohort funnel",
+            stops=[
+                JourneyStop(id="s1", name="All", anchor_tab_id=anchor),
+                JourneyStop(id="s2", name="Filtered", anchor_tab_id=anchor),
+            ],
+        )
+        assert journey.stops[0].anchor_tab_id == anchor
+        assert journey.stops[1].anchor_tab_id == anchor
+
+    def test_multi_tab_journey_supported(self):
+        """Different anchor per stop = multi-tab journey — walks tabs in
+        narrative order without duplicating the sidebar tab nav."""
+        tab_a, tab_b, tab_c = PyObjectId(), PyObjectId(), PyObjectId()
+        journey = Journey(
+            id="j",
+            name="QC → Community → Differential",
+            stops=[
+                JourneyStop(id="s1", name="QC", anchor_tab_id=tab_a),
+                JourneyStop(id="s2", name="Community", anchor_tab_id=tab_b),
+                JourneyStop(id="s3", name="Differential", anchor_tab_id=tab_c),
+            ],
+        )
+        anchors = [s.anchor_tab_id for s in journey.stops]
+        assert len(set(anchors)) == 3
 
 
 class TestUserDashboardState:
@@ -146,7 +205,9 @@ class TestUserDashboardState:
             parent_dashboard_id=PyObjectId(),
         )
         assert state.global_filter_values == {}
-        assert state.last_active_story_id is None
+        assert state.last_active_journey_id is None
+        assert state.last_active_journey_stop_id is None
+        assert state.journey_stops == {}
         assert state.last_active_tab_id is None
 
     def test_round_trip_values(self):
@@ -154,13 +215,17 @@ class TestUserDashboardState:
             user_id=PyObjectId(),
             parent_dashboard_id=PyObjectId(),
             global_filter_values={"gf_a": ["x", "y"], "gf_b": [0, 100]},
-            last_active_story_id="story_1",
+            last_active_journey_id="journey_1",
+            last_active_journey_stop_id="stop_2",
+            journey_stops={"journey_1": "stop_2", "journey_2": "stop_a"},
         )
         dumped = state.model_dump(mode="json")
         assert isinstance(dumped["user_id"], str)
         assert isinstance(dumped["parent_dashboard_id"], str)
         assert dumped["global_filter_values"] == {"gf_a": ["x", "y"], "gf_b": [0, 100]}
-        assert dumped["last_active_story_id"] == "story_1"
+        assert dumped["last_active_journey_id"] == "journey_1"
+        assert dumped["last_active_journey_stop_id"] == "stop_2"
+        assert dumped["journey_stops"]["journey_2"] == "stop_a"
 
 
 class TestDashboardDataIntegration:
@@ -178,7 +243,7 @@ class TestDashboardDataIntegration:
             permissions=Permission(),
         )
         assert dash.global_filters == []
-        assert dash.stories == []
+        assert dash.journeys == []
 
     def test_dashboard_data_round_trip(self):
         from depictio.models.models.dashboards import DashboardData
@@ -190,10 +255,17 @@ class TestDashboardDataIntegration:
             title="t",
             permissions=Permission(),
             global_filters=[_make_filter()],
-            stories=[Story(id="s1", name="story 1")],
+            journeys=[
+                Journey(
+                    id="j1",
+                    name="journey 1",
+                    stops=[JourneyStop(id="s1", name="start", anchor_tab_id=PyObjectId())],
+                )
+            ],
         )
         dumped = dash.model_dump(mode="json")
         assert len(dumped["global_filters"]) == 1
         assert dumped["global_filters"][0]["id"] == "gf_abc"
-        assert len(dumped["stories"]) == 1
-        assert dumped["stories"][0]["name"] == "story 1"
+        assert len(dumped["journeys"]) == 1
+        assert dumped["journeys"][0]["name"] == "journey 1"
+        assert len(dumped["journeys"][0]["stops"]) == 1

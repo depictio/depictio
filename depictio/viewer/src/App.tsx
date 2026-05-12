@@ -9,8 +9,6 @@ import {
   Title,
   Paper,
   Box,
-  Collapse,
-  UnstyledButton,
 } from '@mantine/core';
 import { Icon } from '@iconify/react';
 import { useDisclosure } from '@mantine/hooks';
@@ -36,9 +34,8 @@ import {
   RealtimeIndicator,
   useRealtimeJournal,
   GlobeToggle,
-  StoryPicker,
-  StoryStepper,
-  FunnelWidget,
+  JourneyMenu,
+  JourneyFunnel,
 } from 'depictio-react-core';
 import type {
   DashboardData,
@@ -141,14 +138,23 @@ const App: React.FC = () => {
   // family. Hydrated on the parent dashboard ID below.
   const globalDefinitions = useGlobalFiltersStore((s) => s.definitions);
   const globalValues = useGlobalFiltersStore((s) => s.values);
-  const globalStories = useGlobalFiltersStore((s) => s.stories);
-  const activeStoryId = useGlobalFiltersStore((s) => s.activeStoryId);
+  const journeys = useGlobalFiltersStore((s) => s.journeys);
+  const activeJourneyId = useGlobalFiltersStore((s) => s.activeJourneyId);
+  const activeJourneyStopId = useGlobalFiltersStore((s) => s.activeJourneyStopId);
   const globalParentId = useGlobalFiltersStore((s) => s.parentDashboardId);
   const hydrateGlobal = useGlobalFiltersStore((s) => s.hydrate);
   const resetGlobal = useGlobalFiltersStore((s) => s.reset);
   const setGlobalValue = useGlobalFiltersStore((s) => s.setValue);
   const demoteGlobal = useGlobalFiltersStore((s) => s.demote);
-  const setActiveStory = useGlobalFiltersStore((s) => s.setActiveStory);
+  const setActiveJourney = useGlobalFiltersStore((s) => s.setActiveJourney);
+  const applyJourneyStop = useGlobalFiltersStore((s) => s.applyJourneyStop);
+  const saveCurrentAsStop = useGlobalFiltersStore((s) => s.saveCurrentAsStop);
+
+  // Derived: the active Journey object, for direct rendering.
+  const activeJourney = useMemo(
+    () => journeys.find((j) => j.id === activeJourneyId) ?? null,
+    [journeys, activeJourneyId],
+  );
 
   // Hydrate the store when we know which parent dashboard the active tab
   // belongs to. The store internally short-circuits if the same parent is
@@ -438,9 +444,6 @@ const App: React.FC = () => {
     }
     return out;
   }, [globalDefinitions]);
-  // Collapsible footer: open by default whenever the funnel has work to show.
-  const [funnelOpen, setFunnelOpen] = useState(true);
-
   // "From [tab]" caption per synthetic card — lets the user see at a glance
   // which tab the global was originally promoted from.
   const sourceTabNameByIndex = useMemo<Record<string, string>>(() => {
@@ -613,6 +616,37 @@ const App: React.FC = () => {
           cardsLoading={cardsLoading}
           rightExtras={
             <>
+              <JourneyMenu
+                journeys={journeys}
+                activeJourneyId={activeJourneyId}
+                onSelect={(journeyId) => {
+                  // Activate the journey + resume at its last-active stop
+                  // (or stop 0). The store returns the request payload we
+                  // need to apply locally (per-tab filters + navigate).
+                  const req = setActiveJourney(journeyId);
+                  if (!req) return;
+                  setFilters(req.stop.local_filter_state);
+                  if (req.stop.anchor_tab_id !== dashboardId) {
+                    window.location.assign(`/dashboard-beta/${req.stop.anchor_tab_id}`);
+                  }
+                }}
+                onSaveAsNew={({ journeyName, stopName }) => {
+                  void saveCurrentAsStop({
+                    journeyId: null,
+                    journeyName,
+                    stopName,
+                    currentDashboardId: dashboardId!,
+                    currentLocalFilters: filters,
+                  }).catch((err) => {
+                    notifications.show({
+                      title: 'Failed to save journey',
+                      message: String((err as Error).message ?? err),
+                      color: 'red',
+                    });
+                  });
+                }}
+                onManage={openSettings}
+              />
               {realtimeEnabled && (
                 <span data-tour-id="realtime-indicator" style={{ display: 'inline-flex' }}>
                   <RealtimeIndicator
@@ -680,19 +714,6 @@ const App: React.FC = () => {
                   Filters
                 </Title>
                 <Stack gap="sm">
-                  <StoryPicker
-                    stories={globalStories}
-                    activeStoryId={activeStoryId}
-                    onChange={setActiveStory}
-                    onNavigateToFirstStep={(firstTabId) => {
-                      // Same-tab guard: if the story starts on the tab we're
-                      // already viewing, skip the full-page reload — the
-                      // stepper appears in-place via the Zustand state update.
-                      if (firstTabId && firstTabId !== dashboardId) {
-                        window.location.assign(`/dashboard-beta/${firstTabId}`);
-                      }
-                    }}
-                  />
                   {/* Top "Global filters" section — renders one card per
                    *  active global, preserving the original component's
                    *  styling (icon, color, title) regardless of which tab
@@ -798,36 +819,48 @@ const App: React.FC = () => {
                       Reset all filters
                     </Anchor>
                   )}
-                  {/* Collapsible funnel footer — visible when ≥1 global filter
-                   *  has a non-empty value. Shows per-DC `N → N₁ → …` so the
-                   *  user can see how the chain narrows the underlying data. */}
-                  {funnelSteps.length > 0 && globalParentId && funnelTargetDcs.length > 0 && (
+                  {/* JourneyFunnel — live funnel when no journey is active,
+                   *  vertical journey stepper + save UI when one is active.
+                   *  Always visible in the rail footer (primary widget, not
+                   *  hidden behind a collapse). */}
+                  {globalParentId && (funnelTargetDcs.length > 0 || activeJourney) && (
                     <Box mt="md">
-                      <UnstyledButton
-                        onClick={() => setFunnelOpen((o) => !o)}
-                        style={{ width: '100%' }}
-                      >
-                        <Group gap={6} wrap="nowrap" align="center">
-                          <Icon
-                            icon={funnelOpen ? 'tabler:chevron-down' : 'tabler:chevron-right'}
-                            width={14}
-                            color="var(--mantine-color-dimmed)"
-                          />
-                          <Text size="xs" fw={600} c="dimmed" tt="uppercase" style={{ letterSpacing: 0.4 }}>
-                            Filter funnel
-                          </Text>
-                        </Group>
-                      </UnstyledButton>
-                      <Collapse in={funnelOpen}>
-                        <Box mt={6}>
-                          <FunnelWidget
-                            parentDashboardId={globalParentId}
-                            definitions={globalDefinitions}
-                            steps={funnelSteps}
-                            targetDcs={funnelTargetDcs}
-                          />
-                        </Box>
-                      </Collapse>
+                      <JourneyFunnel
+                        parentDashboardId={globalParentId}
+                        definitions={globalDefinitions}
+                        liveSteps={funnelSteps}
+                        targetDcs={funnelTargetDcs}
+                        journey={activeJourney}
+                        activeStopId={activeJourneyStopId}
+                        onApplyStop={(stop) => {
+                          // Replace per-tab filters with the stop's snapshot
+                          // first so they're live before the page reloads
+                          // (cross-tab case) or before the render commits
+                          // (same-tab case).
+                          setFilters(stop.local_filter_state);
+                          const req = applyJourneyStop(activeJourney!.id, stop);
+                          if (stop.anchor_tab_id !== dashboardId) {
+                            window.location.assign(`/dashboard-beta/${stop.anchor_tab_id}`);
+                          }
+                          void req;
+                        }}
+                        onExitJourney={() => setActiveJourney(null)}
+                        onSaveAsStop={({ journeyId, journeyName, stopName }) => {
+                          void saveCurrentAsStop({
+                            journeyId,
+                            journeyName,
+                            stopName,
+                            currentDashboardId: dashboardId!,
+                            currentLocalFilters: filters,
+                          }).catch((err) => {
+                            notifications.show({
+                              title: 'Failed to save journey stop',
+                              message: String((err as Error).message ?? err),
+                              color: 'red',
+                            });
+                          });
+                        }}
+                      />
                     </Box>
                   )}
                 </Stack>
@@ -845,24 +878,6 @@ const App: React.FC = () => {
                 flexDirection: 'column',
               }}
             >
-              {activeStoryId && (() => {
-                const story = globalStories.find((s) => s.id === activeStoryId);
-                if (!story || !dashboardId) return null;
-                const childTabs = tabSiblings.filter(
-                  (t) => t.dashboard_id !== parentTab?.dashboard_id,
-                );
-                // Include the parent itself if it's part of the story order
-                const allTabs = parentTab ? [parentTab, ...childTabs] : childTabs;
-                return (
-                  <StoryStepper
-                    story={story}
-                    childTabs={allTabs}
-                    currentTabId={dashboardId}
-                    onNavigate={(tabId) => window.location.assign(`/dashboard-beta/${tabId}`)}
-                    onExitStory={() => setActiveStory(null)}
-                  />
-                );
-              })()}
               {topComponents.length > 0 && (
                 <TopPanel
                   components={topComponents}

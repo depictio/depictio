@@ -2771,24 +2771,42 @@ export interface GlobalFilterDef {
   display?: GlobalFilterDisplay | null;
 }
 
-/** A named directional path through a subset of dashboard tabs. */
-export interface Story {
+/** A single saved analytical "stop" inside a Journey.
+ *
+ *  Captures the snapshot needed to replay the user's view: anchor tab,
+ *  global filter values, and a snapshot of per-tab interactive filters on
+ *  the anchor tab. `local_filter_state` is treated as an opaque list of
+ *  `InteractiveFilter`-shaped dicts (kept loose at the type level so the
+ *  backend serializer doesn't have to know the full filter union). */
+export interface JourneyStop {
+  id: string;
+  name: string;
+  description?: string | null;
+  anchor_tab_id: string;
+  global_filter_state: Record<string, unknown>;
+  local_filter_state: InteractiveFilter[];
+}
+
+/** A named, ordered sequence of JourneyStops. */
+export interface Journey {
   id: string;
   name: string;
   description?: string | null;
   icon?: string | null;
   color?: string | null;
-  tab_order: string[];
-  default_global_filter_ids: string[];
+  stops: JourneyStop[];
   pinned: boolean;
 }
 
 /** Hydration shape returned by `GET /dashboards/global_filters/{parentId}`. */
 export interface GlobalFiltersState {
   definitions: GlobalFilterDef[];
-  stories: Story[];
+  journeys: Journey[];
   user_values: Record<string, unknown>;
-  last_active_story_id: string | null;
+  last_active_journey_id: string | null;
+  last_active_journey_stop_id: string | null;
+  /** Per-journey resume bookkeeping: `{ [journeyId]: lastActiveStopId }`. */
+  journey_stops: Record<string, string>;
 }
 
 export async function fetchGlobalFiltersState(
@@ -2869,44 +2887,46 @@ export async function computeFunnel(
   return (await res.json()) as FunnelResponse;
 }
 
-export async function upsertStory(
+export async function upsertJourney(
   parentDashboardId: string,
-  story: Story,
+  journey: Journey,
 ): Promise<void> {
   const res = await authFetch(
-    `${API_BASE}/dashboards/stories/${parentDashboardId}`,
-    { method: 'POST', body: JSON.stringify(story) },
+    `${API_BASE}/dashboards/journeys/${parentDashboardId}`,
+    { method: 'POST', body: JSON.stringify(journey) },
   );
-  if (!res.ok) await throwHttpError(res, 'Failed to upsert story');
+  if (!res.ok) await throwHttpError(res, 'Failed to upsert journey');
 }
 
-export async function deleteStory(
+export async function deleteJourney(
   parentDashboardId: string,
-  storyId: string,
+  journeyId: string,
 ): Promise<void> {
   const res = await authFetch(
-    `${API_BASE}/dashboards/stories/${parentDashboardId}/${storyId}`,
+    `${API_BASE}/dashboards/journeys/${parentDashboardId}/${journeyId}`,
     { method: 'DELETE' },
   );
-  if (!res.ok) await throwHttpError(res, 'Failed to delete story');
+  if (!res.ok) await throwHttpError(res, 'Failed to delete journey');
 }
 
-export async function patchActiveStory(
+export async function patchActiveJourney(
   parentDashboardId: string,
-  storyId: string | null,
+  journeyId: string | null,
+  stopId: string | null,
 ): Promise<void> {
   // `keepalive: true` so the browser commits this PATCH even when the caller
-  // immediately triggers a full-page navigation (StoryPicker → window.location.assign).
-  // Without it, the in-flight request is cancelled at unload, and the server
-  // never records the active story; on hydration the user lands back in Free Explore.
+  // immediately triggers a full-page navigation (cross-tab journey step →
+  // window.location.assign). Without it, the in-flight request is cancelled at
+  // unload, and the server never records the active journey/stop; on
+  // hydration the user lands back in Free Explore.
   const res = await authFetch(
-    `${API_BASE}/dashboards/stories/${parentDashboardId}/active`,
+    `${API_BASE}/dashboards/journeys/${parentDashboardId}/active`,
     {
       method: 'PATCH',
-      body: JSON.stringify({ story_id: storyId }),
+      body: JSON.stringify({ journey_id: journeyId, stop_id: stopId }),
       keepalive: true,
     },
   );
-  if (!res.ok) await throwHttpError(res, 'Failed to persist active story');
+  if (!res.ok) await throwHttpError(res, 'Failed to persist active journey');
 }
 

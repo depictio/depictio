@@ -24,7 +24,7 @@ from depictio.api.v1.db import (
     user_dashboard_state_collection,
 )
 from depictio.models.models.base import PyObjectId, convert_objectid_to_str
-from depictio.models.models.dashboards import GlobalFilterDef, Story
+from depictio.models.models.dashboards import GlobalFilterDef, Journey
 from depictio.models.models.users import User
 
 # ============================================================================
@@ -53,8 +53,18 @@ class FunnelRequest(BaseModel):
     target_dcs: list[FunnelTargetDC] = Field(default_factory=list)
 
 
-class ActiveStoryPatch(BaseModel):
-    story_id: str | None = None
+class ActiveJourneyPatch(BaseModel):
+    """Sets the user's active journey + which stop within it they're on.
+
+    Both fields are optional. Passing ``journey_id=None`` exits the active
+    journey entirely (clears both fields server-side). Passing a non-null
+    ``journey_id`` with no ``stop_id`` keeps whichever stop the user was
+    last on for that journey (resume); see the ``journey_stops`` field on
+    :class:`UserDashboardState`.
+    """
+
+    journey_id: str | None = None
+    stop_id: str | None = None
 
 
 # ============================================================================
@@ -133,14 +143,16 @@ def _get_user_state(user_id: PyObjectId, parent_dashboard_id: PyObjectId) -> dic
 
 
 async def get_global_state(parent_dashboard_id: PyObjectId, current_user: User) -> dict:
-    """Return definitions, stories, and the current user's per-user overrides.
+    """Return definitions, journeys, and the current user's per-user overrides.
 
     Shape:
         {
             "definitions": [GlobalFilterDef, ...],
-            "stories": [Story, ...],
+            "journeys": [Journey, ...],
             "user_values": {filter_id: value, ...},
-            "last_active_story_id": str | None,
+            "last_active_journey_id": str | None,
+            "last_active_journey_stop_id": str | None,
+            "journey_stops": {journey_id: stop_id, ...},
         }
     """
     parent = _load_parent_or_404(parent_dashboard_id)
@@ -151,9 +163,11 @@ async def get_global_state(parent_dashboard_id: PyObjectId, current_user: User) 
     return convert_objectid_to_str(
         {
             "definitions": parent.get("global_filters", []) or [],
-            "stories": parent.get("stories", []) or [],
+            "journeys": parent.get("journeys", []) or [],
             "user_values": user_state.get("global_filter_values", {}) or {},
-            "last_active_story_id": user_state.get("last_active_story_id"),
+            "last_active_journey_id": user_state.get("last_active_journey_id"),
+            "last_active_journey_stop_id": user_state.get("last_active_journey_stop_id"),
+            "journey_stops": user_state.get("journey_stops", {}) or {},
         }
     )
 
@@ -194,22 +208,10 @@ async def delete_global_filter(
         {"$pull": {"global_filters": {"id": filter_id}}},
     )
 
-    # Strip from every story's default_global_filter_ids so we don't dangle
-    stories = parent.get("stories") or []
-    cleaned = [
-        {
-            **s,
-            "default_global_filter_ids": [
-                fid for fid in (s.get("default_global_filter_ids") or []) if fid != filter_id
-            ],
-        }
-        for s in stories
-    ]
-    if cleaned != stories:
-        dashboards_collection.update_one(
-            {"dashboard_id": parent["dashboard_id"]},
-            {"$set": {"stories": cleaned}},
-        )
+    # Journey stops carry a full filter_state snapshot keyed by global filter
+    # id. We don't rewrite stops on demote — `mergeWithGlobal` already
+    # tolerates unknown filter ids when applying a stop, so a stale key just
+    # becomes a no-op. Keeps demote idempotent and avoids touching every stop.
 
     # Drop the per-user values for this filter
     user_dashboard_state_collection.update_many(
@@ -249,32 +251,32 @@ async def patch_filter_value(
     return {"success": True}
 
 
-async def upsert_story(
+async def upsert_journey(
     parent_dashboard_id: PyObjectId,
-    story: Story,
+    journey: Journey,
     current_user: User,
 ) -> dict:
     parent = _load_parent_or_404(parent_dashboard_id)
     _require_editor(parent, current_user)
 
-    new_story = story.model_dump(mode="json")
-    existing = list(parent.get("stories") or [])
-    idx = next((i for i, s in enumerate(existing) if s.get("id") == new_story["id"]), -1)
+    new_journey = journey.model_dump(mode="json")
+    existing = list(parent.get("journeys") or [])
+    idx = next((i for i, j in enumerate(existing) if j.get("id") == new_journey["id"]), -1)
     if idx >= 0:
-        existing[idx] = new_story
+        existing[idx] = new_journey
     else:
-        existing.append(new_story)
+        existing.append(new_journey)
 
     dashboards_collection.update_one(
         {"dashboard_id": parent["dashboard_id"]},
-        {"$set": {"stories": existing}},
+        {"$set": {"journeys": existing}},
     )
-    return {"success": True, "stories": existing}
+    return {"success": True, "journeys": existing}
 
 
-async def delete_story(
+async def delete_journey(
     parent_dashboard_id: PyObjectId,
-    story_id: str,
+    journey_id: str,
     current_user: User,
 ) -> dict:
     parent = _load_parent_or_404(parent_dashboard_id)
@@ -282,39 +284,68 @@ async def delete_story(
 
     dashboards_collection.update_one(
         {"dashboard_id": parent["dashboard_id"]},
-        {"$pull": {"stories": {"id": story_id}}},
+        {"$pull": {"journeys": {"id": journey_id}}},
     )
-    # Clear any user who had this as their active story so they fall back to Free Explore
+    # Clear any user who had this as their active journey so they fall back
+    # to Free Explore. Also drop the per-journey resume bookkeeping.
     user_dashboard_state_collection.update_many(
         {
             "parent_dashboard_id": ObjectId(parent["dashboard_id"]),
-            "last_active_story_id": story_id,
+            "last_active_journey_id": journey_id,
         },
-        {"$set": {"last_active_story_id": None}},
+        {"$set": {"last_active_journey_id": None, "last_active_journey_stop_id": None}},
+    )
+    user_dashboard_state_collection.update_many(
+        {"parent_dashboard_id": ObjectId(parent["dashboard_id"])},
+        {"$unset": {f"journey_stops.{journey_id}": ""}},
     )
     return {"success": True}
 
 
-async def patch_active_story(
+async def patch_active_journey(
     parent_dashboard_id: PyObjectId,
-    body: ActiveStoryPatch,
+    body: ActiveJourneyPatch,
     current_user: User,
 ) -> dict:
+    """Set the active journey + which stop is active, atomically.
+
+    ``journey_id=None`` exits the active journey entirely. ``stop_id`` is
+    persisted both as the top-level ``last_active_journey_stop_id`` and in
+    the per-journey ``journey_stops`` dict so picking the same journey
+    later resumes at its last stop.
+    """
     parent = _load_parent_or_404(parent_dashboard_id)
     _require_viewer(parent, current_user)
 
-    if body.story_id is not None and not any(
-        s.get("id") == body.story_id for s in (parent.get("stories") or [])
-    ):
-        raise HTTPException(status_code=404, detail=f"Story {body.story_id} not found.")
+    if body.journey_id is not None:
+        journey = next(
+            (j for j in (parent.get("journeys") or []) if j.get("id") == body.journey_id),
+            None,
+        )
+        if journey is None:
+            raise HTTPException(status_code=404, detail=f"Journey {body.journey_id} not found.")
+        if body.stop_id is not None and not any(
+            s.get("id") == body.stop_id for s in (journey.get("stops") or [])
+        ):
+            raise HTTPException(
+                status_code=404,
+                detail=f"Stop {body.stop_id} not found in journey {body.journey_id}.",
+            )
+
+    set_fields: dict[str, Any] = {
+        "last_active_journey_id": body.journey_id,
+        "last_active_journey_stop_id": body.stop_id,
+        "updated_at": datetime.utcnow(),
+    }
+    # Record the active stop into the per-journey resume map so next time
+    # the user picks this journey they land back on the same stop.
+    if body.journey_id is not None and body.stop_id is not None:
+        set_fields[f"journey_stops.{body.journey_id}"] = body.stop_id
 
     user_dashboard_state_collection.update_one(
         _user_state_key(current_user.id, parent["dashboard_id"]),
         {
-            "$set": {
-                "last_active_story_id": body.story_id,
-                "updated_at": datetime.utcnow(),
-            },
+            "$set": set_fields,
             "$setOnInsert": {
                 "user_id": ObjectId(current_user.id),
                 "parent_dashboard_id": ObjectId(parent["dashboard_id"]),
