@@ -266,6 +266,7 @@ async def create_initial_dashboards(admin_user: UserBeanie) -> list[dict | None]
                 "ancombc",
                 "da_barplot",
                 "enrichment",
+                "complex_heatmap",
             )
         ),
     ]
