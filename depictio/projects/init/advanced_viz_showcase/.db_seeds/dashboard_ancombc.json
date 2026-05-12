@@ -1,0 +1,315 @@
+{
+  "_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d23"
+  },
+  "description": null,
+  "flexible_metadata": null,
+  "hash": null,
+  "dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d23"
+  },
+  "version": 1,
+  "tmp_children_data": [],
+  "stored_layout_data": [],
+  "stored_children_data": [],
+  "stored_metadata": [
+    {
+      "index": "bc-contrast",
+      "component_type": "interactive",
+      "title": "Contrast",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "ancombc_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d21"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Synthetic ANCOM-BC differentials",
+        "data_collection_tag": "ancombc_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d21"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "contrast",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "title_size": "md",
+      "custom_color": "#2196F3",
+      "icon_name": "mdi:compare-horizontal",
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "bc-card-tests",
+      "component_type": "card",
+      "title": "Tests",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "ancombc_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d21"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Synthetic ANCOM-BC differentials",
+        "data_collection_tag": "ancombc_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d21"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "aggregation": "count",
+      "column_name": "feature_id",
+      "column_type": "object",
+      "value": null,
+      "aggregations": null,
+      "filter_expr": null,
+      "icon_name": "mdi:counter",
+      "icon_color": "#8E44AD",
+      "title_color": "#8E44AD",
+      "title_font_size": "lg",
+      "value_font_size": "xl",
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "bc-card-sig",
+      "component_type": "card",
+      "title": "Significant (q<0.05)",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "ancombc_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d21"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Synthetic ANCOM-BC differentials",
+        "data_collection_tag": "ancombc_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d21"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "aggregation": "count",
+      "column_name": "feature_id",
+      "column_type": "object",
+      "value": null,
+      "aggregations": null,
+      "filter_expr": "col('significance') < 0.05",
+      "icon_name": "mdi:alert-circle",
+      "icon_color": "#E74C3C",
+      "title_color": "#E74C3C",
+      "title_font_size": "lg",
+      "value_font_size": "xl",
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "bc-bar",
+      "component_type": "advanced_viz",
+      "title": "Differential abundance (ANCOM-BC)",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "ancombc_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d21"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Top-N taxa by |lfc| for the selected contrast. Bars are coloured by direction (blue = up, red = down). Bars with q > threshold are greyed out.",
+        "data_collection_tag": "ancombc_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d21"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "viz_kind": "ancombc_differentials",
+      "config": {
+        "viz_kind": "ancombc_differentials",
+        "feature_id_col": "feature_id",
+        "contrast_col": "contrast",
+        "lfc_col": "lfc",
+        "significance_col": "significance",
+        "label_col": "label",
+        "significance_threshold": 0.05,
+        "top_n": 25
+      },
+      "wf_tag": "python/advanced_viz_demo",
+      "description": "Top-N taxa by |lfc| for the selected contrast. Bars are coloured by direction (blue = up, red = down). Bars with q > threshold are greyed out."
+    },
+    {
+      "index": "bc-table",
+      "component_type": "table",
+      "title": "All differentials",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "ancombc_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d21"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Synthetic ANCOM-BC differentials",
+        "data_collection_tag": "ancombc_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d21"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "columns": [
+        "feature_id",
+        "contrast",
+        "lfc",
+        "significance",
+        "label"
+      ],
+      "page_size": 10,
+      "sortable": true,
+      "filterable": true,
+      "row_selection_enabled": false,
+      "row_selection_column": null,
+      "wf_tag": "python/advanced_viz_demo"
+    }
+  ],
+  "stored_edit_dashboard_mode_button": [],
+  "left_panel_layout_data": [
+    {
+      "i": "box-bc-contrast",
+      "x": 0,
+      "y": 0,
+      "w": 1,
+      "h": 5,
+      "static": false
+    }
+  ],
+  "right_panel_layout_data": [
+    {
+      "i": "box-bc-card-tests",
+      "x": 0,
+      "y": 0,
+      "w": 4,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-bc-card-sig",
+      "x": 4,
+      "y": 0,
+      "w": 4,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-bc-bar",
+      "x": 0,
+      "y": 2,
+      "w": 8,
+      "h": 10,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-bc-table",
+      "x": 0,
+      "y": 12,
+      "w": 8,
+      "h": 5,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    }
+  ],
+  "buttons_data": {
+    "unified_edit_mode": true,
+    "add_components_button": {
+      "count": 0
+    }
+  },
+  "stored_add_button": {
+    "count": 0
+  },
+  "title": "ANCOM-BC differentials",
+  "subtitle": "Signed-LFC horizontal bars of differentially-abundant taxa for one selected contrast. Settings \u2699 to switch contrast / Top-N / significance threshold.",
+  "icon": "mdi:chart-bar",
+  "icon_color": "red",
+  "icon_variant": "filled",
+  "workflow_system": "python",
+  "notes_content": "",
+  "permissions": {
+    "owners": [
+      {
+        "_id": {
+          "$oid": "67658ba033c8b59ad489d7c7"
+        },
+        "description": null,
+        "flexible_metadata": null,
+        "hash": null,
+        "email": "admin@example.com",
+        "is_admin": true,
+        "is_anonymous": false,
+        "is_temporary": false,
+        "expiration_time": null
+      }
+    ],
+    "editors": [],
+    "viewers": []
+  },
+  "is_public": true,
+  "last_saved_ts": "2026-05-12 00:00:00",
+  "project_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d00"
+  },
+  "is_main_tab": false,
+  "parent_dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d00"
+  },
+  "tab_order": 11,
+  "main_tab_name": null,
+  "tab_icon": "mdi:chart-bar",
+  "tab_icon_color": "red",
+  "parent_dashboard_title": null
+}

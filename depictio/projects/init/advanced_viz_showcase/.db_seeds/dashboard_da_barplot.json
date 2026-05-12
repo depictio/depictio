@@ -1,0 +1,178 @@
+{
+  "_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d24"
+  },
+  "description": null,
+  "flexible_metadata": null,
+  "hash": null,
+  "dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d24"
+  },
+  "version": 1,
+  "tmp_children_data": [],
+  "stored_layout_data": [],
+  "stored_children_data": [],
+  "stored_metadata": [
+    {
+      "index": "da-bar",
+      "component_type": "advanced_viz",
+      "title": "DA barplot \u2014 faceted by contrast",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "ancombc_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d21"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Each panel shows the top-N taxa (by |lfc|) for one contrast. Bars coloured by direction; greyed when above the significance threshold.",
+        "data_collection_tag": "ancombc_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d21"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "viz_kind": "da_barplot",
+      "config": {
+        "viz_kind": "da_barplot",
+        "feature_id_col": "feature_id",
+        "contrast_col": "contrast",
+        "lfc_col": "lfc",
+        "significance_col": "significance",
+        "label_col": "label",
+        "significance_threshold": 0.05,
+        "top_n": 15
+      },
+      "wf_tag": "python/advanced_viz_demo",
+      "description": "Each panel shows the top-N taxa (by |lfc|) for one contrast. Bars coloured by direction; greyed when above the significance threshold."
+    },
+    {
+      "index": "da-table",
+      "component_type": "table",
+      "title": "All differentials",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "ancombc_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d21"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Synthetic ANCOM-BC differentials",
+        "data_collection_tag": "ancombc_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d21"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "columns": [
+        "feature_id",
+        "contrast",
+        "lfc",
+        "significance",
+        "label"
+      ],
+      "page_size": 10,
+      "sortable": true,
+      "filterable": true,
+      "row_selection_enabled": false,
+      "row_selection_column": null,
+      "wf_tag": "python/advanced_viz_demo"
+    }
+  ],
+  "stored_edit_dashboard_mode_button": [],
+  "left_panel_layout_data": [],
+  "right_panel_layout_data": [
+    {
+      "i": "box-da-bar",
+      "x": 0,
+      "y": 0,
+      "w": 8,
+      "h": 12,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-da-table",
+      "x": 0,
+      "y": 12,
+      "w": 8,
+      "h": 5,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    }
+  ],
+  "buttons_data": {
+    "unified_edit_mode": true,
+    "add_components_button": {
+      "count": 0
+    }
+  },
+  "stored_add_button": {
+    "count": 0
+  },
+  "title": "DA barplot (per contrast)",
+  "subtitle": "Faceted top-N differentially-abundant taxa \u2014 one panel per contrast. Useful for side-by-side comparison.",
+  "icon": "mdi:chart-bar-stacked",
+  "icon_color": "pink",
+  "icon_variant": "filled",
+  "workflow_system": "python",
+  "notes_content": "",
+  "permissions": {
+    "owners": [
+      {
+        "_id": {
+          "$oid": "67658ba033c8b59ad489d7c7"
+        },
+        "description": null,
+        "flexible_metadata": null,
+        "hash": null,
+        "email": "admin@example.com",
+        "is_admin": true,
+        "is_anonymous": false,
+        "is_temporary": false,
+        "expiration_time": null
+      }
+    ],
+    "editors": [],
+    "viewers": []
+  },
+  "is_public": true,
+  "last_saved_ts": "2026-05-12 00:00:00",
+  "project_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d00"
+  },
+  "is_main_tab": false,
+  "parent_dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d00"
+  },
+  "tab_order": 12,
+  "main_tab_name": null,
+  "tab_icon": "mdi:chart-bar-stacked",
+  "tab_icon_color": "pink",
+  "parent_dashboard_title": null
+}
