@@ -395,3 +395,61 @@ write_tsv(
     ["feature_id", "contrast", "lfc", "significance", "label", "neg_log10_q"],
     rows,
 )
+
+
+# ---------------------------------------------------------------------------
+# 7. GSEA / GO / pathway enrichment dot plot.
+# columns: term, source, nes, padj, gene_count, leading_edge
+# ---------------------------------------------------------------------------
+SOURCES_GSEA = ["GO_BP", "GO_CC", "KEGG", "Reactome", "Hallmark"]
+PATHWAY_NOUNS = [
+    "Glycolysis",
+    "Apoptosis",
+    "Cell cycle",
+    "DNA repair",
+    "Inflammation",
+    "Oxidative phosphorylation",
+    "Lipid metabolism",
+    "Protein folding",
+    "Translation",
+    "Innate immunity",
+    "T-cell receptor signaling",
+    "ER stress response",
+    "Hypoxia response",
+    "Wnt signaling",
+    "Notch signaling",
+    "MAPK cascade",
+    "TGF-β signaling",
+    "Autophagy",
+    "Mitochondrial biogenesis",
+    "Ribosome biogenesis",
+    "Spliceosome",
+    "Extracellular matrix",
+    "Chemokine signaling",
+    "Cytokine signaling",
+]
+
+rows = []
+pathway_id = 0
+for src in SOURCES_GSEA:
+    # 12–18 pathways per source for variety.
+    for _ in range(R.randint(12, 18)):
+        noun = R.choice(PATHWAY_NOUNS)
+        term = f"{src}: {noun} ({pathway_id})"
+        pathway_id += 1
+        is_hit = R.random() < 0.55
+        if is_hit:
+            nes = R.choice([-1, 1]) * R.uniform(1.4, 3.2)
+            padj = 10 ** R.uniform(-12, -2)
+        else:
+            nes = R.gauss(0, 0.6)
+            padj = 10 ** R.uniform(-2, 0)
+        gene_count = R.randint(15, 220)
+        leading_edge = ",".join(f"GENE{R.randint(0, 199):03d}" for _ in range(R.randint(3, 8)))
+        rows.append([term, src, round(nes, 3), f"{padj:.6e}", gene_count, leading_edge])
+
+write_tsv(
+    OUT / "gsea_demo.tsv",
+    ["term", "source", "nes", "padj", "gene_count", "leading_edge"],
+    rows,
+)
