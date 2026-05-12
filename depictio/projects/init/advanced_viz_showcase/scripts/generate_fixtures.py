@@ -1,22 +1,61 @@
 """Generate deterministic synthetic TSV fixtures for the advanced-viz showcase.
 
-Run once; outputs are committed under ../data/. No external deps — uses
-stdlib only so it runs in any Python 3.10+ environment.
+Run once; outputs are committed under ``../data/``. Requires ``numpy``,
+``polars``, ``umap-learn`` and ``scikit-learn`` — all of which Depictio
+already depends on. Other than that the script is plain Python.
 
 Each TSV's column schema matches the canonical schema declared in
 depictio/models/components/advanced_viz/schemas.py so the showcase
 dashboards can bind to them with zero remapping.
+
+What this script produces under ``data/`` (run from the repo root):
+
+    volcano_demo.tsv           — feature_id / effect_size / significance / label / category
+    manhattan_demo.tsv         — chr / pos / score / feature / score_kind
+    stacked_taxonomy_demo.tsv  — sample_id / taxon / rank / abundance (raw counts) / lineage
+    embedding_pca.tsv          — sample_id / dim_1 / dim_2 / cluster / color
+    embedding_umap.tsv         — same schema, UMAP coords
+    embedding_tsne.tsv         — same schema, t-SNE coords
+    embedding_pcoa.tsv         — same schema, PCoA on Bray-Curtis distances
+
+The four embedding TSVs all come from the same 90×200 sample×feature
+matrix; only the dim-reduction method differs. This is what makes the
+"Clustering" tabs honest demonstrations of PCA / UMAP / t-SNE / PCoA
+rather than four hand-crafted scatter plots.
 """
 
 from __future__ import annotations
 
 import random
+import sys
 from pathlib import Path
+
+import numpy as np
+import polars as pl
+
+# Make `depictio.recipes.lib.dimreduction` importable when the script is run
+# from the repo root (``python depictio/projects/.../generate_fixtures.py``).
+# parents[5] is the worktree root: scripts → advanced_viz_showcase → init →
+# projects → depictio → <repo root>.
+_REPO_ROOT = Path(__file__).resolve().parents[5]
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
+
+from depictio.recipes.lib.dimreduction import (  # noqa: E402 (sys.path tweak must precede)
+    run_pca,
+    run_pcoa,
+    run_tsne,
+    run_umap,
+)
 
 OUT = Path(__file__).resolve().parent.parent / "data"
 OUT.mkdir(exist_ok=True)
 
+# Two seeded RNGs: ``R`` for stdlib randomness in the volcano / manhattan /
+# taxonomy blocks (keeps git history of those TSVs stable across runs),
+# ``NP_RNG`` for the feature-matrix synthesis used by the embedding methods.
 R = random.Random(20260512)
+NP_RNG = np.random.default_rng(20260512)
 
 
 def write_tsv(path: Path, header: list[str], rows: list[list]) -> None:
@@ -64,34 +103,73 @@ write_tsv(
 
 
 # ---------------------------------------------------------------------------
-# 2. Embedding: 90 samples in 3 clusters (gaussians in 2D + a third cluster
-#    for variety).
-# columns: sample_id, dim_1, dim_2, cluster, color
+# 2. Embedding: real PCA / UMAP / t-SNE / PCoA on a shared 90×200 feature
+#    matrix with three Gaussian clusters separated in feature space. Each
+#    method writes its own TSV so the four "Clustering" dashboard tabs each
+#    show a different projection of the SAME underlying data.
+# columns (each file): sample_id, dim_1, dim_2, cluster, color
 # ---------------------------------------------------------------------------
-CLUSTERS = {
-    "control": ((-3.0, -1.5), 0.8),
-    "treatment": ((2.5, 1.0), 1.0),
-    "recovery": ((0.5, 3.5), 0.7),
-}
-rows = []
-i = 0
-for cluster_name, ((cx, cy), spread) in CLUSTERS.items():
-    n = 30
-    for _ in range(n):
-        x = R.gauss(cx, spread)
-        y = R.gauss(cy, spread)
-        # `color` is a quantitative variable (mock gene expression) loosely
-        # correlated with dim_1 so the embedding has a visible gradient when
-        # colour-by is enabled in the renderer.
-        color = max(0.0, 5.0 + 0.6 * x + R.gauss(0, 1.5))
-        rows.append([f"S{i:03d}", round(x, 4), round(y, 4), cluster_name, round(color, 3)])
-        i += 1
+N_FEATURES = 200
+SAMPLES_PER_CLUSTER = 30
+CLUSTER_NAMES = ["control", "treatment", "recovery"]
 
-write_tsv(
-    OUT / "embedding_demo.tsv",
-    ["sample_id", "dim_1", "dim_2", "cluster", "color"],
-    rows,
+# 1) Build the feature matrix.
+sample_ids: list[str] = []
+cluster_labels: list[str] = []
+feature_rows: list[np.ndarray] = []
+
+for cluster_idx, cluster_name in enumerate(CLUSTER_NAMES):
+    # Each cluster's signature: a unique random set of ~30 features lifted by
+    # +2.0 in mean. The rest are noise, shared across clusters.
+    signature = NP_RNG.choice(N_FEATURES, size=30, replace=False)
+    mean = np.zeros(N_FEATURES)
+    mean[signature] = 2.0
+    for _ in range(SAMPLES_PER_CLUSTER):
+        sample_ids.append(f"S{len(sample_ids):03d}")
+        cluster_labels.append(cluster_name)
+        feature_rows.append(NP_RNG.normal(loc=mean, scale=0.6))
+
+feature_matrix_np = np.stack(feature_rows)  # (90, 200)
+
+# Pack as a polars wide DataFrame for the dim-reduction helpers.
+feature_df = pl.DataFrame(
+    {
+        "sample_id": sample_ids,
+        **{f"feat_{i}": feature_matrix_np[:, i].tolist() for i in range(N_FEATURES)},
+    }
 )
+
+# 2) Run each method and emit a TSV.
+# PCoA's Bray-Curtis distance is defined for non-negative vectors, so shift
+# the matrix into the non-negative orthant before handing it to run_pcoa.
+non_negative_df = feature_df.with_columns(
+    [(pl.col(c) + 5.0).clip(lower_bound=0.0) for c in feature_df.columns if c != "sample_id"]
+)
+
+methods: list[tuple[str, callable, pl.DataFrame, dict]] = [
+    ("pca", run_pca, feature_df, {"n_components": 2}),
+    ("umap", run_umap, feature_df, {"n_components": 2}),
+    ("tsne", run_tsne, feature_df, {"n_components": 2}),
+    ("pcoa", run_pcoa, non_negative_df, {"n_components": 2}),
+]
+
+for method, runner, input_df, params in methods:
+    coords = runner(input_df, **params)
+    dim_1 = np.asarray(coords["dim_1"].to_list(), dtype=np.float64)
+    dim_2 = np.asarray(coords["dim_2"].to_list(), dtype=np.float64)
+    # `color` = a quantitative variable correlated with dim_1 plus jitter, so
+    # the embedding renderer's "colour by" shows a visible gradient.
+    color = dim_1 + NP_RNG.normal(0.0, 0.3, size=len(dim_1))
+    rows = []
+    for sid, x, y, cluster, c in zip(
+        coords["sample_id"].to_list(), dim_1, dim_2, cluster_labels, color
+    ):
+        rows.append([sid, round(float(x), 4), round(float(y), 4), cluster, round(float(c), 3)])
+    write_tsv(
+        OUT / f"embedding_{method}.tsv",
+        ["sample_id", "dim_1", "dim_2", "cluster", "color"],
+        rows,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -138,8 +216,12 @@ write_tsv(
 
 
 # ---------------------------------------------------------------------------
-# 4. Stacked taxonomy: 18 samples x 9 taxa, two ranks (Phylum + Genus), summing
-#    to ~1 within each (sample, rank).
+# 4. Stacked taxonomy: 18 samples × 9 taxa, two ranks (Phylum + Genus).
+#    abundance is INTEGER raw read counts now (per-sample totals in
+#    5,000–50,000 range) — the previous fixture was already per-sample
+#    normalised, which made the renderer's "normalise to one" toggle look
+#    like a no-op. With raw counts the toggle now has a visible effect: OFF
+#    shows raw counts; ON locks the y-axis to [0, 1] and stacks to fractions.
 # columns: sample_id, taxon, rank, abundance, lineage
 # ---------------------------------------------------------------------------
 SAMPLES = [f"sample_{c}_{n}" for c in ("gut", "skin", "soil") for n in range(1, 7)]
@@ -153,30 +235,44 @@ GENERA = {
 }
 
 
-def _norm(d: dict[str, float]) -> dict[str, float]:
-    total = sum(d.values())
-    return {k: v / total for k, v in d.items()} if total > 0 else d
+def _allocate_counts(total: int, weights: dict[str, float]) -> dict[str, int]:
+    """Split ``total`` across keys proportionally to ``weights``.
+
+    Returns integer counts that sum to ``total`` (rounding remainder goes to
+    the largest-weight key so totals are exact).
+    """
+    wsum = sum(weights.values()) or 1.0
+    raw = {k: total * w / wsum for k, w in weights.items()}
+    out = {k: int(round(v)) for k, v in raw.items()}
+    drift = total - sum(out.values())
+    if drift != 0:
+        # Add the drift to the key with the largest fractional component.
+        adjust_key = max(raw, key=lambda k: raw[k] - int(raw[k]))
+        out[adjust_key] += drift
+    return out
 
 
 rows = []
 for s in SAMPLES:
-    # Phylum-level
-    phylum_abund = {p: max(0.0, R.gauss(1.0, 0.6)) for p in PHYLA}
-    phylum_abund = _norm(phylum_abund)
-    for p, a in phylum_abund.items():
-        rows.append([s, p, "Phylum", round(a, 4), p])
-    # Genus-level
-    genus_abund: dict[str, float] = {}
+    # Per-sample total in 5k–50k range so the OFF state of the normalise
+    # toggle shows realistic raw-count y-axis values.
+    sample_total = R.randint(5_000, 50_000)
+
+    # Phylum-level: allocate counts directly.
+    phylum_weights = {p: max(0.01, R.gauss(1.0, 0.6)) for p in PHYLA}
+    phylum_counts = _allocate_counts(sample_total, phylum_weights)
+    for p, count in phylum_counts.items():
+        rows.append([s, p, "Phylum", count, p])
+
+    # Genus-level: within each phylum, distribute the phylum's counts across
+    # its genera so the Phylum and Genus rows agree on per-sample totals.
     for p in PHYLA:
-        # Distribute the phylum's abundance across its genera
-        weights = {g: max(0.0, R.gauss(1.0, 0.5)) for g in GENERA[p]}
-        wsum = sum(weights.values()) or 1.0
-        for g, w in weights.items():
-            genus_abund[g] = phylum_abund[p] * (w / wsum)
-    genus_abund = _norm(genus_abund)
-    for p in PHYLA:
-        for g in GENERA[p]:
-            rows.append([s, g, "Genus", round(genus_abund[g], 4), f"{p};{g}"])
+        if not GENERA[p]:
+            continue
+        genus_weights = {g: max(0.01, R.gauss(1.0, 0.5)) for g in GENERA[p]}
+        genus_counts = _allocate_counts(phylum_counts[p], genus_weights)
+        for g, count in genus_counts.items():
+            rows.append([s, g, "Genus", count, f"{p};{g}"])
 
 write_tsv(
     OUT / "stacked_taxonomy_demo.tsv",

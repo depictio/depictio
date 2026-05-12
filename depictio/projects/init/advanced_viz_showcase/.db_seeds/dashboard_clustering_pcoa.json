@@ -1,0 +1,199 @@
+{
+  "_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d17" },
+  "description": null,
+  "flexible_metadata": null,
+  "hash": null,
+  "dashboard_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d17" },
+  "version": 1,
+  "tmp_children_data": [],
+  "stored_layout_data": [],
+  "stored_children_data": [],
+  "stored_metadata": [
+    {
+      "index": "pcoa-cluster-filter",
+      "component_type": "interactive",
+      "title": "Cluster",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "embedding_pcoa",
+      "wf_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d01" },
+      "dc_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d08" },
+      "dc_config": {
+        "type": null, "metatype": null,
+        "description": "PCoA embedding",
+        "data_collection_tag": "embedding_pcoa",
+        "dc_specific_properties": null,
+        "_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d08" }
+      },
+      "cols_json": {}, "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "cluster", "column_type": "object",
+      "value": null, "default_state": null, "filter_expr": null,
+      "title_size": "md", "custom_color": "#16A085", "icon_name": "mdi:group",
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "pcoa-card-samples",
+      "component_type": "card",
+      "title": "Samples",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "embedding_pcoa",
+      "wf_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d01" },
+      "dc_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d08" },
+      "dc_config": {
+        "type": null, "metatype": null,
+        "description": "PCoA embedding",
+        "data_collection_tag": "embedding_pcoa",
+        "dc_specific_properties": null,
+        "_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d08" }
+      },
+      "cols_json": {}, "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "aggregation": "count", "column_name": "sample_id", "column_type": "object",
+      "value": null, "aggregations": null, "filter_expr": null,
+      "icon_name": "mdi:account-multiple", "icon_color": "#16A085",
+      "title_color": "#16A085", "title_font_size": "lg", "value_font_size": "xl",
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "pcoa-card-clusters",
+      "component_type": "card",
+      "title": "Distinct clusters",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "embedding_pcoa",
+      "wf_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d01" },
+      "dc_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d08" },
+      "dc_config": {
+        "type": null, "metatype": null,
+        "description": "PCoA embedding",
+        "data_collection_tag": "embedding_pcoa",
+        "dc_specific_properties": null,
+        "_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d08" }
+      },
+      "cols_json": {}, "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "aggregation": "nunique", "column_name": "cluster", "column_type": "object",
+      "value": null, "aggregations": null, "filter_expr": null,
+      "icon_name": "mdi:dots-grid", "icon_color": "#2E86C1",
+      "title_color": "#2E86C1", "title_font_size": "lg", "value_font_size": "xl",
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "pcoa-embedding",
+      "component_type": "advanced_viz",
+      "title": "PCoA (synthetic)",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "embedding_pcoa",
+      "wf_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d01" },
+      "dc_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d08" },
+      "dc_config": {
+        "type": null, "metatype": null,
+        "description": "PCoA embedding",
+        "data_collection_tag": "embedding_pcoa",
+        "dc_specific_properties": null,
+        "_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d08" }
+      },
+      "cols_json": {}, "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "viz_kind": "embedding",
+      "config": {
+        "viz_kind": "embedding",
+        "sample_id_col": "sample_id",
+        "dim_1_col": "dim_1",
+        "dim_2_col": "dim_2",
+        "cluster_col": "cluster",
+        "color_col": "color",
+        "point_size": 9,
+        "show_density": false
+      },
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "pcoa-cluster-bar",
+      "component_type": "figure",
+      "title": "Cluster sizes",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "embedding_pcoa",
+      "wf_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d01" },
+      "dc_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d08" },
+      "dc_config": {
+        "type": null, "metatype": null,
+        "description": "PCoA embedding",
+        "data_collection_tag": "embedding_pcoa",
+        "dc_specific_properties": null,
+        "_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d08" }
+      },
+      "cols_json": {}, "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "visu_type": "histogram",
+      "dict_kwargs": { "x": "cluster", "color": "cluster", "title": "Cluster sizes" },
+      "mode": "ui", "code_content": null,
+      "displayed_data_count": 0, "total_data_count": 0,
+      "was_sampled": false, "filter_applied": false,
+      "selection_enabled": false, "selection_column": null,
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "pcoa-table",
+      "component_type": "table",
+      "title": "Samples",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "embedding_pcoa",
+      "wf_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d01" },
+      "dc_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d08" },
+      "dc_config": {
+        "type": null, "metatype": null,
+        "description": "PCoA embedding",
+        "data_collection_tag": "embedding_pcoa",
+        "dc_specific_properties": null,
+        "_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d08" }
+      },
+      "cols_json": {}, "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "columns": ["sample_id", "cluster", "dim_1", "dim_2", "color"],
+      "page_size": 10, "sortable": true, "filterable": true,
+      "row_selection_enabled": false, "row_selection_column": null,
+      "wf_tag": "python/advanced_viz_demo"
+    }
+  ],
+  "stored_edit_dashboard_mode_button": [],
+  "left_panel_layout_data": [
+    { "i": "box-pcoa-cluster-filter", "x": 0, "y": 0, "w": 1, "h": 4, "static": false }
+  ],
+  "right_panel_layout_data": [
+    { "i": "box-pcoa-card-samples",  "x": 0, "y": 0, "w": 2, "h": 2, "static": true },
+    { "i": "box-pcoa-card-clusters", "x": 2, "y": 0, "w": 2, "h": 2, "static": true },
+    { "i": "box-pcoa-embedding",     "x": 0, "y": 2, "w": 8, "h": 8, "static": false, "resizeHandles": ["se","s","e","sw","w"] },
+    { "i": "box-pcoa-cluster-bar",   "x": 0, "y": 10, "w": 4, "h": 5, "static": false, "resizeHandles": ["se","s","e","sw","w"] },
+    { "i": "box-pcoa-table",         "x": 4, "y": 10, "w": 4, "h": 5, "static": false, "resizeHandles": ["se","s","e","sw","w"] }
+  ],
+  "buttons_data": { "unified_edit_mode": true, "add_components_button": { "count": 0 } },
+  "stored_add_button": { "count": 0 },
+  "title": "Clustering: PCoA",
+  "subtitle": "PCoA via Bray–Curtis distance on a non-negative shift of the matrix",
+  "icon": "mdi:relation-many-to-many",
+  "icon_color": "cyan",
+  "icon_variant": "filled",
+  "workflow_system": "python",
+  "notes_content": "",
+  "permissions": {
+    "owners": [
+      {
+        "_id": { "$oid": "67658ba033c8b59ad489d7c7" },
+        "description": null, "flexible_metadata": null, "hash": null,
+        "email": "admin@example.com", "is_admin": true,
+        "is_anonymous": false, "is_temporary": false, "expiration_time": null
+      }
+    ], "editors": [], "viewers": []
+  },
+  "is_public": true,
+  "last_saved_ts": "2026-05-12 00:00:00",
+  "project_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d00" },
+  "is_main_tab": false,
+  "parent_dashboard_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d00" },
+  "tab_order": 7,
+  "main_tab_name": null,
+  "tab_icon": "mdi:relation-many-to-many",
+  "tab_icon_color": "cyan",
+  "parent_dashboard_title": null
+}

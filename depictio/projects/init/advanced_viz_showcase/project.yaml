@@ -44,28 +44,94 @@ workflows:
               category: "Pathway label for colouring"
 
       # ----------------------------------------------------------------
-      # 2. Embedding (sample_id / dim_1 / dim_2 + cluster + color)
+      # 2. Four embedding DCs — same 90×200 feature matrix, projected with
+      #    PCA / UMAP / t-SNE / PCoA respectively. Same canonical schema:
+      #    sample_id / dim_1 / dim_2 / cluster / color. The four "Clustering"
+      #    dashboard tabs each bind to one of these.
       # ----------------------------------------------------------------
       - id: "646b0f3c1e4a2d7f8e5b8d03"
-        data_collection_tag: "embedding_demo"
-        description: "Synthetic 2D embedding: 90 samples in 3 visible clusters"
+        data_collection_tag: "embedding_pca"
+        description: "PCA projection of a synthetic 90×200 sample×feature matrix (3 clusters)"
         config:
           type: "Table"
           metatype: "Aggregate"
           scan:
             mode: "single"
             scan_parameters:
-              filename: "/app/depictio/projects/init/advanced_viz_showcase/data/embedding_demo.tsv"
+              filename: "/app/depictio/projects/init/advanced_viz_showcase/data/embedding_pca.tsv"
           dc_specific_properties:
             format: "TSV"
             polars_kwargs:
               separator: "\t"
             columns_description:
               sample_id: "Sample identifier (S000..S089)"
-              dim_1: "Embedding dimension 1"
-              dim_2: "Embedding dimension 2"
+              dim_1: "PCA component 1"
+              dim_2: "PCA component 2"
               cluster: "True cluster label used to generate the point (control/treatment/recovery)"
-              color: "Mock continuous variable (e.g. gene expression) correlated with dim_1"
+              color: "Continuous gradient correlated with dim_1"
+
+      - id: "646b0f3c1e4a2d7f8e5b8d06"
+        data_collection_tag: "embedding_umap"
+        description: "UMAP projection of the same synthetic feature matrix"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "/app/depictio/projects/init/advanced_viz_showcase/data/embedding_umap.tsv"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+            columns_description:
+              sample_id: "Sample identifier"
+              dim_1: "UMAP dimension 1"
+              dim_2: "UMAP dimension 2"
+              cluster: "True cluster label"
+              color: "Continuous gradient correlated with dim_1"
+
+      - id: "646b0f3c1e4a2d7f8e5b8d07"
+        data_collection_tag: "embedding_tsne"
+        description: "t-SNE projection of the same synthetic feature matrix"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "/app/depictio/projects/init/advanced_viz_showcase/data/embedding_tsne.tsv"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+            columns_description:
+              sample_id: "Sample identifier"
+              dim_1: "t-SNE dimension 1"
+              dim_2: "t-SNE dimension 2"
+              cluster: "True cluster label"
+              color: "Continuous gradient correlated with dim_1"
+
+      - id: "646b0f3c1e4a2d7f8e5b8d08"
+        data_collection_tag: "embedding_pcoa"
+        description: "PCoA (Bray-Curtis) projection of a non-negative shift of the same matrix"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "/app/depictio/projects/init/advanced_viz_showcase/data/embedding_pcoa.tsv"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+            columns_description:
+              sample_id: "Sample identifier"
+              dim_1: "PCoA dimension 1"
+              dim_2: "PCoA dimension 2"
+              cluster: "True cluster label"
+              color: "Continuous gradient correlated with dim_1"
 
       # ----------------------------------------------------------------
       # 3. Manhattan (chr / pos / score, with a few designed hits)

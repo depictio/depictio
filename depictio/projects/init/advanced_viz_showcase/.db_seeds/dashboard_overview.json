@@ -10,6 +10,98 @@
   "stored_children_data": [],
   "stored_metadata": [
     {
+      "index": "ov-card-features",
+      "component_type": "card",
+      "title": "Volcano features",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "volcano_demo",
+      "wf_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d01" },
+      "dc_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d02" },
+      "dc_config": {
+        "type": null, "metatype": null,
+        "description": "Synthetic volcano fixture",
+        "data_collection_tag": "volcano_demo",
+        "dc_specific_properties": null,
+        "_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d02" }
+      },
+      "cols_json": {}, "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "aggregation": "count", "column_name": "feature_id", "column_type": "object",
+      "value": null, "aggregations": null, "filter_expr": null,
+      "icon_name": "mdi:dna", "icon_color": "#8E44AD",
+      "title_color": "#8E44AD", "title_font_size": "lg", "value_font_size": "xl",
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "ov-card-samples",
+      "component_type": "card",
+      "title": "Embedding samples",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "embedding_pca",
+      "wf_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d01" },
+      "dc_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d03" },
+      "dc_config": {
+        "type": null, "metatype": null,
+        "description": "PCA embedding",
+        "data_collection_tag": "embedding_pca",
+        "dc_specific_properties": null,
+        "_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d03" }
+      },
+      "cols_json": {}, "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "aggregation": "nunique", "column_name": "sample_id", "column_type": "object",
+      "value": null, "aggregations": null, "filter_expr": null,
+      "icon_name": "mdi:account-multiple", "icon_color": "#16A085",
+      "title_color": "#16A085", "title_font_size": "lg", "value_font_size": "xl",
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "ov-card-loci",
+      "component_type": "card",
+      "title": "Manhattan loci",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "manhattan_demo",
+      "wf_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d01" },
+      "dc_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d04" },
+      "dc_config": {
+        "type": null, "metatype": null,
+        "description": "Synthetic Manhattan fixture",
+        "data_collection_tag": "manhattan_demo",
+        "dc_specific_properties": null,
+        "_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d04" }
+      },
+      "cols_json": {}, "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "aggregation": "count", "column_name": "pos", "column_type": "int64",
+      "value": null, "aggregations": null, "filter_expr": null,
+      "icon_name": "mdi:format-list-numbered", "icon_color": "#D35400",
+      "title_color": "#D35400", "title_font_size": "lg", "value_font_size": "xl",
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "ov-card-taxa",
+      "component_type": "card",
+      "title": "Distinct taxa",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "stacked_taxonomy_demo",
+      "wf_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d01" },
+      "dc_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d05" },
+      "dc_config": {
+        "type": null, "metatype": null,
+        "description": "Synthetic stacked taxonomy fixture",
+        "data_collection_tag": "stacked_taxonomy_demo",
+        "dc_specific_properties": null,
+        "_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d05" }
+      },
+      "cols_json": {}, "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "aggregation": "nunique", "column_name": "taxon", "column_type": "object",
+      "value": null, "aggregations": null, "filter_expr": null,
+      "icon_name": "mdi:bacteria", "icon_color": "#2E86C1",
+      "title_color": "#2E86C1", "title_font_size": "lg", "value_font_size": "xl",
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
       "index": "ov-volcano",
       "component_type": "advanced_viz",
       "title": "Volcano",
@@ -18,15 +110,13 @@
       "wf_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d01" },
       "dc_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d02" },
       "dc_config": {
-        "type": null,
-        "metatype": null,
+        "type": null, "metatype": null,
         "description": "Synthetic volcano fixture",
         "data_collection_tag": "volcano_demo",
         "dc_specific_properties": null,
         "_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d02" }
       },
-      "cols_json": {},
-      "parent_index": null,
+      "cols_json": {}, "parent_index": null,
       "last_updated": "2026-05-12T00:00:00.000000",
       "viz_kind": "volcano",
       "config": {
@@ -39,28 +129,26 @@
         "significance_is_neg_log10": false,
         "significance_threshold": 0.05,
         "effect_threshold": 1.0,
-        "top_n_labels": 12
+        "top_n_labels": 10
       },
       "wf_tag": "python/advanced_viz_demo"
     },
     {
       "index": "ov-embedding",
       "component_type": "advanced_viz",
-      "title": "Embedding",
+      "title": "Clustering (PCA)",
       "workflow_tag": "advanced_viz_demo",
-      "data_collection_tag": "embedding_demo",
+      "data_collection_tag": "embedding_pca",
       "wf_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d01" },
       "dc_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d03" },
       "dc_config": {
-        "type": null,
-        "metatype": null,
-        "description": "Synthetic embedding fixture",
-        "data_collection_tag": "embedding_demo",
+        "type": null, "metatype": null,
+        "description": "PCA embedding",
+        "data_collection_tag": "embedding_pca",
         "dc_specific_properties": null,
         "_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d03" }
       },
-      "cols_json": {},
-      "parent_index": null,
+      "cols_json": {}, "parent_index": null,
       "last_updated": "2026-05-12T00:00:00.000000",
       "viz_kind": "embedding",
       "config": {
@@ -84,15 +172,13 @@
       "wf_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d01" },
       "dc_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d04" },
       "dc_config": {
-        "type": null,
-        "metatype": null,
+        "type": null, "metatype": null,
         "description": "Synthetic Manhattan fixture",
         "data_collection_tag": "manhattan_demo",
         "dc_specific_properties": null,
         "_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d04" }
       },
-      "cols_json": {},
-      "parent_index": null,
+      "cols_json": {}, "parent_index": null,
       "last_updated": "2026-05-12T00:00:00.000000",
       "viz_kind": "manhattan",
       "config": {
@@ -102,7 +188,8 @@
         "score_col": "score",
         "feature_col": "feature",
         "score_kind": "-log10(padj)",
-        "score_threshold": 5.0
+        "score_threshold": 5.0,
+        "top_n_labels": 6
       },
       "wf_tag": "python/advanced_viz_demo"
     },
@@ -115,15 +202,13 @@
       "wf_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d01" },
       "dc_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d05" },
       "dc_config": {
-        "type": null,
-        "metatype": null,
+        "type": null, "metatype": null,
         "description": "Synthetic stacked taxonomy fixture",
         "data_collection_tag": "stacked_taxonomy_demo",
         "dc_specific_properties": null,
         "_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d05" }
       },
-      "cols_json": {},
-      "parent_index": null,
+      "cols_json": {}, "parent_index": null,
       "last_updated": "2026-05-12T00:00:00.000000",
       "viz_kind": "stacked_taxonomy",
       "config": {
@@ -133,7 +218,7 @@
         "rank_col": "rank",
         "abundance_col": "abundance",
         "default_rank": "Phylum",
-        "top_n": 12,
+        "top_n": 10,
         "sort_by": "abundance",
         "normalise_to_one": true
       },
@@ -143,15 +228,19 @@
   "stored_edit_dashboard_mode_button": [],
   "left_panel_layout_data": [],
   "right_panel_layout_data": [
-    { "i": "box-ov-volcano",          "x": 0, "y": 0, "w": 4, "h": 7, "static": false, "resizeHandles": ["se","s","e","sw","w"] },
-    { "i": "box-ov-embedding",        "x": 4, "y": 0, "w": 4, "h": 7, "static": false, "resizeHandles": ["se","s","e","sw","w"] },
-    { "i": "box-ov-manhattan",        "x": 0, "y": 7, "w": 8, "h": 6, "static": false, "resizeHandles": ["se","s","e","sw","w"] },
-    { "i": "box-ov-stacked-taxonomy", "x": 0, "y": 13,"w": 8, "h": 7, "static": false, "resizeHandles": ["se","s","e","sw","w"] }
+    { "i": "box-ov-card-features", "x": 0, "y": 0, "w": 2, "h": 2, "static": true },
+    { "i": "box-ov-card-samples",  "x": 2, "y": 0, "w": 2, "h": 2, "static": true },
+    { "i": "box-ov-card-loci",     "x": 4, "y": 0, "w": 2, "h": 2, "static": true },
+    { "i": "box-ov-card-taxa",     "x": 6, "y": 0, "w": 2, "h": 2, "static": true },
+    { "i": "box-ov-volcano",          "x": 0, "y": 2, "w": 4, "h": 7, "static": false, "resizeHandles": ["se","s","e","sw","w"] },
+    { "i": "box-ov-embedding",        "x": 4, "y": 2, "w": 4, "h": 7, "static": false, "resizeHandles": ["se","s","e","sw","w"] },
+    { "i": "box-ov-manhattan",        "x": 0, "y": 9, "w": 8, "h": 6, "static": false, "resizeHandles": ["se","s","e","sw","w"] },
+    { "i": "box-ov-stacked-taxonomy", "x": 0, "y": 15,"w": 8, "h": 7, "static": false, "resizeHandles": ["se","s","e","sw","w"] }
   ],
   "buttons_data": { "unified_edit_mode": true, "add_components_button": { "count": 0 } },
   "stored_add_button": { "count": 0 },
   "title": "Overview",
-  "subtitle": "All four advanced visualisations on one canvas",
+  "subtitle": "All four advanced visualisations on one canvas (Clustering tab here = PCA)",
   "icon": "mdi:view-dashboard",
   "icon_color": "violet",
   "icon_variant": "filled",
@@ -161,18 +250,11 @@
     "owners": [
       {
         "_id": { "$oid": "67658ba033c8b59ad489d7c7" },
-        "description": null,
-        "flexible_metadata": null,
-        "hash": null,
-        "email": "admin@example.com",
-        "is_admin": true,
-        "is_anonymous": false,
-        "is_temporary": false,
-        "expiration_time": null
+        "description": null, "flexible_metadata": null, "hash": null,
+        "email": "admin@example.com", "is_admin": true,
+        "is_anonymous": false, "is_temporary": false, "expiration_time": null
       }
-    ],
-    "editors": [],
-    "viewers": []
+    ], "editors": [], "viewers": []
   },
   "is_public": true,
   "last_saved_ts": "2026-05-12 00:00:00",

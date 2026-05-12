@@ -150,11 +150,22 @@ const StackedTaxonomyRenderer: React.FC<Props> = ({ metadata, filters, refreshTi
         layout: {
           template: colorScheme === 'dark' ? 'plotly_dark' : 'plotly_white',
           barmode: 'stack' as const,
-          margin: { l: 50, r: 20, t: 30, b: 70 },
+          margin: { l: 60, r: 20, t: 30, b: 70 },
           xaxis: { title: { text: config.sample_id_col }, tickangle: -45 },
-          yaxis: {
-            title: { text: normalise ? 'Relative abundance' : config.abundance_col },
-          },
+          // When normalise is ON we lock the y-axis to [0, 1] and format ticks
+          // as percentages — this gives the toggle a visible effect even when
+          // the input data is already pre-normalised (the old behaviour: both
+          // toggle states rendered identically because each sample already
+          // summed to 1).
+          yaxis: normalise
+            ? {
+                title: { text: 'Relative abundance' },
+                range: [0, 1],
+                tickformat: '.0%',
+              }
+            : {
+                title: { text: config.abundance_col },
+              },
           showlegend: true,
           legend: { orientation: 'h', y: -0.25 },
           autosize: true,
@@ -199,6 +210,8 @@ const StackedTaxonomyRenderer: React.FC<Props> = ({ metadata, filters, refreshTi
       loading={loading}
       error={error}
       emptyMessage={rows && Object.values(rows)[0]?.length === 0 ? 'No data' : undefined}
+      dataRows={rows ?? undefined}
+      dataColumns={requiredCols}
     >
       {figure ? (
         <Plot
