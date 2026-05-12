@@ -57,6 +57,12 @@ CANONICAL_SCHEMAS: dict[AdvancedVizKind, dict[str, frozenset[str]]] = {
         "rank": _STRING,
         "abundance": _NUMERIC,
     },
+    # Phylogenetic validates the *metadata* DC only: the tree DC is a
+    # phylogeny-type DC (not tabular) so it has no column schema. The
+    # `taxon` role joins metadata rows to tip labels in the tree.
+    "phylogenetic": {
+        "taxon": _STRING,
+    },
 }
 
 # Optional roles — validated only if the user has bound a column for them.
@@ -75,6 +81,10 @@ _OPTIONAL_ROLES: dict[AdvancedVizKind, dict[str, frozenset[str]]] = {
         "effect": _FLOAT,
     },
     "stacked_taxonomy": {},
+    "phylogenetic": {
+        "color": _NUMERIC | _STRING,
+        "label": _STRING,
+    },
 }
 
 

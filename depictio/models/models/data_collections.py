@@ -11,6 +11,7 @@ from depictio.models.models.data_collections_types.geojson import DCGeoJSONConfi
 from depictio.models.models.data_collections_types.image import DCImageConfig
 from depictio.models.models.data_collections_types.jbrowse import DCJBrowse2Config
 from depictio.models.models.data_collections_types.multiqc import DCMultiQC
+from depictio.models.models.data_collections_types.phylogeny import DCPhylogenyConfig
 from depictio.models.models.data_collections_types.table import DCTableConfig
 from depictio.models.models.data_collections_types.table_coordinates import (
     DCTableCoordinatesConfig,
@@ -172,6 +173,7 @@ class DataCollectionConfig(MongoModel):
         | DCMultiQC
         | DCImageConfig
         | DCGeoJSONConfig
+        | DCPhylogenyConfig
     )
     join: TableJoinConfig | None = None
     transform: TransformConfig | None = None
@@ -211,7 +213,7 @@ class DataCollectionConfig(MongoModel):
 
     @field_validator("type", mode="before")
     def validate_type(cls, v):
-        allowed_values = ["table", "jbrowse2", "multiqc", "image", "geojson"]
+        allowed_values = ["table", "jbrowse2", "multiqc", "image", "geojson", "phylogeny"]
         lower_v = v.lower()
         if lower_v not in allowed_values:
             raise ValueError(f"type must be one of {allowed_values}")
@@ -273,6 +275,12 @@ class DataCollectionConfig(MongoModel):
                     values["dc_specific_properties"] = DCGeoJSONConfig(**dc_specific_properties)
                 else:
                     values["dc_specific_properties"] = DCGeoJSONConfig()
+        elif type_value == "phylogeny":
+            if not isinstance(dc_specific_properties, DCPhylogenyConfig):
+                if isinstance(dc_specific_properties, dict):
+                    values["dc_specific_properties"] = DCPhylogenyConfig(**dc_specific_properties)
+                else:
+                    values["dc_specific_properties"] = DCPhylogenyConfig()
 
         # Validate that scan is provided for non-MultiQC types and native sources
         source = values.get("source", "native")  # Default to string value

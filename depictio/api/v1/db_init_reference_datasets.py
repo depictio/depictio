@@ -103,6 +103,9 @@ STATIC_IDS = {
             "embedding_umap": "646b0f3c1e4a2d7f8e5b8d06",
             "embedding_tsne": "646b0f3c1e4a2d7f8e5b8d07",
             "embedding_pcoa": "646b0f3c1e4a2d7f8e5b8d08",
+            # Phylogenetic showcase: bacterial tree + tip metadata.
+            "bacterial_tree": "646b0f3c1e4a2d7f8e5b8d09",
+            "bacterial_metadata": "646b0f3c1e4a2d7f8e5b8d0a",
         },
         "dashboards": {
             # Main tab reuses the project_id so get_child_tabs(main_id) finds
@@ -117,6 +120,7 @@ STATIC_IDS = {
             "advanced_viz_clustering_umap": "646b0f3c1e4a2d7f8e5b8d15",
             "advanced_viz_clustering_tsne": "646b0f3c1e4a2d7f8e5b8d16",
             "advanced_viz_clustering_pcoa": "646b0f3c1e4a2d7f8e5b8d17",
+            "advanced_viz_phylogeny": "646b0f3c1e4a2d7f8e5b8d18",
         },
     },
 }

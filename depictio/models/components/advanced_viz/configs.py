@@ -110,8 +110,63 @@ class StackedTaxonomyConfig(_BaseVizConfig):
     )
 
 
+class PhylogeneticConfig(_BaseVizConfig):
+    """Phylogenetic tree (Microreact-style) — Newick tree + tip metadata.
+
+    The tree itself comes from a *separate* DC with `type: "phylogeny"` (see
+    DCPhylogenyConfig). Tip annotations (group / habitat / clade label /
+    clinical metadata) live in a regular Table DC and are joined to tip
+    labels at render time via the `taxon_col` column.
+    """
+
+    viz_kind: Literal["phylogenetic"] = "phylogenetic"
+
+    # Tree source — a phylogeny DC (the .nwk file lives on disk, served via
+    # the /advanced_viz/phylogeny/{dc_id}/newick endpoint).
+    tree_wf_id: str = Field(..., description="Workflow id of the phylogeny DC")
+    tree_dc_id: str = Field(..., description="Data-collection id of the phylogeny DC")
+
+    # Tip-metadata source — a table DC keyed by taxon name.
+    metadata_wf_id: str | None = Field(
+        default=None, description="Workflow id of the metadata table DC (optional)"
+    )
+    metadata_dc_id: str | None = Field(
+        default=None, description="Data-collection id of the metadata table DC (optional)"
+    )
+    taxon_col: str = Field(
+        default="taxon",
+        description="Column in the metadata DC matching tip labels in the tree",
+    )
+    color_col: str | None = Field(
+        default=None, description="Metadata column for tip colouring (categorical or continuous)"
+    )
+    label_col: str | None = Field(
+        default=None, description="Metadata column shown alongside the tip label (e.g. clade name)"
+    )
+
+    # Display defaults (all editable from the viz controls).
+    default_layout: Literal[
+        "rectangular", "circular", "radial", "diagonal", "hierarchical"
+    ] = Field(default="rectangular")
+    ladderize: bool = Field(default=True, description="Ladderise the tree by default")
+    show_metadata_strip: bool = Field(
+        default=True,
+        description="Render Microreact-style metadata strip next to each tip",
+    )
+    show_branch_lengths: bool = Field(
+        default=True, description="Annotate branches with lengths"
+    )
+    show_internal_labels: bool = Field(
+        default=False, description="Annotate internal nodes with their labels"
+    )
+
+
 # Discriminated union — the AdvancedViz component stores one of these.
 VizConfig = Annotated[
-    VolcanoConfig | EmbeddingConfig | ManhattanConfig | StackedTaxonomyConfig,
+    VolcanoConfig
+    | EmbeddingConfig
+    | ManhattanConfig
+    | StackedTaxonomyConfig
+    | PhylogeneticConfig,
     Field(discriminator="viz_kind"),
 ]

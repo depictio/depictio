@@ -260,6 +260,7 @@ async def create_initial_dashboards(admin_user: UserBeanie) -> list[dict | None]
                 "clustering_umap",
                 "clustering_tsne",
                 "clustering_pcoa",
+                "phylogeny",
             )
         ),
     ]
