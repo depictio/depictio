@@ -74,6 +74,11 @@ _KIND_METADATA: dict[AdvancedVizKind, dict[str, Any]] = {
         "description": "Faceted top-N differentially-abundant features, one panel per contrast.",
         "icon": "tabler:chart-bar-popular",
     },
+    "enrichment": {
+        "label": "Pathway enrichment (GSEA / GO / KEGG)",
+        "description": "Dot plot: term on y, NES on x, dot size = gene-set size, colour = -log10(padj).",
+        "icon": "tabler:chart-dots",
+    },
 }
 
 
