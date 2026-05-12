@@ -166,6 +166,10 @@ export {
   appendTableFiles,
   replaceTableFiles,
   clearTableDC,
+  // Advanced viz
+  fetchAdvancedVizKinds,
+  fetchAdvancedVizData,
+  fetchPolarsSchema,
 } from './api';
 export type { TableMutationResult } from './api';
 // Selection-as-filter helpers (Plotly/AG Grid → InteractiveFilter)
@@ -258,4 +262,8 @@ export type {
   CreateMultiQCDCInput,
   MultiQCMutationResult,
   MultiQCUniformityCheckResult,
+  // Advanced viz types
+  AdvancedVizKind,
+  AdvancedVizKindDescriptor,
+  AdvancedVizDataResponse,
 } from './api';
