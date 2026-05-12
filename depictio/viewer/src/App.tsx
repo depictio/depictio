@@ -728,6 +728,44 @@ const App: React.FC = () => {
                   Filters
                 </Title>
                 <Stack gap="sm">
+                  {/* Funnel widget — top of the rail. Live mode shows the
+                   *  current filter chain's narrowing; active-journey mode
+                   *  shows the journey's steps as clickable bars + Save CTA. */}
+                  {globalParentId && (funnelTargetDcs.length > 0 || activeJourney) && (
+                    <JourneyFunnel
+                      parentDashboardId={globalParentId}
+                      definitions={globalDefinitions}
+                      liveSteps={funnelSteps}
+                      targetDcs={funnelTargetDcs}
+                      dcTagsById={dcTagsById}
+                      journey={activeJourney}
+                      activeStopId={activeJourneyStopId}
+                      onApplyStop={(stop) => {
+                        setFilters(stop.local_filter_state);
+                        const req = applyJourneyStop(activeJourney!.id, stop);
+                        if (stop.anchor_tab_id !== dashboardId) {
+                          window.location.assign(`/dashboard-beta/${stop.anchor_tab_id}`);
+                        }
+                        void req;
+                      }}
+                      onExitJourney={() => setActiveJourney(null)}
+                      onSaveAsStop={({ journeyId, journeyName, stopName }) => {
+                        void saveCurrentAsStop({
+                          journeyId,
+                          journeyName,
+                          stopName,
+                          currentDashboardId: dashboardId!,
+                          currentLocalFilters: filters,
+                        }).catch((err) => {
+                          notifications.show({
+                            title: 'Failed to save journey step',
+                            message: String((err as Error).message ?? err),
+                            color: 'red',
+                          });
+                        });
+                      }}
+                    />
+                  )}
                   {/* Top "Global filters" section — renders one card per
                    *  active global, preserving the original component's
                    *  styling (icon, color, title) regardless of which tab
@@ -832,51 +870,6 @@ const App: React.FC = () => {
                     >
                       Reset all filters
                     </Anchor>
-                  )}
-                  {/* JourneyFunnel — live funnel when no journey is active,
-                   *  vertical journey stepper + save UI when one is active.
-                   *  Always visible in the rail footer (primary widget, not
-                   *  hidden behind a collapse). */}
-                  {globalParentId && (funnelTargetDcs.length > 0 || activeJourney) && (
-                    <Box mt="md">
-                      <JourneyFunnel
-                        parentDashboardId={globalParentId}
-                        definitions={globalDefinitions}
-                        liveSteps={funnelSteps}
-                        targetDcs={funnelTargetDcs}
-                        dcTagsById={dcTagsById}
-                        journey={activeJourney}
-                        activeStopId={activeJourneyStopId}
-                        onApplyStop={(stop) => {
-                          // Replace per-tab filters with the stop's snapshot
-                          // first so they're live before the page reloads
-                          // (cross-tab case) or before the render commits
-                          // (same-tab case).
-                          setFilters(stop.local_filter_state);
-                          const req = applyJourneyStop(activeJourney!.id, stop);
-                          if (stop.anchor_tab_id !== dashboardId) {
-                            window.location.assign(`/dashboard-beta/${stop.anchor_tab_id}`);
-                          }
-                          void req;
-                        }}
-                        onExitJourney={() => setActiveJourney(null)}
-                        onSaveAsStop={({ journeyId, journeyName, stopName }) => {
-                          void saveCurrentAsStop({
-                            journeyId,
-                            journeyName,
-                            stopName,
-                            currentDashboardId: dashboardId!,
-                            currentLocalFilters: filters,
-                          }).catch((err) => {
-                            notifications.show({
-                              title: 'Failed to save journey stop',
-                              message: String((err as Error).message ?? err),
-                              color: 'red',
-                            });
-                          });
-                        }}
-                      />
-                    </Box>
                   )}
                 </Stack>
               </Paper>

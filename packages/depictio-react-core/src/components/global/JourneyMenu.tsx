@@ -75,7 +75,10 @@ const JourneyMenu: React.FC<JourneyMenuProps> = ({
             onClick={() => setSaveOpen(true)}
           >
             <Text size="sm" fw={600} c="blue.7">
-              Save current filters as new journey…
+              Save current filters as new journey
+            </Text>
+            <Text size="xs" c="dimmed">
+              A journey is a multi-step path. Each step saves the current tab + filters.
             </Text>
           </Menu.Item>
           <Menu.Divider />
@@ -145,19 +148,19 @@ const JourneyMenu: React.FC<JourneyMenuProps> = ({
       <Modal
         opened={saveOpen}
         onClose={() => setSaveOpen(false)}
-        title="Save current filters as new journey"
+        title="New journey"
         size="sm"
       >
         <Stack gap="sm">
           <TextInput
             label="Journey name"
-            placeholder="e.g. Riverwater funnel"
+            placeholder="e.g. Riverwater path"
             value={journeyName}
             onChange={(e) => setJourneyName(e.currentTarget.value)}
             autoFocus
           />
           <TextInput
-            label="First stop name"
+            label="First step name"
             placeholder="e.g. All samples"
             value={stopName}
             onChange={(e) => setStopName(e.currentTarget.value)}

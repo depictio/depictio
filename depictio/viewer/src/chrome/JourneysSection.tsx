@@ -44,8 +44,9 @@ const JourneysSection: React.FC = () => {
           </Text>
         </Group>
         <Text size="sm" c="dimmed">
-          No journeys yet. Save the current filter state from the rail's funnel widget or
-          via the Journeys menu in the header.
+          No journeys yet. A journey is a multi-step path through your dashboard — set some
+          filters, then click "Save as new journey" from the header menu or the funnel
+          panel to start one.
         </Text>
       </Box>
     );
@@ -117,7 +118,7 @@ const JourneysSection: React.FC = () => {
                   </Text>
                 )}
                 <Badge size="xs" variant="outline">
-                  {j.stops.length} stops
+                  {j.stops.length} step{j.stops.length === 1 ? '' : 's'}
                 </Badge>
               </Group>
               <Group gap={2} wrap="nowrap">
@@ -159,7 +160,7 @@ const JourneysSection: React.FC = () => {
                   <Text size="xs" c="dimmed" truncate>
                     {idx + 1}. {s.name}
                   </Text>
-                  <Tooltip label="Remove stop">
+                  <Tooltip label="Remove step">
                     <ActionIcon
                       size="xs"
                       variant="subtle"
