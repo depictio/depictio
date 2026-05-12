@@ -116,19 +116,48 @@ def fetch_advanced_viz_data(
     except Exception as exc:
         raise HTTPException(status_code=400, detail=f"Invalid wf_id/dc_id: {exc}")
 
+    from depictio.api.v1.db import deltatables_collection
     from depictio.api.v1.deltatables_utils import load_deltatable_lite
+
+    # Resolve delta-table location directly from MongoDB and hand it to
+    # load_deltatable_lite via init_data so it does NOT take the legacy
+    # HTTP fallback (`GET /deltatables/get/{dc_id}`) — that path needs an
+    # auth token we don't carry across worker boundaries and 401s here.
+    # Mirrors the pattern used by celery_tasks.build_figure_preview.
+    init_data: dict[str, dict] = {}
+    dt_doc = deltatables_collection.find_one({"data_collection_id": dc_oid})
+    if dt_doc and dt_doc.get("delta_table_location"):
+        init_data[str(dc_id)] = {
+            "delta_location": dt_doc["delta_table_location"],
+            "dc_type": "table",
+            "size_bytes": (dt_doc.get("flexible_metadata") or {}).get("deltatable_size_bytes", 0),
+        }
+    else:
+        logger.warning("advanced_viz/data: no materialised delta table for dc_id=%s", dc_id)
+        raise HTTPException(
+            status_code=404,
+            detail="Data collection has no materialised Delta table yet.",
+        )
 
     try:
         df = load_deltatable_lite(
             workflow_id=wf_oid,
-            data_collection_id=dc_oid,
-            metadata=filter_metadata,
+            data_collection_id=str(dc_oid),
+            metadata=filter_metadata or None,
             limit_rows=limit_rows,
             select_columns=columns,
+            init_data=init_data,
         )
     except Exception as exc:
-        logger.warning("advanced_viz/data: load_deltatable_lite failed: %s", exc)
-        raise HTTPException(status_code=500, detail="Failed to load data collection.") from exc
+        logger.warning(
+            "advanced_viz/data: load_deltatable_lite failed for dc_id=%s: %s",
+            dc_id,
+            exc,
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=500, detail=f"Failed to load data collection: {exc}"
+        ) from exc
 
     # Drop any requested columns that didn't survive projection (e.g. user
     # bound an optional column the recipe didn't emit). The renderer
