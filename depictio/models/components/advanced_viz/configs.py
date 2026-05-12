@@ -44,18 +44,50 @@ class VolcanoConfig(_BaseVizConfig):
 
 
 class EmbeddingConfig(_BaseVizConfig):
-    """2D/3D embedding scatter (PCA / UMAP / t-SNE / PCoA output)."""
+    """2D/3D embedding scatter — supports two modes:
+
+    1. **Precomputed mode** (default): the bound DC already has ``dim_1_col``
+       and ``dim_2_col`` (and optionally ``dim_3_col``). The renderer just
+       plots those coordinates. Use this when clustering has been run
+       offline (e.g. recipe-driven, scanpy notebook).
+
+    2. **Live-compute mode**: set ``compute_method`` to one of ``"pca"`` /
+       ``"umap"`` / ``"tsne"`` / ``"pcoa"`` and bind to a wide sample×feature
+       matrix DC. The renderer dispatches a Celery task via
+       ``POST /advanced_viz/compute_embedding`` and renders the coordinates
+       returned by the worker. The user can tune the per-method parameters
+       below in the viz controls; each change re-dispatches a fresh job
+       (cached on the server keyed by (dc, method, params, filters)).
+    """
 
     viz_kind: Literal["embedding"] = "embedding"
 
     sample_id_col: str = Field(..., description="Column with the sample identifier")
-    dim_1_col: str = Field(..., description="Column with first embedding dim")
-    dim_2_col: str = Field(..., description="Column with second embedding dim")
+    dim_1_col: str = Field(default="dim_1", description="Column with first embedding dim (precomputed mode)")
+    dim_2_col: str = Field(default="dim_2", description="Column with second embedding dim (precomputed mode)")
     dim_3_col: str | None = Field(default=None, description="Optional third dim (enables 3D)")
     cluster_col: str | None = Field(default=None, description="Optional cluster assignment column")
     color_col: str | None = Field(
         default=None, description="Optional column for point colouring (metadata or expression)"
     )
+
+    # --- Live-compute mode -------------------------------------------------
+    # When `compute_method` is set, the renderer ignores dim_1_col/dim_2_col
+    # and dispatches a Celery task that runs the chosen dim-reduction on the
+    # wide sample×feature matrix bound via the standard (wf_id, dc_id).
+    compute_method: Literal["pca", "umap", "tsne", "pcoa"] | None = Field(
+        default=None,
+        description="Run dim-reduction live on the server. Null → precomputed mode.",
+    )
+
+    # Per-method tunables. Frontend exposes the ones relevant to the active
+    # method as sliders; the values flow through to the Celery worker's
+    # run_pca / run_umap / run_tsne / run_pcoa calls.
+    umap_n_neighbors: int = Field(default=15, ge=2, le=100)
+    umap_min_dist: float = Field(default=0.1, ge=0.0, le=1.0)
+    tsne_perplexity: float = Field(default=30.0, ge=2.0, le=100.0)
+    tsne_n_iter: int = Field(default=1000, ge=250, le=5000)
+    pcoa_distance: Literal["bray_curtis"] = Field(default="bray_curtis")
 
     show_density: bool = Field(default=False, description="Overlay density contours")
     point_size: int = Field(default=6, ge=1, le=30)

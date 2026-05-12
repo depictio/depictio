@@ -404,10 +404,171 @@ def preview_deltatable(payload: dict) -> dict:
     }
 
 
-# Future tasks (render endpoints) will be added in a later step.
+@celery_app.task(
+    name="depictio.advanced_viz.compute_embedding",
+    soft_time_limit=600,
+    time_limit=900,
+)
+def compute_embedding(payload: dict) -> dict:
+    """Live dim-reduction for the Embedding advanced viz.
+
+    Loads a wide sample×feature matrix DC, projects it via run_pca /
+    run_umap / run_tsne / run_pcoa from depictio.recipes.lib.dimreduction,
+    and returns the 2D coords in the canonical embedding shape (column-
+    oriented dict).
+
+    Input payload (JSON-serialisable):
+        {
+          "wf_id": str,
+          "dc_id": str,                # the feature-matrix DC
+          "feature_id_col": str,       # sample-id column in the matrix
+          "method": "pca" | "umap" | "tsne" | "pcoa",
+          "params": dict,              # per-method tunables
+          "filter_metadata": [...],    # sidebar filters (optional)
+        }
+
+    Output:
+        {
+          "sample_ids": [str],
+          "dim_1": [float],
+          "dim_2": [float],
+        }
+    """
+    from depictio.api.v1.db import deltatables_collection
+    from depictio.api.v1.deltatables_utils import load_deltatable_lite
+    from depictio.recipes.lib.dimreduction import run_pca, run_pcoa, run_tsne, run_umap
+
+    wf_id = payload.get("wf_id")
+    dc_id = payload.get("dc_id")
+    feature_id_col = payload.get("feature_id_col") or "sample_id"
+    method = (payload.get("method") or "pca").lower()
+    params = payload.get("params") or {}
+    filter_metadata = payload.get("filter_metadata") or []
+    # Columns to pass through unchanged from the feature DC alongside the
+    # computed (dim_1, dim_2). Used by the renderer to overlay cluster /
+    # colour annotations on the live embedding without an extra round-trip.
+    extra_cols: list[str] = list(payload.get("extra_cols") or [])
+
+    if not wf_id or not dc_id:
+        raise ValueError("compute_embedding: wf_id and dc_id are required")
+    if method not in {"pca", "umap", "tsne", "pcoa"}:
+        raise ValueError(f"compute_embedding: unsupported method {method!r}")
+
+    # Resolve delta location via Mongo (same pattern as build_figure_preview
+    # — keeps the Celery worker self-contained, no HTTP fallbacks).
+    dt_doc = deltatables_collection.find_one({"data_collection_id": ObjectId(str(dc_id))})
+    if not dt_doc or not dt_doc.get("delta_table_location"):
+        raise ValueError("compute_embedding: feature DC has no materialised Delta table")
+    init_data = {
+        str(dc_id): {
+            "delta_location": dt_doc["delta_table_location"],
+            "dc_type": "table",
+            "size_bytes": 0,
+        }
+    }
+
+    started = time.monotonic()
+    df = load_deltatable_lite(
+        workflow_id=ObjectId(str(wf_id)),
+        data_collection_id=str(dc_id),
+        metadata=filter_metadata or None,
+        init_data=init_data,
+    )
+    load_ms = int((time.monotonic() - started) * 1000)
+    logger.info("compute_embedding[%s]: loaded %d rows in %dms", method, df.height, load_ms)
+
+    # Stash any pass-through columns the renderer asked for (e.g. cluster /
+    # group labels for colour-coding the embedding) before reducing to the
+    # numeric feature matrix.
+    import polars as pl
+
+    passthrough: dict[str, list] = {}
+    if extra_cols:
+        present_extras = [c for c in extra_cols if c in df.columns]
+        for col in present_extras:
+            passthrough[col] = df.get_column(col).to_list()
+
+    # Reduce to sample_id + numeric features. Polars dtype check filters
+    # out string/bool columns so the dim-reduction helpers don't crash on
+    # non-numeric input.
+    numeric_dtypes = {
+        pl.Float32, pl.Float64,
+        pl.Int8, pl.Int16, pl.Int32, pl.Int64,
+        pl.UInt8, pl.UInt16, pl.UInt32, pl.UInt64,
+    }
+    feature_cols = [
+        c for c in df.columns if c != feature_id_col and df[c].dtype in numeric_dtypes
+    ]
+    if not feature_cols:
+        raise ValueError("compute_embedding: no numeric feature columns found in the matrix")
+    df = df.select([feature_id_col] + feature_cols)
+
+    runners = {
+        "pca": (run_pca, {"n_components": 2, "scale": True}),
+        "umap": (
+            run_umap,
+            {
+                "n_components": 2,
+                "n_neighbors": int(params.get("n_neighbors", 15)),
+                "min_dist": float(params.get("min_dist", 0.1)),
+                "metric": str(params.get("metric", "euclidean")),
+            },
+        ),
+        "tsne": (
+            run_tsne,
+            {
+                "n_components": 2,
+                "perplexity": float(params.get("perplexity", 30.0)),
+                "n_iter": int(params.get("n_iter", 1000)),
+                "metric": str(params.get("metric", "euclidean")),
+            },
+        ),
+        "pcoa": (
+            run_pcoa,
+            {"n_components": 2, "distance": str(params.get("distance", "bray_curtis"))},
+        ),
+    }
+    runner, kwargs = runners[method]
+
+    compute_started = time.monotonic()
+    if method == "pcoa":
+        # PCoA's Bray-Curtis distance requires non-negative values; shift
+        # the matrix into the positive orthant if any negatives are present.
+        import polars as pl
+
+        mins = [df.get_column(c).min() for c in feature_cols]
+        global_min = min(float(m if m is not None else 0.0) for m in mins)
+        if global_min < 0:
+            df = df.with_columns(
+                [(pl.col(c) - global_min).alias(c) for c in feature_cols]
+            )
+    coords = runner(df, **kwargs)
+    compute_ms = int((time.monotonic() - compute_started) * 1000)
+    logger.info(
+        "compute_embedding[%s]: produced %d coords in %dms (params=%s)",
+        method,
+        coords.height,
+        compute_ms,
+        params,
+    )
+
+    return {
+        "sample_ids": coords["sample_id"].to_list(),
+        "dim_1": coords["dim_1"].to_list(),
+        "dim_2": coords["dim_2"].to_list(),
+        "extras": passthrough,  # {col: [values]} aligned with sample_ids
+        "method": method,
+        "params": params,
+        "row_count": int(coords.height),
+        "load_ms": load_ms,
+        "compute_ms": compute_ms,
+    }
+
+
 __all__: list[str] = [
     "build_figure_preview",
     "analyze_figure_code",
     "build_multiqc_preview",
     "preview_deltatable",
+    "compute_embedding",
 ]
