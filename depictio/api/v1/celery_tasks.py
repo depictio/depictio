@@ -565,10 +565,140 @@ def compute_embedding(payload: dict) -> dict:
     }
 
 
+@celery_app.task(
+    name="depictio.advanced_viz.compute_complex_heatmap",
+    soft_time_limit=300,
+    time_limit=600,
+)
+def compute_complex_heatmap(payload: dict) -> dict:
+    """Build a ComplexHeatmap figure server-side via plotly-complexheatmap.
+
+    Input payload:
+        {
+          "wf_id": str,
+          "dc_id": str,                # the matrix DC
+          "index_column": str,         # row-label column
+          "value_columns": [str] | null,
+          "row_annotation_cols": [str],
+          "cluster_rows": bool,
+          "cluster_cols": bool,
+          "cluster_method": str,       # ward / single / complete / average
+          "cluster_metric": str,       # euclidean / correlation / cosine
+          "normalize": str,            # none / row_z / col_z / log1p
+          "colorscale": str | null,
+          "filter_metadata": [...],
+        }
+
+    Output:
+        {
+          "figure": <plotly figure dict>,   # straight to react-plotly.js
+          "row_count": int,
+          "col_count": int,
+          "load_ms": int,
+          "compute_ms": int,
+        }
+    """
+    from depictio.api.v1.db import deltatables_collection
+    from depictio.api.v1.deltatables_utils import load_deltatable_lite
+
+    wf_id = payload.get("wf_id")
+    dc_id = payload.get("dc_id")
+    index_column = payload.get("index_column") or "sample_id"
+    value_columns = payload.get("value_columns")
+    row_annotation_cols = list(payload.get("row_annotation_cols") or [])
+    cluster_rows = bool(payload.get("cluster_rows", True))
+    cluster_cols = bool(payload.get("cluster_cols", True))
+    cluster_method = str(payload.get("cluster_method") or "ward")
+    cluster_metric = str(payload.get("cluster_metric") or "euclidean")
+    normalize = str(payload.get("normalize") or "none")
+    colorscale = payload.get("colorscale")
+    filter_metadata = payload.get("filter_metadata") or []
+
+    if not wf_id or not dc_id:
+        raise ValueError("compute_complex_heatmap: wf_id and dc_id are required")
+
+    dt_doc = deltatables_collection.find_one({"data_collection_id": ObjectId(str(dc_id))})
+    if not dt_doc or not dt_doc.get("delta_table_location"):
+        raise ValueError("compute_complex_heatmap: DC has no materialised Delta table")
+    init_data = {
+        str(dc_id): {
+            "delta_location": dt_doc["delta_table_location"],
+            "dc_type": "table",
+            "size_bytes": 0,
+        }
+    }
+
+    started = time.monotonic()
+    df = load_deltatable_lite(
+        workflow_id=ObjectId(str(wf_id)),
+        data_collection_id=str(dc_id),
+        metadata=filter_metadata or None,
+        init_data=init_data,
+    )
+    load_ms = int((time.monotonic() - started) * 1000)
+    logger.info("compute_complex_heatmap: loaded %d rows in %dms", df.height, load_ms)
+
+    # Convert polars → pandas for plotly-complexheatmap (it accepts both but
+    # pandas is its primary input). Drop non-numeric columns from the value
+    # set if value_columns wasn't supplied.
+    import polars as pl
+
+    numeric_dtypes = {
+        pl.Float32, pl.Float64,
+        pl.Int8, pl.Int16, pl.Int32, pl.Int64,
+        pl.UInt8, pl.UInt16, pl.UInt32, pl.UInt64,
+    }
+    if value_columns is None:
+        value_columns = [
+            c for c in df.columns
+            if c != index_column and c not in row_annotation_cols and df[c].dtype in numeric_dtypes
+        ]
+    if not value_columns:
+        raise ValueError("compute_complex_heatmap: no numeric value columns found")
+
+    pdf = df.select([index_column] + value_columns + row_annotation_cols).to_pandas()
+
+    compute_started = time.monotonic()
+    # Import here so the worker startup doesn't pay the cost unless this
+    # task is actually invoked.
+    from plotly_complexheatmap import ComplexHeatmap
+
+    hm_kwargs: dict = {
+        "index_column": index_column,
+        "value_columns": value_columns,
+        "cluster_rows": cluster_rows,
+        "cluster_cols": cluster_cols,
+        "cluster_method": cluster_method,
+        "cluster_metric": cluster_metric,
+        "normalize": normalize,
+    }
+    if row_annotation_cols:
+        hm_kwargs["row_annotations"] = row_annotation_cols
+    if colorscale:
+        hm_kwargs["colorscale"] = colorscale
+
+    hm = ComplexHeatmap.from_dataframe(pdf, **hm_kwargs)
+    fig = hm.to_plotly()
+    fig_dict = fig.to_dict()
+    compute_ms = int((time.monotonic() - compute_started) * 1000)
+    logger.info(
+        "compute_complex_heatmap: %d×%d in %dms", len(value_columns), len(pdf), compute_ms,
+    )
+
+    return {
+        "figure": fig_dict,
+        "row_count": len(pdf),
+        "col_count": len(value_columns),
+        "load_ms": load_ms,
+        "compute_ms": compute_ms,
+    }
+
+
 __all__: list[str] = [
     "build_figure_preview",
     "analyze_figure_code",
     "build_multiqc_preview",
     "preview_deltatable",
     "compute_embedding",
+    "compute_complex_heatmap",
 ]
