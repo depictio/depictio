@@ -4,6 +4,7 @@ import {
   Group,
   NumberInput,
   Select,
+  Stack,
   Switch,
   Text,
   useMantineColorScheme,
@@ -379,104 +380,112 @@ const EmbeddingRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) 
     return opts;
   }, [config]);
 
+  // Controls are rendered inside the chrome Settings popover (see
+  // AdvancedVizFrame). Use a vertical Stack so each control gets a full row
+  // — reads cleaner than a wrapped horizontal Group in a 380px-wide popover.
   const controls = (
-    <Group gap="xs" wrap="wrap" align="flex-end">
+    <Stack gap="xs">
       {liveMode ? (
-        <Select
-          size="xs"
-          label="Method"
-          value={method}
-          onChange={(v) => v && setMethod(v as ComputeMethod)}
-          data={[
-            { value: 'pca', label: 'PCA' },
-            { value: 'umap', label: 'UMAP' },
-            { value: 'tsne', label: 't-SNE' },
-            { value: 'pcoa', label: 'PCoA' },
-          ]}
-          w={100}
-        />
-      ) : null}
-      {liveMode && method === 'umap' ? (
         <>
-          <NumberInput
+          <Select
             size="xs"
-            label="n_neighbors"
-            value={nNeighbors}
-            onChange={(v) => setNNeighbors(Math.max(2, Math.min(100, Number(v) || 15)))}
-            min={2}
-            max={100}
-            w={110}
+            label="Method"
+            value={method}
+            onChange={(v) => v && setMethod(v as ComputeMethod)}
+            data={[
+              { value: 'pca', label: 'PCA' },
+              { value: 'umap', label: 'UMAP' },
+              { value: 'tsne', label: 't-SNE' },
+              { value: 'pcoa', label: 'PCoA' },
+            ]}
+            description="Dim-reduction algorithm dispatched as a Celery task"
           />
-          <NumberInput
-            size="xs"
-            label="min_dist"
-            value={minDist}
-            onChange={(v) => setMinDist(Math.max(0, Math.min(1, Number(v) || 0.1)))}
-            min={0}
-            max={1}
-            step={0.05}
-            decimalScale={2}
-            w={100}
-          />
+          {method === 'umap' ? (
+            <Group gap="xs" grow>
+              <NumberInput
+                size="xs"
+                label="n_neighbors"
+                description="2–100"
+                value={nNeighbors}
+                onChange={(v) => setNNeighbors(Math.max(2, Math.min(100, Number(v) || 15)))}
+                min={2}
+                max={100}
+              />
+              <NumberInput
+                size="xs"
+                label="min_dist"
+                description="0–1"
+                value={minDist}
+                onChange={(v) => setMinDist(Math.max(0, Math.min(1, Number(v) || 0.1)))}
+                min={0}
+                max={1}
+                step={0.05}
+                decimalScale={2}
+              />
+            </Group>
+          ) : null}
+          {method === 'tsne' ? (
+            <NumberInput
+              size="xs"
+              label="perplexity"
+              description="2–100 (clamped below sample count)"
+              value={perplexity}
+              onChange={(v) => setPerplexity(Math.max(2, Math.min(100, Number(v) || 30)))}
+              min={2}
+              max={100}
+            />
+          ) : null}
+          {computeStatus ? (
+            <Badge size="sm" color="grape" variant="light" radius="sm" fullWidth>
+              {computeStatus}
+            </Badge>
+          ) : null}
+          {computeMs != null && computeStatus == null ? (
+            <Text size="xs" c="dimmed">
+              {method.toUpperCase()} computed in {computeMs} ms
+            </Text>
+          ) : null}
         </>
       ) : null}
-      {liveMode && method === 'tsne' ? (
+      <Group gap="xs" grow>
         <NumberInput
           size="xs"
-          label="perplexity"
-          value={perplexity}
-          onChange={(v) => setPerplexity(Math.max(2, Math.min(100, Number(v) || 30)))}
-          min={2}
-          max={100}
-          w={110}
+          label="Point size"
+          value={pointSize}
+          onChange={(v) => setPointSize(Math.max(1, Number(v) || 6))}
+          min={1}
+          max={30}
         />
-      ) : null}
-      <NumberInput
-        size="xs"
-        label="Point size"
-        value={pointSize}
-        onChange={(v) => setPointSize(Math.max(1, Number(v) || 6))}
-        min={1}
-        max={30}
-        w={100}
-      />
-      {colorOptions.length > 0 ? (
-        <Select
-          size="xs"
-          label="Colour by"
-          value={colorBy}
-          onChange={setColorBy}
-          data={colorOptions}
-          clearable
-          w={170}
-        />
-      ) : null}
+        {colorOptions.length > 0 ? (
+          <Select
+            size="xs"
+            label="Colour by"
+            value={colorBy}
+            onChange={setColorBy}
+            data={colorOptions}
+            clearable
+          />
+        ) : null}
+      </Group>
       <Switch
         size="xs"
         checked={showDensity}
         onChange={(e) => setShowDensity(e.currentTarget.checked)}
-        label="Density"
+        label="Density overlay"
       />
-      {liveMode && computeStatus ? (
-        <Badge size="sm" color="grape" variant="light">
-          {computeStatus}
-        </Badge>
-      ) : null}
-      {liveMode && computeMs != null && computeStatus == null ? (
-        <Text size="xs" c="dimmed">
-          {method.toUpperCase()} computed in {computeMs} ms
-        </Text>
-      ) : null}
-    </Group>
+    </Stack>
   );
 
   return (
     <AdvancedVizFrame
       title={metadata.title || 'Embedding'}
+      subtitle={(metadata as any).description || (metadata as any).subtitle}
       controls={controls}
       loading={loading}
       error={error}
       emptyMessage={rows && Object.values(rows)[0]?.length === 0 ? 'No data' : undefined}
+      dataRows={rows ?? undefined}
+      dataColumns={requiredCols}
     >
       {figure ? (
         <Plot

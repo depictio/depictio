@@ -1,9 +1,13 @@
 {
-  "_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d00" },
+  "_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d00"
+  },
   "description": null,
   "flexible_metadata": null,
   "hash": null,
-  "dashboard_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d00" },
+  "dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d00"
+  },
   "version": 1,
   "tmp_children_data": [],
   "stored_layout_data": [],
@@ -15,21 +19,36 @@
       "title": "Volcano features",
       "workflow_tag": "advanced_viz_demo",
       "data_collection_tag": "volcano_demo",
-      "wf_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d01" },
-      "dc_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d02" },
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d02"
+      },
       "dc_config": {
-        "type": null, "metatype": null,
+        "type": null,
+        "metatype": null,
         "description": "Synthetic volcano fixture",
         "data_collection_tag": "volcano_demo",
         "dc_specific_properties": null,
-        "_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d02" }
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d02"
+        }
       },
-      "cols_json": {}, "parent_index": null,
+      "cols_json": {},
+      "parent_index": null,
       "last_updated": "2026-05-12T00:00:00.000000",
-      "aggregation": "count", "column_name": "feature_id", "column_type": "object",
-      "value": null, "aggregations": null, "filter_expr": null,
-      "icon_name": "mdi:dna", "icon_color": "#8E44AD",
-      "title_color": "#8E44AD", "title_font_size": "lg", "value_font_size": "xl",
+      "aggregation": "count",
+      "column_name": "feature_id",
+      "column_type": "object",
+      "value": null,
+      "aggregations": null,
+      "filter_expr": null,
+      "icon_name": "mdi:dna",
+      "icon_color": "#8E44AD",
+      "title_color": "#8E44AD",
+      "title_font_size": "lg",
+      "value_font_size": "xl",
       "wf_tag": "python/advanced_viz_demo"
     },
     {
@@ -38,21 +57,36 @@
       "title": "Embedding samples",
       "workflow_tag": "advanced_viz_demo",
       "data_collection_tag": "embedding_pca",
-      "wf_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d01" },
-      "dc_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d03" },
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d03"
+      },
       "dc_config": {
-        "type": null, "metatype": null,
+        "type": null,
+        "metatype": null,
         "description": "PCA embedding",
         "data_collection_tag": "embedding_pca",
         "dc_specific_properties": null,
-        "_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d03" }
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d03"
+        }
       },
-      "cols_json": {}, "parent_index": null,
+      "cols_json": {},
+      "parent_index": null,
       "last_updated": "2026-05-12T00:00:00.000000",
-      "aggregation": "nunique", "column_name": "sample_id", "column_type": "object",
-      "value": null, "aggregations": null, "filter_expr": null,
-      "icon_name": "mdi:account-multiple", "icon_color": "#16A085",
-      "title_color": "#16A085", "title_font_size": "lg", "value_font_size": "xl",
+      "aggregation": "nunique",
+      "column_name": "sample_id",
+      "column_type": "object",
+      "value": null,
+      "aggregations": null,
+      "filter_expr": null,
+      "icon_name": "mdi:account-multiple",
+      "icon_color": "#16A085",
+      "title_color": "#16A085",
+      "title_font_size": "lg",
+      "value_font_size": "xl",
       "wf_tag": "python/advanced_viz_demo"
     },
     {
@@ -61,21 +95,36 @@
       "title": "Manhattan loci",
       "workflow_tag": "advanced_viz_demo",
       "data_collection_tag": "manhattan_demo",
-      "wf_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d01" },
-      "dc_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d04" },
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d04"
+      },
       "dc_config": {
-        "type": null, "metatype": null,
+        "type": null,
+        "metatype": null,
         "description": "Synthetic Manhattan fixture",
         "data_collection_tag": "manhattan_demo",
         "dc_specific_properties": null,
-        "_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d04" }
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d04"
+        }
       },
-      "cols_json": {}, "parent_index": null,
+      "cols_json": {},
+      "parent_index": null,
       "last_updated": "2026-05-12T00:00:00.000000",
-      "aggregation": "count", "column_name": "pos", "column_type": "int64",
-      "value": null, "aggregations": null, "filter_expr": null,
-      "icon_name": "mdi:format-list-numbered", "icon_color": "#D35400",
-      "title_color": "#D35400", "title_font_size": "lg", "value_font_size": "xl",
+      "aggregation": "count",
+      "column_name": "pos",
+      "column_type": "int64",
+      "value": null,
+      "aggregations": null,
+      "filter_expr": null,
+      "icon_name": "mdi:format-list-numbered",
+      "icon_color": "#D35400",
+      "title_color": "#D35400",
+      "title_font_size": "lg",
+      "value_font_size": "xl",
       "wf_tag": "python/advanced_viz_demo"
     },
     {
@@ -84,21 +133,36 @@
       "title": "Distinct taxa",
       "workflow_tag": "advanced_viz_demo",
       "data_collection_tag": "stacked_taxonomy_demo",
-      "wf_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d01" },
-      "dc_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d05" },
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d05"
+      },
       "dc_config": {
-        "type": null, "metatype": null,
+        "type": null,
+        "metatype": null,
         "description": "Synthetic stacked taxonomy fixture",
         "data_collection_tag": "stacked_taxonomy_demo",
         "dc_specific_properties": null,
-        "_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d05" }
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d05"
+        }
       },
-      "cols_json": {}, "parent_index": null,
+      "cols_json": {},
+      "parent_index": null,
       "last_updated": "2026-05-12T00:00:00.000000",
-      "aggregation": "nunique", "column_name": "taxon", "column_type": "object",
-      "value": null, "aggregations": null, "filter_expr": null,
-      "icon_name": "mdi:bacteria", "icon_color": "#2E86C1",
-      "title_color": "#2E86C1", "title_font_size": "lg", "value_font_size": "xl",
+      "aggregation": "nunique",
+      "column_name": "taxon",
+      "column_type": "object",
+      "value": null,
+      "aggregations": null,
+      "filter_expr": null,
+      "icon_name": "mdi:bacteria",
+      "icon_color": "#2E86C1",
+      "title_color": "#2E86C1",
+      "title_font_size": "lg",
+      "value_font_size": "xl",
       "wf_tag": "python/advanced_viz_demo"
     },
     {
@@ -107,16 +171,24 @@
       "title": "Volcano",
       "workflow_tag": "advanced_viz_demo",
       "data_collection_tag": "volcano_demo",
-      "wf_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d01" },
-      "dc_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d02" },
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d02"
+      },
       "dc_config": {
-        "type": null, "metatype": null,
+        "type": null,
+        "metatype": null,
         "description": "Synthetic volcano fixture",
         "data_collection_tag": "volcano_demo",
         "dc_specific_properties": null,
-        "_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d02" }
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d02"
+        }
       },
-      "cols_json": {}, "parent_index": null,
+      "cols_json": {},
+      "parent_index": null,
       "last_updated": "2026-05-12T00:00:00.000000",
       "viz_kind": "volcano",
       "config": {
@@ -131,7 +203,8 @@
         "effect_threshold": 1.0,
         "top_n_labels": 10
       },
-      "wf_tag": "python/advanced_viz_demo"
+      "wf_tag": "python/advanced_viz_demo",
+      "description": "Effect size vs significance (preview)"
     },
     {
       "index": "ov-embedding",
@@ -139,16 +212,24 @@
       "title": "Clustering (PCA)",
       "workflow_tag": "advanced_viz_demo",
       "data_collection_tag": "embedding_pca",
-      "wf_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d01" },
-      "dc_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d03" },
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d03"
+      },
       "dc_config": {
-        "type": null, "metatype": null,
+        "type": null,
+        "metatype": null,
         "description": "PCA embedding",
         "data_collection_tag": "embedding_pca",
         "dc_specific_properties": null,
-        "_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d03" }
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d03"
+        }
       },
-      "cols_json": {}, "parent_index": null,
+      "cols_json": {},
+      "parent_index": null,
       "last_updated": "2026-05-12T00:00:00.000000",
       "viz_kind": "embedding",
       "config": {
@@ -161,7 +242,8 @@
         "point_size": 8,
         "show_density": false
       },
-      "wf_tag": "python/advanced_viz_demo"
+      "wf_tag": "python/advanced_viz_demo",
+      "description": "PCA on the synthetic 90\u00d780 matrix (preview)"
     },
     {
       "index": "ov-manhattan",
@@ -169,16 +251,24 @@
       "title": "Manhattan",
       "workflow_tag": "advanced_viz_demo",
       "data_collection_tag": "manhattan_demo",
-      "wf_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d01" },
-      "dc_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d04" },
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d04"
+      },
       "dc_config": {
-        "type": null, "metatype": null,
+        "type": null,
+        "metatype": null,
         "description": "Synthetic Manhattan fixture",
         "data_collection_tag": "manhattan_demo",
         "dc_specific_properties": null,
-        "_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d04" }
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d04"
+        }
       },
-      "cols_json": {}, "parent_index": null,
+      "cols_json": {},
+      "parent_index": null,
       "last_updated": "2026-05-12T00:00:00.000000",
       "viz_kind": "manhattan",
       "config": {
@@ -191,24 +281,33 @@
         "score_threshold": 5.0,
         "top_n_labels": 6
       },
-      "wf_tag": "python/advanced_viz_demo"
+      "wf_tag": "python/advanced_viz_demo",
+      "description": "chr \u00d7 score with alternating bands (preview)"
     },
     {
       "index": "ov-stacked-taxonomy",
       "component_type": "advanced_viz",
-      "title": "Stacked taxonomy",
+      "title": "Stacked composition",
       "workflow_tag": "advanced_viz_demo",
       "data_collection_tag": "stacked_taxonomy_demo",
-      "wf_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d01" },
-      "dc_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d05" },
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d05"
+      },
       "dc_config": {
-        "type": null, "metatype": null,
+        "type": null,
+        "metatype": null,
         "description": "Synthetic stacked taxonomy fixture",
         "data_collection_tag": "stacked_taxonomy_demo",
         "dc_specific_properties": null,
-        "_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d05" }
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d05"
+        }
       },
-      "cols_json": {}, "parent_index": null,
+      "cols_json": {},
+      "parent_index": null,
       "last_updated": "2026-05-12T00:00:00.000000",
       "viz_kind": "stacked_taxonomy",
       "config": {
@@ -222,23 +321,115 @@
         "sort_by": "abundance",
         "normalise_to_one": true
       },
-      "wf_tag": "python/advanced_viz_demo"
+      "wf_tag": "python/advanced_viz_demo",
+      "description": "Per-sample relative abundance (preview)"
     }
   ],
   "stored_edit_dashboard_mode_button": [],
   "left_panel_layout_data": [],
   "right_panel_layout_data": [
-    { "i": "box-ov-card-features", "x": 0, "y": 0, "w": 2, "h": 2, "static": true },
-    { "i": "box-ov-card-samples",  "x": 2, "y": 0, "w": 2, "h": 2, "static": true },
-    { "i": "box-ov-card-loci",     "x": 4, "y": 0, "w": 2, "h": 2, "static": true },
-    { "i": "box-ov-card-taxa",     "x": 6, "y": 0, "w": 2, "h": 2, "static": true },
-    { "i": "box-ov-volcano",          "x": 0, "y": 2, "w": 4, "h": 7, "static": false, "resizeHandles": ["se","s","e","sw","w"] },
-    { "i": "box-ov-embedding",        "x": 4, "y": 2, "w": 4, "h": 7, "static": false, "resizeHandles": ["se","s","e","sw","w"] },
-    { "i": "box-ov-manhattan",        "x": 0, "y": 9, "w": 8, "h": 6, "static": false, "resizeHandles": ["se","s","e","sw","w"] },
-    { "i": "box-ov-stacked-taxonomy", "x": 0, "y": 15,"w": 8, "h": 7, "static": false, "resizeHandles": ["se","s","e","sw","w"] }
+    {
+      "i": "box-ov-card-features",
+      "x": 0,
+      "y": 0,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-ov-card-samples",
+      "x": 2,
+      "y": 0,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-ov-card-loci",
+      "x": 4,
+      "y": 0,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-ov-card-taxa",
+      "x": 6,
+      "y": 0,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-ov-volcano",
+      "x": 0,
+      "y": 2,
+      "w": 4,
+      "h": 7,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-ov-embedding",
+      "x": 4,
+      "y": 2,
+      "w": 4,
+      "h": 7,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-ov-manhattan",
+      "x": 0,
+      "y": 9,
+      "w": 8,
+      "h": 6,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-ov-stacked-taxonomy",
+      "x": 0,
+      "y": 15,
+      "w": 8,
+      "h": 7,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    }
   ],
-  "buttons_data": { "unified_edit_mode": true, "add_components_button": { "count": 0 } },
-  "stored_add_button": { "count": 0 },
+  "buttons_data": {
+    "unified_edit_mode": true,
+    "add_components_button": {
+      "count": 0
+    }
+  },
+  "stored_add_button": {
+    "count": 0
+  },
   "title": "Overview",
   "subtitle": "All four advanced visualisations on one canvas (Clustering tab here = PCA)",
   "icon": "mdi:view-dashboard",
@@ -249,16 +440,27 @@
   "permissions": {
     "owners": [
       {
-        "_id": { "$oid": "67658ba033c8b59ad489d7c7" },
-        "description": null, "flexible_metadata": null, "hash": null,
-        "email": "admin@example.com", "is_admin": true,
-        "is_anonymous": false, "is_temporary": false, "expiration_time": null
+        "_id": {
+          "$oid": "67658ba033c8b59ad489d7c7"
+        },
+        "description": null,
+        "flexible_metadata": null,
+        "hash": null,
+        "email": "admin@example.com",
+        "is_admin": true,
+        "is_anonymous": false,
+        "is_temporary": false,
+        "expiration_time": null
       }
-    ], "editors": [], "viewers": []
+    ],
+    "editors": [],
+    "viewers": []
   },
   "is_public": true,
   "last_saved_ts": "2026-05-12 00:00:00",
-  "project_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d00" },
+  "project_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d00"
+  },
   "is_main_tab": true,
   "parent_dashboard_id": null,
   "tab_order": 0,

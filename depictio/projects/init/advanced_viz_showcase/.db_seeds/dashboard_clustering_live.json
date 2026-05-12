@@ -1,53 +1,154 @@
 {
-  "_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d19" },
+  "_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d19"
+  },
   "description": null,
   "flexible_metadata": null,
   "hash": null,
-  "dashboard_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d19" },
+  "dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d19"
+  },
   "version": 1,
   "tmp_children_data": [],
   "stored_layout_data": [],
   "stored_children_data": [],
   "stored_metadata": [
     {
+      "index": "live-sample-filter",
+      "component_type": "interactive",
+      "title": "Samples",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "embedding_features",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d0b"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Feature matrix",
+        "data_collection_tag": "embedding_features",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d0b"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "sample_id",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "title_size": "md",
+      "custom_color": "#9467bd",
+      "icon_name": "mdi:flask",
+      "wf_tag": "python/advanced_viz_demo",
+      "description": "Subset the feature matrix to chosen samples. Each change re-dispatches the Celery clustering job (cached afterwards)."
+    },
+    {
+      "index": "live-feat0-filter",
+      "component_type": "interactive",
+      "title": "feat_0 range",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "embedding_features",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d0b"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Feature matrix",
+        "data_collection_tag": "embedding_features",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d0b"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "interactive_component_type": "RangeSlider",
+      "column_name": "feat_0",
+      "column_type": "float64",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "title_size": "md",
+      "custom_color": "#1f77b4",
+      "icon_name": "mdi:chart-bell-curve",
+      "wf_tag": "python/advanced_viz_demo",
+      "description": "Filter samples by their value on feature 0. Drag to trigger a fresh Celery clustering job."
+    },
+    {
       "index": "live-method-info",
       "component_type": "card",
       "title": "Method",
       "workflow_tag": "advanced_viz_demo",
       "data_collection_tag": "embedding_features",
-      "wf_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d01" },
-      "dc_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d0b" },
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d0b"
+      },
       "dc_config": {
-        "type": null, "metatype": null,
+        "type": null,
+        "metatype": null,
         "description": "Feature matrix",
         "data_collection_tag": "embedding_features",
         "dc_specific_properties": null,
-        "_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d0b" }
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d0b"
+        }
       },
-      "cols_json": {}, "parent_index": null,
+      "cols_json": {},
+      "parent_index": null,
       "last_updated": "2026-05-12T00:00:00.000000",
-      "aggregation": "count", "column_name": "sample_id", "column_type": "object",
-      "value": null, "aggregations": null, "filter_expr": null,
-      "icon_name": "mdi:flask-outline", "icon_color": "#9467bd",
-      "title_color": "#9467bd", "title_font_size": "lg", "value_font_size": "xl",
+      "aggregation": "count",
+      "column_name": "sample_id",
+      "column_type": "object",
+      "value": null,
+      "aggregations": null,
+      "filter_expr": null,
+      "icon_name": "mdi:flask-outline",
+      "icon_color": "#9467bd",
+      "title_color": "#9467bd",
+      "title_font_size": "lg",
+      "value_font_size": "xl",
       "wf_tag": "python/advanced_viz_demo"
     },
     {
       "index": "live-embedding",
       "component_type": "advanced_viz",
-      "title": "Live UMAP (Celery)",
+      "title": "Live clustering (Celery)",
       "workflow_tag": "advanced_viz_demo",
       "data_collection_tag": "embedding_features",
-      "wf_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d01" },
-      "dc_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d0b" },
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d0b"
+      },
       "dc_config": {
-        "type": null, "metatype": null,
-        "description": "Feature matrix — input for live Celery dim-reduction",
+        "type": null,
+        "metatype": null,
+        "description": "Feature matrix \u2014 input for live Celery dim-reduction",
         "data_collection_tag": "embedding_features",
         "dc_specific_properties": null,
-        "_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d0b" }
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d0b"
+        }
       },
-      "cols_json": {}, "parent_index": null,
+      "cols_json": {},
+      "parent_index": null,
       "last_updated": "2026-05-12T00:00:00.000000",
       "viz_kind": "embedding",
       "config": {
@@ -66,7 +167,8 @@
         "point_size": 7,
         "show_density": false
       },
-      "wf_tag": "python/advanced_viz_demo"
+      "wf_tag": "python/advanced_viz_demo",
+      "description": "Tune method + parameters in Settings \u2699 \u2014 the API dispatches a Celery task and renders the result; (DC, method, params, filters) tuples are cached so a second run on the same combo is instant."
     },
     {
       "index": "live-features-table",
@@ -74,34 +176,111 @@
       "title": "Feature matrix preview",
       "workflow_tag": "advanced_viz_demo",
       "data_collection_tag": "embedding_features",
-      "wf_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d01" },
-      "dc_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d0b" },
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d0b"
+      },
       "dc_config": {
-        "type": null, "metatype": null,
+        "type": null,
+        "metatype": null,
         "description": "Feature matrix",
         "data_collection_tag": "embedding_features",
         "dc_specific_properties": null,
-        "_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d0b" }
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d0b"
+        }
       },
-      "cols_json": {}, "parent_index": null,
+      "cols_json": {},
+      "parent_index": null,
       "last_updated": "2026-05-12T00:00:00.000000",
-      "columns": ["sample_id", "feat_0", "feat_1", "feat_2", "feat_3", "feat_4"],
-      "page_size": 10, "sortable": true, "filterable": true,
-      "row_selection_enabled": false, "row_selection_column": null,
+      "columns": [
+        "sample_id",
+        "feat_0",
+        "feat_1",
+        "feat_2",
+        "feat_3",
+        "feat_4"
+      ],
+      "page_size": 10,
+      "sortable": true,
+      "filterable": true,
+      "row_selection_enabled": false,
+      "row_selection_column": null,
       "wf_tag": "python/advanced_viz_demo"
     }
   ],
   "stored_edit_dashboard_mode_button": [],
-  "left_panel_layout_data": [],
-  "right_panel_layout_data": [
-    { "i": "box-live-method-info",     "x": 0, "y": 0, "w": 8, "h": 2, "static": true },
-    { "i": "box-live-embedding",       "x": 0, "y": 2, "w": 8, "h": 9, "static": false, "resizeHandles": ["se","s","e","sw","w"] },
-    { "i": "box-live-features-table",  "x": 0, "y": 11, "w": 8, "h": 5, "static": false, "resizeHandles": ["se","s","e","sw","w"] }
+  "left_panel_layout_data": [
+    {
+      "i": "box-live-sample-filter",
+      "x": 0,
+      "y": 0,
+      "w": 1,
+      "h": 6,
+      "static": false
+    },
+    {
+      "i": "box-live-feat0-filter",
+      "x": 0,
+      "y": 6,
+      "w": 1,
+      "h": 4,
+      "static": false
+    }
   ],
-  "buttons_data": { "unified_edit_mode": true, "add_components_button": { "count": 0 } },
-  "stored_add_button": { "count": 0 },
+  "right_panel_layout_data": [
+    {
+      "i": "box-live-method-info",
+      "x": 0,
+      "y": 0,
+      "w": 8,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-live-embedding",
+      "x": 0,
+      "y": 2,
+      "w": 8,
+      "h": 9,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-live-features-table",
+      "x": 0,
+      "y": 11,
+      "w": 8,
+      "h": 5,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    }
+  ],
+  "buttons_data": {
+    "unified_edit_mode": true,
+    "add_components_button": {
+      "count": 0
+    }
+  },
+  "stored_add_button": {
+    "count": 0
+  },
   "title": "Clustering: Live (Celery)",
-  "subtitle": "UMAP recomputed on demand. Switch method + tune n_neighbors / min_dist; results cached by (dc, method, params, filters).",
+  "subtitle": "Recomputes on every filter / param change; results cached by (DC, method, params, filters). Open Settings \u2699 on the viz to tune the method.",
   "icon": "mdi:lightning-bolt",
   "icon_color": "grape",
   "icon_variant": "filled",
@@ -110,18 +289,31 @@
   "permissions": {
     "owners": [
       {
-        "_id": { "$oid": "67658ba033c8b59ad489d7c7" },
-        "description": null, "flexible_metadata": null, "hash": null,
-        "email": "admin@example.com", "is_admin": true,
-        "is_anonymous": false, "is_temporary": false, "expiration_time": null
+        "_id": {
+          "$oid": "67658ba033c8b59ad489d7c7"
+        },
+        "description": null,
+        "flexible_metadata": null,
+        "hash": null,
+        "email": "admin@example.com",
+        "is_admin": true,
+        "is_anonymous": false,
+        "is_temporary": false,
+        "expiration_time": null
       }
-    ], "editors": [], "viewers": []
+    ],
+    "editors": [],
+    "viewers": []
   },
   "is_public": true,
   "last_saved_ts": "2026-05-12 00:00:00",
-  "project_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d00" },
+  "project_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d00"
+  },
   "is_main_tab": false,
-  "parent_dashboard_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d00" },
+  "parent_dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d00"
+  },
   "tab_order": 9,
   "main_tab_name": null,
   "tab_icon": "mdi:lightning-bolt",
