@@ -1,15 +1,17 @@
-import React, { createContext, useState } from 'react';
+import React, { createContext, useMemo, useState } from 'react';
 import {
   ActionIcon,
   Badge,
   Group,
   Popover,
-  ScrollArea,
   Stack,
-  Table,
   Text,
   Tooltip,
+  useMantineColorScheme,
 } from '@mantine/core';
+import { AgGridReact } from 'ag-grid-react';
+import 'ag-grid-community/styles/ag-grid.css';
+import 'ag-grid-community/styles/ag-theme-alpine.css';
 import { Icon } from '@iconify/react';
 
 /**
@@ -31,7 +33,13 @@ import { Icon } from '@iconify/react';
  * dropdown stays visible. Closing requires a click outside (closeOnClickOutside).
  */
 
-const DATA_PREVIEW_ROWS = 50;
+// Row-count thresholds for the Show-data popover.
+//   ≤ PAGINATION_THRESHOLD → single scrollable view (DOM virtualization handles it).
+//   > PAGINATION_THRESHOLD → AG Grid paginates (default page size 100).
+// The data endpoint /advanced_viz/data caps at 100k rows so we never need
+// the SSRM (server-side row model) here — client-side virtualization
+// comfortably handles 100k rows.
+const PAGINATION_THRESHOLD = 1000;
 
 type Publisher = (jsx: React.ReactNode) => void;
 
@@ -94,11 +102,47 @@ interface DataPopoverProps {
 }
 
 export const AdvancedVizDataPopover: React.FC<DataPopoverProps> = ({ dataRows, dataColumns }) => {
+  const { colorScheme } = useMantineColorScheme();
   const [opened, setOpened] = useState(false);
-  const cols = (dataColumns?.filter((c) => c in dataRows) ?? Object.keys(dataRows)) as string[];
+
+  const cols = useMemo(
+    () => (dataColumns?.filter((c) => c in dataRows) ?? Object.keys(dataRows)) as string[],
+    [dataRows, dataColumns],
+  );
   const total = cols.length > 0 ? dataRows[cols[0]]?.length ?? 0 : 0;
-  const previewN = Math.min(total, DATA_PREVIEW_ROWS);
+
+  // Column-oriented → row-oriented for AG Grid. Only flip when the popover
+  // is opened so the work isn't done on every refresh of the chart upstream.
+  const rowData = useMemo(() => {
+    if (!opened || cols.length === 0) return [];
+    const out: Record<string, unknown>[] = [];
+    for (let i = 0; i < total; i++) {
+      const row: Record<string, unknown> = {};
+      for (const c of cols) row[c] = dataRows[c][i];
+      out.push(row);
+    }
+    return out;
+  }, [opened, cols, dataRows, total]);
+
+  const colDefs = useMemo(
+    () =>
+      cols.map((c) => ({
+        field: c,
+        headerName: c,
+        sortable: true,
+        filter: true,
+        resizable: true,
+        // Polars columns can carry dots (e.g. ``sepal.length``); without a
+        // valueGetter AG Grid treats the dot as a nested-path separator.
+        valueGetter: (params: { data?: Record<string, unknown> }) => params.data?.[c],
+      })),
+    [cols],
+  );
+
   if (cols.length === 0) return null;
+
+  const isDark = colorScheme === 'dark';
+  const paginated = total > PAGINATION_THRESHOLD;
 
   return (
     <Popover
@@ -122,51 +166,34 @@ export const AdvancedVizDataPopover: React.FC<DataPopoverProps> = ({ dataRows, d
           </ActionIcon>
         </Tooltip>
       </Popover.Target>
-      <Popover.Dropdown p="sm" style={{ width: 'min(720px, 80vw)' }}>
+      <Popover.Dropdown p="sm" style={{ width: 'min(820px, 88vw)' }}>
         <Stack gap="xs">
           <Group gap={6} justify="space-between">
             <Text size="xs" fw={600} c="dimmed">
               Underlying data
             </Text>
             <Badge size="xs" color="gray" variant="light">
-              {total.toLocaleString()} rows
-              {total > DATA_PREVIEW_ROWS ? ` · preview ${DATA_PREVIEW_ROWS}` : ''}
+              {total.toLocaleString()} rows · {cols.length} cols
+              {paginated ? ' · paginated' : ''}
             </Badge>
           </Group>
-          <ScrollArea h={300} type="auto" offsetScrollbars>
-            <Table striped withTableBorder withColumnBorders fz="xs" stickyHeader>
-              <Table.Thead>
-                <Table.Tr>
-                  {cols.map((c) => (
-                    <Table.Th key={c}>{c}</Table.Th>
-                  ))}
-                </Table.Tr>
-              </Table.Thead>
-              <Table.Tbody>
-                {Array.from({ length: previewN }).map((_, rowIdx) => (
-                  <Table.Tr key={rowIdx}>
-                    {cols.map((c) => (
-                      <Table.Td key={c}>{formatCell(dataRows[c][rowIdx])}</Table.Td>
-                    ))}
-                  </Table.Tr>
-                ))}
-              </Table.Tbody>
-            </Table>
-          </ScrollArea>
+          <div
+            className={isDark ? 'ag-theme-alpine-dark' : 'ag-theme-alpine'}
+            style={{ width: '100%', height: 340 }}
+          >
+            <AgGridReact
+              rowData={rowData}
+              columnDefs={colDefs}
+              animateRows={false}
+              rowBuffer={25}
+              pagination={paginated}
+              paginationPageSize={100}
+              paginationPageSizeSelector={[50, 100, 250, 500]}
+              defaultColDef={{ minWidth: 100, flex: 1, suppressHeaderMenuButton: false }}
+            />
+          </div>
         </Stack>
       </Popover.Dropdown>
     </Popover>
   );
 };
-
-function formatCell(v: unknown): string {
-  if (v == null) return '';
-  if (typeof v === 'number') {
-    if (!Number.isFinite(v)) return String(v);
-    if (Number.isInteger(v)) return String(v);
-    const abs = Math.abs(v);
-    if (abs !== 0 && (abs < 1e-3 || abs >= 1e6)) return v.toExponential(3);
-    return v.toFixed(4).replace(/\.?0+$/, '');
-  }
-  return String(v);
-}
