@@ -1,16 +1,17 @@
 """Canonical-schema volcano DC for ampliseq.
 
-Reads the same ANCOM-BC per-taxon differential-abundance table the existing
-`ancombc_results` DC points at (``ancombc_habitat_level2.tsv``) and renames
-columns to the canonical advanced-viz volcano schema
-(see depictio/models/components/advanced_viz/schemas.py):
+Consumes the existing ``ancombc_results`` DC (whether produced from
+flat ``ancombc_habitat_level2.tsv`` in 2.14.0 or from the QIIME2-derived
+``ancombc.py`` recipe in 2.16.0+) and renames its columns to the canonical
+advanced-viz volcano schema (see depictio/models/components/advanced_viz/
+schemas.py):
 
     feature_id : Utf8
     effect_size : Float64
     significance : Float64
 
-Optional columns are carried through unchanged so they remain available in
-hover tooltips (contrast, Kingdom, Phylum, neg_log10_qval, significant).
+Optional columns (label/category/Kingdom/Phylum/neg_log10_qval/significant)
+are carried through unchanged so they remain available in hover tooltips.
 """
 
 import polars as pl
@@ -18,11 +19,7 @@ import polars as pl
 from depictio.models.models.transforms import RecipeSource
 
 SOURCES: list[RecipeSource] = [
-    RecipeSource(
-        ref="ancombc_table",
-        path="ancombc_habitat_level2.tsv",
-        format="TSV",
-    ),
+    RecipeSource(ref="ancombc", dc_ref="ancombc_results"),
 ]
 
 EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
@@ -41,10 +38,8 @@ OPTIONAL_SCHEMA: dict[str, type[pl.DataType]] = {
 
 def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
     """Rename ANCOM-BC columns to the canonical volcano schema."""
-    df = sources["ancombc_table"]
+    df = sources["ancombc"]
 
-    # The ANCOM-BC TSV already contains `id`, `lfc`, `q_val` (and usually
-    # `contrast`, `Kingdom`, `Phylum`, `neg_log10_qval`, `significant`).
     rename_map = {
         "id": "feature_id",
         "lfc": "effect_size",
@@ -59,7 +54,7 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         pl.col("feature_id").cast(pl.Utf8),
     )
 
-    # Optional `label` for hover — Phylum if present, else taxonomy string.
+    # Optional `label` for hover — Phylum if present, else taxonomy string, else feature_id.
     if "Phylum" in df.columns:
         df = df.with_columns(pl.col("Phylum").alias("label"))
     elif "taxonomy" in df.columns:

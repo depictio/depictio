@@ -1,14 +1,18 @@
 """Canonical-schema stacked-taxonomy DC for ampliseq.
 
-Source: ``taxonomy_rel_abundance_long.tsv`` (same TSV the existing
-``taxonomy_rel_abundance`` DC reads). Renames + adds a synthetic ``rank``
-column derived from the depth of the taxonomy string.
+Consumes the existing ``taxonomy_rel_abundance`` DC and renames its columns
+to the canonical advanced-viz stacked-taxonomy schema (see
+depictio/models/components/advanced_viz/schemas.py):
 
-Canonical schema (see advanced_viz/schemas.py):
     sample_id : Utf8
     taxon : Utf8
     rank : Utf8
     abundance : Float64
+
+The ``rank`` column is derived from the taxonomy-string depth (Kingdom = 1
+segment, Phylum = 2, Class = 3, ...). The ampliseq pipeline collapses at a
+single rank (Phylum in this project), so the derived ranks are consistent
+across rows.
 """
 
 import polars as pl
@@ -16,11 +20,7 @@ import polars as pl
 from depictio.models.models.transforms import RecipeSource
 
 SOURCES: list[RecipeSource] = [
-    RecipeSource(
-        ref="rel_abundance",
-        path="taxonomy_rel_abundance_long.tsv",
-        format="TSV",
-    ),
+    RecipeSource(ref="rel_abundance", dc_ref="taxonomy_rel_abundance"),
 ]
 
 EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
@@ -32,10 +32,8 @@ EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
 
 OPTIONAL_SCHEMA: dict[str, type[pl.DataType]] = {
     "lineage": pl.Utf8,
-    "parent_taxon": pl.Utf8,
 }
 
-# Map taxonomic depth (number of semicolon-separated segments) to rank name.
 _RANK_BY_DEPTH = {
     1: "Kingdom",
     2: "Phylum",
@@ -63,14 +61,10 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         }
     )
 
-    # Carry the full taxonomy string as `lineage` if a `taxon` column was
-    # derived from it (helpful for hover).
+    # Carry the full taxonomy string as `lineage` (helpful for hover).
     if "taxon" in df.columns:
         df = df.with_columns(pl.col("taxon").alias("lineage"))
 
-    # Derive rank from the taxonomy string depth. The ampliseq pipeline emits
-    # rel-table at one collapsed level (Phylum here, per the project YAML),
-    # so the depth count is consistent across rows.
     df = df.with_columns(pl.col("taxon").str.split(";").list.len().alias("_depth"))
     df = df.with_columns(
         pl.col("_depth")

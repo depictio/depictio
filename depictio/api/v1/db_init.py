@@ -224,6 +224,19 @@ async def create_initial_dashboards(admin_user: UserBeanie) -> list[dict | None]
             ),
             "static_dc_id": None,
         },
+        {
+            "name": "ampliseq_advanced_viz",
+            "json_path": os.path.join(
+                projects_base,
+                ReferenceDatasetRegistry.DATASET_PATHS["ampliseq"],
+                ".db_seeds",
+                "dashboard_advanced_viz.json",
+            ),
+            # Showcase tab for the new advanced_viz component family — three
+            # advanced viz (volcano / embedding / stacked taxonomy) bound to
+            # the recipe-derived canonical-schema DCs.
+            "static_dc_id": None,
+        },
     ]
 
     results = []

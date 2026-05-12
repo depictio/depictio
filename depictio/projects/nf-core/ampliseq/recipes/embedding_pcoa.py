@@ -1,9 +1,9 @@
 """Canonical-schema embedding DC for ampliseq (PCoA on Bray-Curtis).
 
-Source: ``taxonomy_heatmap.tsv`` — a wide matrix with row identifiers
-(Phylum, Kingdom) and per-sample relative-abundance columns. We drop the
-two identifier columns, transpose so samples become rows, then apply PCoA
-via depictio.recipes.lib.dimreduction.run_pcoa.
+Consumes the existing ``taxonomy_heatmap`` DC — a wide matrix with row
+identifiers (Phylum, Kingdom) and per-sample relative-abundance columns —
+drops the identifier columns, transposes so samples become rows, then
+applies PCoA via depictio.recipes.lib.dimreduction.run_pcoa.
 
 Canonical schema (see advanced_viz/schemas.py):
     sample_id : Utf8
@@ -17,11 +17,7 @@ from depictio.models.models.transforms import RecipeSource
 from depictio.recipes.lib.dimreduction import run_pcoa
 
 SOURCES: list[RecipeSource] = [
-    RecipeSource(
-        ref="taxonomy_heatmap",
-        path="taxonomy_heatmap.tsv",
-        format="TSV",
-    ),
+    RecipeSource(ref="taxonomy_heatmap", dc_ref="taxonomy_heatmap"),
 ]
 
 EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
@@ -48,7 +44,10 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
     arr = feature_matrix.to_numpy().astype(float).T  # shape (n_samples, n_taxa)
 
     samples_wide = pl.DataFrame(
-        {"sample_id": sample_ids, **{f"taxon_{i}": arr[:, i].tolist() for i in range(arr.shape[1])}}
+        {
+            "sample_id": sample_ids,
+            **{f"taxon_{i}": arr[:, i].tolist() for i in range(arr.shape[1])},
+        }
     )
 
     return run_pcoa(samples_wide, n_components=2)
