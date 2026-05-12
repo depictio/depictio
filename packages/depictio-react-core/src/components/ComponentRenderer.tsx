@@ -13,6 +13,7 @@ import VolcanoRenderer from './advanced_viz/VolcanoRenderer';
 import EmbeddingRenderer from './advanced_viz/EmbeddingRenderer';
 import ManhattanRenderer from './advanced_viz/ManhattanRenderer';
 import StackedTaxonomyRenderer from './advanced_viz/StackedTaxonomyRenderer';
+import PhylogeneticRenderer from './advanced_viz/PhylogeneticRenderer';
 import MultiSelectRenderer from './interactive/MultiSelectRenderer';
 import RangeSliderRenderer from './interactive/RangeSliderRenderer';
 import SliderRenderer from './interactive/SliderRenderer';
@@ -281,6 +282,8 @@ const ComponentRenderer: React.FC<ComponentRendererProps> = ({
       inner = <ManhattanRenderer {...(advProps as any)} />;
     } else if (vizKind === 'stacked_taxonomy') {
       inner = <StackedTaxonomyRenderer {...(advProps as any)} />;
+    } else if (vizKind === 'phylogenetic') {
+      inner = <PhylogeneticRenderer {...(advProps as any)} />;
     } else {
       inner = (
         <div className="dashboard-error" style={{ fontSize: '0.75rem' }}>

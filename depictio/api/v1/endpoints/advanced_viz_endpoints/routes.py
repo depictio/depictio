@@ -21,10 +21,12 @@ from typing import Any
 
 from bson import ObjectId
 from fastapi import APIRouter, Body, Depends, HTTPException
+from fastapi.responses import PlainTextResponse
 
 from depictio.api.v1.endpoints.user_endpoints.routes import get_user_or_anonymous
 from depictio.models.components.advanced_viz.schemas import CANONICAL_SCHEMAS
 from depictio.models.components.types import AdvancedVizKind
+from depictio.models.models.base import PyObjectId
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +34,11 @@ advanced_viz_endpoint_router = APIRouter()
 
 
 _KIND_METADATA: dict[AdvancedVizKind, dict[str, Any]] = {
+    "phylogenetic": {
+        "label": "Phylogenetic tree",
+        "description": "Newick tree + tip metadata (Microreact-style): 5 layouts, tip search, subtree highlight.",
+        "icon": "tabler:hierarchy-3",
+    },
     "volcano": {
         "label": "Volcano plot",
         "description": "Effect size vs significance, threshold lines, search & top-N labels.",
@@ -169,3 +176,60 @@ def fetch_advanced_viz_data(
         "row_count": int(df.height),
         "filter_applied": bool(filter_metadata),
     }
+
+
+@advanced_viz_endpoint_router.get(
+    "/phylogeny/{data_collection_id}/newick", response_class=PlainTextResponse
+)
+def get_phylogeny_newick(
+    data_collection_id: PyObjectId,
+    current_user=Depends(get_user_or_anonymous),
+) -> str:
+    """Return the raw Newick string for a phylogeny DC.
+
+    Reads the file registered by the scan phase. If local, read from disk;
+    if S3, stream via boto3.
+    """
+    from depictio.api.v1.db import files_collection
+
+    try:
+        dc_oid = ObjectId(str(data_collection_id))
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Invalid dc_id: {exc}") from exc
+
+    file_doc = files_collection.find_one({"data_collection_id": dc_oid})
+    if not file_doc:
+        raise HTTPException(
+            status_code=404,
+            detail="Phylogeny DC has no registered file (scan may not have run).",
+        )
+
+    file_path = file_doc.get("file_location")
+    if not file_path:
+        raise HTTPException(status_code=404, detail="Phylogeny file location missing.")
+
+    try:
+        if file_path.startswith("s3://"):
+            import boto3
+
+            from depictio.api.v1.configs.config import settings
+
+            s3 = boto3.client(
+                "s3",
+                endpoint_url=settings.minio.endpoint_url,
+                aws_access_key_id=settings.minio.root_user,
+                aws_secret_access_key=settings.minio.root_password,
+            )
+            _, _, rest = file_path.partition("s3://")
+            bucket, _, key = rest.partition("/")
+            obj = s3.get_object(Bucket=bucket, Key=key)
+            return obj["Body"].read().decode("utf-8")
+        with open(file_path) as fh:
+            return fh.read()
+    except FileNotFoundError as exc:
+        raise HTTPException(
+            status_code=404, detail=f"Phylogeny file not found at {file_path}"
+        ) from exc
+    except Exception as exc:
+        logger.warning("phylogeny newick read failed: %s", exc, exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to read phylogeny: {exc}") from exc

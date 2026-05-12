@@ -396,6 +396,18 @@ def client_aggregate_data(
     if data_collection.config.type.lower() == "geojson":
         return process_geojson_data_collection(data_collection, CLI_config, overwrite)
 
+    # Phylogeny DCs are file-backed; the scan phase registers the .nwk in
+    # `files`, and the Newick-serving endpoint reads it on demand. No delta
+    # table, no further processing.
+    if data_collection.config.type.lower() == "phylogeny":
+        return {
+            "result": "success",
+            "message": (
+                "Phylogeny DC registered; tree file served on demand "
+                "(no delta-table materialisation needed)."
+            ),
+        }
+
     # Handle transformed (recipe-based) data collections
     if data_collection.config.source == "transformed":
         return process_recipe_data_collection(

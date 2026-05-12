@@ -530,6 +530,16 @@ export async function fetchAdvancedVizData(
   return res.json();
 }
 
+/** Fetch the raw Newick string for a phylogeny-type DC. */
+export async function fetchPhylogenyNewick(dcId: string): Promise<string> {
+  const res = await fetch(`${API_BASE}/advanced_viz/phylogeny/${dcId}/newick`, {
+    headers: authHeaders(),
+  });
+  if (!res.ok) throw new Error(`Failed to fetch phylogeny newick: ${res.status}`);
+  return res.text();
+}
+
+
 /** Paginated table rows + AG Grid column definitions. */
 export interface TableResponse {
   columns: Array<{ field: string; headerName: string; type: string }>;

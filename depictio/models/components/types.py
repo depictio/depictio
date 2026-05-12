@@ -25,7 +25,13 @@ ComponentType = Literal[
 # renderer; the discriminated union over them lives inside the AdvancedViz
 # component (not at the outer ComponentMetadata level), so the rest of the
 # system sees one component type.
-AdvancedVizKind = Literal["volcano", "embedding", "manhattan", "stacked_taxonomy"]
+AdvancedVizKind = Literal[
+    "volcano",
+    "embedding",
+    "manhattan",
+    "stacked_taxonomy",
+    "phylogenetic",
+]
 
 # Map visualization types
 MapType = Literal["scatter_map", "density_map", "choropleth_map"]

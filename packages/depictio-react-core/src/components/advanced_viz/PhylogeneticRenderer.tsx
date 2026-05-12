@@ -1,0 +1,479 @@
+import React, { useEffect, useMemo, useState } from 'react';
+import {
+  Button,
+  Group,
+  SegmentedControl,
+  Select,
+  Switch,
+  TextInput,
+  useMantineColorScheme,
+} from '@mantine/core';
+import Plot from 'react-plotly.js';
+
+import {
+  fetchAdvancedVizData,
+  fetchPhylogenyNewick,
+  InteractiveFilter,
+  StoredMetadata,
+} from '../../api';
+import AdvancedVizFrame from './AdvancedVizFrame';
+import { ladderise, parseNewick, type PhyloNode, type PhyloTree, toNewick } from './phylo/newick';
+import { computeLayout, descendants, type Layout } from './phylo/layout';
+
+interface PhylogeneticConfig {
+  tree_wf_id: string;
+  tree_dc_id: string;
+  metadata_wf_id?: string | null;
+  metadata_dc_id?: string | null;
+  taxon_col?: string;
+  color_col?: string | null;
+  label_col?: string | null;
+  default_layout?: Layout;
+  ladderize?: boolean;
+  show_metadata_strip?: boolean;
+  show_branch_lengths?: boolean;
+  show_internal_labels?: boolean;
+}
+
+interface Props {
+  metadata: StoredMetadata & { viz_kind?: string; config?: PhylogeneticConfig };
+  filters: InteractiveFilter[];
+  refreshTick?: number;
+}
+
+// Muted publication-friendly palette for categorical tip colouring.
+const PALETTE = [
+  '#4C72B0',
+  '#DD8452',
+  '#55A868',
+  '#C44E52',
+  '#8172B3',
+  '#937860',
+  '#DA8BC3',
+  '#8C8C8C',
+];
+
+const LAYOUTS: Array<{ value: Layout; label: string }> = [
+  { value: 'rectangular', label: 'Rect' },
+  { value: 'circular', label: 'Circ' },
+  { value: 'radial', label: 'Radial' },
+  { value: 'diagonal', label: 'Diag' },
+  { value: 'hierarchical', label: 'Hier' },
+];
+
+const PhylogeneticRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => {
+  const { colorScheme } = useMantineColorScheme();
+  const config = (metadata.config || {}) as PhylogeneticConfig;
+  const isDark = colorScheme === 'dark';
+
+  // ---- Tier-2 (intra-viz) controls ----------------------------------------
+  const [layout, setLayout] = useState<Layout>(config.default_layout ?? 'rectangular');
+  const [doLadderise, setDoLadderise] = useState<boolean>(config.ladderize ?? true);
+  const [showStrip, setShowStrip] = useState<boolean>(config.show_metadata_strip ?? true);
+  const [showBranchLengths, setShowBranchLengths] = useState<boolean>(
+    config.show_branch_lengths ?? false,
+  );
+  const [search, setSearch] = useState<string>('');
+  const [colorCol, setColorCol] = useState<string | null>(config.color_col ?? null);
+  const [highlightedRootId, setHighlightedRootId] = useState<number | null>(null);
+
+  // ---- Data fetching ------------------------------------------------------
+  const [newick, setNewick] = useState<string | null>(null);
+  const [meta, setMeta] = useState<Record<string, unknown[]> | null>(null);
+  const [metaCols, setMetaCols] = useState<string[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!config.tree_dc_id) {
+      setError('Phylogenetic: missing tree DC binding');
+      setLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+
+    // 1) Newick tree (raw text).
+    const treeP = fetchPhylogenyNewick(config.tree_dc_id);
+
+    // 2) Metadata table (optional). Project all columns mentioned in the
+    //    config + any user-toggleable colour columns we know about.
+    const taxonCol = config.taxon_col || 'taxon';
+    const wantedCols: string[] = [taxonCol];
+    if (config.color_col) wantedCols.push(config.color_col);
+    if (config.label_col) wantedCols.push(config.label_col);
+    const metaP =
+      config.metadata_wf_id && config.metadata_dc_id
+        ? fetchAdvancedVizData(
+            config.metadata_wf_id,
+            config.metadata_dc_id,
+            Array.from(new Set(wantedCols)),
+            filters,
+          )
+        : Promise.resolve(null);
+
+    Promise.all([treeP, metaP])
+      .then(([nw, metaRes]) => {
+        if (cancelled) return;
+        setNewick(nw);
+        if (metaRes) {
+          setMeta(metaRes.rows);
+          setMetaCols(metaRes.columns);
+        } else {
+          setMeta(null);
+          setMetaCols([]);
+        }
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) setError(err instanceof Error ? err.message : String(err));
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [config.tree_dc_id, config.metadata_wf_id, config.metadata_dc_id, JSON.stringify(filters), refreshTick]);
+
+  // ---- Tree object (memo) -------------------------------------------------
+  const tree = useMemo<PhyloTree | null>(() => {
+    if (!newick) return null;
+    try {
+      const t = parseNewick(newick);
+      if (doLadderise) ladderise(t, true);
+      return t;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+      return null;
+    }
+  }, [newick, doLadderise]);
+
+  // ---- Tip metadata lookup -----------------------------------------------
+  const tipMeta = useMemo<Map<string, Record<string, unknown>>>(() => {
+    const out = new Map<string, Record<string, unknown>>();
+    if (!meta) return out;
+    const taxonCol = config.taxon_col || 'taxon';
+    const taxa = (meta[taxonCol] || []) as unknown[];
+    for (let i = 0; i < taxa.length; i++) {
+      const tax = String(taxa[i] ?? '');
+      const row: Record<string, unknown> = {};
+      for (const c of metaCols) row[c] = (meta[c] || [])[i];
+      out.set(tax, row);
+    }
+    return out;
+  }, [meta, metaCols, config.taxon_col]);
+
+  // ---- Tip colouring ------------------------------------------------------
+  const tipColors = useMemo<{ colorByTip: Map<string, string>; categories: string[] }>(() => {
+    const colorByTip = new Map<string, string>();
+    if (!tree) return { colorByTip, categories: [] };
+    if (!colorCol || !meta) {
+      for (const leaf of tree.leaves) colorByTip.set(leaf.name ?? '', PALETTE[0]);
+      return { colorByTip, categories: [] };
+    }
+    // Build categorical palette over the unique values in the colour column.
+    const uniqueValues: string[] = [];
+    for (const leaf of tree.leaves) {
+      const row = tipMeta.get(leaf.name ?? '');
+      const v = row ? String(row[colorCol] ?? '—') : '—';
+      if (!uniqueValues.includes(v)) uniqueValues.push(v);
+    }
+    uniqueValues.sort();
+    const palette = new Map<string, string>();
+    uniqueValues.forEach((v, i) => palette.set(v, PALETTE[i % PALETTE.length]));
+    for (const leaf of tree.leaves) {
+      const row = tipMeta.get(leaf.name ?? '');
+      const v = row ? String(row[colorCol] ?? '—') : '—';
+      colorByTip.set(leaf.name ?? '', palette.get(v) ?? PALETTE[0]);
+    }
+    return { colorByTip, categories: uniqueValues };
+  }, [tree, colorCol, meta, tipMeta]);
+
+  // ---- Highlighted subtree (clade selection) ------------------------------
+  const highlightedIds = useMemo<Set<number>>(() => {
+    if (!tree || highlightedRootId == null) return new Set();
+    const root = tree.nodes.find((n) => n.id === highlightedRootId) ?? null;
+    if (!root) return new Set();
+    return new Set(descendants(root).map((n) => n.id));
+  }, [tree, highlightedRootId]);
+
+  // ---- Plotly figure ------------------------------------------------------
+  const figure = useMemo(() => {
+    if (!tree) return null;
+    const result = computeLayout(tree, layout);
+    const traces: any[] = [];
+
+    // Edges: one trace for all edges (dimmed) + one trace for highlighted-
+    // subtree edges drawn on top.
+    const baseEdgeColour = isDark ? 'rgba(220,220,220,0.55)' : 'rgba(40,40,40,0.55)';
+    const hiEdgeColour = '#E64980';
+
+    const edgeXs: (number | null)[] = [];
+    const edgeYs: (number | null)[] = [];
+    const hiEdgeXs: (number | null)[] = [];
+    const hiEdgeYs: (number | null)[] = [];
+    for (const e of result.edges) {
+      const isHi = highlightedIds.has(e.to.id);
+      const tgtXs = isHi ? hiEdgeXs : edgeXs;
+      const tgtYs = isHi ? hiEdgeYs : edgeYs;
+      for (const [x, y] of e.pts) {
+        tgtXs.push(x);
+        tgtYs.push(y);
+      }
+      tgtXs.push(null);
+      tgtYs.push(null);
+    }
+
+    traces.push({
+      type: 'scattergl' as const,
+      mode: 'lines' as const,
+      x: edgeXs,
+      y: edgeYs,
+      hoverinfo: 'skip',
+      line: { color: baseEdgeColour, width: 1.4 },
+      showlegend: false,
+    });
+    if (hiEdgeXs.length > 0) {
+      traces.push({
+        type: 'scattergl' as const,
+        mode: 'lines' as const,
+        x: hiEdgeXs,
+        y: hiEdgeYs,
+        hoverinfo: 'skip',
+        line: { color: hiEdgeColour, width: 2.4 },
+        showlegend: false,
+      });
+    }
+
+    // Tips — one trace per cluster category if a colour column is bound.
+    const tipXs: number[] = [];
+    const tipYs: number[] = [];
+    const tipLabels: string[] = [];
+    const tipColours: string[] = [];
+    const tipSizes: number[] = [];
+    const tipBorders: string[] = [];
+    const tipIds: number[] = [];
+
+    const searchLc = search.trim().toLowerCase();
+    for (const leaf of tree.leaves) {
+      tipXs.push(leaf.x!);
+      tipYs.push(leaf.y!);
+      const name = leaf.name ?? '';
+      tipLabels.push(name);
+      tipIds.push(leaf.id);
+      tipColours.push(tipColors.colorByTip.get(name) ?? PALETTE[0]);
+      const isHi = highlightedIds.has(leaf.id);
+      const isSearchMatch = searchLc.length > 0 && name.toLowerCase().includes(searchLc);
+      tipSizes.push(isSearchMatch ? 14 : isHi ? 11 : 9);
+      tipBorders.push(isSearchMatch ? '#FAB005' : isHi ? '#E64980' : isDark ? '#111' : '#fff');
+    }
+
+    traces.push({
+      type: 'scatter' as const,
+      mode: 'markers+text',
+      x: tipXs,
+      y: tipYs,
+      text: tipLabels,
+      customdata: tipIds,
+      textposition: layout === 'rectangular' || layout === 'diagonal' ? 'middle right' : 'top center',
+      textfont: { size: 10, color: isDark ? '#e9ecef' : '#212529' },
+      hovertemplate: '%{text}<extra></extra>',
+      marker: {
+        size: tipSizes,
+        color: tipColours,
+        line: { color: tipBorders, width: 1.4 },
+      },
+      showlegend: false,
+    });
+
+    // Internal-node click targets — invisible markers so the user can
+    // click an internal node to highlight its subtree.
+    const internalXs: number[] = [];
+    const internalYs: number[] = [];
+    const internalIds: number[] = [];
+    for (const n of tree.nodes) {
+      if (n.children.length === 0) continue;
+      internalXs.push(n.x!);
+      internalYs.push(n.y!);
+      internalIds.push(n.id);
+    }
+    traces.push({
+      type: 'scatter' as const,
+      mode: 'markers',
+      x: internalXs,
+      y: internalYs,
+      customdata: internalIds,
+      hovertemplate: 'click to highlight subtree<extra></extra>',
+      marker: { size: 6, color: 'rgba(0,0,0,0)', line: { width: 0 } },
+      showlegend: false,
+    });
+
+    // Categorical legend (renders separately below the controls — using
+    // plotly's legend would cramp the tree). We compute it here and
+    // surface as React below via `tipColors.categories`.
+
+    // Equal aspect ratio for circular/radial. Rectangular/hierarchical/
+    // diagonal benefit from auto-scaling so leaf labels don't squash.
+    const square = layout === 'circular' || layout === 'radial';
+
+    return {
+      data: traces,
+      layout: {
+        template: isDark ? 'plotly_dark' : 'plotly_white',
+        margin: { l: 16, r: 200, t: 8, b: 16 }, // r room for leaf labels
+        xaxis: { visible: false, range: [result.bbox.minX - 0.05, result.bbox.maxX + 0.5] },
+        yaxis: {
+          visible: false,
+          scaleanchor: square ? 'x' : undefined,
+          range: [result.bbox.minY - 0.5, result.bbox.maxY + 0.5],
+        },
+        showlegend: false,
+        autosize: true,
+        plot_bgcolor: 'rgba(0,0,0,0)',
+        paper_bgcolor: 'rgba(0,0,0,0)',
+        annotations: [],
+      },
+    };
+  }, [tree, layout, isDark, tipColors, highlightedIds, search]);
+
+  // ---- Controls -----------------------------------------------------------
+  const colorOptions: { value: string; label: string }[] = useMemo(() => {
+    if (!metaCols || metaCols.length === 0) return [];
+    const taxonCol = config.taxon_col || 'taxon';
+    return metaCols.filter((c) => c !== taxonCol).map((c) => ({ value: c, label: c }));
+  }, [metaCols, config.taxon_col]);
+
+  const exportSelectedNewick = () => {
+    if (!tree || highlightedRootId == null) return;
+    const root = tree.nodes.find((n) => n.id === highlightedRootId);
+    if (!root) return;
+    const text = toNewick(root);
+    const blob = new Blob([text], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${root.name ?? 'subtree'}.nwk`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const controls = (
+    <Group gap="xs" wrap="wrap" align="flex-end">
+      <SegmentedControl
+        size="xs"
+        data={LAYOUTS}
+        value={layout}
+        onChange={(v) => setLayout(v as Layout)}
+      />
+      <TextInput
+        size="xs"
+        placeholder="Search tip…"
+        value={search}
+        onChange={(e) => setSearch(e.currentTarget.value)}
+        w={140}
+      />
+      {colorOptions.length > 0 ? (
+        <Select
+          size="xs"
+          label="Colour by"
+          value={colorCol}
+          onChange={setColorCol}
+          data={colorOptions}
+          clearable
+          w={150}
+        />
+      ) : null}
+      <Switch
+        size="xs"
+        checked={doLadderise}
+        onChange={(e) => setDoLadderise(e.currentTarget.checked)}
+        label="Ladderise"
+      />
+      <Switch
+        size="xs"
+        checked={showStrip}
+        onChange={(e) => setShowStrip(e.currentTarget.checked)}
+        label="Metadata strip"
+      />
+      <Switch
+        size="xs"
+        checked={showBranchLengths}
+        onChange={(e) => setShowBranchLengths(e.currentTarget.checked)}
+        label="Branch lengths"
+      />
+      {highlightedRootId != null ? (
+        <>
+          <Button size="compact-xs" variant="light" color="pink" onClick={() => setHighlightedRootId(null)}>
+            Clear subtree
+          </Button>
+          <Button size="compact-xs" variant="subtle" color="pink" onClick={exportSelectedNewick}>
+            Export .nwk
+          </Button>
+        </>
+      ) : null}
+    </Group>
+  );
+
+  // ---- Categorical legend (rendered as Mantine badges below the chart) ---
+  const legend =
+    tipColors.categories.length > 0 ? (
+      <Group gap={6} px="sm" pb={4} wrap="wrap">
+        {tipColors.categories.map((cat) => (
+          <Group gap={4} key={cat} wrap="nowrap">
+            <div
+              style={{
+                width: 10,
+                height: 10,
+                borderRadius: 2,
+                background: PALETTE[tipColors.categories.indexOf(cat) % PALETTE.length],
+              }}
+            />
+            <span style={{ fontSize: 11 }}>{cat}</span>
+          </Group>
+        ))}
+      </Group>
+    ) : null;
+
+  // ---- AG Grid "Show data" payload — flatten the metadata for the drawer.
+  const dataRows = useMemo<Record<string, unknown[]> | undefined>(() => {
+    if (!meta) return undefined;
+    return meta;
+  }, [meta]);
+
+  // ---- Plotly click handler — toggle subtree highlight on click.
+  const onPlotClick = (event: any) => {
+    const cd = event?.points?.[0]?.customdata;
+    if (cd == null) return;
+    setHighlightedRootId((prev) => (prev === cd ? null : cd));
+  };
+
+  return (
+    <AdvancedVizFrame
+      controls={controls}
+      loading={loading}
+      error={error}
+      emptyMessage={tree && tree.leaves.length === 0 ? 'Empty tree' : undefined}
+      dataRows={dataRows}
+      dataColumns={metaCols}
+    >
+      <div style={{ display: 'flex', flexDirection: 'column', width: '100%', height: '100%' }}>
+        {legend}
+        <div style={{ flex: '1 1 auto', minHeight: 0 }}>
+          {figure ? (
+            <Plot
+              data={figure.data as any}
+              layout={figure.layout as any}
+              onClick={onPlotClick}
+              useResizeHandler
+              style={{ width: '100%', height: '100%' }}
+              config={{ displaylogo: false, responsive: true } as any}
+            />
+          ) : null}
+        </div>
+      </div>
+    </AdvancedVizFrame>
+  );
+};
+
+export default PhylogeneticRenderer;
