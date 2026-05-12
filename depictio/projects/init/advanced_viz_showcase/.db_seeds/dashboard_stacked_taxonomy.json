@@ -24,12 +24,10 @@
         "dc_specific_properties": null,
         "_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d05" }
       },
-      "cols_json": {},
-      "parent_index": null,
+      "cols_json": {}, "parent_index": null,
       "last_updated": "2026-05-12T00:00:00.000000",
       "interactive_component_type": "Select",
-      "column_name": "rank",
-      "column_type": "object",
+      "column_name": "rank", "column_type": "object",
       "value": null, "default_state": null, "filter_expr": null,
       "title_size": "md", "custom_color": "#2E86C1", "icon_name": "mdi:layers-triple",
       "wf_tag": "python/advanced_viz_demo"
@@ -49,14 +47,82 @@
         "dc_specific_properties": null,
         "_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d05" }
       },
-      "cols_json": {},
-      "parent_index": null,
+      "cols_json": {}, "parent_index": null,
       "last_updated": "2026-05-12T00:00:00.000000",
       "interactive_component_type": "MultiSelect",
-      "column_name": "sample_id",
-      "column_type": "object",
+      "column_name": "sample_id", "column_type": "object",
       "value": null, "default_state": null, "filter_expr": null,
       "title_size": "md", "custom_color": "#1ABC9C", "icon_name": "mdi:flask",
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "tax-card-samples",
+      "component_type": "card",
+      "title": "Samples",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "stacked_taxonomy_demo",
+      "wf_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d01" },
+      "dc_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d05" },
+      "dc_config": {
+        "type": null, "metatype": null,
+        "description": "Synthetic stacked taxonomy fixture",
+        "data_collection_tag": "stacked_taxonomy_demo",
+        "dc_specific_properties": null,
+        "_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d05" }
+      },
+      "cols_json": {}, "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "aggregation": "nunique", "column_name": "sample_id", "column_type": "object",
+      "value": null, "aggregations": null, "filter_expr": null,
+      "icon_name": "mdi:flask", "icon_color": "#1ABC9C",
+      "title_color": "#1ABC9C", "title_font_size": "lg", "value_font_size": "xl",
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "tax-card-taxa",
+      "component_type": "card",
+      "title": "Distinct taxa",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "stacked_taxonomy_demo",
+      "wf_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d01" },
+      "dc_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d05" },
+      "dc_config": {
+        "type": null, "metatype": null,
+        "description": "Synthetic stacked taxonomy fixture",
+        "data_collection_tag": "stacked_taxonomy_demo",
+        "dc_specific_properties": null,
+        "_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d05" }
+      },
+      "cols_json": {}, "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "aggregation": "nunique", "column_name": "taxon", "column_type": "object",
+      "value": null, "aggregations": null, "filter_expr": null,
+      "icon_name": "mdi:bacteria", "icon_color": "#2E86C1",
+      "title_color": "#2E86C1", "title_font_size": "lg", "value_font_size": "xl",
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "tax-card-total-reads",
+      "component_type": "card",
+      "title": "Total reads",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "stacked_taxonomy_demo",
+      "wf_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d01" },
+      "dc_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d05" },
+      "dc_config": {
+        "type": null, "metatype": null,
+        "description": "Synthetic stacked taxonomy fixture",
+        "data_collection_tag": "stacked_taxonomy_demo",
+        "dc_specific_properties": null,
+        "_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d05" }
+      },
+      "cols_json": {}, "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "aggregation": "sum", "column_name": "abundance", "column_type": "int64",
+      "value": null, "aggregations": null,
+      "filter_expr": "col('rank') == 'Phylum'",
+      "icon_name": "mdi:counter", "icon_color": "#8E44AD",
+      "title_color": "#8E44AD", "title_font_size": "lg", "value_font_size": "xl",
       "wf_tag": "python/advanced_viz_demo"
     },
     {
@@ -74,8 +140,7 @@
         "dc_specific_properties": null,
         "_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d05" }
       },
-      "cols_json": {},
-      "parent_index": null,
+      "cols_json": {}, "parent_index": null,
       "last_updated": "2026-05-12T00:00:00.000000",
       "viz_kind": "stacked_taxonomy",
       "config": {
@@ -90,6 +155,58 @@
         "normalise_to_one": true
       },
       "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "tax-depth-bar",
+      "component_type": "figure",
+      "title": "Sequencing depth per sample",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "stacked_taxonomy_demo",
+      "wf_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d01" },
+      "dc_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d05" },
+      "dc_config": {
+        "type": null, "metatype": null,
+        "description": "Synthetic stacked taxonomy fixture",
+        "data_collection_tag": "stacked_taxonomy_demo",
+        "dc_specific_properties": null,
+        "_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d05" }
+      },
+      "cols_json": {}, "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "visu_type": "bar",
+      "dict_kwargs": {
+        "x": "sample_id",
+        "y": "abundance",
+        "title": "Sequencing depth (Phylum sum per sample)"
+      },
+      "mode": "code",
+      "code_content": "df_p = df.filter(pl.col('rank') == 'Phylum').group_by('sample_id').agg(pl.col('abundance').sum().alias('depth')).sort('sample_id')\nfig = px.bar(df_p.to_pandas(), x='sample_id', y='depth', title='Sequencing depth (Phylum sum per sample)', labels={'depth': 'Total reads'})\nfig.update_xaxes(tickangle=-45)",
+      "displayed_data_count": 0, "total_data_count": 0,
+      "was_sampled": false, "filter_applied": false,
+      "selection_enabled": false, "selection_column": null,
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "tax-table",
+      "component_type": "table",
+      "title": "Underlying counts",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "stacked_taxonomy_demo",
+      "wf_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d01" },
+      "dc_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d05" },
+      "dc_config": {
+        "type": null, "metatype": null,
+        "description": "Synthetic stacked taxonomy fixture",
+        "data_collection_tag": "stacked_taxonomy_demo",
+        "dc_specific_properties": null,
+        "_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d05" }
+      },
+      "cols_json": {}, "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "columns": ["sample_id","rank","taxon","abundance","lineage"],
+      "page_size": 10, "sortable": true, "filterable": true,
+      "row_selection_enabled": false, "row_selection_column": null,
+      "wf_tag": "python/advanced_viz_demo"
     }
   ],
   "stored_edit_dashboard_mode_button": [],
@@ -98,12 +215,17 @@
     { "i": "box-tax-sample-filter", "x": 0, "y": 3, "w": 1, "h": 5, "static": false }
   ],
   "right_panel_layout_data": [
-    { "i": "box-tax-stacked", "x": 0, "y": 0, "w": 8, "h": 10, "static": false, "resizeHandles": ["se","s","e","sw","w"] }
+    { "i": "box-tax-card-samples",     "x": 0, "y": 0, "w": 2, "h": 2, "static": true },
+    { "i": "box-tax-card-taxa",        "x": 2, "y": 0, "w": 2, "h": 2, "static": true },
+    { "i": "box-tax-card-total-reads", "x": 4, "y": 0, "w": 4, "h": 2, "static": true },
+    { "i": "box-tax-stacked",          "x": 0, "y": 2, "w": 8, "h": 9, "static": false, "resizeHandles": ["se","s","e","sw","w"] },
+    { "i": "box-tax-depth-bar",        "x": 0, "y": 11, "w": 4, "h": 5, "static": false, "resizeHandles": ["se","s","e","sw","w"] },
+    { "i": "box-tax-table",            "x": 4, "y": 11, "w": 4, "h": 5, "static": false, "resizeHandles": ["se","s","e","sw","w"] }
   ],
   "buttons_data": { "unified_edit_mode": true, "add_components_button": { "count": 0 } },
   "stored_add_button": { "count": 0 },
   "title": "Stacked taxonomy",
-  "subtitle": "Per-sample composition bar with rank + sample filters",
+  "subtitle": "Per-sample composition. Toggle 'Normalise' inside the viz to switch between raw counts and 0–100% stacks.",
   "icon": "mdi:chart-bar-stacked",
   "icon_color": "blue",
   "icon_variant": "filled",
@@ -124,7 +246,7 @@
   "project_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d00" },
   "is_main_tab": false,
   "parent_dashboard_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d00" },
-  "tab_order": 4,
+  "tab_order": 3,
   "main_tab_name": null,
   "tab_icon": "mdi:chart-bar-stacked",
   "tab_icon_color": "blue",

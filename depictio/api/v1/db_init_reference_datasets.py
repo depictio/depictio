@@ -85,23 +85,35 @@ STATIC_IDS = {
         },
     },
     # Dedicated showcase for the advanced_viz component family — one project
-    # with four synthetic-fixture DCs (one per viz_kind) and five dashboards
-    # (overview + one tab per viz). See projects/init/advanced_viz_showcase/.
+    # with four classical viz fixtures plus four clustering-method fixtures
+    # (PCA / UMAP / t-SNE / PCoA) projected from a shared 90×200 feature
+    # matrix. Eight dashboard tabs: overview + volcano + manhattan + stacked
+    # taxonomy + one per clustering method.
+    # See projects/init/advanced_viz_showcase/.
     "advanced_viz_showcase": {
         "project": "646b0f3c1e4a2d7f8e5b8d00",
         "workflows": {"advanced_viz_demo": "646b0f3c1e4a2d7f8e5b8d01"},
         "data_collections": {
             "volcano_demo": "646b0f3c1e4a2d7f8e5b8d02",
-            "embedding_demo": "646b0f3c1e4a2d7f8e5b8d03",
+            # PCA reuses the old embedding_demo id (d03) so the seed JSON
+            # doesn't churn an ObjectId; the other three methods are new.
+            "embedding_pca": "646b0f3c1e4a2d7f8e5b8d03",
             "manhattan_demo": "646b0f3c1e4a2d7f8e5b8d04",
             "stacked_taxonomy_demo": "646b0f3c1e4a2d7f8e5b8d05",
+            "embedding_umap": "646b0f3c1e4a2d7f8e5b8d06",
+            "embedding_tsne": "646b0f3c1e4a2d7f8e5b8d07",
+            "embedding_pcoa": "646b0f3c1e4a2d7f8e5b8d08",
         },
         "dashboards": {
             "advanced_viz_overview": "646b0f3c1e4a2d7f8e5b8d10",
             "advanced_viz_volcano": "646b0f3c1e4a2d7f8e5b8d11",
-            "advanced_viz_embedding": "646b0f3c1e4a2d7f8e5b8d12",
+            # PCA reuses the old embedding-tab id (d12) for the same reason.
+            "advanced_viz_clustering_pca": "646b0f3c1e4a2d7f8e5b8d12",
             "advanced_viz_manhattan": "646b0f3c1e4a2d7f8e5b8d13",
             "advanced_viz_stacked_taxonomy": "646b0f3c1e4a2d7f8e5b8d14",
+            "advanced_viz_clustering_umap": "646b0f3c1e4a2d7f8e5b8d15",
+            "advanced_viz_clustering_tsne": "646b0f3c1e4a2d7f8e5b8d16",
+            "advanced_viz_clustering_pcoa": "646b0f3c1e4a2d7f8e5b8d17",
         },
     },
 }

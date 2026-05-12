@@ -251,7 +251,16 @@ async def create_initial_dashboards(admin_user: UserBeanie) -> list[dict | None]
                 ),
                 "static_dc_id": None,
             }
-            for slug in ("overview", "volcano", "embedding", "manhattan", "stacked_taxonomy")
+            for slug in (
+                "overview",
+                "volcano",
+                "manhattan",
+                "stacked_taxonomy",
+                "clustering_pca",
+                "clustering_umap",
+                "clustering_tsne",
+                "clustering_pcoa",
+            )
         ),
     ]
 

@@ -24,14 +24,130 @@
         "dc_specific_properties": null,
         "_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d02" }
       },
-      "cols_json": {},
-      "parent_index": null,
+      "cols_json": {}, "parent_index": null,
       "last_updated": "2026-05-12T00:00:00.000000",
       "interactive_component_type": "MultiSelect",
-      "column_name": "category",
-      "column_type": "object",
+      "column_name": "category", "column_type": "object",
       "value": null, "default_state": null, "filter_expr": null,
       "title_size": "md", "custom_color": "#8E44AD", "icon_name": "mdi:tag-multiple",
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "vol-contrast-filter",
+      "component_type": "interactive",
+      "title": "Contrast",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "volcano_demo",
+      "wf_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d01" },
+      "dc_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d02" },
+      "dc_config": {
+        "type": null, "metatype": null,
+        "description": "Synthetic volcano fixture",
+        "data_collection_tag": "volcano_demo",
+        "dc_specific_properties": null,
+        "_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d02" }
+      },
+      "cols_json": {}, "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "label", "column_type": "object",
+      "value": null, "default_state": null, "filter_expr": null,
+      "title_size": "md", "custom_color": "#2196F3", "icon_name": "mdi:compare-horizontal",
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "vol-card-total",
+      "component_type": "card",
+      "title": "Total tests",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "volcano_demo",
+      "wf_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d01" },
+      "dc_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d02" },
+      "dc_config": {
+        "type": null, "metatype": null,
+        "description": "Synthetic volcano fixture",
+        "data_collection_tag": "volcano_demo",
+        "dc_specific_properties": null,
+        "_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d02" }
+      },
+      "cols_json": {}, "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "aggregation": "count", "column_name": "feature_id", "column_type": "object",
+      "value": null, "aggregations": null, "filter_expr": null,
+      "icon_name": "mdi:dna", "icon_color": "#8E44AD",
+      "title_color": "#8E44AD", "title_font_size": "lg", "value_font_size": "xl",
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "vol-card-significant",
+      "component_type": "card",
+      "title": "Significant (p<0.05)",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "volcano_demo",
+      "wf_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d01" },
+      "dc_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d02" },
+      "dc_config": {
+        "type": null, "metatype": null,
+        "description": "Synthetic volcano fixture",
+        "data_collection_tag": "volcano_demo",
+        "dc_specific_properties": null,
+        "_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d02" }
+      },
+      "cols_json": {}, "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "aggregation": "count", "column_name": "feature_id", "column_type": "object",
+      "value": null, "aggregations": null,
+      "filter_expr": "col('significance') < 0.05",
+      "icon_name": "mdi:alert-circle", "icon_color": "#E74C3C",
+      "title_color": "#E74C3C", "title_font_size": "lg", "value_font_size": "xl",
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "vol-card-up",
+      "component_type": "card",
+      "title": "Up-regulated",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "volcano_demo",
+      "wf_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d01" },
+      "dc_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d02" },
+      "dc_config": {
+        "type": null, "metatype": null,
+        "description": "Synthetic volcano fixture",
+        "data_collection_tag": "volcano_demo",
+        "dc_specific_properties": null,
+        "_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d02" }
+      },
+      "cols_json": {}, "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "aggregation": "count", "column_name": "feature_id", "column_type": "object",
+      "value": null, "aggregations": null,
+      "filter_expr": "(col('significance') < 0.05) & (col('effect_size') > 1.0)",
+      "icon_name": "mdi:arrow-up-thick", "icon_color": "#16A085",
+      "title_color": "#16A085", "title_font_size": "lg", "value_font_size": "xl",
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "vol-card-down",
+      "component_type": "card",
+      "title": "Down-regulated",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "volcano_demo",
+      "wf_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d01" },
+      "dc_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d02" },
+      "dc_config": {
+        "type": null, "metatype": null,
+        "description": "Synthetic volcano fixture",
+        "data_collection_tag": "volcano_demo",
+        "dc_specific_properties": null,
+        "_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d02" }
+      },
+      "cols_json": {}, "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "aggregation": "count", "column_name": "feature_id", "column_type": "object",
+      "value": null, "aggregations": null,
+      "filter_expr": "(col('significance') < 0.05) & (col('effect_size') < -1.0)",
+      "icon_name": "mdi:arrow-down-thick", "icon_color": "#F39C12",
+      "title_color": "#F39C12", "title_font_size": "lg", "value_font_size": "xl",
       "wf_tag": "python/advanced_viz_demo"
     },
     {
@@ -49,8 +165,7 @@
         "dc_specific_properties": null,
         "_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d02" }
       },
-      "cols_json": {},
-      "parent_index": null,
+      "cols_json": {}, "parent_index": null,
       "last_updated": "2026-05-12T00:00:00.000000",
       "viz_kind": "volcano",
       "config": {
@@ -68,6 +183,31 @@
       "wf_tag": "python/advanced_viz_demo"
     },
     {
+      "index": "vol-pathway-bar",
+      "component_type": "figure",
+      "title": "Features per pathway",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "volcano_demo",
+      "wf_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d01" },
+      "dc_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d02" },
+      "dc_config": {
+        "type": null, "metatype": null,
+        "description": "Synthetic volcano fixture",
+        "data_collection_tag": "volcano_demo",
+        "dc_specific_properties": null,
+        "_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d02" }
+      },
+      "cols_json": {}, "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "visu_type": "histogram",
+      "dict_kwargs": { "x": "category", "color": "category", "title": "Features per pathway" },
+      "mode": "ui", "code_content": null,
+      "displayed_data_count": 0, "total_data_count": 0,
+      "was_sampled": false, "filter_applied": false,
+      "selection_enabled": false, "selection_column": null,
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
       "index": "vol-table",
       "component_type": "table",
       "title": "Underlying data",
@@ -82,8 +222,7 @@
         "dc_specific_properties": null,
         "_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d02" }
       },
-      "cols_json": {},
-      "parent_index": null,
+      "cols_json": {}, "parent_index": null,
       "last_updated": "2026-05-12T00:00:00.000000",
       "columns": ["feature_id","category","effect_size","significance"],
       "page_size": 10, "sortable": true, "filterable": true,
@@ -93,11 +232,17 @@
   ],
   "stored_edit_dashboard_mode_button": [],
   "left_panel_layout_data": [
-    { "i": "box-vol-pathway-filter", "x": 0, "y": 0, "w": 1, "h": 4, "static": false }
+    { "i": "box-vol-pathway-filter",  "x": 0, "y": 0, "w": 1, "h": 4, "static": false },
+    { "i": "box-vol-contrast-filter", "x": 0, "y": 4, "w": 1, "h": 4, "static": false }
   ],
   "right_panel_layout_data": [
-    { "i": "box-vol-volcano", "x": 0, "y": 0, "w": 8, "h": 8, "static": false, "resizeHandles": ["se","s","e","sw","w"] },
-    { "i": "box-vol-table",   "x": 0, "y": 8, "w": 8, "h": 6, "static": false, "resizeHandles": ["se","s","e","sw","w"] }
+    { "i": "box-vol-card-total",       "x": 0, "y": 0, "w": 2, "h": 2, "static": true },
+    { "i": "box-vol-card-significant", "x": 2, "y": 0, "w": 2, "h": 2, "static": true },
+    { "i": "box-vol-card-up",          "x": 4, "y": 0, "w": 2, "h": 2, "static": true },
+    { "i": "box-vol-card-down",        "x": 6, "y": 0, "w": 2, "h": 2, "static": true },
+    { "i": "box-vol-volcano",          "x": 0, "y": 2, "w": 8, "h": 8, "static": false, "resizeHandles": ["se","s","e","sw","w"] },
+    { "i": "box-vol-pathway-bar",      "x": 0, "y": 10, "w": 4, "h": 5, "static": false, "resizeHandles": ["se","s","e","sw","w"] },
+    { "i": "box-vol-table",            "x": 4, "y": 10, "w": 4, "h": 5, "static": false, "resizeHandles": ["se","s","e","sw","w"] }
   ],
   "buttons_data": { "unified_edit_mode": true, "add_components_button": { "count": 0 } },
   "stored_add_button": { "count": 0 },
