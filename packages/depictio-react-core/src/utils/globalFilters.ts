@@ -39,53 +39,80 @@ export function filterIdFromSyntheticIndex(index: string): string | null {
 }
 
 export interface SyntheticBuildResult {
-  /** Synthetic interactive-component StoredMetadata entries to splice into the
-   *  rail. One per global filter whose source component isn't on this tab AND
-   *  which has at least one link targeting a DC present on this tab. */
-  synthetic: StoredMetadata[];
-  /** def.id → tabComponent.index for global filters whose source DOES live on
-   *  this tab (native promotion). The rail uses this to decorate the existing
-   *  card rather than emit a synthetic copy. */
-  promotedIndexByDefId: Map<string, string>;
+  /** Synthetic interactive-component StoredMetadata entries to splice into
+   *  the rail. One per active global filter that targets at least one DC on
+   *  this tab — regardless of whether the source component also lives here.
+   *  The rail renders these in a dedicated "Global filters" section at the
+   *  top, so the visual surface for globals is uniform across tabs. */
+   synthetic: StoredMetadata[];
+  /** Set of native component indices that the rail should HIDE from the
+   *  per-tab filter list, because an active global already covers them.
+   *  Two reasons a native is hidden:
+   *    - its `index` is the `source_component_index` of an active global
+   *      (the original filter that was promoted), OR
+   *    - its `(dc_id, column_name)` matches any active global's `links[]`
+   *      on this tab — a different per-tab filter targets the same column
+   *      and would shadow the global if both rendered.
+   */
+   hiddenNativeIndices: Set<string>;
 }
 
 /**
- * Compute the inline-promotion view model for the left rail.
+ * Compute the unified left-rail view model for global filters.
  *
- * For each `def` in `definitions`:
- *   - If a component in `tabComponents` has `index === def.source_component_index`,
- *     record `promotedIndexByDefId.set(def.id, comp.index)` — the rail keeps
- *     that component as-is and decorates it (blue stripe + globe badge).
- *   - Otherwise, if any of `def.links[].dc_id` is in `dcIdsOnTab`, emit one
- *     synthetic StoredMetadata using the first matching link's
- *     `(wf_id, dc_id, column_name)`. The synthetic shares the def's
- *     `interactive_component_type`, `column_type`, and `default_state` so the
- *     existing ComponentRenderer pipeline can render it identically to a
- *     native filter card.
- *   - Otherwise (no source component AND no matching DC on this tab), skip
- *     — the filter still applies via mergeWithGlobal but has no UI here.
+ * For each `def` in `definitions` that targets a DC present on this tab,
+ * emit ONE synthetic StoredMetadata so the rail renders a card in the
+ * dedicated top "Global filters" section. The synthetic copies the def's
+ * `display` styling (icon, custom color, title) so the card LOOKS like the
+ * original component the user promoted — same identity across all tabs.
+ *
+ * Returns the synthetic cards plus the set of native indices the host
+ * should suppress from the per-tab filter list to avoid duplicate UI for
+ * the same logical filter.
  */
 export function buildSyntheticInteractiveComponents(
   definitions: GlobalFilterDef[],
   tabComponents: StoredMetadata[],
   dcIdsOnTab: Iterable<string>,
 ): SyntheticBuildResult {
-  const tabDcSet = new Set<string>();
-  for (const d of dcIdsOnTab) tabDcSet.add(d);
-  const componentsByIndex = new Map<string, StoredMetadata>();
-  for (const c of tabComponents) componentsByIndex.set(c.index, c);
+  const tabDcSet = new Set(dcIdsOnTab);
+  const componentsByIndex = new Map(tabComponents.map((c) => [c.index, c] as const));
 
   const synthetic: StoredMetadata[] = [];
-  const promotedIndexByDefId = new Map<string, string>();
+  const hiddenNativeIndices = new Set<string>();
 
   for (const def of definitions) {
-    const native = componentsByIndex.get(def.source_component_index);
-    if (native) {
-      promotedIndexByDefId.set(def.id, native.index);
-      continue;
-    }
+    // Prefer a link whose dc_id is actually on this tab; without one, the
+    // global filter has no UI here at all.
     const link = def.links.find((l) => tabDcSet.has(l.dc_id));
     if (!link) continue;
+
+    // Native source on this tab → hide it; the synthetic above takes over.
+    const nativeSource = componentsByIndex.get(def.source_component_index);
+    if (nativeSource) hiddenNativeIndices.add(nativeSource.index);
+
+    // Also hide any OTHER per-tab interactive that targets the same
+    // (dc_id, column_name) as one of the def's links — those would be a
+    // redundant per-tab filter for a column the global already controls.
+    for (const c of tabComponents) {
+      const meta = c as unknown as {
+        index: string;
+        component_type?: string;
+        dc_id?: string;
+        column_name?: string;
+      };
+      if (meta.component_type !== 'interactive') continue;
+      if (!meta.dc_id || !meta.column_name) continue;
+      if (
+        def.links.some(
+          (l) => l.dc_id === meta.dc_id && l.column_name === meta.column_name,
+        )
+      ) {
+        hiddenNativeIndices.add(meta.index);
+      }
+    }
+
+    const display = def.display ?? {};
     synthetic.push({
       index: syntheticComponentIndex(def.id),
       component_type: 'interactive',
@@ -95,13 +122,17 @@ export function buildSyntheticInteractiveComponents(
       wf_id: link.wf_id,
       dc_id: link.dc_id,
       default_state: def.default_state,
-      // `title` is rendered by ComponentRenderer's chrome; the def.label is
-      // the user-facing name picked at promotion time.
-      title: def.label,
+      // Styling preservation: use the promotion-time display fields so the
+      // card looks identical wherever it renders. Fall back to def.label
+      // for the title; never let the title be empty.
+      title: display.title || def.label,
+      custom_color: display.custom_color,
+      icon_name: display.icon_name,
+      title_size: display.title_size,
     } as unknown as StoredMetadata);
   }
 
-  return { synthetic, promotedIndexByDefId };
+  return { synthetic, hiddenNativeIndices };
 }
 
 /**
@@ -113,7 +144,7 @@ function syntheticIndex(filterId: string, dcId: string): string {
   return `__global_${filterId}__${dcId}`;
 }
 
-function isEmptyValue(v: unknown): boolean {
+export function isEmptyGlobalValue(v: unknown): boolean {
   return v === null || v === undefined || (Array.isArray(v) && v.length === 0) || v === '';
 }
 
@@ -138,8 +169,7 @@ export function mergeWithGlobal(
   values: Record<string, unknown>,
   dcIdsOnTab: Iterable<string>,
 ): InteractiveFilter[] {
-  const tabDcSet = new Set<string>();
-  for (const d of dcIdsOnTab) tabDcSet.add(d);
+  const tabDcSet = new Set(dcIdsOnTab);
 
   // Build the precedence map from local filters: `(dc_id, column_name)` →
   // present. Synthetic globals skip entries that already collide with a local
@@ -154,7 +184,7 @@ export function mergeWithGlobal(
   const synthetic: InteractiveFilter[] = [];
   for (const def of definitions) {
     const value = values[def.id];
-    if (isEmptyValue(value)) continue;
+    if (isEmptyGlobalValue(value)) continue;
     for (const link of def.links) {
       if (!tabDcSet.has(link.dc_id)) continue;
       if (localScopes.has(`${link.dc_id}::${link.column_name}`)) continue;

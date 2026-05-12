@@ -183,12 +183,12 @@ export {
   buildSyntheticInteractiveComponents,
   isSyntheticComponentIndex,
   filterIdFromSyntheticIndex,
+  syntheticComponentIndex,
+  isEmptyGlobalValue,
 } from './utils/globalFilters';
 
 // Cross-tab global filters & stories — UI
 export { default as GlobeToggle } from './components/global/GlobeToggle';
-export { default as GlobalFilterDecoration } from './components/global/GlobalFilterDecoration';
-export type { GlobalDecorationInfo } from './components/global/GlobalFilterDecoration';
 export { default as FunnelWidget } from './components/global/FunnelWidget';
 export { default as StoryPicker } from './components/global/StoryPicker';
 export { default as StoryStepper } from './components/global/StoryStepper';
@@ -284,6 +284,7 @@ export type {
   MultiQCUniformityCheckResult,
   // Global filters & stories
   GlobalFilterDef,
+  GlobalFilterDisplay,
   GlobalFilterLink,
   Story,
   GlobalFiltersState,

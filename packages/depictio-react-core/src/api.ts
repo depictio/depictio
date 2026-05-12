@@ -2748,6 +2748,17 @@ export interface GlobalFilterLink {
 /** A global filter promoted from an in-tab interactive component. The value
  *  is stored per-user in {@link GlobalFiltersState.user_values}, not on the
  *  definition. */
+/** Styling captured from the source component at promotion time so the
+ *  synthetic card rendered on tabs *without* the source component still LOOKS
+ *  like the original (same icon, color, title). Keys mirror the per-component
+ *  fields read by ComponentRenderer / InteractiveGroupCard. */
+export interface GlobalFilterDisplay {
+  title?: string;
+  custom_color?: string;
+  icon_name?: string;
+  title_size?: string;
+}
+
 export interface GlobalFilterDef {
   id: string;
   label: string;
@@ -2757,6 +2768,7 @@ export interface GlobalFilterDef {
   column_type: string;
   default_state?: unknown;
   links: GlobalFilterLink[];
+  display?: GlobalFilterDisplay | null;
 }
 
 /** A named directional path through a subset of dashboard tabs. */

@@ -1255,6 +1255,15 @@ class GlobalFilterDef(BaseModel):
     column_type: str
     default_state: Any = None
     links: list[GlobalFilterLink] = Field(default_factory=list)
+    # Styling captured at promotion time from the source component (title,
+    # icon, color, title_size). Lets the synthetic card rendered on tabs
+    # *without* the source component still LOOK like the original — same
+    # icon, same custom color, same title — so the user reads "this is the
+    # Sample ID filter I promoted from MultiQC" without a visual jolt.
+    # Loose dict because the renderer reads a handful of optional keys; we
+    # don't want a tight contract here in case the source component schema
+    # gains fields in the future.
+    display: dict[str, Any] | None = None
 
     model_config = ConfigDict(arbitrary_types_allowed=True, extra="forbid")
 

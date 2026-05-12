@@ -11,6 +11,12 @@ db.dashboards.updateOne(
           interactive_component_type: "MultiSelect",
           column_type: "object",
           default_state: null,
+          display: {
+            title: "Sample ID",
+            custom_color: "#45B8AC",
+            icon_name: "mdi:flask",
+            title_size: "md"
+          },
           links: [
             { wf_id: "646b0f3c1e4a2d7f8e5b8ca3", dc_id: "646b0f3c1e4a2d7f8e5b8ca5", column_name: "sample" },
             { wf_id: "646b0f3c1e4a2d7f8e5b8ca3", dc_id: "646b0f3c1e4a2d7f8e5b8ca6", column_name: "sample" },
@@ -26,6 +32,12 @@ db.dashboards.updateOne(
           interactive_component_type: "MultiSelect",
           column_type: "object",
           default_state: null,
+          display: {
+            title: "Habitat Type",
+            custom_color: "#984EA3",
+            icon_name: "mdi:earth",
+            title_size: "md"
+          },
           links: [
             { wf_id: "646b0f3c1e4a2d7f8e5b8ca3", dc_id: "646b0f3c1e4a2d7f8e5b8ca5", column_name: "habitat" },
             { wf_id: "646b0f3c1e4a2d7f8e5b8ca3", dc_id: "646b0f3c1e4a2d7f8e5b8ca6", column_name: "habitat" },

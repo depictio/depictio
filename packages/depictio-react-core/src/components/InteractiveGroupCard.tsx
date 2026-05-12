@@ -3,9 +3,6 @@ import { Divider, Paper, Stack, Text } from '@mantine/core';
 
 import type { InteractiveFilter, StoredMetadata } from '../api';
 import ComponentRenderer from './ComponentRenderer';
-import GlobalFilterDecoration, {
-  type GlobalDecorationInfo,
-} from './global/GlobalFilterDecoration';
 
 interface InteractiveGroupCardProps {
   groupName: string;
@@ -16,11 +13,6 @@ interface InteractiveGroupCardProps {
    *  viewer to inject a {@link GlobeToggle} into each interactive component's
    *  chrome row so users can promote that filter to global scope. */
   extraActionsByIndex?: Record<string, React.ReactNode>;
-  /** Optional per-member "this filter is globally promoted" decoration keyed by
-   *  `metadata.index`. Members listed here get the blue stripe + globe badge.
-   *  Synthetic-from-other-tab cards additionally show a "From [Source Tab]"
-   *  caption beneath the renderer. */
-  globalByIndex?: Record<string, GlobalDecorationInfo>;
 }
 
 /**
@@ -37,7 +29,6 @@ const InteractiveGroupCard: React.FC<InteractiveGroupCardProps> = ({
   filters,
   onFilterChange,
   extraActionsByIndex,
-  globalByIndex,
 }) => {
   return (
     <Paper withBorder p="xs" radius="md" shadow="xs">
@@ -48,15 +39,13 @@ const InteractiveGroupCard: React.FC<InteractiveGroupCardProps> = ({
         {members.map((m, i) => (
           <React.Fragment key={m.index}>
             {i > 0 && <Divider />}
-            <GlobalFilterDecoration decoration={globalByIndex?.[m.index]}>
-              <ComponentRenderer
-                metadata={m}
-                filters={filters}
-                onFilterChange={onFilterChange}
-                compact
-                extraActions={extraActionsByIndex?.[m.index]}
-              />
-            </GlobalFilterDecoration>
+            <ComponentRenderer
+              metadata={m}
+              filters={filters}
+              onFilterChange={onFilterChange}
+              compact
+              extraActions={extraActionsByIndex?.[m.index]}
+            />
           </React.Fragment>
         ))}
       </Stack>
