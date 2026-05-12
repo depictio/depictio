@@ -266,6 +266,36 @@ class ComplexHeatmapConfig(_BaseVizConfig):
     colorscale: str | None = Field(default=None, description="Plotly colorscale name override")
 
 
+class UpsetPlotConfig(_BaseVizConfig):
+    """UpSet plot for set-intersection visualisation.
+
+    Wraps the in-tree ``packages/plotly-upset`` library. The Celery worker
+    calls ``UpSetPlot(df, set_columns=..., ...).to_plotly()`` and the React
+    renderer hands the resulting Plotly figure dict to react-plotly.js.
+    Input DC: a binary table where each row is an element and each set_col
+    is a 0/1 membership indicator.
+    """
+
+    viz_kind: Literal["upset_plot"] = "upset_plot"
+
+    matrix_wf_id: str = Field(..., description="Workflow id of the membership DC")
+    matrix_dc_id: str = Field(..., description="DC id — binary membership table")
+    set_columns: list[str] | None = Field(
+        default=None,
+        description="Explicit list of set columns. None → auto-detect binary columns.",
+    )
+    sort_by: Literal["cardinality", "degree", "degree-cardinality", "input"] = Field(
+        default="cardinality"
+    )
+    sort_order: Literal["descending", "ascending"] = Field(default="descending")
+    min_size: int = Field(default=1, ge=0, description="Hide intersections smaller than this")
+    max_degree: int | None = Field(
+        default=None, description="Hide intersections involving more than N sets"
+    )
+    show_set_sizes: bool = Field(default=True, description="Show horizontal set-size bar chart")
+    color_intersections_by: Literal["none", "set", "degree"] = Field(default="none")
+
+
 class PhylogeneticConfig(_BaseVizConfig):
     """Phylogenetic tree (Microreact-style) — Newick tree + tip metadata.
 
@@ -328,6 +358,7 @@ VizConfig = Annotated[
     | ANCOMBCDifferentialsConfig
     | DaBarplotConfig
     | EnrichmentConfig
-    | ComplexHeatmapConfig,
+    | ComplexHeatmapConfig
+    | UpsetPlotConfig,
     Field(discriminator="viz_kind"),
 ]
