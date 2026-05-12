@@ -285,6 +285,18 @@ async def create_dashboard_from_json(
             update_fields["is_public"] = True
             needs_update = True
 
+        # Re-sync cross-tab global_filters & stories from the seed so existing
+        # deployments pick up new demo content without requiring a MongoDB wipe.
+        # We compare on the JSON-normalized form so dict/ObjectId equivalence
+        # doesn't trigger spurious updates.
+        for fld in ("global_filters", "stories"):
+            seed_val = dashboard_data.get(fld, [])
+            existing_val = _check.get(fld, [])
+            if seed_val != existing_val:
+                logger.info(f"Syncing '{fld}' from seed ({len(seed_val)} entries)")
+                update_fields[fld] = seed_val
+                needs_update = True
+
         # Only force static DC ID if specified (for single-DC dashboards like Iris)
         if static_dc_id:
             if "stored_metadata" in _check:
