@@ -198,25 +198,64 @@ const PhylogeneticRenderer: React.FC<Props> = ({ metadata, filters, refreshTick 
     return new Set(descendants(root).map((n) => n.id));
   }, [tree, highlightedRootId]);
 
+  // ---- Filter-derived "tips in scope" set --------------------------------
+  // Sidebar / global filters narrow the metadata DC; any leaf whose taxon
+  // isn't in the filtered metadata gets dimmed (smaller marker, ghost edge).
+  // No filters bound → everything is "in scope" so the tree renders normally.
+  const tipsInScope = useMemo<Set<string> | null>(() => {
+    if (!meta) return null;
+    const taxonCol = config.taxon_col || 'taxon';
+    const taxa = (meta[taxonCol] || []) as unknown[];
+    // If the filtered metadata returns the FULL set there's no filter applied;
+    // a null result skips the dimming logic.
+    const inScope = new Set(taxa.map((v) => String(v ?? '')));
+    return inScope;
+  }, [meta, config.taxon_col]);
+
+  const isInScope = (taxonName: string): boolean => {
+    if (!tipsInScope) return true;
+    return tipsInScope.has(taxonName);
+  };
+
   // ---- Plotly figure ------------------------------------------------------
   const figure = useMemo(() => {
     if (!tree) return null;
     const result = computeLayout(tree, layout);
     const traces: any[] = [];
 
-    // Edges: one trace for all edges (dimmed) + one trace for highlighted-
-    // subtree edges drawn on top.
-    const baseEdgeColour = isDark ? 'rgba(220,220,220,0.55)' : 'rgba(40,40,40,0.55)';
+    // For each internal node, determine if any descendant leaf is in scope —
+    // that edge stays "solid"; otherwise the edge is rendered as ghost.
+    const subtreeInScope = new Map<number, boolean>();
+    function visit(n: PhyloNode): boolean {
+      if (n.children.length === 0) {
+        const ok = isInScope(n.name ?? '');
+        subtreeInScope.set(n.id, ok);
+        return ok;
+      }
+      let any = false;
+      for (const c of n.children) if (visit(c)) any = true;
+      subtreeInScope.set(n.id, any);
+      return any;
+    }
+    visit(tree.root);
+
+    // Edges: three traces — ghost (out-of-scope), base (in scope), highlight
+    // (selected subtree). Drawn in that z-order.
+    const baseEdgeColour = isDark ? 'rgba(220,220,220,0.65)' : 'rgba(40,40,40,0.65)';
+    const ghostEdgeColour = isDark ? 'rgba(180,180,180,0.18)' : 'rgba(60,60,60,0.15)';
     const hiEdgeColour = '#E64980';
 
+    const ghostXs: (number | null)[] = [];
+    const ghostYs: (number | null)[] = [];
     const edgeXs: (number | null)[] = [];
     const edgeYs: (number | null)[] = [];
     const hiEdgeXs: (number | null)[] = [];
     const hiEdgeYs: (number | null)[] = [];
     for (const e of result.edges) {
       const isHi = highlightedIds.has(e.to.id);
-      const tgtXs = isHi ? hiEdgeXs : edgeXs;
-      const tgtYs = isHi ? hiEdgeYs : edgeYs;
+      const isGhost = !subtreeInScope.get(e.to.id);
+      const tgtXs = isHi ? hiEdgeXs : isGhost ? ghostXs : edgeXs;
+      const tgtYs = isHi ? hiEdgeYs : isGhost ? ghostYs : edgeYs;
       for (const [x, y] of e.pts) {
         tgtXs.push(x);
         tgtYs.push(y);
@@ -225,6 +264,17 @@ const PhylogeneticRenderer: React.FC<Props> = ({ metadata, filters, refreshTick 
       tgtYs.push(null);
     }
 
+    if (ghostXs.length > 0) {
+      traces.push({
+        type: 'scattergl' as const,
+        mode: 'lines' as const,
+        x: ghostXs,
+        y: ghostYs,
+        hoverinfo: 'skip',
+        line: { color: ghostEdgeColour, width: 1 },
+        showlegend: false,
+      });
+    }
     traces.push({
       type: 'scattergl' as const,
       mode: 'lines' as const,
@@ -246,27 +296,58 @@ const PhylogeneticRenderer: React.FC<Props> = ({ metadata, filters, refreshTick 
       });
     }
 
-    // Tips — one trace per cluster category if a colour column is bound.
+    // Branch-length annotations (when toggle is on, and only for layouts
+    // where edges have well-defined midpoints in screen space).
+    const branchLengthAnnotations: any[] = [];
+    if (showBranchLengths && (layout === 'rectangular' || layout === 'diagonal' || layout === 'hierarchical')) {
+      for (const e of result.edges) {
+        const len = e.to.branchLength;
+        if (!Number.isFinite(len)) continue;
+        // Rectangular polyline: pts[0]=parent, pts[1]=elbow, pts[2]=child.
+        // Use the horizontal segment between elbow and child for label position.
+        const pts = e.pts;
+        const last = pts[pts.length - 1];
+        const prev = pts[pts.length - 2] ?? pts[0];
+        const mx = (prev[0] + last[0]) / 2;
+        const my = (prev[1] + last[1]) / 2;
+        branchLengthAnnotations.push({
+          x: mx,
+          y: my,
+          text: len.toFixed(3),
+          showarrow: false,
+          font: { size: 9, color: isDark ? '#ced4da' : '#495057' },
+          yshift: 8,
+          bgcolor: 'rgba(0,0,0,0)',
+        });
+      }
+    }
+
+    // Tips.
     const tipXs: number[] = [];
     const tipYs: number[] = [];
     const tipLabels: string[] = [];
     const tipColours: string[] = [];
     const tipSizes: number[] = [];
     const tipBorders: string[] = [];
+    const tipOpacities: number[] = [];
     const tipIds: number[] = [];
 
     const searchLc = search.trim().toLowerCase();
     for (const leaf of tree.leaves) {
+      const name = leaf.name ?? '';
+      const inScope = isInScope(name);
       tipXs.push(leaf.x!);
       tipYs.push(leaf.y!);
-      const name = leaf.name ?? '';
       tipLabels.push(name);
       tipIds.push(leaf.id);
       tipColours.push(tipColors.colorByTip.get(name) ?? PALETTE[0]);
       const isHi = highlightedIds.has(leaf.id);
       const isSearchMatch = searchLc.length > 0 && name.toLowerCase().includes(searchLc);
-      tipSizes.push(isSearchMatch ? 14 : isHi ? 11 : 9);
-      tipBorders.push(isSearchMatch ? '#FAB005' : isHi ? '#E64980' : isDark ? '#111' : '#fff');
+      tipSizes.push(isSearchMatch ? 13 : isHi ? 10 : inScope ? 8 : 5);
+      tipBorders.push(
+        isSearchMatch ? '#FAB005' : isHi ? '#E64980' : isDark ? 'rgba(255,255,255,0.6)' : 'rgba(0,0,0,0.4)',
+      );
+      tipOpacities.push(inScope ? 1 : 0.25);
     }
 
     traces.push({
@@ -282,7 +363,8 @@ const PhylogeneticRenderer: React.FC<Props> = ({ metadata, filters, refreshTick 
       marker: {
         size: tipSizes,
         color: tipColours,
-        line: { color: tipBorders, width: 1.4 },
+        line: { color: tipBorders, width: 1 },
+        opacity: tipOpacities,
       },
       showlegend: false,
     });
@@ -332,10 +414,10 @@ const PhylogeneticRenderer: React.FC<Props> = ({ metadata, filters, refreshTick 
         autosize: true,
         plot_bgcolor: 'rgba(0,0,0,0)',
         paper_bgcolor: 'rgba(0,0,0,0)',
-        annotations: [],
+        annotations: branchLengthAnnotations,
       },
     };
-  }, [tree, layout, isDark, tipColors, highlightedIds, search]);
+  }, [tree, layout, isDark, tipColors, highlightedIds, search, showBranchLengths, tipsInScope]);
 
   // ---- Controls -----------------------------------------------------------
   const colorOptions: { value: string; label: string }[] = useMemo(() => {
@@ -435,12 +517,6 @@ const PhylogeneticRenderer: React.FC<Props> = ({ metadata, filters, refreshTick 
       </Group>
     ) : null;
 
-  // ---- AG Grid "Show data" payload — flatten the metadata for the drawer.
-  const dataRows = useMemo<Record<string, unknown[]> | undefined>(() => {
-    if (!meta) return undefined;
-    return meta;
-  }, [meta]);
-
   // ---- Plotly click handler — toggle subtree highlight on click.
   const onPlotClick = (event: any) => {
     const cd = event?.points?.[0]?.customdata;
@@ -450,12 +526,11 @@ const PhylogeneticRenderer: React.FC<Props> = ({ metadata, filters, refreshTick 
 
   return (
     <AdvancedVizFrame
+      title={metadata.title || 'Phylogeny'}
       controls={controls}
       loading={loading}
       error={error}
       emptyMessage={tree && tree.leaves.length === 0 ? 'Empty tree' : undefined}
-      dataRows={dataRows}
-      dataColumns={metaCols}
     >
       <div style={{ display: 'flex', flexDirection: 'column', width: '100%', height: '100%' }}>
         {legend}

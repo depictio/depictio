@@ -35,7 +35,7 @@ interface Props {
 const EmbeddingRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => {
   const { colorScheme } = useMantineColorScheme();
   const config = (metadata.config || {}) as EmbeddingConfig;
-  const [pointSize, setPointSize] = useState<number>(config.point_size ?? 10);
+  const [pointSize, setPointSize] = useState<number>(config.point_size ?? 7);
   // Default to the discrete cluster column (clearer cluster separation),
   // falling back to the continuous color column. Either can be toggled in
   // the controls — picking the cluster column triggers a categorical legend
@@ -113,26 +113,29 @@ const EmbeddingRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) 
       });
     }
 
-    // Paper-figure-friendly marker style.
-    const markerOutline = isDark ? 'rgba(20,20,20,0.85)' : 'rgba(255,255,255,0.95)';
+    // scanpy / ggplot2 publication style: NO marker outline, smaller markers,
+    // slightly translucent so overlapping points hint at density.
     const baseMarker = {
       size: pointSize,
-      opacity: 0.95,
-      line: { color: markerOutline, width: 1.2 },
+      opacity: 0.85,
+      line: { width: 0 },
     };
 
     if (isCategorical && colorValues) {
       // Categorical: one trace per cluster so plotly renders a clean legend
-      // and discrete colours instead of one rainbow blob.
+      // and discrete colours instead of one rainbow blob. Palette matches
+      // matplotlib's tab10 (scanpy's default).
       const palette = [
-        '#4C72B0', // muted blue
-        '#DD8452', // muted orange
-        '#55A868', // muted green
-        '#C44E52', // muted red
-        '#8172B3', // muted purple
-        '#937860', // muted brown
-        '#DA8BC3', // muted pink
-        '#8C8C8C', // grey
+        '#1f77b4',
+        '#ff7f0e',
+        '#2ca02c',
+        '#d62728',
+        '#9467bd',
+        '#8c564b',
+        '#e377c2',
+        '#7f7f7f',
+        '#bcbd22',
+        '#17becf',
       ];
       const categories = Array.from(new Set(colorValues.map((v) => String(v))));
       categories.sort();
@@ -179,32 +182,33 @@ const EmbeddingRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) 
       });
     }
 
-    // Paper-figure layout: clean white/dark background, no zero lines, light
-    // grid, square aspect (UMAP/t-SNE/PCoA have no preferred aspect; PCA
-    // technically does but a square plot reads more cleanly in a grid item).
+    // scanpy / ggplot2 `theme_minimal()` style: hide axis ticks + numbers,
+    // no grid, keep a small axis arrow-style title in the corner. Box stays
+    // visible (one thin line, no mirror) so the plot has a clear extent.
+    const axisLine = isDark ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.35)';
     const axisCommon = {
       zeroline: false,
-      showgrid: true,
-      gridcolor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)',
+      showgrid: false,
+      showticklabels: false,
+      ticks: '' as const,
       showline: true,
-      linecolor: isDark ? 'rgba(255,255,255,0.25)' : 'rgba(0,0,0,0.25)',
-      ticks: 'outside',
-      ticklen: 4,
-      mirror: true,
+      linecolor: axisLine,
+      linewidth: 1,
+      mirror: false,
     };
 
     return {
       data: traces,
       layout: {
         template: isDark ? 'plotly_dark' : 'plotly_white',
-        margin: { l: 56, r: 16, t: 16, b: 48 },
-        xaxis: { ...axisCommon, title: { text: config.dim_1_col } },
+        margin: { l: 40, r: 12, t: 12, b: 40 },
+        xaxis: {
+          ...axisCommon,
+          title: { text: config.dim_1_col, standoff: 6, font: { size: 12 } },
+        },
         yaxis: {
           ...axisCommon,
-          title: { text: config.dim_2_col },
-          // Lock aspect ratio to 1:1 so cluster shapes look identical
-          // regardless of the underlying method (PCA can have very different
-          // scales between dims otherwise).
+          title: { text: config.dim_2_col, standoff: 6, font: { size: 12 } },
           scaleanchor: 'x',
           scaleratio: 1,
         },
@@ -217,6 +221,8 @@ const EmbeddingRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) 
               bgcolor: 'rgba(0,0,0,0)',
               borderwidth: 0,
               font: { size: 11 },
+              itemsizing: 'constant',
+              tracegroupgap: 4,
             }
           : undefined,
         autosize: true,
@@ -268,12 +274,11 @@ const EmbeddingRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) 
 
   return (
     <AdvancedVizFrame
+      title={metadata.title || 'Embedding'}
       controls={controls}
       loading={loading}
       error={error}
       emptyMessage={rows && Object.values(rows)[0]?.length === 0 ? 'No data' : undefined}
-      dataRows={rows ?? undefined}
-      dataColumns={requiredCols}
     >
       {figure ? (
         <Plot
