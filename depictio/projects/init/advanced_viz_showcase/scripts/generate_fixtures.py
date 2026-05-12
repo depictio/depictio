@@ -146,13 +146,22 @@ feature_matrix_np = np.stack(feature_rows)  # (90, N_FEATURES)
 # the live Celery clustering uses (the dashboard's clustering tabs can
 # point at this DC + a method, and the API recomputes PCA/UMAP/t-SNE/PCoA
 # on demand via depictio/api/v1/celery_tasks.compute_embedding).
+#
+# Extra columns (cluster, color) ride along so the Embedding renderer's
+# "Colour by" dropdown has something to pick in live mode — the task's
+# `extra_cols` payload field threads them through unchanged. Numeric
+# feature columns are auto-detected; string columns like `cluster` are
+# skipped by the dim-reduction helpers.
 feature_tsv_rows = []
 for i, sid in enumerate(sample_ids):
-    row = [sid] + [round(float(feature_matrix_np[i, j]), 4) for j in range(N_FEATURES)]
+    row = (
+        [sid, cluster_labels[i], round(5.0 + 0.6 * float(feature_matrix_np[i, 0]), 3)]
+        + [round(float(feature_matrix_np[i, j]), 4) for j in range(N_FEATURES)]
+    )
     feature_tsv_rows.append(row)
 write_tsv(
     OUT / "embedding_features.tsv",
-    ["sample_id"] + [f"feat_{j}" for j in range(N_FEATURES)],
+    ["sample_id", "cluster", "color"] + [f"feat_{j}" for j in range(N_FEATURES)],
     feature_tsv_rows,
 )
 
