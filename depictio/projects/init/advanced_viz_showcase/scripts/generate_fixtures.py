@@ -142,6 +142,20 @@ for cluster_idx, cluster_name in enumerate(CLUSTER_NAMES):
 
 feature_matrix_np = np.stack(feature_rows)  # (90, N_FEATURES)
 
+# Also write the raw sample×feature matrix as a TSV — this is the input
+# the live Celery clustering uses (the dashboard's clustering tabs can
+# point at this DC + a method, and the API recomputes PCA/UMAP/t-SNE/PCoA
+# on demand via depictio/api/v1/celery_tasks.compute_embedding).
+feature_tsv_rows = []
+for i, sid in enumerate(sample_ids):
+    row = [sid] + [round(float(feature_matrix_np[i, j]), 4) for j in range(N_FEATURES)]
+    feature_tsv_rows.append(row)
+write_tsv(
+    OUT / "embedding_features.tsv",
+    ["sample_id"] + [f"feat_{j}" for j in range(N_FEATURES)],
+    feature_tsv_rows,
+)
+
 # Pack as a polars wide DataFrame for the dim-reduction helpers.
 feature_df = pl.DataFrame(
     {

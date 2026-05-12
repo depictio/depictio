@@ -1,19 +1,26 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  Badge,
   Group,
   NumberInput,
   Select,
   Switch,
+  Text,
   useMantineColorScheme,
 } from '@mantine/core';
 import Plot from 'react-plotly.js';
 
 import {
+  dispatchComputeEmbedding,
   fetchAdvancedVizData,
   InteractiveFilter,
+  pollComputeEmbedding,
   StoredMetadata,
+  type ComputeEmbeddingResult,
 } from '../../api';
 import AdvancedVizFrame from './AdvancedVizFrame';
+
+type ComputeMethod = 'pca' | 'umap' | 'tsne' | 'pcoa';
 
 interface EmbeddingConfig {
   sample_id_col: string;
@@ -24,6 +31,15 @@ interface EmbeddingConfig {
   color_col?: string | null;
   point_size?: number;
   show_density?: boolean;
+  // Live-compute mode (see PhylogeneticConfig / EmbeddingConfig in
+  // depictio/models/components/advanced_viz/configs.py). When set, the
+  // renderer dispatches a Celery task instead of reading dim_*_col.
+  compute_method?: ComputeMethod | null;
+  umap_n_neighbors?: number;
+  umap_min_dist?: number;
+  tsne_perplexity?: number;
+  tsne_n_iter?: number;
+  pcoa_distance?: string;
 }
 
 interface Props {
@@ -46,6 +62,13 @@ const EmbeddingRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) 
   );
   const [showDensity, setShowDensity] = useState<boolean>(Boolean(config.show_density));
 
+  // ---- Live-compute mode state -------------------------------------------
+  const liveMode = Boolean(config.compute_method);
+  const [method, setMethod] = useState<ComputeMethod>(config.compute_method ?? 'pca');
+  const [nNeighbors, setNNeighbors] = useState<number>(config.umap_n_neighbors ?? 15);
+  const [minDist, setMinDist] = useState<number>(config.umap_min_dist ?? 0.1);
+  const [perplexity, setPerplexity] = useState<number>(config.tsne_perplexity ?? 30);
+
   const requiredCols = useMemo(() => {
     const cols = [config.sample_id_col, config.dim_1_col, config.dim_2_col].filter(Boolean) as string[];
     if (config.dim_3_col) cols.push(config.dim_3_col);
@@ -57,9 +80,20 @@ const EmbeddingRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) 
   const [rows, setRows] = useState<Record<string, unknown[]> | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  const [computeStatus, setComputeStatus] = useState<string | null>(null);
+  const [computeMs, setComputeMs] = useState<number | null>(null);
 
+  // Live-compute params object — re-fetches whenever the user nudges a slider.
+  const computeParams = useMemo(() => {
+    if (method === 'umap') return { n_neighbors: nNeighbors, min_dist: minDist };
+    if (method === 'tsne') return { perplexity, n_iter: config.tsne_n_iter ?? 1000 };
+    if (method === 'pcoa') return { distance: config.pcoa_distance ?? 'bray_curtis' };
+    return {};
+  }, [method, nNeighbors, minDist, perplexity, config.tsne_n_iter, config.pcoa_distance]);
+
+  // Two fetch paths: precomputed (existing) or live-compute (new).
   useEffect(() => {
-    if (!metadata.wf_id || !metadata.dc_id || requiredCols.length < 3) {
+    if (!metadata.wf_id || !metadata.dc_id) {
       setError('Embedding: missing data binding');
       setLoading(false);
       return;
@@ -67,20 +101,124 @@ const EmbeddingRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) 
     let cancelled = false;
     setLoading(true);
     setError(null);
-    fetchAdvancedVizData(metadata.wf_id, metadata.dc_id, requiredCols, filters)
-      .then((res) => {
-        if (!cancelled) setRows(res.rows);
+    setComputeStatus(null);
+    setComputeMs(null);
+
+    if (!liveMode) {
+      // ---- Precomputed mode: read dim_1_col/dim_2_col directly ---------
+      fetchAdvancedVizData(metadata.wf_id, metadata.dc_id, requiredCols, filters)
+        .then((res) => {
+          if (!cancelled) setRows(res.rows);
+        })
+        .catch((err: unknown) => {
+          if (!cancelled) setError(err instanceof Error ? err.message : String(err));
+        })
+        .finally(() => {
+          if (!cancelled) setLoading(false);
+        });
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    // ---- Live-compute mode: dispatch + poll Celery ---------------------
+    setComputeStatus(`Computing ${method.toUpperCase()}…`);
+    // Pass-through columns (cluster + colour) so the renderer can overlay
+    // categorical/quantitative annotation on the live result.
+    const extraCols: string[] = [];
+    if (config.cluster_col) extraCols.push(config.cluster_col);
+    if (config.color_col && !extraCols.includes(config.color_col)) {
+      extraCols.push(config.color_col);
+    }
+    const payload = {
+      wf_id: metadata.wf_id,
+      dc_id: metadata.dc_id,
+      feature_id_col: config.sample_id_col,
+      method,
+      params: computeParams,
+      filter_metadata: filters,
+      extra_cols: extraCols,
+    };
+
+    let pollTimer: ReturnType<typeof setTimeout> | undefined;
+
+    const acceptResult = (result: ComputeEmbeddingResult) => {
+      if (cancelled) return;
+      // Reshape the live result into the same column-oriented shape the
+      // figure-builder expects below (so we don't need a second code path).
+      const r: Record<string, unknown[]> = {
+        [config.sample_id_col]: result.sample_ids,
+        [config.dim_1_col || 'dim_1']: result.dim_1,
+        [config.dim_2_col || 'dim_2']: result.dim_2,
+      };
+      if (result.extras) {
+        for (const [col, vals] of Object.entries(result.extras)) r[col] = vals;
+      }
+      setRows(r);
+      setComputeMs(result.compute_ms ?? null);
+      setComputeStatus(null);
+      setLoading(false);
+    };
+
+    dispatchComputeEmbedding(payload)
+      .then((job) => {
+        if (cancelled) return;
+        if (job.status === 'done' && job.result) {
+          acceptResult(job.result);
+          return;
+        }
+        if (job.status === 'failed') {
+          setError(job.error || 'Compute task failed');
+          setLoading(false);
+          return;
+        }
+        // Pending — start polling.
+        const tick = async () => {
+          if (cancelled) return;
+          try {
+            const status = await pollComputeEmbedding(job.job_id);
+            if (cancelled) return;
+            if (status.status === 'done' && status.result) {
+              acceptResult(status.result);
+            } else if (status.status === 'failed') {
+              setError(status.error || 'Compute task failed');
+              setLoading(false);
+            } else {
+              pollTimer = setTimeout(tick, 1500);
+            }
+          } catch (err) {
+            if (!cancelled) {
+              setError(err instanceof Error ? err.message : String(err));
+              setLoading(false);
+            }
+          }
+        };
+        pollTimer = setTimeout(tick, 800);
       })
       .catch((err: unknown) => {
-        if (!cancelled) setError(err instanceof Error ? err.message : String(err));
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : String(err));
+          setLoading(false);
+        }
       });
+
     return () => {
       cancelled = true;
+      if (pollTimer) clearTimeout(pollTimer);
     };
-  }, [metadata.wf_id, metadata.dc_id, JSON.stringify(requiredCols), JSON.stringify(filters), refreshTick]);
+  }, [
+    liveMode,
+    metadata.wf_id,
+    metadata.dc_id,
+    JSON.stringify(requiredCols),
+    JSON.stringify(filters),
+    refreshTick,
+    method,
+    JSON.stringify(computeParams),
+    config.sample_id_col,
+    config.dim_1_col,
+    config.dim_2_col,
+  ]);
 
   const figure = useMemo(() => {
     if (!rows) return null;
@@ -242,7 +380,57 @@ const EmbeddingRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) 
   }, [config]);
 
   const controls = (
-    <Group gap="xs" wrap="wrap">
+    <Group gap="xs" wrap="wrap" align="flex-end">
+      {liveMode ? (
+        <Select
+          size="xs"
+          label="Method"
+          value={method}
+          onChange={(v) => v && setMethod(v as ComputeMethod)}
+          data={[
+            { value: 'pca', label: 'PCA' },
+            { value: 'umap', label: 'UMAP' },
+            { value: 'tsne', label: 't-SNE' },
+            { value: 'pcoa', label: 'PCoA' },
+          ]}
+          w={100}
+        />
+      ) : null}
+      {liveMode && method === 'umap' ? (
+        <>
+          <NumberInput
+            size="xs"
+            label="n_neighbors"
+            value={nNeighbors}
+            onChange={(v) => setNNeighbors(Math.max(2, Math.min(100, Number(v) || 15)))}
+            min={2}
+            max={100}
+            w={110}
+          />
+          <NumberInput
+            size="xs"
+            label="min_dist"
+            value={minDist}
+            onChange={(v) => setMinDist(Math.max(0, Math.min(1, Number(v) || 0.1)))}
+            min={0}
+            max={1}
+            step={0.05}
+            decimalScale={2}
+            w={100}
+          />
+        </>
+      ) : null}
+      {liveMode && method === 'tsne' ? (
+        <NumberInput
+          size="xs"
+          label="perplexity"
+          value={perplexity}
+          onChange={(v) => setPerplexity(Math.max(2, Math.min(100, Number(v) || 30)))}
+          min={2}
+          max={100}
+          w={110}
+        />
+      ) : null}
       <NumberInput
         size="xs"
         label="Point size"
@@ -269,6 +457,16 @@ const EmbeddingRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) 
         onChange={(e) => setShowDensity(e.currentTarget.checked)}
         label="Density"
       />
+      {liveMode && computeStatus ? (
+        <Badge size="sm" color="grape" variant="light">
+          {computeStatus}
+        </Badge>
+      ) : null}
+      {liveMode && computeMs != null && computeStatus == null ? (
+        <Text size="xs" c="dimmed">
+          {method.toUpperCase()} computed in {computeMs} ms
+        </Text>
+      ) : null}
     </Group>
   );
 

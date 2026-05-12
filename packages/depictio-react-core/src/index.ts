@@ -169,6 +169,8 @@ export {
   fetchAdvancedVizData,
   fetchPolarsSchema,
   fetchPhylogenyNewick,
+  dispatchComputeEmbedding,
+  pollComputeEmbedding,
 } from './api';
 export type { TableMutationResult } from './api';
 // Selection-as-filter helpers (Plotly/AG Grid → InteractiveFilter)

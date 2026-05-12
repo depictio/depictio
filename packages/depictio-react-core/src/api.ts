@@ -530,6 +530,66 @@ export async function fetchAdvancedVizData(
   return res.json();
 }
 
+export interface ComputeEmbeddingPayload {
+  wf_id: string;
+  dc_id: string;
+  feature_id_col: string;
+  method: 'pca' | 'umap' | 'tsne' | 'pcoa';
+  params: Record<string, number | string | boolean>;
+  filter_metadata: InteractiveFilter[];
+  /** Optional pass-through columns from the feature DC (e.g. cluster, group).
+   *  The Celery worker projects these onto the result so the renderer can
+   *  colour points by metadata without an extra round-trip. */
+  extra_cols?: string[];
+}
+
+export interface ComputeEmbeddingResult {
+  sample_ids: string[];
+  dim_1: number[];
+  dim_2: number[];
+  /** Per-column arrays aligned with sample_ids, populated when extra_cols
+   *  was supplied in the payload. */
+  extras?: Record<string, unknown[]>;
+  method: string;
+  params: Record<string, unknown>;
+  row_count: number;
+  load_ms?: number;
+  compute_ms?: number;
+}
+
+export interface ComputeEmbeddingJob {
+  job_id: string;
+  status: 'pending' | 'done' | 'failed';
+  result?: ComputeEmbeddingResult | null;
+  error?: string | null;
+  from_cache?: boolean;
+}
+
+/** Dispatch a live dim-reduction Celery task. Returns a job_id the caller
+ *  polls via pollComputeEmbedding(). Cache hits return status='done'
+ *  immediately with the result inline. */
+export async function dispatchComputeEmbedding(
+  payload: ComputeEmbeddingPayload,
+): Promise<ComputeEmbeddingJob> {
+  const res = await fetch(`${API_BASE}/advanced_viz/compute_embedding`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw new Error(`Failed to dispatch compute_embedding: ${res.status}`);
+  return res.json();
+}
+
+/** Poll a previously-dispatched embedding compute. */
+export async function pollComputeEmbedding(jobId: string): Promise<ComputeEmbeddingJob> {
+  const res = await fetch(`${API_BASE}/advanced_viz/compute_embedding/${jobId}`, {
+    headers: authHeaders(),
+  });
+  if (!res.ok) throw new Error(`Failed to poll compute_embedding: ${res.status}`);
+  return res.json();
+}
+
+
 /** Fetch the raw Newick string for a phylogeny-type DC. */
 export async function fetchPhylogenyNewick(dcId: string): Promise<string> {
   const res = await fetch(`${API_BASE}/advanced_viz/phylogeny/${dcId}/newick`, {
