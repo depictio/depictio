@@ -1,0 +1,131 @@
+{
+  "_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d11" },
+  "description": null,
+  "flexible_metadata": null,
+  "hash": null,
+  "dashboard_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d11" },
+  "version": 1,
+  "tmp_children_data": [],
+  "stored_layout_data": [],
+  "stored_children_data": [],
+  "stored_metadata": [
+    {
+      "index": "vol-pathway-filter",
+      "component_type": "interactive",
+      "title": "Pathway",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "volcano_demo",
+      "wf_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d01" },
+      "dc_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d02" },
+      "dc_config": {
+        "type": null, "metatype": null,
+        "description": "Synthetic volcano fixture",
+        "data_collection_tag": "volcano_demo",
+        "dc_specific_properties": null,
+        "_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d02" }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "category",
+      "column_type": "object",
+      "value": null, "default_state": null, "filter_expr": null,
+      "title_size": "md", "custom_color": "#8E44AD", "icon_name": "mdi:tag-multiple",
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "vol-volcano",
+      "component_type": "advanced_viz",
+      "title": "Volcano (synthetic)",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "volcano_demo",
+      "wf_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d01" },
+      "dc_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d02" },
+      "dc_config": {
+        "type": null, "metatype": null,
+        "description": "Synthetic volcano fixture",
+        "data_collection_tag": "volcano_demo",
+        "dc_specific_properties": null,
+        "_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d02" }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "viz_kind": "volcano",
+      "config": {
+        "viz_kind": "volcano",
+        "feature_id_col": "feature_id",
+        "effect_size_col": "effect_size",
+        "significance_col": "significance",
+        "label_col": "label",
+        "category_col": "category",
+        "significance_is_neg_log10": false,
+        "significance_threshold": 0.05,
+        "effect_threshold": 1.0,
+        "top_n_labels": 15
+      },
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "vol-table",
+      "component_type": "table",
+      "title": "Underlying data",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "volcano_demo",
+      "wf_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d01" },
+      "dc_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d02" },
+      "dc_config": {
+        "type": null, "metatype": null,
+        "description": "Synthetic volcano fixture",
+        "data_collection_tag": "volcano_demo",
+        "dc_specific_properties": null,
+        "_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d02" }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "columns": ["feature_id","category","effect_size","significance"],
+      "page_size": 10, "sortable": true, "filterable": true,
+      "row_selection_enabled": false, "row_selection_column": null,
+      "wf_tag": "python/advanced_viz_demo"
+    }
+  ],
+  "stored_edit_dashboard_mode_button": [],
+  "left_panel_layout_data": [
+    { "i": "box-vol-pathway-filter", "x": 0, "y": 0, "w": 1, "h": 4, "static": false }
+  ],
+  "right_panel_layout_data": [
+    { "i": "box-vol-volcano", "x": 0, "y": 0, "w": 8, "h": 8, "static": false, "resizeHandles": ["se","s","e","sw","w"] },
+    { "i": "box-vol-table",   "x": 0, "y": 8, "w": 8, "h": 6, "static": false, "resizeHandles": ["se","s","e","sw","w"] }
+  ],
+  "buttons_data": { "unified_edit_mode": true, "add_components_button": { "count": 0 } },
+  "stored_add_button": { "count": 0 },
+  "title": "Volcano",
+  "subtitle": "Differential analysis with threshold sliders, top-N labels and search",
+  "icon": "mdi:chart-scatter-plot",
+  "icon_color": "red",
+  "icon_variant": "filled",
+  "workflow_system": "python",
+  "notes_content": "",
+  "permissions": {
+    "owners": [
+      {
+        "_id": { "$oid": "67658ba033c8b59ad489d7c7" },
+        "description": null, "flexible_metadata": null, "hash": null,
+        "email": "admin@example.com", "is_admin": true,
+        "is_anonymous": false, "is_temporary": false, "expiration_time": null
+      }
+    ], "editors": [], "viewers": []
+  },
+  "is_public": true,
+  "last_saved_ts": "2026-05-12 00:00:00",
+  "project_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d00" },
+  "is_main_tab": false,
+  "parent_dashboard_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d00" },
+  "tab_order": 1,
+  "main_tab_name": null,
+  "tab_icon": "mdi:chart-scatter-plot",
+  "tab_icon_color": "red",
+  "parent_dashboard_title": null
+}

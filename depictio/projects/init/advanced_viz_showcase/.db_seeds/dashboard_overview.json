@@ -1,0 +1,187 @@
+{
+  "_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d10" },
+  "description": null,
+  "flexible_metadata": null,
+  "hash": null,
+  "dashboard_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d10" },
+  "version": 1,
+  "tmp_children_data": [],
+  "stored_layout_data": [],
+  "stored_children_data": [],
+  "stored_metadata": [
+    {
+      "index": "ov-volcano",
+      "component_type": "advanced_viz",
+      "title": "Volcano",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "volcano_demo",
+      "wf_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d01" },
+      "dc_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d02" },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Synthetic volcano fixture",
+        "data_collection_tag": "volcano_demo",
+        "dc_specific_properties": null,
+        "_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d02" }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "viz_kind": "volcano",
+      "config": {
+        "viz_kind": "volcano",
+        "feature_id_col": "feature_id",
+        "effect_size_col": "effect_size",
+        "significance_col": "significance",
+        "label_col": "label",
+        "category_col": "category",
+        "significance_is_neg_log10": false,
+        "significance_threshold": 0.05,
+        "effect_threshold": 1.0,
+        "top_n_labels": 12
+      },
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "ov-embedding",
+      "component_type": "advanced_viz",
+      "title": "Embedding",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "embedding_demo",
+      "wf_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d01" },
+      "dc_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d03" },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Synthetic embedding fixture",
+        "data_collection_tag": "embedding_demo",
+        "dc_specific_properties": null,
+        "_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d03" }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "viz_kind": "embedding",
+      "config": {
+        "viz_kind": "embedding",
+        "sample_id_col": "sample_id",
+        "dim_1_col": "dim_1",
+        "dim_2_col": "dim_2",
+        "cluster_col": "cluster",
+        "color_col": "color",
+        "point_size": 8,
+        "show_density": false
+      },
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "ov-manhattan",
+      "component_type": "advanced_viz",
+      "title": "Manhattan",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "manhattan_demo",
+      "wf_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d01" },
+      "dc_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d04" },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Synthetic Manhattan fixture",
+        "data_collection_tag": "manhattan_demo",
+        "dc_specific_properties": null,
+        "_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d04" }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "viz_kind": "manhattan",
+      "config": {
+        "viz_kind": "manhattan",
+        "chr_col": "chr",
+        "pos_col": "pos",
+        "score_col": "score",
+        "feature_col": "feature",
+        "score_kind": "-log10(padj)",
+        "score_threshold": 5.0
+      },
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "ov-stacked-taxonomy",
+      "component_type": "advanced_viz",
+      "title": "Stacked taxonomy",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "stacked_taxonomy_demo",
+      "wf_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d01" },
+      "dc_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d05" },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Synthetic stacked taxonomy fixture",
+        "data_collection_tag": "stacked_taxonomy_demo",
+        "dc_specific_properties": null,
+        "_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d05" }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "viz_kind": "stacked_taxonomy",
+      "config": {
+        "viz_kind": "stacked_taxonomy",
+        "sample_id_col": "sample_id",
+        "taxon_col": "taxon",
+        "rank_col": "rank",
+        "abundance_col": "abundance",
+        "default_rank": "Phylum",
+        "top_n": 12,
+        "sort_by": "abundance",
+        "normalise_to_one": true
+      },
+      "wf_tag": "python/advanced_viz_demo"
+    }
+  ],
+  "stored_edit_dashboard_mode_button": [],
+  "left_panel_layout_data": [],
+  "right_panel_layout_data": [
+    { "i": "box-ov-volcano",          "x": 0, "y": 0, "w": 4, "h": 7, "static": false, "resizeHandles": ["se","s","e","sw","w"] },
+    { "i": "box-ov-embedding",        "x": 4, "y": 0, "w": 4, "h": 7, "static": false, "resizeHandles": ["se","s","e","sw","w"] },
+    { "i": "box-ov-manhattan",        "x": 0, "y": 7, "w": 8, "h": 6, "static": false, "resizeHandles": ["se","s","e","sw","w"] },
+    { "i": "box-ov-stacked-taxonomy", "x": 0, "y": 13,"w": 8, "h": 7, "static": false, "resizeHandles": ["se","s","e","sw","w"] }
+  ],
+  "buttons_data": { "unified_edit_mode": true, "add_components_button": { "count": 0 } },
+  "stored_add_button": { "count": 0 },
+  "title": "Overview",
+  "subtitle": "All four advanced visualisations on one canvas",
+  "icon": "mdi:view-dashboard",
+  "icon_color": "violet",
+  "icon_variant": "filled",
+  "workflow_system": "python",
+  "notes_content": "",
+  "permissions": {
+    "owners": [
+      {
+        "_id": { "$oid": "67658ba033c8b59ad489d7c7" },
+        "description": null,
+        "flexible_metadata": null,
+        "hash": null,
+        "email": "admin@example.com",
+        "is_admin": true,
+        "is_anonymous": false,
+        "is_temporary": false,
+        "expiration_time": null
+      }
+    ],
+    "editors": [],
+    "viewers": []
+  },
+  "is_public": true,
+  "last_saved_ts": "2026-05-12 00:00:00",
+  "project_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d00" },
+  "is_main_tab": true,
+  "parent_dashboard_id": null,
+  "tab_order": 0,
+  "main_tab_name": "Overview",
+  "tab_icon": "mdi:view-dashboard",
+  "tab_icon_color": "violet",
+  "parent_dashboard_title": null
+}
