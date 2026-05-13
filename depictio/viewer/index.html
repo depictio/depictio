@@ -2,6 +2,11 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <!-- href is relative to Vite's `base` ('/dashboard-beta/'). Don't hardcode
+         the prefix here — Vite already prepends base for `/`-prefixed URLs and
+         doing it twice yields a 404 in `vite dev` (the user sees a missing
+         favicon and "did you mean /dashboard-beta/dashboard-beta/favicon.svg?"
+         in the network tab). -->
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="color-scheme" content="light dark" />

@@ -213,8 +213,10 @@ services:
     command:
       - sh
       - -c
+      # The dev-viewer Dockerfile stage already runs `corepack prepare pnpm@10 --activate`,
+      # so do NOT re-prepare here. `pnpm@latest` at runtime pulls pnpm 11, which requires
+      # `node:sqlite` and crashes on Node 20 with ERR_UNKNOWN_BUILTIN_MODULE.
       - |
-        corepack prepare pnpm@10 --activate &&
         pnpm install --frozen-lockfile --prefer-offline --child-concurrency=2 --network-concurrency=4 &&
         pnpm --filter depictio-viewer dev --host 0.0.0.0 --port 5173
     user: "${UID:-1000}:${GID:-1000}"
