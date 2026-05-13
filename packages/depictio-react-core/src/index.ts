@@ -138,6 +138,8 @@ export {
   setUserAdmin,
   listAllProjects,
   listAllDashboards,
+  listExampleProjects,
+  cleanExampleProjects,
   // Profile + CLI tokens
   fetchCurrentUserFull,
   editPassword,
@@ -236,6 +238,7 @@ export type {
   AdminUser,
   AdminProject,
   AdminDashboard,
+  ExampleProject,
   // Profile + CLI token types
   ProfileUser,
   CliToken,

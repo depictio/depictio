@@ -28,6 +28,76 @@ from depictio.models.models.projects import Project, ProjectPermissionRequest, P
 
 projects_endpoint_router = APIRouter()
 
+# Seed projects shipped via ``db_init`` and the ``depictio/projects/`` tree.
+# Source of truth: each project's ``project.yaml`` ``id:`` field. Kept here so
+# the ``/admin/clean_examples`` endpoint can wipe exactly these without
+# string-matching project names.
+SEED_PROJECT_IDS: tuple[str, ...] = (
+    "646b0f3c1e4a2d7f8e5b8c9a",  # Iris — depictio/projects/init/iris/project.yaml
+    "646b0f3c1e4a2d7f8e5b8c9d",  # Penguins — depictio/projects/init/penguins/project.yaml
+    "646b0f3c1e4a2d7f8e5b8ca2",  # nf-core/ampliseq 2.14.0 — depictio/projects/nf-core/ampliseq/2.14.0/project.yaml
+)
+
+
+def _cascade_delete_project(project_id: PyObjectId, project_name: str) -> None:
+    """Delete a project's S3 objects, dependent Mongo documents, and the project
+    document itself. Permission checks must already have been done by the caller —
+    this helper is purely the cascade body extracted from ``delete_project``.
+    """
+    dc_agg = list(
+        projects_collection.aggregate(
+            [
+                {"$match": {"_id": ObjectId(project_id)}},
+                {"$unwind": "$workflows"},
+                {"$unwind": "$workflows.data_collections"},
+                {"$project": {"_id": 0, "dc_id": "$workflows.data_collections._id"}},
+            ]
+        )
+    )
+    dc_ids: list[ObjectId] = [r["dc_id"] for r in dc_agg if isinstance(r.get("dc_id"), ObjectId)]
+
+    # S3 cleanup is best-effort — Mongo cascade still runs even if MinIO is down.
+    if dc_ids:
+        try:
+            s3_paths = _collect_s3_locations_for_project(dc_ids, settings.minio.bucket)
+            if s3_paths:
+                s3_client = boto3.client(
+                    "s3",
+                    endpoint_url=settings.minio.endpoint_url,
+                    aws_access_key_id=settings.minio.root_user,
+                    aws_secret_access_key=settings.minio.root_password,
+                    region_name="us-east-1",
+                    verify=False,
+                )
+                for prefix in s3_paths:
+                    paginator = s3_client.get_paginator("list_objects_v2")
+                    for page in paginator.paginate(
+                        Bucket=settings.minio.bucket, Prefix=prefix.strip("/")
+                    ):
+                        keys = [{"Key": obj["Key"]} for obj in page.get("Contents", [])]
+                        if keys:
+                            s3_client.delete_objects(
+                                Bucket=settings.minio.bucket, Delete={"Objects": keys}
+                            )
+                logger.info(f"Deleted S3 objects for project {project_id}: {s3_paths}")
+        except Exception as exc:
+            logger.warning(f"S3 cleanup failed for project {project_id} (non-fatal): {exc}")
+
+    # data_collection_id may be stored as ObjectId or plain string depending on
+    # the code path that wrote it — query both forms.
+    if dc_ids:
+        dc_query: dict = {"$in": dc_ids + [str(dc_id) for dc_id in dc_ids]}
+        files_collection.delete_many({"data_collection_id": dc_query})
+        deltatables_collection.delete_many({"data_collection_id": dc_query})
+        runs_collection.delete_many({"data_collection_id": dc_query})
+        multiqc_collection.delete_many({"data_collection_id": dc_query})
+        jbrowse_collection.delete_many({"data_collection_id": dc_query})
+        data_collections_collection.delete_many({"_id": {"$in": dc_ids}})
+
+    dashboards_collection.delete_many({"project_id": ObjectId(project_id)})
+    projects_collection.delete_one({"_id": ObjectId(project_id)})
+    logger.info(f"Project '{project_name}' ({project_id}) deleted with cascade.")
+
 
 # Endpoints
 @projects_endpoint_router.get("/get/all", response_model=list[Project])
@@ -235,14 +305,9 @@ async def update_project(project: Project, current_user=Depends(get_current_user
 
 @projects_endpoint_router.delete("/delete")
 async def delete_project(project_id: PyObjectId, current_user=Depends(get_current_user)):
-    # Find the project using simple query (no aggregation pipeline)
-    # We don't need delta_location enrichment for deletion
     project_dict = _async_get_project_from_id(project_id, current_user, projects_collection)
-
-    # Convert ObjectIds to strings
     project = ProjectResponse.from_mongo(project_dict)
 
-    # Ensure the current_user is an owner
     if (
         current_user.id not in [owner.id for owner in project.permissions.owners]
         and not current_user.is_admin
@@ -252,67 +317,51 @@ async def delete_project(project_id: PyObjectId, current_user=Depends(get_curren
             detail="User does not have permission to delete this project.",
         )
 
-    # Collect dc_ids and workflow_ids via aggregation (same pattern as migrate endpoint)
-    dc_agg = list(
-        projects_collection.aggregate(
-            [
-                {"$match": {"_id": ObjectId(project_id)}},
-                {"$unwind": "$workflows"},
-                {"$unwind": "$workflows.data_collections"},
-                {"$project": {"_id": 0, "dc_id": "$workflows.data_collections._id"}},
-            ]
-        )
-    )
-    dc_ids: list[ObjectId] = [r["dc_id"] for r in dc_agg if isinstance(r.get("dc_id"), ObjectId)]
-
-    # Delete S3 objects (best-effort: log errors but don't fail the request)
-    if dc_ids:
-        try:
-            s3_paths = _collect_s3_locations_for_project(dc_ids, settings.minio.bucket)
-            if s3_paths:
-                s3_client = boto3.client(
-                    "s3",
-                    endpoint_url=settings.minio.endpoint_url,
-                    aws_access_key_id=settings.minio.root_user,
-                    aws_secret_access_key=settings.minio.root_password,
-                    region_name="us-east-1",
-                    verify=False,
-                )
-                for prefix in s3_paths:
-                    paginator = s3_client.get_paginator("list_objects_v2")
-                    for page in paginator.paginate(
-                        Bucket=settings.minio.bucket, Prefix=prefix.strip("/")
-                    ):
-                        keys = [{"Key": obj["Key"]} for obj in page.get("Contents", [])]
-                        if keys:
-                            s3_client.delete_objects(
-                                Bucket=settings.minio.bucket, Delete={"Objects": keys}
-                            )
-                logger.info(f"Deleted S3 objects for project {project_id}: {s3_paths}")
-        except Exception as exc:
-            logger.warning(f"S3 cleanup failed for project {project_id} (non-fatal): {exc}")
-
-    # Cascade delete dependent MongoDB documents.
-    # data_collection_id may be stored as ObjectId or plain string depending on code path,
-    # so query with both forms to ensure all documents are found.
-    if dc_ids:
-        dc_query: dict = {"$in": dc_ids + [str(dc_id) for dc_id in dc_ids]}
-        files_collection.delete_many({"data_collection_id": dc_query})
-        deltatables_collection.delete_many({"data_collection_id": dc_query})
-        runs_collection.delete_many({"data_collection_id": dc_query})
-        multiqc_collection.delete_many({"data_collection_id": dc_query})
-        jbrowse_collection.delete_many({"data_collection_id": dc_query})
-        data_collections_collection.delete_many({"_id": {"$in": dc_ids}})
-
-    dashboards_collection.delete_many({"project_id": ObjectId(project_id)})
-
-    # Delete the project document
-    projects_collection.delete_one({"_id": ObjectId(project_id)})
+    _cascade_delete_project(project_id, project.name)
 
     return {
         "success": True,
         "message": f"Project '{project.name}' with ID '{project.id}' deleted.",
     }
+
+
+@projects_endpoint_router.get("/admin/examples")
+async def list_example_projects(current_user=Depends(get_user_or_anonymous)):
+    """List seed projects that currently exist in Mongo. Admin-only.
+
+    Tolerates anonymous (single-user / public mode) so the React admin page
+    loads without a persisted token — the inline ``is_admin`` gate below still
+    blocks non-admin users.
+    """
+    if not current_user.is_admin:
+        raise HTTPException(status_code=401, detail="Current user is not an admin.")
+
+    rows = list(
+        projects_collection.find(
+            {"_id": {"$in": [ObjectId(pid) for pid in SEED_PROJECT_IDS]}},
+            {"_id": 1, "name": 1},
+        )
+    )
+    return [{"id": str(r["_id"]), "name": r.get("name", "")} for r in rows]
+
+
+@projects_endpoint_router.post("/admin/clean_examples")
+async def clean_example_projects(current_user=Depends(get_user_or_anonymous)):
+    """Delete every seed project listed in ``SEED_PROJECT_IDS`` that still
+    exists, cascading dashboards / workflows / data collections / S3 objects
+    via ``_cascade_delete_project``. Admin-only.
+    """
+    if not current_user.is_admin:
+        raise HTTPException(status_code=401, detail="Current user is not an admin.")
+
+    deleted: list[dict] = []
+    for pid in SEED_PROJECT_IDS:
+        row = projects_collection.find_one({"_id": ObjectId(pid)}, {"name": 1})
+        if not row:
+            continue
+        _cascade_delete_project(PyObjectId(pid), row.get("name", ""))
+        deleted.append({"id": pid, "name": row.get("name", "")})
+    return {"deleted": deleted}
 
 
 @projects_endpoint_router.post("/update_project_permissions")

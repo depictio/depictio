@@ -19,6 +19,76 @@ from depictio.models.models.multiqc_reports import MultiQCReport
 __all__ = ["build_sample_mapping"]
 
 
+def _compute_multiqc_builder_options(reports: list[dict]) -> dict:
+    """Aggregate modules / plots / datasets / s3_locations across a list of MultiQC reports.
+
+    Pure data-shaping helper. Each report dict is expected to carry ``metadata``
+    (with ``modules`` + ``plots``) and ``s3_location`` (or ``delta_table_location``).
+    Used by both the HTTP route (`get_multiqc_builder_options`) and the new
+    full-DC prewarm task in `dash/celery_app.py`.
+    """
+    modules: set[str] = set()
+    plots: dict[str, set[str]] = {}
+    datasets: dict[str, set[str]] = {}
+    s3_locations: list[str] = []
+    general_stats: list[dict[str, str]] = []
+
+    for report in reports:
+        s3_loc = report.get("s3_location") or report.get("delta_table_location")
+        if s3_loc and s3_loc not in s3_locations:
+            s3_locations.append(s3_loc)
+
+        meta = report.get("metadata") or {}
+        for module in meta.get("modules", []) or []:
+            modules.add(str(module))
+        plots_meta = meta.get("plots") or {}
+        for module, module_plots in plots_meta.items():
+            mod = str(module)
+            plots.setdefault(mod, set())
+            if isinstance(module_plots, list):
+                for entry in module_plots:
+                    if isinstance(entry, dict):
+                        for plot_name, ds_list in entry.items():
+                            plots[mod].add(str(plot_name))
+                            if isinstance(ds_list, list):
+                                datasets.setdefault(str(plot_name), set()).update(
+                                    str(d) for d in ds_list
+                                )
+                    else:
+                        plots[mod].add(str(entry))
+            elif isinstance(module_plots, dict):
+                for plot_name, ds_list in module_plots.items():
+                    plots[mod].add(str(plot_name))
+                    if isinstance(ds_list, list):
+                        datasets.setdefault(str(plot_name), set()).update(str(d) for d in ds_list)
+
+    if "general_stats" in modules:
+        general_stats.append({"module": "general_stats", "plot": "general_stats"})
+
+    return {
+        "modules": sorted(modules),
+        "plots": {k: sorted(v) for k, v in plots.items()},
+        "datasets": {k: sorted(v) for k, v in datasets.items()},
+        "s3_locations": s3_locations,
+        "general_stats": general_stats,
+    }
+
+
+def fetch_multiqc_builder_options_sync(dc_id: str) -> dict:
+    """Sync fetcher + options aggregator for the new full-DC prewarm task.
+
+    Queries ``multiqc_collection`` directly (no async/Beanie path needed) so it
+    can run from inside a Celery worker. Mirrors the HTTP route's response
+    shape via ``_compute_multiqc_builder_options``.
+    """
+    cursor = multiqc_collection.find(
+        {"data_collection_id": str(dc_id)},
+        {"s3_location": 1, "delta_table_location": 1, "metadata": 1},
+    ).sort([("_id", 1)])
+    reports = list(cursor)
+    return _compute_multiqc_builder_options(reports)
+
+
 def _invalidate_multiqc_caches_for_dc(dc_id: str) -> None:
     """Drop every cached figure + DataFrame entry for a MultiQC DC.
 
@@ -82,22 +152,45 @@ def _invalidate_multiqc_caches_for_dc(dc_id: str) -> None:
 
 
 def _invalidate_and_prewarm_for_dc(dc_id: str) -> dict:
-    """Drop the DC's caches then enqueue an async disk-persistent rebuild.
+    """Drop the DC's caches then enqueue two async rebuilds.
 
-    Called from append/replace right before returning success. Phase 2: the
-    rebuild runs in the Celery worker (``build_multiqc_prerender``) so the
-    upload modal no longer blocks 30-75s — disk persistence happens in the
-    background, and the render endpoint serves 202s + then disk reads.
+    Called from append/replace right before returning success, plus from the
+    initial-upload path. Two tasks fire:
+      - ``build_multiqc_prerender``: dashboard-bound, warms only plots that
+        already have a saved component (no-op for fresh DCs).
+      - ``prewarm_multiqc_dc_all_plots``: full-DC, warms every plot in the
+        builder_options. Powers the DC Viewer Preview Accordion.
+    Both share the same Redis lock so they can't fight; the second is a no-op
+    if the first is still running.
     """
     _invalidate_multiqc_caches_for_dc(dc_id)
+    enqueued_tasks: list[str] = []
     try:
-        from depictio.dash.celery_app import build_multiqc_prerender
+        from depictio.dash.celery_app import (
+            build_multiqc_prerender,
+            prewarm_multiqc_dc_all_plots,
+        )
 
         build_multiqc_prerender.delay(str(dc_id))
-        return {"status": "build_enqueued", "dc_id": str(dc_id)}
+        enqueued_tasks.append("build_multiqc_prerender")
+        prewarm_multiqc_dc_all_plots.delay(str(dc_id))
+        enqueued_tasks.append("prewarm_multiqc_dc_all_plots")
+        return {
+            "status": "build_enqueued",
+            "dc_id": str(dc_id),
+            "tasks": enqueued_tasks,
+        }
     except Exception as exc:
-        logger.warning(f"build_multiqc_prerender enqueue failed for dc={dc_id} (non-fatal): {exc}")
-        return {"status": "enqueue_failed", "dc_id": str(dc_id), "error": str(exc)}
+        logger.warning(
+            f"prewarm enqueue failed for dc={dc_id} (non-fatal): "
+            f"enqueued={enqueued_tasks} err={exc}"
+        )
+        return {
+            "status": "enqueue_failed" if not enqueued_tasks else "partial",
+            "dc_id": str(dc_id),
+            "tasks": enqueued_tasks,
+            "error": str(exc),
+        }
 
 
 async def check_duplicate_multiqc_report(

@@ -702,6 +702,212 @@ def build_multiqc_prerender(self, dc_id: str) -> dict:
             logger.warning(f"build_multiqc_prerender: failed to clear lock {lock_key}: {exc}")
 
 
+@celery_app.task(
+    bind=True,
+    name="prewarm_multiqc_dc_all_plots",
+    soft_time_limit=1800,
+    time_limit=2400,
+)
+def prewarm_multiqc_dc_all_plots(self, dc_id: str) -> dict:
+    """Warm every plot in a MultiQC DC, irrespective of dashboard usage.
+
+    Companion to ``build_multiqc_prerender`` for the DC Viewer Preview path
+    (depictio/viewer/src/projects/detail/MultiQCViewerPreview.tsx). That
+    component pings ``POST /multiqc/preview`` for plots the user might not
+    have bound to a dashboard yet — ``build_multiqc_prerender`` skips those
+    DCs because it only walks dashboards via ``_collect_dc_components``.
+
+    Triggered from ``_invalidate_and_prewarm_for_dc`` (create/append/replace)
+    and as a safety-net enqueue from the preview endpoint on cache miss.
+    Shares the ``multiqc:prerender_build_lock:dc={dc_id}`` lock with
+    ``build_multiqc_prerender`` so the two can't fight over the same DC.
+    """
+    import json
+    from datetime import datetime
+
+    from celery.exceptions import SoftTimeLimitExceeded
+
+    from depictio.api.cache import get_cache
+    from depictio.api.v1.configs.logging_init import logger
+    from depictio.api.v1.db import multiqc_prerender_collection
+    from depictio.api.v1.endpoints.multiqc_endpoints.utils import (
+        fetch_multiqc_builder_options_sync,
+    )
+    from depictio.api.v1.services import multiqc_prerender_store
+    from depictio.dash.modules.figure_component.multiqc_vis import (
+        MULTIQC_CACHE_TTL_SECONDS,
+        _generate_figure_cache_key,
+        create_multiqc_plot,
+    )
+
+    cache = get_cache()
+    lock_key = f"multiqc:prerender_build_lock:dc={dc_id}"
+
+    if not cache.set_nx(lock_key, "1", ttl=1800):
+        logger.info(
+            f"prewarm_multiqc_dc_all_plots {dc_id}: lock held by another "
+            "worker; skipping duplicate run"
+        )
+        return {"status": "skipped_locked", "dc_id": str(dc_id)}
+
+    warmed = 0
+    skipped = 0
+    failed = 0
+    try:
+        current_hash = _compute_s3_locations_hash(dc_id)
+        existing = multiqc_prerender_collection.find_one({"dc_id": str(dc_id)})
+        if (
+            existing
+            and existing.get("status") == "ready"
+            and existing.get("s3_locations_hash") == current_hash
+            and current_hash
+        ):
+            logger.info(
+                f"prewarm_multiqc_dc_all_plots {dc_id}: doc already ready for "
+                f"hash {current_hash[:8]}…; no-op"
+            )
+            return {
+                "status": "already_ready",
+                "dc_id": str(dc_id),
+                "figure_count": existing.get("figure_count", 0),
+            }
+
+        now = datetime.now()
+        multiqc_prerender_collection.update_one(
+            {"dc_id": str(dc_id)},
+            {
+                "$set": {
+                    "dc_id": str(dc_id),
+                    "status": "building",
+                    "s3_locations_hash": current_hash,
+                    "last_error": None,
+                    "updated_at": now,
+                },
+                "$setOnInsert": {"created_at": now, "figure_count": 0},
+            },
+            upsert=True,
+        )
+
+        opts = fetch_multiqc_builder_options_sync(dc_id)
+        if not opts["s3_locations"]:
+            multiqc_prerender_collection.update_one(
+                {"dc_id": str(dc_id)},
+                {
+                    "$set": {
+                        "status": "ready",
+                        "figure_count": 0,
+                        "updated_at": datetime.now(),
+                    }
+                },
+            )
+            logger.info(
+                f"prewarm_multiqc_dc_all_plots {dc_id}: no s3_locations resolved "
+                "(DC has no MultiQC reports yet)"
+            )
+            return {"status": "no_reports", "dc_id": str(dc_id), "warmed": 0}
+
+        for module in opts["modules"]:
+            # general_stats has its own renderer (not create_multiqc_plot)
+            # and the DC viewer preview special-cases it inline. Skip here.
+            if module == "general_stats":
+                continue
+            for plot in opts["plots"].get(module, []):
+                # Some plots don't carry a dataset — represent that as a
+                # single-element [None] iteration so the loop still runs.
+                dataset_list = opts["datasets"].get(plot) or [None]
+                for ds in dataset_list:
+                    for theme in ("light", "dark"):
+                        bare_key = _generate_figure_cache_key(
+                            opts["s3_locations"],
+                            module,
+                            plot,
+                            str(ds) if ds else None,
+                            theme,
+                            dc_id=str(dc_id),
+                        )
+                        # Skip if already persisted — makes retries cheap if
+                        # this task crashes mid-warm and gets re-enqueued.
+                        if multiqc_prerender_store.figure_path(str(dc_id), bare_key).exists():
+                            skipped += 1
+                            continue
+                        try:
+                            fig = create_multiqc_plot(
+                                s3_locations=opts["s3_locations"],
+                                module=module,
+                                plot=plot,
+                                dataset_id=str(ds) if ds else None,
+                                theme=theme,
+                                dc_id=str(dc_id),
+                            )
+                            fig_dict = json.loads(fig.to_json()) if hasattr(fig, "to_json") else fig
+                            multiqc_prerender_store.write_figure(str(dc_id), bare_key, fig_dict)
+                            try:
+                                cache.set(bare_key, fig_dict, ttl=MULTIQC_CACHE_TTL_SECONDS)
+                            except Exception as exc:
+                                logger.warning(
+                                    f"prewarm_multiqc_dc_all_plots {dc_id}: redis "
+                                    f"set failed key={bare_key}: {exc}"
+                                )
+                            warmed += 1
+                        except SoftTimeLimitExceeded:
+                            raise
+                        except Exception as exc:
+                            logger.warning(
+                                f"prewarm_multiqc_dc_all_plots {dc_id}: plot warm "
+                                f"failed module={module} plot={plot} dataset={ds} "
+                                f"theme={theme}: {exc}"
+                            )
+                            failed += 1
+
+        multiqc_prerender_collection.update_one(
+            {"dc_id": str(dc_id)},
+            {
+                "$set": {
+                    "status": "ready",
+                    "figure_count": warmed,
+                    "updated_at": datetime.now(),
+                }
+            },
+        )
+        logger.info(
+            f"prewarm_multiqc_dc_all_plots {dc_id}: warmed={warmed} "
+            f"skipped={skipped} failed={failed}"
+        )
+        return {
+            "status": "ok",
+            "dc_id": str(dc_id),
+            "warmed": warmed,
+            "skipped": skipped,
+            "failed": failed,
+        }
+    except Exception as exc:
+        logger.error(
+            f"prewarm_multiqc_dc_all_plots {dc_id}: build failed: {exc}",
+            exc_info=True,
+        )
+        try:
+            multiqc_prerender_collection.update_one(
+                {"dc_id": str(dc_id)},
+                {
+                    "$set": {
+                        "status": "failed",
+                        "last_error": str(exc)[:1000],
+                        "updated_at": datetime.now(),
+                    }
+                },
+            )
+        except Exception as doc_exc:
+            logger.warning(
+                f"prewarm_multiqc_dc_all_plots {dc_id}: failed to mark doc as failed: {doc_exc}"
+            )
+        return {"status": "failed", "dc_id": str(dc_id), "error": str(exc)}
+    finally:
+        try:
+            cache.delete(lock_key)
+        except Exception as exc:
+            logger.warning(f"prewarm_multiqc_dc_all_plots: failed to clear lock {lock_key}: {exc}")
+
+
 # NOTE: Dash apps will import celery_app when they're created in flask_dispatcher.py
 # Background callbacks are registered automatically when apps are initialized
 # No need to import apps here - that would create a circular dependency:

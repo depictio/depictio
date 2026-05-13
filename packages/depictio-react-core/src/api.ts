@@ -2227,6 +2227,31 @@ export async function listAllDashboards(): Promise<AdminDashboard[]> {
   return Array.isArray(data) ? data : [];
 }
 
+/** A seed project currently present in Mongo — minimal shape for the
+ *  Maintenance tab's status row. */
+export interface ExampleProject {
+  id: string;
+  name: string;
+}
+
+export async function listExampleProjects(): Promise<ExampleProject[]> {
+  const res = await fetch(`${API_BASE}/projects/admin/examples`, { headers: authHeaders() });
+  if (!res.ok) await throwHttpError(res, 'Failed to list example projects');
+  const data = await res.json();
+  return Array.isArray(data) ? data : [];
+}
+
+export async function cleanExampleProjects(): Promise<{ deleted: ExampleProject[] }> {
+  const res = await fetch(`${API_BASE}/projects/admin/clean_examples`, {
+    method: 'POST',
+    headers: authHeaders(),
+  });
+  if (!res.ok) await throwHttpError(res, 'Failed to clean example projects');
+  const data = await res.json();
+  const deleted = Array.isArray(data?.deleted) ? (data.deleted as ExampleProject[]) : [];
+  return { deleted };
+}
+
 // ---- Profile + CLI token management (/profile-beta, /cli-agents-beta) -----
 //
 // These wrap the FastAPI endpoints used by the React profile and CLI agents

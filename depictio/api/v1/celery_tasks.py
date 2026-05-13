@@ -241,11 +241,11 @@ def build_multiqc_preview(payload: dict) -> dict:
 
     started = time.monotonic()
 
-    # Short-circuit if the prerender pipeline has already produced this exact
-    # (dc, module, plot, dataset, theme) figure. The dashboard render endpoint
-    # does the same Redis-then-disk lookup; mirroring it here means the builder
-    # preview hits the same warm cache and never trips the 30s offload timeout
-    # for fresh DCs whose `build_multiqc_prerender` task has finished.
+    # Compute the bare cache key once for non-general_stats DC requests — used
+    # by the Redis/disk read paths AND the cold-build writeback below so the
+    # next click on the same plot hits the warm cache instead of rebuilding.
+    cache = get_cache()
+    bare_key: str | None = None
     if dc_id and module != "general_stats" and plot != "general_stats":
         bare_key = _generate_figure_cache_key(
             s3_locations,
@@ -255,7 +255,10 @@ def build_multiqc_preview(payload: dict) -> dict:
             theme,
             dc_id=str(dc_id),
         )
-        cache = get_cache()
+
+        # Short-circuit if the prerender pipeline has already produced this
+        # exact (dc, module, plot, dataset, theme) figure. The dashboard render
+        # endpoint does the same Redis-then-disk lookup.
         cached_fig = cache.get(bare_key)
         if cached_fig is not None:
             elapsed_ms = int((time.monotonic() - started) * 1000)
@@ -337,6 +340,23 @@ def build_multiqc_preview(payload: dict) -> dict:
     fig_dict = json.loads(fig.to_json()) if hasattr(fig, "to_json") else fig
     if isinstance(fig_dict, dict) and "layout" in fig_dict:
         fig_dict["layout"].setdefault("uirevision", "persistent")
+
+    # Writeback after a cold build so the next click for the same plot hits
+    # disk/Redis instead of paying 60s again. Same bare_key used by the read
+    # paths above, so the next call's cache_hit=disk lookup finds it.
+    if bare_key is not None:
+        try:
+            multiqc_prerender_store.write_figure(str(dc_id), bare_key, fig_dict)
+        except Exception as exc:
+            logger.warning(
+                f"build_multiqc_preview: disk writeback failed dc={dc_id} key={bare_key}: {exc}"
+            )
+        try:
+            cache.set(bare_key, fig_dict, ttl=MULTIQC_CACHE_TTL_SECONDS)
+        except Exception as exc:
+            logger.warning(
+                f"build_multiqc_preview: redis writeback failed dc={dc_id} key={bare_key}: {exc}"
+            )
 
     logger.info(
         f"celery_tasks.build_multiqc_preview module={module} plot={plot} "

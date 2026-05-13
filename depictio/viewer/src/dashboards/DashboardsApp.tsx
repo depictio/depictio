@@ -39,6 +39,7 @@ import DashboardsList from './DashboardsList';
 import CreateDashboardModal from './CreateDashboardModal';
 import EditDashboardModal from './EditDashboardModal';
 import DeleteDashboardModal from './DeleteDashboardModal';
+import { recordOpen as recordDashboardOpen } from './lib/dashboardRecents';
 
 /** Separate storage key from the per-dashboard sidebar (`sidebar-collapsed`)
  *  so the management page can default to OPEN regardless of the user's
@@ -195,6 +196,13 @@ const DashboardsApp: React.FC = () => {
     [refresh],
   );
 
+  /** Wrap navigation so opening a dashboard from any view records it in the
+   *  Recently opened pile. localStorage-only — see lib/dashboardRecents.ts. */
+  const handleView = useCallback((dashboard: DashboardListEntry) => {
+    recordDashboardOpen(String(dashboard.dashboard_id));
+    window.location.assign(`/dashboard-beta/${dashboard.dashboard_id}`);
+  }, []);
+
   const handleExport = useCallback(async (dashboard: DashboardListEntry) => {
     try {
       const payload = await exportDashboardJson(dashboard.dashboard_id);
@@ -221,6 +229,31 @@ const DashboardsApp: React.FC = () => {
       });
     }
   }, []);
+
+  const handleBulkExport = useCallback(
+    async (targets: DashboardListEntry[]) => {
+      // Sequential to keep download prompts in order; each call yields a
+      // separate file, matching the per-row Export JSON action.
+      for (const d of targets) {
+        // eslint-disable-next-line no-await-in-loop
+        await handleExport(d);
+      }
+    },
+    [handleExport],
+  );
+
+  const handleBulkDelete = useCallback(
+    (targets: DashboardListEntry[]) => {
+      if (targets.length === 0) return;
+      const first = targets[0];
+      // For >1 we still go through the single-row delete modal one at a time
+      // to keep the confirmation flow consistent. The user picks them off one
+      // at a time after bulk-selecting in the table.
+      // (A dedicated bulk-delete modal can come later if the workflow demands it.)
+      setDeleteTarget(first);
+    },
+    [],
+  );
 
   return (
     <AppShell
@@ -306,11 +339,15 @@ const DashboardsApp: React.FC = () => {
               dashboards={dashboards}
               projects={projects}
               currentUserEmail={currentUserEmail}
+              pinDisabled={isPublicMode || isDemoMode}
+              onView={handleView}
               onEdit={(d) => setEditTarget(d)}
               onDelete={(d) => setDeleteTarget(d)}
               onDuplicate={handleDuplicate}
               onExport={handleExport}
               onCreateClick={openCreate}
+              onBulkExport={handleBulkExport}
+              onBulkDelete={handleBulkDelete}
             />
           )}
         </Box>
