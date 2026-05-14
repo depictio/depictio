@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Paper, Loader, Text, Stack, useMantineColorScheme } from '@mantine/core';
 import Plot from 'react-plotly.js';
-import Plotly from 'plotly.js';
 
 import { renderFigure, InteractiveFilter, StoredMetadata } from '../api';
 import { extractScatterSelection } from '../selection';
@@ -10,6 +9,27 @@ import { useNewItemIds } from '../hooks/useNewItemIds';
 import { useTransientFlag } from '../hooks/useTransientFlag';
 import { asNumberArray, extractCustomdataIds } from '../plotlyData';
 import RefetchOverlay from './RefetchOverlay';
+
+// Plotly is already loaded by react-plotly.js (which bundles
+// `plotly.js/dist/plotly` and attaches it to `window.Plotly`). Re-importing
+// `plotly.js` directly here would make Vite/esbuild walk Plotly's source
+// tree and crash on an unresolved `require('buffer/')` shim in
+// `plotly.js/src/traces/image/helpers.js`. Reach for the runtime handle
+// instead — no extra bundle weight, no Node polyfill needed.
+type PlotlyHandle = {
+  relayout: (gd: HTMLElement, update: Record<string, unknown>) => Promise<unknown>;
+  restyle: (
+    gd: HTMLElement,
+    update: Record<string, unknown>,
+    traceIndices: number[],
+  ) => Promise<unknown>;
+};
+
+function getPlotly(): PlotlyHandle | null {
+  if (typeof window === 'undefined') return null;
+  const plotly = (window as unknown as { Plotly?: PlotlyHandle }).Plotly;
+  return plotly ?? null;
+}
 
 interface FigureRendererProps {
   dashboardId: string;
@@ -160,6 +180,8 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
 
   useEffect(() => {
     if (hasOwnSelection || !gdRef.current) return;
+    const Plotly = getPlotly();
+    if (!Plotly) return;
     const gd = gdRef.current;
     try {
       Plotly.relayout(gd, { selections: null }).catch(() => {});
