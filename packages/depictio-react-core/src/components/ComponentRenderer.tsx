@@ -150,6 +150,7 @@ const ComponentRenderer: React.FC<ComponentRendererProps> = ({
               source: 'scatter_selection',
             })
         : undefined;
+    const sourceFilterActive = isSourceFilterActive(filters, metadata.index, 'scatter_selection');
     return wrapWithChrome(
       'figure',
       metadata,
@@ -161,7 +162,7 @@ const ComponentRenderer: React.FC<ComponentRendererProps> = ({
         onFilterChange={onFilterChange}
         refreshTick={refreshTick}
       />,
-      { onResetFilter: onResetSelection, extraActions, showDragHandle },
+      { onResetFilter: onResetSelection, extraActions, showDragHandle, sourceFilterActive },
     );
   }
 
@@ -190,6 +191,7 @@ const ComponentRenderer: React.FC<ComponentRendererProps> = ({
               source: 'image_selection',
             })
         : undefined;
+    const sourceFilterActive = isSourceFilterActive(filters, metadata.index, 'image_selection');
     return wrapWithChrome(
       'image',
       metadata,
@@ -201,7 +203,7 @@ const ComponentRenderer: React.FC<ComponentRendererProps> = ({
         onFilterChange={onFilterChange}
         refreshTick={refreshTick}
       />,
-      { onResetFilter: onResetSelection, extraActions, showDragHandle },
+      { onResetFilter: onResetSelection, extraActions, showDragHandle, sourceFilterActive },
     );
   }
 
@@ -220,6 +222,7 @@ const ComponentRenderer: React.FC<ComponentRendererProps> = ({
               source: 'map_selection',
             })
         : undefined;
+    const sourceFilterActive = isSourceFilterActive(filters, metadata.index, 'map_selection');
     return wrapWithChrome(
       'map',
       metadata,
@@ -231,7 +234,7 @@ const ComponentRenderer: React.FC<ComponentRendererProps> = ({
         onFilterChange={onFilterChange}
         refreshTick={refreshTick}
       />,
-      { onResetFilter: onResetSelection, extraActions, showDragHandle },
+      { onResetFilter: onResetSelection, extraActions, showDragHandle, sourceFilterActive },
     );
   }
 
@@ -308,6 +311,7 @@ const TableBlock: React.FC<{
           });
         }
       : undefined;
+  const sourceFilterActive = isSourceFilterActive(filters, metadata.index, 'table_selection');
   return wrapWithChrome(
     'table',
     metadata,
@@ -320,9 +324,35 @@ const TableBlock: React.FC<{
       onFilterChange={onFilterChange}
       refreshTick={refreshTick}
     />,
-    { agGridApiRef, onResetFilter: onResetSelection, extraActions, showDragHandle },
+    {
+      agGridApiRef,
+      onResetFilter: onResetSelection,
+      extraActions,
+      showDragHandle,
+      sourceFilterActive,
+    },
   );
 };
+
+/** A filter is "source-active" for this component when an entry exists with
+ *  matching `index`, the expected `source` discriminator, and a non-empty
+ *  value (avoid false-positives for filters that were emitted then cleared
+ *  but kept in the array with `value: []`). */
+function isSourceFilterActive(
+  filters: InteractiveFilter[],
+  componentIndex: string,
+  expectedSource: InteractiveFilter['source'],
+): boolean {
+  for (const f of filters) {
+    if (f.index !== componentIndex) continue;
+    if (f.source !== expectedSource) continue;
+    const v = f.value;
+    if (v == null) continue;
+    if (Array.isArray(v) && v.length === 0) continue;
+    return true;
+  }
+  return false;
+}
 
 const CardRenderer: React.FC<{
   metadata: StoredMetadata;

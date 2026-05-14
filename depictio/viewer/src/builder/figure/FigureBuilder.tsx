@@ -7,9 +7,10 @@
  * Execute result.
  */
 import React, { Suspense } from 'react';
-import { Box, Center, Loader, SegmentedControl, Stack } from '@mantine/core';
+import { Accordion, Box, Center, Loader, SegmentedControl, Stack } from '@mantine/core';
 import { Icon } from '@iconify/react';
 import { useBuilderStore } from '../store/useBuilderStore';
+import CrossFilterSection from '../shared/CrossFilterSection';
 import FigureUIMode from './FigureUIMode';
 import FigurePreview from './FigurePreview';
 
@@ -26,6 +27,11 @@ const TOGGLE_LABEL_STYLE: React.CSSProperties = {
 const FigureBuilder: React.FC = () => {
   const figureMode = useBuilderStore((s) => s.figureMode);
   const setFigureMode = useBuilderStore((s) => s.setFigureMode);
+  const config = useBuilderStore((s) => s.config) as {
+    selection_enabled?: boolean;
+    selection_column?: string;
+  };
+  const patchConfig = useBuilderStore((s) => s.patchConfig);
 
   return (
     <Stack gap="md" pt="md">
@@ -94,6 +100,20 @@ const FigureBuilder: React.FC = () => {
           )}
         </Box>
       </Box>
+
+      {/* Cross-filtering applies to both UI and code modes — placed outside
+       *  the visualization config column so it's visible regardless of mode. */}
+      <Accordion variant="separated" radius="md" multiple>
+        <CrossFilterSection
+          enabled={Boolean(config.selection_enabled)}
+          onEnabledChange={(checked) =>
+            patchConfig({ selection_enabled: checked })
+          }
+          column={config.selection_column}
+          onColumnChange={(name) => patchConfig({ selection_column: name })}
+          columnDescription="Column to extract from selected points"
+        />
+      </Accordion>
     </Stack>
   );
 };

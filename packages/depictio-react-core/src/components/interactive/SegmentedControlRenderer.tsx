@@ -3,6 +3,7 @@ import { Paper, Stack, Text, Group, SegmentedControl } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
 import { fetchUniqueValues, InteractiveFilter, StoredMetadata } from '../../api';
+import { useAvailableSet } from '../../availableValues';
 
 /**
  * SegmentedControl renderer for the React viewer.
@@ -77,9 +78,17 @@ const SegmentedControlRenderer: React.FC<{
   const selectedValue =
     typeof filterEntry?.value === 'string' ? (filterEntry!.value as string) : null;
 
+  // Cross-DC available-values intersection — see `availableValues.tsx`. Marks
+  // segments whose value isn't present in any other joined DC as disabled.
+  const availableSet = useAvailableSet(metadata.dc_id, metadata.column_name);
   const data = useMemo(
-    () => options.map((v) => ({ value: v, label: v })),
-    [options],
+    () =>
+      options.map((v) => ({
+        value: v,
+        label: v,
+        disabled: availableSet ? !availableSet.has(v) : false,
+      })),
+    [options, availableSet],
   );
 
   const displayTitle =

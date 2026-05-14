@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ActionIcon, Group } from '@mantine/core';
+import { ActionIcon, Group, Tooltip } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
 import { StoredMetadata } from '../../api';
@@ -31,6 +31,12 @@ export interface ComponentChromeProps {
   /** When true, render the drag-handle action (3×3 grip). The actual drag is
    *  wired by react-grid-layout via `draggableHandle=".react-grid-dragHandle"`. */
   showDragHandle?: boolean;
+  /** When true, an orange corner badge is rendered top-left to signal that
+   *  this component is currently the SOURCE of an active dashboard filter
+   *  (e.g. a scatter selection, a table row selection, a map polygon).
+   *  Clicking the badge invokes `onResetFilter`. When this is true the
+   *  redundant `'reset'` entry in the action-icon row is suppressed. */
+  sourceFilterActive?: boolean;
 }
 
 /** View-accessible action visibility per component type. Mirrors the
@@ -89,6 +95,7 @@ const ComponentChrome: React.FC<ComponentChromeProps> = ({
   fullscreenRef: externalFullscreenRef,
   extraActions,
   showDragHandle = false,
+  sourceFilterActive = false,
 }) => {
   const localFullscreenRef = useRef<HTMLDivElement | null>(null);
   const fullscreenRef = externalFullscreenRef ?? localFullscreenRef;
@@ -102,7 +109,13 @@ const ComponentChrome: React.FC<ComponentChromeProps> = ({
     return () => document.removeEventListener('fullscreenchange', onChange);
   }, [fullscreenRef]);
 
-  const actions = actionsFor(componentType);
+  // Source-filter badge replaces the per-component 'reset' action icon when
+  // a filter is active from this component — keeps a single, visible reset
+  // affordance instead of duplicating it.
+  const actions = actionsFor(componentType).filter(
+    (a) => !(a === 'reset' && sourceFilterActive),
+  );
+  const showSourceBadge = sourceFilterActive && Boolean(onResetFilter);
 
   const renderAction = (action: ChromeAction) => {
     switch (action) {
@@ -136,6 +149,27 @@ const ComponentChrome: React.FC<ComponentChromeProps> = ({
         (isFullscreenActive ? ' fullscreen-active' : '')
       }
     >
+      {showSourceBadge && (
+        <span
+          className="dgl-no-drag depictio-source-filter-badge"
+          onMouseDown={(e) => e.stopPropagation()}
+          onTouchStart={(e) => e.stopPropagation()}
+          onPointerDown={(e) => e.stopPropagation()}
+        >
+          <Tooltip label="Reset filter from this component" withArrow>
+            <ActionIcon
+              variant="filled"
+              color="orange"
+              size="sm"
+              radius="xl"
+              onClick={() => onResetFilter?.()}
+              aria-label="Reset filter from this component"
+            >
+              <Icon icon="bx:reset" width={14} height={14} />
+            </ActionIcon>
+          </Tooltip>
+        </span>
+      )}
       <Group
         gap={4}
         className={
