@@ -153,7 +153,8 @@ const ComponentChrome: React.FC<ComponentChromeProps> = ({
         gap={4}
         className={
           'depictio-component-actions' +
-          (orientationFor(componentType) === 'vertical' ? ' depictio-actions-vertical' : '')
+          (orientationFor(componentType) === 'vertical' ? ' depictio-actions-vertical' : '') +
+          (sourceFilterActive && onResetFilter ? ' has-active-reset' : '')
         }
         wrap="nowrap"
       >
@@ -182,18 +183,21 @@ const ComponentChrome: React.FC<ComponentChromeProps> = ({
             </ActionIcon>
           </span>
         )}
-        {actions.map((a) => (
-          <span
-            key={a}
-            className="dgl-no-drag"
-            style={{ display: 'inline-flex', alignItems: 'center' }}
-            onMouseDown={(e) => e.stopPropagation()}
-            onTouchStart={(e) => e.stopPropagation()}
-            onPointerDown={(e) => e.stopPropagation()}
-          >
-            {renderAction(a)}
-          </span>
-        ))}
+        {actions.map((a) => {
+          const isActiveReset = a === 'reset' && sourceFilterActive && Boolean(onResetFilter);
+          return (
+            <span
+              key={a}
+              className={'dgl-no-drag' + (isActiveReset ? ' depictio-active-reset' : '')}
+              style={{ display: 'inline-flex', alignItems: 'center' }}
+              onMouseDown={(e) => e.stopPropagation()}
+              onTouchStart={(e) => e.stopPropagation()}
+              onPointerDown={(e) => e.stopPropagation()}
+            >
+              {renderAction(a)}
+            </span>
+          );
+        })}
         {extraActions && (
           <span
             className="dgl-no-drag"

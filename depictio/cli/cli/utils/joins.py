@@ -449,6 +449,34 @@ def execute_join(
     metadata["joined_rows"] = joined_df.shape[0]
     metadata["joined_columns"] = joined_df.columns
 
+    # Fan-out sanity check: an inner/left join over input frames of N×M rows
+    # should never produce more than max(N, M) rows unless one of the join
+    # keys has duplicates on the *other* side. When that happens, the result
+    # has hidden N:1 multiplicity that bites downstream filters (e.g. picking
+    # one row in a table returns multiple rows in linked components). The
+    # canonical fix is to widen the join keys to include whatever
+    # distinguishes the duplicates (run id, timestamp, replicate id, …) or
+    # to dedup the offending side before joining.
+    fanout_thresholds = {"inner", "left", "right"}
+    if join_def.how in fanout_thresholds:
+        expected_max = max(left_df.height, right_df.height)
+        if expected_max > 0 and joined_df.height > expected_max:
+            ratio = joined_df.height / expected_max
+            warning_msg = (
+                f"Join produced {joined_df.height} rows from inputs of "
+                f"{left_df.height} (left) × {right_df.height} (right) on "
+                f"{join_columns} — {ratio:.2f}× fan-out vs the larger input. "
+                "Likely a non-unique join key: widen the key set or dedup before joining."
+            )
+            logger.warning(warning_msg)
+            console.print(f"  [yellow]⚠ {warning_msg}[/yellow]")
+            metadata["fanout_warning"] = {
+                "ratio": ratio,
+                "expected_max": expected_max,
+                "actual_rows": joined_df.height,
+                "message": warning_msg,
+            }
+
     return joined_df, metadata
 
 

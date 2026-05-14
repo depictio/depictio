@@ -1,6 +1,7 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Paper, Loader, Text, Stack, useMantineColorScheme } from '@mantine/core';
 import Plot from 'react-plotly.js';
+import Plotly from 'plotly.js';
 
 import { renderFigure, InteractiveFilter, StoredMetadata } from '../api';
 import { extractScatterSelection } from '../selection';
@@ -137,6 +138,45 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
     if (!selectionEnabled) return;
     emitSelection([]);
   };
+
+  // Plotly graph div captured on init/update so we can imperatively clear the
+  // visual lasso/box selection when the user clicks the chrome reset button.
+  // react-plotly.js is a controlled wrapper for `data` + `layout`, but the
+  // drawn selection lives in Plotly's internal UI state (`layout.selections`
+  // and per-trace `selectedpoints`) which isn't reflected back into our props.
+  // Forcing those to null via `relayout` / `restyle` is the documented escape
+  // hatch.
+  const gdRef = useRef<HTMLElement | null>(null);
+
+  const hasOwnSelection = useMemo(() => {
+    return filters.some(
+      (f) =>
+        f.index === metadata.index &&
+        f.source === 'scatter_selection' &&
+        Array.isArray(f.value) &&
+        f.value.length > 0,
+    );
+  }, [filters, metadata.index]);
+
+  useEffect(() => {
+    if (hasOwnSelection || !gdRef.current) return;
+    const gd = gdRef.current;
+    try {
+      Plotly.relayout(gd, { selections: null }).catch(() => {});
+      const traceCount = Array.isArray((gd as { data?: unknown }).data)
+        ? ((gd as { data: unknown[] }).data.length)
+        : 0;
+      if (traceCount > 0) {
+        Plotly.restyle(
+          gd,
+          { selectedpoints: [null] },
+          Array.from({ length: traceCount }, (_, i) => i),
+        ).catch(() => {});
+      }
+    } catch {
+      // best-effort: graph div may have unmounted between schedule and run
+    }
+  }, [hasOwnSelection]);
 
   // ── New-item highlight pipeline ───────────────────────────────────────────
   // Only wired for scatter visualisations — histograms / box / bar aggregate
@@ -281,6 +321,12 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
             config={{ displaylogo: false, responsive: true }}
             style={{ width: '100%', height: '100%' }}
             useResizeHandler
+            onInitialized={(_fig, gd) => {
+              gdRef.current = gd as HTMLElement;
+            }}
+            onUpdate={(_fig, gd) => {
+              gdRef.current = gd as HTMLElement;
+            }}
             onSelected={selectionEnabled ? handleSelected : undefined}
             onClick={selectionEnabled ? handleClick : undefined}
             onDeselect={selectionEnabled ? handleDeselect : undefined}
