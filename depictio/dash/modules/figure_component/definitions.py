@@ -21,13 +21,18 @@ from .models import VisualizationDefinition
 from .parameter_discovery import discover_all_visualizations
 
 # Curated set of visualization types exposed to the figure builder.
+#
+# `heatmap` and `scatter_matrix` were excluded on purpose: the first is not a
+# Plotly Express constructor of its own (heatmap rendering goes through the
+# complex-heatmap path in core.py), and scatter_matrix has a per-viz parameter
+# shape that doesn't match the rest of the builder cleanly. Add them back only
+# alongside dedicated builder support.
 ALLOWED_VISUALIZATIONS = {
     "scatter",
     "line",
     "bar",
     "box",
     "histogram",
-    "heatmap",
     "violin",
     "ecdf",
     "density_heatmap",
@@ -35,7 +40,6 @@ ALLOWED_VISUALIZATIONS = {
     "area",
     "funnel",
     "strip",
-    "scatter_matrix",
 }
 
 # Hand-authored display metadata. Override Plotly's auto-generated labels and
@@ -70,10 +74,6 @@ VIZ_LABELS_DESCRIPTIONS: Dict[str, tuple[str, str]] = {
         "ECDF",
         "Empirical cumulative distribution — fraction of values at or below each point.",
     ),
-    "heatmap": (
-        "Heatmap",
-        "2D grid of values, often with row/column clustering.",
-    ),
     "density_heatmap": (
         "Density Heatmap",
         "2D bin counts as a heatmap — shows where points concentrate.",
@@ -93,10 +93,6 @@ VIZ_LABELS_DESCRIPTIONS: Dict[str, tuple[str, str]] = {
     "strip": (
         "Strip Plot",
         "One-dimensional scatter — every observation as a tick along a numeric axis.",
-    ),
-    "scatter_matrix": (
-        "Scatter Matrix",
-        "Pairwise scatter plots across multiple numeric columns.",
     ),
 }
 
