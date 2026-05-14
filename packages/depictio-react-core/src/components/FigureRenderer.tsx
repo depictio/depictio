@@ -1,6 +1,11 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Paper, Loader, Text, Stack, useMantineColorScheme } from '@mantine/core';
 import Plot from 'react-plotly.js';
+// Vite resolve.alias in depictio/viewer/vite.config.ts rewrites bare
+// `plotly.js` to `plotly.js/dist/plotly`, so this import grabs the prebuilt
+// browser UMD bundle that react-plotly.js itself uses internally — no
+// `buffer/` source walk, no extra bundle weight, single Plotly instance.
+import Plotly from 'plotly.js';
 
 import { renderFigure, InteractiveFilter, StoredMetadata } from '../api';
 import { extractScatterSelection } from '../selection';
@@ -9,27 +14,6 @@ import { useNewItemIds } from '../hooks/useNewItemIds';
 import { useTransientFlag } from '../hooks/useTransientFlag';
 import { asNumberArray, extractCustomdataIds } from '../plotlyData';
 import RefetchOverlay from './RefetchOverlay';
-
-// Plotly is already loaded by react-plotly.js (which bundles
-// `plotly.js/dist/plotly` and attaches it to `window.Plotly`). Re-importing
-// `plotly.js` directly here would make Vite/esbuild walk Plotly's source
-// tree and crash on an unresolved `require('buffer/')` shim in
-// `plotly.js/src/traces/image/helpers.js`. Reach for the runtime handle
-// instead — no extra bundle weight, no Node polyfill needed.
-type PlotlyHandle = {
-  relayout: (gd: HTMLElement, update: Record<string, unknown>) => Promise<unknown>;
-  restyle: (
-    gd: HTMLElement,
-    update: Record<string, unknown>,
-    traceIndices: number[],
-  ) => Promise<unknown>;
-};
-
-function getPlotly(): PlotlyHandle | null {
-  if (typeof window === 'undefined') return null;
-  const plotly = (window as unknown as { Plotly?: PlotlyHandle }).Plotly;
-  return plotly ?? null;
-}
 
 interface FigureRendererProps {
   dashboardId: string;
@@ -178,25 +162,40 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
     );
   }, [filters, metadata.index]);
 
+  // Track whether THIS component had its own selection on the previous render
+  // so we only fire the clear effect on the true→false transition (someone
+  // pressed the chrome reset button or deselected externally). Without this
+  // gate the effect would also run on first mount before any selection ever
+  // existed.
+  const prevHadOwnSelection = useRef(false);
+
   useEffect(() => {
-    if (hasOwnSelection || !gdRef.current) return;
-    const Plotly = getPlotly();
-    if (!Plotly) return;
+    const wasActive = prevHadOwnSelection.current;
+    prevHadOwnSelection.current = hasOwnSelection;
+    if (!wasActive || hasOwnSelection) return;
+
     const gd = gdRef.current;
+    if (!gd) return;
+
+    // Plotly methods accept a string selector or HTMLElement. The Plot's gd
+    // is the chart container; relayout({selections: null}) wipes drawn
+    // selection shapes (lasso/box outline) and restyle({selectedpoints:
+    // null}) restores the un-dimmed look on every trace. Wrapped in
+    // try/catch because the gd may have unmounted between scheduling and
+    // running, and Plotly raises on a detached div.
     try {
-      Plotly.relayout(gd, { selections: null }).catch(() => {});
-      const traceCount = Array.isArray((gd as { data?: unknown }).data)
-        ? ((gd as { data: unknown[] }).data.length)
-        : 0;
+      // Cast: @types/plotly.js wants Plotly types on gd but the wrapper
+      // exposes a regular HTMLElement that Plotly accepts at runtime.
+      const target = gd as unknown as Parameters<typeof Plotly.relayout>[0];
+      Plotly.relayout(target, { selections: null }).catch(() => {});
+      const data = (gd as unknown as { data?: unknown[] }).data;
+      const traceCount = Array.isArray(data) ? data.length : 0;
       if (traceCount > 0) {
-        Plotly.restyle(
-          gd,
-          { selectedpoints: [null] },
-          Array.from({ length: traceCount }, (_, i) => i),
-        ).catch(() => {});
+        const indices = Array.from({ length: traceCount }, (_, i) => i);
+        Plotly.restyle(target, { selectedpoints: [null] }, indices).catch(() => {});
       }
     } catch {
-      // best-effort: graph div may have unmounted between schedule and run
+      // best-effort: gd may have unmounted between schedule and run
     }
   }, [hasOwnSelection]);
 
