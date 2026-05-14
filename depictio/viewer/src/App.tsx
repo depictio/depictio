@@ -307,6 +307,7 @@ const App: React.FC = () => {
   return (
     <AvailableFilterValuesProvider
       dashboardMetadata={dashboard?.stored_metadata}
+      projectId={dashboard?.project_id}
     >
       <AppShell
       header={{ height: 50 }}
