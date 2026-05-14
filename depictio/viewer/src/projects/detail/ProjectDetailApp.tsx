@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Accordion,
   ActionIcon,
@@ -59,6 +59,7 @@ import ManageDataCollectionModal, {
 } from './ManageDataCollectionModal';
 import MultiQCViewerPreview from './MultiQCViewerPreview';
 import CoordinatesMapPreview from './CoordinatesMapPreview';
+import { detectCoordinatesColumns } from './extendedTableCategories';
 import { UnstyledDropZone } from '../../components/UnstyledDropZone';
 import { useFolderDropzone } from '../../hooks/useFolderDropzone';
 
@@ -824,9 +825,8 @@ function guessFormat(name: string | undefined): string | null {
   return null;
 }
 
-/** Single-file dropzone + selected-file chip shared by the Table and Coordinates
- *  tabs in the create-DC modal. Both flows use the same dropzone + file state;
- *  only the headline icon/copy differs. */
+/** Single-file dropzone + selected-file chip for the Table tab of the
+ *  create-DC modal. */
 const TableFileDropZone: React.FC<{
   dropzone: ReturnType<typeof useFolderDropzone>;
   file: File | null;
@@ -906,7 +906,7 @@ const CreateDataCollectionModal: React.FC<{
   onClose: () => void;
   onSuccess: () => void;
 }> = ({ opened, projectType, projectId, onClose, onSuccess }) => {
-  const [dcType, setDcType] = useState<'table' | 'multiqc' | 'coordinates'>('table');
+  const [dcType, setDcType] = useState<'table' | 'multiqc'>('table');
   const [file, setFile] = useState<File | null>(null);
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
@@ -920,13 +920,18 @@ const CreateDataCollectionModal: React.FC<{
   const [lastCheckPassed, setLastCheckPassed] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [mismatch, setMismatch] = useState<MultiQCMismatch | null>(null);
-  // Coordinates-tab state: header columns parsed from the dropped file, plus
-  // user-selected lat/lon columns. Auto-detected when the column names match
-  // /^lat(itude)?$/i / /^lon(g(itude)?)?$/i.
+  // Header columns parsed client-side from the dropped CSV/TSV file. Used both
+  // to surface coordinates auto-detection (see detectCoordinatesColumns) and
+  // to back the lat/lon Select dropdowns when the user opts into a coordinates
+  // table on the Table tab.
   const [csvColumns, setCsvColumns] = useState<string[]>([]);
   const [parsingHeader, setParsingHeader] = useState(false);
   const [latColumn, setLatColumn] = useState<string | null>(null);
   const [lonColumn, setLonColumn] = useState<string | null>(null);
+  // True when the user wants the table persisted as a coordinates DC
+  // (DCTableCoordinatesConfig). Auto-flips on when detection succeeds; can be
+  // toggled manually for non-delimited formats where we can't peek the header.
+  const [coordsConfirmed, setCoordsConfirmed] = useState(false);
 
   // MultiQC folder dropzone — owned by the modal so close-and-reopen clears it.
   const multiqcDropzone = useFolderDropzone({
@@ -942,22 +947,22 @@ const CreateDataCollectionModal: React.FC<{
   });
   // Sync the first dropped/picked file into the existing `file` state so the
   // rest of the table flow (auto-fill, submit) keeps working unchanged.
-  // Same picker is used for the Coordinates tab.
   useEffect(() => {
-    if (dcType !== 'table' && dcType !== 'coordinates') return;
+    if (dcType !== 'table') return;
     const first = tableDropzone.files[0];
     if (!first) return;
     if (file && first === file) return;
     setFile(first);
   }, [dcType, tableDropzone.files, file]);
 
-  // Parse the dropped file's header for the Coordinates tab so the lat/lon
-  // dropdowns can populate. Reads the first ~64KB client-side — enough for any
-  // reasonable single-line header without paying the cost of the whole file.
-  // Parquet/feather headers aren't accessible without a wasm parser; we defer
-  // to the API's `_validate_coord_columns_in_file` for those.
+  // Parse the dropped file's header (CSV/TSV only) so the coordinates
+  // detection + lat/lon Select dropdowns can populate. Reads the first ~64KB
+  // client-side — enough for any reasonable single-line header without paying
+  // the cost of the whole file. Parquet/feather headers aren't accessible
+  // without a wasm parser; for those the user opts in manually and the API
+  // validates column names server-side via `_validate_coord_columns_in_file`.
   useEffect(() => {
-    if (dcType !== 'coordinates' || !file) {
+    if (dcType !== 'table' || !file || !hasHeader) {
       setCsvColumns([]);
       return;
     }
@@ -977,9 +982,6 @@ const CreateDataCollectionModal: React.FC<{
         const firstLine = text.split(/\r?\n/).find((l) => l.length > 0) ?? '';
         const cols = firstLine.split(sep).map((c) => c.trim()).filter(Boolean);
         setCsvColumns(cols);
-        // Auto-detect on first parse — don't clobber a manual choice.
-        setLatColumn((prev) => prev ?? cols.find((c) => /^lat(itude)?$/i.test(c)) ?? null);
-        setLonColumn((prev) => prev ?? cols.find((c) => /^lon(g(itude)?)?$/i.test(c)) ?? null);
       })
       .catch(() => {
         if (!cancelled) setCsvColumns([]);
@@ -990,7 +992,29 @@ const CreateDataCollectionModal: React.FC<{
     return () => {
       cancelled = true;
     };
-  }, [dcType, file, fileFormat, separator, customSeparator]);
+  }, [dcType, file, fileFormat, separator, customSeparator, hasHeader]);
+
+  // Detect an extended category from the parsed header. When coordinates land,
+  // pre-fill lat/lon and flip the coordsConfirmed switch on. The auto-fill is
+  // gated by a per-file ref so a user who explicitly toggles the switch off
+  // doesn't immediately have it flipped back on by this effect.
+  const coordsGuess = useMemo(
+    () => detectCoordinatesColumns(csvColumns),
+    [csvColumns],
+  );
+  const autoConfirmedForFileRef = useRef<File | null>(null);
+  useEffect(() => {
+    if (!file) {
+      autoConfirmedForFileRef.current = null;
+      return;
+    }
+    if (!coordsGuess) return;
+    if (autoConfirmedForFileRef.current === file) return;
+    autoConfirmedForFileRef.current = file;
+    setLatColumn(coordsGuess.latColumn);
+    setLonColumn(coordsGuess.lonColumn);
+    setCoordsConfirmed(true);
+  }, [file, coordsGuess]);
 
   // Reset everything when the modal closes — otherwise re-opening shows stale
   // state from the previous attempt.
@@ -1010,6 +1034,7 @@ const CreateDataCollectionModal: React.FC<{
       setCsvColumns([]);
       setLatColumn(null);
       setLonColumn(null);
+      setCoordsConfirmed(false);
       setParsingHeader(false);
       multiqcDropzone.clear();
       tableDropzone.clear();
@@ -1176,7 +1201,7 @@ const CreateDataCollectionModal: React.FC<{
           setSubmitting(false);
           return;
         }
-        if (dcType === 'coordinates') {
+        if (coordsConfirmed) {
           if (!latColumn || !lonColumn) {
             setError('Pick the latitude and longitude columns.');
             setSubmitting(false);
@@ -1199,8 +1224,8 @@ const CreateDataCollectionModal: React.FC<{
           compression,
           hasHeader,
           file,
-          latColumn: dcType === 'coordinates' ? latColumn : null,
-          lonColumn: dcType === 'coordinates' ? lonColumn : null,
+          latColumn: coordsConfirmed ? latColumn : null,
+          lonColumn: coordsConfirmed ? lonColumn : null,
         });
         notifications.show({
           color: 'teal',
@@ -1250,9 +1275,7 @@ const CreateDataCollectionModal: React.FC<{
 
         <Tabs
           value={dcType}
-          onChange={(v) =>
-            v && setDcType(v as 'table' | 'multiqc' | 'coordinates')
-          }
+          onChange={(v) => v && setDcType(v as 'table' | 'multiqc')}
           variant="default"
         >
           <Tabs.List grow>
@@ -1262,15 +1285,6 @@ const CreateDataCollectionModal: React.FC<{
               disabled={submitting}
             >
               Table (CSV / TSV / Parquet)
-            </Tabs.Tab>
-            <Tabs.Tab
-              value="coordinates"
-              leftSection={
-                <Icon icon="mdi:map-marker-radius-outline" width={18} />
-              }
-              disabled={submitting}
-            >
-              Coordinates table
             </Tabs.Tab>
             <Tabs.Tab
               value="multiqc"
@@ -1299,34 +1313,50 @@ const CreateDataCollectionModal: React.FC<{
                 title="Drop a CSV, TSV, Parquet, or Feather file"
                 onRemove={() => {
                   setFile(null);
-                  tableDropzone.clear();
-                }}
-              />
-            </Stack>
-          </Tabs.Panel>
-
-          <Tabs.Panel value="coordinates" pt="md">
-            <Stack gap="xs">
-              <Text size="sm" c="dimmed">
-                Upload a CSV / TSV / Parquet table with latitude &amp; longitude
-                columns. The resulting data collection becomes selectable as the
-                data source for Map components.
-              </Text>
-              <TableFileDropZone
-                dropzone={tableDropzone}
-                file={file}
-                submitting={submitting}
-                icon="mdi:map-marker-radius-outline"
-                title="Drop a CSV / TSV / Parquet with lat & lon columns"
-                onRemove={() => {
-                  setFile(null);
                   setCsvColumns([]);
                   setLatColumn(null);
                   setLonColumn(null);
+                  setCoordsConfirmed(false);
                   tableDropzone.clear();
                 }}
               />
-              {file && (fileFormat === 'csv' || fileFormat === 'tsv') && (() => {
+              {file && coordsGuess && coordsConfirmed && (
+                <Alert
+                  color="teal"
+                  variant="light"
+                  icon={
+                    <Icon icon="mdi:map-marker-radius-outline" width={18} />
+                  }
+                  title="Looks like a coordinates table"
+                >
+                  <Text size="sm">
+                    We detected latitude / longitude columns. This data
+                    collection will be saved with coordinates metadata so it
+                    can power Map components. Pick different columns below or
+                    turn off the toggle to save it as a plain table.
+                  </Text>
+                </Alert>
+              )}
+              {file && (
+                <Switch
+                  label="Save as a coordinates table"
+                  description="Adds latitude / longitude column metadata so the data collection can power Map components."
+                  checked={coordsConfirmed}
+                  disabled={submitting}
+                  onChange={(e) => {
+                    const next = e.currentTarget.checked;
+                    setCoordsConfirmed(next);
+                    if (!next) {
+                      setLatColumn(null);
+                      setLonColumn(null);
+                    } else if (coordsGuess) {
+                      setLatColumn((prev) => prev ?? coordsGuess.latColumn);
+                      setLonColumn((prev) => prev ?? coordsGuess.lonColumn);
+                    }
+                  }}
+                />
+              )}
+              {file && coordsConfirmed && (fileFormat === 'csv' || fileFormat === 'tsv') && (() => {
                 let placeholder: string;
                 if (parsingHeader) placeholder = 'Reading header…';
                 else if (csvColumns.length) placeholder = 'Pick column';
@@ -1363,7 +1393,7 @@ const CreateDataCollectionModal: React.FC<{
                   </SimpleGrid>
                 );
               })()}
-              {file && fileFormat !== 'csv' && fileFormat !== 'tsv' && (
+              {file && coordsConfirmed && fileFormat !== 'csv' && fileFormat !== 'tsv' && (
                 <SimpleGrid cols={2} spacing="sm">
                   <TextInput
                     label="Latitude column"
@@ -1520,7 +1550,7 @@ const CreateDataCollectionModal: React.FC<{
           disabled={submitting}
         />
 
-        {(dcType === 'table' || dcType === 'coordinates') && (
+        {dcType === 'table' && (
           <>
             <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
               <Select
@@ -1619,7 +1649,7 @@ const CreateDataCollectionModal: React.FC<{
               (dcType === 'multiqc'
                 ? multiqcDropzone.files.length === 0
                 : !file ||
-                  (dcType === 'coordinates' && (!latColumn || !lonColumn)))
+                  (coordsConfirmed && (!latColumn || !lonColumn)))
             }
             leftSection={<Icon icon="mdi:cloud-upload-outline" width={16} />}
           >
