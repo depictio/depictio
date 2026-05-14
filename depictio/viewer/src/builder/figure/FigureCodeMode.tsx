@@ -20,10 +20,13 @@ import {
   Accordion,
   Alert,
   Anchor,
+  Badge,
   Button,
   Code,
   Group,
+  ScrollArea,
   Stack,
+  Table,
   Text,
   Tooltip,
 } from '@mantine/core';
@@ -186,12 +189,21 @@ const FigureCodeMode: React.FC = () => {
     }
   }, [codeContent, dictKwargs, visuType, setCodeContent]);
 
-  const columnsListing = useMemo(() => {
-    if (!cols.length) {
-      return 'No columns loaded yet — pick a data collection in the Data Source step.';
+  // Type → Mantine color mapping. The colors mirror the Dash side's
+  // column-type chips so the same numeric/string/boolean palette appears
+  // wherever a DC column is rendered (data preview, builder dropdowns, here).
+  const colorForType = (t: string): string => {
+    const lower = (t || '').toLowerCase();
+    if (lower.includes('int') || lower.includes('float') || lower.includes('num')) {
+      return 'blue';
     }
-    return cols.map((c) => `${c.name} (${c.type})`).join(', ');
-  }, [cols]);
+    if (lower.includes('bool')) return 'orange';
+    if (lower.includes('date') || lower.includes('time')) return 'grape';
+    if (lower.includes('str') || lower.includes('utf') || lower.includes('object')) {
+      return 'teal';
+    }
+    return 'gray';
+  };
 
   const handleExecute = () => {
     if (!state.wfId || !state.dcId) {
@@ -448,11 +460,11 @@ const FigureCodeMode: React.FC = () => {
             </Text>
           </Accordion.Control>
           <Accordion.Panel>
-            <Stack gap="xs">
+            <Stack gap="sm">
               <Text size="xs">
                 Code Mode lets you author the figure as Python code instead of
-                clicking through visualization parameters. The code runs
-                server-side in a sandbox built on{' '}
+                clicking through visualization parameters. Your code runs
+                server-side inside a sandbox built on{' '}
                 <Anchor
                   href="https://restrictedpython.readthedocs.io/"
                   target="_blank"
@@ -460,61 +472,160 @@ const FigureCodeMode: React.FC = () => {
                   size="xs"
                 >
                   RestrictedPython
-                </Anchor>
-                {' '}— the same battle-tested library Zope has been using to
-                run untrusted plugin code for ~20 years.
+                </Anchor>{' '}
+                (Zope Foundation) — the source is at{' '}
+                <code>depictio/dash/modules/figure_component/simple_code_executor.py</code>.
               </Text>
-              <Text size="xs" fw={600}>
-                What's available
+
+              <Text size="xs" fw={700}>
+                Pre-loaded modules (full names)
               </Text>
-              <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12 }}>
-                <li>
-                  <code>df</code> — your data collection as a Polars DataFrame
-                  (read-only; you cannot reassign <code>df</code>)
-                </li>
-                <li>
-                  <code>df_modified</code> — single preprocessing line allowed
-                  (e.g. groupby, agg)
-                </li>
-                <li>
-                  <code>fig</code> — the final Plotly figure (this is what gets
-                  rendered)
-                </li>
-                <li>
-                  Libraries pre-imported: <code>px</code>, <code>go</code>,{' '}
-                  <code>pl</code>, <code>pd</code>, <code>np</code>
-                </li>
-                <li>
-                  Safe built-ins: <code>len</code>, <code>range</code>,{' '}
-                  <code>list</code>, <code>dict</code>, <code>tuple</code>,{' '}
-                  <code>enumerate</code>, <code>zip</code>
-                </li>
-              </ul>
-              <Text size="xs" fw={600}>
-                What's blocked
+              <Table
+                withRowBorders={false}
+                verticalSpacing={4}
+                horizontalSpacing="sm"
+                styles={{ td: { fontSize: 12, padding: '2px 8px' } }}
+              >
+                <Table.Tbody>
+                  <Table.Tr>
+                    <Table.Td><Code>px</Code></Table.Td>
+                    <Table.Td><Code>plotly.express</Code></Table.Td>
+                    <Table.Td>
+                      <Text size="xs" c="dimmed">High-level chart constructors (scatter, bar, …)</Text>
+                    </Table.Td>
+                  </Table.Tr>
+                  <Table.Tr>
+                    <Table.Td><Code>go</Code></Table.Td>
+                    <Table.Td><Code>plotly.graph_objects</Code></Table.Td>
+                    <Table.Td>
+                      <Text size="xs" c="dimmed">Low-level trace + layout primitives</Text>
+                    </Table.Td>
+                  </Table.Tr>
+                  <Table.Tr>
+                    <Table.Td><Code>pl</Code></Table.Td>
+                    <Table.Td><Code>polars</Code></Table.Td>
+                    <Table.Td>
+                      <Text size="xs" c="dimmed">Native dataframe library — <Code>df</Code> is a Polars DataFrame</Text>
+                    </Table.Td>
+                  </Table.Tr>
+                  <Table.Tr>
+                    <Table.Td><Code>pd</Code></Table.Td>
+                    <Table.Td><Code>pandas</Code></Table.Td>
+                    <Table.Td>
+                      <Text size="xs" c="dimmed">For <Code>df.to_pandas()</Code> conversions / pie-chart preprocessing</Text>
+                    </Table.Td>
+                  </Table.Tr>
+                  <Table.Tr>
+                    <Table.Td><Code>np</Code></Table.Td>
+                    <Table.Td><Code>numpy</Code></Table.Td>
+                    <Table.Td>
+                      <Text size="xs" c="dimmed">Numeric helpers (<Code>np.log</Code>, array ops)</Text>
+                    </Table.Td>
+                  </Table.Tr>
+                </Table.Tbody>
+              </Table>
+
+              <Text size="xs" fw={700}>
+                Safe built-ins (whitelisted, not the full <Code>builtins</Code> module)
               </Text>
-              <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12 }}>
-                <li>
-                  <code>import</code> statements — only the libraries listed
-                  above are reachable
-                </li>
-                <li>
-                  <code>exec</code> / <code>eval</code> / <code>compile</code>{' '}
-                  — no dynamic code execution
-                </li>
-                <li>
-                  File I/O (<code>open</code>, <code>os</code>,{' '}
-                  <code>pathlib</code>), networking (<code>requests</code>,{' '}
-                  <code>socket</code>), subprocesses — fully sandboxed
-                </li>
-                <li>
-                  Access to dunder attributes (<code>__class__</code>,{' '}
-                  <code>__globals__</code>, …) — RestrictedPython rewrites
-                  attribute access through a guarded getter
-                </li>
-              </ul>
+              <Group gap={4} wrap="wrap">
+                {['len', 'range', 'list', 'dict', 'tuple', 'enumerate', 'zip'].map((b) => (
+                  <Badge key={b} variant="light" color="gray" size="sm">
+                    <Code style={{ background: 'transparent', padding: 0 }}>{b}</Code>
+                  </Badge>
+                ))}
+              </Group>
               <Text size="xs" c="dimmed">
-                Source: <code>depictio/dash/modules/figure_component/simple_code_executor.py</code>
+                Anything else from <Code>builtins</Code> — including <Code>print</Code>,{' '}
+                <Code>input</Code>, <Code>type</Code>, <Code>__import__</Code>,{' '}
+                <Code>open</Code> — comes from{' '}
+                <Code>RestrictedPython.Guards.safe_builtins</Code>, which omits all
+                I/O, introspection, and import primitives.
+              </Text>
+
+              <Text size="xs" fw={700}>
+                Variables in scope
+              </Text>
+              <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12 }}>
+                <li>
+                  <Code>df</Code> — your data collection as a Polars
+                  DataFrame. Read-only: an AST pre-pass rejects code that
+                  rebinds <Code>df</Code> (<Code>df = …</Code>, <Code>df += …</Code>).
+                </li>
+                <li>
+                  <Code>df_modified</Code> — optional single preprocessing
+                  statement (e.g. <Code>df_modified = df.to_pandas().groupby(…)</Code>).
+                </li>
+                <li>
+                  <Code>fig</Code> — the Plotly figure your code MUST produce. The
+                  preview pane renders <Code>fig</Code> after execution.
+                </li>
+              </ul>
+
+              <Text size="xs" fw={700}>
+                What RestrictedPython blocks at compile time
+              </Text>
+              <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12 }}>
+                <li>
+                  <Code>import …</Code> / <Code>from … import …</Code> — only
+                  modules already in scope are usable.
+                </li>
+                <li>
+                  <Code>exec</Code>, <Code>eval</Code>, <Code>compile</Code> —
+                  no dynamic code execution.
+                </li>
+                <li>
+                  Direct access to dunder attributes (<Code>__class__</Code>,{' '}
+                  <Code>__globals__</Code>, <Code>__subclasses__</Code>, …) — the
+                  compiler rewrites attribute access through a guarded getter
+                  that rejects names starting with <Code>_</Code>.
+                </li>
+                <li>
+                  File I/O, subprocess, network sockets — none of{' '}
+                  <Code>open</Code>, <Code>os</Code>, <Code>sys</Code>,{' '}
+                  <Code>subprocess</Code>, <Code>socket</Code>,{' '}
+                  <Code>requests</Code>, <Code>urllib</Code> are reachable.
+                </li>
+              </ul>
+
+              <Text size="xs" fw={700}>
+                How safe is this?
+              </Text>
+              <Text size="xs">
+                Honest answer: <strong>safe enough for authenticated users in
+                your own deployment, not safe for arbitrary public input.</strong>
+                {' '}RestrictedPython has had 20+ years of hardening at Zope and
+                blocks every well-known Python-sandbox escape gadget (dunder
+                attribute walks, <Code>__import__</Code> chains, raw bytecode).
+                But two design choices in this executor widen the attack
+                surface:
+              </Text>
+              <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12 }}>
+                <li>
+                  <Code>safe_getattr</Code> / <Code>safe_setattr</Code> in
+                  this codebase delegate to the real <Code>getattr</Code> /{' '}
+                  <Code>setattr</Code> (not RestrictedPython's stricter
+                  defaults) so pandas / polars method chains work. That means
+                  any attribute that doesn't start with <Code>_</Code> is
+                  reachable on every exposed object.
+                </li>
+                <li>
+                  Pandas and Polars are large API surfaces. Methods like{' '}
+                  <Code>DataFrame.to_csv(path)</Code>,{' '}
+                  <Code>DataFrame.to_pickle(path)</Code>, or{' '}
+                  <Code>polars.read_csv(path)</Code> sit on the exposed objects
+                  and are not individually blacklisted — a determined
+                  authenticated user could write to disk via the server
+                  process's filesystem permissions.
+                </li>
+              </ul>
+              <Text size="xs">
+                Practical posture: treat code mode as "trusted user runs
+                trusted code as the server user." If you ever expose code mode
+                to anonymous / adversarial users, add a second layer
+                underneath (container with read-only FS, seccomp filter, or a
+                separate worker process with dropped capabilities) — don't
+                rely on RestrictedPython alone.
               </Text>
             </Stack>
           </Accordion.Panel>
@@ -523,13 +634,67 @@ const FigureCodeMode: React.FC = () => {
         <Accordion.Item value="columns">
           <Accordion.Control icon={<Icon icon="mdi:table" width={18} />}>
             <Text fw={700} size="sm">
-              Available Columns
+              Available Columns{' '}
+              {cols.length > 0 && (
+                <Text component="span" c="dimmed" size="xs" fw={400}>
+                  ({cols.length})
+                </Text>
+              )}
             </Text>
           </Accordion.Control>
           <Accordion.Panel>
-            <Text size="xs" style={{ fontFamily: EDITOR_FONT_FAMILY }}>
-              {columnsListing}
-            </Text>
+            {cols.length === 0 ? (
+              <Text size="xs" c="dimmed">
+                No columns loaded yet — pick a data collection in the Data
+                Source step.
+              </Text>
+            ) : (
+              <ScrollArea.Autosize mah={260}>
+                <Table
+                  withRowBorders
+                  highlightOnHover
+                  verticalSpacing={4}
+                  horizontalSpacing="sm"
+                  styles={{ td: { padding: '4px 8px' }, th: { padding: '4px 8px' } }}
+                >
+                  <Table.Thead>
+                    <Table.Tr>
+                      <Table.Th>
+                        <Text size="xs" fw={600} c="dimmed">
+                          Name
+                        </Text>
+                      </Table.Th>
+                      <Table.Th>
+                        <Text size="xs" fw={600} c="dimmed">
+                          Type
+                        </Text>
+                      </Table.Th>
+                    </Table.Tr>
+                  </Table.Thead>
+                  <Table.Tbody>
+                    {cols.map((c) => (
+                      <Table.Tr key={c.name}>
+                        <Table.Td>
+                          <Code style={{ fontFamily: EDITOR_FONT_FAMILY }}>
+                            {c.name}
+                          </Code>
+                        </Table.Td>
+                        <Table.Td>
+                          <Badge
+                            variant="light"
+                            color={colorForType(c.type)}
+                            size="sm"
+                            radius="sm"
+                          >
+                            {c.type}
+                          </Badge>
+                        </Table.Td>
+                      </Table.Tr>
+                    ))}
+                  </Table.Tbody>
+                </Table>
+              </ScrollArea.Autosize>
+            )}
           </Accordion.Panel>
         </Accordion.Item>
 
