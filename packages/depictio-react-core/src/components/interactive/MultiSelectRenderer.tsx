@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useMemo, useState, useRef } from 'react';
 import { DepictioMultiSelect } from 'depictio-components';
 
 import {
@@ -6,6 +6,7 @@ import {
   InteractiveFilter,
   StoredMetadata,
 } from '../../api';
+import { useAvailableSet } from '../../availableValues';
 
 // Module-level cache for unique-values fetches. Keyed by `${dcId}|${column}`.
 // Cleared on page reload — adequate for the MVP; a longer-lived cache (TTL +
@@ -54,6 +55,18 @@ const MultiSelectRenderer: React.FC<{
   const selected =
     (filters.find((f) => f.index === metadata.index)?.value as string[]) || [];
 
+  // Grey out values that the filter's source DC declares but that aren't
+  // present in the dashboard's joined data — see `availableValues.tsx`.
+  const availableSet = useAvailableSet(metadata.dc_id, metadata.column_name);
+  const optionItems = useMemo(() => {
+    if (!availableSet) return options.map((v) => ({ value: v, label: v }));
+    return options.map((v) => ({
+      value: v,
+      label: v,
+      disabled: !availableSet.has(v),
+    }));
+  }, [options, availableSet]);
+
   // Mirrors Dash DEFAULT_ICONS in interactive_component/utils.py:1622.
   const defaultIcon =
     metadata.interactive_component_type === 'SegmentedControl' ||
@@ -66,7 +79,7 @@ const MultiSelectRenderer: React.FC<{
       title={metadata.title}
       column_name={metadata.column_name}
       interactive_component_type={metadata.interactive_component_type}
-      options={options}
+      options={optionItems}
       value={selected}
       placeholder={
         loading
