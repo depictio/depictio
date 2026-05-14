@@ -27,11 +27,17 @@ const TOGGLE_LABEL_STYLE: React.CSSProperties = {
 const FigureBuilder: React.FC = () => {
   const figureMode = useBuilderStore((s) => s.figureMode);
   const setFigureMode = useBuilderStore((s) => s.setFigureMode);
+  const visuType = useBuilderStore((s) => s.visuType);
   const config = useBuilderStore((s) => s.config) as {
     selection_enabled?: boolean;
     selection_column?: string;
   };
   const patchConfig = useBuilderStore((s) => s.patchConfig);
+  // Cross-filtering only makes sense for traces that carry per-row
+  // customdata (scatter / scatter_3d). On aggregated visus we hide the
+  // section so authors don't think they're configuring it. Renderer
+  // mirrors the same gate.
+  const supportsCrossFilter = visuType === 'scatter' || visuType === 'scatter_3d';
 
   return (
     <Stack gap="md" pt="md">
@@ -92,8 +98,9 @@ const FigureBuilder: React.FC = () => {
            *  visualization config sections. In code mode the right panel is
            *  taken by the editor, so the section sits under the preview in
            *  the left pane — same column, directly below the chart, easy to
-           *  reach without the eyes leaving the preview area. */}
-          {figureMode === 'code' && (
+           *  reach without the eyes leaving the preview area. Gated to
+           *  scatter-like visus only (see supportsCrossFilter above). */}
+          {figureMode === 'code' && supportsCrossFilter && (
             <Accordion variant="separated" radius="md" multiple mt="sm">
               <CrossFilterSection
                 enabled={Boolean(config.selection_enabled)}

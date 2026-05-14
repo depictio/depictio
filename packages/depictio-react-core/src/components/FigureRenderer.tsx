@@ -52,7 +52,17 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
   const theme: 'light' | 'dark' = colorScheme === 'dark' ? 'dark' : 'light';
   const [containerRef, inView] = useInView<HTMLDivElement>('200px');
 
-  const selectionEnabled = Boolean(metadata.selection_enabled) && !!onFilterChange;
+  // Cross-filtering only fires meaningful events on scatter-like traces —
+  // histograms / bars / pies aggregate input rows into bins, so Plotly's
+  // `onSelected` would emit per-bin envelopes (no per-row identity) and the
+  // downstream filter would point at nothing useful. Builders hide the
+  // toggle for non-scatter visus; the renderer hardens the same gate so
+  // legacy metadata with `selection_enabled: true` on (say) a histogram is
+  // silently no-op'd instead of producing junk filters.
+  const isScatterLikeForSelection =
+    metadata.visu_type === 'scatter' || metadata.visu_type === 'scatter_3d';
+  const selectionEnabled =
+    Boolean(metadata.selection_enabled) && !!onFilterChange && isScatterLikeForSelection;
   const selectionColumn =
     typeof metadata.selection_column === 'string'
       ? (metadata.selection_column as string)

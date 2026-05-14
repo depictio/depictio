@@ -140,7 +140,14 @@ const ComponentRenderer: React.FC<ComponentRendererProps> = ({
   }
 
   if (metadata.component_type === 'figure' && dashboardId) {
-    const selectionEnabled = Boolean(metadata.selection_enabled) && !!onFilterChange;
+    // Only scatter / scatter_3d traces carry the per-row customdata we need
+    // for meaningful cross-filter selection. Aggregated visus (histogram,
+    // box, bar, pie, …) would emit per-bin envelopes — hide the reset
+    // affordance there too so chrome stays clean.
+    const isScatterLikeForSelection =
+      metadata.visu_type === 'scatter' || metadata.visu_type === 'scatter_3d';
+    const selectionEnabled =
+      Boolean(metadata.selection_enabled) && !!onFilterChange && isScatterLikeForSelection;
     const onResetSelection =
       selectionEnabled && onFilterChange
         ? () =>
