@@ -57,14 +57,25 @@ const MultiSelectRenderer: React.FC<{
 
   // Grey out values that the filter's source DC declares but that aren't
   // present in the dashboard's joined data — see `availableValues.tsx`.
+  // Sort order: available values first (so they're immediately visible),
+  // then unavailable (greyed) values; alphabetical within each bucket using
+  // a locale-aware natural compare so `Sample_2` sorts before `Sample_10`.
   const availableSet = useAvailableSet(metadata.dc_id, metadata.column_name);
   const optionItems = useMemo(() => {
-    if (!availableSet) return options.map((v) => ({ value: v, label: v }));
-    return options.map((v) => ({
-      value: v,
-      label: v,
-      disabled: !availableSet.has(v),
-    }));
+    const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
+    if (!availableSet) {
+      return [...options]
+        .sort((a, b) => collator.compare(a, b))
+        .map((v) => ({ value: v, label: v }));
+    }
+    return [...options]
+      .sort((a, b) => {
+        const aAvail = availableSet.has(a);
+        const bAvail = availableSet.has(b);
+        if (aAvail !== bAvail) return aAvail ? -1 : 1;
+        return collator.compare(a, b);
+      })
+      .map((v) => ({ value: v, label: v, disabled: !availableSet.has(v) }));
   }, [options, availableSet]);
 
   // Mirrors Dash DEFAULT_ICONS in interactive_component/utils.py:1622.
