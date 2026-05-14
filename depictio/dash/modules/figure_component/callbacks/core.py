@@ -1202,6 +1202,38 @@ def _create_figure_from_data(
                 )
 
         plot_func = getattr(px, visu_type)
+
+        # Drop kwargs the target px function doesn't accept. The builder's
+        # dict_kwargs can carry leftovers from a previous visu type (e.g.,
+        # `markers=True` chosen while in line/scatter still in dict_kwargs
+        # after the user switches to strip / funnel which don't take that
+        # kwarg). Without this filter px raises a hard TypeError and the
+        # whole render fails. The signature inspection is cheap (cached per
+        # function by inspect) and forwarding-friendly via **kwargs.
+        import inspect
+
+        try:
+            sig = inspect.signature(plot_func)
+            accepts_var_kw = any(
+                p.kind == inspect.Parameter.VAR_KEYWORD for p in sig.parameters.values()
+            )
+            if not accepts_var_kw:
+                allowed_names = set(sig.parameters.keys())
+                dropped = {k: cleaned_kwargs[k] for k in cleaned_kwargs if k not in allowed_names}
+                if dropped:
+                    logger.info(
+                        f"_create_figure_from_data: dropping {len(dropped)} kwarg(s) "
+                        f"not accepted by px.{visu_type}: {sorted(dropped.keys())}"
+                    )
+                    cleaned_kwargs = {k: v for k, v in cleaned_kwargs.items() if k in allowed_names}
+        except (ValueError, TypeError) as sig_err:
+            # signature() can fail on C-extension callables; fall through and
+            # let plotly handle (or fail loudly on) whatever we pass.
+            logger.debug(
+                f"_create_figure_from_data: signature inspection failed for "
+                f"px.{visu_type}: {sig_err}"
+            )
+
         fig = plot_func(pandas_df, **cleaned_kwargs)
 
         layout_updates = {
