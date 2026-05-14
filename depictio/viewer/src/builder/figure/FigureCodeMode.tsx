@@ -599,45 +599,6 @@ const FigureCodeMode: React.FC = () => {
                 </li>
               </ul>
 
-              <Text size="xs" fw={700}>
-                How safe is this?
-              </Text>
-              <Text size="xs">
-                Honest answer: <strong>safe enough for authenticated users in
-                your own deployment, not safe for arbitrary public input.</strong>
-                {' '}RestrictedPython has had 20+ years of hardening at Zope and
-                blocks every well-known Python-sandbox escape gadget (dunder
-                attribute walks, <Code>__import__</Code> chains, raw bytecode).
-                But two design choices in this executor widen the attack
-                surface:
-              </Text>
-              <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12 }}>
-                <li>
-                  <Code>safe_getattr</Code> / <Code>safe_setattr</Code> in
-                  this codebase delegate to the real <Code>getattr</Code> /{' '}
-                  <Code>setattr</Code> (not RestrictedPython's stricter
-                  defaults) so pandas / polars method chains work. That means
-                  any attribute that doesn't start with <Code>_</Code> is
-                  reachable on every exposed object.
-                </li>
-                <li>
-                  Pandas and Polars are large API surfaces. Methods like{' '}
-                  <Code>DataFrame.to_csv(path)</Code>,{' '}
-                  <Code>DataFrame.to_pickle(path)</Code>, or{' '}
-                  <Code>polars.read_csv(path)</Code> sit on the exposed objects
-                  and are not individually blacklisted — a determined
-                  authenticated user could write to disk via the server
-                  process's filesystem permissions.
-                </li>
-              </ul>
-              <Text size="xs">
-                Practical posture: treat code mode as "trusted user runs
-                trusted code as the server user." If you ever expose code mode
-                to anonymous / adversarial users, add a second layer
-                underneath (container with read-only FS, seccomp filter, or a
-                separate worker process with dropped capabilities) — don't
-                rely on RestrictedPython alone.
-              </Text>
             </Stack>
           </Accordion.Panel>
         </Accordion.Item>
