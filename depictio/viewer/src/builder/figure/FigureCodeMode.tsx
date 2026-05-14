@@ -480,50 +480,61 @@ const FigureCodeMode: React.FC = () => {
               <Text size="xs" fw={700}>
                 Pre-loaded modules (full names)
               </Text>
-              <Table
-                withRowBorders={false}
-                verticalSpacing={4}
-                horizontalSpacing="sm"
-                styles={{ td: { fontSize: 12, padding: '2px 8px' } }}
-              >
-                <Table.Tbody>
-                  <Table.Tr>
-                    <Table.Td><Code>px</Code></Table.Td>
-                    <Table.Td><Code>plotly.express</Code></Table.Td>
-                    <Table.Td>
-                      <Text size="xs" c="dimmed">High-level chart constructors (scatter, bar, …)</Text>
-                    </Table.Td>
-                  </Table.Tr>
-                  <Table.Tr>
-                    <Table.Td><Code>go</Code></Table.Td>
-                    <Table.Td><Code>plotly.graph_objects</Code></Table.Td>
-                    <Table.Td>
-                      <Text size="xs" c="dimmed">Low-level trace + layout primitives</Text>
-                    </Table.Td>
-                  </Table.Tr>
-                  <Table.Tr>
-                    <Table.Td><Code>pl</Code></Table.Td>
-                    <Table.Td><Code>polars</Code></Table.Td>
-                    <Table.Td>
-                      <Text size="xs" c="dimmed">Native dataframe library — <Code>df</Code> is a Polars DataFrame</Text>
-                    </Table.Td>
-                  </Table.Tr>
-                  <Table.Tr>
-                    <Table.Td><Code>pd</Code></Table.Td>
-                    <Table.Td><Code>pandas</Code></Table.Td>
-                    <Table.Td>
-                      <Text size="xs" c="dimmed">For <Code>df.to_pandas()</Code> conversions / pie-chart preprocessing</Text>
-                    </Table.Td>
-                  </Table.Tr>
-                  <Table.Tr>
-                    <Table.Td><Code>np</Code></Table.Td>
-                    <Table.Td><Code>numpy</Code></Table.Td>
-                    <Table.Td>
-                      <Text size="xs" c="dimmed">Numeric helpers (<Code>np.log</Code>, array ops)</Text>
-                    </Table.Td>
-                  </Table.Tr>
-                </Table.Tbody>
-              </Table>
+              {/* One row per module — alias chip, full dotted name, short
+               *  description. Flat Stack of Groups with nowrap so the row
+               *  never wraps onto two lines; the description takes the
+               *  remaining width and truncates via `lineClamp={1}` rather
+               *  than wrapping. Avoids the previous Table layout which
+               *  multi-row'd each module when the description was long. */}
+              <Stack gap={4}>
+                {[
+                  {
+                    alias: 'px',
+                    full: 'plotly.express',
+                    desc: 'High-level chart constructors (scatter, bar, …)',
+                  },
+                  {
+                    alias: 'go',
+                    full: 'plotly.graph_objects',
+                    desc: 'Low-level trace + layout primitives',
+                  },
+                  {
+                    alias: 'pl',
+                    full: 'polars',
+                    desc: 'Native dataframe library — df is a Polars DataFrame',
+                  },
+                  {
+                    alias: 'pd',
+                    full: 'pandas',
+                    desc: 'For df.to_pandas() conversions / pie-chart preprocessing',
+                  },
+                  {
+                    alias: 'np',
+                    full: 'numpy',
+                    desc: 'Numeric helpers (np.log, array ops)',
+                  },
+                ].map((m) => (
+                  <Group key={m.alias} gap="sm" wrap="nowrap" align="center">
+                    <Code style={{ minWidth: 28, textAlign: 'center' }}>
+                      {m.alias}
+                    </Code>
+                    <Text size="xs" c="dimmed" style={{ width: 14 }}>
+                      →
+                    </Text>
+                    <Code style={{ minWidth: 168, fontFamily: EDITOR_FONT_FAMILY }}>
+                      {m.full}
+                    </Code>
+                    <Text
+                      size="xs"
+                      c="dimmed"
+                      lineClamp={1}
+                      style={{ flex: 1, minWidth: 0 }}
+                    >
+                      {m.desc}
+                    </Text>
+                  </Group>
+                ))}
+              </Stack>
 
               <Text size="xs" fw={700}>
                 Safe built-ins (whitelisted, not the full <Code>builtins</Code> module)
