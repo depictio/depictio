@@ -1,0 +1,12 @@
+[project]
+name = "multiqc-multi-reports"
+version = "0.1.0"
+description = "Generate multiple MultiQC parquet reports across sequencing runs for testing"
+requires-python = ">=3.11"
+dependencies = [
+    "multiqc==1.31",
+    "polars>=1.0",
+]
+
+[project.scripts]
+generate-reports = "generate_multi_run_reports:main"

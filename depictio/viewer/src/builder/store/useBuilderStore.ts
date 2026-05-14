@@ -204,6 +204,25 @@ export const useBuilderStore = create<BuilderState & BuilderActions>((set) => ({
   setCodeStatus: (status) => set({ codeStatus: status }),
   loadExisting: (m) => {
     const ct = String(m.component_type) as ComponentType;
+    // Legacy Map components saved before the rename used `lat`/`lon`/`color`/`size`.
+    // Map them onto the canonical `*_column` names so the builder dropdowns
+    // rehydrate; the next save writes the canonical keys.
+    const rawMeta = m as Record<string, unknown>;
+    const config: Record<string, unknown> = { ...rawMeta };
+    if (ct === 'map') {
+      if (config.lat_column === undefined && rawMeta.lat !== undefined) {
+        config.lat_column = rawMeta.lat;
+      }
+      if (config.lon_column === undefined && rawMeta.lon !== undefined) {
+        config.lon_column = rawMeta.lon;
+      }
+      if (config.color_column === undefined && rawMeta.color !== undefined) {
+        config.color_column = rawMeta.color;
+      }
+      if (config.size_column === undefined && rawMeta.size !== undefined) {
+        config.size_column = rawMeta.size;
+      }
+    }
     set({
       existing: m,
       mode: 'edit',
@@ -217,7 +236,7 @@ export const useBuilderStore = create<BuilderState & BuilderActions>((set) => ({
       codeContent: (m.code_content as string) || '',
       // The per-type config bag is just the raw metadata for edit prefilling —
       // each builder reads what it cares about.
-      config: { ...m },
+      config,
     });
   },
   setSaving: (b) => set({ saving: b }),

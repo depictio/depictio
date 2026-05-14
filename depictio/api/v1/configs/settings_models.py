@@ -115,6 +115,7 @@ class MongoDBConfig(ServiceConfig):
         initialization_collection: str = Field(default="initialization")
         projects_collection: str = Field(default="projects")
         multiqc_collection: str = Field(default="multiqc")
+        multiqc_prerender_collection: str = Field(default="multiqc_prerender")
         test_collection: str = Field(default="test")
 
     collections: Collections = Field(default_factory=Collections)
@@ -451,6 +452,31 @@ class S3CacheConfig(BaseSettings):
     )
 
     model_config = SettingsConfigDict(env_prefix="DEPICTIO_S3_")
+
+
+class MultiQCPrerenderConfig(BaseSettings):
+    """Disk-persistent storage for pre-rendered MultiQC Plotly figures.
+
+    Phase 2 of the MultiQC caching story: the Celery build task writes each
+    rendered figure as a gzipped JSON dict under
+    ``<prerender_dir>/<dc_id>/<sha>.json.gz``. The render endpoint reads from
+    here on Redis miss so a FLUSHALL / container restart never re-pays the
+    76s parse+build cost.
+
+    Environment variable: DEPICTIO_MULTIQC_PRERENDER_DIR
+    Example (compose): DEPICTIO_MULTIQC_PRERENDER_DIR=/app/multiqc_prerender
+    """
+
+    prerender_dir: str = Field(
+        default="~/.depictio/multiqc_prerender",
+        description=(
+            "Local directory for pre-rendered MultiQC figures. Use "
+            "DEPICTIO_MULTIQC_PRERENDER_DIR to override (the dev compose mounts "
+            "./${DATA_DIR}/multiqc_prerender to /app/multiqc_prerender)."
+        ),
+    )
+
+    model_config = SettingsConfigDict(env_prefix="DEPICTIO_MULTIQC_")
 
 
 # ── Optional Features ─────────────────────────────────────────────────────────
@@ -834,6 +860,7 @@ class Settings(BaseSettings):
     cache: CacheConfig = Field(default_factory=CacheConfig)
     celery: CeleryConfig = Field(default_factory=CeleryConfig)
     s3_cache: S3CacheConfig = Field(default_factory=S3CacheConfig)
+    multiqc_prerender: MultiQCPrerenderConfig = Field(default_factory=MultiQCPrerenderConfig)
 
     # Optional features
     jbrowse: JBrowseConfig = Field(default_factory=JBrowseConfig)

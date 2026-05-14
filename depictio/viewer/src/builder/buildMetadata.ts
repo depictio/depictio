@@ -7,6 +7,7 @@
  * so no Pydantic validation regressions on POST /dashboards/save.
  */
 import type { StoredMetadata } from 'depictio-react-core';
+import { readMultiqcSelection } from 'depictio-react-core';
 import type { BuilderState } from './store/useBuilderStore';
 import { autoCardTitle } from './card/cardTitle';
 
@@ -168,19 +169,20 @@ function buildMultiqc(
   base: StoredMetadata,
   existing: Record<string, unknown>,
 ): StoredMetadata {
-  const c = as<{
-    multiqc_module?: string;
-    multiqc_plot?: string;
-    multiqc_dataset?: string;
-    s3_locations?: string[];
-    is_general_stats?: boolean;
-  }>(state.config);
+  // Persist with `selected_*` keys — the backend's render_multiqc endpoint
+  // and depictio.dash.modules.multiqc_component.models.MultiQCState read
+  // `selected_module`/`selected_plot`/`selected_dataset`. Earlier the
+  // builder used `multiqc_*` here, which silently produced 400s at render.
+  const c = as<{ s3_locations?: string[]; is_general_stats?: boolean }>(state.config);
+  const sel = readMultiqcSelection(state.config as Record<string, unknown>);
   return {
     ...existing,
     ...base,
-    multiqc_module: c.multiqc_module,
-    multiqc_plot: c.multiqc_plot,
-    multiqc_dataset: c.multiqc_dataset,
+    // `|| null` normalizes `undefined` to an explicit null so the wire
+    // shape doesn't depend on JSON's `undefined`-stripping behavior.
+    selected_module: sel.module || null,
+    selected_plot: sel.plot || null,
+    selected_dataset: sel.dataset || null,
     s3_locations: c.s3_locations || [],
     is_general_stats: Boolean(c.is_general_stats),
   };
@@ -210,22 +212,34 @@ function buildMap(
   base: StoredMetadata,
   existing: Record<string, unknown>,
 ): StoredMetadata {
+  // Schema mirrors MapLiteComponent (depictio/models/components/lite.py) and
+  // what depictio/dash/modules/map_component/utils.py reads from trigger_data.
   const c = as<{
     map_type?: string;
-    lat?: string;
-    lon?: string;
-    color?: string;
-    size?: string;
+    lat_column?: string;
+    lon_column?: string;
+    color_column?: string;
+    size_column?: string;
+    hover_columns?: string[];
+    map_style?: string;
+    opacity?: number;
+    selection_enabled?: boolean;
+    selection_column?: string;
     title?: string;
   }>(state.config);
   return {
     ...existing,
     ...base,
     map_type: c.map_type ?? 'scatter_map',
-    lat: c.lat,
-    lon: c.lon,
-    color: c.color,
-    size: c.size,
+    lat_column: c.lat_column,
+    lon_column: c.lon_column,
+    color_column: c.color_column,
+    size_column: c.size_column,
+    hover_columns: c.hover_columns ?? [],
+    map_style: c.map_style ?? 'carto-positron',
+    opacity: typeof c.opacity === 'number' ? c.opacity : 1.0,
+    selection_enabled: Boolean(c.selection_enabled),
+    selection_column: c.selection_column,
     title: c.title ?? '',
   };
 }

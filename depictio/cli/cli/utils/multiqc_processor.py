@@ -41,13 +41,34 @@ def extract_multiqc_metadata(parquet_path: str) -> Dict[str, Any]:
 
         logger.info(f"Extracting MultiQC metadata from: {parquet_path}")
 
-        # Extract MultiQC version from the installed module
-        multiqc_version = None
+        # Source the writer's MultiQC version from the parquet's own
+        # `multiqc_version` column. That column is what the validator's
+        # uniformity check needs to surface mismatches between reports
+        # produced by different MultiQC releases — using the reader's
+        # installed package version would stamp every report with the
+        # same value and silently bypass the check.
+        multiqc_version: str | None = None
         try:
-            multiqc_version = multiqc.__version__
-            logger.info(f"Detected MultiQC version: {multiqc_version}")
-        except AttributeError:
-            logger.warning("Could not detect MultiQC version from module")
+            import polars as pl
+
+            version_series = (
+                pl.read_parquet(parquet_path, columns=["multiqc_version"])
+                .get_column("multiqc_version")
+                .drop_nulls()
+                .unique()
+            )
+            if version_series.len() > 0:
+                multiqc_version = str(version_series.item(0))
+                logger.info(f"MultiQC version (from parquet): {multiqc_version}")
+        except Exception as e:
+            logger.debug(f"Could not read multiqc_version column from parquet: {e}")
+
+        if multiqc_version is None:
+            try:
+                multiqc_version = multiqc.__version__
+                logger.info(f"MultiQC version (fallback from installed pkg): {multiqc_version}")
+            except AttributeError:
+                logger.warning("Could not detect MultiQC version")
 
         # Reset MultiQC state and parse the parquet file
         multiqc.reset()
@@ -81,8 +102,6 @@ def extract_multiqc_metadata(parquet_path: str) -> Dict[str, Any]:
             f"Extracted metadata: {len(samples)} samples, {len(canonical_samples)} canonical IDs, "
             f"{len(modules)} modules, {len(plots)} plot groups"
         )
-        if multiqc_version:
-            logger.info(f"MultiQC version: {multiqc_version}")
 
         return metadata
 

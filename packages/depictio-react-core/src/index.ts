@@ -36,6 +36,8 @@ export { default as InteractiveGroupCard } from './components/InteractiveGroupCa
 export { default as TopPanel } from './components/TopPanel';
 export { groupInteractiveComponents } from './utils/groupInteractive';
 export type { InteractiveGroup } from './utils/groupInteractive';
+export { readMultiqcSelection } from './utils/multiqcSelection';
+export type { MultiqcSelection } from './utils/multiqcSelection';
 
 // MultiQC sub-renderers
 export { default as MultiQCFigure } from './components/multiqc/MultiQCFigure';
@@ -87,6 +89,7 @@ export {
   fetchDataCollectionPreview,
   previewFigure,
   previewMultiQC,
+  fetchMultiQCBuilderOptions,
   analyzeFigureCode,
   fetchFigureParameterDiscovery,
   fetchFigureVisualizationList,
@@ -135,6 +138,8 @@ export {
   setUserAdmin,
   listAllProjects,
   listAllDashboards,
+  listExampleProjects,
+  cleanExampleProjects,
   // Profile + CLI tokens
   fetchCurrentUserFull,
   editPassword,
@@ -142,7 +147,25 @@ export {
   createLongLivedToken,
   deleteLongLivedToken,
   generateAgentConfig,
+  // Cross-DC links
+  listProjectLinks,
+  createProjectLink,
+  updateProjectLink,
+  deleteProjectLink,
+  listLinkResolvers,
+  fetchMultiQCSampleMappings,
+  // MultiQC management (multipart uploads)
+  createMultiQCDataCollection,
+  checkMultiQCUniformity,
+  appendMultiQCFiles,
+  replaceMultiQCFiles,
+  clearMultiQCDC,
+  // Table DC management (multipart uploads)
+  appendTableFiles,
+  replaceTableFiles,
+  clearTableDC,
 } from './api';
+export type { TableMutationResult } from './api';
 // Selection-as-filter helpers (Plotly/AG Grid → InteractiveFilter)
 export {
   extractScatterSelection,
@@ -178,6 +201,7 @@ export type {
   PreviewResult,
   FigurePreviewRequest,
   MultiQCPreviewRequest,
+  MultiQCBuilderOptions,
   CodeAnalysis,
   FigureParameterSpec,
   FigureParameterType,
@@ -214,9 +238,22 @@ export type {
   AdminUser,
   AdminProject,
   AdminDashboard,
+  ExampleProject,
   // Profile + CLI token types
   ProfileUser,
   CliToken,
   CreatedToken,
   CliAgentConfig,
+  // Link types
+  LinkResolverName,
+  LinkTargetType,
+  DCLink,
+  DCLinkConfig,
+  CreateLinkInput,
+  UpdateLinkInput,
+  ResolverInfo,
+  // MultiQC management types
+  CreateMultiQCDCInput,
+  MultiQCMutationResult,
+  MultiQCUniformityCheckResult,
 } from './api';

@@ -41,9 +41,9 @@ export function actionsFor(componentType: string): ChromeAction[] {
   switch (componentType) {
     case 'figure':
     case 'map':
-      return ['metadata', 'fullscreen', 'download', 'reset'];
+      return ['metadata', 'fullscreen', 'reset'];
     case 'multiqc':
-      return ['metadata', 'fullscreen', 'download'];
+      return ['metadata', 'fullscreen'];
     case 'table':
       return ['metadata', 'fullscreen', 'download', 'reset'];
     case 'interactive':

@@ -216,10 +216,14 @@ def render_map(
     import plotly.graph_objects as go
 
     map_type = trigger_data.get("map_type", "scatter_map")
-    lat_column = trigger_data.get("lat_column", "")
-    lon_column = trigger_data.get("lon_column", "")
-    color_column = trigger_data.get("color_column")
-    size_column = trigger_data.get("size_column")
+    # Legacy React builder writes saved before the canonical-key rename used
+    # plotly-short keys (`lat`, `lon`, `color`, `size`). Fall back to those so
+    # old Map components keep rendering until the user re-saves through the
+    # current builder (which writes `*_column` keys).
+    lat_column = trigger_data.get("lat_column") or trigger_data.get("lat", "")
+    lon_column = trigger_data.get("lon_column") or trigger_data.get("lon", "")
+    color_column = trigger_data.get("color_column") or trigger_data.get("color")
+    size_column = trigger_data.get("size_column") or trigger_data.get("size")
     hover_columns = trigger_data.get("hover_columns", [])
     text_column = trigger_data.get("text_column")
     map_style = trigger_data.get("map_style", "carto-positron")

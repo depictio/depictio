@@ -9,7 +9,6 @@
 import React, { useEffect } from 'react';
 import {
   AppShell,
-  Box,
   Button,
   Center,
   Container,
@@ -63,7 +62,7 @@ const CreateComponentPage: React.FC<CreateComponentPageProps> = ({
   };
 
   return (
-    <AppShell padding="md" header={{ height: 50 }}>
+    <AppShell padding="md" header={{ height: 50 }} footer={{ height: 80 }}>
       <AppShell.Header>
         <Group h="100%" px="md" justify="space-between">
           <Group gap="xs">
@@ -144,14 +143,23 @@ const CreateComponentPage: React.FC<CreateComponentPageProps> = ({
               </Stack>
             </Stepper.Completed>
           </Stepper>
+        </Container>
+      </AppShell.Main>
 
-          <Group justify="center" align="center" mt="xl" gap="md">
+      <AppShell.Footer
+        withBorder
+        style={{
+          background: 'var(--mantine-color-body)',
+        }}
+      >
+        <Container size="xl" px="md" h="100%">
+          <Group justify="center" align="center" gap="md" h="100%">
             <Button
               variant="outline"
               color="gray"
               size="lg"
               leftSection={<Icon icon="mdi:arrow-left" width={20} />}
-              disabled={step === 0}
+              disabled={step === 0 || step >= 2}
               onClick={() => setStep(Math.max(0, step - 1))}
             >
               Back
@@ -171,10 +179,8 @@ const CreateComponentPage: React.FC<CreateComponentPageProps> = ({
               Next Step
             </Button>
           </Group>
-
-          <Box h={32} />
         </Container>
-      </AppShell.Main>
+      </AppShell.Footer>
     </AppShell>
   );
 };

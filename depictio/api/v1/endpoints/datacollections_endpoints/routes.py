@@ -7,8 +7,11 @@ from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.db import db, projects_collection
 from depictio.api.v1.endpoints.datacollections_endpoints.utils import (
+    _check_multiqc_uniformity_from_uploads,
     _create_dc_from_upload,
+    _create_multiqc_dc_from_uploads,
     _delete_data_collection_by_id,
+    _delete_orphan_links_for_dc,
     _get_data_collection_specs,
     _update_data_collection_name,
     _update_dc_specific_properties,
@@ -56,6 +59,13 @@ async def delete_datacollection(
         {"_id": workflow_oid},
         {"$pull": {"data_collections": data_collection}},
     )
+
+    links_pulled = _delete_orphan_links_for_dc(data_collection_id)
+    if links_pulled:
+        logger.info(
+            f"Removed orphan cross-DC links from {links_pulled} project(s) after deleting DC {data_collection_id} (workflow {workflow_id})"
+        )
+
     return {"message": "Data collection deleted successfully."}
 
 
@@ -191,6 +201,8 @@ async def create_data_collection_from_upload(
     compression: str = Form("none"),
     has_header: bool = Form(True),
     description: str = Form(""),
+    lat_column: str | None = Form(None),
+    lon_column: str | None = Form(None),
     file: UploadFile = File(...),
     current_user=Depends(get_user_or_anonymous),
 ):
@@ -201,6 +213,10 @@ async def create_data_collection_from_upload(
     Dash anymore. Tolerates missing tokens (single-user / public mode); the
     project-permission check inside ``_create_dc_from_upload`` still gates
     write access.
+
+    When ``lat_column`` and ``lon_column`` are provided, the resulting DC
+    config is a ``DCTableCoordinatesConfig`` (still ``dc_type='table'``) —
+    consumed by Map components for geographic data.
     """
     file_bytes = await file.read()
     return await asyncio.to_thread(
@@ -216,5 +232,80 @@ async def create_data_collection_from_upload(
         has_header=has_header,
         file_bytes=file_bytes,
         filename=file.filename or "upload.dat",
+        current_user=current_user,
+        lat_column=lat_column,
+        lon_column=lon_column,
+    )
+
+
+@datacollections_endpoint_router.post("/multiqc_uniformity_check")
+async def multiqc_uniformity_check(
+    files: list[UploadFile] = File(...),
+    current_user=Depends(get_user_or_anonymous),
+):
+    """Dry-run MultiQC uniformity check (no DC created, no S3 writes).
+
+    Lets the React Create DC modal preview the same checks the create flow
+    runs (modules, plots, version, samples) before the user commits to Create.
+    """
+    if not files:
+        raise HTTPException(status_code=400, detail="No files uploaded.")
+
+    decoded_files: list[tuple[bytes, str]] = []
+    running_total = 0
+    for upload in files:
+        body = await upload.read()
+        running_total += len(body)
+        if running_total > 500 * 1024 * 1024:
+            raise HTTPException(
+                status_code=413,
+                detail=(
+                    f"Total upload size {running_total / (1024 * 1024):.1f}MB exceeds 500MB limit."
+                ),
+            )
+        decoded_files.append((body, upload.filename or "upload.parquet"))
+
+    return await asyncio.to_thread(_check_multiqc_uniformity_from_uploads, decoded_files)
+
+
+@datacollections_endpoint_router.post("/create_multiqc_from_upload")
+async def create_multiqc_data_collection_from_upload(
+    project_id: str = Form(...),
+    name: str = Form(...),
+    description: str = Form(""),
+    files: list[UploadFile] = File(...),
+    current_user=Depends(get_user_or_anonymous),
+):
+    """Create a MultiQC data collection from one or more uploaded multiqc.parquet files.
+
+    Each file's effective name is the browser-provided ``webkitRelativePath``
+    (``run_01/multiqc_data/multiqc.parquet``) so the helper can group reports
+    by parent folder. Per-file cap 50MB, total cap 500MB; per-file cap is
+    enforced inside the helper, total is enforced here against the headers
+    so we can fail fast before reading bodies.
+    """
+    if not files:
+        raise HTTPException(status_code=400, detail="No files uploaded.")
+
+    decoded_files: list[tuple[bytes, str]] = []
+    running_total = 0
+    for upload in files:
+        body = await upload.read()
+        running_total += len(body)
+        if running_total > 500 * 1024 * 1024:
+            raise HTTPException(
+                status_code=413,
+                detail=(
+                    f"Total upload size {running_total / (1024 * 1024):.1f}MB exceeds 500MB limit."
+                ),
+            )
+        decoded_files.append((body, upload.filename or "upload.parquet"))
+
+    return await asyncio.to_thread(
+        _create_multiqc_dc_from_uploads,
+        project_id=project_id,
+        name=name,
+        description=description,
+        decoded_files=decoded_files,
         current_user=current_user,
     )

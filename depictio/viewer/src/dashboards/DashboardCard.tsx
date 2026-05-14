@@ -6,7 +6,6 @@ import {
   Card,
   Center,
   Group,
-  Menu,
   Stack,
   Space,
   Text,
@@ -20,12 +19,23 @@ import { Icon } from '@iconify/react';
 
 import type { DashboardListEntry } from 'depictio-react-core';
 import MultiTabPreview from './MultiTabPreview';
+import DashboardActionsMenu from './DashboardActionsMenu';
+import {
+  coerceString,
+  formatLastSaved,
+  isImagePath,
+  resolveAssetUrl,
+  screenshotUrl,
+} from './lib/format';
 
 interface DashboardCardProps {
   dashboard: DashboardListEntry;
   childTabs?: DashboardListEntry[];
   isOwner: boolean;
   projectName?: string;
+  pinned?: boolean;
+  pinDisabled?: boolean;
+  onTogglePin?: () => void;
   onView: (d: DashboardListEntry) => void;
   onEdit: (d: DashboardListEntry) => void;
   onDelete: (d: DashboardListEntry) => void;
@@ -33,67 +43,13 @@ interface DashboardCardProps {
   onExport: (d: DashboardListEntry) => void;
 }
 
-/** True for icon values that point at an image file (e.g. workflow logos
- *  shipped with the Dash app at `/assets/images/logos/...`). */
-function isImagePath(s: string | null | undefined): boolean {
-  if (!s) return false;
-  return /^(\/|https?:\/\/|data:)/.test(s) || /\.(png|svg|jpe?g|webp)$/i.test(s);
-}
-
-/** Resolve a Dash asset path (e.g. `/assets/images/logos/multiqc.png`) to a
- *  loadable URL. The Dash app serves /assets/ on port 5122; the SPA on 8122
- *  doesn't proxy them, so cross-port in dev. Mirrors `resolveAssetUrl()` in
- *  `chrome/Sidebar.tsx`. */
-function resolveAssetUrl(s: string): string {
-  if (/^(https?:\/\/|data:)/.test(s)) return s;
-  if (s.startsWith('/')) {
-    const env = (import.meta as unknown as { env?: Record<string, string> }).env;
-    if (env?.VITE_DASH_ORIGIN) return env.VITE_DASH_ORIGIN.replace(/\/$/, '') + s;
-    if (
-      typeof window !== 'undefined' &&
-      window.location.hostname &&
-      window.location.port === '8122'
-    ) {
-      return `${window.location.protocol}//${window.location.hostname}:5122${s}`;
-    }
-    return s;
-  }
-  return s;
-}
-
-/** Format `last_saved_ts` (ISO or "%Y-%m-%d %H:%M:%S") as "yyyy-mm-dd HH:MM"
- *  to match `dashboards_management.py:607-611`. */
-function formatLastSaved(raw: string): string {
-  const d = new Date(raw.replace('Z', '+00:00'));
-  if (Number.isNaN(d.getTime())) return raw;
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
-
-function screenshotUrl(
-  dashboardId: string,
-  theme: 'light' | 'dark',
-  lastSavedTs?: string,
-): string {
-  // Cache-bust on every save: the auto-screenshot job overwrites the file
-  // in place, so without a versioned URL the browser keeps showing the old
-  // image until a hard reload. ``last_saved_ts`` changes whenever the
-  // dashboard is saved (and the screenshot job runs as part of save), so
-  // it's the right version key.
-  const base = `/static/screenshots/${dashboardId}_${theme}.png`;
-  if (!lastSavedTs) return base;
-  return `${base}?v=${encodeURIComponent(lastSavedTs)}`;
-}
-
 const SingleThumbnail: React.FC<{
   dashboard: DashboardListEntry;
   theme: 'light' | 'dark';
 }> = ({ dashboard, theme }) => {
   const [errored, setErrored] = useState(false);
-  const icon =
-    (typeof dashboard.icon === 'string' && dashboard.icon) || 'mdi:view-dashboard';
-  const color =
-    (typeof dashboard.icon_color === 'string' && dashboard.icon_color) || 'orange';
+  const icon = coerceString(dashboard.icon, 'mdi:view-dashboard');
+  const color = coerceString(dashboard.icon_color, 'orange');
 
   if (errored) {
     return (
@@ -148,6 +104,9 @@ const DashboardCard: React.FC<DashboardCardProps> = ({
   childTabs = [],
   isOwner,
   projectName,
+  pinned = false,
+  pinDisabled = false,
+  onTogglePin,
   onView,
   onEdit,
   onDelete,
@@ -157,23 +116,58 @@ const DashboardCard: React.FC<DashboardCardProps> = ({
   const { colorScheme } = useMantineColorScheme();
   const theme: 'light' | 'dark' = colorScheme === 'dark' ? 'dark' : 'light';
 
-  const dashboardIcon =
-    (typeof dashboard.icon === 'string' && dashboard.icon) || 'mdi:view-dashboard';
-  const dashboardIconColor =
-    (typeof dashboard.icon_color === 'string' && dashboard.icon_color) || 'orange';
-  const subtitle =
-    typeof dashboard.subtitle === 'string' ? dashboard.subtitle : '';
+  const dashboardIcon = coerceString(dashboard.icon, 'mdi:view-dashboard');
+  const dashboardIconColor = coerceString(dashboard.icon_color, 'orange');
+  const subtitle = coerceString(dashboard.subtitle, '');
   const ownerEmail = dashboard.permissions?.owners?.[0]?.email ?? '';
   const isPublic = Boolean(dashboard.is_public);
-  const lastSavedRaw =
-    typeof dashboard.last_saved_ts === 'string' ? dashboard.last_saved_ts : '';
+  const lastSavedRaw = coerceString(dashboard.last_saved_ts, '');
   const lastSaved = lastSavedRaw ? formatLastSaved(lastSavedRaw) : 'Never';
   const titleText = dashboard.title || dashboard.dashboard_id;
   const totalTabs = childTabs.length + 1;
   const hasMultipleTabs = childTabs.length > 0;
 
   return (
-    <Card shadow="sm" padding="md" radius="md" withBorder>
+    <Card shadow="sm" padding="md" radius="md" withBorder style={{ position: 'relative' }}>
+      {onTogglePin && (
+        <Tooltip
+          label={
+            pinDisabled
+              ? 'Pinning is disabled in public mode'
+              : pinned
+                ? 'Unpin'
+                : 'Pin to top'
+          }
+          withinPortal
+        >
+          <ActionIcon
+            variant="transparent"
+            size="md"
+            onClick={onTogglePin}
+            disabled={pinDisabled}
+            aria-label={pinned ? 'Unpin dashboard' : 'Pin dashboard'}
+            style={{
+              position: 'absolute',
+              top: 8,
+              right: 8,
+              zIndex: 2,
+              // Drop shadow keeps the icon legible against any screenshot.
+              filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.4))',
+            }}
+          >
+            <Icon
+              icon={pinned ? 'mdi:star' : 'mdi:star-outline'}
+              width={20}
+              color={
+                pinned
+                  ? 'var(--mantine-color-yellow-5)'
+                  : 'var(--mantine-color-white)'
+              }
+            />
+          </ActionIcon>
+        </Tooltip>
+      )}
+
       <Card.Section>
         <AspectRatio ratio={16 / 10}>
           {hasMultipleTabs ? (
@@ -232,54 +226,15 @@ const DashboardCard: React.FC<DashboardCardProps> = ({
             </Text>
           )}
         </Stack>
-        <Menu position="bottom-end" shadow="md" withinPortal width={170}>
-          <Menu.Target>
-            <ActionIcon
-              variant="subtle"
-              color="gray"
-              size="md"
-              aria-label="Dashboard actions"
-            >
-              <Icon icon="tabler:dots-vertical" width={18} />
-            </ActionIcon>
-          </Menu.Target>
-          <Menu.Dropdown>
-            <Menu.Item
-              leftSection={<Icon icon="mdi:eye" width={14} />}
-              onClick={() => onView(dashboard)}
-            >
-              Open
-            </Menu.Item>
-            <Menu.Item
-              leftSection={<Icon icon="tabler:edit" width={14} />}
-              disabled={!isOwner}
-              onClick={() => onEdit(dashboard)}
-            >
-              Edit
-            </Menu.Item>
-            <Menu.Item
-              leftSection={<Icon icon="mdi:content-duplicate" width={14} />}
-              onClick={() => onDuplicate(dashboard)}
-            >
-              Duplicate
-            </Menu.Item>
-            <Menu.Item
-              leftSection={<Icon icon="mdi:download" width={14} />}
-              onClick={() => onExport(dashboard)}
-            >
-              Export JSON
-            </Menu.Item>
-            <Menu.Divider />
-            <Menu.Item
-              color="red"
-              leftSection={<Icon icon="tabler:trash" width={14} />}
-              disabled={!isOwner}
-              onClick={() => onDelete(dashboard)}
-            >
-              Delete
-            </Menu.Item>
-          </Menu.Dropdown>
-        </Menu>
+        <DashboardActionsMenu
+          dashboard={dashboard}
+          isOwner={isOwner}
+          onView={onView}
+          onEdit={onEdit}
+          onDelete={onDelete}
+          onDuplicate={onDuplicate}
+          onExport={onExport}
+        />
       </Group>
 
       <Space h={10} />

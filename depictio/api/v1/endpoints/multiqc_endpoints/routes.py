@@ -8,17 +8,26 @@ This module provides REST API endpoints for managing MultiQC reports:
 - Get MultiQC report metadata and plots
 """
 
+import asyncio
+
 from bson import ObjectId
-from fastapi import APIRouter, Depends, Query, Response
+from bson.errors import InvalidId
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile
 from pydantic import BaseModel
 
 from depictio.api.v1.celery_dispatch import offload_or_run
 from depictio.api.v1.celery_tasks import build_multiqc_preview as build_multiqc_preview_task
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
+from depictio.api.v1.db import multiqc_collection, projects_collection
+from depictio.api.v1.endpoints.dashboards_endpoints.routes import check_project_permission
 from depictio.api.v1.endpoints.multiqc_endpoints.utils import (
+    _append_multiqc_dc_uploads,
+    _compute_multiqc_builder_options,
+    _replace_multiqc_dc_uploads,
     check_duplicate_multiqc_report,
     create_multiqc_report_in_db,
+    delete_all_multiqc_reports_for_dc,
     delete_multiqc_report_by_id,
     generate_multiqc_download_url,
     get_multiqc_report_by_id,
@@ -32,6 +41,38 @@ from depictio.api.v1.endpoints.user_endpoints.routes import (
 )
 from depictio.models.models.multiqc_reports import MultiQCReport
 from depictio.models.models.users import User
+
+
+def _project_id_for_dc(data_collection_id: str) -> str | None:
+    """Return the owning project's id for a DC, or None if unknown.
+
+    Walks ``projects.workflows[].data_collections[]`` in Mongo to locate
+    the workflow that owns the DC. The shape mirrors what the rest of
+    the codebase already does (see e.g. ``_fetch_s3_locations_from_dc``);
+    we don't have a flat dc → project index.
+    """
+    project = projects_collection.find_one(
+        {"workflows.data_collections._id": ObjectId(data_collection_id)},
+        {"_id": 1},
+    )
+    return str(project["_id"]) if project else None
+
+
+def _require_dc_editor_or_404(data_collection_id: str, user: User) -> None:
+    """Authorize a destructive call against a MultiQC DC.
+
+    Mirrors the project-permission check that the dashboard delete uses
+    so a stolen JWT can't reach across tenants and wipe another user's
+    MultiQC reports + S3 parquets via the bulk endpoint. Returns 404
+    instead of 403 when the DC isn't found OR the user has no rights —
+    don't leak existence to non-members.
+    """
+    project_id = _project_id_for_dc(data_collection_id)
+    if not project_id or not check_project_permission(project_id, user, "editor"):
+        raise HTTPException(
+            status_code=404,
+            detail=f"Data collection {data_collection_id} not found",
+        )
 
 
 class MultiQCReportResponse(BaseModel):
@@ -235,7 +276,141 @@ async def delete_multiqc_report(
     Returns:
         Deletion confirmation
     """
+    try:
+        report_oid = ObjectId(report_id)
+    except (InvalidId, TypeError):
+        raise HTTPException(status_code=400, detail=f"Invalid report id: {report_id}")
+
+    report_doc = multiqc_collection.find_one({"_id": report_oid}, {"data_collection_id": 1})
+    if not report_doc:
+        raise HTTPException(status_code=404, detail=f"Report {report_id} not found")
+
+    _require_dc_editor_or_404(str(report_doc["data_collection_id"]), current_user)
+
     return await delete_multiqc_report_by_id(report_id, delete_s3_file)
+
+
+@router.delete(
+    "/reports/data-collection/{data_collection_id}",
+    response_model=dict,
+    summary="Bulk-delete all MultiQC reports for a data collection",
+)
+async def delete_all_reports_for_data_collection(
+    data_collection_id: str,
+    delete_s3_files: bool = Query(
+        False, description="Whether to also delete the associated S3 parquet objects"
+    ),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Delete all MultiQC reports linked to a data collection in a single Mongo call.
+
+    Optionally also deletes the underlying S3 parquet objects. Returns counts for
+    both Mongo and S3 deletions.
+    """
+    try:
+        ObjectId(data_collection_id)
+    except (InvalidId, TypeError):
+        raise HTTPException(
+            status_code=400, detail=f"Invalid data collection id: {data_collection_id}"
+        )
+
+    _require_dc_editor_or_404(data_collection_id, current_user)
+
+    result = await delete_all_multiqc_reports_for_dc(data_collection_id, delete_s3_files)
+    from depictio.api.v1.endpoints.multiqc_endpoints.utils import _invalidate_multiqc_caches_for_dc
+
+    _invalidate_multiqc_caches_for_dc(data_collection_id)
+    return {**result, "data_collection_id": data_collection_id}
+
+
+async def _read_multiqc_uploads_with_caps(files: list[UploadFile]) -> list[tuple[bytes, str]]:
+    """Read all UploadFiles into memory while enforcing the 500MB total cap.
+
+    The per-file 50MB cap is enforced inside the helper so we keep one
+    source of truth.
+    """
+    if not files:
+        raise HTTPException(status_code=400, detail="No files uploaded.")
+
+    decoded_files: list[tuple[bytes, str]] = []
+    running_total = 0
+    for upload in files:
+        body = await upload.read()
+        running_total += len(body)
+        if running_total > 500 * 1024 * 1024:
+            raise HTTPException(
+                status_code=413,
+                detail=(
+                    f"Total upload size {running_total / (1024 * 1024):.1f}MB exceeds 500MB limit."
+                ),
+            )
+        decoded_files.append((body, upload.filename or "upload.parquet"))
+    return decoded_files
+
+
+@router.post(
+    "/reports/data-collection/{data_collection_id}/replace",
+    response_model=dict,
+    summary="Replace all reports for a MultiQC DC with the uploaded set",
+)
+async def replace_multiqc_reports(
+    data_collection_id: str,
+    files: list[UploadFile] = File(...),
+    current_user: User = Depends(get_current_user),
+):
+    """Bulk-delete every existing report (Mongo + S3) and reprocess from the uploads.
+
+    Editor permission check happens inside the helper; returns 404 (not 403)
+    on permission failure to avoid leaking DC existence.
+    """
+    try:
+        ObjectId(data_collection_id)
+    except (InvalidId, TypeError):
+        raise HTTPException(
+            status_code=400, detail=f"Invalid data collection id: {data_collection_id}"
+        )
+
+    decoded_files = await _read_multiqc_uploads_with_caps(files)
+    return await asyncio.to_thread(
+        _replace_multiqc_dc_uploads,
+        data_collection_id=data_collection_id,
+        decoded_files=decoded_files,
+        current_user=current_user,
+    )
+
+
+@router.post(
+    "/reports/data-collection/{data_collection_id}/append",
+    response_model=dict,
+    summary="Append new reports to a MultiQC DC, preserving existing reports",
+)
+async def append_multiqc_reports(
+    data_collection_id: str,
+    files: list[UploadFile] = File(...),
+    current_user: User = Depends(get_current_user),
+):
+    """Add new uploads to an existing MultiQC DC.
+
+    Existing reports' parquets are pulled back from S3 so the processor
+    sees the full file set. Old report rows are dropped only after the
+    reprocess succeeds — partial failure leaves the DC at its pre-append
+    state.
+    """
+    try:
+        ObjectId(data_collection_id)
+    except (InvalidId, TypeError):
+        raise HTTPException(
+            status_code=400, detail=f"Invalid data collection id: {data_collection_id}"
+        )
+
+    decoded_files = await _read_multiqc_uploads_with_caps(files)
+    return await asyncio.to_thread(
+        _append_multiqc_dc_uploads,
+        data_collection_id=data_collection_id,
+        decoded_files=decoded_files,
+        current_user=current_user,
+    )
 
 
 @router.get(
@@ -318,56 +493,12 @@ async def get_multiqc_builder_options(
     reports, _total = await get_multiqc_reports_by_data_collection(
         data_collection_id, limit=100, offset=0
     )
-
-    modules: set[str] = set()
-    plots: dict[str, set[str]] = {}
-    datasets: dict[str, set[str]] = {}
-    s3_locations: list[str] = []
-    general_stats: list[dict[str, str]] = []
-
-    for report in reports:
-        # MultiQCReport may be a Pydantic model or a dict depending on path —
-        # normalize via .model_dump() when available.
-        report_data = report.model_dump() if hasattr(report, "model_dump") else dict(report)
-
-        s3_loc = report_data.get("s3_location") or report_data.get("delta_table_location")
-        if s3_loc and s3_loc not in s3_locations:
-            s3_locations.append(s3_loc)
-
-        meta = report_data.get("metadata") or {}
-        for module in meta.get("modules", []) or []:
-            modules.add(str(module))
-        plots_meta = meta.get("plots") or {}
-        for module, module_plots in plots_meta.items():
-            mod = str(module)
-            plots.setdefault(mod, set())
-            if isinstance(module_plots, list):
-                for entry in module_plots:
-                    if isinstance(entry, dict):
-                        for plot_name, ds_list in entry.items():
-                            plots[mod].add(str(plot_name))
-                            if isinstance(ds_list, list):
-                                datasets.setdefault(str(plot_name), set()).update(
-                                    str(d) for d in ds_list
-                                )
-                    else:
-                        plots[mod].add(str(entry))
-            elif isinstance(module_plots, dict):
-                for plot_name, ds_list in module_plots.items():
-                    plots[mod].add(str(plot_name))
-                    if isinstance(ds_list, list):
-                        datasets.setdefault(str(plot_name), set()).update(str(d) for d in ds_list)
-
-    if "general_stats" in modules:
-        general_stats.append({"module": "general_stats", "plot": "general_stats"})
-
-    return {
-        "modules": sorted(modules),
-        "plots": {k: sorted(v) for k, v in plots.items()},
-        "datasets": {k: sorted(v) for k, v in datasets.items()},
-        "s3_locations": s3_locations,
-        "general_stats": general_stats,
-    }
+    # MultiQCReport may be a Pydantic model or a dict depending on path —
+    # normalize via .model_dump() when available.
+    report_dicts = [
+        report.model_dump() if hasattr(report, "model_dump") else dict(report) for report in reports
+    ]
+    return _compute_multiqc_builder_options(report_dicts)
 
 
 @router.post(
@@ -441,18 +572,40 @@ async def multiqc_preview(
     offload = settings.celery.offload_preview
     response.headers["X-Celery-Path"] = "offloaded" if offload else "inline"
 
+    # Safety net for legacy DCs uploaded before the prewarm pipeline existed
+    # (or for any reason where the prerender disk dir is empty). Fire-and-forget
+    # full-DC warm so the user pays the cold cost on this plot but every other
+    # plot in the DC warms in the background. The Redis lock in
+    # `prewarm_multiqc_dc_all_plots` no-ops if a build is already running, and
+    # the freshness short-circuit no-ops if the doc is already ready with a
+    # matching s3_locations_hash.
+    try:
+        from depictio.dash.celery_app import prewarm_multiqc_dc_all_plots
+
+        prewarm_multiqc_dc_all_plots.delay(str(dc_id))
+    except Exception as exc:
+        logger.warning(
+            f"multiqc_preview: bootstrap prewarm enqueue failed for dc={dc_id} (non-fatal): {exc}"
+        )
+
     payload = {
         "s3_locations": s3_locations,
         "module": str(selected_module),
         "plot": str(selected_plot),
         "dataset": str(selected_dataset) if selected_dataset else None,
         "theme": theme,
+        "dc_id": str(dc_id),
     }
     try:
+        # Match the Celery task's soft_time_limit (120s) so a cold-path render
+        # — Polars scan + plotly.get_plot on the first hit for a parquet — has
+        # time to complete. The 30s default in `offload_timeout_seconds` is
+        # tuned for fast figure previews and is too tight for MultiQC.
         return await offload_or_run(
             build_multiqc_preview_task,
             (payload,),
             offload=offload,
+            timeout=120.0,
             label=f"multiqc_preview dc={dc_id} module={selected_module} plot={selected_plot}",
         )
     except HTTPException:

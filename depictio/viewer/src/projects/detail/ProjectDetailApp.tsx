@@ -14,6 +14,7 @@ import {
   ScrollArea,
   SimpleGrid,
   Stack,
+  Tabs,
   Text,
   Title,
   useMantineColorScheme,
@@ -29,7 +30,6 @@ import { notifications } from '@mantine/notifications';
 import {
   Alert,
   Anchor,
-  FileInput,
   Modal,
   Select,
   Switch,
@@ -44,12 +44,23 @@ import {
   renameDataCollection,
   deleteDataCollection,
   createDataCollectionFromUpload,
+  createMultiQCDataCollection,
+  checkMultiQCUniformity,
 } from 'depictio-react-core';
 import type {
   ProjectListEntry,
   PreviewResult,
   MultiQCReportSummary,
+  DCLink,
 } from 'depictio-react-core';
+import LinksSection from './LinksSection';
+import ManageDataCollectionModal, {
+  type ManageDcType,
+} from './ManageDataCollectionModal';
+import MultiQCViewerPreview from './MultiQCViewerPreview';
+import CoordinatesMapPreview from './CoordinatesMapPreview';
+import { UnstyledDropZone } from '../../components/UnstyledDropZone';
+import { useFolderDropzone } from '../../hooks/useFolderDropzone';
 
 import { useCurrentUser } from '../../hooks/useCurrentUser';
 import { AppSidebar } from '../../chrome';
@@ -123,6 +134,18 @@ function getDcSizeBytes(dc: DataCollectionShape): number {
     );
   }
   return (flex.deltatable_size_bytes as number | undefined) ?? 0;
+}
+
+/** A DC is a "coordinates table" when its config carries explicit lat/lon
+ *  column hints — backed by DCTableCoordinatesConfig server-side, but the
+ *  dc_type stays "table". Mirrors validation.py:dc_has_coordinates. */
+function dcHasCoordinates(dc: DataCollectionShape): boolean {
+  const type = (dc.config?.type as string | undefined)?.toLowerCase();
+  if (type !== 'table') return false;
+  const props = dc.config?.dc_specific_properties as
+    | Record<string, unknown>
+    | undefined;
+  return Boolean(props?.lat_column) && Boolean(props?.lon_column);
 }
 
 /** Pick the right "where is this data stored" string for a DC. */
@@ -199,10 +222,30 @@ function flattenDataCollections(
   return workflows.flatMap((wf) => wf.data_collections ?? []);
 }
 
-/** Best-effort column extraction matching the Dash version's priority:
- *  config.columns > config.dc_specific_properties.columns_description (keys)
+/** Best-effort column extraction matching the Dash version's priority
+ *  (depictio/dash/components/depictio_cytoscape_joins.py:948-989):
+ *  last_aggregation.aggregation_columns_specs > config.columns
+ *  > config.dc_specific_properties.columns_description (keys)
  *  > delta_table_schema (keys or field names). Falls back to []. */
 function extractColumns(dc: DataCollectionShape): string[] {
+  // Priority 1: aggregation_columns_specs from the latest aggregation entry.
+  // For DCs ingested through the React table-create / append flow this is
+  // the only populated source — without it the cytoscape table-DC node
+  // renders an empty box.
+  const lastAggRaw = dc.last_aggregation;
+  const lastAgg = Array.isArray(lastAggRaw)
+    ? lastAggRaw[lastAggRaw.length - 1]
+    : lastAggRaw;
+  const specs = (lastAgg as
+    | { aggregation_columns_specs?: Array<{ name?: unknown }> }
+    | undefined)?.aggregation_columns_specs;
+  if (Array.isArray(specs) && specs.length > 0) {
+    const names = specs
+      .map((s) => (typeof s?.name === 'string' ? s.name : null))
+      .filter((n): n is string => !!n);
+    if (names.length > 0) return names;
+  }
+
   const config = (dc.config ?? {}) as Record<string, unknown>;
   const direct = config.columns;
   if (Array.isArray(direct)) return direct.map(String);
@@ -235,8 +278,13 @@ const ProjectDetailApp: React.FC = () => {
   const [refreshKey, setRefreshKey] = useState(0);
   const [renameTarget, setRenameTarget] = useState<DataCollectionShape | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<DataCollectionShape | null>(null);
+  const [manageTarget, setManageTarget] = useState<DataCollectionShape | null>(null);
   const [selectedWorkflowId, setSelectedWorkflowId] = useState<string | null>(null);
   const [createDcOpened, setCreateDcOpened] = useState(false);
+  /** Cross-DC links for this project. Fetched alongside the project doc and
+   *  refreshed when the user creates / edits / deletes a link from the
+   *  Links section. Wired into the JoinsGraph for visualization. */
+  const [projectLinks, setProjectLinks] = useState<DCLink[]>([]);
 
   const [mobileOpened, { toggle: toggleMobile }] = useDisclosure(false);
   const [desktopOpened, { toggle: toggleDesktop }] = useDisclosure(true);
@@ -441,8 +489,21 @@ const ProjectDetailApp: React.FC = () => {
                 onSelect={setSelectedDcId}
                 onRename={setRenameTarget}
                 onDelete={setDeleteTarget}
+                onManage={setManageTarget}
                 onCreate={() => setCreateDcOpened(true)}
               />
+              {projectId && (
+                <LinksSection
+                  projectId={projectId}
+                  dataCollections={allDataCollections.map((d) => ({
+                    id: (d._id ?? d.id) as string,
+                    tag: d.data_collection_tag || ((d._id ?? d.id) as string),
+                    type: (d.config?.type as string | undefined) || 'unknown',
+                  }))}
+                  canMutate={canMutate}
+                  onLinksChange={setProjectLinks}
+                />
+              )}
               {selectedDc && (
                 <DataCollectionViewer
                   dc={selectedDc}
@@ -456,16 +517,7 @@ const ProjectDetailApp: React.FC = () => {
                         }>
                       | undefined) || []
                   }
-                  links={
-                    ((project as Record<string, unknown>).links as
-                      | Array<{
-                          source_dc_id?: string;
-                          target_dc_id?: string;
-                          source_column?: string;
-                          enabled?: boolean;
-                        }>
-                      | undefined) || []
-                  }
+                  links={projectLinks}
                 />
               )}
             </Stack>
@@ -502,6 +554,27 @@ const ProjectDetailApp: React.FC = () => {
           refresh();
         }}
       />
+      {manageTarget && (
+        <ManageDataCollectionModal
+          opened={!!manageTarget}
+          dcId={(manageTarget._id ?? manageTarget.id) as string}
+          dcName={manageTarget.data_collection_tag || 'data collection'}
+          dcType={
+            (((manageTarget.config?.type as string | undefined) || '').toLowerCase() ===
+            'multiqc'
+              ? 'multiqc'
+              : 'table') as ManageDcType
+          }
+          tableFormat={
+            (manageTarget.config?.dc_specific_properties?.format as string | undefined) || null
+          }
+          onClose={() => setManageTarget(null)}
+          onSuccess={() => {
+            setManageTarget(null);
+            refresh();
+          }}
+        />
+      )}
     </AppShell>
   );
 };
@@ -528,6 +601,218 @@ const COMPRESSION_OPTIONS = [
   { value: 'bz2', label: 'bz2' },
 ];
 
+type MultiQCMismatchKind = 'modules' | 'plots' | 'version' | 'samples';
+type MultiQCMismatch = {
+  code: 'multiqc_report_mismatch';
+  kind: MultiQCMismatchKind;
+  summary: string;
+  details: Record<string, unknown>;
+};
+
+/** Try to recover the structured 422 detail the server raised from a
+ *  `multiqc_report_mismatch`. `throwHttpDetailError` JSON-stringifies the
+ *  detail into the Error message, so we parse it back out here. */
+function tryParseMultiQCMismatch(message: string): MultiQCMismatch | null {
+  try {
+    const parsed = JSON.parse(message);
+    if (parsed && parsed.code === 'multiqc_report_mismatch') {
+      return parsed as MultiQCMismatch;
+    }
+  } catch {
+    /* not JSON; not a structured mismatch */
+  }
+  return null;
+}
+
+const MULTIQC_CHECKS: ReadonlyArray<{
+  kind: MultiQCMismatchKind;
+  label: string;
+  desc: string;
+}> = [
+  {
+    kind: 'modules',
+    label: 'Modules',
+    desc: 'All reports include the same MultiQC modules.',
+  },
+  {
+    kind: 'plots',
+    label: 'Plot keys',
+    desc: 'All reports expose the same set of plots.',
+  },
+  {
+    kind: 'version',
+    label: 'MultiQC version',
+    desc: 'All reports share the same major.minor version.',
+  },
+  {
+    kind: 'samples',
+    label: 'Sample uniqueness',
+    desc: 'No sample name appears in more than one report.',
+  },
+];
+
+const MultiQCMismatchDetails: React.FC<{ mismatch: MultiQCMismatch }> = ({
+  mismatch,
+}) => {
+  const d = mismatch.details || {};
+  const list = (xs: unknown): string[] => (Array.isArray(xs) ? (xs as string[]) : []);
+  const added = list(d.added_in_compared);
+  const removed = list(d.removed_in_compared);
+  const dupes =
+    mismatch.kind === 'samples' && d.duplicate_samples
+      ? (d.duplicate_samples as Record<string, string[]>)
+      : {};
+  const dupeEntries = Object.entries(dupes);
+  return (
+    <Paper
+      withBorder
+      p={8}
+      radius="xs"
+      ml={26}
+      bg="var(--mantine-color-red-0)"
+    >
+      <Text size="xs" c="red" mb={4}>
+        {mismatch.summary}
+      </Text>
+      {(mismatch.kind === 'modules' || mismatch.kind === 'plots') && (
+        <Stack gap={2}>
+          {added.length > 0 && (
+            <Text size="xs" c="dimmed">
+              Added in <code>{String(d.compared_report ?? '?')}</code>:{' '}
+              {added.join(', ')}
+            </Text>
+          )}
+          {removed.length > 0 && (
+            <Text size="xs" c="dimmed">
+              Missing in <code>{String(d.compared_report ?? '?')}</code>:{' '}
+              {removed.join(', ')}
+            </Text>
+          )}
+        </Stack>
+      )}
+      {mismatch.kind === 'version' && (
+        <Text size="xs" c="dimmed">
+          <code>{String(d.baseline_report ?? '?')}</code> ={' '}
+          {String(d.baseline_version ?? '?')} ·{' '}
+          <code>{String(d.compared_report ?? '?')}</code> ={' '}
+          {String(d.compared_version ?? '?')}
+        </Text>
+      )}
+      {mismatch.kind === 'samples' && dupeEntries.length > 0 && (
+        <Stack gap={2}>
+          {dupeEntries.slice(0, 5).map(([sample, reports]) => (
+            <Text key={sample} size="xs" c="dimmed">
+              <code>{sample}</code> in {reports.join(', ')}
+            </Text>
+          ))}
+          {dupeEntries.length > 5 && (
+            <Text size="xs" c="dimmed">
+              …and {dupeEntries.length - 5} more
+            </Text>
+          )}
+        </Stack>
+      )}
+    </Paper>
+  );
+};
+
+const MultiQCUniformityChecklist: React.FC<{
+  fileCount: number;
+  submitting: boolean;
+  validating: boolean;
+  lastCheckPassed: boolean;
+  mismatch: MultiQCMismatch | null;
+  onCheck: () => void;
+}> = ({ fileCount, submitting, validating, lastCheckPassed, mismatch, onCheck }) => {
+  const hasMultiple = fileCount >= 2;
+  const busy = submitting || validating;
+  const statusText = !hasMultiple
+    ? 'activated with 2+ reports'
+    : submitting
+      ? 'running on Create…'
+      : validating
+        ? 'checking…'
+        : mismatch
+          ? 'failed'
+          : lastCheckPassed
+            ? 'all uniform'
+            : 'not checked yet';
+  return (
+    <Paper withBorder p="sm" radius="sm">
+      <Group justify="space-between" mb={6} wrap="nowrap">
+        <Group gap={6} wrap="nowrap">
+          <Icon
+            icon="mdi:clipboard-check-outline"
+            width={16}
+            color="var(--mantine-color-teal-6)"
+          />
+          <Text size="sm" fw={500}>
+            Uniformity checks
+          </Text>
+        </Group>
+        <Group gap={8} wrap="nowrap">
+          <Text size="xs" c="dimmed">
+            {statusText}
+          </Text>
+          <Button
+            size="compact-xs"
+            variant="light"
+            color="teal"
+            onClick={onCheck}
+            disabled={!hasMultiple || busy}
+            loading={validating}
+            leftSection={<Icon icon="mdi:check-decagram-outline" width={14} />}
+          >
+            Check now
+          </Button>
+        </Group>
+      </Group>
+      <Stack gap={4}>
+        {MULTIQC_CHECKS.map((c) => {
+          // 1) red X if this row is the failing kind in mismatch
+          // 2) animated dots while validating or submitting
+          // 3) green check if the last check passed (and no mismatch since)
+          // 4) gray pending dot otherwise (never checked, files just staged)
+          const failed = mismatch?.kind === c.kind;
+          const iconName = failed
+            ? 'mdi:close-circle'
+            : busy && hasMultiple
+              ? 'mdi:dots-horizontal-circle-outline'
+              : lastCheckPassed && hasMultiple
+                ? 'mdi:check-circle'
+                : 'mdi:circle-outline';
+          const iconColor = failed
+            ? 'var(--mantine-color-red-6)'
+            : busy && hasMultiple
+              ? 'var(--mantine-color-teal-6)'
+              : lastCheckPassed && hasMultiple
+                ? 'var(--mantine-color-teal-6)'
+                : 'var(--mantine-color-gray-5)';
+          return (
+            <Stack gap={2} key={c.kind}>
+              <Group gap="xs" wrap="nowrap" align="flex-start">
+                <Icon icon={iconName} width={18} color={iconColor} />
+                <Text
+                  size="sm"
+                  c={failed ? 'red' : undefined}
+                  fw={failed ? 500 : 400}
+                  style={{ minWidth: 140 }}
+                >
+                  {c.label}
+                </Text>
+                <Text size="xs" c="dimmed" style={{ flex: 1 }}>
+                  {c.desc}
+                </Text>
+              </Group>
+              {failed && mismatch && <MultiQCMismatchDetails mismatch={mismatch} />}
+            </Stack>
+          );
+        })}
+      </Stack>
+    </Paper>
+  );
+};
+
 /** Guess the file format from extension. Lets the user override afterwards. */
 function guessFormat(name: string | undefined): string | null {
   if (!name) return null;
@@ -539,6 +824,81 @@ function guessFormat(name: string | undefined): string | null {
   return null;
 }
 
+/** Single-file dropzone + selected-file chip shared by the Table and Coordinates
+ *  tabs in the create-DC modal. Both flows use the same dropzone + file state;
+ *  only the headline icon/copy differs. */
+const TableFileDropZone: React.FC<{
+  dropzone: ReturnType<typeof useFolderDropzone>;
+  file: File | null;
+  submitting: boolean;
+  icon: string;
+  title: string;
+  onRemove: () => void;
+}> = ({ dropzone, file, submitting, icon, title, onRemove }) => (
+  <>
+    <Text size="sm" fw={500}>
+      File <span style={{ color: 'var(--mantine-color-red-6)' }}>*</span>
+    </Text>
+    <div ref={dropzone.rootRef}>
+      <UnstyledDropZone
+        onClick={() => !submitting && dropzone.openPicker()}
+        disabled={submitting}
+        active={dropzone.isDragOver}
+      >
+        <Stack gap={4} align="center">
+          <Icon icon={icon} width={28} />
+          <Text fw={500}>{title}</Text>
+          <Text size="xs" c="dimmed">
+            or click to pick · max 50 MB
+          </Text>
+        </Stack>
+      </UnstyledDropZone>
+      <input
+        ref={dropzone.inputRef}
+        type="file"
+        accept=".csv,.tsv,.tab,.parquet,.pq,.feather,.arrow"
+        style={{ display: 'none' }}
+      />
+    </div>
+    {dropzone.error && (
+      <Alert
+        color="orange"
+        variant="light"
+        icon={<Icon icon="mdi:alert" width={16} />}
+      >
+        {dropzone.error}
+      </Alert>
+    )}
+    {file && (
+      <Paper withBorder p="xs" radius="sm">
+        <Group justify="space-between" wrap="nowrap" gap="xs">
+          <Group gap="xs" wrap="nowrap">
+            <Icon icon="mdi:file-outline" width={16} />
+            <Text size="sm" ff="monospace" lineClamp={1}>
+              {file.name}
+            </Text>
+          </Group>
+          <Group gap={4} wrap="nowrap">
+            <Text size="xs" c="dimmed">
+              {(file.size / (1024 * 1024)).toFixed(1)} MB
+            </Text>
+            <ActionIcon
+              size="xs"
+              variant="subtle"
+              color="red"
+              onClick={onRemove}
+              disabled={submitting}
+              aria-label="Remove file"
+            >
+              <Icon icon="mdi:close" width={14} />
+            </ActionIcon>
+          </Group>
+        </Group>
+      </Paper>
+    )}
+  </>
+);
+
 const CreateDataCollectionModal: React.FC<{
   opened: boolean;
   projectType: 'basic' | 'advanced';
@@ -546,6 +906,7 @@ const CreateDataCollectionModal: React.FC<{
   onClose: () => void;
   onSuccess: () => void;
 }> = ({ opened, projectType, projectId, onClose, onSuccess }) => {
+  const [dcType, setDcType] = useState<'table' | 'multiqc' | 'coordinates'>('table');
   const [file, setFile] = useState<File | null>(null);
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
@@ -555,12 +916,87 @@ const CreateDataCollectionModal: React.FC<{
   const [compression, setCompression] = useState<string>('none');
   const [hasHeader, setHasHeader] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [validating, setValidating] = useState(false);
+  const [lastCheckPassed, setLastCheckPassed] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [mismatch, setMismatch] = useState<MultiQCMismatch | null>(null);
+  // Coordinates-tab state: header columns parsed from the dropped file, plus
+  // user-selected lat/lon columns. Auto-detected when the column names match
+  // /^lat(itude)?$/i / /^lon(g(itude)?)?$/i.
+  const [csvColumns, setCsvColumns] = useState<string[]>([]);
+  const [parsingHeader, setParsingHeader] = useState(false);
+  const [latColumn, setLatColumn] = useState<string | null>(null);
+  const [lonColumn, setLonColumn] = useState<string | null>(null);
+
+  // MultiQC folder dropzone — owned by the modal so close-and-reopen clears it.
+  const multiqcDropzone = useFolderDropzone({
+    filterFilename: 'multiqc.parquet',
+    maxPerFile: 50 * 1024 * 1024,
+    maxTotal: 500 * 1024 * 1024,
+  });
+
+  // Single-file dropzone for the table DC flow. Same drag-anywhere UX as the
+  // MultiQC dropzone — we just take the first file and pipe it into `file`.
+  const tableDropzone = useFolderDropzone({
+    maxPerFile: 50 * 1024 * 1024,
+  });
+  // Sync the first dropped/picked file into the existing `file` state so the
+  // rest of the table flow (auto-fill, submit) keeps working unchanged.
+  // Same picker is used for the Coordinates tab.
+  useEffect(() => {
+    if (dcType !== 'table' && dcType !== 'coordinates') return;
+    const first = tableDropzone.files[0];
+    if (!first) return;
+    if (file && first === file) return;
+    setFile(first);
+  }, [dcType, tableDropzone.files, file]);
+
+  // Parse the dropped file's header for the Coordinates tab so the lat/lon
+  // dropdowns can populate. Reads the first ~64KB client-side — enough for any
+  // reasonable single-line header without paying the cost of the whole file.
+  // Parquet/feather headers aren't accessible without a wasm parser; we defer
+  // to the API's `_validate_coord_columns_in_file` for those.
+  useEffect(() => {
+    if (dcType !== 'coordinates' || !file) {
+      setCsvColumns([]);
+      return;
+    }
+    const fmt = fileFormat.toLowerCase();
+    if (fmt !== 'csv' && fmt !== 'tsv') {
+      setCsvColumns([]);
+      return;
+    }
+    let cancelled = false;
+    setParsingHeader(true);
+    const sep = separator === 'custom' ? customSeparator || ',' : separator;
+    file
+      .slice(0, 65536)
+      .text()
+      .then((text) => {
+        if (cancelled) return;
+        const firstLine = text.split(/\r?\n/).find((l) => l.length > 0) ?? '';
+        const cols = firstLine.split(sep).map((c) => c.trim()).filter(Boolean);
+        setCsvColumns(cols);
+        // Auto-detect on first parse — don't clobber a manual choice.
+        setLatColumn((prev) => prev ?? cols.find((c) => /^lat(itude)?$/i.test(c)) ?? null);
+        setLonColumn((prev) => prev ?? cols.find((c) => /^lon(g(itude)?)?$/i.test(c)) ?? null);
+      })
+      .catch(() => {
+        if (!cancelled) setCsvColumns([]);
+      })
+      .finally(() => {
+        if (!cancelled) setParsingHeader(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [dcType, file, fileFormat, separator, customSeparator]);
 
   // Reset everything when the modal closes — otherwise re-opening shows stale
   // state from the previous attempt.
   useEffect(() => {
     if (!opened) {
+      setDcType('table');
       setFile(null);
       setName('');
       setDescription('');
@@ -571,7 +1007,15 @@ const CreateDataCollectionModal: React.FC<{
       setHasHeader(true);
       setError(null);
       setSubmitting(false);
+      setCsvColumns([]);
+      setLatColumn(null);
+      setLonColumn(null);
+      setParsingHeader(false);
+      multiqcDropzone.clear();
+      tableDropzone.clear();
     }
+    // multiqcDropzone is recreated on each render but its `clear` is stable.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [opened]);
 
   // Auto-fill format + name from picked filename. Don't clobber a name the
@@ -589,6 +1033,43 @@ const CreateDataCollectionModal: React.FC<{
       setName(stem);
     }
   }, [file, name]);
+
+  // Clear any prior uniformity mismatch (and stale pass state) when the user
+  // changes the dropped file set — both refer to a different set of reports.
+  useEffect(() => {
+    setMismatch(null);
+    setLastCheckPassed(false);
+  }, [multiqcDropzone.files, dcType]);
+
+  // Auto-fill name when the user drops MultiQC files, so the Create button
+  // doesn't sit silently disabled. Picks the deepest shared parent directory
+  // across all dropped files so multi-run drops get a representative name.
+  useEffect(() => {
+    if (dcType !== 'multiqc') return;
+    if (name.trim()) return;
+    if (multiqcDropzone.files.length === 0) return;
+
+    const splitPaths = multiqcDropzone.files.map((f) =>
+      f.name.replace(/\\/g, '/').split('/').filter(Boolean),
+    );
+    // Drop the trailing filename segment so we compare directories only.
+    const dirPaths = splitPaths.map((p) => p.slice(0, -1));
+    const common: string[] = [];
+    const minLen = Math.min(...dirPaths.map((p) => p.length));
+    for (let i = 0; i < minLen; i++) {
+      const seg = dirPaths[0][i];
+      if (dirPaths.every((p) => p[i] === seg)) common.push(seg);
+      else break;
+    }
+    // The deepest shared dir is usually wrapper-ish (e.g. `multiqc_data`)
+    // when only one run was dropped; prefer its parent for >1 run so the
+    // wrapper folder (`mysamples`) wins over the per-run `multiqc_data`.
+    const deepest =
+      common.length > 0 && common[common.length - 1] === 'multiqc_data'
+        ? common[common.length - 2]
+        : common[common.length - 1];
+    setName(deepest || 'multiqc_reports');
+  }, [dcType, multiqcDropzone.files, name]);
 
   if (projectType === 'advanced') {
     return (
@@ -629,47 +1110,115 @@ const CreateDataCollectionModal: React.FC<{
     );
   }
 
+  const handleCheckUniformity = async () => {
+    if (multiqcDropzone.files.length < 2) return;
+    setValidating(true);
+    setError(null);
+    setMismatch(null);
+    setLastCheckPassed(false);
+    try {
+      await checkMultiQCUniformity(multiqcDropzone.files);
+      setLastCheckPassed(true);
+    } catch (err) {
+      const raw = (err as Error).message || 'Uniformity check failed.';
+      const parsed = tryParseMultiQCMismatch(raw);
+      if (parsed) {
+        setMismatch(parsed);
+        setError(parsed.summary);
+      } else {
+        setError(raw);
+      }
+    } finally {
+      setValidating(false);
+    }
+  };
+
   const handleSubmit = async () => {
     if (!projectId) {
       setError('Project ID missing from URL.');
-      return;
-    }
-    if (!file) {
-      setError('Pick a file to upload.');
       return;
     }
     if (!name.trim()) {
       setError('Data collection name is required.');
       return;
     }
-    if (separator === 'custom' && !customSeparator) {
-      setError('Custom separator cannot be empty.');
-      return;
-    }
+
     setSubmitting(true);
     setError(null);
+    setMismatch(null);
     try {
-      const result = await createDataCollectionFromUpload({
-        projectId,
-        name: name.trim(),
-        description: description.trim(),
-        dataType: 'table',
-        fileFormat,
-        separator,
-        customSeparator: separator === 'custom' ? customSeparator : null,
-        compression,
-        hasHeader,
-        file,
-      });
-      notifications.show({
-        color: 'teal',
-        title: 'Data collection created',
-        message: result.message || `"${name.trim()}" is ready.`,
-        autoClose: 2500,
-      });
+      if (dcType === 'multiqc') {
+        if (multiqcDropzone.files.length === 0) {
+          setError('Drop one or more folders containing multiqc.parquet.');
+          setSubmitting(false);
+          return;
+        }
+        const result = await createMultiQCDataCollection({
+          projectId,
+          name: name.trim(),
+          description: description.trim(),
+          files: multiqcDropzone.files,
+        });
+        notifications.show({
+          color: 'teal',
+          title: 'MultiQC data collection created',
+          message: result.message || `"${name.trim()}" is ready.`,
+          autoClose: 4000,
+        });
+      } else {
+        if (!file) {
+          setError('Pick a file to upload.');
+          setSubmitting(false);
+          return;
+        }
+        if (separator === 'custom' && !customSeparator) {
+          setError('Custom separator cannot be empty.');
+          setSubmitting(false);
+          return;
+        }
+        if (dcType === 'coordinates') {
+          if (!latColumn || !lonColumn) {
+            setError('Pick the latitude and longitude columns.');
+            setSubmitting(false);
+            return;
+          }
+          if (latColumn === lonColumn) {
+            setError('Latitude and longitude columns must differ.');
+            setSubmitting(false);
+            return;
+          }
+        }
+        const result = await createDataCollectionFromUpload({
+          projectId,
+          name: name.trim(),
+          description: description.trim(),
+          dataType: 'table',
+          fileFormat,
+          separator,
+          customSeparator: separator === 'custom' ? customSeparator : null,
+          compression,
+          hasHeader,
+          file,
+          latColumn: dcType === 'coordinates' ? latColumn : null,
+          lonColumn: dcType === 'coordinates' ? lonColumn : null,
+        });
+        notifications.show({
+          color: 'teal',
+          title: 'Data collection created',
+          message: result.message || `"${name.trim()}" is ready.`,
+          autoClose: 2500,
+        });
+      }
       onSuccess();
     } catch (err) {
-      setError((err as Error).message || 'Upload failed.');
+      const rawMessage = (err as Error).message || 'Upload failed.';
+      const parsed = tryParseMultiQCMismatch(rawMessage);
+      if (parsed) {
+        setMismatch(parsed);
+        setError(parsed.summary);
+      } else {
+        setError(rawMessage);
+      }
     } finally {
       setSubmitting(false);
     }
@@ -681,37 +1230,279 @@ const CreateDataCollectionModal: React.FC<{
     <Modal
       opened={opened}
       onClose={onClose}
-      title="Create data collection"
+      title={null}
       centered
       size="lg"
       closeOnClickOutside={!submitting}
       withCloseButton={!submitting}
     >
       <Stack gap="md">
-        <Group gap="xs">
+        <Group justify="center" gap="sm">
           <Icon
             icon="mdi:database-plus-outline"
-            width={26}
+            width={32}
             color="var(--mantine-color-teal-6)"
           />
-          <Text fw={500}>Upload a file to register a new data collection.</Text>
+          <Title order={3} c="teal" m={0}>
+            Create a Data Collection
+          </Title>
         </Group>
 
-        <FileInput
-          label="File"
-          placeholder="Select a CSV, TSV, Parquet, or Feather file"
-          required
-          accept=".csv,.tsv,.tab,.parquet,.pq,.feather,.arrow"
-          value={file}
-          onChange={setFile}
-          disabled={submitting}
-          leftSection={<Icon icon="mdi:file-upload-outline" width={16} />}
-          description="Maximum size: 50 MB"
-        />
+        <Tabs
+          value={dcType}
+          onChange={(v) =>
+            v && setDcType(v as 'table' | 'multiqc' | 'coordinates')
+          }
+          variant="default"
+        >
+          <Tabs.List grow>
+            <Tabs.Tab
+              value="table"
+              leftSection={<Icon icon="mdi:table" width={18} />}
+              disabled={submitting}
+            >
+              Table (CSV / TSV / Parquet)
+            </Tabs.Tab>
+            <Tabs.Tab
+              value="coordinates"
+              leftSection={
+                <Icon icon="mdi:map-marker-radius-outline" width={18} />
+              }
+              disabled={submitting}
+            >
+              Coordinates table
+            </Tabs.Tab>
+            <Tabs.Tab
+              value="multiqc"
+              leftSection={
+                <img
+                  src={`${import.meta.env.BASE_URL}logos/multiqc_icon_color.svg`}
+                  alt=""
+                  width={18}
+                  height={18}
+                  style={{ objectFit: 'contain', display: 'block' }}
+                />
+              }
+              disabled={submitting}
+            >
+              MultiQC report(s)
+            </Tabs.Tab>
+          </Tabs.List>
+
+          <Tabs.Panel value="table" pt="md">
+            <Stack gap="xs">
+              <TableFileDropZone
+                dropzone={tableDropzone}
+                file={file}
+                submitting={submitting}
+                icon="mdi:file-upload-outline"
+                title="Drop a CSV, TSV, Parquet, or Feather file"
+                onRemove={() => {
+                  setFile(null);
+                  tableDropzone.clear();
+                }}
+              />
+            </Stack>
+          </Tabs.Panel>
+
+          <Tabs.Panel value="coordinates" pt="md">
+            <Stack gap="xs">
+              <Text size="sm" c="dimmed">
+                Upload a CSV / TSV / Parquet table with latitude &amp; longitude
+                columns. The resulting data collection becomes selectable as the
+                data source for Map components.
+              </Text>
+              <TableFileDropZone
+                dropzone={tableDropzone}
+                file={file}
+                submitting={submitting}
+                icon="mdi:map-marker-radius-outline"
+                title="Drop a CSV / TSV / Parquet with lat & lon columns"
+                onRemove={() => {
+                  setFile(null);
+                  setCsvColumns([]);
+                  setLatColumn(null);
+                  setLonColumn(null);
+                  tableDropzone.clear();
+                }}
+              />
+              {file && (fileFormat === 'csv' || fileFormat === 'tsv') && (() => {
+                let placeholder: string;
+                if (parsingHeader) placeholder = 'Reading header…';
+                else if (csvColumns.length) placeholder = 'Pick column';
+                else placeholder = 'No columns found';
+                const colsDisabled =
+                  submitting || parsingHeader || csvColumns.length === 0;
+                return (
+                  <SimpleGrid cols={2} spacing="sm">
+                    <Select
+                      label="Latitude column"
+                      placeholder={placeholder}
+                      data={csvColumns}
+                      value={latColumn}
+                      onChange={setLatColumn}
+                      disabled={colsDisabled}
+                      required
+                      leftSection={
+                        parsingHeader ? <Loader size="xs" /> : undefined
+                      }
+                      searchable
+                      nothingFoundMessage="No matching columns"
+                    />
+                    <Select
+                      label="Longitude column"
+                      placeholder={placeholder}
+                      data={csvColumns}
+                      value={lonColumn}
+                      onChange={setLonColumn}
+                      disabled={colsDisabled}
+                      required
+                      searchable
+                      nothingFoundMessage="No matching columns"
+                    />
+                  </SimpleGrid>
+                );
+              })()}
+              {file && fileFormat !== 'csv' && fileFormat !== 'tsv' && (
+                <SimpleGrid cols={2} spacing="sm">
+                  <TextInput
+                    label="Latitude column"
+                    placeholder="e.g. latitude"
+                    value={latColumn ?? ''}
+                    onChange={(e) =>
+                      setLatColumn(e.currentTarget.value || null)
+                    }
+                    disabled={submitting}
+                    required
+                  />
+                  <TextInput
+                    label="Longitude column"
+                    placeholder="e.g. longitude"
+                    value={lonColumn ?? ''}
+                    onChange={(e) =>
+                      setLonColumn(e.currentTarget.value || null)
+                    }
+                    disabled={submitting}
+                    required
+                  />
+                </SimpleGrid>
+              )}
+            </Stack>
+          </Tabs.Panel>
+
+          <Tabs.Panel value="multiqc" pt="md">
+            <Stack gap="xs">
+            <Text size="sm" fw={500}>
+              MultiQC reports
+            </Text>
+            <div ref={multiqcDropzone.rootRef}>
+              <UnstyledDropZone
+                onClick={() => !submitting && multiqcDropzone.openPicker()}
+                disabled={submitting}
+                active={multiqcDropzone.isDragOver}
+              >
+                <Stack gap={4} align="center">
+                  <Icon icon="mdi:folder-upload" width={28} />
+                  <Text fw={500}>
+                    Drop a multiqc.parquet file or a folder of runs
+                  </Text>
+                  <Text size="xs" c="dimmed">
+                    Only multiqc.parquet files are kept · run folder name is preserved
+                  </Text>
+                </Stack>
+              </UnstyledDropZone>
+              <input
+                ref={multiqcDropzone.inputRef}
+                type="file"
+                multiple
+                accept=".parquet"
+                style={{ display: 'none' }}
+              />
+            </div>
+            {multiqcDropzone.error && (
+              <Alert
+                color="orange"
+                variant="light"
+                icon={<Icon icon="mdi:alert" width={16} />}
+              >
+                {multiqcDropzone.error}
+              </Alert>
+            )}
+            {multiqcDropzone.files.length > 0 && (
+              <Paper withBorder p="xs" radius="sm">
+                <Group justify="space-between" mb={6}>
+                  <Text size="sm" fw={500}>
+                    {multiqcDropzone.files.length} file
+                    {multiqcDropzone.files.length === 1 ? '' : 's'} ·{' '}
+                    {(multiqcDropzone.totalBytes / (1024 * 1024)).toFixed(1)} MB
+                  </Text>
+                  <Button
+                    size="xs"
+                    variant="subtle"
+                    onClick={multiqcDropzone.clear}
+                    disabled={submitting}
+                  >
+                    Clear list
+                  </Button>
+                </Group>
+                <ScrollArea h={Math.min(multiqcDropzone.files.length * 28 + 8, 200)}>
+                  <Stack gap={2}>
+                    {multiqcDropzone.files.map((f, i) => (
+                      <Group
+                        key={`${f.name}-${i}`}
+                        justify="space-between"
+                        wrap="nowrap"
+                        gap="xs"
+                      >
+                        <Text size="xs" ff="monospace" lineClamp={1}>
+                          {f.name}
+                        </Text>
+                        <Group gap={4} wrap="nowrap">
+                          <Text size="xs" c="dimmed">
+                            {(f.size / (1024 * 1024)).toFixed(1)} MB
+                          </Text>
+                          <ActionIcon
+                            size="xs"
+                            variant="subtle"
+                            color="red"
+                            onClick={() => multiqcDropzone.removeFile(f)}
+                            disabled={submitting}
+                            aria-label="Remove file"
+                          >
+                            <Icon icon="mdi:close" width={14} />
+                          </ActionIcon>
+                        </Group>
+                      </Group>
+                    ))}
+                  </Stack>
+                </ScrollArea>
+                {multiqcDropzone.skipped.length > 0 && (
+                  <Text size="xs" c="dimmed" mt={6}>
+                    Skipped {multiqcDropzone.skipped.length} non-multiqc file
+                    {multiqcDropzone.skipped.length === 1 ? '' : 's'}.
+                  </Text>
+                )}
+              </Paper>
+            )}
+            {multiqcDropzone.files.length > 0 && (
+              <MultiQCUniformityChecklist
+                fileCount={multiqcDropzone.files.length}
+                submitting={submitting}
+                validating={validating}
+                lastCheckPassed={lastCheckPassed}
+                mismatch={mismatch}
+                onCheck={handleCheckUniformity}
+              />
+            )}
+            </Stack>
+          </Tabs.Panel>
+        </Tabs>
 
         <TextInput
           label="Name"
-          placeholder="e.g. samples_metadata"
+          placeholder={
+            dcType === 'multiqc' ? 'e.g. multiqc_qc' : 'e.g. samples_metadata'
+          }
           required
           value={name}
           onChange={(e) => setName(e.currentTarget.value)}
@@ -729,57 +1520,61 @@ const CreateDataCollectionModal: React.FC<{
           disabled={submitting}
         />
 
-        <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
-          <Select
-            label="Format"
-            data={FORMAT_OPTIONS}
-            value={fileFormat}
-            onChange={(v) => v && setFileFormat(v)}
-            allowDeselect={false}
-            disabled={submitting}
-          />
-          {isDelimited && (
-            <Select
-              label="Separator"
-              data={SEPARATOR_OPTIONS}
-              value={separator}
-              onChange={(v) => v && setSeparator(v)}
-              allowDeselect={false}
-              disabled={submitting}
-            />
-          )}
-        </SimpleGrid>
+        {(dcType === 'table' || dcType === 'coordinates') && (
+          <>
+            <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
+              <Select
+                label="Format"
+                data={FORMAT_OPTIONS}
+                value={fileFormat}
+                onChange={(v) => v && setFileFormat(v)}
+                allowDeselect={false}
+                disabled={submitting}
+              />
+              {isDelimited && (
+                <Select
+                  label="Separator"
+                  data={SEPARATOR_OPTIONS}
+                  value={separator}
+                  onChange={(v) => v && setSeparator(v)}
+                  allowDeselect={false}
+                  disabled={submitting}
+                />
+              )}
+            </SimpleGrid>
 
-        {isDelimited && separator === 'custom' && (
-          <TextInput
-            label="Custom separator"
-            placeholder="e.g. ::"
-            value={customSeparator}
-            onChange={(e) => setCustomSeparator(e.currentTarget.value)}
-            required
-            disabled={submitting}
-          />
+            {isDelimited && separator === 'custom' && (
+              <TextInput
+                label="Custom separator"
+                placeholder="e.g. ::"
+                value={customSeparator}
+                onChange={(e) => setCustomSeparator(e.currentTarget.value)}
+                required
+                disabled={submitting}
+              />
+            )}
+
+            <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
+              <Select
+                label="Compression"
+                data={COMPRESSION_OPTIONS}
+                value={compression}
+                onChange={(v) => v && setCompression(v)}
+                allowDeselect={false}
+                disabled={submitting}
+              />
+              {isDelimited && (
+                <Switch
+                  mt="lg"
+                  label="File has header row"
+                  checked={hasHeader}
+                  onChange={(e) => setHasHeader(e.currentTarget.checked)}
+                  disabled={submitting}
+                />
+              )}
+            </SimpleGrid>
+          </>
         )}
-
-        <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
-          <Select
-            label="Compression"
-            data={COMPRESSION_OPTIONS}
-            value={compression}
-            onChange={(v) => v && setCompression(v)}
-            allowDeselect={false}
-            disabled={submitting}
-          />
-          {isDelimited && (
-            <Switch
-              mt="lg"
-              label="File has header row"
-              checked={hasHeader}
-              onChange={(e) => setHasHeader(e.currentTarget.checked)}
-              disabled={submitting}
-            />
-          )}
-        </SimpleGrid>
 
         {error && (
           <Alert
@@ -819,7 +1614,13 @@ const CreateDataCollectionModal: React.FC<{
             color="teal"
             onClick={handleSubmit}
             loading={submitting}
-            disabled={!file || !name.trim()}
+            disabled={
+              !name.trim() ||
+              (dcType === 'multiqc'
+                ? multiqcDropzone.files.length === 0
+                : !file ||
+                  (dcType === 'coordinates' && (!latColumn || !lonColumn)))
+            }
             leftSection={<Icon icon="mdi:cloud-upload-outline" width={16} />}
           >
             Create
@@ -1199,6 +2000,9 @@ const DataCollectionsManagerSection: React.FC<{
   onSelect: (id: string | null) => void;
   onRename: (dc: DataCollectionShape) => void;
   onDelete: (dc: DataCollectionShape) => void;
+  /** Open the manage-data modal for a MultiQC DC. Optional so non-MultiQC
+   *  callers don't have to wire it. */
+  onManage?: (dc: DataCollectionShape) => void;
   onCreate: () => void;
 }> = ({
   projectType,
@@ -1209,6 +2013,7 @@ const DataCollectionsManagerSection: React.FC<{
   onSelect,
   onRename,
   onDelete,
+  onManage,
   onCreate,
 }) => {
   return (
@@ -1306,6 +2111,7 @@ const DataCollectionsManagerSection: React.FC<{
                 onClick={() => onSelect(isSelected ? null : id)}
                 onRename={() => onRename(dc)}
                 onDelete={() => onDelete(dc)}
+                onManage={onManage ? () => onManage(dc) : undefined}
               />
             );
           })}
@@ -1365,11 +2171,14 @@ const DataCollectionRow: React.FC<{
   onClick: () => void;
   onRename: () => void;
   onDelete: () => void;
-}> = ({ dc, selected, canMutate, onClick, onRename, onDelete }) => {
+  /** Set for both MultiQC and Table DCs — opens the unified Manage Data modal. */
+  onManage?: () => void;
+}> = ({ dc, selected, canMutate, onClick, onRename, onDelete, onManage }) => {
   const type = (dc.config?.type as string | undefined) || 'unknown';
   const metatype = (dc.config?.metatype as string | undefined) || null;
   const isTable = type === 'table';
   const isMultiQC = type.toLowerCase() === 'multiqc';
+  const isCoordTable = dcHasCoordinates(dc);
   // Tables that aren't metadata are aggregates — surface that with a badge so
   // the user can tell at a glance which collection is the joined fact table.
   const isAggregate = isTable && (metatype || '').toLowerCase() !== 'metadata';
@@ -1404,9 +2213,19 @@ const DataCollectionRow: React.FC<{
             />
           ) : (
             <Icon
-              icon={isTable ? 'mdi:table' : 'mdi:file-document-outline'}
+              icon={
+                isCoordTable
+                  ? 'mdi:map-marker-radius-outline'
+                  : isTable
+                    ? 'mdi:table'
+                    : 'mdi:file-document-outline'
+              }
               width={20}
-              color="var(--mantine-color-teal-6)"
+              color={
+                isCoordTable
+                  ? 'var(--mantine-color-grape-6)'
+                  : 'var(--mantine-color-teal-6)'
+              }
             />
           )}
           {type && (
@@ -1414,12 +2233,17 @@ const DataCollectionRow: React.FC<{
               {type.toUpperCase()}
             </Badge>
           )}
+          {isCoordTable && (
+            <Badge color="grape" variant="light" size="sm" radius="sm">
+              COORDINATES
+            </Badge>
+          )}
           {metatype && (
             <Badge color="gray" variant="light" size="sm" radius="sm">
               {metatype.toUpperCase()}
             </Badge>
           )}
-          {isAggregate && !metatype && (
+          {isAggregate && !metatype && !isCoordTable && (
             <Badge color="orange" variant="light" size="sm" radius="sm">
               AGGREGATE
             </Badge>
@@ -1429,16 +2253,20 @@ const DataCollectionRow: React.FC<{
           </Text>
         </Group>
         <Group gap={4}>
-          <ActionIcon
-            variant="subtle"
-            color="gray"
-            size="sm"
-            disabled
-            title="Overwrite (coming soon)"
-            onClick={guard(() => undefined)}
-          >
-            <Icon icon="mdi:database-arrow-up-outline" width={16} />
-          </ActionIcon>
+          {onManage && (
+            <ActionIcon
+              variant="subtle"
+              color="teal"
+              size="sm"
+              disabled={!canMutate}
+              onClick={guard(onManage)}
+              title={
+                canMutate ? 'Manage data (append / replace / clear)' : 'Owner permission required'
+              }
+            >
+              <Icon icon="mdi:database-cog-outline" width={16} />
+            </ActionIcon>
+          )}
           <ActionIcon
             variant="subtle"
             color="blue"
@@ -1494,6 +2322,7 @@ const DataCollectionViewer: React.FC<{
   // `/projects/get/all` payload). Mirror the row's fallback so the viewer
   // surfaces the implicit "AGGREGATE" classification too.
   const isTable = type.toLowerCase() === 'table';
+  const isCoordTable = dcHasCoordinates(dc);
   const isAggregate = isTable && (metatype || '').toLowerCase() !== 'metadata';
 
   return (
@@ -1508,22 +2337,37 @@ const DataCollectionViewer: React.FC<{
           <Title order={4}>Data Collection Viewer</Title>
         </Group>
         <Group gap="sm">
-          <Icon
-            icon={
-              isMultiQC
-                ? 'mdi:chart-bar'
-                : type === 'table'
-                  ? 'mdi:table'
-                  : 'mdi:file-document-outline'
-            }
-            width={22}
-            color={
-              isMultiQC
-                ? 'var(--mantine-color-blue-6)'
-                : 'var(--mantine-color-teal-6)'
-            }
-          />
+          {isMultiQC ? (
+            <img
+              src={`${import.meta.env.BASE_URL}logos/multiqc_icon_color.svg`}
+              alt="MultiQC"
+              width={22}
+              height={22}
+              style={{ objectFit: 'contain', display: 'block' }}
+            />
+          ) : (
+            <Icon
+              icon={
+                isCoordTable
+                  ? 'mdi:map-marker-radius-outline'
+                  : type === 'table'
+                    ? 'mdi:table'
+                    : 'mdi:file-document-outline'
+              }
+              width={22}
+              color={
+                isCoordTable
+                  ? 'var(--mantine-color-grape-6)'
+                  : 'var(--mantine-color-teal-6)'
+              }
+            />
+          )}
           <Title order={4}>{dc.data_collection_tag || dcId}</Title>
+          {isCoordTable && (
+            <Badge color="grape" variant="light" size="sm" radius="sm">
+              COORDINATES
+            </Badge>
+          )}
         </Group>
 
         <SimpleGrid cols={{ base: 1, md: 2 }} spacing="md">
@@ -1541,9 +2385,16 @@ const DataCollectionViewer: React.FC<{
               <DetailRow
                 label="Type"
                 badge={
-                  <Badge color="blue" size="sm" radius="sm">
-                    {type.toUpperCase()}
-                  </Badge>
+                  <Group gap={4} wrap="nowrap">
+                    <Badge color="blue" size="sm" radius="sm">
+                      {type.toUpperCase()}
+                    </Badge>
+                    {isCoordTable && (
+                      <Badge color="grape" variant="light" size="sm" radius="sm">
+                        COORDINATES
+                      </Badge>
+                    )}
+                  </Group>
                 }
               />
               {metatype ? (
@@ -1555,7 +2406,7 @@ const DataCollectionViewer: React.FC<{
                     </Badge>
                   }
                 />
-              ) : isAggregate ? (
+              ) : isAggregate && !isCoordTable ? (
                 <DetailRow
                   label="Metatype"
                   badge={
@@ -1565,6 +2416,28 @@ const DataCollectionViewer: React.FC<{
                   }
                 />
               ) : null}
+              {isCoordTable && (
+                <>
+                  <DetailRow
+                    label="Latitude column"
+                    value={
+                      ((dc.config?.dc_specific_properties as
+                        | Record<string, unknown>
+                        | undefined)?.lat_column as string | undefined) || '—'
+                    }
+                    mono
+                  />
+                  <DetailRow
+                    label="Longitude column"
+                    value={
+                      ((dc.config?.dc_specific_properties as
+                        | Record<string, unknown>
+                        | undefined)?.lon_column as string | undefined) || '—'
+                    }
+                    mono
+                  />
+                </>
+              )}
             </Stack>
           </Card>
           {isMultiQC ? (
@@ -1610,6 +2483,31 @@ const DataCollectionViewer: React.FC<{
           )}
         </SimpleGrid>
 
+        {(isMultiQC || isCoordTable) && (
+          <Accordion variant="separated" radius="md" defaultValue="preview">
+            <Accordion.Item value="preview">
+              <Accordion.Control
+                icon={
+                  <Icon
+                    icon="mdi:eye-outline"
+                    width={18}
+                    color="var(--mantine-color-blue-6)"
+                  />
+                }
+              >
+                <Text fw={600}>Preview</Text>
+              </Accordion.Control>
+              <Accordion.Panel>
+                {isMultiQC ? (
+                  <MultiQCViewerPreview dcId={dcId} />
+                ) : (
+                  <CoordinatesMapPreview dc={dc} />
+                )}
+              </Accordion.Panel>
+            </Accordion.Item>
+          </Accordion>
+        )}
+
         <Card withBorder radius="md" p="md">
           <Group gap="xs" mb="xs">
             <Icon
@@ -1648,7 +2546,7 @@ const DataCollectionViewer: React.FC<{
               />
               <Text fw={600}>Data Preview</Text>
             </Group>
-            <DataPreviewPanel dcId={dcId} />
+            <DataPreviewPanel key={dcId} dcId={dcId} />
           </Card>
         )}
 
@@ -2002,13 +2900,17 @@ const MultiQCReportBlock: React.FC<{
   );
 };
 
-/** Wrapper that fetches reports for a MultiQC DC and renders one block per
- *  report. The Samples/Modules/Plots accordions live inside each block. */
+/** Wrapper that fetches reports for a MultiQC DC and renders ONE block at a
+ *  time, picked via a Select dropdown. Mirrors Dash's
+ *  `_build_multiqc_section` (project_data_collections.py L3308+) which uses
+ *  a `dmc.Select` to keep the panel scannable when the DC has many reports.
+ *  When there's only a single report the dropdown is hidden. */
 const MultiQCReportsCard: React.FC<{ dcId: string }> = ({ dcId }) => {
   const [reports, setReports] = useState<MultiQCReportSummary[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [selectedIdx, setSelectedIdx] = useState<string>('0');
 
   useEffect(() => {
     let cancelled = false;
@@ -2030,15 +2932,37 @@ const MultiQCReportsCard: React.FC<{ dcId: string }> = ({ dcId }) => {
     };
   }, [dcId]);
 
+  // Reset selection when the DC changes or the report set shrinks below the
+  // current index — otherwise we'd render `reports[undefined]` after a clear.
+  useEffect(() => {
+    setSelectedIdx('0');
+  }, [dcId, reports.length]);
+
+  const reportOptions = useMemo(
+    () =>
+      reports.map((r, i) => ({
+        value: String(i),
+        label: r.report?.report_name || `Report ${i + 1}`,
+      })),
+    [reports],
+  );
+
+  const activeIdx = Math.min(Number(selectedIdx) || 0, reports.length - 1);
+  const activeReport = reports[activeIdx];
+
   return (
     <Card withBorder radius="md" p="md">
       <Group gap="xs" mb="xs">
-        <Icon
-          icon="mdi:file-document-multiple"
+        <img
+          src={`${import.meta.env.BASE_URL}logos/multiqc_icon_color.svg`}
+          alt="MultiQC"
           width={20}
-          color="var(--mantine-color-blue-6)"
+          height={20}
+          style={{ objectFit: 'contain', display: 'block' }}
         />
-        <Text fw={600}>
+        <Text fw={600}>MultiQC Report Metadata</Text>
+        <Text size="sm" c="dimmed">
+          ·{' '}
           {total} report{total === 1 ? '' : 's'} available
         </Text>
       </Group>
@@ -2056,13 +2980,25 @@ const MultiQCReportsCard: React.FC<{ dcId: string }> = ({ dcId }) => {
         </Text>
       ) : (
         <Stack gap="md">
-          {reports.map((r, i) => (
-            <MultiQCReportBlock
-              key={r.report?.report_id || r.report?.id || i}
-              report={r}
-              index={i}
+          {reports.length > 1 && (
+            <Select
+              label="Select Report"
+              data={reportOptions}
+              value={selectedIdx}
+              onChange={(v) => v != null && setSelectedIdx(v)}
+              size="xs"
+              w={280}
+              leftSection={<Icon icon="mdi:file-document-outline" width={14} />}
+              comboboxProps={{ withinPortal: true }}
             />
-          ))}
+          )}
+          {activeReport && (
+            <MultiQCReportBlock
+              key={activeReport.report?.report_id || activeReport.report?.id || activeIdx}
+              report={activeReport}
+              index={activeIdx}
+            />
+          )}
         </Stack>
       )}
     </Card>

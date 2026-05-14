@@ -20,8 +20,9 @@ import { useCurrentUser } from '../hooks/useCurrentUser';
 import AdminUsersPanel from './AdminUsersPanel';
 import AdminProjectsPanel from './AdminProjectsPanel';
 import AdminDashboardsPanel from './AdminDashboardsPanel';
+import AdminMaintenancePanel from './AdminMaintenancePanel';
 
-type AdminTab = 'users' | 'projects' | 'dashboards';
+type AdminTab = 'users' | 'projects' | 'dashboards' | 'maintenance';
 
 /** Persist the active tab so a refresh keeps the admin where they left off. */
 const TAB_KEY = 'admin-active-tab';
@@ -29,7 +30,12 @@ const TAB_KEY = 'admin-active-tab';
 function readInitialTab(): AdminTab {
   try {
     const raw = localStorage.getItem(TAB_KEY);
-    if (raw === 'users' || raw === 'projects' || raw === 'dashboards') {
+    if (
+      raw === 'users' ||
+      raw === 'projects' ||
+      raw === 'dashboards' ||
+      raw === 'maintenance'
+    ) {
       return raw;
     }
   } catch {
@@ -108,6 +114,9 @@ const AdminApp: React.FC = () => {
           >
             Dashboards
           </Tabs.Tab>
+          <Tabs.Tab value="maintenance" leftSection={<Icon icon="mdi:broom" width={16} />}>
+            Maintenance
+          </Tabs.Tab>
         </Tabs.List>
 
         <Tabs.Panel value="users" pt="md">
@@ -118,6 +127,9 @@ const AdminApp: React.FC = () => {
         </Tabs.Panel>
         <Tabs.Panel value="dashboards" pt="md">
           <AdminDashboardsPanel />
+        </Tabs.Panel>
+        <Tabs.Panel value="maintenance" pt="md">
+          <AdminMaintenancePanel />
         </Tabs.Panel>
       </Tabs>
     );

@@ -150,6 +150,11 @@ const ProjectsApp: React.FC = () => {
     [refresh],
   );
 
+  const handleView = useCallback((project: ProjectListEntry) => {
+    const projectId = (project._id ?? project.id) as string;
+    if (projectId) window.location.assign(`/projects-beta/${projectId}`);
+  }, []);
+
   const handleDelete = useCallback(
     async (projectId: string) => {
       await apiDeleteProject(projectId);
@@ -263,6 +268,7 @@ const ProjectsApp: React.FC = () => {
               isAdmin={Boolean(user?.is_admin)}
               createDisabled={isPublic}
               onCreateClick={openCreate}
+              onView={handleView}
               onEdit={(p) => setEditTarget(p)}
               onDelete={(p) => setDeleteTarget(p)}
             />

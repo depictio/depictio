@@ -115,6 +115,11 @@ services:
       - ./docker-images/run_fastapi.sh:/app/run_fastapi.sh
       - ./${DATA_DIR}/prof_files:/app/prof_files
       - ./${DATA_DIR}/minio_data:/app/minio_data
+      # Phase 2: shared with the celery worker so the worker writes
+      # pre-rendered MultiQC figures here and the backend reads them on
+      # Redis miss. Survives `docker compose down`, so a container restart
+      # never replays the 76s parse+build cost.
+      - ./${DATA_DIR}/multiqc_prerender:/app/multiqc_prerender
     env_file:
       - docker-compose/.env
     environment:
@@ -128,6 +133,10 @@ services:
         DEPICTIO_DASH_EXTERNAL_HOST: "${DEPICTIO_DASH_EXTERNAL_HOST:-localhost}"
         DEPICTIO_MINIO_EXTERNAL_PORT: "${DEPICTIO_MINIO_EXTERNAL_PORT:-9000}"
         DEPICTIO_MINIO_EXTERNAL_HOST: "${DEPICTIO_MINIO_EXTERNAL_HOST:-localhost}"
+        # Point the prerender store at the in-container mount instead of the
+        # host-friendly `~/.depictio/multiqc_prerender` default. Backend +
+        # worker must agree on this path or they'd write to different dirs.
+        DEPICTIO_MULTIQC_PRERENDER_DIR: "/app/multiqc_prerender"
         # Realtime event system — opt-in. See the depictio-frontend env block
         # above for the full note. Backend hosts the MongoDB watcher and the
         # WebSocket / SSE endpoints — both gated on this flag.
@@ -228,6 +237,15 @@ services:
       - ./packages/plotly-complexheatmap:/app/packages/plotly-complexheatmap
       - ./docker-images/run_celery_worker.sh:/app/run_celery_worker.sh
       - ./${DATA_DIR}/prof_files:/app/prof_files
+      # Phase 2: same mount as the backend — worker writes here during
+      # ``build_multiqc_prerender``, backend reads on cache miss.
+      - ./${DATA_DIR}/multiqc_prerender:/app/multiqc_prerender
+      # Worker also needs the S3 file cache mount the frontend already
+      # has: ``_get_or_parse_multiqc_logs`` downloads MultiQC parquets to
+      # /app/cache/s3_files via ``S3CacheConfig``. Without this mount the
+      # worker re-downloads on every build instead of reusing what the
+      # frontend already fetched.
+      - ./${DATA_DIR}/cache:/app/cache
     env_file:
       - docker-compose/.env
     environment:
@@ -238,6 +256,10 @@ services:
         # Match the backend / dash flag — keeps event publishers consistent
         # whether the work runs on the API process or the celery worker.
         DEPICTIO_EVENTS_ENABLED: "${DEPICTIO_EVENTS_ENABLED:-false}"
+        # Mirror the backend mount so both processes write to the same dir.
+        DEPICTIO_MULTIQC_PRERENDER_DIR: "/app/multiqc_prerender"
+        DEPICTIO_S3_CACHE_DIR: "/app/cache/s3_files"
+        DEPICTIO_DELTA_CACHE_DIR: "/app/cache/delta_cache"
     command: ["/app/run_celery_worker.sh"]
     user: "${UID:-1000}:${GID:-1000}"
     depends_on:

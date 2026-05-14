@@ -1,9 +1,11 @@
 /**
  * MultiQC builder. Cascading module → plot → dataset picker driven by
- * /api/v1/multiqc/builder_options. Persists `multiqc_module`,
- * `multiqc_plot`, `multiqc_dataset`, `s3_locations` and `is_general_stats`
- * matching the canonical multiqc metadata shape (see
- * depictio/dash/modules/multiqc_component/utils.py:214).
+ * /api/v1/multiqc/builder_options. Persists `selected_module`,
+ * `selected_plot`, `selected_dataset`, `s3_locations` and `is_general_stats`
+ * matching the canonical shape that
+ * depictio.api.v1.endpoints.dashboards_endpoints.routes.render_multiqc_endpoint
+ * reads (and that depictio.dash.modules.multiqc_component.models.MultiQCState
+ * stores).
  *
  * Mirrors depictio/dash/modules/multiqc_component/frontend.py:design_multiqc
  * (lines 126-327) — module/plot/dataset cascade with a side-by-side preview.
@@ -18,57 +20,33 @@ import {
   Text,
   Title,
 } from '@mantine/core';
-import { Icon } from '@iconify/react';
+import {
+  fetchMultiQCBuilderOptions,
+  readMultiqcSelection,
+} from 'depictio-react-core';
+import type { MultiQCBuilderOptions } from 'depictio-react-core';
 import { useBuilderStore } from '../store/useBuilderStore';
 import DesignShell from '../shared/DesignShell';
 import MultiQCPreview from './MultiQCPreview';
 
-interface BuilderOptions {
-  modules: string[];
-  plots: Record<string, string[]>; // module → plots
-  datasets: Record<string, string[]>; // plot → datasets
-  s3_locations: string[];
-  /** Module + plot pairs that map to general_stats (rendered as table). */
-  general_stats?: Array<{ module: string; plot: string }>;
-}
-
-async function fetchBuilderOptions(dcId: string): Promise<BuilderOptions> {
-  const res = await fetch(
-    `/depictio/api/v1/multiqc/builder_options?data_collection_id=${dcId}`,
-    {
-      headers: (() => {
-        const headers: Record<string, string> = {};
-        try {
-          const stored = localStorage.getItem('local-store');
-          if (stored) {
-            const parsed = JSON.parse(stored);
-            if (parsed?.access_token) {
-              headers.Authorization = `Bearer ${parsed.access_token}`;
-            }
-          }
-        } catch {
-          // ignore
-        }
-        return headers;
-      })(),
-    },
-  );
-  if (!res.ok) throw new Error(`Failed to fetch MultiQC options: ${res.status}`);
-  return res.json();
-}
-
 const MultiQCBuilder: React.FC = () => {
   const dcId = useBuilderStore((s) => s.dcId);
-  const config = useBuilderStore((s) => s.config) as {
-    multiqc_module?: string;
-    multiqc_plot?: string;
-    multiqc_dataset?: string;
+  const rawConfig = useBuilderStore((s) => s.config) as {
     s3_locations?: string[];
     is_general_stats?: boolean;
   };
+  // Read with legacy `multiqc_*` fallback so existing components pre-fill
+  // the cascade. Persist always writes `selected_*` (buildMetadata.ts).
+  const sel = readMultiqcSelection(rawConfig as Record<string, unknown>);
+  const config = {
+    ...rawConfig,
+    selected_module: sel.module,
+    selected_plot: sel.plot,
+    selected_dataset: sel.dataset,
+  };
   const patchConfig = useBuilderStore((s) => s.patchConfig);
 
-  const [opts, setOpts] = useState<BuilderOptions | null>(null);
+  const [opts, setOpts] = useState<MultiQCBuilderOptions | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -76,7 +54,7 @@ const MultiQCBuilder: React.FC = () => {
     if (!dcId) return;
     setLoading(true);
     setError(null);
-    fetchBuilderOptions(dcId)
+    fetchMultiQCBuilderOptions(dcId)
       .then((data) => {
         setOpts(data);
         if (!config.s3_locations) {
@@ -98,14 +76,14 @@ const MultiQCBuilder: React.FC = () => {
       .filter((m) => m !== 'general_stats')
       .map((m) => ({ value: m, label: m })),
   ];
-  const plotOptions = opts?.plots[config.multiqc_module || ''] ?? [];
+  const plotOptions = opts?.plots[config.selected_module || ''] ?? [];
   const datasetOptions =
-    opts?.datasets[config.multiqc_plot || ''] ?? [];
+    opts?.datasets[config.selected_plot || ''] ?? [];
 
   const isGeneralStats = Boolean(
     opts?.general_stats?.find(
       (gs) =>
-        gs.module === config.multiqc_module && gs.plot === config.multiqc_plot,
+        gs.module === config.selected_module && gs.plot === config.selected_plot,
     ),
   );
 
@@ -119,7 +97,13 @@ const MultiQCBuilder: React.FC = () => {
   const form = (
     <Stack gap="md">
       <Group gap="xs" align="center">
-        <Icon icon="mdi:chart-line" width={20} color="orange" />
+        <img
+          src={`${import.meta.env.BASE_URL}logos/multiqc_icon_color.svg`}
+          alt=""
+          width={20}
+          height={20}
+          style={{ objectFit: 'contain', display: 'block' }}
+        />
         <Title order={6}>MultiQC Report</Title>
       </Group>
 
@@ -139,51 +123,51 @@ const MultiQCBuilder: React.FC = () => {
         label="Module"
         placeholder="Pick a MultiQC module"
         data={moduleOptions}
-        value={config.multiqc_module ?? null}
+        value={config.selected_module ?? null}
         onChange={(val) => {
           // "General Stats Table" is one click — module and plot are both
           // ``general_stats``, no further drill-down needed.
           if (val === 'general_stats') {
             patchConfig({
-              multiqc_module: 'general_stats',
-              multiqc_plot: 'general_stats',
-              multiqc_dataset: undefined,
+              selected_module: 'general_stats',
+              selected_plot: 'general_stats',
+              selected_dataset: undefined,
             });
             return;
           }
           patchConfig({
-            multiqc_module: val,
-            multiqc_plot: undefined,
-            multiqc_dataset: undefined,
+            selected_module: val,
+            selected_plot: undefined,
+            selected_dataset: undefined,
           });
         }}
         searchable
         disabled={!opts || !moduleOptions.length}
       />
 
-      {config.multiqc_module !== 'general_stats' && (
+      {config.selected_module !== 'general_stats' && (
         <Select
           label="Plot"
           placeholder={
-            !config.multiqc_module ? 'Pick a module first' : 'Pick a plot'
+            !config.selected_module ? 'Pick a module first' : 'Pick a plot'
           }
           data={plotOptions}
-          value={config.multiqc_plot ?? null}
+          value={config.selected_plot ?? null}
           onChange={(val) =>
-            patchConfig({ multiqc_plot: val, multiqc_dataset: undefined })
+            patchConfig({ selected_plot: val, selected_dataset: undefined })
           }
           searchable
           disabled={!plotOptions.length}
         />
       )}
 
-      {datasetOptions.length > 0 && config.multiqc_module !== 'general_stats' && (
+      {datasetOptions.length > 0 && config.selected_module !== 'general_stats' && (
         <Select
           label="Dataset"
           placeholder="Pick a dataset"
           data={datasetOptions}
-          value={config.multiqc_dataset ?? null}
-          onChange={(val) => patchConfig({ multiqc_dataset: val })}
+          value={config.selected_dataset ?? null}
+          onChange={(val) => patchConfig({ selected_dataset: val })}
           searchable
         />
       )}

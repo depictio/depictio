@@ -348,6 +348,11 @@ def build_multiqc(**kwargs: Any):
                     "dataset_id": selected_dataset,
                     "theme": theme,
                     "component_id": str(component_id),
+                    # Carry dc_id + project_id so the view-mode renderer can
+                    # live-fetch the current s3_locations instead of relying
+                    # on the snapshot above (which goes stale after appends).
+                    "data_collection_id": dc_id_str,
+                    "project_id": project_id_str,
                 },
             ),
         ]
