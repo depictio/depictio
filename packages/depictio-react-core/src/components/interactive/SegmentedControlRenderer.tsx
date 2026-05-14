@@ -80,16 +80,25 @@ const SegmentedControlRenderer: React.FC<{
 
   // Cross-DC available-values intersection — see `availableValues.tsx`. Marks
   // segments whose value isn't present in any other joined DC as disabled.
+  // Available segments come first, then unavailable; locale-aware natural
+  // sort within each bucket so `Sample_2` precedes `Sample_10`.
   const availableSet = useAvailableSet(metadata.dc_id, metadata.column_name);
-  const data = useMemo(
-    () =>
-      options.map((v) => ({
-        value: v,
-        label: v,
-        disabled: availableSet ? !availableSet.has(v) : false,
-      })),
-    [options, availableSet],
-  );
+  const data = useMemo(() => {
+    const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
+    const sorted = [...options].sort((a, b) => {
+      if (availableSet) {
+        const aAvail = availableSet.has(a);
+        const bAvail = availableSet.has(b);
+        if (aAvail !== bAvail) return aAvail ? -1 : 1;
+      }
+      return collator.compare(a, b);
+    });
+    return sorted.map((v) => ({
+      value: v,
+      label: v,
+      disabled: availableSet ? !availableSet.has(v) : false,
+    }));
+  }, [options, availableSet]);
 
   const displayTitle =
     metadata.title || (metadata.column_name ? `Filter on ${metadata.column_name}` : '');
