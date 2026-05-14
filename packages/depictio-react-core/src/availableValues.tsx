@@ -147,19 +147,35 @@ export const AvailableFilterValuesProvider: React.FC<
       const k = key(dcId, columnName);
       if (k in cache) return;
       if (inFlightRef.current.has(k)) return;
-      // No other DCs to intersect against → no narrowing possible.
-      if (dcs.length < 2) {
+
+      // Always include the filter's own source DC in the intersection. The
+      // dashboard's "data" components (table/figure/multiqc/etc.) drive the
+      // narrowing, but they may not reference the filter's source DC — a
+      // common shape is a metadata DC used only by interactive filters
+      // alongside a single multiqc report. Without adding the source DC
+      // explicitly we'd intersect just the multiqc samples and the
+      // narrowing would be backwards (everything in metadata vs nothing
+      // present). Treating the filter's source DC as a regular delta-table
+      // DC means `fetchUniqueValues(dc, column)` returns the full set of
+      // metadata-declared values; the data DCs then trim it.
+      const fetchTargets: DataDcEntry[] = [...dcs];
+      if (!fetchTargets.some((d) => d.dcId === dcId)) {
+        fetchTargets.push({ dcId, type: 'interactive_source' });
+      }
+
+      // Nothing to narrow against — only the source DC contributes.
+      if (fetchTargets.length < 2) {
         setCache((prev) => ({ ...prev, [k]: null }));
         return;
       }
       inFlightRef.current.add(k);
 
-      // Dispatch per DC type: delta-table DCs (table/figure/map/image/card)
-      // expose a per-column unique-values endpoint, multiqc DCs only expose
-      // their sample list via the per-project sample-mappings endpoint.
-      // Mapping returns `{canonical: [variants...]}` — flatten to a set of
-      // all known sample names so it matches whatever convention the
-      // metadata table uses (canonical or variant).
+      // Dispatch per DC type: delta-table DCs (table/figure/map/image/card/
+      // interactive_source) expose a per-column unique-values endpoint,
+      // multiqc DCs only expose their sample list via the per-project
+      // sample-mappings endpoint. Mapping returns `{canonical: [variants...]}`
+      // — flatten to a set of all known sample names so it matches whatever
+      // convention the metadata table uses (canonical or variant).
       const fetchOne = (entry: DataDcEntry): Promise<Set<string>> => {
         if (entry.type === 'multiqc') {
           if (!effectiveProjectId) return Promise.reject(new Error('no projectId'));
@@ -177,7 +193,7 @@ export const AvailableFilterValuesProvider: React.FC<
         return fetchUniqueValues(entry.dcId, columnName).then((values) => new Set(values));
       };
 
-      Promise.allSettled(dcs.map(fetchOne))
+      Promise.allSettled(fetchTargets.map(fetchOne))
         .then((results) => {
           const sets: Set<string>[] = [];
           for (const r of results) {
