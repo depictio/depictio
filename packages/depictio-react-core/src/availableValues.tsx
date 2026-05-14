@@ -101,6 +101,26 @@ function deriveProjectId(metadataList: StoredMetadata[] | undefined): string | u
   return undefined;
 }
 
+/** Multiqc samples are routinely stored with a per-read / per-lane /
+ *  per-replicate suffix like ``NA12878_R1`` / ``NA12878_R2``, while the
+ *  metadata table they link to carries the bare canonical id ``NA12878``.
+ *  Exact-string intersection would miss them all, so we expand each multiqc
+ *  name with its suffix-stripped base form.
+ *
+ *  Mirrors ``SampleMappingResolver._SAMPLE_SUFFIX_RE`` in
+ *  ``depictio/api/v1/endpoints/links_endpoints/resolvers.py``. The regex is
+ *  deliberately restricted to explicit prefix letters (R/L/REP/TECH) so we
+ *  don't over-strip IDs that legitimately end in ``_<digits>`` like
+ *  ``Sample_2024`` or ``Patient_42`` — generic separator splitting would
+ *  silently collapse unrelated samples into one base. */
+const SAMPLE_SUFFIX_RE = /_(?:R\d+|L\d+|REP\d+|TECH\d+)$/i;
+
+function expandWithPrefixes(name: string): string[] {
+  if (!name) return [];
+  const base = name.replace(SAMPLE_SUFFIX_RE, '');
+  return base !== name ? [name, base] : [name];
+}
+
 export interface AvailableFilterValuesProviderProps {
   dashboardMetadata: StoredMetadata[] | undefined;
   /** Project ID — required to resolve MultiQC sample mappings (the
@@ -182,9 +202,11 @@ export const AvailableFilterValuesProvider: React.FC<
           return fetchMultiQCSampleMappings(effectiveProjectId, entry.dcId).then((mappings) => {
             const out = new Set<string>();
             for (const [canonical, variants] of Object.entries(mappings)) {
-              out.add(canonical);
+              for (const v of expandWithPrefixes(canonical)) out.add(v);
               if (Array.isArray(variants)) {
-                for (const v of variants) out.add(v);
+                for (const variant of variants) {
+                  for (const v of expandWithPrefixes(variant)) out.add(v);
+                }
               }
             }
             return out;
