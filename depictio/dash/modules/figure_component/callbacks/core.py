@@ -1167,8 +1167,22 @@ def _create_figure_from_data(
             )
             return fig
 
-        if visu_type not in ["scatter", "line", "bar", "box", "histogram"]:
-            logger.warning(f"Unsupported visualization type: {visu_type}, defaulting to scatter")
+        # Gate on the curated registry, not a stale hand-maintained subset.
+        # The previous hardcoded list (scatter/line/bar/box/histogram) silently
+        # downgraded every advanced Plotly Express type — density_heatmap,
+        # density_contour, area, funnel, strip, violin, ecdf, scatter_matrix —
+        # to scatter, even though they're all in ALLOWED_VISUALIZATIONS and
+        # picked up by parameter discovery in the builder. Use the same
+        # registry the builder uses so add-a-viz only touches one place.
+        from depictio.dash.modules.figure_component.definitions import (
+            ALLOWED_VISUALIZATIONS,
+        )
+
+        if visu_type not in ALLOWED_VISUALIZATIONS:
+            logger.warning(
+                f"Unsupported visualization type: {visu_type!r} "
+                f"(not in ALLOWED_VISUALIZATIONS), defaulting to scatter"
+            )
             visu_type = "scatter"
 
         # Plotly rejects NaN in the marker `size` property with a hard
