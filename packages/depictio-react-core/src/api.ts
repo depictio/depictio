@@ -2453,9 +2453,11 @@ export interface ResolverInfo {
 }
 
 export async function listProjectLinks(projectId: string): Promise<DCLink[]> {
-  const res = await fetch(`${API_BASE}/links/${projectId}`, {
-    headers: authHeaders(),
-  });
+  // Use authFetch (not raw fetch + authHeaders) so a stale access_token gets
+  // silently refreshed and retried instead of bubbling up as a 401 "Invalid
+  // token". The links endpoint uses strict get_current_user — there's no
+  // anonymous fallback to recover from a bad header.
+  const res = await authFetch(`${API_BASE}/links/${projectId}`);
   if (!res.ok) await throwHttpError(res, 'Failed to list project links');
   const body = await res.json();
   // Backend returns either {links: [...]} or [...]; accept both.

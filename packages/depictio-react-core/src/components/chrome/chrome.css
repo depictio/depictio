@@ -70,22 +70,6 @@
   cursor: grabbing;
 }
 
-/* Always-visible orange badge in the top-LEFT corner of the chrome that
- * appears when this component is the SOURCE of an active dashboard filter
- * (chart selection, table row selection, map polygon, image pick).
- * Distinct from the hover-revealed action row at top-right so users have a
- * persistent affordance to see — and reset — which component is currently
- * filtering the rest of the dashboard. */
-.depictio-source-filter-badge {
-  position: absolute;
-  top: 10px;
-  left: 10px;
-  z-index: 5;
-  display: inline-flex;
-  align-items: center;
-  pointer-events: auto;
-}
-
 /* Drop placeholder during drag — mirrors
  * depictio/dash/assets/css/components/draggable-grid.css:546 */
 .react-grid-layout .react-grid-placeholder {

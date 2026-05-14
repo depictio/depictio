@@ -12,6 +12,7 @@ from depictio.api.v1.endpoints.datacollections_endpoints.utils import (
     _create_multiqc_dc_from_uploads,
     _delete_data_collection_by_id,
     _delete_orphan_links_for_dc,
+    _ensure_user_cli_token,
     _get_data_collection_specs,
     _update_data_collection_name,
     _update_dc_specific_properties,
@@ -219,6 +220,7 @@ async def create_data_collection_from_upload(
     consumed by Map components for geographic data.
     """
     file_bytes = await file.read()
+    await _ensure_user_cli_token(current_user)
     return await asyncio.to_thread(
         _create_dc_from_upload,
         project_id=project_id,
@@ -301,6 +303,7 @@ async def create_multiqc_data_collection_from_upload(
             )
         decoded_files.append((body, upload.filename or "upload.parquet"))
 
+    await _ensure_user_cli_token(current_user)
     return await asyncio.to_thread(
         _create_multiqc_dc_from_uploads,
         project_id=project_id,
