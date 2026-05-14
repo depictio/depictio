@@ -89,12 +89,27 @@ function collectDataDcs(metadataList: StoredMetadata[] | undefined): DataDcEntry
   return Array.from(byId.values());
 }
 
+/** The dashboard endpoint doesn't return `project_id` at the top level — it
+ *  only lives on each `stored_metadata` entry. Pick the first non-empty
+ *  one; we assume a single project per dashboard which is the case
+ *  everywhere in depictio today (dashboard owns the project_id 1:1). */
+function deriveProjectId(metadataList: StoredMetadata[] | undefined): string | undefined {
+  if (!metadataList) return undefined;
+  for (const m of metadataList) {
+    if (m.project_id) return m.project_id;
+  }
+  return undefined;
+}
+
 export interface AvailableFilterValuesProviderProps {
   dashboardMetadata: StoredMetadata[] | undefined;
   /** Project ID — required to resolve MultiQC sample mappings (the
    *  `/links/{projectId}/multiqc/{dcId}/sample-mappings` endpoint is
-   *  scoped per project). When absent, multiqc DCs are skipped and the
-   *  intersection falls back to whatever delta-table DCs contribute. */
+   *  scoped per project). Optional: when not provided, the provider
+   *  derives it from `dashboardMetadata[i].project_id` (the dashboards
+   *  endpoint doesn't expose project_id at the top level). When still
+   *  absent, multiqc DCs are skipped and the intersection falls back to
+   *  whatever delta-table DCs contribute. */
   projectId?: string;
   children: React.ReactNode;
 }
@@ -113,6 +128,10 @@ export const AvailableFilterValuesProvider: React.FC<
   const dcSignature = useMemo(
     () => dcs.map((d) => `${d.type}:${d.dcId}`).join('|'),
     [dcs],
+  );
+  const effectiveProjectId = useMemo(
+    () => projectId ?? deriveProjectId(dashboardMetadata),
+    [projectId, dashboardMetadata],
   );
 
   // Reset cache when the dashboard's set of DCs changes — the intersection
@@ -143,8 +162,8 @@ export const AvailableFilterValuesProvider: React.FC<
       // metadata table uses (canonical or variant).
       const fetchOne = (entry: DataDcEntry): Promise<Set<string>> => {
         if (entry.type === 'multiqc') {
-          if (!projectId) return Promise.reject(new Error('no projectId'));
-          return fetchMultiQCSampleMappings(projectId, entry.dcId).then((mappings) => {
+          if (!effectiveProjectId) return Promise.reject(new Error('no projectId'));
+          return fetchMultiQCSampleMappings(effectiveProjectId, entry.dcId).then((mappings) => {
             const out = new Set<string>();
             for (const [canonical, variants] of Object.entries(mappings)) {
               out.add(canonical);
@@ -162,9 +181,12 @@ export const AvailableFilterValuesProvider: React.FC<
         .then((results) => {
           const sets: Set<string>[] = [];
           for (const r of results) {
-            if (r.status === 'fulfilled') sets.push(r.value);
-            // Rejected = column doesn't exist on that DC (or multiqc has no
-            // sample mappings yet) — treated as "no constraint from this DC".
+            // Skip both rejections AND empty fulfilled sets — an empty
+            // result means "this DC has no opinion on this column" (e.g.,
+            // column missing, multiqc with no sample_mappings yet), not
+            // "everything is unavailable". Treating empty as a constraint
+            // would grey out every option, which is never what we want.
+            if (r.status === 'fulfilled' && r.value.size > 0) sets.push(r.value);
           }
           let intersection: Set<string> | null = null;
           if (sets.length >= 2) {
@@ -188,7 +210,7 @@ export const AvailableFilterValuesProvider: React.FC<
           inFlightRef.current.delete(k);
         });
     },
-    [cache, dcs, projectId],
+    [cache, dcs, effectiveProjectId],
   );
 
   const getSet = useCallback(
