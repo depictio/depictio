@@ -253,11 +253,19 @@ async def _get_multiqc_sample_mappings(target_dc_id: str) -> dict[str, list[str]
     parquet files). Each report may have different samples with their own mappings.
     This function aggregates all sample_mappings from all reports for the DC.
 
+    When no explicit ``sample_mappings`` are configured (typical for DCs that
+    haven't yet been linked to an external metadata table), we fall back to the
+    raw ``canonical_samples`` parsed out of each report and synthesize a
+    ``{sample: []}`` mapping — variants empty, but the caller (greying /
+    intersection callers) still gets the authoritative set of samples actually
+    present in the MultiQC reports.
+
     Args:
         target_dc_id: MultiQC data collection ID
 
     Returns:
-        Aggregated sample mappings dict or empty dict if not found
+        Aggregated sample mappings dict — values may be empty lists when only
+        canonical samples are known. Empty dict only when the DC has no reports.
     """
     try:
         # Find ALL reports for this DC, not just the first one
@@ -265,14 +273,19 @@ async def _get_multiqc_sample_mappings(target_dc_id: str) -> dict[str, list[str]
 
         cursor = multiqc_collection.find(
             {"data_collection_id": target_dc_id},
-            {"metadata.sample_mappings": 1},
+            # Pull canonical_samples too so we can fall back when no explicit
+            # mapping has been configured yet.
+            {"metadata.sample_mappings": 1, "metadata.canonical_samples": 1},
         )
 
         report_count = 0
+        had_explicit_mappings = False
         for report in cursor:
             report_count += 1
-            mappings = report.get("metadata", {}).get("sample_mappings", {})
+            metadata = report.get("metadata") or {}
+            mappings = metadata.get("sample_mappings") or {}
             if mappings:
+                had_explicit_mappings = True
                 # Merge mappings - if same key exists, combine variant lists
                 for sample_id, variants in mappings.items():
                     if sample_id in aggregated_mappings:
@@ -283,11 +296,20 @@ async def _get_multiqc_sample_mappings(target_dc_id: str) -> dict[str, list[str]
                                 aggregated_mappings[sample_id].append(v)
                     else:
                         aggregated_mappings[sample_id] = list(variants)
+            else:
+                # Fall back to canonical_samples (the raw list of sample names
+                # MultiQC parsed out of this report). Treated as canonical IDs
+                # with no variants — still useful for narrowing filter options
+                # to "samples actually present in the report".
+                for sample_id in metadata.get("canonical_samples") or []:
+                    if sample_id and sample_id not in aggregated_mappings:
+                        aggregated_mappings[sample_id] = []
 
         if aggregated_mappings:
             logger.debug(
                 f"Aggregated {len(aggregated_mappings)} sample mappings "
-                f"from {report_count} MultiQC reports for DC {target_dc_id}"
+                f"from {report_count} MultiQC reports for DC {target_dc_id} "
+                f"(explicit_mappings={had_explicit_mappings})"
             )
         return aggregated_mappings
 
