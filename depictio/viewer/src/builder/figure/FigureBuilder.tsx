@@ -55,7 +55,7 @@ const FigureBuilder: React.FC = () => {
               label: (
                 <span style={TOGGLE_LABEL_STYLE}>
                   <Icon icon="tabler:code" width={16} />
-                  Code Mode (Beta)
+                  Code Mode
                 </span>
               ),
             },
@@ -71,14 +71,41 @@ const FigureBuilder: React.FC = () => {
             display: 'inline-block',
             verticalAlign: 'top',
             marginRight: '2%',
-            minHeight: 400,
-            border: '1px solid var(--mantine-color-gray-3)',
-            borderRadius: 'var(--mantine-radius-md)',
-            padding: 'var(--mantine-spacing-sm)',
             boxSizing: 'border-box',
           }}
         >
-          <FigurePreview />
+          <Box
+            component="div"
+            style={{
+              minHeight: 400,
+              border: '1px solid var(--mantine-color-gray-3)',
+              borderRadius: 'var(--mantine-radius-md)',
+              padding: 'var(--mantine-spacing-sm)',
+              boxSizing: 'border-box',
+            }}
+          >
+            <FigurePreview />
+          </Box>
+
+          {/* In UI mode the cross-filter section is rendered inside the
+           *  right-panel Accordion (see FigureUIMode) to match the other
+           *  visualization config sections. In code mode the right panel is
+           *  taken by the editor, so the section sits under the preview in
+           *  the left pane — same column, directly below the chart, easy to
+           *  reach without the eyes leaving the preview area. */}
+          {figureMode === 'code' && (
+            <Accordion variant="separated" radius="md" multiple mt="sm">
+              <CrossFilterSection
+                enabled={Boolean(config.selection_enabled)}
+                onEnabledChange={(checked) =>
+                  patchConfig({ selection_enabled: checked })
+                }
+                column={config.selection_column}
+                onColumnChange={(name) => patchConfig({ selection_column: name })}
+                columnDescription="Column to extract from selected points"
+              />
+            </Accordion>
+          )}
         </Box>
         <Box
           component="div"
@@ -100,24 +127,6 @@ const FigureBuilder: React.FC = () => {
           )}
         </Box>
       </Box>
-
-      {/* In UI mode the cross-filter section is rendered inside the right-
-       *  panel Accordion (see FigureUIMode) to match the other visualization
-       *  config sections. In code mode the right panel is taken by the
-       *  editor, so the section is shown directly under the preview row. */}
-      {figureMode === 'code' && (
-        <Accordion variant="separated" radius="md" multiple>
-          <CrossFilterSection
-            enabled={Boolean(config.selection_enabled)}
-            onEnabledChange={(checked) =>
-              patchConfig({ selection_enabled: checked })
-            }
-            column={config.selection_column}
-            onColumnChange={(name) => patchConfig({ selection_column: name })}
-            columnDescription="Column to extract from selected points"
-          />
-        </Accordion>
-      )}
     </Stack>
   );
 };
