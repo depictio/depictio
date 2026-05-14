@@ -309,6 +309,7 @@ const App: React.FC = () => {
   return (
     <AvailableFilterValuesProvider
       dashboardMetadata={dashboard?.stored_metadata}
+      projectId={dashboard?.project_id}
     >
       {ENABLE_DEMO_UI && isDemoMode && <DemoModeBanner />}
       <DemoTour active={ENABLE_DEMO_UI && isDemoMode} />
