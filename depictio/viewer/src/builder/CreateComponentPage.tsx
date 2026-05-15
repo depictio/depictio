@@ -46,11 +46,14 @@ const CreateComponentPage: React.FC<CreateComponentPageProps> = ({
     return () => reset();
   }, [dashboardId, newComponentId, init, reset]);
 
-  // Text components don't bind to a workflow/DC — Step 1 is irrelevant and
-  // skipped (0 → 2 directly). Other types still gate Step 1 → 2 on wf+dc.
+  // Text components don't bind to a workflow/DC — the Data Source step is
+  // hidden entirely. The global `step` state still uses 0,1,2; for text the
+  // stepper UI just renders 2 children (Type → Design), so internal state 2
+  // maps to stepper position 1.
   const isText = componentType === 'text';
   const canAdvanceFromZero = Boolean(componentType);
   const canAdvanceFromOne = isText || Boolean(wfId && dcId);
+  const stepperActive = isText ? (step >= 2 ? 1 : 0) : step;
 
   const cancel = () => {
     window.location.assign(`/dashboard-beta-edit/${dashboardId}`);
@@ -79,13 +82,12 @@ const CreateComponentPage: React.FC<CreateComponentPageProps> = ({
       <AppShell.Main>
         <Container size="xl" px="md" py="xl">
           <Stepper
-            active={step}
+            active={stepperActive}
             onStepClick={(n) => {
-              // Text bypasses Step 1: clicking the data step jumps straight
-              // to design, and "back" from design returns to type.
-              if (isText && n === 1) {
-                if (canAdvanceFromZero) setStep(2);
-                else setStep(0);
+              if (isText) {
+                // 2-step stepper for text: 0 → Type, 1 → Design (internal step=2)
+                if (n === 0) setStep(0);
+                else if (n === 1 && canAdvanceFromZero) setStep(2);
                 return;
               }
               if (n < step) setStep(n);
@@ -111,12 +113,14 @@ const CreateComponentPage: React.FC<CreateComponentPageProps> = ({
             >
               <StepType />
             </Stepper.Step>
-            <Stepper.Step
-              label="Data Source"
-              description="Connect your component to data"
-            >
-              <StepData />
-            </Stepper.Step>
+            {!isText && (
+              <Stepper.Step
+                label="Data Source"
+                description="Connect your component to data"
+              >
+                <StepData />
+              </Stepper.Step>
+            )}
             <Stepper.Step
               label="Component Design"
               description="Customize the appearance and behavior of your component"

@@ -67,6 +67,7 @@ const NotesFooter: React.FC<NotesFooterProps> = ({
   initialContent,
 }) => {
   const [opened, setOpened] = useState<boolean>(() => readStoredOpen(dashboardId));
+  const [fullscreen, setFullscreen] = useState<boolean>(false);
   const [status, setStatus] = useState<SaveStatus>('idle');
   const [savedAt, setSavedAt] = useState<Date | null>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -130,6 +131,7 @@ const NotesFooter: React.FC<NotesFooterProps> = ({
 
   const handleClose = useCallback(() => {
     setOpened(false);
+    setFullscreen(false);
     writeStoredOpen(dashboardId, false);
   }, [dashboardId]);
 
@@ -161,7 +163,7 @@ const NotesFooter: React.FC<NotesFooterProps> = ({
         opened={opened}
         onClose={handleClose}
         position="bottom"
-        size={320}
+        size={fullscreen ? '100%' : 420}
         padding="md"
         withCloseButton={false}
         title={
@@ -171,23 +173,69 @@ const NotesFooter: React.FC<NotesFooterProps> = ({
               <Text fw={600}>Notes & Documentation</Text>
               <SaveStatusIndicator status={status} savedAt={savedAt} />
             </Group>
-            <ActionIcon
-              variant="subtle"
-              color="gray"
-              size="sm"
-              onClick={handleClose}
-              aria-label="Collapse notes"
-            >
-              <Icon icon="material-symbols:expand-more" width={20} />
-            </ActionIcon>
+            <Group gap={4} wrap="nowrap">
+              <Tooltip
+                label={fullscreen ? 'Restore size' : 'Fullscreen'}
+                position="left"
+                withArrow
+              >
+                <ActionIcon
+                  variant="subtle"
+                  color="gray"
+                  size="sm"
+                  onClick={() => setFullscreen((f) => !f)}
+                  aria-label={fullscreen ? 'Restore notes drawer' : 'Expand notes to fullscreen'}
+                >
+                  <Icon
+                    icon={
+                      fullscreen
+                        ? 'material-symbols:close-fullscreen'
+                        : 'material-symbols:open-in-full'
+                    }
+                    width={18}
+                  />
+                </ActionIcon>
+              </Tooltip>
+              <Tooltip label="Close notes" position="left" withArrow>
+                <ActionIcon
+                  variant="subtle"
+                  color="gray"
+                  size="sm"
+                  onClick={handleClose}
+                  aria-label="Close notes"
+                >
+                  <Icon icon="material-symbols:close" width={18} />
+                </ActionIcon>
+              </Tooltip>
+            </Group>
           </Group>
         }
         styles={{
           title: { width: '100%' },
-          body: { paddingTop: 8 },
+          // Flex column body so the RichTextEditor can stretch to fill the
+          // drawer and its content area scrolls independently of the toolbar.
+          body: {
+            paddingTop: 8,
+            display: 'flex',
+            flexDirection: 'column',
+            flex: 1,
+            minHeight: 0,
+          },
+          content: {
+            display: 'flex',
+            flexDirection: 'column',
+          },
         }}
       >
-        <RichTextEditor editor={editor} style={{ maxHeight: 240, overflowY: 'auto' }}>
+        <RichTextEditor
+          editor={editor}
+          style={{
+            flex: 1,
+            minHeight: 0,
+            display: 'flex',
+            flexDirection: 'column',
+          }}
+        >
           <RichTextEditor.Toolbar sticky stickyOffset={0}>
             <RichTextEditor.ControlsGroup>
               <RichTextEditor.Bold />
@@ -215,7 +263,7 @@ const NotesFooter: React.FC<NotesFooterProps> = ({
               <RichTextEditor.Redo />
             </RichTextEditor.ControlsGroup>
           </RichTextEditor.Toolbar>
-          <RichTextEditor.Content />
+          <RichTextEditor.Content style={{ flex: 1, minHeight: 0, overflowY: 'auto' }} />
         </RichTextEditor>
       </Drawer>
     </>
