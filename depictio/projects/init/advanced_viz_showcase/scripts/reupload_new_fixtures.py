@@ -138,7 +138,16 @@ def _column_specs(df: pl.DataFrame) -> list[dict[str, Any]]:
         # ("object" for strings, "int64" / "float64" for numerics).
         if dtype in (pl.Utf8, pl.Categorical):
             type_str = "object"
-        elif dtype in (pl.Int8, pl.Int16, pl.Int32, pl.Int64, pl.UInt8, pl.UInt16, pl.UInt32, pl.UInt64):
+        elif dtype in (
+            pl.Int8,
+            pl.Int16,
+            pl.Int32,
+            pl.Int64,
+            pl.UInt8,
+            pl.UInt16,
+            pl.UInt32,
+            pl.UInt64,
+        ):
             type_str = "int64"
         elif dtype in (pl.Float32, pl.Float64):
             type_str = "float64"
@@ -192,9 +201,7 @@ def _write_delta(dc: dict[str, Any]) -> tuple[int, pl.DataFrame]:
 
 
 def _dc_document(dc: dict[str, Any]) -> dict[str, Any]:
-    container_path = (
-        f"/app/depictio/projects/init/advanced_viz_showcase/data/{dc['tsv']}"
-    )
+    container_path = f"/app/depictio/projects/init/advanced_viz_showcase/data/{dc['tsv']}"
     return {
         "_id": ObjectId(dc["id"]),
         "description": dc["description"],
@@ -229,9 +236,7 @@ def _dc_document(dc: dict[str, Any]) -> dict[str, Any]:
 def _deltatable_document(dc: dict[str, Any], size_bytes: int, df: pl.DataFrame) -> dict[str, Any]:
     specs = _column_specs(df)
     now = datetime.now(timezone.utc)
-    agg_hash = hashlib.sha256(
-        f"{dc['id']}|{now.isoformat()}|{len(specs)}".encode()
-    ).hexdigest()
+    agg_hash = hashlib.sha256(f"{dc['id']}|{now.isoformat()}|{len(specs)}".encode()).hexdigest()
     return {
         "data_collection_id": ObjectId(dc["id"]),
         "delta_table_location": f"s3://{S3_BUCKET}/{dc['id']}",
@@ -268,9 +273,7 @@ def main() -> None:
         )
     print(f"Found project: {proj['name']}")
 
-    workflow = next(
-        (wf for wf in proj["workflows"] if str(wf.get("_id")) == WORKFLOW_ID), None
-    )
+    workflow = next((wf for wf in proj["workflows"] if str(wf.get("_id")) == WORKFLOW_ID), None)
     if not workflow:
         raise SystemExit(f"Workflow {WORKFLOW_ID} not on project document")
     existing_dc_ids = {str(dc["_id"]) for dc in workflow.get("data_collections", [])}
