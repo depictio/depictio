@@ -46,10 +46,14 @@ const CreateComponentPage: React.FC<CreateComponentPageProps> = ({
     return () => reset();
   }, [dashboardId, newComponentId, init, reset]);
 
-  // Step 0 → 1 needs componentType. Step 1 → 2 needs wfId+dcId. Step 2 always
-  // allowed once reached.
+  // Text components don't bind to a workflow/DC — the Data Source step is
+  // hidden entirely. The global `step` state still uses 0,1,2; for text the
+  // stepper UI just renders 2 children (Type → Design), so internal state 2
+  // maps to stepper position 1.
+  const isText = componentType === 'text';
   const canAdvanceFromZero = Boolean(componentType);
-  const canAdvanceFromOne = Boolean(wfId && dcId);
+  const canAdvanceFromOne = isText || Boolean(wfId && dcId);
+  const stepperActive = isText ? (step >= 2 ? 1 : 0) : step;
 
   const cancel = () => {
     window.location.assign(`/dashboard-beta-edit/${dashboardId}`);
@@ -78,8 +82,14 @@ const CreateComponentPage: React.FC<CreateComponentPageProps> = ({
       <AppShell.Main>
         <Container size="xl" px="md" py="xl">
           <Stepper
-            active={step}
+            active={stepperActive}
             onStepClick={(n) => {
+              if (isText) {
+                // 2-step stepper for text: 0 → Type, 1 → Design (internal step=2)
+                if (n === 0) setStep(0);
+                else if (n === 1 && canAdvanceFromZero) setStep(2);
+                return;
+              }
               if (n < step) setStep(n);
               else if (n === 1 && canAdvanceFromZero) setStep(1);
               else if (n === 2 && canAdvanceFromZero && canAdvanceFromOne)
@@ -103,12 +113,14 @@ const CreateComponentPage: React.FC<CreateComponentPageProps> = ({
             >
               <StepType />
             </Stepper.Step>
-            <Stepper.Step
-              label="Data Source"
-              description="Connect your component to data"
-            >
-              <StepData />
-            </Stepper.Step>
+            {!isText && (
+              <Stepper.Step
+                label="Data Source"
+                description="Connect your component to data"
+              >
+                <StepData />
+              </Stepper.Step>
+            )}
             <Stepper.Step
               label="Component Design"
               description="Customize the appearance and behavior of your component"
@@ -159,8 +171,12 @@ const CreateComponentPage: React.FC<CreateComponentPageProps> = ({
               color="gray"
               size="lg"
               leftSection={<Icon icon="mdi:arrow-left" width={20} />}
-              disabled={step === 0 || step >= 2}
-              onClick={() => setStep(Math.max(0, step - 1))}
+              disabled={step === 0 || (step >= 2 && !isText)}
+              onClick={() => {
+                // Text components skip Step 1 in both directions.
+                if (isText && step === 2) setStep(0);
+                else setStep(Math.max(0, step - 1));
+              }}
             >
               Back
             </Button>
@@ -174,7 +190,11 @@ const CreateComponentPage: React.FC<CreateComponentPageProps> = ({
                 (step === 1 && !canAdvanceFromOne) ||
                 step >= 2
               }
-              onClick={() => setStep(step + 1)}
+              onClick={() => {
+                // Text jumps 0 → 2 directly (no data binding required).
+                if (isText && step === 0) setStep(2);
+                else setStep(step + 1);
+              }}
             >
               Next Step
             </Button>

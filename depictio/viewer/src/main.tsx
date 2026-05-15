@@ -12,6 +12,11 @@ import '@mantine/carousel/styles.css';
 // docs / DMC equivalent. This must come AFTER core/styles.css so the
 // dates-package overrides apply.
 import '@mantine/dates/styles.css';
+// REQUIRED: @mantine/tiptap ships its own stylesheet for the RichTextEditor.
+// Without it, the toolbar's ControlsGroup/Bold/Italic/etc. controls render
+// as un-styled invisible boxes and the editor surface has no border or
+// padding, producing a large empty gap inside the NotesFooter drawer.
+import '@mantine/tiptap/styles.css';
 import './styles/app.css';
 
 import App from './App';

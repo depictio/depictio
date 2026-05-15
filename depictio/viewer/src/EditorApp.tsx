@@ -74,6 +74,7 @@ import type { TabModalSubmitPayload } from './chrome';
 import { useAuthMode } from './auth/hooks/useAuthMode';
 import DemoTour from './demo/DemoTour';
 import DemoModeBanner from './components/DemoModeBanner';
+import NotesFooter from './components/NotesFooter';
 import './chrome/chrome.css';
 
 // Demo onboarding UI temporarily disabled — flip to true to re-enable.
@@ -997,6 +998,12 @@ const EditorApp: React.FC = () => {
               />
             </Box>
           </div>
+        )}
+        {dashboard && dashboardId && (
+          <NotesFooter
+            dashboardId={dashboardId}
+            initialContent={(dashboard.notes_content as string) ?? ''}
+          />
         )}
       </AppShell.Main>
 
