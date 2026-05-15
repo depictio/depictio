@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class _BaseVizConfig(BaseModel):
@@ -63,8 +63,12 @@ class EmbeddingConfig(_BaseVizConfig):
     viz_kind: Literal["embedding"] = "embedding"
 
     sample_id_col: str = Field(..., description="Column with the sample identifier")
-    dim_1_col: str = Field(default="dim_1", description="Column with first embedding dim (precomputed mode)")
-    dim_2_col: str = Field(default="dim_2", description="Column with second embedding dim (precomputed mode)")
+    dim_1_col: str = Field(
+        default="dim_1", description="Column with first embedding dim (precomputed mode)"
+    )
+    dim_2_col: str = Field(
+        default="dim_2", description="Column with second embedding dim (precomputed mode)"
+    )
     dim_3_col: str | None = Field(default=None, description="Optional third dim (enables 3D)")
     cluster_col: str | None = Field(default=None, description="Optional cluster assignment column")
     color_col: str | None = Field(
@@ -180,7 +184,9 @@ class ANCOMBCDifferentialsConfig(_BaseVizConfig):
     feature_id_col: str = Field(..., description="Feature / taxon identifier")
     contrast_col: str = Field(..., description="Contrast name (used for the dropdown)")
     lfc_col: str = Field(..., description="Log-fold-change (signed)")
-    significance_col: str = Field(..., description="FDR-adjusted p-value (used to bold significant bars)")
+    significance_col: str = Field(
+        ..., description="FDR-adjusted p-value (used to bold significant bars)"
+    )
     label_col: str | None = Field(
         default=None, description="Optional column for the bar's display label"
     )
@@ -204,9 +210,7 @@ class DaBarplotConfig(_BaseVizConfig):
     significance_col: str | None = Field(
         default=None, description="FDR-adjusted p-value (for highlighting significant bars)"
     )
-    label_col: str | None = Field(
-        default=None, description="Optional display label"
-    )
+    label_col: str | None = Field(default=None, description="Optional display label")
     significance_threshold: float = Field(default=0.05, ge=0.0, le=1.0)
     top_n: int = Field(default=15, ge=1, description="Top features (by |lfc|) shown per contrast")
 
@@ -331,19 +335,240 @@ class PhylogeneticConfig(_BaseVizConfig):
     )
 
     # Display defaults (all editable from the viz controls).
-    default_layout: Literal[
-        "rectangular", "circular", "radial", "diagonal", "hierarchical"
-    ] = Field(default="rectangular")
+    default_layout: Literal["rectangular", "circular", "radial", "diagonal", "hierarchical"] = (
+        Field(default="rectangular")
+    )
     ladderize: bool = Field(default=True, description="Ladderise the tree by default")
     show_metadata_strip: bool = Field(
         default=True,
         description="Render Microreact-style metadata strip next to each tip",
     )
-    show_branch_lengths: bool = Field(
-        default=True, description="Annotate branches with lengths"
-    )
+    show_branch_lengths: bool = Field(default=True, description="Annotate branches with lengths")
     show_internal_labels: bool = Field(
         default=False, description="Annotate internal nodes with their labels"
+    )
+
+
+class MAConfig(_BaseVizConfig):
+    """MA (Bland-Altman) plot: mean log intensity (x) vs log fold change (y).
+
+    Canonical post-DE / post-proteomics view. Shares the tier-coloured
+    UP / DN / NS scheme with VolcanoConfig — same `significance_col` knob
+    drives the colour split. The labelling story is also identical
+    (top-N by |y| × -log10(sig), free-text search).
+    """
+
+    viz_kind: Literal["ma"] = "ma"
+
+    feature_id_col: str = Field(..., description="Feature identifier column")
+    avg_log_intensity_col: str = Field(
+        ..., description="Column with average log intensity (x-axis, A in MA)"
+    )
+    log2_fold_change_col: str = Field(
+        ..., description="Column with log2 fold change (y-axis, M in MA)"
+    )
+    significance_col: str | None = Field(
+        default=None, description="Optional p/padj column for tier colouring"
+    )
+    label_col: str | None = Field(default=None, description="Optional hover label column")
+
+    significance_threshold: float = Field(default=0.05, ge=0.0, le=1.0)
+    fold_change_threshold: float = Field(default=1.0, ge=0.0)
+    top_n_labels: int = Field(default=15, ge=0)
+
+
+class DotPlotConfig(_BaseVizConfig):
+    """Single-cell marker-gene dot plot.
+
+    Rows = genes, columns = clusters. Each dot's colour encodes mean
+    expression in that (gene, cluster) cell; dot size encodes the
+    fraction of cells in the cluster expressing the gene above a cut-off.
+    Canonical scanpy / Seurat ``dotplot`` layout.
+    """
+
+    viz_kind: Literal["dot_plot"] = "dot_plot"
+
+    cluster_col: str = Field(..., description="Cluster / group column (x axis)")
+    gene_col: str = Field(..., description="Gene / feature column (y axis)")
+    mean_expression_col: str = Field(..., description="Mean expression value (dot colour)")
+    frac_expressing_col: str = Field(
+        ..., description="Fraction of cells expressing the gene in the cluster (dot size)"
+    )
+
+    max_dot_size: int = Field(default=22, ge=4, le=60, description="Max marker size in pixels")
+    min_dot_size: int = Field(default=2, ge=0, le=20)
+
+
+class LollipopConfig(_BaseVizConfig):
+    """Lollipop / needle plot for variant / mutation tracks along a gene.
+
+    Each gene's body is drawn as a horizontal line; each variant is a
+    vertical stem with a marker on top, coloured by consequence category
+    (``category_col``). Optional ``effect_col`` modulates marker size.
+    """
+
+    viz_kind: Literal["lollipop"] = "lollipop"
+
+    feature_id_col: str = Field(..., description="Gene / feature the variant is on")
+    position_col: str = Field(..., description="Position along the feature (integer)")
+    category_col: str = Field(..., description="Variant consequence category (colour)")
+    effect_col: str | None = Field(
+        default=None, description="Optional numeric effect column (marker size)"
+    )
+
+    max_subplot_genes: int = Field(
+        default=6,
+        ge=1,
+        description="When the gene universe exceeds this, switch to a single-gene picker",
+    )
+
+
+class QQConfig(_BaseVizConfig):
+    """Quantile-quantile plot for p-value distributions (GWAS / DE / eQTL QC).
+
+    Sorts p-values, plots ``-log10(observed)`` against the theoretical
+    ``-log10(expected)`` under a uniform null. Y = x reference line + 95%
+    null CI band are drawn client-side. Optional ``category_col`` produces
+    one trace per stratum.
+    """
+
+    viz_kind: Literal["qq"] = "qq"
+
+    p_value_col: str = Field(..., description="Raw p-value column (0–1)")
+    feature_id_col: str | None = Field(default=None, description="Optional id column for hover")
+    category_col: str | None = Field(
+        default=None, description="Optional stratification column (one trace per value)"
+    )
+    show_ci: bool = Field(default=True, description="Shade the 95% null CI band")
+
+
+class SunburstConfig(_BaseVizConfig):
+    """Sunburst for taxonomic / hierarchical abundance.
+
+    ``rank_cols`` lists the columns that form the hierarchy from root to
+    leaf (e.g. ``[Kingdom, Phylum, Class, Order, Family, Genus]``).
+    ``abundance_col`` is the leaf weight; intermediate arc sizes are
+    reconstructed via Plotly's ``branchvalues='total'``.
+    """
+
+    viz_kind: Literal["sunburst"] = "sunburst"
+
+    rank_cols: list[str] = Field(
+        ..., min_length=2, description="Hierarchical rank columns from root to leaf"
+    )
+    abundance_col: str = Field(..., description="Leaf abundance weight column")
+
+
+class CoverageTrackConfig(_BaseVizConfig):
+    """Read-depth / signal coverage along a coordinate axis.
+
+    Universal genomics primitive: nf-core viralrecon (mosdepth per-bin
+    coverage), rnaseq (BigWig-derived transcript coverage), chipseq/atacseq
+    (peak signal), methylseq (depth), mag/bacass (contig coverage), sarek QC.
+    The renderer is a Plotly line/area plot; optional ``sample_col`` produces
+    one subplot row per sample, optional ``category_col`` colour-segments
+    the trace (annotation lane).
+    """
+
+    viz_kind: Literal["coverage_track"] = "coverage_track"
+
+    chromosome_col: str = Field(..., description="Column with the chromosome / contig label")
+    position_col: str = Field(
+        ..., description="Column with the bin centre or single-base position (integer)"
+    )
+    value_col: str = Field(..., description="Column with the coverage / signal value")
+    end_col: str | None = Field(
+        default=None,
+        description="Optional bin end column — when set with position_col, treated as interval",
+    )
+    sample_col: str | None = Field(
+        default=None, description="Optional column for per-sample faceting (stacked subplots)"
+    )
+    category_col: str | None = Field(
+        default=None,
+        description="Optional categorical annotation column (gene region, peak class, …)",
+    )
+
+    # Display defaults — editable from the viz Settings popover.
+    y_scale: Literal["linear", "log"] = Field(default="linear")
+    smoothing_window: int = Field(
+        default=0,
+        ge=0,
+        le=200,
+        description="Rolling-mean window in bins (0 disables smoothing)",
+    )
+    color_by: Literal["single", "category", "sample"] = Field(
+        default="single", description="Trace colour assignment mode"
+    )
+    show_annotation_lane: bool = Field(
+        default=True,
+        description="Render a thin annotation strip below the coverage when category_col is bound",
+    )
+    chromosomes_filter: list[str] | None = Field(
+        default=None,
+        description="Optional whitelist of chromosomes to display; null = all chromosomes",
+    )
+    samples_filter: list[str] | None = Field(
+        default=None,
+        description="Optional whitelist of samples to display; null = all samples",
+    )
+
+
+class SankeyConfig(_BaseVizConfig):
+    """Sankey / categorical-flow diagram across N ordered categorical levels.
+
+    Universal multi-step categorical flow: viralrecon (sample → lineage →
+    clade), taxprofiler (sample → kingdom → phylum → genus), mag (sample →
+    bin → taxonomy), airrflow (V → D → J gene), sarek (tissue → variant
+    class → consequence). The Celery worker aggregates by ``step_cols`` and
+    builds a Plotly ``sankey`` trace; the React renderer applies client-side
+    sort / colour / opacity tweaks without re-dispatching.
+    """
+
+    viz_kind: Literal["sankey"] = "sankey"
+
+    step_cols: list[str] = Field(
+        ...,
+        min_length=2,
+        description="Ordered categorical columns from source to leaf (≥2 levels)",
+    )
+    value_col: str | None = Field(
+        default=None,
+        description="Optional numeric weight column; null → each row counts as 1",
+    )
+
+    # Display defaults — editable from the Settings popover.
+    sort_mode: Literal["alphabetical", "total_flow", "input"] = Field(default="total_flow")
+    color_mode: Literal["source", "target", "step"] = Field(default="source")
+    link_opacity: float = Field(default=0.5, ge=0.05, le=1.0)
+    min_link_value: float = Field(
+        default=0.0,
+        ge=0.0,
+        description="Hide links whose aggregated value is below this threshold",
+    )
+    show_node_labels: bool = Field(default=True)
+
+    @field_validator("step_cols")
+    @classmethod
+    def _step_cols_unique(cls, v: list[str]) -> list[str]:
+        if len(set(v)) != len(v):
+            raise ValueError("step_cols must not contain duplicate column names")
+        return v
+
+
+class OncoplotConfig(_BaseVizConfig):
+    """Oncoplot / co-mutation matrix (sample × gene × mutation type).
+
+    Discrete heatmap with one colour per mutation type (NA cells stay
+    blank). Side strips show per-gene and per-sample mutation counts.
+    """
+
+    viz_kind: Literal["oncoplot"] = "oncoplot"
+
+    sample_id_col: str = Field(..., description="Sample identifier column (x axis)")
+    gene_col: str = Field(..., description="Gene identifier column (y axis)")
+    mutation_type_col: str = Field(
+        ..., description="Categorical mutation-type column (cell colour)"
     )
 
 
@@ -359,6 +584,14 @@ VizConfig = Annotated[
     | DaBarplotConfig
     | EnrichmentConfig
     | ComplexHeatmapConfig
-    | UpsetPlotConfig,
+    | UpsetPlotConfig
+    | MAConfig
+    | DotPlotConfig
+    | LollipopConfig
+    | QQConfig
+    | SunburstConfig
+    | OncoplotConfig
+    | CoverageTrackConfig
+    | SankeyConfig,
     Field(discriminator="viz_kind"),
 ]

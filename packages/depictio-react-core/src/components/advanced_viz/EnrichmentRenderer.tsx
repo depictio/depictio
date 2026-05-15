@@ -1,9 +1,17 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { MultiSelect, NumberInput, Stack, useMantineColorScheme } from '@mantine/core';
+import {
+  MultiSelect,
+  NumberInput,
+  Select,
+  Stack,
+  useMantineColorScheme,
+  useMantineTheme,
+} from '@mantine/core';
 import Plot from 'react-plotly.js';
 
 import { fetchAdvancedVizData, InteractiveFilter, StoredMetadata } from '../../api';
 import AdvancedVizFrame from './AdvancedVizFrame';
+import { applyDataTheme, applyLayoutTheme, plotlyAxisOverrides, plotlyThemeFragment } from './plotlyTheme';
 
 interface EnrichmentConfig {
   term_col: string;
@@ -23,12 +31,15 @@ interface Props {
 
 const EnrichmentRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => {
   const { colorScheme } = useMantineColorScheme();
+  const theme = useMantineTheme();
   const config = (metadata.config || {}) as EnrichmentConfig;
   const isDark = colorScheme === 'dark';
 
   const [topN, setTopN] = useState<number>(config.top_n ?? 20);
   const [padjThreshold, setPadjThreshold] = useState<number>(config.padj_threshold ?? 0.05);
   const [selectedSources, setSelectedSources] = useState<string[]>([]);
+  type ColourBy = 'neg_log10_padj' | 'abs_nes' | 'nes_sign' | 'gene_count';
+  const [colourBy, setColourBy] = useState<ColourBy>('neg_log10_padj');
 
   const requiredCols = useMemo(() => {
     const cols = [
@@ -121,7 +132,45 @@ const EnrichmentRenderer: React.FC<Props> = ({ metadata, filters, refreshTick })
     const counts2 = top.map((r) => r.count);
     const cMax = Math.max(...counts2, 1);
     const sizes = counts2.map((c) => 6 + Math.sqrt(c / cMax) * 24);
-    const neg_log10_padj = top.map((r) => -Math.log10(Math.max(r.padj, 1e-300)));
+
+    // Colour-by maps the user's choice to (a) per-point colour values and
+    // (b) the colourscale + colourbar title. NES sign is the only discrete
+    // mode — encoded as the integer sign so plotly draws two colour buckets.
+    const colourValues: number[] =
+      colourBy === 'neg_log10_padj'
+        ? top.map((r) => -Math.log10(Math.max(r.padj, 1e-300)))
+        : colourBy === 'abs_nes'
+          ? top.map((r) => Math.abs(r.nes))
+          : colourBy === 'gene_count'
+            ? top.map((r) => r.count)
+            : top.map((r) => Math.sign(r.nes));
+    // NES sign uses a discrete blue (down) / red (up) palette; the other
+    // modes use perceptually-uniform sequential scales. YlOrRd reads better
+    // than Viridis when the user picked |NES| (magnitude-only — warm end
+    // signals "stronger enrichment").
+    const colorscale: string | (string | number)[][] =
+      colourBy === 'nes_sign'
+        ? [
+            [0.0, '#1f77b4'],
+            [0.49, '#1f77b4'],
+            [0.51, '#d62728'],
+            [1.0, '#d62728'],
+          ]
+        : colourBy === 'abs_nes'
+          ? isDark
+            ? 'Plasma'
+            : 'YlOrRd'
+          : isDark
+            ? 'Plasma'
+            : 'Viridis';
+    const colourbarTitle: string =
+      colourBy === 'neg_log10_padj'
+        ? '-log10(padj)'
+        : colourBy === 'abs_nes'
+          ? '|NES|'
+          : colourBy === 'gene_count'
+            ? 'gene count'
+            : 'NES sign';
 
     return {
       data: [
@@ -138,34 +187,43 @@ const EnrichmentRenderer: React.FC<Props> = ({ metadata, filters, refreshTick })
             `<extra></extra>`,
           marker: {
             size: sizes,
-            color: neg_log10_padj,
-            colorscale: isDark ? 'Plasma' : 'Viridis',
+            color: colourValues,
+            colorscale: colorscale,
             showscale: true,
+            // Discrete two-bucket palette needs an explicit min/max so the
+            // boundary lands at 0 rather than auto-fitting to the data.
+            ...(colourBy === 'nes_sign' ? { cmin: -1, cmax: 1 } : {}),
             colorbar: {
-              title: { text: '-log10(padj)', side: 'right' },
+              title: { text: colourbarTitle, side: 'right' },
               thickness: 10,
               len: 0.85,
+              ...(colourBy === 'nes_sign'
+                ? { tickvals: [-1, 1], ticktext: ['down', 'up'] }
+                : {}),
             },
             line: { width: 0 },
           },
         },
       ],
       layout: {
-        template: isDark ? 'plotly_dark' : 'plotly_white',
+        ...plotlyThemeFragment(isDark, theme),
         margin: { l: 220, r: 60, t: 16, b: 48 },
         xaxis: {
+          ...plotlyAxisOverrides(isDark, theme),
           title: { text: 'NES (normalized enrichment score)' },
           zeroline: true,
-          zerolinecolor: isDark ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.35)',
         },
-        yaxis: { automargin: true, ticks: '', showgrid: true },
+        yaxis: {
+          ...plotlyAxisOverrides(isDark, theme),
+          automargin: true,
+          ticks: '',
+          showgrid: true,
+        },
         showlegend: false,
         autosize: true,
-        plot_bgcolor: 'rgba(0,0,0,0)',
-        paper_bgcolor: 'rgba(0,0,0,0)',
       },
     };
-  }, [rows, config, topN, padjThreshold, selectedSources, isDark]);
+  }, [rows, config, topN, padjThreshold, selectedSources, colourBy, isDark, theme]);
 
   const controls = (
     <Stack gap="xs">
@@ -199,6 +257,19 @@ const EnrichmentRenderer: React.FC<Props> = ({ metadata, filters, refreshTick })
         step={0.01}
         decimalScale={3}
       />
+      <Select
+        size="xs"
+        label="Colour by"
+        value={colourBy}
+        onChange={(v) => v && setColourBy(v as ColourBy)}
+        data={[
+          { value: 'neg_log10_padj', label: '-log10(padj)' },
+          { value: 'abs_nes', label: '|NES|' },
+          { value: 'nes_sign', label: 'NES sign (up / down)' },
+          { value: 'gene_count', label: 'Gene count' },
+        ]}
+        allowDeselect={false}
+      />
     </Stack>
   );
 
@@ -215,8 +286,8 @@ const EnrichmentRenderer: React.FC<Props> = ({ metadata, filters, refreshTick })
     >
       {figure ? (
         <Plot
-          data={figure.data as any}
-          layout={figure.layout as any}
+          data={applyDataTheme(figure.data, isDark, theme) as any}
+          layout={applyLayoutTheme(figure.layout as any, isDark, theme) as any}
           useResizeHandler
           style={{ width: '100%', height: '100%' }}
           config={{ displaylogo: false, responsive: true } as any}

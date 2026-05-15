@@ -42,6 +42,7 @@ workflows:
               significance: "p-value (raw — client toggles -log10 transform)"
               label: "Hover label (gene id here)"
               category: "Pathway label for colouring"
+              avg_log_intensity: "Mean log intensity across replicates — drives the MA plot's x axis"
 
       # ----------------------------------------------------------------
       # 2. Four embedding DCs — same 90×200 feature matrix, projected with
@@ -67,6 +68,7 @@ workflows:
               sample_id: "Sample identifier (S000..S089)"
               dim_1: "PCA component 1"
               dim_2: "PCA component 2"
+              dim_3: "PCA component 3 (drives the 3D view)"
               cluster: "True cluster label used to generate the point (control/treatment/recovery)"
               color: "Continuous gradient correlated with dim_1"
 
@@ -88,6 +90,7 @@ workflows:
               sample_id: "Sample identifier"
               dim_1: "UMAP dimension 1"
               dim_2: "UMAP dimension 2"
+              dim_3: "UMAP dimension 3 (drives the 3D view)"
               cluster: "True cluster label"
               color: "Continuous gradient correlated with dim_1"
 
@@ -109,6 +112,7 @@ workflows:
               sample_id: "Sample identifier"
               dim_1: "t-SNE dimension 1"
               dim_2: "t-SNE dimension 2"
+              dim_3: "t-SNE dimension 3 (drives the 3D view)"
               cluster: "True cluster label"
               color: "Continuous gradient correlated with dim_1"
 
@@ -130,6 +134,7 @@ workflows:
               sample_id: "Sample identifier"
               dim_1: "PCoA dimension 1"
               dim_2: "PCoA dimension 2"
+              dim_3: "PCoA dimension 3 (drives the 3D view)"
               cluster: "True cluster label"
               color: "Continuous gradient correlated with dim_1"
 
@@ -156,6 +161,7 @@ workflows:
               score: "-log10(padj) — higher = more significant"
               feature: "SNP id for designed hits (empty otherwise)"
               score_kind: "Y-axis label hint for the renderer"
+              p_value: "Raw p-value (derived from score; drives the QQ plot)"
 
       # ----------------------------------------------------------------
       # 4. Stacked taxonomy (sample_id / taxon / rank / abundance)
@@ -180,6 +186,12 @@ workflows:
               rank: "Taxonomic rank (Phylum or Genus)"
               abundance: "Relative abundance, normalised within (sample, rank)"
               lineage: "Phylum;Genus path for Genus rows, Phylum alone for Phylum rows"
+              Kingdom: "Top-level taxonomic kingdom (Bacteria) — sunburst root"
+              Phylum: "Phylum — second-level sunburst arc"
+              Class: "Class — third-level sunburst arc (synthetic '<Phylum>_class')"
+              Order: "Order — fourth-level sunburst arc"
+              Family: "Family — fifth-level sunburst arc"
+              Genus: "Genus — leaf-level sunburst arc"
 
       # ----------------------------------------------------------------
       # 5. Phylogenetic tree (newick file + metadata table). The tree DC
@@ -293,11 +305,119 @@ workflows:
               separator: "\t"
             columns_description:
               feature_id: "Feature identifier"
+              feature_group: "Categorical bucket (kinase / metabolic / signalling / structural / transcription_factor) — used by the dashboard MultiSelect to pre-filter intersections"
               contrastA: "1 if feature is differentially expressed in contrast A"
               contrastB: "1 if feature is differentially expressed in contrast B"
               contrastC: "1 if feature is differentially expressed in contrast C"
               contrastD: "1 if feature is differentially expressed in contrast D"
               contrastE: "1 if feature is differentially expressed in contrast E"
+
+      # Single-cell marker dot plot fixture.
+      - id: "646b0f3c1e4a2d7f8e5b8d30"
+        data_collection_tag: "dotplot_demo"
+        description: "Synthetic single-cell marker matrix: 6 clusters × 25 marker genes with cluster-specific expression"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "/app/depictio/projects/init/advanced_viz_showcase/data/dotplot_demo.tsv"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+            columns_description:
+              cluster: "Cluster name (T_cell / B_cell / Monocyte / NK / Dendritic / Plasma)"
+              gene: "Marker gene symbol"
+              mean_expression: "Mean expression of the gene within the cluster (continuous → dot colour)"
+              frac_expressing: "Fraction of cells in the cluster expressing the gene (0–1 → dot size)"
+
+      # Lollipop / needle plot fixture — variant tracks along 4 genes.
+      - id: "646b0f3c1e4a2d7f8e5b8d31"
+        data_collection_tag: "lollipop_demo"
+        description: "Synthetic variant tracks: 4 cancer genes × 50–80 variants × 5 consequence categories"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "/app/depictio/projects/init/advanced_viz_showcase/data/lollipop_demo.tsv"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+            columns_description:
+              feature_id: "Gene the variant is on (TP53 / BRCA1 / EGFR / KRAS)"
+              position: "1-based position along the gene"
+              category: "Variant consequence (missense / synonymous / stop_gained / frameshift / splice_region)"
+              effect: "Effect-strength score (drives marker size)"
+
+      # Oncoplot fixture — long-format sample × gene × mutation observations.
+      - id: "646b0f3c1e4a2d7f8e5b8d32"
+        data_collection_tag: "oncoplot_demo"
+        description: "Synthetic cancer cohort: 40 samples × 30 genes × 5 mutation types (sparse)"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "/app/depictio/projects/init/advanced_viz_showcase/data/oncoplot_demo.tsv"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+            columns_description:
+              sample_id: "Sample identifier (TCGA-000 .. TCGA-039)"
+              gene: "Mutated gene symbol"
+              mutation_type: "Mutation classification (Missense_Mutation / Nonsense_Mutation / Frame_Shift_Del / Frame_Shift_Ins / In_Frame_Del)"
+
+      # Coverage track input — viralrecon-mosdepth-derived per-bin coverage.
+      - id: "646b0f3c1e4a2d7f8e5b8d50"
+        data_collection_tag: "coverage_track_demo"
+        description: "SARS-CoV-2 coverage tracks (200 bp bins) for ~50 samples with SARS-CoV-2 gene-region annotation; sourced from a viralrecon-bowtie2-mosdepth run"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "/app/depictio/projects/init/advanced_viz_showcase/data/coverage_track_demo.tsv"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+            columns_description:
+              chrom: "Reference contig / chromosome (MN908947.3 for SARS-CoV-2)"
+              start: "Bin start position (0-based, half-open)"
+              end: "Bin end position"
+              position: "Bin centre — drives the renderer's x axis"
+              coverage: "Mean read depth in the bin"
+              sample: "Sample identifier (used as the per-track facet key)"
+              gene_region: "SARS-CoV-2 gene-region annotation (ORF1ab / S / N / … / intergenic) — drives the coverage-track colouring lane"
+
+      # Categorical-flow (Sankey) input — per-sample lineage classification.
+      - id: "646b0f3c1e4a2d7f8e5b8d51"
+        data_collection_tag: "categorical_flow_demo"
+        description: "Per-sample Pangolin + Nextclade classification: qc_status → lineage → clade flow across SARS-CoV-2 samples"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "/app/depictio/projects/init/advanced_viz_showcase/data/categorical_flow_demo.tsv"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+            columns_description:
+              sample_id: "Sample identifier"
+              qc_status: "Pangolin QC pass/fail (Sankey step 1)"
+              lineage: "Pangolin lineage assignment (Sankey step 2)"
+              clade: "Nextclade WHO clade assignment (Sankey step 3)"
 
       - id: "646b0f3c1e4a2d7f8e5b8d09"
         data_collection_tag: "bacterial_tree"

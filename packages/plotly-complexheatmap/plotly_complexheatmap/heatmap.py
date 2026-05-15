@@ -195,7 +195,7 @@ class ComplexHeatmap:
             else:
                 for col, cfg in row_annotations.items():
                     if isinstance(cfg, dict) and "columns" in cfg:
-                        anno_cols.update(cfg["columns"])   # multi-column source
+                        anno_cols.update(cfg["columns"])  # multi-column source
                     else:
                         anno_cols.add(col)
 

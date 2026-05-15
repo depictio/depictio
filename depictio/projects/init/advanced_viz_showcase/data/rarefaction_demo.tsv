@@ -1,2161 +1,2161 @@
-sample_id	depth	iter	faith_pd	observed_features	habitat
-sample_gut_1	500	0	2.67	18.7	gut
-sample_gut_1	500	1	1.625	27.2	gut
-sample_gut_1	500	2	2.322	11.8	gut
-sample_gut_1	500	3	1.777	28.2	gut
-sample_gut_1	500	4	2.876	23.2	gut
-sample_gut_1	500	5	3.32	18.3	gut
-sample_gut_1	500	6	2.34	19.6	gut
-sample_gut_1	500	7	2.739	21.2	gut
-sample_gut_1	500	8	2.844	14.5	gut
-sample_gut_1	500	9	2.083	16.6	gut
-sample_gut_1	1000	0	4.646	33.0	gut
-sample_gut_1	1000	1	5.046	35.5	gut
-sample_gut_1	1000	2	4.629	34.7	gut
-sample_gut_1	1000	3	5.366	39.9	gut
-sample_gut_1	1000	4	4.698	38.2	gut
-sample_gut_1	1000	5	4.23	37.4	gut
-sample_gut_1	1000	6	4.946	39.2	gut
-sample_gut_1	1000	7	5.019	37.6	gut
-sample_gut_1	1000	8	4.623	36.4	gut
-sample_gut_1	1000	9	5.038	29.5	gut
-sample_gut_1	2000	0	9.445	72.5	gut
-sample_gut_1	2000	1	9.019	67.4	gut
-sample_gut_1	2000	2	8.85	62.3	gut
-sample_gut_1	2000	3	9.418	70.5	gut
-sample_gut_1	2000	4	8.825	65.9	gut
-sample_gut_1	2000	5	9.097	75.4	gut
-sample_gut_1	2000	6	9.202	71.7	gut
-sample_gut_1	2000	7	9.076	76.2	gut
-sample_gut_1	2000	8	8.617	69.9	gut
-sample_gut_1	2000	9	9.407	69.0	gut
-sample_gut_1	4000	0	15.058	123.7	gut
-sample_gut_1	4000	1	15.327	120.5	gut
-sample_gut_1	4000	2	14.913	116.9	gut
-sample_gut_1	4000	3	15.34	129.4	gut
-sample_gut_1	4000	4	14.639	127.5	gut
-sample_gut_1	4000	5	15.176	120.3	gut
-sample_gut_1	4000	6	14.953	116.1	gut
-sample_gut_1	4000	7	14.846	117.5	gut
-sample_gut_1	4000	8	15.278	127.9	gut
-sample_gut_1	4000	9	15.024	129.3	gut
-sample_gut_1	6000	0	20.22	162.5	gut
-sample_gut_1	6000	1	19.795	158.2	gut
-sample_gut_1	6000	2	19.68	158.3	gut
-sample_gut_1	6000	3	19.614	157.8	gut
-sample_gut_1	6000	4	19.578	152.8	gut
-sample_gut_1	6000	5	19.802	161.5	gut
-sample_gut_1	6000	6	19.605	150.9	gut
-sample_gut_1	6000	7	19.578	152.7	gut
-sample_gut_1	6000	8	19.759	156.6	gut
-sample_gut_1	6000	9	19.871	154.5	gut
-sample_gut_1	8000	0	22.67	174.8	gut
-sample_gut_1	8000	1	22.379	179.4	gut
-sample_gut_1	8000	2	23.357	189.0	gut
-sample_gut_1	8000	3	22.88	182.6	gut
-sample_gut_1	8000	4	23.178	181.1	gut
-sample_gut_1	8000	5	22.293	184.7	gut
-sample_gut_1	8000	6	23.569	180.1	gut
-sample_gut_1	8000	7	23.528	185.1	gut
-sample_gut_1	8000	8	23.899	181.6	gut
-sample_gut_1	8000	9	22.81	181.9	gut
-sample_gut_1	12000	0	27.605	217.4	gut
-sample_gut_1	12000	1	26.964	218.6	gut
-sample_gut_1	12000	2	26.803	214.5	gut
-sample_gut_1	12000	3	26.884	214.2	gut
-sample_gut_1	12000	4	27.55	215.4	gut
-sample_gut_1	12000	5	26.084	213.4	gut
-sample_gut_1	12000	6	27.613	215.6	gut
-sample_gut_1	12000	7	27.252	213.1	gut
-sample_gut_1	12000	8	27.125	215.8	gut
-sample_gut_1	12000	9	26.397	220.9	gut
-sample_gut_1	16000	0	29.844	237.8	gut
-sample_gut_1	16000	1	28.777	233.2	gut
-sample_gut_1	16000	2	28.846	229.6	gut
-sample_gut_1	16000	3	29.171	229.3	gut
-sample_gut_1	16000	4	28.9	237.2	gut
-sample_gut_1	16000	5	29.045	236.4	gut
-sample_gut_1	16000	6	28.954	237.9	gut
-sample_gut_1	16000	7	29.516	227.8	gut
-sample_gut_1	16000	8	28.953	241.2	gut
-sample_gut_1	16000	9	28.947	234.3	gut
-sample_gut_1	22000	0	30.226	239.3	gut
-sample_gut_1	22000	1	30.883	247.0	gut
-sample_gut_1	22000	2	30.875	241.0	gut
-sample_gut_1	22000	3	30.453	249.9	gut
-sample_gut_1	22000	4	30.298	247.2	gut
-sample_gut_1	22000	5	30.636	244.0	gut
-sample_gut_1	22000	6	30.475	243.1	gut
-sample_gut_1	22000	7	30.707	241.0	gut
-sample_gut_1	22000	8	30.358	245.4	gut
-sample_gut_1	22000	9	30.901	245.1	gut
-sample_gut_1	30000	0	31.708	246.6	gut
-sample_gut_1	30000	1	30.815	244.2	gut
-sample_gut_1	30000	2	31.972	247.8	gut
-sample_gut_1	30000	3	31.189	248.8	gut
-sample_gut_1	30000	4	31.292	254.8	gut
-sample_gut_1	30000	5	31.462	242.2	gut
-sample_gut_1	30000	6	31.568	253.2	gut
-sample_gut_1	30000	7	31.077	251.3	gut
-sample_gut_1	30000	8	31.407	250.8	gut
-sample_gut_1	30000	9	31.517	253.2	gut
-sample_gut_1	40000	0	31.208	254.5	gut
-sample_gut_1	40000	1	30.836	251.8	gut
-sample_gut_1	40000	2	31.343	251.5	gut
-sample_gut_1	40000	3	31.269	254.0	gut
-sample_gut_1	40000	4	31.258	250.9	gut
-sample_gut_1	40000	5	31.118	257.3	gut
-sample_gut_1	40000	6	31.388	249.6	gut
-sample_gut_1	40000	7	30.906	249.8	gut
-sample_gut_1	40000	8	31.738	251.9	gut
-sample_gut_1	40000	9	31.432	252.9	gut
-sample_gut_1	50000	0	32.159	254.2	gut
-sample_gut_1	50000	1	31.024	247.5	gut
-sample_gut_1	50000	2	31.658	247.0	gut
-sample_gut_1	50000	3	31.133	254.9	gut
-sample_gut_1	50000	4	31.511	246.2	gut
-sample_gut_1	50000	5	31.179	248.2	gut
-sample_gut_1	50000	6	31.689	250.2	gut
-sample_gut_1	50000	7	31.732	247.5	gut
-sample_gut_1	50000	8	31.686	253.3	gut
-sample_gut_1	50000	9	31.213	256.6	gut
-sample_gut_2	500	0	2.059	18.9	gut
-sample_gut_2	500	1	3.464	19.8	gut
-sample_gut_2	500	2	2.77	14.9	gut
-sample_gut_2	500	3	2.777	26.9	gut
-sample_gut_2	500	4	2.3	27.6	gut
-sample_gut_2	500	5	1.868	18.5	gut
-sample_gut_2	500	6	2.848	10.0	gut
-sample_gut_2	500	7	2.246	20.5	gut
-sample_gut_2	500	8	2.554	26.3	gut
-sample_gut_2	500	9	2.976	18.4	gut
-sample_gut_2	1000	0	4.998	39.6	gut
-sample_gut_2	1000	1	4.724	29.7	gut
-sample_gut_2	1000	2	5.094	33.7	gut
-sample_gut_2	1000	3	4.679	33.9	gut
-sample_gut_2	1000	4	4.711	34.0	gut
-sample_gut_2	1000	5	4.665	29.5	gut
-sample_gut_2	1000	6	4.347	36.7	gut
-sample_gut_2	1000	7	4.379	34.5	gut
-sample_gut_2	1000	8	3.98	42.5	gut
-sample_gut_2	1000	9	3.691	39.1	gut
-sample_gut_2	2000	0	7.895	67.6	gut
-sample_gut_2	2000	1	8.232	63.7	gut
-sample_gut_2	2000	2	8.692	70.0	gut
-sample_gut_2	2000	3	8.964	76.0	gut
-sample_gut_2	2000	4	8.762	67.7	gut
-sample_gut_2	2000	5	8.513	62.9	gut
-sample_gut_2	2000	6	8.579	70.5	gut
-sample_gut_2	2000	7	8.771	64.1	gut
-sample_gut_2	2000	8	8.521	68.9	gut
-sample_gut_2	2000	9	8.336	70.2	gut
-sample_gut_2	4000	0	14.786	110.0	gut
-sample_gut_2	4000	1	14.922	107.5	gut
-sample_gut_2	4000	2	14.622	114.5	gut
-sample_gut_2	4000	3	15.111	120.6	gut
-sample_gut_2	4000	4	14.848	113.4	gut
-sample_gut_2	4000	5	14.718	117.2	gut
-sample_gut_2	4000	6	14.061	119.5	gut
-sample_gut_2	4000	7	14.199	113.5	gut
-sample_gut_2	4000	8	14.254	114.9	gut
-sample_gut_2	4000	9	14.147	111.8	gut
-sample_gut_2	6000	0	18.584	153.9	gut
-sample_gut_2	6000	1	18.787	152.9	gut
-sample_gut_2	6000	2	18.666	149.6	gut
-sample_gut_2	6000	3	18.207	143.2	gut
-sample_gut_2	6000	4	19.379	152.0	gut
-sample_gut_2	6000	5	19.455	158.9	gut
-sample_gut_2	6000	6	18.118	158.6	gut
-sample_gut_2	6000	7	19.057	149.3	gut
-sample_gut_2	6000	8	18.696	151.8	gut
-sample_gut_2	6000	9	18.442	146.8	gut
-sample_gut_2	8000	0	21.859	167.6	gut
-sample_gut_2	8000	1	22.103	179.1	gut
-sample_gut_2	8000	2	21.907	177.1	gut
-sample_gut_2	8000	3	21.828	178.4	gut
-sample_gut_2	8000	4	22.366	170.6	gut
-sample_gut_2	8000	5	21.926	173.1	gut
-sample_gut_2	8000	6	22.515	177.7	gut
-sample_gut_2	8000	7	21.761	173.7	gut
-sample_gut_2	8000	8	22.401	176.8	gut
-sample_gut_2	8000	9	21.623	171.2	gut
-sample_gut_2	12000	0	24.584	206.5	gut
-sample_gut_2	12000	1	25.367	205.4	gut
-sample_gut_2	12000	2	25.358	213.0	gut
-sample_gut_2	12000	3	26.164	204.7	gut
-sample_gut_2	12000	4	25.527	207.9	gut
-sample_gut_2	12000	5	25.412	209.6	gut
-sample_gut_2	12000	6	25.956	206.7	gut
-sample_gut_2	12000	7	25.8	208.4	gut
-sample_gut_2	12000	8	26.055	200.0	gut
-sample_gut_2	12000	9	25.8	208.4	gut
-sample_gut_2	16000	0	27.775	220.0	gut
-sample_gut_2	16000	1	28.019	226.1	gut
-sample_gut_2	16000	2	27.966	224.6	gut
-sample_gut_2	16000	3	28.007	219.5	gut
-sample_gut_2	16000	4	27.477	228.7	gut
-sample_gut_2	16000	5	27.641	233.1	gut
-sample_gut_2	16000	6	27.834	224.7	gut
-sample_gut_2	16000	7	28.152	223.6	gut
-sample_gut_2	16000	8	28.267	219.5	gut
-sample_gut_2	16000	9	27.857	217.8	gut
-sample_gut_2	22000	0	28.376	236.5	gut
-sample_gut_2	22000	1	29.726	231.0	gut
-sample_gut_2	22000	2	29.657	229.3	gut
-sample_gut_2	22000	3	29.67	233.0	gut
-sample_gut_2	22000	4	28.68	236.2	gut
-sample_gut_2	22000	5	28.35	229.1	gut
-sample_gut_2	22000	6	29.276	228.7	gut
-sample_gut_2	22000	7	29.355	233.3	gut
-sample_gut_2	22000	8	28.558	237.9	gut
-sample_gut_2	22000	9	28.902	232.5	gut
-sample_gut_2	30000	0	29.809	237.3	gut
-sample_gut_2	30000	1	30.133	247.2	gut
-sample_gut_2	30000	2	30.432	238.7	gut
-sample_gut_2	30000	3	29.733	240.7	gut
-sample_gut_2	30000	4	29.477	241.6	gut
-sample_gut_2	30000	5	30.253	246.0	gut
-sample_gut_2	30000	6	28.68	246.3	gut
-sample_gut_2	30000	7	29.891	238.4	gut
-sample_gut_2	30000	8	30.58	237.8	gut
-sample_gut_2	30000	9	29.752	244.0	gut
-sample_gut_2	40000	0	29.551	238.9	gut
-sample_gut_2	40000	1	29.896	234.1	gut
-sample_gut_2	40000	2	30.457	239.8	gut
-sample_gut_2	40000	3	30.694	239.5	gut
-sample_gut_2	40000	4	29.859	241.0	gut
-sample_gut_2	40000	5	29.994	238.4	gut
-sample_gut_2	40000	6	29.979	240.9	gut
-sample_gut_2	40000	7	30.504	243.8	gut
-sample_gut_2	40000	8	30.407	237.2	gut
-sample_gut_2	40000	9	29.87	241.5	gut
-sample_gut_2	50000	0	30.833	240.0	gut
-sample_gut_2	50000	1	30.305	225.1	gut
-sample_gut_2	50000	2	30.115	234.1	gut
-sample_gut_2	50000	3	30.627	235.4	gut
-sample_gut_2	50000	4	29.88	240.1	gut
-sample_gut_2	50000	5	29.62	236.4	gut
-sample_gut_2	50000	6	29.966	241.9	gut
-sample_gut_2	50000	7	30.326	243.6	gut
-sample_gut_2	50000	8	30.356	239.9	gut
-sample_gut_2	50000	9	30.275	241.8	gut
-sample_gut_3	500	0	2.143	17.1	gut
-sample_gut_3	500	1	3.177	12.1	gut
-sample_gut_3	500	2	2.93	24.1	gut
-sample_gut_3	500	3	1.852	23.2	gut
-sample_gut_3	500	4	2.113	24.4	gut
-sample_gut_3	500	5	2.77	22.1	gut
-sample_gut_3	500	6	2.895	16.5	gut
-sample_gut_3	500	7	3.048	15.3	gut
-sample_gut_3	500	8	2.543	12.1	gut
-sample_gut_3	500	9	2.249	14.9	gut
-sample_gut_3	1000	0	4.071	35.9	gut
-sample_gut_3	1000	1	4.372	32.3	gut
-sample_gut_3	1000	2	4.631	32.6	gut
-sample_gut_3	1000	3	4.234	41.6	gut
-sample_gut_3	1000	4	4.39	42.7	gut
-sample_gut_3	1000	5	4.253	37.5	gut
-sample_gut_3	1000	6	3.874	33.7	gut
-sample_gut_3	1000	7	3.422	31.6	gut
-sample_gut_3	1000	8	4.766	32.6	gut
-sample_gut_3	1000	9	4.535	26.5	gut
-sample_gut_3	2000	0	8.323	67.6	gut
-sample_gut_3	2000	1	8.497	67.8	gut
-sample_gut_3	2000	2	8.186	71.9	gut
-sample_gut_3	2000	3	7.791	63.5	gut
-sample_gut_3	2000	4	9.254	63.5	gut
-sample_gut_3	2000	5	8.345	65.3	gut
-sample_gut_3	2000	6	8.52	61.2	gut
-sample_gut_3	2000	7	7.669	66.0	gut
-sample_gut_3	2000	8	8.853	68.2	gut
-sample_gut_3	2000	9	8.372	58.2	gut
-sample_gut_3	4000	0	14.062	113.8	gut
-sample_gut_3	4000	1	14.761	112.1	gut
-sample_gut_3	4000	2	13.881	115.1	gut
-sample_gut_3	4000	3	14.081	111.6	gut
-sample_gut_3	4000	4	13.564	116.7	gut
-sample_gut_3	4000	5	13.389	115.5	gut
-sample_gut_3	4000	6	14.646	103.9	gut
-sample_gut_3	4000	7	13.374	108.9	gut
-sample_gut_3	4000	8	14.224	113.4	gut
-sample_gut_3	4000	9	14.537	118.3	gut
-sample_gut_3	6000	0	18.233	148.1	gut
-sample_gut_3	6000	1	18.872	148.7	gut
-sample_gut_3	6000	2	17.686	138.8	gut
-sample_gut_3	6000	3	18.354	146.6	gut
-sample_gut_3	6000	4	18.068	141.9	gut
-sample_gut_3	6000	5	18.099	141.1	gut
-sample_gut_3	6000	6	18.649	139.3	gut
-sample_gut_3	6000	7	18.34	153.2	gut
-sample_gut_3	6000	8	17.939	145.4	gut
-sample_gut_3	6000	9	17.8	149.4	gut
-sample_gut_3	8000	0	20.97	163.7	gut
-sample_gut_3	8000	1	20.153	170.4	gut
-sample_gut_3	8000	2	21.336	168.8	gut
-sample_gut_3	8000	3	21.184	166.2	gut
-sample_gut_3	8000	4	19.926	175.7	gut
-sample_gut_3	8000	5	20.52	172.5	gut
-sample_gut_3	8000	6	20.938	164.7	gut
-sample_gut_3	8000	7	20.384	168.7	gut
-sample_gut_3	8000	8	20.876	168.1	gut
-sample_gut_3	8000	9	20.758	162.5	gut
-sample_gut_3	12000	0	24.767	194.0	gut
-sample_gut_3	12000	1	24.319	200.6	gut
-sample_gut_3	12000	2	24.06	191.1	gut
-sample_gut_3	12000	3	24.707	196.9	gut
-sample_gut_3	12000	4	23.781	190.1	gut
-sample_gut_3	12000	5	24.475	195.9	gut
-sample_gut_3	12000	6	25.125	189.7	gut
-sample_gut_3	12000	7	24.113	192.5	gut
-sample_gut_3	12000	8	23.902	193.1	gut
-sample_gut_3	12000	9	24.179	194.3	gut
-sample_gut_3	16000	0	26.044	206.6	gut
-sample_gut_3	16000	1	25.27	215.8	gut
-sample_gut_3	16000	2	26.29	210.1	gut
-sample_gut_3	16000	3	26.613	213.5	gut
-sample_gut_3	16000	4	26.409	214.1	gut
-sample_gut_3	16000	5	25.879	204.4	gut
-sample_gut_3	16000	6	25.684	209.5	gut
-sample_gut_3	16000	7	26.39	214.5	gut
-sample_gut_3	16000	8	25.111	213.3	gut
-sample_gut_3	16000	9	25.738	208.6	gut
-sample_gut_3	22000	0	26.945	210.8	gut
-sample_gut_3	22000	1	27.089	217.3	gut
-sample_gut_3	22000	2	26.771	216.9	gut
-sample_gut_3	22000	3	28.093	224.5	gut
-sample_gut_3	22000	4	27.445	208.9	gut
-sample_gut_3	22000	5	26.818	217.0	gut
-sample_gut_3	22000	6	27.302	209.6	gut
-sample_gut_3	22000	7	27.296	221.5	gut
-sample_gut_3	22000	8	27.537	215.8	gut
-sample_gut_3	22000	9	26.994	215.8	gut
-sample_gut_3	30000	0	27.795	216.3	gut
-sample_gut_3	30000	1	27.521	222.8	gut
-sample_gut_3	30000	2	26.906	223.8	gut
-sample_gut_3	30000	3	27.148	217.4	gut
-sample_gut_3	30000	4	26.957	224.2	gut
-sample_gut_3	30000	5	28.054	221.7	gut
-sample_gut_3	30000	6	28.05	221.1	gut
-sample_gut_3	30000	7	27.402	217.9	gut
-sample_gut_3	30000	8	27.384	219.2	gut
-sample_gut_3	30000	9	27.716	215.8	gut
-sample_gut_3	40000	0	27.595	221.3	gut
-sample_gut_3	40000	1	28.177	221.0	gut
-sample_gut_3	40000	2	27.967	219.2	gut
-sample_gut_3	40000	3	27.631	223.1	gut
-sample_gut_3	40000	4	27.5	219.9	gut
-sample_gut_3	40000	5	27.748	224.1	gut
-sample_gut_3	40000	6	27.337	219.7	gut
-sample_gut_3	40000	7	27.887	209.6	gut
-sample_gut_3	40000	8	27.96	221.9	gut
-sample_gut_3	40000	9	27.487	221.4	gut
-sample_gut_3	50000	0	27.056	218.7	gut
-sample_gut_3	50000	1	27.829	218.4	gut
-sample_gut_3	50000	2	27.585	216.7	gut
-sample_gut_3	50000	3	27.593	219.2	gut
-sample_gut_3	50000	4	26.935	215.2	gut
-sample_gut_3	50000	5	27.823	219.1	gut
-sample_gut_3	50000	6	27.808	223.3	gut
-sample_gut_3	50000	7	27.674	222.5	gut
-sample_gut_3	50000	8	27.969	222.2	gut
-sample_gut_3	50000	9	27.524	216.0	gut
-sample_gut_4	500	0	1.771	21.7	gut
-sample_gut_4	500	1	2.385	10.9	gut
-sample_gut_4	500	2	1.752	6.9	gut
-sample_gut_4	500	3	2.2	14.3	gut
-sample_gut_4	500	4	1.951	20.8	gut
-sample_gut_4	500	5	2.152	19.5	gut
-sample_gut_4	500	6	1.443	15.6	gut
-sample_gut_4	500	7	2.499	12.1	gut
-sample_gut_4	500	8	2.355	25.1	gut
-sample_gut_4	500	9	1.92	13.7	gut
-sample_gut_4	1000	0	4.553	29.7	gut
-sample_gut_4	1000	1	3.396	34.2	gut
-sample_gut_4	1000	2	3.684	31.7	gut
-sample_gut_4	1000	3	3.679	33.4	gut
-sample_gut_4	1000	4	4.274	23.3	gut
-sample_gut_4	1000	5	3.398	29.3	gut
-sample_gut_4	1000	6	3.51	24.3	gut
-sample_gut_4	1000	7	3.701	37.8	gut
-sample_gut_4	1000	8	4.772	30.2	gut
-sample_gut_4	1000	9	4.253	37.2	gut
-sample_gut_4	2000	0	7.014	63.3	gut
-sample_gut_4	2000	1	6.971	61.2	gut
-sample_gut_4	2000	2	7.491	58.8	gut
-sample_gut_4	2000	3	7.281	65.7	gut
-sample_gut_4	2000	4	7.257	59.6	gut
-sample_gut_4	2000	5	7.867	64.3	gut
-sample_gut_4	2000	6	6.969	59.4	gut
-sample_gut_4	2000	7	7.594	58.6	gut
-sample_gut_4	2000	8	6.955	57.9	gut
-sample_gut_4	2000	9	6.818	59.2	gut
-sample_gut_4	4000	0	12.426	107.6	gut
-sample_gut_4	4000	1	13.384	109.8	gut
-sample_gut_4	4000	2	12.621	112.1	gut
-sample_gut_4	4000	3	12.479	100.0	gut
-sample_gut_4	4000	4	13.053	101.1	gut
-sample_gut_4	4000	5	12.865	103.8	gut
-sample_gut_4	4000	6	12.697	104.0	gut
-sample_gut_4	4000	7	11.988	101.2	gut
-sample_gut_4	4000	8	12.79	100.5	gut
-sample_gut_4	4000	9	13.3	106.2	gut
-sample_gut_4	6000	0	16.752	132.6	gut
-sample_gut_4	6000	1	16.782	137.5	gut
-sample_gut_4	6000	2	17.029	138.2	gut
-sample_gut_4	6000	3	16.843	133.9	gut
-sample_gut_4	6000	4	16.513	132.8	gut
-sample_gut_4	6000	5	16.625	138.1	gut
-sample_gut_4	6000	6	16.93	133.9	gut
-sample_gut_4	6000	7	17.001	137.4	gut
-sample_gut_4	6000	8	17.302	125.3	gut
-sample_gut_4	6000	9	16.718	132.2	gut
-sample_gut_4	8000	0	19.302	158.4	gut
-sample_gut_4	8000	1	19.785	152.8	gut
-sample_gut_4	8000	2	19.41	162.3	gut
-sample_gut_4	8000	3	19.289	155.3	gut
-sample_gut_4	8000	4	19.71	150.1	gut
-sample_gut_4	8000	5	20.292	160.2	gut
-sample_gut_4	8000	6	19.846	154.5	gut
-sample_gut_4	8000	7	20.574	156.6	gut
-sample_gut_4	8000	8	20.135	155.8	gut
-sample_gut_4	8000	9	20.094	161.0	gut
-sample_gut_4	12000	0	23.302	192.8	gut
-sample_gut_4	12000	1	23.783	186.0	gut
-sample_gut_4	12000	2	23.401	189.5	gut
-sample_gut_4	12000	3	23.373	183.3	gut
-sample_gut_4	12000	4	23.406	185.7	gut
-sample_gut_4	12000	5	23.548	185.0	gut
-sample_gut_4	12000	6	23.278	188.1	gut
-sample_gut_4	12000	7	23.557	188.4	gut
-sample_gut_4	12000	8	22.851	187.9	gut
-sample_gut_4	12000	9	23.948	192.1	gut
-sample_gut_4	16000	0	24.967	198.7	gut
-sample_gut_4	16000	1	25.069	197.5	gut
-sample_gut_4	16000	2	25.762	200.5	gut
-sample_gut_4	16000	3	24.947	201.7	gut
-sample_gut_4	16000	4	24.812	207.1	gut
-sample_gut_4	16000	5	25.341	201.1	gut
-sample_gut_4	16000	6	24.608	199.7	gut
-sample_gut_4	16000	7	25.378	209.0	gut
-sample_gut_4	16000	8	24.684	202.8	gut
-sample_gut_4	16000	9	25.16	200.7	gut
-sample_gut_4	22000	0	26.082	219.1	gut
-sample_gut_4	22000	1	26.465	214.7	gut
-sample_gut_4	22000	2	26.621	214.0	gut
-sample_gut_4	22000	3	26.728	202.7	gut
-sample_gut_4	22000	4	26.96	209.6	gut
-sample_gut_4	22000	5	26.932	214.5	gut
-sample_gut_4	22000	6	26.03	211.5	gut
-sample_gut_4	22000	7	26.559	213.0	gut
-sample_gut_4	22000	8	26.571	213.5	gut
-sample_gut_4	22000	9	26.474	211.7	gut
-sample_gut_4	30000	0	26.512	215.8	gut
-sample_gut_4	30000	1	27.141	213.0	gut
-sample_gut_4	30000	2	27.761	217.5	gut
-sample_gut_4	30000	3	27.729	213.6	gut
-sample_gut_4	30000	4	26.946	227.1	gut
-sample_gut_4	30000	5	27.103	211.4	gut
-sample_gut_4	30000	6	26.671	221.0	gut
-sample_gut_4	30000	7	26.993	216.1	gut
-sample_gut_4	30000	8	27.637	218.7	gut
-sample_gut_4	30000	9	27.251	220.3	gut
-sample_gut_4	40000	0	27.32	216.3	gut
-sample_gut_4	40000	1	27.652	215.4	gut
-sample_gut_4	40000	2	27.923	219.3	gut
-sample_gut_4	40000	3	27.51	220.8	gut
-sample_gut_4	40000	4	27.938	218.6	gut
-sample_gut_4	40000	5	27.107	221.6	gut
-sample_gut_4	40000	6	26.604	220.4	gut
-sample_gut_4	40000	7	26.822	220.4	gut
-sample_gut_4	40000	8	27.273	215.2	gut
-sample_gut_4	40000	9	27.492	226.4	gut
-sample_gut_4	50000	0	27.266	217.3	gut
-sample_gut_4	50000	1	28.433	223.5	gut
-sample_gut_4	50000	2	27.461	219.9	gut
-sample_gut_4	50000	3	27.507	220.0	gut
-sample_gut_4	50000	4	27.282	221.2	gut
-sample_gut_4	50000	5	27.553	220.9	gut
-sample_gut_4	50000	6	27.439	217.4	gut
-sample_gut_4	50000	7	26.197	222.3	gut
-sample_gut_4	50000	8	27.512	221.5	gut
-sample_gut_4	50000	9	28.482	221.2	gut
-sample_gut_5	500	0	1.764	20.5	gut
-sample_gut_5	500	1	2.162	13.2	gut
-sample_gut_5	500	2	2.078	23.4	gut
-sample_gut_5	500	3	2.751	18.1	gut
-sample_gut_5	500	4	2.267	13.4	gut
-sample_gut_5	500	5	2.212	15.6	gut
-sample_gut_5	500	6	2.485	22.8	gut
-sample_gut_5	500	7	2.8	9.4	gut
-sample_gut_5	500	8	2.128	22.2	gut
-sample_gut_5	500	9	2.085	21.4	gut
-sample_gut_5	1000	0	4.225	29.5	gut
-sample_gut_5	1000	1	4.409	35.8	gut
-sample_gut_5	1000	2	4.135	30.1	gut
-sample_gut_5	1000	3	3.528	34.5	gut
-sample_gut_5	1000	4	4.185	33.7	gut
-sample_gut_5	1000	5	4.495	27.9	gut
-sample_gut_5	1000	6	3.67	30.7	gut
-sample_gut_5	1000	7	4.207	33.7	gut
-sample_gut_5	1000	8	4.174	37.1	gut
-sample_gut_5	1000	9	4.178	28.0	gut
-sample_gut_5	2000	0	8.624	61.6	gut
-sample_gut_5	2000	1	7.66	53.6	gut
-sample_gut_5	2000	2	7.605	62.5	gut
-sample_gut_5	2000	3	8.008	64.1	gut
-sample_gut_5	2000	4	7.319	56.1	gut
-sample_gut_5	2000	5	7.141	58.8	gut
-sample_gut_5	2000	6	7.108	53.8	gut
-sample_gut_5	2000	7	7.371	58.4	gut
-sample_gut_5	2000	8	7.301	61.8	gut
-sample_gut_5	2000	9	7.11	60.3	gut
-sample_gut_5	4000	0	13.284	105.4	gut
-sample_gut_5	4000	1	11.724	96.4	gut
-sample_gut_5	4000	2	12.676	110.3	gut
-sample_gut_5	4000	3	12.788	106.4	gut
-sample_gut_5	4000	4	12.854	99.1	gut
-sample_gut_5	4000	5	13.013	100.8	gut
-sample_gut_5	4000	6	12.681	107.2	gut
-sample_gut_5	4000	7	12.584	103.7	gut
-sample_gut_5	4000	8	12.632	109.5	gut
-sample_gut_5	4000	9	13.064	103.8	gut
-sample_gut_5	6000	0	16.468	134.5	gut
-sample_gut_5	6000	1	16.593	139.8	gut
-sample_gut_5	6000	2	16.036	127.2	gut
-sample_gut_5	6000	3	16.553	127.7	gut
-sample_gut_5	6000	4	15.329	137.9	gut
-sample_gut_5	6000	5	16.286	130.6	gut
-sample_gut_5	6000	6	16.68	131.5	gut
-sample_gut_5	6000	7	16.532	126.3	gut
-sample_gut_5	6000	8	16.994	133.1	gut
-sample_gut_5	6000	9	16.22	129.7	gut
-sample_gut_5	8000	0	19.835	158.4	gut
-sample_gut_5	8000	1	19.716	156.7	gut
-sample_gut_5	8000	2	19.374	155.7	gut
-sample_gut_5	8000	3	18.8	151.6	gut
-sample_gut_5	8000	4	18.879	153.9	gut
-sample_gut_5	8000	5	19.268	158.6	gut
-sample_gut_5	8000	6	19.877	152.5	gut
-sample_gut_5	8000	7	19.354	157.8	gut
-sample_gut_5	8000	8	18.82	156.0	gut
-sample_gut_5	8000	9	19.046	156.5	gut
-sample_gut_5	12000	0	23.332	185.3	gut
-sample_gut_5	12000	1	21.858	182.2	gut
-sample_gut_5	12000	2	22.318	183.5	gut
-sample_gut_5	12000	3	22.675	178.5	gut
-sample_gut_5	12000	4	21.777	180.6	gut
-sample_gut_5	12000	5	22.127	181.5	gut
-sample_gut_5	12000	6	23.086	181.8	gut
-sample_gut_5	12000	7	23.291	175.1	gut
-sample_gut_5	12000	8	22.011	179.6	gut
-sample_gut_5	12000	9	21.972	177.3	gut
-sample_gut_5	16000	0	24.334	192.5	gut
-sample_gut_5	16000	1	24.154	196.7	gut
-sample_gut_5	16000	2	23.559	193.5	gut
-sample_gut_5	16000	3	24.288	193.9	gut
-sample_gut_5	16000	4	24.106	193.0	gut
-sample_gut_5	16000	5	24.908	191.8	gut
-sample_gut_5	16000	6	24.156	201.2	gut
-sample_gut_5	16000	7	24.236	192.5	gut
-sample_gut_5	16000	8	23.028	190.2	gut
-sample_gut_5	16000	9	23.468	190.0	gut
-sample_gut_5	22000	0	25.071	198.7	gut
-sample_gut_5	22000	1	25.533	202.1	gut
-sample_gut_5	22000	2	25.244	204.4	gut
-sample_gut_5	22000	3	24.824	197.6	gut
-sample_gut_5	22000	4	25.502	202.0	gut
-sample_gut_5	22000	5	24.995	199.3	gut
-sample_gut_5	22000	6	24.778	196.2	gut
-sample_gut_5	22000	7	25.96	198.1	gut
-sample_gut_5	22000	8	25.171	198.2	gut
-sample_gut_5	22000	9	24.704	199.8	gut
-sample_gut_5	30000	0	25.492	205.2	gut
-sample_gut_5	30000	1	25.541	196.2	gut
-sample_gut_5	30000	2	25.255	203.2	gut
-sample_gut_5	30000	3	24.838	204.0	gut
-sample_gut_5	30000	4	25.014	203.5	gut
-sample_gut_5	30000	5	24.668	214.2	gut
-sample_gut_5	30000	6	25.506	204.9	gut
-sample_gut_5	30000	7	25.66	202.4	gut
-sample_gut_5	30000	8	25.638	205.9	gut
-sample_gut_5	30000	9	25.89	205.4	gut
-sample_gut_5	40000	0	25.152	202.9	gut
-sample_gut_5	40000	1	26.525	204.3	gut
-sample_gut_5	40000	2	25.328	206.5	gut
-sample_gut_5	40000	3	25.335	192.4	gut
-sample_gut_5	40000	4	25.868	201.3	gut
-sample_gut_5	40000	5	25.622	207.4	gut
-sample_gut_5	40000	6	25.371	197.7	gut
-sample_gut_5	40000	7	26.074	202.7	gut
-sample_gut_5	40000	8	25.729	208.8	gut
-sample_gut_5	40000	9	25.204	200.3	gut
-sample_gut_5	50000	0	25.59	200.7	gut
-sample_gut_5	50000	1	26.303	206.1	gut
-sample_gut_5	50000	2	25.737	197.0	gut
-sample_gut_5	50000	3	25.89	210.0	gut
-sample_gut_5	50000	4	25.477	208.2	gut
-sample_gut_5	50000	5	25.253	200.9	gut
-sample_gut_5	50000	6	25.775	207.5	gut
-sample_gut_5	50000	7	25.96	208.0	gut
-sample_gut_5	50000	8	24.933	203.6	gut
-sample_gut_5	50000	9	26.561	209.4	gut
-sample_gut_6	500	0	2.715	22.0	gut
-sample_gut_6	500	1	2.536	16.6	gut
-sample_gut_6	500	2	2.675	24.7	gut
-sample_gut_6	500	3	2.234	23.9	gut
-sample_gut_6	500	4	2.536	22.5	gut
-sample_gut_6	500	5	2.414	20.5	gut
-sample_gut_6	500	6	2.163	28.4	gut
-sample_gut_6	500	7	2.053	25.0	gut
-sample_gut_6	500	8	2.663	27.0	gut
-sample_gut_6	500	9	2.627	23.1	gut
-sample_gut_6	1000	0	5.336	37.5	gut
-sample_gut_6	1000	1	5.472	48.0	gut
-sample_gut_6	1000	2	5.037	42.1	gut
-sample_gut_6	1000	3	5.199	40.6	gut
-sample_gut_6	1000	4	5.432	45.2	gut
-sample_gut_6	1000	5	4.884	47.5	gut
-sample_gut_6	1000	6	5.67	40.5	gut
-sample_gut_6	1000	7	4.303	38.7	gut
-sample_gut_6	1000	8	5.882	43.8	gut
-sample_gut_6	1000	9	5.166	40.3	gut
-sample_gut_6	2000	0	9.817	71.3	gut
-sample_gut_6	2000	1	10.181	75.3	gut
-sample_gut_6	2000	2	10.29	71.7	gut
-sample_gut_6	2000	3	9.696	71.7	gut
-sample_gut_6	2000	4	9.306	80.1	gut
-sample_gut_6	2000	5	9.258	79.2	gut
-sample_gut_6	2000	6	8.773	71.6	gut
-sample_gut_6	2000	7	9.807	81.5	gut
-sample_gut_6	2000	8	9.59	73.3	gut
-sample_gut_6	2000	9	9.523	76.1	gut
-sample_gut_6	4000	0	16.486	123.9	gut
-sample_gut_6	4000	1	16.944	123.1	gut
-sample_gut_6	4000	2	16.014	128.7	gut
-sample_gut_6	4000	3	16.204	131.3	gut
-sample_gut_6	4000	4	16.756	128.6	gut
-sample_gut_6	4000	5	16.264	125.4	gut
-sample_gut_6	4000	6	16.107	122.4	gut
-sample_gut_6	4000	7	16.407	134.7	gut
-sample_gut_6	4000	8	16.394	126.0	gut
-sample_gut_6	4000	9	15.761	123.6	gut
-sample_gut_6	6000	0	20.354	167.0	gut
-sample_gut_6	6000	1	20.839	164.1	gut
-sample_gut_6	6000	2	20.904	164.7	gut
-sample_gut_6	6000	3	21.736	165.3	gut
-sample_gut_6	6000	4	20.383	165.7	gut
-sample_gut_6	6000	5	20.87	165.8	gut
-sample_gut_6	6000	6	20.201	158.3	gut
-sample_gut_6	6000	7	20.608	159.6	gut
-sample_gut_6	6000	8	21.212	166.8	gut
-sample_gut_6	6000	9	20.846	172.9	gut
-sample_gut_6	8000	0	23.899	191.2	gut
-sample_gut_6	8000	1	23.881	192.2	gut
-sample_gut_6	8000	2	23.753	190.1	gut
-sample_gut_6	8000	3	24.309	187.8	gut
-sample_gut_6	8000	4	24.31	189.3	gut
-sample_gut_6	8000	5	23.727	195.6	gut
-sample_gut_6	8000	6	24.329	191.6	gut
-sample_gut_6	8000	7	24.033	190.9	gut
-sample_gut_6	8000	8	23.949	196.2	gut
-sample_gut_6	8000	9	24.249	199.7	gut
-sample_gut_6	12000	0	27.784	221.8	gut
-sample_gut_6	12000	1	27.728	228.8	gut
-sample_gut_6	12000	2	27.918	225.4	gut
-sample_gut_6	12000	3	28.544	221.3	gut
-sample_gut_6	12000	4	28.297	229.5	gut
-sample_gut_6	12000	5	28.589	222.4	gut
-sample_gut_6	12000	6	27.866	220.9	gut
-sample_gut_6	12000	7	27.736	231.7	gut
-sample_gut_6	12000	8	28.455	227.5	gut
-sample_gut_6	12000	9	27.686	231.6	gut
-sample_gut_6	16000	0	29.61	241.4	gut
-sample_gut_6	16000	1	30.04	237.9	gut
-sample_gut_6	16000	2	30.091	241.4	gut
-sample_gut_6	16000	3	30.175	238.4	gut
-sample_gut_6	16000	4	29.578	237.0	gut
-sample_gut_6	16000	5	29.793	241.4	gut
-sample_gut_6	16000	6	29.752	246.7	gut
-sample_gut_6	16000	7	29.703	245.2	gut
-sample_gut_6	16000	8	30.185	246.2	gut
-sample_gut_6	16000	9	30.59	243.8	gut
-sample_gut_6	22000	0	31.251	242.3	gut
-sample_gut_6	22000	1	30.861	254.2	gut
-sample_gut_6	22000	2	30.824	249.8	gut
-sample_gut_6	22000	3	30.592	245.5	gut
-sample_gut_6	22000	4	30.723	245.8	gut
-sample_gut_6	22000	5	30.927	251.3	gut
-sample_gut_6	22000	6	31.57	247.7	gut
-sample_gut_6	22000	7	30.907	242.4	gut
-sample_gut_6	22000	8	30.802	251.4	gut
-sample_gut_6	22000	9	30.697	249.9	gut
-sample_gut_6	30000	0	31.533	255.8	gut
-sample_gut_6	30000	1	31.506	257.3	gut
-sample_gut_6	30000	2	31.465	253.8	gut
-sample_gut_6	30000	3	31.463	252.4	gut
-sample_gut_6	30000	4	31.542	251.5	gut
-sample_gut_6	30000	5	31.827	251.5	gut
-sample_gut_6	30000	6	32.348	252.9	gut
-sample_gut_6	30000	7	30.961	248.7	gut
-sample_gut_6	30000	8	31.839	256.2	gut
-sample_gut_6	30000	9	31.533	254.3	gut
-sample_gut_6	40000	0	31.31	257.1	gut
-sample_gut_6	40000	1	32.083	255.8	gut
-sample_gut_6	40000	2	31.901	255.3	gut
-sample_gut_6	40000	3	32.063	257.7	gut
-sample_gut_6	40000	4	31.822	254.7	gut
-sample_gut_6	40000	5	31.947	254.8	gut
-sample_gut_6	40000	6	31.675	260.9	gut
-sample_gut_6	40000	7	31.568	253.9	gut
-sample_gut_6	40000	8	31.85	252.9	gut
-sample_gut_6	40000	9	31.595	257.6	gut
-sample_gut_6	50000	0	31.385	256.6	gut
-sample_gut_6	50000	1	31.291	253.2	gut
-sample_gut_6	50000	2	31.901	254.9	gut
-sample_gut_6	50000	3	32.269	254.6	gut
-sample_gut_6	50000	4	32.539	254.2	gut
-sample_gut_6	50000	5	32.296	259.6	gut
-sample_gut_6	50000	6	31.596	257.0	gut
-sample_gut_6	50000	7	30.589	255.9	gut
-sample_gut_6	50000	8	32.292	256.3	gut
-sample_gut_6	50000	9	31.304	256.4	gut
-sample_skin_1	500	0	2.295	16.8	skin
-sample_skin_1	500	1	2.473	14.0	skin
-sample_skin_1	500	2	2.212	19.6	skin
-sample_skin_1	500	3	2.48	25.7	skin
-sample_skin_1	500	4	2.235	19.0	skin
-sample_skin_1	500	5	2.599	22.7	skin
-sample_skin_1	500	6	2.038	11.8	skin
-sample_skin_1	500	7	2.526	21.5	skin
-sample_skin_1	500	8	2.585	15.9	skin
-sample_skin_1	500	9	2.502	24.3	skin
-sample_skin_1	1000	0	4.262	39.1	skin
-sample_skin_1	1000	1	5.212	40.0	skin
-sample_skin_1	1000	2	4.165	40.8	skin
-sample_skin_1	1000	3	4.435	36.4	skin
-sample_skin_1	1000	4	4.333	40.3	skin
-sample_skin_1	1000	5	4.546	42.8	skin
-sample_skin_1	1000	6	4.784	30.6	skin
-sample_skin_1	1000	7	4.493	38.7	skin
-sample_skin_1	1000	8	4.982	36.4	skin
-sample_skin_1	1000	9	3.937	27.7	skin
-sample_skin_1	2000	0	7.766	66.0	skin
-sample_skin_1	2000	1	7.69	60.9	skin
-sample_skin_1	2000	2	7.832	61.2	skin
-sample_skin_1	2000	3	7.291	65.0	skin
-sample_skin_1	2000	4	7.722	64.4	skin
-sample_skin_1	2000	5	7.382	66.9	skin
-sample_skin_1	2000	6	7.895	66.4	skin
-sample_skin_1	2000	7	7.186	57.0	skin
-sample_skin_1	2000	8	6.973	56.0	skin
-sample_skin_1	2000	9	7.607	59.7	skin
-sample_skin_1	4000	0	11.591	91.5	skin
-sample_skin_1	4000	1	11.112	90.3	skin
-sample_skin_1	4000	2	11.949	96.1	skin
-sample_skin_1	4000	3	12.142	90.6	skin
-sample_skin_1	4000	4	11.743	92.9	skin
-sample_skin_1	4000	5	11.698	96.7	skin
-sample_skin_1	4000	6	11.417	98.0	skin
-sample_skin_1	4000	7	11.034	93.5	skin
-sample_skin_1	4000	8	11.773	92.6	skin
-sample_skin_1	4000	9	11.438	96.5	skin
-sample_skin_1	6000	0	13.432	103.7	skin
-sample_skin_1	6000	1	14.52	105.9	skin
-sample_skin_1	6000	2	14.127	108.4	skin
-sample_skin_1	6000	3	13.332	105.8	skin
-sample_skin_1	6000	4	13.122	103.8	skin
-sample_skin_1	6000	5	13.521	109.7	skin
-sample_skin_1	6000	6	13.697	112.0	skin
-sample_skin_1	6000	7	13.607	109.0	skin
-sample_skin_1	6000	8	13.833	104.8	skin
-sample_skin_1	6000	9	13.506	106.9	skin
-sample_skin_1	8000	0	14.803	117.7	skin
-sample_skin_1	8000	1	14.215	114.4	skin
-sample_skin_1	8000	2	14.482	113.0	skin
-sample_skin_1	8000	3	14.96	116.0	skin
-sample_skin_1	8000	4	15.433	118.8	skin
-sample_skin_1	8000	5	14.199	113.1	skin
-sample_skin_1	8000	6	14.952	121.7	skin
-sample_skin_1	8000	7	14.208	116.1	skin
-sample_skin_1	8000	8	15.049	112.4	skin
-sample_skin_1	8000	9	15.05	123.4	skin
-sample_skin_1	12000	0	15.643	123.9	skin
-sample_skin_1	12000	1	14.899	129.3	skin
-sample_skin_1	12000	2	15.683	129.8	skin
-sample_skin_1	12000	3	15.37	126.4	skin
-sample_skin_1	12000	4	14.94	130.1	skin
-sample_skin_1	12000	5	15.755	125.0	skin
-sample_skin_1	12000	6	15.286	132.3	skin
-sample_skin_1	12000	7	16.003	127.3	skin
-sample_skin_1	12000	8	15.827	119.7	skin
-sample_skin_1	12000	9	15.91	129.2	skin
-sample_skin_1	16000	0	16.099	129.1	skin
-sample_skin_1	16000	1	15.916	127.1	skin
-sample_skin_1	16000	2	16.002	134.7	skin
-sample_skin_1	16000	3	15.492	127.3	skin
-sample_skin_1	16000	4	15.723	127.3	skin
-sample_skin_1	16000	5	15.098	129.3	skin
-sample_skin_1	16000	6	15.728	120.0	skin
-sample_skin_1	16000	7	16.567	130.2	skin
-sample_skin_1	16000	8	15.364	130.6	skin
-sample_skin_1	16000	9	15.94	131.9	skin
-sample_skin_1	22000	0	15.967	124.6	skin
-sample_skin_1	22000	1	15.315	123.8	skin
-sample_skin_1	22000	2	15.48	121.6	skin
-sample_skin_1	22000	3	16.007	130.7	skin
-sample_skin_1	22000	4	16.707	127.9	skin
-sample_skin_1	22000	5	16.209	128.9	skin
-sample_skin_1	22000	6	15.859	128.2	skin
-sample_skin_1	22000	7	15.888	126.4	skin
-sample_skin_1	22000	8	16.081	124.0	skin
-sample_skin_1	22000	9	16.263	127.3	skin
-sample_skin_1	30000	0	15.681	123.5	skin
-sample_skin_1	30000	1	15.878	123.9	skin
-sample_skin_1	30000	2	16.635	124.5	skin
-sample_skin_1	30000	3	16.31	126.4	skin
-sample_skin_1	30000	4	16.522	127.5	skin
-sample_skin_1	30000	5	15.274	132.1	skin
-sample_skin_1	30000	6	16.031	131.9	skin
-sample_skin_1	30000	7	15.698	121.6	skin
-sample_skin_1	30000	8	16.384	125.5	skin
-sample_skin_1	30000	9	15.877	131.9	skin
-sample_skin_1	40000	0	16.207	122.3	skin
-sample_skin_1	40000	1	15.551	130.3	skin
-sample_skin_1	40000	2	16.031	124.7	skin
-sample_skin_1	40000	3	16.126	129.7	skin
-sample_skin_1	40000	4	16.092	134.2	skin
-sample_skin_1	40000	5	15.427	128.8	skin
-sample_skin_1	40000	6	16.246	127.9	skin
-sample_skin_1	40000	7	16.037	134.5	skin
-sample_skin_1	40000	8	15.463	125.9	skin
-sample_skin_1	40000	9	15.775	133.8	skin
-sample_skin_1	50000	0	16.036	127.0	skin
-sample_skin_1	50000	1	16.297	129.8	skin
-sample_skin_1	50000	2	15.787	132.8	skin
-sample_skin_1	50000	3	15.859	126.3	skin
-sample_skin_1	50000	4	15.77	128.4	skin
-sample_skin_1	50000	5	16.252	122.0	skin
-sample_skin_1	50000	6	15.611	130.6	skin
-sample_skin_1	50000	7	16.221	125.9	skin
-sample_skin_1	50000	8	15.732	130.3	skin
-sample_skin_1	50000	9	16.212	122.2	skin
-sample_skin_2	500	0	1.678	16.2	skin
-sample_skin_2	500	1	1.987	12.9	skin
-sample_skin_2	500	2	1.16	12.7	skin
-sample_skin_2	500	3	2.17	11.9	skin
-sample_skin_2	500	4	1.772	9.4	skin
-sample_skin_2	500	5	1.693	12.2	skin
-sample_skin_2	500	6	1.237	14.6	skin
-sample_skin_2	500	7	2.362	16.2	skin
-sample_skin_2	500	8	1.429	12.2	skin
-sample_skin_2	500	9	1.699	15.8	skin
-sample_skin_2	1000	0	2.817	25.5	skin
-sample_skin_2	1000	1	3.385	23.1	skin
-sample_skin_2	1000	2	3.03	25.1	skin
-sample_skin_2	1000	3	2.894	16.2	skin
-sample_skin_2	1000	4	3.517	23.6	skin
-sample_skin_2	1000	5	3.146	26.7	skin
-sample_skin_2	1000	6	2.724	27.6	skin
-sample_skin_2	1000	7	3.773	23.0	skin
-sample_skin_2	1000	8	3.731	22.2	skin
-sample_skin_2	1000	9	2.736	21.9	skin
-sample_skin_2	2000	0	5.786	44.6	skin
-sample_skin_2	2000	1	5.345	40.8	skin
-sample_skin_2	2000	2	4.762	44.6	skin
-sample_skin_2	2000	3	5.12	48.0	skin
-sample_skin_2	2000	4	5.183	44.7	skin
-sample_skin_2	2000	5	5.526	45.8	skin
-sample_skin_2	2000	6	6.02	37.0	skin
-sample_skin_2	2000	7	5.27	39.6	skin
-sample_skin_2	2000	8	4.924	43.2	skin
-sample_skin_2	2000	9	5.106	40.7	skin
-sample_skin_2	4000	0	8.468	66.2	skin
-sample_skin_2	4000	1	8.417	61.0	skin
-sample_skin_2	4000	2	8.188	68.0	skin
-sample_skin_2	4000	3	8.272	66.9	skin
-sample_skin_2	4000	4	8.219	68.8	skin
-sample_skin_2	4000	5	8.136	65.1	skin
-sample_skin_2	4000	6	7.806	72.3	skin
-sample_skin_2	4000	7	8.765	71.7	skin
-sample_skin_2	4000	8	8.738	67.2	skin
-sample_skin_2	4000	9	7.744	67.7	skin
-sample_skin_2	6000	0	10.112	86.3	skin
-sample_skin_2	6000	1	9.942	83.7	skin
-sample_skin_2	6000	2	9.535	84.8	skin
-sample_skin_2	6000	3	10.482	83.0	skin
-sample_skin_2	6000	4	10.034	78.9	skin
-sample_skin_2	6000	5	10.34	78.2	skin
-sample_skin_2	6000	6	9.962	84.2	skin
-sample_skin_2	6000	7	10.519	83.6	skin
-sample_skin_2	6000	8	10.496	79.8	skin
-sample_skin_2	6000	9	9.924	82.5	skin
-sample_skin_2	8000	0	11.037	87.0	skin
-sample_skin_2	8000	1	10.952	87.6	skin
-sample_skin_2	8000	2	11.252	90.5	skin
-sample_skin_2	8000	3	11.438	83.1	skin
-sample_skin_2	8000	4	11.898	90.2	skin
-sample_skin_2	8000	5	11.573	84.8	skin
-sample_skin_2	8000	6	11.105	91.7	skin
-sample_skin_2	8000	7	10.808	90.1	skin
-sample_skin_2	8000	8	10.621	92.7	skin
-sample_skin_2	8000	9	10.622	91.2	skin
-sample_skin_2	12000	0	11.558	100.4	skin
-sample_skin_2	12000	1	12.114	96.0	skin
-sample_skin_2	12000	2	12.505	99.6	skin
-sample_skin_2	12000	3	11.811	92.4	skin
-sample_skin_2	12000	4	12.1	95.6	skin
-sample_skin_2	12000	5	12.42	96.5	skin
-sample_skin_2	12000	6	12.362	99.3	skin
-sample_skin_2	12000	7	11.627	101.0	skin
-sample_skin_2	12000	8	12.411	93.8	skin
-sample_skin_2	12000	9	12.207	92.9	skin
-sample_skin_2	16000	0	12.238	96.0	skin
-sample_skin_2	16000	1	12.319	100.8	skin
-sample_skin_2	16000	2	12.723	94.8	skin
-sample_skin_2	16000	3	11.872	105.5	skin
-sample_skin_2	16000	4	11.863	100.6	skin
-sample_skin_2	16000	5	12.114	103.5	skin
-sample_skin_2	16000	6	13.003	99.2	skin
-sample_skin_2	16000	7	11.983	97.4	skin
-sample_skin_2	16000	8	12.371	102.5	skin
-sample_skin_2	16000	9	12.498	99.7	skin
-sample_skin_2	22000	0	12.109	92.0	skin
-sample_skin_2	22000	1	12.402	91.2	skin
-sample_skin_2	22000	2	12.728	103.3	skin
-sample_skin_2	22000	3	12.18	99.6	skin
-sample_skin_2	22000	4	13.045	104.7	skin
-sample_skin_2	22000	5	12.396	92.8	skin
-sample_skin_2	22000	6	13.129	105.4	skin
-sample_skin_2	22000	7	12.375	107.1	skin
-sample_skin_2	22000	8	13.183	97.1	skin
-sample_skin_2	22000	9	12.361	94.9	skin
-sample_skin_2	30000	0	13.364	106.9	skin
-sample_skin_2	30000	1	12.269	102.6	skin
-sample_skin_2	30000	2	12.434	96.7	skin
-sample_skin_2	30000	3	12.328	100.6	skin
-sample_skin_2	30000	4	13.142	103.5	skin
-sample_skin_2	30000	5	13.076	93.9	skin
-sample_skin_2	30000	6	12.45	103.4	skin
-sample_skin_2	30000	7	12.369	96.8	skin
-sample_skin_2	30000	8	13.216	100.3	skin
-sample_skin_2	30000	9	12.638	100.2	skin
-sample_skin_2	40000	0	12.797	97.5	skin
-sample_skin_2	40000	1	13.064	96.3	skin
-sample_skin_2	40000	2	12.043	98.4	skin
-sample_skin_2	40000	3	12.174	104.9	skin
-sample_skin_2	40000	4	12.995	104.0	skin
-sample_skin_2	40000	5	12.787	97.0	skin
-sample_skin_2	40000	6	11.457	105.3	skin
-sample_skin_2	40000	7	12.658	102.4	skin
-sample_skin_2	40000	8	12.128	103.9	skin
-sample_skin_2	40000	9	12.624	102.5	skin
-sample_skin_2	50000	0	13.171	99.9	skin
-sample_skin_2	50000	1	12.469	104.2	skin
-sample_skin_2	50000	2	12.739	108.7	skin
-sample_skin_2	50000	3	12.902	97.5	skin
-sample_skin_2	50000	4	12.636	98.1	skin
-sample_skin_2	50000	5	12.251	103.9	skin
-sample_skin_2	50000	6	12.429	102.0	skin
-sample_skin_2	50000	7	12.673	102.5	skin
-sample_skin_2	50000	8	12.334	97.8	skin
-sample_skin_2	50000	9	11.816	96.0	skin
-sample_skin_3	500	0	1.719	15.2	skin
-sample_skin_3	500	1	2.431	9.0	skin
-sample_skin_3	500	2	1.906	14.2	skin
-sample_skin_3	500	3	2.07	17.6	skin
-sample_skin_3	500	4	1.074	14.3	skin
-sample_skin_3	500	5	1.749	12.3	skin
-sample_skin_3	500	6	2.587	22.7	skin
-sample_skin_3	500	7	2.133	21.7	skin
-sample_skin_3	500	8	2.139	19.2	skin
-sample_skin_3	500	9	2.09	22.8	skin
-sample_skin_3	1000	0	3.399	32.4	skin
-sample_skin_3	1000	1	3.435	29.3	skin
-sample_skin_3	1000	2	3.242	36.0	skin
-sample_skin_3	1000	3	3.187	28.5	skin
-sample_skin_3	1000	4	3.546	33.4	skin
-sample_skin_3	1000	5	3.645	29.7	skin
-sample_skin_3	1000	6	4.492	34.4	skin
-sample_skin_3	1000	7	3.288	29.5	skin
-sample_skin_3	1000	8	3.933	30.3	skin
-sample_skin_3	1000	9	3.443	30.4	skin
-sample_skin_3	2000	0	6.605	50.6	skin
-sample_skin_3	2000	1	6.408	54.8	skin
-sample_skin_3	2000	2	6.906	41.3	skin
-sample_skin_3	2000	3	6.572	54.5	skin
-sample_skin_3	2000	4	6.471	49.8	skin
-sample_skin_3	2000	5	6.824	50.6	skin
-sample_skin_3	2000	6	6.64	56.6	skin
-sample_skin_3	2000	7	6.356	52.6	skin
-sample_skin_3	2000	8	6.93	54.8	skin
-sample_skin_3	2000	9	6.434	54.3	skin
-sample_skin_3	4000	0	9.693	84.8	skin
-sample_skin_3	4000	1	9.681	81.4	skin
-sample_skin_3	4000	2	9.248	77.2	skin
-sample_skin_3	4000	3	9.839	79.4	skin
-sample_skin_3	4000	4	10.253	78.8	skin
-sample_skin_3	4000	5	10.136	78.7	skin
-sample_skin_3	4000	6	9.421	79.7	skin
-sample_skin_3	4000	7	10.224	80.5	skin
-sample_skin_3	4000	8	9.796	78.2	skin
-sample_skin_3	4000	9	9.494	72.7	skin
-sample_skin_3	6000	0	12.019	89.0	skin
-sample_skin_3	6000	1	11.001	81.6	skin
-sample_skin_3	6000	2	11.623	98.7	skin
-sample_skin_3	6000	3	11.578	97.7	skin
-sample_skin_3	6000	4	11.727	97.2	skin
-sample_skin_3	6000	5	11.565	90.8	skin
-sample_skin_3	6000	6	11.127	86.6	skin
-sample_skin_3	6000	7	11.427	93.9	skin
-sample_skin_3	6000	8	11.493	92.5	skin
-sample_skin_3	6000	9	11.575	90.8	skin
-sample_skin_3	8000	0	11.567	98.3	skin
-sample_skin_3	8000	1	12.19	96.9	skin
-sample_skin_3	8000	2	11.36	98.1	skin
-sample_skin_3	8000	3	12.45	93.8	skin
-sample_skin_3	8000	4	11.669	103.3	skin
-sample_skin_3	8000	5	12.325	103.3	skin
-sample_skin_3	8000	6	11.783	94.5	skin
-sample_skin_3	8000	7	12.088	103.1	skin
-sample_skin_3	8000	8	12.638	94.8	skin
-sample_skin_3	8000	9	12.098	99.0	skin
-sample_skin_3	12000	0	13.229	108.8	skin
-sample_skin_3	12000	1	13.728	98.2	skin
-sample_skin_3	12000	2	13.079	100.2	skin
-sample_skin_3	12000	3	12.533	100.4	skin
-sample_skin_3	12000	4	12.363	101.7	skin
-sample_skin_3	12000	5	12.957	106.7	skin
-sample_skin_3	12000	6	12.958	108.6	skin
-sample_skin_3	12000	7	12.663	106.4	skin
-sample_skin_3	12000	8	12.53	101.2	skin
-sample_skin_3	12000	9	13.527	103.5	skin
-sample_skin_3	16000	0	12.834	103.3	skin
-sample_skin_3	16000	1	13.452	108.2	skin
-sample_skin_3	16000	2	13.13	100.7	skin
-sample_skin_3	16000	3	12.988	103.8	skin
-sample_skin_3	16000	4	13.097	110.5	skin
-sample_skin_3	16000	5	12.874	108.3	skin
-sample_skin_3	16000	6	13.694	109.1	skin
-sample_skin_3	16000	7	13.424	97.1	skin
-sample_skin_3	16000	8	12.942	105.7	skin
-sample_skin_3	16000	9	12.918	112.2	skin
-sample_skin_3	22000	0	13.844	101.9	skin
-sample_skin_3	22000	1	12.781	94.9	skin
-sample_skin_3	22000	2	13.534	101.0	skin
-sample_skin_3	22000	3	12.809	106.0	skin
-sample_skin_3	22000	4	13.341	99.2	skin
-sample_skin_3	22000	5	13.802	113.3	skin
-sample_skin_3	22000	6	12.815	105.1	skin
-sample_skin_3	22000	7	13.093	104.7	skin
-sample_skin_3	22000	8	13.163	105.1	skin
-sample_skin_3	22000	9	12.84	105.2	skin
-sample_skin_3	30000	0	13.802	108.2	skin
-sample_skin_3	30000	1	13.372	106.6	skin
-sample_skin_3	30000	2	13.286	105.4	skin
-sample_skin_3	30000	3	13.532	104.7	skin
-sample_skin_3	30000	4	12.143	99.7	skin
-sample_skin_3	30000	5	12.878	100.8	skin
-sample_skin_3	30000	6	13.584	107.1	skin
-sample_skin_3	30000	7	13.155	110.0	skin
-sample_skin_3	30000	8	13.575	104.6	skin
-sample_skin_3	30000	9	13.475	101.1	skin
-sample_skin_3	40000	0	12.885	107.5	skin
-sample_skin_3	40000	1	13.198	104.6	skin
-sample_skin_3	40000	2	13.232	110.6	skin
-sample_skin_3	40000	3	13.263	105.9	skin
-sample_skin_3	40000	4	12.6	104.1	skin
-sample_skin_3	40000	5	12.524	110.0	skin
-sample_skin_3	40000	6	13.47	105.4	skin
-sample_skin_3	40000	7	12.94	106.5	skin
-sample_skin_3	40000	8	13.124	110.3	skin
-sample_skin_3	40000	9	13.43	111.8	skin
-sample_skin_3	50000	0	13.381	105.3	skin
-sample_skin_3	50000	1	13.21	107.7	skin
-sample_skin_3	50000	2	12.385	113.1	skin
-sample_skin_3	50000	3	13.359	107.0	skin
-sample_skin_3	50000	4	13.849	107.7	skin
-sample_skin_3	50000	5	12.781	103.8	skin
-sample_skin_3	50000	6	13.125	107.8	skin
-sample_skin_3	50000	7	13.293	113.5	skin
-sample_skin_3	50000	8	13.077	103.2	skin
-sample_skin_3	50000	9	13.654	109.0	skin
-sample_skin_4	500	0	1.608	16.8	skin
-sample_skin_4	500	1	1.522	15.9	skin
-sample_skin_4	500	2	1.674	19.0	skin
-sample_skin_4	500	3	2.57	11.2	skin
-sample_skin_4	500	4	2.241	15.9	skin
-sample_skin_4	500	5	2.468	11.6	skin
-sample_skin_4	500	6	3.022	18.9	skin
-sample_skin_4	500	7	2.269	22.2	skin
-sample_skin_4	500	8	1.552	23.9	skin
-sample_skin_4	500	9	2.495	13.3	skin
-sample_skin_4	1000	0	4.107	40.0	skin
-sample_skin_4	1000	1	3.774	31.7	skin
-sample_skin_4	1000	2	4.111	34.1	skin
-sample_skin_4	1000	3	3.946	41.4	skin
-sample_skin_4	1000	4	4.484	37.8	skin
-sample_skin_4	1000	5	3.836	34.7	skin
-sample_skin_4	1000	6	3.751	33.2	skin
-sample_skin_4	1000	7	3.772	32.2	skin
-sample_skin_4	1000	8	4.899	28.4	skin
-sample_skin_4	1000	9	3.457	29.5	skin
-sample_skin_4	2000	0	6.743	55.8	skin
-sample_skin_4	2000	1	7.053	54.9	skin
-sample_skin_4	2000	2	7.142	53.7	skin
-sample_skin_4	2000	3	7.582	56.3	skin
-sample_skin_4	2000	4	7.136	60.6	skin
-sample_skin_4	2000	5	7.068	59.6	skin
-sample_skin_4	2000	6	6.82	58.8	skin
-sample_skin_4	2000	7	6.672	53.8	skin
-sample_skin_4	2000	8	6.932	51.6	skin
-sample_skin_4	2000	9	6.745	57.9	skin
-sample_skin_4	4000	0	10.873	91.6	skin
-sample_skin_4	4000	1	10.678	85.1	skin
-sample_skin_4	4000	2	10.798	88.7	skin
-sample_skin_4	4000	3	10.7	79.9	skin
-sample_skin_4	4000	4	10.818	88.6	skin
-sample_skin_4	4000	5	10.99	83.2	skin
-sample_skin_4	4000	6	11.094	84.1	skin
-sample_skin_4	4000	7	10.577	89.8	skin
-sample_skin_4	4000	8	10.443	81.8	skin
-sample_skin_4	4000	9	10.912	85.9	skin
-sample_skin_4	6000	0	12.367	101.1	skin
-sample_skin_4	6000	1	12.778	94.4	skin
-sample_skin_4	6000	2	12.582	96.6	skin
-sample_skin_4	6000	3	13.331	104.3	skin
-sample_skin_4	6000	4	13.483	96.7	skin
-sample_skin_4	6000	5	12.613	102.6	skin
-sample_skin_4	6000	6	12.597	102.3	skin
-sample_skin_4	6000	7	12.894	102.4	skin
-sample_skin_4	6000	8	12.257	99.8	skin
-sample_skin_4	6000	9	13.342	103.5	skin
-sample_skin_4	8000	0	14.095	111.4	skin
-sample_skin_4	8000	1	13.296	117.2	skin
-sample_skin_4	8000	2	14.008	113.7	skin
-sample_skin_4	8000	3	13.507	114.6	skin
-sample_skin_4	8000	4	13.477	116.0	skin
-sample_skin_4	8000	5	14.587	113.3	skin
-sample_skin_4	8000	6	14.015	112.4	skin
-sample_skin_4	8000	7	13.992	114.5	skin
-sample_skin_4	8000	8	14.74	112.2	skin
-sample_skin_4	8000	9	14.386	109.1	skin
-sample_skin_4	12000	0	15.396	121.2	skin
-sample_skin_4	12000	1	15.491	113.6	skin
-sample_skin_4	12000	2	15.323	118.2	skin
-sample_skin_4	12000	3	15.024	117.7	skin
-sample_skin_4	12000	4	15.068	118.4	skin
-sample_skin_4	12000	5	14.771	128.5	skin
-sample_skin_4	12000	6	14.416	114.2	skin
-sample_skin_4	12000	7	14.423	123.2	skin
-sample_skin_4	12000	8	14.733	117.6	skin
-sample_skin_4	12000	9	14.35	127.2	skin
-sample_skin_4	16000	0	15.425	128.8	skin
-sample_skin_4	16000	1	14.791	126.4	skin
-sample_skin_4	16000	2	14.779	120.9	skin
-sample_skin_4	16000	3	15.464	126.7	skin
-sample_skin_4	16000	4	14.886	126.4	skin
-sample_skin_4	16000	5	14.697	127.1	skin
-sample_skin_4	16000	6	14.86	120.4	skin
-sample_skin_4	16000	7	15.436	121.5	skin
-sample_skin_4	16000	8	14.754	122.9	skin
-sample_skin_4	16000	9	15.152	123.3	skin
-sample_skin_4	22000	0	15.436	121.1	skin
-sample_skin_4	22000	1	15.403	126.1	skin
-sample_skin_4	22000	2	15.428	126.0	skin
-sample_skin_4	22000	3	15.79	123.0	skin
-sample_skin_4	22000	4	14.971	120.6	skin
-sample_skin_4	22000	5	15.115	127.0	skin
-sample_skin_4	22000	6	15.507	130.8	skin
-sample_skin_4	22000	7	14.788	124.1	skin
-sample_skin_4	22000	8	15.328	114.5	skin
-sample_skin_4	22000	9	15.142	117.4	skin
-sample_skin_4	30000	0	15.478	121.1	skin
-sample_skin_4	30000	1	15.245	120.8	skin
-sample_skin_4	30000	2	15.341	120.1	skin
-sample_skin_4	30000	3	15.059	123.2	skin
-sample_skin_4	30000	4	15.579	121.5	skin
-sample_skin_4	30000	5	15.577	126.3	skin
-sample_skin_4	30000	6	15.303	124.1	skin
-sample_skin_4	30000	7	15.664	123.2	skin
-sample_skin_4	30000	8	15.206	116.5	skin
-sample_skin_4	30000	9	15.1	126.9	skin
-sample_skin_4	40000	0	16.253	115.7	skin
-sample_skin_4	40000	1	15.59	117.0	skin
-sample_skin_4	40000	2	15.395	126.0	skin
-sample_skin_4	40000	3	14.895	123.7	skin
-sample_skin_4	40000	4	14.769	130.1	skin
-sample_skin_4	40000	5	15.374	121.9	skin
-sample_skin_4	40000	6	15.232	123.8	skin
-sample_skin_4	40000	7	15.358	128.1	skin
-sample_skin_4	40000	8	15.521	126.5	skin
-sample_skin_4	40000	9	14.703	123.5	skin
-sample_skin_4	50000	0	15.633	120.7	skin
-sample_skin_4	50000	1	15.515	120.3	skin
-sample_skin_4	50000	2	15.264	126.5	skin
-sample_skin_4	50000	3	15.501	121.5	skin
-sample_skin_4	50000	4	15.342	128.0	skin
-sample_skin_4	50000	5	15.429	130.0	skin
-sample_skin_4	50000	6	15.615	127.3	skin
-sample_skin_4	50000	7	15.817	123.5	skin
-sample_skin_4	50000	8	15.508	119.2	skin
-sample_skin_4	50000	9	15.301	123.8	skin
-sample_skin_5	500	0	2.404	16.8	skin
-sample_skin_5	500	1	2.507	17.2	skin
-sample_skin_5	500	2	2.16	24.9	skin
-sample_skin_5	500	3	2.069	18.1	skin
-sample_skin_5	500	4	2.447	19.4	skin
-sample_skin_5	500	5	2.487	18.8	skin
-sample_skin_5	500	6	1.553	17.7	skin
-sample_skin_5	500	7	2.309	13.5	skin
-sample_skin_5	500	8	1.859	19.4	skin
-sample_skin_5	500	9	2.718	10.4	skin
-sample_skin_5	1000	0	4.078	32.6	skin
-sample_skin_5	1000	1	4.487	29.7	skin
-sample_skin_5	1000	2	4.821	29.2	skin
-sample_skin_5	1000	3	4.608	31.9	skin
-sample_skin_5	1000	4	4.087	31.0	skin
-sample_skin_5	1000	5	3.794	28.4	skin
-sample_skin_5	1000	6	4.038	38.0	skin
-sample_skin_5	1000	7	3.687	28.4	skin
-sample_skin_5	1000	8	3.906	25.8	skin
-sample_skin_5	1000	9	3.752	31.1	skin
-sample_skin_5	2000	0	7.042	49.7	skin
-sample_skin_5	2000	1	7.027	56.0	skin
-sample_skin_5	2000	2	6.588	59.1	skin
-sample_skin_5	2000	3	6.986	54.2	skin
-sample_skin_5	2000	4	6.744	56.7	skin
-sample_skin_5	2000	5	6.651	55.8	skin
-sample_skin_5	2000	6	7.566	56.8	skin
-sample_skin_5	2000	7	7.062	51.6	skin
-sample_skin_5	2000	8	6.616	53.2	skin
-sample_skin_5	2000	9	6.996	55.9	skin
-sample_skin_5	4000	0	10.955	84.0	skin
-sample_skin_5	4000	1	11.41	89.0	skin
-sample_skin_5	4000	2	10.696	91.0	skin
-sample_skin_5	4000	3	11.053	90.4	skin
-sample_skin_5	4000	4	11.365	84.6	skin
-sample_skin_5	4000	5	11.315	83.5	skin
-sample_skin_5	4000	6	10.86	87.7	skin
-sample_skin_5	4000	7	10.691	82.2	skin
-sample_skin_5	4000	8	10.871	80.1	skin
-sample_skin_5	4000	9	10.92	86.8	skin
-sample_skin_5	6000	0	12.663	101.7	skin
-sample_skin_5	6000	1	13.126	102.7	skin
-sample_skin_5	6000	2	12.818	110.5	skin
-sample_skin_5	6000	3	12.428	98.8	skin
-sample_skin_5	6000	4	12.468	110.3	skin
-sample_skin_5	6000	5	13.198	100.8	skin
-sample_skin_5	6000	6	11.948	103.0	skin
-sample_skin_5	6000	7	12.051	104.3	skin
-sample_skin_5	6000	8	12.803	103.8	skin
-sample_skin_5	6000	9	12.387	96.8	skin
-sample_skin_5	8000	0	14.269	111.8	skin
-sample_skin_5	8000	1	13.397	103.7	skin
-sample_skin_5	8000	2	13.653	114.6	skin
-sample_skin_5	8000	3	13.209	112.6	skin
-sample_skin_5	8000	4	13.509	118.9	skin
-sample_skin_5	8000	5	13.689	110.5	skin
-sample_skin_5	8000	6	13.463	106.1	skin
-sample_skin_5	8000	7	13.754	105.4	skin
-sample_skin_5	8000	8	13.641	99.9	skin
-sample_skin_5	8000	9	13.587	109.2	skin
-sample_skin_5	12000	0	14.201	121.6	skin
-sample_skin_5	12000	1	14.473	115.4	skin
-sample_skin_5	12000	2	14.79	121.8	skin
-sample_skin_5	12000	3	14.545	116.5	skin
-sample_skin_5	12000	4	14.857	122.8	skin
-sample_skin_5	12000	5	14.919	126.4	skin
-sample_skin_5	12000	6	14.686	112.0	skin
-sample_skin_5	12000	7	14.976	113.9	skin
-sample_skin_5	12000	8	13.631	117.2	skin
-sample_skin_5	12000	9	14.438	114.8	skin
-sample_skin_5	16000	0	15.481	111.9	skin
-sample_skin_5	16000	1	14.622	112.3	skin
-sample_skin_5	16000	2	14.479	115.1	skin
-sample_skin_5	16000	3	14.99	119.6	skin
-sample_skin_5	16000	4	14.107	115.1	skin
-sample_skin_5	16000	5	14.523	119.0	skin
-sample_skin_5	16000	6	14.639	112.7	skin
-sample_skin_5	16000	7	15.425	126.6	skin
-sample_skin_5	16000	8	15.229	116.0	skin
-sample_skin_5	16000	9	14.708	111.1	skin
-sample_skin_5	22000	0	15.232	117.1	skin
-sample_skin_5	22000	1	15.031	118.9	skin
-sample_skin_5	22000	2	14.264	128.8	skin
-sample_skin_5	22000	3	14.562	116.3	skin
-sample_skin_5	22000	4	15.492	120.0	skin
-sample_skin_5	22000	5	15.335	120.2	skin
-sample_skin_5	22000	6	14.527	121.3	skin
-sample_skin_5	22000	7	14.924	121.5	skin
-sample_skin_5	22000	8	14.464	120.0	skin
-sample_skin_5	22000	9	14.283	118.5	skin
-sample_skin_5	30000	0	14.091	120.8	skin
-sample_skin_5	30000	1	14.929	122.0	skin
-sample_skin_5	30000	2	15.421	120.9	skin
-sample_skin_5	30000	3	15.352	115.3	skin
-sample_skin_5	30000	4	14.848	119.9	skin
-sample_skin_5	30000	5	14.38	113.8	skin
-sample_skin_5	30000	6	14.775	124.5	skin
-sample_skin_5	30000	7	14.2	122.3	skin
-sample_skin_5	30000	8	14.723	106.6	skin
-sample_skin_5	30000	9	14.476	117.4	skin
-sample_skin_5	40000	0	14.646	125.1	skin
-sample_skin_5	40000	1	14.951	123.6	skin
-sample_skin_5	40000	2	14.817	115.0	skin
-sample_skin_5	40000	3	14.621	117.5	skin
-sample_skin_5	40000	4	15.422	122.3	skin
-sample_skin_5	40000	5	14.392	119.0	skin
-sample_skin_5	40000	6	14.767	120.7	skin
-sample_skin_5	40000	7	14.995	117.0	skin
-sample_skin_5	40000	8	14.438	116.0	skin
-sample_skin_5	40000	9	14.219	122.0	skin
-sample_skin_5	50000	0	14.397	115.4	skin
-sample_skin_5	50000	1	14.531	115.9	skin
-sample_skin_5	50000	2	14.944	122.3	skin
-sample_skin_5	50000	3	14.903	129.0	skin
-sample_skin_5	50000	4	14.127	118.6	skin
-sample_skin_5	50000	5	14.604	111.8	skin
-sample_skin_5	50000	6	14.766	116.6	skin
-sample_skin_5	50000	7	14.603	118.2	skin
-sample_skin_5	50000	8	14.717	112.3	skin
-sample_skin_5	50000	9	14.77	120.4	skin
-sample_skin_6	500	0	1.665	10.8	skin
-sample_skin_6	500	1	2.097	15.5	skin
-sample_skin_6	500	2	1.927	12.4	skin
-sample_skin_6	500	3	1.927	21.0	skin
-sample_skin_6	500	4	1.026	14.1	skin
-sample_skin_6	500	5	2.843	13.9	skin
-sample_skin_6	500	6	1.932	20.5	skin
-sample_skin_6	500	7	2.484	16.3	skin
-sample_skin_6	500	8	2.226	10.1	skin
-sample_skin_6	500	9	2.139	17.8	skin
-sample_skin_6	1000	0	3.751	33.0	skin
-sample_skin_6	1000	1	4.621	25.5	skin
-sample_skin_6	1000	2	4.181	31.5	skin
-sample_skin_6	1000	3	3.818	33.3	skin
-sample_skin_6	1000	4	3.934	37.0	skin
-sample_skin_6	1000	5	3.785	30.1	skin
-sample_skin_6	1000	6	3.698	31.4	skin
-sample_skin_6	1000	7	3.778	32.4	skin
-sample_skin_6	1000	8	3.837	32.1	skin
-sample_skin_6	1000	9	3.874	34.3	skin
-sample_skin_6	2000	0	6.452	59.0	skin
-sample_skin_6	2000	1	6.746	53.1	skin
-sample_skin_6	2000	2	6.453	53.9	skin
-sample_skin_6	2000	3	7.0	55.6	skin
-sample_skin_6	2000	4	6.494	46.7	skin
-sample_skin_6	2000	5	6.831	48.9	skin
-sample_skin_6	2000	6	7.461	47.3	skin
-sample_skin_6	2000	7	6.248	57.7	skin
-sample_skin_6	2000	8	6.21	54.0	skin
-sample_skin_6	2000	9	6.357	55.3	skin
-sample_skin_6	4000	0	10.021	77.9	skin
-sample_skin_6	4000	1	10.76	80.1	skin
-sample_skin_6	4000	2	10.032	77.7	skin
-sample_skin_6	4000	3	10.133	74.8	skin
-sample_skin_6	4000	4	9.909	84.5	skin
-sample_skin_6	4000	5	9.659	86.6	skin
-sample_skin_6	4000	6	11.062	83.5	skin
-sample_skin_6	4000	7	10.453	87.3	skin
-sample_skin_6	4000	8	10.75	91.8	skin
-sample_skin_6	4000	9	10.526	82.0	skin
-sample_skin_6	6000	0	11.78	97.3	skin
-sample_skin_6	6000	1	11.838	95.6	skin
-sample_skin_6	6000	2	12.111	99.3	skin
-sample_skin_6	6000	3	12.185	97.8	skin
-sample_skin_6	6000	4	11.603	94.8	skin
-sample_skin_6	6000	5	12.244	96.8	skin
-sample_skin_6	6000	6	11.696	91.2	skin
-sample_skin_6	6000	7	12.287	89.0	skin
-sample_skin_6	6000	8	12.436	94.8	skin
-sample_skin_6	6000	9	12.164	97.4	skin
-sample_skin_6	8000	0	13.937	105.0	skin
-sample_skin_6	8000	1	13.69	99.5	skin
-sample_skin_6	8000	2	13.277	104.9	skin
-sample_skin_6	8000	3	13.213	105.8	skin
-sample_skin_6	8000	4	12.765	109.6	skin
-sample_skin_6	8000	5	13.249	110.1	skin
-sample_skin_6	8000	6	12.862	106.0	skin
-sample_skin_6	8000	7	13.497	101.2	skin
-sample_skin_6	8000	8	13.457	115.7	skin
-sample_skin_6	8000	9	12.622	110.0	skin
-sample_skin_6	12000	0	14.698	114.8	skin
-sample_skin_6	12000	1	14.819	112.2	skin
-sample_skin_6	12000	2	14.631	119.3	skin
-sample_skin_6	12000	3	14.54	111.3	skin
-sample_skin_6	12000	4	14.02	111.5	skin
-sample_skin_6	12000	5	13.814	116.9	skin
-sample_skin_6	12000	6	14.383	110.2	skin
-sample_skin_6	12000	7	14.232	117.2	skin
-sample_skin_6	12000	8	14.834	109.1	skin
-sample_skin_6	12000	9	14.135	108.7	skin
-sample_skin_6	16000	0	14.885	114.3	skin
-sample_skin_6	16000	1	14.645	117.1	skin
-sample_skin_6	16000	2	14.489	126.2	skin
-sample_skin_6	16000	3	13.625	119.6	skin
-sample_skin_6	16000	4	14.45	113.6	skin
-sample_skin_6	16000	5	14.678	116.1	skin
-sample_skin_6	16000	6	14.894	113.8	skin
-sample_skin_6	16000	7	14.737	116.5	skin
-sample_skin_6	16000	8	14.318	112.8	skin
-sample_skin_6	16000	9	13.818	117.3	skin
-sample_skin_6	22000	0	14.627	117.2	skin
-sample_skin_6	22000	1	15.032	118.1	skin
-sample_skin_6	22000	2	15.168	122.6	skin
-sample_skin_6	22000	3	14.466	114.2	skin
-sample_skin_6	22000	4	14.16	116.4	skin
-sample_skin_6	22000	5	13.594	116.3	skin
-sample_skin_6	22000	6	15.052	116.3	skin
-sample_skin_6	22000	7	14.648	111.5	skin
-sample_skin_6	22000	8	14.774	110.5	skin
-sample_skin_6	22000	9	15.005	109.5	skin
-sample_skin_6	30000	0	14.165	116.1	skin
-sample_skin_6	30000	1	14.576	116.1	skin
-sample_skin_6	30000	2	15.015	115.8	skin
-sample_skin_6	30000	3	14.294	117.7	skin
-sample_skin_6	30000	4	14.786	115.8	skin
-sample_skin_6	30000	5	14.923	111.8	skin
-sample_skin_6	30000	6	14.503	119.5	skin
-sample_skin_6	30000	7	14.681	118.5	skin
-sample_skin_6	30000	8	14.264	107.4	skin
-sample_skin_6	30000	9	14.883	109.8	skin
-sample_skin_6	40000	0	14.669	123.7	skin
-sample_skin_6	40000	1	13.916	119.3	skin
-sample_skin_6	40000	2	14.468	118.2	skin
-sample_skin_6	40000	3	14.448	120.6	skin
-sample_skin_6	40000	4	13.722	112.7	skin
-sample_skin_6	40000	5	14.436	118.4	skin
-sample_skin_6	40000	6	14.332	117.6	skin
-sample_skin_6	40000	7	14.804	118.5	skin
-sample_skin_6	40000	8	14.792	114.4	skin
-sample_skin_6	40000	9	14.318	124.6	skin
-sample_skin_6	50000	0	15.14	116.4	skin
-sample_skin_6	50000	1	14.805	108.4	skin
-sample_skin_6	50000	2	14.603	115.8	skin
-sample_skin_6	50000	3	14.259	116.4	skin
-sample_skin_6	50000	4	14.468	122.5	skin
-sample_skin_6	50000	5	15.088	119.3	skin
-sample_skin_6	50000	6	14.758	114.3	skin
-sample_skin_6	50000	7	14.648	118.4	skin
-sample_skin_6	50000	8	14.004	117.6	skin
-sample_skin_6	50000	9	14.754	112.1	skin
-sample_soil_1	500	0	1.965	14.5	soil
-sample_soil_1	500	1	2.028	16.4	soil
-sample_soil_1	500	2	1.25	16.0	soil
-sample_soil_1	500	3	1.909	6.6	soil
-sample_soil_1	500	4	1.175	18.0	soil
-sample_soil_1	500	5	1.67	9.5	soil
-sample_soil_1	500	6	1.73	20.6	soil
-sample_soil_1	500	7	1.737	12.5	soil
-sample_soil_1	500	8	1.755	14.9	soil
-sample_soil_1	500	9	1.741	16.5	soil
-sample_soil_1	1000	0	3.371	23.4	soil
-sample_soil_1	1000	1	3.517	30.6	soil
-sample_soil_1	1000	2	3.476	20.9	soil
-sample_soil_1	1000	3	3.321	29.4	soil
-sample_soil_1	1000	4	3.387	34.4	soil
-sample_soil_1	1000	5	3.452	32.0	soil
-sample_soil_1	1000	6	3.329	30.4	soil
-sample_soil_1	1000	7	2.987	30.3	soil
-sample_soil_1	1000	8	3.698	26.1	soil
-sample_soil_1	1000	9	3.498	24.1	soil
-sample_soil_1	2000	0	5.824	45.3	soil
-sample_soil_1	2000	1	6.154	45.4	soil
-sample_soil_1	2000	2	6.919	53.5	soil
-sample_soil_1	2000	3	5.846	46.7	soil
-sample_soil_1	2000	4	6.085	53.7	soil
-sample_soil_1	2000	5	6.795	48.2	soil
-sample_soil_1	2000	6	5.654	43.8	soil
-sample_soil_1	2000	7	6.584	51.1	soil
-sample_soil_1	2000	8	6.462	54.7	soil
-sample_soil_1	2000	9	5.988	47.5	soil
-sample_soil_1	4000	0	10.057	85.3	soil
-sample_soil_1	4000	1	10.456	76.4	soil
-sample_soil_1	4000	2	10.861	83.0	soil
-sample_soil_1	4000	3	9.991	82.2	soil
-sample_soil_1	4000	4	10.903	82.1	soil
-sample_soil_1	4000	5	10.085	84.9	soil
-sample_soil_1	4000	6	10.047	86.2	soil
-sample_soil_1	4000	7	10.446	90.7	soil
-sample_soil_1	4000	8	10.546	82.0	soil
-sample_soil_1	4000	9	10.429	89.7	soil
-sample_soil_1	6000	0	13.619	107.3	soil
-sample_soil_1	6000	1	13.733	105.2	soil
-sample_soil_1	6000	2	13.072	111.9	soil
-sample_soil_1	6000	3	13.041	107.8	soil
-sample_soil_1	6000	4	13.654	105.4	soil
-sample_soil_1	6000	5	13.736	112.9	soil
-sample_soil_1	6000	6	13.756	107.2	soil
-sample_soil_1	6000	7	13.061	110.3	soil
-sample_soil_1	6000	8	12.994	102.7	soil
-sample_soil_1	6000	9	13.539	103.3	soil
-sample_soil_1	8000	0	15.213	132.3	soil
-sample_soil_1	8000	1	15.763	125.9	soil
-sample_soil_1	8000	2	16.181	125.9	soil
-sample_soil_1	8000	3	15.376	116.6	soil
-sample_soil_1	8000	4	15.837	121.2	soil
-sample_soil_1	8000	5	15.693	124.6	soil
-sample_soil_1	8000	6	15.529	121.0	soil
-sample_soil_1	8000	7	15.957	117.3	soil
-sample_soil_1	8000	8	15.735	125.4	soil
-sample_soil_1	8000	9	15.624	128.1	soil
-sample_soil_1	12000	0	17.389	143.0	soil
-sample_soil_1	12000	1	17.804	129.0	soil
-sample_soil_1	12000	2	18.647	142.0	soil
-sample_soil_1	12000	3	17.843	140.6	soil
-sample_soil_1	12000	4	17.162	141.1	soil
-sample_soil_1	12000	5	17.843	143.1	soil
-sample_soil_1	12000	6	17.613	138.7	soil
-sample_soil_1	12000	7	17.817	131.5	soil
-sample_soil_1	12000	8	17.874	147.6	soil
-sample_soil_1	12000	9	16.757	142.6	soil
-sample_soil_1	16000	0	18.931	150.2	soil
-sample_soil_1	16000	1	18.419	144.1	soil
-sample_soil_1	16000	2	18.815	149.8	soil
-sample_soil_1	16000	3	18.932	154.8	soil
-sample_soil_1	16000	4	19.495	142.9	soil
-sample_soil_1	16000	5	18.895	148.6	soil
-sample_soil_1	16000	6	19.038	143.4	soil
-sample_soil_1	16000	7	19.172	146.6	soil
-sample_soil_1	16000	8	18.759	155.9	soil
-sample_soil_1	16000	9	19.541	158.0	soil
-sample_soil_1	22000	0	19.226	149.9	soil
-sample_soil_1	22000	1	19.092	154.4	soil
-sample_soil_1	22000	2	19.436	151.5	soil
-sample_soil_1	22000	3	19.945	155.6	soil
-sample_soil_1	22000	4	19.334	160.2	soil
-sample_soil_1	22000	5	19.086	147.0	soil
-sample_soil_1	22000	6	18.928	157.4	soil
-sample_soil_1	22000	7	19.31	158.1	soil
-sample_soil_1	22000	8	18.256	161.2	soil
-sample_soil_1	22000	9	19.407	156.1	soil
-sample_soil_1	30000	0	19.802	151.2	soil
-sample_soil_1	30000	1	19.136	157.4	soil
-sample_soil_1	30000	2	19.391	147.2	soil
-sample_soil_1	30000	3	19.369	164.6	soil
-sample_soil_1	30000	4	18.763	155.5	soil
-sample_soil_1	30000	5	19.319	154.9	soil
-sample_soil_1	30000	6	19.982	159.0	soil
-sample_soil_1	30000	7	19.27	156.6	soil
-sample_soil_1	30000	8	19.175	160.0	soil
-sample_soil_1	30000	9	19.772	149.5	soil
-sample_soil_1	40000	0	19.289	162.8	soil
-sample_soil_1	40000	1	19.529	158.5	soil
-sample_soil_1	40000	2	19.333	153.4	soil
-sample_soil_1	40000	3	19.319	155.1	soil
-sample_soil_1	40000	4	19.516	161.2	soil
-sample_soil_1	40000	5	19.455	156.5	soil
-sample_soil_1	40000	6	19.711	166.5	soil
-sample_soil_1	40000	7	19.698	158.7	soil
-sample_soil_1	40000	8	19.433	152.4	soil
-sample_soil_1	40000	9	19.33	157.8	soil
-sample_soil_1	50000	0	18.852	157.0	soil
-sample_soil_1	50000	1	20.268	156.5	soil
-sample_soil_1	50000	2	19.397	159.0	soil
-sample_soil_1	50000	3	18.943	154.6	soil
-sample_soil_1	50000	4	19.87	150.0	soil
-sample_soil_1	50000	5	19.332	160.0	soil
-sample_soil_1	50000	6	19.975	152.8	soil
-sample_soil_1	50000	7	18.978	152.8	soil
-sample_soil_1	50000	8	20.209	158.9	soil
-sample_soil_1	50000	9	19.903	157.7	soil
-sample_soil_2	500	0	2.349	14.9	soil
-sample_soil_2	500	1	1.83	11.7	soil
-sample_soil_2	500	2	2.649	14.1	soil
-sample_soil_2	500	3	2.45	13.0	soil
-sample_soil_2	500	4	2.06	15.4	soil
-sample_soil_2	500	5	1.908	18.6	soil
-sample_soil_2	500	6	1.727	21.3	soil
-sample_soil_2	500	7	1.71	19.4	soil
-sample_soil_2	500	8	1.628	23.9	soil
-sample_soil_2	500	9	2.078	14.5	soil
-sample_soil_2	1000	0	4.082	34.3	soil
-sample_soil_2	1000	1	3.988	30.7	soil
-sample_soil_2	1000	2	3.896	37.5	soil
-sample_soil_2	1000	3	4.39	29.0	soil
-sample_soil_2	1000	4	3.925	35.5	soil
-sample_soil_2	1000	5	4.556	30.0	soil
-sample_soil_2	1000	6	4.713	37.0	soil
-sample_soil_2	1000	7	4.224	29.3	soil
-sample_soil_2	1000	8	4.388	39.2	soil
-sample_soil_2	1000	9	4.115	32.4	soil
-sample_soil_2	2000	0	7.54	56.0	soil
-sample_soil_2	2000	1	7.562	62.3	soil
-sample_soil_2	2000	2	7.841	59.1	soil
-sample_soil_2	2000	3	7.964	59.1	soil
-sample_soil_2	2000	4	7.597	61.9	soil
-sample_soil_2	2000	5	7.009	65.2	soil
-sample_soil_2	2000	6	7.431	52.8	soil
-sample_soil_2	2000	7	7.628	56.7	soil
-sample_soil_2	2000	8	7.258	61.0	soil
-sample_soil_2	2000	9	7.151	47.0	soil
-sample_soil_2	4000	0	12.891	98.7	soil
-sample_soil_2	4000	1	12.292	103.5	soil
-sample_soil_2	4000	2	12.218	100.1	soil
-sample_soil_2	4000	3	11.875	95.9	soil
-sample_soil_2	4000	4	13.469	101.1	soil
-sample_soil_2	4000	5	12.499	104.9	soil
-sample_soil_2	4000	6	12.734	101.6	soil
-sample_soil_2	4000	7	12.36	97.5	soil
-sample_soil_2	4000	8	13.272	92.1	soil
-sample_soil_2	4000	9	12.374	100.5	soil
-sample_soil_2	6000	0	15.33	119.8	soil
-sample_soil_2	6000	1	15.995	125.5	soil
-sample_soil_2	6000	2	15.392	125.3	soil
-sample_soil_2	6000	3	15.806	131.9	soil
-sample_soil_2	6000	4	15.799	117.8	soil
-sample_soil_2	6000	5	16.074	125.4	soil
-sample_soil_2	6000	6	15.407	122.2	soil
-sample_soil_2	6000	7	15.19	127.0	soil
-sample_soil_2	6000	8	15.769	122.5	soil
-sample_soil_2	6000	9	15.153	126.7	soil
-sample_soil_2	8000	0	17.448	141.1	soil
-sample_soil_2	8000	1	17.939	148.5	soil
-sample_soil_2	8000	2	17.051	140.1	soil
-sample_soil_2	8000	3	17.675	145.3	soil
-sample_soil_2	8000	4	18.063	140.5	soil
-sample_soil_2	8000	5	17.969	132.4	soil
-sample_soil_2	8000	6	17.378	143.0	soil
-sample_soil_2	8000	7	17.196	142.7	soil
-sample_soil_2	8000	8	17.545	140.4	soil
-sample_soil_2	8000	9	17.956	136.3	soil
-sample_soil_2	12000	0	20.066	160.9	soil
-sample_soil_2	12000	1	20.083	158.4	soil
-sample_soil_2	12000	2	19.789	159.1	soil
-sample_soil_2	12000	3	19.703	161.8	soil
-sample_soil_2	12000	4	19.631	158.2	soil
-sample_soil_2	12000	5	19.293	158.8	soil
-sample_soil_2	12000	6	20.796	158.6	soil
-sample_soil_2	12000	7	18.998	152.0	soil
-sample_soil_2	12000	8	19.475	158.2	soil
-sample_soil_2	12000	9	20.592	156.5	soil
-sample_soil_2	16000	0	20.905	170.8	soil
-sample_soil_2	16000	1	20.695	161.9	soil
-sample_soil_2	16000	2	20.789	164.4	soil
-sample_soil_2	16000	3	20.767	165.2	soil
-sample_soil_2	16000	4	20.495	165.0	soil
-sample_soil_2	16000	5	20.926	160.2	soil
-sample_soil_2	16000	6	21.381	161.4	soil
-sample_soil_2	16000	7	21.104	163.6	soil
-sample_soil_2	16000	8	21.041	166.5	soil
-sample_soil_2	16000	9	20.957	174.0	soil
-sample_soil_2	22000	0	21.158	171.1	soil
-sample_soil_2	22000	1	21.556	167.7	soil
-sample_soil_2	22000	2	21.347	170.4	soil
-sample_soil_2	22000	3	21.364	165.0	soil
-sample_soil_2	22000	4	21.816	169.8	soil
-sample_soil_2	22000	5	21.382	166.8	soil
-sample_soil_2	22000	6	20.923	159.0	soil
-sample_soil_2	22000	7	21.245	172.6	soil
-sample_soil_2	22000	8	21.222	170.5	soil
-sample_soil_2	22000	9	21.56	167.9	soil
-sample_soil_2	30000	0	21.59	171.6	soil
-sample_soil_2	30000	1	21.021	179.7	soil
-sample_soil_2	30000	2	21.322	168.8	soil
-sample_soil_2	30000	3	22.039	176.6	soil
-sample_soil_2	30000	4	22.158	182.0	soil
-sample_soil_2	30000	5	22.218	172.4	soil
-sample_soil_2	30000	6	20.956	166.1	soil
-sample_soil_2	30000	7	21.681	170.2	soil
-sample_soil_2	30000	8	21.313	174.8	soil
-sample_soil_2	30000	9	22.151	170.1	soil
-sample_soil_2	40000	0	21.975	172.7	soil
-sample_soil_2	40000	1	22.081	174.9	soil
-sample_soil_2	40000	2	21.395	180.4	soil
-sample_soil_2	40000	3	21.109	175.3	soil
-sample_soil_2	40000	4	21.321	177.4	soil
-sample_soil_2	40000	5	20.973	176.6	soil
-sample_soil_2	40000	6	21.512	174.8	soil
-sample_soil_2	40000	7	21.774	171.9	soil
-sample_soil_2	40000	8	21.859	179.9	soil
-sample_soil_2	40000	9	21.442	169.7	soil
-sample_soil_2	50000	0	21.457	170.6	soil
-sample_soil_2	50000	1	20.811	177.7	soil
-sample_soil_2	50000	2	21.189	173.1	soil
-sample_soil_2	50000	3	21.248	177.4	soil
-sample_soil_2	50000	4	22.002	174.6	soil
-sample_soil_2	50000	5	20.885	176.9	soil
-sample_soil_2	50000	6	21.918	174.4	soil
-sample_soil_2	50000	7	21.364	169.4	soil
-sample_soil_2	50000	8	22.164	171.6	soil
-sample_soil_2	50000	9	22.255	168.6	soil
-sample_soil_3	500	0	0.694	7.1	soil
-sample_soil_3	500	1	1.901	10.2	soil
-sample_soil_3	500	2	2.458	17.0	soil
-sample_soil_3	500	3	1.75	11.7	soil
-sample_soil_3	500	4	1.523	10.7	soil
-sample_soil_3	500	5	1.739	14.2	soil
-sample_soil_3	500	6	1.466	15.7	soil
-sample_soil_3	500	7	0.918	15.4	soil
-sample_soil_3	500	8	1.659	13.1	soil
-sample_soil_3	500	9	1.948	13.2	soil
-sample_soil_3	1000	0	2.861	21.2	soil
-sample_soil_3	1000	1	3.339	24.8	soil
-sample_soil_3	1000	2	3.99	28.3	soil
-sample_soil_3	1000	3	2.507	30.1	soil
-sample_soil_3	1000	4	3.658	33.7	soil
-sample_soil_3	1000	5	3.503	18.7	soil
-sample_soil_3	1000	6	3.157	27.5	soil
-sample_soil_3	1000	7	3.706	24.5	soil
-sample_soil_3	1000	8	3.164	23.0	soil
-sample_soil_3	1000	9	3.381	26.8	soil
-sample_soil_3	2000	0	5.89	48.6	soil
-sample_soil_3	2000	1	6.179	41.5	soil
-sample_soil_3	2000	2	6.182	45.6	soil
-sample_soil_3	2000	3	5.744	45.9	soil
-sample_soil_3	2000	4	6.731	45.4	soil
-sample_soil_3	2000	5	5.686	52.5	soil
-sample_soil_3	2000	6	5.539	47.5	soil
-sample_soil_3	2000	7	5.005	52.4	soil
-sample_soil_3	2000	8	5.407	43.3	soil
-sample_soil_3	2000	9	6.392	44.3	soil
-sample_soil_3	4000	0	9.783	75.4	soil
-sample_soil_3	4000	1	9.95	82.7	soil
-sample_soil_3	4000	2	9.649	82.5	soil
-sample_soil_3	4000	3	9.928	73.4	soil
-sample_soil_3	4000	4	9.727	82.9	soil
-sample_soil_3	4000	5	9.788	78.2	soil
-sample_soil_3	4000	6	10.267	72.2	soil
-sample_soil_3	4000	7	9.974	83.3	soil
-sample_soil_3	4000	8	9.737	69.6	soil
-sample_soil_3	4000	9	10.033	71.4	soil
-sample_soil_3	6000	0	12.466	97.9	soil
-sample_soil_3	6000	1	12.402	97.4	soil
-sample_soil_3	6000	2	12.194	94.8	soil
-sample_soil_3	6000	3	12.79	99.6	soil
-sample_soil_3	6000	4	12.679	98.1	soil
-sample_soil_3	6000	5	11.943	100.9	soil
-sample_soil_3	6000	6	12.342	101.5	soil
-sample_soil_3	6000	7	12.179	97.5	soil
-sample_soil_3	6000	8	12.676	99.2	soil
-sample_soil_3	6000	9	11.582	102.4	soil
-sample_soil_3	8000	0	14.385	115.7	soil
-sample_soil_3	8000	1	14.611	115.2	soil
-sample_soil_3	8000	2	14.104	124.2	soil
-sample_soil_3	8000	3	14.064	115.4	soil
-sample_soil_3	8000	4	14.454	105.9	soil
-sample_soil_3	8000	5	14.457	112.8	soil
-sample_soil_3	8000	6	13.867	109.9	soil
-sample_soil_3	8000	7	14.474	110.1	soil
-sample_soil_3	8000	8	14.041	107.4	soil
-sample_soil_3	8000	9	14.079	107.2	soil
-sample_soil_3	12000	0	15.666	132.1	soil
-sample_soil_3	12000	1	16.321	129.4	soil
-sample_soil_3	12000	2	15.478	123.2	soil
-sample_soil_3	12000	3	15.869	126.8	soil
-sample_soil_3	12000	4	15.937	139.6	soil
-sample_soil_3	12000	5	15.955	124.5	soil
-sample_soil_3	12000	6	16.426	134.8	soil
-sample_soil_3	12000	7	15.896	128.8	soil
-sample_soil_3	12000	8	15.308	132.2	soil
-sample_soil_3	12000	9	16.103	124.4	soil
-sample_soil_3	16000	0	16.156	133.8	soil
-sample_soil_3	16000	1	17.397	142.3	soil
-sample_soil_3	16000	2	16.729	143.1	soil
-sample_soil_3	16000	3	16.326	128.9	soil
-sample_soil_3	16000	4	16.631	138.0	soil
-sample_soil_3	16000	5	16.687	133.9	soil
-sample_soil_3	16000	6	16.074	140.4	soil
-sample_soil_3	16000	7	17.716	145.7	soil
-sample_soil_3	16000	8	17.099	137.0	soil
-sample_soil_3	16000	9	17.024	140.0	soil
-sample_soil_3	22000	0	17.568	146.8	soil
-sample_soil_3	22000	1	17.615	140.7	soil
-sample_soil_3	22000	2	18.275	138.4	soil
-sample_soil_3	22000	3	17.808	139.3	soil
-sample_soil_3	22000	4	17.537	139.3	soil
-sample_soil_3	22000	5	17.756	141.9	soil
-sample_soil_3	22000	6	17.631	144.2	soil
-sample_soil_3	22000	7	16.747	139.6	soil
-sample_soil_3	22000	8	17.002	138.5	soil
-sample_soil_3	22000	9	18.042	138.4	soil
-sample_soil_3	30000	0	18.844	142.7	soil
-sample_soil_3	30000	1	17.933	143.2	soil
-sample_soil_3	30000	2	17.554	146.4	soil
-sample_soil_3	30000	3	17.901	139.9	soil
-sample_soil_3	30000	4	17.966	143.8	soil
-sample_soil_3	30000	5	16.966	145.5	soil
-sample_soil_3	30000	6	18.1	143.9	soil
-sample_soil_3	30000	7	17.918	145.0	soil
-sample_soil_3	30000	8	17.74	137.5	soil
-sample_soil_3	30000	9	17.574	136.2	soil
-sample_soil_3	40000	0	18.246	139.1	soil
-sample_soil_3	40000	1	17.662	147.4	soil
-sample_soil_3	40000	2	19.422	143.2	soil
-sample_soil_3	40000	3	17.521	141.4	soil
-sample_soil_3	40000	4	17.658	139.9	soil
-sample_soil_3	40000	5	18.408	139.7	soil
-sample_soil_3	40000	6	17.321	144.1	soil
-sample_soil_3	40000	7	18.352	147.4	soil
-sample_soil_3	40000	8	17.419	136.5	soil
-sample_soil_3	40000	9	18.071	145.8	soil
-sample_soil_3	50000	0	17.71	139.3	soil
-sample_soil_3	50000	1	18.154	149.2	soil
-sample_soil_3	50000	2	18.419	145.4	soil
-sample_soil_3	50000	3	17.723	144.0	soil
-sample_soil_3	50000	4	17.747	142.2	soil
-sample_soil_3	50000	5	17.452	134.2	soil
-sample_soil_3	50000	6	17.959	141.4	soil
-sample_soil_3	50000	7	17.693	146.8	soil
-sample_soil_3	50000	8	18.141	138.3	soil
-sample_soil_3	50000	9	17.659	140.6	soil
-sample_soil_4	500	0	1.837	17.6	soil
-sample_soil_4	500	1	1.554	14.2	soil
-sample_soil_4	500	2	1.66	16.1	soil
-sample_soil_4	500	3	1.237	14.9	soil
-sample_soil_4	500	4	2.184	16.5	soil
-sample_soil_4	500	5	1.686	15.8	soil
-sample_soil_4	500	6	1.772	11.9	soil
-sample_soil_4	500	7	2.832	18.3	soil
-sample_soil_4	500	8	1.861	18.8	soil
-sample_soil_4	500	9	3.053	13.9	soil
-sample_soil_4	1000	0	3.226	32.9	soil
-sample_soil_4	1000	1	4.626	31.6	soil
-sample_soil_4	1000	2	3.807	26.8	soil
-sample_soil_4	1000	3	3.594	29.6	soil
-sample_soil_4	1000	4	3.604	30.2	soil
-sample_soil_4	1000	5	3.699	31.6	soil
-sample_soil_4	1000	6	3.32	29.8	soil
-sample_soil_4	1000	7	3.385	30.4	soil
-sample_soil_4	1000	8	3.598	31.0	soil
-sample_soil_4	1000	9	3.018	25.9	soil
-sample_soil_4	2000	0	6.276	51.5	soil
-sample_soil_4	2000	1	5.932	50.2	soil
-sample_soil_4	2000	2	6.022	52.2	soil
-sample_soil_4	2000	3	6.132	49.7	soil
-sample_soil_4	2000	4	6.422	52.7	soil
-sample_soil_4	2000	5	6.932	48.1	soil
-sample_soil_4	2000	6	6.456	48.8	soil
-sample_soil_4	2000	7	6.64	54.1	soil
-sample_soil_4	2000	8	6.644	43.2	soil
-sample_soil_4	2000	9	6.558	51.3	soil
-sample_soil_4	4000	0	10.963	90.5	soil
-sample_soil_4	4000	1	10.981	81.4	soil
-sample_soil_4	4000	2	10.597	78.1	soil
-sample_soil_4	4000	3	11.386	82.8	soil
-sample_soil_4	4000	4	10.909	88.9	soil
-sample_soil_4	4000	5	10.773	84.0	soil
-sample_soil_4	4000	6	11.02	84.4	soil
-sample_soil_4	4000	7	10.484	88.9	soil
-sample_soil_4	4000	8	11.175	82.6	soil
-sample_soil_4	4000	9	10.119	87.0	soil
-sample_soil_4	6000	0	14.224	112.2	soil
-sample_soil_4	6000	1	14.245	117.0	soil
-sample_soil_4	6000	2	13.984	108.2	soil
-sample_soil_4	6000	3	13.792	109.4	soil
-sample_soil_4	6000	4	13.61	111.0	soil
-sample_soil_4	6000	5	13.912	106.2	soil
-sample_soil_4	6000	6	13.846	119.0	soil
-sample_soil_4	6000	7	13.46	107.6	soil
-sample_soil_4	6000	8	14.456	114.2	soil
-sample_soil_4	6000	9	14.322	111.2	soil
-sample_soil_4	8000	0	15.472	127.3	soil
-sample_soil_4	8000	1	15.728	127.2	soil
-sample_soil_4	8000	2	15.633	128.3	soil
-sample_soil_4	8000	3	16.296	128.3	soil
-sample_soil_4	8000	4	15.779	121.0	soil
-sample_soil_4	8000	5	16.065	129.5	soil
-sample_soil_4	8000	6	15.494	126.5	soil
-sample_soil_4	8000	7	16.601	125.1	soil
-sample_soil_4	8000	8	16.103	127.6	soil
-sample_soil_4	8000	9	15.893	128.9	soil
-sample_soil_4	12000	0	18.186	143.4	soil
-sample_soil_4	12000	1	18.273	145.6	soil
-sample_soil_4	12000	2	19.093	150.8	soil
-sample_soil_4	12000	3	18.625	147.0	soil
-sample_soil_4	12000	4	17.366	151.8	soil
-sample_soil_4	12000	5	18.566	147.6	soil
-sample_soil_4	12000	6	18.151	140.2	soil
-sample_soil_4	12000	7	17.876	157.6	soil
-sample_soil_4	12000	8	18.256	147.7	soil
-sample_soil_4	12000	9	17.939	142.4	soil
-sample_soil_4	16000	0	19.501	147.2	soil
-sample_soil_4	16000	1	19.636	157.0	soil
-sample_soil_4	16000	2	20.055	151.6	soil
-sample_soil_4	16000	3	19.388	160.4	soil
-sample_soil_4	16000	4	19.528	160.2	soil
-sample_soil_4	16000	5	19.628	152.1	soil
-sample_soil_4	16000	6	19.942	153.7	soil
-sample_soil_4	16000	7	19.098	157.7	soil
-sample_soil_4	16000	8	19.176	157.8	soil
-sample_soil_4	16000	9	19.613	154.1	soil
-sample_soil_4	22000	0	20.245	166.3	soil
-sample_soil_4	22000	1	20.265	161.3	soil
-sample_soil_4	22000	2	20.749	160.9	soil
-sample_soil_4	22000	3	19.809	168.4	soil
-sample_soil_4	22000	4	20.114	161.0	soil
-sample_soil_4	22000	5	20.198	161.0	soil
-sample_soil_4	22000	6	20.817	165.5	soil
-sample_soil_4	22000	7	20.424	170.0	soil
-sample_soil_4	22000	8	20.517	166.0	soil
-sample_soil_4	22000	9	20.132	160.8	soil
-sample_soil_4	30000	0	20.019	162.0	soil
-sample_soil_4	30000	1	20.014	165.0	soil
-sample_soil_4	30000	2	19.537	161.9	soil
-sample_soil_4	30000	3	20.214	158.8	soil
-sample_soil_4	30000	4	20.714	166.4	soil
-sample_soil_4	30000	5	19.497	158.7	soil
-sample_soil_4	30000	6	20.308	164.1	soil
-sample_soil_4	30000	7	20.86	167.4	soil
-sample_soil_4	30000	8	20.692	165.3	soil
-sample_soil_4	30000	9	21.448	165.1	soil
-sample_soil_4	40000	0	20.473	162.1	soil
-sample_soil_4	40000	1	20.851	165.9	soil
-sample_soil_4	40000	2	20.245	167.0	soil
-sample_soil_4	40000	3	20.107	165.7	soil
-sample_soil_4	40000	4	20.819	168.9	soil
-sample_soil_4	40000	5	20.796	164.0	soil
-sample_soil_4	40000	6	21.056	152.8	soil
-sample_soil_4	40000	7	20.185	168.9	soil
-sample_soil_4	40000	8	19.909	169.6	soil
-sample_soil_4	40000	9	20.6	162.7	soil
-sample_soil_4	50000	0	20.04	161.4	soil
-sample_soil_4	50000	1	20.42	165.7	soil
-sample_soil_4	50000	2	20.61	159.2	soil
-sample_soil_4	50000	3	20.105	163.7	soil
-sample_soil_4	50000	4	20.518	169.1	soil
-sample_soil_4	50000	5	21.726	166.9	soil
-sample_soil_4	50000	6	20.212	175.0	soil
-sample_soil_4	50000	7	20.586	164.7	soil
-sample_soil_4	50000	8	20.349	164.3	soil
-sample_soil_4	50000	9	20.201	171.0	soil
-sample_soil_5	500	0	2.325	14.9	soil
-sample_soil_5	500	1	1.833	17.4	soil
-sample_soil_5	500	2	2.442	20.3	soil
-sample_soil_5	500	3	1.69	18.7	soil
-sample_soil_5	500	4	1.624	20.5	soil
-sample_soil_5	500	5	2.426	13.7	soil
-sample_soil_5	500	6	1.582	10.3	soil
-sample_soil_5	500	7	2.195	6.4	soil
-sample_soil_5	500	8	2.071	15.6	soil
-sample_soil_5	500	9	1.86	8.0	soil
-sample_soil_5	1000	0	3.815	32.7	soil
-sample_soil_5	1000	1	2.797	29.6	soil
-sample_soil_5	1000	2	4.288	30.8	soil
-sample_soil_5	1000	3	3.634	31.6	soil
-sample_soil_5	1000	4	3.0	29.0	soil
-sample_soil_5	1000	5	3.689	29.6	soil
-sample_soil_5	1000	6	3.371	30.2	soil
-sample_soil_5	1000	7	3.926	20.2	soil
-sample_soil_5	1000	8	3.374	36.9	soil
-sample_soil_5	1000	9	4.016	30.1	soil
-sample_soil_5	2000	0	6.596	55.0	soil
-sample_soil_5	2000	1	6.238	49.7	soil
-sample_soil_5	2000	2	7.385	47.6	soil
-sample_soil_5	2000	3	6.717	47.6	soil
-sample_soil_5	2000	4	6.136	52.4	soil
-sample_soil_5	2000	5	6.191	60.3	soil
-sample_soil_5	2000	6	6.699	56.3	soil
-sample_soil_5	2000	7	6.909	51.0	soil
-sample_soil_5	2000	8	6.27	47.1	soil
-sample_soil_5	2000	9	6.349	48.5	soil
-sample_soil_5	4000	0	11.088	86.7	soil
-sample_soil_5	4000	1	9.792	90.9	soil
-sample_soil_5	4000	2	10.782	84.4	soil
-sample_soil_5	4000	3	10.92	83.2	soil
-sample_soil_5	4000	4	11.355	89.5	soil
-sample_soil_5	4000	5	11.018	90.7	soil
-sample_soil_5	4000	6	10.663	91.4	soil
-sample_soil_5	4000	7	10.358	84.3	soil
-sample_soil_5	4000	8	10.255	89.5	soil
-sample_soil_5	4000	9	10.937	94.0	soil
-sample_soil_5	6000	0	14.24	110.0	soil
-sample_soil_5	6000	1	13.766	108.7	soil
-sample_soil_5	6000	2	13.99	114.5	soil
-sample_soil_5	6000	3	13.93	112.6	soil
-sample_soil_5	6000	4	12.978	107.2	soil
-sample_soil_5	6000	5	14.264	113.5	soil
-sample_soil_5	6000	6	14.361	102.5	soil
-sample_soil_5	6000	7	13.661	107.8	soil
-sample_soil_5	6000	8	13.567	112.1	soil
-sample_soil_5	6000	9	14.099	112.6	soil
-sample_soil_5	8000	0	15.665	130.3	soil
-sample_soil_5	8000	1	16.001	133.4	soil
-sample_soil_5	8000	2	16.166	129.9	soil
-sample_soil_5	8000	3	16.425	131.7	soil
-sample_soil_5	8000	4	16.303	129.9	soil
-sample_soil_5	8000	5	15.843	125.0	soil
-sample_soil_5	8000	6	15.898	125.5	soil
-sample_soil_5	8000	7	16.383	131.5	soil
-sample_soil_5	8000	8	15.48	121.8	soil
-sample_soil_5	8000	9	16.322	116.9	soil
-sample_soil_5	12000	0	17.278	143.9	soil
-sample_soil_5	12000	1	18.41	144.6	soil
-sample_soil_5	12000	2	17.51	137.4	soil
-sample_soil_5	12000	3	17.643	146.6	soil
-sample_soil_5	12000	4	17.543	141.7	soil
-sample_soil_5	12000	5	18.241	144.9	soil
-sample_soil_5	12000	6	17.596	141.9	soil
-sample_soil_5	12000	7	17.465	142.0	soil
-sample_soil_5	12000	8	17.34	143.8	soil
-sample_soil_5	12000	9	17.674	141.1	soil
-sample_soil_5	16000	0	18.62	156.4	soil
-sample_soil_5	16000	1	19.1	157.5	soil
-sample_soil_5	16000	2	18.878	153.5	soil
-sample_soil_5	16000	3	19.132	158.3	soil
-sample_soil_5	16000	4	18.466	154.1	soil
-sample_soil_5	16000	5	19.118	147.8	soil
-sample_soil_5	16000	6	18.601	152.0	soil
-sample_soil_5	16000	7	18.279	152.0	soil
-sample_soil_5	16000	8	18.52	145.2	soil
-sample_soil_5	16000	9	18.425	151.7	soil
-sample_soil_5	22000	0	19.938	153.4	soil
-sample_soil_5	22000	1	19.972	159.5	soil
-sample_soil_5	22000	2	19.792	157.9	soil
-sample_soil_5	22000	3	19.398	155.9	soil
-sample_soil_5	22000	4	19.211	153.6	soil
-sample_soil_5	22000	5	19.27	161.0	soil
-sample_soil_5	22000	6	19.027	158.8	soil
-sample_soil_5	22000	7	19.631	154.6	soil
-sample_soil_5	22000	8	19.413	155.5	soil
-sample_soil_5	22000	9	18.752	158.2	soil
-sample_soil_5	30000	0	19.099	151.1	soil
-sample_soil_5	30000	1	19.868	159.7	soil
-sample_soil_5	30000	2	19.981	151.5	soil
-sample_soil_5	30000	3	20.867	165.0	soil
-sample_soil_5	30000	4	20.495	164.1	soil
-sample_soil_5	30000	5	20.415	157.2	soil
-sample_soil_5	30000	6	19.253	160.8	soil
-sample_soil_5	30000	7	19.717	159.6	soil
-sample_soil_5	30000	8	19.039	156.9	soil
-sample_soil_5	30000	9	19.434	160.5	soil
-sample_soil_5	40000	0	20.099	163.4	soil
-sample_soil_5	40000	1	19.753	155.1	soil
-sample_soil_5	40000	2	19.877	160.1	soil
-sample_soil_5	40000	3	19.588	159.4	soil
-sample_soil_5	40000	4	19.384	155.1	soil
-sample_soil_5	40000	5	18.896	160.8	soil
-sample_soil_5	40000	6	20.022	157.8	soil
-sample_soil_5	40000	7	19.715	162.5	soil
-sample_soil_5	40000	8	19.899	157.5	soil
-sample_soil_5	40000	9	20.895	150.4	soil
-sample_soil_5	50000	0	19.842	159.2	soil
-sample_soil_5	50000	1	19.424	154.7	soil
-sample_soil_5	50000	2	19.691	159.0	soil
-sample_soil_5	50000	3	19.847	152.3	soil
-sample_soil_5	50000	4	20.854	157.1	soil
-sample_soil_5	50000	5	19.704	162.4	soil
-sample_soil_5	50000	6	19.339	161.0	soil
-sample_soil_5	50000	7	20.055	163.8	soil
-sample_soil_5	50000	8	19.378	161.0	soil
-sample_soil_5	50000	9	20.706	165.2	soil
-sample_soil_6	500	0	1.766	13.2	soil
-sample_soil_6	500	1	2.546	21.5	soil
-sample_soil_6	500	2	1.385	14.5	soil
-sample_soil_6	500	3	0.929	11.9	soil
-sample_soil_6	500	4	1.608	15.6	soil
-sample_soil_6	500	5	1.643	8.1	soil
-sample_soil_6	500	6	2.042	14.8	soil
-sample_soil_6	500	7	1.254	14.9	soil
-sample_soil_6	500	8	1.793	12.8	soil
-sample_soil_6	500	9	2.173	12.9	soil
-sample_soil_6	1000	0	2.882	20.9	soil
-sample_soil_6	1000	1	3.172	29.6	soil
-sample_soil_6	1000	2	3.009	23.0	soil
-sample_soil_6	1000	3	3.197	31.0	soil
-sample_soil_6	1000	4	3.749	21.0	soil
-sample_soil_6	1000	5	2.567	22.7	soil
-sample_soil_6	1000	6	3.248	24.2	soil
-sample_soil_6	1000	7	3.204	24.2	soil
-sample_soil_6	1000	8	3.083	25.0	soil
-sample_soil_6	1000	9	3.063	29.7	soil
-sample_soil_6	2000	0	6.845	44.2	soil
-sample_soil_6	2000	1	5.718	50.9	soil
-sample_soil_6	2000	2	5.273	40.9	soil
-sample_soil_6	2000	3	6.227	43.3	soil
-sample_soil_6	2000	4	6.077	46.7	soil
-sample_soil_6	2000	5	4.799	49.7	soil
-sample_soil_6	2000	6	6.339	50.3	soil
-sample_soil_6	2000	7	5.785	47.4	soil
-sample_soil_6	2000	8	5.64	55.0	soil
-sample_soil_6	2000	9	5.563	39.6	soil
-sample_soil_6	4000	0	9.36	81.9	soil
-sample_soil_6	4000	1	10.041	80.2	soil
-sample_soil_6	4000	2	10.656	75.9	soil
-sample_soil_6	4000	3	9.733	82.7	soil
-sample_soil_6	4000	4	10.505	80.6	soil
-sample_soil_6	4000	5	10.518	75.3	soil
-sample_soil_6	4000	6	8.767	82.0	soil
-sample_soil_6	4000	7	9.499	84.3	soil
-sample_soil_6	4000	8	10.006	75.4	soil
-sample_soil_6	4000	9	10.332	75.2	soil
-sample_soil_6	6000	0	12.27	105.7	soil
-sample_soil_6	6000	1	12.44	103.1	soil
-sample_soil_6	6000	2	12.132	103.7	soil
-sample_soil_6	6000	3	13.25	98.8	soil
-sample_soil_6	6000	4	12.356	98.0	soil
-sample_soil_6	6000	5	12.543	110.1	soil
-sample_soil_6	6000	6	13.097	93.8	soil
-sample_soil_6	6000	7	13.143	94.3	soil
-sample_soil_6	6000	8	12.802	96.5	soil
-sample_soil_6	6000	9	12.411	106.4	soil
-sample_soil_6	8000	0	13.828	115.6	soil
-sample_soil_6	8000	1	13.347	104.9	soil
-sample_soil_6	8000	2	13.972	110.1	soil
-sample_soil_6	8000	3	14.103	112.5	soil
-sample_soil_6	8000	4	14.139	114.2	soil
-sample_soil_6	8000	5	14.404	117.4	soil
-sample_soil_6	8000	6	14.413	115.8	soil
-sample_soil_6	8000	7	14.61	113.0	soil
-sample_soil_6	8000	8	13.581	115.8	soil
-sample_soil_6	8000	9	13.933	117.4	soil
-sample_soil_6	12000	0	16.323	126.2	soil
-sample_soil_6	12000	1	15.558	121.7	soil
-sample_soil_6	12000	2	15.437	127.9	soil
-sample_soil_6	12000	3	15.909	130.4	soil
-sample_soil_6	12000	4	15.754	122.3	soil
-sample_soil_6	12000	5	16.318	129.1	soil
-sample_soil_6	12000	6	16.248	118.3	soil
-sample_soil_6	12000	7	15.529	125.6	soil
-sample_soil_6	12000	8	16.153	129.1	soil
-sample_soil_6	12000	9	15.966	125.4	soil
-sample_soil_6	16000	0	16.959	126.5	soil
-sample_soil_6	16000	1	16.333	137.9	soil
-sample_soil_6	16000	2	16.682	129.4	soil
-sample_soil_6	16000	3	16.666	136.4	soil
-sample_soil_6	16000	4	16.625	139.9	soil
-sample_soil_6	16000	5	16.531	143.3	soil
-sample_soil_6	16000	6	16.798	139.2	soil
-sample_soil_6	16000	7	16.363	129.5	soil
-sample_soil_6	16000	8	16.491	132.1	soil
-sample_soil_6	16000	9	16.586	128.8	soil
-sample_soil_6	22000	0	16.442	139.9	soil
-sample_soil_6	22000	1	16.763	132.8	soil
-sample_soil_6	22000	2	16.576	130.3	soil
-sample_soil_6	22000	3	16.777	138.4	soil
-sample_soil_6	22000	4	16.626	135.1	soil
-sample_soil_6	22000	5	16.848	133.1	soil
-sample_soil_6	22000	6	16.97	135.8	soil
-sample_soil_6	22000	7	16.247	132.9	soil
-sample_soil_6	22000	8	16.839	138.7	soil
-sample_soil_6	22000	9	16.806	143.1	soil
-sample_soil_6	30000	0	16.045	138.8	soil
-sample_soil_6	30000	1	17.252	137.8	soil
-sample_soil_6	30000	2	17.234	135.4	soil
-sample_soil_6	30000	3	16.706	136.5	soil
-sample_soil_6	30000	4	17.158	139.4	soil
-sample_soil_6	30000	5	17.449	134.4	soil
-sample_soil_6	30000	6	16.963	141.2	soil
-sample_soil_6	30000	7	17.088	133.7	soil
-sample_soil_6	30000	8	17.39	134.9	soil
-sample_soil_6	30000	9	17.068	135.9	soil
-sample_soil_6	40000	0	17.859	137.3	soil
-sample_soil_6	40000	1	17.339	128.8	soil
-sample_soil_6	40000	2	16.53	137.2	soil
-sample_soil_6	40000	3	17.181	136.3	soil
-sample_soil_6	40000	4	17.24	137.8	soil
-sample_soil_6	40000	5	17.553	142.7	soil
-sample_soil_6	40000	6	16.897	132.8	soil
-sample_soil_6	40000	7	16.731	140.9	soil
-sample_soil_6	40000	8	17.109	146.4	soil
-sample_soil_6	40000	9	16.677	144.1	soil
-sample_soil_6	50000	0	17.037	134.7	soil
-sample_soil_6	50000	1	17.534	140.2	soil
-sample_soil_6	50000	2	17.116	138.8	soil
-sample_soil_6	50000	3	16.982	134.8	soil
-sample_soil_6	50000	4	16.483	136.5	soil
-sample_soil_6	50000	5	17.15	138.1	soil
-sample_soil_6	50000	6	16.729	137.2	soil
-sample_soil_6	50000	7	17.014	127.7	soil
-sample_soil_6	50000	8	15.926	138.7	soil
-sample_soil_6	50000	9	16.852	142.5	soil
+sample_id	depth	iter	faith_pd	observed_features	shannon	habitat
+sample_gut_1	500	0	2.225	7.6	0.743	gut
+sample_gut_1	500	1	1.44	12.4	0.721	gut
+sample_gut_1	500	2	1.734	14.8	0.756	gut
+sample_gut_1	500	3	1.387	16.7	0.69	gut
+sample_gut_1	500	4	1.895	13.1	0.839	gut
+sample_gut_1	500	5	3.02	7.3	0.837	gut
+sample_gut_1	500	6	2.042	12.6	0.691	gut
+sample_gut_1	500	7	1.661	14.1	0.675	gut
+sample_gut_1	500	8	2.384	13.3	0.801	gut
+sample_gut_1	500	9	2.062	25.7	0.678	gut
+sample_gut_1	1000	0	3.957	21.5	1.421	gut
+sample_gut_1	1000	1	3.046	28.5	1.542	gut
+sample_gut_1	1000	2	3.885	35.8	1.472	gut
+sample_gut_1	1000	3	3.152	32.7	1.465	gut
+sample_gut_1	1000	4	3.292	23.6	1.408	gut
+sample_gut_1	1000	5	3.651	36.9	1.499	gut
+sample_gut_1	1000	6	3.597	34.0	1.467	gut
+sample_gut_1	1000	7	4.093	33.4	1.472	gut
+sample_gut_1	1000	8	3.369	32.2	1.473	gut
+sample_gut_1	1000	9	3.224	28.3	1.377	gut
+sample_gut_1	2000	0	6.453	54.9	2.609	gut
+sample_gut_1	2000	1	6.98	51.9	2.539	gut
+sample_gut_1	2000	2	6.575	53.0	2.574	gut
+sample_gut_1	2000	3	6.701	50.4	2.599	gut
+sample_gut_1	2000	4	6.731	52.6	2.554	gut
+sample_gut_1	2000	5	6.941	51.3	2.618	gut
+sample_gut_1	2000	6	6.521	54.1	2.495	gut
+sample_gut_1	2000	7	7.489	57.3	2.702	gut
+sample_gut_1	2000	8	7.452	59.3	2.735	gut
+sample_gut_1	2000	9	6.228	53.5	2.652	gut
+sample_gut_1	4000	0	12.004	93.7	4.342	gut
+sample_gut_1	4000	1	11.344	106.7	4.456	gut
+sample_gut_1	4000	2	11.803	91.0	4.313	gut
+sample_gut_1	4000	3	11.745	93.7	4.394	gut
+sample_gut_1	4000	4	11.877	97.5	4.484	gut
+sample_gut_1	4000	5	11.528	100.6	4.349	gut
+sample_gut_1	4000	6	11.376	93.9	4.481	gut
+sample_gut_1	4000	7	11.742	82.4	4.459	gut
+sample_gut_1	4000	8	11.7	103.6	4.331	gut
+sample_gut_1	4000	9	11.852	95.3	4.435	gut
+sample_gut_1	6000	0	15.524	119.6	5.599	gut
+sample_gut_1	6000	1	15.422	125.6	5.464	gut
+sample_gut_1	6000	2	15.7	124.0	5.556	gut
+sample_gut_1	6000	3	14.937	125.1	5.606	gut
+sample_gut_1	6000	4	15.308	125.8	5.562	gut
+sample_gut_1	6000	5	15.738	123.2	5.456	gut
+sample_gut_1	6000	6	15.808	126.3	5.52	gut
+sample_gut_1	6000	7	15.817	122.6	5.458	gut
+sample_gut_1	6000	8	15.59	122.3	5.551	gut
+sample_gut_1	6000	9	15.245	118.5	5.509	gut
+sample_gut_1	8000	0	18.759	148.4	6.249	gut
+sample_gut_1	8000	1	18.143	148.7	6.177	gut
+sample_gut_1	8000	2	18.277	145.0	6.402	gut
+sample_gut_1	8000	3	18.536	145.6	6.281	gut
+sample_gut_1	8000	4	17.943	144.7	6.287	gut
+sample_gut_1	8000	5	18.507	142.7	6.322	gut
+sample_gut_1	8000	6	18.498	148.9	6.339	gut
+sample_gut_1	8000	7	18.298	145.5	6.34	gut
+sample_gut_1	8000	8	18.611	153.8	6.382	gut
+sample_gut_1	8000	9	18.161	148.8	6.208	gut
+sample_gut_1	12000	0	22.177	175.3	7.093	gut
+sample_gut_1	12000	1	22.076	171.6	7.148	gut
+sample_gut_1	12000	2	21.929	178.2	6.985	gut
+sample_gut_1	12000	3	21.749	180.8	7.129	gut
+sample_gut_1	12000	4	22.241	175.6	7.133	gut
+sample_gut_1	12000	5	22.214	181.9	7.019	gut
+sample_gut_1	12000	6	21.7	175.6	7.151	gut
+sample_gut_1	12000	7	21.681	174.8	6.997	gut
+sample_gut_1	12000	8	21.911	177.2	7.046	gut
+sample_gut_1	12000	9	21.591	166.2	7.038	gut
+sample_gut_1	16000	0	23.942	194.7	7.504	gut
+sample_gut_1	16000	1	23.6	195.8	7.441	gut
+sample_gut_1	16000	2	23.602	198.4	7.459	gut
+sample_gut_1	16000	3	23.99	187.9	7.471	gut
+sample_gut_1	16000	4	23.114	197.4	7.392	gut
+sample_gut_1	16000	5	23.36	194.2	7.518	gut
+sample_gut_1	16000	6	23.602	181.4	7.517	gut
+sample_gut_1	16000	7	24.37	191.0	7.426	gut
+sample_gut_1	16000	8	24.132	195.7	7.402	gut
+sample_gut_1	16000	9	24.347	186.4	7.441	gut
+sample_gut_1	22000	0	24.958	201.2	7.716	gut
+sample_gut_1	22000	1	25.534	199.8	7.709	gut
+sample_gut_1	22000	2	24.975	207.1	7.644	gut
+sample_gut_1	22000	3	25.05	208.7	7.542	gut
+sample_gut_1	22000	4	25.382	202.3	7.523	gut
+sample_gut_1	22000	5	25.363	211.4	7.61	gut
+sample_gut_1	22000	6	25.879	207.7	7.636	gut
+sample_gut_1	22000	7	24.882	212.1	7.685	gut
+sample_gut_1	22000	8	25.318	206.3	7.47	gut
+sample_gut_1	22000	9	25.393	201.9	7.611	gut
+sample_gut_1	30000	0	25.642	200.8	7.732	gut
+sample_gut_1	30000	1	25.881	212.7	7.767	gut
+sample_gut_1	30000	2	25.5	211.1	7.716	gut
+sample_gut_1	30000	3	25.487	210.6	7.647	gut
+sample_gut_1	30000	4	26.362	207.0	7.637	gut
+sample_gut_1	30000	5	26.387	216.1	7.623	gut
+sample_gut_1	30000	6	25.685	211.8	7.823	gut
+sample_gut_1	30000	7	25.953	203.2	7.641	gut
+sample_gut_1	30000	8	26.059	205.4	7.621	gut
+sample_gut_1	30000	9	26.093	206.2	7.748	gut
+sample_gut_1	40000	0	26.957	208.4	7.601	gut
+sample_gut_1	40000	1	26.314	216.2	7.72	gut
+sample_gut_1	40000	2	26.433	206.7	7.64	gut
+sample_gut_1	40000	3	25.798	213.0	7.734	gut
+sample_gut_1	40000	4	25.596	209.1	7.695	gut
+sample_gut_1	40000	5	27.163	205.0	7.773	gut
+sample_gut_1	40000	6	26.548	217.9	7.673	gut
+sample_gut_1	40000	7	26.555	211.2	7.825	gut
+sample_gut_1	40000	8	27.113	205.2	7.644	gut
+sample_gut_1	40000	9	26.696	212.0	7.668	gut
+sample_gut_1	50000	0	27.014	206.9	7.85	gut
+sample_gut_1	50000	1	26.219	215.3	7.699	gut
+sample_gut_1	50000	2	25.94	216.1	7.667	gut
+sample_gut_1	50000	3	26.694	209.5	7.696	gut
+sample_gut_1	50000	4	26.273	209.2	7.726	gut
+sample_gut_1	50000	5	26.483	208.3	7.796	gut
+sample_gut_1	50000	6	26.05	210.8	7.75	gut
+sample_gut_1	50000	7	26.858	214.4	7.474	gut
+sample_gut_1	50000	8	26.139	204.3	7.835	gut
+sample_gut_1	50000	9	25.921	214.0	7.898	gut
+sample_gut_2	500	0	1.334	12.5	0.636	gut
+sample_gut_2	500	1	1.506	16.0	0.81	gut
+sample_gut_2	500	2	2.105	10.1	0.818	gut
+sample_gut_2	500	3	1.828	16.5	0.763	gut
+sample_gut_2	500	4	1.509	15.6	0.732	gut
+sample_gut_2	500	5	1.676	14.5	0.755	gut
+sample_gut_2	500	6	1.578	6.6	0.646	gut
+sample_gut_2	500	7	1.631	20.8	0.682	gut
+sample_gut_2	500	8	1.853	6.8	0.739	gut
+sample_gut_2	500	9	1.035	20.6	0.877	gut
+sample_gut_2	1000	0	3.352	25.3	1.429	gut
+sample_gut_2	1000	1	3.896	27.1	1.513	gut
+sample_gut_2	1000	2	4.078	27.9	1.428	gut
+sample_gut_2	1000	3	3.247	28.0	1.372	gut
+sample_gut_2	1000	4	3.585	27.5	1.283	gut
+sample_gut_2	1000	5	3.197	30.7	1.488	gut
+sample_gut_2	1000	6	3.032	32.7	1.543	gut
+sample_gut_2	1000	7	3.148	31.0	1.488	gut
+sample_gut_2	1000	8	3.413	27.6	1.47	gut
+sample_gut_2	1000	9	3.71	30.7	1.495	gut
+sample_gut_2	2000	0	6.38	59.6	2.767	gut
+sample_gut_2	2000	1	5.997	51.2	2.571	gut
+sample_gut_2	2000	2	6.413	54.0	2.712	gut
+sample_gut_2	2000	3	6.594	53.0	2.579	gut
+sample_gut_2	2000	4	6.653	51.1	2.749	gut
+sample_gut_2	2000	5	5.464	55.3	2.77	gut
+sample_gut_2	2000	6	6.641	56.9	2.61	gut
+sample_gut_2	2000	7	6.01	55.4	2.697	gut
+sample_gut_2	2000	8	6.578	53.0	2.593	gut
+sample_gut_2	2000	9	6.762	58.7	2.629	gut
+sample_gut_2	4000	0	11.541	92.0	4.35	gut
+sample_gut_2	4000	1	11.177	88.1	4.239	gut
+sample_gut_2	4000	2	10.698	88.3	4.269	gut
+sample_gut_2	4000	3	11.267	82.3	4.417	gut
+sample_gut_2	4000	4	11.55	83.3	4.324	gut
+sample_gut_2	4000	5	10.873	102.2	4.351	gut
+sample_gut_2	4000	6	11.245	90.9	4.438	gut
+sample_gut_2	4000	7	11.412	88.3	4.329	gut
+sample_gut_2	4000	8	11.436	89.2	4.484	gut
+sample_gut_2	4000	9	11.002	83.5	4.384	gut
+sample_gut_2	6000	0	15.162	119.2	5.612	gut
+sample_gut_2	6000	1	14.654	119.4	5.507	gut
+sample_gut_2	6000	2	14.63	117.7	5.502	gut
+sample_gut_2	6000	3	14.765	124.5	5.527	gut
+sample_gut_2	6000	4	14.485	114.7	5.402	gut
+sample_gut_2	6000	5	14.673	116.7	5.478	gut
+sample_gut_2	6000	6	14.423	120.9	5.603	gut
+sample_gut_2	6000	7	15.04	120.9	5.399	gut
+sample_gut_2	6000	8	14.418	124.9	5.505	gut
+sample_gut_2	6000	9	14.743	122.4	5.303	gut
+sample_gut_2	8000	0	17.434	132.0	6.324	gut
+sample_gut_2	8000	1	18.11	136.9	6.19	gut
+sample_gut_2	8000	2	17.877	137.0	6.186	gut
+sample_gut_2	8000	3	17.828	140.8	6.09	gut
+sample_gut_2	8000	4	17.088	132.8	6.23	gut
+sample_gut_2	8000	5	17.863	139.0	6.228	gut
+sample_gut_2	8000	6	17.388	139.0	6.263	gut
+sample_gut_2	8000	7	17.653	142.8	6.244	gut
+sample_gut_2	8000	8	18.599	143.0	6.065	gut
+sample_gut_2	8000	9	17.205	138.3	6.138	gut
+sample_gut_2	12000	0	20.972	158.5	7.188	gut
+sample_gut_2	12000	1	21.039	167.1	7.116	gut
+sample_gut_2	12000	2	21.011	165.1	6.973	gut
+sample_gut_2	12000	3	20.08	157.3	7.134	gut
+sample_gut_2	12000	4	21.203	164.1	7.157	gut
+sample_gut_2	12000	5	20.963	164.7	6.968	gut
+sample_gut_2	12000	6	20.8	162.4	7.047	gut
+sample_gut_2	12000	7	21.029	174.4	6.955	gut
+sample_gut_2	12000	8	19.459	162.2	7.013	gut
+sample_gut_2	12000	9	21.172	174.5	7.02	gut
+sample_gut_2	16000	0	22.866	183.3	7.439	gut
+sample_gut_2	16000	1	22.547	183.9	7.393	gut
+sample_gut_2	16000	2	23.408	182.6	7.411	gut
+sample_gut_2	16000	3	22.923	182.3	7.417	gut
+sample_gut_2	16000	4	21.868	185.6	7.308	gut
+sample_gut_2	16000	5	21.817	178.3	7.445	gut
+sample_gut_2	16000	6	23.332	187.2	7.367	gut
+sample_gut_2	16000	7	22.732	182.8	7.262	gut
+sample_gut_2	16000	8	22.679	184.9	7.37	gut
+sample_gut_2	16000	9	22.571	184.7	7.35	gut
+sample_gut_2	22000	0	24.116	191.5	7.712	gut
+sample_gut_2	22000	1	24.042	194.1	7.619	gut
+sample_gut_2	22000	2	23.934	193.5	7.353	gut
+sample_gut_2	22000	3	23.95	194.1	7.502	gut
+sample_gut_2	22000	4	24.213	194.5	7.726	gut
+sample_gut_2	22000	5	23.815	189.8	7.52	gut
+sample_gut_2	22000	6	23.882	196.8	7.469	gut
+sample_gut_2	22000	7	24.167	190.9	7.657	gut
+sample_gut_2	22000	8	24.351	198.2	7.465	gut
+sample_gut_2	22000	9	23.773	195.6	7.593	gut
+sample_gut_2	30000	0	24.777	204.3	7.613	gut
+sample_gut_2	30000	1	25.073	196.2	7.667	gut
+sample_gut_2	30000	2	25.787	199.0	7.567	gut
+sample_gut_2	30000	3	24.303	201.1	7.523	gut
+sample_gut_2	30000	4	24.795	190.2	7.617	gut
+sample_gut_2	30000	5	24.848	197.6	7.637	gut
+sample_gut_2	30000	6	25.432	195.1	7.655	gut
+sample_gut_2	30000	7	24.733	198.6	7.605	gut
+sample_gut_2	30000	8	24.219	194.8	7.573	gut
+sample_gut_2	30000	9	24.22	204.5	7.605	gut
+sample_gut_2	40000	0	24.624	205.1	7.753	gut
+sample_gut_2	40000	1	24.601	199.3	7.669	gut
+sample_gut_2	40000	2	25.521	205.7	7.665	gut
+sample_gut_2	40000	3	24.654	200.0	7.715	gut
+sample_gut_2	40000	4	25.211	198.4	7.763	gut
+sample_gut_2	40000	5	25.882	204.3	7.688	gut
+sample_gut_2	40000	6	24.789	199.0	7.537	gut
+sample_gut_2	40000	7	24.822	204.3	7.667	gut
+sample_gut_2	40000	8	25.116	201.9	7.495	gut
+sample_gut_2	40000	9	24.943	202.1	7.707	gut
+sample_gut_2	50000	0	25.574	202.3	7.539	gut
+sample_gut_2	50000	1	25.606	201.2	7.817	gut
+sample_gut_2	50000	2	25.062	206.9	7.524	gut
+sample_gut_2	50000	3	25.332	201.9	7.561	gut
+sample_gut_2	50000	4	25.154	195.3	7.83	gut
+sample_gut_2	50000	5	25.087	199.9	7.569	gut
+sample_gut_2	50000	6	24.909	201.6	7.736	gut
+sample_gut_2	50000	7	25.719	201.0	7.662	gut
+sample_gut_2	50000	8	24.947	197.7	7.757	gut
+sample_gut_2	50000	9	25.839	193.9	7.621	gut
+sample_gut_3	500	0	2.01	12.4	0.779	gut
+sample_gut_3	500	1	1.889	13.4	0.844	gut
+sample_gut_3	500	2	2.433	15.2	0.839	gut
+sample_gut_3	500	3	2.198	19.2	0.766	gut
+sample_gut_3	500	4	2.026	16.7	0.784	gut
+sample_gut_3	500	5	1.38	10.7	0.777	gut
+sample_gut_3	500	6	2.04	14.3	0.729	gut
+sample_gut_3	500	7	2.284	14.6	0.781	gut
+sample_gut_3	500	8	1.307	15.1	0.868	gut
+sample_gut_3	500	9	2.039	12.9	0.836	gut
+sample_gut_3	1000	0	3.797	29.8	1.551	gut
+sample_gut_3	1000	1	3.533	27.2	1.581	gut
+sample_gut_3	1000	2	2.779	35.9	1.609	gut
+sample_gut_3	1000	3	4.15	31.6	1.649	gut
+sample_gut_3	1000	4	4.002	35.2	1.454	gut
+sample_gut_3	1000	5	3.875	21.7	1.478	gut
+sample_gut_3	1000	6	3.622	30.6	1.492	gut
+sample_gut_3	1000	7	3.805	27.5	1.628	gut
+sample_gut_3	1000	8	3.444	26.5	1.568	gut
+sample_gut_3	1000	9	4.811	26.0	1.582	gut
+sample_gut_3	2000	0	7.074	53.0	2.798	gut
+sample_gut_3	2000	1	7.442	54.9	3.031	gut
+sample_gut_3	2000	2	7.131	57.8	2.785	gut
+sample_gut_3	2000	3	7.737	50.2	2.748	gut
+sample_gut_3	2000	4	6.876	60.7	2.753	gut
+sample_gut_3	2000	5	7.722	56.8	2.844	gut
+sample_gut_3	2000	6	6.867	57.8	2.758	gut
+sample_gut_3	2000	7	7.454	55.4	2.902	gut
+sample_gut_3	2000	8	7.577	61.1	2.823	gut
+sample_gut_3	2000	9	7.2	55.9	2.937	gut
+sample_gut_3	4000	0	12.914	97.7	4.559	gut
+sample_gut_3	4000	1	12.109	101.9	4.565	gut
+sample_gut_3	4000	2	12.49	99.8	4.625	gut
+sample_gut_3	4000	3	11.408	99.4	4.611	gut
+sample_gut_3	4000	4	12.382	102.9	4.582	gut
+sample_gut_3	4000	5	12.511	103.4	4.593	gut
+sample_gut_3	4000	6	11.723	92.7	4.691	gut
+sample_gut_3	4000	7	12.327	96.9	4.537	gut
+sample_gut_3	4000	8	12.543	97.9	4.542	gut
+sample_gut_3	4000	9	11.62	95.0	4.657	gut
+sample_gut_3	6000	0	16.101	126.8	5.72	gut
+sample_gut_3	6000	1	15.903	124.9	5.667	gut
+sample_gut_3	6000	2	15.838	124.1	5.856	gut
+sample_gut_3	6000	3	16.305	126.3	5.759	gut
+sample_gut_3	6000	4	15.528	130.7	5.794	gut
+sample_gut_3	6000	5	16.075	132.0	5.764	gut
+sample_gut_3	6000	6	16.243	131.9	5.773	gut
+sample_gut_3	6000	7	15.06	127.7	5.711	gut
+sample_gut_3	6000	8	16.022	136.0	5.9	gut
+sample_gut_3	6000	9	16.086	135.7	5.745	gut
+sample_gut_3	8000	0	18.679	152.0	6.378	gut
+sample_gut_3	8000	1	19.007	150.0	6.541	gut
+sample_gut_3	8000	2	19.075	158.7	6.556	gut
+sample_gut_3	8000	3	18.806	150.5	6.428	gut
+sample_gut_3	8000	4	18.914	151.2	6.451	gut
+sample_gut_3	8000	5	18.359	148.4	6.556	gut
+sample_gut_3	8000	6	19.315	149.0	6.509	gut
+sample_gut_3	8000	7	18.446	152.7	6.494	gut
+sample_gut_3	8000	8	18.673	153.8	6.562	gut
+sample_gut_3	8000	9	18.991	147.8	6.33	gut
+sample_gut_3	12000	0	22.814	177.1	7.326	gut
+sample_gut_3	12000	1	22.064	182.8	7.366	gut
+sample_gut_3	12000	2	22.233	178.5	7.13	gut
+sample_gut_3	12000	3	22.279	180.8	7.122	gut
+sample_gut_3	12000	4	22.199	178.6	7.125	gut
+sample_gut_3	12000	5	22.136	174.8	7.488	gut
+sample_gut_3	12000	6	21.8	177.4	7.251	gut
+sample_gut_3	12000	7	22.385	180.4	7.308	gut
+sample_gut_3	12000	8	22.503	183.0	7.132	gut
+sample_gut_3	12000	9	22.264	175.6	7.277	gut
+sample_gut_3	16000	0	24.207	191.3	7.548	gut
+sample_gut_3	16000	1	24.61	184.6	7.552	gut
+sample_gut_3	16000	2	23.987	193.1	7.743	gut
+sample_gut_3	16000	3	24.565	188.2	7.526	gut
+sample_gut_3	16000	4	23.637	190.7	7.424	gut
+sample_gut_3	16000	5	23.625	185.3	7.551	gut
+sample_gut_3	16000	6	24.722	192.3	7.372	gut
+sample_gut_3	16000	7	23.878	195.2	7.416	gut
+sample_gut_3	16000	8	23.63	197.8	7.489	gut
+sample_gut_3	16000	9	24.001	188.0	7.597	gut
+sample_gut_3	22000	0	25.413	201.4	7.765	gut
+sample_gut_3	22000	1	25.834	207.5	7.683	gut
+sample_gut_3	22000	2	25.283	204.0	7.76	gut
+sample_gut_3	22000	3	25.458	203.9	7.573	gut
+sample_gut_3	22000	4	25.135	201.6	7.517	gut
+sample_gut_3	22000	5	25.465	212.9	7.518	gut
+sample_gut_3	22000	6	25.395	200.9	7.672	gut
+sample_gut_3	22000	7	24.527	203.7	7.785	gut
+sample_gut_3	22000	8	25.499	202.9	7.672	gut
+sample_gut_3	22000	9	25.035	200.1	7.706	gut
+sample_gut_3	30000	0	25.821	205.7	7.668	gut
+sample_gut_3	30000	1	25.719	206.1	7.693	gut
+sample_gut_3	30000	2	26.287	210.8	7.694	gut
+sample_gut_3	30000	3	26.305	211.0	7.678	gut
+sample_gut_3	30000	4	25.924	202.8	7.684	gut
+sample_gut_3	30000	5	26.549	212.1	7.842	gut
+sample_gut_3	30000	6	25.719	211.5	7.707	gut
+sample_gut_3	30000	7	25.601	207.3	7.59	gut
+sample_gut_3	30000	8	26.259	203.1	7.651	gut
+sample_gut_3	30000	9	26.193	205.4	7.659	gut
+sample_gut_3	40000	0	26.178	206.2	7.638	gut
+sample_gut_3	40000	1	25.773	210.1	7.686	gut
+sample_gut_3	40000	2	26.101	209.5	7.658	gut
+sample_gut_3	40000	3	26.274	206.9	7.582	gut
+sample_gut_3	40000	4	26.091	211.4	7.843	gut
+sample_gut_3	40000	5	25.236	209.7	7.731	gut
+sample_gut_3	40000	6	25.928	215.7	7.805	gut
+sample_gut_3	40000	7	25.932	203.7	7.696	gut
+sample_gut_3	40000	8	26.551	208.4	7.707	gut
+sample_gut_3	40000	9	25.868	208.5	7.747	gut
+sample_gut_3	50000	0	26.17	210.6	7.727	gut
+sample_gut_3	50000	1	26.373	206.9	7.634	gut
+sample_gut_3	50000	2	26.294	204.2	7.74	gut
+sample_gut_3	50000	3	25.701	204.0	7.659	gut
+sample_gut_3	50000	4	25.782	213.6	7.635	gut
+sample_gut_3	50000	5	26.197	207.7	7.669	gut
+sample_gut_3	50000	6	25.631	207.6	7.812	gut
+sample_gut_3	50000	7	25.943	206.6	7.706	gut
+sample_gut_3	50000	8	25.789	210.9	7.793	gut
+sample_gut_3	50000	9	26.578	213.6	7.798	gut
+sample_gut_4	500	0	1.974	19.4	0.935	gut
+sample_gut_4	500	1	2.182	18.3	0.898	gut
+sample_gut_4	500	2	1.62	19.5	0.86	gut
+sample_gut_4	500	3	2.034	20.2	0.797	gut
+sample_gut_4	500	4	2.446	18.4	0.851	gut
+sample_gut_4	500	5	2.267	26.9	0.948	gut
+sample_gut_4	500	6	1.963	18.5	0.896	gut
+sample_gut_4	500	7	2.278	14.9	0.908	gut
+sample_gut_4	500	8	1.919	16.1	0.587	gut
+sample_gut_4	500	9	1.887	16.4	0.818	gut
+sample_gut_4	1000	0	4.347	32.1	1.649	gut
+sample_gut_4	1000	1	4.224	40.2	1.645	gut
+sample_gut_4	1000	2	3.623	33.7	1.552	gut
+sample_gut_4	1000	3	4.202	37.8	1.663	gut
+sample_gut_4	1000	4	4.403	37.1	1.603	gut
+sample_gut_4	1000	5	4.134	32.7	1.722	gut
+sample_gut_4	1000	6	3.736	31.9	1.705	gut
+sample_gut_4	1000	7	4.509	21.0	1.691	gut
+sample_gut_4	1000	8	4.668	33.9	1.689	gut
+sample_gut_4	1000	9	4.01	28.0	1.651	gut
+sample_gut_4	2000	0	7.498	58.6	2.782	gut
+sample_gut_4	2000	1	7.183	57.0	3.105	gut
+sample_gut_4	2000	2	6.989	63.0	2.986	gut
+sample_gut_4	2000	3	7.41	53.7	2.981	gut
+sample_gut_4	2000	4	7.383	63.7	2.956	gut
+sample_gut_4	2000	5	8.301	64.1	2.813	gut
+sample_gut_4	2000	6	8.143	59.0	2.895	gut
+sample_gut_4	2000	7	7.886	53.1	2.969	gut
+sample_gut_4	2000	8	7.34	61.0	2.898	gut
+sample_gut_4	2000	9	7.333	58.0	2.882	gut
+sample_gut_4	4000	0	12.635	101.0	4.84	gut
+sample_gut_4	4000	1	12.839	95.8	4.84	gut
+sample_gut_4	4000	2	13.044	98.4	4.843	gut
+sample_gut_4	4000	3	12.794	104.0	4.857	gut
+sample_gut_4	4000	4	13.088	111.1	4.699	gut
+sample_gut_4	4000	5	12.62	103.1	4.624	gut
+sample_gut_4	4000	6	12.928	101.0	4.648	gut
+sample_gut_4	4000	7	12.604	105.4	4.886	gut
+sample_gut_4	4000	8	13.048	94.8	4.732	gut
+sample_gut_4	4000	9	12.584	104.9	4.787	gut
+sample_gut_4	6000	0	16.528	128.3	5.708	gut
+sample_gut_4	6000	1	16.207	130.3	5.958	gut
+sample_gut_4	6000	2	16.884	132.3	5.915	gut
+sample_gut_4	6000	3	16.814	137.4	5.823	gut
+sample_gut_4	6000	4	16.821	132.3	5.963	gut
+sample_gut_4	6000	5	16.497	131.9	5.862	gut
+sample_gut_4	6000	6	16.807	126.7	6.015	gut
+sample_gut_4	6000	7	16.344	135.1	5.877	gut
+sample_gut_4	6000	8	16.216	130.9	5.889	gut
+sample_gut_4	6000	9	16.851	135.6	5.902	gut
+sample_gut_4	8000	0	19.125	156.4	6.613	gut
+sample_gut_4	8000	1	19.174	158.2	6.593	gut
+sample_gut_4	8000	2	19.367	151.2	6.498	gut
+sample_gut_4	8000	3	19.277	152.2	6.729	gut
+sample_gut_4	8000	4	19.066	155.4	6.624	gut
+sample_gut_4	8000	5	19.163	159.7	6.721	gut
+sample_gut_4	8000	6	19.593	153.8	6.505	gut
+sample_gut_4	8000	7	20.27	155.0	6.654	gut
+sample_gut_4	8000	8	19.321	155.3	6.649	gut
+sample_gut_4	8000	9	18.786	158.6	6.39	gut
+sample_gut_4	12000	0	22.489	183.8	7.401	gut
+sample_gut_4	12000	1	22.014	177.9	7.352	gut
+sample_gut_4	12000	2	22.737	183.5	7.25	gut
+sample_gut_4	12000	3	22.035	178.3	7.093	gut
+sample_gut_4	12000	4	21.997	177.6	7.272	gut
+sample_gut_4	12000	5	22.427	177.8	7.205	gut
+sample_gut_4	12000	6	22.618	184.0	7.21	gut
+sample_gut_4	12000	7	22.485	178.9	7.426	gut
+sample_gut_4	12000	8	22.708	187.0	7.537	gut
+sample_gut_4	12000	9	22.189	182.7	7.4	gut
+sample_gut_4	16000	0	24.071	195.2	7.624	gut
+sample_gut_4	16000	1	24.179	187.5	7.627	gut
+sample_gut_4	16000	2	24.117	191.9	7.616	gut
+sample_gut_4	16000	3	24.042	191.8	7.704	gut
+sample_gut_4	16000	4	23.687	200.7	7.609	gut
+sample_gut_4	16000	5	23.771	191.9	7.554	gut
+sample_gut_4	16000	6	23.908	197.1	7.567	gut
+sample_gut_4	16000	7	23.611	196.0	7.492	gut
+sample_gut_4	16000	8	24.369	192.5	7.503	gut
+sample_gut_4	16000	9	24.074	197.4	7.615	gut
+sample_gut_4	22000	0	25.278	209.5	7.678	gut
+sample_gut_4	22000	1	25.628	201.3	7.701	gut
+sample_gut_4	22000	2	25.513	205.7	7.714	gut
+sample_gut_4	22000	3	25.388	205.7	7.684	gut
+sample_gut_4	22000	4	25.756	199.4	7.756	gut
+sample_gut_4	22000	5	25.823	206.2	7.682	gut
+sample_gut_4	22000	6	25.278	200.6	7.573	gut
+sample_gut_4	22000	7	25.265	202.1	7.751	gut
+sample_gut_4	22000	8	25.403	205.8	7.673	gut
+sample_gut_4	22000	9	25.064	201.1	7.656	gut
+sample_gut_4	30000	0	26.097	209.9	7.733	gut
+sample_gut_4	30000	1	25.954	205.9	7.57	gut
+sample_gut_4	30000	2	26.433	205.4	7.811	gut
+sample_gut_4	30000	3	25.645	209.3	7.838	gut
+sample_gut_4	30000	4	26.149	207.7	7.74	gut
+sample_gut_4	30000	5	26.039	212.1	7.849	gut
+sample_gut_4	30000	6	26.199	209.0	7.631	gut
+sample_gut_4	30000	7	25.598	202.0	7.666	gut
+sample_gut_4	30000	8	25.402	203.6	7.665	gut
+sample_gut_4	30000	9	25.139	205.7	7.536	gut
+sample_gut_4	40000	0	25.656	218.9	7.554	gut
+sample_gut_4	40000	1	25.415	203.1	7.694	gut
+sample_gut_4	40000	2	25.673	215.4	7.728	gut
+sample_gut_4	40000	3	26.216	200.5	7.818	gut
+sample_gut_4	40000	4	25.047	200.1	7.754	gut
+sample_gut_4	40000	5	25.528	209.4	7.785	gut
+sample_gut_4	40000	6	25.832	205.0	7.591	gut
+sample_gut_4	40000	7	25.462	208.8	7.695	gut
+sample_gut_4	40000	8	25.508	209.6	7.607	gut
+sample_gut_4	40000	9	26.807	207.5	7.706	gut
+sample_gut_4	50000	0	25.685	209.6	7.651	gut
+sample_gut_4	50000	1	26.565	206.4	7.706	gut
+sample_gut_4	50000	2	25.292	206.0	7.669	gut
+sample_gut_4	50000	3	26.562	209.5	7.728	gut
+sample_gut_4	50000	4	25.978	206.6	7.66	gut
+sample_gut_4	50000	5	25.685	200.4	7.667	gut
+sample_gut_4	50000	6	26.323	208.3	7.72	gut
+sample_gut_4	50000	7	26.157	205.7	7.702	gut
+sample_gut_4	50000	8	25.916	204.9	7.54	gut
+sample_gut_4	50000	9	25.79	206.1	7.776	gut
+sample_gut_5	500	0	2.067	8.3	0.908	gut
+sample_gut_5	500	1	1.291	11.1	0.808	gut
+sample_gut_5	500	2	1.457	12.9	0.809	gut
+sample_gut_5	500	3	1.707	18.3	0.759	gut
+sample_gut_5	500	4	2.233	21.1	0.672	gut
+sample_gut_5	500	5	2.263	18.4	0.739	gut
+sample_gut_5	500	6	1.7	18.2	0.832	gut
+sample_gut_5	500	7	0.886	17.8	0.847	gut
+sample_gut_5	500	8	1.906	17.2	0.832	gut
+sample_gut_5	500	9	2.097	11.2	0.753	gut
+sample_gut_5	1000	0	3.188	33.8	1.415	gut
+sample_gut_5	1000	1	3.232	26.7	1.433	gut
+sample_gut_5	1000	2	2.877	31.0	1.536	gut
+sample_gut_5	1000	3	3.078	24.6	1.511	gut
+sample_gut_5	1000	4	3.824	30.6	1.498	gut
+sample_gut_5	1000	5	3.964	28.2	1.515	gut
+sample_gut_5	1000	6	3.151	27.0	1.391	gut
+sample_gut_5	1000	7	3.2	30.9	1.356	gut
+sample_gut_5	1000	8	3.349	30.9	1.501	gut
+sample_gut_5	1000	9	3.651	24.0	1.604	gut
+sample_gut_5	2000	0	6.412	50.8	2.685	gut
+sample_gut_5	2000	1	6.645	46.0	2.751	gut
+sample_gut_5	2000	2	6.589	51.4	2.549	gut
+sample_gut_5	2000	3	5.949	53.2	2.799	gut
+sample_gut_5	2000	4	6.212	55.2	2.651	gut
+sample_gut_5	2000	5	5.796	41.3	2.747	gut
+sample_gut_5	2000	6	6.532	49.9	2.734	gut
+sample_gut_5	2000	7	6.146	50.0	2.799	gut
+sample_gut_5	2000	8	6.746	57.3	2.773	gut
+sample_gut_5	2000	9	6.893	55.1	2.639	gut
+sample_gut_5	4000	0	11.287	89.4	4.349	gut
+sample_gut_5	4000	1	11.313	89.7	4.458	gut
+sample_gut_5	4000	2	11.134	86.6	4.42	gut
+sample_gut_5	4000	3	11.261	97.1	4.406	gut
+sample_gut_5	4000	4	11.491	92.1	4.46	gut
+sample_gut_5	4000	5	10.975	85.0	4.527	gut
+sample_gut_5	4000	6	11.309	91.5	4.351	gut
+sample_gut_5	4000	7	11.002	90.3	4.467	gut
+sample_gut_5	4000	8	12.021	95.7	4.517	gut
+sample_gut_5	4000	9	11.682	86.9	4.496	gut
+sample_gut_5	6000	0	15.549	117.7	5.524	gut
+sample_gut_5	6000	1	14.27	120.7	5.517	gut
+sample_gut_5	6000	2	15.005	123.0	5.623	gut
+sample_gut_5	6000	3	14.575	122.0	5.545	gut
+sample_gut_5	6000	4	14.924	114.4	5.588	gut
+sample_gut_5	6000	5	14.437	117.2	5.559	gut
+sample_gut_5	6000	6	15.356	112.5	5.499	gut
+sample_gut_5	6000	7	14.946	114.7	5.636	gut
+sample_gut_5	6000	8	14.845	121.2	5.586	gut
+sample_gut_5	6000	9	14.862	116.3	5.722	gut
+sample_gut_5	8000	0	17.628	147.0	6.39	gut
+sample_gut_5	8000	1	17.663	140.6	6.277	gut
+sample_gut_5	8000	2	17.605	143.2	6.385	gut
+sample_gut_5	8000	3	17.664	142.1	6.272	gut
+sample_gut_5	8000	4	17.788	133.6	6.121	gut
+sample_gut_5	8000	5	17.378	133.4	6.411	gut
+sample_gut_5	8000	6	17.254	142.0	6.406	gut
+sample_gut_5	8000	7	17.379	145.5	6.195	gut
+sample_gut_5	8000	8	17.056	137.6	6.268	gut
+sample_gut_5	8000	9	17.625	136.2	6.328	gut
+sample_gut_5	12000	0	21.494	168.5	7.052	gut
+sample_gut_5	12000	1	21.066	165.6	7.013	gut
+sample_gut_5	12000	2	20.547	162.9	7.232	gut
+sample_gut_5	12000	3	20.789	166.0	7.171	gut
+sample_gut_5	12000	4	21.469	167.3	7.037	gut
+sample_gut_5	12000	5	20.43	170.7	7.25	gut
+sample_gut_5	12000	6	20.748	159.5	7.03	gut
+sample_gut_5	12000	7	20.18	161.3	7.155	gut
+sample_gut_5	12000	8	20.777	165.2	7.081	gut
+sample_gut_5	12000	9	20.292	168.2	7.002	gut
+sample_gut_5	16000	0	22.558	186.1	7.521	gut
+sample_gut_5	16000	1	22.316	182.7	7.387	gut
+sample_gut_5	16000	2	21.757	177.8	7.308	gut
+sample_gut_5	16000	3	22.162	176.9	7.457	gut
+sample_gut_5	16000	4	22.899	180.5	7.397	gut
+sample_gut_5	16000	5	22.524	177.1	7.371	gut
+sample_gut_5	16000	6	22.755	182.0	7.357	gut
+sample_gut_5	16000	7	22.878	170.2	7.351	gut
+sample_gut_5	16000	8	22.527	183.7	7.358	gut
+sample_gut_5	16000	9	22.352	185.6	7.296	gut
+sample_gut_5	22000	0	23.775	185.9	7.532	gut
+sample_gut_5	22000	1	23.989	190.8	7.644	gut
+sample_gut_5	22000	2	23.356	195.5	7.633	gut
+sample_gut_5	22000	3	23.434	191.7	7.487	gut
+sample_gut_5	22000	4	23.987	194.3	7.634	gut
+sample_gut_5	22000	5	23.733	194.2	7.58	gut
+sample_gut_5	22000	6	24.109	189.2	7.595	gut
+sample_gut_5	22000	7	23.564	186.6	7.592	gut
+sample_gut_5	22000	8	23.737	182.6	7.504	gut
+sample_gut_5	22000	9	23.927	199.9	7.539	gut
+sample_gut_5	30000	0	24.41	195.2	7.682	gut
+sample_gut_5	30000	1	24.63	188.5	7.724	gut
+sample_gut_5	30000	2	24.501	190.0	7.64	gut
+sample_gut_5	30000	3	24.245	189.7	7.714	gut
+sample_gut_5	30000	4	24.346	190.6	7.767	gut
+sample_gut_5	30000	5	24.821	196.5	7.559	gut
+sample_gut_5	30000	6	24.841	193.6	7.753	gut
+sample_gut_5	30000	7	24.566	197.3	7.602	gut
+sample_gut_5	30000	8	24.703	194.3	7.535	gut
+sample_gut_5	30000	9	24.169	197.4	7.537	gut
+sample_gut_5	40000	0	24.712	202.7	7.516	gut
+sample_gut_5	40000	1	24.746	197.3	7.67	gut
+sample_gut_5	40000	2	24.841	193.8	7.704	gut
+sample_gut_5	40000	3	23.588	184.8	7.662	gut
+sample_gut_5	40000	4	23.496	199.1	7.682	gut
+sample_gut_5	40000	5	25.243	190.1	7.502	gut
+sample_gut_5	40000	6	24.575	201.5	7.562	gut
+sample_gut_5	40000	7	24.141	202.0	7.67	gut
+sample_gut_5	40000	8	24.264	197.8	7.712	gut
+sample_gut_5	40000	9	24.953	191.4	7.56	gut
+sample_gut_5	50000	0	24.271	203.3	7.608	gut
+sample_gut_5	50000	1	24.948	196.4	7.641	gut
+sample_gut_5	50000	2	24.818	195.1	7.636	gut
+sample_gut_5	50000	3	24.326	193.3	7.559	gut
+sample_gut_5	50000	4	24.055	197.9	7.578	gut
+sample_gut_5	50000	5	24.236	196.0	7.623	gut
+sample_gut_5	50000	6	24.789	189.3	7.734	gut
+sample_gut_5	50000	7	24.263	197.7	7.535	gut
+sample_gut_5	50000	8	24.653	193.1	7.532	gut
+sample_gut_5	50000	9	25.417	200.5	7.698	gut
+sample_gut_6	500	0	1.821	16.7	0.659	gut
+sample_gut_6	500	1	1.912	18.6	0.854	gut
+sample_gut_6	500	2	1.723	10.4	0.829	gut
+sample_gut_6	500	3	0.965	18.9	0.745	gut
+sample_gut_6	500	4	1.21	13.5	0.856	gut
+sample_gut_6	500	5	2.722	16.7	0.733	gut
+sample_gut_6	500	6	2.02	10.9	0.868	gut
+sample_gut_6	500	7	1.913	18.6	0.9	gut
+sample_gut_6	500	8	1.531	12.7	0.589	gut
+sample_gut_6	500	9	1.736	13.2	0.781	gut
+sample_gut_6	1000	0	3.766	23.4	1.507	gut
+sample_gut_6	1000	1	3.47	26.3	1.461	gut
+sample_gut_6	1000	2	3.235	36.0	1.464	gut
+sample_gut_6	1000	3	3.903	28.9	1.501	gut
+sample_gut_6	1000	4	3.741	31.0	1.577	gut
+sample_gut_6	1000	5	3.883	32.9	1.58	gut
+sample_gut_6	1000	6	3.349	25.9	1.561	gut
+sample_gut_6	1000	7	3.294	30.4	1.444	gut
+sample_gut_6	1000	8	3.47	24.4	1.47	gut
+sample_gut_6	1000	9	4.238	27.7	1.39	gut
+sample_gut_6	2000	0	6.912	52.4	2.743	gut
+sample_gut_6	2000	1	6.942	49.2	2.727	gut
+sample_gut_6	2000	2	6.28	62.0	2.738	gut
+sample_gut_6	2000	3	6.169	53.1	2.734	gut
+sample_gut_6	2000	4	6.399	55.1	2.487	gut
+sample_gut_6	2000	5	6.978	54.0	2.608	gut
+sample_gut_6	2000	6	6.828	55.4	2.684	gut
+sample_gut_6	2000	7	6.837	53.3	2.698	gut
+sample_gut_6	2000	8	6.106	54.2	2.62	gut
+sample_gut_6	2000	9	5.973	55.9	2.556	gut
+sample_gut_6	4000	0	11.66	87.0	4.493	gut
+sample_gut_6	4000	1	11.23	91.9	4.365	gut
+sample_gut_6	4000	2	10.425	88.9	4.47	gut
+sample_gut_6	4000	3	11.871	99.3	4.438	gut
+sample_gut_6	4000	4	11.391	90.3	4.386	gut
+sample_gut_6	4000	5	11.006	88.1	4.502	gut
+sample_gut_6	4000	6	11.495	94.4	4.394	gut
+sample_gut_6	4000	7	11.574	95.8	4.553	gut
+sample_gut_6	4000	8	11.434	90.4	4.376	gut
+sample_gut_6	4000	9	11.916	99.3	4.519	gut
+sample_gut_6	6000	0	14.813	120.9	5.782	gut
+sample_gut_6	6000	1	15.703	115.9	5.669	gut
+sample_gut_6	6000	2	14.662	120.8	5.498	gut
+sample_gut_6	6000	3	15.72	113.0	5.465	gut
+sample_gut_6	6000	4	15.059	119.4	5.513	gut
+sample_gut_6	6000	5	14.229	118.9	5.459	gut
+sample_gut_6	6000	6	15.555	120.3	5.564	gut
+sample_gut_6	6000	7	15.247	118.9	5.497	gut
+sample_gut_6	6000	8	14.668	124.4	5.613	gut
+sample_gut_6	6000	9	15.347	116.3	5.642	gut
+sample_gut_6	8000	0	18.044	143.9	6.49	gut
+sample_gut_6	8000	1	17.876	143.9	6.207	gut
+sample_gut_6	8000	2	16.571	134.6	6.398	gut
+sample_gut_6	8000	3	17.8	139.1	6.298	gut
+sample_gut_6	8000	4	17.294	142.7	6.179	gut
+sample_gut_6	8000	5	17.654	139.9	6.372	gut
+sample_gut_6	8000	6	16.472	140.8	6.412	gut
+sample_gut_6	8000	7	18.106	136.7	6.368	gut
+sample_gut_6	8000	8	17.752	142.4	6.403	gut
+sample_gut_6	8000	9	17.911	142.9	6.312	gut
+sample_gut_6	12000	0	21.442	166.4	7.192	gut
+sample_gut_6	12000	1	20.81	172.6	7.141	gut
+sample_gut_6	12000	2	20.744	156.4	7.006	gut
+sample_gut_6	12000	3	21.304	170.9	7.099	gut
+sample_gut_6	12000	4	21.148	168.7	7.108	gut
+sample_gut_6	12000	5	21.137	167.0	7.023	gut
+sample_gut_6	12000	6	20.766	166.3	7.096	gut
+sample_gut_6	12000	7	21.145	167.8	7.024	gut
+sample_gut_6	12000	8	22.088	172.2	7.215	gut
+sample_gut_6	12000	9	21.548	166.0	7.223	gut
+sample_gut_6	16000	0	22.951	179.1	7.323	gut
+sample_gut_6	16000	1	22.904	183.6	7.337	gut
+sample_gut_6	16000	2	22.913	180.6	7.539	gut
+sample_gut_6	16000	3	22.779	187.7	7.325	gut
+sample_gut_6	16000	4	22.604	176.0	7.25	gut
+sample_gut_6	16000	5	22.337	177.0	7.423	gut
+sample_gut_6	16000	6	23.018	177.7	7.595	gut
+sample_gut_6	16000	7	22.504	185.3	7.369	gut
+sample_gut_6	16000	8	23.019	177.5	7.29	gut
+sample_gut_6	16000	9	22.991	186.9	7.457	gut
+sample_gut_6	22000	0	23.915	190.3	7.611	gut
+sample_gut_6	22000	1	24.217	185.3	7.536	gut
+sample_gut_6	22000	2	24.236	189.8	7.698	gut
+sample_gut_6	22000	3	23.433	186.9	7.657	gut
+sample_gut_6	22000	4	24.209	194.8	7.512	gut
+sample_gut_6	22000	5	24.419	195.2	7.648	gut
+sample_gut_6	22000	6	23.761	195.2	7.597	gut
+sample_gut_6	22000	7	23.863	194.1	7.625	gut
+sample_gut_6	22000	8	23.791	189.1	7.583	gut
+sample_gut_6	22000	9	23.46	189.7	7.542	gut
+sample_gut_6	30000	0	24.817	189.6	7.553	gut
+sample_gut_6	30000	1	25.717	194.5	7.418	gut
+sample_gut_6	30000	2	24.264	199.3	7.661	gut
+sample_gut_6	30000	3	25.047	195.9	7.593	gut
+sample_gut_6	30000	4	24.785	196.9	7.687	gut
+sample_gut_6	30000	5	25.44	193.8	7.564	gut
+sample_gut_6	30000	6	24.818	199.4	7.574	gut
+sample_gut_6	30000	7	25.273	198.6	7.698	gut
+sample_gut_6	30000	8	24.51	195.8	7.526	gut
+sample_gut_6	30000	9	25.237	196.3	7.45	gut
+sample_gut_6	40000	0	25.314	199.0	7.847	gut
+sample_gut_6	40000	1	25.15	201.5	7.599	gut
+sample_gut_6	40000	2	24.536	202.0	7.686	gut
+sample_gut_6	40000	3	25.679	193.1	7.737	gut
+sample_gut_6	40000	4	24.468	205.7	7.721	gut
+sample_gut_6	40000	5	24.778	191.2	7.515	gut
+sample_gut_6	40000	6	24.864	199.7	7.786	gut
+sample_gut_6	40000	7	24.95	206.6	7.729	gut
+sample_gut_6	40000	8	25.233	204.2	7.551	gut
+sample_gut_6	40000	9	25.629	196.9	7.603	gut
+sample_gut_6	50000	0	24.868	196.5	7.644	gut
+sample_gut_6	50000	1	24.08	192.0	7.581	gut
+sample_gut_6	50000	2	24.817	202.9	7.69	gut
+sample_gut_6	50000	3	24.898	189.4	7.753	gut
+sample_gut_6	50000	4	24.819	196.4	7.664	gut
+sample_gut_6	50000	5	24.241	195.4	7.683	gut
+sample_gut_6	50000	6	24.147	200.1	7.592	gut
+sample_gut_6	50000	7	24.916	200.9	7.775	gut
+sample_gut_6	50000	8	25.023	205.4	7.498	gut
+sample_gut_6	50000	9	25.247	194.6	7.577	gut
+sample_skin_1	500	0	2.606	15.5	1.246	skin
+sample_skin_1	500	1	2.556	14.5	1.354	skin
+sample_skin_1	500	2	2.043	14.1	1.387	skin
+sample_skin_1	500	3	2.14	14.0	1.35	skin
+sample_skin_1	500	4	2.693	17.3	1.506	skin
+sample_skin_1	500	5	2.449	17.1	1.421	skin
+sample_skin_1	500	6	2.371	19.6	1.314	skin
+sample_skin_1	500	7	2.81	17.8	1.4	skin
+sample_skin_1	500	8	2.3	14.0	1.384	skin
+sample_skin_1	500	9	1.613	11.0	1.411	skin
+sample_skin_1	1000	0	4.018	30.5	2.609	skin
+sample_skin_1	1000	1	3.581	31.3	2.514	skin
+sample_skin_1	1000	2	3.888	37.4	2.568	skin
+sample_skin_1	1000	3	3.85	30.0	2.514	skin
+sample_skin_1	1000	4	3.996	26.2	2.614	skin
+sample_skin_1	1000	5	3.597	38.0	2.432	skin
+sample_skin_1	1000	6	4.399	36.2	2.616	skin
+sample_skin_1	1000	7	3.815	26.6	2.568	skin
+sample_skin_1	1000	8	4.232	32.4	2.543	skin
+sample_skin_1	1000	9	4.424	37.4	2.725	skin
+sample_skin_1	2000	0	7.381	53.7	4.178	skin
+sample_skin_1	2000	1	6.329	52.7	4.109	skin
+sample_skin_1	2000	2	7.105	55.4	4.182	skin
+sample_skin_1	2000	3	7.102	56.8	4.206	skin
+sample_skin_1	2000	4	6.583	49.1	4.185	skin
+sample_skin_1	2000	5	7.341	61.7	4.364	skin
+sample_skin_1	2000	6	7.242	55.2	4.065	skin
+sample_skin_1	2000	7	6.351	49.5	4.24	skin
+sample_skin_1	2000	8	6.786	52.1	4.262	skin
+sample_skin_1	2000	9	6.205	56.3	4.116	skin
+sample_skin_1	4000	0	10.127	91.8	5.779	skin
+sample_skin_1	4000	1	9.896	86.4	5.785	skin
+sample_skin_1	4000	2	10.604	82.2	5.817	skin
+sample_skin_1	4000	3	10.618	81.6	5.854	skin
+sample_skin_1	4000	4	10.3	76.2	5.771	skin
+sample_skin_1	4000	5	10.223	78.8	5.798	skin
+sample_skin_1	4000	6	10.485	80.0	5.746	skin
+sample_skin_1	4000	7	9.992	87.2	5.695	skin
+sample_skin_1	4000	8	10.306	88.8	5.85	skin
+sample_skin_1	4000	9	10.428	82.9	5.843	skin
+sample_skin_1	6000	0	12.219	99.1	6.407	skin
+sample_skin_1	6000	1	11.703	94.9	6.401	skin
+sample_skin_1	6000	2	12.06	96.9	6.452	skin
+sample_skin_1	6000	3	12.308	98.2	6.436	skin
+sample_skin_1	6000	4	12.664	97.2	6.51	skin
+sample_skin_1	6000	5	12.039	93.3	6.53	skin
+sample_skin_1	6000	6	11.598	98.6	6.487	skin
+sample_skin_1	6000	7	12.213	98.8	6.365	skin
+sample_skin_1	6000	8	12.364	100.5	6.428	skin
+sample_skin_1	6000	9	12.627	94.8	6.527	skin
+sample_skin_1	8000	0	13.577	105.5	6.71	skin
+sample_skin_1	8000	1	13.302	116.9	6.591	skin
+sample_skin_1	8000	2	12.827	109.2	6.693	skin
+sample_skin_1	8000	3	13.417	103.4	6.668	skin
+sample_skin_1	8000	4	13.355	107.1	6.691	skin
+sample_skin_1	8000	5	12.629	112.3	6.584	skin
+sample_skin_1	8000	6	12.656	100.5	6.812	skin
+sample_skin_1	8000	7	12.762	102.3	6.883	skin
+sample_skin_1	8000	8	13.881	110.2	6.719	skin
+sample_skin_1	8000	9	12.742	97.8	6.783	skin
+sample_skin_1	12000	0	13.921	114.8	6.736	skin
+sample_skin_1	12000	1	13.415	116.9	6.829	skin
+sample_skin_1	12000	2	13.623	114.7	6.793	skin
+sample_skin_1	12000	3	14.12	109.3	6.901	skin
+sample_skin_1	12000	4	13.534	112.3	6.819	skin
+sample_skin_1	12000	5	13.853	108.5	6.615	skin
+sample_skin_1	12000	6	13.991	114.3	6.836	skin
+sample_skin_1	12000	7	13.448	118.6	6.85	skin
+sample_skin_1	12000	8	13.588	111.1	6.842	skin
+sample_skin_1	12000	9	13.456	109.4	6.781	skin
+sample_skin_1	16000	0	14.116	109.9	6.732	skin
+sample_skin_1	16000	1	13.73	115.1	6.798	skin
+sample_skin_1	16000	2	14.325	112.0	6.773	skin
+sample_skin_1	16000	3	14.09	112.1	6.921	skin
+sample_skin_1	16000	4	14.153	108.4	6.953	skin
+sample_skin_1	16000	5	13.852	109.4	6.811	skin
+sample_skin_1	16000	6	13.978	105.6	6.947	skin
+sample_skin_1	16000	7	13.799	122.1	6.754	skin
+sample_skin_1	16000	8	13.757	118.9	6.94	skin
+sample_skin_1	16000	9	14.599	117.3	6.801	skin
+sample_skin_1	22000	0	14.46	113.8	6.718	skin
+sample_skin_1	22000	1	13.505	115.3	6.715	skin
+sample_skin_1	22000	2	14.398	111.1	6.866	skin
+sample_skin_1	22000	3	14.205	109.0	6.783	skin
+sample_skin_1	22000	4	14.529	115.7	6.702	skin
+sample_skin_1	22000	5	14.729	114.4	6.814	skin
+sample_skin_1	22000	6	14.016	114.0	6.906	skin
+sample_skin_1	22000	7	14.12	116.4	6.909	skin
+sample_skin_1	22000	8	14.673	112.0	6.994	skin
+sample_skin_1	22000	9	13.814	106.1	6.876	skin
+sample_skin_1	30000	0	13.888	106.3	6.863	skin
+sample_skin_1	30000	1	13.461	111.4	6.814	skin
+sample_skin_1	30000	2	14.625	115.6	6.712	skin
+sample_skin_1	30000	3	14.339	114.8	6.876	skin
+sample_skin_1	30000	4	13.601	117.0	6.786	skin
+sample_skin_1	30000	5	14.907	111.4	6.874	skin
+sample_skin_1	30000	6	14.373	115.1	6.734	skin
+sample_skin_1	30000	7	13.962	109.2	6.785	skin
+sample_skin_1	30000	8	14.219	113.3	6.698	skin
+sample_skin_1	30000	9	14.369	114.7	6.91	skin
+sample_skin_1	40000	0	14.023	115.0	6.892	skin
+sample_skin_1	40000	1	13.695	113.0	6.832	skin
+sample_skin_1	40000	2	14.914	115.3	6.808	skin
+sample_skin_1	40000	3	15.326	119.3	6.83	skin
+sample_skin_1	40000	4	13.859	122.7	6.779	skin
+sample_skin_1	40000	5	14.29	109.9	6.951	skin
+sample_skin_1	40000	6	14.344	115.1	6.941	skin
+sample_skin_1	40000	7	14.118	105.6	6.854	skin
+sample_skin_1	40000	8	14.777	111.8	6.803	skin
+sample_skin_1	40000	9	14.087	121.2	6.935	skin
+sample_skin_1	50000	0	14.257	112.9	6.962	skin
+sample_skin_1	50000	1	13.985	110.0	6.754	skin
+sample_skin_1	50000	2	13.701	117.6	6.892	skin
+sample_skin_1	50000	3	13.857	110.4	6.829	skin
+sample_skin_1	50000	4	14.767	112.4	6.953	skin
+sample_skin_1	50000	5	13.129	110.6	6.801	skin
+sample_skin_1	50000	6	14.466	111.7	6.843	skin
+sample_skin_1	50000	7	13.995	110.8	6.702	skin
+sample_skin_1	50000	8	14.467	125.1	7.097	skin
+sample_skin_1	50000	9	13.851	115.7	6.733	skin
+sample_skin_2	500	0	2.105	15.8	1.078	skin
+sample_skin_2	500	1	1.374	18.7	1.094	skin
+sample_skin_2	500	2	1.745	15.5	1.179	skin
+sample_skin_2	500	3	1.472	14.7	1.275	skin
+sample_skin_2	500	4	2.023	18.8	1.22	skin
+sample_skin_2	500	5	1.528	17.1	1.292	skin
+sample_skin_2	500	6	1.667	15.4	1.127	skin
+sample_skin_2	500	7	1.414	13.0	1.201	skin
+sample_skin_2	500	8	2.116	22.1	1.32	skin
+sample_skin_2	500	9	1.183	11.6	1.194	skin
+sample_skin_2	1000	0	3.043	29.9	2.093	skin
+sample_skin_2	1000	1	2.349	34.5	2.244	skin
+sample_skin_2	1000	2	2.457	28.4	2.136	skin
+sample_skin_2	1000	3	2.769	31.8	2.216	skin
+sample_skin_2	1000	4	2.777	23.6	2.269	skin
+sample_skin_2	1000	5	3.443	27.6	2.193	skin
+sample_skin_2	1000	6	2.744	30.8	2.29	skin
+sample_skin_2	1000	7	3.041	23.1	2.122	skin
+sample_skin_2	1000	8	3.483	30.8	2.191	skin
+sample_skin_2	1000	9	3.317	21.3	2.183	skin
+sample_skin_2	2000	0	5.424	49.8	3.621	skin
+sample_skin_2	2000	1	5.666	53.7	3.655	skin
+sample_skin_2	2000	2	6.439	43.2	3.74	skin
+sample_skin_2	2000	3	6.547	49.5	3.719	skin
+sample_skin_2	2000	4	6.367	47.2	3.676	skin
+sample_skin_2	2000	5	5.832	45.3	3.659	skin
+sample_skin_2	2000	6	5.797	43.6	3.522	skin
+sample_skin_2	2000	7	6.017	42.6	3.564	skin
+sample_skin_2	2000	8	6.566	49.3	3.752	skin
+sample_skin_2	2000	9	5.615	45.9	3.547	skin
+sample_skin_2	4000	0	8.881	77.0	5.365	skin
+sample_skin_2	4000	1	9.605	73.8	5.314	skin
+sample_skin_2	4000	2	9.322	81.5	5.203	skin
+sample_skin_2	4000	3	9.939	76.5	5.329	skin
+sample_skin_2	4000	4	8.425	69.2	5.383	skin
+sample_skin_2	4000	5	9.299	76.9	5.253	skin
+sample_skin_2	4000	6	9.732	67.0	5.342	skin
+sample_skin_2	4000	7	8.858	72.3	5.379	skin
+sample_skin_2	4000	8	9.604	77.6	5.224	skin
+sample_skin_2	4000	9	9.479	76.7	5.313	skin
+sample_skin_2	6000	0	11.611	93.5	6.065	skin
+sample_skin_2	6000	1	11.289	91.8	6.135	skin
+sample_skin_2	6000	2	11.534	83.7	6.192	skin
+sample_skin_2	6000	3	11.254	93.6	6.203	skin
+sample_skin_2	6000	4	11.478	95.9	6.131	skin
+sample_skin_2	6000	5	11.655	88.3	6.214	skin
+sample_skin_2	6000	6	11.08	96.4	6.131	skin
+sample_skin_2	6000	7	11.291	95.0	6.227	skin
+sample_skin_2	6000	8	11.209	90.5	6.113	skin
+sample_skin_2	6000	9	10.997	98.2	6.124	skin
+sample_skin_2	8000	0	12.633	106.7	6.513	skin
+sample_skin_2	8000	1	13.459	105.0	6.503	skin
+sample_skin_2	8000	2	12.624	102.1	6.488	skin
+sample_skin_2	8000	3	13.0	99.8	6.396	skin
+sample_skin_2	8000	4	13.858	104.8	6.595	skin
+sample_skin_2	8000	5	12.294	99.7	6.512	skin
+sample_skin_2	8000	6	13.281	104.8	6.559	skin
+sample_skin_2	8000	7	12.546	96.0	6.467	skin
+sample_skin_2	8000	8	12.303	103.6	6.524	skin
+sample_skin_2	8000	9	12.324	105.7	6.518	skin
+sample_skin_2	12000	0	13.516	110.5	6.742	skin
+sample_skin_2	12000	1	13.555	108.0	6.809	skin
+sample_skin_2	12000	2	13.354	106.4	6.738	skin
+sample_skin_2	12000	3	14.863	109.1	6.913	skin
+sample_skin_2	12000	4	14.196	109.8	6.668	skin
+sample_skin_2	12000	5	13.421	115.9	6.742	skin
+sample_skin_2	12000	6	13.474	110.7	6.851	skin
+sample_skin_2	12000	7	14.045	101.7	6.681	skin
+sample_skin_2	12000	8	13.133	115.6	6.687	skin
+sample_skin_2	12000	9	14.112	100.8	6.826	skin
+sample_skin_2	16000	0	14.072	114.2	6.883	skin
+sample_skin_2	16000	1	13.554	115.2	6.771	skin
+sample_skin_2	16000	2	14.799	115.6	6.737	skin
+sample_skin_2	16000	3	14.26	118.2	6.853	skin
+sample_skin_2	16000	4	14.055	114.6	6.851	skin
+sample_skin_2	16000	5	13.874	121.5	6.895	skin
+sample_skin_2	16000	6	13.872	106.4	6.939	skin
+sample_skin_2	16000	7	14.669	113.7	6.895	skin
+sample_skin_2	16000	8	14.069	109.2	6.931	skin
+sample_skin_2	16000	9	14.199	110.1	6.859	skin
+sample_skin_2	22000	0	13.967	111.7	6.765	skin
+sample_skin_2	22000	1	14.57	112.3	6.815	skin
+sample_skin_2	22000	2	14.364	119.0	6.916	skin
+sample_skin_2	22000	3	13.89	110.3	6.871	skin
+sample_skin_2	22000	4	14.458	117.1	6.814	skin
+sample_skin_2	22000	5	14.578	112.7	6.91	skin
+sample_skin_2	22000	6	14.687	114.1	6.987	skin
+sample_skin_2	22000	7	14.459	114.4	6.815	skin
+sample_skin_2	22000	8	14.411	117.0	6.902	skin
+sample_skin_2	22000	9	14.2	121.3	6.909	skin
+sample_skin_2	30000	0	15.041	112.0	6.852	skin
+sample_skin_2	30000	1	14.781	113.6	6.837	skin
+sample_skin_2	30000	2	14.359	114.6	6.873	skin
+sample_skin_2	30000	3	14.455	119.0	6.782	skin
+sample_skin_2	30000	4	14.4	117.9	6.739	skin
+sample_skin_2	30000	5	14.446	113.2	6.989	skin
+sample_skin_2	30000	6	15.175	117.4	6.792	skin
+sample_skin_2	30000	7	14.695	116.2	7.018	skin
+sample_skin_2	30000	8	14.954	113.4	6.897	skin
+sample_skin_2	30000	9	14.527	116.6	6.899	skin
+sample_skin_2	40000	0	13.718	109.6	6.815	skin
+sample_skin_2	40000	1	13.539	118.0	6.579	skin
+sample_skin_2	40000	2	14.179	114.2	6.695	skin
+sample_skin_2	40000	3	14.257	105.6	6.886	skin
+sample_skin_2	40000	4	14.249	104.6	6.772	skin
+sample_skin_2	40000	5	14.092	115.0	6.711	skin
+sample_skin_2	40000	6	13.955	121.2	6.877	skin
+sample_skin_2	40000	7	14.802	118.6	6.937	skin
+sample_skin_2	40000	8	14.784	111.7	6.901	skin
+sample_skin_2	40000	9	14.011	121.8	7.012	skin
+sample_skin_2	50000	0	14.569	110.6	6.804	skin
+sample_skin_2	50000	1	14.84	113.2	6.926	skin
+sample_skin_2	50000	2	14.454	114.1	6.749	skin
+sample_skin_2	50000	3	13.893	116.0	7.0	skin
+sample_skin_2	50000	4	14.379	113.6	7.006	skin
+sample_skin_2	50000	5	14.684	114.3	6.859	skin
+sample_skin_2	50000	6	14.534	112.6	6.814	skin
+sample_skin_2	50000	7	14.278	110.9	6.817	skin
+sample_skin_2	50000	8	13.985	124.6	6.958	skin
+sample_skin_2	50000	9	14.936	107.5	6.942	skin
+sample_skin_3	500	0	2.205	25.6	1.514	skin
+sample_skin_3	500	1	2.59	17.3	1.268	skin
+sample_skin_3	500	2	2.563	27.5	1.318	skin
+sample_skin_3	500	3	2.805	22.6	1.361	skin
+sample_skin_3	500	4	2.553	16.1	1.425	skin
+sample_skin_3	500	5	2.762	19.9	1.439	skin
+sample_skin_3	500	6	2.396	17.4	1.444	skin
+sample_skin_3	500	7	3.051	21.2	1.47	skin
+sample_skin_3	500	8	2.216	15.1	1.455	skin
+sample_skin_3	500	9	2.434	20.1	1.385	skin
+sample_skin_3	1000	0	4.562	31.8	2.486	skin
+sample_skin_3	1000	1	4.509	37.3	2.519	skin
+sample_skin_3	1000	2	4.51	27.5	2.53	skin
+sample_skin_3	1000	3	3.8	33.5	2.527	skin
+sample_skin_3	1000	4	4.343	39.6	2.458	skin
+sample_skin_3	1000	5	3.904	38.0	2.559	skin
+sample_skin_3	1000	6	4.232	28.3	2.485	skin
+sample_skin_3	1000	7	4.937	35.9	2.626	skin
+sample_skin_3	1000	8	4.871	36.5	2.517	skin
+sample_skin_3	1000	9	3.968	34.1	2.525	skin
+sample_skin_3	2000	0	7.689	56.7	4.071	skin
+sample_skin_3	2000	1	7.547	63.7	4.148	skin
+sample_skin_3	2000	2	7.265	61.8	4.164	skin
+sample_skin_3	2000	3	7.516	63.5	4.112	skin
+sample_skin_3	2000	4	7.472	56.8	4.158	skin
+sample_skin_3	2000	5	7.73	62.6	4.096	skin
+sample_skin_3	2000	6	6.974	57.4	4.087	skin
+sample_skin_3	2000	7	7.846	60.1	4.036	skin
+sample_skin_3	2000	8	6.902	50.4	4.054	skin
+sample_skin_3	2000	9	7.48	57.5	4.109	skin
+sample_skin_3	4000	0	10.85	87.2	5.874	skin
+sample_skin_3	4000	1	11.336	93.7	5.812	skin
+sample_skin_3	4000	2	11.161	86.2	5.76	skin
+sample_skin_3	4000	3	11.248	88.2	5.704	skin
+sample_skin_3	4000	4	11.487	90.2	5.729	skin
+sample_skin_3	4000	5	10.826	88.9	5.73	skin
+sample_skin_3	4000	6	11.542	85.7	5.795	skin
+sample_skin_3	4000	7	11.257	96.2	5.831	skin
+sample_skin_3	4000	8	10.241	87.9	5.748	skin
+sample_skin_3	4000	9	10.993	94.6	5.809	skin
+sample_skin_3	6000	0	13.65	101.1	6.419	skin
+sample_skin_3	6000	1	14.068	109.9	6.517	skin
+sample_skin_3	6000	2	13.332	114.1	6.504	skin
+sample_skin_3	6000	3	13.394	106.7	6.584	skin
+sample_skin_3	6000	4	13.571	106.5	6.42	skin
+sample_skin_3	6000	5	13.022	106.9	6.359	skin
+sample_skin_3	6000	6	13.355	107.7	6.468	skin
+sample_skin_3	6000	7	12.752	103.0	6.582	skin
+sample_skin_3	6000	8	12.974	110.5	6.439	skin
+sample_skin_3	6000	9	13.854	112.6	6.577	skin
+sample_skin_3	8000	0	14.385	119.6	6.779	skin
+sample_skin_3	8000	1	14.984	116.7	6.681	skin
+sample_skin_3	8000	2	14.699	121.1	6.769	skin
+sample_skin_3	8000	3	14.374	119.8	6.839	skin
+sample_skin_3	8000	4	14.329	114.2	6.877	skin
+sample_skin_3	8000	5	14.608	114.1	6.953	skin
+sample_skin_3	8000	6	14.935	121.3	6.826	skin
+sample_skin_3	8000	7	14.509	111.9	6.817	skin
+sample_skin_3	8000	8	13.935	113.7	6.776	skin
+sample_skin_3	8000	9	14.383	121.9	6.745	skin
+sample_skin_3	12000	0	15.576	133.8	6.912	skin
+sample_skin_3	12000	1	16.117	118.6	6.833	skin
+sample_skin_3	12000	2	15.717	125.8	7.099	skin
+sample_skin_3	12000	3	16.002	124.2	6.897	skin
+sample_skin_3	12000	4	15.236	127.2	6.906	skin
+sample_skin_3	12000	5	16.033	121.1	6.911	skin
+sample_skin_3	12000	6	15.947	134.4	6.908	skin
+sample_skin_3	12000	7	15.841	123.9	7.031	skin
+sample_skin_3	12000	8	15.306	123.4	7.038	skin
+sample_skin_3	12000	9	15.8	124.7	6.907	skin
+sample_skin_3	16000	0	15.82	132.3	7.001	skin
+sample_skin_3	16000	1	15.548	125.3	6.946	skin
+sample_skin_3	16000	2	15.443	127.3	7.018	skin
+sample_skin_3	16000	3	15.222	123.1	6.945	skin
+sample_skin_3	16000	4	17.36	128.8	7.027	skin
+sample_skin_3	16000	5	15.85	122.3	6.983	skin
+sample_skin_3	16000	6	15.032	128.5	7.117	skin
+sample_skin_3	16000	7	15.681	124.9	6.868	skin
+sample_skin_3	16000	8	16.295	135.2	6.9	skin
+sample_skin_3	16000	9	16.048	123.6	6.99	skin
+sample_skin_3	22000	0	15.981	125.7	6.993	skin
+sample_skin_3	22000	1	16.053	128.7	7.063	skin
+sample_skin_3	22000	2	15.916	124.5	7.037	skin
+sample_skin_3	22000	3	15.838	132.7	6.936	skin
+sample_skin_3	22000	4	16.246	123.4	7.063	skin
+sample_skin_3	22000	5	16.08	130.2	6.979	skin
+sample_skin_3	22000	6	15.665	123.7	6.976	skin
+sample_skin_3	22000	7	16.037	126.3	6.992	skin
+sample_skin_3	22000	8	15.158	128.2	7.001	skin
+sample_skin_3	22000	9	15.94	128.0	6.879	skin
+sample_skin_3	30000	0	16.373	125.6	6.978	skin
+sample_skin_3	30000	1	15.54	132.0	6.923	skin
+sample_skin_3	30000	2	15.788	125.4	7.022	skin
+sample_skin_3	30000	3	16.489	130.1	6.9	skin
+sample_skin_3	30000	4	15.231	131.6	7.027	skin
+sample_skin_3	30000	5	16.185	129.2	6.941	skin
+sample_skin_3	30000	6	16.057	131.1	6.89	skin
+sample_skin_3	30000	7	16.353	131.5	7.017	skin
+sample_skin_3	30000	8	15.456	127.5	7.007	skin
+sample_skin_3	30000	9	16.193	130.3	7.105	skin
+sample_skin_3	40000	0	15.964	123.0	6.966	skin
+sample_skin_3	40000	1	15.439	130.4	7.126	skin
+sample_skin_3	40000	2	16.566	129.5	7.011	skin
+sample_skin_3	40000	3	15.587	129.8	7.123	skin
+sample_skin_3	40000	4	15.708	130.4	7.05	skin
+sample_skin_3	40000	5	15.893	129.5	6.965	skin
+sample_skin_3	40000	6	15.115	128.1	6.952	skin
+sample_skin_3	40000	7	15.398	129.6	7.012	skin
+sample_skin_3	40000	8	15.55	125.8	7.08	skin
+sample_skin_3	40000	9	16.164	127.8	7.072	skin
+sample_skin_3	50000	0	16.563	129.8	6.879	skin
+sample_skin_3	50000	1	15.784	127.9	7.004	skin
+sample_skin_3	50000	2	16.043	131.4	7.04	skin
+sample_skin_3	50000	3	15.761	133.7	7.058	skin
+sample_skin_3	50000	4	15.657	129.3	6.904	skin
+sample_skin_3	50000	5	16.481	132.5	7.111	skin
+sample_skin_3	50000	6	15.524	129.1	6.934	skin
+sample_skin_3	50000	7	15.89	126.7	7.08	skin
+sample_skin_3	50000	8	15.93	124.5	7.048	skin
+sample_skin_3	50000	9	16.131	122.3	7.031	skin
+sample_skin_4	500	0	2.469	16.6	1.435	skin
+sample_skin_4	500	1	2.762	19.9	1.542	skin
+sample_skin_4	500	2	2.597	15.5	1.497	skin
+sample_skin_4	500	3	1.515	12.2	1.442	skin
+sample_skin_4	500	4	2.138	19.1	1.667	skin
+sample_skin_4	500	5	2.696	15.5	1.461	skin
+sample_skin_4	500	6	2.42	20.3	1.438	skin
+sample_skin_4	500	7	2.767	15.4	1.467	skin
+sample_skin_4	500	8	3.068	20.8	1.596	skin
+sample_skin_4	500	9	2.213	27.9	1.494	skin
+sample_skin_4	1000	0	4.177	44.3	2.706	skin
+sample_skin_4	1000	1	4.691	36.1	2.552	skin
+sample_skin_4	1000	2	4.317	36.2	2.673	skin
+sample_skin_4	1000	3	3.95	34.1	2.749	skin
+sample_skin_4	1000	4	4.126	35.3	2.579	skin
+sample_skin_4	1000	5	4.156	38.0	2.667	skin
+sample_skin_4	1000	6	4.655	37.1	2.695	skin
+sample_skin_4	1000	7	4.538	34.5	2.653	skin
+sample_skin_4	1000	8	4.743	36.4	2.633	skin
+sample_skin_4	1000	9	4.048	31.8	2.753	skin
+sample_skin_4	2000	0	7.821	60.9	4.356	skin
+sample_skin_4	2000	1	7.445	59.7	4.351	skin
+sample_skin_4	2000	2	7.564	61.1	4.389	skin
+sample_skin_4	2000	3	8.358	58.2	4.175	skin
+sample_skin_4	2000	4	7.232	58.3	4.224	skin
+sample_skin_4	2000	5	7.513	61.8	4.393	skin
+sample_skin_4	2000	6	8.13	56.0	4.353	skin
+sample_skin_4	2000	7	7.465	58.6	4.254	skin
+sample_skin_4	2000	8	8.205	68.3	4.374	skin
+sample_skin_4	2000	9	7.849	60.9	4.326	skin
+sample_skin_4	4000	0	11.219	93.1	5.89	skin
+sample_skin_4	4000	1	10.706	97.0	5.708	skin
+sample_skin_4	4000	2	10.617	95.3	5.997	skin
+sample_skin_4	4000	3	10.963	84.1	5.781	skin
+sample_skin_4	4000	4	11.44	90.9	5.939	skin
+sample_skin_4	4000	5	10.702	87.5	5.976	skin
+sample_skin_4	4000	6	11.249	89.3	5.971	skin
+sample_skin_4	4000	7	11.524	90.5	6.039	skin
+sample_skin_4	4000	8	11.592	91.8	6.053	skin
+sample_skin_4	4000	9	11.586	99.6	5.91	skin
+sample_skin_4	6000	0	13.266	107.7	6.602	skin
+sample_skin_4	6000	1	12.967	105.6	6.612	skin
+sample_skin_4	6000	2	13.589	107.0	6.561	skin
+sample_skin_4	6000	3	13.182	107.4	6.56	skin
+sample_skin_4	6000	4	13.257	105.2	6.599	skin
+sample_skin_4	6000	5	13.411	103.6	6.583	skin
+sample_skin_4	6000	6	13.542	109.3	6.46	skin
+sample_skin_4	6000	7	13.423	103.8	6.555	skin
+sample_skin_4	6000	8	13.421	110.8	6.557	skin
+sample_skin_4	6000	9	12.945	104.1	6.701	skin
+sample_skin_4	8000	0	14.801	114.1	6.834	skin
+sample_skin_4	8000	1	15.231	118.3	6.88	skin
+sample_skin_4	8000	2	14.809	120.2	6.813	skin
+sample_skin_4	8000	3	14.48	119.0	6.637	skin
+sample_skin_4	8000	4	14.11	110.5	6.779	skin
+sample_skin_4	8000	5	14.849	118.7	6.895	skin
+sample_skin_4	8000	6	14.393	109.5	6.873	skin
+sample_skin_4	8000	7	14.634	112.7	6.89	skin
+sample_skin_4	8000	8	14.355	114.0	6.84	skin
+sample_skin_4	8000	9	13.763	115.2	6.903	skin
+sample_skin_4	12000	0	14.697	120.8	6.981	skin
+sample_skin_4	12000	1	15.193	120.9	6.8	skin
+sample_skin_4	12000	2	14.695	130.1	6.881	skin
+sample_skin_4	12000	3	14.669	126.2	6.976	skin
+sample_skin_4	12000	4	14.618	122.3	6.953	skin
+sample_skin_4	12000	5	14.25	122.9	6.995	skin
+sample_skin_4	12000	6	15.018	125.1	6.828	skin
+sample_skin_4	12000	7	14.796	116.1	6.938	skin
+sample_skin_4	12000	8	14.888	128.5	6.86	skin
+sample_skin_4	12000	9	16.624	121.6	6.96	skin
+sample_skin_4	16000	0	15.745	123.4	6.826	skin
+sample_skin_4	16000	1	15.371	117.3	6.934	skin
+sample_skin_4	16000	2	15.129	120.6	7.011	skin
+sample_skin_4	16000	3	15.672	124.3	6.912	skin
+sample_skin_4	16000	4	15.668	126.9	6.985	skin
+sample_skin_4	16000	5	15.474	120.7	7.016	skin
+sample_skin_4	16000	6	15.114	125.9	7.02	skin
+sample_skin_4	16000	7	14.914	127.6	6.907	skin
+sample_skin_4	16000	8	15.387	127.8	6.976	skin
+sample_skin_4	16000	9	15.788	130.8	6.884	skin
+sample_skin_4	22000	0	14.67	116.5	7.04	skin
+sample_skin_4	22000	1	15.675	121.7	6.961	skin
+sample_skin_4	22000	2	15.72	118.8	6.965	skin
+sample_skin_4	22000	3	15.584	121.2	6.868	skin
+sample_skin_4	22000	4	15.901	125.6	6.869	skin
+sample_skin_4	22000	5	16.027	130.7	7.039	skin
+sample_skin_4	22000	6	15.316	122.6	7.117	skin
+sample_skin_4	22000	7	15.25	129.4	6.92	skin
+sample_skin_4	22000	8	15.482	123.7	6.859	skin
+sample_skin_4	22000	9	15.533	118.9	6.902	skin
+sample_skin_4	30000	0	15.634	126.6	6.807	skin
+sample_skin_4	30000	1	16.0	125.8	6.879	skin
+sample_skin_4	30000	2	16.498	126.5	6.953	skin
+sample_skin_4	30000	3	16.121	125.6	6.799	skin
+sample_skin_4	30000	4	15.263	121.3	7.058	skin
+sample_skin_4	30000	5	15.055	127.8	6.998	skin
+sample_skin_4	30000	6	15.962	120.5	6.914	skin
+sample_skin_4	30000	7	15.184	116.0	6.993	skin
+sample_skin_4	30000	8	15.168	124.0	7.055	skin
+sample_skin_4	30000	9	15.518	121.4	6.956	skin
+sample_skin_4	40000	0	15.354	122.5	7.037	skin
+sample_skin_4	40000	1	16.014	122.0	7.044	skin
+sample_skin_4	40000	2	15.432	126.6	7.071	skin
+sample_skin_4	40000	3	15.13	118.0	6.978	skin
+sample_skin_4	40000	4	15.363	128.3	6.851	skin
+sample_skin_4	40000	5	15.8	120.6	7.069	skin
+sample_skin_4	40000	6	15.28	115.2	6.95	skin
+sample_skin_4	40000	7	15.351	126.9	6.941	skin
+sample_skin_4	40000	8	15.577	124.6	6.958	skin
+sample_skin_4	40000	9	16.029	122.4	7.037	skin
+sample_skin_4	50000	0	15.262	130.6	6.842	skin
+sample_skin_4	50000	1	15.472	119.0	7.12	skin
+sample_skin_4	50000	2	16.339	133.4	6.997	skin
+sample_skin_4	50000	3	15.017	131.4	6.993	skin
+sample_skin_4	50000	4	15.369	128.4	7.008	skin
+sample_skin_4	50000	5	15.543	126.1	6.862	skin
+sample_skin_4	50000	6	15.908	125.4	7.027	skin
+sample_skin_4	50000	7	15.478	121.5	6.814	skin
+sample_skin_4	50000	8	15.515	124.7	6.956	skin
+sample_skin_4	50000	9	15.538	125.3	6.852	skin
+sample_skin_5	500	0	2.526	11.2	1.443	skin
+sample_skin_5	500	1	1.947	15.8	1.413	skin
+sample_skin_5	500	2	2.189	7.9	1.4	skin
+sample_skin_5	500	3	2.933	11.9	1.499	skin
+sample_skin_5	500	4	0.808	21.4	1.355	skin
+sample_skin_5	500	5	2.043	19.2	1.408	skin
+sample_skin_5	500	6	2.881	13.6	1.461	skin
+sample_skin_5	500	7	2.404	18.5	1.253	skin
+sample_skin_5	500	8	1.908	18.5	1.432	skin
+sample_skin_5	500	9	2.265	20.1	1.442	skin
+sample_skin_5	1000	0	4.027	25.0	2.529	skin
+sample_skin_5	1000	1	3.884	30.7	2.609	skin
+sample_skin_5	1000	2	4.036	26.5	2.575	skin
+sample_skin_5	1000	3	3.981	34.2	2.498	skin
+sample_skin_5	1000	4	3.259	32.5	2.538	skin
+sample_skin_5	1000	5	3.457	32.9	2.596	skin
+sample_skin_5	1000	6	4.235	28.4	2.356	skin
+sample_skin_5	1000	7	4.667	28.3	2.534	skin
+sample_skin_5	1000	8	4.145	29.2	2.58	skin
+sample_skin_5	1000	9	3.556	30.8	2.417	skin
+sample_skin_5	2000	0	7.088	53.0	4.011	skin
+sample_skin_5	2000	1	6.568	52.5	4.108	skin
+sample_skin_5	2000	2	7.017	57.0	4.062	skin
+sample_skin_5	2000	3	6.585	50.5	4.127	skin
+sample_skin_5	2000	4	6.319	55.3	3.942	skin
+sample_skin_5	2000	5	6.69	54.9	3.97	skin
+sample_skin_5	2000	6	6.535	56.9	4.059	skin
+sample_skin_5	2000	7	6.117	49.7	4.094	skin
+sample_skin_5	2000	8	6.669	54.5	4.011	skin
+sample_skin_5	2000	9	7.317	51.4	4.039	skin
+sample_skin_5	4000	0	11.448	86.8	5.754	skin
+sample_skin_5	4000	1	10.692	83.0	5.745	skin
+sample_skin_5	4000	2	10.046	85.3	5.749	skin
+sample_skin_5	4000	3	10.118	81.1	5.738	skin
+sample_skin_5	4000	4	10.51	76.0	5.751	skin
+sample_skin_5	4000	5	11.469	86.9	5.544	skin
+sample_skin_5	4000	6	10.272	76.6	5.761	skin
+sample_skin_5	4000	7	9.78	84.2	5.787	skin
+sample_skin_5	4000	8	10.513	79.3	5.76	skin
+sample_skin_5	4000	9	10.505	87.2	5.762	skin
+sample_skin_5	6000	0	11.512	101.0	6.367	skin
+sample_skin_5	6000	1	13.081	98.3	6.394	skin
+sample_skin_5	6000	2	11.94	95.2	6.306	skin
+sample_skin_5	6000	3	13.221	100.1	6.369	skin
+sample_skin_5	6000	4	12.318	102.3	6.286	skin
+sample_skin_5	6000	5	12.367	95.8	6.344	skin
+sample_skin_5	6000	6	12.203	101.2	6.537	skin
+sample_skin_5	6000	7	12.832	95.3	6.392	skin
+sample_skin_5	6000	8	12.42	96.5	6.336	skin
+sample_skin_5	6000	9	12.266	97.9	6.358	skin
+sample_skin_5	8000	0	13.845	110.8	6.697	skin
+sample_skin_5	8000	1	13.565	95.6	6.654	skin
+sample_skin_5	8000	2	13.186	106.3	6.769	skin
+sample_skin_5	8000	3	14.301	106.4	6.708	skin
+sample_skin_5	8000	4	13.681	98.7	6.664	skin
+sample_skin_5	8000	5	13.117	105.8	6.607	skin
+sample_skin_5	8000	6	13.68	108.9	6.801	skin
+sample_skin_5	8000	7	13.71	106.7	6.685	skin
+sample_skin_5	8000	8	12.9	108.1	6.832	skin
+sample_skin_5	8000	9	13.665	109.6	6.671	skin
+sample_skin_5	12000	0	14.325	110.0	6.968	skin
+sample_skin_5	12000	1	14.515	109.3	6.837	skin
+sample_skin_5	12000	2	15.055	113.5	6.786	skin
+sample_skin_5	12000	3	14.73	115.7	6.835	skin
+sample_skin_5	12000	4	14.14	121.4	6.852	skin
+sample_skin_5	12000	5	13.883	114.9	6.763	skin
+sample_skin_5	12000	6	14.104	113.1	7.071	skin
+sample_skin_5	12000	7	14.825	118.9	6.847	skin
+sample_skin_5	12000	8	14.289	114.6	6.811	skin
+sample_skin_5	12000	9	14.011	119.6	6.913	skin
+sample_skin_5	16000	0	13.967	121.1	6.768	skin
+sample_skin_5	16000	1	14.525	112.1	6.927	skin
+sample_skin_5	16000	2	13.784	115.0	6.882	skin
+sample_skin_5	16000	3	14.312	115.0	6.924	skin
+sample_skin_5	16000	4	14.762	121.7	6.693	skin
+sample_skin_5	16000	5	14.524	115.3	6.753	skin
+sample_skin_5	16000	6	14.431	121.7	6.914	skin
+sample_skin_5	16000	7	14.561	117.3	6.824	skin
+sample_skin_5	16000	8	15.118	117.0	6.7	skin
+sample_skin_5	16000	9	14.346	113.9	6.687	skin
+sample_skin_5	22000	0	14.602	113.9	6.863	skin
+sample_skin_5	22000	1	14.023	116.3	6.784	skin
+sample_skin_5	22000	2	15.098	118.4	6.963	skin
+sample_skin_5	22000	3	14.85	119.5	6.937	skin
+sample_skin_5	22000	4	13.869	119.1	6.82	skin
+sample_skin_5	22000	5	14.319	123.5	6.9	skin
+sample_skin_5	22000	6	13.996	113.2	6.994	skin
+sample_skin_5	22000	7	14.419	115.8	6.844	skin
+sample_skin_5	22000	8	14.551	118.7	6.875	skin
+sample_skin_5	22000	9	14.646	117.7	6.947	skin
+sample_skin_5	30000	0	14.261	110.8	6.714	skin
+sample_skin_5	30000	1	14.574	115.2	6.814	skin
+sample_skin_5	30000	2	14.268	112.3	6.797	skin
+sample_skin_5	30000	3	15.046	110.5	6.895	skin
+sample_skin_5	30000	4	14.021	116.3	7.007	skin
+sample_skin_5	30000	5	14.068	122.4	7.037	skin
+sample_skin_5	30000	6	14.863	118.3	6.905	skin
+sample_skin_5	30000	7	14.89	112.0	7.002	skin
+sample_skin_5	30000	8	15.363	112.8	6.82	skin
+sample_skin_5	30000	9	14.961	116.6	6.851	skin
+sample_skin_5	40000	0	14.957	113.1	6.812	skin
+sample_skin_5	40000	1	14.072	117.8	6.892	skin
+sample_skin_5	40000	2	14.846	115.3	6.892	skin
+sample_skin_5	40000	3	14.806	120.8	6.873	skin
+sample_skin_5	40000	4	15.004	116.0	6.899	skin
+sample_skin_5	40000	5	14.962	117.9	6.818	skin
+sample_skin_5	40000	6	14.133	121.7	6.886	skin
+sample_skin_5	40000	7	15.007	117.7	6.75	skin
+sample_skin_5	40000	8	14.691	110.8	6.859	skin
+sample_skin_5	40000	9	14.53	117.5	6.94	skin
+sample_skin_5	50000	0	15.082	119.0	6.747	skin
+sample_skin_5	50000	1	14.146	117.9	6.594	skin
+sample_skin_5	50000	2	14.266	119.2	6.955	skin
+sample_skin_5	50000	3	13.745	113.5	6.84	skin
+sample_skin_5	50000	4	14.811	116.6	6.898	skin
+sample_skin_5	50000	5	14.18	113.3	6.982	skin
+sample_skin_5	50000	6	14.019	117.5	6.939	skin
+sample_skin_5	50000	7	14.136	123.7	6.88	skin
+sample_skin_5	50000	8	14.645	117.7	6.755	skin
+sample_skin_5	50000	9	14.268	116.2	7.019	skin
+sample_skin_6	500	0	1.166	14.4	1.268	skin
+sample_skin_6	500	1	1.476	11.5	1.21	skin
+sample_skin_6	500	2	2.107	19.6	1.12	skin
+sample_skin_6	500	3	1.041	12.7	1.117	skin
+sample_skin_6	500	4	2.131	16.0	1.307	skin
+sample_skin_6	500	5	1.675	14.9	1.173	skin
+sample_skin_6	500	6	1.523	8.4	1.138	skin
+sample_skin_6	500	7	2.24	10.8	1.277	skin
+sample_skin_6	500	8	1.989	10.7	1.133	skin
+sample_skin_6	500	9	1.551	15.9	1.365	skin
+sample_skin_6	1000	0	3.297	21.5	2.147	skin
+sample_skin_6	1000	1	2.689	25.7	2.268	skin
+sample_skin_6	1000	2	3.064	21.3	2.168	skin
+sample_skin_6	1000	3	3.09	23.6	2.121	skin
+sample_skin_6	1000	4	3.025	22.2	2.065	skin
+sample_skin_6	1000	5	2.403	15.4	2.15	skin
+sample_skin_6	1000	6	2.307	22.7	2.092	skin
+sample_skin_6	1000	7	3.226	18.8	2.072	skin
+sample_skin_6	1000	8	2.887	25.2	2.059	skin
+sample_skin_6	1000	9	2.303	26.3	2.057	skin
+sample_skin_6	2000	0	5.439	45.2	3.561	skin
+sample_skin_6	2000	1	4.939	43.1	3.563	skin
+sample_skin_6	2000	2	5.73	42.4	3.644	skin
+sample_skin_6	2000	3	5.08	43.0	3.757	skin
+sample_skin_6	2000	4	5.731	37.0	3.481	skin
+sample_skin_6	2000	5	4.891	42.9	3.585	skin
+sample_skin_6	2000	6	5.567	38.7	3.552	skin
+sample_skin_6	2000	7	4.963	44.9	3.683	skin
+sample_skin_6	2000	8	4.79	38.1	3.406	skin
+sample_skin_6	2000	9	5.44	44.0	3.511	skin
+sample_skin_6	4000	0	8.894	68.4	5.151	skin
+sample_skin_6	4000	1	8.357	66.8	5.212	skin
+sample_skin_6	4000	2	8.388	60.1	5.211	skin
+sample_skin_6	4000	3	8.528	69.8	5.157	skin
+sample_skin_6	4000	4	9.042	60.1	5.476	skin
+sample_skin_6	4000	5	7.849	62.7	5.176	skin
+sample_skin_6	4000	6	8.354	67.0	5.176	skin
+sample_skin_6	4000	7	8.143	68.1	5.175	skin
+sample_skin_6	4000	8	8.521	62.6	5.095	skin
+sample_skin_6	4000	9	7.691	65.0	5.19	skin
+sample_skin_6	6000	0	10.232	89.8	5.901	skin
+sample_skin_6	6000	1	9.463	79.3	5.814	skin
+sample_skin_6	6000	2	9.771	90.7	5.909	skin
+sample_skin_6	6000	3	9.915	85.1	6.06	skin
+sample_skin_6	6000	4	9.875	78.1	5.998	skin
+sample_skin_6	6000	5	10.295	89.0	6.002	skin
+sample_skin_6	6000	6	10.586	74.4	6.062	skin
+sample_skin_6	6000	7	10.533	79.3	6.01	skin
+sample_skin_6	6000	8	10.517	78.5	6.013	skin
+sample_skin_6	6000	9	10.418	80.5	6.013	skin
+sample_skin_6	8000	0	11.003	86.3	6.332	skin
+sample_skin_6	8000	1	11.313	90.0	6.324	skin
+sample_skin_6	8000	2	11.578	88.5	6.407	skin
+sample_skin_6	8000	3	10.907	91.9	6.362	skin
+sample_skin_6	8000	4	10.937	98.7	6.399	skin
+sample_skin_6	8000	5	10.942	94.7	6.381	skin
+sample_skin_6	8000	6	11.567	94.3	6.371	skin
+sample_skin_6	8000	7	11.335	95.8	6.499	skin
+sample_skin_6	8000	8	10.667	97.0	6.408	skin
+sample_skin_6	8000	9	10.614	91.4	6.394	skin
+sample_skin_6	12000	0	12.038	99.9	6.516	skin
+sample_skin_6	12000	1	12.727	98.5	6.662	skin
+sample_skin_6	12000	2	12.555	101.2	6.479	skin
+sample_skin_6	12000	3	12.809	98.5	6.653	skin
+sample_skin_6	12000	4	12.248	94.4	6.736	skin
+sample_skin_6	12000	5	12.459	90.8	6.55	skin
+sample_skin_6	12000	6	13.247	104.9	6.6	skin
+sample_skin_6	12000	7	12.46	101.0	6.559	skin
+sample_skin_6	12000	8	13.056	100.4	6.537	skin
+sample_skin_6	12000	9	12.182	93.7	6.55	skin
+sample_skin_6	16000	0	12.682	104.3	6.674	skin
+sample_skin_6	16000	1	12.673	103.5	6.777	skin
+sample_skin_6	16000	2	12.459	98.5	6.533	skin
+sample_skin_6	16000	3	12.62	99.1	6.608	skin
+sample_skin_6	16000	4	11.778	103.7	6.598	skin
+sample_skin_6	16000	5	12.866	110.9	6.756	skin
+sample_skin_6	16000	6	13.512	97.6	6.609	skin
+sample_skin_6	16000	7	12.914	99.3	6.643	skin
+sample_skin_6	16000	8	13.035	103.9	6.643	skin
+sample_skin_6	16000	9	12.98	107.6	6.682	skin
+sample_skin_6	22000	0	13.097	105.7	6.754	skin
+sample_skin_6	22000	1	12.549	97.4	6.786	skin
+sample_skin_6	22000	2	13.239	108.4	6.731	skin
+sample_skin_6	22000	3	12.902	96.5	6.693	skin
+sample_skin_6	22000	4	12.621	104.8	6.784	skin
+sample_skin_6	22000	5	13.645	98.8	6.641	skin
+sample_skin_6	22000	6	13.251	105.1	6.673	skin
+sample_skin_6	22000	7	12.369	101.6	6.738	skin
+sample_skin_6	22000	8	13.178	99.5	6.712	skin
+sample_skin_6	22000	9	12.804	101.9	6.661	skin
+sample_skin_6	30000	0	12.521	96.4	6.89	skin
+sample_skin_6	30000	1	12.688	105.5	6.666	skin
+sample_skin_6	30000	2	12.422	104.3	6.853	skin
+sample_skin_6	30000	3	12.302	96.6	6.704	skin
+sample_skin_6	30000	4	13.334	105.9	6.601	skin
+sample_skin_6	30000	5	12.961	105.5	6.666	skin
+sample_skin_6	30000	6	13.06	102.1	6.616	skin
+sample_skin_6	30000	7	12.795	97.0	6.693	skin
+sample_skin_6	30000	8	13.049	100.9	6.788	skin
+sample_skin_6	30000	9	12.826	102.2	6.702	skin
+sample_skin_6	40000	0	13.051	104.1	6.743	skin
+sample_skin_6	40000	1	12.696	99.9	6.575	skin
+sample_skin_6	40000	2	12.549	105.8	6.729	skin
+sample_skin_6	40000	3	13.2	99.3	6.603	skin
+sample_skin_6	40000	4	13.649	96.0	6.731	skin
+sample_skin_6	40000	5	12.359	102.8	6.606	skin
+sample_skin_6	40000	6	12.328	95.0	6.728	skin
+sample_skin_6	40000	7	12.165	97.9	6.824	skin
+sample_skin_6	40000	8	13.382	105.8	6.754	skin
+sample_skin_6	40000	9	13.181	99.4	6.74	skin
+sample_skin_6	50000	0	12.574	106.7	6.854	skin
+sample_skin_6	50000	1	13.177	112.2	6.626	skin
+sample_skin_6	50000	2	12.671	102.6	6.695	skin
+sample_skin_6	50000	3	12.981	106.4	6.797	skin
+sample_skin_6	50000	4	12.636	100.8	6.638	skin
+sample_skin_6	50000	5	12.897	102.3	6.66	skin
+sample_skin_6	50000	6	12.351	101.4	6.657	skin
+sample_skin_6	50000	7	13.204	99.8	6.633	skin
+sample_skin_6	50000	8	13.617	100.5	6.698	skin
+sample_skin_6	50000	9	12.38	97.0	6.607	skin
+sample_soil_1	500	0	2.571	13.6	0.903	soil
+sample_soil_1	500	1	2.153	19.6	0.94	soil
+sample_soil_1	500	2	2.136	17.5	1.063	soil
+sample_soil_1	500	3	2.415	18.2	1.05	soil
+sample_soil_1	500	4	2.168	18.4	1.115	soil
+sample_soil_1	500	5	1.975	17.4	0.897	soil
+sample_soil_1	500	6	2.034	16.2	0.924	soil
+sample_soil_1	500	7	2.069	19.8	1.112	soil
+sample_soil_1	500	8	2.302	18.6	1.011	soil
+sample_soil_1	500	9	2.551	18.2	1.027	soil
+sample_soil_1	1000	0	4.246	26.7	1.995	soil
+sample_soil_1	1000	1	3.733	26.5	1.898	soil
+sample_soil_1	1000	2	3.733	31.9	1.82	soil
+sample_soil_1	1000	3	3.995	37.3	1.972	soil
+sample_soil_1	1000	4	3.761	33.4	1.761	soil
+sample_soil_1	1000	5	3.294	31.4	1.963	soil
+sample_soil_1	1000	6	4.17	25.8	1.832	soil
+sample_soil_1	1000	7	3.341	35.0	1.995	soil
+sample_soil_1	1000	8	3.625	31.4	1.908	soil
+sample_soil_1	1000	9	3.58	33.2	1.92	soil
+sample_soil_1	2000	0	7.32	48.2	3.31	soil
+sample_soil_1	2000	1	6.454	55.7	3.437	soil
+sample_soil_1	2000	2	7.106	57.0	3.307	soil
+sample_soil_1	2000	3	7.446	63.8	3.382	soil
+sample_soil_1	2000	4	7.011	56.0	3.502	soil
+sample_soil_1	2000	5	6.72	60.8	3.394	soil
+sample_soil_1	2000	6	7.229	57.7	3.439	soil
+sample_soil_1	2000	7	7.371	59.9	3.404	soil
+sample_soil_1	2000	8	7.201	59.5	3.291	soil
+sample_soil_1	2000	9	7.21	59.4	3.368	soil
+sample_soil_1	4000	0	11.018	95.5	5.219	soil
+sample_soil_1	4000	1	11.537	88.8	5.055	soil
+sample_soil_1	4000	2	11.405	96.4	5.152	soil
+sample_soil_1	4000	3	11.91	99.0	5.291	soil
+sample_soil_1	4000	4	11.893	91.1	5.16	soil
+sample_soil_1	4000	5	12.082	96.5	5.12	soil
+sample_soil_1	4000	6	11.228	92.6	5.27	soil
+sample_soil_1	4000	7	12.132	96.1	5.092	soil
+sample_soil_1	4000	8	12.096	91.0	5.29	soil
+sample_soil_1	4000	9	11.869	92.8	5.217	soil
+sample_soil_1	6000	0	14.301	118.1	6.351	soil
+sample_soil_1	6000	1	14.666	114.6	6.098	soil
+sample_soil_1	6000	2	14.56	116.4	6.223	soil
+sample_soil_1	6000	3	14.567	119.8	6.188	soil
+sample_soil_1	6000	4	14.615	112.6	6.181	soil
+sample_soil_1	6000	5	15.46	111.8	6.159	soil
+sample_soil_1	6000	6	15.213	114.2	6.172	soil
+sample_soil_1	6000	7	14.823	118.5	6.151	soil
+sample_soil_1	6000	8	14.86	117.3	6.089	soil
+sample_soil_1	6000	9	14.624	119.5	6.127	soil
+sample_soil_1	8000	0	16.55	123.6	6.67	soil
+sample_soil_1	8000	1	16.016	126.7	6.664	soil
+sample_soil_1	8000	2	16.617	140.0	6.735	soil
+sample_soil_1	8000	3	17.207	132.8	6.681	soil
+sample_soil_1	8000	4	16.709	127.6	6.641	soil
+sample_soil_1	8000	5	16.731	131.4	6.723	soil
+sample_soil_1	8000	6	16.022	141.0	6.697	soil
+sample_soil_1	8000	7	16.789	135.6	6.654	soil
+sample_soil_1	8000	8	16.429	135.5	6.731	soil
+sample_soil_1	8000	9	16.535	130.9	6.583	soil
+sample_soil_1	12000	0	18.368	145.8	7.051	soil
+sample_soil_1	12000	1	18.499	149.9	7.178	soil
+sample_soil_1	12000	2	18.647	154.2	7.186	soil
+sample_soil_1	12000	3	19.027	156.4	7.199	soil
+sample_soil_1	12000	4	18.867	152.6	7.094	soil
+sample_soil_1	12000	5	18.746	155.6	7.3	soil
+sample_soil_1	12000	6	18.844	149.5	7.272	soil
+sample_soil_1	12000	7	19.073	144.0	7.204	soil
+sample_soil_1	12000	8	18.862	149.8	7.174	soil
+sample_soil_1	12000	9	18.607	153.7	7.029	soil
+sample_soil_1	16000	0	20.525	161.1	7.341	soil
+sample_soil_1	16000	1	19.479	154.3	7.23	soil
+sample_soil_1	16000	2	19.755	157.4	7.402	soil
+sample_soil_1	16000	3	19.568	157.2	7.317	soil
+sample_soil_1	16000	4	19.137	159.9	7.275	soil
+sample_soil_1	16000	5	19.227	159.0	7.293	soil
+sample_soil_1	16000	6	19.767	158.0	7.309	soil
+sample_soil_1	16000	7	19.113	161.0	7.251	soil
+sample_soil_1	16000	8	20.237	171.3	7.293	soil
+sample_soil_1	16000	9	19.318	150.9	7.322	soil
+sample_soil_1	22000	0	20.119	161.7	7.231	soil
+sample_soil_1	22000	1	20.236	160.8	7.371	soil
+sample_soil_1	22000	2	20.109	162.3	7.343	soil
+sample_soil_1	22000	3	20.158	162.7	7.388	soil
+sample_soil_1	22000	4	19.982	162.7	7.269	soil
+sample_soil_1	22000	5	20.332	166.8	7.354	soil
+sample_soil_1	22000	6	20.423	153.0	7.426	soil
+sample_soil_1	22000	7	19.653	158.8	7.284	soil
+sample_soil_1	22000	8	20.404	152.5	7.365	soil
+sample_soil_1	22000	9	20.572	151.4	7.344	soil
+sample_soil_1	30000	0	19.862	158.2	7.428	soil
+sample_soil_1	30000	1	20.092	163.5	7.388	soil
+sample_soil_1	30000	2	20.534	169.8	7.385	soil
+sample_soil_1	30000	3	20.401	156.1	7.374	soil
+sample_soil_1	30000	4	20.484	160.7	7.322	soil
+sample_soil_1	30000	5	19.963	167.7	7.355	soil
+sample_soil_1	30000	6	20.841	166.4	7.302	soil
+sample_soil_1	30000	7	20.525	161.9	7.326	soil
+sample_soil_1	30000	8	20.435	162.1	7.169	soil
+sample_soil_1	30000	9	20.108	160.2	7.473	soil
+sample_soil_1	40000	0	19.746	162.2	7.379	soil
+sample_soil_1	40000	1	20.68	161.7	7.488	soil
+sample_soil_1	40000	2	20.593	158.7	7.327	soil
+sample_soil_1	40000	3	19.975	164.6	7.382	soil
+sample_soil_1	40000	4	19.985	162.6	7.434	soil
+sample_soil_1	40000	5	19.26	163.0	7.283	soil
+sample_soil_1	40000	6	20.413	160.8	7.469	soil
+sample_soil_1	40000	7	19.973	162.8	7.465	soil
+sample_soil_1	40000	8	20.559	170.5	7.465	soil
+sample_soil_1	40000	9	19.994	163.2	7.429	soil
+sample_soil_1	50000	0	20.63	164.3	7.173	soil
+sample_soil_1	50000	1	20.498	170.1	7.385	soil
+sample_soil_1	50000	2	20.028	160.2	7.377	soil
+sample_soil_1	50000	3	21.206	160.0	7.387	soil
+sample_soil_1	50000	4	20.601	160.9	7.298	soil
+sample_soil_1	50000	5	19.932	158.0	7.437	soil
+sample_soil_1	50000	6	20.171	164.2	7.409	soil
+sample_soil_1	50000	7	20.708	166.8	7.368	soil
+sample_soil_1	50000	8	19.519	163.1	7.453	soil
+sample_soil_1	50000	9	20.601	163.9	7.325	soil
+sample_soil_2	500	0	1.797	18.4	1.215	soil
+sample_soil_2	500	1	2.427	22.8	1.159	soil
+sample_soil_2	500	2	2.128	17.8	1.038	soil
+sample_soil_2	500	3	1.764	17.2	1.119	soil
+sample_soil_2	500	4	2.39	21.9	1.105	soil
+sample_soil_2	500	5	1.793	21.2	1.076	soil
+sample_soil_2	500	6	2.139	20.3	1.024	soil
+sample_soil_2	500	7	2.089	14.9	1.107	soil
+sample_soil_2	500	8	2.09	18.0	1.088	soil
+sample_soil_2	500	9	1.589	13.6	1.029	soil
+sample_soil_2	1000	0	3.715	28.0	1.91	soil
+sample_soil_2	1000	1	4.455	35.1	2.092	soil
+sample_soil_2	1000	2	3.959	33.0	1.852	soil
+sample_soil_2	1000	3	3.734	27.3	1.836	soil
+sample_soil_2	1000	4	4.758	27.1	2.022	soil
+sample_soil_2	1000	5	3.736	28.8	2.168	soil
+sample_soil_2	1000	6	3.311	28.1	1.975	soil
+sample_soil_2	1000	7	4.388	32.5	1.941	soil
+sample_soil_2	1000	8	3.703	35.7	2.027	soil
+sample_soil_2	1000	9	3.945	36.7	1.871	soil
+sample_soil_2	2000	0	6.706	54.5	3.41	soil
+sample_soil_2	2000	1	7.66	56.7	3.334	soil
+sample_soil_2	2000	2	7.465	54.8	3.523	soil
+sample_soil_2	2000	3	7.435	63.2	3.466	soil
+sample_soil_2	2000	4	7.347	61.3	3.554	soil
+sample_soil_2	2000	5	6.953	52.1	3.57	soil
+sample_soil_2	2000	6	6.778	62.5	3.466	soil
+sample_soil_2	2000	7	6.449	60.0	3.49	soil
+sample_soil_2	2000	8	7.403	56.5	3.517	soil
+sample_soil_2	2000	9	7.743	54.1	3.281	soil
+sample_soil_2	4000	0	11.606	92.2	5.233	soil
+sample_soil_2	4000	1	11.237	100.8	5.265	soil
+sample_soil_2	4000	2	11.737	94.7	5.343	soil
+sample_soil_2	4000	3	11.364	96.3	5.115	soil
+sample_soil_2	4000	4	12.462	93.6	5.379	soil
+sample_soil_2	4000	5	12.123	95.3	5.403	soil
+sample_soil_2	4000	6	12.122	92.8	5.32	soil
+sample_soil_2	4000	7	12.12	95.5	5.346	soil
+sample_soil_2	4000	8	11.444	88.3	5.29	soil
+sample_soil_2	4000	9	11.743	95.6	5.438	soil
+sample_soil_2	6000	0	14.429	119.3	6.233	soil
+sample_soil_2	6000	1	14.661	122.2	6.2	soil
+sample_soil_2	6000	2	14.858	112.7	6.298	soil
+sample_soil_2	6000	3	14.437	119.6	6.192	soil
+sample_soil_2	6000	4	14.771	118.6	6.266	soil
+sample_soil_2	6000	5	13.94	121.5	6.259	soil
+sample_soil_2	6000	6	14.752	119.4	6.058	soil
+sample_soil_2	6000	7	14.547	115.0	6.256	soil
+sample_soil_2	6000	8	14.683	119.1	6.25	soil
+sample_soil_2	6000	9	15.177	114.6	6.187	soil
+sample_soil_2	8000	0	16.371	131.1	6.705	soil
+sample_soil_2	8000	1	16.647	132.6	6.785	soil
+sample_soil_2	8000	2	16.442	136.8	6.647	soil
+sample_soil_2	8000	3	16.632	124.5	6.648	soil
+sample_soil_2	8000	4	16.38	134.2	6.553	soil
+sample_soil_2	8000	5	16.917	133.8	6.768	soil
+sample_soil_2	8000	6	16.164	136.4	6.777	soil
+sample_soil_2	8000	7	17.035	142.6	6.768	soil
+sample_soil_2	8000	8	16.339	131.4	6.655	soil
+sample_soil_2	8000	9	17.362	127.2	6.869	soil
+sample_soil_2	12000	0	18.268	155.4	7.21	soil
+sample_soil_2	12000	1	18.967	137.9	7.11	soil
+sample_soil_2	12000	2	18.547	148.2	7.13	soil
+sample_soil_2	12000	3	19.178	152.1	7.146	soil
+sample_soil_2	12000	4	19.316	146.3	7.066	soil
+sample_soil_2	12000	5	17.964	151.9	7.269	soil
+sample_soil_2	12000	6	18.321	148.8	7.205	soil
+sample_soil_2	12000	7	19.103	143.2	7.209	soil
+sample_soil_2	12000	8	18.291	148.7	7.011	soil
+sample_soil_2	12000	9	18.739	147.3	7.175	soil
+sample_soil_2	16000	0	19.451	157.5	7.281	soil
+sample_soil_2	16000	1	19.898	151.5	7.219	soil
+sample_soil_2	16000	2	19.654	159.9	7.304	soil
+sample_soil_2	16000	3	19.109	156.5	7.363	soil
+sample_soil_2	16000	4	19.631	152.2	7.126	soil
+sample_soil_2	16000	5	20.081	156.9	7.221	soil
+sample_soil_2	16000	6	19.25	153.5	7.357	soil
+sample_soil_2	16000	7	19.357	153.9	7.213	soil
+sample_soil_2	16000	8	18.985	154.1	7.246	soil
+sample_soil_2	16000	9	20.012	158.1	7.178	soil
+sample_soil_2	22000	0	19.432	164.1	7.098	soil
+sample_soil_2	22000	1	20.12	153.9	7.327	soil
+sample_soil_2	22000	2	20.083	151.7	7.27	soil
+sample_soil_2	22000	3	19.934	161.7	7.187	soil
+sample_soil_2	22000	4	20.01	165.3	7.224	soil
+sample_soil_2	22000	5	20.054	155.7	7.312	soil
+sample_soil_2	22000	6	19.994	153.8	7.223	soil
+sample_soil_2	22000	7	20.758	153.7	7.406	soil
+sample_soil_2	22000	8	19.68	157.2	7.314	soil
+sample_soil_2	22000	9	19.093	162.6	7.307	soil
+sample_soil_2	30000	0	19.982	156.1	7.316	soil
+sample_soil_2	30000	1	20.101	162.2	7.352	soil
+sample_soil_2	30000	2	19.859	161.6	7.4	soil
+sample_soil_2	30000	3	19.646	153.9	7.166	soil
+sample_soil_2	30000	4	20.042	161.8	7.276	soil
+sample_soil_2	30000	5	19.232	158.8	7.196	soil
+sample_soil_2	30000	6	19.807	166.5	7.308	soil
+sample_soil_2	30000	7	19.781	154.5	7.243	soil
+sample_soil_2	30000	8	20.334	156.3	7.328	soil
+sample_soil_2	30000	9	20.38	157.4	7.44	soil
+sample_soil_2	40000	0	19.89	161.7	7.328	soil
+sample_soil_2	40000	1	19.969	158.2	7.527	soil
+sample_soil_2	40000	2	20.474	160.5	7.23	soil
+sample_soil_2	40000	3	19.271	159.8	7.252	soil
+sample_soil_2	40000	4	19.453	158.5	7.339	soil
+sample_soil_2	40000	5	19.946	162.0	7.457	soil
+sample_soil_2	40000	6	20.234	158.5	7.388	soil
+sample_soil_2	40000	7	19.883	155.5	7.193	soil
+sample_soil_2	40000	8	19.85	161.9	7.266	soil
+sample_soil_2	40000	9	20.255	161.3	7.326	soil
+sample_soil_2	50000	0	19.461	161.7	7.384	soil
+sample_soil_2	50000	1	19.496	157.8	7.295	soil
+sample_soil_2	50000	2	19.994	167.4	7.26	soil
+sample_soil_2	50000	3	20.515	157.3	7.354	soil
+sample_soil_2	50000	4	20.175	161.8	7.378	soil
+sample_soil_2	50000	5	19.184	157.3	7.343	soil
+sample_soil_2	50000	6	20.014	157.5	7.301	soil
+sample_soil_2	50000	7	20.09	151.8	7.382	soil
+sample_soil_2	50000	8	19.813	161.7	7.47	soil
+sample_soil_2	50000	9	20.152	155.5	7.424	soil
+sample_soil_3	500	0	2.688	11.7	0.926	soil
+sample_soil_3	500	1	2.259	14.1	1.134	soil
+sample_soil_3	500	2	2.07	12.3	1.1	soil
+sample_soil_3	500	3	2.509	23.2	1.083	soil
+sample_soil_3	500	4	2.308	18.2	1.144	soil
+sample_soil_3	500	5	2.387	17.2	1.04	soil
+sample_soil_3	500	6	1.902	11.0	1.068	soil
+sample_soil_3	500	7	1.917	10.5	1.169	soil
+sample_soil_3	500	8	2.467	13.7	1.009	soil
+sample_soil_3	500	9	1.861	20.9	1.029	soil
+sample_soil_3	1000	0	4.201	31.1	1.896	soil
+sample_soil_3	1000	1	4.694	26.8	2.028	soil
+sample_soil_3	1000	2	4.775	33.8	1.941	soil
+sample_soil_3	1000	3	4.277	33.7	2.073	soil
+sample_soil_3	1000	4	4.533	27.8	1.944	soil
+sample_soil_3	1000	5	4.059	29.5	1.896	soil
+sample_soil_3	1000	6	4.427	34.3	1.899	soil
+sample_soil_3	1000	7	4.167	27.1	1.99	soil
+sample_soil_3	1000	8	4.809	37.3	1.874	soil
+sample_soil_3	1000	9	4.022	32.4	2.01	soil
+sample_soil_3	2000	0	7.682	51.5	3.306	soil
+sample_soil_3	2000	1	7.226	65.3	3.272	soil
+sample_soil_3	2000	2	8.13	59.3	3.458	soil
+sample_soil_3	2000	3	7.208	55.2	3.389	soil
+sample_soil_3	2000	4	7.22	59.6	3.507	soil
+sample_soil_3	2000	5	7.926	62.3	3.428	soil
+sample_soil_3	2000	6	7.872	59.5	3.404	soil
+sample_soil_3	2000	7	7.037	58.4	3.38	soil
+sample_soil_3	2000	8	7.716	57.4	3.349	soil
+sample_soil_3	2000	9	7.682	59.6	3.301	soil
+sample_soil_3	4000	0	11.311	102.5	5.389	soil
+sample_soil_3	4000	1	13.195	90.0	5.326	soil
+sample_soil_3	4000	2	11.922	97.8	5.289	soil
+sample_soil_3	4000	3	12.898	99.6	5.337	soil
+sample_soil_3	4000	4	12.172	98.2	5.269	soil
+sample_soil_3	4000	5	11.695	102.8	5.36	soil
+sample_soil_3	4000	6	12.821	96.4	5.126	soil
+sample_soil_3	4000	7	12.307	96.2	5.262	soil
+sample_soil_3	4000	8	12.209	95.8	5.252	soil
+sample_soil_3	4000	9	12.533	92.8	5.248	soil
+sample_soil_3	6000	0	15.973	125.4	6.242	soil
+sample_soil_3	6000	1	15.518	128.6	6.136	soil
+sample_soil_3	6000	2	15.47	127.2	6.264	soil
+sample_soil_3	6000	3	16.085	129.6	6.245	soil
+sample_soil_3	6000	4	16.276	125.2	6.196	soil
+sample_soil_3	6000	5	16.146	129.1	6.364	soil
+sample_soil_3	6000	6	15.279	130.4	6.28	soil
+sample_soil_3	6000	7	15.083	126.9	6.37	soil
+sample_soil_3	6000	8	15.887	123.4	6.245	soil
+sample_soil_3	6000	9	15.45	126.9	6.332	soil
+sample_soil_3	8000	0	17.328	147.1	6.949	soil
+sample_soil_3	8000	1	18.027	143.2	6.727	soil
+sample_soil_3	8000	2	17.72	144.2	6.798	soil
+sample_soil_3	8000	3	17.48	145.1	6.851	soil
+sample_soil_3	8000	4	17.745	146.3	6.653	soil
+sample_soil_3	8000	5	17.346	138.7	6.815	soil
+sample_soil_3	8000	6	18.105	146.6	6.75	soil
+sample_soil_3	8000	7	18.098	137.5	6.843	soil
+sample_soil_3	8000	8	17.819	147.4	6.65	soil
+sample_soil_3	8000	9	17.444	143.5	6.786	soil
+sample_soil_3	12000	0	20.117	158.9	7.231	soil
+sample_soil_3	12000	1	19.883	160.0	7.345	soil
+sample_soil_3	12000	2	19.88	158.5	7.209	soil
+sample_soil_3	12000	3	19.528	161.7	7.19	soil
+sample_soil_3	12000	4	19.662	156.0	7.343	soil
+sample_soil_3	12000	5	20.493	153.0	7.325	soil
+sample_soil_3	12000	6	19.998	151.8	7.26	soil
+sample_soil_3	12000	7	19.948	149.9	7.311	soil
+sample_soil_3	12000	8	20.267	163.2	7.16	soil
+sample_soil_3	12000	9	20.295	159.7	7.206	soil
+sample_soil_3	16000	0	21.118	165.0	7.43	soil
+sample_soil_3	16000	1	20.718	168.0	7.595	soil
+sample_soil_3	16000	2	21.208	167.6	7.455	soil
+sample_soil_3	16000	3	20.632	167.2	7.341	soil
+sample_soil_3	16000	4	20.641	168.8	7.372	soil
+sample_soil_3	16000	5	20.87	163.5	7.39	soil
+sample_soil_3	16000	6	21.171	163.8	7.3	soil
+sample_soil_3	16000	7	21.525	169.6	7.439	soil
+sample_soil_3	16000	8	21.243	165.7	7.404	soil
+sample_soil_3	16000	9	20.696	169.7	7.367	soil
+sample_soil_3	22000	0	21.865	179.0	7.453	soil
+sample_soil_3	22000	1	20.992	174.7	7.446	soil
+sample_soil_3	22000	2	21.393	175.1	7.469	soil
+sample_soil_3	22000	3	21.961	169.3	7.452	soil
+sample_soil_3	22000	4	21.838	169.8	7.403	soil
+sample_soil_3	22000	5	21.135	178.9	7.487	soil
+sample_soil_3	22000	6	20.994	174.6	7.491	soil
+sample_soil_3	22000	7	21.571	170.2	7.475	soil
+sample_soil_3	22000	8	21.918	173.0	7.5	soil
+sample_soil_3	22000	9	21.655	170.0	7.509	soil
+sample_soil_3	30000	0	22.047	169.9	7.536	soil
+sample_soil_3	30000	1	20.458	175.1	7.451	soil
+sample_soil_3	30000	2	21.556	167.6	7.477	soil
+sample_soil_3	30000	3	21.336	176.6	7.465	soil
+sample_soil_3	30000	4	21.205	181.9	7.5	soil
+sample_soil_3	30000	5	22.257	173.8	7.389	soil
+sample_soil_3	30000	6	21.119	171.8	7.411	soil
+sample_soil_3	30000	7	21.436	168.0	7.325	soil
+sample_soil_3	30000	8	21.737	171.2	7.416	soil
+sample_soil_3	30000	9	21.506	170.2	7.48	soil
+sample_soil_3	40000	0	20.554	170.5	7.47	soil
+sample_soil_3	40000	1	21.852	168.5	7.331	soil
+sample_soil_3	40000	2	21.332	178.1	7.438	soil
+sample_soil_3	40000	3	20.891	172.8	7.383	soil
+sample_soil_3	40000	4	21.887	168.9	7.509	soil
+sample_soil_3	40000	5	21.668	179.5	7.364	soil
+sample_soil_3	40000	6	21.612	170.5	7.491	soil
+sample_soil_3	40000	7	21.232	167.1	7.402	soil
+sample_soil_3	40000	8	21.459	176.0	7.374	soil
+sample_soil_3	40000	9	21.91	171.1	7.595	soil
+sample_soil_3	50000	0	22.349	174.9	7.612	soil
+sample_soil_3	50000	1	21.344	173.5	7.336	soil
+sample_soil_3	50000	2	20.986	173.9	7.475	soil
+sample_soil_3	50000	3	21.589	175.1	7.505	soil
+sample_soil_3	50000	4	21.472	177.7	7.438	soil
+sample_soil_3	50000	5	21.762	174.6	7.455	soil
+sample_soil_3	50000	6	21.909	170.4	7.425	soil
+sample_soil_3	50000	7	21.447	170.5	7.408	soil
+sample_soil_3	50000	8	20.277	168.5	7.335	soil
+sample_soil_3	50000	9	21.483	169.4	7.569	soil
+sample_soil_4	500	0	1.834	17.3	1.035	soil
+sample_soil_4	500	1	2.422	17.4	1.065	soil
+sample_soil_4	500	2	1.779	13.7	1.096	soil
+sample_soil_4	500	3	2.231	14.6	0.986	soil
+sample_soil_4	500	4	1.683	19.2	0.943	soil
+sample_soil_4	500	5	2.004	19.1	0.912	soil
+sample_soil_4	500	6	1.655	16.6	0.989	soil
+sample_soil_4	500	7	2.756	22.6	0.986	soil
+sample_soil_4	500	8	2.144	17.1	0.964	soil
+sample_soil_4	500	9	1.266	18.2	1.078	soil
+sample_soil_4	1000	0	3.805	28.4	1.966	soil
+sample_soil_4	1000	1	3.973	25.5	1.817	soil
+sample_soil_4	1000	2	3.855	26.7	1.964	soil
+sample_soil_4	1000	3	4.535	32.1	1.856	soil
+sample_soil_4	1000	4	3.7	30.8	1.817	soil
+sample_soil_4	1000	5	3.476	34.0	1.759	soil
+sample_soil_4	1000	6	4.456	27.5	2.0	soil
+sample_soil_4	1000	7	3.623	33.8	1.83	soil
+sample_soil_4	1000	8	4.15	27.8	1.853	soil
+sample_soil_4	1000	9	4.474	30.4	1.895	soil
+sample_soil_4	2000	0	6.941	56.2	3.303	soil
+sample_soil_4	2000	1	7.189	58.5	3.294	soil
+sample_soil_4	2000	2	7.268	51.2	3.377	soil
+sample_soil_4	2000	3	6.712	52.3	3.114	soil
+sample_soil_4	2000	4	7.134	55.5	3.341	soil
+sample_soil_4	2000	5	7.334	60.3	3.533	soil
+sample_soil_4	2000	6	7.511	58.8	3.098	soil
+sample_soil_4	2000	7	6.268	53.7	3.299	soil
+sample_soil_4	2000	8	7.381	55.9	3.173	soil
+sample_soil_4	2000	9	7.533	58.2	3.185	soil
+sample_soil_4	4000	0	11.986	95.5	5.081	soil
+sample_soil_4	4000	1	11.826	95.0	5.077	soil
+sample_soil_4	4000	2	12.092	88.7	5.201	soil
+sample_soil_4	4000	3	11.476	95.0	5.204	soil
+sample_soil_4	4000	4	12.074	96.2	5.245	soil
+sample_soil_4	4000	5	13.133	99.5	5.041	soil
+sample_soil_4	4000	6	12.076	96.2	5.057	soil
+sample_soil_4	4000	7	11.297	94.9	5.19	soil
+sample_soil_4	4000	8	12.087	95.4	5.154	soil
+sample_soil_4	4000	9	11.175	89.0	5.028	soil
+sample_soil_4	6000	0	14.862	119.5	6.106	soil
+sample_soil_4	6000	1	15.103	126.2	6.113	soil
+sample_soil_4	6000	2	15.16	118.3	6.17	soil
+sample_soil_4	6000	3	14.577	116.5	5.959	soil
+sample_soil_4	6000	4	14.238	124.8	6.065	soil
+sample_soil_4	6000	5	14.813	117.6	6.042	soil
+sample_soil_4	6000	6	14.778	118.6	6.138	soil
+sample_soil_4	6000	7	14.541	123.5	6.182	soil
+sample_soil_4	6000	8	14.883	118.9	6.145	soil
+sample_soil_4	6000	9	14.365	125.6	6.202	soil
+sample_soil_4	8000	0	17.274	135.1	6.685	soil
+sample_soil_4	8000	1	17.278	138.8	6.788	soil
+sample_soil_4	8000	2	16.611	139.1	6.699	soil
+sample_soil_4	8000	3	16.843	142.8	6.651	soil
+sample_soil_4	8000	4	16.632	134.5	6.684	soil
+sample_soil_4	8000	5	16.779	131.4	6.875	soil
+sample_soil_4	8000	6	17.125	131.3	6.555	soil
+sample_soil_4	8000	7	17.43	133.5	6.695	soil
+sample_soil_4	8000	8	16.875	134.8	6.75	soil
+sample_soil_4	8000	9	16.893	144.2	6.828	soil
+sample_soil_4	12000	0	18.941	151.9	7.092	soil
+sample_soil_4	12000	1	19.465	156.0	7.171	soil
+sample_soil_4	12000	2	19.459	151.1	7.187	soil
+sample_soil_4	12000	3	19.894	156.0	7.29	soil
+sample_soil_4	12000	4	19.284	154.6	7.135	soil
+sample_soil_4	12000	5	19.119	150.9	7.163	soil
+sample_soil_4	12000	6	19.413	152.3	7.166	soil
+sample_soil_4	12000	7	18.896	154.2	7.269	soil
+sample_soil_4	12000	8	19.651	151.7	7.258	soil
+sample_soil_4	12000	9	19.321	154.9	7.264	soil
+sample_soil_4	16000	0	19.806	158.7	7.273	soil
+sample_soil_4	16000	1	20.396	167.2	7.324	soil
+sample_soil_4	16000	2	19.813	165.7	7.352	soil
+sample_soil_4	16000	3	20.261	165.1	7.322	soil
+sample_soil_4	16000	4	21.453	158.4	7.349	soil
+sample_soil_4	16000	5	21.09	162.6	7.228	soil
+sample_soil_4	16000	6	20.949	160.4	7.386	soil
+sample_soil_4	16000	7	20.426	164.0	7.386	soil
+sample_soil_4	16000	8	20.721	159.1	7.337	soil
+sample_soil_4	16000	9	20.498	160.2	7.368	soil
+sample_soil_4	22000	0	20.876	165.3	7.372	soil
+sample_soil_4	22000	1	21.147	168.8	7.403	soil
+sample_soil_4	22000	2	20.715	165.9	7.273	soil
+sample_soil_4	22000	3	21.397	176.5	7.483	soil
+sample_soil_4	22000	4	21.635	174.9	7.391	soil
+sample_soil_4	22000	5	21.615	166.8	7.347	soil
+sample_soil_4	22000	6	20.492	169.2	7.503	soil
+sample_soil_4	22000	7	21.126	169.6	7.476	soil
+sample_soil_4	22000	8	20.283	167.6	7.523	soil
+sample_soil_4	22000	9	20.633	170.9	7.185	soil
+sample_soil_4	30000	0	21.771	167.4	7.439	soil
+sample_soil_4	30000	1	20.993	170.2	7.285	soil
+sample_soil_4	30000	2	20.495	176.5	7.407	soil
+sample_soil_4	30000	3	20.871	170.6	7.33	soil
+sample_soil_4	30000	4	21.015	176.9	7.404	soil
+sample_soil_4	30000	5	20.762	173.0	7.411	soil
+sample_soil_4	30000	6	21.868	165.7	7.521	soil
+sample_soil_4	30000	7	21.009	171.6	7.499	soil
+sample_soil_4	30000	8	21.059	170.3	7.377	soil
+sample_soil_4	30000	9	21.187	168.2	7.45	soil
+sample_soil_4	40000	0	20.925	172.8	7.402	soil
+sample_soil_4	40000	1	20.804	170.2	7.359	soil
+sample_soil_4	40000	2	21.51	172.5	7.476	soil
+sample_soil_4	40000	3	21.309	170.6	7.467	soil
+sample_soil_4	40000	4	21.165	168.6	7.403	soil
+sample_soil_4	40000	5	22.027	174.1	7.511	soil
+sample_soil_4	40000	6	21.281	164.0	7.351	soil
+sample_soil_4	40000	7	21.563	172.7	7.496	soil
+sample_soil_4	40000	8	20.875	168.6	7.324	soil
+sample_soil_4	40000	9	22.263	168.5	7.479	soil
+sample_soil_4	50000	0	21.197	168.9	7.379	soil
+sample_soil_4	50000	1	21.524	175.6	7.45	soil
+sample_soil_4	50000	2	21.196	171.5	7.389	soil
+sample_soil_4	50000	3	21.049	168.4	7.411	soil
+sample_soil_4	50000	4	20.751	169.1	7.478	soil
+sample_soil_4	50000	5	21.163	174.1	7.31	soil
+sample_soil_4	50000	6	20.519	167.2	7.299	soil
+sample_soil_4	50000	7	21.646	172.8	7.383	soil
+sample_soil_4	50000	8	21.33	172.4	7.404	soil
+sample_soil_4	50000	9	21.491	171.5	7.397	soil
+sample_soil_5	500	0	1.912	19.0	0.78	soil
+sample_soil_5	500	1	2.224	10.0	0.915	soil
+sample_soil_5	500	2	2.368	16.0	0.962	soil
+sample_soil_5	500	3	2.387	17.8	0.924	soil
+sample_soil_5	500	4	1.563	16.7	0.785	soil
+sample_soil_5	500	5	2.022	16.0	0.955	soil
+sample_soil_5	500	6	1.167	15.1	0.984	soil
+sample_soil_5	500	7	1.583	11.5	0.965	soil
+sample_soil_5	500	8	2.396	17.3	0.842	soil
+sample_soil_5	500	9	1.655	18.7	0.833	soil
+sample_soil_5	1000	0	2.932	26.6	1.74	soil
+sample_soil_5	1000	1	3.104	26.5	1.743	soil
+sample_soil_5	1000	2	3.429	27.8	1.743	soil
+sample_soil_5	1000	3	3.34	28.6	1.685	soil
+sample_soil_5	1000	4	3.339	32.1	1.758	soil
+sample_soil_5	1000	5	3.828	34.3	1.832	soil
+sample_soil_5	1000	6	4.033	33.7	1.529	soil
+sample_soil_5	1000	7	3.559	26.4	1.705	soil
+sample_soil_5	1000	8	3.203	31.4	1.872	soil
+sample_soil_5	1000	9	3.428	18.1	1.749	soil
+sample_soil_5	2000	0	6.79	50.1	2.799	soil
+sample_soil_5	2000	1	6.417	51.7	3.071	soil
+sample_soil_5	2000	2	6.564	51.1	3.016	soil
+sample_soil_5	2000	3	6.279	49.3	2.846	soil
+sample_soil_5	2000	4	6.498	52.2	2.953	soil
+sample_soil_5	2000	5	6.384	50.8	2.842	soil
+sample_soil_5	2000	6	5.848	54.1	2.952	soil
+sample_soil_5	2000	7	6.377	46.4	2.956	soil
+sample_soil_5	2000	8	6.962	51.1	2.953	soil
+sample_soil_5	2000	9	6.254	47.1	2.958	soil
+sample_soil_5	4000	0	10.604	84.5	4.9	soil
+sample_soil_5	4000	1	10.99	90.1	4.67	soil
+sample_soil_5	4000	2	10.494	90.5	4.777	soil
+sample_soil_5	4000	3	10.918	89.0	4.645	soil
+sample_soil_5	4000	4	11.075	87.0	4.661	soil
+sample_soil_5	4000	5	11.226	85.9	4.692	soil
+sample_soil_5	4000	6	11.064	87.6	4.76	soil
+sample_soil_5	4000	7	10.864	90.4	4.805	soil
+sample_soil_5	4000	8	10.86	93.7	4.77	soil
+sample_soil_5	4000	9	10.967	89.4	4.856	soil
+sample_soil_5	6000	0	13.718	117.0	5.695	soil
+sample_soil_5	6000	1	13.996	107.6	5.715	soil
+sample_soil_5	6000	2	14.284	108.4	5.804	soil
+sample_soil_5	6000	3	13.645	116.6	5.692	soil
+sample_soil_5	6000	4	13.63	102.4	5.756	soil
+sample_soil_5	6000	5	13.554	109.7	5.872	soil
+sample_soil_5	6000	6	13.817	113.7	5.761	soil
+sample_soil_5	6000	7	13.903	113.3	5.737	soil
+sample_soil_5	6000	8	15.173	111.3	5.792	soil
+sample_soil_5	6000	9	14.536	116.3	5.776	soil
+sample_soil_5	8000	0	16.23	131.6	6.416	soil
+sample_soil_5	8000	1	16.337	135.7	6.615	soil
+sample_soil_5	8000	2	16.02	123.9	6.53	soil
+sample_soil_5	8000	3	16.594	129.4	6.569	soil
+sample_soil_5	8000	4	15.547	127.0	6.445	soil
+sample_soil_5	8000	5	16.254	134.0	6.435	soil
+sample_soil_5	8000	6	15.74	130.3	6.436	soil
+sample_soil_5	8000	7	16.415	134.7	6.449	soil
+sample_soil_5	8000	8	15.668	124.3	6.588	soil
+sample_soil_5	8000	9	16.61	130.8	6.421	soil
+sample_soil_5	12000	0	18.89	160.4	6.991	soil
+sample_soil_5	12000	1	18.32	156.4	6.996	soil
+sample_soil_5	12000	2	18.896	149.3	7.011	soil
+sample_soil_5	12000	3	18.722	149.0	6.96	soil
+sample_soil_5	12000	4	19.075	140.3	6.908	soil
+sample_soil_5	12000	5	18.64	148.5	7.049	soil
+sample_soil_5	12000	6	18.701	157.2	7.055	soil
+sample_soil_5	12000	7	19.15	153.7	7.056	soil
+sample_soil_5	12000	8	18.133	150.6	7.205	soil
+sample_soil_5	12000	9	18.57	156.6	7.179	soil
+sample_soil_5	16000	0	20.299	164.9	7.292	soil
+sample_soil_5	16000	1	20.46	161.3	7.392	soil
+sample_soil_5	16000	2	19.932	166.1	7.294	soil
+sample_soil_5	16000	3	19.738	158.5	7.264	soil
+sample_soil_5	16000	4	20.934	162.1	7.168	soil
+sample_soil_5	16000	5	20.136	160.2	7.287	soil
+sample_soil_5	16000	6	20.983	167.9	7.358	soil
+sample_soil_5	16000	7	20.668	150.8	7.289	soil
+sample_soil_5	16000	8	20.67	159.0	7.204	soil
+sample_soil_5	16000	9	20.279	154.9	7.258	soil
+sample_soil_5	22000	0	20.358	163.5	7.341	soil
+sample_soil_5	22000	1	20.608	165.6	7.365	soil
+sample_soil_5	22000	2	20.909	162.7	7.37	soil
+sample_soil_5	22000	3	20.753	174.4	7.394	soil
+sample_soil_5	22000	4	20.594	166.6	7.474	soil
+sample_soil_5	22000	5	21.035	165.1	7.3	soil
+sample_soil_5	22000	6	21.435	162.9	7.312	soil
+sample_soil_5	22000	7	20.683	164.8	7.404	soil
+sample_soil_5	22000	8	20.106	166.0	7.341	soil
+sample_soil_5	22000	9	20.84	171.8	7.431	soil
+sample_soil_5	30000	0	20.763	167.9	7.358	soil
+sample_soil_5	30000	1	21.273	174.2	7.403	soil
+sample_soil_5	30000	2	21.548	161.7	7.614	soil
+sample_soil_5	30000	3	21.056	171.2	7.324	soil
+sample_soil_5	30000	4	21.452	173.4	7.442	soil
+sample_soil_5	30000	5	20.668	174.0	7.431	soil
+sample_soil_5	30000	6	20.835	172.4	7.51	soil
+sample_soil_5	30000	7	21.042	167.7	7.343	soil
+sample_soil_5	30000	8	20.86	167.0	7.306	soil
+sample_soil_5	30000	9	21.307	169.9	7.561	soil
+sample_soil_5	40000	0	20.336	171.9	7.406	soil
+sample_soil_5	40000	1	22.015	173.0	7.463	soil
+sample_soil_5	40000	2	21.561	175.0	7.283	soil
+sample_soil_5	40000	3	21.146	164.1	7.497	soil
+sample_soil_5	40000	4	21.05	175.5	7.367	soil
+sample_soil_5	40000	5	20.757	170.1	7.239	soil
+sample_soil_5	40000	6	20.827	173.6	7.315	soil
+sample_soil_5	40000	7	21.375	175.8	7.47	soil
+sample_soil_5	40000	8	21.238	169.9	7.469	soil
+sample_soil_5	40000	9	21.09	166.1	7.461	soil
+sample_soil_5	50000	0	21.495	170.8	7.38	soil
+sample_soil_5	50000	1	21.15	170.8	7.464	soil
+sample_soil_5	50000	2	21.091	174.4	7.481	soil
+sample_soil_5	50000	3	21.098	169.3	7.549	soil
+sample_soil_5	50000	4	20.958	175.2	7.439	soil
+sample_soil_5	50000	5	21.161	167.9	7.367	soil
+sample_soil_5	50000	6	21.363	162.5	7.394	soil
+sample_soil_5	50000	7	20.391	166.7	7.488	soil
+sample_soil_5	50000	8	21.131	174.0	7.309	soil
+sample_soil_5	50000	9	21.466	168.4	7.42	soil
+sample_soil_6	500	0	1.065	14.5	0.928	soil
+sample_soil_6	500	1	1.503	15.8	0.959	soil
+sample_soil_6	500	2	1.865	16.6	1.028	soil
+sample_soil_6	500	3	2.208	17.7	1.103	soil
+sample_soil_6	500	4	2.25	22.6	0.933	soil
+sample_soil_6	500	5	1.838	7.4	1.112	soil
+sample_soil_6	500	6	2.033	20.2	0.926	soil
+sample_soil_6	500	7	2.149	17.0	0.968	soil
+sample_soil_6	500	8	1.191	19.5	1.149	soil
+sample_soil_6	500	9	2.001	21.1	1.096	soil
+sample_soil_6	1000	0	3.319	31.1	1.939	soil
+sample_soil_6	1000	1	3.081	22.7	1.746	soil
+sample_soil_6	1000	2	2.379	25.7	1.879	soil
+sample_soil_6	1000	3	3.687	26.6	1.823	soil
+sample_soil_6	1000	4	3.738	22.1	1.803	soil
+sample_soil_6	1000	5	2.648	32.6	1.901	soil
+sample_soil_6	1000	6	2.876	31.7	1.7	soil
+sample_soil_6	1000	7	4.028	24.7	1.911	soil
+sample_soil_6	1000	8	3.206	26.3	1.746	soil
+sample_soil_6	1000	9	3.535	38.7	1.771	soil
+sample_soil_6	2000	0	5.632	50.8	3.244	soil
+sample_soil_6	2000	1	6.298	55.5	3.365	soil
+sample_soil_6	2000	2	6.065	52.5	3.145	soil
+sample_soil_6	2000	3	6.647	49.1	3.111	soil
+sample_soil_6	2000	4	6.515	48.1	3.157	soil
+sample_soil_6	2000	5	6.59	49.7	3.082	soil
+sample_soil_6	2000	6	5.7	46.2	3.357	soil
+sample_soil_6	2000	7	5.443	45.9	3.18	soil
+sample_soil_6	2000	8	6.456	53.7	3.24	soil
+sample_soil_6	2000	9	5.673	42.5	3.149	soil
+sample_soil_6	4000	0	9.143	76.6	4.952	soil
+sample_soil_6	4000	1	9.641	83.1	5.027	soil
+sample_soil_6	4000	2	9.762	79.6	5.069	soil
+sample_soil_6	4000	3	9.209	80.6	5.113	soil
+sample_soil_6	4000	4	10.324	76.4	4.946	soil
+sample_soil_6	4000	5	9.516	82.6	4.997	soil
+sample_soil_6	4000	6	10.103	81.2	5.231	soil
+sample_soil_6	4000	7	9.292	78.2	4.978	soil
+sample_soil_6	4000	8	9.92	77.3	4.987	soil
+sample_soil_6	4000	9	10.36	77.5	5.098	soil
+sample_soil_6	6000	0	12.382	99.6	5.877	soil
+sample_soil_6	6000	1	12.226	99.9	5.788	soil
+sample_soil_6	6000	2	12.656	104.9	5.941	soil
+sample_soil_6	6000	3	12.612	102.4	5.981	soil
+sample_soil_6	6000	4	13.169	107.0	6.051	soil
+sample_soil_6	6000	5	12.762	101.7	5.93	soil
+sample_soil_6	6000	6	12.601	105.0	5.909	soil
+sample_soil_6	6000	7	12.747	100.6	5.995	soil
+sample_soil_6	6000	8	12.236	98.8	6.014	soil
+sample_soil_6	6000	9	13.185	104.5	5.9	soil
+sample_soil_6	8000	0	13.99	109.5	6.488	soil
+sample_soil_6	8000	1	14.61	114.3	6.499	soil
+sample_soil_6	8000	2	14.135	114.9	6.57	soil
+sample_soil_6	8000	3	13.803	113.8	6.373	soil
+sample_soil_6	8000	4	14.061	123.2	6.546	soil
+sample_soil_6	8000	5	14.15	111.3	6.475	soil
+sample_soil_6	8000	6	13.943	114.5	6.518	soil
+sample_soil_6	8000	7	15.064	117.4	6.619	soil
+sample_soil_6	8000	8	13.935	111.4	6.528	soil
+sample_soil_6	8000	9	14.545	113.5	6.433	soil
+sample_soil_6	12000	0	16.291	131.9	6.769	soil
+sample_soil_6	12000	1	16.701	127.4	6.948	soil
+sample_soil_6	12000	2	16.378	127.0	6.984	soil
+sample_soil_6	12000	3	15.507	127.1	6.881	soil
+sample_soil_6	12000	4	16.342	137.5	6.893	soil
+sample_soil_6	12000	5	16.163	125.7	6.955	soil
+sample_soil_6	12000	6	16.177	126.1	7.059	soil
+sample_soil_6	12000	7	16.497	131.2	6.972	soil
+sample_soil_6	12000	8	16.097	128.3	6.819	soil
+sample_soil_6	12000	9	16.082	136.6	6.94	soil
+sample_soil_6	16000	0	17.147	135.6	7.196	soil
+sample_soil_6	16000	1	16.632	134.8	7.114	soil
+sample_soil_6	16000	2	16.736	134.7	6.967	soil
+sample_soil_6	16000	3	17.002	132.2	7.147	soil
+sample_soil_6	16000	4	17.087	142.1	7.174	soil
+sample_soil_6	16000	5	17.186	138.6	7.088	soil
+sample_soil_6	16000	6	17.264	135.9	7.154	soil
+sample_soil_6	16000	7	16.904	138.3	7.09	soil
+sample_soil_6	16000	8	17.126	142.9	7.065	soil
+sample_soil_6	16000	9	16.882	137.1	7.202	soil
+sample_soil_6	22000	0	16.938	138.0	7.02	soil
+sample_soil_6	22000	1	17.4	139.1	7.143	soil
+sample_soil_6	22000	2	18.006	137.8	7.066	soil
+sample_soil_6	22000	3	17.602	143.6	7.065	soil
+sample_soil_6	22000	4	18.194	133.5	7.022	soil
+sample_soil_6	22000	5	17.755	137.5	7.122	soil
+sample_soil_6	22000	6	17.89	138.7	7.157	soil
+sample_soil_6	22000	7	17.516	137.6	7.205	soil
+sample_soil_6	22000	8	17.666	140.0	7.158	soil
+sample_soil_6	22000	9	17.893	135.0	7.156	soil
+sample_soil_6	30000	0	17.075	139.2	7.121	soil
+sample_soil_6	30000	1	17.271	143.5	7.179	soil
+sample_soil_6	30000	2	17.946	142.5	7.002	soil
+sample_soil_6	30000	3	17.716	142.5	7.149	soil
+sample_soil_6	30000	4	18.035	140.6	7.197	soil
+sample_soil_6	30000	5	18.104	135.5	7.006	soil
+sample_soil_6	30000	6	17.754	145.0	7.056	soil
+sample_soil_6	30000	7	18.168	142.0	7.234	soil
+sample_soil_6	30000	8	16.866	137.3	7.034	soil
+sample_soil_6	30000	9	17.065	141.3	7.111	soil
+sample_soil_6	40000	0	16.407	137.7	6.991	soil
+sample_soil_6	40000	1	17.411	139.1	7.07	soil
+sample_soil_6	40000	2	16.76	142.8	7.242	soil
+sample_soil_6	40000	3	16.85	142.4	7.211	soil
+sample_soil_6	40000	4	17.354	138.8	7.094	soil
+sample_soil_6	40000	5	17.788	137.0	7.136	soil
+sample_soil_6	40000	6	17.51	142.4	7.103	soil
+sample_soil_6	40000	7	17.707	137.2	7.185	soil
+sample_soil_6	40000	8	17.325	138.4	7.186	soil
+sample_soil_6	40000	9	17.129	137.5	7.257	soil
+sample_soil_6	50000	0	17.675	141.5	7.239	soil
+sample_soil_6	50000	1	17.808	131.7	7.005	soil
+sample_soil_6	50000	2	16.883	142.4	7.053	soil
+sample_soil_6	50000	3	17.9	141.1	7.14	soil
+sample_soil_6	50000	4	17.47	144.9	7.231	soil
+sample_soil_6	50000	5	17.504	142.7	7.22	soil
+sample_soil_6	50000	6	17.278	137.7	6.962	soil
+sample_soil_6	50000	7	16.824	144.2	7.231	soil
+sample_soil_6	50000	8	17.159	143.9	7.104	soil
+sample_soil_6	50000	9	17.814	146.9	7.19	soil

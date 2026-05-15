@@ -136,12 +136,21 @@ const ComponentChrome: React.FC<ComponentChromeProps> = ({
     }
   };
 
+  // Advanced-viz components rely on a Settings + Show-data popover cluster
+  // alongside the standard chrome icons. Hiding those behind the hover-fade
+  // creates real interaction friction: open the data popover, mouse over the
+  // table, chrome fades, settings icon disappears under the cursor. Always
+  // showing the action row for this family fixes that without affecting other
+  // component types (which keep the hover affordance).
+  const pinActions = componentType === 'advanced_viz';
+
   return (
     <div
       ref={fullscreenRef as React.RefObject<HTMLDivElement>}
       className={
         'depictio-component-chrome' +
-        (isFullscreenActive ? ' fullscreen-active' : '')
+        (isFullscreenActive ? ' fullscreen-active' : '') +
+        (pinActions ? ' depictio-chrome-pin-actions' : '')
       }
     >
       <Group

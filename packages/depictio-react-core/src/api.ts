@@ -470,7 +470,22 @@ export type AdvancedVizKind =
   | 'volcano'
   | 'embedding'
   | 'manhattan'
-  | 'stacked_taxonomy';
+  | 'stacked_taxonomy'
+  | 'phylogenetic'
+  | 'rarefaction'
+  | 'ancombc_differentials'
+  | 'da_barplot'
+  | 'enrichment'
+  | 'complex_heatmap'
+  | 'upset_plot'
+  | 'ma'
+  | 'dot_plot'
+  | 'lollipop'
+  | 'qq'
+  | 'sunburst'
+  | 'oncoplot'
+  | 'coverage_track'
+  | 'sankey';
 
 export interface AdvancedVizKindDescriptor {
   viz_kind: AdvancedVizKind;
@@ -478,6 +493,9 @@ export interface AdvancedVizKindDescriptor {
   description: string;
   icon: string;
   required_roles: string[];
+  /** "plot" for pure visualisations, "tool" for statistical methods that
+   *  compute then plot (GSEA, GWAS, ANCOM-BC, DA barplot per contrast). */
+  category: 'plot' | 'tool';
 }
 
 /** Metadata used by the builder's viz-kind picker. Cached on first load. */
@@ -547,6 +565,8 @@ export interface ComputeEmbeddingResult {
   sample_ids: string[];
   dim_1: number[];
   dim_2: number[];
+  /** Populated when the payload requested n_components=3. */
+  dim_3?: number[];
   /** Per-column arrays aligned with sample_ids, populated when extra_cols
    *  was supplied in the payload. */
   extras?: Record<string, unknown[]>;
@@ -647,11 +667,13 @@ export interface UpsetPayload {
   wf_id: string;
   dc_id: string;
   set_columns?: string[] | null;
+  annotation_cols?: string[] | null;
   sort_by?: 'cardinality' | 'degree' | 'degree-cardinality' | 'input';
   sort_order?: 'descending' | 'ascending';
   min_size?: number;
   max_degree?: number | null;
   show_set_sizes?: boolean;
+  show_values?: boolean;
   color_intersections_by?: 'none' | 'set' | 'degree';
   filter_metadata: InteractiveFilter[];
 }
@@ -689,6 +711,133 @@ export async function pollUpset(jobId: string): Promise<UpsetJob> {
     headers: authHeaders(),
   });
   if (!res.ok) throw new Error(`Failed to poll compute_upset: ${res.status}`);
+  return res.json();
+}
+
+
+export interface CoverageTrackPayload {
+  wf_id: string;
+  dc_id: string;
+  chromosome_col: string;
+  position_col: string;
+  value_col: string;
+  end_col?: string | null;
+  sample_col?: string | null;
+  category_col?: string | null;
+  chromosomes_filter?: string[] | null;
+  samples_filter?: string[] | null;
+  smoothing_window?: number;
+  max_rows?: number | null;
+  filter_metadata: InteractiveFilter[];
+}
+
+export interface CoverageTrackResult {
+  rows: Record<string, unknown[]>;
+  columns: {
+    chromosome: string;
+    position: string;
+    value: string;
+    end?: string | null;
+    sample?: string | null;
+    category?: string | null;
+  };
+  summary: {
+    row_count: number;
+    chromosomes: string[];
+    samples: string[];
+    n_samples: number;
+    mean_value: number | null;
+    max_value: number | null;
+  };
+  row_count: number;
+  load_ms?: number;
+  compute_ms?: number;
+}
+
+export interface CoverageTrackJob {
+  job_id: string;
+  status: 'pending' | 'done' | 'failed';
+  result?: CoverageTrackResult | null;
+  error?: string | null;
+  from_cache?: boolean;
+}
+
+/** Dispatch a coverage-track aggregation Celery task. */
+export async function dispatchCoverageTrack(
+  payload: CoverageTrackPayload,
+): Promise<CoverageTrackJob> {
+  const res = await fetch(`${API_BASE}/advanced_viz/compute_coverage_track`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw new Error(`Failed to dispatch compute_coverage_track: ${res.status}`);
+  return res.json();
+}
+
+/** Poll a previously-dispatched coverage-track compute. */
+export async function pollCoverageTrack(jobId: string): Promise<CoverageTrackJob> {
+  const res = await fetch(`${API_BASE}/advanced_viz/compute_coverage_track/${jobId}`, {
+    headers: authHeaders(),
+  });
+  if (!res.ok) throw new Error(`Failed to poll compute_coverage_track: ${res.status}`);
+  return res.json();
+}
+
+/** Dispatch payload for the Sankey Celery task. NOTE: `color_mode`,
+ *  `link_opacity`, and `show_node_labels` from SankeyConfig (Pydantic) are
+ *  intentionally NOT in this payload — those are pure presentation tweaks
+ *  applied client-side on the returned figure so toggling them doesn't burn a
+ *  fresh compute. Adding them here would invalidate the server-side cache key
+ *  on every slider tick. */
+export interface SankeyPayload {
+  wf_id: string;
+  dc_id: string;
+  step_cols: string[];
+  value_col?: string | null;
+  sort_mode?: 'alphabetical' | 'total_flow' | 'input';
+  min_link_value?: number;
+  step_filters?: Record<string, string[]> | null;
+  filter_metadata: InteractiveFilter[];
+}
+
+export interface SankeyResult {
+  figure: { data: unknown[]; layout: Record<string, unknown> };
+  nodes: Array<{ label: string; step: string; step_index: number }>;
+  step_cols: string[];
+  node_count: number;
+  link_count: number;
+  total_flow: number;
+  row_count: number;
+  load_ms?: number;
+  compute_ms?: number;
+}
+
+export interface SankeyJob {
+  job_id: string;
+  status: 'pending' | 'done' | 'failed';
+  result?: SankeyResult | null;
+  error?: string | null;
+  from_cache?: boolean;
+}
+
+/** Dispatch a Sankey / categorical-flow Celery task. */
+export async function dispatchSankey(payload: SankeyPayload): Promise<SankeyJob> {
+  const res = await fetch(`${API_BASE}/advanced_viz/compute_sankey`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw new Error(`Failed to dispatch compute_sankey: ${res.status}`);
+  return res.json();
+}
+
+/** Poll a previously-dispatched Sankey compute. */
+export async function pollSankey(jobId: string): Promise<SankeyJob> {
+  const res = await fetch(`${API_BASE}/advanced_viz/compute_sankey/${jobId}`, {
+    headers: authHeaders(),
+  });
+  if (!res.ok) throw new Error(`Failed to poll compute_sankey: ${res.status}`);
   return res.json();
 }
 

@@ -91,6 +91,10 @@ export interface BuilderState {
   // UI status flags
   saving: boolean;
   saveError: string | null;
+  // Set true once a live preview has rendered for component types that show
+  // one (currently advanced_viz). Non-preview component types leave it at the
+  // initial `true` so they aren't blocked from saving.
+  previewReady: boolean;
 }
 
 export interface BuilderActions {
@@ -124,6 +128,7 @@ export interface BuilderActions {
   loadExisting: (m: StoredMetadata) => void;
   setSaving: (b: boolean) => void;
   setSaveError: (e: string | null) => void;
+  setPreviewReady: (b: boolean) => void;
   reset: () => void;
 }
 
@@ -155,6 +160,7 @@ const INITIAL: BuilderState = {
   existing: null,
   saving: false,
   saveError: null,
+  previewReady: true,
 };
 
 export const useBuilderStore = create<BuilderState & BuilderActions>((set) => ({
@@ -169,18 +175,34 @@ export const useBuilderStore = create<BuilderState & BuilderActions>((set) => ({
     }),
   setStep: (n) => set({ step: n }),
   setWorkflow: (wfId, projectId) =>
-    set({
+    set((s) => ({
       wfId,
       projectId,
-      // Changing workflow invalidates DC + columns.
+      // Changing workflow invalidates DC, columns, AND any per-type config
+      // (column bindings reference column names that may not exist in the new
+      // DC). Without resetting `config`, a viz_kind + column_mapping bound to
+      // the old DC leaks into the new one and surfaces as
+      // "Column X (role Y) is not in the DC" save errors.
       dcId: null,
       dcConfigType: null,
       cols: [],
-    }),
+      config: {},
+      previewReady: s.componentType !== 'advanced_viz',
+    })),
   setDataCollection: (dcId, dcConfigType) =>
-    set({ dcId, dcConfigType, cols: [] }),
+    set((s) => ({
+      dcId,
+      dcConfigType,
+      cols: [],
+      // See setWorkflow comment — same reset applies here.
+      config: {},
+      previewReady: s.componentType !== 'advanced_viz',
+    })),
   setCols: (cols) => set({ cols }),
-  setComponentType: (t) => set({ componentType: t, config: {} }),
+  // Reset previewReady when switching to a type that demands a preview.
+  // Other types keep it at true so they aren't blocked from saving.
+  setComponentType: (t) =>
+    set({ componentType: t, config: {}, previewReady: t !== 'advanced_viz' }),
   patchConfig: (patch) =>
     set((s) => ({ config: { ...s.config, ...patch } })),
   setFigureMode: (m) => set({ figureMode: m }),
@@ -242,5 +264,6 @@ export const useBuilderStore = create<BuilderState & BuilderActions>((set) => ({
   },
   setSaving: (b) => set({ saving: b }),
   setSaveError: (e) => set({ saveError: e }),
+  setPreviewReady: (b) => set({ previewReady: b }),
   reset: () => set(INITIAL),
 }));

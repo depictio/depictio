@@ -10,6 +10,7 @@ import type { StoredMetadata } from 'depictio-react-core';
 import { readMultiqcSelection } from 'depictio-react-core';
 import type { BuilderState } from './store/useBuilderStore';
 import { autoCardTitle } from './card/cardTitle';
+import { buildAdvancedVizConfigBlob } from './advanced_viz/configBlob';
 
 /** Augment an unknown record with type-narrowing safety. */
 function as<T extends Record<string, unknown>>(v: unknown): T {
@@ -215,23 +216,14 @@ function buildAdvancedViz(
   existing: Record<string, unknown>,
 ): StoredMetadata {
   const c = as<{
-    viz_kind?: 'volcano' | 'embedding' | 'manhattan' | 'stacked_taxonomy';
-    column_mapping?: Record<string, string>;
+    viz_kind?: string;
+    column_mapping?: Record<string, string | string[]>;
   }>(state.config);
-  const kind = c.viz_kind;
-  const cm = c.column_mapping || {};
-  // Translate role→column mapping into the per-kind Pydantic config shape
-  // (each role becomes `<role>_col`). This mirrors what
-  // depictio/models/components/advanced_viz/configs.py expects.
-  const configBlob: Record<string, unknown> = { viz_kind: kind };
-  for (const [role, col] of Object.entries(cm)) {
-    configBlob[`${role}_col`] = col;
-  }
   return {
     ...existing,
     ...base,
-    viz_kind: kind,
-    config: configBlob,
+    viz_kind: c.viz_kind,
+    config: buildAdvancedVizConfigBlob(c.viz_kind, c.column_mapping || {}),
   };
 }
 

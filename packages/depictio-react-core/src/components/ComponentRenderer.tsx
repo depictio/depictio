@@ -20,6 +20,14 @@ import DaBarplotRenderer from './advanced_viz/DaBarplotRenderer';
 import EnrichmentRenderer from './advanced_viz/EnrichmentRenderer';
 import ComplexHeatmapRenderer from './advanced_viz/ComplexHeatmapRenderer';
 import UpsetRenderer from './advanced_viz/UpsetRenderer';
+import MARenderer from './advanced_viz/MARenderer';
+import DotPlotRenderer from './advanced_viz/DotPlotRenderer';
+import LollipopRenderer from './advanced_viz/LollipopRenderer';
+import QQRenderer from './advanced_viz/QQRenderer';
+import SunburstRenderer from './advanced_viz/SunburstRenderer';
+import OncoplotRenderer from './advanced_viz/OncoplotRenderer';
+import CoverageTrackRenderer from './advanced_viz/CoverageTrackRenderer';
+import SankeyRenderer from './advanced_viz/SankeyRenderer';
 import { AdvancedVizExtrasProvider } from './advanced_viz/AdvancedVizExtras';
 import MultiSelectRenderer from './interactive/MultiSelectRenderer';
 import RangeSliderRenderer from './interactive/RangeSliderRenderer';
@@ -478,6 +486,22 @@ const AdvancedVizDispatch: React.FC<AdvancedVizDispatchProps> = ({
     inner = <ComplexHeatmapRenderer {...(advProps as any)} />;
   } else if (vizKind === 'upset_plot') {
     inner = <UpsetRenderer {...(advProps as any)} />;
+  } else if (vizKind === 'ma') {
+    inner = <MARenderer {...(advProps as any)} />;
+  } else if (vizKind === 'dot_plot') {
+    inner = <DotPlotRenderer {...(advProps as any)} />;
+  } else if (vizKind === 'lollipop') {
+    inner = <LollipopRenderer {...(advProps as any)} />;
+  } else if (vizKind === 'qq') {
+    inner = <QQRenderer {...(advProps as any)} />;
+  } else if (vizKind === 'sunburst') {
+    inner = <SunburstRenderer {...(advProps as any)} />;
+  } else if (vizKind === 'oncoplot') {
+    inner = <OncoplotRenderer {...(advProps as any)} />;
+  } else if (vizKind === 'coverage_track') {
+    inner = <CoverageTrackRenderer {...(advProps as any)} />;
+  } else if (vizKind === 'sankey') {
+    inner = <SankeyRenderer {...(advProps as any)} />;
   } else {
     inner = (
       <div className="dashboard-error" style={{ fontSize: '0.75rem' }}>
@@ -501,4 +525,3 @@ const AdvancedVizDispatch: React.FC<AdvancedVizDispatchProps> = ({
     { extraActions: combinedExtras, showDragHandle },
   );
 };
-

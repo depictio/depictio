@@ -10,6 +10,29 @@
   "stored_children_data": [],
   "stored_metadata": [
     {
+      "index": "ups-feature-group-filter",
+      "component_type": "interactive",
+      "title": "Feature group",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "upset_demo",
+      "wf_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d01" },
+      "dc_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d28" },
+      "dc_config": {
+        "type": null, "metatype": null,
+        "description": "Set-membership table",
+        "data_collection_tag": "upset_demo",
+        "dc_specific_properties": null,
+        "_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d28" }
+      },
+      "cols_json": {}, "parent_index": null,
+      "last_updated": "2026-05-13T00:00:00.000000",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "feature_group", "column_type": "object",
+      "value": null, "default_state": null, "filter_expr": null,
+      "title_size": "md", "custom_color": "#9467bd", "icon_name": "mdi:tag-multiple",
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
       "index": "ups-card-features",
       "component_type": "card",
       "title": "Features",
@@ -127,14 +150,16 @@
       },
       "cols_json": {}, "parent_index": null,
       "last_updated": "2026-05-12T00:00:00.000000",
-      "columns": ["feature_id", "contrastA", "contrastB", "contrastC", "contrastD", "contrastE"],
+      "columns": ["feature_id", "feature_group", "contrastA", "contrastB", "contrastC", "contrastD", "contrastE"],
       "page_size": 10, "sortable": true, "filterable": true,
       "row_selection_enabled": false, "row_selection_column": null,
       "wf_tag": "python/advanced_viz_demo"
     }
   ],
   "stored_edit_dashboard_mode_button": [],
-  "left_panel_layout_data": [],
+  "left_panel_layout_data": [
+    { "i": "box-ups-feature-group-filter", "x": 0, "y": 0, "w": 1, "h": 5, "static": false }
+  ],
   "right_panel_layout_data": [
     { "i": "box-ups-card-features", "x": 0, "y": 0, "w": 2, "h": 2, "static": true },
     { "i": "box-ups-card-A",        "x": 2, "y": 0, "w": 3, "h": 2, "static": true },

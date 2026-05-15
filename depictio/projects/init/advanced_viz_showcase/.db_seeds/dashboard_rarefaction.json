@@ -230,6 +230,7 @@
         "sample_id_col": "sample_id",
         "depth_col": "depth",
         "metric_col": "faith_pd",
+        "metric_options": ["faith_pd", "observed_features", "shannon"],
         "iter_col": "iter",
         "group_col": "habitat",
         "show_ci": true
@@ -268,6 +269,7 @@
         "iter",
         "faith_pd",
         "observed_features",
+        "shannon",
         "habitat"
       ],
       "page_size": 10,

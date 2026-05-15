@@ -94,6 +94,46 @@ CANONICAL_SCHEMAS: dict[AdvancedVizKind, dict[str, frozenset[str]]] = {
     # UpSet — no canonical column-role schema; the renderer enumerates
     # binary columns at compute time. Editor validation is a no-op.
     "upset_plot": {},
+    "ma": {
+        "feature_id": _STRING,
+        "avg_log_intensity": _FLOAT,
+        "log2_fold_change": _FLOAT,
+    },
+    "dot_plot": {
+        "cluster": _STRING,
+        "gene": _STRING,
+        "mean_expression": _FLOAT,
+        "frac_expressing": _FLOAT,
+    },
+    "lollipop": {
+        "feature_id": _STRING,
+        "position": _INT,
+        "category": _STRING,
+    },
+    "qq": {
+        "p_value": _FLOAT,
+    },
+    # Sunburst uses a multi-column `rank_cols` list (no single <role>_col
+    # mapping). Only `abundance` validates against the standard pattern;
+    # the renderer enforces the rank columns at runtime.
+    "sunburst": {
+        "abundance": _NUMERIC,
+    },
+    "oncoplot": {
+        "sample_id": _STRING,
+        "gene": _STRING,
+        "mutation_type": _STRING,
+    },
+    "coverage_track": {
+        "chromosome": _STRING,
+        "position": _INT,
+        "value": _NUMERIC,
+    },
+    # Sankey's ``step_cols`` is a multi-column list (no single <role>_col
+    # mapping) — like Sunburst's rank_cols. The renderer validates step
+    # presence at compute time; the editor enforces ≥2 columns via the
+    # Pydantic config's ``min_length=2``.
+    "sankey": {},
 }
 
 # Optional roles — validated only if the user has bound a column for them.
@@ -132,6 +172,26 @@ _OPTIONAL_ROLES: dict[AdvancedVizKind, dict[str, frozenset[str]]] = {
     },
     "complex_heatmap": {},
     "upset_plot": {},
+    "ma": {
+        "significance": _FLOAT,
+        "label": _STRING,
+    },
+    "dot_plot": {},
+    "lollipop": {
+        "effect": _FLOAT,
+    },
+    "qq": {
+        "feature_id": _STRING,
+        "category": _STRING,
+    },
+    "sunburst": {},
+    "oncoplot": {},
+    "coverage_track": {
+        "end": _INT,
+        "sample": _STRING,
+        "category": _STRING,
+    },
+    "sankey": {},
 }
 
 

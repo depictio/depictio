@@ -268,6 +268,14 @@ async def create_initial_dashboards(admin_user: UserBeanie) -> list[dict | None]
                 "enrichment",
                 "complex_heatmap",
                 "upset",
+                "ma",
+                "dotplot",
+                "lollipop",
+                "qq",
+                "sunburst",
+                "oncoplot",
+                "coverage_track",
+                "categorical_flow",
             )
         ),
     ]
