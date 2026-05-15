@@ -10,6 +10,9 @@ The link resolution endpoint is the primary integration point for Dash callbacks
 to apply cross-DC filtering without pre-computed joins.
 """
 
+import hashlib
+import json
+import time
 from typing import Any
 
 import polars as pl
@@ -129,6 +132,38 @@ def _find_link_for_resolution(project: dict, source_dc_id: str, target_dc_id: st
     return None
 
 
+# Cross-call caches for the cross-DC filter resolution path. This
+# function was the bottleneck: every dashboard component fires it on
+# every filter change, and every call did a fresh ``pl.read_delta()``
+# from S3 with no cache. The upstream client times out at 10s, so a
+# slow S3 path looked like "dashboard is broken" to the user.
+#
+# Two layers:
+# - ``_translate_df_cache``: the loaded source-DC DataFrame, keyed by
+#   ``(source_dc_id,)``. Skips the S3 read on subsequent calls.
+# - ``_translate_result_cache``: the final translated values list, keyed
+#   by ``(source_dc_id, filter_column, filter_values_hash, link_column)``.
+#   Short-circuits identical repeat calls entirely.
+_TRANSLATE_CACHE_TTL_S = 60.0
+_translate_df_cache: dict[str, tuple[float, pl.DataFrame]] = {}
+_translate_result_cache: dict[tuple[str, str, str, str], tuple[float, list[Any]]] = {}
+
+
+def _filter_values_hash(filter_values: list[Any]) -> str:
+    """Stable short hash for a filter values list — order-independent
+    for set-like filters (MultiSelect), order-preserving for ranges."""
+    try:
+        # Sort scalars to make MultiSelect order-independent. Falls
+        # back to JSON of the raw list for date ranges / nested values.
+        if all(isinstance(v, (str, int, float, bool, type(None))) for v in filter_values):
+            payload = json.dumps(sorted(filter_values, key=str), separators=(",", ":"))
+        else:
+            payload = json.dumps(filter_values, separators=(",", ":"), default=str)
+    except (TypeError, ValueError):
+        payload = repr(filter_values)
+    return hashlib.sha1(payload.encode()).hexdigest()[:16]
+
+
 async def _translate_filter_values(
     source_dc_id: str,
     filter_column: str,
@@ -158,33 +193,51 @@ async def _translate_filter_values(
     Raises:
         HTTPException: If DC not found, Delta table not accessible, or columns missing
     """
-    # Get Delta table location (try both string and ObjectId formats for compatibility)
-    deltatable_doc = deltatables_collection.find_one({"data_collection_id": source_dc_id})
-    if not deltatable_doc:
-        # Try with ObjectId format
-        deltatable_doc = deltatables_collection.find_one(
-            {"data_collection_id": ObjectId(source_dc_id)}
-        )
-    if not deltatable_doc or "delta_table_location" not in deltatable_doc:
-        logger.error(
-            f"Delta table not found for DC {source_dc_id}. "
-            f"Document exists: {deltatable_doc is not None}, "
-            f"Has location: {deltatable_doc and 'delta_table_location' in deltatable_doc}"
-        )
-        raise HTTPException(
-            status_code=404,
-            detail=f"Delta table not found for DC {source_dc_id}",
-        )
+    # ── Layer 2 cache: identical call → identical result, short-circuit.
+    values_hash = _filter_values_hash(filter_values)
+    result_key = (source_dc_id, filter_column, values_hash, link_column)
+    cached_result = _translate_result_cache.get(result_key)
+    now = time.perf_counter()
+    if cached_result and (now - cached_result[0]) < _TRANSLATE_CACHE_TTL_S:
+        return cached_result[1]
 
-    delta_table_location = deltatable_doc["delta_table_location"]
-    logger.debug(f"Querying Delta table at {delta_table_location}")
+    # ── Layer 1 cache: loaded source df. Skips the S3 read.
+    df_cached = _translate_df_cache.get(source_dc_id)
+    if df_cached and (now - df_cached[0]) < _TRANSLATE_CACHE_TTL_S:
+        df = df_cached[1]
+    else:
+        # Get Delta table location (try both string and ObjectId formats for compatibility)
+        deltatable_doc = deltatables_collection.find_one({"data_collection_id": source_dc_id})
+        if not deltatable_doc:
+            # Try with ObjectId format
+            deltatable_doc = deltatables_collection.find_one(
+                {"data_collection_id": ObjectId(source_dc_id)}
+            )
+        if not deltatable_doc or "delta_table_location" not in deltatable_doc:
+            logger.error(
+                f"Delta table not found for DC {source_dc_id}. "
+                f"Document exists: {deltatable_doc is not None}, "
+                f"Has location: {deltatable_doc and 'delta_table_location' in deltatable_doc}"
+            )
+            raise HTTPException(
+                status_code=404,
+                detail=f"Delta table not found for DC {source_dc_id}",
+            )
 
-    try:
+        delta_table_location = deltatable_doc["delta_table_location"]
+        logger.debug(f"Querying Delta table at {delta_table_location}")
+
         # Read Delta table with S3 credentials
         from depictio.api.v1.s3 import polars_s3_config
 
+        t_read = time.perf_counter()
         df = pl.read_delta(delta_table_location, storage_options=polars_s3_config)
+        logger.info(
+            f"[translate-filter] s3_read dc={source_dc_id} elapsed={time.perf_counter() - t_read:.3f}s"
+        )
+        _translate_df_cache[source_dc_id] = (now, df)
 
+    try:
         # Validate columns exist
         if filter_column not in df.columns:
             raise HTTPException(
@@ -236,8 +289,12 @@ async def _translate_filter_values(
             f"{len(link_values)} {link_column} values (from {len(filtered_df)} rows)"
         )
 
+        _translate_result_cache[result_key] = (time.perf_counter(), link_values)
         return link_values
 
+    except HTTPException:
+        # Don't wrap a 400/404 into a generic 500 — preserve the original.
+        raise
     except Exception as e:
         logger.error(f"Error querying source DC for column translation: {e}")
         raise HTTPException(

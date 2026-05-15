@@ -26,7 +26,9 @@ from depictio.api.v1.endpoints.dashboards_endpoints.global_filters import (
     ActiveJourneyPatch,
     FilterValuePatch,
     FunnelRequest,
+    JourneyPreviewRequest,
     compute_funnel,
+    compute_journey_preview,
     delete_global_filter,
     delete_journey,
     get_global_state,
@@ -4634,6 +4636,15 @@ async def route_compute_funnel(
     current_user: User = Depends(get_user_or_anonymous),
 ):
     return await compute_funnel(parent_dashboard_id, body, current_user)
+
+
+@dashboards_endpoint_router.post("/global_filters/{parent_dashboard_id}/funnel/journey_preview")
+async def route_compute_journey_preview(
+    parent_dashboard_id: PyObjectId,
+    body: JourneyPreviewRequest,
+    current_user: User = Depends(get_user_or_anonymous),
+):
+    return await compute_journey_preview(parent_dashboard_id, body, current_user)
 
 
 @dashboards_endpoint_router.post("/journeys/{parent_dashboard_id}")

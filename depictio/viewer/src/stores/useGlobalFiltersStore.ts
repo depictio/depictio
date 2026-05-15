@@ -6,12 +6,11 @@
  * (see App.tsx — every dashboard fetch reseeds the local filter array). This
  * store sits one level above that lifecycle: it is keyed on the *parent*
  * dashboard ID so child tabs of the same multi-tab dashboard share the same
- * promoted filters, journey selection, and per-user values.
+ * promoted filters, journeys, and per-user values.
  *
- * Definitions (global filters + journeys) live on the parent dashboard
- * document in MongoDB. Values, active journey, and per-journey resume
- * bookkeeping live in `user_dashboard_state` per (user, parent dashboard) so
- * collaborators don't overwrite each other.
+ * Journeys here are the new declarative pin-based funnels: each step is a
+ * filter pin (global or local). No per-step snapshots — the user's current
+ * filter values flow through the pinned chain to produce live row counts.
  */
 
 import { create } from 'zustand';
@@ -23,22 +22,27 @@ import {
   patchGlobalFilterValue,
   upsertGlobalFilter,
   upsertJourney,
+  type FunnelStep,
   type GlobalFilterDef,
-  type InteractiveFilter,
   type Journey,
-  type JourneyStop,
 } from 'depictio-react-core';
 
 interface PatchTimers {
   values: Record<string, ReturnType<typeof setTimeout> | undefined>;
 }
 
-/** Payload emitted to App.tsx when a journey stop is applied. App.tsx is
- *  responsible for navigating to `anchor_tab_id` (if different from current)
- *  and replacing the per-tab `filters` state with `local_filter_state`. */
-export interface ApplyStopRequest {
-  journeyId: string;
-  stop: JourneyStop;
+export interface PinDescriptor {
+  scope: 'global' | 'local';
+  tab_id: string;
+  global_filter_id?: string;
+  component_index?: string;
+  label?: string;
+  order_within_tab?: number;
+  /** dc_id of the component being pinned. Required for local pins on
+   *  multi-DC tabs so the backend applies the filter to the right DC.
+   *  Globals don't need it — `_step_applies_to_target` uses
+   *  `GlobalFilterDef.links[].dc_id` for them. */
+  source_dc_id?: string;
 }
 
 interface GlobalFiltersStoreState {
@@ -48,9 +52,6 @@ interface GlobalFiltersStoreState {
 
   journeys: Journey[];
   activeJourneyId: string | null;
-  activeJourneyStopId: string | null;
-  /** Per-journey resume bookkeeping: `{ [journeyId]: lastActiveStopId }`. */
-  journeyStops: Record<string, string>;
 
   hydrated: boolean;
   _timers: PatchTimers;
@@ -64,27 +65,40 @@ interface GlobalFiltersStoreState {
   upsertJourneyDef: (journey: Journey) => Promise<void>;
   removeJourney: (journeyId: string) => Promise<void>;
 
-  /** Activate a journey + optionally a specific stop. If `stopId` is null,
-   *  resumes the user's last stop for that journey (or the first stop). The
-   *  caller is responsible for invoking the returned `ApplyStopRequest` to
-   *  navigate / apply per-tab filters. */
-  setActiveJourney: (journeyId: string | null, stopId?: string | null) => ApplyStopRequest | null;
+  setActiveJourney: (journeyId: string | null) => void;
 
-  /** Apply a specific stop's snapshot — replaces global values, returns the
-   *  request payload App.tsx needs to navigate + replay per-tab filters.
-   *  Persists `last_active_journey_stop_id` so refresh resumes here. */
-  applyJourneyStop: (journeyId: string, stop: JourneyStop) => ApplyStopRequest;
+  /** Pin a filter as a new step on the active funnel.
+   *
+   * Creates a default funnel if none exists and activates it. The new step
+   * is appended at the end of its tab's block in the steps list; the
+   * server runs the final tab-order resort on upsert. */
+  pinFilterToActiveFunnel: (pin: PinDescriptor) => Promise<void>;
 
-  /** Save current state as a new stop. If `journeyId` is null, creates a new
-   *  journey with this snapshot as Stop 1. Returns the new/updated journey
-   *  so the UI can highlight it. */
-  saveCurrentAsStop: (args: {
-    journeyId: string | null;
-    journeyName?: string;
-    stopName: string;
-    currentDashboardId: string;
-    currentLocalFilters: InteractiveFilter[];
-  }) => Promise<Journey>;
+  /** Remove the matching step from the active funnel. Matches by
+   *  step id, or by (scope, ref) when stepId is omitted. */
+  unpinFilterFromActiveFunnel: (matcher: {
+    stepId?: string;
+    scope?: 'global' | 'local';
+    global_filter_id?: string;
+    tab_id?: string;
+    component_index?: string;
+  }) => Promise<void>;
+
+  /** Swap a step with its neighbor in the same tab. No-op at tab
+   *  boundaries (the funnel modal's Steps panel disables the affordance). */
+  reorderStepWithinTab: (
+    journeyId: string,
+    stepId: string,
+    direction: 'up' | 'down',
+  ) => Promise<void>;
+
+  /** UI helper: is this filter currently a step in the active funnel? */
+  isFilterPinned: (matcher: {
+    scope: 'global' | 'local';
+    global_filter_id?: string;
+    tab_id?: string;
+    component_index?: string;
+  }) => boolean;
 
   reset: () => void;
 }
@@ -95,14 +109,60 @@ function genId(prefix: string): string {
   return `${prefix}_${Math.random().toString(36).slice(2, 10)}${Date.now().toString(36).slice(-4)}`;
 }
 
+function stepMatches(
+  step: FunnelStep,
+  matcher: {
+    scope?: 'global' | 'local';
+    global_filter_id?: string;
+    tab_id?: string;
+    component_index?: string;
+  },
+): boolean {
+  if (matcher.scope && step.scope !== matcher.scope) return false;
+  if (step.scope === 'global') {
+    // Require the matcher to name a specific global_filter_id. A bare
+    // `{ scope: 'global' }` would otherwise match every global step in the
+    // funnel — a footgun if `unpinFilterFromActiveFunnel({ scope: 'global' })`
+    // is ever called without the id (the interface allows it).
+    if (!matcher.global_filter_id) return false;
+    return step.global_filter_id === matcher.global_filter_id;
+  }
+  // local — require both tab_id and component_index for a positive match.
+  // Same reasoning: a bare `{ scope: 'local' }` would otherwise sweep up
+  // every local step.
+  if (!matcher.tab_id || !matcher.component_index) return false;
+  if (step.tab_id !== matcher.tab_id) return false;
+  return step.component_index === matcher.component_index;
+}
+
+/** Active funnel = journey matching `activeJourneyId`, or the first one
+ *  defined (default-pick policy). Null when no journeys exist yet. */
+function pickActiveFunnel(state: GlobalFiltersStoreState): Journey | null {
+  return (
+    state.journeys.find((j) => j.id === state.activeJourneyId) ??
+    state.journeys[0] ??
+    null
+  );
+}
+
+/** Sentinel error thrown by `pinFilterToActiveFunnel` when there is no
+ *  funnel for the step to land in. The host (App.tsx) catches it and
+ *  surfaces a "Create funnel" CTA — we deliberately do NOT auto-create
+ *  a placeholder-named funnel because users want to name funnels
+ *  intentionally. */
+export class NoActiveFunnelError extends Error {
+  constructor() {
+    super('No active funnel — create one in Settings → Funnels first.');
+    this.name = 'NoActiveFunnelError';
+  }
+}
+
 export const useGlobalFiltersStore = create<GlobalFiltersStoreState>((set, get) => ({
   parentDashboardId: null,
   definitions: [],
   values: {},
   journeys: [],
   activeJourneyId: null,
-  activeJourneyStopId: null,
-  journeyStops: {},
   hydrated: false,
   _timers: { values: {} },
 
@@ -118,12 +178,9 @@ export const useGlobalFiltersStore = create<GlobalFiltersStoreState>((set, get) 
       values: {},
       journeys: [],
       activeJourneyId: null,
-      activeJourneyStopId: null,
-      journeyStops: {},
     });
     try {
       const state = await fetchGlobalFiltersState(parentDashboardId);
-      // Seed values from default_state for any filter without an override.
       const seeded: Record<string, unknown> = { ...state.user_values };
       for (const def of state.definitions) {
         if (!(def.id in seeded) && def.default_state !== undefined) {
@@ -135,8 +192,6 @@ export const useGlobalFiltersStore = create<GlobalFiltersStoreState>((set, get) 
         values: seeded,
         journeys: state.journeys,
         activeJourneyId: state.last_active_journey_id,
-        activeJourneyStopId: state.last_active_journey_stop_id,
-        journeyStops: state.journey_stops ?? {},
         hydrated: true,
       });
     } catch (err) {
@@ -214,116 +269,118 @@ export const useGlobalFiltersStore = create<GlobalFiltersStoreState>((set, get) 
     const { parentDashboardId } = get();
     if (!parentDashboardId) return;
     await apiDeleteJourney(parentDashboardId, journeyId);
-    set((s) => {
-      const { [journeyId]: _drop, ...rest } = s.journeyStops;
-      void _drop;
-      return {
-        journeys: s.journeys.filter((j) => j.id !== journeyId),
-        activeJourneyId: s.activeJourneyId === journeyId ? null : s.activeJourneyId,
-        activeJourneyStopId:
-          s.activeJourneyId === journeyId ? null : s.activeJourneyStopId,
-        journeyStops: rest,
-      };
-    });
-  },
-
-  setActiveJourney: (journeyId, stopId) => {
-    const { parentDashboardId, journeys, journeyStops } = get();
-
-    if (journeyId === null) {
-      // Exit journey: clear active state, KEEP current filter values.
-      set({ activeJourneyId: null, activeJourneyStopId: null });
-      if (parentDashboardId) {
-        void patchActiveJourney(parentDashboardId, null, null).catch((err) => {
-          console.warn('Failed to clear active journey:', err);
-        });
-      }
-      return null;
-    }
-
-    const journey = journeys.find((j) => j.id === journeyId);
-    if (!journey || journey.stops.length === 0) return null;
-
-    // Resume bookkeeping: caller-provided stopId > per-journey last-active > first stop.
-    const targetStopId = stopId ?? journeyStops[journeyId] ?? journey.stops[0].id;
-    const target = journey.stops.find((s) => s.id === targetStopId) ?? journey.stops[0];
-    return get().applyJourneyStop(journeyId, target);
-  },
-
-  applyJourneyStop: (journeyId, stop) => {
-    const { parentDashboardId } = get();
     set((s) => ({
-      activeJourneyId: journeyId,
-      activeJourneyStopId: stop.id,
-      journeyStops: { ...s.journeyStops, [journeyId]: stop.id },
-      // Replace global values with the stop's snapshot. Stale keys (filters
-      // demoted since the stop was saved) are tolerated by mergeWithGlobal.
-      values: { ...stop.global_filter_state },
+      journeys: s.journeys.filter((j) => j.id !== journeyId),
+      activeJourneyId: s.activeJourneyId === journeyId ? null : s.activeJourneyId,
     }));
+  },
+
+  setActiveJourney: (journeyId) => {
+    const { parentDashboardId } = get();
+    set({ activeJourneyId: journeyId });
     if (parentDashboardId) {
-      void patchActiveJourney(parentDashboardId, journeyId, stop.id).catch((err) => {
+      void patchActiveJourney(parentDashboardId, journeyId).catch((err) => {
         console.warn('Failed to persist active journey:', err);
       });
     }
-    return { journeyId, stop };
   },
 
-  saveCurrentAsStop: async ({
-    journeyId,
-    journeyName,
-    stopName,
-    currentDashboardId,
-    currentLocalFilters,
-  }) => {
-    const { parentDashboardId, journeys, values } = get();
-    if (!parentDashboardId) {
-      throw new Error('No parent dashboard hydrated; cannot save journey stop.');
+  pinFilterToActiveFunnel: async (pin) => {
+    const state = get();
+    if (!state.parentDashboardId) {
+      throw new Error('No parent dashboard hydrated; cannot pin filter.');
     }
-    const newStop: JourneyStop = {
-      id: genId('stop'),
-      name: stopName,
-      anchor_tab_id: currentDashboardId,
-      // Snapshot of current global values + per-tab local filters.
-      global_filter_state: { ...values },
-      local_filter_state: currentLocalFilters.map((f) => ({ ...f })),
+    const funnel = pickActiveFunnel(state);
+    if (!funnel) {
+      throw new NoActiveFunnelError();
+    }
+    const { parentDashboardId } = state;
+
+    // Insert at the end of this step's tab block so the server's resort is
+    // a no-op in the common case.
+    const sameTabSteps = funnel.steps.filter((s) => s.tab_id === pin.tab_id);
+    const orderWithinTab =
+      pin.order_within_tab ??
+      (sameTabSteps.length === 0
+        ? 0
+        : Math.max(...sameTabSteps.map((s) => s.order_within_tab)) + 1);
+
+    const newStep: FunnelStep = {
+      id: genId('step'),
+      scope: pin.scope,
+      tab_id: pin.tab_id,
+      global_filter_id: pin.scope === 'global' ? (pin.global_filter_id ?? null) : null,
+      component_index: pin.scope === 'local' ? (pin.component_index ?? null) : null,
+      order_within_tab: orderWithinTab,
+      label: pin.label ?? null,
+      source_dc_id: pin.scope === 'local' ? (pin.source_dc_id ?? null) : null,
     };
 
-    let target: Journey;
-    if (journeyId === null) {
-      target = {
-        id: genId('journey'),
-        name: journeyName ?? 'New journey',
-        stops: [newStop],
-        pinned: false,
-      };
-    } else {
-      const existing = journeys.find((j) => j.id === journeyId);
-      if (!existing) throw new Error(`Journey ${journeyId} not found.`);
-      target = { ...existing, stops: [...existing.stops, newStop] };
-    }
+    // Append in tab order: find the last step whose tab_id matches and insert
+    // right after it. If no match, append at end (server resort will fix).
+    const idx = funnel.steps.map((s) => s.tab_id).lastIndexOf(pin.tab_id);
+    const nextSteps =
+      idx >= 0
+        ? [...funnel.steps.slice(0, idx + 1), newStep, ...funnel.steps.slice(idx + 1)]
+        : [...funnel.steps, newStep];
 
-    await upsertJourney(parentDashboardId, target);
-    set((s) => {
-      const idx = s.journeys.findIndex((j) => j.id === target.id);
-      const journeys =
-        idx >= 0
-          ? s.journeys.map((j, i) => (i === idx ? target : j))
-          : [...s.journeys, target];
-      // Saving a step *into* a journey makes that step the active one — matches
-      // user expectation that "save → now I'm on the step I just saved".
-      return {
-        journeys,
-        activeJourneyId: target.id,
-        activeJourneyStopId: newStop.id,
-        journeyStops: { ...s.journeyStops, [target.id]: newStop.id },
-      };
+    const updated: Journey = { ...funnel, steps: nextSteps };
+    await upsertJourney(parentDashboardId, updated);
+    set((s) => ({
+      journeys: s.journeys.map((j) => (j.id === updated.id ? updated : j)),
+    }));
+  },
+
+  unpinFilterFromActiveFunnel: async (matcher) => {
+    const state = get();
+    if (!state.parentDashboardId) return;
+    const funnel = pickActiveFunnel(state);
+    if (!funnel) return;
+    const { parentDashboardId } = state;
+
+    const nextSteps = funnel.steps.filter((step) => {
+      if (matcher.stepId) return step.id !== matcher.stepId;
+      return !stepMatches(step, matcher);
     });
-    if (parentDashboardId) {
-      void patchActiveJourney(parentDashboardId, target.id, newStop.id).catch((err) => {
-        console.warn('Failed to persist active journey after save:', err);
-      });
-    }
-    return target;
+    if (nextSteps.length === funnel.steps.length) return; // no change
+
+    const updated: Journey = { ...funnel, steps: nextSteps };
+    await upsertJourney(parentDashboardId, updated);
+    set((s) => ({
+      journeys: s.journeys.map((j) => (j.id === updated.id ? updated : j)),
+    }));
+  },
+
+  reorderStepWithinTab: async (journeyId, stepId, direction) => {
+    const { parentDashboardId, journeys } = get();
+    if (!parentDashboardId) return;
+    const funnel = journeys.find((j) => j.id === journeyId);
+    if (!funnel) return;
+
+    const idx = funnel.steps.findIndex((s) => s.id === stepId);
+    if (idx < 0) return;
+    const me = funnel.steps[idx];
+    const neighborIdx = direction === 'up' ? idx - 1 : idx + 1;
+    if (neighborIdx < 0 || neighborIdx >= funnel.steps.length) return;
+    const neighbor = funnel.steps[neighborIdx];
+    if (neighbor.tab_id !== me.tab_id) return; // can't cross tabs
+
+    // Swap order_within_tab values + positions.
+    const nextSteps = funnel.steps.slice();
+    nextSteps[idx] = { ...neighbor, order_within_tab: me.order_within_tab };
+    nextSteps[neighborIdx] = { ...me, order_within_tab: neighbor.order_within_tab };
+
+    const updated: Journey = { ...funnel, steps: nextSteps };
+    await upsertJourney(parentDashboardId, updated);
+    set((s) => ({
+      journeys: s.journeys.map((j) => (j.id === updated.id ? updated : j)),
+    }));
+  },
+
+  isFilterPinned: (matcher) => {
+    const funnel = pickActiveFunnel(get());
+    if (!funnel) return false;
+    return funnel.steps.some((step) => stepMatches(step, matcher));
   },
 
   reset: () => {
@@ -335,8 +392,6 @@ export const useGlobalFiltersStore = create<GlobalFiltersStoreState>((set, get) 
       values: {},
       journeys: [],
       activeJourneyId: null,
-      activeJourneyStopId: null,
-      journeyStops: {},
       hydrated: false,
       _timers: { values: {} },
     });

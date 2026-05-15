@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useCallback, useRef, useMemo, useDeferredValue } from 'react';
 import {
   AppShell,
+  Button,
   Group,
   Text,
   Loader,
@@ -34,21 +35,28 @@ import {
   RealtimeIndicator,
   useRealtimeJournal,
   GlobeToggle,
-  JourneyMenu,
+  FunnelPinToggle,
   JourneyFunnel,
 } from 'depictio-react-core';
 import type {
   DashboardData,
   DashboardSummary,
+  FunnelStep,
+  FunnelStepInput,
+  FunnelTab,
+  FunnelTargetDC,
   InteractiveFilter,
+  Journey,
   RealtimeMode,
   StoredMetadata,
-  FunnelStep,
-  FunnelTargetDC,
 } from 'depictio-react-core';
 import { notifications } from '@mantine/notifications';
 import { Header, Sidebar, SettingsDrawer } from './chrome';
-import { useGlobalFiltersStore } from './stores/useGlobalFiltersStore';
+import {
+  NoActiveFunnelError,
+  useGlobalFiltersStore,
+} from './stores/useGlobalFiltersStore';
+import { useFunnelsEnabled } from './hooks/useFunnelsEnabled';
 import { useSidebarOpen } from './hooks/useSidebarOpen';
 import { useAuthMode } from './auth/hooks/useAuthMode';
 import DemoTour from './demo/DemoTour';
@@ -56,6 +64,20 @@ import DemoModeBanner from './components/DemoModeBanner';
 
 // Demo onboarding UI temporarily disabled — flip to true to re-enable.
 const ENABLE_DEMO_UI = false;
+
+// Narrow view of `stored_metadata` entries used by the funnel widgets — the
+// raw entries carry many more fields; we only read these.
+type FunnelComponentMeta = {
+  index?: string;
+  title?: string;
+  column_name?: string;
+  interactive_component_type?: string;
+  dc_id?: string;
+};
+
+function genFunnelId(): string {
+  return `journey_${Math.random().toString(36).slice(2, 10)}${Date.now().toString(36).slice(-4)}`;
+}
 
 /**
  * Top-level SPA. Layout:
@@ -94,6 +116,8 @@ const App: React.FC = () => {
   // `sidebar-collapsed` localStorage key the Dash app writes.
   const [desktopOpened, toggleDesktop] = useSidebarOpen();
   const [settingsOpened, { open: openSettings, close: closeSettings }] = useDisclosure(false);
+  const [funnelOpened, { open: openFunnel, close: closeFunnel }] = useDisclosure(false);
+  const [funnelsEnabled] = useFunnelsEnabled();
   const auth = useAuthMode();
   const isDemoMode = auth.status?.is_demo_mode === true;
 
@@ -140,19 +164,26 @@ const App: React.FC = () => {
   const globalValues = useGlobalFiltersStore((s) => s.values);
   const journeys = useGlobalFiltersStore((s) => s.journeys);
   const activeJourneyId = useGlobalFiltersStore((s) => s.activeJourneyId);
-  const activeJourneyStopId = useGlobalFiltersStore((s) => s.activeJourneyStopId);
   const globalParentId = useGlobalFiltersStore((s) => s.parentDashboardId);
   const hydrateGlobal = useGlobalFiltersStore((s) => s.hydrate);
   const resetGlobal = useGlobalFiltersStore((s) => s.reset);
   const setGlobalValue = useGlobalFiltersStore((s) => s.setValue);
   const demoteGlobal = useGlobalFiltersStore((s) => s.demote);
+  const pinFilter = useGlobalFiltersStore((s) => s.pinFilterToActiveFunnel);
+  const unpinFilter = useGlobalFiltersStore((s) => s.unpinFilterFromActiveFunnel);
+  const isFilterPinned = useGlobalFiltersStore((s) => s.isFilterPinned);
+  // Funnel CRUD + step reordering — wired into the modal's switcher menu
+  // and Steps panel.
   const setActiveJourney = useGlobalFiltersStore((s) => s.setActiveJourney);
-  const applyJourneyStop = useGlobalFiltersStore((s) => s.applyJourneyStop);
-  const saveCurrentAsStop = useGlobalFiltersStore((s) => s.saveCurrentAsStop);
+  const upsertJourneyDef = useGlobalFiltersStore((s) => s.upsertJourneyDef);
+  const removeJourney = useGlobalFiltersStore((s) => s.removeJourney);
+  const reorderStepWithinTab = useGlobalFiltersStore((s) => s.reorderStepWithinTab);
 
-  // Derived: the active Journey object, for direct rendering.
+  // Derived: the active funnel (journey) object, for direct rendering.
+  // Falls back to the first journey if no active id is set — matches the
+  // store's `resolveTargetFunnel` policy.
   const activeJourney = useMemo(
-    () => journeys.find((j) => j.id === activeJourneyId) ?? null,
+    () => journeys.find((j) => j.id === activeJourneyId) ?? journeys[0] ?? null,
     [journeys, activeJourneyId],
   );
 
@@ -199,6 +230,19 @@ const App: React.FC = () => {
       if (meta.dc_id && meta.data_collection_tag && !map[meta.dc_id]) {
         map[meta.dc_id] = meta.data_collection_tag;
       }
+    }
+    return map;
+  }, [dashboard]);
+
+  // Component metadata by index — single lookup map used by both the funnel
+  // step-input builder and the step-label resolver below. The raw
+  // `stored_metadata` entries are loosely typed; we cast through a narrow
+  // shape that captures only the fields we read.
+  const metadataByIndex = useMemo(() => {
+    const map = new Map<string, FunnelComponentMeta>();
+    for (const m of dashboard?.stored_metadata ?? []) {
+      const meta = m as FunnelComponentMeta;
+      if (meta.index) map.set(meta.index, meta);
     }
     return map;
   }, [dashboard]);
@@ -436,28 +480,181 @@ const App: React.FC = () => {
     [visibleLeftComponents, globalCards],
   );
 
-  // Funnel inputs derived from the active global filter values + every DC
-  // referenced by at least one link. Empty arrays → the footer is hidden.
-  const funnelSteps = useMemo<FunnelStep[]>(
-    () =>
-      globalDefinitions
-        .filter((d) => !isEmptyGlobalValue(globalValues[d.id]))
-        .map((d) => ({ filter_id: d.id, value: globalValues[d.id] })),
-    [globalDefinitions, globalValues],
-  );
+  // Funnel target DCs = the union of (wf_id, dc_id) referenced by either
+  // a global filter link OR a tab that hosts a local pinned step. Empty
+  // → no funnel rail.
   const funnelTargetDcs = useMemo<FunnelTargetDC[]>(() => {
     const seen = new Set<string>();
     const out: FunnelTargetDC[] = [];
+    const add = (wf_id: string, dc_id: string) => {
+      const key = `${wf_id}::${dc_id}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+      out.push({ wf_id, dc_id });
+    };
     for (const def of globalDefinitions) {
-      for (const link of def.links) {
-        const key = `${link.wf_id}::${link.dc_id}`;
-        if (seen.has(key)) continue;
-        seen.add(key);
-        out.push({ wf_id: link.wf_id, dc_id: link.dc_id });
+      for (const link of def.links) add(link.wf_id, link.dc_id);
+    }
+    // Locally-pinned steps from the active journey: derive the target DC
+    // from the host tab's first interactive component metadata. The server
+    // does the equivalent lookup; we mirror it client-side just enough to
+    // ensure the target DC list isn't empty for local-only funnels.
+    for (const step of activeJourney?.steps ?? []) {
+      if (step.scope !== 'local') continue;
+      const tabId = step.tab_id;
+      if (tabId === dashboardId) {
+        // The currently-loaded tab — use its own stored_metadata.
+        for (const m of dashboard?.stored_metadata ?? []) {
+          const wf = (m as { wf_id?: string }).wf_id;
+          const dc = (m as { dc_id?: string }).dc_id;
+          if (wf && dc) {
+            add(wf, dc);
+            break;
+          }
+        }
       }
+      // Cross-tab local pins: we don't have the other tab's metadata in
+      // memory client-side. The server still evaluates them correctly via
+      // its own tab_dc_index — the result just won't show that DC in the
+      // cascade table on the rail until the user visits that tab.
+      //
+      // KNOWN LIMITATION: silent gap in the cascade table for tabs the
+      // user hasn't visited this session. Follow-up: eagerly fetch sibling
+      // tab `stored_metadata` (or extend `fetchAllDashboards` to carry the
+      // primary DC per tab) so cross-tab locals are visible immediately.
     }
     return out;
-  }, [globalDefinitions]);
+  }, [globalDefinitions, activeJourney, dashboardId, dashboard]);
+
+  // Resolve every step in the active funnel to a FunnelStepInput carrying
+  // its current value. Globals pull from the store; locals pull from this
+  // tab's `filters` array (matched by component_index). Steps on other
+  // tabs whose values we don't have locally yet send `value: null` —
+  // the server treats that as "no narrowing for this step" so the chain
+  // still renders. Bumping `refreshTick` invalidates the funnel fetch.
+  const funnelStepInputs = useMemo<FunnelStepInput[]>(() => {
+    if (!activeJourney) return [];
+    return activeJourney.steps.map((step): FunnelStepInput => {
+      if (step.scope === 'global') {
+        const v = globalValues[step.global_filter_id ?? ''];
+        return {
+          scope: 'global',
+          value: isEmptyGlobalValue(v) ? null : v,
+          global_filter_id: step.global_filter_id ?? null,
+        };
+      }
+      // Local step: resolve current value from the live filter array iff
+      // the host tab matches the currently-rendered tab. Cross-tab locals
+      // carry null until the user visits the host tab.
+      const compIndex = step.component_index ?? '';
+      let value: unknown = null;
+      let columnName: string | null = null;
+      let componentType: string | null = null;
+      if (step.tab_id === dashboardId) {
+        const live = filters.find((f) => f.index === compIndex);
+        value = live?.value ?? null;
+        columnName =
+          live?.column_name ??
+          live?.metadata?.column_name ??
+          null;
+        componentType =
+          live?.interactive_component_type ??
+          live?.metadata?.interactive_component_type ??
+          null;
+      }
+      // Fall back to per-tab metadata stored on the dashboard for the
+      // column / component type when no live filter has fired yet. Also
+      // back-fill source_dc_id when the step is older than this field —
+      // available only if the user is on the host tab, but better than
+      // forcing a repin to recover from the multi-DC bug.
+      let sourceDcId = step.source_dc_id ?? null;
+      if (!columnName || !componentType || !sourceDcId) {
+        const m = metadataByIndex.get(compIndex);
+        if (m) {
+          columnName = columnName ?? m.column_name ?? null;
+          componentType = componentType ?? m.interactive_component_type ?? null;
+          sourceDcId = sourceDcId ?? m.dc_id ?? null;
+        }
+      }
+      return {
+        scope: 'local',
+        value,
+        tab_id: step.tab_id,
+        component_index: compIndex,
+        column_name: columnName,
+        interactive_component_type: componentType,
+        source_dc_id: sourceDcId,
+      };
+    });
+  }, [activeJourney, globalValues, filters, dashboardId, metadataByIndex]);
+
+  // Shared step → display-label resolver. Returns null when nothing matches
+  // so callers can pick their own fallback string ("Filter" for the funnel
+  // strip, no label for the SettingsDrawer subsection).
+  const resolveStepLabel = useCallback(
+    (step: FunnelStep): string | null => {
+      if (step.label) return step.label;
+      if (step.scope === 'global') {
+        const def = globalDefinitions.find((d) => d.id === step.global_filter_id);
+        return def?.label ?? null;
+      }
+      const m = metadataByIndex.get(step.component_index ?? '');
+      return m?.title || m?.column_name || null;
+    },
+    [globalDefinitions, metadataByIndex],
+  );
+
+  // Display labels for each pinned step in the active funnel. Reuses
+  // `resolveStepLabel` and substitutes a generic fallback when the resolver
+  // returns null (e.g. step references a since-removed component).
+  const funnelStepLabels = useMemo<string[]>(() => {
+    if (!activeJourney) return [];
+    return activeJourney.steps.map(
+      (step) =>
+        resolveStepLabel(step) ??
+        (step.scope === 'global' ? 'Global filter' : 'Filter'),
+    );
+  }, [activeJourney, resolveStepLabel]);
+
+  // Funnel modal Steps panel: tabs in display order. The funnel modal
+  // owns step editing now (Settings drawer is just the master toggle), so
+  // we pass these straight through to <JourneyFunnel>.
+  const funnelTabs = useMemo<FunnelTab[]>(
+    () =>
+      tabSiblings.map((t) => ({
+        id: t.dashboard_id,
+        name: t.title || 'Untitled tab',
+        icon: t.tab_icon ?? (t.parent_dashboard_id ? undefined : 'tabler:layout-dashboard'),
+      })),
+    [tabSiblings],
+  );
+
+  // Columns per DC for the funnel modal's "Unique values" view. Derived
+  // from the active tab's `stored_metadata` — every interactive/figure
+  // component carries a `dc_id` + `column_name` (or sometimes `columns`).
+  // This gives the user the set of columns already referenced on this tab
+  // without a backend column-schema endpoint. Cross-tab columns aren't
+  // included because `DashboardSummary` (used for sibling tabs) carries no
+  // stored_metadata — covering them would mean loading each sibling
+  // dashboard or a dedicated `/columns` endpoint.
+  const columnsByDc = useMemo<Record<string, string[]>>(() => {
+    const map: Record<string, Set<string>> = {};
+    for (const meta of dashboard?.stored_metadata ?? []) {
+      const m = meta as {
+        dc_id?: string;
+        column_name?: string;
+        columns?: string[];
+      };
+      const dc = m?.dc_id;
+      if (!dc) continue;
+      const set = map[dc] ?? (map[dc] = new Set());
+      if (m.column_name) set.add(m.column_name);
+      if (Array.isArray(m.columns)) m.columns.forEach((c) => c && set.add(c));
+    }
+    return Object.fromEntries(
+      Object.entries(map).map(([k, v]) => [k, [...v].sort()]),
+    );
+  }, [dashboard]);
   // "From [tab]" caption per synthetic card — lets the user see at a glance
   // which tab the global was originally promoted from.
   const sourceTabNameByIndex = useMemo<Record<string, string>>(() => {
@@ -495,11 +692,75 @@ const App: React.FC = () => {
 
   const promoteGlobal = useGlobalFiltersStore((s) => s.promote);
 
-  // Map of component index → GlobeToggle, so each card in the unified left
-  // rail gets a "promote ↔ demote" affordance in its chrome row.
-  //   - Native per-tab card not yet global  → globe off, click promotes.
-  //   - Native per-tab card already global  → globe on,  click demotes.
-  //   - Synthetic card (from another tab)   → globe on,  click demotes.
+  // Funnel CRUD handlers passed to <JourneyFunnel>. Each wraps the store
+  // action in a small layer that generates new IDs / opens prompts / etc.
+  const handleCreateJourney = useCallback(
+    async (name: string) => {
+      const newJourney: Journey = {
+        id: genFunnelId(),
+        name,
+        description: null,
+        icon: null,
+        color: null,
+        steps: [],
+        pinned: false,
+        is_default: journeys.length === 0,
+      };
+      await upsertJourneyDef(newJourney);
+      setActiveJourney(newJourney.id);
+    },
+    [journeys, upsertJourneyDef, setActiveJourney],
+  );
+
+  const handleRenameJourney = useCallback(
+    async (journeyId: string, name: string) => {
+      const target = journeys.find((j) => j.id === journeyId);
+      if (!target) return;
+      await upsertJourneyDef({ ...target, name });
+    },
+    [journeys, upsertJourneyDef],
+  );
+
+  const handleToggleDefault = useCallback(
+    async (journeyId: string) => {
+      const target = journeys.find((j) => j.id === journeyId);
+      if (!target) return;
+      await upsertJourneyDef({ ...target, is_default: !target.is_default });
+    },
+    [journeys, upsertJourneyDef],
+  );
+
+  // Surface NoActiveFunnelError with a snackbar that points the user at
+  // the Settings drawer. Other pin/unpin errors get a generic red toast.
+  const handlePinErr = useCallback(
+    (err: unknown) => {
+      if (err instanceof NoActiveFunnelError) {
+        notifications.show({
+          title: 'No funnel yet',
+          message: 'Create a funnel in Settings → Funnels first, then pin filters into it.',
+          color: 'blue',
+          onClick: () => openSettings(),
+        });
+        return;
+      }
+      notifications.show({
+        title: 'Pin failed',
+        message: String((err as Error).message ?? err),
+        color: 'red',
+      });
+    },
+    [openSettings],
+  );
+
+  // Map of component index → action cluster (GlobeToggle + FunnelPinToggle).
+  // Globe: promote ↔ demote a filter to/from cross-tab global scope.
+  // Pin:   add ↔ remove the filter as a step in the active funnel.
+  //        Hidden when the funnels feature is disabled in Settings.
+  //
+  // Native per-tab card not yet global  → globe off; pin reflects funnel state.
+  // Native per-tab card already global  → globe on;  pin reflects funnel state.
+  // Synthetic card (from another tab)   → globe on;  pin reflects funnel state
+  //                                      keyed on the underlying global filter id.
   const extraActionsByIndex = useMemo(() => {
     const map: Record<string, React.ReactNode> = {};
     if (!dashboardId) return map;
@@ -508,13 +769,34 @@ const App: React.FC = () => {
       // Synthetic card path — already global by construction; click demotes.
       if (isSyntheticComponentIndex(idx)) {
         const defId = filterIdFromSyntheticIndex(idx)!;
+        const def = globalDefinitions.find((d) => d.id === defId);
+        const pinned = funnelsEnabled && isFilterPinned({ scope: 'global', global_filter_id: defId });
         map[idx] = (
-          <GlobeToggle
-            active
-            onClick={() => {
-              void demoteGlobal(defId);
-            }}
-          />
+          <Group gap={2} wrap="nowrap">
+            {funnelsEnabled && (
+              <FunnelPinToggle
+                pinned={pinned}
+                onClick={() => {
+                  if (pinned) {
+                    void unpinFilter({ scope: 'global', global_filter_id: defId });
+                  } else if (def) {
+                    void pinFilter({
+                      scope: 'global',
+                      tab_id: String(def.source_tab_id),
+                      global_filter_id: defId,
+                      label: def.label,
+                    }).catch(handlePinErr);
+                  }
+                }}
+              />
+            )}
+            <GlobeToggle
+              active
+              onClick={() => {
+                void demoteGlobal(defId);
+              }}
+            />
+          </Group>
         );
         continue;
       }
@@ -579,10 +861,64 @@ const App: React.FC = () => {
           });
         });
       };
-      map[idx] = <GlobeToggle active={isGlobal} onClick={handleClick} />;
+      // The pin toggle keys on whichever scope is currently true: if the
+      // filter is promoted, the funnel pin references the global filter id;
+      // otherwise it references the (tab_id, component_index) pair.
+      const pinMatcher = isGlobal && existing
+        ? { scope: 'global' as const, global_filter_id: existing.id }
+        : { scope: 'local' as const, tab_id: dashboardId, component_index: idx };
+      const pinned = funnelsEnabled && isFilterPinned(pinMatcher);
+      const handlePinClick = () => {
+        if (pinned) {
+          void unpinFilter(pinMatcher);
+          return;
+        }
+        const pinPromise = isGlobal && existing
+          ? pinFilter({
+              scope: 'global',
+              tab_id: dashboardId,
+              global_filter_id: existing.id,
+              label: existing.label,
+            })
+          : pinFilter({
+              scope: 'local',
+              tab_id: dashboardId,
+              component_index: idx,
+              label: meta.title || meta.column_name,
+              // Capture the component's dc_id so the funnel backend can
+              // target the right DC on multi-DC tabs (otherwise its
+              // tab→DC fallback picks the first stored_metadata entry
+              // which may be a different DC than the filter's column).
+              source_dc_id: meta.dc_id,
+            });
+        pinPromise.catch(handlePinErr);
+      };
+      map[idx] = (
+        <Group gap={2} wrap="nowrap">
+          {funnelsEnabled && <FunnelPinToggle pinned={pinned} onClick={handlePinClick} />}
+          <GlobeToggle active={isGlobal} onClick={handleClick} />
+        </Group>
+      );
     }
     return map;
-  }, [effectiveLeftComponents, globalDefinitions, demoteGlobal, promoteGlobal, dashboardId]);
+  }, [
+    effectiveLeftComponents,
+    globalDefinitions,
+    demoteGlobal,
+    promoteGlobal,
+    dashboardId,
+    isFilterPinned,
+    pinFilter,
+    unpinFilter,
+    funnelsEnabled,
+    // `journeys` and `activeJourneyId` aren't read directly here, but
+    // `isFilterPinned(...)` reads them off the store at call time. Listing
+    // them makes the memo recompute when a step is pinned/unpinned so the
+    // filled/outline state of the pin icon refreshes immediately.
+    journeys,
+    activeJourneyId,
+    handlePinErr,
+  ]);
 
   // Filter-change interceptor: when the change comes from a synthetic card,
   // route the value to setGlobalValue (per-user state) instead of mixing it
@@ -630,37 +966,28 @@ const App: React.FC = () => {
           cardsLoading={cardsLoading}
           rightExtras={
             <>
-              <JourneyMenu
-                journeys={journeys}
-                activeJourneyId={activeJourneyId}
-                onSelect={(journeyId) => {
-                  // Activate the journey + resume at its last-active stop
-                  // (or stop 0). The store returns the request payload we
-                  // need to apply locally (per-tab filters + navigate).
-                  const req = setActiveJourney(journeyId);
-                  if (!req) return;
-                  setFilters(req.stop.local_filter_state);
-                  if (req.stop.anchor_tab_id !== dashboardId) {
-                    window.location.assign(`/dashboard-beta/${req.stop.anchor_tab_id}`);
+              {/* Dedicated launcher for the funnel view. Lives in the
+               *  header so the user can always reach the funnel modal —
+               *  the rail strip alone was too easy to miss. Disabled
+               *  (rather than hidden) when there is no active funnel so
+               *  the affordance is discoverable; tooltip explains why. */}
+              {funnelsEnabled && globalParentId && (
+                <Button
+                  size="xs"
+                  variant="light"
+                  color={activeJourney ? 'blue' : 'gray'}
+                  leftSection={<Icon icon="tabler:filter-cog" width={14} />}
+                  onClick={openFunnel}
+                  disabled={!activeJourney}
+                  title={
+                    activeJourney
+                      ? `Open funnel: ${activeJourney.name}`
+                      : 'No active funnel — create one in Settings → Funnels'
                   }
-                }}
-                onSaveAsNew={({ journeyName, stopName }) => {
-                  void saveCurrentAsStop({
-                    journeyId: null,
-                    journeyName,
-                    stopName,
-                    currentDashboardId: dashboardId!,
-                    currentLocalFilters: filters,
-                  }).catch((err) => {
-                    notifications.show({
-                      title: 'Failed to save journey',
-                      message: String((err as Error).message ?? err),
-                      color: 'red',
-                    });
-                  });
-                }}
-                onManage={openSettings}
-              />
+                >
+                  Funnel
+                </Button>
+              )}
               {realtimeEnabled && (
                 <span data-tour-id="realtime-indicator" style={{ display: 'inline-flex' }}>
                   <RealtimeIndicator
@@ -728,44 +1055,38 @@ const App: React.FC = () => {
                   Filters
                 </Title>
                 <Stack gap="sm">
-                  {/* Funnel widget — top of the rail. Live mode shows the
-                   *  current filter chain's narrowing; active-journey mode
-                   *  shows the journey's steps as clickable bars + Save CTA. */}
-                  {globalParentId && (funnelTargetDcs.length > 0 || activeJourney) && (
-                    <JourneyFunnel
-                      parentDashboardId={globalParentId}
-                      definitions={globalDefinitions}
-                      liveSteps={funnelSteps}
-                      targetDcs={funnelTargetDcs}
-                      dcTagsById={dcTagsById}
-                      journey={activeJourney}
-                      activeStopId={activeJourneyStopId}
-                      onApplyStop={(stop) => {
-                        setFilters(stop.local_filter_state);
-                        const req = applyJourneyStop(activeJourney!.id, stop);
-                        if (stop.anchor_tab_id !== dashboardId) {
-                          window.location.assign(`/dashboard-beta/${stop.anchor_tab_id}`);
-                        }
-                        void req;
-                      }}
-                      onExitJourney={() => setActiveJourney(null)}
-                      onSaveAsStop={({ journeyId, journeyName, stopName }) => {
-                        void saveCurrentAsStop({
-                          journeyId,
-                          journeyName,
-                          stopName,
-                          currentDashboardId: dashboardId!,
-                          currentLocalFilters: filters,
-                        }).catch((err) => {
-                          notifications.show({
-                            title: 'Failed to save journey step',
-                            message: String((err as Error).message ?? err),
-                            color: 'red',
-                          });
-                        });
-                      }}
-                    />
-                  )}
+                  {/* Funnel modal — launched from the header "Funnel"
+                   *  button (rightExtras above). Controlled-mode: no
+                   *  inline rail strip; the modal renders only when
+                   *  funnelOpened is true. Mounted here so it sits inside
+                   *  the dashboard scope where filter values + target DCs
+                   *  are already in context. */}
+                  {funnelsEnabled &&
+                    globalParentId &&
+                    (funnelTargetDcs.length > 0 || activeJourney) && (
+                      <JourneyFunnel
+                        parentDashboardId={globalParentId}
+                        journey={activeJourney}
+                        journeys={journeys}
+                        stepInputs={funnelStepInputs}
+                        stepLabels={funnelStepLabels}
+                        targetDcs={funnelTargetDcs}
+                        dcTagsById={dcTagsById}
+                        columnsByDc={columnsByDc}
+                        tabs={funnelTabs}
+                        resolveStepLabel={resolveStepLabel}
+                        refreshTick={refreshTick}
+                        controlledOpen={funnelOpened}
+                        onCloseControlled={closeFunnel}
+                        onSwitchJourney={setActiveJourney}
+                        onCreateJourney={handleCreateJourney}
+                        onRenameJourney={handleRenameJourney}
+                        onDeleteJourney={removeJourney}
+                        onToggleDefaultJourney={handleToggleDefault}
+                        onReorderStep={reorderStepWithinTab}
+                        onUnpinStep={(stepId) => void unpinFilter({ stepId })}
+                      />
+                    )}
                   {/* Top "Global filters" section — renders one card per
                    *  active global, preserving the original component's
                    *  styling (icon, color, title) regardless of which tab

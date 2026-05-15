@@ -170,6 +170,7 @@ export {
   deleteGlobalFilter,
   patchGlobalFilterValue,
   computeFunnel,
+  fetchJourneyPreview,
   upsertJourney,
   deleteJourney,
   patchActiveJourney,
@@ -187,10 +188,12 @@ export {
   isEmptyGlobalValue,
 } from './utils/globalFilters';
 
-// Cross-tab global filters & stories — UI
+// Cross-tab global filters & journeys — UI
 export { default as GlobeToggle } from './components/global/GlobeToggle';
+export { default as FunnelPinToggle } from './components/global/FunnelPinToggle';
 export { default as JourneyMenu } from './components/global/JourneyMenu';
 export { default as JourneyFunnel } from './components/global/JourneyFunnel';
+export type { FunnelTab, JourneyFunnelProps } from './components/global/JourneyFunnel';
 // Selection-as-filter helpers (Plotly/AG Grid → InteractiveFilter)
 export {
   extractScatterSelection,
@@ -286,9 +289,9 @@ export type {
   GlobalFilterDisplay,
   GlobalFilterLink,
   Journey,
-  JourneyStop,
-  GlobalFiltersState,
   FunnelStep,
+  GlobalFiltersState,
+  FunnelStepInput,
   FunnelTargetDC,
   FunnelResponse,
 } from './api';

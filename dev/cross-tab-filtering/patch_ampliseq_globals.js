@@ -1,3 +1,12 @@
+// Mongosh patch script — sync the ampliseq parent dashboard's
+// global_filters and journeys to the latest pin-based funnel schema for
+// deployments that won't be wiped + reseeded from JSON.
+//
+// Run from the host (port 27101 maps to the dev compose's depictio mongo):
+//   mongosh --quiet --port 27101 depictioDB dev/cross-tab-filtering/patch_ampliseq_globals.js
+//
+// Idempotent. Also $unsets legacy fields from prior iterations.
+
 db.dashboards.updateOne(
   { dashboard_id: ObjectId("646b0f3c1e4a2d7f8e5b8ca2") },
   {
@@ -45,80 +54,29 @@ db.dashboards.updateOne(
           ]
         }
       ],
-      journeys: [
-        {
-          id: "journey_riverwater",
-          name: "Riverwater funnel",
-          description: "Single-tab funnel on the MultiQC tab — narrow from all samples down to two specific Riverwater samples.",
-          icon: "tabler:droplet",
-          color: "blue",
-          pinned: true,
-          stops: [
-            {
-              id: "stop_river_all",
-              name: "All samples",
-              anchor_tab_id: "646b0f3c1e4a2d7f8e5b8ca2",
-              global_filter_state: {},
-              local_filter_state: []
-            },
-            {
-              id: "stop_river_only",
-              name: "Riverwater only",
-              anchor_tab_id: "646b0f3c1e4a2d7f8e5b8ca2",
-              global_filter_state: { gf_habitat: ["Riverwater"] },
-              local_filter_state: []
-            },
-            {
-              id: "stop_river_two",
-              name: "Two specific samples",
-              anchor_tab_id: "646b0f3c1e4a2d7f8e5b8ca2",
-              global_filter_state: {
-                gf_habitat: ["Riverwater"],
-                gf_sample_id: ["SRR10070130", "SRR10070131"]
-              },
-              local_filter_state: []
-            }
-          ]
-        },
-        {
-          id: "journey_soil_drilldown",
-          name: "Habitat → taxa drill-down",
-          description: "Multi-tab journey: scope to Soil samples in QC, see their community composition, then drill into differentially abundant taxa.",
-          icon: "tabler:route",
-          color: "violet",
-          pinned: false,
-          stops: [
-            {
-              id: "stop_soil_qc",
-              name: "QC: Soil samples",
-              anchor_tab_id: "646b0f3c1e4a2d7f8e5b8ca2",
-              global_filter_state: { gf_habitat: ["Soil"] },
-              local_filter_state: []
-            },
-            {
-              id: "stop_soil_community",
-              name: "Community: Soil diversity",
-              anchor_tab_id: "646b0f3c1e4a2d7f8e5b8cb3",
-              global_filter_state: { gf_habitat: ["Soil"] },
-              local_filter_state: []
-            },
-            {
-              id: "stop_soil_differential",
-              name: "Differential: Soil taxa",
-              anchor_tab_id: "646b0f3c1e4a2d7f8e5b8cb4",
-              global_filter_state: { gf_habitat: ["Soil"] },
-              local_filter_state: []
-            }
-          ]
-        }
-      ]
+      journeys: []
     },
-    // Strip the legacy `stories` field if it was written by a previous run.
+    // Strip legacy fields written by prior iterations on this branch:
+    //   stories                   — pre-Journey rename
+    //   journeys.*.stops          — pre-pin-based-funnel snapshot model
+    //   last_active_journey_stop  — per-stop resume bookkeeping
     $unset: { stories: "" }
   }
 );
+
+// Clean legacy per-user state fields on the user_dashboard_state docs that
+// pointed at this dashboard. Inert with the new model, but kept tidy.
+db.user_dashboard_state.updateMany(
+  { parent_dashboard_id: ObjectId("646b0f3c1e4a2d7f8e5b8ca2") },
+  { $unset: { last_active_journey_stop_id: "", journey_stops: "" } }
+);
+
 const doc = db.dashboards.findOne(
   { dashboard_id: ObjectId("646b0f3c1e4a2d7f8e5b8ca2") },
   { global_filters: 1, journeys: 1, _id: 0 }
 );
-printjson({ filters: (doc.global_filters || []).length, journeys: (doc.journeys || []).length });
+printjson({
+  filters: (doc.global_filters || []).length,
+  journeys: (doc.journeys || []).length,
+  steps_per_journey: (doc.journeys || []).map((j) => (j.steps || []).length)
+});

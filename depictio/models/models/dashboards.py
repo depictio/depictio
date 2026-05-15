@@ -19,11 +19,12 @@ Component Architecture:
 
 import re
 from pathlib import Path
-from typing import Any, ClassVar, Optional
+from typing import Annotated, Any, ClassVar, Optional
 
 import yaml
 from pydantic import (
     BaseModel,
+    BeforeValidator,
     ConfigDict,
     Field,
     ValidationError,
@@ -1222,6 +1223,20 @@ class DashboardDataLite(BaseModel):
 # ============================================================================
 
 
+def _coerce_id_to_str(value: Any) -> Any:
+    """Stringify an ObjectId-or-str ID. MongoDB stores wf_id/dc_id as
+    ``ObjectId`` system-wide; the link model treats them as opaque
+    strings, so coerce on read."""
+    if value is None:
+        return value
+    # bson.ObjectId has a clean __str__; the type check is duck-typed so we
+    # don't pay an import here.
+    return value if isinstance(value, str) else str(value)
+
+
+IdStr = Annotated[str, BeforeValidator(_coerce_id_to_str)]
+
+
 class GlobalFilterLink(BaseModel):
     """One (workflow, data collection, column) target of a global filter.
 
@@ -1231,8 +1246,8 @@ class GlobalFilterLink(BaseModel):
     handled server-side by ``depictio.api.v1.filter_links``.
     """
 
-    wf_id: str
-    dc_id: str
+    wf_id: IdStr
+    dc_id: IdStr
     column_name: str
 
     model_config = ConfigDict(extra="forbid")
@@ -1272,40 +1287,61 @@ class GlobalFilterDef(BaseModel):
         return str(source_tab_id)
 
 
-class JourneyStop(BaseModel):
-    """A single analytical "stop" in a saved Journey.
+class FunnelStep(BaseModel):
+    """A single pinned filter in a Journey's funnel.
 
-    Captures the snapshot needed to replay an analytical state: which tab
-    the user was on, the global filter values at the time, and a snapshot
-    of the per-tab interactive filters on that tab. Applying a stop
-    navigates to ``anchor_tab_id`` and replays both filter snapshots.
+    A step references either a global filter (``scope='global'`` with
+    ``global_filter_id``) or a per-tab interactive filter
+    (``scope='local'`` with ``component_index``). ``tab_id`` is always set
+    and anchors the step in cross-tab order — the dashboard's tab order
+    determines step order across tabs; ``order_within_tab`` resolves
+    within-tab order from the component's position in
+    ``left_panel_layout_data``.
     """
 
     id: str
-    name: str
-    description: str | None = None
-    anchor_tab_id: PyObjectId
-    global_filter_state: dict[str, Any] = Field(default_factory=dict)
-    local_filter_state: list[dict[str, Any]] = Field(default_factory=list)
+    scope: str  # 'global' | 'local'
+    tab_id: PyObjectId
+    global_filter_id: str | None = None
+    component_index: str | None = None
+    order_within_tab: int = 0
+    label: str | None = None
+    # The dc_id of the component the filter was pinned from. Set at pin-time
+    # so the funnel backend can apply the filter to the right DC even when
+    # the host tab has multiple DCs (and `_build_tab_dc_index` would pick the
+    # wrong one). Legacy steps without this field fall back to the tab→DC
+    # index lookup.
+    source_dc_id: str | None = None
 
     model_config = ConfigDict(arbitrary_types_allowed=True, extra="forbid")
 
-    @field_serializer("anchor_tab_id")
-    def serialize_anchor_tab_id(self, anchor_tab_id: PyObjectId) -> str:
-        return str(anchor_tab_id)
+    @field_serializer("tab_id")
+    def serialize_tab_id(self, tab_id: PyObjectId) -> str:
+        return str(tab_id)
+
+    @model_validator(mode="after")
+    def _check_scope_references(self) -> "FunnelStep":
+        if self.scope not in ("global", "local"):
+            raise ValueError(f"FunnelStep.scope must be 'global' or 'local', got {self.scope!r}")
+        if self.scope == "global" and not self.global_filter_id:
+            raise ValueError("FunnelStep(scope='global') requires global_filter_id")
+        if self.scope == "local" and not self.component_index:
+            raise ValueError("FunnelStep(scope='local') requires component_index")
+        return self
 
 
 class Journey(BaseModel):
-    """A named, ordered sequence of analytical stops.
+    """A named, ordered sequence of pinned filter steps (a funnel).
 
-    Each stop is a saved snapshot of (tab + global filters + per-tab
-    filters). Stepping into a stop replays its filter state on its anchor
-    tab — driving the funnel-narrowing view in the React viewer.
+    A journey is a declarative list of filters an author has pinned, in
+    tab order. Each step is one filter (global or local); the live row
+    count at each step is computed from the user's current filter values
+    flowing through the prefix of steps.
 
-    Multiple journeys may coexist on the same dashboard. They are
-    dashboard-scoped (definitions live on the parent ``DashboardData``);
-    per-user state — which stop the user was last on for each journey —
-    lives in :class:`UserDashboardState`.
+    Multiple journeys may coexist on the same dashboard for different
+    analytical directions (e.g. ``Genes → Locations`` vs
+    ``Locations → Genes``). Definitions are dashboard-scoped; per-user
+    last-active journey lives in :class:`UserDashboardState`.
     """
 
     id: str
@@ -1313,10 +1349,39 @@ class Journey(BaseModel):
     description: str | None = None
     icon: str | None = None
     color: str | None = None
-    stops: list[JourneyStop] = Field(default_factory=list)
+    steps: list[FunnelStep] = Field(default_factory=list)
     pinned: bool = False
+    is_default: bool = False
 
     model_config = ConfigDict(arbitrary_types_allowed=True, extra="forbid")
+
+    @model_validator(mode="after")
+    def _dedupe_steps(self) -> "Journey":
+        """Drop steps that duplicate the same (scope, ref) target.
+
+        Within-tab and cross-tab ordering is reconciled server-side by the
+        upsert endpoint (which has access to tab_order and
+        left_panel_layout_data); the model only guarantees structural
+        invariants — unique step IDs, no duplicate filter references.
+        """
+        seen_ids: set[str] = set()
+        seen_refs: set[tuple[str, str]] = set()
+        deduped: list[FunnelStep] = []
+        for step in self.steps:
+            if step.id in seen_ids:
+                continue
+            ref_key = (
+                ("global", step.global_filter_id or "")
+                if step.scope == "global"
+                else ("local", f"{step.tab_id}:{step.component_index or ''}")
+            )
+            if ref_key in seen_refs:
+                continue
+            seen_ids.add(step.id)
+            seen_refs.add(ref_key)
+            deduped.append(step)
+        self.steps = deduped
+        return self
 
 
 class DashboardData(MongoModel):

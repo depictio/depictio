@@ -116,7 +116,7 @@ const JourneyMenu: React.FC<JourneyMenuProps> = ({
                         />
                       )}
                       <Badge size="xs" variant="outline">
-                        {j.stops.length}
+                        {j.steps.length}
                       </Badge>
                     </Group>
                   }

@@ -20,13 +20,11 @@ class UserDashboardState(MongoModel):
     parent_dashboard_id: PyObjectId
     global_filter_values: dict[str, Any] = Field(default_factory=dict)
 
-    # Currently-active journey + which stop within it the user is on.
-    # `journey_stops` records the last-active stop *per* journey so picking a
-    # journey the user has used before resumes them at that journey's last
-    # stop rather than always at stop 0.
+    # Currently-active journey. In the pin-based funnel model, a journey
+    # is a declarative list of pinned filter steps (no per-stop snapshots),
+    # so we only need to track which funnel the user is viewing — not a
+    # per-journey resume position.
     last_active_journey_id: Optional[str] = None
-    last_active_journey_stop_id: Optional[str] = None
-    journey_stops: dict[str, str] = Field(default_factory=dict)
 
     last_active_tab_id: Optional[PyObjectId] = None
     updated_at: datetime = Field(default_factory=datetime.utcnow)

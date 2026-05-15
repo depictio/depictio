@@ -297,8 +297,10 @@ async def create_dashboard_from_json(
                 update_fields[fld] = seed_val
                 needs_update = True
         # Strip the legacy `stories` field if a previous deployment of this
-        # branch wrote it — schema renamed Story → Journey. Separate $unset
-        # call so the $set payload stays a plain field map.
+        # branch wrote it — schema renamed Story → Journey. Per-journey
+        # snapshot bookkeeping (`journey_stops`, `last_active_journey_stop_id`)
+        # lives on `user_dashboard_state` documents, not here, so no unset
+        # is needed on the dashboard doc itself.
         if "stories" in _check:
             logger.info("Dropping legacy 'stories' field (renamed to 'journeys')")
             dashboards_collection.update_one(
