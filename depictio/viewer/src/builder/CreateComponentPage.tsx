@@ -46,10 +46,11 @@ const CreateComponentPage: React.FC<CreateComponentPageProps> = ({
     return () => reset();
   }, [dashboardId, newComponentId, init, reset]);
 
-  // Step 0 → 1 needs componentType. Step 1 → 2 needs wfId+dcId. Step 2 always
-  // allowed once reached.
+  // Text components don't bind to a workflow/DC — Step 1 is irrelevant and
+  // skipped (0 → 2 directly). Other types still gate Step 1 → 2 on wf+dc.
+  const isText = componentType === 'text';
   const canAdvanceFromZero = Boolean(componentType);
-  const canAdvanceFromOne = Boolean(wfId && dcId);
+  const canAdvanceFromOne = isText || Boolean(wfId && dcId);
 
   const cancel = () => {
     window.location.assign(`/dashboard-beta-edit/${dashboardId}`);
@@ -80,6 +81,13 @@ const CreateComponentPage: React.FC<CreateComponentPageProps> = ({
           <Stepper
             active={step}
             onStepClick={(n) => {
+              // Text bypasses Step 1: clicking the data step jumps straight
+              // to design, and "back" from design returns to type.
+              if (isText && n === 1) {
+                if (canAdvanceFromZero) setStep(2);
+                else setStep(0);
+                return;
+              }
               if (n < step) setStep(n);
               else if (n === 1 && canAdvanceFromZero) setStep(1);
               else if (n === 2 && canAdvanceFromZero && canAdvanceFromOne)
@@ -159,8 +167,12 @@ const CreateComponentPage: React.FC<CreateComponentPageProps> = ({
               color="gray"
               size="lg"
               leftSection={<Icon icon="mdi:arrow-left" width={20} />}
-              disabled={step === 0 || step >= 2}
-              onClick={() => setStep(Math.max(0, step - 1))}
+              disabled={step === 0 || (step >= 2 && !isText)}
+              onClick={() => {
+                // Text components skip Step 1 in both directions.
+                if (isText && step === 2) setStep(0);
+                else setStep(Math.max(0, step - 1));
+              }}
             >
               Back
             </Button>
@@ -174,7 +186,11 @@ const CreateComponentPage: React.FC<CreateComponentPageProps> = ({
                 (step === 1 && !canAdvanceFromOne) ||
                 step >= 2
               }
-              onClick={() => setStep(step + 1)}
+              onClick={() => {
+                // Text jumps 0 → 2 directly (no data binding required).
+                if (isText && step === 0) setStep(2);
+                else setStep(step + 1);
+              }}
             >
               Next Step
             </Button>

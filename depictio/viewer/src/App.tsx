@@ -39,6 +39,7 @@ import { useSidebarOpen } from './hooks/useSidebarOpen';
 import { useAuthMode } from './auth/hooks/useAuthMode';
 import DemoTour from './demo/DemoTour';
 import DemoModeBanner from './components/DemoModeBanner';
+import NotesFooter from './components/NotesFooter';
 
 // Demo onboarding UI temporarily disabled — flip to true to re-enable.
 const ENABLE_DEMO_UI = false;
@@ -485,6 +486,12 @@ const App: React.FC = () => {
               </Box>
             </Box>
           </div>
+        )}
+        {dashboard && dashboardId && (
+          <NotesFooter
+            dashboardId={dashboardId}
+            initialContent={(dashboard.notes_content as string) ?? ''}
+          />
         )}
       </AppShell.Main>
 

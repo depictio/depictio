@@ -44,9 +44,20 @@ export function buildMetadata(state: BuilderState): StoredMetadata {
       return buildImage(state, base, existing);
     case 'map':
       return buildMap(state, base, existing);
+    case 'text':
+      return buildText(state, base, existing);
     default:
       return { ...existing, ...base };
   }
+}
+
+function clampOrder(v: unknown): 1 | 2 | 3 | 4 | 5 | 6 {
+  const n = typeof v === 'number' ? v : Number(v);
+  if (!Number.isFinite(n)) return 1;
+  const t = Math.trunc(n);
+  if (t < 1) return 1;
+  if (t > 6) return 6;
+  return t as 1 | 2 | 3 | 4 | 5 | 6;
 }
 
 // ---- per-type --------------------------------------------------------------
@@ -204,6 +215,34 @@ function buildImage(
     image_column: c.image_column,
     s3_base_folder: c.s3_base_folder,
     title: c.title ?? '',
+  };
+}
+
+function buildText(
+  state: BuilderState,
+  base: StoredMetadata,
+  existing: Record<string, unknown>,
+): StoredMetadata {
+  const c = as<{
+    title?: string;
+    order?: number | string;
+    alignment?: string;
+    body?: string;
+  }>(state.config);
+  return {
+    ...existing,
+    ...base,
+    // Text components are stand-alone — no workflow/DC binding. Ensure these
+    // are explicitly undefined even if `existing` had leftover values from a
+    // prior component reuse.
+    wf_id: undefined,
+    dc_id: undefined,
+    project_id: undefined,
+    title: c.title ?? '',
+    order: clampOrder(c.order ?? 1),
+    alignment:
+      c.alignment === 'center' || c.alignment === 'right' ? c.alignment : 'left',
+    body: c.body ?? '',
   };
 }
 

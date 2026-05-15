@@ -7,6 +7,7 @@ import FigureRenderer from './FigureRenderer';
 import TableRenderer from './TableRenderer';
 import ImageRenderer from './ImageRenderer';
 import MapRenderer from './MapRenderer';
+import TextRenderer from './TextRenderer';
 import JBrowseRenderer from './JBrowseRenderer';
 import MultiQCRenderer from './MultiQCRenderer';
 import MultiSelectRenderer from './interactive/MultiSelectRenderer';
@@ -246,6 +247,16 @@ const ComponentRenderer: React.FC<ComponentRendererProps> = ({
         filters={filters}
         refreshTick={refreshTick}
       />,
+      { extraActions, showDragHandle },
+    );
+  }
+
+  if (metadata.component_type === 'text') {
+    return wrapWithChrome(
+      'text',
+      metadata,
+      undefined,
+      <TextRenderer metadata={metadata} />,
       { extraActions, showDragHandle },
     );
   }
