@@ -1,0 +1,273 @@
+{
+  "_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d46" },
+  "description": null,
+  "flexible_metadata": null,
+  "hash": null,
+  "dashboard_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d46" },
+  "version": 1,
+  "tmp_children_data": [],
+  "stored_layout_data": [],
+  "stored_children_data": [],
+  "stored_metadata": [
+    {
+      "index": "cov-gene-filter",
+      "component_type": "interactive",
+      "title": "Gene region",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "coverage_track_demo",
+      "wf_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d01" },
+      "dc_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d50" },
+      "dc_config": {
+        "type": null, "metatype": null,
+        "description": "Coverage tracks",
+        "data_collection_tag": "coverage_track_demo",
+        "dc_specific_properties": null,
+        "_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d50" }
+      },
+      "cols_json": {}, "parent_index": null,
+      "last_updated": "2026-05-14T00:00:00.000000",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "gene_region", "column_type": "object",
+      "value": null, "default_state": null, "filter_expr": null,
+      "title_size": "md", "custom_color": "#1f77b4", "icon_name": "mdi:dna",
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "cov-sample-filter",
+      "component_type": "interactive",
+      "title": "Samples",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "coverage_track_demo",
+      "wf_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d01" },
+      "dc_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d50" },
+      "dc_config": {
+        "type": null, "metatype": null,
+        "description": "Coverage tracks",
+        "data_collection_tag": "coverage_track_demo",
+        "dc_specific_properties": null,
+        "_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d50" }
+      },
+      "cols_json": {}, "parent_index": null,
+      "last_updated": "2026-05-14T00:00:00.000000",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "sample", "column_type": "object",
+      "value": null, "default_state": null, "filter_expr": null,
+      "title_size": "md", "custom_color": "#2ca02c", "icon_name": "mdi:dna-strand",
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "cov-coverage-range",
+      "component_type": "interactive",
+      "title": "Coverage range",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "coverage_track_demo",
+      "wf_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d01" },
+      "dc_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d50" },
+      "dc_config": {
+        "type": null, "metatype": null,
+        "description": "Coverage tracks",
+        "data_collection_tag": "coverage_track_demo",
+        "dc_specific_properties": null,
+        "_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d50" }
+      },
+      "cols_json": {}, "parent_index": null,
+      "last_updated": "2026-05-14T00:00:00.000000",
+      "interactive_component_type": "RangeSlider",
+      "column_name": "coverage", "column_type": "float64",
+      "value": null, "default_state": null, "filter_expr": null,
+      "title_size": "md", "custom_color": "#ff7f0e", "icon_name": "mdi:chart-areaspline-variant",
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "cov-card-samples",
+      "component_type": "card",
+      "title": "Samples",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "coverage_track_demo",
+      "wf_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d01" },
+      "dc_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d50" },
+      "dc_config": {
+        "type": null, "metatype": null,
+        "description": "Coverage tracks",
+        "data_collection_tag": "coverage_track_demo",
+        "dc_specific_properties": null,
+        "_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d50" }
+      },
+      "cols_json": {}, "parent_index": null,
+      "last_updated": "2026-05-14T00:00:00.000000",
+      "aggregation": "nunique", "column_name": "sample", "column_type": "object",
+      "value": null, "aggregations": null, "filter_expr": null,
+      "icon_name": "mdi:dna-strand", "icon_color": "#2ca02c",
+      "title_color": "#2ca02c", "title_font_size": "lg", "value_font_size": "xl",
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "cov-card-mean",
+      "component_type": "card",
+      "title": "Mean depth",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "coverage_track_demo",
+      "wf_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d01" },
+      "dc_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d50" },
+      "dc_config": {
+        "type": null, "metatype": null,
+        "description": "Coverage tracks",
+        "data_collection_tag": "coverage_track_demo",
+        "dc_specific_properties": null,
+        "_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d50" }
+      },
+      "cols_json": {}, "parent_index": null,
+      "last_updated": "2026-05-14T00:00:00.000000",
+      "aggregation": "average", "column_name": "coverage", "column_type": "float64",
+      "value": null, "aggregations": null, "filter_expr": null,
+      "icon_name": "mdi:chart-line", "icon_color": "#1f77b4",
+      "title_color": "#1f77b4", "title_font_size": "lg", "value_font_size": "xl",
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "cov-card-max",
+      "component_type": "card",
+      "title": "Max depth",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "coverage_track_demo",
+      "wf_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d01" },
+      "dc_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d50" },
+      "dc_config": {
+        "type": null, "metatype": null,
+        "description": "Coverage tracks",
+        "data_collection_tag": "coverage_track_demo",
+        "dc_specific_properties": null,
+        "_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d50" }
+      },
+      "cols_json": {}, "parent_index": null,
+      "last_updated": "2026-05-14T00:00:00.000000",
+      "aggregation": "max", "column_name": "coverage", "column_type": "float64",
+      "value": null, "aggregations": null, "filter_expr": null,
+      "icon_name": "mdi:trending-up", "icon_color": "#d62728",
+      "title_color": "#d62728", "title_font_size": "lg", "value_font_size": "xl",
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "cov-card-bins",
+      "component_type": "card",
+      "title": "Bins",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "coverage_track_demo",
+      "wf_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d01" },
+      "dc_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d50" },
+      "dc_config": {
+        "type": null, "metatype": null,
+        "description": "Coverage tracks",
+        "data_collection_tag": "coverage_track_demo",
+        "dc_specific_properties": null,
+        "_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d50" }
+      },
+      "cols_json": {}, "parent_index": null,
+      "last_updated": "2026-05-14T00:00:00.000000",
+      "aggregation": "count", "column_name": "position", "column_type": "int64",
+      "value": null, "aggregations": null, "filter_expr": null,
+      "icon_name": "mdi:counter", "icon_color": "#9467bd",
+      "title_color": "#9467bd", "title_font_size": "lg", "value_font_size": "xl",
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "cov-track",
+      "component_type": "advanced_viz",
+      "title": "Coverage track",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "coverage_track_demo",
+      "wf_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d01" },
+      "dc_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d50" },
+      "dc_config": {
+        "type": null, "metatype": null,
+        "description": "Coverage tracks",
+        "data_collection_tag": "coverage_track_demo",
+        "dc_specific_properties": null,
+        "_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d50" }
+      },
+      "cols_json": {}, "parent_index": null,
+      "last_updated": "2026-05-14T00:00:00.000000",
+      "viz_kind": "coverage_track",
+      "config": {
+        "viz_kind": "coverage_track",
+        "chromosome_col": "chrom",
+        "position_col": "position",
+        "value_col": "coverage",
+        "end_col": "end",
+        "sample_col": "sample",
+        "category_col": "gene_region",
+        "y_scale": "linear",
+        "smoothing_window": 0,
+        "color_by": "category",
+        "show_annotation_lane": true
+      },
+      "wf_tag": "python/advanced_viz_demo",
+      "description": "Read-depth tracks along the SARS-CoV-2 reference. Sample multi-select faceting, gene-region colouring lane, log/linear y-scale, rolling-mean smoothing — all live in the Settings ⚙ popover."
+    },
+    {
+      "index": "cov-table",
+      "component_type": "table",
+      "title": "Coverage rows",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "coverage_track_demo",
+      "wf_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d01" },
+      "dc_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d50" },
+      "dc_config": {
+        "type": null, "metatype": null,
+        "description": "Coverage tracks",
+        "data_collection_tag": "coverage_track_demo",
+        "dc_specific_properties": null,
+        "_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d50" }
+      },
+      "cols_json": {}, "parent_index": null,
+      "last_updated": "2026-05-14T00:00:00.000000",
+      "columns": ["chrom", "start", "end", "position", "coverage", "sample", "gene_region"],
+      "page_size": 10, "sortable": true, "filterable": true,
+      "row_selection_enabled": false, "row_selection_column": null,
+      "wf_tag": "python/advanced_viz_demo"
+    }
+  ],
+  "stored_edit_dashboard_mode_button": [],
+  "left_panel_layout_data": [
+    { "i": "box-cov-gene-filter",     "x": 0, "y": 0, "w": 1, "h": 5, "static": false },
+    { "i": "box-cov-sample-filter",   "x": 0, "y": 5, "w": 1, "h": 5, "static": false },
+    { "i": "box-cov-coverage-range",  "x": 0, "y": 10, "w": 1, "h": 4, "static": false }
+  ],
+  "right_panel_layout_data": [
+    { "i": "box-cov-card-samples", "x": 0, "y": 0, "w": 2, "h": 2, "static": true },
+    { "i": "box-cov-card-mean",    "x": 2, "y": 0, "w": 2, "h": 2, "static": true },
+    { "i": "box-cov-card-max",     "x": 4, "y": 0, "w": 2, "h": 2, "static": true },
+    { "i": "box-cov-card-bins",    "x": 6, "y": 0, "w": 2, "h": 2, "static": true },
+    { "i": "box-cov-track",        "x": 0, "y": 2, "w": 8, "h": 14, "static": false, "resizeHandles": ["se","s","e","sw","w"] },
+    { "i": "box-cov-table",        "x": 0, "y": 16, "w": 8, "h": 5, "static": false, "resizeHandles": ["se","s","e","sw","w"] }
+  ],
+  "buttons_data": { "unified_edit_mode": true, "add_components_button": { "count": 0 } },
+  "stored_add_button": { "count": 0 },
+  "title": "Coverage track",
+  "subtitle": "Read-depth signal along a coordinate axis (mosdepth-style). Multi-sample faceting + SARS-CoV-2 gene-region annotation lane.",
+  "icon": "mdi:chart-areaspline-variant",
+  "icon_color": "blue",
+  "icon_variant": "filled",
+  "workflow_system": "python",
+  "notes_content": "",
+  "permissions": {
+    "owners": [
+      {
+        "_id": { "$oid": "67658ba033c8b59ad489d7c7" },
+        "description": null, "flexible_metadata": null, "hash": null,
+        "email": "admin@example.com", "is_admin": true,
+        "is_anonymous": false, "is_temporary": false, "expiration_time": null
+      }
+    ], "editors": [], "viewers": []
+  },
+  "is_public": true,
+  "last_saved_ts": "2026-05-14 00:00:00",
+  "project_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d00" },
+  "is_main_tab": false,
+  "parent_dashboard_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d00" },
+  "tab_order": 22,
+  "main_tab_name": null,
+  "tab_icon": "mdi:chart-areaspline-variant",
+  "tab_icon_color": "blue",
+  "parent_dashboard_title": null
+}

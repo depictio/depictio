@@ -61,6 +61,7 @@ services:
       - ./docker-images/run_dash.sh:/app/run_dash.sh
       - ./pyproject.toml:/app/pyproject.toml
       - ./packages/plotly-complexheatmap:/app/packages/plotly-complexheatmap
+      - ./packages/plotly-upset:/app/packages/plotly-upset
       - ./VERSION:/app/VERSION
       - ./${DATA_DIR}/prof_files:/app/prof_files
       - ./${DATA_DIR}/cache:/app/cache
@@ -111,6 +112,7 @@ services:
       - ./dashboards:/app/dashboards
       - ./pyproject.toml:/app/pyproject.toml
       - ./packages/plotly-complexheatmap:/app/packages/plotly-complexheatmap
+      - ./packages/plotly-upset:/app/packages/plotly-upset
       - ./VERSION:/app/VERSION
       - ./docker-images/run_fastapi.sh:/app/run_fastapi.sh
       - ./${DATA_DIR}/prof_files:/app/prof_files
@@ -141,6 +143,13 @@ services:
         # above for the full note. Backend hosts the MongoDB watcher and the
         # WebSocket / SSE endpoints — both gated on this flag.
         DEPICTIO_EVENTS_ENABLED: "${DEPICTIO_EVENTS_ENABLED:-false}"
+        # Belt-and-suspenders: the editable plotly-upset / plotly-complexheatmap
+        # packages are installed into the venv at image build (uv sync). If the
+        # build re-used a cached layer (pre-dating the package addition), the
+        # venv's .pth files are missing — these explicit PYTHONPATH entries make
+        # the imports work regardless. /app stays first so depictio.* resolves
+        # normally (overrides the Dockerfile's ENV PYTHONPATH=/app).
+        PYTHONPATH: "/app:/app/packages/plotly-upset:/app/packages/plotly-complexheatmap"
     command: ["/app/run_fastapi.sh"]
     user: "${UID:-1000}:${GID:-1000}"
     depends_on:
@@ -235,6 +244,7 @@ services:
       - ./dashboards:/app/dashboards
       - ./pyproject.toml:/app/pyproject.toml
       - ./packages/plotly-complexheatmap:/app/packages/plotly-complexheatmap
+      - ./packages/plotly-upset:/app/packages/plotly-upset
       - ./docker-images/run_celery_worker.sh:/app/run_celery_worker.sh
       - ./${DATA_DIR}/prof_files:/app/prof_files
       # Phase 2: same mount as the backend — worker writes here during
@@ -260,6 +270,11 @@ services:
         DEPICTIO_MULTIQC_PRERENDER_DIR: "/app/multiqc_prerender"
         DEPICTIO_S3_CACHE_DIR: "/app/cache/s3_files"
         DEPICTIO_DELTA_CACHE_DIR: "/app/cache/delta_cache"
+        # Editable in-tree packages — see backend block above. The celery worker
+        # is the actual importer of plotly_upset / plotly_complexheatmap from
+        # compute_upset / compute_complex_heatmap tasks, so this PYTHONPATH
+        # entry is mandatory here when the venv lacks the .pth files.
+        PYTHONPATH: "/app:/app/packages/plotly-upset:/app/packages/plotly-complexheatmap"
     command: ["/app/run_celery_worker.sh"]
     user: "${UID:-1000}:${GID:-1000}"
     depends_on:

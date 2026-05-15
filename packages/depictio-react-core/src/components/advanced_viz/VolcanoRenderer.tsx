@@ -1,12 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-  Group,
   NumberInput,
   Stack,
   Switch,
   TextInput,
   Tooltip,
   useMantineColorScheme,
+  useMantineTheme,
 } from '@mantine/core';
 import Plot from 'react-plotly.js';
 
@@ -16,6 +16,7 @@ import {
   StoredMetadata,
 } from '../../api';
 import AdvancedVizFrame from './AdvancedVizFrame';
+import { applyDataTheme, applyLayoutTheme, plotlyAxisOverrides, plotlyThemeFragment } from './plotlyTheme';
 
 interface VolcanoConfig {
   feature_id_col: string;
@@ -37,6 +38,8 @@ interface Props {
 
 const VolcanoRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => {
   const { colorScheme } = useMantineColorScheme();
+  const theme = useMantineTheme();
+  const isDark = colorScheme === 'dark';
   const config = (metadata.config || {}) as VolcanoConfig;
 
   // Tier-2 local controls (never enter the global filter array).
@@ -113,14 +116,23 @@ const VolcanoRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =>
       : -Math.log10(sigThreshold);
 
     // Classify each point: significant + above-threshold effect ⇒ "hit".
-    const colors = xs.map((x, i) => {
+    // The `tiers` array carries UP / DN / NS for the hover badge so the user
+    // doesn't have to mentally re-derive it from x/y.
+    const tiers: ('UP' | 'DN' | 'NS')[] = xs.map((x, i) => {
       const y = ys[i];
-      if (y == null) return 'rgba(160,160,160,0.5)';
+      if (y == null) return 'NS';
       const passSig = y >= sigThresholdY;
       const passEffect = Math.abs(x) >= effectThreshold;
-      if (passSig && passEffect) return x > 0 ? '#e64980' : '#1c7ed6';
-      return 'rgba(160,160,160,0.55)';
+      if (passSig && passEffect) return x > 0 ? 'UP' : 'DN';
+      return 'NS';
     });
+    const colors = tiers.map((t) =>
+      t === 'UP' ? '#e64980' : t === 'DN' ? '#1c7ed6' : 'rgba(160,160,160,0.55)',
+    );
+
+    // Binary size scheme so significant hits visually pop out from the
+    // grey NS cloud without distracting magnitude variation.
+    const sizes = tiers.map((t) => (t === 'NS' ? 5 : 7));
 
     // Top-N label selection — by combined (|x| × y) so both axes matter.
     const ranked = xs
@@ -162,7 +174,22 @@ const VolcanoRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =>
           .filter(Boolean)
       : [];
 
+    // customdata threads label, raw significance, and tier badge into the
+    // hover so the tooltip reads UP / DN / NS + values without needing
+    // separate per-tier traces. Index [0] is the feature id used by the
+    // %{text} fallback already.
+    const customdata = xs.map((_, i) => [
+      String(labels[i] ?? ids[i] ?? ''),
+      sigRaw[i] ?? null,
+      tiers[i],
+    ]);
+
+    const counts: Record<string, number> = { UP: 0, DN: 0, NS: 0 };
+    for (const t of tiers) counts[t] += 1;
+
     return {
+      tiers,
+      counts,
       data: [
         {
           type: 'scattergl' as const,
@@ -170,16 +197,26 @@ const VolcanoRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =>
           x: xs,
           y: ys,
           text: ids.map((v) => String(v ?? '')),
+          customdata,
           hovertemplate:
-            `<b>%{text}</b><br>${config.effect_size_col}: %{x}<br>${config.significance_col}: %{y}<extra></extra>`,
-          marker: { color: colors, size: 6, opacity: 0.85 },
+            `<b>%{customdata[0]}</b>  <span style="opacity:0.7">[%{customdata[2]}]</span>` +
+            `<br>${config.effect_size_col}: %{x:.3f}` +
+            `<br>${config.significance_col}: %{customdata[1]:.2e}` +
+            `<br>-log10(sig): %{y:.2f}` +
+            `<extra></extra>`,
+          marker: { color: colors, size: sizes, opacity: 0.85 },
         },
       ],
       layout: {
-        template: colorScheme === 'dark' ? 'plotly_dark' : 'plotly_white',
+        ...plotlyThemeFragment(isDark, theme),
         margin: { l: 50, r: 20, t: 30, b: 40 },
-        xaxis: { title: { text: config.effect_size_col }, zeroline: true },
+        xaxis: {
+          ...plotlyAxisOverrides(isDark, theme),
+          title: { text: config.effect_size_col },
+          zeroline: true,
+        },
         yaxis: {
+          ...plotlyAxisOverrides(isDark, theme),
           title: {
             text: config.significance_is_neg_log10
               ? config.significance_col
@@ -194,7 +231,7 @@ const VolcanoRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =>
             yref: 'paper',
             y0: 0,
             y1: 1,
-            line: { dash: 'dot', color: 'gray', width: 1 },
+            line: { dash: 'dot', color: 'rgba(128,128,128,0.6)', width: 1 },
           },
           {
             type: 'line' as const,
@@ -203,7 +240,7 @@ const VolcanoRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =>
             yref: 'paper',
             y0: 0,
             y1: 1,
-            line: { dash: 'dot', color: 'gray', width: 1 },
+            line: { dash: 'dot', color: 'rgba(128,128,128,0.6)', width: 1 },
           },
           {
             type: 'line' as const,
@@ -212,7 +249,7 @@ const VolcanoRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =>
             x1: 1,
             y0: sigThresholdY,
             y1: sigThresholdY,
-            line: { dash: 'dot', color: 'gray', width: 1 },
+            line: { dash: 'dot', color: 'rgba(128,128,128,0.6)', width: 1 },
           },
         ],
         annotations,
@@ -220,57 +257,72 @@ const VolcanoRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =>
         autosize: true,
       },
     };
-  }, [rows, config, sigThreshold, effectThreshold, topN, search, showLabels, colorScheme]);
+  }, [rows, config, sigThreshold, effectThreshold, topN, search, showLabels, isDark, theme]);
 
-  const controls = (
-    <Group gap="xs" wrap="wrap">
-      <Tooltip label="Significance threshold (raw p/padj)">
+  // Memoised so AdvancedVizFrame's `extras` useMemo doesn't invalidate on
+  // every render — otherwise the published popover JSX is republished on
+  // each tick and AG Grid receives a fresh tierAnnotation reference, which
+  // (combined with controlled `sort`) was clobbering user filter/sort.
+  const controls = useMemo(
+    () => (
+      <Stack gap="xs">
+        <Tooltip label="Significance threshold (raw p/padj)">
+          <NumberInput
+            size="xs"
+            label="p / padj"
+            value={sigThreshold}
+            onChange={(v) => setSigThreshold(Number(v) || 0.05)}
+            step={0.01}
+            min={0}
+            max={1}
+            decimalScale={3}
+          />
+        </Tooltip>
         <NumberInput
           size="xs"
-          label="p / padj"
-          value={sigThreshold}
-          onChange={(v) => setSigThreshold(Number(v) || 0.05)}
-          step={0.01}
+          label="|effect|"
+          value={effectThreshold}
+          onChange={(v) => setEffectThreshold(Number(v) || 0)}
+          step={0.1}
           min={0}
-          max={1}
-          decimalScale={3}
-          w={110}
+          decimalScale={2}
         />
-      </Tooltip>
-      <NumberInput
-        size="xs"
-        label="|effect|"
-        value={effectThreshold}
-        onChange={(v) => setEffectThreshold(Number(v) || 0)}
-        step={0.1}
-        min={0}
-        decimalScale={2}
-        w={90}
-      />
-      <NumberInput
-        size="xs"
-        label="Top-N labels"
-        value={topN}
-        onChange={(v) => setTopN(Math.max(0, Number(v) || 0))}
-        min={0}
-        max={500}
-        w={110}
-      />
-      <TextInput
-        size="xs"
-        label="Search"
-        value={search}
-        onChange={(e) => setSearch(e.currentTarget.value)}
-        w={140}
-        placeholder="gene / taxon"
-      />
-      <Switch
-        size="xs"
-        checked={showLabels}
-        onChange={(e) => setShowLabels(e.currentTarget.checked)}
-        label="Labels"
-      />
-    </Group>
+        <NumberInput
+          size="xs"
+          label="Top-N labels"
+          value={topN}
+          onChange={(v) => setTopN(Math.max(0, Number(v) || 0))}
+          min={0}
+          max={500}
+        />
+        <TextInput
+          size="xs"
+          label="Search"
+          value={search}
+          onChange={(e) => setSearch(e.currentTarget.value)}
+          placeholder="gene / taxon"
+        />
+        <Switch
+          size="xs"
+          checked={showLabels}
+          onChange={(e) => setShowLabels(e.currentTarget.checked)}
+          label="Labels"
+        />
+      </Stack>
+    ),
+    [sigThreshold, effectThreshold, topN, search, showLabels],
+  );
+
+  const tierAnnotation = useMemo(
+    () =>
+      figure?.tiers
+        ? {
+            values: figure.tiers,
+            selectedOrder: ['UP', 'DN'],
+            columnLabel: 'tier',
+          }
+        : undefined,
+    [figure?.tiers],
   );
 
   return (
@@ -283,11 +335,13 @@ const VolcanoRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =>
       emptyMessage={rows && Object.values(rows)[0]?.length === 0 ? 'No data' : undefined}
       dataRows={rows ?? undefined}
       dataColumns={requiredCols}
+      counts={figure?.counts}
+      tierAnnotation={tierAnnotation}
     >
       {figure ? (
         <Plot
-          data={figure.data as any}
-          layout={figure.layout as any}
+          data={applyDataTheme(figure.data, isDark, theme) as any}
+          layout={applyLayoutTheme(figure.layout as any, isDark, theme) as any}
           useResizeHandler
           style={{ width: '100%', height: '100%' }}
           config={{ displaylogo: false, responsive: true } as any}

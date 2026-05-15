@@ -1,16 +1,27 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Badge, NumberInput, Select, Stack, Switch, Text } from '@mantine/core';
+import {
+  Badge,
+  MultiSelect,
+  Select,
+  Stack,
+  Switch,
+  Text,
+  useMantineColorScheme,
+  useMantineTheme,
+} from '@mantine/core';
 import Plot from 'react-plotly.js';
 
 import {
   ComplexHeatmapResult,
   dispatchComplexHeatmap,
   fetchAdvancedVizData,
+  fetchPolarsSchema,
   InteractiveFilter,
   pollComplexHeatmap,
   StoredMetadata,
 } from '../../api';
 import AdvancedVizFrame from './AdvancedVizFrame';
+import { applyDataTheme, applyLayoutTheme } from './plotlyTheme';
 
 interface ComplexHeatmapConfig {
   matrix_wf_id: string;
@@ -34,6 +45,9 @@ interface Props {
 
 const ComplexHeatmapRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => {
   const config = (metadata.config || {}) as ComplexHeatmapConfig;
+  const { colorScheme } = useMantineColorScheme();
+  const theme = useMantineTheme();
+  const isDark = colorScheme === 'dark';
 
   // Tier-2 controls — change any of these and a new Celery task is
   // dispatched (cache-keyed so repeats are instant).
@@ -45,6 +59,12 @@ const ComplexHeatmapRenderer: React.FC<Props> = ({ metadata, filters, refreshTic
   const [clusterMethod, setClusterMethod] = useState<NonNullable<
     ComplexHeatmapConfig['cluster_method']
   >>(config.cluster_method ?? 'ward');
+  // Row-annotation columns — editable in the popover. Seeded from config so
+  // the dashboard author's defaults still apply on first paint.
+  const [rowAnnotationCols, setRowAnnotationCols] = useState<string[]>(
+    config.row_annotation_cols ?? [],
+  );
+  const [schema, setSchema] = useState<Record<string, string> | null>(null);
 
   const [figure, setFigure] = useState<ComplexHeatmapResult['figure'] | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
@@ -73,7 +93,7 @@ const ComplexHeatmapRenderer: React.FC<Props> = ({ metadata, filters, refreshTic
       dc_id: metadata.dc_id,
       index_column: config.index_column,
       value_columns: config.value_columns ?? null,
-      row_annotation_cols: config.row_annotation_cols ?? [],
+      row_annotation_cols: rowAnnotationCols,
       cluster_rows: clusterRows,
       cluster_cols: clusterCols,
       cluster_method: clusterMethod,
@@ -146,8 +166,39 @@ const ComplexHeatmapRenderer: React.FC<Props> = ({ metadata, filters, refreshTic
     clusterMethod,
     config.index_column,
     JSON.stringify(config.value_columns),
-    JSON.stringify(config.row_annotation_cols),
+    JSON.stringify(rowAnnotationCols),
   ]);
+
+  // Fetch the column schema once so the MultiSelect knows what's available.
+  useEffect(() => {
+    if (!metadata.dc_id) return;
+    let cancelled = false;
+    fetchPolarsSchema(metadata.dc_id)
+      .then((s) => {
+        if (!cancelled) setSchema(s);
+      })
+      .catch(() => {
+        /* schema is best-effort — fall back to config-only options */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [metadata.dc_id]);
+
+  const annotationOptions = useMemo(() => {
+    const valueSet = new Set(config.value_columns ?? []);
+    const opts: string[] = [];
+    if (schema) {
+      for (const col of Object.keys(schema)) {
+        if (col === config.index_column) continue;
+        if (valueSet.has(col)) continue;
+        opts.push(col);
+      }
+    }
+    // Always include current selections even if schema-fetch failed.
+    for (const c of rowAnnotationCols) if (!opts.includes(c)) opts.push(c);
+    return opts;
+  }, [schema, config.index_column, config.value_columns, rowAnnotationCols]);
 
   // Best-effort fetch of a small data sample (max 200 rows) for the
   // Show-data popover — separate from the heatmap dispatch.
@@ -170,56 +221,85 @@ const ComplexHeatmapRenderer: React.FC<Props> = ({ metadata, filters, refreshTic
     };
   }, [metadata.wf_id, metadata.dc_id, JSON.stringify(previewCols), JSON.stringify(filters), refreshTick]);
 
-  const controls = (
-    <Stack gap="xs">
-      <Select
-        size="xs"
-        label="Normalisation"
-        value={normalize}
-        onChange={(v) => v && setNormalize(v as typeof normalize)}
-        data={[
-          { value: 'none', label: 'None' },
-          { value: 'row_z', label: 'Row z-score' },
-          { value: 'col_z', label: 'Column z-score' },
-          { value: 'log1p', label: 'log1p' },
-        ]}
-        description="Applied before clustering + colourisation"
-      />
-      <Select
-        size="xs"
-        label="Clustering method"
-        value={clusterMethod}
-        onChange={(v) => v && setClusterMethod(v as typeof clusterMethod)}
-        data={[
-          { value: 'ward', label: 'Ward' },
-          { value: 'single', label: 'Single' },
-          { value: 'complete', label: 'Complete' },
-          { value: 'average', label: 'Average' },
-        ]}
-      />
-      <Switch
-        size="xs"
-        checked={clusterRows}
-        onChange={(e) => setClusterRows(e.currentTarget.checked)}
-        label="Cluster rows"
-      />
-      <Switch
-        size="xs"
-        checked={clusterCols}
-        onChange={(e) => setClusterCols(e.currentTarget.checked)}
-        label="Cluster columns"
-      />
-      {computeStatus ? (
-        <Badge size="sm" color="grape" variant="light" radius="sm" fullWidth>
-          {computeStatus}
-        </Badge>
-      ) : null}
-      {computeMs != null && !computeStatus ? (
-        <Text size="xs" c="dimmed">
-          Built in {computeMs} ms ({dims?.rows ?? '?'} rows × {dims?.cols ?? '?'} cols)
-        </Text>
-      ) : null}
-    </Stack>
+  // Memo the controls JSX so its reference is stable across renders.
+  // AdvancedVizFrame publishes `controls` up to a parent state via useEffect;
+  // a fresh JSX reference on every render would refire the publish effect →
+  // setState → re-render → fresh JSX → loop (manifested as React's
+  // "Maximum update depth exceeded" warning).
+  const controls = useMemo(
+    () => (
+      <Stack gap="xs">
+        <Select
+          size="xs"
+          label="Normalisation"
+          value={normalize}
+          onChange={(v) => v && setNormalize(v as typeof normalize)}
+          data={[
+            { value: 'none', label: 'None' },
+            { value: 'row_z', label: 'Row z-score' },
+            { value: 'col_z', label: 'Column z-score' },
+            { value: 'log1p', label: 'log1p' },
+          ]}
+          description="Applied before clustering + colourisation"
+        />
+        <Select
+          size="xs"
+          label="Clustering method"
+          value={clusterMethod}
+          onChange={(v) => v && setClusterMethod(v as typeof clusterMethod)}
+          data={[
+            { value: 'ward', label: 'Ward' },
+            { value: 'single', label: 'Single' },
+            { value: 'complete', label: 'Complete' },
+            { value: 'average', label: 'Average' },
+          ]}
+        />
+        <Switch
+          size="xs"
+          checked={clusterRows}
+          onChange={(e) => setClusterRows(e.currentTarget.checked)}
+          label="Cluster rows"
+        />
+        <Switch
+          size="xs"
+          checked={clusterCols}
+          onChange={(e) => setClusterCols(e.currentTarget.checked)}
+          label="Cluster columns"
+        />
+        <MultiSelect
+          size="xs"
+          label="Row annotations"
+          description="Metadata columns drawn as side tracks (categorical auto-coloured, numeric → bar)"
+          value={rowAnnotationCols}
+          onChange={setRowAnnotationCols}
+          data={annotationOptions}
+          placeholder={annotationOptions.length === 0 ? 'No DC columns loaded yet' : 'Pick columns'}
+          searchable
+          clearable
+        />
+        {computeStatus ? (
+          <Badge size="sm" color="grape" variant="light" radius="sm" fullWidth>
+            {computeStatus}
+          </Badge>
+        ) : null}
+        {computeMs != null && !computeStatus ? (
+          <Text size="xs" c="dimmed">
+            Built in {computeMs} ms ({dims?.rows ?? '?'} rows × {dims?.cols ?? '?'} cols)
+          </Text>
+        ) : null}
+      </Stack>
+    ),
+    [
+      normalize,
+      clusterMethod,
+      clusterRows,
+      clusterCols,
+      rowAnnotationCols,
+      annotationOptions,
+      computeStatus,
+      computeMs,
+      dims,
+    ],
   );
 
   return (
@@ -235,8 +315,24 @@ const ComplexHeatmapRenderer: React.FC<Props> = ({ metadata, filters, refreshTic
     >
       {figure ? (
         <Plot
-          data={figure.data as any}
-          layout={figure.layout as any}
+          data={applyDataTheme(figure.data, isDark, theme) as any}
+          // plotly-complexheatmap bakes an explicit width/height into its
+          // figure layout (sized for its own jupyter/standalone use case);
+          // strip them so the chart fills the chrome panel responsively.
+          // applyLayoutTheme retints every axis / colorbar / legend / title
+          // baked at server-render time so the dark/light flip is total.
+          layout={
+            applyLayoutTheme(
+              {
+                ...(figure.layout as Record<string, unknown>),
+                width: undefined,
+                height: undefined,
+                autosize: true,
+              },
+              isDark,
+              theme,
+            ) as any
+          }
           useResizeHandler
           style={{ width: '100%', height: '100%' }}
           config={{ displaylogo: false, responsive: true } as any}

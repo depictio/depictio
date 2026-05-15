@@ -37,6 +37,14 @@ AdvancedVizKind = Literal[
     "enrichment",
     "complex_heatmap",
     "upset_plot",
+    "ma",
+    "dot_plot",
+    "lollipop",
+    "qq",
+    "sunburst",
+    "oncoplot",
+    "coverage_track",
+    "sankey",
 ]
 
 # Map visualization types

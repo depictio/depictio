@@ -4,19 +4,24 @@ import {
   Group,
   SegmentedControl,
   Select,
+  Stack,
   Switch,
   TextInput,
   useMantineColorScheme,
+  useMantineTheme,
 } from '@mantine/core';
 import Plot from 'react-plotly.js';
 
 import {
   fetchAdvancedVizData,
   fetchPhylogenyNewick,
+  fetchUniqueValues,
   InteractiveFilter,
   StoredMetadata,
 } from '../../api';
+import { stableColorMap } from '../../colors';
 import AdvancedVizFrame from './AdvancedVizFrame';
+import { applyDataTheme, applyLayoutTheme } from './plotlyTheme';
 import { ladderise, parseNewick, type PhyloNode, type PhyloTree, toNewick } from './phylo/newick';
 import { computeLayout, descendants, type Layout } from './phylo/layout';
 
@@ -63,6 +68,7 @@ const LAYOUTS: Array<{ value: Layout; label: string }> = [
 
 const PhylogeneticRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => {
   const { colorScheme } = useMantineColorScheme();
+  const theme = useMantineTheme();
   const config = (metadata.config || {}) as PhylogeneticConfig;
   const isDark = colorScheme === 'dark';
 
@@ -76,6 +82,27 @@ const PhylogeneticRenderer: React.FC<Props> = ({ metadata, filters, refreshTick 
   const [search, setSearch] = useState<string>('');
   const [colorCol, setColorCol] = useState<string | null>(config.color_col ?? null);
   const [highlightedRootId, setHighlightedRootId] = useState<number | null>(null);
+  // Stable universe of distinct values for the colour column — keeps tip
+  // colours invariant when the user filters down to a subset.
+  const [colorUniverse, setColorUniverse] = useState<string[] | null>(null);
+  useEffect(() => {
+    const metaDc = config.metadata_dc_id;
+    if (!metaDc || !colorCol) {
+      setColorUniverse(null);
+      return;
+    }
+    let cancelled = false;
+    fetchUniqueValues(metaDc, colorCol)
+      .then((values) => {
+        if (!cancelled) setColorUniverse(values);
+      })
+      .catch(() => {
+        /* best-effort */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [config.metadata_dc_id, colorCol]);
 
   // ---- Data fetching ------------------------------------------------------
   const [newick, setNewick] = useState<string | null>(null);
@@ -172,7 +199,10 @@ const PhylogeneticRenderer: React.FC<Props> = ({ metadata, filters, refreshTick 
       for (const leaf of tree.leaves) colorByTip.set(leaf.name ?? '', PALETTE[0]);
       return { colorByTip, categories: [] };
     }
-    // Build categorical palette over the unique values in the colour column.
+    // Build categorical palette keyed on the FULL distinct-value universe
+    // when available — filter changes don't shift colours then. Falls back to
+    // the visible tree's unique values when the unique-values fetch hasn't
+    // responded yet.
     const uniqueValues: string[] = [];
     for (const leaf of tree.leaves) {
       const row = tipMeta.get(leaf.name ?? '');
@@ -180,15 +210,14 @@ const PhylogeneticRenderer: React.FC<Props> = ({ metadata, filters, refreshTick 
       if (!uniqueValues.includes(v)) uniqueValues.push(v);
     }
     uniqueValues.sort();
-    const palette = new Map<string, string>();
-    uniqueValues.forEach((v, i) => palette.set(v, PALETTE[i % PALETTE.length]));
+    const colourSource = stableColorMap(colorUniverse ?? uniqueValues, PALETTE);
     for (const leaf of tree.leaves) {
       const row = tipMeta.get(leaf.name ?? '');
       const v = row ? String(row[colorCol] ?? '—') : '—';
-      colorByTip.set(leaf.name ?? '', palette.get(v) ?? PALETTE[0]);
+      colorByTip.set(leaf.name ?? '', colourSource.get(v));
     }
     return { colorByTip, categories: uniqueValues };
-  }, [tree, colorCol, meta, tipMeta]);
+  }, [tree, colorCol, meta, tipMeta, colorUniverse]);
 
   // ---- Highlighted subtree (clade selection) ------------------------------
   const highlightedIds = useMemo<Set<number>>(() => {
@@ -441,19 +470,20 @@ const PhylogeneticRenderer: React.FC<Props> = ({ metadata, filters, refreshTick 
   };
 
   const controls = (
-    <Group gap="xs" wrap="wrap" align="flex-end">
+    <Stack gap="xs">
       <SegmentedControl
         size="xs"
         data={LAYOUTS}
         value={layout}
         onChange={(v) => setLayout(v as Layout)}
+        fullWidth
       />
       <TextInput
         size="xs"
-        placeholder="Search tip…"
+        label="Search tip"
+        placeholder="taxon name"
         value={search}
         onChange={(e) => setSearch(e.currentTarget.value)}
-        w={140}
       />
       {colorOptions.length > 0 ? (
         <Select
@@ -463,7 +493,6 @@ const PhylogeneticRenderer: React.FC<Props> = ({ metadata, filters, refreshTick 
           onChange={setColorCol}
           data={colorOptions}
           clearable
-          w={150}
         />
       ) : null}
       <Switch
@@ -485,16 +514,16 @@ const PhylogeneticRenderer: React.FC<Props> = ({ metadata, filters, refreshTick 
         label="Branch lengths"
       />
       {highlightedRootId != null ? (
-        <>
+        <Group gap="xs" grow>
           <Button size="compact-xs" variant="light" color="pink" onClick={() => setHighlightedRootId(null)}>
             Clear subtree
           </Button>
           <Button size="compact-xs" variant="subtle" color="pink" onClick={exportSelectedNewick}>
             Export .nwk
           </Button>
-        </>
+        </Group>
       ) : null}
-    </Group>
+    </Stack>
   );
 
   // ---- Categorical legend (rendered as Mantine badges below the chart) ---
@@ -508,7 +537,13 @@ const PhylogeneticRenderer: React.FC<Props> = ({ metadata, filters, refreshTick 
                 width: 10,
                 height: 10,
                 borderRadius: 2,
-                background: PALETTE[tipColors.categories.indexOf(cat) % PALETTE.length],
+                // Pull from the same stable colour map as the tips so legend
+              // swatches match what's painted on the tree (and stay stable
+              // when the user filters down to a subset of categories).
+              background: stableColorMap(
+                colorUniverse ?? tipColors.categories,
+                PALETTE,
+              ).get(cat),
               }}
             />
             <span style={{ fontSize: 11 }}>{cat}</span>
@@ -540,8 +575,8 @@ const PhylogeneticRenderer: React.FC<Props> = ({ metadata, filters, refreshTick 
         <div style={{ flex: '1 1 auto', minHeight: 0 }}>
           {figure ? (
             <Plot
-              data={figure.data as any}
-              layout={figure.layout as any}
+              data={applyDataTheme(figure.data, isDark, theme) as any}
+              layout={applyLayoutTheme(figure.layout as any, isDark, theme) as any}
               onClick={onPlotClick}
               useResizeHandler
               style={{ width: '100%', height: '100%' }}

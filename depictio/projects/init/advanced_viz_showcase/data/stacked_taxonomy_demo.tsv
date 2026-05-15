@@ -1,235 +1,235 @@
-sample_id	taxon	rank	abundance	lineage
-sample_gut_1	Firmicutes	Phylum	13520	Firmicutes
-sample_gut_1	Bacteroidetes	Phylum	8300	Bacteroidetes
-sample_gut_1	Proteobacteria	Phylum	3832	Proteobacteria
-sample_gut_1	Actinobacteria	Phylum	6845	Actinobacteria
-sample_gut_1	Verrucomicrobia	Phylum	8937	Verrucomicrobia
-sample_gut_1	Lactobacillus	Genus	3197	Firmicutes;Lactobacillus
-sample_gut_1	Faecalibacterium	Genus	5957	Firmicutes;Faecalibacterium
-sample_gut_1	Clostridium	Genus	4366	Firmicutes;Clostridium
-sample_gut_1	Bacteroides	Genus	3493	Bacteroidetes;Bacteroides
-sample_gut_1	Prevotella	Genus	4807	Bacteroidetes;Prevotella
-sample_gut_1	Escherichia	Genus	3832	Proteobacteria;Escherichia
-sample_gut_1	Bifidobacterium	Genus	6845	Actinobacteria;Bifidobacterium
-sample_gut_1	Akkermansia	Genus	8937	Verrucomicrobia;Akkermansia
-sample_gut_2	Firmicutes	Phylum	3229	Firmicutes
-sample_gut_2	Bacteroidetes	Phylum	4158	Bacteroidetes
-sample_gut_2	Proteobacteria	Phylum	6763	Proteobacteria
-sample_gut_2	Actinobacteria	Phylum	2799	Actinobacteria
-sample_gut_2	Verrucomicrobia	Phylum	3011	Verrucomicrobia
-sample_gut_2	Lactobacillus	Genus	846	Firmicutes;Lactobacillus
-sample_gut_2	Faecalibacterium	Genus	1385	Firmicutes;Faecalibacterium
-sample_gut_2	Clostridium	Genus	998	Firmicutes;Clostridium
-sample_gut_2	Bacteroides	Genus	3821	Bacteroidetes;Bacteroides
-sample_gut_2	Prevotella	Genus	337	Bacteroidetes;Prevotella
-sample_gut_2	Escherichia	Genus	6763	Proteobacteria;Escherichia
-sample_gut_2	Bifidobacterium	Genus	2799	Actinobacteria;Bifidobacterium
-sample_gut_2	Akkermansia	Genus	3011	Verrucomicrobia;Akkermansia
-sample_gut_3	Firmicutes	Phylum	4262	Firmicutes
-sample_gut_3	Bacteroidetes	Phylum	9619	Bacteroidetes
-sample_gut_3	Proteobacteria	Phylum	5618	Proteobacteria
-sample_gut_3	Actinobacteria	Phylum	5161	Actinobacteria
-sample_gut_3	Verrucomicrobia	Phylum	2957	Verrucomicrobia
-sample_gut_3	Lactobacillus	Genus	1995	Firmicutes;Lactobacillus
-sample_gut_3	Faecalibacterium	Genus	809	Firmicutes;Faecalibacterium
-sample_gut_3	Clostridium	Genus	1458	Firmicutes;Clostridium
-sample_gut_3	Bacteroides	Genus	3837	Bacteroidetes;Bacteroides
-sample_gut_3	Prevotella	Genus	5782	Bacteroidetes;Prevotella
-sample_gut_3	Escherichia	Genus	5618	Proteobacteria;Escherichia
-sample_gut_3	Bifidobacterium	Genus	5161	Actinobacteria;Bifidobacterium
-sample_gut_3	Akkermansia	Genus	2957	Verrucomicrobia;Akkermansia
-sample_gut_4	Firmicutes	Phylum	6688	Firmicutes
-sample_gut_4	Bacteroidetes	Phylum	364	Bacteroidetes
-sample_gut_4	Proteobacteria	Phylum	7199	Proteobacteria
-sample_gut_4	Actinobacteria	Phylum	8564	Actinobacteria
-sample_gut_4	Verrucomicrobia	Phylum	62	Verrucomicrobia
-sample_gut_4	Lactobacillus	Genus	1640	Firmicutes;Lactobacillus
-sample_gut_4	Faecalibacterium	Genus	4124	Firmicutes;Faecalibacterium
-sample_gut_4	Clostridium	Genus	924	Firmicutes;Clostridium
-sample_gut_4	Bacteroides	Genus	240	Bacteroidetes;Bacteroides
-sample_gut_4	Prevotella	Genus	124	Bacteroidetes;Prevotella
-sample_gut_4	Escherichia	Genus	7199	Proteobacteria;Escherichia
-sample_gut_4	Bifidobacterium	Genus	8564	Actinobacteria;Bifidobacterium
-sample_gut_4	Akkermansia	Genus	62	Verrucomicrobia;Akkermansia
-sample_gut_5	Firmicutes	Phylum	4539	Firmicutes
-sample_gut_5	Bacteroidetes	Phylum	2484	Bacteroidetes
-sample_gut_5	Proteobacteria	Phylum	2165	Proteobacteria
-sample_gut_5	Actinobacteria	Phylum	3283	Actinobacteria
-sample_gut_5	Verrucomicrobia	Phylum	5595	Verrucomicrobia
-sample_gut_5	Lactobacillus	Genus	16	Firmicutes;Lactobacillus
-sample_gut_5	Faecalibacterium	Genus	2449	Firmicutes;Faecalibacterium
-sample_gut_5	Clostridium	Genus	2074	Firmicutes;Clostridium
-sample_gut_5	Bacteroides	Genus	1978	Bacteroidetes;Bacteroides
-sample_gut_5	Prevotella	Genus	506	Bacteroidetes;Prevotella
-sample_gut_5	Escherichia	Genus	2165	Proteobacteria;Escherichia
-sample_gut_5	Bifidobacterium	Genus	3283	Actinobacteria;Bifidobacterium
-sample_gut_5	Akkermansia	Genus	5595	Verrucomicrobia;Akkermansia
-sample_gut_6	Firmicutes	Phylum	6479	Firmicutes
-sample_gut_6	Bacteroidetes	Phylum	5413	Bacteroidetes
-sample_gut_6	Proteobacteria	Phylum	4092	Proteobacteria
-sample_gut_6	Actinobacteria	Phylum	10691	Actinobacteria
-sample_gut_6	Verrucomicrobia	Phylum	2520	Verrucomicrobia
-sample_gut_6	Lactobacillus	Genus	2832	Firmicutes;Lactobacillus
-sample_gut_6	Faecalibacterium	Genus	1157	Firmicutes;Faecalibacterium
-sample_gut_6	Clostridium	Genus	2490	Firmicutes;Clostridium
-sample_gut_6	Bacteroides	Genus	2919	Bacteroidetes;Bacteroides
-sample_gut_6	Prevotella	Genus	2494	Bacteroidetes;Prevotella
-sample_gut_6	Escherichia	Genus	4092	Proteobacteria;Escherichia
-sample_gut_6	Bifidobacterium	Genus	10691	Actinobacteria;Bifidobacterium
-sample_gut_6	Akkermansia	Genus	2520	Verrucomicrobia;Akkermansia
-sample_skin_1	Firmicutes	Phylum	9663	Firmicutes
-sample_skin_1	Bacteroidetes	Phylum	9880	Bacteroidetes
-sample_skin_1	Proteobacteria	Phylum	10165	Proteobacteria
-sample_skin_1	Actinobacteria	Phylum	8061	Actinobacteria
-sample_skin_1	Verrucomicrobia	Phylum	102	Verrucomicrobia
-sample_skin_1	Lactobacillus	Genus	39	Firmicutes;Lactobacillus
-sample_skin_1	Faecalibacterium	Genus	3971	Firmicutes;Faecalibacterium
-sample_skin_1	Clostridium	Genus	5653	Firmicutes;Clostridium
-sample_skin_1	Bacteroides	Genus	4404	Bacteroidetes;Bacteroides
-sample_skin_1	Prevotella	Genus	5476	Bacteroidetes;Prevotella
-sample_skin_1	Escherichia	Genus	10165	Proteobacteria;Escherichia
-sample_skin_1	Bifidobacterium	Genus	8061	Actinobacteria;Bifidobacterium
-sample_skin_1	Akkermansia	Genus	102	Verrucomicrobia;Akkermansia
-sample_skin_2	Firmicutes	Phylum	8574	Firmicutes
-sample_skin_2	Bacteroidetes	Phylum	13137	Bacteroidetes
-sample_skin_2	Proteobacteria	Phylum	11627	Proteobacteria
-sample_skin_2	Actinobacteria	Phylum	12870	Actinobacteria
-sample_skin_2	Verrucomicrobia	Phylum	1202	Verrucomicrobia
-sample_skin_2	Lactobacillus	Genus	3856	Firmicutes;Lactobacillus
-sample_skin_2	Faecalibacterium	Genus	3172	Firmicutes;Faecalibacterium
-sample_skin_2	Clostridium	Genus	1546	Firmicutes;Clostridium
-sample_skin_2	Bacteroides	Genus	7740	Bacteroidetes;Bacteroides
-sample_skin_2	Prevotella	Genus	5397	Bacteroidetes;Prevotella
-sample_skin_2	Escherichia	Genus	11627	Proteobacteria;Escherichia
-sample_skin_2	Bifidobacterium	Genus	12870	Actinobacteria;Bifidobacterium
-sample_skin_2	Akkermansia	Genus	1202	Verrucomicrobia;Akkermansia
-sample_skin_3	Firmicutes	Phylum	11727	Firmicutes
-sample_skin_3	Bacteroidetes	Phylum	9741	Bacteroidetes
-sample_skin_3	Proteobacteria	Phylum	12150	Proteobacteria
-sample_skin_3	Actinobacteria	Phylum	2716	Actinobacteria
-sample_skin_3	Verrucomicrobia	Phylum	12071	Verrucomicrobia
-sample_skin_3	Lactobacillus	Genus	4013	Firmicutes;Lactobacillus
-sample_skin_3	Faecalibacterium	Genus	4164	Firmicutes;Faecalibacterium
-sample_skin_3	Clostridium	Genus	3550	Firmicutes;Clostridium
-sample_skin_3	Bacteroides	Genus	4554	Bacteroidetes;Bacteroides
-sample_skin_3	Prevotella	Genus	5187	Bacteroidetes;Prevotella
-sample_skin_3	Escherichia	Genus	12150	Proteobacteria;Escherichia
-sample_skin_3	Bifidobacterium	Genus	2716	Actinobacteria;Bifidobacterium
-sample_skin_3	Akkermansia	Genus	12071	Verrucomicrobia;Akkermansia
-sample_skin_4	Firmicutes	Phylum	10090	Firmicutes
-sample_skin_4	Bacteroidetes	Phylum	6330	Bacteroidetes
-sample_skin_4	Proteobacteria	Phylum	3313	Proteobacteria
-sample_skin_4	Actinobacteria	Phylum	3014	Actinobacteria
-sample_skin_4	Verrucomicrobia	Phylum	64	Verrucomicrobia
-sample_skin_4	Lactobacillus	Genus	4134	Firmicutes;Lactobacillus
-sample_skin_4	Faecalibacterium	Genus	2046	Firmicutes;Faecalibacterium
-sample_skin_4	Clostridium	Genus	3910	Firmicutes;Clostridium
-sample_skin_4	Bacteroides	Genus	1769	Bacteroidetes;Bacteroides
-sample_skin_4	Prevotella	Genus	4561	Bacteroidetes;Prevotella
-sample_skin_4	Escherichia	Genus	3313	Proteobacteria;Escherichia
-sample_skin_4	Bifidobacterium	Genus	3014	Actinobacteria;Bifidobacterium
-sample_skin_4	Akkermansia	Genus	64	Verrucomicrobia;Akkermansia
-sample_skin_5	Firmicutes	Phylum	9222	Firmicutes
-sample_skin_5	Bacteroidetes	Phylum	7197	Bacteroidetes
-sample_skin_5	Proteobacteria	Phylum	8948	Proteobacteria
-sample_skin_5	Actinobacteria	Phylum	938	Actinobacteria
-sample_skin_5	Verrucomicrobia	Phylum	12458	Verrucomicrobia
-sample_skin_5	Lactobacillus	Genus	2292	Firmicutes;Lactobacillus
-sample_skin_5	Faecalibacterium	Genus	3177	Firmicutes;Faecalibacterium
-sample_skin_5	Clostridium	Genus	3753	Firmicutes;Clostridium
-sample_skin_5	Bacteroides	Genus	5653	Bacteroidetes;Bacteroides
-sample_skin_5	Prevotella	Genus	1544	Bacteroidetes;Prevotella
-sample_skin_5	Escherichia	Genus	8948	Proteobacteria;Escherichia
-sample_skin_5	Bifidobacterium	Genus	938	Actinobacteria;Bifidobacterium
-sample_skin_5	Akkermansia	Genus	12458	Verrucomicrobia;Akkermansia
-sample_skin_6	Firmicutes	Phylum	2959	Firmicutes
-sample_skin_6	Bacteroidetes	Phylum	31	Bacteroidetes
-sample_skin_6	Proteobacteria	Phylum	4802	Proteobacteria
-sample_skin_6	Actinobacteria	Phylum	2486	Actinobacteria
-sample_skin_6	Verrucomicrobia	Phylum	286	Verrucomicrobia
-sample_skin_6	Lactobacillus	Genus	1171	Firmicutes;Lactobacillus
-sample_skin_6	Faecalibacterium	Genus	1152	Firmicutes;Faecalibacterium
-sample_skin_6	Clostridium	Genus	636	Firmicutes;Clostridium
-sample_skin_6	Bacteroides	Genus	12	Bacteroidetes;Bacteroides
-sample_skin_6	Prevotella	Genus	19	Bacteroidetes;Prevotella
-sample_skin_6	Escherichia	Genus	4802	Proteobacteria;Escherichia
-sample_skin_6	Bifidobacterium	Genus	2486	Actinobacteria;Bifidobacterium
-sample_skin_6	Akkermansia	Genus	286	Verrucomicrobia;Akkermansia
-sample_soil_1	Firmicutes	Phylum	5133	Firmicutes
-sample_soil_1	Bacteroidetes	Phylum	382	Bacteroidetes
-sample_soil_1	Proteobacteria	Phylum	125	Proteobacteria
-sample_soil_1	Actinobacteria	Phylum	9508	Actinobacteria
-sample_soil_1	Verrucomicrobia	Phylum	19237	Verrucomicrobia
-sample_soil_1	Lactobacillus	Genus	1010	Firmicutes;Lactobacillus
-sample_soil_1	Faecalibacterium	Genus	2512	Firmicutes;Faecalibacterium
-sample_soil_1	Clostridium	Genus	1611	Firmicutes;Clostridium
-sample_soil_1	Bacteroides	Genus	172	Bacteroidetes;Bacteroides
-sample_soil_1	Prevotella	Genus	210	Bacteroidetes;Prevotella
-sample_soil_1	Escherichia	Genus	125	Proteobacteria;Escherichia
-sample_soil_1	Bifidobacterium	Genus	9508	Actinobacteria;Bifidobacterium
-sample_soil_1	Akkermansia	Genus	19237	Verrucomicrobia;Akkermansia
-sample_soil_2	Firmicutes	Phylum	2120	Firmicutes
-sample_soil_2	Bacteroidetes	Phylum	4224	Bacteroidetes
-sample_soil_2	Proteobacteria	Phylum	3121	Proteobacteria
-sample_soil_2	Actinobacteria	Phylum	2397	Actinobacteria
-sample_soil_2	Verrucomicrobia	Phylum	1568	Verrucomicrobia
-sample_soil_2	Lactobacillus	Genus	846	Firmicutes;Lactobacillus
-sample_soil_2	Faecalibacterium	Genus	610	Firmicutes;Faecalibacterium
-sample_soil_2	Clostridium	Genus	664	Firmicutes;Clostridium
-sample_soil_2	Bacteroides	Genus	1914	Bacteroidetes;Bacteroides
-sample_soil_2	Prevotella	Genus	2310	Bacteroidetes;Prevotella
-sample_soil_2	Escherichia	Genus	3121	Proteobacteria;Escherichia
-sample_soil_2	Bifidobacterium	Genus	2397	Actinobacteria;Bifidobacterium
-sample_soil_2	Akkermansia	Genus	1568	Verrucomicrobia;Akkermansia
-sample_soil_3	Firmicutes	Phylum	4600	Firmicutes
-sample_soil_3	Bacteroidetes	Phylum	2289	Bacteroidetes
-sample_soil_3	Proteobacteria	Phylum	1631	Proteobacteria
-sample_soil_3	Actinobacteria	Phylum	2098	Actinobacteria
-sample_soil_3	Verrucomicrobia	Phylum	1151	Verrucomicrobia
-sample_soil_3	Lactobacillus	Genus	3562	Firmicutes;Lactobacillus
-sample_soil_3	Faecalibacterium	Genus	35	Firmicutes;Faecalibacterium
-sample_soil_3	Clostridium	Genus	1003	Firmicutes;Clostridium
-sample_soil_3	Bacteroides	Genus	1170	Bacteroidetes;Bacteroides
-sample_soil_3	Prevotella	Genus	1119	Bacteroidetes;Prevotella
-sample_soil_3	Escherichia	Genus	1631	Proteobacteria;Escherichia
-sample_soil_3	Bifidobacterium	Genus	2098	Actinobacteria;Bifidobacterium
-sample_soil_3	Akkermansia	Genus	1151	Verrucomicrobia;Akkermansia
-sample_soil_4	Firmicutes	Phylum	12520	Firmicutes
-sample_soil_4	Bacteroidetes	Phylum	5395	Bacteroidetes
-sample_soil_4	Proteobacteria	Phylum	11466	Proteobacteria
-sample_soil_4	Actinobacteria	Phylum	151	Actinobacteria
-sample_soil_4	Verrucomicrobia	Phylum	8876	Verrucomicrobia
-sample_soil_4	Lactobacillus	Genus	2316	Firmicutes;Lactobacillus
-sample_soil_4	Faecalibacterium	Genus	7855	Firmicutes;Faecalibacterium
-sample_soil_4	Clostridium	Genus	2349	Firmicutes;Clostridium
-sample_soil_4	Bacteroides	Genus	5340	Bacteroidetes;Bacteroides
-sample_soil_4	Prevotella	Genus	55	Bacteroidetes;Prevotella
-sample_soil_4	Escherichia	Genus	11466	Proteobacteria;Escherichia
-sample_soil_4	Bifidobacterium	Genus	151	Actinobacteria;Bifidobacterium
-sample_soil_4	Akkermansia	Genus	8876	Verrucomicrobia;Akkermansia
-sample_soil_5	Firmicutes	Phylum	7499	Firmicutes
-sample_soil_5	Bacteroidetes	Phylum	4680	Bacteroidetes
-sample_soil_5	Proteobacteria	Phylum	488	Proteobacteria
-sample_soil_5	Actinobacteria	Phylum	7474	Actinobacteria
-sample_soil_5	Verrucomicrobia	Phylum	41	Verrucomicrobia
-sample_soil_5	Lactobacillus	Genus	3671	Firmicutes;Lactobacillus
-sample_soil_5	Faecalibacterium	Genus	1997	Firmicutes;Faecalibacterium
-sample_soil_5	Clostridium	Genus	1831	Firmicutes;Clostridium
-sample_soil_5	Bacteroides	Genus	1939	Bacteroidetes;Bacteroides
-sample_soil_5	Prevotella	Genus	2741	Bacteroidetes;Prevotella
-sample_soil_5	Escherichia	Genus	488	Proteobacteria;Escherichia
-sample_soil_5	Bifidobacterium	Genus	7474	Actinobacteria;Bifidobacterium
-sample_soil_5	Akkermansia	Genus	41	Verrucomicrobia;Akkermansia
-sample_soil_6	Firmicutes	Phylum	4938	Firmicutes
-sample_soil_6	Bacteroidetes	Phylum	1371	Bacteroidetes
-sample_soil_6	Proteobacteria	Phylum	4497	Proteobacteria
-sample_soil_6	Actinobacteria	Phylum	49	Actinobacteria
-sample_soil_6	Verrucomicrobia	Phylum	3622	Verrucomicrobia
-sample_soil_6	Lactobacillus	Genus	1576	Firmicutes;Lactobacillus
-sample_soil_6	Faecalibacterium	Genus	19	Firmicutes;Faecalibacterium
-sample_soil_6	Clostridium	Genus	3343	Firmicutes;Clostridium
-sample_soil_6	Bacteroides	Genus	1067	Bacteroidetes;Bacteroides
-sample_soil_6	Prevotella	Genus	304	Bacteroidetes;Prevotella
-sample_soil_6	Escherichia	Genus	4497	Proteobacteria;Escherichia
-sample_soil_6	Bifidobacterium	Genus	49	Actinobacteria;Bifidobacterium
-sample_soil_6	Akkermansia	Genus	3622	Verrucomicrobia;Akkermansia
+sample_id	taxon	rank	abundance	lineage	Kingdom	Phylum	Class	Order	Family	Genus
+sample_gut_1	Firmicutes	Phylum	4118	Firmicutes	Bacteria	Firmicutes				
+sample_gut_1	Bacteroidetes	Phylum	5897	Bacteroidetes	Bacteria	Bacteroidetes				
+sample_gut_1	Proteobacteria	Phylum	5537	Proteobacteria	Bacteria	Proteobacteria				
+sample_gut_1	Actinobacteria	Phylum	7764	Actinobacteria	Bacteria	Actinobacteria				
+sample_gut_1	Verrucomicrobia	Phylum	6570	Verrucomicrobia	Bacteria	Verrucomicrobia				
+sample_gut_1	Lactobacillus	Genus	1649	Firmicutes;Lactobacillus	Bacteria	Firmicutes	Firmicutes_class	Firmicutes_order	Firmicutes_family	Lactobacillus
+sample_gut_1	Faecalibacterium	Genus	1269	Firmicutes;Faecalibacterium	Bacteria	Firmicutes	Firmicutes_class	Firmicutes_order	Firmicutes_family	Faecalibacterium
+sample_gut_1	Clostridium	Genus	1200	Firmicutes;Clostridium	Bacteria	Firmicutes	Firmicutes_class	Firmicutes_order	Firmicutes_family	Clostridium
+sample_gut_1	Bacteroides	Genus	2211	Bacteroidetes;Bacteroides	Bacteria	Bacteroidetes	Bacteroidetes_class	Bacteroidetes_order	Bacteroidetes_family	Bacteroides
+sample_gut_1	Prevotella	Genus	3686	Bacteroidetes;Prevotella	Bacteria	Bacteroidetes	Bacteroidetes_class	Bacteroidetes_order	Bacteroidetes_family	Prevotella
+sample_gut_1	Escherichia	Genus	5537	Proteobacteria;Escherichia	Bacteria	Proteobacteria	Proteobacteria_class	Proteobacteria_order	Proteobacteria_family	Escherichia
+sample_gut_1	Bifidobacterium	Genus	7764	Actinobacteria;Bifidobacterium	Bacteria	Actinobacteria	Actinobacteria_class	Actinobacteria_order	Actinobacteria_family	Bifidobacterium
+sample_gut_1	Akkermansia	Genus	6570	Verrucomicrobia;Akkermansia	Bacteria	Verrucomicrobia	Verrucomicrobia_class	Verrucomicrobia_order	Verrucomicrobia_family	Akkermansia
+sample_gut_2	Firmicutes	Phylum	6570	Firmicutes	Bacteria	Firmicutes				
+sample_gut_2	Bacteroidetes	Phylum	3846	Bacteroidetes	Bacteria	Bacteroidetes				
+sample_gut_2	Proteobacteria	Phylum	6558	Proteobacteria	Bacteria	Proteobacteria				
+sample_gut_2	Actinobacteria	Phylum	2811	Actinobacteria	Bacteria	Actinobacteria				
+sample_gut_2	Verrucomicrobia	Phylum	1266	Verrucomicrobia	Bacteria	Verrucomicrobia				
+sample_gut_2	Lactobacillus	Genus	2238	Firmicutes;Lactobacillus	Bacteria	Firmicutes	Firmicutes_class	Firmicutes_order	Firmicutes_family	Lactobacillus
+sample_gut_2	Faecalibacterium	Genus	2109	Firmicutes;Faecalibacterium	Bacteria	Firmicutes	Firmicutes_class	Firmicutes_order	Firmicutes_family	Faecalibacterium
+sample_gut_2	Clostridium	Genus	2223	Firmicutes;Clostridium	Bacteria	Firmicutes	Firmicutes_class	Firmicutes_order	Firmicutes_family	Clostridium
+sample_gut_2	Bacteroides	Genus	1521	Bacteroidetes;Bacteroides	Bacteria	Bacteroidetes	Bacteroidetes_class	Bacteroidetes_order	Bacteroidetes_family	Bacteroides
+sample_gut_2	Prevotella	Genus	2325	Bacteroidetes;Prevotella	Bacteria	Bacteroidetes	Bacteroidetes_class	Bacteroidetes_order	Bacteroidetes_family	Prevotella
+sample_gut_2	Escherichia	Genus	6558	Proteobacteria;Escherichia	Bacteria	Proteobacteria	Proteobacteria_class	Proteobacteria_order	Proteobacteria_family	Escherichia
+sample_gut_2	Bifidobacterium	Genus	2811	Actinobacteria;Bifidobacterium	Bacteria	Actinobacteria	Actinobacteria_class	Actinobacteria_order	Actinobacteria_family	Bifidobacterium
+sample_gut_2	Akkermansia	Genus	1266	Verrucomicrobia;Akkermansia	Bacteria	Verrucomicrobia	Verrucomicrobia_class	Verrucomicrobia_order	Verrucomicrobia_family	Akkermansia
+sample_gut_3	Firmicutes	Phylum	3897	Firmicutes	Bacteria	Firmicutes				
+sample_gut_3	Bacteroidetes	Phylum	2346	Bacteroidetes	Bacteria	Bacteroidetes				
+sample_gut_3	Proteobacteria	Phylum	4014	Proteobacteria	Bacteria	Proteobacteria				
+sample_gut_3	Actinobacteria	Phylum	3285	Actinobacteria	Bacteria	Actinobacteria				
+sample_gut_3	Verrucomicrobia	Phylum	1204	Verrucomicrobia	Bacteria	Verrucomicrobia				
+sample_gut_3	Lactobacillus	Genus	1537	Firmicutes;Lactobacillus	Bacteria	Firmicutes	Firmicutes_class	Firmicutes_order	Firmicutes_family	Lactobacillus
+sample_gut_3	Faecalibacterium	Genus	1169	Firmicutes;Faecalibacterium	Bacteria	Firmicutes	Firmicutes_class	Firmicutes_order	Firmicutes_family	Faecalibacterium
+sample_gut_3	Clostridium	Genus	1191	Firmicutes;Clostridium	Bacteria	Firmicutes	Firmicutes_class	Firmicutes_order	Firmicutes_family	Clostridium
+sample_gut_3	Bacteroides	Genus	548	Bacteroidetes;Bacteroides	Bacteria	Bacteroidetes	Bacteroidetes_class	Bacteroidetes_order	Bacteroidetes_family	Bacteroides
+sample_gut_3	Prevotella	Genus	1798	Bacteroidetes;Prevotella	Bacteria	Bacteroidetes	Bacteroidetes_class	Bacteroidetes_order	Bacteroidetes_family	Prevotella
+sample_gut_3	Escherichia	Genus	4014	Proteobacteria;Escherichia	Bacteria	Proteobacteria	Proteobacteria_class	Proteobacteria_order	Proteobacteria_family	Escherichia
+sample_gut_3	Bifidobacterium	Genus	3285	Actinobacteria;Bifidobacterium	Bacteria	Actinobacteria	Actinobacteria_class	Actinobacteria_order	Actinobacteria_family	Bifidobacterium
+sample_gut_3	Akkermansia	Genus	1204	Verrucomicrobia;Akkermansia	Bacteria	Verrucomicrobia	Verrucomicrobia_class	Verrucomicrobia_order	Verrucomicrobia_family	Akkermansia
+sample_gut_4	Firmicutes	Phylum	48	Firmicutes	Bacteria	Firmicutes				
+sample_gut_4	Bacteroidetes	Phylum	4896	Bacteroidetes	Bacteria	Bacteroidetes				
+sample_gut_4	Proteobacteria	Phylum	4372	Proteobacteria	Bacteria	Proteobacteria				
+sample_gut_4	Actinobacteria	Phylum	5634	Actinobacteria	Bacteria	Actinobacteria				
+sample_gut_4	Verrucomicrobia	Phylum	8618	Verrucomicrobia	Bacteria	Verrucomicrobia				
+sample_gut_4	Lactobacillus	Genus	22	Firmicutes;Lactobacillus	Bacteria	Firmicutes	Firmicutes_class	Firmicutes_order	Firmicutes_family	Lactobacillus
+sample_gut_4	Faecalibacterium	Genus	2	Firmicutes;Faecalibacterium	Bacteria	Firmicutes	Firmicutes_class	Firmicutes_order	Firmicutes_family	Faecalibacterium
+sample_gut_4	Clostridium	Genus	24	Firmicutes;Clostridium	Bacteria	Firmicutes	Firmicutes_class	Firmicutes_order	Firmicutes_family	Clostridium
+sample_gut_4	Bacteroides	Genus	3071	Bacteroidetes;Bacteroides	Bacteria	Bacteroidetes	Bacteroidetes_class	Bacteroidetes_order	Bacteroidetes_family	Bacteroides
+sample_gut_4	Prevotella	Genus	1825	Bacteroidetes;Prevotella	Bacteria	Bacteroidetes	Bacteroidetes_class	Bacteroidetes_order	Bacteroidetes_family	Prevotella
+sample_gut_4	Escherichia	Genus	4372	Proteobacteria;Escherichia	Bacteria	Proteobacteria	Proteobacteria_class	Proteobacteria_order	Proteobacteria_family	Escherichia
+sample_gut_4	Bifidobacterium	Genus	5634	Actinobacteria;Bifidobacterium	Bacteria	Actinobacteria	Actinobacteria_class	Actinobacteria_order	Actinobacteria_family	Bifidobacterium
+sample_gut_4	Akkermansia	Genus	8618	Verrucomicrobia;Akkermansia	Bacteria	Verrucomicrobia	Verrucomicrobia_class	Verrucomicrobia_order	Verrucomicrobia_family	Akkermansia
+sample_gut_5	Firmicutes	Phylum	5403	Firmicutes	Bacteria	Firmicutes				
+sample_gut_5	Bacteroidetes	Phylum	4097	Bacteroidetes	Bacteria	Bacteroidetes				
+sample_gut_5	Proteobacteria	Phylum	2635	Proteobacteria	Bacteria	Proteobacteria				
+sample_gut_5	Actinobacteria	Phylum	1165	Actinobacteria	Bacteria	Actinobacteria				
+sample_gut_5	Verrucomicrobia	Phylum	417	Verrucomicrobia	Bacteria	Verrucomicrobia				
+sample_gut_5	Lactobacillus	Genus	1816	Firmicutes;Lactobacillus	Bacteria	Firmicutes	Firmicutes_class	Firmicutes_order	Firmicutes_family	Lactobacillus
+sample_gut_5	Faecalibacterium	Genus	1775	Firmicutes;Faecalibacterium	Bacteria	Firmicutes	Firmicutes_class	Firmicutes_order	Firmicutes_family	Faecalibacterium
+sample_gut_5	Clostridium	Genus	1812	Firmicutes;Clostridium	Bacteria	Firmicutes	Firmicutes_class	Firmicutes_order	Firmicutes_family	Clostridium
+sample_gut_5	Bacteroides	Genus	991	Bacteroidetes;Bacteroides	Bacteria	Bacteroidetes	Bacteroidetes_class	Bacteroidetes_order	Bacteroidetes_family	Bacteroides
+sample_gut_5	Prevotella	Genus	3106	Bacteroidetes;Prevotella	Bacteria	Bacteroidetes	Bacteroidetes_class	Bacteroidetes_order	Bacteroidetes_family	Prevotella
+sample_gut_5	Escherichia	Genus	2635	Proteobacteria;Escherichia	Bacteria	Proteobacteria	Proteobacteria_class	Proteobacteria_order	Proteobacteria_family	Escherichia
+sample_gut_5	Bifidobacterium	Genus	1165	Actinobacteria;Bifidobacterium	Bacteria	Actinobacteria	Actinobacteria_class	Actinobacteria_order	Actinobacteria_family	Bifidobacterium
+sample_gut_5	Akkermansia	Genus	417	Verrucomicrobia;Akkermansia	Bacteria	Verrucomicrobia	Verrucomicrobia_class	Verrucomicrobia_order	Verrucomicrobia_family	Akkermansia
+sample_gut_6	Firmicutes	Phylum	669	Firmicutes	Bacteria	Firmicutes				
+sample_gut_6	Bacteroidetes	Phylum	1891	Bacteroidetes	Bacteria	Bacteroidetes				
+sample_gut_6	Proteobacteria	Phylum	1361	Proteobacteria	Bacteria	Proteobacteria				
+sample_gut_6	Actinobacteria	Phylum	912	Actinobacteria	Bacteria	Actinobacteria				
+sample_gut_6	Verrucomicrobia	Phylum	1142	Verrucomicrobia	Bacteria	Verrucomicrobia				
+sample_gut_6	Lactobacillus	Genus	163	Firmicutes;Lactobacillus	Bacteria	Firmicutes	Firmicutes_class	Firmicutes_order	Firmicutes_family	Lactobacillus
+sample_gut_6	Faecalibacterium	Genus	263	Firmicutes;Faecalibacterium	Bacteria	Firmicutes	Firmicutes_class	Firmicutes_order	Firmicutes_family	Faecalibacterium
+sample_gut_6	Clostridium	Genus	243	Firmicutes;Clostridium	Bacteria	Firmicutes	Firmicutes_class	Firmicutes_order	Firmicutes_family	Clostridium
+sample_gut_6	Bacteroides	Genus	808	Bacteroidetes;Bacteroides	Bacteria	Bacteroidetes	Bacteroidetes_class	Bacteroidetes_order	Bacteroidetes_family	Bacteroides
+sample_gut_6	Prevotella	Genus	1083	Bacteroidetes;Prevotella	Bacteria	Bacteroidetes	Bacteroidetes_class	Bacteroidetes_order	Bacteroidetes_family	Prevotella
+sample_gut_6	Escherichia	Genus	1361	Proteobacteria;Escherichia	Bacteria	Proteobacteria	Proteobacteria_class	Proteobacteria_order	Proteobacteria_family	Escherichia
+sample_gut_6	Bifidobacterium	Genus	912	Actinobacteria;Bifidobacterium	Bacteria	Actinobacteria	Actinobacteria_class	Actinobacteria_order	Actinobacteria_family	Bifidobacterium
+sample_gut_6	Akkermansia	Genus	1142	Verrucomicrobia;Akkermansia	Bacteria	Verrucomicrobia	Verrucomicrobia_class	Verrucomicrobia_order	Verrucomicrobia_family	Akkermansia
+sample_skin_1	Firmicutes	Phylum	7925	Firmicutes	Bacteria	Firmicutes				
+sample_skin_1	Bacteroidetes	Phylum	8020	Bacteroidetes	Bacteria	Bacteroidetes				
+sample_skin_1	Proteobacteria	Phylum	9382	Proteobacteria	Bacteria	Proteobacteria				
+sample_skin_1	Actinobacteria	Phylum	5988	Actinobacteria	Bacteria	Actinobacteria				
+sample_skin_1	Verrucomicrobia	Phylum	8183	Verrucomicrobia	Bacteria	Verrucomicrobia				
+sample_skin_1	Lactobacillus	Genus	2334	Firmicutes;Lactobacillus	Bacteria	Firmicutes	Firmicutes_class	Firmicutes_order	Firmicutes_family	Lactobacillus
+sample_skin_1	Faecalibacterium	Genus	4372	Firmicutes;Faecalibacterium	Bacteria	Firmicutes	Firmicutes_class	Firmicutes_order	Firmicutes_family	Faecalibacterium
+sample_skin_1	Clostridium	Genus	1219	Firmicutes;Clostridium	Bacteria	Firmicutes	Firmicutes_class	Firmicutes_order	Firmicutes_family	Clostridium
+sample_skin_1	Bacteroides	Genus	2798	Bacteroidetes;Bacteroides	Bacteria	Bacteroidetes	Bacteroidetes_class	Bacteroidetes_order	Bacteroidetes_family	Bacteroides
+sample_skin_1	Prevotella	Genus	5222	Bacteroidetes;Prevotella	Bacteria	Bacteroidetes	Bacteroidetes_class	Bacteroidetes_order	Bacteroidetes_family	Prevotella
+sample_skin_1	Escherichia	Genus	9382	Proteobacteria;Escherichia	Bacteria	Proteobacteria	Proteobacteria_class	Proteobacteria_order	Proteobacteria_family	Escherichia
+sample_skin_1	Bifidobacterium	Genus	5988	Actinobacteria;Bifidobacterium	Bacteria	Actinobacteria	Actinobacteria_class	Actinobacteria_order	Actinobacteria_family	Bifidobacterium
+sample_skin_1	Akkermansia	Genus	8183	Verrucomicrobia;Akkermansia	Bacteria	Verrucomicrobia	Verrucomicrobia_class	Verrucomicrobia_order	Verrucomicrobia_family	Akkermansia
+sample_skin_2	Firmicutes	Phylum	2466	Firmicutes	Bacteria	Firmicutes				
+sample_skin_2	Bacteroidetes	Phylum	988	Bacteroidetes	Bacteria	Bacteroidetes				
+sample_skin_2	Proteobacteria	Phylum	2304	Proteobacteria	Bacteria	Proteobacteria				
+sample_skin_2	Actinobacteria	Phylum	2972	Actinobacteria	Bacteria	Actinobacteria				
+sample_skin_2	Verrucomicrobia	Phylum	3272	Verrucomicrobia	Bacteria	Verrucomicrobia				
+sample_skin_2	Lactobacillus	Genus	1351	Firmicutes;Lactobacillus	Bacteria	Firmicutes	Firmicutes_class	Firmicutes_order	Firmicutes_family	Lactobacillus
+sample_skin_2	Faecalibacterium	Genus	575	Firmicutes;Faecalibacterium	Bacteria	Firmicutes	Firmicutes_class	Firmicutes_order	Firmicutes_family	Faecalibacterium
+sample_skin_2	Clostridium	Genus	540	Firmicutes;Clostridium	Bacteria	Firmicutes	Firmicutes_class	Firmicutes_order	Firmicutes_family	Clostridium
+sample_skin_2	Bacteroides	Genus	358	Bacteroidetes;Bacteroides	Bacteria	Bacteroidetes	Bacteroidetes_class	Bacteroidetes_order	Bacteroidetes_family	Bacteroides
+sample_skin_2	Prevotella	Genus	630	Bacteroidetes;Prevotella	Bacteria	Bacteroidetes	Bacteroidetes_class	Bacteroidetes_order	Bacteroidetes_family	Prevotella
+sample_skin_2	Escherichia	Genus	2304	Proteobacteria;Escherichia	Bacteria	Proteobacteria	Proteobacteria_class	Proteobacteria_order	Proteobacteria_family	Escherichia
+sample_skin_2	Bifidobacterium	Genus	2972	Actinobacteria;Bifidobacterium	Bacteria	Actinobacteria	Actinobacteria_class	Actinobacteria_order	Actinobacteria_family	Bifidobacterium
+sample_skin_2	Akkermansia	Genus	3272	Verrucomicrobia;Akkermansia	Bacteria	Verrucomicrobia	Verrucomicrobia_class	Verrucomicrobia_order	Verrucomicrobia_family	Akkermansia
+sample_skin_3	Firmicutes	Phylum	7794	Firmicutes	Bacteria	Firmicutes				
+sample_skin_3	Bacteroidetes	Phylum	10423	Bacteroidetes	Bacteria	Bacteroidetes				
+sample_skin_3	Proteobacteria	Phylum	98	Proteobacteria	Bacteria	Proteobacteria				
+sample_skin_3	Actinobacteria	Phylum	13572	Actinobacteria	Bacteria	Actinobacteria				
+sample_skin_3	Verrucomicrobia	Phylum	8763	Verrucomicrobia	Bacteria	Verrucomicrobia				
+sample_skin_3	Lactobacillus	Genus	2236	Firmicutes;Lactobacillus	Bacteria	Firmicutes	Firmicutes_class	Firmicutes_order	Firmicutes_family	Lactobacillus
+sample_skin_3	Faecalibacterium	Genus	1122	Firmicutes;Faecalibacterium	Bacteria	Firmicutes	Firmicutes_class	Firmicutes_order	Firmicutes_family	Faecalibacterium
+sample_skin_3	Clostridium	Genus	4436	Firmicutes;Clostridium	Bacteria	Firmicutes	Firmicutes_class	Firmicutes_order	Firmicutes_family	Clostridium
+sample_skin_3	Bacteroides	Genus	5585	Bacteroidetes;Bacteroides	Bacteria	Bacteroidetes	Bacteroidetes_class	Bacteroidetes_order	Bacteroidetes_family	Bacteroides
+sample_skin_3	Prevotella	Genus	4838	Bacteroidetes;Prevotella	Bacteria	Bacteroidetes	Bacteroidetes_class	Bacteroidetes_order	Bacteroidetes_family	Prevotella
+sample_skin_3	Escherichia	Genus	98	Proteobacteria;Escherichia	Bacteria	Proteobacteria	Proteobacteria_class	Proteobacteria_order	Proteobacteria_family	Escherichia
+sample_skin_3	Bifidobacterium	Genus	13572	Actinobacteria;Bifidobacterium	Bacteria	Actinobacteria	Actinobacteria_class	Actinobacteria_order	Actinobacteria_family	Bifidobacterium
+sample_skin_3	Akkermansia	Genus	8763	Verrucomicrobia;Akkermansia	Bacteria	Verrucomicrobia	Verrucomicrobia_class	Verrucomicrobia_order	Verrucomicrobia_family	Akkermansia
+sample_skin_4	Firmicutes	Phylum	9389	Firmicutes	Bacteria	Firmicutes				
+sample_skin_4	Bacteroidetes	Phylum	9813	Bacteroidetes	Bacteria	Bacteroidetes				
+sample_skin_4	Proteobacteria	Phylum	5196	Proteobacteria	Bacteria	Proteobacteria				
+sample_skin_4	Actinobacteria	Phylum	10206	Actinobacteria	Bacteria	Actinobacteria				
+sample_skin_4	Verrucomicrobia	Phylum	5212	Verrucomicrobia	Bacteria	Verrucomicrobia				
+sample_skin_4	Lactobacillus	Genus	5287	Firmicutes;Lactobacillus	Bacteria	Firmicutes	Firmicutes_class	Firmicutes_order	Firmicutes_family	Lactobacillus
+sample_skin_4	Faecalibacterium	Genus	649	Firmicutes;Faecalibacterium	Bacteria	Firmicutes	Firmicutes_class	Firmicutes_order	Firmicutes_family	Faecalibacterium
+sample_skin_4	Clostridium	Genus	3453	Firmicutes;Clostridium	Bacteria	Firmicutes	Firmicutes_class	Firmicutes_order	Firmicutes_family	Clostridium
+sample_skin_4	Bacteroides	Genus	5565	Bacteroidetes;Bacteroides	Bacteria	Bacteroidetes	Bacteroidetes_class	Bacteroidetes_order	Bacteroidetes_family	Bacteroides
+sample_skin_4	Prevotella	Genus	4248	Bacteroidetes;Prevotella	Bacteria	Bacteroidetes	Bacteroidetes_class	Bacteroidetes_order	Bacteroidetes_family	Prevotella
+sample_skin_4	Escherichia	Genus	5196	Proteobacteria;Escherichia	Bacteria	Proteobacteria	Proteobacteria_class	Proteobacteria_order	Proteobacteria_family	Escherichia
+sample_skin_4	Bifidobacterium	Genus	10206	Actinobacteria;Bifidobacterium	Bacteria	Actinobacteria	Actinobacteria_class	Actinobacteria_order	Actinobacteria_family	Bifidobacterium
+sample_skin_4	Akkermansia	Genus	5212	Verrucomicrobia;Akkermansia	Bacteria	Verrucomicrobia	Verrucomicrobia_class	Verrucomicrobia_order	Verrucomicrobia_family	Akkermansia
+sample_skin_5	Firmicutes	Phylum	8922	Firmicutes	Bacteria	Firmicutes				
+sample_skin_5	Bacteroidetes	Phylum	10856	Bacteroidetes	Bacteria	Bacteroidetes				
+sample_skin_5	Proteobacteria	Phylum	8837	Proteobacteria	Bacteria	Proteobacteria				
+sample_skin_5	Actinobacteria	Phylum	5908	Actinobacteria	Bacteria	Actinobacteria				
+sample_skin_5	Verrucomicrobia	Phylum	87	Verrucomicrobia	Bacteria	Verrucomicrobia				
+sample_skin_5	Lactobacillus	Genus	4873	Firmicutes;Lactobacillus	Bacteria	Firmicutes	Firmicutes_class	Firmicutes_order	Firmicutes_family	Lactobacillus
+sample_skin_5	Faecalibacterium	Genus	86	Firmicutes;Faecalibacterium	Bacteria	Firmicutes	Firmicutes_class	Firmicutes_order	Firmicutes_family	Faecalibacterium
+sample_skin_5	Clostridium	Genus	3963	Firmicutes;Clostridium	Bacteria	Firmicutes	Firmicutes_class	Firmicutes_order	Firmicutes_family	Clostridium
+sample_skin_5	Bacteroides	Genus	3929	Bacteroidetes;Bacteroides	Bacteria	Bacteroidetes	Bacteroidetes_class	Bacteroidetes_order	Bacteroidetes_family	Bacteroides
+sample_skin_5	Prevotella	Genus	6927	Bacteroidetes;Prevotella	Bacteria	Bacteroidetes	Bacteroidetes_class	Bacteroidetes_order	Bacteroidetes_family	Prevotella
+sample_skin_5	Escherichia	Genus	8837	Proteobacteria;Escherichia	Bacteria	Proteobacteria	Proteobacteria_class	Proteobacteria_order	Proteobacteria_family	Escherichia
+sample_skin_5	Bifidobacterium	Genus	5908	Actinobacteria;Bifidobacterium	Bacteria	Actinobacteria	Actinobacteria_class	Actinobacteria_order	Actinobacteria_family	Bifidobacterium
+sample_skin_5	Akkermansia	Genus	87	Verrucomicrobia;Akkermansia	Bacteria	Verrucomicrobia	Verrucomicrobia_class	Verrucomicrobia_order	Verrucomicrobia_family	Akkermansia
+sample_skin_6	Firmicutes	Phylum	3786	Firmicutes	Bacteria	Firmicutes				
+sample_skin_6	Bacteroidetes	Phylum	1053	Bacteroidetes	Bacteria	Bacteroidetes				
+sample_skin_6	Proteobacteria	Phylum	7104	Proteobacteria	Bacteria	Proteobacteria				
+sample_skin_6	Actinobacteria	Phylum	2282	Actinobacteria	Bacteria	Actinobacteria				
+sample_skin_6	Verrucomicrobia	Phylum	3386	Verrucomicrobia	Bacteria	Verrucomicrobia				
+sample_skin_6	Lactobacillus	Genus	1368	Firmicutes;Lactobacillus	Bacteria	Firmicutes	Firmicutes_class	Firmicutes_order	Firmicutes_family	Lactobacillus
+sample_skin_6	Faecalibacterium	Genus	1333	Firmicutes;Faecalibacterium	Bacteria	Firmicutes	Firmicutes_class	Firmicutes_order	Firmicutes_family	Faecalibacterium
+sample_skin_6	Clostridium	Genus	1085	Firmicutes;Clostridium	Bacteria	Firmicutes	Firmicutes_class	Firmicutes_order	Firmicutes_family	Clostridium
+sample_skin_6	Bacteroides	Genus	710	Bacteroidetes;Bacteroides	Bacteria	Bacteroidetes	Bacteroidetes_class	Bacteroidetes_order	Bacteroidetes_family	Bacteroides
+sample_skin_6	Prevotella	Genus	343	Bacteroidetes;Prevotella	Bacteria	Bacteroidetes	Bacteroidetes_class	Bacteroidetes_order	Bacteroidetes_family	Prevotella
+sample_skin_6	Escherichia	Genus	7104	Proteobacteria;Escherichia	Bacteria	Proteobacteria	Proteobacteria_class	Proteobacteria_order	Proteobacteria_family	Escherichia
+sample_skin_6	Bifidobacterium	Genus	2282	Actinobacteria;Bifidobacterium	Bacteria	Actinobacteria	Actinobacteria_class	Actinobacteria_order	Actinobacteria_family	Bifidobacterium
+sample_skin_6	Akkermansia	Genus	3386	Verrucomicrobia;Akkermansia	Bacteria	Verrucomicrobia	Verrucomicrobia_class	Verrucomicrobia_order	Verrucomicrobia_family	Akkermansia
+sample_soil_1	Firmicutes	Phylum	2801	Firmicutes	Bacteria	Firmicutes				
+sample_soil_1	Bacteroidetes	Phylum	1622	Bacteroidetes	Bacteria	Bacteroidetes				
+sample_soil_1	Proteobacteria	Phylum	1847	Proteobacteria	Bacteria	Proteobacteria				
+sample_soil_1	Actinobacteria	Phylum	2405	Actinobacteria	Bacteria	Actinobacteria				
+sample_soil_1	Verrucomicrobia	Phylum	3894	Verrucomicrobia	Bacteria	Verrucomicrobia				
+sample_soil_1	Lactobacillus	Genus	786	Firmicutes;Lactobacillus	Bacteria	Firmicutes	Firmicutes_class	Firmicutes_order	Firmicutes_family	Lactobacillus
+sample_soil_1	Faecalibacterium	Genus	813	Firmicutes;Faecalibacterium	Bacteria	Firmicutes	Firmicutes_class	Firmicutes_order	Firmicutes_family	Faecalibacterium
+sample_soil_1	Clostridium	Genus	1202	Firmicutes;Clostridium	Bacteria	Firmicutes	Firmicutes_class	Firmicutes_order	Firmicutes_family	Clostridium
+sample_soil_1	Bacteroides	Genus	1242	Bacteroidetes;Bacteroides	Bacteria	Bacteroidetes	Bacteroidetes_class	Bacteroidetes_order	Bacteroidetes_family	Bacteroides
+sample_soil_1	Prevotella	Genus	380	Bacteroidetes;Prevotella	Bacteria	Bacteroidetes	Bacteroidetes_class	Bacteroidetes_order	Bacteroidetes_family	Prevotella
+sample_soil_1	Escherichia	Genus	1847	Proteobacteria;Escherichia	Bacteria	Proteobacteria	Proteobacteria_class	Proteobacteria_order	Proteobacteria_family	Escherichia
+sample_soil_1	Bifidobacterium	Genus	2405	Actinobacteria;Bifidobacterium	Bacteria	Actinobacteria	Actinobacteria_class	Actinobacteria_order	Actinobacteria_family	Bifidobacterium
+sample_soil_1	Akkermansia	Genus	3894	Verrucomicrobia;Akkermansia	Bacteria	Verrucomicrobia	Verrucomicrobia_class	Verrucomicrobia_order	Verrucomicrobia_family	Akkermansia
+sample_soil_2	Firmicutes	Phylum	8586	Firmicutes	Bacteria	Firmicutes				
+sample_soil_2	Bacteroidetes	Phylum	4129	Bacteroidetes	Bacteria	Bacteroidetes				
+sample_soil_2	Proteobacteria	Phylum	3150	Proteobacteria	Bacteria	Proteobacteria				
+sample_soil_2	Actinobacteria	Phylum	2364	Actinobacteria	Bacteria	Actinobacteria				
+sample_soil_2	Verrucomicrobia	Phylum	9733	Verrucomicrobia	Bacteria	Verrucomicrobia				
+sample_soil_2	Lactobacillus	Genus	2354	Firmicutes;Lactobacillus	Bacteria	Firmicutes	Firmicutes_class	Firmicutes_order	Firmicutes_family	Lactobacillus
+sample_soil_2	Faecalibacterium	Genus	3090	Firmicutes;Faecalibacterium	Bacteria	Firmicutes	Firmicutes_class	Firmicutes_order	Firmicutes_family	Faecalibacterium
+sample_soil_2	Clostridium	Genus	3142	Firmicutes;Clostridium	Bacteria	Firmicutes	Firmicutes_class	Firmicutes_order	Firmicutes_family	Clostridium
+sample_soil_2	Bacteroides	Genus	3458	Bacteroidetes;Bacteroides	Bacteria	Bacteroidetes	Bacteroidetes_class	Bacteroidetes_order	Bacteroidetes_family	Bacteroides
+sample_soil_2	Prevotella	Genus	671	Bacteroidetes;Prevotella	Bacteria	Bacteroidetes	Bacteroidetes_class	Bacteroidetes_order	Bacteroidetes_family	Prevotella
+sample_soil_2	Escherichia	Genus	3150	Proteobacteria;Escherichia	Bacteria	Proteobacteria	Proteobacteria_class	Proteobacteria_order	Proteobacteria_family	Escherichia
+sample_soil_2	Bifidobacterium	Genus	2364	Actinobacteria;Bifidobacterium	Bacteria	Actinobacteria	Actinobacteria_class	Actinobacteria_order	Actinobacteria_family	Bifidobacterium
+sample_soil_2	Akkermansia	Genus	9733	Verrucomicrobia;Akkermansia	Bacteria	Verrucomicrobia	Verrucomicrobia_class	Verrucomicrobia_order	Verrucomicrobia_family	Akkermansia
+sample_soil_3	Firmicutes	Phylum	8124	Firmicutes	Bacteria	Firmicutes				
+sample_soil_3	Bacteroidetes	Phylum	2678	Bacteroidetes	Bacteria	Bacteroidetes				
+sample_soil_3	Proteobacteria	Phylum	4130	Proteobacteria	Bacteria	Proteobacteria				
+sample_soil_3	Actinobacteria	Phylum	5437	Actinobacteria	Bacteria	Actinobacteria				
+sample_soil_3	Verrucomicrobia	Phylum	5927	Verrucomicrobia	Bacteria	Verrucomicrobia				
+sample_soil_3	Lactobacillus	Genus	4997	Firmicutes;Lactobacillus	Bacteria	Firmicutes	Firmicutes_class	Firmicutes_order	Firmicutes_family	Lactobacillus
+sample_soil_3	Faecalibacterium	Genus	1225	Firmicutes;Faecalibacterium	Bacteria	Firmicutes	Firmicutes_class	Firmicutes_order	Firmicutes_family	Faecalibacterium
+sample_soil_3	Clostridium	Genus	1902	Firmicutes;Clostridium	Bacteria	Firmicutes	Firmicutes_class	Firmicutes_order	Firmicutes_family	Clostridium
+sample_soil_3	Bacteroides	Genus	1645	Bacteroidetes;Bacteroides	Bacteria	Bacteroidetes	Bacteroidetes_class	Bacteroidetes_order	Bacteroidetes_family	Bacteroides
+sample_soil_3	Prevotella	Genus	1033	Bacteroidetes;Prevotella	Bacteria	Bacteroidetes	Bacteroidetes_class	Bacteroidetes_order	Bacteroidetes_family	Prevotella
+sample_soil_3	Escherichia	Genus	4130	Proteobacteria;Escherichia	Bacteria	Proteobacteria	Proteobacteria_class	Proteobacteria_order	Proteobacteria_family	Escherichia
+sample_soil_3	Bifidobacterium	Genus	5437	Actinobacteria;Bifidobacterium	Bacteria	Actinobacteria	Actinobacteria_class	Actinobacteria_order	Actinobacteria_family	Bifidobacterium
+sample_soil_3	Akkermansia	Genus	5927	Verrucomicrobia;Akkermansia	Bacteria	Verrucomicrobia	Verrucomicrobia_class	Verrucomicrobia_order	Verrucomicrobia_family	Akkermansia
+sample_soil_4	Firmicutes	Phylum	4485	Firmicutes	Bacteria	Firmicutes				
+sample_soil_4	Bacteroidetes	Phylum	6082	Bacteroidetes	Bacteria	Bacteroidetes				
+sample_soil_4	Proteobacteria	Phylum	3806	Proteobacteria	Bacteria	Proteobacteria				
+sample_soil_4	Actinobacteria	Phylum	6394	Actinobacteria	Bacteria	Actinobacteria				
+sample_soil_4	Verrucomicrobia	Phylum	302	Verrucomicrobia	Bacteria	Verrucomicrobia				
+sample_soil_4	Lactobacillus	Genus	2743	Firmicutes;Lactobacillus	Bacteria	Firmicutes	Firmicutes_class	Firmicutes_order	Firmicutes_family	Lactobacillus
+sample_soil_4	Faecalibacterium	Genus	767	Firmicutes;Faecalibacterium	Bacteria	Firmicutes	Firmicutes_class	Firmicutes_order	Firmicutes_family	Faecalibacterium
+sample_soil_4	Clostridium	Genus	975	Firmicutes;Clostridium	Bacteria	Firmicutes	Firmicutes_class	Firmicutes_order	Firmicutes_family	Clostridium
+sample_soil_4	Bacteroides	Genus	1836	Bacteroidetes;Bacteroides	Bacteria	Bacteroidetes	Bacteroidetes_class	Bacteroidetes_order	Bacteroidetes_family	Bacteroides
+sample_soil_4	Prevotella	Genus	4246	Bacteroidetes;Prevotella	Bacteria	Bacteroidetes	Bacteroidetes_class	Bacteroidetes_order	Bacteroidetes_family	Prevotella
+sample_soil_4	Escherichia	Genus	3806	Proteobacteria;Escherichia	Bacteria	Proteobacteria	Proteobacteria_class	Proteobacteria_order	Proteobacteria_family	Escherichia
+sample_soil_4	Bifidobacterium	Genus	6394	Actinobacteria;Bifidobacterium	Bacteria	Actinobacteria	Actinobacteria_class	Actinobacteria_order	Actinobacteria_family	Bifidobacterium
+sample_soil_4	Akkermansia	Genus	302	Verrucomicrobia;Akkermansia	Bacteria	Verrucomicrobia	Verrucomicrobia_class	Verrucomicrobia_order	Verrucomicrobia_family	Akkermansia
+sample_soil_5	Firmicutes	Phylum	153	Firmicutes	Bacteria	Firmicutes				
+sample_soil_5	Bacteroidetes	Phylum	14455	Bacteroidetes	Bacteria	Bacteroidetes				
+sample_soil_5	Proteobacteria	Phylum	4077	Proteobacteria	Bacteria	Proteobacteria				
+sample_soil_5	Actinobacteria	Phylum	12076	Actinobacteria	Bacteria	Actinobacteria				
+sample_soil_5	Verrucomicrobia	Phylum	3866	Verrucomicrobia	Bacteria	Verrucomicrobia				
+sample_soil_5	Lactobacillus	Genus	69	Firmicutes;Lactobacillus	Bacteria	Firmicutes	Firmicutes_class	Firmicutes_order	Firmicutes_family	Lactobacillus
+sample_soil_5	Faecalibacterium	Genus	55	Firmicutes;Faecalibacterium	Bacteria	Firmicutes	Firmicutes_class	Firmicutes_order	Firmicutes_family	Faecalibacterium
+sample_soil_5	Clostridium	Genus	29	Firmicutes;Clostridium	Bacteria	Firmicutes	Firmicutes_class	Firmicutes_order	Firmicutes_family	Clostridium
+sample_soil_5	Bacteroides	Genus	4960	Bacteroidetes;Bacteroides	Bacteria	Bacteroidetes	Bacteroidetes_class	Bacteroidetes_order	Bacteroidetes_family	Bacteroides
+sample_soil_5	Prevotella	Genus	9495	Bacteroidetes;Prevotella	Bacteria	Bacteroidetes	Bacteroidetes_class	Bacteroidetes_order	Bacteroidetes_family	Prevotella
+sample_soil_5	Escherichia	Genus	4077	Proteobacteria;Escherichia	Bacteria	Proteobacteria	Proteobacteria_class	Proteobacteria_order	Proteobacteria_family	Escherichia
+sample_soil_5	Bifidobacterium	Genus	12076	Actinobacteria;Bifidobacterium	Bacteria	Actinobacteria	Actinobacteria_class	Actinobacteria_order	Actinobacteria_family	Bifidobacterium
+sample_soil_5	Akkermansia	Genus	3866	Verrucomicrobia;Akkermansia	Bacteria	Verrucomicrobia	Verrucomicrobia_class	Verrucomicrobia_order	Verrucomicrobia_family	Akkermansia
+sample_soil_6	Firmicutes	Phylum	6299	Firmicutes	Bacteria	Firmicutes				
+sample_soil_6	Bacteroidetes	Phylum	8278	Bacteroidetes	Bacteria	Bacteroidetes				
+sample_soil_6	Proteobacteria	Phylum	4574	Proteobacteria	Bacteria	Proteobacteria				
+sample_soil_6	Actinobacteria	Phylum	5053	Actinobacteria	Bacteria	Actinobacteria				
+sample_soil_6	Verrucomicrobia	Phylum	713	Verrucomicrobia	Bacteria	Verrucomicrobia				
+sample_soil_6	Lactobacillus	Genus	1691	Firmicutes;Lactobacillus	Bacteria	Firmicutes	Firmicutes_class	Firmicutes_order	Firmicutes_family	Lactobacillus
+sample_soil_6	Faecalibacterium	Genus	2142	Firmicutes;Faecalibacterium	Bacteria	Firmicutes	Firmicutes_class	Firmicutes_order	Firmicutes_family	Faecalibacterium
+sample_soil_6	Clostridium	Genus	2466	Firmicutes;Clostridium	Bacteria	Firmicutes	Firmicutes_class	Firmicutes_order	Firmicutes_family	Clostridium
+sample_soil_6	Bacteroides	Genus	4412	Bacteroidetes;Bacteroides	Bacteria	Bacteroidetes	Bacteroidetes_class	Bacteroidetes_order	Bacteroidetes_family	Bacteroides
+sample_soil_6	Prevotella	Genus	3866	Bacteroidetes;Prevotella	Bacteria	Bacteroidetes	Bacteroidetes_class	Bacteroidetes_order	Bacteroidetes_family	Prevotella
+sample_soil_6	Escherichia	Genus	4574	Proteobacteria;Escherichia	Bacteria	Proteobacteria	Proteobacteria_class	Proteobacteria_order	Proteobacteria_family	Escherichia
+sample_soil_6	Bifidobacterium	Genus	5053	Actinobacteria;Bifidobacterium	Bacteria	Actinobacteria	Actinobacteria_class	Actinobacteria_order	Actinobacteria_family	Bifidobacterium
+sample_soil_6	Akkermansia	Genus	713	Verrucomicrobia;Akkermansia	Bacteria	Verrucomicrobia	Verrucomicrobia_class	Verrucomicrobia_order	Verrucomicrobia_family	Akkermansia

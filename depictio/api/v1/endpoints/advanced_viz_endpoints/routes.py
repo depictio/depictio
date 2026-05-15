@@ -17,6 +17,7 @@ Thin endpoints:
 from __future__ import annotations
 
 import logging
+import os
 from typing import Any
 
 from bson import ObjectId
@@ -45,14 +46,19 @@ _KIND_METADATA: dict[AdvancedVizKind, dict[str, Any]] = {
         "icon": "tabler:chart-scatter",
     },
     "embedding": {
-        "label": "Embedding (PCA / UMAP / t-SNE / PCoA)",
-        "description": "2D sample embedding from a pre-computed (or recipe-derived) DC.",
+        "label": "Embedding / clustering",
+        "description": (
+            "2D/3D sample embedding (PCA / UMAP / t-SNE / PCoA) — accepts a "
+            "pre-computed DC (dim_1, dim_2 columns) or runs the reduction "
+            "live on a wide sample×feature matrix DC via Celery."
+        ),
         "icon": "tabler:atom",
     },
     "manhattan": {
-        "label": "Manhattan / GWAS",
+        "label": "GWAS Manhattan (tool)",
         "description": "chr / pos / score scatter — works for true GWAS, peak qvalues, and variant AF.",
         "icon": "tabler:chart-histogram",
+        "category": "tool",
     },
     "stacked_taxonomy": {
         "label": "Stacked taxonomy",
@@ -65,19 +71,22 @@ _KIND_METADATA: dict[AdvancedVizKind, dict[str, Any]] = {
         "icon": "tabler:chart-line",
     },
     "ancombc_differentials": {
-        "label": "ANCOM-BC differentials",
+        "label": "ANCOM-BC differential abundance (tool)",
         "description": "Ranked signed-LFC horizontal bar of differentially-abundant features for the selected contrast.",
         "icon": "tabler:chart-bar",
+        "category": "tool",
     },
     "da_barplot": {
-        "label": "DA barplot (per contrast)",
+        "label": "Differential-abundance bars (tool, per contrast)",
         "description": "Faceted top-N differentially-abundant features, one panel per contrast.",
         "icon": "tabler:chart-bar-popular",
+        "category": "tool",
     },
     "enrichment": {
-        "label": "Pathway enrichment (GSEA / GO / KEGG)",
+        "label": "GSEA / pathway enrichment (tool)",
         "description": "Dot plot: term on y, NES on x, dot size = gene-set size, colour = -log10(padj).",
         "icon": "tabler:chart-dots",
+        "category": "tool",
     },
     "complex_heatmap": {
         "label": "ComplexHeatmap (clustered)",
@@ -88,6 +97,46 @@ _KIND_METADATA: dict[AdvancedVizKind, dict[str, Any]] = {
         "label": "UpSet plot",
         "description": "Set-intersection visualisation (alternative to Venn diagrams). Server-side compute via plotly-upset, dispatched as a Celery task.",
         "icon": "tabler:chart-bar-popular",
+    },
+    "ma": {
+        "label": "MA plot",
+        "description": "Mean log intensity vs log2 fold change — same hits as a volcano, classic DE / proteomics layout.",
+        "icon": "tabler:chart-bell",
+    },
+    "dot_plot": {
+        "label": "Dot plot",
+        "description": "scanpy / Seurat marker dot plot: cluster × gene with size = fraction expressing, colour = mean expression.",
+        "icon": "tabler:circle-dot",
+    },
+    "lollipop": {
+        "label": "Lollipop / needle plot",
+        "description": "Variant tracks along genes: vertical stems coloured by consequence, marker size = effect.",
+        "icon": "tabler:chart-arcs",
+    },
+    "qq": {
+        "label": "QQ plot",
+        "description": "Quantile-quantile of -log10(p) vs uniform null — standard p-value distribution QC.",
+        "icon": "tabler:chart-line",
+    },
+    "sunburst": {
+        "label": "Sunburst",
+        "description": "Hierarchical taxonomy / pathway viewer — concentric rings from root to leaf.",
+        "icon": "tabler:sun",
+    },
+    "oncoplot": {
+        "label": "Oncoplot",
+        "description": "Sample × gene mutation matrix with discrete mutation-type colours and frequency strips.",
+        "icon": "tabler:grid-pattern",
+    },
+    "coverage_track": {
+        "label": "Coverage track",
+        "description": "Read depth / signal along a coordinate axis. Optional per-sample faceting and categorical annotation lane (gene region, peak class, …).",
+        "icon": "tabler:chart-area-line",
+    },
+    "sankey": {
+        "label": "Sankey (categorical flow)",
+        "description": "Flow across N ordered categorical levels (e.g. sample → lineage → clade). Server-side aggregation, client-side colour / opacity tweaks.",
+        "icon": "tabler:chart-sankey",
     },
 }
 
@@ -102,6 +151,8 @@ def list_kinds(current_user=Depends(get_user_or_anonymous)) -> list[dict[str, An
             "description": meta["description"],
             "icon": meta["icon"],
             "required_roles": list(CANONICAL_SCHEMAS[kind].keys()),
+            # Entries without an explicit category are pure visualisations.
+            "category": meta.get("category", "plot"),
         }
         for kind, meta in _KIND_METADATA.items()
     ]
@@ -208,27 +259,22 @@ def fetch_advanced_viz_data(
     }
 
 
+_CACHE_KEY_VERSION = "v3"
+
+
 def _compute_cache_key(payload: dict) -> str:
     """Stable key for the compute_results cache.
 
-    Inputs that affect the embedding output: dc_id, method, params (sorted),
-    feature_id_col, filter_metadata. We hash to a fixed-length string so the
-    key fits comfortably as a Mongo ``_id``.
+    Hashes the full payload sort-stably so every tunable (embedding params,
+    UpSet sort_by/min_size/colour_by, ComplexHeatmap normalize/cluster_*,
+    filter_metadata) participates in the key. Bump ``_CACHE_KEY_VERSION``
+    when the task contract changes in a way that invalidates prior entries
+    (e.g. fixing a bug that produced stuck "pending" docs).
     """
     import hashlib
     import json as _json
 
-    blob = _json.dumps(
-        {
-            "dc_id": str(payload.get("dc_id", "")),
-            "method": payload.get("method", ""),
-            "feature_id_col": payload.get("feature_id_col", "sample_id"),
-            "params": payload.get("params") or {},
-            "filter_metadata": payload.get("filter_metadata") or [],
-        },
-        sort_keys=True,
-        default=str,
-    )
+    blob = _json.dumps({"_v": _CACHE_KEY_VERSION, "p": payload}, sort_keys=True, default=str)
     return hashlib.sha256(blob.encode()).hexdigest()[:32]
 
 
@@ -246,8 +292,8 @@ def dispatch_compute_embedding(
     import time
     from datetime import datetime, timezone
 
-    from depictio.api.v1.db import db
     from depictio.api.v1.celery_tasks import compute_embedding as compute_task
+    from depictio.api.v1.db import db
 
     method = (payload.get("method") or "").lower()
     if method not in {"pca", "umap", "tsne", "pcoa"}:
@@ -270,20 +316,34 @@ def dispatch_compute_embedding(
         }
 
     # Miss → mark pending, dispatch task, return job_id.
-    cache.insert_one(
-        {
-            "_id": cache_key,
-            "status": "pending",
-            "method": method,
-            "created_at": datetime.now(timezone.utc),
-            "payload": {
-                "wf_id": str(payload["wf_id"]),
-                "dc_id": str(payload["dc_id"]),
+    # Race-safe: handle a concurrent dispatch with the same cache_key by
+    # falling through to the cache-hit return path.
+    from pymongo.errors import DuplicateKeyError
+
+    try:
+        cache.insert_one(
+            {
+                "_id": cache_key,
+                "status": "pending",
                 "method": method,
-                "params": payload.get("params") or {},
-            },
+                "created_at": datetime.now(timezone.utc),
+                "payload": {
+                    "wf_id": str(payload["wf_id"]),
+                    "dc_id": str(payload["dc_id"]),
+                    "method": method,
+                    "params": payload.get("params") or {},
+                },
+            }
+        )
+    except DuplicateKeyError:
+        existing = cache.find_one({"_id": cache_key}) or {}
+        return {
+            "job_id": cache_key,
+            "status": existing.get("status", "pending"),
+            "result": existing.get("result"),
+            "error": existing.get("error"),
+            "from_cache": True,
         }
-    )
 
     # Dispatch via apply_async with a callback that updates the cache doc.
     # We use a lightweight inline wrapper so Celery's success / failure
@@ -383,8 +443,8 @@ def dispatch_compute_complex_heatmap(
     import time
     from datetime import datetime, timezone
 
-    from depictio.api.v1.db import db
     from depictio.api.v1.celery_tasks import compute_complex_heatmap as compute_task
+    from depictio.api.v1.db import db
 
     if not payload.get("wf_id") or not payload.get("dc_id"):
         raise HTTPException(status_code=400, detail="wf_id and dc_id are required")
@@ -407,19 +467,35 @@ def dispatch_compute_complex_heatmap(
             "from_cache": True,
         }
 
-    cache.insert_one(
-        {
-            "_id": cache_key,
-            "status": "pending",
-            "method": "complex_heatmap",
-            "created_at": datetime.now(timezone.utc),
-            "payload": {
-                "wf_id": str(payload["wf_id"]),
-                "dc_id": str(payload["dc_id"]),
+    # Race-safe insert: two concurrent dispatches with the same key (e.g.
+    # React StrictMode double-mount in dev) both pass the find_one check.
+    # Use upsert + insert-only path to dedupe — second caller falls into
+    # the find_one branch.
+    from pymongo.errors import DuplicateKeyError
+
+    try:
+        cache.insert_one(
+            {
+                "_id": cache_key,
+                "status": "pending",
                 "method": "complex_heatmap",
-            },
+                "created_at": datetime.now(timezone.utc),
+                "payload": {
+                    "wf_id": str(payload["wf_id"]),
+                    "dc_id": str(payload["dc_id"]),
+                    "method": "complex_heatmap",
+                },
+            }
+        )
+    except DuplicateKeyError:
+        existing = cache.find_one({"_id": cache_key}) or {}
+        return {
+            "job_id": cache_key,
+            "status": existing.get("status", "pending"),
+            "result": existing.get("result"),
+            "error": existing.get("error"),
+            "from_cache": True,
         }
-    )
     started = time.monotonic()
     async_result = compute_task.apply_async(args=[payload])
     cache.update_one({"_id": cache_key}, {"$set": {"celery_task_id": async_result.id}})
@@ -467,13 +543,25 @@ def poll_compute_complex_heatmap(
             result = async_result.result
             cache.update_one(
                 {"_id": job_id},
-                {"$set": {"status": "done", "result": result, "completed_at": datetime.now(timezone.utc)}},
+                {
+                    "$set": {
+                        "status": "done",
+                        "result": result,
+                        "completed_at": datetime.now(timezone.utc),
+                    }
+                },
             )
             return {"job_id": job_id, "status": "done", "result": result}
         err = str(async_result.result)[:500]
         cache.update_one(
             {"_id": job_id},
-            {"$set": {"status": "failed", "error": err, "completed_at": datetime.now(timezone.utc)}},
+            {
+                "$set": {
+                    "status": "failed",
+                    "error": err,
+                    "completed_at": datetime.now(timezone.utc),
+                }
+            },
         )
         return {"job_id": job_id, "status": "failed", "error": err}
     return {"job_id": job_id, "status": "pending"}
@@ -489,8 +577,8 @@ def dispatch_compute_upset(
     import time
     from datetime import datetime, timezone
 
-    from depictio.api.v1.db import db
     from depictio.api.v1.celery_tasks import compute_upset as compute_task
+    from depictio.api.v1.db import db
 
     if not payload.get("wf_id") or not payload.get("dc_id"):
         raise HTTPException(status_code=400, detail="wf_id and dc_id are required")
@@ -509,19 +597,31 @@ def dispatch_compute_upset(
             "from_cache": True,
         }
 
-    cache.insert_one(
-        {
-            "_id": cache_key,
-            "status": "pending",
-            "method": "upset_plot",
-            "created_at": datetime.now(timezone.utc),
-            "payload": {
-                "wf_id": str(payload["wf_id"]),
-                "dc_id": str(payload["dc_id"]),
+    from pymongo.errors import DuplicateKeyError
+
+    try:
+        cache.insert_one(
+            {
+                "_id": cache_key,
+                "status": "pending",
                 "method": "upset_plot",
-            },
+                "created_at": datetime.now(timezone.utc),
+                "payload": {
+                    "wf_id": str(payload["wf_id"]),
+                    "dc_id": str(payload["dc_id"]),
+                    "method": "upset_plot",
+                },
+            }
+        )
+    except DuplicateKeyError:
+        existing = cache.find_one({"_id": cache_key}) or {}
+        return {
+            "job_id": cache_key,
+            "status": existing.get("status", "pending"),
+            "result": existing.get("result"),
+            "error": existing.get("error"),
+            "from_cache": True,
         }
-    )
     started = time.monotonic()
     async_result = compute_task.apply_async(args=[payload])
     cache.update_one({"_id": cache_key}, {"$set": {"celery_task_id": async_result.id}})
@@ -567,16 +667,189 @@ def poll_compute_upset(
             result = async_result.result
             cache.update_one(
                 {"_id": job_id},
-                {"$set": {"status": "done", "result": result, "completed_at": datetime.now(timezone.utc)}},
+                {
+                    "$set": {
+                        "status": "done",
+                        "result": result,
+                        "completed_at": datetime.now(timezone.utc),
+                    }
+                },
             )
             return {"job_id": job_id, "status": "done", "result": result}
         err = str(async_result.result)[:500]
         cache.update_one(
             {"_id": job_id},
-            {"$set": {"status": "failed", "error": err, "completed_at": datetime.now(timezone.utc)}},
+            {
+                "$set": {
+                    "status": "failed",
+                    "error": err,
+                    "completed_at": datetime.now(timezone.utc),
+                }
+            },
         )
         return {"job_id": job_id, "status": "failed", "error": err}
     return {"job_id": job_id, "status": "pending"}
+
+
+def _dispatch_compute(
+    payload: dict,
+    method_name: str,
+    compute_task,
+) -> dict[str, Any]:
+    """Shared dispatch helper for Celery-backed advanced viz endpoints.
+
+    Encapsulates the cache-key lookup + race-safe insert + apply_async +
+    cache-id mirror pattern used by every compute_*  endpoint here. Kept
+    private to this module — the endpoints themselves stay thin wrappers
+    so they remain discoverable via FastAPI's normal route registration.
+    """
+    import time
+    from datetime import datetime, timezone
+
+    from pymongo.errors import DuplicateKeyError
+
+    from depictio.api.v1.db import db
+
+    if not payload.get("wf_id") or not payload.get("dc_id"):
+        raise HTTPException(status_code=400, detail="wf_id and dc_id are required")
+
+    cache = db["compute_results"]
+    cache_key = _compute_cache_key({**payload, "method": payload.get("method", method_name)})
+
+    def _from_cache(existing: dict) -> dict[str, Any]:
+        return {
+            "job_id": cache_key,
+            "status": existing.get("status", "pending"),
+            "result": existing.get("result"),
+            "error": existing.get("error"),
+            "from_cache": True,
+        }
+
+    existing = cache.find_one({"_id": cache_key})
+    if existing:
+        return _from_cache(existing)
+
+    try:
+        cache.insert_one(
+            {
+                "_id": cache_key,
+                "status": "pending",
+                "method": method_name,
+                "created_at": datetime.now(timezone.utc),
+                "payload": {
+                    "wf_id": str(payload["wf_id"]),
+                    "dc_id": str(payload["dc_id"]),
+                    "method": method_name,
+                },
+            }
+        )
+    except DuplicateKeyError:
+        return _from_cache(cache.find_one({"_id": cache_key}) or {})
+
+    started = time.monotonic()
+    async_result = compute_task.apply_async(args=[payload])
+    cache.update_one({"_id": cache_key}, {"$set": {"celery_task_id": async_result.id}})
+    logger.info(
+        "%s dispatched: cache_key=%s task_id=%s (%.2fs)",
+        method_name,
+        cache_key,
+        async_result.id,
+        time.monotonic() - started,
+    )
+    return {"job_id": cache_key, "status": "pending", "from_cache": False}
+
+
+def _poll_compute(job_id: str) -> dict[str, Any]:
+    """Shared poll helper — mirror of the per-endpoint poll body."""
+    from datetime import datetime, timezone
+
+    from celery.result import AsyncResult
+
+    from depictio.api.v1.db import db
+    from depictio.dash.celery_app import celery_app
+
+    cache = db["compute_results"]
+    doc = cache.find_one({"_id": job_id})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if doc.get("status") in ("done", "failed"):
+        return {
+            "job_id": job_id,
+            "status": doc["status"],
+            "result": doc.get("result"),
+            "error": doc.get("error"),
+        }
+    task_id = doc.get("celery_task_id")
+    if not task_id:
+        return {"job_id": job_id, "status": doc.get("status", "pending")}
+    async_result = AsyncResult(task_id, app=celery_app)
+    if async_result.ready():
+        if async_result.successful():
+            result = async_result.result
+            cache.update_one(
+                {"_id": job_id},
+                {
+                    "$set": {
+                        "status": "done",
+                        "result": result,
+                        "completed_at": datetime.now(timezone.utc),
+                    }
+                },
+            )
+            return {"job_id": job_id, "status": "done", "result": result}
+        err = str(async_result.result)[:500]
+        cache.update_one(
+            {"_id": job_id},
+            {
+                "$set": {
+                    "status": "failed",
+                    "error": err,
+                    "completed_at": datetime.now(timezone.utc),
+                }
+            },
+        )
+        return {"job_id": job_id, "status": "failed", "error": err}
+    return {"job_id": job_id, "status": "pending"}
+
+
+@advanced_viz_endpoint_router.post("/compute_coverage_track")
+def dispatch_compute_coverage_track(
+    payload: dict = Body(...),
+    current_user=Depends(get_user_or_anonymous),
+) -> dict[str, Any]:
+    """Dispatch a coverage-track aggregation Celery task."""
+    from depictio.api.v1.celery_tasks import compute_coverage_track as compute_task
+
+    return _dispatch_compute(payload, "coverage_track", compute_task)
+
+
+@advanced_viz_endpoint_router.get("/compute_coverage_track/{job_id}")
+def poll_compute_coverage_track(
+    job_id: str,
+    current_user=Depends(get_user_or_anonymous),
+) -> dict[str, Any]:
+    """Poll a previously-dispatched coverage-track compute."""
+    return _poll_compute(job_id)
+
+
+@advanced_viz_endpoint_router.post("/compute_sankey")
+def dispatch_compute_sankey(
+    payload: dict = Body(...),
+    current_user=Depends(get_user_or_anonymous),
+) -> dict[str, Any]:
+    """Dispatch a Sankey / categorical-flow Celery task."""
+    from depictio.api.v1.celery_tasks import compute_sankey as compute_task
+
+    return _dispatch_compute(payload, "sankey", compute_task)
+
+
+@advanced_viz_endpoint_router.get("/compute_sankey/{job_id}")
+def poll_compute_sankey(
+    job_id: str,
+    current_user=Depends(get_user_or_anonymous),
+) -> dict[str, Any]:
+    """Poll a previously-dispatched Sankey compute."""
+    return _poll_compute(job_id)
 
 
 @advanced_viz_endpoint_router.get(
@@ -588,26 +861,77 @@ def get_phylogeny_newick(
 ) -> str:
     """Return the raw Newick string for a phylogeny DC.
 
-    Reads the file registered by the scan phase. If local, read from disk;
-    if S3, stream via boto3.
+    Resolves the file location in two ways: (1) prefer the file registered
+    by the CLI scan in ``files_collection``; (2) for reference datasets
+    (seeded via db_init, never CLI-scanned), traverse the project document
+    to find the matching DC under ``workflows[].data_collections[]`` and
+    read its ``config.scan.scan_parameters.filename``. DCs are stored
+    embedded in the project — there is no top-level ``data_collections``
+    document for them — so we can't ``find_one({"_id": dc_oid})`` directly.
+
+    Returns local file contents directly; stream S3-hosted trees via boto3.
     """
-    from depictio.api.v1.db import files_collection
+    from depictio.api.v1.db import files_collection, projects_collection
 
     try:
         dc_oid = ObjectId(str(data_collection_id))
     except Exception as exc:
         raise HTTPException(status_code=400, detail=f"Invalid dc_id: {exc}") from exc
 
+    # Build a list of candidate paths and try each. The CLI scan records the
+    # *host* path it saw when the user ran depictio-cli on their laptop
+    # (``/Users/.../depictio/...``); the backend in Docker can't read that.
+    # The project's scan_parameters.filename is the canonical container path
+    # (``/app/depictio/...``), so we prefer files_collection when its path is
+    # readable and fall through to the project doc otherwise.
+    candidates: list[str] = []
+
     file_doc = files_collection.find_one({"data_collection_id": dc_oid})
-    if not file_doc:
+    if file_doc and file_doc.get("file_location"):
+        candidates.append(str(file_doc["file_location"]))
+
+    project_doc = projects_collection.find_one(
+        {"workflows.data_collections._id": dc_oid},
+    )
+    if project_doc:
+        for wf in project_doc.get("workflows", []) or []:
+            for dc in wf.get("data_collections", []) or []:
+                dc_id_in_doc = dc.get("_id") or dc.get("id")
+                if dc_id_in_doc != dc_oid:
+                    continue
+                scan_cfg = ((dc.get("config") or {}).get("scan") or {}).get("scan_parameters") or {}
+                fname = scan_cfg.get("filename")
+                if fname and fname not in candidates:
+                    candidates.append(str(fname))
+
+    if not candidates:
         raise HTTPException(
             status_code=404,
-            detail="Phylogeny DC has no registered file (scan may not have run).",
+            detail="Phylogeny file not registered (no entry in files_collection and no scan_parameters.filename in the project's DC config).",
         )
 
-    file_path = file_doc.get("file_location")
+    # Resolve to the first existing local path (or any s3:// URL — those go
+    # through boto3 below). Records the chosen path for the read block.
+    file_path: str | None = None
+    for c in candidates:
+        if c.startswith("s3://"):
+            file_path = c
+            break
+        try:
+            if os.path.exists(c):
+                file_path = c
+                break
+        except OSError:
+            continue
+
     if not file_path:
-        raise HTTPException(status_code=404, detail="Phylogeny file location missing.")
+        raise HTTPException(
+            status_code=404,
+            detail=(
+                "Phylogeny file location resolved but none of the candidate paths "
+                f"exist on the backend filesystem: {candidates}"
+            ),
+        )
 
     try:
         if file_path.startswith("s3://"):

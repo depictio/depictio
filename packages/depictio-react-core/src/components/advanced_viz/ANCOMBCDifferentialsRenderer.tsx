@@ -1,9 +1,16 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { NumberInput, Select, Stack, useMantineColorScheme } from '@mantine/core';
+import {
+  NumberInput,
+  Select,
+  Stack,
+  useMantineColorScheme,
+  useMantineTheme,
+} from '@mantine/core';
 import Plot from 'react-plotly.js';
 
 import { fetchAdvancedVizData, InteractiveFilter, StoredMetadata } from '../../api';
 import AdvancedVizFrame from './AdvancedVizFrame';
+import { applyDataTheme, applyLayoutTheme, plotlyAxisOverrides, plotlyThemeFragment } from './plotlyTheme';
 
 interface ANCOMBCDifferentialsConfig {
   feature_id_col: string;
@@ -27,6 +34,7 @@ const FADED = 'rgba(127,127,127,0.45)';
 
 const ANCOMBCDifferentialsRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => {
   const { colorScheme } = useMantineColorScheme();
+  const theme = useMantineTheme();
   const config = (metadata.config || {}) as ANCOMBCDifferentialsConfig;
   const isDark = colorScheme === 'dark';
 
@@ -144,14 +152,20 @@ const ANCOMBCDifferentialsRenderer: React.FC<Props> = ({ metadata, filters, refr
         },
       ],
       layout: {
-        template: isDark ? 'plotly_dark' : 'plotly_white',
+        ...plotlyThemeFragment(isDark, theme),
         margin: { l: 200, r: 16, t: 24, b: 48 },
         xaxis: {
+          ...plotlyAxisOverrides(isDark, theme),
           title: { text: `${config.lfc_col} (signed)` },
           zeroline: true,
-          zerolinecolor: isDark ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.35)',
         },
-        yaxis: { tickmode: 'array', tickvals, ticktext, automargin: true },
+        yaxis: {
+          ...plotlyAxisOverrides(isDark, theme),
+          tickmode: 'array',
+          tickvals,
+          ticktext,
+          automargin: true,
+        },
         shapes: [
           {
             type: 'line',
@@ -164,11 +178,9 @@ const ANCOMBCDifferentialsRenderer: React.FC<Props> = ({ metadata, filters, refr
           },
         ],
         autosize: true,
-        plot_bgcolor: 'rgba(0,0,0,0)',
-        paper_bgcolor: 'rgba(0,0,0,0)',
       },
     };
-  }, [rows, selectedContrast, topN, sigThreshold, config, isDark]);
+  }, [rows, selectedContrast, topN, sigThreshold, config, isDark, theme]);
 
   const controls = (
     <Stack gap="xs">
@@ -215,8 +227,8 @@ const ANCOMBCDifferentialsRenderer: React.FC<Props> = ({ metadata, filters, refr
     >
       {figure ? (
         <Plot
-          data={figure.data as any}
-          layout={figure.layout as any}
+          data={applyDataTheme(figure.data, isDark, theme) as any}
+          layout={applyLayoutTheme(figure.layout as any, isDark, theme) as any}
           useResizeHandler
           style={{ width: '100%', height: '100%' }}
           config={{ displaylogo: false, responsive: true } as any}

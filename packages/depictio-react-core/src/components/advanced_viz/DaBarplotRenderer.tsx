@@ -1,9 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { NumberInput, Stack, useMantineColorScheme } from '@mantine/core';
+import { NumberInput, Stack, Tabs, useMantineColorScheme, useMantineTheme } from '@mantine/core';
 import Plot from 'react-plotly.js';
 
 import { fetchAdvancedVizData, InteractiveFilter, StoredMetadata } from '../../api';
 import AdvancedVizFrame from './AdvancedVizFrame';
+import { applyDataTheme, applyLayoutTheme, plotlyAxisOverrides, plotlyThemeFragment } from './plotlyTheme';
 
 interface DaBarplotConfig {
   feature_id_col: string;
@@ -27,11 +28,13 @@ const FADED = 'rgba(127,127,127,0.45)';
 
 const DaBarplotRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => {
   const { colorScheme } = useMantineColorScheme();
+  const theme = useMantineTheme();
   const config = (metadata.config || {}) as DaBarplotConfig;
   const isDark = colorScheme === 'dark';
 
   const [topN, setTopN] = useState<number>(config.top_n ?? 15);
   const [sigThreshold, setSigThreshold] = useState<number>(config.significance_threshold ?? 0.05);
+  const [activeContrast, setActiveContrast] = useState<string | null>(null);
 
   const requiredCols = useMemo(() => {
     const cols = [config.feature_id_col, config.contrast_col, config.lfc_col].filter(Boolean) as string[];
@@ -69,9 +72,12 @@ const DaBarplotRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) 
     };
   }, [metadata.wf_id, metadata.dc_id, JSON.stringify(requiredCols), JSON.stringify(filters), refreshTick]);
 
-  const figure = useMemo(() => {
-    if (!rows) return null;
-
+  // Group rows by contrast once — both the Tabs.List and the active panel
+  // read from the same Map so contrast switching never re-traverses raw rows.
+  type FeatureRow = { feat: string; label: string; lfc: number; sig: number };
+  const { byContrast, contrastNames } = useMemo(() => {
+    const map = new Map<string, FeatureRow[]>();
+    if (!rows) return { byContrast: map, contrastNames: [] as string[] };
     const feats = (rows[config.feature_id_col] || []) as (string | number)[];
     const contrasts = (rows[config.contrast_col] || []) as (string | number)[];
     const lfcs = (rows[config.lfc_col] || []) as number[];
@@ -80,90 +86,83 @@ const DaBarplotRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) 
       : null;
     const labels = config.label_col ? (rows[config.label_col] as (string | number)[]) : null;
 
-    type Row = { feat: string; label: string; lfc: number; sig: number };
-    const byContrast = new Map<string, Row[]>();
     for (let i = 0; i < feats.length; i++) {
       const c = String(contrasts[i] ?? '');
       const lfc = Number(lfcs[i]);
       if (!Number.isFinite(lfc)) continue;
       const sig = sigs ? Number(sigs[i]) : 1;
-      const r: Row = {
+      const r: FeatureRow = {
         feat: String(feats[i] ?? ''),
         label: labels ? String(labels[i] ?? '') : String(feats[i] ?? ''),
         lfc,
         sig: Number.isFinite(sig) ? sig : 1,
       };
-      const arr = byContrast.get(c) ?? [];
+      const arr = map.get(c) ?? [];
       arr.push(r);
-      byContrast.set(c, arr);
+      map.set(c, arr);
     }
-    const contrastNames = Array.from(byContrast.keys()).sort();
-    if (contrastNames.length === 0) return null;
+    return { byContrast: map, contrastNames: Array.from(map.keys()).sort() };
+  }, [rows, config]);
 
-    // One sub-plot per contrast in an xN grid. Plotly's facet support via
-    // subplots is verbose but the small fixture (≤ 4 contrasts) keeps it
-    // tractable.
-    const cols = Math.min(2, contrastNames.length);
-    const rowsCount = Math.ceil(contrastNames.length / cols);
+  // Initialise / heal the active tab when contrasts become available or change.
+  useEffect(() => {
+    if (contrastNames.length === 0) return;
+    if (!activeContrast || !contrastNames.includes(activeContrast)) {
+      setActiveContrast(contrastNames[0]);
+    }
+  }, [contrastNames, activeContrast]);
 
-    const data: any[] = [];
-    const annotations: any[] = [];
-    const layoutAxes: Record<string, any> = {};
+  const figure = useMemo(() => {
+    if (!activeContrast) return null;
+    const all = byContrast.get(activeContrast);
+    if (!all || all.length === 0) return null;
 
-    contrastNames.forEach((c, idx) => {
-      const all = byContrast.get(c)!;
-      all.sort((a, b) => Math.abs(b.lfc) - Math.abs(a.lfc));
-      const top = all.slice(0, topN);
-      top.sort((a, b) => a.lfc - b.lfc);
-      const colour = top.map((r) =>
-        r.sig <= sigThreshold ? (r.lfc >= 0 ? POSITIVE : NEGATIVE) : FADED,
-      );
-      const xaxis = idx === 0 ? 'x' : `x${idx + 1}`;
-      const yaxis = idx === 0 ? 'y' : `y${idx + 1}`;
-      data.push({
-        type: 'bar' as const,
-        orientation: 'h' as const,
-        x: top.map((r) => r.lfc),
-        y: top.map((r, i) => `${idx}-${i}-${r.label}`),
-        text: top.map((r) => r.label),
-        textposition: 'auto' as const,
-        insidetextanchor: 'start',
-        marker: { color: colour, line: { width: 0 } },
-        hovertemplate: `<b>%{text}</b><br>${config.lfc_col}: %{x:.3f}<extra></extra>`,
-        showlegend: false,
-        xaxis,
-        yaxis,
-      });
-      const rowIdx = Math.floor(idx / cols);
-      const colIdx = idx % cols;
-      const xPaper = (colIdx + 0.5) / cols;
-      const yPaper = 1 - rowIdx / rowsCount;
-      annotations.push({
-        text: `<b>${c}</b>`,
-        x: xPaper,
-        y: yPaper - 0.02,
-        xref: 'paper',
-        yref: 'paper',
-        xanchor: 'center',
-        showarrow: false,
-        font: { size: 11 },
-      });
-    });
+    // Sort by |LFC|, take top-N, then re-sort by signed LFC so positives sit
+    // at the top of the y-axis (plotly draws first item at the bottom).
+    const ranked = [...all].sort((a, b) => Math.abs(b.lfc) - Math.abs(a.lfc)).slice(0, topN);
+    ranked.sort((a, b) => a.lfc - b.lfc);
+    const colour = ranked.map((r) =>
+      r.sig <= sigThreshold ? (r.lfc >= 0 ? POSITIVE : NEGATIVE) : FADED,
+    );
 
     return {
-      data,
+      data: [
+        {
+          type: 'bar' as const,
+          orientation: 'h' as const,
+          x: ranked.map((r) => r.lfc),
+          y: ranked.map((r) => r.label),
+          text: ranked.map((r) => r.label),
+          customdata: ranked.map((r) => [r.feat, r.sig]),
+          textposition: 'outside' as const,
+          marker: { color: colour, line: { width: 0 } },
+          hovertemplate:
+            `<b>%{text}</b><br>${config.lfc_col}: %{x:.3f}` +
+            (config.significance_col
+              ? `<br>${config.significance_col}: %{customdata[1]:.2e}`
+              : '') +
+            `<extra></extra>`,
+          showlegend: false,
+        },
+      ],
       layout: {
-        template: isDark ? 'plotly_dark' : 'plotly_white',
-        margin: { l: 8, r: 8, t: 28, b: 36 },
-        grid: { rows: rowsCount, columns: cols, pattern: 'independent' as const },
-        annotations,
+        ...plotlyThemeFragment(isDark, theme),
+        margin: { l: 8, r: 80, t: 12, b: 36 },
+        xaxis: {
+          ...plotlyAxisOverrides(isDark, theme),
+          title: { text: config.lfc_col },
+          zeroline: true,
+        },
+        yaxis: {
+          ...plotlyAxisOverrides(isDark, theme),
+          automargin: true,
+          showticklabels: false,
+          ticks: '',
+        },
         autosize: true,
-        plot_bgcolor: 'rgba(0,0,0,0)',
-        paper_bgcolor: 'rgba(0,0,0,0)',
-        ...layoutAxes,
       },
     };
-  }, [rows, topN, sigThreshold, config, isDark]);
+  }, [activeContrast, byContrast, topN, sigThreshold, config, isDark, theme]);
 
   const controls = (
     <Stack gap="xs">
@@ -199,14 +198,34 @@ const DaBarplotRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) 
       dataRows={rows ?? undefined}
       dataColumns={requiredCols}
     >
-      {figure ? (
-        <Plot
-          data={figure.data as any}
-          layout={figure.layout as any}
-          useResizeHandler
-          style={{ width: '100%', height: '100%' }}
-          config={{ displaylogo: false, responsive: true } as any}
-        />
+      {contrastNames.length > 0 ? (
+        <Tabs
+          value={activeContrast}
+          onChange={setActiveContrast}
+          variant="outline"
+          radius="sm"
+          styles={{ root: { display: 'flex', flexDirection: 'column', height: '100%' } }}
+          keepMounted={false}
+        >
+          <Tabs.List>
+            {contrastNames.map((c) => (
+              <Tabs.Tab key={c} value={c}>
+                {c}
+              </Tabs.Tab>
+            ))}
+          </Tabs.List>
+          <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
+            {figure ? (
+              <Plot
+                data={applyDataTheme(figure.data, isDark, theme) as any}
+                layout={applyLayoutTheme(figure.layout as any, isDark, theme) as any}
+                useResizeHandler
+                style={{ width: '100%', height: '100%' }}
+                config={{ displaylogo: false, responsive: true } as any}
+              />
+            ) : null}
+          </div>
+        </Tabs>
       ) : null}
     </AdvancedVizFrame>
   );

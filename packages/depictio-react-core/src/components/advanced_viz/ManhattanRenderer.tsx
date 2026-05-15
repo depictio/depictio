@@ -1,9 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-  Group,
   MultiSelect,
   NumberInput,
+  Stack,
   useMantineColorScheme,
+  useMantineTheme,
 } from '@mantine/core';
 import Plot from 'react-plotly.js';
 
@@ -13,6 +14,7 @@ import {
   StoredMetadata,
 } from '../../api';
 import AdvancedVizFrame from './AdvancedVizFrame';
+import { applyDataTheme, applyLayoutTheme, plotlyAxisOverrides, plotlyThemeFragment } from './plotlyTheme';
 
 interface ManhattanConfig {
   chr_col: string;
@@ -55,6 +57,8 @@ function chromosomeSortKey(label: string): number {
 
 const ManhattanRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => {
   const { colorScheme } = useMantineColorScheme();
+  const theme = useMantineTheme();
+  const isDark = colorScheme === 'dark';
   const config = (metadata.config || {}) as ManhattanConfig;
 
   const [scoreThreshold, setScoreThreshold] = useState<number | undefined>(
@@ -105,8 +109,14 @@ const ManhattanRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) 
     refreshTick,
   ]);
 
-  const { figure, allChrs } = useMemo(() => {
-    if (!rows) return { figure: null, allChrs: [] as string[] };
+  const { figure, allChrs, tiers, counts } = useMemo(() => {
+    if (!rows)
+      return {
+        figure: null,
+        allChrs: [] as string[],
+        tiers: null as ('ABOVE' | 'BELOW')[] | null,
+        counts: undefined as Record<string, number> | undefined,
+      };
 
     const chrs = (rows[config.chr_col] || []).map((v) => String(v ?? '')) as string[];
     const positions = (rows[config.pos_col] || []) as number[];
@@ -145,17 +155,27 @@ const ManhattanRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) 
     }
     const totalSpan = cursor;
 
-    // 2) Map every row to its cumulative x and chromosome colour.
+    // 2) Map every row to its cumulative x and chromosome colour. When a
+    //    threshold is set, points below it dim to grey so the eye is drawn to
+    //    the "hits" instead of the chromosome blocks. `tiers` mirrors the
+    //    Volcano/MA classification so the data popover can highlight the same
+    //    rows and the counts row shows ABOVE / BELOW.
     const xs = chrs.map((c, i) => (offsetByChr.get(c) ?? 0) + (positions[i] ?? 0));
     const colorByChr = new Map<string, string>(
       allChrs.map((c, i) => [c, _palette[i % _palette.length]]),
     );
-    const colors = chrs.map((c) =>
-      activeChrs.has(c) ? colorByChr.get(c) || '#777' : 'rgba(200,200,200,0.3)',
-    );
+    const hasThreshold = scoreThreshold != null && Number.isFinite(scoreThreshold);
+    const tiers: ('ABOVE' | 'BELOW')[] | null = hasThreshold
+      ? scores.map((s) => (s != null && s >= (scoreThreshold as number) ? 'ABOVE' : 'BELOW'))
+      : null;
+    const colors = chrs.map((c, i) => {
+      if (!activeChrs.has(c)) return 'rgba(200,200,200,0.3)';
+      if (tiers && tiers[i] === 'BELOW') return 'rgba(160,160,160,0.45)';
+      return colorByChr.get(c) || '#777';
+    });
+    const sizes = tiers ? tiers.map((t) => (t === 'ABOVE' ? 6 : 4)) : 5;
 
     // 3) Alternating background band shapes — one per chromosome.
-    const isDark = colorScheme === 'dark';
     const bandFill = isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.04)';
     const layoutShapes: any[] = [];
     allChrs.forEach((c, idx) => {
@@ -175,27 +195,39 @@ const ManhattanRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) 
       });
     });
 
-    // 4) Threshold horizontal line.
-    if (scoreThreshold != null) {
+    // 4) Threshold horizontal line. Solid + accent colour so it actually
+    //    catches the eye — the previous dotted rgba(128,128,128,0.6) was
+    //    invisible against the grey theme. Paired with the per-point recolour
+    //    above (hits in chromosome colour, misses dimmed), the line is now
+    //    informational rather than load-bearing.
+    if (hasThreshold) {
+      const accent =
+        colorScheme === 'dark' ? 'rgba(232,62,140,0.85)' : 'rgba(214,51,108,0.85)';
       layoutShapes.push({
         type: 'line',
         xref: 'paper',
         x0: 0,
         x1: 1,
-        y0: scoreThreshold,
-        y1: scoreThreshold,
-        line: { dash: 'dot', color: 'gray', width: 1 },
+        y0: scoreThreshold as number,
+        y1: scoreThreshold as number,
+        line: { dash: 'solid', color: accent, width: 1.5 },
       });
     }
 
     // 5) Top-N label annotations. Use the feature column when present,
-    //    fall back to "chr:pos". Only label points in active chromosomes
-    //    (so the chromosome-filter dropdown also narrows labels).
+    //    fall back to "chr:pos". Two filters apply:
+    //    a) active chromosomes — chromosome dropdown narrows labels.
+    //    b) score threshold (when set) — only label "hits" (score >= threshold)
+    //       so labels match the recolored markers. Without (b) the top-N list
+    //       was just the highest-scoring points overall, which often disagrees
+    //       with what the user set the threshold for.
     const annotations: any[] = [];
     if (topNLabels > 0) {
       const candidates: number[] = [];
       for (let i = 0; i < scores.length; i++) {
-        if (activeChrs.has(chrs[i])) candidates.push(i);
+        if (!activeChrs.has(chrs[i])) continue;
+        if (hasThreshold && (scores[i] == null || scores[i] < (scoreThreshold as number))) continue;
+        candidates.push(i);
       }
       candidates.sort((a, b) => (scores[b] ?? -Infinity) - (scores[a] ?? -Infinity));
       const top = candidates.slice(0, topNLabels);
@@ -227,6 +259,16 @@ const ManhattanRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) 
     const tickvals = allChrs.map((c) => chrSpan.get(c)!.mid);
     const ticktext = allChrs.map((c) => c.replace(/^chr/i, ''));
 
+    const counts: Record<string, number> | undefined = tiers
+      ? tiers.reduce<Record<string, number>>(
+          (acc, t) => {
+            acc[t] += 1;
+            return acc;
+          },
+          { ABOVE: 0, BELOW: 0 },
+        )
+      : undefined;
+
     return {
       figure: {
         data: [
@@ -239,13 +281,14 @@ const ManhattanRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) 
             customdata: chrs,
             hovertemplate:
               `chr %{customdata}, pos %{x}<br>score: %{y}<br>%{text}<extra></extra>`,
-            marker: { color: colors, size: 5, opacity: 0.85 },
+            marker: { color: colors, size: sizes, opacity: 0.85 },
           },
         ],
         layout: {
-          template: colorScheme === 'dark' ? 'plotly_dark' : 'plotly_white',
+          ...plotlyThemeFragment(isDark, theme),
           margin: { l: 55, r: 20, t: 20, b: 50 },
           xaxis: {
+            ...plotlyAxisOverrides(isDark, theme),
             title: { text: 'Chromosome' },
             zeroline: false,
             showgrid: false,
@@ -255,6 +298,7 @@ const ManhattanRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) 
             range: [0, totalSpan],
           },
           yaxis: {
+            ...plotlyAxisOverrides(isDark, theme),
             title: { text: config.score_kind || config.score_col },
             zeroline: false,
           },
@@ -265,40 +309,56 @@ const ManhattanRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) 
         },
       },
       allChrs,
+      tiers,
+      counts,
     };
-  }, [rows, config, scoreThreshold, selectedChrs, topNLabels, colorScheme]);
+  }, [rows, config, scoreThreshold, selectedChrs, topNLabels, colorScheme, theme]);
 
-  const controls = (
-    <Group gap="xs" wrap="wrap">
-      <NumberInput
-        size="xs"
-        label="Threshold"
-        value={scoreThreshold ?? ''}
-        onChange={(v) => setScoreThreshold(v === '' ? undefined : Number(v))}
-        decimalScale={3}
-        w={110}
-      />
-      <NumberInput
-        size="xs"
-        label="Top-N labels"
-        value={topNLabels}
-        onChange={(v) => setTopNLabels(Number(v) || 0)}
-        min={0}
-        max={50}
-        w={110}
-      />
-      <MultiSelect
-        size="xs"
-        label="Chromosomes"
-        value={selectedChrs}
-        onChange={setSelectedChrs}
-        data={allChrs}
-        placeholder="all"
-        searchable
-        clearable
-        w={220}
-      />
-    </Group>
+  // Memoised so AdvancedVizFrame's `extras` useMemo stays stable between
+  // renders — see VolcanoRenderer for the full reasoning.
+  const controls = useMemo(
+    () => (
+      <Stack gap="xs">
+        <NumberInput
+          size="xs"
+          label="Threshold"
+          value={scoreThreshold ?? ''}
+          onChange={(v) => setScoreThreshold(v === '' ? undefined : Number(v))}
+          decimalScale={3}
+        />
+        <NumberInput
+          size="xs"
+          label="Top-N labels"
+          value={topNLabels}
+          onChange={(v) => setTopNLabels(Number(v) || 0)}
+          min={0}
+          max={50}
+        />
+        <MultiSelect
+          size="xs"
+          label="Chromosomes"
+          value={selectedChrs}
+          onChange={setSelectedChrs}
+          data={allChrs}
+          placeholder="all"
+          searchable
+          clearable
+        />
+      </Stack>
+    ),
+    [scoreThreshold, topNLabels, selectedChrs, allChrs],
+  );
+
+  const tierAnnotation = useMemo(
+    () =>
+      tiers
+        ? {
+            values: tiers,
+            selectedOrder: ['ABOVE'],
+            columnLabel: 'threshold',
+          }
+        : undefined,
+    [tiers],
   );
 
   return (
@@ -311,11 +371,13 @@ const ManhattanRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) 
       emptyMessage={rows && Object.values(rows)[0]?.length === 0 ? 'No data' : undefined}
       dataRows={rows ?? undefined}
       dataColumns={requiredCols}
+      counts={counts}
+      tierAnnotation={tierAnnotation}
     >
       {figure ? (
         <Plot
-          data={figure.data as any}
-          layout={figure.layout as any}
+          data={applyDataTheme(figure.data, isDark, theme) as any}
+          layout={applyLayoutTheme(figure.layout as any, isDark, theme) as any}
           useResizeHandler
           style={{ width: '100%', height: '100%' }}
           config={{ displaylogo: false, responsive: true } as any}

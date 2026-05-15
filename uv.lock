@@ -1145,6 +1145,7 @@ dependencies = [
     { name = "playwright" },
     { name = "plotly-complexheatmap" },
     { name = "plotly-express" },
+    { name = "plotly-upset" },
     { name = "polars-lts-cpu", extra = ["deltalake", "excel", "numpy", "pandas", "pyarrow"] },
     { name = "psutil" },
     { name = "pydantic", extra = ["email"] },
@@ -1236,6 +1237,7 @@ requires-dist = [
     { name = "playwright", specifier = "==1.52.0" },
     { name = "plotly-complexheatmap", editable = "packages/plotly-complexheatmap" },
     { name = "plotly-express", specifier = "==0.4.1" },
+    { name = "plotly-upset", editable = "packages/plotly-upset" },
     { name = "polars-lts-cpu", extras = ["numpy", "pandas", "pyarrow", "excel", "deltalake"], specifier = "==1.19.0" },
     { name = "pre-commit", marker = "extra == 'dev'", specifier = "==4.2.0" },
     { name = "psutil", specifier = "==7.0.0" },
@@ -3056,6 +3058,32 @@ sdist = { url = "https://files.pythonhosted.org/packages/a9/e8/e6e0518d9e2fc7891
 wheels = [
     { url = "https://files.pythonhosted.org/packages/d4/d6/8a2906f51e073a4be80cab35cfa10e7a34853e60f3ed5304ac470852a08d/plotly_express-0.4.1-py2.py3-none-any.whl", hash = "sha256:5f112922b0a6225dc7c010e3b86295a74449e3eac6cac8faa95175e99b7698ce", size = 2907, upload-time = "2019-08-07T16:06:09.844Z" },
 ]
+
+[[package]]
+name = "plotly-upset"
+version = "0.1.0"
+source = { editable = "packages/plotly-upset" }
+dependencies = [
+    { name = "numpy" },
+    { name = "pandas" },
+    { name = "plotly" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "ipywidgets", marker = "extra == 'dev'", specifier = ">=8.0" },
+    { name = "ipywidgets", marker = "extra == 'notebook'", specifier = ">=8.0" },
+    { name = "jupyterlab", marker = "extra == 'dev'", specifier = ">=4.0" },
+    { name = "jupyterlab", marker = "extra == 'notebook'", specifier = ">=4.0" },
+    { name = "numpy", specifier = ">=1.22.0" },
+    { name = "pandas", specifier = ">=1.4.0" },
+    { name = "plotly", specifier = ">=5.5.0" },
+    { name = "polars", marker = "extra == 'dev'", specifier = ">=0.20.0" },
+    { name = "polars", marker = "extra == 'polars'", specifier = ">=0.20.0" },
+    { name = "pytest", marker = "extra == 'dev'", specifier = ">=7.0" },
+    { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=4.0" },
+]
+provides-extras = ["polars", "notebook", "dev"]
 
 [[package]]
 name = "pluggy"

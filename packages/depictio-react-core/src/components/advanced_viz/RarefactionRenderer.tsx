@@ -1,14 +1,41 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Group, NumberInput, Select, Stack, Switch, useMantineColorScheme } from '@mantine/core';
+import {
+  NumberInput,
+  Select,
+  Stack,
+  Switch,
+  Tabs,
+  useMantineColorScheme,
+  useMantineTheme,
+} from '@mantine/core';
 import Plot from 'react-plotly.js';
 
-import { fetchAdvancedVizData, InteractiveFilter, StoredMetadata } from '../../api';
+import {
+  fetchAdvancedVizData,
+  fetchPolarsSchema,
+  fetchUniqueValues,
+  InteractiveFilter,
+  StoredMetadata,
+} from '../../api';
+import { stableColorMap, TAB10_PALETTE } from '../../colors';
 import AdvancedVizFrame from './AdvancedVizFrame';
+import {
+  applyDataTheme,
+  applyLayoutTheme,
+  plotlyAxisOverrides,
+  plotlyThemeColors,
+  plotlyThemeFragment,
+} from './plotlyTheme';
 
 interface RarefactionConfig {
   sample_id_col: string;
   depth_col: string;
   metric_col: string;
+  // Optional allowlist of additional metric columns the user can switch to
+  // in the renderer (e.g. ["observed_features", "shannon", "chao1"]).
+  // When unset, the renderer auto-discovers numeric metric columns from
+  // the fetched rows.
+  metric_options?: string[] | null;
   iter_col?: string | null;
   group_col?: string | null;
   show_ci?: boolean;
@@ -20,28 +47,97 @@ interface Props {
   refreshTick?: number;
 }
 
-// Same scanpy / matplotlib tab10 palette used by EmbeddingRenderer so grouped
-// curves match the colour scheme of other viz in the same dashboard.
-const PALETTE = [
-  '#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd',
-  '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf',
-];
+// Shared tab10 palette via colors.ts so cross-viz colour assignments stay
+// in sync. The local alias keeps the index-based fallback ergonomic.
+const PALETTE = TAB10_PALETTE;
 
 const RarefactionRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => {
   const { colorScheme } = useMantineColorScheme();
+  const theme = useMantineTheme();
   const config = (metadata.config || {}) as RarefactionConfig;
   const isDark = colorScheme === 'dark';
 
   const [showCI, setShowCI] = useState<boolean>(config.show_ci ?? true);
   const [topN, setTopN] = useState<number>(60);
   const [groupBy, setGroupBy] = useState<string | null>(config.group_col ?? null);
+  const [activeMetric, setActiveMetric] = useState<string>(config.metric_col);
+
+  // DC schema for auto-discovering additional numeric metric columns when the
+  // dashboard JSON's metric_options is stale or under-specified. Declared
+  // before requiredCols because that useMemo depends on schemaMetricCols.
+  const [dcSchema, setDcSchema] = useState<Record<string, string> | null>(null);
+
+  useEffect(() => {
+    if (!metadata.dc_id) return;
+    let cancelled = false;
+    fetchPolarsSchema(metadata.dc_id)
+      .then((s) => {
+        if (!cancelled) setDcSchema(s);
+      })
+      .catch(() => {
+        /* schema is best-effort — falls back to row-scan inside metricOptions */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [metadata.dc_id]);
+
+  // Full distinct set of group values so colours stay stable when the user
+  // filters down to a subset (e.g. selecting only "treatment" keeps it on the
+  // 3rd palette colour instead of shifting to the 1st).
+  const [groupUniverse, setGroupUniverse] = useState<string[] | null>(null);
+  useEffect(() => {
+    if (!metadata.dc_id || !groupBy) {
+      setGroupUniverse(null);
+      return;
+    }
+    let cancelled = false;
+    fetchUniqueValues(metadata.dc_id, groupBy)
+      .then((values) => {
+        if (!cancelled) setGroupUniverse(values);
+      })
+      .catch(() => {
+        /* fall back to filtered-set ordering if the endpoint errors */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [metadata.dc_id, groupBy]);
+
+  const schemaMetricCols = useMemo(() => {
+    if (!dcSchema) return [] as string[];
+    const NUMERIC_DTYPE_PREFIXES = ['Int', 'UInt', 'Float', 'Decimal'];
+    const skip = new Set<string>(
+      [
+        config.sample_id_col,
+        config.depth_col,
+        config.iter_col,
+        config.group_col,
+      ].filter(Boolean) as string[],
+    );
+    const out: string[] = [];
+    for (const [col, dtype] of Object.entries(dcSchema)) {
+      if (skip.has(col)) continue;
+      if (NUMERIC_DTYPE_PREFIXES.some((p) => dtype.startsWith(p))) out.push(col);
+    }
+    return out;
+  }, [dcSchema, config]);
 
   const requiredCols = useMemo(() => {
     const cols = [config.sample_id_col, config.depth_col, config.metric_col].filter(Boolean) as string[];
     if (config.iter_col) cols.push(config.iter_col);
     if (config.group_col && !cols.includes(config.group_col)) cols.push(config.group_col);
+    // Pull additional metric columns so the user can switch without a refetch.
+    for (const m of config.metric_options ?? []) {
+      if (m && !cols.includes(m)) cols.push(m);
+    }
+    // Also fetch numeric columns discovered from the DC schema — keeps the
+    // metric tabs alive even when the dashboard JSON in MongoDB is stale.
+    for (const m of schemaMetricCols) {
+      if (m && !cols.includes(m)) cols.push(m);
+    }
     return cols;
-  }, [config]);
+  }, [config, schemaMetricCols]);
 
   const [rows, setRows] = useState<Record<string, unknown[]> | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
@@ -76,11 +172,13 @@ const RarefactionRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }
 
     const sampleIds = (rows[config.sample_id_col] || []) as (string | number)[];
     const depths = (rows[config.depth_col] || []) as number[];
-    const metrics = (rows[config.metric_col] || []) as number[];
+    const metrics = (rows[activeMetric] || rows[config.metric_col] || []) as number[];
     const groups = groupBy ? (rows[groupBy] as (string | number)[]) : null;
 
-    // Aggregate (sample, depth) → mean + std over iter. Without iter we still
-    // collapse by (sample, depth) in case multiple rows per pair exist.
+    // Aggregate (sample, depth) → mean + standard error across the iterations
+    // (Welford-style running sums). The QIIME2 rarefaction viewer reports
+    // mean ± SE; we match that so the plot reads correctly to anyone used to
+    // the standard alpha-rarefaction output.
     type Acc = { sum: number; sumSq: number; n: number };
     const perSample = new Map<string, Map<number, Acc>>();
     const sampleGroup = new Map<string, string>();
@@ -114,8 +212,12 @@ const RarefactionRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }
       }
       uniqGroups.sort();
     }
+    // Use the full distinct-value universe when available so the colour for
+    // each group is invariant under filtering. Falls back to the filtered
+    // ordering when the unique-values endpoint hasn't responded yet.
+    const colourSource = stableColorMap(groupUniverse ?? uniqGroups, PALETTE);
     const colourForGroup = new Map<string, string>(
-      uniqGroups.map((g, i) => [g, PALETTE[i % PALETTE.length]]),
+      uniqGroups.map((g) => [g, colourSource.get(g)]),
     );
     const seenGroupInLegend = new Set<string>();
 
@@ -142,22 +244,9 @@ const RarefactionRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }
       const showInLegend = !groups || !seenGroupInLegend.has(group);
       if (showInLegend && groups) seenGroupInLegend.add(group);
 
-      if (showCI && ses.some((v) => v > 0)) {
-        const upper = means.map((m, k) => m + ses[k]);
-        const lower = means.map((m, k) => m - ses[k]);
-        traces.push({
-          type: 'scatter' as const,
-          mode: 'lines' as const,
-          x: [...ds, ...ds.slice().reverse()],
-          y: [...upper, ...lower.slice().reverse()],
-          line: { width: 0 },
-          fill: 'toself',
-          fillcolor: colour.replace(')', ', 0.12)').replace('rgb', 'rgba'),
-          hoverinfo: 'skip',
-          showlegend: false,
-        });
-      }
-
+      // Single trace = lines connecting the markers + scatter markers + per-
+      // point SE whiskers. Matches the QIIME2 alpha-rarefaction default look:
+      // mean as the dot, error bar = ±SE, segments joining adjacent depths.
       traces.push({
         type: 'scatter' as const,
         mode: 'lines+markers' as const,
@@ -166,27 +255,78 @@ const RarefactionRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }
         name: legendName,
         legendgroup: legendName,
         showlegend: showInLegend,
-        line: { color: colour, width: 1.8 },
-        marker: { size: 4, color: colour },
-        hovertemplate: `<b>${String(sid)}</b><br>${config.depth_col}: %{x}<br>${config.metric_col}: %{y:.3f}<extra></extra>`,
+        line: { color: colour, width: 1.6 },
+        marker: { size: 6, color: colour, line: { width: 0 } },
+        error_y: showCI
+          ? {
+              type: 'data' as const,
+              array: ses,
+              visible: true,
+              thickness: 1,
+              width: 3,
+              color: colour,
+            }
+          : { visible: false },
+        hovertemplate:
+          `<b>${String(sid)}</b><br>${config.depth_col}: %{x}` +
+          `<br>${activeMetric}: %{y:.3f} ± %{error_y.array:.3f}<extra></extra>`,
       });
     }
 
+    const { textColor } = plotlyThemeColors(isDark, theme);
     return {
       data: traces,
       layout: {
-        template: isDark ? 'plotly_dark' : 'plotly_white',
+        ...plotlyThemeFragment(isDark, theme),
         margin: { l: 56, r: 16, t: 16, b: 48 },
-        xaxis: { title: { text: config.depth_col }, zeroline: false },
-        yaxis: { title: { text: config.metric_col }, zeroline: false },
+        xaxis: {
+          ...plotlyAxisOverrides(isDark, theme),
+          title: { text: config.depth_col },
+          zeroline: false,
+        },
+        yaxis: {
+          ...plotlyAxisOverrides(isDark, theme),
+          title: { text: activeMetric },
+          zeroline: false,
+        },
         showlegend: true,
-        legend: { orientation: 'v', x: 1.02, y: 1, font: { size: 10 } },
+        legend: {
+          orientation: 'v',
+          x: 1.02,
+          y: 1,
+          font: { size: 10, color: textColor },
+          bgcolor: 'rgba(0,0,0,0)',
+        },
         autosize: true,
-        plot_bgcolor: 'rgba(0,0,0,0)',
-        paper_bgcolor: 'rgba(0,0,0,0)',
       },
     };
-  }, [rows, config, isDark, showCI, topN, groupBy]);
+  }, [rows, config, isDark, theme, showCI, topN, groupBy, activeMetric]);
+
+  // Available metric columns. Prefer the config allowlist; merge in schema-
+  // discovered numeric columns so a stale dashboard JSON (config.metric_options
+  // missing or under-populated) still surfaces the metric tabs. Final fallback:
+  // scan loaded rows for numeric columns (works even without a schema endpoint).
+  const metricOptions = useMemo(() => {
+    const cfgList = (config.metric_options ?? []).filter(Boolean) as string[];
+    const seed = new Set<string>([config.metric_col, ...cfgList]);
+    // Schema-driven discovery first (cheap, runs once after schema fetch).
+    for (const c of schemaMetricCols) seed.add(c);
+    // Row-scan fallback if neither config nor schema produced ≥2 metrics.
+    if (seed.size <= 1 && rows) {
+      const skip = new Set<string>(
+        [config.sample_id_col, config.depth_col, config.iter_col, config.group_col].filter(
+          Boolean,
+        ) as string[],
+      );
+      for (const c of Object.keys(rows)) {
+        if (skip.has(c)) continue;
+        const v = (rows[c] || []) as unknown[];
+        const firstNum = v.find((x) => x != null);
+        if (typeof firstNum === 'number') seed.add(c);
+      }
+    }
+    return Array.from(seed);
+  }, [rows, config, schemaMetricCols]);
 
   // Discover group/metric options from the rows once they arrive.
   const groupOptions = useMemo(() => {
@@ -213,21 +353,19 @@ const RarefactionRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }
           description="Colour curves by metadata column"
         />
       ) : null}
-      <Group gap="xs" grow>
-        <NumberInput
-          size="xs"
-          label="Top-N samples"
-          value={topN}
-          onChange={(v) => setTopN(Math.max(1, Number(v) || 60))}
-          min={1}
-          max={200}
-        />
-      </Group>
+      <NumberInput
+        size="xs"
+        label="Top-N samples"
+        value={topN}
+        onChange={(v) => setTopN(Math.max(1, Number(v) || 60))}
+        min={1}
+        max={200}
+      />
       <Switch
         size="xs"
         checked={showCI}
         onChange={(e) => setShowCI(e.currentTarget.checked)}
-        label="±SE band"
+        label="Show error bars (±SE)"
       />
     </Stack>
   );
@@ -243,10 +381,41 @@ const RarefactionRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }
       dataRows={rows ?? undefined}
       dataColumns={requiredCols}
     >
-      {figure ? (
+      {metricOptions.length > 1 ? (
+        // Tabs switcher (same pattern as DaBarplotRenderer's contrast switcher) —
+        // the metric is the dominant axis of comparison, so it's surfaced as the
+        // primary control above the chart instead of being buried in the popover.
+        <Tabs
+          value={activeMetric}
+          onChange={(v) => v && setActiveMetric(v)}
+          variant="outline"
+          radius="sm"
+          styles={{ root: { display: 'flex', flexDirection: 'column', height: '100%' } }}
+          keepMounted={false}
+        >
+          <Tabs.List>
+            {metricOptions.map((m) => (
+              <Tabs.Tab key={m} value={m}>
+                {m}
+              </Tabs.Tab>
+            ))}
+          </Tabs.List>
+          <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
+            {figure ? (
+              <Plot
+                data={applyDataTheme(figure.data, isDark, theme) as any}
+                layout={applyLayoutTheme(figure.layout as any, isDark, theme) as any}
+                useResizeHandler
+                style={{ width: '100%', height: '100%' }}
+                config={{ displaylogo: false, responsive: true } as any}
+              />
+            ) : null}
+          </div>
+        </Tabs>
+      ) : figure ? (
         <Plot
-          data={figure.data as any}
-          layout={figure.layout as any}
+          data={applyDataTheme(figure.data, isDark, theme) as any}
+          layout={applyLayoutTheme(figure.layout as any, isDark, theme) as any}
           useResizeHandler
           style={{ width: '100%', height: '100%' }}
           config={{ displaylogo: false, responsive: true } as any}

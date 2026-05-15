@@ -1,0 +1,201 @@
+{
+  "_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d43" },
+  "description": null,
+  "flexible_metadata": null,
+  "hash": null,
+  "dashboard_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d43" },
+  "version": 1,
+  "tmp_children_data": [],
+  "stored_layout_data": [],
+  "stored_children_data": [],
+  "stored_metadata": [
+    {
+      "index": "qq-chr-filter",
+      "component_type": "interactive",
+      "title": "Chromosome",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "manhattan_demo",
+      "wf_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d01" },
+      "dc_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d04" },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Manhattan fixture",
+        "data_collection_tag": "manhattan_demo",
+        "dc_specific_properties": null,
+        "_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d04" }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-13T00:00:00.000000",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "chr",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "title_size": "md",
+      "custom_color": "#9C27B0",
+      "icon_name": "mdi:dna",
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "qq-score-filter",
+      "component_type": "interactive",
+      "title": "-log10(p) range",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "manhattan_demo",
+      "wf_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d01" },
+      "dc_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d04" },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Manhattan fixture",
+        "data_collection_tag": "manhattan_demo",
+        "dc_specific_properties": null,
+        "_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d04" }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-13T00:00:00.000000",
+      "interactive_component_type": "RangeSlider",
+      "column_name": "score",
+      "column_type": "number",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "title_size": "md",
+      "custom_color": "#FF9800",
+      "icon_name": "mdi:filter-variant",
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "qq-card-tests",
+      "component_type": "card",
+      "title": "Tests",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "manhattan_demo",
+      "wf_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d01" },
+      "dc_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d04" },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Manhattan fixture (with p_value)",
+        "data_collection_tag": "manhattan_demo",
+        "dc_specific_properties": null,
+        "_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d04" }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-13T00:00:00.000000",
+      "aggregation": "count",
+      "column_name": "pos",
+      "column_type": "number",
+      "value": null,
+      "aggregations": null,
+      "filter_expr": null,
+      "icon_name": "mdi:chart-line",
+      "icon_color": "#9C27B0",
+      "title_color": "#9C27B0",
+      "title_font_size": "lg",
+      "value_font_size": "xl",
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "qq-plot",
+      "component_type": "advanced_viz",
+      "title": "QQ plot — p-value distribution",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "manhattan_demo",
+      "wf_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d01" },
+      "dc_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d04" },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Manhattan fixture",
+        "data_collection_tag": "manhattan_demo",
+        "dc_specific_properties": null,
+        "_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d04" }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-13T00:00:00.000000",
+      "viz_kind": "qq",
+      "config": {
+        "viz_kind": "qq",
+        "p_value_col": "p_value",
+        "feature_id_col": "feature",
+        "show_ci": true
+      },
+      "wf_tag": "python/advanced_viz_demo",
+      "description": "Observed vs expected -log10(p). 95% CI band, hover surfaces designed-hit rsids."
+    }
+  ],
+  "stored_edit_dashboard_mode_button": [],
+  "left_panel_layout_data": [
+    {
+      "i": "box-qq-chr-filter",
+      "x": 0,
+      "y": 0,
+      "w": 1,
+      "h": 4,
+      "static": false
+    },
+    {
+      "i": "box-qq-score-filter",
+      "x": 0,
+      "y": 4,
+      "w": 1,
+      "h": 4,
+      "static": false
+    }
+  ],
+  "right_panel_layout_data": [
+    { "i": "box-qq-card-tests", "x": 0, "y": 0, "w": 2, "h": 2, "static": true },
+    {
+      "i": "box-qq-plot",
+      "x": 0,
+      "y": 2,
+      "w": 8,
+      "h": 10,
+      "static": false,
+      "resizeHandles": ["se", "s", "e", "sw", "w"]
+    }
+  ],
+  "buttons_data": { "unified_edit_mode": true, "add_components_button": { "count": 0 } },
+  "stored_add_button": { "count": 0 },
+  "title": "QQ plot",
+  "subtitle": "Quantile-quantile of p-value distribution",
+  "icon": "mdi:chart-line",
+  "icon_color": "grape",
+  "icon_variant": "filled",
+  "workflow_system": "python",
+  "notes_content": "",
+  "permissions": {
+    "owners": [
+      {
+        "_id": { "$oid": "67658ba033c8b59ad489d7c7" },
+        "description": null,
+        "flexible_metadata": null,
+        "hash": null,
+        "email": "admin@example.com",
+        "is_admin": true,
+        "is_anonymous": false,
+        "is_temporary": false,
+        "expiration_time": null
+      }
+    ],
+    "editors": [],
+    "viewers": []
+  },
+  "is_public": true,
+  "last_saved_ts": "2026-05-13 00:00:00",
+  "project_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d00" },
+  "is_main_tab": false,
+  "parent_dashboard_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d00" },
+  "tab_order": 19,
+  "main_tab_name": null,
+  "tab_icon": "mdi:chart-line",
+  "tab_icon_color": "grape",
+  "parent_dashboard_title": null
+}

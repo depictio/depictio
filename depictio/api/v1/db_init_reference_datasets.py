@@ -113,6 +113,13 @@ STATIC_IDS = {
             "ancombc_demo": "646b0f3c1e4a2d7f8e5b8d21",
             "gsea_demo": "646b0f3c1e4a2d7f8e5b8d25",
             "upset_demo": "646b0f3c1e4a2d7f8e5b8d28",
+            # Six new viz fixtures landing alongside the kind-selector
+            # redesign — dotplot / lollipop / oncoplot get their own DCs;
+            # MA, QQ, sunburst reuse existing DCs (volcano, manhattan,
+            # stacked_taxonomy) with extended columns.
+            "dotplot_demo": "646b0f3c1e4a2d7f8e5b8d30",
+            "lollipop_demo": "646b0f3c1e4a2d7f8e5b8d31",
+            "oncoplot_demo": "646b0f3c1e4a2d7f8e5b8d32",
         },
         "dashboards": {
             # Main tab reuses the project_id so get_child_tabs(main_id) finds
@@ -127,13 +134,20 @@ STATIC_IDS = {
             "advanced_viz_clustering_umap": "646b0f3c1e4a2d7f8e5b8d15",
             "advanced_viz_clustering_tsne": "646b0f3c1e4a2d7f8e5b8d16",
             "advanced_viz_clustering_pcoa": "646b0f3c1e4a2d7f8e5b8d17",
-            "advanced_viz_phylogeny": "646b0f3c1e4a2d7f8e5b8d18",            "advanced_viz_clustering_live": "646b0f3c1e4a2d7f8e5b8d19",
+            "advanced_viz_phylogeny": "646b0f3c1e4a2d7f8e5b8d18",
+            "advanced_viz_clustering_live": "646b0f3c1e4a2d7f8e5b8d19",
             "advanced_viz_rarefaction": "646b0f3c1e4a2d7f8e5b8d22",
             "advanced_viz_ancombc": "646b0f3c1e4a2d7f8e5b8d23",
             "advanced_viz_da_barplot": "646b0f3c1e4a2d7f8e5b8d24",
             "advanced_viz_enrichment": "646b0f3c1e4a2d7f8e5b8d26",
             "advanced_viz_complex_heatmap": "646b0f3c1e4a2d7f8e5b8d27",
             "advanced_viz_upset": "646b0f3c1e4a2d7f8e5b8d29",
+            "advanced_viz_ma": "646b0f3c1e4a2d7f8e5b8d40",
+            "advanced_viz_dotplot": "646b0f3c1e4a2d7f8e5b8d41",
+            "advanced_viz_lollipop": "646b0f3c1e4a2d7f8e5b8d42",
+            "advanced_viz_qq": "646b0f3c1e4a2d7f8e5b8d43",
+            "advanced_viz_sunburst": "646b0f3c1e4a2d7f8e5b8d44",
+            "advanced_viz_oncoplot": "646b0f3c1e4a2d7f8e5b8d45",
         },
     },
 }
