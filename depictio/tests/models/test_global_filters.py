@@ -15,6 +15,13 @@ import pytest
 from pydantic import ValidationError
 
 from depictio.models.models.base import PyObjectId
+from depictio.models.models.dashboards import (
+    FunnelStep,
+    GlobalFilterDef,
+    GlobalFilterLink,
+    Journey,
+)
+from depictio.models.models.user_dashboard_state import UserDashboardState
 
 # Some classes below import from `depictio.api.v1.endpoints.*`, which pulls in
 # fastapi. The CLI quality job installs only model + cli deps, so skip those
@@ -23,13 +30,6 @@ requires_fastapi = pytest.mark.skipif(
     importlib.util.find_spec("fastapi") is None,
     reason="requires fastapi (API endpoint tests)",
 )
-from depictio.models.models.dashboards import (
-    FunnelStep,
-    GlobalFilterDef,
-    GlobalFilterLink,
-    Journey,
-)
-from depictio.models.models.user_dashboard_state import UserDashboardState
 
 
 def _make_filter(**overrides) -> GlobalFilterDef:
