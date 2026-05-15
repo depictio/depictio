@@ -194,15 +194,21 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
     // try/catch because the gd may have unmounted between scheduling and
     // running, and Plotly raises on a detached div.
     try {
-      // Cast: @types/plotly.js wants Plotly types on gd but the wrapper
-      // exposes a regular HTMLElement that Plotly accepts at runtime.
+      // Casts: @types/plotly.js wants Plotly types on gd but the wrapper
+      // exposes a regular HTMLElement that Plotly accepts at runtime; and
+      // `selections` / `selectedpoints` aren't in the typed layout/style
+      // surface but Plotly accepts them as a known clear-state idiom.
       const target = gd as unknown as Parameters<typeof Plotly.relayout>[0];
-      Plotly.relayout(target, { selections: null }).catch(() => {});
+      Plotly.relayout(target, { selections: null } as Partial<Plotly.Layout>).catch(() => {});
       const data = (gd as unknown as { data?: unknown[] }).data;
       const traceCount = Array.isArray(data) ? data.length : 0;
       if (traceCount > 0) {
         const indices = Array.from({ length: traceCount }, (_, i) => i);
-        Plotly.restyle(target, { selectedpoints: [null] }, indices).catch(() => {});
+        Plotly.restyle(
+          target,
+          { selectedpoints: [null] } as Partial<Plotly.PlotData>,
+          indices,
+        ).catch(() => {});
       }
     } catch {
       // best-effort: gd may have unmounted between schedule and run
