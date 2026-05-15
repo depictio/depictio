@@ -137,9 +137,9 @@ const NotesFooter: React.FC<NotesFooterProps> = ({
 
   return (
     <>
-      {/* Fixed floating toggle button, anchored bottom-left. Stays visible at
+      {/* Fixed floating toggle button, anchored bottom-right. Stays visible at
        *  all times so the user can open the notes from anywhere on the page. */}
-      <Tooltip label="Dashboard notes" position="right" withArrow>
+      <Tooltip label="Dashboard notes" position="left" withArrow>
         <ActionIcon
           aria-label="Toggle dashboard notes"
           onClick={handleToggle}
@@ -150,7 +150,7 @@ const NotesFooter: React.FC<NotesFooterProps> = ({
           style={{
             position: 'fixed',
             bottom: 16,
-            left: 16,
+            right: 16,
             zIndex: 200,
             boxShadow: '0 2px 8px rgba(0, 0, 0, 0.15)',
           }}
