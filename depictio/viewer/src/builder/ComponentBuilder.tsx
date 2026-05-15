@@ -13,6 +13,7 @@ import TableBuilder from './table/TableBuilder';
 import MultiQCBuilder from './multiqc/MultiQCBuilder';
 import ImageBuilder from './image/ImageBuilder';
 import MapBuilder from './map/MapBuilder';
+import TextBuilder from './text/TextBuilder';
 
 const ComponentBuilder: React.FC = () => {
   const componentType = useBuilderStore((s) => s.componentType);
@@ -32,6 +33,8 @@ const ComponentBuilder: React.FC = () => {
       return <ImageBuilder />;
     case 'map':
       return <MapBuilder />;
+    case 'text':
+      return <TextBuilder />;
     default:
       return (
         <Alert color="yellow" title="Unknown component type">
