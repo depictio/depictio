@@ -189,6 +189,9 @@ importers:
       '@mantine/hooks':
         specifier: ^7.14.0
         version: 7.17.8(react@18.3.1)
+      '@types/plotly.js':
+        specifier: ^2.33.0
+        version: 2.35.14
       '@types/react':
         specifier: ^18.3.0
         version: 18.3.28
