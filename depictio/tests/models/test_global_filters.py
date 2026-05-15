@@ -9,10 +9,20 @@ requires a mongomock fixture.
 
 from __future__ import annotations
 
+import importlib.util
+
 import pytest
 from pydantic import ValidationError
 
 from depictio.models.models.base import PyObjectId
+
+# Some classes below import from `depictio.api.v1.endpoints.*`, which pulls in
+# fastapi. The CLI quality job installs only model + cli deps, so skip those
+# class blocks when fastapi isn't importable.
+requires_fastapi = pytest.mark.skipif(
+    importlib.util.find_spec("fastapi") is None,
+    reason="requires fastapi (API endpoint tests)",
+)
 from depictio.models.models.dashboards import (
     FunnelStep,
     GlobalFilterDef,
@@ -417,6 +427,7 @@ class TestDashboardDataIntegration:
         assert dumped["journeys"][0]["steps"][0]["global_filter_id"] == "gf_abc"
 
 
+@requires_fastapi
 class TestGlobalFiltersEndpointNormalizers:
     """Regression tests for the `_id`→`id` rename helpers in
     ``depictio.api.v1.endpoints.dashboards_endpoints.global_filters``.
@@ -463,6 +474,7 @@ class TestGlobalFiltersEndpointNormalizers:
         assert all("_id" not in s for s in out["steps"])
 
 
+@requires_fastapi
 class TestMeasureDf:
     """Unit tests for the ``_measure_df`` helper that powers the metric
     toggle in ``compute_funnel`` (``rows`` vs ``nunique``)."""
@@ -502,6 +514,7 @@ class TestMeasureDf:
         assert _measure_df(df, "nunique", None) == 0
 
 
+@requires_fastapi
 class TestFunnelRequestEnvelope:
     """Validation of the ``FunnelRequest`` envelope — new ``metric`` and
     ``metric_column`` fields with safe defaults."""
@@ -529,6 +542,7 @@ class TestFunnelRequestEnvelope:
             FunnelRequest(metric="median")
 
 
+@requires_fastapi
 class TestComputeFunnelIntegration:
     """End-to-end test of ``compute_funnel`` with mocked DB + delta-table.
 
