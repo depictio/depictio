@@ -68,12 +68,6 @@ CANONICAL_SCHEMAS: dict[AdvancedVizKind, dict[str, frozenset[str]]] = {
         "depth": _NUMERIC,
         "metric": _NUMERIC,
     },
-    "ancombc_differentials": {
-        "feature_id": _STRING,
-        "contrast": _STRING,
-        "lfc": _FLOAT,
-        "significance": _FLOAT,
-    },
     "da_barplot": {
         "feature_id": _STRING,
         "contrast": _STRING,
@@ -159,9 +153,6 @@ _OPTIONAL_ROLES: dict[AdvancedVizKind, dict[str, frozenset[str]]] = {
     "rarefaction": {
         "iter": _NUMERIC,
         "group": _STRING,
-    },
-    "ancombc_differentials": {
-        "label": _STRING,
     },
     "da_barplot": {
         "significance": _FLOAT,

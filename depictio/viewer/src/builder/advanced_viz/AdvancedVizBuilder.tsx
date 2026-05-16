@@ -90,12 +90,6 @@ const REQUIRED_ROLES: Record<AdvancedVizKind, Record<string, string[]>> = {
     depth: NUMERIC_ANY,
     metric: NUMERIC_ANY,
   },
-  ancombc_differentials: {
-    feature_id: STRING_LIKE,
-    contrast: STRING_LIKE,
-    lfc: NUMERIC_FLOAT,
-    significance: NUMERIC_FLOAT,
-  },
   da_barplot: {
     feature_id: STRING_LIKE,
     contrast: STRING_LIKE,
@@ -160,7 +154,6 @@ const OPTIONAL_ROLES: Record<AdvancedVizKind, Record<string, string[]>> = {
   stacked_taxonomy: {},
   phylogenetic: {},
   rarefaction: { iter: NUMERIC_ANY, group: STRING_LIKE },
-  ancombc_differentials: { label: STRING_LIKE },
   da_barplot: { significance: NUMERIC_FLOAT, label: STRING_LIKE },
   enrichment: { source: STRING_LIKE },
   complex_heatmap: {},

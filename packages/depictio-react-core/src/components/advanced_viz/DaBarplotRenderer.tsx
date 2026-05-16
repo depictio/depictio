@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { NumberInput, Stack, Tabs, useMantineColorScheme, useMantineTheme } from '@mantine/core';
+import { NumberInput, ScrollArea, Stack, Tabs, useMantineColorScheme, useMantineTheme } from '@mantine/core';
 import Plot from 'react-plotly.js';
 
 import { fetchAdvancedVizData, InteractiveFilter, StoredMetadata } from '../../api';
@@ -14,6 +14,7 @@ interface DaBarplotConfig {
   label_col?: string | null;
   significance_threshold?: number;
   top_n?: number;
+  contrast_view?: string;
 }
 
 interface Props {
@@ -25,6 +26,9 @@ interface Props {
 const POSITIVE = '#1f77b4';
 const NEGATIVE = '#d62728';
 const FADED = 'rgba(127,127,127,0.45)';
+const ALL_TAB = 'all';
+
+type FeatureRow = { feat: string; label: string; lfc: number; sig: number };
 
 const DaBarplotRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => {
   const { colorScheme } = useMantineColorScheme();
@@ -34,7 +38,7 @@ const DaBarplotRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) 
 
   const [topN, setTopN] = useState<number>(config.top_n ?? 15);
   const [sigThreshold, setSigThreshold] = useState<number>(config.significance_threshold ?? 0.05);
-  const [activeContrast, setActiveContrast] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<string | null>(null);
 
   const requiredCols = useMemo(() => {
     const cols = [config.feature_id_col, config.contrast_col, config.lfc_col].filter(Boolean) as string[];
@@ -72,9 +76,8 @@ const DaBarplotRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) 
     };
   }, [metadata.wf_id, metadata.dc_id, JSON.stringify(requiredCols), JSON.stringify(filters), refreshTick]);
 
-  // Group rows by contrast once — both the Tabs.List and the active panel
+  // Group rows by contrast once — both the tabs list and the active panel
   // read from the same Map so contrast switching never re-traverses raw rows.
-  type FeatureRow = { feat: string; label: string; lfc: number; sig: number };
   const { byContrast, contrastNames } = useMemo(() => {
     const map = new Map<string, FeatureRow[]>();
     if (!rows) return { byContrast: map, contrastNames: [] as string[] };
@@ -104,27 +107,40 @@ const DaBarplotRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) 
     return { byContrast: map, contrastNames: Array.from(map.keys()).sort() };
   }, [rows, config]);
 
-  // Initialise / heal the active tab when contrasts become available or change.
+  // The "All" tab shows up only when there's more than one contrast — otherwise
+  // it would just duplicate the only contrast tab.
+  const showAllTab = contrastNames.length > 1;
+  const tabValues = useMemo(
+    () => (showAllTab ? [ALL_TAB, ...contrastNames] : contrastNames),
+    [contrastNames, showAllTab],
+  );
+
+  // Initialise / heal the active tab when contrasts arrive.
+  // Default comes from config.contrast_view: "all" → All tab; a specific
+  // contrast string → that tab; anything else → first available tab.
   useEffect(() => {
-    if (contrastNames.length === 0) return;
-    if (!activeContrast || !contrastNames.includes(activeContrast)) {
-      setActiveContrast(contrastNames[0]);
+    if (tabValues.length === 0) return;
+    if (activeTab && tabValues.includes(activeTab)) return;
+    const preferred = config.contrast_view;
+    if (preferred && tabValues.includes(preferred)) {
+      setActiveTab(preferred);
+    } else if (showAllTab) {
+      setActiveTab(ALL_TAB);
+    } else {
+      setActiveTab(tabValues[0]);
     }
-  }, [contrastNames, activeContrast]);
+  }, [tabValues, activeTab, config.contrast_view, showAllTab]);
 
-  const figure = useMemo(() => {
-    if (!activeContrast) return null;
-    const all = byContrast.get(activeContrast);
+  // Build the bar trace + layout for a single contrast. Returned shape is
+  // ready to pass directly to react-plotly.js.
+  const buildPanel = (contrastName: string) => {
+    const all = byContrast.get(contrastName);
     if (!all || all.length === 0) return null;
-
-    // Sort by |LFC|, take top-N, then re-sort by signed LFC so positives sit
-    // at the top of the y-axis (plotly draws first item at the bottom).
     const ranked = [...all].sort((a, b) => Math.abs(b.lfc) - Math.abs(a.lfc)).slice(0, topN);
     ranked.sort((a, b) => a.lfc - b.lfc);
     const colour = ranked.map((r) =>
       r.sig <= sigThreshold ? (r.lfc >= 0 ? POSITIVE : NEGATIVE) : FADED,
     );
-
     return {
       data: [
         {
@@ -162,13 +178,13 @@ const DaBarplotRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) 
         autosize: true,
       },
     };
-  }, [activeContrast, byContrast, topN, sigThreshold, config, isDark, theme]);
+  };
 
   const controls = (
     <Stack gap="xs">
       <NumberInput
         size="xs"
-        label="Top-N per contrast"
+        label="Top-N per panel"
         value={topN}
         onChange={(v) => setTopN(Math.max(1, Number(v) || 15))}
         min={1}
@@ -187,9 +203,55 @@ const DaBarplotRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) 
     </Stack>
   );
 
+  // Per-panel height for the faceted "All" view. Tight enough to fit several
+  // contrasts in view without forcing scroll for 2–3 panels.
+  const FACETED_PANEL_HEIGHT = 240;
+
+  const renderAllFaceted = () => (
+    <ScrollArea style={{ width: '100%', height: '100%' }}>
+      <Stack gap="md" p="xs">
+        {contrastNames.map((c) => {
+          const panel = buildPanel(c);
+          if (!panel) return null;
+          const layout = {
+            ...panel.layout,
+            title: { text: c, font: { size: 12 } },
+            margin: { ...panel.layout.margin, t: 32 },
+          };
+          return (
+            <div key={c} style={{ height: FACETED_PANEL_HEIGHT, position: 'relative' }}>
+              <Plot
+                data={applyDataTheme(panel.data, isDark, theme) as any}
+                layout={applyLayoutTheme(layout as any, isDark, theme) as any}
+                useResizeHandler
+                style={{ width: '100%', height: '100%' }}
+                config={{ displaylogo: false, responsive: true } as any}
+              />
+            </div>
+          );
+        })}
+      </Stack>
+    </ScrollArea>
+  );
+
+  const renderSinglePanel = () => {
+    if (!activeTab || activeTab === ALL_TAB) return null;
+    const panel = buildPanel(activeTab);
+    if (!panel) return null;
+    return (
+      <Plot
+        data={applyDataTheme(panel.data, isDark, theme) as any}
+        layout={applyLayoutTheme(panel.layout as any, isDark, theme) as any}
+        useResizeHandler
+        style={{ width: '100%', height: '100%' }}
+        config={{ displaylogo: false, responsive: true } as any}
+      />
+    );
+  };
+
   return (
     <AdvancedVizFrame
-      title={metadata.title || 'DA barplot (per contrast)'}
+      title={metadata.title || 'DA barplot'}
       subtitle={(metadata as any).description || (metadata as any).subtitle}
       controls={controls}
       loading={loading}
@@ -198,32 +260,24 @@ const DaBarplotRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) 
       dataRows={rows ?? undefined}
       dataColumns={requiredCols}
     >
-      {contrastNames.length > 0 ? (
+      {tabValues.length > 0 ? (
         <Tabs
-          value={activeContrast}
-          onChange={setActiveContrast}
+          value={activeTab}
+          onChange={setActiveTab}
           variant="outline"
           radius="sm"
           styles={{ root: { display: 'flex', flexDirection: 'column', height: '100%' } }}
           keepMounted={false}
         >
           <Tabs.List>
-            {contrastNames.map((c) => (
-              <Tabs.Tab key={c} value={c}>
-                {c}
+            {tabValues.map((v) => (
+              <Tabs.Tab key={v} value={v}>
+                {v === ALL_TAB ? 'All' : v}
               </Tabs.Tab>
             ))}
           </Tabs.List>
           <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
-            {figure ? (
-              <Plot
-                data={applyDataTheme(figure.data, isDark, theme) as any}
-                layout={applyLayoutTheme(figure.layout as any, isDark, theme) as any}
-                useResizeHandler
-                style={{ width: '100%', height: '100%' }}
-                config={{ displaylogo: false, responsive: true } as any}
-              />
-            ) : null}
+            {activeTab === ALL_TAB ? renderAllFaceted() : renderSinglePanel()}
           </div>
         </Tabs>
       ) : null}

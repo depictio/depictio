@@ -32,7 +32,6 @@ AdvancedVizKind = Literal[
     "stacked_taxonomy",
     "phylogenetic",
     "rarefaction",
-    "ancombc_differentials",
     "da_barplot",
     "enrichment",
     "complex_heatmap",

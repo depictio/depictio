@@ -16,7 +16,6 @@ import ManhattanRenderer from './advanced_viz/ManhattanRenderer';
 import StackedTaxonomyRenderer from './advanced_viz/StackedTaxonomyRenderer';
 import PhylogeneticRenderer from './advanced_viz/PhylogeneticRenderer';
 import RarefactionRenderer from './advanced_viz/RarefactionRenderer';
-import ANCOMBCDifferentialsRenderer from './advanced_viz/ANCOMBCDifferentialsRenderer';
 import DaBarplotRenderer from './advanced_viz/DaBarplotRenderer';
 import EnrichmentRenderer from './advanced_viz/EnrichmentRenderer';
 import ComplexHeatmapRenderer from './advanced_viz/ComplexHeatmapRenderer';
@@ -487,9 +486,9 @@ const AdvancedVizDispatch: React.FC<AdvancedVizDispatchProps> = ({
     inner = <PhylogeneticRenderer {...(advProps as any)} />;
   } else if (vizKind === 'rarefaction') {
     inner = <RarefactionRenderer {...(advProps as any)} />;
-  } else if (vizKind === 'ancombc_differentials') {
-    inner = <ANCOMBCDifferentialsRenderer {...(advProps as any)} />;
-  } else if (vizKind === 'da_barplot') {
+  } else if (vizKind === 'da_barplot' || vizKind === 'ancombc_differentials') {
+    // ancombc_differentials was collapsed into da_barplot — legacy persisted
+    // dashboards still carry the old kind string and need the same renderer.
     inner = <DaBarplotRenderer {...(advProps as any)} />;
   } else if (vizKind === 'enrichment') {
     inner = <EnrichmentRenderer {...(advProps as any)} />;

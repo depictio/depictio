@@ -70,15 +70,13 @@ _KIND_METADATA: dict[AdvancedVizKind, dict[str, Any]] = {
         "description": "Alpha-diversity vs sequencing depth — one line per sample with ±SE band and group colouring.",
         "icon": "tabler:chart-line",
     },
-    "ancombc_differentials": {
-        "label": "ANCOM-BC differential abundance (tool)",
-        "description": "Ranked signed-LFC horizontal bar of differentially-abundant features for the selected contrast.",
-        "icon": "tabler:chart-bar",
-        "category": "tool",
-    },
     "da_barplot": {
-        "label": "Differential-abundance bars (tool, per contrast)",
-        "description": "Faceted top-N differentially-abundant features, one panel per contrast.",
+        "label": "Differential-abundance bars (tool)",
+        "description": (
+            'Ranked signed-LFC top-N features for differential abundance — `contrast_view: "all"` '
+            "(default) faceted small-multiples, or any specific contrast value for a single-panel drill-in. "
+            "Replaces the previous ancombc_differentials kind (auto-migrated)."
+        ),
         "icon": "tabler:chart-bar-popular",
         "category": "tool",
     },

@@ -170,49 +170,38 @@ class RarefactionConfig(_BaseVizConfig):
     show_ci: bool = Field(default=True, description="Shade ±1 SE band around each sample's curve")
 
 
-class ANCOMBCDifferentialsConfig(_BaseVizConfig):
-    """Ranked horizontal bar of ANCOM-BC log-fold-changes.
-
-    Long-format input: one row per (feature, contrast) with lfc + significance.
-    Renders top-N features by |lfc| for the selected contrast as a signed
-    horizontal bar (up = enriched in the contrast's numerator, down = depleted).
-    Orthogonal to the volcano viz — same data, different question.
-    """
-
-    viz_kind: Literal["ancombc_differentials"] = "ancombc_differentials"
-
-    feature_id_col: str = Field(..., description="Feature / taxon identifier")
-    contrast_col: str = Field(..., description="Contrast name (used for the dropdown)")
-    lfc_col: str = Field(..., description="Log-fold-change (signed)")
-    significance_col: str = Field(
-        ..., description="FDR-adjusted p-value (used to bold significant bars)"
-    )
-    label_col: str | None = Field(
-        default=None, description="Optional column for the bar's display label"
-    )
-    significance_threshold: float = Field(default=0.05, ge=0.0, le=1.0)
-    top_n: int = Field(default=25, ge=1)
-
-
 class DaBarplotConfig(_BaseVizConfig):
-    """Per-contrast differential-abundance barplot.
+    """Differential-abundance barplot — single panel or faceted across contrasts.
 
-    Faceted variant of the ANCOM-BC differentials viz: one small-multiples
-    panel per contrast, top-N features ordered by signed lfc within each
-    panel. Useful for comparing multiple contrasts side by side.
+    Long-format input: one row per (feature, contrast) with lfc + optional
+    significance. Renders top-N features by |lfc|. ``contrast_view`` controls
+    layout: ``"all"`` = faceted small-multiples (one panel per contrast); any
+    specific contrast value = single panel drilling into that contrast.
+
+    Previously split into ``ancombc_differentials`` (single-panel + contrast
+    dropdown) and ``da_barplot`` (faceted). Both collapsed here — the legacy
+    ``viz_kind: ancombc_differentials`` string is rewritten to ``da_barplot``
+    at deserialisation by AdvancedVizLiteComponent's pre-validator.
     """
 
     viz_kind: Literal["da_barplot"] = "da_barplot"
 
     feature_id_col: str = Field(..., description="Feature / taxon identifier")
-    contrast_col: str = Field(..., description="Faceting column (one panel per contrast)")
+    contrast_col: str = Field(..., description="Contrast name (faceting + single-panel filter)")
     lfc_col: str = Field(..., description="Log-fold-change (signed)")
     significance_col: str | None = Field(
         default=None, description="FDR-adjusted p-value (for highlighting significant bars)"
     )
     label_col: str | None = Field(default=None, description="Optional display label")
     significance_threshold: float = Field(default=0.05, ge=0.0, le=1.0)
-    top_n: int = Field(default=15, ge=1, description="Top features (by |lfc|) shown per contrast")
+    top_n: int = Field(default=15, ge=1, description="Top features (by |lfc|) shown per panel")
+    contrast_view: str = Field(
+        default="all",
+        description=(
+            "'all' → faceted view (one panel per contrast); any specific contrast value → "
+            "single-panel drill-in. Used as the initial active tab in the React renderer."
+        ),
+    )
 
 
 class EnrichmentConfig(_BaseVizConfig):
@@ -580,7 +569,6 @@ VizConfig = Annotated[
     | StackedTaxonomyConfig
     | PhylogeneticConfig
     | RarefactionConfig
-    | ANCOMBCDifferentialsConfig
     | DaBarplotConfig
     | EnrichmentConfig
     | ComplexHeatmapConfig

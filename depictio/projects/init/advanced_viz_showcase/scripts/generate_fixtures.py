@@ -446,9 +446,9 @@ write_tsv(
 
 
 # ---------------------------------------------------------------------------
-# 6. ANCOM-BC differentials: 200 taxa across 3 contrasts. Drives both the
-#    ANCOMBCDifferentialsRenderer (ranked horizontal bar for one contrast)
-#    and the DaBarplotRenderer (faceted top-N per contrast).
+# 6. ANCOM-BC differentials: 200 taxa across 3 contrasts. Drives the merged
+#    DaBarplotRenderer in both its faceted ('All' tab) and single-contrast
+#    (per-contrast tab) layouts.
 # columns: feature_id, contrast, lfc, significance, label, neg_log10_q
 # ---------------------------------------------------------------------------
 TAXA = [f"OTU{i:04d}" for i in range(200)]
