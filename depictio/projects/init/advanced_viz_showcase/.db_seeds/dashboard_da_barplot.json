@@ -51,45 +51,6 @@
       },
       "wf_tag": "python/advanced_viz_demo",
       "description": "Each panel shows the top-N taxa (by |lfc|) for one contrast. Bars coloured by direction; greyed when above the significance threshold."
-    },
-    {
-      "index": "da-table",
-      "component_type": "table",
-      "title": "All differentials",
-      "workflow_tag": "advanced_viz_demo",
-      "data_collection_tag": "ancombc_demo",
-      "wf_id": {
-        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
-      },
-      "dc_id": {
-        "$oid": "646b0f3c1e4a2d7f8e5b8d21"
-      },
-      "dc_config": {
-        "type": null,
-        "metatype": null,
-        "description": "Synthetic ANCOM-BC differentials",
-        "data_collection_tag": "ancombc_demo",
-        "dc_specific_properties": null,
-        "_id": {
-          "$oid": "646b0f3c1e4a2d7f8e5b8d21"
-        }
-      },
-      "cols_json": {},
-      "parent_index": null,
-      "last_updated": "2026-05-12T00:00:00.000000",
-      "columns": [
-        "feature_id",
-        "contrast",
-        "lfc",
-        "significance",
-        "label"
-      ],
-      "page_size": 10,
-      "sortable": true,
-      "filterable": true,
-      "row_selection_enabled": false,
-      "row_selection_column": null,
-      "wf_tag": "python/advanced_viz_demo"
     }
   ],
   "stored_edit_dashboard_mode_button": [],
@@ -99,23 +60,8 @@
       "i": "box-da-bar",
       "x": 0,
       "y": 0,
-      "w": 8,
-      "h": 12,
-      "static": false,
-      "resizeHandles": [
-        "se",
-        "s",
-        "e",
-        "sw",
-        "w"
-      ]
-    },
-    {
-      "i": "box-da-table",
-      "x": 0,
-      "y": 12,
-      "w": 8,
-      "h": 5,
+      "w": 12,
+      "h": 8,
       "static": false,
       "resizeHandles": [
         "se",

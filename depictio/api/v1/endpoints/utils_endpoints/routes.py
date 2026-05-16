@@ -829,6 +829,72 @@ async def screenshot_dash_dual(dashboard_id: str, current_user=Depends(get_curre
         raise HTTPException(status_code=500, detail=result.get("error", "Screenshot failed"))
 
 
+@utils_endpoint_router.get("/screenshot-react-dual/{dashboard_id}")
+async def screenshot_react_dual(
+    dashboard_id: str,
+    open_settings: bool = False,
+    filename_prefix: str = "react",
+    authorization: str | None = Header(None),
+):
+    """Generate light + dark screenshots of the React beta viewer.
+
+    Sibling of `/screenshot-dash-dual` but drives the SPA bundle at
+    `{settings.fastapi.url}/dashboard-beta/{dashboard_id}` (the React/Vite
+    build that FastAPI itself serves) instead of the Dash app on port 5080.
+
+    Single-user mode skips auth; otherwise the caller must be a dashboard owner.
+
+    Query params:
+        open_settings: click the first `aria-label="Viz settings"` ActionIcon
+            before capturing so the popover shows in the shot (best-effort —
+            silently disabled when no settings cog is present). When the
+            popover opens, we switch to a viewport capture because Mantine
+            portals dropdowns outside AppShell.Main.
+        filename_prefix: PNG filename prefix (default `react`) — change it to
+            keep parallel batches in the same output folder from clobbering
+            each other.
+
+    Returns:
+        ScreenshotResult dict with `light_screenshot` / `dark_screenshot`
+        paths (host-visible via the bind-mounted screenshots dir).
+    """
+    from depictio.api.v1.services.screenshot_service import (
+        check_dashboard_owner_permission,
+        generate_react_dual_theme_screenshots,
+    )
+
+    user_id: str | None = None
+    if not settings.auth.is_single_user_mode:
+        if not authorization or not authorization.startswith("Bearer "):
+            raise HTTPException(
+                status_code=401, detail="Authentication required for screenshot generation"
+            )
+        token = authorization.replace("Bearer ", "")
+        try:
+            current_user = await get_current_user(token)
+        except HTTPException:
+            raise HTTPException(status_code=401, detail="Invalid authentication token")
+        is_owner = await check_dashboard_owner_permission(
+            dashboard_id=dashboard_id, user_id=str(current_user.id)
+        )
+        if not is_owner:
+            raise HTTPException(
+                status_code=403, detail="Only dashboard owners can generate screenshots"
+            )
+        user_id = str(current_user.id)
+
+    result = await generate_react_dual_theme_screenshots(
+        dashboard_id=dashboard_id,
+        user_id=user_id,
+        open_settings=open_settings,
+        filename_prefix=filename_prefix,
+    )
+
+    if result["status"] in ("success", "skipped"):
+        return result
+    raise HTTPException(status_code=500, detail=result.get("error", "Screenshot failed"))
+
+
 @utils_endpoint_router.get("/infrastructure-diagnostics")
 async def infrastructure_diagnostics(current_user=Depends(get_current_user)):
     """

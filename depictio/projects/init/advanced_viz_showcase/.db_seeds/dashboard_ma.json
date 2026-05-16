@@ -14,119 +14,9 @@
   "stored_children_data": [],
   "stored_metadata": [
     {
-      "index": "ma-pathway-filter",
-      "component_type": "interactive",
-      "title": "Pathway",
-      "workflow_tag": "advanced_viz_demo",
-      "data_collection_tag": "volcano_demo",
-      "wf_id": {
-        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
-      },
-      "dc_id": {
-        "$oid": "646b0f3c1e4a2d7f8e5b8d02"
-      },
-      "dc_config": {
-        "type": null,
-        "metatype": null,
-        "description": "Synthetic volcano fixture",
-        "data_collection_tag": "volcano_demo",
-        "dc_specific_properties": null,
-        "_id": {
-          "$oid": "646b0f3c1e4a2d7f8e5b8d02"
-        }
-      },
-      "cols_json": {},
-      "parent_index": null,
-      "last_updated": "2026-05-13T00:00:00.000000",
-      "interactive_component_type": "MultiSelect",
-      "column_name": "category",
-      "column_type": "object",
-      "value": null,
-      "default_state": null,
-      "filter_expr": null,
-      "title_size": "md",
-      "custom_color": "#E91E63",
-      "icon_name": "mdi:tag-multiple",
-      "wf_tag": "python/advanced_viz_demo"
-    },
-    {
-      "index": "ma-contrast-filter",
-      "component_type": "interactive",
-      "title": "Contrast",
-      "workflow_tag": "advanced_viz_demo",
-      "data_collection_tag": "volcano_demo",
-      "wf_id": {
-        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
-      },
-      "dc_id": {
-        "$oid": "646b0f3c1e4a2d7f8e5b8d02"
-      },
-      "dc_config": {
-        "type": null,
-        "metatype": null,
-        "description": "Synthetic volcano fixture",
-        "data_collection_tag": "volcano_demo",
-        "dc_specific_properties": null,
-        "_id": {
-          "$oid": "646b0f3c1e4a2d7f8e5b8d02"
-        }
-      },
-      "cols_json": {},
-      "parent_index": null,
-      "last_updated": "2026-05-13T00:00:00.000000",
-      "interactive_component_type": "MultiSelect",
-      "column_name": "label",
-      "column_type": "object",
-      "value": null,
-      "default_state": null,
-      "filter_expr": null,
-      "title_size": "md",
-      "custom_color": "#2196F3",
-      "icon_name": "mdi:compare-horizontal",
-      "wf_tag": "python/advanced_viz_demo"
-    },
-    {
-      "index": "ma-card-total",
-      "component_type": "card",
-      "title": "Total tests",
-      "workflow_tag": "advanced_viz_demo",
-      "data_collection_tag": "volcano_demo",
-      "wf_id": {
-        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
-      },
-      "dc_id": {
-        "$oid": "646b0f3c1e4a2d7f8e5b8d02"
-      },
-      "dc_config": {
-        "type": null,
-        "metatype": null,
-        "description": "Synthetic volcano fixture",
-        "data_collection_tag": "volcano_demo",
-        "dc_specific_properties": null,
-        "_id": {
-          "$oid": "646b0f3c1e4a2d7f8e5b8d02"
-        }
-      },
-      "cols_json": {},
-      "parent_index": null,
-      "last_updated": "2026-05-13T00:00:00.000000",
-      "aggregation": "count",
-      "column_name": "feature_id",
-      "column_type": "object",
-      "value": null,
-      "aggregations": null,
-      "filter_expr": null,
-      "icon_name": "mdi:dna",
-      "icon_color": "#8E44AD",
-      "title_color": "#8E44AD",
-      "title_font_size": "lg",
-      "value_font_size": "xl",
-      "wf_tag": "python/advanced_viz_demo"
-    },
-    {
       "index": "ma-plot",
       "component_type": "advanced_viz",
-      "title": "MA plot — differential abundance",
+      "title": "MA plot \u2014 differential abundance",
       "workflow_tag": "advanced_viz_demo",
       "data_collection_tag": "volcano_demo",
       "wf_id": {
@@ -161,99 +51,37 @@
         "top_n_labels": 15
       },
       "wf_tag": "python/advanced_viz_demo",
-      "description": "Mean log intensity vs log2 fold change — same tier-colour story as the volcano, different axis pairing."
-    },
-    {
-      "index": "ma-table",
-      "component_type": "table",
-      "title": "Underlying data",
-      "workflow_tag": "advanced_viz_demo",
-      "data_collection_tag": "volcano_demo",
-      "wf_id": {
-        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
-      },
-      "dc_id": {
-        "$oid": "646b0f3c1e4a2d7f8e5b8d02"
-      },
-      "dc_config": {
-        "type": null,
-        "metatype": null,
-        "description": "Synthetic volcano fixture",
-        "data_collection_tag": "volcano_demo",
-        "dc_specific_properties": null,
-        "_id": {
-          "$oid": "646b0f3c1e4a2d7f8e5b8d02"
-        }
-      },
-      "cols_json": {},
-      "parent_index": null,
-      "last_updated": "2026-05-13T00:00:00.000000",
-      "columns": [
-        "feature_id",
-        "avg_log_intensity",
-        "effect_size",
-        "significance"
-      ],
-      "page_size": 10,
-      "sortable": true,
-      "filterable": true,
-      "row_selection_enabled": false,
-      "row_selection_column": null,
-      "wf_tag": "python/advanced_viz_demo"
+      "description": "Mean log intensity vs log2 fold change \u2014 same tier-colour story as the volcano, different axis pairing."
     }
   ],
   "stored_edit_dashboard_mode_button": [],
-  "left_panel_layout_data": [
-    {
-      "i": "box-ma-pathway-filter",
-      "x": 0,
-      "y": 0,
-      "w": 1,
-      "h": 4,
-      "static": false
-    },
-    {
-      "i": "box-ma-contrast-filter",
-      "x": 0,
-      "y": 4,
-      "w": 1,
-      "h": 4,
-      "static": false
-    }
-  ],
+  "left_panel_layout_data": [],
   "right_panel_layout_data": [
-    {
-      "i": "box-ma-card-total",
-      "x": 0,
-      "y": 0,
-      "w": 2,
-      "h": 2,
-      "static": true
-    },
     {
       "i": "box-ma-plot",
       "x": 0,
-      "y": 2,
-      "w": 8,
+      "y": 0,
+      "w": 12,
       "h": 8,
       "static": false,
-      "resizeHandles": ["se", "s", "e", "sw", "w"]
-    },
-    {
-      "i": "box-ma-table",
-      "x": 0,
-      "y": 10,
-      "w": 8,
-      "h": 5,
-      "static": false,
-      "resizeHandles": ["se", "s", "e", "sw", "w"]
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
     }
   ],
   "buttons_data": {
     "unified_edit_mode": true,
-    "add_components_button": { "count": 0 }
+    "add_components_button": {
+      "count": 0
+    }
   },
-  "stored_add_button": { "count": 0 },
+  "stored_add_button": {
+    "count": 0
+  },
   "title": "MA plot",
   "subtitle": "Mean log intensity vs log2 fold change",
   "icon": "mdi:chart-bell-curve",
@@ -264,7 +92,9 @@
   "permissions": {
     "owners": [
       {
-        "_id": { "$oid": "67658ba033c8b59ad489d7c7" },
+        "_id": {
+          "$oid": "67658ba033c8b59ad489d7c7"
+        },
         "description": null,
         "flexible_metadata": null,
         "hash": null,
@@ -280,9 +110,13 @@
   },
   "is_public": true,
   "last_saved_ts": "2026-05-13 00:00:00",
-  "project_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d00" },
+  "project_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d00"
+  },
   "is_main_tab": false,
-  "parent_dashboard_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d00" },
+  "parent_dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d00"
+  },
   "tab_order": 16,
   "main_tab_name": null,
   "tab_icon": "mdi:chart-bell-curve",

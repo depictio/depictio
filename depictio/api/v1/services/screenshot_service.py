@@ -331,3 +331,195 @@ async def generate_dual_theme_screenshots(
             "error": str(e),
         }
         return error_result
+
+
+async def _try_open_viz_settings(page: Page) -> bool:
+    """Click the first advanced-viz settings cog so the popover shows in the shot.
+
+    Returns True if the popover opened. Silently returns False when the viz
+    being screenshotted is something other than an advanced-viz (or when the
+    popover fails to mount for any reason) — the caller continues with a
+    settings-closed capture in that case.
+    """
+    btn = await page.query_selector('[aria-label="Viz settings"]')
+    if not btn:
+        return False
+    await btn.click()
+    try:
+        await page.wait_for_selector(".mantine-Popover-dropdown", timeout=2000)
+        await page.wait_for_timeout(200)
+        return True
+    except Exception:
+        return False
+
+
+async def generate_react_dual_theme_screenshots(
+    dashboard_id: str,
+    output_folder: str = "/app/depictio/dash/static/screenshots",
+    user_id: str | None = None,
+    open_settings: bool = False,
+    filename_prefix: str = "react",
+) -> ScreenshotResult:
+    """Generate light + dark screenshots of the React beta viewer.
+
+    Sibling of `generate_dual_theme_screenshots` (which targets the Dash app at
+    `settings.dash.url`). This one drives the SPA bundle that FastAPI itself
+    serves at `{settings.fastapi.url}/dashboard-beta/{id}`.
+
+    Differences vs the Dash variant:
+      • Origin / dashboard URL come from `settings.fastapi.*` (not `settings.dash`).
+      • `theme-store` localStorage payload is `{"colorScheme": "<theme>"}` — the
+        SPA's `readInitialColorScheme()` reads `parsed.colorScheme`, so the
+        Dash-style bare string `"light"` would silently fall back to light.
+      • Optional `open_settings=True` clicks the first `aria-label="Viz settings"`
+        ActionIcon so the popover shows in the capture. Falls back to a normal
+        shot if no popover exists. The Mantine popover is portaled to body, so
+        we full-page capture in that case instead of cropping to AppShell.Main.
+
+    Output filenames are `{filename_prefix}_{dashboard_id}_{theme}.png` (default
+    prefix keeps them out of the way of the Dash auto-screenshot job which uses
+    `{dashboard_id}_{theme}.png`).
+    """
+    if user_id:
+        is_owner = await check_dashboard_owner_permission(
+            dashboard_id=dashboard_id, user_id=user_id
+        )
+        if not is_owner:
+            return {
+                "status": "forbidden",
+                "dashboard_id": dashboard_id,
+                "light_screenshot": None,
+                "dark_screenshot": None,
+                "error": "User is not dashboard owner",
+            }
+
+    Path(output_folder).mkdir(parents=True, exist_ok=True)
+    light_path = f"{output_folder}/{filename_prefix}_{dashboard_id}_light.png"
+    dark_path = f"{output_folder}/{filename_prefix}_{dashboard_id}_dark.png"
+
+    # The React SPA is served by the FastAPI process itself. Use `.url` so the
+    # property picks internal vs external based on DEPICTIO_CONTEXT — inside
+    # the API container this resolves to the docker DNS hostname, on a host
+    # invocation it falls back to the external port.
+    origin = settings.fastapi.url
+    dashboard_url = f"{origin}/dashboard-beta/{dashboard_id}"
+
+    try:
+        token_data = await get_admin_auth_token()
+        token_data_json = json.dumps(token_data)
+
+        logger.info(f"React dual-theme screenshot: dashboard {dashboard_id} via {dashboard_url}")
+
+        async with async_playwright() as p:
+            browser = await p.chromium.launch(headless=True)
+            context = await browser.new_context(viewport={"width": 1920, "height": 1080})
+
+            for theme, output_path in [("light", light_path), ("dark", dark_path)]:
+                # SPA's readInitialColorScheme reads parsed.colorScheme — a bare
+                # string like '"light"' parses to a string with no .colorScheme
+                # property and silently falls back to light. Inject both
+                # localStorage values via init script BEFORE any navigation:
+                # hitting the bare origin would trigger the SPA's `isBareRoot`
+                # redirect to /dashboards-beta and kill any page.evaluate
+                # before it lands, so we can't set storage after the fact.
+                theme_payload = json.dumps({"colorScheme": theme})
+                init_script = (
+                    f"localStorage.setItem('local-store', {json.dumps(token_data_json)});"
+                    f"localStorage.setItem('theme-store', {json.dumps(theme_payload)});"
+                )
+                # Drop any prior init script (light pass) before adding the
+                # dark-pass one, so the two themes don't stack.
+                await context.clear_cookies()
+                page = await context.new_page()
+                await page.add_init_script(init_script)
+
+                try:
+                    await page.goto(
+                        dashboard_url,
+                        timeout=settings.performance.screenshot_navigation_timeout,
+                    )
+                except Exception as nav_err:
+                    msg = str(nav_err)
+                    if any(m in msg for m in _HOST_UNREACHABLE_MARKERS):
+                        logger.warning(
+                            f"FastAPI host ({origin}) unreachable — skipping React "
+                            f"screenshot for {dashboard_id}."
+                        )
+                        await browser.close()
+                        return {
+                            "status": "skipped",
+                            "light_screenshot": None,
+                            "dark_screenshot": None,
+                            "dashboard_id": dashboard_id,
+                            "error": None,
+                        }
+                    raise
+
+                # Wait for Mantine to apply the colour scheme before the viz
+                # mounts — otherwise the first render flashes in the wrong
+                # theme and the screenshot may catch the flash.
+                try:
+                    await page.wait_for_selector(
+                        f'[data-mantine-color-scheme="{theme}"]',
+                        timeout=settings.performance.screenshot_content_wait,
+                    )
+                except Exception:
+                    logger.warning(
+                        f"React: timeout waiting for {theme} theme attribute "
+                        f"on dashboard {dashboard_id}"
+                    )
+
+                try:
+                    await wait_for_dashboard_content(page)
+                except Exception:
+                    logger.warning(
+                        f"React: timeout waiting for grid items "
+                        f"({theme}) on dashboard {dashboard_id}"
+                    )
+
+                # Extra settling time for plotly to finish drawing.
+                await page.wait_for_timeout(settings.performance.screenshot_stabilization_wait)
+
+                await hide_ui_chrome(page)
+
+                popover_open = False
+                if open_settings:
+                    popover_open = await _try_open_viz_settings(page)
+
+                if popover_open:
+                    # Mantine popovers portal to document.body, so they sit
+                    # outside the AppShell.Main DOM bbox — element.screenshot()
+                    # would clip them off. Fall back to a viewport capture.
+                    await page.screenshot(path=output_path, full_page=False)
+                else:
+                    main_element = await page.query_selector(".mantine-AppShell-main")
+                    if main_element:
+                        await main_element.screenshot(path=output_path)
+                    else:
+                        await page.screenshot(path=output_path, full_page=False)
+
+                # Fresh page per theme so the init-script (which sets the
+                # theme key) re-runs cleanly on the next iteration.
+                await page.close()
+
+            await context.close()
+            await browser.close()
+            logger.info(f"React dual-theme screenshots completed for {dashboard_id}")
+
+        return {
+            "status": "success",
+            "light_screenshot": light_path,
+            "dark_screenshot": dark_path,
+            "dashboard_id": dashboard_id,
+            "error": None,
+        }
+
+    except Exception as e:
+        logger.error(f"React dual-theme screenshot error for {dashboard_id}: {e}")
+        return {
+            "status": "error",
+            "dashboard_id": dashboard_id,
+            "light_screenshot": None,
+            "dark_screenshot": None,
+            "error": str(e),
+        }
