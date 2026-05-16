@@ -9,6 +9,26 @@ import ImageRenderer from './ImageRenderer';
 import MapRenderer from './MapRenderer';
 import JBrowseRenderer from './JBrowseRenderer';
 import MultiQCRenderer from './MultiQCRenderer';
+import VolcanoRenderer from './advanced_viz/VolcanoRenderer';
+import EmbeddingRenderer from './advanced_viz/EmbeddingRenderer';
+import ManhattanRenderer from './advanced_viz/ManhattanRenderer';
+import StackedTaxonomyRenderer from './advanced_viz/StackedTaxonomyRenderer';
+import PhylogeneticRenderer from './advanced_viz/PhylogeneticRenderer';
+import RarefactionRenderer from './advanced_viz/RarefactionRenderer';
+import ANCOMBCDifferentialsRenderer from './advanced_viz/ANCOMBCDifferentialsRenderer';
+import DaBarplotRenderer from './advanced_viz/DaBarplotRenderer';
+import EnrichmentRenderer from './advanced_viz/EnrichmentRenderer';
+import ComplexHeatmapRenderer from './advanced_viz/ComplexHeatmapRenderer';
+import UpsetRenderer from './advanced_viz/UpsetRenderer';
+import MARenderer from './advanced_viz/MARenderer';
+import DotPlotRenderer from './advanced_viz/DotPlotRenderer';
+import LollipopRenderer from './advanced_viz/LollipopRenderer';
+import QQRenderer from './advanced_viz/QQRenderer';
+import SunburstRenderer from './advanced_viz/SunburstRenderer';
+import OncoplotRenderer from './advanced_viz/OncoplotRenderer';
+import CoverageTrackRenderer from './advanced_viz/CoverageTrackRenderer';
+import SankeyRenderer from './advanced_viz/SankeyRenderer';
+import { AdvancedVizExtrasProvider } from './advanced_viz/AdvancedVizExtras';
 import MultiSelectRenderer from './interactive/MultiSelectRenderer';
 import RangeSliderRenderer from './interactive/RangeSliderRenderer';
 import SliderRenderer from './interactive/SliderRenderer';
@@ -265,6 +285,18 @@ const ComponentRenderer: React.FC<ComponentRendererProps> = ({
     );
   }
 
+  if (metadata.component_type === 'advanced_viz') {
+    return (
+      <AdvancedVizDispatch
+        metadata={metadata}
+        filters={filters}
+        refreshTick={refreshTick}
+        extraActions={extraActions}
+        showDragHandle={showDragHandle}
+      />
+    );
+  }
+
   return (
     <div className="dashboard-error" style={{ fontSize: '0.75rem' }}>
       Component type "{metadata.component_type}" not yet ported.
@@ -402,3 +434,94 @@ function formatValue(v: unknown): string | number {
   }
   return String(v);
 }
+
+interface AdvancedVizDispatchProps {
+  metadata: StoredMetadata;
+  filters: InteractiveFilter[];
+  refreshTick?: number;
+  extraActions?: React.ReactNode;
+  showDragHandle?: boolean;
+}
+
+/**
+ * Per-component sub-renderer for the advanced_viz family.
+ *
+ * Holds a useState for the Settings + Show-data popovers the framed renderer
+ * publishes via AdvancedVizExtrasContext. The published JSX is appended to
+ * the standard chrome icons (metadata + fullscreen + reset) via the
+ * `extraActions` slot so all the action icons land in the same hover-revealed
+ * row with matching Mantine styling.
+ */
+const AdvancedVizDispatch: React.FC<AdvancedVizDispatchProps> = ({
+  metadata,
+  filters,
+  refreshTick,
+  extraActions,
+  showDragHandle,
+}) => {
+  const [publishedExtras, setPublishedExtras] = React.useState<React.ReactNode>(null);
+
+  const vizKind = (metadata.viz_kind as string) || '';
+  const advProps = { metadata, filters, refreshTick };
+  let inner: React.ReactNode;
+  if (vizKind === 'volcano') {
+    inner = <VolcanoRenderer {...(advProps as any)} />;
+  } else if (vizKind === 'embedding') {
+    inner = <EmbeddingRenderer {...(advProps as any)} />;
+  } else if (vizKind === 'manhattan') {
+    inner = <ManhattanRenderer {...(advProps as any)} />;
+  } else if (vizKind === 'stacked_taxonomy') {
+    inner = <StackedTaxonomyRenderer {...(advProps as any)} />;
+  } else if (vizKind === 'phylogenetic') {
+    inner = <PhylogeneticRenderer {...(advProps as any)} />;
+  } else if (vizKind === 'rarefaction') {
+    inner = <RarefactionRenderer {...(advProps as any)} />;
+  } else if (vizKind === 'ancombc_differentials') {
+    inner = <ANCOMBCDifferentialsRenderer {...(advProps as any)} />;
+  } else if (vizKind === 'da_barplot') {
+    inner = <DaBarplotRenderer {...(advProps as any)} />;
+  } else if (vizKind === 'enrichment') {
+    inner = <EnrichmentRenderer {...(advProps as any)} />;
+  } else if (vizKind === 'complex_heatmap') {
+    inner = <ComplexHeatmapRenderer {...(advProps as any)} />;
+  } else if (vizKind === 'upset_plot') {
+    inner = <UpsetRenderer {...(advProps as any)} />;
+  } else if (vizKind === 'ma') {
+    inner = <MARenderer {...(advProps as any)} />;
+  } else if (vizKind === 'dot_plot') {
+    inner = <DotPlotRenderer {...(advProps as any)} />;
+  } else if (vizKind === 'lollipop') {
+    inner = <LollipopRenderer {...(advProps as any)} />;
+  } else if (vizKind === 'qq') {
+    inner = <QQRenderer {...(advProps as any)} />;
+  } else if (vizKind === 'sunburst') {
+    inner = <SunburstRenderer {...(advProps as any)} />;
+  } else if (vizKind === 'oncoplot') {
+    inner = <OncoplotRenderer {...(advProps as any)} />;
+  } else if (vizKind === 'coverage_track') {
+    inner = <CoverageTrackRenderer {...(advProps as any)} />;
+  } else if (vizKind === 'sankey') {
+    inner = <SankeyRenderer {...(advProps as any)} />;
+  } else {
+    inner = (
+      <div className="dashboard-error" style={{ fontSize: '0.75rem' }}>
+        Unknown advanced viz kind: "{vizKind}"
+      </div>
+    );
+  }
+
+  const combinedExtras = publishedExtras || extraActions ? (
+    <>
+      {publishedExtras}
+      {extraActions}
+    </>
+  ) : undefined;
+
+  return wrapWithChrome(
+    'advanced_viz',
+    metadata,
+    undefined,
+    <AdvancedVizExtrasProvider onChange={setPublishedExtras}>{inner}</AdvancedVizExtrasProvider>,
+    { extraActions: combinedExtras, showDragHandle },
+  );
+};

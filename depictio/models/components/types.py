@@ -8,7 +8,44 @@ for component configuration.
 from typing import Literal
 
 # Component types
-ComponentType = Literal["card", "figure", "interactive", "table", "text", "jbrowse", "image", "map"]
+ComponentType = Literal[
+    "card",
+    "figure",
+    "interactive",
+    "table",
+    "text",
+    "jbrowse",
+    "image",
+    "map",
+    "advanced_viz",
+]
+
+# Advanced visualisation kinds. Each kind has its own Pydantic config submodel
+# in depictio/models/components/advanced_viz/configs.py and its own React
+# renderer; the discriminated union over them lives inside the AdvancedViz
+# component (not at the outer ComponentMetadata level), so the rest of the
+# system sees one component type.
+AdvancedVizKind = Literal[
+    "volcano",
+    "embedding",
+    "manhattan",
+    "stacked_taxonomy",
+    "phylogenetic",
+    "rarefaction",
+    "ancombc_differentials",
+    "da_barplot",
+    "enrichment",
+    "complex_heatmap",
+    "upset_plot",
+    "ma",
+    "dot_plot",
+    "lollipop",
+    "qq",
+    "sunburst",
+    "oncoplot",
+    "coverage_track",
+    "sankey",
+]
 
 # Map visualization types
 MapType = Literal["scatter_map", "density_map", "choropleth_map"]

@@ -1,0 +1,454 @@
+{
+  "_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d18"
+  },
+  "description": null,
+  "flexible_metadata": null,
+  "hash": null,
+  "dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d18"
+  },
+  "version": 1,
+  "tmp_children_data": [],
+  "stored_layout_data": [],
+  "stored_children_data": [],
+  "stored_metadata": [
+    {
+      "index": "phylo-group-filter",
+      "component_type": "interactive",
+      "title": "Group",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "bacterial_metadata",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d0a"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Bacterial metadata",
+        "data_collection_tag": "bacterial_metadata",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d0a"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "group",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "title_size": "md",
+      "custom_color": "#4C72B0",
+      "icon_name": "mdi:family-tree",
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "phylo-habitat-filter",
+      "component_type": "interactive",
+      "title": "Habitat",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "bacterial_metadata",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d0a"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Bacterial metadata",
+        "data_collection_tag": "bacterial_metadata",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d0a"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "habitat",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "title_size": "md",
+      "custom_color": "#55A868",
+      "icon_name": "mdi:tree",
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "phylo-resistance-filter",
+      "component_type": "interactive",
+      "title": "Resistance",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "bacterial_metadata",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d0a"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Bacterial metadata",
+        "data_collection_tag": "bacterial_metadata",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d0a"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "resistance_profile",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "title_size": "md",
+      "custom_color": "#C44E52",
+      "icon_name": "mdi:bacteria",
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "phylo-card-taxa",
+      "component_type": "card",
+      "title": "Taxa",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "bacterial_metadata",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d0a"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Bacterial metadata",
+        "data_collection_tag": "bacterial_metadata",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d0a"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "aggregation": "nunique",
+      "column_name": "taxon",
+      "column_type": "object",
+      "value": null,
+      "aggregations": null,
+      "filter_expr": null,
+      "icon_name": "mdi:dna",
+      "icon_color": "#4C72B0",
+      "title_color": "#4C72B0",
+      "title_font_size": "lg",
+      "value_font_size": "xl",
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "phylo-card-groups",
+      "component_type": "card",
+      "title": "Phyla",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "bacterial_metadata",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d0a"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Bacterial metadata",
+        "data_collection_tag": "bacterial_metadata",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d0a"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "aggregation": "nunique",
+      "column_name": "group",
+      "column_type": "object",
+      "value": null,
+      "aggregations": null,
+      "filter_expr": null,
+      "icon_name": "mdi:family-tree",
+      "icon_color": "#55A868",
+      "title_color": "#55A868",
+      "title_font_size": "lg",
+      "value_font_size": "xl",
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "phylo-card-mdr",
+      "component_type": "card",
+      "title": "MDR strains",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "bacterial_metadata",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d0a"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Bacterial metadata",
+        "data_collection_tag": "bacterial_metadata",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d0a"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "aggregation": "count",
+      "column_name": "taxon",
+      "column_type": "object",
+      "value": null,
+      "aggregations": null,
+      "filter_expr": "col('resistance_profile') == 'MDR'",
+      "icon_name": "mdi:bacteria",
+      "icon_color": "#C44E52",
+      "title_color": "#C44E52",
+      "title_font_size": "lg",
+      "value_font_size": "xl",
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "phylo-tree",
+      "component_type": "advanced_viz",
+      "title": "Bacterial phylogeny (Newick)",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "bacterial_tree",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d09"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Bacterial phylogeny",
+        "data_collection_tag": "bacterial_tree",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d09"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "viz_kind": "phylogenetic",
+      "config": {
+        "viz_kind": "phylogenetic",
+        "tree_wf_id": "646b0f3c1e4a2d7f8e5b8d01",
+        "tree_dc_id": "646b0f3c1e4a2d7f8e5b8d09",
+        "metadata_wf_id": "646b0f3c1e4a2d7f8e5b8d01",
+        "metadata_dc_id": "646b0f3c1e4a2d7f8e5b8d0a",
+        "taxon_col": "taxon",
+        "color_col": "group",
+        "label_col": "resistance_profile",
+        "default_layout": "rectangular",
+        "ladderize": true,
+        "show_metadata_strip": true,
+        "show_branch_lengths": false,
+        "show_internal_labels": false
+      },
+      "wf_tag": "python/advanced_viz_demo",
+      "description": "Microreact-style rendering \u2014 5 layouts (rectangular / circular / radial / diagonal / hierarchical), tip search, click any internal node to highlight its clade and export it as .nwk."
+    },
+    {
+      "index": "phylo-metadata-table",
+      "component_type": "table",
+      "title": "Tip metadata",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "bacterial_metadata",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d0a"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Bacterial metadata",
+        "data_collection_tag": "bacterial_metadata",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d0a"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "columns": [
+        "taxon",
+        "group",
+        "habitat",
+        "genome_size_mb",
+        "resistance_profile"
+      ],
+      "page_size": 10,
+      "sortable": true,
+      "filterable": true,
+      "row_selection_enabled": false,
+      "row_selection_column": null,
+      "wf_tag": "python/advanced_viz_demo"
+    }
+  ],
+  "stored_edit_dashboard_mode_button": [],
+  "left_panel_layout_data": [
+    {
+      "i": "box-phylo-group-filter",
+      "x": 0,
+      "y": 0,
+      "w": 1,
+      "h": 4,
+      "static": false
+    },
+    {
+      "i": "box-phylo-habitat-filter",
+      "x": 0,
+      "y": 4,
+      "w": 1,
+      "h": 4,
+      "static": false
+    },
+    {
+      "i": "box-phylo-resistance-filter",
+      "x": 0,
+      "y": 8,
+      "w": 1,
+      "h": 4,
+      "static": false
+    }
+  ],
+  "right_panel_layout_data": [
+    {
+      "i": "box-phylo-card-taxa",
+      "x": 0,
+      "y": 0,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-phylo-card-groups",
+      "x": 2,
+      "y": 0,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-phylo-card-mdr",
+      "x": 4,
+      "y": 0,
+      "w": 4,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-phylo-tree",
+      "x": 0,
+      "y": 2,
+      "w": 8,
+      "h": 10,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-phylo-metadata-table",
+      "x": 0,
+      "y": 12,
+      "w": 8,
+      "h": 5,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    }
+  ],
+  "buttons_data": {
+    "unified_edit_mode": true,
+    "add_components_button": {
+      "count": 0
+    }
+  },
+  "stored_add_button": {
+    "count": 0
+  },
+  "title": "Phylogeny",
+  "subtitle": "Bacterial phylogenetic tree with tip metadata (Microreact-style)",
+  "icon": "mdi:family-tree",
+  "icon_color": "lime",
+  "icon_variant": "filled",
+  "workflow_system": "python",
+  "notes_content": "",
+  "permissions": {
+    "owners": [
+      {
+        "_id": {
+          "$oid": "67658ba033c8b59ad489d7c7"
+        },
+        "description": null,
+        "flexible_metadata": null,
+        "hash": null,
+        "email": "admin@example.com",
+        "is_admin": true,
+        "is_anonymous": false,
+        "is_temporary": false,
+        "expiration_time": null
+      }
+    ],
+    "editors": [],
+    "viewers": []
+  },
+  "is_public": true,
+  "last_saved_ts": "2026-05-12 00:00:00",
+  "project_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d00"
+  },
+  "is_main_tab": false,
+  "parent_dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d00"
+  },
+  "tab_order": 8,
+  "main_tab_name": null,
+  "tab_icon": "mdi:family-tree",
+  "tab_icon_color": "lime",
+  "parent_dashboard_title": null
+}

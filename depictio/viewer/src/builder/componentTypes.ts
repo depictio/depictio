@@ -69,6 +69,13 @@ export const COMPONENT_TYPES: ComponentTypeMeta[] = [
     icon: 'mdi:map-marker-multiple',
     iconBg: '#7A5DC7',
   },
+  {
+    type: 'advanced_viz',
+    label: 'Advanced viz',
+    description: 'Composite analysis viz: volcano, clustering, Manhattan, taxonomy bar',
+    icon: 'mdi:chart-scatter-plot-hexbin',
+    iconBg: '#d6336c',
+  },
 ];
 
 export function getComponentTypeMeta(t: ComponentType): ComponentTypeMeta {

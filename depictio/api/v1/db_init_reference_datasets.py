@@ -60,11 +60,18 @@ STATIC_IDS = {
             "taxonomy_rel_abundance": "646b0f3c1e4a2d7f8e5b8ca9",
             "taxonomy_heatmap": "646b0f3c1e4a2d7f8e5b8caf",
             "ancombc_results": "646b0f3c1e4a2d7f8e5b8caa",
+            # Canonical-schema DCs feeding the advanced_viz components — see
+            # depictio/projects/nf-core/ampliseq/recipes/{volcano,stacked_
+            # taxonomy,embedding_pcoa}_canonical.py.
+            "volcano_canonical": "646b0f3c1e4a2d7f8e5b8cb0",
+            "stacked_taxonomy_canonical": "646b0f3c1e4a2d7f8e5b8cb1",
+            "embedding_pcoa": "646b0f3c1e4a2d7f8e5b8cb2",
         },
         "dashboards": {
             "ampliseq_multiqc": "646b0f3c1e4a2d7f8e5b8cb7",
             "ampliseq_community": "646b0f3c1e4a2d7f8e5b8cb3",
             "ampliseq_differential": "646b0f3c1e4a2d7f8e5b8cb4",
+            "ampliseq_advanced_viz": "646b0f3c1e4a2d7f8e5b8cc2",
         },
     },
     "ampliseq_base": {
@@ -75,6 +82,72 @@ STATIC_IDS = {
             "ampliseq_base_multiqc": "646b0f3c1e4a2d7f8e5b8cb8",
             "ampliseq_base_community": "646b0f3c1e4a2d7f8e5b8cb5",
             "ampliseq_base_differential": "646b0f3c1e4a2d7f8e5b8cc1",
+        },
+    },
+    # Dedicated showcase for the advanced_viz component family — one project
+    # with four classical viz fixtures plus four clustering-method fixtures
+    # (PCA / UMAP / t-SNE / PCoA) projected from a shared 90×200 feature
+    # matrix. Eight dashboard tabs: overview + volcano + manhattan + stacked
+    # taxonomy + one per clustering method.
+    # See projects/init/advanced_viz_showcase/.
+    "advanced_viz_showcase": {
+        "project": "646b0f3c1e4a2d7f8e5b8d00",
+        "workflows": {"advanced_viz_demo": "646b0f3c1e4a2d7f8e5b8d01"},
+        "data_collections": {
+            "volcano_demo": "646b0f3c1e4a2d7f8e5b8d02",
+            # PCA reuses the old embedding_demo id (d03) so the seed JSON
+            # doesn't churn an ObjectId; the other three methods are new.
+            "embedding_pca": "646b0f3c1e4a2d7f8e5b8d03",
+            "manhattan_demo": "646b0f3c1e4a2d7f8e5b8d04",
+            "stacked_taxonomy_demo": "646b0f3c1e4a2d7f8e5b8d05",
+            "embedding_umap": "646b0f3c1e4a2d7f8e5b8d06",
+            "embedding_tsne": "646b0f3c1e4a2d7f8e5b8d07",
+            "embedding_pcoa": "646b0f3c1e4a2d7f8e5b8d08",
+            # Phylogenetic showcase: bacterial tree + tip metadata.
+            "bacterial_tree": "646b0f3c1e4a2d7f8e5b8d09",
+            "bacterial_metadata": "646b0f3c1e4a2d7f8e5b8d0a",
+            # Raw sample × feature matrix — input for live Celery clustering.
+            "embedding_features": "646b0f3c1e4a2d7f8e5b8d0b",
+            # Microbiome alpha-rarefaction + ANCOM-BC differentials fixtures.
+            "rarefaction_demo": "646b0f3c1e4a2d7f8e5b8d20",
+            "ancombc_demo": "646b0f3c1e4a2d7f8e5b8d21",
+            "gsea_demo": "646b0f3c1e4a2d7f8e5b8d25",
+            "upset_demo": "646b0f3c1e4a2d7f8e5b8d28",
+            # Six new viz fixtures landing alongside the kind-selector
+            # redesign — dotplot / lollipop / oncoplot get their own DCs;
+            # MA, QQ, sunburst reuse existing DCs (volcano, manhattan,
+            # stacked_taxonomy) with extended columns.
+            "dotplot_demo": "646b0f3c1e4a2d7f8e5b8d30",
+            "lollipop_demo": "646b0f3c1e4a2d7f8e5b8d31",
+            "oncoplot_demo": "646b0f3c1e4a2d7f8e5b8d32",
+        },
+        "dashboards": {
+            # Main tab reuses the project_id so get_child_tabs(main_id) finds
+            # the children (this is the same convention as ampliseq, whose
+            # main dashboard _id equals project_id 5b8ca2).
+            "advanced_viz_overview": "646b0f3c1e4a2d7f8e5b8d00",
+            "advanced_viz_volcano": "646b0f3c1e4a2d7f8e5b8d11",
+            # PCA reuses the old embedding-tab id (d12).
+            "advanced_viz_clustering_pca": "646b0f3c1e4a2d7f8e5b8d12",
+            "advanced_viz_manhattan": "646b0f3c1e4a2d7f8e5b8d13",
+            "advanced_viz_stacked_taxonomy": "646b0f3c1e4a2d7f8e5b8d14",
+            "advanced_viz_clustering_umap": "646b0f3c1e4a2d7f8e5b8d15",
+            "advanced_viz_clustering_tsne": "646b0f3c1e4a2d7f8e5b8d16",
+            "advanced_viz_clustering_pcoa": "646b0f3c1e4a2d7f8e5b8d17",
+            "advanced_viz_phylogeny": "646b0f3c1e4a2d7f8e5b8d18",
+            "advanced_viz_clustering_live": "646b0f3c1e4a2d7f8e5b8d19",
+            "advanced_viz_rarefaction": "646b0f3c1e4a2d7f8e5b8d22",
+            "advanced_viz_ancombc": "646b0f3c1e4a2d7f8e5b8d23",
+            "advanced_viz_da_barplot": "646b0f3c1e4a2d7f8e5b8d24",
+            "advanced_viz_enrichment": "646b0f3c1e4a2d7f8e5b8d26",
+            "advanced_viz_complex_heatmap": "646b0f3c1e4a2d7f8e5b8d27",
+            "advanced_viz_upset": "646b0f3c1e4a2d7f8e5b8d29",
+            "advanced_viz_ma": "646b0f3c1e4a2d7f8e5b8d40",
+            "advanced_viz_dotplot": "646b0f3c1e4a2d7f8e5b8d41",
+            "advanced_viz_lollipop": "646b0f3c1e4a2d7f8e5b8d42",
+            "advanced_viz_qq": "646b0f3c1e4a2d7f8e5b8d43",
+            "advanced_viz_sunburst": "646b0f3c1e4a2d7f8e5b8d44",
+            "advanced_viz_oncoplot": "646b0f3c1e4a2d7f8e5b8d45",
         },
     },
 }
@@ -210,6 +283,7 @@ class ReferenceDatasetRegistry:
         "iris": os.path.join("init", "iris"),
         "penguins": os.path.join("init", "penguins"),
         "ampliseq": os.path.join("nf-core", "ampliseq", "2.16.0"),
+        "advanced_viz_showcase": os.path.join("init", "advanced_viz_showcase"),
     }
 
     @classmethod
@@ -513,8 +587,8 @@ async def create_reference_datasets(
     """
     created_projects = []
 
-    # Create reference datasets (iris, penguins, ampliseq)
-    for dataset_name in ["iris", "penguins", "ampliseq"]:
+    # Create reference datasets (iris, penguins, ampliseq, advanced_viz_showcase)
+    for dataset_name in ["iris", "penguins", "ampliseq", "advanced_viz_showcase"]:
         logger.info(f"Creating reference dataset: {dataset_name}")
 
         result = await ReferenceDatasetRegistry.create_reference_project(

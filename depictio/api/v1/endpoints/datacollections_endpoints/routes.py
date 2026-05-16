@@ -12,6 +12,7 @@ from depictio.api.v1.endpoints.datacollections_endpoints.utils import (
     _create_multiqc_dc_from_uploads,
     _delete_data_collection_by_id,
     _delete_orphan_links_for_dc,
+    _get_data_collection_polars_schema,
     _get_data_collection_specs,
     _update_data_collection_name,
     _update_dc_specific_properties,
@@ -33,6 +34,19 @@ async def specs(
     current_user: str = Depends(get_user_or_anonymous),
 ):
     return await _get_data_collection_specs(data_collection_id, current_user)
+
+
+@datacollections_endpoint_router.get("/polars_schema/{data_collection_id}")
+async def polars_schema(
+    data_collection_id: PyObjectId,
+    current_user: str = Depends(get_user_or_anonymous),
+) -> dict[str, str]:
+    """Return the Delta-table schema as ``{column: polars-dtype-name}``.
+
+    Used by the advanced-viz builder UI for editor-time validation of column
+    bindings (see depictio/models/components/advanced_viz/schemas.py).
+    """
+    return await _get_data_collection_polars_schema(data_collection_id, current_user)
 
 
 @datacollections_endpoint_router.delete("/delete/{workflow_id}/{data_collection_id}")

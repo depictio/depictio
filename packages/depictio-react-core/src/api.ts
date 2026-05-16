@@ -462,6 +462,396 @@ export async function renderFigure(
   return res.json();
 }
 
+/* -------------------------------------------------------------------------
+ * Advanced visualisations (volcano / embedding / manhattan / stacked_taxonomy)
+ * ------------------------------------------------------------------------- */
+
+export type AdvancedVizKind =
+  | 'volcano'
+  | 'embedding'
+  | 'manhattan'
+  | 'stacked_taxonomy'
+  | 'phylogenetic'
+  | 'rarefaction'
+  | 'ancombc_differentials'
+  | 'da_barplot'
+  | 'enrichment'
+  | 'complex_heatmap'
+  | 'upset_plot'
+  | 'ma'
+  | 'dot_plot'
+  | 'lollipop'
+  | 'qq'
+  | 'sunburst'
+  | 'oncoplot'
+  | 'coverage_track'
+  | 'sankey';
+
+export interface AdvancedVizKindDescriptor {
+  viz_kind: AdvancedVizKind;
+  label: string;
+  description: string;
+  icon: string;
+  required_roles: string[];
+  /** "plot" for pure visualisations, "tool" for statistical methods that
+   *  compute then plot (GSEA, GWAS, ANCOM-BC, DA barplot per contrast). */
+  category: 'plot' | 'tool';
+}
+
+/** Metadata used by the builder's viz-kind picker. Cached on first load. */
+export async function fetchAdvancedVizKinds(): Promise<AdvancedVizKindDescriptor[]> {
+  const res = await fetch(`${API_BASE}/advanced_viz/kinds`, { headers: authHeaders() });
+  if (!res.ok) throw new Error(`Failed to fetch advanced viz kinds: ${res.status}`);
+  return res.json();
+}
+
+/** Polars schema for a DC ({col -> dtype-name}). Used at editor time to
+ *  validate that the user's role→column binding matches the canonical
+ *  schema declared in depictio/models/components/advanced_viz/schemas.py. */
+export async function fetchPolarsSchema(dcId: string): Promise<Record<string, string>> {
+  const res = await fetch(`${API_BASE}/datacollections/polars_schema/${dcId}`, {
+    headers: authHeaders(),
+  });
+  if (!res.ok) throw new Error(`Failed to fetch polars schema: ${res.status}`);
+  return res.json();
+}
+
+export interface AdvancedVizDataResponse {
+  columns: string[];
+  rows: Record<string, unknown[]>;
+  row_count: number;
+  filter_applied: boolean;
+}
+
+/** Project a column subset from a DC + apply global filters. Rendering is
+ *  done entirely on the client so intra-viz controls (thresholds, top-N,
+ *  rank dropdown) don't round-trip to the server. */
+export async function fetchAdvancedVizData(
+  wfId: string,
+  dcId: string,
+  columns: string[],
+  filters: InteractiveFilter[],
+  limitRows?: number,
+): Promise<AdvancedVizDataResponse> {
+  const res = await fetch(`${API_BASE}/advanced_viz/data`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: JSON.stringify({
+      wf_id: wfId,
+      dc_id: dcId,
+      columns,
+      filter_metadata: filters,
+      limit_rows: limitRows,
+    }),
+  });
+  if (!res.ok) throw new Error(`Failed to fetch advanced viz data: ${res.status}`);
+  return res.json();
+}
+
+export interface ComputeEmbeddingPayload {
+  wf_id: string;
+  dc_id: string;
+  feature_id_col: string;
+  method: 'pca' | 'umap' | 'tsne' | 'pcoa';
+  params: Record<string, number | string | boolean>;
+  filter_metadata: InteractiveFilter[];
+  /** Optional pass-through columns from the feature DC (e.g. cluster, group).
+   *  The Celery worker projects these onto the result so the renderer can
+   *  colour points by metadata without an extra round-trip. */
+  extra_cols?: string[];
+}
+
+export interface ComputeEmbeddingResult {
+  sample_ids: string[];
+  dim_1: number[];
+  dim_2: number[];
+  /** Populated when the payload requested n_components=3. */
+  dim_3?: number[];
+  /** Per-column arrays aligned with sample_ids, populated when extra_cols
+   *  was supplied in the payload. */
+  extras?: Record<string, unknown[]>;
+  method: string;
+  params: Record<string, unknown>;
+  row_count: number;
+  load_ms?: number;
+  compute_ms?: number;
+}
+
+export interface ComputeEmbeddingJob {
+  job_id: string;
+  status: 'pending' | 'done' | 'failed';
+  result?: ComputeEmbeddingResult | null;
+  error?: string | null;
+  from_cache?: boolean;
+}
+
+/** Dispatch a live dim-reduction Celery task. Returns a job_id the caller
+ *  polls via pollComputeEmbedding(). Cache hits return status='done'
+ *  immediately with the result inline. */
+export async function dispatchComputeEmbedding(
+  payload: ComputeEmbeddingPayload,
+): Promise<ComputeEmbeddingJob> {
+  const res = await fetch(`${API_BASE}/advanced_viz/compute_embedding`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw new Error(`Failed to dispatch compute_embedding: ${res.status}`);
+  return res.json();
+}
+
+/** Poll a previously-dispatched embedding compute. */
+export async function pollComputeEmbedding(jobId: string): Promise<ComputeEmbeddingJob> {
+  const res = await fetch(`${API_BASE}/advanced_viz/compute_embedding/${jobId}`, {
+    headers: authHeaders(),
+  });
+  if (!res.ok) throw new Error(`Failed to poll compute_embedding: ${res.status}`);
+  return res.json();
+}
+
+export interface ComplexHeatmapPayload {
+  wf_id: string;
+  dc_id: string;
+  index_column: string;
+  value_columns?: string[] | null;
+  row_annotation_cols?: string[];
+  cluster_rows?: boolean;
+  cluster_cols?: boolean;
+  cluster_method?: string;
+  cluster_metric?: string;
+  normalize?: string;
+  colorscale?: string | null;
+  filter_metadata: InteractiveFilter[];
+}
+
+export interface ComplexHeatmapResult {
+  figure: { data: unknown[]; layout: Record<string, unknown> };
+  row_count: number;
+  col_count: number;
+  load_ms?: number;
+  compute_ms?: number;
+}
+
+export interface ComplexHeatmapJob {
+  job_id: string;
+  status: 'pending' | 'done' | 'failed';
+  result?: ComplexHeatmapResult | null;
+  error?: string | null;
+  from_cache?: boolean;
+}
+
+/** Dispatch a ComplexHeatmap Celery task (server-side clustering + figure
+ *  build via packages/plotly-complexheatmap). Cache-hit returns inline. */
+export async function dispatchComplexHeatmap(
+  payload: ComplexHeatmapPayload,
+): Promise<ComplexHeatmapJob> {
+  const res = await fetch(`${API_BASE}/advanced_viz/compute_complex_heatmap`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw new Error(`Failed to dispatch compute_complex_heatmap: ${res.status}`);
+  return res.json();
+}
+
+/** Poll the ComplexHeatmap Celery task. */
+export async function pollComplexHeatmap(jobId: string): Promise<ComplexHeatmapJob> {
+  const res = await fetch(`${API_BASE}/advanced_viz/compute_complex_heatmap/${jobId}`, {
+    headers: authHeaders(),
+  });
+  if (!res.ok) throw new Error(`Failed to poll compute_complex_heatmap: ${res.status}`);
+  return res.json();
+}
+
+export interface UpsetPayload {
+  wf_id: string;
+  dc_id: string;
+  set_columns?: string[] | null;
+  annotation_cols?: string[] | null;
+  sort_by?: 'cardinality' | 'degree' | 'degree-cardinality' | 'input';
+  sort_order?: 'descending' | 'ascending';
+  min_size?: number;
+  max_degree?: number | null;
+  show_set_sizes?: boolean;
+  show_values?: boolean;
+  color_intersections_by?: 'none' | 'set' | 'degree';
+  filter_metadata: InteractiveFilter[];
+}
+
+export interface UpsetResult {
+  figure: { data: unknown[]; layout: Record<string, unknown> };
+  row_count: number;
+  set_count?: number | null;
+  load_ms?: number;
+  compute_ms?: number;
+}
+
+export interface UpsetJob {
+  job_id: string;
+  status: 'pending' | 'done' | 'failed';
+  result?: UpsetResult | null;
+  error?: string | null;
+  from_cache?: boolean;
+}
+
+/** Dispatch an UpSet-plot Celery task. */
+export async function dispatchUpset(payload: UpsetPayload): Promise<UpsetJob> {
+  const res = await fetch(`${API_BASE}/advanced_viz/compute_upset`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw new Error(`Failed to dispatch compute_upset: ${res.status}`);
+  return res.json();
+}
+
+/** Poll an UpSet-plot Celery task. */
+export async function pollUpset(jobId: string): Promise<UpsetJob> {
+  const res = await fetch(`${API_BASE}/advanced_viz/compute_upset/${jobId}`, {
+    headers: authHeaders(),
+  });
+  if (!res.ok) throw new Error(`Failed to poll compute_upset: ${res.status}`);
+  return res.json();
+}
+
+
+export interface CoverageTrackPayload {
+  wf_id: string;
+  dc_id: string;
+  chromosome_col: string;
+  position_col: string;
+  value_col: string;
+  end_col?: string | null;
+  sample_col?: string | null;
+  category_col?: string | null;
+  chromosomes_filter?: string[] | null;
+  samples_filter?: string[] | null;
+  smoothing_window?: number;
+  max_rows?: number | null;
+  filter_metadata: InteractiveFilter[];
+}
+
+export interface CoverageTrackResult {
+  rows: Record<string, unknown[]>;
+  columns: {
+    chromosome: string;
+    position: string;
+    value: string;
+    end?: string | null;
+    sample?: string | null;
+    category?: string | null;
+  };
+  summary: {
+    row_count: number;
+    chromosomes: string[];
+    samples: string[];
+    n_samples: number;
+    mean_value: number | null;
+    max_value: number | null;
+  };
+  row_count: number;
+  load_ms?: number;
+  compute_ms?: number;
+}
+
+export interface CoverageTrackJob {
+  job_id: string;
+  status: 'pending' | 'done' | 'failed';
+  result?: CoverageTrackResult | null;
+  error?: string | null;
+  from_cache?: boolean;
+}
+
+/** Dispatch a coverage-track aggregation Celery task. */
+export async function dispatchCoverageTrack(
+  payload: CoverageTrackPayload,
+): Promise<CoverageTrackJob> {
+  const res = await fetch(`${API_BASE}/advanced_viz/compute_coverage_track`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw new Error(`Failed to dispatch compute_coverage_track: ${res.status}`);
+  return res.json();
+}
+
+/** Poll a previously-dispatched coverage-track compute. */
+export async function pollCoverageTrack(jobId: string): Promise<CoverageTrackJob> {
+  const res = await fetch(`${API_BASE}/advanced_viz/compute_coverage_track/${jobId}`, {
+    headers: authHeaders(),
+  });
+  if (!res.ok) throw new Error(`Failed to poll compute_coverage_track: ${res.status}`);
+  return res.json();
+}
+
+/** Dispatch payload for the Sankey Celery task. NOTE: `color_mode`,
+ *  `link_opacity`, and `show_node_labels` from SankeyConfig (Pydantic) are
+ *  intentionally NOT in this payload — those are pure presentation tweaks
+ *  applied client-side on the returned figure so toggling them doesn't burn a
+ *  fresh compute. Adding them here would invalidate the server-side cache key
+ *  on every slider tick. */
+export interface SankeyPayload {
+  wf_id: string;
+  dc_id: string;
+  step_cols: string[];
+  value_col?: string | null;
+  sort_mode?: 'alphabetical' | 'total_flow' | 'input';
+  min_link_value?: number;
+  step_filters?: Record<string, string[]> | null;
+  filter_metadata: InteractiveFilter[];
+}
+
+export interface SankeyResult {
+  figure: { data: unknown[]; layout: Record<string, unknown> };
+  nodes: Array<{ label: string; step: string; step_index: number }>;
+  step_cols: string[];
+  node_count: number;
+  link_count: number;
+  total_flow: number;
+  row_count: number;
+  load_ms?: number;
+  compute_ms?: number;
+}
+
+export interface SankeyJob {
+  job_id: string;
+  status: 'pending' | 'done' | 'failed';
+  result?: SankeyResult | null;
+  error?: string | null;
+  from_cache?: boolean;
+}
+
+/** Dispatch a Sankey / categorical-flow Celery task. */
+export async function dispatchSankey(payload: SankeyPayload): Promise<SankeyJob> {
+  const res = await fetch(`${API_BASE}/advanced_viz/compute_sankey`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw new Error(`Failed to dispatch compute_sankey: ${res.status}`);
+  return res.json();
+}
+
+/** Poll a previously-dispatched Sankey compute. */
+export async function pollSankey(jobId: string): Promise<SankeyJob> {
+  const res = await fetch(`${API_BASE}/advanced_viz/compute_sankey/${jobId}`, {
+    headers: authHeaders(),
+  });
+  if (!res.ok) throw new Error(`Failed to poll compute_sankey: ${res.status}`);
+  return res.json();
+}
+
+
+/** Fetch the raw Newick string for a phylogeny-type DC. */
+export async function fetchPhylogenyNewick(dcId: string): Promise<string> {
+  const res = await fetch(`${API_BASE}/advanced_viz/phylogeny/${dcId}/newick`, {
+    headers: authHeaders(),
+  });
+  if (!res.ok) throw new Error(`Failed to fetch phylogeny newick: ${res.status}`);
+  return res.text();
+}
+
+
 /** Paginated table rows + AG Grid column definitions. */
 export interface TableResponse {
   columns: Array<{ field: string; headerName: string; type: string }>;

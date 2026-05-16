@@ -1,0 +1,407 @@
+{
+  "_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d22"
+  },
+  "description": null,
+  "flexible_metadata": null,
+  "hash": null,
+  "dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d22"
+  },
+  "version": 1,
+  "tmp_children_data": [],
+  "stored_layout_data": [],
+  "stored_children_data": [],
+  "stored_metadata": [
+    {
+      "index": "rare-habitat",
+      "component_type": "interactive",
+      "title": "Habitat",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "rarefaction_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d20"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Synthetic alpha-rarefaction",
+        "data_collection_tag": "rarefaction_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d20"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "habitat",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "title_size": "md",
+      "custom_color": "#1ABC9C",
+      "icon_name": "mdi:earth",
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "rare-sample",
+      "component_type": "interactive",
+      "title": "Samples",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "rarefaction_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d20"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Synthetic alpha-rarefaction",
+        "data_collection_tag": "rarefaction_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d20"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "sample_id",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "title_size": "md",
+      "custom_color": "#16A085",
+      "icon_name": "mdi:flask",
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "rare-card-samples",
+      "component_type": "card",
+      "title": "Samples",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "rarefaction_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d20"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Synthetic alpha-rarefaction",
+        "data_collection_tag": "rarefaction_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d20"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "aggregation": "nunique",
+      "column_name": "sample_id",
+      "column_type": "object",
+      "value": null,
+      "aggregations": null,
+      "filter_expr": null,
+      "icon_name": "mdi:flask",
+      "icon_color": "#16A085",
+      "title_color": "#16A085",
+      "title_font_size": "lg",
+      "value_font_size": "xl",
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "rare-card-depths",
+      "component_type": "card",
+      "title": "Depths",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "rarefaction_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d20"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Synthetic alpha-rarefaction",
+        "data_collection_tag": "rarefaction_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d20"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "aggregation": "nunique",
+      "column_name": "depth",
+      "column_type": "int64",
+      "value": null,
+      "aggregations": null,
+      "filter_expr": null,
+      "icon_name": "mdi:chart-line",
+      "icon_color": "#4C72B0",
+      "title_color": "#4C72B0",
+      "title_font_size": "lg",
+      "value_font_size": "xl",
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "rare-card-max",
+      "component_type": "card",
+      "title": "Max Faith PD",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "rarefaction_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d20"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Synthetic alpha-rarefaction",
+        "data_collection_tag": "rarefaction_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d20"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "aggregation": "max",
+      "column_name": "faith_pd",
+      "column_type": "float64",
+      "value": null,
+      "aggregations": null,
+      "filter_expr": null,
+      "icon_name": "mdi:trophy",
+      "icon_color": "#F1C40F",
+      "title_color": "#F1C40F",
+      "title_font_size": "lg",
+      "value_font_size": "xl",
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "rare-curves",
+      "component_type": "advanced_viz",
+      "title": "Rarefaction curves (Faith PD)",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "rarefaction_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d20"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Alpha-diversity rises with sequencing depth then plateaus. Drag the Habitat filter to colour-segregate; tune Top-N samples and \u00b1SE band in the Settings popover.",
+        "data_collection_tag": "rarefaction_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d20"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "viz_kind": "rarefaction",
+      "config": {
+        "viz_kind": "rarefaction",
+        "sample_id_col": "sample_id",
+        "depth_col": "depth",
+        "metric_col": "faith_pd",
+        "metric_options": ["faith_pd", "observed_features", "shannon"],
+        "iter_col": "iter",
+        "group_col": "habitat",
+        "show_ci": true
+      },
+      "wf_tag": "python/advanced_viz_demo",
+      "description": "Alpha-diversity rises with sequencing depth then plateaus. Drag the Habitat filter to colour-segregate; tune Top-N samples and \u00b1SE band in the Settings popover."
+    },
+    {
+      "index": "rare-table",
+      "component_type": "table",
+      "title": "Underlying data",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "rarefaction_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d20"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Synthetic alpha-rarefaction",
+        "data_collection_tag": "rarefaction_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d20"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "columns": [
+        "sample_id",
+        "depth",
+        "iter",
+        "faith_pd",
+        "observed_features",
+        "shannon",
+        "habitat"
+      ],
+      "page_size": 10,
+      "sortable": true,
+      "filterable": true,
+      "row_selection_enabled": false,
+      "row_selection_column": null,
+      "wf_tag": "python/advanced_viz_demo"
+    }
+  ],
+  "stored_edit_dashboard_mode_button": [],
+  "left_panel_layout_data": [
+    {
+      "i": "box-rare-habitat",
+      "x": 0,
+      "y": 0,
+      "w": 1,
+      "h": 4,
+      "static": false
+    },
+    {
+      "i": "box-rare-sample",
+      "x": 0,
+      "y": 4,
+      "w": 1,
+      "h": 6,
+      "static": false
+    }
+  ],
+  "right_panel_layout_data": [
+    {
+      "i": "box-rare-card-samples",
+      "x": 0,
+      "y": 0,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-rare-card-depths",
+      "x": 2,
+      "y": 0,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-rare-card-max",
+      "x": 4,
+      "y": 0,
+      "w": 4,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-rare-curves",
+      "x": 0,
+      "y": 2,
+      "w": 8,
+      "h": 10,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-rare-table",
+      "x": 0,
+      "y": 12,
+      "w": 8,
+      "h": 5,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    }
+  ],
+  "buttons_data": {
+    "unified_edit_mode": true,
+    "add_components_button": {
+      "count": 0
+    }
+  },
+  "stored_add_button": {
+    "count": 0
+  },
+  "title": "Rarefaction",
+  "subtitle": "Alpha-diversity vs sequencing depth across 18 samples in 3 habitats (gut / skin / soil).",
+  "icon": "mdi:chart-line",
+  "icon_color": "cyan",
+  "icon_variant": "filled",
+  "workflow_system": "python",
+  "notes_content": "",
+  "permissions": {
+    "owners": [
+      {
+        "_id": {
+          "$oid": "67658ba033c8b59ad489d7c7"
+        },
+        "description": null,
+        "flexible_metadata": null,
+        "hash": null,
+        "email": "admin@example.com",
+        "is_admin": true,
+        "is_anonymous": false,
+        "is_temporary": false,
+        "expiration_time": null
+      }
+    ],
+    "editors": [],
+    "viewers": []
+  },
+  "is_public": true,
+  "last_saved_ts": "2026-05-12 00:00:00",
+  "project_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d00"
+  },
+  "is_main_tab": false,
+  "parent_dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d00"
+  },
+  "tab_order": 10,
+  "main_tab_name": null,
+  "tab_icon": "mdi:chart-line",
+  "tab_icon_color": "cyan",
+  "parent_dashboard_title": null
+}

@@ -269,6 +269,67 @@ workflows:
               "Phylum": "Phylum-level taxonomic classification (row identifier)"
               "Kingdom": "Kingdom-level classification (row annotation)"
 
+      # ====================================================================
+      # Advanced-viz canonical-schema DCs (recipe-derived from existing files)
+      # ====================================================================
+      # These are TRANSFORMED data collections whose columns match the
+      # required schemas declared by the advanced_viz components in
+      # depictio/models/components/advanced_viz/schemas.py.
+
+      - id: "646b0f3c1e4a2d7f8e5b8cb0"
+        data_collection_tag: "volcano_canonical"
+        description: "Volcano-ready ANCOM-BC results (feature_id/effect_size/significance)"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/ampliseq/volcano_canonical.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "feature_id": "Taxon identifier"
+              "effect_size": "Log-fold change (lfc)"
+              "significance": "FDR-adjusted p-value (q_val)"
+              "label": "Display label (Phylum)"
+              "category": "Contrast group for colouring"
+              "contrast": "Statistical contrast"
+              "Kingdom": "Kingdom-level taxonomy"
+              "Phylum": "Phylum-level taxonomy"
+              "neg_log10_qval": "-log10(q-value)"
+              "significant": "q < 0.05"
+
+      - id: "646b0f3c1e4a2d7f8e5b8cb1"
+        data_collection_tag: "stacked_taxonomy_canonical"
+        description: "Stacked-taxonomy-ready relative abundance (sample/taxon/rank/abundance)"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/ampliseq/stacked_taxonomy_canonical.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample_id": "Sample identifier"
+              "taxon": "Taxon name"
+              "rank": "Taxonomic rank (Phylum here)"
+              "abundance": "Relative abundance (0-1)"
+              "lineage": "Full taxonomy string"
+
+      - id: "646b0f3c1e4a2d7f8e5b8cb2"
+        data_collection_tag: "embedding_pcoa"
+        description: "Sample embedding (PCoA on Bray-Curtis) ready for the embedding viz"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/ampliseq/embedding_pcoa.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample_id": "Sample identifier"
+              "dim_1": "PCoA component 1"
+              "dim_2": "PCoA component 2"
+
 # ============================================================================
 # TABLE JOINS CONFIGURATION
 # ============================================================================

@@ -1,0 +1,134 @@
+{
+  "_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d27" },
+  "description": null,
+  "flexible_metadata": null,
+  "hash": null,
+  "dashboard_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d27" },
+  "version": 1,
+  "tmp_children_data": [],
+  "stored_layout_data": [],
+  "stored_children_data": [],
+  "stored_metadata": [
+    {
+      "index": "ch-cluster-filter",
+      "component_type": "interactive",
+      "title": "Cluster annotation",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "embedding_features",
+      "wf_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d01" },
+      "dc_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d0b" },
+      "dc_config": {
+        "type": null, "metatype": null,
+        "description": "Feature matrix (sample × feature)",
+        "data_collection_tag": "embedding_features",
+        "dc_specific_properties": null,
+        "_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d0b" }
+      },
+      "cols_json": {}, "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "cluster", "column_type": "object",
+      "value": null, "default_state": null, "filter_expr": null,
+      "title_size": "md", "custom_color": "#9467bd", "icon_name": "mdi:group",
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "ch-heatmap",
+      "component_type": "advanced_viz",
+      "title": "Clustered heatmap (ComplexHeatmap)",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "embedding_features",
+      "wf_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d01" },
+      "dc_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d0b" },
+      "dc_config": {
+        "type": null, "metatype": null,
+        "description": "Feature matrix (sample × feature)",
+        "data_collection_tag": "embedding_features",
+        "dc_specific_properties": null,
+        "_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d0b" }
+      },
+      "cols_json": {}, "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "viz_kind": "complex_heatmap",
+      "config": {
+        "viz_kind": "complex_heatmap",
+        "matrix_wf_id": "646b0f3c1e4a2d7f8e5b8d01",
+        "matrix_dc_id": "646b0f3c1e4a2d7f8e5b8d0b",
+        "index_column": "sample_id",
+        "value_columns": [
+          "feat_0","feat_1","feat_2","feat_3","feat_4","feat_5","feat_6","feat_7",
+          "feat_8","feat_9","feat_10","feat_11","feat_12","feat_13","feat_14","feat_15",
+          "feat_16","feat_17","feat_18","feat_19","feat_20","feat_21","feat_22","feat_23",
+          "feat_24","feat_25","feat_26","feat_27","feat_28","feat_29"
+        ],
+        "row_annotation_cols": ["cluster"],
+        "cluster_rows": true,
+        "cluster_cols": true,
+        "cluster_method": "ward",
+        "cluster_metric": "euclidean",
+        "normalize": "col_z"
+      },
+      "wf_tag": "python/advanced_viz_demo",
+      "description": "Server-side clustering via packages/plotly-complexheatmap. 90 samples × first 30 features of the synthetic matrix, z-scored per column with a cluster annotation strip on the right. Settings ⚙ tunes normalisation / cluster method / cluster axes; each change re-dispatches a Celery task (cached by params)."
+    },
+    {
+      "index": "ch-features-table",
+      "component_type": "table",
+      "title": "Feature matrix preview",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "embedding_features",
+      "wf_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d01" },
+      "dc_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d0b" },
+      "dc_config": {
+        "type": null, "metatype": null,
+        "description": "Feature matrix (sample × feature)",
+        "data_collection_tag": "embedding_features",
+        "dc_specific_properties": null,
+        "_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d0b" }
+      },
+      "cols_json": {}, "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "columns": ["sample_id", "cluster", "color", "feat_0", "feat_1", "feat_2", "feat_3"],
+      "page_size": 10, "sortable": true, "filterable": true,
+      "row_selection_enabled": false, "row_selection_column": null,
+      "wf_tag": "python/advanced_viz_demo"
+    }
+  ],
+  "stored_edit_dashboard_mode_button": [],
+  "left_panel_layout_data": [
+    { "i": "box-ch-cluster-filter", "x": 0, "y": 0, "w": 1, "h": 5, "static": false }
+  ],
+  "right_panel_layout_data": [
+    { "i": "box-ch-heatmap",        "x": 0, "y": 0, "w": 8, "h": 12, "static": false, "resizeHandles": ["se","s","e","sw","w"] },
+    { "i": "box-ch-features-table", "x": 0, "y": 12, "w": 8, "h": 5, "static": false, "resizeHandles": ["se","s","e","sw","w"] }
+  ],
+  "buttons_data": { "unified_edit_mode": true, "add_components_button": { "count": 0 } },
+  "stored_add_button": { "count": 0 },
+  "title": "ComplexHeatmap",
+  "subtitle": "Clustered heatmap with dendrograms + annotation track. Server-side compute via packages/plotly-complexheatmap; cached by (DC, normalize, cluster opts, filters).",
+  "icon": "mdi:grid",
+  "icon_color": "indigo",
+  "icon_variant": "filled",
+  "workflow_system": "python",
+  "notes_content": "",
+  "permissions": {
+    "owners": [
+      {
+        "_id": { "$oid": "67658ba033c8b59ad489d7c7" },
+        "description": null, "flexible_metadata": null, "hash": null,
+        "email": "admin@example.com", "is_admin": true,
+        "is_anonymous": false, "is_temporary": false, "expiration_time": null
+      }
+    ], "editors": [], "viewers": []
+  },
+  "is_public": true,
+  "last_saved_ts": "2026-05-12 00:00:00",
+  "project_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d00" },
+  "is_main_tab": false,
+  "parent_dashboard_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d00" },
+  "tab_order": 14,
+  "main_tab_name": null,
+  "tab_icon": "mdi:grid",
+  "tab_icon_color": "indigo",
+  "parent_dashboard_title": null
+}

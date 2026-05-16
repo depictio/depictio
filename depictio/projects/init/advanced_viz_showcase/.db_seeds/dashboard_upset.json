@@ -1,0 +1,199 @@
+{
+  "_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d29" },
+  "description": null,
+  "flexible_metadata": null,
+  "hash": null,
+  "dashboard_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d29" },
+  "version": 1,
+  "tmp_children_data": [],
+  "stored_layout_data": [],
+  "stored_children_data": [],
+  "stored_metadata": [
+    {
+      "index": "ups-feature-group-filter",
+      "component_type": "interactive",
+      "title": "Feature group",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "upset_demo",
+      "wf_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d01" },
+      "dc_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d28" },
+      "dc_config": {
+        "type": null, "metatype": null,
+        "description": "Set-membership table",
+        "data_collection_tag": "upset_demo",
+        "dc_specific_properties": null,
+        "_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d28" }
+      },
+      "cols_json": {}, "parent_index": null,
+      "last_updated": "2026-05-13T00:00:00.000000",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "feature_group", "column_type": "object",
+      "value": null, "default_state": null, "filter_expr": null,
+      "title_size": "md", "custom_color": "#9467bd", "icon_name": "mdi:tag-multiple",
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "ups-card-features",
+      "component_type": "card",
+      "title": "Features",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "upset_demo",
+      "wf_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d01" },
+      "dc_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d28" },
+      "dc_config": {
+        "type": null, "metatype": null,
+        "description": "Set-membership table",
+        "data_collection_tag": "upset_demo",
+        "dc_specific_properties": null,
+        "_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d28" }
+      },
+      "cols_json": {}, "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "aggregation": "count", "column_name": "feature_id", "column_type": "object",
+      "value": null, "aggregations": null, "filter_expr": null,
+      "icon_name": "mdi:dna", "icon_color": "#9467bd",
+      "title_color": "#9467bd", "title_font_size": "lg", "value_font_size": "xl",
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "ups-card-A",
+      "component_type": "card",
+      "title": "In contrast A",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "upset_demo",
+      "wf_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d01" },
+      "dc_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d28" },
+      "dc_config": {
+        "type": null, "metatype": null,
+        "description": "Set-membership table",
+        "data_collection_tag": "upset_demo",
+        "dc_specific_properties": null,
+        "_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d28" }
+      },
+      "cols_json": {}, "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "aggregation": "sum", "column_name": "contrastA", "column_type": "int64",
+      "value": null, "aggregations": null, "filter_expr": null,
+      "icon_name": "mdi:set-square", "icon_color": "#1f77b4",
+      "title_color": "#1f77b4", "title_font_size": "lg", "value_font_size": "xl",
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "ups-card-E",
+      "component_type": "card",
+      "title": "In contrast E",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "upset_demo",
+      "wf_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d01" },
+      "dc_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d28" },
+      "dc_config": {
+        "type": null, "metatype": null,
+        "description": "Set-membership table",
+        "data_collection_tag": "upset_demo",
+        "dc_specific_properties": null,
+        "_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d28" }
+      },
+      "cols_json": {}, "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "aggregation": "sum", "column_name": "contrastE", "column_type": "int64",
+      "value": null, "aggregations": null, "filter_expr": null,
+      "icon_name": "mdi:set-square", "icon_color": "#d62728",
+      "title_color": "#d62728", "title_font_size": "lg", "value_font_size": "xl",
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "ups-upset",
+      "component_type": "advanced_viz",
+      "title": "UpSet plot",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "upset_demo",
+      "wf_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d01" },
+      "dc_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d28" },
+      "dc_config": {
+        "type": null, "metatype": null,
+        "description": "Set-membership table",
+        "data_collection_tag": "upset_demo",
+        "dc_specific_properties": null,
+        "_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d28" }
+      },
+      "cols_json": {}, "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "viz_kind": "upset_plot",
+      "config": {
+        "viz_kind": "upset_plot",
+        "matrix_wf_id": "646b0f3c1e4a2d7f8e5b8d01",
+        "matrix_dc_id": "646b0f3c1e4a2d7f8e5b8d28",
+        "set_columns": ["contrastA", "contrastB", "contrastC", "contrastD", "contrastE"],
+        "sort_by": "cardinality",
+        "sort_order": "descending",
+        "min_size": 1,
+        "show_set_sizes": true,
+        "color_intersections_by": "degree"
+      },
+      "wf_tag": "python/advanced_viz_demo",
+      "description": "Set-intersection visualisation (alternative to Venn diagrams). Server-side compute via packages/plotly-upset; Settings ⚙ tunes Sort / Min size / Colour / set-size bars. Cached by (DC, params)."
+    },
+    {
+      "index": "ups-table",
+      "component_type": "table",
+      "title": "Membership table",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "upset_demo",
+      "wf_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d01" },
+      "dc_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d28" },
+      "dc_config": {
+        "type": null, "metatype": null,
+        "description": "Set-membership table",
+        "data_collection_tag": "upset_demo",
+        "dc_specific_properties": null,
+        "_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d28" }
+      },
+      "cols_json": {}, "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "columns": ["feature_id", "feature_group", "contrastA", "contrastB", "contrastC", "contrastD", "contrastE"],
+      "page_size": 10, "sortable": true, "filterable": true,
+      "row_selection_enabled": false, "row_selection_column": null,
+      "wf_tag": "python/advanced_viz_demo"
+    }
+  ],
+  "stored_edit_dashboard_mode_button": [],
+  "left_panel_layout_data": [
+    { "i": "box-ups-feature-group-filter", "x": 0, "y": 0, "w": 1, "h": 5, "static": false }
+  ],
+  "right_panel_layout_data": [
+    { "i": "box-ups-card-features", "x": 0, "y": 0, "w": 2, "h": 2, "static": true },
+    { "i": "box-ups-card-A",        "x": 2, "y": 0, "w": 3, "h": 2, "static": true },
+    { "i": "box-ups-card-E",        "x": 5, "y": 0, "w": 3, "h": 2, "static": true },
+    { "i": "box-ups-upset",         "x": 0, "y": 2, "w": 8, "h": 12, "static": false, "resizeHandles": ["se","s","e","sw","w"] },
+    { "i": "box-ups-table",         "x": 0, "y": 14, "w": 8, "h": 5, "static": false, "resizeHandles": ["se","s","e","sw","w"] }
+  ],
+  "buttons_data": { "unified_edit_mode": true, "add_components_button": { "count": 0 } },
+  "stored_add_button": { "count": 0 },
+  "title": "UpSet plot",
+  "subtitle": "Alternative to Venn diagrams for >3 sets. Server-side compute via packages/plotly-upset; cached by (DC, params, filters).",
+  "icon": "mdi:set-merge",
+  "icon_color": "yellow",
+  "icon_variant": "filled",
+  "workflow_system": "python",
+  "notes_content": "",
+  "permissions": {
+    "owners": [
+      {
+        "_id": { "$oid": "67658ba033c8b59ad489d7c7" },
+        "description": null, "flexible_metadata": null, "hash": null,
+        "email": "admin@example.com", "is_admin": true,
+        "is_anonymous": false, "is_temporary": false, "expiration_time": null
+      }
+    ], "editors": [], "viewers": []
+  },
+  "is_public": true,
+  "last_saved_ts": "2026-05-12 00:00:00",
+  "project_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d00" },
+  "is_main_tab": false,
+  "parent_dashboard_id": { "$oid": "646b0f3c1e4a2d7f8e5b8d00" },
+  "tab_order": 15,
+  "main_tab_name": null,
+  "tab_icon": "mdi:set-merge",
+  "tab_icon_color": "yellow",
+  "parent_dashboard_title": null
+}
