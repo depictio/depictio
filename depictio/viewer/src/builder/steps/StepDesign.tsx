@@ -125,6 +125,7 @@ const StepDesign: React.FC = () => {
           disabled={!ready || savedRedirect}
           onClick={handleSave}
           style={{ height: 60, fontSize: 18, fontWeight: 700 }}
+          data-tour-id="component-save"
         >
           {state.mode === 'create' ? 'Create component' : 'Save changes'}
         </Button>

@@ -213,6 +213,7 @@ const Header: React.FC<HeaderProps> = ({
             size="xs"
             onClick={onAddComponent}
             disabled={!dashboardId}
+            data-tour-id="editor-add-component"
           >
             Add component
           </Button>
@@ -225,6 +226,7 @@ const Header: React.FC<HeaderProps> = ({
             size="xs"
             onClick={onSave}
             disabled={!dashboardId}
+            data-tour-id="editor-save"
           >
             Save
           </Button>

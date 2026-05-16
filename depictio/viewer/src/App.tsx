@@ -36,12 +36,6 @@ import type {
 import { notifications } from '@mantine/notifications';
 import { Header, Sidebar, SettingsDrawer } from './chrome';
 import { useSidebarOpen } from './hooks/useSidebarOpen';
-import { useAuthMode } from './auth/hooks/useAuthMode';
-import DemoTour from './demo/DemoTour';
-import DemoModeBanner from './components/DemoModeBanner';
-
-// Demo onboarding UI temporarily disabled — flip to true to re-enable.
-const ENABLE_DEMO_UI = false;
 
 /**
  * Top-level SPA. Layout:
@@ -80,8 +74,6 @@ const App: React.FC = () => {
   // `sidebar-collapsed` localStorage key the Dash app writes.
   const [desktopOpened, toggleDesktop] = useSidebarOpen();
   const [settingsOpened, { open: openSettings, close: closeSettings }] = useDisclosure(false);
-  const auth = useAuthMode();
-  const isDemoMode = auth.status?.is_demo_mode === true;
 
   const dashboardId = extractDashboardId();
   const bulkCtrl = useRef<AbortController | null>(null);
@@ -307,8 +299,6 @@ const App: React.FC = () => {
 
   return (
     <>
-      {ENABLE_DEMO_UI && isDemoMode && <DemoModeBanner />}
-      <DemoTour active={ENABLE_DEMO_UI && isDemoMode} />
       <AppShell
       header={{ height: 50 }}
       navbar={{

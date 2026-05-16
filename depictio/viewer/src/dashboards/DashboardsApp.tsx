@@ -304,6 +304,7 @@ const DashboardsApp: React.FC = () => {
             size="md"
             onClick={openCreate}
             style={{ fontFamily: 'Virgil' }}
+            data-tour-id="dashboards-create"
           >
             + New Dashboard
           </Button>

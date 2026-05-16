@@ -71,13 +71,7 @@ import LeftFilterPanel from './components/LeftFilterPanel';
 import GridItemEditOverlay from './components/GridItemEditOverlay';
 import { Header, Sidebar, SettingsDrawer, TabModal } from './chrome';
 import type { TabModalSubmitPayload } from './chrome';
-import { useAuthMode } from './auth/hooks/useAuthMode';
-import DemoTour from './demo/DemoTour';
-import DemoModeBanner from './components/DemoModeBanner';
 import './chrome/chrome.css';
-
-// Demo onboarding UI temporarily disabled — flip to true to re-enable.
-const ENABLE_DEMO_UI = false;
 
 const API_BASE = '/depictio/api/v1';
 const SAVE_DEBOUNCE_MS = 500;
@@ -160,8 +154,6 @@ const EditorApp: React.FC = () => {
   // Persist across tab/page navigations (matches App.tsx + Dash app).
   const [desktopOpened, toggleDesktop] = useSidebarOpen();
   const [settingsOpened, { open: openSettings, close: closeSettings }] = useDisclosure(false);
-  const auth = useAuthMode();
-  const isDemoMode = auth.status?.is_demo_mode === true;
   // Tab modal state — `mode` decides between create vs edit. `target` is the
   // tab being edited (or null for create). `submitting` blocks Save while a
   // request is in flight.
@@ -857,8 +849,6 @@ const EditorApp: React.FC = () => {
 
   return (
     <>
-      {ENABLE_DEMO_UI && isDemoMode && <DemoModeBanner />}
-      <DemoTour active={ENABLE_DEMO_UI && isDemoMode} />
     <AppShell
       header={{ height: 50 }}
       navbar={{
