@@ -76,27 +76,38 @@ async function refreshAccessToken(refreshToken: string): Promise<{
  *  cache. Reset to null when the refresh resolves. */
 let pendingRefresh: Promise<string | null> | null = null;
 
-async function ensureFreshAccessToken(): Promise<string | null> {
-  const session = readStoredSession();
-  const access = typeof session?.access_token === 'string' ? session.access_token : null;
-  const refresh = typeof session?.refresh_token === 'string' ? session.refresh_token : null;
-  const expireIso = typeof session?.expire_datetime === 'string' ? session.expire_datetime : null;
+/** Last time a refresh attempt returned null (i.e. the refresh token itself
+ *  was rejected). Used as a short cooldown so a burst of parallel authFetch's
+ *  on page load doesn't fire one /auth/refresh per request when the token
+ *  is dead. After this window we'll let one retry try again — if it also
+ *  fails, the cooldown resets and we keep redirecting users to /auth. */
+let lastRefreshFailureMs: number | null = null;
+const REFRESH_FAILURE_COOLDOWN_MS = 30_000;
 
-  if (!access || !refresh) return access;
-
-  const expireMs = expireIso ? Date.parse(expireIso) : NaN;
-  if (Number.isFinite(expireMs) && expireMs - Date.now() > REFRESH_WINDOW_MS) {
-    return access;
+/** Run an /auth/refresh through the shared ``pendingRefresh`` slot so
+ *  N parallel callers (proactive + 401 retries from concurrent requests)
+ *  collapse into one network call. Returns the new access token, or null
+ *  if the refresh token itself was rejected / we're inside the failure
+ *  cooldown. On success, persists the updated session to localStorage. */
+async function sharedRefresh(refreshToken: string): Promise<string | null> {
+  if (
+    lastRefreshFailureMs !== null &&
+    Date.now() - lastRefreshFailureMs < REFRESH_FAILURE_COOLDOWN_MS
+  ) {
+    return null;
   }
-
   if (!pendingRefresh) {
     pendingRefresh = (async () => {
       try {
-        const refreshed = await refreshAccessToken(refresh);
-        if (!refreshed) return null;
-        const next = { ...session, ...refreshed };
+        const refreshed = await refreshAccessToken(refreshToken);
+        if (!refreshed) {
+          lastRefreshFailureMs = Date.now();
+          return null;
+        }
+        lastRefreshFailureMs = null;
+        const session = readStoredSession() ?? {};
         try {
-          localStorage.setItem(SESSION_KEY, JSON.stringify(next));
+          localStorage.setItem(SESSION_KEY, JSON.stringify({ ...session, ...refreshed }));
         } catch {
           // ignore quota / private mode
         }
@@ -106,7 +117,27 @@ async function ensureFreshAccessToken(): Promise<string | null> {
       }
     })();
   }
-  const next = await pendingRefresh;
+  return pendingRefresh;
+}
+
+async function ensureFreshAccessToken(): Promise<string | null> {
+  const session = readStoredSession();
+  const access = typeof session?.access_token === 'string' ? session.access_token : null;
+  const refresh = typeof session?.refresh_token === 'string' ? session.refresh_token : null;
+  const expireIso = typeof session?.expire_datetime === 'string' ? session.expire_datetime : null;
+
+  if (!access || !refresh) return access;
+
+  // Without a parseable expiry we don't proactively refresh — letting the
+  // server's 401 trigger the retry path is cheaper than refreshing on
+  // every fetch (which is what the old `Number.isFinite(NaN)` fall-through
+  // accidentally did, hammering /auth/refresh on legacy sessions).
+  const expireMs = expireIso ? Date.parse(expireIso) : NaN;
+  if (!Number.isFinite(expireMs) || expireMs - Date.now() > REFRESH_WINDOW_MS) {
+    return access;
+  }
+
+  const next = await sharedRefresh(refresh);
   return next ?? access;
 }
 
@@ -132,25 +163,21 @@ async function authFetch(url: string, init: RequestInit = {}): Promise<Response>
   const first = await fetch(url, { ...init, headers });
   if (first.status !== 401) return first;
 
-  // Single retry: force a refresh, then re-issue.
+  // Single retry: share the refresh round-trip via ``sharedRefresh`` so a
+  // burst of parallel 401s collapses into one /auth/refresh call.
   const refresh = typeof existing?.refresh_token === 'string' ? existing.refresh_token : null;
   if (!refresh) {
     redirectToAuth();
     return first;
   }
-  const refreshed = await refreshAccessToken(refresh);
-  if (!refreshed) {
+  const refreshedToken = await sharedRefresh(refresh);
+  if (!refreshedToken) {
     clearSession();
     redirectToAuth();
     return first;
   }
-  try {
-    localStorage.setItem(SESSION_KEY, JSON.stringify({ ...existing, ...refreshed }));
-  } catch {
-    // ignore
-  }
   const retryHeaders = new Headers(init.headers || {});
-  retryHeaders.set('Authorization', `Bearer ${refreshed.access_token}`);
+  retryHeaders.set('Authorization', `Bearer ${refreshedToken}`);
   if (!retryHeaders.has('Content-Type') && init.body && typeof init.body === 'string') {
     retryHeaders.set('Content-Type', 'application/json');
   }
@@ -2732,4 +2759,269 @@ export async function clearTableDC(dcId: string): Promise<TableMutationResult> {
   });
   if (!res.ok) await throwHttpDetailError(res, 'Failed to clear Table DC');
   return (await res.json()) as TableMutationResult;
+}
+
+// ============================================================================
+// Global filters & stories (cross-tab story feature)
+// ============================================================================
+
+/** One (workflow, data collection, column) target of a global filter. */
+export interface GlobalFilterLink {
+  wf_id: string;
+  dc_id: string;
+  column_name: string;
+}
+
+/** A global filter promoted from an in-tab interactive component. The value
+ *  is stored per-user in {@link GlobalFiltersState.user_values}, not on the
+ *  definition. */
+/** Styling captured from the source component at promotion time so the
+ *  synthetic card rendered on tabs *without* the source component still LOOKS
+ *  like the original (same icon, color, title). Keys mirror the per-component
+ *  fields read by ComponentRenderer / InteractiveGroupCard. */
+export interface GlobalFilterDisplay {
+  title?: string;
+  custom_color?: string;
+  icon_name?: string;
+  title_size?: string;
+}
+
+export interface GlobalFilterDef {
+  id: string;
+  label: string;
+  source_component_index: string;
+  source_tab_id: string;
+  interactive_component_type: string;
+  column_type: string;
+  default_state?: unknown;
+  links: GlobalFilterLink[];
+  display?: GlobalFilterDisplay | null;
+}
+
+/** A single pinned filter inside a Journey's funnel.
+ *
+ *  `scope='global'` references a `GlobalFilterDef.id` (cross-tab filter);
+ *  `scope='local'` references a per-tab interactive filter by its
+ *  `component_index` on `tab_id`. `order_within_tab` resolves order among
+ *  steps that share the same tab; cross-tab order is dictated by the
+ *  dashboard's `tab_order`. */
+export interface FunnelStep {
+  id: string;
+  scope: 'global' | 'local';
+  tab_id: string;
+  global_filter_id?: string | null;
+  component_index?: string | null;
+  order_within_tab: number;
+  label?: string | null;
+  /** dc_id of the component the filter was pinned from. Set at pin-time so
+   *  the funnel backend applies the filter to the right DC on tabs that
+   *  carry multiple DCs. Legacy steps may omit this; the server falls back
+   *  to a tab→DC index lookup in that case. */
+  source_dc_id?: string | null;
+}
+
+/** A named, ordered list of FunnelSteps — one analytical direction. */
+export interface Journey {
+  id: string;
+  name: string;
+  description?: string | null;
+  icon?: string | null;
+  color?: string | null;
+  steps: FunnelStep[];
+  pinned: boolean;
+  is_default: boolean;
+}
+
+/** Hydration shape returned by `GET /dashboards/global_filters/{parentId}`. */
+export interface GlobalFiltersState {
+  definitions: GlobalFilterDef[];
+  journeys: Journey[];
+  user_values: Record<string, unknown>;
+  last_active_journey_id: string | null;
+}
+
+export async function fetchGlobalFiltersState(
+  parentDashboardId: string,
+): Promise<GlobalFiltersState> {
+  const res = await authFetch(
+    `${API_BASE}/dashboards/global_filters/${parentDashboardId}`,
+  );
+  if (!res.ok) await throwHttpError(res, 'Failed to fetch global filters state');
+  return (await res.json()) as GlobalFiltersState;
+}
+
+export async function upsertGlobalFilter(
+  parentDashboardId: string,
+  def: GlobalFilterDef,
+): Promise<void> {
+  const res = await authFetch(
+    `${API_BASE}/dashboards/global_filters/${parentDashboardId}`,
+    { method: 'POST', body: JSON.stringify(def) },
+  );
+  if (!res.ok) await throwHttpError(res, 'Failed to upsert global filter');
+}
+
+export async function deleteGlobalFilter(
+  parentDashboardId: string,
+  filterId: string,
+): Promise<void> {
+  const res = await authFetch(
+    `${API_BASE}/dashboards/global_filters/${parentDashboardId}/${filterId}`,
+    { method: 'DELETE' },
+  );
+  if (!res.ok) await throwHttpError(res, 'Failed to delete global filter');
+}
+
+export async function patchGlobalFilterValue(
+  parentDashboardId: string,
+  filterId: string,
+  value: unknown,
+): Promise<void> {
+  const res = await authFetch(
+    `${API_BASE}/dashboards/global_filters/${parentDashboardId}/${filterId}/value`,
+    { method: 'PATCH', body: JSON.stringify({ value }) },
+  );
+  if (!res.ok) await throwHttpError(res, 'Failed to persist global filter value');
+}
+
+export interface FunnelTargetDC {
+  wf_id: string;
+  dc_id: string;
+}
+
+/** Wire shape sent to `/funnel` for row-count evaluation per step.
+ *
+ *  Renamed from `FunnelStep` (now used for the pinned-step definition);
+ *  this is the runtime evaluation payload carrying the current value for
+ *  one pinned step. Globals: `scope='global'` + `global_filter_id`.
+ *  Locals: `scope='local'` + `tab_id`, `component_index`, `column_name`,
+ *  `interactive_component_type`. */
+export interface FunnelStepInput {
+  scope: 'global' | 'local';
+  value: unknown;
+  global_filter_id?: string | null;
+  tab_id?: string | null;
+  component_index?: string | null;
+  column_name?: string | null;
+  interactive_component_type?: string | null;
+  /** Forwarded from the FunnelStep — the dc_id of the component the filter
+   *  was pinned from. Backend uses it directly when present (instead of the
+   *  tab→DC lookup) so multi-DC tabs resolve the right target. */
+  source_dc_id?: string | null;
+}
+
+/** Metric for funnel cell values. `rows` returns surviving row count;
+ *  `nunique` returns distinct-value count of `metric_column`. */
+export type FunnelMetric = 'rows' | 'nunique';
+
+export interface FunnelComputeOptions {
+  metric?: FunnelMetric;
+  metricColumn?: string | null;
+}
+
+/** Returns one cumulative series per target DC. Length is `steps.length + 1`
+ *  (N₀ at index 0). A target DC that failed to load returns `null` in place
+ *  of its series so the rest of the widget can still render.
+ *
+ *  `applicable[dc][i]` is `false` when step `i-1` did not narrow `dc` (the
+ *  filter doesn't link to that DC, so the previous value was carried
+ *  forward). Slot 0 ("All rows") is always `true`. The client uses this to
+ *  dim no-op cells in the cascade table. */
+export interface FunnelResponse {
+  counts: Record<string, number[] | null>;
+  applicable: Record<string, boolean[] | null>;
+}
+
+export async function computeFunnel(
+  parentDashboardId: string,
+  steps: FunnelStepInput[],
+  targetDcs: FunnelTargetDC[],
+  options: FunnelComputeOptions = {},
+): Promise<FunnelResponse> {
+  const body: Record<string, unknown> = { steps, target_dcs: targetDcs };
+  if (options.metric) body.metric = options.metric;
+  if (options.metricColumn) body.metric_column = options.metricColumn;
+  const res = await authFetch(
+    `${API_BASE}/dashboards/global_filters/${parentDashboardId}/funnel`,
+    { method: 'POST', body: JSON.stringify(body) },
+  );
+  if (!res.ok) await throwHttpError(res, 'Failed to compute funnel');
+  return (await res.json()) as FunnelResponse;
+}
+
+export interface JourneyPreviewResponse {
+  columns: string[];
+  /** Up to `limit` rows sampled from the *unfiltered* target DC. */
+  rows: Record<string, unknown>[];
+  /** Parallel to `rows`: index of the step that first removed each row,
+   *  or `null` if the row survived all steps. */
+  removed_at_step: (number | null)[];
+  /** Total unfiltered row count. */
+  total: number;
+  /** Rows surviving all steps (≥ 0). */
+  survivors: number;
+  /** Rows first removed at each step. Length == steps.length. */
+  step_drops: number[];
+}
+
+/** Sample of `targetDc` rows annotated by which step removed them, so a
+ *  single table can show all stages of the funnel at once. Fires
+ *  on-demand from the "View filtered rows" UI — not on every filter
+ *  change. */
+export async function fetchJourneyPreview(
+  parentDashboardId: string,
+  steps: FunnelStepInput[],
+  targetDc: FunnelTargetDC,
+  limit: number = 200,
+): Promise<JourneyPreviewResponse> {
+  const res = await authFetch(
+    `${API_BASE}/dashboards/global_filters/${parentDashboardId}/funnel/journey_preview`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ steps, target_dc: targetDc, limit }),
+    },
+  );
+  if (!res.ok) await throwHttpError(res, 'Failed to load journey preview');
+  return (await res.json()) as JourneyPreviewResponse;
+}
+
+export async function upsertJourney(
+  parentDashboardId: string,
+  journey: Journey,
+): Promise<void> {
+  const res = await authFetch(
+    `${API_BASE}/dashboards/journeys/${parentDashboardId}`,
+    { method: 'POST', body: JSON.stringify(journey) },
+  );
+  if (!res.ok) await throwHttpError(res, 'Failed to upsert journey');
+}
+
+export async function deleteJourney(
+  parentDashboardId: string,
+  journeyId: string,
+): Promise<void> {
+  const res = await authFetch(
+    `${API_BASE}/dashboards/journeys/${parentDashboardId}/${journeyId}`,
+    { method: 'DELETE' },
+  );
+  if (!res.ok) await throwHttpError(res, 'Failed to delete journey');
+}
+
+export async function patchActiveJourney(
+  parentDashboardId: string,
+  journeyId: string | null,
+): Promise<void> {
+  // `keepalive: true` so the browser commits this PATCH even when the
+  // caller immediately triggers a full-page navigation. Without it, the
+  // in-flight request is cancelled at unload and on hydration the user
+  // lands back in Free Explore.
+  const res = await authFetch(
+    `${API_BASE}/dashboards/journeys/${parentDashboardId}/active`,
+    {
+      method: 'PATCH',
+      body: JSON.stringify({ journey_id: journeyId }),
+      keepalive: true,
+    },
+  );
+  if (!res.ok) await throwHttpError(res, 'Failed to persist active journey');
 }

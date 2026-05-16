@@ -164,8 +164,36 @@ export {
   appendTableFiles,
   replaceTableFiles,
   clearTableDC,
+  // Global filters & stories (cross-tab feature)
+  fetchGlobalFiltersState,
+  upsertGlobalFilter,
+  deleteGlobalFilter,
+  patchGlobalFilterValue,
+  computeFunnel,
+  fetchJourneyPreview,
+  upsertJourney,
+  deleteJourney,
+  patchActiveJourney,
 } from './api';
 export type { TableMutationResult } from './api';
+
+// Cross-tab merge helpers (synthesizes global filters into the InteractiveFilter array
+// + builds synthetic interactive-component cards for the unified left rail)
+export {
+  mergeWithGlobal,
+  buildSyntheticInteractiveComponents,
+  isSyntheticComponentIndex,
+  filterIdFromSyntheticIndex,
+  syntheticComponentIndex,
+  isEmptyGlobalValue,
+} from './utils/globalFilters';
+
+// Cross-tab global filters & journeys — UI
+export { default as GlobeToggle } from './components/global/GlobeToggle';
+export { default as FunnelPinToggle } from './components/global/FunnelPinToggle';
+export { default as JourneyMenu } from './components/global/JourneyMenu';
+export { default as JourneyFunnel } from './components/global/JourneyFunnel';
+export type { FunnelTab, JourneyFunnelProps } from './components/global/JourneyFunnel';
 // Selection-as-filter helpers (Plotly/AG Grid → InteractiveFilter)
 export {
   extractScatterSelection,
@@ -256,4 +284,14 @@ export type {
   CreateMultiQCDCInput,
   MultiQCMutationResult,
   MultiQCUniformityCheckResult,
+  // Global filters & journeys
+  GlobalFilterDef,
+  GlobalFilterDisplay,
+  GlobalFilterLink,
+  Journey,
+  FunnelStep,
+  GlobalFiltersState,
+  FunnelStepInput,
+  FunnelTargetDC,
+  FunnelResponse,
 } from './api';

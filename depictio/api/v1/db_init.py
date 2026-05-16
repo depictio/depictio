@@ -285,6 +285,29 @@ async def create_dashboard_from_json(
             update_fields["is_public"] = True
             needs_update = True
 
+        # Re-sync cross-tab global_filters & journeys from the seed so existing
+        # deployments pick up new demo content without requiring a MongoDB wipe.
+        # We compare on the JSON-normalized form so dict/ObjectId equivalence
+        # doesn't trigger spurious updates.
+        for fld in ("global_filters", "journeys"):
+            seed_val = dashboard_data.get(fld, [])
+            existing_val = _check.get(fld, [])
+            if seed_val != existing_val:
+                logger.info(f"Syncing '{fld}' from seed ({len(seed_val)} entries)")
+                update_fields[fld] = seed_val
+                needs_update = True
+        # Strip the legacy `stories` field if a previous deployment of this
+        # branch wrote it — schema renamed Story → Journey. Per-journey
+        # snapshot bookkeeping (`journey_stops`, `last_active_journey_stop_id`)
+        # lives on `user_dashboard_state` documents, not here, so no unset
+        # is needed on the dashboard doc itself.
+        if "stories" in _check:
+            logger.info("Dropping legacy 'stories' field (renamed to 'journeys')")
+            dashboards_collection.update_one(
+                {"_id": ObjectId(dashboard_data["_id"])},
+                {"$unset": {"stories": ""}},
+            )
+
         # Only force static DC ID if specified (for single-DC dashboards like Iris)
         if static_dc_id:
             if "stored_metadata" in _check:

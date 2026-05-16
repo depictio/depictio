@@ -15,6 +15,7 @@ import { Icon } from '@iconify/react';
 
 import type { DashboardData } from 'depictio-react-core';
 import { fetchProject } from 'depictio-react-core';
+import FunnelsSection from './FunnelsSection';
 
 interface SettingsDrawerProps {
   opened: boolean;
@@ -122,6 +123,10 @@ const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
             )}
           </Stack>
         )}
+
+        <Divider />
+
+        <FunnelsSection />
 
         <Divider />
 

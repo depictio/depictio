@@ -116,6 +116,7 @@ class MongoDBConfig(ServiceConfig):
         projects_collection: str = Field(default="projects")
         multiqc_collection: str = Field(default="multiqc")
         multiqc_prerender_collection: str = Field(default="multiqc_prerender")
+        user_dashboard_state_collection: str = Field(default="user_dashboard_state")
         test_collection: str = Field(default="test")
 
     collections: Collections = Field(default_factory=Collections)

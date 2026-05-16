@@ -19,11 +19,12 @@ Component Architecture:
 
 import re
 from pathlib import Path
-from typing import Any, ClassVar, Optional
+from typing import Annotated, Any, ClassVar, Optional
 
 import yaml
 from pydantic import (
     BaseModel,
+    BeforeValidator,
     ConfigDict,
     Field,
     ValidationError,
@@ -1217,6 +1218,172 @@ class DashboardDataLite(BaseModel):
         return full_dict
 
 
+# ============================================================================
+# Global Filters & Stories (cross-tab / multi-directional filtering)
+# ============================================================================
+
+
+def _coerce_id_to_str(value: Any) -> Any:
+    """Stringify an ObjectId-or-str ID. MongoDB stores wf_id/dc_id as
+    ``ObjectId`` system-wide; the link model treats them as opaque
+    strings, so coerce on read."""
+    if value is None:
+        return value
+    # bson.ObjectId has a clean __str__; the type check is duck-typed so we
+    # don't pay an import here.
+    return value if isinstance(value, str) else str(value)
+
+
+IdStr = Annotated[str, BeforeValidator(_coerce_id_to_str)]
+
+
+class GlobalFilterLink(BaseModel):
+    """One (workflow, data collection, column) target of a global filter.
+
+    A single global filter may carry multiple links so its value applies to
+    different DCs/columns across tabs (e.g. ``sample_id`` in DC1 maps to
+    ``sample`` in DC2). Link resolution against project-level link maps is
+    handled server-side by ``depictio.api.v1.filter_links``.
+    """
+
+    wf_id: IdStr
+    dc_id: IdStr
+    column_name: str
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class GlobalFilterDef(BaseModel):
+    """A global filter promoted from an in-tab interactive component.
+
+    Persisted on the parent ``DashboardData`` (``is_main_tab=True``).
+    The current per-user value is stored separately in
+    :class:`depictio.models.models.user_dashboard_state.UserDashboardState`
+    so collaborators on the same dashboard do not overwrite each other.
+    """
+
+    id: str
+    label: str
+    source_component_index: str
+    source_tab_id: PyObjectId
+    interactive_component_type: str
+    column_type: str
+    default_state: Any = None
+    links: list[GlobalFilterLink] = Field(default_factory=list)
+    # Styling captured at promotion time from the source component (title,
+    # icon, color, title_size). Lets the synthetic card rendered on tabs
+    # *without* the source component still LOOK like the original — same
+    # icon, same custom color, same title — so the user reads "this is the
+    # Sample ID filter I promoted from MultiQC" without a visual jolt.
+    # Loose dict because the renderer reads a handful of optional keys; we
+    # don't want a tight contract here in case the source component schema
+    # gains fields in the future.
+    display: dict[str, Any] | None = None
+
+    model_config = ConfigDict(arbitrary_types_allowed=True, extra="forbid")
+
+    @field_serializer("source_tab_id")
+    def serialize_source_tab_id(self, source_tab_id: PyObjectId) -> str:
+        return str(source_tab_id)
+
+
+class FunnelStep(BaseModel):
+    """A single pinned filter in a Journey's funnel.
+
+    A step references either a global filter (``scope='global'`` with
+    ``global_filter_id``) or a per-tab interactive filter
+    (``scope='local'`` with ``component_index``). ``tab_id`` is always set
+    and anchors the step in cross-tab order — the dashboard's tab order
+    determines step order across tabs; ``order_within_tab`` resolves
+    within-tab order from the component's position in
+    ``left_panel_layout_data``.
+    """
+
+    id: str
+    scope: str  # 'global' | 'local'
+    tab_id: PyObjectId
+    global_filter_id: str | None = None
+    component_index: str | None = None
+    order_within_tab: int = 0
+    label: str | None = None
+    # The dc_id of the component the filter was pinned from. Set at pin-time
+    # so the funnel backend can apply the filter to the right DC even when
+    # the host tab has multiple DCs (and `_build_tab_dc_index` would pick the
+    # wrong one). Legacy steps without this field fall back to the tab→DC
+    # index lookup.
+    source_dc_id: str | None = None
+
+    model_config = ConfigDict(arbitrary_types_allowed=True, extra="forbid")
+
+    @field_serializer("tab_id")
+    def serialize_tab_id(self, tab_id: PyObjectId) -> str:
+        return str(tab_id)
+
+    @model_validator(mode="after")
+    def _check_scope_references(self) -> "FunnelStep":
+        if self.scope not in ("global", "local"):
+            raise ValueError(f"FunnelStep.scope must be 'global' or 'local', got {self.scope!r}")
+        if self.scope == "global" and not self.global_filter_id:
+            raise ValueError("FunnelStep(scope='global') requires global_filter_id")
+        if self.scope == "local" and not self.component_index:
+            raise ValueError("FunnelStep(scope='local') requires component_index")
+        return self
+
+
+class Journey(BaseModel):
+    """A named, ordered sequence of pinned filter steps (a funnel).
+
+    A journey is a declarative list of filters an author has pinned, in
+    tab order. Each step is one filter (global or local); the live row
+    count at each step is computed from the user's current filter values
+    flowing through the prefix of steps.
+
+    Multiple journeys may coexist on the same dashboard for different
+    analytical directions (e.g. ``Genes → Locations`` vs
+    ``Locations → Genes``). Definitions are dashboard-scoped; per-user
+    last-active journey lives in :class:`UserDashboardState`.
+    """
+
+    id: str
+    name: str
+    description: str | None = None
+    icon: str | None = None
+    color: str | None = None
+    steps: list[FunnelStep] = Field(default_factory=list)
+    pinned: bool = False
+    is_default: bool = False
+
+    model_config = ConfigDict(arbitrary_types_allowed=True, extra="forbid")
+
+    @model_validator(mode="after")
+    def _dedupe_steps(self) -> "Journey":
+        """Drop steps that duplicate the same (scope, ref) target.
+
+        Within-tab and cross-tab ordering is reconciled server-side by the
+        upsert endpoint (which has access to tab_order and
+        left_panel_layout_data); the model only guarantees structural
+        invariants — unique step IDs, no duplicate filter references.
+        """
+        seen_ids: set[str] = set()
+        seen_refs: set[tuple[str, str]] = set()
+        deduped: list[FunnelStep] = []
+        for step in self.steps:
+            if step.id in seen_ids:
+                continue
+            ref_key = (
+                ("global", step.global_filter_id or "")
+                if step.scope == "global"
+                else ("local", f"{step.tab_id}:{step.component_index or ''}")
+            )
+            if ref_key in seen_refs:
+                continue
+            seen_ids.add(step.id)
+            seen_refs.add(ref_key)
+            deduped.append(step)
+        self.steps = deduped
+        return self
+
+
 class DashboardData(MongoModel):
     """Full dashboard model with MongoDB and auth fields.
 
@@ -1267,6 +1434,11 @@ class DashboardData(MongoModel):
     project_realtime: Optional[dict] = (
         None  # Populated at runtime from the parent project's realtime config
     )
+
+    # Cross-tab global filters & journeys (meaningful only when is_main_tab=True;
+    # ignored on child tabs). Defaults keep older documents loading unchanged.
+    global_filters: list[GlobalFilterDef] = Field(default_factory=list)
+    journeys: list[Journey] = Field(default_factory=list)
 
     model_config = ConfigDict(
         arbitrary_types_allowed=True,
