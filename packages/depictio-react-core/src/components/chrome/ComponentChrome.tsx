@@ -31,6 +31,12 @@ export interface ComponentChromeProps {
   /** When true, render the drag-handle action (3×3 grip). The actual drag is
    *  wired by react-grid-layout via `draggableHandle=".react-grid-dragHandle"`. */
   showDragHandle?: boolean;
+  /** When true, this component is the SOURCE of an active dashboard filter
+   *  (e.g. a scatter selection, a table row selection, a map polygon). The
+   *  reset action icon stays in its original position in the chrome row but
+   *  switches to a filled-orange style; otherwise it renders disabled in the
+   *  light variant. The action-icon order is preserved either way. */
+  sourceFilterActive?: boolean;
 }
 
 /** View-accessible action visibility per component type. Mirrors the
@@ -89,6 +95,7 @@ const ComponentChrome: React.FC<ComponentChromeProps> = ({
   fullscreenRef: externalFullscreenRef,
   extraActions,
   showDragHandle = false,
+  sourceFilterActive = false,
 }) => {
   const localFullscreenRef = useRef<HTMLDivElement | null>(null);
   const fullscreenRef = externalFullscreenRef ?? localFullscreenRef;
@@ -124,7 +131,13 @@ const ComponentChrome: React.FC<ComponentChromeProps> = ({
         // Skip reset entirely when the host didn't wire one up — keeps the
         // figure/table/map chrome clean for components without selection.
         if (!onResetFilter) return null;
-        return <ResetButton key="reset" onResetFilter={onResetFilter} />;
+        return (
+          <ResetButton
+            key="reset"
+            onResetFilter={onResetFilter}
+            active={sourceFilterActive}
+          />
+        );
     }
   };
 
@@ -140,7 +153,8 @@ const ComponentChrome: React.FC<ComponentChromeProps> = ({
         gap={4}
         className={
           'depictio-component-actions' +
-          (orientationFor(componentType) === 'vertical' ? ' depictio-actions-vertical' : '')
+          (orientationFor(componentType) === 'vertical' ? ' depictio-actions-vertical' : '') +
+          (sourceFilterActive && onResetFilter ? ' has-active-reset' : '')
         }
         wrap="nowrap"
       >
@@ -169,18 +183,21 @@ const ComponentChrome: React.FC<ComponentChromeProps> = ({
             </ActionIcon>
           </span>
         )}
-        {actions.map((a) => (
-          <span
-            key={a}
-            className="dgl-no-drag"
-            style={{ display: 'inline-flex', alignItems: 'center' }}
-            onMouseDown={(e) => e.stopPropagation()}
-            onTouchStart={(e) => e.stopPropagation()}
-            onPointerDown={(e) => e.stopPropagation()}
-          >
-            {renderAction(a)}
-          </span>
-        ))}
+        {actions.map((a) => {
+          const isActiveReset = a === 'reset' && sourceFilterActive && Boolean(onResetFilter);
+          return (
+            <span
+              key={a}
+              className={'dgl-no-drag' + (isActiveReset ? ' depictio-active-reset' : '')}
+              style={{ display: 'inline-flex', alignItems: 'center' }}
+              onMouseDown={(e) => e.stopPropagation()}
+              onTouchStart={(e) => e.stopPropagation()}
+              onPointerDown={(e) => e.stopPropagation()}
+            >
+              {renderAction(a)}
+            </span>
+          );
+        })}
         {extraActions && (
           <span
             className="dgl-no-drag"

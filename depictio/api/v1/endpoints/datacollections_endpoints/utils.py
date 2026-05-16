@@ -783,6 +783,39 @@ def _build_multiqc_workflow(name: str, description: str, temp_dir: str):
     return workflow, data_collection
 
 
+async def _ensure_user_cli_token(current_user) -> None:
+    """Ensure a long-lived CLI token exists for the current user.
+
+    The viewer's DC-create flow needs to drive the same CLI helpers as the
+    `depictio data process` command, which authenticate back to FastAPI with
+    a stored bearer token from the ``tokens`` collection. Browser-only users
+    (signed in via session JWT) won't have one yet, so we mint one on demand
+    here — matching the behavior the React `/profile-beta` UI offers via
+    `POST /auth/me/tokens`, just transparent so first-time DC creation
+    doesn't 401 before the user knows they need to click a button.
+
+    Public/anonymous mode is left alone: the anonymous user has its own
+    pre-provisioned token in db_init, so this code path only fires for real
+    authenticated users who haven't created a CLI token yet.
+    """
+    user_id = getattr(current_user, "id", None)
+    if user_id is None:
+        return
+    if tokens_collection.find_one({"user_id": user_id}) is not None:
+        return
+
+    from depictio.api.v1.endpoints.user_endpoints.core_functions import _add_token
+    from depictio.models.models.users import TokenData
+
+    token_data = TokenData(
+        name="viewer-auto",
+        token_lifetime="long-lived",
+        token_type="bearer",
+        sub=user_id,  # type: ignore[invalid-argument-type]
+    )
+    await _add_token(token_data)
+
+
 def _build_cli_config_for_user(current_user):
     """Build a CLIConfig for in-process processor calls.
 

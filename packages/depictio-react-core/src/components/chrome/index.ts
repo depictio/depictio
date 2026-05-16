@@ -16,6 +16,7 @@ export interface WrapWithChromeOpts {
   fullscreenRef?: React.RefObject<HTMLDivElement | null>;
   extraActions?: React.ReactNode;
   showDragHandle?: boolean;
+  sourceFilterActive?: boolean;
 }
 
 /**
@@ -42,6 +43,7 @@ export function wrapWithChrome(
       fullscreenRef: opts?.fullscreenRef,
       extraActions: opts?.extraActions,
       showDragHandle: opts?.showDragHandle,
+      sourceFilterActive: opts?.sourceFilterActive,
     },
   );
 }

@@ -105,19 +105,29 @@ export default defineConfig({
         : undefined,
   },
   resolve: {
-    alias: {
+    // Array form so we can use a regex for the plotly.js exact-match alias —
+    // object-form aliases prefix-match, which would also rewrite
+    // `plotly.js/dist/plotly` and break react-plotly.js.
+    alias: [
       // Allow importing shared components directly from source (not the built bundle).
-      'depictio-components': path.resolve(
-        __dirname,
-        '../../packages/depictio-components/src/lib',
-      ),
+      {
+        find: 'depictio-components',
+        replacement: path.resolve(__dirname, '../../packages/depictio-components/src/lib'),
+      },
       // depictio-react-core is a sibling workspace package — alias straight to
       // its src/index.ts so Vite/HMR sees source changes without a build step.
-      'depictio-react-core': path.resolve(
-        __dirname,
-        '../../packages/depictio-react-core/src',
-      ),
-    },
+      {
+        find: 'depictio-react-core',
+        replacement: path.resolve(__dirname, '../../packages/depictio-react-core/src'),
+      },
+      // Force any bare `plotly.js` import to resolve to the prebuilt browser
+      // UMD bundle that react-plotly.js itself uses internally. Otherwise
+      // Vite/esbuild walks `plotly.js/src/traces/image/helpers.js` which has
+      // an unpolyfilled `require('buffer/')` shim and crashes optimizeDeps
+      // with "Could not resolve 'buffer/'". Exact match (regex) keeps subpath
+      // imports (e.g. `plotly.js/dist/plotly`) untouched.
+      { find: /^plotly\.js$/, replacement: 'plotly.js/dist/plotly' },
+    ],
     // Force a single instance of these packages across the whole graph.
     // Without this, depictio-components' own node_modules contributes a
     // duplicate copy of @mantine/core, causing "MantineProvider was not

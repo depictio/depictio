@@ -663,6 +663,59 @@ class TestExecuteJoinEdgeCases:
         assert "depictio_run_id" in metadata["join_columns"]
         assert all(result_df["depictio_run_id"] == "run1")
 
+    @patch("depictio.cli.cli.utils.joins.read_delta_table")
+    def test_fanout_warning_attached_when_keys_duplicate(
+        self, mock_read_delta, join_definition, mock_project, mock_cli_config
+    ):
+        """When a join produces more rows than max(left, right), the metadata
+        carries a `fanout_warning` entry naming the offending input and ratio.
+
+        Mirrors the penguin bug at #6824cb3b: per-species CSVs all reset
+        ``ID_1, ID_2, ...`` so the same ``individual_id`` appears in 3 runs;
+        an inner join on ``individual_id`` then triples each individual.
+        """
+        # Both sides have id=1 repeated 3× — inner join on `id` alone produces
+        # a 9-row cartesian per match.
+        left_df = pl.DataFrame({"id": [1, 1, 1, 2], "name": ["a1", "a2", "a3", "b"]})
+        right_df = pl.DataFrame({"id": [1, 1, 1, 2], "value": [10, 20, 30, 40]})
+        mock_read_delta.side_effect = [delta_success(left_df), delta_success(right_df)]
+
+        result_df, metadata = execute_join(
+            join_definition, mock_project, mock_cli_config, apply_granularity=False
+        )
+
+        # 3×3 fan-out for id=1, 1×1 for id=2 → 10 rows total, > max(4,4)=4.
+        assert result_df.shape[0] == 10
+        assert "fanout_warning" in metadata
+        warning = metadata["fanout_warning"]
+        assert warning["actual_rows"] == 10
+        assert warning["expected_max"] == 4
+        assert warning["ratio"] == 2.5
+        assert "non-unique join key" in warning["message"]
+
+    @patch("depictio.cli.cli.utils.joins.read_delta_table")
+    def test_no_fanout_warning_for_unique_keys(
+        self,
+        mock_read_delta,
+        join_definition,
+        mock_project,
+        mock_cli_config,
+        sample_left_df,
+        sample_right_df,
+    ):
+        """Joins on unique keys must not flag a fan-out warning — guards against
+        false positives on the happy path."""
+        mock_read_delta.side_effect = [
+            delta_success(sample_left_df),
+            delta_success(sample_right_df),
+        ]
+
+        _result_df, metadata = execute_join(
+            join_definition, mock_project, mock_cli_config, apply_granularity=False
+        )
+
+        assert "fanout_warning" not in metadata
+
 
 class TestExecuteJoinErrors:
     """Test error handling in join execution."""

@@ -18,6 +18,7 @@ import {
   Table,
 } from '@mantine/core';
 import { useBuilderStore } from '../store/useBuilderStore';
+import CrossFilterSection from '../shared/CrossFilterSection';
 import DesignShell from '../shared/DesignShell';
 import TablePreview from './TablePreview';
 
@@ -30,6 +31,8 @@ const TableBuilder: React.FC = () => {
     striped?: boolean;
     compact?: boolean;
     export_csv?: boolean;
+    row_selection_enabled?: boolean;
+    row_selection_column?: string;
   };
   const patchConfig = useBuilderStore((s) => s.patchConfig);
 
@@ -86,6 +89,19 @@ const TableBuilder: React.FC = () => {
             </Stack>
           </Accordion.Panel>
         </Accordion.Item>
+
+        <CrossFilterSection
+          enabled={Boolean(config.row_selection_enabled)}
+          onEnabledChange={(checked) =>
+            patchConfig({ row_selection_enabled: checked })
+          }
+          column={config.row_selection_column}
+          onColumnChange={(name) =>
+            patchConfig({ row_selection_column: name })
+          }
+          columnLabel="Row column"
+          columnDescription="Column to extract from selected rows"
+        />
 
         <Accordion.Item value="columns">
           <Accordion.Control>

@@ -13,6 +13,10 @@ import { Icon } from '@iconify/react';
 export interface MultiSelectOption {
   value: string;
   label: string;
+  /** When true the option is rendered greyed-out and cannot be selected.
+   *  Used by cross-DC "available values" intersection to mark metadata
+   *  values that are not present in the joined data. */
+  disabled?: boolean;
 }
 
 export interface DepictioMultiSelectProps {

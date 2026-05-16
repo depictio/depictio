@@ -1167,8 +1167,22 @@ def _create_figure_from_data(
             )
             return fig
 
-        if visu_type not in ["scatter", "line", "bar", "box", "histogram"]:
-            logger.warning(f"Unsupported visualization type: {visu_type}, defaulting to scatter")
+        # Gate on the curated registry, not a stale hand-maintained subset.
+        # The previous hardcoded list (scatter/line/bar/box/histogram) silently
+        # downgraded every advanced Plotly Express type — density_heatmap,
+        # density_contour, area, funnel, strip, violin, ecdf, scatter_matrix —
+        # to scatter, even though they're all in ALLOWED_VISUALIZATIONS and
+        # picked up by parameter discovery in the builder. Use the same
+        # registry the builder uses so add-a-viz only touches one place.
+        from depictio.dash.modules.figure_component.definitions import (
+            ALLOWED_VISUALIZATIONS,
+        )
+
+        if visu_type not in ALLOWED_VISUALIZATIONS:
+            logger.warning(
+                f"Unsupported visualization type: {visu_type!r} "
+                f"(not in ALLOWED_VISUALIZATIONS), defaulting to scatter"
+            )
             visu_type = "scatter"
 
         # Plotly rejects NaN in the marker `size` property with a hard
@@ -1188,6 +1202,38 @@ def _create_figure_from_data(
                 )
 
         plot_func = getattr(px, visu_type)
+
+        # Drop kwargs the target px function doesn't accept. The builder's
+        # dict_kwargs can carry leftovers from a previous visu type (e.g.,
+        # `markers=True` chosen while in line/scatter still in dict_kwargs
+        # after the user switches to strip / funnel which don't take that
+        # kwarg). Without this filter px raises a hard TypeError and the
+        # whole render fails. The signature inspection is cheap (cached per
+        # function by inspect) and forwarding-friendly via **kwargs.
+        import inspect
+
+        try:
+            sig = inspect.signature(plot_func)
+            accepts_var_kw = any(
+                p.kind == inspect.Parameter.VAR_KEYWORD for p in sig.parameters.values()
+            )
+            if not accepts_var_kw:
+                allowed_names = set(sig.parameters.keys())
+                dropped = {k: cleaned_kwargs[k] for k in cleaned_kwargs if k not in allowed_names}
+                if dropped:
+                    logger.info(
+                        f"_create_figure_from_data: dropping {len(dropped)} kwarg(s) "
+                        f"not accepted by px.{visu_type}: {sorted(dropped.keys())}"
+                    )
+                    cleaned_kwargs = {k: v for k, v in cleaned_kwargs.items() if k in allowed_names}
+        except (ValueError, TypeError) as sig_err:
+            # signature() can fail on C-extension callables; fall through and
+            # let plotly handle (or fail loudly on) whatever we pass.
+            logger.debug(
+                f"_create_figure_from_data: signature inspection failed for "
+                f"px.{visu_type}: {sig_err}"
+            )
+
         fig = plot_func(pandas_df, **cleaned_kwargs)
 
         layout_updates = {

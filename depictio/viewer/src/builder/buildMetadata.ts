@@ -88,6 +88,14 @@ function buildFigure(
   base: StoredMetadata,
   existing: Record<string, unknown>,
 ): StoredMetadata {
+  // Cross-filtering toggle lives on the figure config (not dict_kwargs) since
+  // it applies to both UI and code modes — keys match the renderer's reads in
+  // packages/depictio-react-core/src/components/ComponentRenderer.tsx
+  // (selection_enabled / scatter_selection source).
+  const c = as<{
+    selection_enabled?: boolean;
+    selection_column?: string;
+  }>(state.config);
   if (state.figureMode === 'code') {
     return {
       ...existing,
@@ -97,6 +105,8 @@ function buildFigure(
       visu_type: state.visuType, // hint for renderers
       // dict_kwargs intentionally cleared in code mode
       dict_kwargs: {},
+      selection_enabled: Boolean(c.selection_enabled),
+      selection_column: c.selection_column,
     };
   }
   return {
@@ -106,6 +116,8 @@ function buildFigure(
     visu_type: state.visuType,
     dict_kwargs: state.dictKwargs,
     code_content: null,
+    selection_enabled: Boolean(c.selection_enabled),
+    selection_column: c.selection_column,
   };
 }
 
@@ -153,6 +165,8 @@ function buildTable(
     striped?: boolean;
     compact?: boolean;
     export_csv?: boolean;
+    row_selection_enabled?: boolean;
+    row_selection_column?: string;
   }>(state.config);
   return {
     ...existing,
@@ -161,6 +175,11 @@ function buildTable(
     striped: c.striped ?? true,
     compact: c.compact ?? false,
     export_csv: c.export_csv ?? false,
+    // Row selection drives `table_selection` filters in
+    // packages/depictio-react-core/src/components/ComponentRenderer.tsx —
+    // mirrors what map / figure do with `selection_enabled`.
+    row_selection_enabled: Boolean(c.row_selection_enabled),
+    row_selection_column: c.row_selection_column,
   };
 }
 

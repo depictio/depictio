@@ -34,6 +34,7 @@ import {
   summariesToVisuMeta,
 } from './visuTypes';
 import ParameterField from './ParameterField';
+import CrossFilterSection from '../shared/CrossFilterSection';
 
 type CategoryKey = 'core' | 'common' | 'specific' | 'advanced';
 
@@ -76,6 +77,11 @@ const FigureUIMode: React.FC = () => {
   const setFigureVisualizationList = useBuilderStore(
     (s) => s.setFigureVisualizationList,
   );
+  const config = useBuilderStore((s) => s.config) as {
+    selection_enabled?: boolean;
+    selection_column?: string;
+  };
+  const patchConfig = useBuilderStore((s) => s.patchConfig);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -281,6 +287,24 @@ const FigureUIMode: React.FC = () => {
                 </Stack>
               </Accordion.Panel>
             </Accordion.Item>
+          )}
+
+          {/* Cross-filtering only carries per-row identity for scatter
+           *  traces (their customdata lines up 1:1 with input rows).
+           *  Aggregated visus — histogram, bar, box, pie — would emit
+           *  per-bin envelopes with no useful filter target, so we hide the
+           *  toggle entirely on those. FigureRenderer + ComponentRenderer
+           *  enforce the same gate defensively for legacy metadata. */}
+          {(visuType === 'scatter' || visuType === 'scatter_3d') && (
+            <CrossFilterSection
+              enabled={Boolean(config.selection_enabled)}
+              onEnabledChange={(checked) =>
+                patchConfig({ selection_enabled: checked })
+              }
+              column={config.selection_column}
+              onColumnChange={(name) => patchConfig({ selection_column: name })}
+              columnDescription="Column to extract from selected points"
+            />
           )}
         </Accordion>
       )}

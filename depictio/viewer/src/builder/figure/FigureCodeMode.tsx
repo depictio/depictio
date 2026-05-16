@@ -3,21 +3,32 @@
  *
  * Mirrors the structure Dash builds in figure_component/callbacks/design.py
  * for the code-mode interface: macOS-styled editor, Execute / Clear buttons,
- * and four info alerts (Status / Available Columns / Dataset & Figure Usage
- * / Code Examples). Preview goes to the left-column FigurePreview via the
+ * and info sections. Preview goes to the left-column FigurePreview via the
  * `lastCodeFigure` slot in the builder store — there's no live debounce,
  * preview only updates when Execute is clicked.
+ *
+ * Help is grouped into a single collapsible Accordion below the editor so
+ * the panel stays compact when users are mid-code. The status alert stays
+ * always-visible because it surfaces the last execution result.
+ *
+ * Editor height + font size persist in localStorage so a user's preferred
+ * setup survives page reloads without bloating the builder store.
  */
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  ActionIcon,
+  Accordion,
   Alert,
   Anchor,
+  Badge,
   Button,
   Code,
-  Collapse,
   Group,
+  ScrollArea,
   Stack,
+  Table,
   Text,
+  Tooltip,
 } from '@mantine/core';
 import Editor from '@monaco-editor/react';
 import { Icon } from '@iconify/react';
@@ -39,6 +50,39 @@ const SAMPLE_CODE = `# Enter your Python/Plotly code here...
 
 const EDITOR_FONT_FAMILY =
   "Fira Code, JetBrains Mono, Monaco, Consolas, 'Courier New', monospace";
+
+// localStorage keys + sane defaults / bounds. Kept private to this file; if
+// other builders want the same pattern, lift to a shared hook later.
+const LS_FONT_SIZE = 'depictio.code_mode.font_size';
+const LS_EDITOR_HEIGHT = 'depictio.code_mode.editor_height';
+const FONT_MIN = 9;
+const FONT_MAX = 22;
+const FONT_DEFAULT = 11;
+const HEIGHT_MIN = 180;
+const HEIGHT_MAX = 800;
+const HEIGHT_DEFAULT = 280;
+
+function readNumberPref(key: string, fallback: number, min: number, max: number): number {
+  if (typeof window === 'undefined') return fallback;
+  try {
+    const raw = window.localStorage.getItem(key);
+    if (raw == null) return fallback;
+    const n = Number(raw);
+    if (!Number.isFinite(n)) return fallback;
+    return Math.min(max, Math.max(min, Math.round(n)));
+  } catch {
+    return fallback;
+  }
+}
+
+function writeNumberPref(key: string, value: number) {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.setItem(key, String(value));
+  } catch {
+    // ignore quota / private mode
+  }
+}
 
 const CODE_EXAMPLES: Array<{ title: string; code: string }> = [
   {
@@ -84,8 +128,45 @@ const FigureCodeMode: React.FC = () => {
   const { colorScheme } = useColorScheme();
 
   const [executing, setExecuting] = useState(false);
-  const [examplesOpen, setExamplesOpen] = useState(false);
   const initialised = useRef(false);
+
+  // Editor preferences — initialised from localStorage on mount so a user's
+  // last setup is preserved across reloads. The setters write straight back
+  // through `writeNumberPref` so updates persist without a separate effect.
+  const [fontSize, setFontSizeState] = useState<number>(() =>
+    readNumberPref(LS_FONT_SIZE, FONT_DEFAULT, FONT_MIN, FONT_MAX),
+  );
+  const [editorHeight, setEditorHeightState] = useState<number>(() =>
+    readNumberPref(LS_EDITOR_HEIGHT, HEIGHT_DEFAULT, HEIGHT_MIN, HEIGHT_MAX),
+  );
+  const setFontSize = (next: number) => {
+    const clamped = Math.min(FONT_MAX, Math.max(FONT_MIN, next));
+    setFontSizeState(clamped);
+    writeNumberPref(LS_FONT_SIZE, clamped);
+  };
+  const setEditorHeight = (next: number) => {
+    const clamped = Math.min(HEIGHT_MAX, Math.max(HEIGHT_MIN, Math.round(next)));
+    setEditorHeightState(clamped);
+    writeNumberPref(LS_EDITOR_HEIGHT, clamped);
+  };
+
+  // Observe the resizable wrapper so dragging the corner persists the new
+  // height. CSS `resize: vertical` mutates the element style directly — we
+  // pick it up via ResizeObserver and round-trip to localStorage.
+  const editorWrapRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const el = editorWrapRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver((entries) => {
+      const h = entries[0]?.contentRect?.height;
+      if (typeof h === 'number' && Math.abs(h - editorHeight) > 1) {
+        setEditorHeight(h);
+      }
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Seed the editor on first mount: prefer existing code; otherwise generate
   // a starter from current visu_type + dict_kwargs (matches Dash's
@@ -108,12 +189,21 @@ const FigureCodeMode: React.FC = () => {
     }
   }, [codeContent, dictKwargs, visuType, setCodeContent]);
 
-  const columnsListing = useMemo(() => {
-    if (!cols.length) {
-      return 'No columns loaded yet — pick a data collection in the Data Source step.';
+  // Type → Mantine color mapping. The colors mirror the Dash side's
+  // column-type chips so the same numeric/string/boolean palette appears
+  // wherever a DC column is rendered (data preview, builder dropdowns, here).
+  const colorForType = (t: string): string => {
+    const lower = (t || '').toLowerCase();
+    if (lower.includes('int') || lower.includes('float') || lower.includes('num')) {
+      return 'blue';
     }
-    return cols.map((c) => `${c.name} (${c.type})`).join(', ');
-  }, [cols]);
+    if (lower.includes('bool')) return 'orange';
+    if (lower.includes('date') || lower.includes('time')) return 'grape';
+    if (lower.includes('str') || lower.includes('utf') || lower.includes('object')) {
+      return 'teal';
+    }
+    return 'gray';
+  };
 
   const handleExecute = () => {
     if (!state.wfId || !state.dcId) {
@@ -205,11 +295,36 @@ const FigureCodeMode: React.FC = () => {
 
   return (
     <Stack gap="sm" style={{ padding: '0 4px' }}>
-      <Group justify="space-between" align="center">
+      <Group justify="space-between" align="center" wrap="nowrap">
         <Text size="sm" fw={700} c="dimmed">
           Python Code:
         </Text>
-        <Group gap="xs">
+        <Group gap={6} wrap="nowrap">
+          <Tooltip label="Decrease font size" withArrow>
+            <ActionIcon
+              size="sm"
+              variant="default"
+              onClick={() => setFontSize(fontSize - 1)}
+              disabled={fontSize <= FONT_MIN}
+              aria-label="Decrease editor font size"
+            >
+              <Icon icon="mdi:format-font-size-decrease" width={14} />
+            </ActionIcon>
+          </Tooltip>
+          <Text size="xs" c="dimmed" style={{ minWidth: 24, textAlign: 'center' }}>
+            {fontSize}px
+          </Text>
+          <Tooltip label="Increase font size" withArrow>
+            <ActionIcon
+              size="sm"
+              variant="default"
+              onClick={() => setFontSize(fontSize + 1)}
+              disabled={fontSize >= FONT_MAX}
+              aria-label="Increase editor font size"
+            >
+              <Icon icon="mdi:format-font-size-increase" width={14} />
+            </ActionIcon>
+          </Tooltip>
           <Button
             size="xs"
             color="green"
@@ -285,25 +400,42 @@ const FigureCodeMode: React.FC = () => {
           <span style={{ color: 'var(--mantine-color-gray-6)' }}>Python</span>
           <span style={{ color: 'var(--mantine-color-gray-6)' }}>UTF-8</span>
         </div>
-        <Editor
-          height="200px"
-          defaultLanguage="python"
-          theme={colorScheme === 'dark' ? 'vs-dark' : 'vs-light'}
-          value={codeContent}
-          onChange={(v) => setCodeContent(v ?? '')}
-          options={{
-            minimap: { enabled: false },
-            fontSize: 11,
-            fontFamily: EDITOR_FONT_FAMILY,
-            scrollBeyondLastLine: false,
-            tabSize: 4,
-            insertSpaces: true,
-            wordWrap: 'on',
-            renderLineHighlight: 'line',
+        {/* Resizable host. `resize: vertical` lets the user drag the corner
+         *  to grow / shrink the editor; ResizeObserver above persists the
+         *  new height. Monaco fills 100% of this wrapper. */}
+        <div
+          ref={editorWrapRef}
+          style={{
+            height: editorHeight,
+            minHeight: HEIGHT_MIN,
+            maxHeight: HEIGHT_MAX,
+            resize: 'vertical',
+            overflow: 'hidden',
           }}
-        />
+        >
+          <Editor
+            height="100%"
+            defaultLanguage="python"
+            theme={colorScheme === 'dark' ? 'vs-dark' : 'vs-light'}
+            value={codeContent}
+            onChange={(v) => setCodeContent(v ?? '')}
+            options={{
+              minimap: { enabled: false },
+              fontSize,
+              fontFamily: EDITOR_FONT_FAMILY,
+              scrollBeyondLastLine: false,
+              tabSize: 4,
+              insertSpaces: true,
+              wordWrap: 'on',
+              renderLineHighlight: 'line',
+              automaticLayout: true,
+            }}
+          />
+        </div>
       </div>
 
+      {/* Always-visible status alert — last execution result lives here so
+       *  users see error tracebacks without expanding a section. */}
       <Alert
         color={codeStatus.color}
         title={codeStatus.title}
@@ -317,83 +449,281 @@ const FigureCodeMode: React.FC = () => {
         )}
       </Alert>
 
-      <Alert
-        color="teal"
-        title="Available Columns"
-        icon={<Icon icon="mdi:table" width={16} />}
-        variant="light"
-      >
-        <Text size="xs" style={{ fontFamily: EDITOR_FONT_FAMILY }}>
-          {columnsListing}
-        </Text>
-      </Alert>
-
-      <Alert
-        color="blue"
-        title="Dataset & Figure Usage"
-        icon={<Icon icon="mdi:database" width={16} />}
-        variant="light"
-      >
-        <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12 }}>
-          <li>
-            <code>df</code> — your dataset (Polars DataFrame) — READ ONLY
-          </li>
-          <li>
-            <code>df_modified</code> — use for preprocessing (single line only)
-          </li>
-          <li>
-            <code>fig</code> — your final Plotly figure (required)
-          </li>
-          <li>
-            ✅ Valid: <code>fig = px.scatter(df, ...)</code> or{' '}
-            <code>fig = px.pie(df_modified, ...)</code>
-          </li>
-          <li>
-            ❌ Invalid: multiple preprocessing lines or wrong variable names
-          </li>
-        </ul>
-      </Alert>
-
-      <Alert
-        color="teal"
-        title="Code Examples (Iris Dataset)"
-        icon={<Icon icon="mdi:code-tags" width={16} />}
-        variant="light"
-      >
-        <Anchor
-          component="button"
-          type="button"
-          size="xs"
-          c="teal"
-          onClick={() => setExamplesOpen((o) => !o)}
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: 4,
-            marginBottom: 6,
-          }}
-        >
-          <Icon icon="mdi:code-braces" width={14} />
-          {examplesOpen ? 'Hide Code Examples' : 'Show Code Examples'}
-        </Anchor>
-        <Collapse in={examplesOpen}>
-          <Stack gap="xs">
-            {CODE_EXAMPLES.map((ex) => (
-              <div key={ex.title}>
-                <Text size="xs" fw={700} c="teal">
-                  {ex.title}
-                </Text>
-                <Code
-                  block
-                  style={{ fontFamily: EDITOR_FONT_FAMILY, fontSize: 11 }}
+      {/* Help — collapsible, all closed by default so the panel stays compact.
+       *  `multiple` lets the user keep more than one section open if they're
+       *  cross-referencing (e.g., columns + examples while writing code). */}
+      <Accordion variant="separated" radius="md" multiple defaultValue={[]}>
+        <Accordion.Item value="about">
+          <Accordion.Control icon={<Icon icon="mdi:shield-check" width={18} />}>
+            <Text fw={700} size="sm">
+              About Code Mode
+            </Text>
+          </Accordion.Control>
+          <Accordion.Panel>
+            <Stack gap="sm">
+              <Text size="xs">
+                Code Mode lets you author the figure as Python code instead of
+                clicking through visualization parameters. Your code runs
+                server-side inside a sandbox built on{' '}
+                <Anchor
+                  href="https://restrictedpython.readthedocs.io/"
+                  target="_blank"
+                  rel="noreferrer"
+                  size="xs"
                 >
-                  {ex.code}
-                </Code>
-              </div>
-            ))}
-          </Stack>
-        </Collapse>
-      </Alert>
+                  RestrictedPython
+                </Anchor>{' '}
+                (Zope Foundation) — the source is at{' '}
+                <code>depictio/dash/modules/figure_component/simple_code_executor.py</code>.
+              </Text>
+
+              <Text size="xs" fw={700}>
+                Pre-loaded modules (full names)
+              </Text>
+              {/* One row per module — alias chip, full dotted name, short
+               *  description. Flat Stack of Groups with nowrap so the row
+               *  never wraps onto two lines; the description takes the
+               *  remaining width and truncates via `lineClamp={1}` rather
+               *  than wrapping. Avoids the previous Table layout which
+               *  multi-row'd each module when the description was long. */}
+              <Stack gap={4}>
+                {[
+                  {
+                    alias: 'px',
+                    full: 'plotly.express',
+                    desc: 'High-level chart constructors (scatter, bar, …)',
+                  },
+                  {
+                    alias: 'go',
+                    full: 'plotly.graph_objects',
+                    desc: 'Low-level trace + layout primitives',
+                  },
+                  {
+                    alias: 'pl',
+                    full: 'polars',
+                    desc: 'Native dataframe library — df is a Polars DataFrame',
+                  },
+                  {
+                    alias: 'pd',
+                    full: 'pandas',
+                    desc: 'For df.to_pandas() conversions / pie-chart preprocessing',
+                  },
+                  {
+                    alias: 'np',
+                    full: 'numpy',
+                    desc: 'Numeric helpers (np.log, array ops)',
+                  },
+                ].map((m) => (
+                  <Group key={m.alias} gap="sm" wrap="nowrap" align="center">
+                    <Code style={{ minWidth: 28, textAlign: 'center' }}>
+                      {m.alias}
+                    </Code>
+                    <Text size="xs" c="dimmed" style={{ width: 14 }}>
+                      →
+                    </Text>
+                    <Code style={{ minWidth: 168, fontFamily: EDITOR_FONT_FAMILY }}>
+                      {m.full}
+                    </Code>
+                    <Text
+                      size="xs"
+                      c="dimmed"
+                      lineClamp={1}
+                      style={{ flex: 1, minWidth: 0 }}
+                    >
+                      {m.desc}
+                    </Text>
+                  </Group>
+                ))}
+              </Stack>
+
+              <Text size="xs" fw={700}>
+                Safe built-ins (whitelisted, not the full <Code>builtins</Code> module)
+              </Text>
+              <Group gap={4} wrap="wrap">
+                {['len', 'range', 'list', 'dict', 'tuple', 'enumerate', 'zip'].map((b) => (
+                  <Badge key={b} variant="light" color="gray" size="sm">
+                    <Code style={{ background: 'transparent', padding: 0 }}>{b}</Code>
+                  </Badge>
+                ))}
+              </Group>
+              <Text size="xs" c="dimmed">
+                Anything else from <Code>builtins</Code> — including <Code>print</Code>,{' '}
+                <Code>input</Code>, <Code>type</Code>, <Code>__import__</Code>,{' '}
+                <Code>open</Code> — comes from{' '}
+                <Code>RestrictedPython.Guards.safe_builtins</Code>, which omits all
+                I/O, introspection, and import primitives.
+              </Text>
+
+              <Text size="xs" fw={700}>
+                Variables in scope
+              </Text>
+              <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12 }}>
+                <li>
+                  <Code>df</Code> — your data collection as a Polars
+                  DataFrame. Read-only: an AST pre-pass rejects code that
+                  rebinds <Code>df</Code> (<Code>df = …</Code>, <Code>df += …</Code>).
+                </li>
+                <li>
+                  <Code>df_modified</Code> — optional single preprocessing
+                  statement (e.g. <Code>df_modified = df.to_pandas().groupby(…)</Code>).
+                </li>
+                <li>
+                  <Code>fig</Code> — the Plotly figure your code MUST produce. The
+                  preview pane renders <Code>fig</Code> after execution.
+                </li>
+              </ul>
+
+              <Text size="xs" fw={700}>
+                What RestrictedPython blocks at compile time
+              </Text>
+              <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12 }}>
+                <li>
+                  <Code>import …</Code> / <Code>from … import …</Code> — only
+                  modules already in scope are usable.
+                </li>
+                <li>
+                  <Code>exec</Code>, <Code>eval</Code>, <Code>compile</Code> —
+                  no dynamic code execution.
+                </li>
+                <li>
+                  Direct access to dunder attributes (<Code>__class__</Code>,{' '}
+                  <Code>__globals__</Code>, <Code>__subclasses__</Code>, …) — the
+                  compiler rewrites attribute access through a guarded getter
+                  that rejects names starting with <Code>_</Code>.
+                </li>
+                <li>
+                  File I/O, subprocess, network sockets — none of{' '}
+                  <Code>open</Code>, <Code>os</Code>, <Code>sys</Code>,{' '}
+                  <Code>subprocess</Code>, <Code>socket</Code>,{' '}
+                  <Code>requests</Code>, <Code>urllib</Code> are reachable.
+                </li>
+              </ul>
+
+            </Stack>
+          </Accordion.Panel>
+        </Accordion.Item>
+
+        <Accordion.Item value="columns">
+          <Accordion.Control icon={<Icon icon="mdi:table" width={18} />}>
+            <Text fw={700} size="sm">
+              Available Columns{' '}
+              {cols.length > 0 && (
+                <Text component="span" c="dimmed" size="xs" fw={400}>
+                  ({cols.length})
+                </Text>
+              )}
+            </Text>
+          </Accordion.Control>
+          <Accordion.Panel>
+            {cols.length === 0 ? (
+              <Text size="xs" c="dimmed">
+                No columns loaded yet — pick a data collection in the Data
+                Source step.
+              </Text>
+            ) : (
+              <ScrollArea.Autosize mah={260}>
+                <Table
+                  withRowBorders
+                  highlightOnHover
+                  verticalSpacing={4}
+                  horizontalSpacing="sm"
+                  styles={{ td: { padding: '4px 8px' }, th: { padding: '4px 8px' } }}
+                >
+                  <Table.Thead>
+                    <Table.Tr>
+                      <Table.Th>
+                        <Text size="xs" fw={600} c="dimmed">
+                          Name
+                        </Text>
+                      </Table.Th>
+                      <Table.Th>
+                        <Text size="xs" fw={600} c="dimmed">
+                          Type
+                        </Text>
+                      </Table.Th>
+                    </Table.Tr>
+                  </Table.Thead>
+                  <Table.Tbody>
+                    {cols.map((c) => (
+                      <Table.Tr key={c.name}>
+                        <Table.Td>
+                          <Code style={{ fontFamily: EDITOR_FONT_FAMILY }}>
+                            {c.name}
+                          </Code>
+                        </Table.Td>
+                        <Table.Td>
+                          <Badge
+                            variant="light"
+                            color={colorForType(c.type)}
+                            size="sm"
+                            radius="sm"
+                          >
+                            {c.type}
+                          </Badge>
+                        </Table.Td>
+                      </Table.Tr>
+                    ))}
+                  </Table.Tbody>
+                </Table>
+              </ScrollArea.Autosize>
+            )}
+          </Accordion.Panel>
+        </Accordion.Item>
+
+        <Accordion.Item value="variables">
+          <Accordion.Control icon={<Icon icon="mdi:variable" width={18} />}>
+            <Text fw={700} size="sm">
+              Variables & Output
+            </Text>
+          </Accordion.Control>
+          <Accordion.Panel>
+            <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12 }}>
+              <li>
+                <code>df</code> — your dataset (Polars DataFrame) — READ ONLY
+              </li>
+              <li>
+                <code>df_modified</code> — use for preprocessing (single line only)
+              </li>
+              <li>
+                <code>fig</code> — your final Plotly figure (required)
+              </li>
+              <li>
+                Valid: <code>fig = px.scatter(df, ...)</code> or{' '}
+                <code>fig = px.pie(df_modified, ...)</code>
+              </li>
+              <li>
+                Invalid: multiple preprocessing lines or reassigning{' '}
+                <code>df</code>
+              </li>
+            </ul>
+          </Accordion.Panel>
+        </Accordion.Item>
+
+        <Accordion.Item value="examples">
+          <Accordion.Control icon={<Icon icon="mdi:code-tags" width={18} />}>
+            <Text fw={700} size="sm">
+              Code Examples (Iris Dataset)
+            </Text>
+          </Accordion.Control>
+          <Accordion.Panel>
+            <Stack gap="xs">
+              {CODE_EXAMPLES.map((ex) => (
+                <div key={ex.title}>
+                  <Text size="xs" fw={700} c="teal">
+                    {ex.title}
+                  </Text>
+                  <Code
+                    block
+                    style={{ fontFamily: EDITOR_FONT_FAMILY, fontSize: 11 }}
+                  >
+                    {ex.code}
+                  </Code>
+                </div>
+              ))}
+            </Stack>
+          </Accordion.Panel>
+        </Accordion.Item>
+      </Accordion>
     </Stack>
   );
 };

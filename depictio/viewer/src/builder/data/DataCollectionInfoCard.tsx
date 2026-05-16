@@ -6,7 +6,19 @@
  * delta version, rows, columns. Type renders the MultiQC SVG inline when type=multiqc.
  */
 import React from 'react';
-import { Card, Stack, Table, Text } from '@mantine/core';
+import { Badge, Card, Group, Stack, Table, Text } from '@mantine/core';
+import { Icon } from '@iconify/react';
+
+/** Join definition surfaced for "joined" DCs — mirrors the project-level
+ *  `joins[]` entry minus the workflow plumbing. Used to render Left / Right /
+ *  On / How rows in the info card. */
+export interface JoinDetails {
+  leftDc: string;
+  rightDc: string;
+  onColumns: string[];
+  /** "inner" / "left" / "right" / "full" — straight from the join definition. */
+  how: string;
+}
 
 export interface DataCollectionInfo {
   workflowId: string;
@@ -18,6 +30,11 @@ export interface DataCollectionInfo {
   deltaVersion: string;
   numRows: number | null | undefined;
   numColumns: number | null | undefined;
+  /** "native" (ingested) or "joined" (derived from a project-level join). */
+  source?: string;
+  /** Present when ``source === 'joined'`` — populated from the project's
+   *  ``joins[]`` array for the row whose ``result_dc_id`` matches this DC. */
+  join?: JoinDetails;
 }
 
 const formatInt = (n: number | null | undefined): string =>
@@ -32,6 +49,7 @@ interface Props {
 
 const DataCollectionInfoCard: React.FC<Props> = ({ info }) => {
   const isMultiQC = info.type?.toLowerCase() === 'multiqc';
+  const isJoined = info.source?.toLowerCase() === 'joined';
 
   return (
     <Card withBorder radius="md" p="md">
@@ -61,6 +79,62 @@ const DataCollectionInfoCard: React.FC<Props> = ({ info }) => {
             }
           />
           <Row label="MetaType" value={<Text size="sm">{cap(info.metaType)}</Text>} />
+          {info.source && (
+            <Row
+              label="Source"
+              value={
+                <Badge
+                  size="sm"
+                  variant="light"
+                  color={isJoined ? 'grape' : 'gray'}
+                  leftSection={
+                    <Icon
+                      icon={isJoined ? 'mdi:link-variant' : 'mdi:database-arrow-down'}
+                      width={12}
+                    />
+                  }
+                >
+                  {cap(info.source)}
+                </Badge>
+              }
+            />
+          )}
+          {isJoined && info.join && (
+            <>
+              <Row
+                label="Join Inputs"
+                value={
+                  <Group gap={6} wrap="wrap">
+                    <Badge size="sm" variant="light" color="blue">
+                      {info.join.leftDc}
+                    </Badge>
+                    <Text size="sm" c="dimmed" component="span" style={{ lineHeight: 1 }}>
+                      ⋈
+                    </Text>
+                    <Badge size="sm" variant="light" color="blue">
+                      {info.join.rightDc}
+                    </Badge>
+                  </Group>
+                }
+              />
+              <Row
+                label="On Columns"
+                value={
+                  <Group gap={4} wrap="wrap">
+                    {info.join.onColumns.map((c) => (
+                      <Badge key={c} size="sm" variant="outline" color="grape">
+                        {c}
+                      </Badge>
+                    ))}
+                  </Group>
+                }
+              />
+              <Row
+                label="Join Type"
+                value={<Text size="sm">{cap(info.join.how)}</Text>}
+              />
+            </>
+          )}
           <Row label="Name" value={<Text size="sm">{info.name}</Text>} />
           <Row
             label="Description"
