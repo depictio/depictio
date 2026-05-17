@@ -85,11 +85,13 @@ const Walkthrough: React.FC<WalkthroughProps> = ({ definition, enabled }) => {
   }, [target, step?.awaitClick, next]);
 
   if (!step) return null;
-  // Anchored step but target not in DOM yet → keep the dim backdrop so the
-  // page goes quiet, but render no popover until the target appears.
-  if (step.target && !target) {
-    return <SpotlightBackdrop target={null} allowTargetClick={false} />;
-  }
+  // Anchored step but target not in DOM yet — render nothing so the user can
+  // interact with the page freely. The MutationObserver in useTargetElement
+  // keeps watching; the popover reappears the moment the target mounts. This
+  // is essential for sub-steppers: e.g. the component-save target lives on
+  // wizard tab 3 of 3, and the user needs an unblocked tab 2 to configure
+  // data before they ever reach the save button.
+  if (step.target && !target) return null;
 
   const stepNumber = visibleStep + 1;
   const total = definition.steps.length;

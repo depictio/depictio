@@ -91,6 +91,7 @@ export const authBuilderWalkthrough: WalkthroughDefinition = {
       title: 'Pick a component type',
       body: 'Choose what to render: a chart, a KPI card, a data table, or an interactive filter. Each type drives the next configuration steps.',
       position: 'bottom',
+      awaitClick: true,
     },
     {
       id: 'component-save',
