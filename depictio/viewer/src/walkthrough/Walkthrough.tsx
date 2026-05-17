@@ -113,6 +113,7 @@ const Walkthrough: React.FC<WalkthroughProps> = ({ definition, enabled }) => {
   };
 
   const heroImage = step.image && !step.target ? step.image : null;
+  const bodyNodes = renderInlineMarkup(step.body);
 
   const popoverContent = (
     <Stack gap="sm">
@@ -133,7 +134,7 @@ const Walkthrough: React.FC<WalkthroughProps> = ({ definition, enabled }) => {
           {stepNumber} / {total}
         </Badge>
       </Group>
-      <Text size="md">{step.body}</Text>
+      <Text size="md">{bodyNodes}</Text>
       <Progress value={(stepNumber / total) * 100} size="xs" />
       <Group justify="space-between" wrap="nowrap">
         <Button variant="subtle" color="gray" size="xs" onClick={skip}>
@@ -217,5 +218,19 @@ const Walkthrough: React.FC<WalkthroughProps> = ({ definition, enabled }) => {
     </>
   );
 };
+
+/** Bare-bones inline-bold renderer: splits on `**...**` and wraps the
+ *  matched segments in <strong>. Keeps step bodies as plain strings in the
+ *  step definitions while letting the engine emphasize key terms. We don't
+ *  pull in a full markdown library — the body is one paragraph at most. */
+function renderInlineMarkup(text: string): React.ReactNode[] {
+  const parts = text.split(/(\*\*[^*]+\*\*)/g);
+  return parts.map((segment, idx) => {
+    if (segment.startsWith('**') && segment.endsWith('**')) {
+      return <strong key={idx}>{segment.slice(2, -2)}</strong>;
+    }
+    return <React.Fragment key={idx}>{segment}</React.Fragment>;
+  });
+}
 
 export default Walkthrough;
