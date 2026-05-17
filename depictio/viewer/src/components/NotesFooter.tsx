@@ -20,17 +20,27 @@
  * race where a user editing notes while rearranging the grid in another tab
  * could clobber one or the other. Acceptable for this feature.
  */
-import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { ActionIcon, Drawer, Group, Text, Tooltip } from '@mantine/core';
+import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
+import { ActionIcon, Badge, Drawer, Group, Text, Tooltip } from '@mantine/core';
 import { Icon } from '@iconify/react';
 import { RichTextEditor, Link } from '@mantine/tiptap';
 import { useEditor } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { saveDashboardNotes } from 'depictio-react-core';
+import type {
+  DashboardPermissions,
+  DashboardPermissionsUser,
+} from 'depictio-react-core';
+import { useCurrentUser } from '../hooks/useCurrentUser';
 
 interface NotesFooterProps {
   dashboardId: string;
   initialContent: string;
+  /** Dashboard permissions block (owners / editors / viewers). Used to gate
+   *  the editor: only owners can author notes; everyone else gets a read-only
+   *  view of the same content. Server still authorizes the underlying save
+   *  endpoint; this is a UI-level affordance. */
+  permissions?: DashboardPermissions;
 }
 
 type SaveStatus = 'idle' | 'saving' | 'saved' | 'error';
@@ -65,6 +75,7 @@ function formatTime(d: Date): string {
 const NotesFooter: React.FC<NotesFooterProps> = ({
   dashboardId,
   initialContent,
+  permissions,
 }) => {
   const [opened, setOpened] = useState<boolean>(() => readStoredOpen(dashboardId));
   const [fullscreen, setFullscreen] = useState<boolean>(false);
@@ -75,13 +86,30 @@ const NotesFooter: React.FC<NotesFooterProps> = ({
   // (e.g. the initial onUpdate fired right after editor mount).
   const lastSavedRef = useRef<string>(initialContent || '');
 
+  // Only dashboard owners may author notes; viewers / editors / anonymous
+  // public visitors see the same content but can't modify it. Loading state
+  // defaults to read-only — flipping editable later (see effect below) is
+  // safer than letting a brief write window slip through before auth resolves.
+  const { user, loading: userLoading } = useCurrentUser();
+  const canEdit = useMemo<boolean>(() => {
+    if (userLoading || !user) return false;
+    const owners = permissions?.owners ?? [];
+    return owners.some((o: DashboardPermissionsUser) => {
+      if (user.id && (o._id === user.id || o.id === user.id)) return true;
+      if (user.email && o.email && o.email === user.email) return true;
+      return false;
+    });
+  }, [permissions, user, userLoading]);
+
   const editor = useEditor({
     extensions: [
       StarterKit,
       Link.configure({ openOnClick: false }),
     ],
     content: initialContent || '',
+    editable: canEdit,
     onUpdate: ({ editor: ed }) => {
+      if (!canEdit) return;
       const html = ed.getHTML();
       if (html === lastSavedRef.current) return;
       setStatus('saving');
@@ -100,6 +128,16 @@ const NotesFooter: React.FC<NotesFooterProps> = ({
       }, AUTO_SAVE_DEBOUNCE_MS);
     },
   });
+
+  // Tiptap caches `editable` from initial options. When auth resolves and
+  // the user turns out to own the dashboard, flip the live editor's state
+  // so they can actually type. Same goes the other way around for safety.
+  useEffect(() => {
+    if (!editor) return;
+    if (editor.isEditable !== canEdit) {
+      editor.setEditable(canEdit);
+    }
+  }, [editor, canEdit]);
 
   // If the parent re-fetches the dashboard and feeds in different
   // initialContent (e.g. after a layout save), reflect that in the editor.
@@ -171,7 +209,18 @@ const NotesFooter: React.FC<NotesFooterProps> = ({
             <Group gap="xs" align="center">
               <Icon icon="material-symbols:edit-note" width={20} />
               <Text fw={600}>Notes & Documentation</Text>
-              <SaveStatusIndicator status={status} savedAt={savedAt} />
+              {canEdit ? (
+                <SaveStatusIndicator status={status} savedAt={savedAt} />
+              ) : (
+                <Badge
+                  variant="light"
+                  color="gray"
+                  size="xs"
+                  leftSection={<Icon icon="mdi:lock" width={10} />}
+                >
+                  Read-only
+                </Badge>
+              )}
             </Group>
             <Group gap={4} wrap="nowrap">
               <Tooltip
@@ -236,33 +285,35 @@ const NotesFooter: React.FC<NotesFooterProps> = ({
             flexDirection: 'column',
           }}
         >
-          <RichTextEditor.Toolbar sticky stickyOffset={0}>
-            <RichTextEditor.ControlsGroup>
-              <RichTextEditor.Bold />
-              <RichTextEditor.Italic />
-              <RichTextEditor.Underline />
-              <RichTextEditor.Strikethrough />
-              <RichTextEditor.Code />
-            </RichTextEditor.ControlsGroup>
-            <RichTextEditor.ControlsGroup>
-              <RichTextEditor.H1 />
-              <RichTextEditor.H2 />
-              <RichTextEditor.H3 />
-            </RichTextEditor.ControlsGroup>
-            <RichTextEditor.ControlsGroup>
-              <RichTextEditor.Blockquote />
-              <RichTextEditor.BulletList />
-              <RichTextEditor.OrderedList />
-            </RichTextEditor.ControlsGroup>
-            <RichTextEditor.ControlsGroup>
-              <RichTextEditor.Link />
-              <RichTextEditor.Unlink />
-            </RichTextEditor.ControlsGroup>
-            <RichTextEditor.ControlsGroup>
-              <RichTextEditor.Undo />
-              <RichTextEditor.Redo />
-            </RichTextEditor.ControlsGroup>
-          </RichTextEditor.Toolbar>
+          {canEdit && (
+            <RichTextEditor.Toolbar sticky stickyOffset={0}>
+              <RichTextEditor.ControlsGroup>
+                <RichTextEditor.Bold />
+                <RichTextEditor.Italic />
+                <RichTextEditor.Underline />
+                <RichTextEditor.Strikethrough />
+                <RichTextEditor.Code />
+              </RichTextEditor.ControlsGroup>
+              <RichTextEditor.ControlsGroup>
+                <RichTextEditor.H1 />
+                <RichTextEditor.H2 />
+                <RichTextEditor.H3 />
+              </RichTextEditor.ControlsGroup>
+              <RichTextEditor.ControlsGroup>
+                <RichTextEditor.Blockquote />
+                <RichTextEditor.BulletList />
+                <RichTextEditor.OrderedList />
+              </RichTextEditor.ControlsGroup>
+              <RichTextEditor.ControlsGroup>
+                <RichTextEditor.Link />
+                <RichTextEditor.Unlink />
+              </RichTextEditor.ControlsGroup>
+              <RichTextEditor.ControlsGroup>
+                <RichTextEditor.Undo />
+                <RichTextEditor.Redo />
+              </RichTextEditor.ControlsGroup>
+            </RichTextEditor.Toolbar>
+          )}
           <RichTextEditor.Content style={{ flex: 1, minHeight: 0, overflowY: 'auto' }} />
         </RichTextEditor>
       </Drawer>

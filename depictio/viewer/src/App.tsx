@@ -29,6 +29,7 @@ import {
 } from 'depictio-react-core';
 import type {
   DashboardData,
+  DashboardPermissions,
   DashboardSummary,
   InteractiveFilter,
   RealtimeMode,
@@ -486,6 +487,7 @@ const App: React.FC = () => {
           <NotesFooter
             dashboardId={dashboardId}
             initialContent={(dashboard.notes_content as string) ?? ''}
+            permissions={dashboard.permissions as DashboardPermissions | undefined}
           />
         )}
       </AppShell.Main>
