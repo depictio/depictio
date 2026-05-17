@@ -6,10 +6,11 @@
  * `figureMode` to decide between live UI preview and the last code-mode
  * Execute result.
  */
-import React, { Suspense } from 'react';
-import { Accordion, Box, Center, Loader, SegmentedControl, Stack } from '@mantine/core';
+import React, { Suspense, useEffect } from 'react';
+import { Accordion, Box, Center, Loader, SegmentedControl, Stack, Tooltip } from '@mantine/core';
 import { Icon } from '@iconify/react';
 import { useBuilderStore } from '../store/useBuilderStore';
+import { useDashboardAccess } from '../../hooks/useDashboardAccess';
 import CrossFilterSection from '../shared/CrossFilterSection';
 import FigureUIMode from './FigureUIMode';
 import FigurePreview from './FigurePreview';
@@ -28,6 +29,7 @@ const FigureBuilder: React.FC = () => {
   const figureMode = useBuilderStore((s) => s.figureMode);
   const setFigureMode = useBuilderStore((s) => s.setFigureMode);
   const visuType = useBuilderStore((s) => s.visuType);
+  const dashboardId = useBuilderStore((s) => s.dashboardId);
   const config = useBuilderStore((s) => s.config) as {
     selection_enabled?: boolean;
     selection_column?: string;
@@ -38,35 +40,53 @@ const FigureBuilder: React.FC = () => {
   // section so authors don't think they're configuring it. Renderer
   // mirrors the same gate.
   const supportsCrossFilter = visuType === 'scatter' || visuType === 'scatter_3d';
+  const { canUseCodeMode } = useDashboardAccess(dashboardId);
+
+  // Public/demo deployments shouldn't expose the server-side Python executor.
+  // If a non-owner / public visitor lands on a component that was saved in
+  // code mode, snap them back to the safe UI mode.
+  useEffect(() => {
+    if (!canUseCodeMode && figureMode === 'code') {
+      setFigureMode('ui');
+    }
+  }, [canUseCodeMode, figureMode, setFigureMode]);
 
   return (
     <Stack gap="md" pt="md">
       <Center>
-        <SegmentedControl
-          size="lg"
-          value={figureMode}
-          onChange={(val) => setFigureMode(val as 'ui' | 'code')}
-          data={[
-            {
-              value: 'ui',
-              label: (
-                <span style={TOGGLE_LABEL_STYLE}>
-                  <Icon icon="tabler:eye" width={16} />
-                  UI Mode
-                </span>
-              ),
-            },
-            {
-              value: 'code',
-              label: (
-                <span style={TOGGLE_LABEL_STYLE}>
-                  <Icon icon="tabler:code" width={16} />
-                  Code Mode
-                </span>
-              ),
-            },
-          ]}
-        />
+        <Tooltip
+          label="Code Mode is unavailable in public / demo deployments."
+          disabled={canUseCodeMode}
+          withArrow
+          position="bottom"
+        >
+          <SegmentedControl
+            size="lg"
+            value={figureMode}
+            onChange={(val) => setFigureMode(val as 'ui' | 'code')}
+            data={[
+              {
+                value: 'ui',
+                label: (
+                  <span style={TOGGLE_LABEL_STYLE}>
+                    <Icon icon="tabler:eye" width={16} />
+                    UI Mode
+                  </span>
+                ),
+              },
+              {
+                value: 'code',
+                disabled: !canUseCodeMode,
+                label: (
+                  <span style={TOGGLE_LABEL_STYLE}>
+                    <Icon icon="tabler:code" width={16} />
+                    Code Mode
+                  </span>
+                ),
+              },
+            ]}
+          />
+        </Tooltip>
       </Center>
 
       <Box style={{ width: '100%' }}>

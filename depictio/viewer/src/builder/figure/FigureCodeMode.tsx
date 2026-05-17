@@ -35,6 +35,7 @@ import { Icon } from '@iconify/react';
 import { previewFigure } from 'depictio-react-core';
 import { useBuilderStore } from '../store/useBuilderStore';
 import { useColorScheme } from '../../hooks/useColorScheme';
+import { useDashboardAccess } from '../../hooks/useDashboardAccess';
 import { buildMetadata } from '../buildMetadata';
 
 const SAMPLE_CODE = `# Enter your Python/Plotly code here...
@@ -126,6 +127,17 @@ const FigureCodeMode: React.FC = () => {
   const setCodeStatus = state.setCodeStatus;
   const setLastCodeFigure = state.setLastCodeFigure;
   const { colorScheme } = useColorScheme();
+  // Gate code editing: read-only in public/demo deployments and for users
+  // who aren't owners of the dashboard. Server still authorizes Execute,
+  // but disabling the affordances avoids surprise 403s and signals intent.
+  const { canEditCode, isPublicMode, isDemoMode, isOwner, loading: accessLoading } =
+    useDashboardAccess(state.dashboardId);
+  const readOnly = !accessLoading && !canEditCode;
+  const readOnlyReason = isPublicMode || isDemoMode
+    ? 'Code Mode is read-only in public / demo deployments.'
+    : !isOwner
+      ? 'Only dashboard owners can edit Code Mode.'
+      : '';
 
   const [executing, setExecuting] = useState(false);
   const initialised = useRef(false);
@@ -325,27 +337,41 @@ const FigureCodeMode: React.FC = () => {
               <Icon icon="mdi:format-font-size-increase" width={14} />
             </ActionIcon>
           </Tooltip>
-          <Button
-            size="xs"
-            color="green"
-            variant="filled"
-            leftSection={<Icon icon="mdi:play" width={14} />}
-            onClick={handleExecute}
-            loading={executing}
-          >
-            Execute Code
-          </Button>
+          <Tooltip label={readOnlyReason} disabled={!readOnly} withArrow>
+            <Button
+              size="xs"
+              color="green"
+              variant="filled"
+              leftSection={<Icon icon="mdi:play" width={14} />}
+              onClick={handleExecute}
+              loading={executing}
+              disabled={readOnly}
+            >
+              Execute Code
+            </Button>
+          </Tooltip>
           <Button
             size="xs"
             color="gray"
             variant="outline"
             leftSection={<Icon icon="mdi:broom" width={14} />}
             onClick={handleClear}
+            disabled={readOnly}
           >
             Clear
           </Button>
         </Group>
       </Group>
+
+      {readOnly && (
+        <Alert
+          color="gray"
+          variant="light"
+          icon={<Icon icon="mdi:lock" width={16} />}
+        >
+          <Text size="xs">{readOnlyReason}</Text>
+        </Alert>
+      )}
 
       <div
         style={{
@@ -429,6 +455,7 @@ const FigureCodeMode: React.FC = () => {
               wordWrap: 'on',
               renderLineHighlight: 'line',
               automaticLayout: true,
+              readOnly,
             }}
           />
         </div>
