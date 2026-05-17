@@ -36,6 +36,8 @@ import type {
 import { notifications } from '@mantine/notifications';
 import { Header, Sidebar, SettingsDrawer } from './chrome';
 import { useSidebarOpen } from './hooks/useSidebarOpen';
+import { useCurrentUser } from './hooks/useCurrentUser';
+import { isDashboardOwner } from './lib/dashboardOwnership';
 
 /**
  * Top-level SPA. Layout:
@@ -74,6 +76,8 @@ const App: React.FC = () => {
   // `sidebar-collapsed` localStorage key the Dash app writes.
   const [desktopOpened, toggleDesktop] = useSidebarOpen();
   const [settingsOpened, { open: openSettings, close: closeSettings }] = useDisclosure(false);
+  const { user: currentUser } = useCurrentUser();
+  const isOwner = isDashboardOwner(dashboard, currentUser?.email ?? null);
 
   const dashboardId = extractDashboardId();
   const bulkCtrl = useRef<AbortController | null>(null);
@@ -323,6 +327,7 @@ const App: React.FC = () => {
           onReset={handleResetAllFilters}
           onOpenSettings={openSettings}
           cardsLoading={cardsLoading}
+          isOwner={isOwner}
           rightExtras={
             <>
               {realtimeEnabled && (
