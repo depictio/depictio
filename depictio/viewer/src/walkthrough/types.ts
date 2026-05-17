@@ -22,6 +22,17 @@ export interface WalkthroughStep {
    *  "Create dashboard" button to advance). The popover stays open with a
    *  "waiting for click" hint. */
   awaitClick?: boolean;
+  /** Optional hero image rendered above the title (centered card layout only —
+   *  ignored when the step has a `target`). Used for the welcome card. */
+  image?: {
+    src: string;
+    alt: string;
+    height?: number;
+  };
+  /** When set, the Next button navigates here instead of just advancing the
+   *  step counter in-place. The counter still advances so auto-advance can
+   *  pick up the matching next step once the new page mounts. */
+  navigateTo?: string;
 }
 
 export interface WalkthroughDefinition {

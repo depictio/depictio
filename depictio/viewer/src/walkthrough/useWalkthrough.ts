@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { WalkthroughDefinition, WalkthroughState } from './types';
 
 const STORAGE_PREFIX = 'depictio.walkthrough.';
@@ -88,6 +88,41 @@ export function useWalkthrough(
       update({ status: 'in-progress', step: 0 });
     }
   }, [enabled, state.status, update]);
+
+  // Auto-advance on real pathname changes only. When the user clicks a
+  // target with `awaitClick: true` (or hits a step with `navigateTo`), the
+  // page changes but the stored step counter doesn't always advance to
+  // exactly the right step — we scan forward from the current step for the
+  // first step whose route guard matches the new pathname.
+  //
+  // The pathname-changed gate is load-bearing: without it, calling `next()`
+  // synchronously before `window.location.href = …` triggers a re-render of
+  // this effect with the new `state.step` but the *old* pathname, and the
+  // scan-forward leapfrogs to whatever later step's route happens to match
+  // the page we're navigating *away* from. With the ref-based guard, the
+  // effect only does work when the route actually changed.
+  //
+  // Route-less steps (welcome, done) are skipped as landing targets — they're
+  // only reachable by explicit Next clicks. Otherwise `matchesRoute(undefined,
+  // anyPath)` would happily return true and the scan would land on "done".
+  const lastSeenPathRef = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    if (!enabled || state.status !== 'in-progress') return;
+    if (state.step >= def.steps.length) return;
+    const isPathChange = lastSeenPathRef.current !== pathname;
+    lastSeenPathRef.current = pathname;
+    if (!isPathChange) return;
+    const current = def.steps[state.step];
+    if (matchesRoute(current.route, pathname)) return;
+    for (let i = state.step + 1; i < def.steps.length; i++) {
+      const candidate = def.steps[i];
+      if (!candidate.route) continue;
+      if (matchesRoute(candidate.route, pathname)) {
+        update({ step: i });
+        return;
+      }
+    }
+  }, [enabled, pathname, state.status, state.step, def, update]);
 
   const stepCount = def.steps.length;
 

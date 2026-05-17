@@ -4,6 +4,7 @@ import {
   Box,
   Button,
   Group,
+  Image,
   Popover,
   Progress,
   Stack,
@@ -74,6 +75,18 @@ const Walkthrough: React.FC<WalkthroughProps> = ({ definition, enabled }) => {
   const step = visibleStep >= 0 ? definition.steps[visibleStep] : null;
   const target = useTargetElement(step?.target ?? null);
 
+  // When the step expects the user to actually click the target (awaitClick),
+  // catch that click and advance the step counter. Without this, the
+  // spotlight backdrop keeps dimming the page after the click — covering any
+  // modal that opens, or staying on top of the new route until auto-advance
+  // catches up on the next mount.
+  useEffect(() => {
+    if (!target || !step?.awaitClick) return;
+    const onClick = () => next();
+    target.addEventListener('click', onClick, { once: true });
+    return () => target.removeEventListener('click', onClick);
+  }, [target, step?.awaitClick, next]);
+
   if (!step) return null;
   // Anchored step but target not in DOM yet → keep the dim backdrop so the
   // page goes quiet, but render no popover until the target appears.
@@ -86,15 +99,42 @@ const Walkthrough: React.FC<WalkthroughProps> = ({ definition, enabled }) => {
   const isFirst = visibleStep === 0;
   const isLast = visibleStep === total - 1;
 
+  // Next button can either advance in-place (default) or fire a navigation.
+  // When navigating we still call `next()` so the step counter advances —
+  // auto-advance in `useWalkthrough` then resolves to the actual next visible
+  // step on the destination page (handles the case where `navigateTo` lands
+  // somewhere matched by a later step than step+1).
+  const handleNext = () => {
+    if (step.navigateTo) {
+      next();
+      window.location.href = step.navigateTo;
+    } else {
+      next();
+    }
+  };
+
+  const heroImage = step.image && !step.target ? step.image : null;
+
   const popoverContent = (
-    <Stack gap="xs">
+    <Stack gap="sm">
+      {heroImage && (
+        <Group justify="center">
+          <Image
+            src={heroImage.src}
+            alt={heroImage.alt}
+            h={heroImage.height ?? 56}
+            w="auto"
+            fit="contain"
+          />
+        </Group>
+      )}
       <Group justify="space-between" wrap="nowrap">
-        <Title order={5}>{step.title}</Title>
+        <Title order={4}>{step.title}</Title>
         <Badge size="sm" variant="light" color="gray">
           {stepNumber} / {total}
         </Badge>
       </Group>
-      <Text size="sm">{step.body}</Text>
+      <Text size="md">{step.body}</Text>
       <Progress value={(stepNumber / total) * 100} size="xs" />
       <Group justify="space-between" wrap="nowrap">
         <Button variant="subtle" color="gray" size="xs" onClick={skip}>
@@ -107,8 +147,8 @@ const Walkthrough: React.FC<WalkthroughProps> = ({ definition, enabled }) => {
             </Button>
           )}
           {!isLast ? (
-            <Button size="xs" onClick={next}>
-              Next
+            <Button size="xs" onClick={handleNext}>
+              {step.navigateTo ? "Let's go" : 'Next'}
             </Button>
           ) : (
             <Button size="xs" color="teal" onClick={finish}>

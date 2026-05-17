@@ -5,15 +5,20 @@ import type { WalkthroughDefinition } from '../types';
  *  the user feel the interactive filtering. No CTA at the end. */
 export const publicExplorerWalkthrough: WalkthroughDefinition = {
   id: 'public',
-  version: 'v1',
+  version: 'v2',
   label: 'Take the tour',
   steps: [
     {
       id: 'welcome',
       target: null,
       title: 'Welcome to Depictio',
-      body: "You're exploring a live demo. Nothing you do here will be saved — feel free to click around.",
+      body: "👋 You've landed in a live demo — explore freely, reviewer #2 isn't watching. Let's take a quick tour of what dashboards can do.",
       position: 'bottom',
+      image: {
+        src: '/dashboard-beta/favicon.svg',
+        alt: 'Depictio',
+        height: 64,
+      },
     },
     {
       id: 'sidebar',
