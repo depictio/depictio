@@ -87,7 +87,7 @@ export const authBuilderWalkthrough: WalkthroughDefinition = {
     {
       id: 'component-type',
       target: 'component-type-grid',
-      route: /\/(create|edit)\//,
+      route: /\/component\/(add|edit)\//,
       title: 'Pick a component type',
       body: 'Choose what to render: a chart, a KPI card, a data table, or an interactive filter. Each type drives the next configuration steps.',
       position: 'bottom',
@@ -95,7 +95,7 @@ export const authBuilderWalkthrough: WalkthroughDefinition = {
     {
       id: 'component-save',
       target: 'component-save',
-      route: /\/(create|edit)\//,
+      route: /\/component\/(add|edit)\//,
       title: 'Save the component',
       body: 'Once data and design are configured, save the component. It will appear on your dashboard grid where you can resize and arrange it.',
       position: 'top',

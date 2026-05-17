@@ -22,9 +22,12 @@ interface WalkthroughProps {
   enabled: boolean;
 }
 
-/** Resolves the DOM element for the current step's `data-tour-id`. Retries on
- *  a short cadence because targets may mount asynchronously after a route
- *  change. Returns `null` while waiting. */
+/** Resolves the DOM element for the current step's `data-tour-id`. Uses a
+ *  MutationObserver so the popover can appear whenever the target eventually
+ *  mounts — important for steps that live behind a sub-stepper (e.g. the
+ *  component-builder wizard, where the save button is on tab 3 of 3 and the
+ *  user has to step through tabs 1 and 2 first). Returns `null` until found.
+ */
 function useTargetElement(target: string | null): HTMLElement | null {
   const [el, setEl] = useState<HTMLElement | null>(null);
   useEffect(() => {
@@ -32,22 +35,16 @@ function useTargetElement(target: string | null): HTMLElement | null {
       setEl(null);
       return;
     }
-    let cancelled = false;
-    let attempts = 0;
-    const tick = () => {
-      const found = document.querySelector<HTMLElement>(`[data-tour-id="${target}"]`);
-      if (cancelled) return;
-      setEl(found);
-      attempts += 1;
-      // Keep retrying for ~3s — covers slow data fetches that delay mount.
-      if (!found && attempts < 30) {
-        window.setTimeout(tick, 100);
-      }
-    };
-    tick();
-    return () => {
-      cancelled = true;
-    };
+    const selector = `[data-tour-id="${target}"]`;
+    const lookup = () =>
+      document.querySelector<HTMLElement>(selector);
+    setEl(lookup());
+    const observer = new MutationObserver(() => {
+      const found = lookup();
+      setEl((prev) => (prev === found ? prev : found));
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+    return () => observer.disconnect();
   }, [target]);
   return el;
 }
