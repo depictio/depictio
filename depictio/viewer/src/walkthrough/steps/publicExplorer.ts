@@ -34,16 +34,16 @@ export function buildPublicExplorerWalkthrough(
   const ttl = formatExpiry(opts.expiryHours, opts.expiryMinutes);
   return {
     id: 'public',
-    // v4 — bumped after adding the duplicate-to-own-copy step (and after the
-    // welcome rewrite that landed in v3).
-    version: 'v4',
+    // v5 — bumped after surfacing duplicate-to-temp-session in the welcome
+    // body too (v4 added the dedicated step but missed the upfront mention).
+    version: 'v5',
     label: 'Take the tour',
     steps: [
       {
         id: 'welcome',
         target: null,
         title: 'Welcome to Depictio',
-        body: "👋 Welcome! This Depictio instance has been made public so the dashboards and datasets it contains can be shared. Open any dashboard below — the tour will show you how to use it.",
+        body: `👋 Welcome! This Depictio instance has been made public so the dashboards and datasets it contains can be shared. Open any dashboard below to explore it — or **duplicate** one to get your own editable copy in a temporary session (lasts ${ttl}). The tour walks you through both.`,
         position: 'bottom',
         image: {
           src: '/dashboard-beta/favicon.svg',
