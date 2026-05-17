@@ -34,6 +34,12 @@ export interface UseCurrentUserResult {
   isDemoMode: boolean;
   /** True when the server runs in single-admin mode (no login UI). */
   isSingleUserMode: boolean;
+  /** TTL of a temporary public-mode user, in hours. Used by the walkthrough
+   *  to tell visitors how long a duplicated dashboard / temporary session
+   *  will live. Falls back to 24 when the backend didn't supply a value. */
+  temporaryUserExpiryHours: number;
+  /** Sub-hour TTL component for temporary public-mode users. */
+  temporaryUserExpiryMinutes: number;
   loading: boolean;
 }
 
@@ -59,6 +65,8 @@ export function useCurrentUser(): UseCurrentUserResult {
   const [isPublicMode, setIsPublicMode] = useState<boolean>(false);
   const [isDemoMode, setIsDemoMode] = useState<boolean>(false);
   const [isSingleUserMode, setIsSingleUserMode] = useState<boolean>(false);
+  const [temporaryUserExpiryHours, setTemporaryUserExpiryHours] = useState<number>(24);
+  const [temporaryUserExpiryMinutes, setTemporaryUserExpiryMinutes] = useState<number>(0);
   const [loading, setLoading] = useState<boolean>(true);
 
   useEffect(() => {
@@ -86,6 +94,8 @@ export function useCurrentUser(): UseCurrentUserResult {
               is_public_mode?: boolean;
               is_demo_mode?: boolean;
               is_single_user_mode?: boolean;
+              temporary_user_expiry_hours?: number;
+              temporary_user_expiry_minutes?: number;
             }
           | null;
         if (cancelled) return;
@@ -99,6 +109,12 @@ export function useCurrentUser(): UseCurrentUserResult {
         setIsPublicMode(Boolean(data?.is_public_mode));
         setIsDemoMode(Boolean(data?.is_demo_mode));
         setIsSingleUserMode(Boolean(data?.is_single_user_mode));
+        if (typeof data?.temporary_user_expiry_hours === 'number') {
+          setTemporaryUserExpiryHours(data.temporary_user_expiry_hours);
+        }
+        if (typeof data?.temporary_user_expiry_minutes === 'number') {
+          setTemporaryUserExpiryMinutes(data.temporary_user_expiry_minutes);
+        }
         setUser(
           u && u.email
             ? { id: u.id, email: u.email, is_admin: Boolean(u.is_admin) }
@@ -115,5 +131,14 @@ export function useCurrentUser(): UseCurrentUserResult {
     };
   }, []);
 
-  return { user, authMode, isPublicMode, isDemoMode, isSingleUserMode, loading };
+  return {
+    user,
+    authMode,
+    isPublicMode,
+    isDemoMode,
+    isSingleUserMode,
+    temporaryUserExpiryHours,
+    temporaryUserExpiryMinutes,
+    loading,
+  };
 }
