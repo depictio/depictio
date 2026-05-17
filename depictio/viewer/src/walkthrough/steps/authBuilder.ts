@@ -116,7 +116,7 @@ export const authBuilderWalkthrough: WalkthroughDefinition = {
       target: 'editor-grid',
       route: /^\/dashboard-beta-edit\//,
       title: 'Arrange and resize',
-      body: 'Drag your component from its header to move it. Drag the bottom-right corner to resize. Add a few more components and lay them out however you like.',
+      body: 'Drag your component from dedicated button to move it. Drag the bottom-right corner to resize. Add a few more components and lay them out however you like.',
       position: 'left',
     },
     {
@@ -124,7 +124,7 @@ export const authBuilderWalkthrough: WalkthroughDefinition = {
       target: 'editor-save',
       route: /^\/dashboard-beta-edit\//,
       title: 'Save the dashboard',
-      body: 'Components are added to the workspace, but the dashboard layout itself needs an explicit save. Hit Save to persist your work.',
+      body: 'Components are added on the dashboard, but the layout itself needs an explicit save. Hit Save to persist updated layout.',
       position: 'bottom',
     },
     {
