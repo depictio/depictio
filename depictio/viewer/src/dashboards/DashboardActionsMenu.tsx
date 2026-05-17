@@ -34,6 +34,7 @@ const DashboardActionsMenu: React.FC<DashboardActionsMenuProps> = ({
         size={triggerSize}
         aria-label="Dashboard actions"
         onClick={(e) => e.stopPropagation()}
+        data-tour-id="dashboard-actions"
       >
         <Icon icon="tabler:dots-vertical" width={18} />
       </ActionIcon>
@@ -55,6 +56,7 @@ const DashboardActionsMenu: React.FC<DashboardActionsMenuProps> = ({
       <Menu.Item
         leftSection={<Icon icon="mdi:content-duplicate" width={14} />}
         onClick={() => onDuplicate(dashboard)}
+        data-tour-id="dashboard-duplicate"
       >
         Duplicate
       </Menu.Item>

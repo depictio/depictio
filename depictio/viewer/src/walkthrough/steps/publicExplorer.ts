@@ -34,9 +34,10 @@ export function buildPublicExplorerWalkthrough(
   const ttl = formatExpiry(opts.expiryHours, opts.expiryMinutes);
   return {
     id: 'public',
-    // v5 — bumped after surfacing duplicate-to-temp-session in the welcome
-    // body too (v4 added the dedicated step but missed the upfront mention).
-    version: 'v5',
+    // v6 — bumped after replacing the centered duplicate card with two
+    // anchored steps that actually show *how* to duplicate (menu trigger →
+    // Duplicate item).
+    version: 'v6',
     label: 'Take the tour',
     steps: [
       {
@@ -52,11 +53,29 @@ export function buildPublicExplorerWalkthrough(
         },
       },
       {
+        id: 'dashboard-actions',
+        target: 'dashboard-actions',
+        route: /^\/dashboards-beta\/?$/,
+        title: "Each dashboard's actions menu",
+        body: 'Every dashboard has a menu here. Click it to see what you can do with this dashboard — including making your own copy.',
+        position: 'left',
+        awaitClick: true,
+      },
+      {
+        id: 'dashboard-duplicate',
+        target: 'dashboard-duplicate',
+        route: /^\/dashboards-beta\/?$/,
+        title: 'Duplicate to get your own copy',
+        body: `Pick **Duplicate** to spin up your own editable copy in a temporary session (lasts ${ttl}). Tweak filters, rearrange components, save your view — the copy disappears when your session expires. Or hit Next to keep exploring without duplicating.`,
+        position: 'left',
+        awaitClick: true,
+      },
+      {
         id: 'pick-dashboard',
         target: 'dashboard-card',
         route: /^\/dashboards-beta\/?$/,
-        title: 'Pick a dashboard',
-        body: 'These are the dashboards shared on this instance. Click any of them to open it — the tour resumes inside.',
+        title: 'Open a dashboard',
+        body: 'Click any dashboard card to dive in — the tour resumes inside.',
         position: 'right',
         awaitClick: true,
       },
@@ -82,13 +101,6 @@ export function buildPublicExplorerWalkthrough(
         route: /^\/dashboard-beta\//,
         title: 'Live updates',
         body: 'When upstream data changes, this pill lights up. Open Settings to switch on auto-refresh, or click to refresh manually.',
-        position: 'bottom',
-      },
-      {
-        id: 'duplicate',
-        target: null,
-        title: 'Want your own copy?',
-        body: `Open any dashboard's actions menu and pick **Duplicate**. You'll get your own editable copy in a temporary session that lasts ${ttl} — tweak filters, rearrange components, save your view. The copy disappears when your session expires.`,
         position: 'bottom',
       },
       {
