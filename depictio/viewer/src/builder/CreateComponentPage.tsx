@@ -89,6 +89,7 @@ const CreateComponentPage: React.FC<CreateComponentPageProps> = ({
             color="gray"
             size="lg"
             iconSize={42}
+            data-tour-id="component-wizard-stepper"
             styles={{
               stepLabel: { fontSize: '16px', fontWeight: 700 },
               stepDescription: {

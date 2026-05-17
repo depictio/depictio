@@ -964,6 +964,7 @@ const EditorApp: React.FC = () => {
             <Box
               px={4}
               py={4}
+              data-tour-id="editor-grid"
               style={{
                 height: '100%',
                 minWidth: 0,

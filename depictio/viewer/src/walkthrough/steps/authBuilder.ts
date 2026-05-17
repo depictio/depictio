@@ -6,8 +6,9 @@ import type { WalkthroughDefinition } from '../types';
  *  data has to live somewhere before a dashboard can render it. */
 export const authBuilderWalkthrough: WalkthroughDefinition = {
   id: 'builder',
-  // v3 — bumped after rewording + inserting the enter-edit-mode step.
-  version: 'v3',
+  // v4 — bumped after expanding the component-build phase (recommend a type,
+  // configure data + design, then layout/resize before saving the dashboard).
+  version: 'v4',
   label: 'Take the builder tour',
   steps: [
     {
@@ -88,19 +89,35 @@ export const authBuilderWalkthrough: WalkthroughDefinition = {
       id: 'component-type',
       target: 'component-type-grid',
       route: /\/component\/(add|edit)\//,
-      title: 'Pick a component type',
-      body: 'Choose what to render: a chart, a KPI card, a data table, or an interactive filter. Each type drives the next configuration steps.',
+      title: 'Pick a Figure to start with',
+      body: "For this tour, pick **Figure** — it's the most flexible component and great for getting a feel for the builder. (You can come back later and try cards, tables, interactive filters, MultiQC plots, or geomaps.)",
       position: 'bottom',
       awaitClick: true,
+    },
+    {
+      id: 'component-configure',
+      target: 'component-wizard-stepper',
+      route: /\/component\/(add|edit)\//,
+      title: 'Configure your component',
+      body: 'Walk through the wizard: **Data Source** picks the workflow and data collection, then **Design** chooses the chart type and axes. Use Next on each stage to advance.',
+      position: 'bottom',
     },
     {
       id: 'component-save',
       target: 'component-save',
       route: /\/component\/(add|edit)\//,
       title: 'Save the component',
-      body: 'Once data and design are configured, save the component. It will appear on your dashboard grid where you can resize and arrange it.',
+      body: 'Design configured? Hit save. The wizard closes and your new component lands on the dashboard grid.',
       position: 'top',
       awaitClick: true,
+    },
+    {
+      id: 'component-resize',
+      target: 'editor-grid',
+      route: /^\/dashboard-beta-edit\//,
+      title: 'Arrange and resize',
+      body: 'Drag your component from its header to move it. Drag the bottom-right corner to resize. Add a few more components and lay them out however you like.',
+      position: 'left',
     },
     {
       id: 'editor-save',
