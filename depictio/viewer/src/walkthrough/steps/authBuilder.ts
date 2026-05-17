@@ -6,9 +6,8 @@ import type { WalkthroughDefinition } from '../types';
  *  data has to live somewhere before a dashboard can render it. */
 export const authBuilderWalkthrough: WalkthroughDefinition = {
   id: 'builder',
-  // v2 — bumped after restructuring to put projects before dashboards. Anyone
-  // who saw the v1 builder tour gets v2 once on next visit.
-  version: 'v2',
+  // v3 — bumped after rewording + inserting the enter-edit-mode step.
+  version: 'v3',
   label: 'Take the builder tour',
   steps: [
     {
@@ -29,7 +28,7 @@ export const authBuilderWalkthrough: WalkthroughDefinition = {
       target: 'projects-header',
       route: /^\/projects-beta\/?$/,
       title: 'Projects bundle your data',
-      body: 'A project groups the data collections, workflows, and permissions your dashboards will pull from. You can have one per study, pipeline, or team.',
+      body: "A project groups the data collections your dashboards read from, the permissions controlling who sees them, and optionally one or more workflows that produced the data.",
       position: 'bottom',
     },
     {
@@ -37,7 +36,7 @@ export const authBuilderWalkthrough: WalkthroughDefinition = {
       target: 'projects-create',
       route: /^\/projects-beta\/?$/,
       title: 'Create your first project',
-      body: "Click here to spin up a new project. You'll pick a name and (optionally) attach data collections — the tour resumes once you land on the project page.",
+      body: "Click here to spin up a new project. You'll pick a name and attach the data collections it should hold — without data, a project doesn't do much. The tour resumes once you land on the project page.",
       position: 'left',
       awaitClick: true,
     },
@@ -46,7 +45,7 @@ export const authBuilderWalkthrough: WalkthroughDefinition = {
       target: null,
       route: /^\/projects-beta\/[^/]+\/?$/,
       title: 'Inside a project',
-      body: "Here you can browse this project's data collections, set permissions, and check workflow runs. When you're ready, we'll head over to Dashboards to build a view on top.",
+      body: "Here you can browse this project's data collections and the workflow runs that fed them. Permissions live on a separate page. Next we'll head to the Dashboards page and start visualizing this data.",
       position: 'bottom',
       navigateTo: '/dashboards-beta',
     },
@@ -55,7 +54,7 @@ export const authBuilderWalkthrough: WalkthroughDefinition = {
       target: null,
       route: /^\/dashboards-beta\/?$/,
       title: 'Dashboards live here',
-      body: 'Dashboards visualize a project. Each one can have multiple tabs and any number of components — figures, cards, tables, and interactive filters.',
+      body: "A dashboard is a layout of components that read from a project's data. Each dashboard can have multiple tabs and multiple components — figures, cards, tables, interactive filters, MultiQC plots, and geomaps.",
       position: 'bottom',
     },
     {
@@ -63,8 +62,17 @@ export const authBuilderWalkthrough: WalkthroughDefinition = {
       target: 'dashboards-create',
       route: /^\/dashboards-beta\/?$/,
       title: 'Create a dashboard',
-      body: "Click here to start a new dashboard. Pick the project you just made — the tour will continue in the editor.",
+      body: "Click here to start a new dashboard. Pick the project you just made — the new dashboard will show up in the list, and the tour resumes once you open it.",
       position: 'left',
+      awaitClick: true,
+    },
+    {
+      id: 'enter-edit-mode',
+      target: 'enter-edit-mode',
+      route: /^\/dashboard-beta\/[^/]+/,
+      title: 'Open the editor',
+      body: 'Your new dashboard opens in view mode. Click Edit to drop into the editor — that\'s where you add components.',
+      position: 'bottom',
       awaitClick: true,
     },
     {

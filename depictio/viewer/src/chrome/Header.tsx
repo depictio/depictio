@@ -239,6 +239,7 @@ const Header: React.FC<HeaderProps> = ({
             size="xs"
             onClick={handleEdit}
             disabled={!dashboardId}
+            data-tour-id="enter-edit-mode"
           >
             Edit
           </Button>
