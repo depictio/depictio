@@ -12,9 +12,8 @@ export const authBuilderWalkthrough: WalkthroughDefinition = {
     {
       id: 'welcome',
       target: null,
-      route: /^\/dashboards-beta(\/|$)/,
       title: 'Welcome to Depictio',
-      body: "Let's build your first dashboard. This tour walks you through creating one from scratch.",
+      body: "Let's build your first dashboard. This tour walks you through creating one from scratch — head over to the Dashboards page to start.",
       position: 'bottom',
     },
     {
