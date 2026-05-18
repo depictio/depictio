@@ -9,7 +9,7 @@ validate input cheaply, then `await offload_or_run(...)` to dispatch the task
 and unwrap its result.
 
 Tasks are auto-discovered when this module is imported by the Celery worker
-(see `depictio.dash.celery_worker`).
+(see `depictio.api.celery_worker`).
 """
 
 from __future__ import annotations
@@ -20,8 +20,8 @@ from typing import Any
 
 from bson import ObjectId
 
+from depictio.api.celery_app import celery_app
 from depictio.api.v1.configs.logging_init import logger
-from depictio.dash.celery_app import celery_app
 
 
 def _ensure_mantine_templates() -> None:

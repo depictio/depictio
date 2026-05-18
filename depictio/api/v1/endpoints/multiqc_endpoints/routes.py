@@ -580,7 +580,7 @@ async def multiqc_preview(
     # the freshness short-circuit no-ops if the doc is already ready with a
     # matching s3_locations_hash.
     try:
-        from depictio.dash.celery_app import prewarm_multiqc_dc_all_plots
+        from depictio.api.celery_app import prewarm_multiqc_dc_all_plots
 
         prewarm_multiqc_dc_all_plots.delay(str(dc_id))
     except Exception as exc:

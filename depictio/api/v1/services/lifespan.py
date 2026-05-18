@@ -225,8 +225,8 @@ def start_multiqc_prewarm(should_initialize: bool) -> None:
         return
 
     try:
+        from depictio.api.celery_app import prewarm_multiqc_dashboard
         from depictio.api.v1.db import dashboards_collection
-        from depictio.dash.celery_app import prewarm_multiqc_dashboard
 
         cursor = dashboards_collection.find(
             {"stored_metadata.component_type": "multiqc"},

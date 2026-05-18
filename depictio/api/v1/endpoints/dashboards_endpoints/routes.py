@@ -273,7 +273,7 @@ async def get_dashboard(
     )
     if has_multiqc:
         try:
-            from depictio.dash.celery_app import prewarm_multiqc_dashboard
+            from depictio.api.celery_app import prewarm_multiqc_dashboard
 
             prewarm_multiqc_dashboard.delay(str(dashboard_id))
         except Exception as e:
@@ -682,10 +682,10 @@ async def save_dashboard(
         # the 1h window and always regenerate.
         try:
             if force_screenshot or _should_enqueue_screenshot(dashboard_id_str):
-                # Lazy import keeps API startup independent of the Dash
-                # worker module; broad except so a Celery/broker outage
-                # never breaks the save response itself.
-                from depictio.dash.celery_app import generate_dashboard_screenshot_dual
+                # Lazy import keeps API startup independent of the worker
+                # module; broad except so a Celery/broker outage never
+                # breaks the save response itself.
+                from depictio.api.celery_app import generate_dashboard_screenshot_dual
 
                 user_id = str(getattr(current_user, "id", "") or "")
                 # `force=True` on explicit Save also bypasses the celery
@@ -3213,7 +3213,7 @@ def render_multiqc_endpoint(
 
             if not prerender_ready or build_running:
                 if not build_running:
-                    from depictio.dash.celery_app import build_multiqc_prerender
+                    from depictio.api.celery_app import build_multiqc_prerender
 
                     try:
                         build_multiqc_prerender.delay(str(dc_id))

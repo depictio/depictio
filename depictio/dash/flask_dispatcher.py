@@ -110,7 +110,7 @@ def create_shared_dash_config():
     background_callback_manager = None
 
     try:
-        from depictio.dash.celery_app import celery_app
+        from depictio.api.celery_app import celery_app
 
         background_callback_manager = dash.CeleryManager(celery_app)
     except Exception as e:

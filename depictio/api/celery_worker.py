@@ -17,16 +17,15 @@ Multi-App Background Callback Distribution:
 - Editor app: Full version with all background callbacks (editing + component builder)
 
 Usage:
-    celery -A depictio.dash.celery_worker:celery_app worker --loglevel=info
+    celery -A depictio.api.celery_worker:celery_app worker --loglevel=info
 """
 
 # Register FastAPI-side tasks (preview / render offload). Importing the module
 # triggers `@celery_app.task` decorators so the worker can pick them up.
+# Import the Celery app instance
+from depictio.api.celery_app import celery_app
 from depictio.api.v1 import celery_tasks  # noqa: E402, F401
 from depictio.api.v1.configs.logging_init import logger
-
-# Import the Celery app instance
-from depictio.dash.celery_app import celery_app
 
 logger.info("=" * 80)
 logger.info("=" * 80)
