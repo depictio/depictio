@@ -207,7 +207,7 @@ const CreateDashboardModal: React.FC<CreateDashboardModalProps> = ({
       padding={28}
       overlayProps={{ blur: 3, backgroundOpacity: 0.55 }}
     >
-      <Stack gap="lg">
+      <Stack gap="lg" data-testid="create-dashboard-modal">
         <Group justify="center" gap="sm">
           <Icon
             icon="mdi:view-dashboard-outline"

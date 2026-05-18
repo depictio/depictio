@@ -145,6 +145,7 @@ const LinksSection: React.FC<LinksSectionProps> = ({
         </Group>
         <Tooltip label={disabledTip} disabled={canMutate}>
           <Button
+            data-testid="add-link-btn"
             leftSection={<Icon icon="mdi:plus" width={16} />}
             onClick={openCreate}
             disabled={!canMutate}

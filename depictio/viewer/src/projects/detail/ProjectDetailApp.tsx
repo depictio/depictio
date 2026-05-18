@@ -1261,7 +1261,7 @@ const CreateDataCollectionModal: React.FC<{
       closeOnClickOutside={!submitting}
       withCloseButton={!submitting}
     >
-      <Stack gap="md">
+      <Stack gap="md" data-testid="create-dc-modal">
         <Group justify="center" gap="sm">
           <Icon
             icon="mdi:database-plus-outline"
@@ -2109,6 +2109,7 @@ const DataCollectionsManagerSection: React.FC<{
             </Badge>
           </Group>
           <Button
+            data-testid="create-dc-btn"
             color="teal"
             size="sm"
             leftSection={<Icon icon="mdi:plus" width={16} />}
@@ -2285,6 +2286,7 @@ const DataCollectionRow: React.FC<{
         <Group gap={4}>
           {onManage && (
             <ActionIcon
+              data-testid="manage-dc-btn"
               variant="subtle"
               color="teal"
               size="sm"

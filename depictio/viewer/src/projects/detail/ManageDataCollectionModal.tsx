@@ -258,7 +258,7 @@ const ManageDataCollectionModal: React.FC<ManageDataCollectionModalProps> = ({
       closeOnEscape={!submitting}
       padding="lg"
     >
-      <Stack gap="md">
+      <Stack gap="md" data-testid="manage-dc-modal">
         {/* Header — generic title, matches Dash. DC name surfaces inside the
             Clear tab's typed-name input rather than in the title. */}
         <Group justify="center" gap="sm">

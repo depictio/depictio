@@ -1,5 +1,4 @@
 import asyncio
-import json
 from datetime import datetime
 from pathlib import Path
 
@@ -27,7 +26,7 @@ from depictio.api.v1.endpoints.utils_endpoints.process_data_collections import (
     process_initial_data_collections,
 )
 from depictio.api.v1.s3 import s3_client
-from depictio.models.models.users import TokenBeanie, UserBeanie
+from depictio.models.models.users import UserBeanie
 from depictio.version import get_version
 
 # Define the router
@@ -658,34 +657,11 @@ async def screenshot_dash_fixed(
     Path(output_folder).mkdir(parents=True, exist_ok=True)
 
     try:
-        # Get admin auth token for screenshot generation
-        admin_user = await UserBeanie.find_one({"email": "admin@example.com"})
-        if not admin_user:
-            raise HTTPException(status_code=404, detail="Admin user not found")
-
-        token = await TokenBeanie.find_one(
-            {
-                "user_id": admin_user.id,
-                "refresh_expire_datetime": {"$gt": datetime.now()},
-            }
+        from depictio.api.v1.endpoints.user_endpoints.utils import (
+            _get_admin_token_localstorage_payload,
         )
-        if not token:
-            raise HTTPException(status_code=404, detail="Valid token not found")
 
-        # Prepare token data
-        token_data = token.model_dump(exclude_none=True)
-        token_data["_id"] = str(token_data.pop("id", None))
-        token_data["user_id"] = str(token_data["user_id"])
-        token_data["logged_in"] = True
-
-        if isinstance(token_data.get("expire_datetime"), datetime):
-            token_data["expire_datetime"] = token_data["expire_datetime"].strftime(
-                "%Y-%m-%d %H:%M:%S"
-            )
-        if isinstance(token_data.get("created_at"), datetime):
-            token_data["created_at"] = token_data["created_at"].strftime("%Y-%m-%d %H:%M:%S")
-
-        token_data_json = json.dumps(token_data)
+        token_data_json = await _get_admin_token_localstorage_payload()
 
         # Simple browser screenshot
         async with async_playwright() as p:
