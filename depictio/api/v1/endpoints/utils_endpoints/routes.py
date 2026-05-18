@@ -614,7 +614,7 @@ async def navigate_with_hybrid_strategy(page, url: str, max_retries: int = 2) ->
     return False, "all_strategies_failed"
 
 
-@utils_endpoint_router.get("/screenshot-dash-fixed/{dashboard_id}")
+@utils_endpoint_router.get("/screenshot-dash-fixed/{dashboard_id}", deprecated=True)
 async def screenshot_dash_fixed(
     dashboard_id: str = "6824cb3b89d2b72169309737",
     authorization: str | None = Header(None),
@@ -622,10 +622,16 @@ async def screenshot_dash_fixed(
     """
     Minimal screenshot endpoint - just take a full page screenshot.
     Only dashboard owners can generate screenshots (except in single user mode).
+
+    DEPRECATED: production screenshot capture drives the React SPA via
+    `/screenshot-react-dual/{dashboard_id}`. This endpoint is retained for
+    emergency rollback only.
     """
     from playwright.async_api import async_playwright
 
     from depictio.api.v1.services.screenshot_service import check_dashboard_owner_permission
+
+    logger.warning("/screenshot-dash-fixed is deprecated — use /screenshot-react-dual instead.")
 
     # In single user mode, skip all authentication and permission checks
     if not settings.auth.is_single_user_mode:
@@ -811,6 +817,8 @@ async def screenshot_dash_dual(dashboard_id: str, current_user=Depends(get_curre
         generate_dual_theme_screenshots,
     )
 
+    logger.warning("/screenshot-dash-dual is deprecated — use /screenshot-react-dual instead.")
+
     # Check if user owns the dashboard
     is_owner = await check_dashboard_owner_permission(
         dashboard_id=dashboard_id, user_id=str(current_user.id)
@@ -833,7 +841,7 @@ async def screenshot_dash_dual(dashboard_id: str, current_user=Depends(get_curre
 async def screenshot_react_dual(
     dashboard_id: str,
     open_settings: bool = False,
-    filename_prefix: str = "react",
+    filename_prefix: str = "",
     authorization: str | None = Header(None),
 ):
     """Generate light + dark screenshots of the React beta viewer.
@@ -850,9 +858,11 @@ async def screenshot_react_dual(
             silently disabled when no settings cog is present). When the
             popover opens, we switch to a viewport capture because Mantine
             portals dropdowns outside AppShell.Main.
-        filename_prefix: PNG filename prefix (default `react`) — change it to
-            keep parallel batches in the same output folder from clobbering
-            each other.
+        filename_prefix: PNG filename prefix (default `""` → writes the
+            canonical `{id}_{theme}.png` filenames that dashboard cards
+            already consume). Pass a non-empty prefix (e.g. `docs`) to keep
+            parallel batches in the same folder from clobbering each other:
+            `{prefix}_{id}_{theme}.png`.
 
     Returns:
         ScreenshotResult dict with `light_screenshot` / `dark_screenshot`

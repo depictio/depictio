@@ -1,11 +1,16 @@
 """
 Shared screenshot service for dashboard dual-theme screenshot generation.
 
-This module provides centralized Playwright-based screenshot logic that can be
-used by both the API endpoint (for testing/debugging) and the Celery task
-(for production async screenshot generation).
+The active code path drives the React SPA at `{fastapi.url}/dashboard-beta/{id}`
+via `generate_react_dual_theme_screenshots`. Dash-targeted captures
+(`generate_dual_theme_screenshots`) are kept for emergency rollback only —
+they log a deprecation warning on every call and should not run in normal
+operation.
 
-Eliminates HTTP indirection and centralizes screenshot logic in one place.
+Low-level Playwright primitives (init-script builder, theme/grid waits, chrome
+hider, notification dismisser, unreachable-host markers) live in
+`screenshot_helpers.py` so the dev `docs_screenshots.py` script can share them
+without dragging the MongoDB-backed token loader along.
 """
 
 import json
@@ -19,7 +24,27 @@ from playwright.async_api import Page, async_playwright
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.db import dashboards_collection, projects_collection
+from depictio.api.v1.services.screenshot_helpers import (
+    HOST_UNREACHABLE_MARKERS,
+    apply_init_script,
+    hide_ui_chrome,
+    wait_for_dashboard_content,
+    wait_for_plotly_drawn,
+    wait_for_theme_applied,
+)
 from depictio.models.models.users import TokenBeanie, UserBeanie
+
+__all__ = [
+    "ScreenshotResult",
+    "check_dashboard_owner_permission",
+    "check_dashboard_owner_permission_sync",
+    "generate_dual_theme_screenshots",
+    "generate_react_dual_theme_screenshots",
+    "get_admin_auth_token",
+    # Re-exported for legacy callers; the canonical source is screenshot_helpers.
+    "hide_ui_chrome",
+    "wait_for_dashboard_content",
+]
 
 
 class ScreenshotResult(TypedDict):
@@ -30,16 +55,6 @@ class ScreenshotResult(TypedDict):
     light_screenshot: str | None
     dark_screenshot: str | None
     error: str | None
-
-
-# Playwright error substrings that mean "the Dash frontend host isn't reachable"
-# (typically: this worktree didn't start the depictio-frontend container).
-# Treat them as "skip screenshot" rather than "task failed".
-_HOST_UNREACHABLE_MARKERS = (
-    "ERR_NAME_NOT_RESOLVED",
-    "ERR_CONNECTION_REFUSED",
-    "ERR_CONNECTION_TIMED_OUT",
-)
 
 
 def check_dashboard_owner_permission_sync(dashboard_id: str, user_id: str) -> bool:
@@ -91,51 +106,6 @@ async def check_dashboard_owner_permission(dashboard_id: str, user_id: str) -> b
     exists for API compatibility in async contexts.
     """
     return check_dashboard_owner_permission_sync(dashboard_id, user_id)
-
-
-async def wait_for_dashboard_content(page: Page) -> None:
-    """Wait for react-grid-item components to render with proper dimensions."""
-    await page.wait_for_function(
-        """() => {
-            const components = document.querySelectorAll('.react-grid-item');
-            if (components.length === 0) return false;
-            for (let component of components) {
-                const rect = component.getBoundingClientRect();
-                if (rect.width > 0 && rect.height > 0) return true;
-            }
-            return false;
-        }""",
-        timeout=settings.performance.screenshot_content_wait,
-    )
-
-
-async def hide_ui_chrome(page: Page) -> None:
-    """Hide navbar, header, debug menu, and adjust page styling for clean screenshot."""
-    await page.evaluate(
-        """() => {
-        const navbar = document.querySelector('.mantine-AppShell-navbar');
-        if (navbar) navbar.style.display = 'none';
-
-        const header = document.querySelector('.mantine-AppShell-header');
-        if (header) header.style.display = 'none';
-
-        const debugMenu = document.querySelector('.dash-debug-menu__outer');
-        if (debugMenu) debugMenu.style.display = 'none';
-
-        const pageContent = document.querySelector('#page-content');
-        if (pageContent) {
-            pageContent.style.padding = '0';
-            pageContent.style.margin = '0';
-        }
-
-        const main = document.querySelector('.mantine-AppShell-main');
-        if (main) {
-            main.style.padding = '0';
-            main.style.paddingLeft = '0';
-            main.style.margin = '0';
-        }
-    }"""
-    )
 
 
 async def get_admin_auth_token() -> dict[str, str]:
@@ -206,7 +176,15 @@ async def generate_dual_theme_screenshots(
     Returns:
         ScreenshotResult: Dict with status, dashboard_id, screenshot paths, and optional error
                          Returns forbidden status if user_id provided but user is not owner
+
+    DEPRECATED: prefer `generate_react_dual_theme_screenshots`. Production
+    screenshot capture now drives the React SPA. This function is kept for
+    emergency rollback and logs a warning on every call.
     """
+    logger.warning(
+        "generate_dual_theme_screenshots (Dash) is deprecated — "
+        "callers should use generate_react_dual_theme_screenshots."
+    )
     # Validate ownership if user_id provided (defense in depth)
     if user_id:
         is_owner = await check_dashboard_owner_permission(
@@ -251,7 +229,7 @@ async def generate_dual_theme_screenshots(
                 await page.goto(settings.dash.internal_url)
             except Exception as nav_err:
                 msg = str(nav_err)
-                if any(m in msg for m in _HOST_UNREACHABLE_MARKERS):
+                if any(m in msg for m in HOST_UNREACHABLE_MARKERS):
                     logger.warning(
                         f"Dash frontend ({settings.dash.internal_url}) is unreachable "
                         f"from this worker — skipping screenshot for {dashboard_id}. "
@@ -353,32 +331,51 @@ async def _try_open_viz_settings(page: Page) -> bool:
         return False
 
 
+def _react_output_paths(
+    output_folder: str, dashboard_id: str, filename_prefix: str
+) -> tuple[str, str]:
+    """Resolve `(light_path, dark_path)` for the React screenshot job.
+
+    Default `filename_prefix=""` produces `{id}_{theme}.png` — same names as
+    the legacy Dash job, so dashboard-card UIs that already fetch those URLs
+    keep working with no frontend change. A non-empty prefix yields
+    `{prefix}_{id}_{theme}.png` for parallel batches (e.g. docs captures
+    flagged with `--filename-prefix=docs`) that must not clobber the
+    canonical shots.
+    """
+    if filename_prefix:
+        light = f"{output_folder}/{filename_prefix}_{dashboard_id}_light.png"
+        dark = f"{output_folder}/{filename_prefix}_{dashboard_id}_dark.png"
+    else:
+        light = f"{output_folder}/{dashboard_id}_light.png"
+        dark = f"{output_folder}/{dashboard_id}_dark.png"
+    return light, dark
+
+
 async def generate_react_dual_theme_screenshots(
     dashboard_id: str,
     output_folder: str = "/app/depictio/dash/static/screenshots",
     user_id: str | None = None,
     open_settings: bool = False,
-    filename_prefix: str = "react",
+    filename_prefix: str = "",
 ) -> ScreenshotResult:
     """Generate light + dark screenshots of the React beta viewer.
 
-    Sibling of `generate_dual_theme_screenshots` (which targets the Dash app at
-    `settings.dash.url`). This one drives the SPA bundle that FastAPI itself
-    serves at `{settings.fastapi.url}/dashboard-beta/{id}`.
+    This is the canonical production path. Drives the SPA bundle FastAPI
+    serves at `{settings.fastapi.url}/dashboard-beta/{id}` (port 8100 by
+    default).
 
-    Differences vs the Dash variant:
-      • Origin / dashboard URL come from `settings.fastapi.*` (not `settings.dash`).
-      • `theme-store` localStorage payload is `{"colorScheme": "<theme>"}` — the
-        SPA's `readInitialColorScheme()` reads `parsed.colorScheme`, so the
-        Dash-style bare string `"light"` would silently fall back to light.
-      • Optional `open_settings=True` clicks the first `aria-label="Viz settings"`
-        ActionIcon so the popover shows in the capture. Falls back to a normal
-        shot if no popover exists. The Mantine popover is portaled to body, so
-        we full-page capture in that case instead of cropping to AppShell.Main.
+    Defaults to filenames `{id}_light.png` / `{id}_dark.png` for backward
+    compatibility with consumers that previously read the Dash-generated
+    PNGs from the same folder. Pass a non-empty `filename_prefix` to keep
+    parallel batches (e.g. docs captures) from clobbering the canonical
+    shots.
 
-    Output filenames are `{filename_prefix}_{dashboard_id}_{theme}.png` (default
-    prefix keeps them out of the way of the Dash auto-screenshot job which uses
-    `{dashboard_id}_{theme}.png`).
+    `open_settings=True` clicks the first `aria-label="Viz settings"`
+    ActionIcon before capture so the popover shows in the shot (advanced-
+    viz docs flow); falls back to a normal shot if no popover exists.
+    Because Mantine popovers portal to document.body, a popover-open
+    capture switches from element.screenshot to a viewport capture.
     """
     if user_id:
         is_owner = await check_dashboard_owner_permission(
@@ -394,8 +391,7 @@ async def generate_react_dual_theme_screenshots(
             }
 
     Path(output_folder).mkdir(parents=True, exist_ok=True)
-    light_path = f"{output_folder}/{filename_prefix}_{dashboard_id}_light.png"
-    dark_path = f"{output_folder}/{filename_prefix}_{dashboard_id}_dark.png"
+    light_path, dark_path = _react_output_paths(output_folder, dashboard_id, filename_prefix)
 
     # The React SPA is served by the FastAPI process itself. Use `.url` so the
     # property picks internal vs external based on DEPICTIO_CONTEXT — inside
@@ -412,39 +408,40 @@ async def generate_react_dual_theme_screenshots(
 
         async with async_playwright() as p:
             browser = await p.chromium.launch(headless=True)
-            context = await browser.new_context(viewport={"width": 1920, "height": 1080})
 
             for theme, output_path in [("light", light_path), ("dark", dark_path)]:
-                # SPA's readInitialColorScheme reads parsed.colorScheme — a bare
-                # string like '"light"' parses to a string with no .colorScheme
-                # property and silently falls back to light. Inject both
-                # localStorage values via init script BEFORE any navigation:
-                # hitting the bare origin would trigger the SPA's `isBareRoot`
-                # redirect to /dashboards-beta and kill any page.evaluate
-                # before it lands, so we can't set storage after the fact.
-                theme_payload = json.dumps({"colorScheme": theme})
-                init_script = (
-                    f"localStorage.setItem('local-store', {json.dumps(token_data_json)});"
-                    f"localStorage.setItem('theme-store', {json.dumps(theme_payload)});"
-                )
-                # Drop any prior init script (light pass) before adding the
-                # dark-pass one, so the two themes don't stack.
-                await context.clear_cookies()
+                # Fresh context per theme — Playwright init scripts re-run on
+                # every navigation/reload and overwrite any post-nav
+                # `evaluate(localStorage.set...)`, so a reload-and-swap strategy
+                # silently captures the same theme twice. The fresh context
+                # is the safe choice; cost is ~+14 s vs the Dash variant on a
+                # large dashboard. Acceptable because the active path
+                # (`generate_dashboard_screenshot_dual` Celery task) is
+                # fire-and-forget and the user doesn't wait.
+                context = await browser.new_context(viewport={"width": 1920, "height": 1080})
+                await apply_init_script(context, token_data_json, theme)
                 page = await context.new_page()
-                await page.add_init_script(init_script)
 
                 try:
+                    # `wait_until="domcontentloaded"` rather than the default
+                    # "load" — the SPA keeps lazy-loading code-split chunks
+                    # for a couple seconds after first paint and we don't
+                    # need them; `wait_for_dashboard_content` below gates on
+                    # the actual grid-render. Also matches the dev
+                    # docs_screenshots.py pattern.
                     await page.goto(
                         dashboard_url,
+                        wait_until="domcontentloaded",
                         timeout=settings.performance.screenshot_navigation_timeout,
                     )
                 except Exception as nav_err:
                     msg = str(nav_err)
-                    if any(m in msg for m in _HOST_UNREACHABLE_MARKERS):
+                    if any(m in msg for m in HOST_UNREACHABLE_MARKERS):
                         logger.warning(
                             f"FastAPI host ({origin}) unreachable — skipping React "
                             f"screenshot for {dashboard_id}."
                         )
+                        await context.close()
                         await browser.close()
                         return {
                             "status": "skipped",
@@ -455,15 +452,7 @@ async def generate_react_dual_theme_screenshots(
                         }
                     raise
 
-                # Wait for Mantine to apply the colour scheme before the viz
-                # mounts — otherwise the first render flashes in the wrong
-                # theme and the screenshot may catch the flash.
-                try:
-                    await page.wait_for_selector(
-                        f'[data-mantine-color-scheme="{theme}"]',
-                        timeout=settings.performance.screenshot_content_wait,
-                    )
-                except Exception:
+                if not await wait_for_theme_applied(page, theme):
                     logger.warning(
                         f"React: timeout waiting for {theme} theme attribute "
                         f"on dashboard {dashboard_id}"
@@ -477,8 +466,18 @@ async def generate_react_dual_theme_screenshots(
                         f"({theme}) on dashboard {dashboard_id}"
                     )
 
-                # Extra settling time for plotly to finish drawing.
-                await page.wait_for_timeout(settings.performance.screenshot_stabilization_wait)
+                # Probe each `.plotly-graph-div` for `.plot-container` instead
+                # of paying an unconditional ~1 s sleep — exits in <200 ms on a
+                # warm dashboard, exits immediately on a card-only dashboard,
+                # and falls back to a "log + continue" on the (rare) 3 s
+                # timeout. The Dash variant still sleeps because its plotly
+                # mounts happen after server callbacks complete and aren't as
+                # easy to probe from the page side.
+                if not await wait_for_plotly_drawn(page):
+                    logger.warning(
+                        f"React: plotly draw timed out ({theme}) on dashboard "
+                        f"{dashboard_id} — capturing anyway"
+                    )
 
                 await hide_ui_chrome(page)
 
@@ -498,11 +497,8 @@ async def generate_react_dual_theme_screenshots(
                     else:
                         await page.screenshot(path=output_path, full_page=False)
 
-                # Fresh page per theme so the init-script (which sets the
-                # theme key) re-runs cleanly on the next iteration.
-                await page.close()
+                await context.close()
 
-            await context.close()
             await browser.close()
             logger.info(f"React dual-theme screenshots completed for {dashboard_id}")
 
