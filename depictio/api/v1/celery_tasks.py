@@ -95,9 +95,9 @@ def build_figure_preview(payload: dict) -> dict:
 
     _ensure_mantine_templates()
 
-    from depictio.dash.modules.figure_component.callbacks.core import (
-        _create_figure_from_data,
-        _process_code_mode_figure,
+    from depictio.api.v1.services.figure.figure_builder import (
+        create_figure_from_data,
+        process_code_mode_figure,
     )
 
     visu_type = metadata.get("visu_type", "scatter")
@@ -110,9 +110,9 @@ def build_figure_preview(payload: dict) -> dict:
     build_started = time.monotonic()
     code_error: str | None = None
     if mode == "code":
-        ok, fig, detected = _process_code_mode_figure(code_content, df, theme, "viewer")
+        ok, fig, detected = process_code_mode_figure(code_content, df, theme, "viewer")
         if not ok:
-            # `_process_code_mode_figure` returns `(False, error_fig, None)` when
+            # `process_code_mode_figure` returns `(False, error_fig, None)` when
             # the user code raises (e.g. unknown column name). The error_fig
             # carries a user-facing annotation with the actual Plotly error.
             # Surface that to the preview rather than masking it as a generic
@@ -143,7 +143,7 @@ def build_figure_preview(payload: dict) -> dict:
         # Render path uses `selection_*`; preview path doesn't pass them. The
         # underlying helper takes both as kwargs with safe defaults, so always
         # forwarding is fine and keeps the call site type-checkable.
-        fig = _create_figure_from_data(
+        fig = create_figure_from_data(
             df=df,
             visu_type=visu_type,
             dict_kwargs=dict_kwargs,
@@ -180,7 +180,7 @@ def build_figure_preview(payload: dict) -> dict:
 @celery_app.task(name="depictio.figure.analyze_code", soft_time_limit=10, time_limit=20)
 def analyze_figure_code(code: str) -> dict:
     """Heavy body of `POST /figure/analyze_code` — wraps `analyze_constrained_code`."""
-    from depictio.dash.modules.figure_component.code_mode import analyze_constrained_code
+    from depictio.api.v1.services.figure.code_mode import analyze_constrained_code
 
     code = (code or "").strip()
     if not code:
