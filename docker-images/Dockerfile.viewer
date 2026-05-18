@@ -1,0 +1,52 @@
+# -----------------------------
+# Depictio viewer image (nginx + built React SPA)
+# -----------------------------
+# Two-stage build: node:20-slim produces depictio/viewer/dist, then a
+# clean nginx:alpine layer ships the static bundle. Final image is ~30 MB
+# and carries zero Python or Node tooling.
+#
+# Pinned: pnpm 11+ requires Node 22.13+ (uses node:sqlite). Stay on
+# pnpm 10's tip until we bump the base image — matches the pin in
+# _uv.dockerfile's viewer-builder stage.
+# -----------------------------
+
+FROM node:20-slim AS builder
+WORKDIR /build
+
+RUN corepack enable && corepack prepare pnpm@10 --activate
+
+COPY pnpm-workspace.yaml pnpm-lock.yaml ./
+COPY packages ./packages/
+COPY depictio/viewer ./depictio/viewer/
+
+RUN --mount=type=cache,id=pnpm,target=/root/.local/share/pnpm/store \
+    pnpm install --frozen-lockfile
+
+# Memory caps for typical 6 GB container limits: sourcemaps off (peak-mem
+# win, not shipped to users anyway), heap capped at 4 GB to leave cgroup
+# headroom for native + worker stacks. Same knobs as the _uv.dockerfile
+# viewer-builder stage.
+RUN VITE_NO_SOURCEMAP=true NODE_OPTIONS="--max-old-space-size=4096" \
+    pnpm --filter depictio-viewer build
+
+# -----------------------------
+# Runtime stage
+# -----------------------------
+FROM nginx:1.27-alpine
+
+ARG VERSION=latest
+LABEL org.opencontainers.image.description="Depictio viewer — nginx-served React SPA."
+LABEL org.opencontainers.image.source="https://github.com/depictio/depictio"
+LABEL org.opencontainers.image.version="${VERSION:-latest}"
+LABEL org.opencontainers.image.authors="Thomas Weber <thomas.weber@embl.de>"
+LABEL org.opencontainers.image.licenses="MIT"
+
+# Vite builds under base `/dashboard-beta/`, so the bundle lives there on
+# disk too — keeps nginx's `root` simple and asset URLs untouched.
+COPY --from=builder /build/depictio/viewer/dist /usr/share/nginx/html/dashboard-beta
+
+COPY docker-images/nginx.conf /etc/nginx/conf.d/default.conf
+
+EXPOSE 80
+
+# nginx:alpine's default CMD already runs in the foreground; no override needed.

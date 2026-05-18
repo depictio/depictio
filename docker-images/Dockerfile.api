@@ -1,0 +1,56 @@
+# -----------------------------
+# Depictio API image (FastAPI only)
+# -----------------------------
+# Net-new image as part of the Dash → React migration. Carries only what
+# `depictio.api.main:app` needs at runtime: Python + uv-installed deps.
+# No Playwright (worker owns screenshots), no Node, no Dash assets — that
+# trims ~300 MB off the current monolithic _uv image.
+#
+# Until the celery worker module is moved out of depictio/dash/ (migration
+# Layer 5), this image still COPYs the full depictio/ tree so any shared
+# helpers resolve. The unused subpackages aren't imported by the FastAPI
+# entrypoint and add no runtime cost.
+# -----------------------------
+
+FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim AS base
+
+ARG VERSION=latest
+LABEL org.opencontainers.image.description="Depictio API — FastAPI backend."
+LABEL org.opencontainers.image.source="https://github.com/depictio/depictio"
+LABEL org.opencontainers.image.version="${VERSION:-latest}"
+LABEL org.opencontainers.image.authors="Thomas Weber <thomas.weber@embl.de>"
+LABEL org.opencontainers.image.licenses="MIT"
+
+WORKDIR /app
+
+RUN apt-get update && apt-get install --no-install-recommends -y \
+        curl \
+        netcat-openbsd \
+        ca-certificates \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+ARG UID=1000
+ARG GID=1000
+RUN groupadd -g ${GID} depictio && \
+    useradd -m -u ${UID} -g ${GID} -s /bin/bash depictio
+
+COPY --chown=depictio:depictio pyproject.toml uv.lock* VERSION ./
+COPY --chown=depictio:depictio packages ./packages/
+COPY --chown=depictio:depictio depictio ./depictio/
+
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen --no-dev || uv sync --no-dev
+
+COPY --chown=depictio:depictio docker-images/run_fastapi.sh /app/run_fastapi.sh
+RUN chmod +x /app/run_fastapi.sh
+
+ENV PATH="/app/.venv/bin:${PATH}"
+ENV PYTHONPATH="/app"
+ENV PYTHONUNBUFFERED=1
+
+USER depictio
+
+EXPOSE 8058
+
+CMD ["/app/run_fastapi.sh"]
