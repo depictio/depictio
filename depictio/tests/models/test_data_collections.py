@@ -17,6 +17,9 @@ from depictio.models.models.data_collections import (
 from depictio.models.models.data_collections_types.geojson import DCGeoJSONConfig
 from depictio.models.models.data_collections_types.jbrowse import DCJBrowse2Config
 from depictio.models.models.data_collections_types.table import DCTableConfig
+from depictio.models.models.data_collections_types.table_coordinates import (
+    DCTableCoordinatesConfig,
+)
 
 
 class TestWildcardRegexBase:
@@ -356,6 +359,60 @@ class TestDataCollectionConfig:
         )
         assert isinstance(config.dc_specific_properties, DCGeoJSONConfig)
         assert config.dc_specific_properties.feature_id_key == "properties.ISO_A3"
+
+    def test_table_coordinates_dispatch(self):
+        """Table DC with lat_column/lon_column materialises as DCTableCoordinatesConfig.
+
+        Same dc_type ('table') as a regular DCTableConfig — the subclass is picked
+        based on the presence of lat_column/lon_column keys. Round-trip via dict
+        is what MongoDB rehydration looks like.
+        """
+        scan_config = Scan(mode="single", scan_parameters=ScanSingle(filename="cities.tsv"))
+        dc_specific = {
+            "format": "tsv",
+            "lat_column": "latitude",
+            "lon_column": "longitude",
+        }
+
+        config = DataCollectionConfig(
+            type="table",
+            scan=scan_config,
+            dc_specific_properties=dc_specific,  # type: ignore[arg-type]
+        )
+        assert config.type == "table"
+        assert isinstance(config.dc_specific_properties, DCTableCoordinatesConfig)
+        assert config.dc_specific_properties.lat_column == "latitude"
+        assert config.dc_specific_properties.lon_column == "longitude"
+        # CRS gets a sensible default and is inherited table fields work too
+        assert config.dc_specific_properties.crs == "EPSG:4326"
+        assert config.dc_specific_properties.format == "tsv"
+
+    def test_table_without_coordinates_stays_base(self):
+        """A plain table dc_specific_properties (no lat/lon) materialises as DCTableConfig
+        — not the coordinates subclass — so existing flows are unaffected.
+        """
+        scan_config = Scan(mode="single", scan_parameters=ScanSingle(filename="x.csv"))
+        config = DataCollectionConfig(
+            type="table",
+            scan=scan_config,
+            dc_specific_properties={"format": "csv"},  # type: ignore[arg-type]
+        )
+        assert isinstance(config.dc_specific_properties, DCTableConfig)
+        assert not isinstance(config.dc_specific_properties, DCTableCoordinatesConfig)
+
+    def test_table_coordinates_rejects_identical_columns(self):
+        """lat_column and lon_column must differ — caught by the subclass validator."""
+        scan_config = Scan(mode="single", scan_parameters=ScanSingle(filename="bad.tsv"))
+        with pytest.raises(ValidationError):
+            DataCollectionConfig(
+                type="table",
+                scan=scan_config,
+                dc_specific_properties={  # type: ignore[arg-type]
+                    "format": "tsv",
+                    "lat_column": "coord",
+                    "lon_column": "coord",
+                },
+            )
 
 
 class TestDataCollection:

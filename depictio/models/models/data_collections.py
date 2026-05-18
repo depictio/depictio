@@ -12,6 +12,9 @@ from depictio.models.models.data_collections_types.image import DCImageConfig
 from depictio.models.models.data_collections_types.jbrowse import DCJBrowse2Config
 from depictio.models.models.data_collections_types.multiqc import DCMultiQC
 from depictio.models.models.data_collections_types.table import DCTableConfig
+from depictio.models.models.data_collections_types.table_coordinates import (
+    DCTableCoordinatesConfig,
+)
 from depictio.models.models.transforms import TransformConfig
 
 
@@ -163,7 +166,12 @@ class DataCollectionConfig(MongoModel):
     metatype: str | None = None
     scan: Scan | None = None
     dc_specific_properties: (
-        DCTableConfig | DCJBrowse2Config | DCMultiQC | DCImageConfig | DCGeoJSONConfig
+        DCTableCoordinatesConfig
+        | DCTableConfig
+        | DCJBrowse2Config
+        | DCMultiQC
+        | DCImageConfig
+        | DCGeoJSONConfig
     )
     join: TableJoinConfig | None = None
     transform: TransformConfig | None = None
@@ -218,11 +226,22 @@ class DataCollectionConfig(MongoModel):
         dc_specific_properties = values.get("dc_specific_properties")
 
         if type_value == "table":
-            # Check if it's already a DCTableConfig instance
+            # DCTableCoordinatesConfig is a DCTableConfig subclass — preserve existing
+            # subclass instances; dispatch dicts on the presence of lat_column/lon_column
+            # so persisted configs round-trip back to the specialised subclass.
             if not isinstance(dc_specific_properties, DCTableConfig):
                 if isinstance(dc_specific_properties, dict) and "format" in dc_specific_properties:
+                    # If either coord key is present, route through the
+                    # coordinates subclass — its required-fields validator
+                    # gives a clear error for half-populated configs. A dict
+                    # with neither key goes to the base class.
+                    has_coord_keys = (
+                        "lat_column" in dc_specific_properties
+                        or "lon_column" in dc_specific_properties
+                    )
+                    target_cls = DCTableCoordinatesConfig if has_coord_keys else DCTableConfig
                     try:
-                        values["dc_specific_properties"] = DCTableConfig(**dc_specific_properties)
+                        values["dc_specific_properties"] = target_cls(**dc_specific_properties)
                     except Exception:
                         # Keep original if conversion fails
                         pass

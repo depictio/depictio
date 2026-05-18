@@ -19,6 +19,7 @@ export { default as FigureRenderer } from './components/FigureRenderer';
 export { default as TableRenderer } from './components/TableRenderer';
 export { default as ImageRenderer } from './components/ImageRenderer';
 export { default as MapRenderer } from './components/MapRenderer';
+export { default as TextRenderer } from './components/TextRenderer';
 export { default as JBrowseRenderer } from './components/JBrowseRenderer';
 export { default as MultiQCRenderer } from './components/MultiQCRenderer';
 
@@ -36,6 +37,8 @@ export { default as InteractiveGroupCard } from './components/InteractiveGroupCa
 export { default as TopPanel } from './components/TopPanel';
 export { groupInteractiveComponents } from './utils/groupInteractive';
 export type { InteractiveGroup } from './utils/groupInteractive';
+export { readMultiqcSelection } from './utils/multiqcSelection';
+export type { MultiqcSelection } from './utils/multiqcSelection';
 
 // MultiQC sub-renderers
 export { default as MultiQCFigure } from './components/multiqc/MultiQCFigure';
@@ -87,10 +90,12 @@ export {
   fetchDataCollectionPreview,
   previewFigure,
   previewMultiQC,
+  fetchMultiQCBuilderOptions,
   analyzeFigureCode,
   fetchFigureParameterDiscovery,
   fetchFigureVisualizationList,
   upsertComponent,
+  saveDashboardNotes,
   // Auth helpers (React /auth page)
   fetchAuthStatus,
   loginUser,
@@ -135,6 +140,8 @@ export {
   setUserAdmin,
   listAllProjects,
   listAllDashboards,
+  listExampleProjects,
+  cleanExampleProjects,
   // Profile + CLI tokens
   fetchCurrentUserFull,
   editPassword,
@@ -142,7 +149,25 @@ export {
   createLongLivedToken,
   deleteLongLivedToken,
   generateAgentConfig,
+  // Cross-DC links
+  listProjectLinks,
+  createProjectLink,
+  updateProjectLink,
+  deleteProjectLink,
+  listLinkResolvers,
+  fetchMultiQCSampleMappings,
+  // MultiQC management (multipart uploads)
+  createMultiQCDataCollection,
+  checkMultiQCUniformity,
+  appendMultiQCFiles,
+  replaceMultiQCFiles,
+  clearMultiQCDC,
+  // Table DC management (multipart uploads)
+  appendTableFiles,
+  replaceTableFiles,
+  clearTableDC,
 } from './api';
+export type { TableMutationResult } from './api';
 // Selection-as-filter helpers (Plotly/AG Grid → InteractiveFilter)
 export {
   extractScatterSelection,
@@ -151,6 +176,13 @@ export {
   clearFiltersBySource,
   hasSelectionFilters,
 } from './selection';
+
+// Cross-DC available-values intersection (powers greying-out unavailable
+// options in interactive filter dropdowns).
+export {
+  AvailableFilterValuesProvider,
+  useAvailableSet,
+} from './availableValues';
 
 // Real-time event subscription (WebSocket /events/ws)
 export { useDataCollectionUpdates } from './realtime';
@@ -178,6 +210,7 @@ export type {
   PreviewResult,
   FigurePreviewRequest,
   MultiQCPreviewRequest,
+  MultiQCBuilderOptions,
   CodeAnalysis,
   FigureParameterSpec,
   FigureParameterType,
@@ -214,9 +247,22 @@ export type {
   AdminUser,
   AdminProject,
   AdminDashboard,
+  ExampleProject,
   // Profile + CLI token types
   ProfileUser,
   CliToken,
   CreatedToken,
   CliAgentConfig,
+  // Link types
+  LinkResolverName,
+  LinkTargetType,
+  DCLink,
+  DCLinkConfig,
+  CreateLinkInput,
+  UpdateLinkInput,
+  ResolverInfo,
+  // MultiQC management types
+  CreateMultiQCDCInput,
+  MultiQCMutationResult,
+  MultiQCUniformityCheckResult,
 } from './api';

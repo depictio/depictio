@@ -17,10 +17,10 @@ import PreviewPanel from '../shared/PreviewPanel';
 
 interface MapConfig {
   map_type?: string;
-  lat?: string;
-  lon?: string;
-  color?: string;
-  size?: string;
+  lat_column?: string;
+  lon_column?: string;
+  color_column?: string;
+  size_column?: string;
   hover_columns?: string[];
   map_style?: string;
   opacity?: number;
@@ -35,7 +35,7 @@ const MapPreview: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!dcId || !config.lat || !config.lon) {
+    if (!dcId || !config.lat_column || !config.lon_column) {
       setData(null);
       return;
     }
@@ -55,24 +55,24 @@ const MapPreview: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, [dcId, config.lat, config.lon]);
+  }, [dcId, config.lat_column, config.lon_column]);
 
   const fig = useMemo(() => {
-    if (!data?.rows?.length || !config.lat || !config.lon) return null;
+    if (!data?.rows?.length || !config.lat_column || !config.lon_column) return null;
     const lats: number[] = [];
     const lons: number[] = [];
     const colors: (number | string)[] = [];
     const sizes: number[] = [];
     const texts: string[] = [];
     for (const row of data.rows) {
-      const la = Number(row?.[config.lat]);
-      const lo = Number(row?.[config.lon]);
+      const la = Number(row?.[config.lat_column]);
+      const lo = Number(row?.[config.lon_column]);
       if (!Number.isFinite(la) || !Number.isFinite(lo)) continue;
       lats.push(la);
       lons.push(lo);
-      if (config.color) colors.push(row?.[config.color] as number | string);
-      if (config.size) {
-        const s = Number(row?.[config.size]);
+      if (config.color_column) colors.push(row?.[config.color_column] as number | string);
+      if (config.size_column) {
+        const s = Number(row?.[config.size_column]);
         sizes.push(Number.isFinite(s) ? s : 8);
       }
       if (config.hover_columns?.length) {
@@ -129,9 +129,9 @@ const MapPreview: React.FC = () => {
         },
       } as Partial<Plotly.Layout>,
     };
-  }, [data, config.lat, config.lon, config.color, config.size, config.map_type, config.map_style, config.opacity, config.hover_columns]);
+  }, [data, config.lat_column, config.lon_column, config.color_column, config.size_column, config.map_type, config.map_style, config.opacity, config.hover_columns]);
 
-  if (!config.lat || !config.lon) {
+  if (!config.lat_column || !config.lon_column) {
     return (
       <PreviewPanel
         minHeight={320}
@@ -150,8 +150,8 @@ const MapPreview: React.FC = () => {
             after save.
           </Text>
           <Text size="xs" c="dimmed">
-            Configured: <code>{config.lat}</code> / <code>{config.lon}</code>,
-            color by <code>{config.color || 'none'}</code>
+            Configured: <code>{config.lat_column}</code> / <code>{config.lon_column}</code>,
+            color by <code>{config.color_column || 'none'}</code>
           </Text>
         </Stack>
       </PreviewPanel>

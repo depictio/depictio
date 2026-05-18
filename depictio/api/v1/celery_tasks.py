@@ -220,18 +220,75 @@ def build_multiqc_preview(payload: dict) -> dict:
           "s3_locations": [...],
           "module": str, "plot": str,
           "dataset": str | None,
-          "theme": "light" | "dark"
+          "theme": "light" | "dark",
+          "dc_id": str | None
         }
     """
-    from depictio.dash.modules.figure_component.multiqc_vis import create_multiqc_plot
+    from depictio.api.cache import get_cache
+    from depictio.api.v1.services import multiqc_prerender_store
+    from depictio.dash.modules.figure_component.multiqc_vis import (
+        MULTIQC_CACHE_TTL_SECONDS,
+        _generate_figure_cache_key,
+        create_multiqc_plot,
+    )
 
     s3_locations = payload.get("s3_locations") or []
     module = str(payload.get("module"))
     plot = str(payload.get("plot"))
     dataset = payload.get("dataset")
     theme = payload.get("theme") or "light"
+    dc_id = payload.get("dc_id")
 
     started = time.monotonic()
+
+    # Compute the bare cache key once for non-general_stats DC requests — used
+    # by the Redis/disk read paths AND the cold-build writeback below so the
+    # next click on the same plot hits the warm cache instead of rebuilding.
+    cache = get_cache()
+    bare_key: str | None = None
+    if dc_id and module != "general_stats" and plot != "general_stats":
+        bare_key = _generate_figure_cache_key(
+            s3_locations,
+            module,
+            plot,
+            str(dataset) if dataset else None,
+            theme,
+            dc_id=str(dc_id),
+        )
+
+        # Short-circuit if the prerender pipeline has already produced this
+        # exact (dc, module, plot, dataset, theme) figure. The dashboard render
+        # endpoint does the same Redis-then-disk lookup.
+        cached_fig = cache.get(bare_key)
+        if cached_fig is not None:
+            elapsed_ms = int((time.monotonic() - started) * 1000)
+            logger.info(
+                f"celery_tasks.build_multiqc_preview cache_hit=redis dc={dc_id} "
+                f"module={module} plot={plot} elapsed_ms={elapsed_ms}"
+            )
+            if isinstance(cached_fig, dict) and "layout" in cached_fig:
+                cached_fig["layout"].setdefault("uirevision", "persistent")
+            return {
+                "figure": cached_fig,
+                "metadata": {"module": module, "plot": plot, "dataset_id": dataset},
+            }
+        disk_fig = multiqc_prerender_store.read_figure(str(dc_id), bare_key)
+        if disk_fig is not None:
+            try:
+                cache.set(bare_key, disk_fig, ttl=MULTIQC_CACHE_TTL_SECONDS)
+            except Exception:
+                pass
+            elapsed_ms = int((time.monotonic() - started) * 1000)
+            logger.info(
+                f"celery_tasks.build_multiqc_preview cache_hit=disk dc={dc_id} "
+                f"module={module} plot={plot} elapsed_ms={elapsed_ms}"
+            )
+            if isinstance(disk_fig, dict) and "layout" in disk_fig:
+                disk_fig["layout"].setdefault("uirevision", "persistent")
+            return {
+                "figure": disk_fig,
+                "metadata": {"module": module, "plot": plot, "dataset_id": dataset},
+            }
 
     # General Stats Table preview branch — ``general_stats`` is not a real
     # MultiQC module so ``create_multiqc_plot`` would raise. Mirror the Dash
@@ -276,12 +333,30 @@ def build_multiqc_preview(payload: dict) -> dict:
         plot=plot,
         dataset_id=str(dataset) if dataset else None,
         theme=theme,
+        dc_id=str(dc_id) if dc_id else None,
     )
     build_ms = int((time.monotonic() - started) * 1000)
 
     fig_dict = json.loads(fig.to_json()) if hasattr(fig, "to_json") else fig
     if isinstance(fig_dict, dict) and "layout" in fig_dict:
         fig_dict["layout"].setdefault("uirevision", "persistent")
+
+    # Writeback after a cold build so the next click for the same plot hits
+    # disk/Redis instead of paying 60s again. Same bare_key used by the read
+    # paths above, so the next call's cache_hit=disk lookup finds it.
+    if bare_key is not None:
+        try:
+            multiqc_prerender_store.write_figure(str(dc_id), bare_key, fig_dict)
+        except Exception as exc:
+            logger.warning(
+                f"build_multiqc_preview: disk writeback failed dc={dc_id} key={bare_key}: {exc}"
+            )
+        try:
+            cache.set(bare_key, fig_dict, ttl=MULTIQC_CACHE_TTL_SECONDS)
+        except Exception as exc:
+            logger.warning(
+                f"build_multiqc_preview: redis writeback failed dc={dc_id} key={bare_key}: {exc}"
+            )
 
     logger.info(
         f"celery_tasks.build_multiqc_preview module={module} plot={plot} "

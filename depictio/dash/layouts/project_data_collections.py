@@ -25,10 +25,17 @@ from dash_iconify import DashIconify
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.deltatables_utils import load_deltatable_lite
 from depictio.dash.api_calls import (
+    api_call_append_to_multiqc_data_collection,
+    api_call_clear_multiqc_data_collection,
+    api_call_create_link,
+    api_call_delete_link,
     api_call_fetch_all_multiqc_reports,
     api_call_fetch_delta_table_info,
     api_call_fetch_multiqc_report,
     api_call_fetch_project_by_id,
+    api_call_get_dc_columns,
+    api_call_get_project_links,
+    api_call_overwrite_multiqc_data_collection,
 )
 from depictio.dash.colors import colors
 from depictio.dash.components.depictio_cytoscape_joins import (
@@ -41,8 +48,235 @@ from depictio.dash.layouts.layouts_toolbox import (
     create_data_collection_edit_name_modal,
     create_data_collection_modal,
     create_data_collection_overwrite_modal,
+    create_dc_link_modal,
 )
 from depictio.models.models.projects import ProjectResponse
+
+MULTIQC_PARQUET_BASENAME = "multiqc.parquet"
+
+
+def _multiqc_folder_from_path(filename: str, fallback_idx: int) -> str:
+    """Mirror of api_calls._extract_multiqc_folder_name for UI-side previews.
+
+    Kept separate (not imported) to avoid leaking a private symbol; the logic
+    is small and identical to the server's, which guarantees the preview
+    reflects the temp layout the server will create.
+    """
+    parts = [p for p in filename.replace("\\", "/").split("/") if p]
+    if len(parts) >= 3 and parts[-2] == "multiqc_data":
+        return parts[-3]
+    if len(parts) >= 2:
+        return parts[-2]
+    return f"report_{fallback_idx}"
+
+
+def _normalize_upload_to_lists(contents, filename) -> tuple[list, list]:
+    """Coerce ``dcc.Upload`` contents/filename to parallel lists.
+
+    Single-file uploads come through as scalars; multi-file uploads as lists.
+    Callers downstream (MultiQC ingest, validators) want a uniform list view.
+    """
+    if isinstance(contents, str):
+        contents_list = [contents]
+        filenames_list = [filename] if isinstance(filename, str) else filename
+    else:
+        contents_list = contents
+        filenames_list = filename if isinstance(filename, list) else [filename]
+    return contents_list, filenames_list
+
+
+def _build_multiqc_report_detail(report: dict) -> list:
+    """Build the per-report detail block (info row + samples + modules accordions).
+
+    Used both for the initial render (in ``populate_multiqc_metadata_content``)
+    and for the selector-driven swap callback so the two stay in lockstep.
+    """
+    if not report:
+        return [dmc.Text("No report selected", size="sm", c="gray", ta="center")]
+
+    metadata = report.get("metadata", {}) or {}
+    modules = metadata.get("modules", []) or []
+    plots = metadata.get("plots", {}) or {}
+
+    canonical_samples = metadata.get("canonical_samples", []) or []
+    if not canonical_samples:
+        all_samples = metadata.get("samples", []) or []
+        canonical_samples = [
+            s
+            for s in all_samples
+            if not any(
+                suffix in s
+                for suffix in [
+                    "_1",
+                    "_2",
+                    "_R1",
+                    "_R2",
+                    " - First read",
+                    " - Second read",
+                    " - Adapter",
+                    " - adapter",
+                ]
+            )
+        ]
+
+    multiqc_version = report.get("multiqc_version", "N/A")
+    report_name = report.get("report_name", "N/A")
+    processed_at = report.get("processed_at", "N/A") or "N/A"
+    file_size_bytes = report.get("file_size_bytes")
+
+    if file_size_bytes and isinstance(file_size_bytes, (int, float)):
+        formatted_size, unit = format_storage_size(file_size_bytes)
+        file_size_display = f"{formatted_size} {unit}"
+    else:
+        file_size_display = "Unknown"
+
+    samples_list = dmc.Stack(
+        [dmc.Text(sample, size="xs", ff="monospace") for sample in sorted(canonical_samples)],
+        gap=2,
+    )
+
+    module_plot_items = []
+    for module in sorted(modules):
+        module_plots = plots.get(module, []) if isinstance(plots, dict) else []
+        plot_names: list[str] = []
+        if isinstance(module_plots, list):
+            for plot in module_plots:
+                if isinstance(plot, str):
+                    plot_names.append(plot)
+                elif isinstance(plot, dict):
+                    plot_names.extend(plot.keys())
+
+        if plot_names:
+            plot_list = dmc.Stack(
+                [
+                    dmc.Group(
+                        [
+                            DashIconify(icon="mdi:chart-box", width=14, color=colors["orange"]),
+                            dmc.Text(plot_name, size="xs"),
+                        ],
+                        gap="xs",
+                    )
+                    for plot_name in plot_names
+                ],
+                gap=4,
+                pl="md",
+            )
+        else:
+            plot_list = dmc.Text("No plots", size="xs", c="gray", fs="italic", pl="md")
+
+        module_plot_items.append(
+            dmc.AccordionItem(
+                value=module,
+                children=[
+                    dmc.AccordionControl(
+                        dmc.Group(
+                            [
+                                DashIconify(icon="mdi:puzzle", width=16, color=colors["green"]),
+                                dmc.Text(module, size="sm", fw=500),
+                                dmc.Text(f"({len(plot_names)} plots)", size="xs", c="gray"),
+                            ],
+                            gap="xs",
+                        ),
+                    ),
+                    dmc.AccordionPanel(plot_list),
+                ],
+            )
+        )
+
+    info_row = dmc.SimpleGrid(
+        cols={"base": 2, "sm": 4},
+        spacing="md",
+        children=[
+            dmc.Stack(
+                [
+                    dmc.Text("Report", size="xs", c="gray"),
+                    dmc.Text(report_name, size="sm", ff="monospace", truncate=True),
+                ],
+                gap=2,
+            ),
+            dmc.Stack(
+                [
+                    dmc.Text("Version", size="xs", c="gray"),
+                    dmc.Text(multiqc_version, size="sm", ff="monospace"),
+                ],
+                gap=2,
+            ),
+            dmc.Stack(
+                [
+                    dmc.Text("Processed", size="xs", c="gray"),
+                    dmc.Text(
+                        processed_at[:10] if len(processed_at) > 10 else processed_at,
+                        size="sm",
+                    ),
+                ],
+                gap=2,
+            ),
+            dmc.Stack(
+                [
+                    dmc.Text("Size", size="xs", c="gray"),
+                    dmc.Text(file_size_display, size="sm", ff="monospace"),
+                ],
+                gap=2,
+            ),
+        ],
+    )
+
+    samples_panel = (
+        dmc.ScrollArea(samples_list, h=150, type="auto", offsetScrollbars=True)
+        if canonical_samples
+        else dmc.Text("No samples found", size="sm", c="gray", fs="italic")
+    )
+
+    modules_panel = (
+        dmc.Accordion(
+            variant="contained",
+            chevronPosition="left",
+            children=module_plot_items,
+        )
+        if module_plot_items
+        else dmc.Text("No modules found", size="sm", c="gray", fs="italic")
+    )
+
+    accordions = dmc.Accordion(
+        variant="separated",
+        chevronPosition="left",
+        children=[
+            dmc.AccordionItem(
+                value="samples",
+                children=[
+                    dmc.AccordionControl(
+                        dmc.Group(
+                            [
+                                DashIconify(icon="mdi:test-tube", width=18, color=colors["blue"]),
+                                dmc.Text("Samples", size="sm", fw=500),
+                                dmc.Text(f"({len(canonical_samples)})", size="sm", c="gray"),
+                            ],
+                            gap="xs",
+                        ),
+                    ),
+                    dmc.AccordionPanel(samples_panel),
+                ],
+            ),
+            dmc.AccordionItem(
+                value="modules-plots",
+                children=[
+                    dmc.AccordionControl(
+                        dmc.Group(
+                            [
+                                DashIconify(icon="mdi:puzzle", width=18, color=colors["green"]),
+                                dmc.Text("Modules & Plots", size="sm", fw=500),
+                                dmc.Text(f"({len(modules)} modules)", size="sm", c="gray"),
+                            ],
+                            gap="xs",
+                        ),
+                    ),
+                    dmc.AccordionPanel(modules_panel),
+                ],
+            ),
+        ],
+    )
+
+    return [dmc.Divider(my="sm"), info_row, dmc.Divider(my="sm"), accordions]
 
 
 def _create_template_origin_section(project) -> html.Div:
@@ -993,25 +1227,36 @@ def create_unified_data_collections_manager_section(
                         # Action buttons
                         dmc.Group(
                             [
+                                # Single "Manage data" entry point for all
+                                # content-modification flows (overwrite for
+                                # tabular DCs, modify/clear for MultiQC). The
+                                # actual modal opened depends on dc_type and
+                                # is decided by callbacks downstream.
                                 dmc.Tooltip(
                                     dmc.ActionIcon(
-                                        DashIconify(icon="mdi:database-refresh", width=16),
+                                        DashIconify(icon="mdi:database-cog", width=18),
                                         id={
-                                            "type": "dc-overwrite-button",
-                                            "index": dc.data_collection_tag,
+                                            "type": "dc-manage-button",
+                                            "index": str(
+                                                getattr(dc, "id", "") or getattr(dc, "_id", "")
+                                            ),
                                         },
                                         variant="subtle",
-                                        color="orange",
+                                        color="blue",
                                         size="sm",
                                         disabled=(
-                                            dc_type in ("multiqc", "image")
+                                            dc_type == "image"
                                             or (
                                                 dc.config.metatype
                                                 and dc.config.metatype.lower() == "aggregate"
                                             )
                                         ),
                                     ),
-                                    label="Overwrite data",
+                                    label=(
+                                        "Manage data"
+                                        if dc_type in ("multiqc", "table")
+                                        else "Manage data not available for this type"
+                                    ),
                                     position="top",
                                 ),
                                 dmc.Tooltip(
@@ -1778,8 +2023,12 @@ def create_data_collections_landing_ui():
     Returns:
         html.Div: The complete landing UI layout
     """
-    # Create data collection modal
+    # Unified data collection modal (handles create, update, and clear modes
+    # via a sibling `data-collection-modal-mode` Store; section visibility is
+    # toggled by callbacks rather than rebuilt per mode).
     data_collection_modal, data_collection_modal_id = create_data_collection_modal()
+    # Create DC link modal
+    dc_link_modal, dc_link_modal_id = create_dc_link_modal()
 
     return html.Div(
         [
@@ -1787,6 +2036,14 @@ def create_data_collections_landing_ui():
             dcc.Store(id="project-data-store", data={}),
             dcc.Store(id="selected-workflow-store", data=None),
             dcc.Store(id="selected-data-collection-store", data=None),
+            # Mode store driving the unified modal:
+            #   {"mode": "create" | "update" | "clear" | None,
+            #    "dc_id": str | None,
+            #    "expected_name": str | None}
+            dcc.Store(
+                id="data-collection-modal-mode",
+                data={"mode": None, "dc_id": None, "expected_name": None},
+            ),
             # Interval to trigger MultiQC metadata loading after page render
             dcc.Interval(
                 id="multiqc-metadata-interval",
@@ -1794,8 +2051,10 @@ def create_data_collections_landing_ui():
                 n_intervals=0,
                 max_intervals=1,  # Fire only once
             ),
-            # Data collection creation modal
+            # Unified data collection modal (create/update/clear)
             data_collection_modal,
+            # DC link creation modal
+            dc_link_modal,
             # Header section
             dmc.Stack(
                 [
@@ -1828,6 +2087,11 @@ def create_data_collections_landing_ui():
             html.Div(id="workflows-manager-section", style={"marginBottom": "3rem"}),
             # Data Collections Manager Section
             html.Div(id="data-collections-manager-section", style={"marginTop": "2rem"}),
+            # DC Links Manager Section
+            html.Div(
+                id="dc-links-manager-section",
+                style={"marginTop": "2rem"},
+            ),
             # Data Collection Joins Visualization Section
             html.Div(
                 id="joins-visualization-section",
@@ -2967,8 +3231,17 @@ def register_project_data_collections_callbacks(app):
     @app.callback(
         Output({"type": "dc-viewer-multiqc-metadata-content", "index": MATCH}, "children"),
         [
+            # The metadata-content div is itself created by the dc-card click
+            # callback (handle_data_collection_selection) — i.e. it does NOT
+            # exist in the DOM until that callback's viewer_content output
+            # lands. If we triggered only on selected-data-collection-store
+            # changes, the MATCH output target wouldn't resolve on the first
+            # click and the user would have to click the card twice. Adding
+            # the viewer-content children as an Input gives us a second
+            # trigger that fires AFTER the new container is mounted.
             Input("selected-data-collection-store", "data"),
             Input("project-data-store", "data"),
+            Input("data-collection-viewer-content", "children"),
         ],
         [
             State("selected-workflow-store", "data"),
@@ -2976,7 +3249,7 @@ def register_project_data_collections_callbacks(app):
         ],
     )
     def populate_multiqc_metadata_content(
-        selected_dc_tag, project_data, selected_workflow_id, local_data
+        selected_dc_tag, project_data, _viewer_children, selected_workflow_id, local_data
     ):
         """Populate MultiQC metadata content when a MultiQC data collection is selected.
 
@@ -3038,115 +3311,19 @@ def register_project_data_collections_callbacks(app):
                     report_name = report.get("report_name", f"Report {idx + 1}")
                     report_options.append({"value": str(idx), "label": report_name})
 
-                # Use first report by default (will be controlled by selector callback)
-                selected_report = reports[0] if reports else {}
-                metadata = selected_report.get("metadata", {})
-                modules = metadata.get("modules", [])
-                plots = metadata.get("plots", {})
+                # Pattern-matched IDs so the selector callback can target the
+                # right detail container + reports store for this DC.
+                dc_id_str = str(dc_id)
+                report_detail = _build_multiqc_report_detail(reports[0] if reports else {})
 
-                # Use canonical_samples (filtered) if available
-                canonical_samples = metadata.get("canonical_samples", [])
-                if not canonical_samples:
-                    all_samples = metadata.get("samples", [])
-                    canonical_samples = [
-                        s
-                        for s in all_samples
-                        if not any(
-                            suffix in s
-                            for suffix in [
-                                "_1",
-                                "_2",
-                                "_R1",
-                                "_R2",
-                                " - First read",
-                                " - Second read",
-                                " - Adapter",
-                                " - adapter",
-                            ]
-                        )
-                    ]
-
-                multiqc_version = selected_report.get("multiqc_version", "N/A")
-                report_name = selected_report.get("report_name", "N/A")
-                processed_at = selected_report.get("processed_at", "N/A")
-                file_size_bytes = selected_report.get("file_size_bytes")
-
-                # Format file size
-                if file_size_bytes and isinstance(file_size_bytes, (int, float)):
-                    formatted_size, unit = format_storage_size(file_size_bytes)
-                    file_size_display = f"{formatted_size} {unit}"
-                else:
-                    file_size_display = "Unknown"
-
-                # Build samples list for ScrollArea
-                samples_list = dmc.Stack(
-                    [
-                        dmc.Text(sample, size="xs", ff="monospace")
-                        for sample in sorted(canonical_samples)
-                    ],
-                    gap=2,
-                )
-
-                # Build modules & plots hierarchy (module > its plots)
-                module_plot_items = []
-                for module in sorted(modules):
-                    # Get plots for this module
-                    module_plots = plots.get(module, []) if isinstance(plots, dict) else []
-                    plot_names = []
-                    if isinstance(module_plots, list):
-                        for plot in module_plots:
-                            if isinstance(plot, str):
-                                plot_names.append(plot)
-                            elif isinstance(plot, dict):
-                                plot_names.extend(plot.keys())
-
-                    # Create accordion item for each module
-                    if plot_names:
-                        plot_list = dmc.Stack(
-                            [
-                                dmc.Group(
-                                    [
-                                        DashIconify(
-                                            icon="mdi:chart-box", width=14, color=colors["orange"]
-                                        ),
-                                        dmc.Text(plot_name, size="xs"),
-                                    ],
-                                    gap="xs",
-                                )
-                                for plot_name in plot_names
-                            ],
-                            gap=4,
-                            pl="md",
-                        )
-                    else:
-                        plot_list = dmc.Text("No plots", size="xs", c="gray", fs="italic", pl="md")
-
-                    module_plot_items.append(
-                        dmc.AccordionItem(
-                            value=module,
-                            children=[
-                                dmc.AccordionControl(
-                                    dmc.Group(
-                                        [
-                                            DashIconify(
-                                                icon="mdi:puzzle", width=16, color=colors["green"]
-                                            ),
-                                            dmc.Text(module, size="sm", fw=500),
-                                            dmc.Text(
-                                                f"({len(plot_names)} plots)", size="xs", c="gray"
-                                            ),
-                                        ],
-                                        gap="xs",
-                                    ),
-                                ),
-                                dmc.AccordionPanel(plot_list),
-                            ],
-                        )
-                    )
-
-                # Create metadata display with accordions
                 content_children = [
-                    # Report count and selector (only show if multiple reports)
+                    # Hidden cache of all reports for this DC; keyed by dc_id
+                    # so multiple MultiQC viewers on the same page don't fight.
+                    dcc.Store(
+                        id={"type": "multiqc-reports-store", "index": dc_id_str},
+                        data=reports,
+                    ),
+                    # Report count badge
                     dmc.Group(
                         [
                             DashIconify(
@@ -3162,144 +3339,29 @@ def register_project_data_collections_callbacks(app):
                     ),
                 ]
 
-                # Add report selector if multiple reports
+                # Selector — pattern-matched id wires to a MATCH callback
+                # below that re-renders the detail container on change.
                 if total_count > 1:
                     content_children.append(
                         dmc.Select(
+                            id={"type": "multiqc-report-selector", "index": dc_id_str},
                             data=report_options,
                             value="0",
                             label="Select Report",
                             size="xs",
                             w=250,
                             leftSection=DashIconify(icon="mdi:file-document"),
+                            allowDeselect=False,
                         )
                     )
 
-                # Report info row
-                content_children.extend(
-                    [
-                        dmc.Divider(my="sm"),
-                        dmc.SimpleGrid(
-                            cols={"base": 2, "sm": 4},
-                            spacing="md",
-                            children=[
-                                dmc.Stack(
-                                    [
-                                        dmc.Text("Report", size="xs", c="gray"),
-                                        dmc.Text(
-                                            report_name, size="sm", ff="monospace", truncate=True
-                                        ),
-                                    ],
-                                    gap=2,
-                                ),
-                                dmc.Stack(
-                                    [
-                                        dmc.Text("Version", size="xs", c="gray"),
-                                        dmc.Text(multiqc_version, size="sm", ff="monospace"),
-                                    ],
-                                    gap=2,
-                                ),
-                                dmc.Stack(
-                                    [
-                                        dmc.Text("Processed", size="xs", c="gray"),
-                                        dmc.Text(
-                                            processed_at[:10]
-                                            if len(processed_at) > 10
-                                            else processed_at,
-                                            size="sm",
-                                        ),
-                                    ],
-                                    gap=2,
-                                ),
-                                dmc.Stack(
-                                    [
-                                        dmc.Text("Size", size="xs", c="gray"),
-                                        dmc.Text(file_size_display, size="sm", ff="monospace"),
-                                    ],
-                                    gap=2,
-                                ),
-                            ],
-                        ),
-                        dmc.Divider(my="sm"),
-                    ]
-                )
-
-                # Main accordion with Samples and Modules & Plots
+                # Per-report detail block lives in its own container so the
+                # selector callback can swap its children without touching
+                # the surrounding header / store.
                 content_children.append(
-                    dmc.Accordion(
-                        variant="separated",
-                        chevronPosition="left",
-                        children=[
-                            # Samples accordion
-                            dmc.AccordionItem(
-                                value="samples",
-                                children=[
-                                    dmc.AccordionControl(
-                                        dmc.Group(
-                                            [
-                                                DashIconify(
-                                                    icon="mdi:test-tube",
-                                                    width=18,
-                                                    color=colors["blue"],
-                                                ),
-                                                dmc.Text("Samples", size="sm", fw=500),
-                                                dmc.Text(
-                                                    f"({len(canonical_samples)})",
-                                                    size="sm",
-                                                    c="gray",
-                                                ),
-                                            ],
-                                            gap="xs",
-                                        ),
-                                    ),
-                                    dmc.AccordionPanel(
-                                        dmc.ScrollArea(
-                                            samples_list,
-                                            h=150,
-                                            type="auto",
-                                            offsetScrollbars=True,
-                                        )
-                                        if canonical_samples
-                                        else dmc.Text(
-                                            "No samples found", size="sm", c="gray", fs="italic"
-                                        ),
-                                    ),
-                                ],
-                            ),
-                            # Modules & Plots accordion
-                            dmc.AccordionItem(
-                                value="modules-plots",
-                                children=[
-                                    dmc.AccordionControl(
-                                        dmc.Group(
-                                            [
-                                                DashIconify(
-                                                    icon="mdi:puzzle",
-                                                    width=18,
-                                                    color=colors["green"],
-                                                ),
-                                                dmc.Text("Modules & Plots", size="sm", fw=500),
-                                                dmc.Text(
-                                                    f"({len(modules)} modules)", size="sm", c="gray"
-                                                ),
-                                            ],
-                                            gap="xs",
-                                        ),
-                                    ),
-                                    dmc.AccordionPanel(
-                                        dmc.Accordion(
-                                            variant="contained",
-                                            chevronPosition="left",
-                                            children=module_plot_items,
-                                        )
-                                        if module_plot_items
-                                        else dmc.Text(
-                                            "No modules found", size="sm", c="gray", fs="italic"
-                                        ),
-                                    ),
-                                ],
-                            ),
-                        ],
+                    html.Div(
+                        id={"type": "multiqc-report-detail", "index": dc_id_str},
+                        children=report_detail,
                     )
                 )
 
@@ -3314,6 +3376,29 @@ def register_project_data_collections_callbacks(app):
                 )
 
         return dmc.Text("Unable to load MultiQC metadata", size="sm", c="gray", ta="center")
+
+    @app.callback(
+        Output({"type": "multiqc-report-detail", "index": MATCH}, "children"),
+        Input({"type": "multiqc-report-selector", "index": MATCH}, "value"),
+        State({"type": "multiqc-reports-store", "index": MATCH}, "data"),
+        prevent_initial_call=True,
+    )
+    def render_selected_multiqc_report(selected_idx, reports):
+        """Swap the per-report detail block when the selector value changes.
+
+        Reads from the per-DC reports Store populated by
+        :func:`populate_multiqc_metadata_content`, so no new API call fires
+        on selection change.
+        """
+        if reports is None or selected_idx is None:
+            raise dash.exceptions.PreventUpdate
+        try:
+            idx = int(selected_idx)
+        except (TypeError, ValueError):
+            raise dash.exceptions.PreventUpdate
+        if idx < 0 or idx >= len(reports):
+            raise dash.exceptions.PreventUpdate
+        return _build_multiqc_report_detail(reports[idx])
 
     @app.callback(
         Output("data-collections-content", "children"),
@@ -3489,6 +3574,461 @@ def register_project_data_collections_callbacks(app):
 
         return separator_style, custom_style
 
+    # NOTE: Table-vs-MultiQC option visibility is folded into
+    # :func:`update_modal_section_visibility` below — the unified mode
+    # callback owns ``data-collection-creation-table-options-container``
+    # and ``...-multiqc-options-container`` so we don't double-bind them.
+
+    # Mark the upload component with a class when MultiQC is selected so the
+    # client-side hook (assets/multiqc_folder_upload.js) can switch the
+    # underlying <input> into folder-pick mode (webkitdirectory) and walk
+    # dropped directory entries. Update mode is MultiQC-only, so we also
+    # force folder-pick mode whenever the modal is in ``update`` mode (the
+    # data-type select is hidden in that mode and may carry a stale value).
+    @app.callback(
+        Output("data-collection-creation-file-upload", "className"),
+        [
+            Input("data-collection-creation-type-select", "value"),
+            Input("data-collection-modal-mode", "data"),
+        ],
+    )
+    def set_dropzone_folder_mode(data_type, mode_data):
+        mode = (mode_data or {}).get("mode")
+        if mode == "update" or data_type == "multiqc":
+            return "depictio-multiqc-folder-upload"
+        return ""
+
+    # =========================================================================
+    # DC Link Modal Callbacks
+    # =========================================================================
+
+    @app.callback(
+        [
+            Output("dc-link-creation-modal", "opened"),
+            Output("dc-link-creation-error-alert", "style", allow_duplicate=True),
+        ],
+        [
+            Input("create-dc-link-button", "n_clicks"),
+            Input("cancel-dc-link-creation-button", "n_clicks"),
+        ],
+        [dash.State("dc-link-creation-modal", "opened")],
+        prevent_initial_call=True,
+    )
+    def toggle_dc_link_modal(open_clicks, cancel_clicks, opened):
+        """Handle opening and closing of DC link creation modal."""
+        if not ctx.triggered:
+            return False, {"display": "none"}
+
+        trigger = ctx.triggered_id
+        if trigger == "create-dc-link-button" and open_clicks:
+            return True, {"display": "none"}
+        elif trigger == "cancel-dc-link-creation-button" and cancel_clicks:
+            return False, {"display": "none"}
+        return opened, {"display": "none"}
+
+    @app.callback(
+        [
+            Output("dc-link-creation-source-dc-select", "data"),
+            Output("dc-link-creation-target-dc-select", "data"),
+        ],
+        [Input("dc-link-creation-modal", "opened")],
+        [dash.State("project-data-store", "data")],
+        prevent_initial_call=True,
+    )
+    def populate_link_dc_selects(opened, project_data):
+        """Populate source and target DC selects when the link modal opens."""
+        if not opened or not project_data:
+            return [], []
+
+        # Gather all data collections from the project
+        dc_options = []
+        data_collections = project_data.get("data_collections", [])
+
+        # Also check workflows
+        for wf in project_data.get("workflows", []):
+            for dc in wf.get("data_collections", []):
+                if dc not in data_collections:
+                    data_collections.append(dc)
+
+        for dc in data_collections:
+            dc_tag = dc.get("data_collection_tag", "Unknown")
+            dc_id = str(dc.get("id", ""))
+            dc_type = dc.get("config", {}).get("type", "unknown")
+            label = f"{dc_tag} ({dc_type})"
+            dc_options.append({"value": dc_id, "label": label})
+
+        return dc_options, dc_options
+
+    @app.callback(
+        [
+            Output("dc-link-creation-source-column-select", "data"),
+            Output("dc-link-creation-source-column-select", "disabled"),
+        ],
+        [Input("dc-link-creation-source-dc-select", "value")],
+        [dash.State("local-store", "data")],
+        prevent_initial_call=True,
+    )
+    def load_source_dc_columns(source_dc_id, local_data):
+        """Load columns for the selected source DC."""
+        if not source_dc_id or not local_data or not local_data.get("access_token"):
+            return [], True
+
+        token = local_data["access_token"]
+        columns = api_call_get_dc_columns(source_dc_id, token)
+
+        if columns:
+            col_options = [{"value": c, "label": c} for c in columns]
+            return col_options, False
+        return [], True
+
+    @app.callback(
+        Output("dc-link-creation-target-type-input", "value"),
+        [Input("dc-link-creation-target-dc-select", "value")],
+        [dash.State("project-data-store", "data")],
+        prevent_initial_call=True,
+    )
+    def detect_target_dc_type(target_dc_id, project_data):
+        """Auto-detect the target DC type when a target is selected."""
+        if not target_dc_id or not project_data:
+            return ""
+
+        # Search in data_collections and workflows
+        all_dcs = list(project_data.get("data_collections", []))
+        for wf in project_data.get("workflows", []):
+            all_dcs.extend(wf.get("data_collections", []))
+
+        for dc in all_dcs:
+            if str(dc.get("id", "")) == target_dc_id:
+                return dc.get("config", {}).get("type", "unknown")
+        return ""
+
+    @app.callback(
+        Output("create-dc-link-creation-submit", "disabled"),
+        [
+            Input("dc-link-creation-source-dc-select", "value"),
+            Input("dc-link-creation-source-column-select", "value"),
+            Input("dc-link-creation-target-dc-select", "value"),
+        ],
+    )
+    def update_link_submit_state(source_dc, source_col, target_dc):
+        """Enable link submit button only when all required fields are filled."""
+        if source_dc and source_col and target_dc and source_dc != target_dc:
+            return False
+        return True
+
+    @app.callback(
+        Output("dc-link-creation-resolver-select", "value"),
+        [Input("dc-link-creation-target-type-input", "value")],
+        prevent_initial_call=True,
+    )
+    def auto_select_resolver(target_type):
+        """Auto-select resolver based on target type."""
+        if target_type == "multiqc":
+            return "sample_mapping"
+        return "direct"
+
+    @app.callback(
+        [
+            Output("dc-link-creation-modal", "opened", allow_duplicate=True),
+            Output("project-data-store", "data", allow_duplicate=True),
+            Output("dc-link-creation-error-alert", "children"),
+            Output("dc-link-creation-error-alert", "style"),
+        ],
+        [Input("create-dc-link-creation-submit", "n_clicks")],
+        [
+            dash.State("dc-link-creation-source-dc-select", "value"),
+            dash.State("dc-link-creation-source-column-select", "value"),
+            dash.State("dc-link-creation-target-dc-select", "value"),
+            dash.State("dc-link-creation-target-type-input", "value"),
+            dash.State("dc-link-creation-resolver-select", "value"),
+            dash.State("dc-link-creation-description-input", "value"),
+            dash.State("project-data-store", "data"),
+            dash.State("local-store", "data"),
+        ],
+        prevent_initial_call=True,
+    )
+    def submit_dc_link_creation(
+        n_clicks,
+        source_dc_id,
+        source_column,
+        target_dc_id,
+        target_type,
+        resolver,
+        description,
+        project_data,
+        local_data,
+    ):
+        """Handle DC link creation submission."""
+        if not n_clicks or not source_dc_id or not source_column or not target_dc_id:
+            return dash.no_update, dash.no_update, dash.no_update, dash.no_update
+
+        if not local_data or not local_data.get("access_token"):
+            return (
+                dash.no_update,
+                dash.no_update,
+                "Authentication required.",
+                {"display": "block"},
+            )
+
+        if source_dc_id == target_dc_id:
+            return (
+                dash.no_update,
+                dash.no_update,
+                "Source and target must be different data collections.",
+                {"display": "block"},
+            )
+
+        token = local_data["access_token"]
+        project_id = project_data.get("project_id")
+
+        # Map target type - default to "table" if not recognized
+        valid_types = ["table", "multiqc", "image"]
+        effective_type = target_type if target_type in valid_types else "table"
+
+        result = api_call_create_link(
+            project_id=project_id,
+            source_dc_id=source_dc_id,
+            source_column=source_column,
+            target_dc_id=target_dc_id,
+            target_type=effective_type,
+            resolver=resolver or "direct",
+            description=description,
+            token=token,
+        )
+
+        if result and result.get("success"):
+            from datetime import datetime
+
+            updated = project_data.copy()
+            updated["refresh_timestamp"] = datetime.now().isoformat()
+            return False, updated, "", {"display": "none"}
+        else:
+            error_msg = result.get("message", "Unknown error") if result else "API call failed"
+            return (
+                dash.no_update,
+                dash.no_update,
+                f"Failed to create link: {error_msg}",
+                {"display": "block"},
+            )
+
+    # DC Links Manager Section callback
+    @app.callback(
+        Output("dc-links-manager-section", "children"),
+        [Input("project-data-store", "data")],
+        [dash.State("local-store", "data")],
+    )
+    def render_dc_links_section(project_data, local_data):
+        """Render the DC links manager section with existing links and create button."""
+        if not project_data or not project_data.get("project_id"):
+            return []
+
+        project_id = project_data.get("project_id")
+        token = local_data.get("access_token") if local_data else None
+
+        # Get all data collections for label lookup
+        all_dcs = {}
+        for dc in project_data.get("data_collections", []):
+            dc_id = str(dc.get("id", ""))
+            all_dcs[dc_id] = dc.get("data_collection_tag", "Unknown")
+        for wf in project_data.get("workflows", []):
+            for dc in wf.get("data_collections", []):
+                dc_id = str(dc.get("id", ""))
+                all_dcs[dc_id] = dc.get("data_collection_tag", "Unknown")
+
+        # Need at least 2 DCs to create links
+        if len(all_dcs) < 2:
+            return []
+
+        # Fetch existing links
+        links = []
+        if token:
+            links = api_call_get_project_links(project_id, token)
+
+        # Build link cards
+        link_cards = []
+        for link in links:
+            link_id = str(link.get("id", ""))
+            source_name = all_dcs.get(str(link.get("source_dc_id", "")), "Unknown DC")
+            target_name = all_dcs.get(str(link.get("target_dc_id", "")), "Unknown DC")
+            source_col = link.get("source_column", "?")
+            resolver = link.get("link_config", {}).get("resolver", "direct")
+            target_type = link.get("target_type", "unknown")
+            desc = link.get("description", "")
+
+            link_cards.append(
+                dmc.Card(
+                    [
+                        dmc.Group(
+                            [
+                                dmc.Group(
+                                    [
+                                        DashIconify(
+                                            icon="mdi:link-variant",
+                                            width=20,
+                                            color=colors["blue"],
+                                        ),
+                                        dmc.Stack(
+                                            [
+                                                dmc.Group(
+                                                    [
+                                                        dmc.Text(source_name, fw="bold", size="sm"),
+                                                        dmc.Text(
+                                                            f"({source_col})",
+                                                            size="xs",
+                                                            c="gray",
+                                                        ),
+                                                        DashIconify(
+                                                            icon="mdi:arrow-right",
+                                                            width=16,
+                                                            color="gray",
+                                                        ),
+                                                        dmc.Text(target_name, fw="bold", size="sm"),
+                                                    ],
+                                                    gap="xs",
+                                                ),
+                                                dmc.Group(
+                                                    [
+                                                        dmc.Badge(
+                                                            resolver,
+                                                            color="blue",
+                                                            variant="light",
+                                                            size="xs",
+                                                        ),
+                                                        dmc.Badge(
+                                                            target_type,
+                                                            color="gray",
+                                                            variant="outline",
+                                                            size="xs",
+                                                        ),
+                                                        dmc.Text(
+                                                            desc or "",
+                                                            size="xs",
+                                                            c="gray",
+                                                            fs="italic",
+                                                        ),
+                                                    ],
+                                                    gap="xs",
+                                                ),
+                                            ],
+                                            gap="xs",
+                                        ),
+                                    ],
+                                    gap="sm",
+                                    align="center",
+                                ),
+                                dmc.ActionIcon(
+                                    DashIconify(icon="mdi:delete", width=16),
+                                    color="red",
+                                    variant="subtle",
+                                    id={"type": "dc-link-delete-button", "index": link_id},
+                                    size="sm",
+                                ),
+                            ],
+                            justify="space-between",
+                            align="center",
+                        ),
+                    ],
+                    withBorder=True,
+                    shadow="xs",
+                    radius="md",
+                    p="sm",
+                )
+            )
+
+        return dmc.Stack(
+            [
+                dmc.Divider(
+                    label="Data Collection Links",
+                    labelPosition="center",
+                    my="md",
+                ),
+                dmc.Group(
+                    [
+                        dmc.Group(
+                            [
+                                DashIconify(
+                                    icon="mdi:link-variant",
+                                    width=24,
+                                    color=colors["blue"],
+                                ),
+                                dmc.Text(
+                                    "Cross-DC Links",
+                                    fw="bold",
+                                    size="lg",
+                                ),
+                                dmc.Text(
+                                    f"({len(links)} active)",
+                                    size="sm",
+                                    c="gray",
+                                ),
+                            ],
+                            gap="sm",
+                        ),
+                        dmc.Button(
+                            "Link Collections",
+                            id="create-dc-link-button",
+                            leftSection=DashIconify(icon="mdi:link-variant-plus", width=16),
+                            color="blue",
+                            variant="light",
+                            radius="md",
+                            size="sm",
+                        ),
+                    ],
+                    justify="space-between",
+                ),
+                dmc.Stack(
+                    link_cards
+                    if link_cards
+                    else [
+                        dmc.Text(
+                            "No links defined yet. Create a link to enable cross-DC filtering.",
+                            size="sm",
+                            c="gray",
+                            fs="italic",
+                            ta="center",
+                        )
+                    ],
+                    gap="sm",
+                ),
+            ],
+            gap="md",
+        )
+
+    @app.callback(
+        Output("project-data-store", "data", allow_duplicate=True),
+        [Input({"type": "dc-link-delete-button", "index": ALL}, "n_clicks")],
+        [
+            dash.State("project-data-store", "data"),
+            dash.State("local-store", "data"),
+        ],
+        prevent_initial_call=True,
+    )
+    def handle_dc_link_delete(n_clicks_list, project_data, local_data):
+        """Handle deletion of a DC link."""
+        if not any(n_clicks_list):
+            return dash.no_update
+
+        trigger = ctx.triggered_id
+        if not trigger:
+            return dash.no_update
+
+        link_id = trigger["index"]
+        if not local_data or not local_data.get("access_token"):
+            return dash.no_update
+
+        token = local_data["access_token"]
+        project_id = project_data.get("project_id")
+
+        result = api_call_delete_link(project_id, link_id, token)
+        if result and result.get("success"):
+            from datetime import datetime
+
+            updated = project_data.copy()
+            updated["refresh_timestamp"] = datetime.now().isoformat()
+            return updated
+
+        return dash.no_update
+
     def _check_user_is_viewer(project_data, local_data):
         """Helper function to check if current user is a viewer."""
         if not project_data or not local_data:
@@ -3588,7 +4128,7 @@ def register_project_data_collections_callbacks(app):
 
     @app.callback(
         [
-            Output({"type": "dc-overwrite-button", "index": dash.ALL}, "disabled"),
+            Output({"type": "dc-manage-button", "index": dash.ALL}, "disabled"),
             Output({"type": "dc-edit-name-button", "index": dash.ALL}, "disabled"),
             Output({"type": "dc-delete-button", "index": dash.ALL}, "disabled"),
         ],
@@ -3599,77 +4139,64 @@ def register_project_data_collections_callbacks(app):
         prevent_initial_call=True,
     )
     def control_dc_action_buttons_access(project_data, local_data):
-        """
-        Control access to data collection action buttons based on user role.
+        """Control DC action buttons based on user role.
 
-        Disables overwrite, edit, and delete buttons for viewers. Returns
-        disabled state lists matching the number of data collections.
-
-        Args:
-            project_data: Project data dictionary containing data collections.
-            local_data: Local storage data containing user ID.
-
-        Returns:
-            Tuple of three lists of disabled states for each button type.
+        Disables Manage, Edit, and Delete buttons for viewers. Returns three
+        disabled-state lists matching the number of rendered DCs.
         """
         is_viewer = _check_user_is_viewer(project_data, local_data)
 
-        # Get the number of data collections to return the right number of disabled states
         try:
             if project_data and project_data.get("data_collections"):
                 num_dcs = len(project_data["data_collections"])
             else:
                 num_dcs = 0
 
-            # Return disabled state for all buttons (same state for all three button types)
             disabled_states = [is_viewer] * num_dcs
             return disabled_states, disabled_states, disabled_states
 
         except Exception as e:
             logger.error(f"Error controlling DC action buttons: {e}")
-            # Return disabled state for safety
             return [], [], []
 
     @app.callback(
         [
-            Output("data-collection-creation-modal", "opened"),
-            Output("data-collection-creation-error-alert", "style"),
+            Output("data-collection-creation-modal", "opened", allow_duplicate=True),
+            Output("data-collection-creation-error-alert", "style", allow_duplicate=True),
+            Output("data-collection-modal-mode", "data", allow_duplicate=True),
         ],
         [
             Input("create-data-collection-button", "n_clicks"),
             Input("cancel-data-collection-creation-button", "n_clicks"),
         ],
-        [dash.State("data-collection-creation-modal", "opened")],
         prevent_initial_call=True,
     )
-    def toggle_data_collection_modal(open_clicks, cancel_clicks, opened):
+    def toggle_data_collection_modal(open_clicks, cancel_clicks):
         """
-        Handle opening and closing of data collection creation modal.
+        Handle the top-of-page Create button + the modal's Cancel button.
 
-        Opens modal when create button is clicked, closes when cancel is clicked.
-        Hides error alert when modal state changes.
-
-        Args:
-            open_clicks: Click count for create button.
-            cancel_clicks: Click count for cancel button.
-            opened: Current modal opened state.
-
-        Returns:
-            Tuple of (modal_opened_state, error_alert_style)
+        Opening sets the unified modal mode to ``create`` and clears the
+        active-DC + expected-name fields. Cancel resets the mode to None so
+        a stale store doesn't leak into the next open.
         """
         if not ctx.triggered:
-            return False, {"display": "none"}
+            return dash.no_update, dash.no_update, dash.no_update
 
         ctx_trigger = ctx.triggered_id
 
         if ctx_trigger == "create-data-collection-button" and open_clicks:
-            # When opening modal, hide error alert
-            return True, {"display": "none"}
-        elif ctx_trigger == "cancel-data-collection-creation-button" and cancel_clicks:
-            # When closing modal, hide error alert
-            return False, {"display": "none"}
-
-        return opened, {"display": "none"}
+            return (
+                True,
+                {"display": "none"},
+                {"mode": "create", "dc_id": None, "expected_name": None},
+            )
+        if ctx_trigger == "cancel-data-collection-creation-button" and cancel_clicks:
+            return (
+                False,
+                {"display": "none"},
+                {"mode": None, "dc_id": None, "expected_name": None},
+            )
+        return dash.no_update, dash.no_update, dash.no_update
 
     @app.callback(
         Output("data-collection-creation-file-info", "children"),
@@ -3682,14 +4209,13 @@ def register_project_data_collections_callbacks(app):
     )
     def handle_file_upload(contents, filename, last_modified):
         """
-        Handle file upload and display file information.
+        Handle file upload and display basic file information.
 
-        Decodes uploaded file, validates size against 5MB limit, and displays
-        file information card with name and size.
+        Supports both single file and multi-file uploads.
 
         Args:
-            contents: Base64-encoded file contents.
-            filename: Original filename.
+            contents: Base64-encoded file contents (string or list).
+            filename: Original filename (string or list).
             last_modified: File last modified timestamp.
 
         Returns:
@@ -3698,32 +4224,244 @@ def register_project_data_collections_callbacks(app):
         if not contents or not filename:
             return []
 
-        # Decode the file content to check size
-        try:
-            content_type, content_string = contents.split(",")
-            decoded = base64.b64decode(content_string)
-            file_size = len(decoded)
+        contents_list, filenames_list = _normalize_upload_to_lists(contents, filename)
 
-            # Check file size limit (5MB)
-            max_size = 5 * 1024 * 1024  # 5MB in bytes
-            if file_size > max_size:
+        logger.info(
+            "handle_file_upload received %d file(s); first 20 names: %s",
+            len(filenames_list),
+            filenames_list[:20],
+        )
+
+        try:
+            # Detect a folder-style upload: any filename containing a path
+            # separator means the user dropped folders (the dropzone JS hook
+            # surfaces webkitRelativePath as file.name). In that case, present
+            # a folder-grouped summary; otherwise fall back to the simple flat
+            # listing used by the table flow.
+            looks_like_folder_upload = any(
+                "/" in (fname or "") or "\\" in (fname or "") for fname in filenames_list
+            )
+
+            if looks_like_folder_upload:
+                kept_folders: dict[str, int] = {}
+                multiqc_size = 0
+                skipped = 0
+                for i, (content, fname) in enumerate(zip(contents_list, filenames_list)):
+                    basename = fname.replace("\\", "/").rsplit("/", 1)[-1]
+                    if basename != MULTIQC_PARQUET_BASENAME:
+                        skipped += 1
+                        continue
+                    _, content_string = content.split(",")
+                    decoded = base64.b64decode(content_string)
+                    multiqc_size += len(decoded)
+                    folder = _multiqc_folder_from_path(fname, i)
+                    kept_folders[folder] = kept_folders.get(folder, 0) + 1
+
+                if not kept_folders:
+                    return dmc.Alert(
+                        "No 'multiqc.parquet' files found in the dropped folders.",
+                        color="red",
+                        icon=DashIconify(icon="mdi:alert"),
+                    )
+
+                summary_parts = [
+                    f"{len(kept_folders)} folder(s)",
+                    f"{sum(kept_folders.values())} multiqc.parquet",
+                    f"{multiqc_size / 1024:.1f}KB",
+                ]
+                if skipped:
+                    summary_parts.append(f"{skipped} other file(s) ignored")
+
+                return dmc.Card(
+                    [
+                        dmc.Group(
+                            [
+                                DashIconify(icon="mdi:folder-multiple", width=20, color="green"),
+                                dmc.Text(
+                                    " • ".join(summary_parts),
+                                    fw="bold",
+                                    size="sm",
+                                ),
+                            ],
+                            gap="md",
+                            align="center",
+                        ),
+                    ],
+                    withBorder=True,
+                    shadow="xs",
+                    radius="md",
+                    p="sm",
+                    style={"backgroundColor": "var(--mantine-color-green-0)"},
+                )
+
+            total_size = 0
+            file_infos = []
+            for content, fname in zip(contents_list, filenames_list):
+                content_type, content_string = content.split(",")
+                decoded = base64.b64decode(content_string)
+                file_size = len(decoded)
+                total_size += file_size
+                file_infos.append((fname, file_size))
+
+            if len(file_infos) == 1:
+                fname, fsize = file_infos[0]
+                return dmc.Card(
+                    [
+                        dmc.Group(
+                            [
+                                DashIconify(icon="mdi:file-check", width=20, color="green"),
+                                dmc.Stack(
+                                    [
+                                        dmc.Text(fname, fw="bold", size="sm"),
+                                        dmc.Text(
+                                            f"Size: {fsize / 1024:.1f}KB",
+                                            size="xs",
+                                            c="gray",
+                                        ),
+                                    ],
+                                    gap="xs",
+                                ),
+                            ],
+                            gap="md",
+                            align="center",
+                        ),
+                    ],
+                    withBorder=True,
+                    shadow="xs",
+                    radius="md",
+                    p="sm",
+                    style={"backgroundColor": "var(--mantine-color-green-0)"},
+                )
+            else:
+                return dmc.Card(
+                    [
+                        dmc.Group(
+                            [
+                                DashIconify(icon="mdi:file-check", width=20, color="green"),
+                                dmc.Text(
+                                    f"{len(file_infos)} files uploaded ({total_size / 1024:.1f}KB total)",
+                                    fw="bold",
+                                    size="sm",
+                                ),
+                            ],
+                            gap="md",
+                            align="center",
+                        ),
+                    ],
+                    withBorder=True,
+                    shadow="xs",
+                    radius="md",
+                    p="sm",
+                    style={"backgroundColor": "var(--mantine-color-green-0)"},
+                )
+
+        except Exception as e:
+            return dmc.Alert(
+                f"Error processing file: {str(e)}",
+                color="red",
+                icon=DashIconify(icon="mdi:alert"),
+            )
+
+    @app.callback(
+        Output("create-data-collection-creation-submit", "disabled"),
+        [
+            Input("data-collection-creation-name-input", "value"),
+            Input("data-collection-creation-file-upload", "contents"),
+            Input("data-collection-creation-clear-confirm-name-input", "value"),
+            Input("data-collection-modal-mode", "data"),
+        ],
+    )
+    def update_submit_button_state(name, file_contents, clear_typed_name, mode_data):
+        """Enable/disable the unified submit button based on the active mode.
+
+        - ``create``: requires both a DC name and a file upload.
+        - ``update``: requires a file upload (the DC id comes from the mode store).
+        - ``clear``: requires the typed-name guard to match (expected vs typed);
+          the actual disabled toggle for clear is owned by a clientside callback
+          (so this callback returns False to relinquish control to the JS).
+        """
+        mode = (mode_data or {}).get("mode")
+        if mode == "update":
+            return not bool(file_contents)
+        if mode == "clear":
+            expected = (mode_data or {}).get("expected_name") or ""
+            return str(clear_typed_name or "") != str(expected) or not expected
+        # create (or unknown — keep disabled until name + file are supplied).
+        if not name or not file_contents:
+            return True
+        return False
+
+    def _validate_multiqc_files(contents, filename):
+        """Validate uploaded MultiQC files and return a folder-grouped preview.
+
+        Filenames may arrive as relative paths (e.g.
+        ``run_01/multiqc_data/multiqc.parquet``) when the user drops folders;
+        the dropzone JS hook rewrites ``file.name`` to ``webkitRelativePath``.
+        We strict-filter to ``basename == "multiqc.parquet"`` and skip the
+        ~17 sibling support files MultiQC emits per run.
+        """
+        contents_list, filenames_list = _normalize_upload_to_lists(contents, filename)
+
+        kept_per_folder: dict[str, int] = {}
+        kept_count = 0
+        skipped_count = 0
+        total_size = 0
+
+        for i, (content, fname) in enumerate(zip(contents_list, filenames_list)):
+            basename = fname.replace("\\", "/").rsplit("/", 1)[-1]
+            if basename != MULTIQC_PARQUET_BASENAME:
+                skipped_count += 1
+                continue
+
+            try:
+                _, content_string = content.split(",")
+                decoded = base64.b64decode(content_string)
+                file_size = len(decoded)
+            except Exception as e:
                 return dmc.Alert(
-                    f"File size ({file_size / (1024 * 1024):.1f}MB) exceeds the 5MB limit",
+                    f"Error processing file '{fname}': {str(e)}",
                     color="red",
                     icon=DashIconify(icon="mdi:alert"),
                 )
 
-            # Display file info
-            return dmc.Card(
+            if file_size > 50 * 1024 * 1024:
+                return dmc.Alert(
+                    f"File '{fname}' ({file_size / (1024 * 1024):.1f}MB) exceeds the 50MB limit",
+                    color="red",
+                    icon=DashIconify(icon="mdi:alert"),
+                )
+
+            folder = _multiqc_folder_from_path(fname, i)
+            kept_per_folder[folder] = kept_per_folder.get(folder, 0) + 1
+            kept_count += 1
+            total_size += file_size
+
+        if kept_count == 0:
+            return dmc.Alert(
+                "No 'multiqc.parquet' files found in the upload. "
+                "Drop one or more folders that each contain a multiqc.parquet file.",
+                color="red",
+                icon=DashIconify(icon="mdi:alert"),
+            )
+
+        if total_size > 500 * 1024 * 1024:
+            return dmc.Alert(
+                f"Total file size ({total_size / (1024 * 1024):.1f}MB) exceeds the 500MB limit",
+                color="red",
+                icon=DashIconify(icon="mdi:alert"),
+            )
+
+        folder_cards = [
+            dmc.Card(
                 [
                     dmc.Group(
                         [
-                            DashIconify(icon="mdi:file-check", width=20, color="green"),
+                            DashIconify(icon="mdi:folder-check", width=20, color="green"),
                             dmc.Stack(
                                 [
-                                    dmc.Text(filename, fw="bold", size="sm"),
+                                    dmc.Text(folder, fw="bold", size="sm"),
                                     dmc.Text(
-                                        f"Size: {file_size / 1024:.1f}KB",
+                                        f"{count} multiqc.parquet • Format: Parquet (MultiQC)",
                                         size="xs",
                                         c="gray",
                                     ),
@@ -3741,38 +4479,24 @@ def register_project_data_collections_callbacks(app):
                 p="sm",
                 style={"backgroundColor": "var(--mantine-color-green-0)"},
             )
+            for folder, count in sorted(kept_per_folder.items())
+        ]
 
-        except Exception as e:
-            return dmc.Alert(
-                f"Error processing file: {str(e)}",
-                color="red",
-                icon=DashIconify(icon="mdi:alert"),
-            )
+        summary_parts = [
+            f"{len(kept_per_folder)} folder(s)",
+            f"{kept_count} multiqc.parquet",
+            f"{total_size / 1024:.1f}KB total",
+        ]
+        if skipped_count:
+            summary_parts.append(f"{skipped_count} non-multiqc file(s) ignored")
+        summary = dmc.Text(
+            " • ".join(summary_parts),
+            size="xs",
+            c="gray",
+            fw="bold",
+        )
 
-    @app.callback(
-        Output("create-data-collection-creation-submit", "disabled"),
-        [
-            Input("data-collection-creation-name-input", "value"),
-            Input("data-collection-creation-file-upload", "contents"),
-        ],
-    )
-    def update_submit_button_state(name, file_contents):
-        """
-        Enable/disable submit button based on form completeness.
-
-        Requires both a name and uploaded file for the button to be enabled.
-
-        Args:
-            name: Data collection name input value.
-            file_contents: Uploaded file contents.
-
-        Returns:
-            bool: True to disable button, False to enable.
-        """
-        # Require name and file upload (data type has default value)
-        if not name or not file_contents:
-            return True
-        return False
+        return dmc.Stack([summary] + folder_cards, gap="sm")
 
     @app.callback(
         Output("data-collection-creation-file-info", "children", allow_duplicate=True),
@@ -3785,31 +4509,53 @@ def register_project_data_collections_callbacks(app):
         ],
         [
             dash.State("data-collection-creation-file-upload", "filename"),
+            dash.State("data-collection-creation-type-select", "value"),
+            dash.State("data-collection-modal-mode", "data"),
         ],
         prevent_initial_call=True,
     )
     def validate_file_with_polars(
-        contents, file_format, separator, custom_separator, has_header, filename
+        contents,
+        file_format,
+        separator,
+        custom_separator,
+        has_header,
+        filename,
+        data_type,
+        mode_data,
     ):
         """
-        Validate uploaded file using polars and display detailed information.
+        Validate uploaded file(s) and display detailed information.
 
-        Saves file temporarily, reads with polars using specified format options,
-        and displays row/column counts with column names preview.
+        For table type: validates with polars using format options.
+        For MultiQC type: validates parquet files.
 
-        Args:
-            contents: Base64-encoded file contents.
-            file_format: Selected file format for parsing.
-            separator: Selected delimiter character.
-            custom_separator: Custom delimiter if separator is 'custom'.
-            has_header: Whether file has header row.
-            filename: Original filename.
-
-        Returns:
-            Stack component with file info and data preview, or error alert.
+        In ``update`` mode, the data-type select is hidden and may carry a
+        stale "table" default — but updates are MultiQC-only, so we coerce
+        the validation path to the MultiQC validator.
         """
+        mode = (mode_data or {}).get("mode")
+        if mode == "update":
+            data_type = "multiqc"
         if not contents or not filename:
             return []
+
+        # Handle MultiQC type
+        if data_type == "multiqc":
+            return _validate_multiqc_files(contents, filename)
+
+        # For table type, handle single file (contents may be a list with one element)
+        if isinstance(contents, list):
+            if len(contents) > 1:
+                return dmc.Alert(
+                    "Table data collections only support a single file upload.",
+                    color="red",
+                    icon=DashIconify(icon="mdi:alert"),
+                )
+            contents = contents[0]
+            filename = filename[0] if isinstance(filename, list) else filename
+        if isinstance(filename, list):
+            filename = filename[0]
 
         try:
             # Decode file content
@@ -3966,9 +4712,11 @@ def register_project_data_collections_callbacks(app):
             Output("project-data-store", "data", allow_duplicate=True),
             Output("data-collection-creation-error-alert", "children", allow_duplicate=True),
             Output("data-collection-creation-error-alert", "style", allow_duplicate=True),
+            Output("data-collection-modal-mode", "data", allow_duplicate=True),
         ],
         [Input("create-data-collection-creation-submit", "n_clicks")],
         [
+            dash.State("data-collection-modal-mode", "data"),
             dash.State("data-collection-creation-name-input", "value"),
             dash.State("data-collection-creation-description-input", "value"),
             dash.State("data-collection-creation-type-select", "value"),
@@ -3979,13 +4727,16 @@ def register_project_data_collections_callbacks(app):
             dash.State("data-collection-creation-has-header-switch", "checked"),
             dash.State("data-collection-creation-file-upload", "contents"),
             dash.State("data-collection-creation-file-upload", "filename"),
+            dash.State("data-collection-creation-replace-toggle", "checked"),
+            dash.State("data-collection-creation-clear-confirm-name-input", "value"),
             dash.State("project-data-store", "data"),
             dash.State("local-store", "data"),
         ],
         prevent_initial_call=True,
     )
-    def submit_data_collection_creation(
+    def submit_data_collection_modal(
         submit_clicks,
+        mode_data,
         name,
         description,
         data_type,
@@ -3996,127 +4747,161 @@ def register_project_data_collections_callbacks(app):
         has_header,
         file_contents,
         filename,
+        replace_toggle,
+        clear_typed_name,
         project_data,
         local_data,
     ):
+        """Unified submit handler — dispatches to create / update / clear based on mode.
+
+        Reads ``data-collection-modal-mode.data`` to decide which API call to
+        make. Mirrors the previous per-mode submit handlers' outputs so the
+        modal closes on success, the error alert surfaces failures, and the
+        ``project-data-store.refresh_timestamp`` triggers the page refresh.
         """
-        Handle data collection creation submission with file processing.
+        # Helpers for the 5-tuple outputs of this callback.
+        no_op = (dash.no_update,) * 5
 
-        Validates inputs, calls API to create data collection, and updates
-        project store to trigger UI refresh on success.
+        def err(msg: str) -> tuple:
+            return (dash.no_update, dash.no_update, msg, {"display": "block"}, dash.no_update)
 
-        Args:
-            submit_clicks: Submit button click count.
-            name: Data collection name.
-            description: Optional description.
-            data_type: Data type (e.g., 'table').
-            file_format: File format (csv, parquet, etc.).
-            separator: Delimiter character.
-            custom_separator: Custom delimiter if applicable.
-            compression: Compression type.
-            has_header: Whether file has header row.
-            file_contents: Base64-encoded file contents.
-            filename: Original filename.
-            project_data: Project data for refresh timestamp.
-            local_data: Local storage with access token.
+        if not submit_clicks:
+            return no_op
 
-        Returns:
-            Tuple of (modal_opened, project_data, error_message, error_style)
-        """
-        if not submit_clicks or not name or not file_contents or not filename:
-            return dash.no_update, dash.no_update, dash.no_update, dash.no_update
+        mode = (mode_data or {}).get("mode")
+        dc_id = (mode_data or {}).get("dc_id")
+        expected_name = (mode_data or {}).get("expected_name")
+
+        # Common project + auth checks shared across all three modes.
+        if not project_data or "project_id" not in project_data:
+            return err("No project information available")
+        project_id = project_data["project_id"]
+        if not project_id:
+            return err("No project ID available")
+        if not local_data or not local_data.get("access_token"):
+            return err("Authentication required. Please log in.")
+        token = local_data["access_token"]
 
         try:
             from datetime import datetime
 
-            from depictio.dash.api_calls import api_call_create_data_collection
+            if mode == "create":
+                if not name or not file_contents or not filename:
+                    return no_op
 
-            logger.debug(f"Creating data collection: {name}")
+                if data_type == "multiqc":
+                    from depictio.dash.api_calls import api_call_create_multiqc_data_collection
 
-            # Get current project information
-            if not project_data or "project_id" not in project_data:
-                logger.error("No project information available")
-                return (
-                    dash.no_update,
-                    dash.no_update,
-                    "No project information available",
-                    {"display": "block"},
+                    contents_list, filenames_list = _normalize_upload_to_lists(
+                        file_contents, filename
+                    )
+
+                    result = api_call_create_multiqc_data_collection(
+                        name=name,
+                        description=description or "",
+                        file_contents_list=contents_list,
+                        filenames_list=filenames_list,
+                        project_id=project_id,
+                        token=token,
+                    )
+                else:
+                    from depictio.dash.api_calls import api_call_create_data_collection
+
+                    single_contents = file_contents
+                    single_filename = filename
+                    if isinstance(file_contents, list):
+                        single_contents = file_contents[0]
+                    if isinstance(filename, list):
+                        single_filename = filename[0]
+
+                    result = api_call_create_data_collection(
+                        name=name,
+                        description=description or "",
+                        data_type=data_type,
+                        file_format=file_format,
+                        separator=separator,
+                        custom_separator=custom_separator,
+                        compression=compression,
+                        has_header=has_header,
+                        file_contents=single_contents,
+                        filename=single_filename,
+                        project_id=project_id,
+                        token=token,
+                    )
+
+                action_label = "create"
+
+            elif mode == "update":
+                if not dc_id or not file_contents or not filename:
+                    return no_op
+
+                contents_list, filenames_list = _normalize_upload_to_lists(file_contents, filename)
+
+                if replace_toggle:
+                    result = api_call_overwrite_multiqc_data_collection(
+                        project_id=project_id,
+                        data_collection_id=str(dc_id),
+                        file_contents_list=contents_list,
+                        filenames_list=filenames_list,
+                        token=token,
+                    )
+                else:
+                    result = api_call_append_to_multiqc_data_collection(
+                        project_id=project_id,
+                        data_collection_id=str(dc_id),
+                        file_contents_list=contents_list,
+                        filenames_list=filenames_list,
+                        token=token,
+                    )
+
+                action_label = "update"
+
+            elif mode == "clear":
+                if not dc_id:
+                    return no_op
+                # Defense-in-depth: clientside callback already gates the
+                # button until the typed name matches, but we re-check here.
+                if not expected_name or str(clear_typed_name or "") != str(expected_name):
+                    return err("Typed name does not match the data collection name.")
+
+                result = api_call_clear_multiqc_data_collection(
+                    project_id=project_id,
+                    data_collection_id=str(dc_id),
+                    token=token,
                 )
 
-            project_id = project_data.get("project_id")
-            if not project_id:
-                logger.error("No project ID available")
-                return (
-                    dash.no_update,
-                    dash.no_update,
-                    "No project ID available",
-                    {"display": "block"},
-                )
+                action_label = "clear"
 
-            # Get authentication token from user session
-            if not local_data or not local_data.get("access_token"):
-                logger.error("No authentication token available")
-                return (
-                    dash.no_update,
-                    dash.no_update,
-                    "Authentication required. Please log in.",
-                    {"display": "block"},
-                )
-
-            token = local_data["access_token"]
-
-            # Call the API function to create the data collection
-            result = api_call_create_data_collection(
-                name=name,
-                description=description or "",
-                data_type=data_type,
-                file_format=file_format,
-                separator=separator,
-                custom_separator=custom_separator,
-                compression=compression,
-                has_header=has_header,
-                file_contents=file_contents,
-                filename=filename,
-                project_id=project_id,
-                token=token,
-            )
+            else:
+                return err(f"Unknown modal mode: {mode}")
 
             if result and result.get("success"):
-                logger.debug(f"Data collection created successfully: {result.get('message')}")
-
-                # Update project data store to trigger refresh
+                logger.debug(f"Data collection {action_label} succeeded: {result.get('message')}")
                 updated_project_data = project_data.copy()
                 updated_project_data["refresh_timestamp"] = datetime.now().isoformat()
-
-                # Close modal and refresh project data (hide error alert)
-                return False, updated_project_data, "", {"display": "none"}
-            else:
-                error_msg = result.get("message", "Unknown error") if result else "API call failed"
-                logger.error(f"Data collection creation failed: {error_msg}")
                 return (
-                    dash.no_update,
-                    dash.no_update,
-                    f"Failed to create data collection: {error_msg}",
-                    {"display": "block"},
+                    False,
+                    updated_project_data,
+                    "",
+                    {"display": "none"},
+                    {"mode": None, "dc_id": None, "expected_name": None},
                 )
 
+            error_msg = result.get("message", "Unknown error") if result else "API call failed"
+            logger.error(f"Data collection {action_label} failed: {error_msg}")
+            return err(f"Failed to {action_label} data collection: {error_msg}")
         except Exception as e:
-            logger.error(f"Error creating data collection: {str(e)}")
+            logger.error(f"Error in modal submit ({mode}): {e}")
             import traceback
 
             traceback.print_exc()
-            return (
-                dash.no_update,
-                dash.no_update,
-                f"Unexpected error: {str(e)}",
-                {"display": "block"},
-            )
+            return err(f"Unexpected error: {str(e)}")
 
     # Data collection action buttons callbacks
     @app.callback(
         Output("dc-action-modals-container", "children"),
         [
-            Input({"type": "dc-overwrite-button", "index": dash.ALL}, "n_clicks"),
+            Input({"type": "dc-manage-button", "index": dash.ALL}, "n_clicks"),
             Input({"type": "dc-edit-name-button", "index": dash.ALL}, "n_clicks"),
             Input({"type": "dc-delete-button", "index": dash.ALL}, "n_clicks"),
         ],
@@ -4125,51 +4910,54 @@ def register_project_data_collections_callbacks(app):
         ],
         prevent_initial_call=True,
     )
-    def handle_dc_action_buttons(overwrite_clicks, edit_clicks, delete_clicks, project_data):
-        """
-        Handle data collection action button clicks by creating appropriate modals.
+    def handle_dc_action_buttons(manage_clicks, edit_clicks, delete_clicks, project_data):
+        """Open the right modal for manage / edit-name / delete on a DC.
 
-        Determines which action button was clicked (overwrite, edit, or delete),
-        finds the corresponding data collection, and creates the appropriate modal.
-
-        Args:
-            overwrite_clicks: List of click counts for overwrite buttons.
-            edit_clicks: List of click counts for edit buttons.
-            delete_clicks: List of click counts for delete buttons.
-            project_data: Project data containing data collections.
-
-        Returns:
-            List containing the appropriate modal component, or empty list.
+        ``dc-manage-button`` is a single entry point for all content-modification
+        flows. For tabular DCs it opens the legacy overwrite modal. For MultiQC
+        DCs we return [] here — the unified modal is opened by a sibling
+        callback (``open_modal_for_dc_action``) that has access to the project
+        store and can populate the clear-mode preview in one shot.
         """
         ctx_trigger = ctx.triggered_id
 
-        if not ctx_trigger or not any(
-            [any(overwrite_clicks), any(edit_clicks), any(delete_clicks)]
-        ):
+        if not ctx_trigger or not any([any(manage_clicks), any(edit_clicks), any(delete_clicks)]):
             return []
 
         if not project_data:
             return []
 
-        # Get the data collection tag from the clicked button
-        dc_tag = ctx_trigger["index"]
+        triggered_index = ctx_trigger["index"]
+        triggered_type = ctx_trigger["type"]
 
-        # Find the data collection info from project data
         data_collections = project_data.get("data_collections", [])
+
+        # Resolve the DC by tag (edit/delete) or by id (manage). Manage button
+        # ids are stringified DC ids, while edit/delete still use tags.
         dc_info = None
-        for dc in data_collections:
-            if dc.get("data_collection_tag") == dc_tag:
-                dc_info = dc
-                break
+        if triggered_type == "dc-manage-button":
+            for dc in data_collections:
+                if str(dc.get("id", "") or dc.get("_id", "")) == str(triggered_index):
+                    dc_info = dc
+                    break
+        else:
+            for dc in data_collections:
+                if dc.get("data_collection_tag") == triggered_index:
+                    dc_info = dc
+                    break
 
         if not dc_info:
             return []
 
         dc_name = dc_info.get("data_collection_tag", "Unknown")
         dc_id = str(dc_info.get("id", ""))
+        dc_type = (dc_info.get("config") or {}).get("type", "")
 
-        # Create the appropriate modal based on which button was clicked
-        if ctx_trigger["type"] == "dc-overwrite-button":
+        if triggered_type == "dc-manage-button":
+            # MultiQC DCs are handled by the unified modal via a sibling
+            # callback. Tabular DCs use the legacy overwrite modal.
+            if dc_type == "multiqc":
+                return []
             modal, modal_id = create_data_collection_overwrite_modal(
                 opened=True,
                 data_collection_name=dc_name,
@@ -5107,6 +5895,272 @@ def register_project_data_collections_callbacks(app):
                 return True, img_data.get("src", ""), img_data.get("title", "")
 
         raise dash.exceptions.PreventUpdate
+
+    # =========================================================================
+    # Unified data-collection modal — open / close / mode-driven visibility
+    # =========================================================================
+
+    def _find_dc_in_project_data(project_data: dict | None, dc_id: str) -> dict | None:
+        """Locate a data collection dict in the project store by stringified id."""
+        if not project_data or not dc_id:
+            return None
+        for dc in project_data.get("data_collections", []) or []:
+            if str(dc.get("id") or dc.get("_id") or "") == str(dc_id):
+                return dc
+        return None
+
+    @app.callback(
+        [
+            Output("data-collection-creation-modal", "opened", allow_duplicate=True),
+            Output("data-collection-modal-mode", "data", allow_duplicate=True),
+            Output("data-collection-creation-clear-summary", "children"),
+            Output("data-collection-creation-clear-folder-list", "children"),
+            Output("data-collection-creation-clear-confirm-name-input", "value"),
+            Output("data-collection-creation-clear-expected-name", "data"),
+            Output("data-collection-creation-error-alert", "style", allow_duplicate=True),
+            Output("data-collection-creation-action-segment", "value"),
+        ],
+        [
+            Input({"type": "dc-manage-button", "index": ALL}, "n_clicks"),
+        ],
+        [
+            State("project-data-store", "data"),
+            State("local-store", "data"),
+        ],
+        prevent_initial_call=True,
+    )
+    def open_modal_for_dc_action(manage_clicks, project_data, local_data):
+        """Open the unified modal in manage flow for a per-DC manage click.
+
+        For MultiQC DCs the modal opens in ``update`` mode with the action
+        segment defaulting to ``modify``. The user can flip to ``clear``
+        inside the modal via the SegmentedControl. When that happens, the
+        clear-mode preview ("N folders • X MB" + folder code block) is
+        populated lazily; we pre-populate it on open too so switching is
+        instant.
+
+        Tabular DCs are handled by the legacy overwrite modal via the
+        sibling ``handle_dc_action_buttons`` callback — this callback
+        no-ops for them.
+        """
+        if not manage_clicks or not any(n for n in manage_clicks if n):
+            raise dash.exceptions.PreventUpdate
+
+        triggered_id = ctx.triggered_id
+        if not triggered_id or not isinstance(triggered_id, dict):
+            raise dash.exceptions.PreventUpdate
+
+        dc_id = triggered_id.get("index")
+        if not dc_id:
+            raise dash.exceptions.PreventUpdate
+
+        # Only proceed for MultiQC DCs; tabular DCs use the legacy modal.
+        dc_info = _find_dc_in_project_data(project_data, str(dc_id))
+        if not dc_info:
+            raise dash.exceptions.PreventUpdate
+        dc_type = (dc_info.get("config") or {}).get("type", "")
+        if dc_type != "multiqc":
+            raise dash.exceptions.PreventUpdate
+
+        dc_name = dc_info.get("data_collection_tag", "") or str(dc_id)
+
+        # Pre-populate clear preview so the segment-flip is instant.
+        token = (local_data or {}).get("access_token", "")
+        summary_text = "0 folders • 0.0 MB"
+        folder_list_text = "(no reports)"
+
+        if token:
+            try:
+                fetched = api_call_fetch_all_multiqc_reports(str(dc_id), token)
+                reports = (fetched or {}).get("reports", []) or []
+                folder_names: list[str] = []
+                total_bytes = 0
+                for idx, report in enumerate(reports):
+                    if not isinstance(report, dict):
+                        continue
+                    original_path = report.get("original_file_path") or ""
+                    folder = _multiqc_folder_from_path(original_path, idx)
+                    folder_names.append(folder)
+
+                    size = report.get("deltatable_size_bytes") or report.get("file_size") or 0
+                    if isinstance(size, (int, float)):
+                        total_bytes += int(size)
+
+                if folder_names:
+                    folder_list_text = "\n".join(folder_names)
+                summary_text = (
+                    f"{len(folder_names)} folder(s) • {total_bytes / (1024 * 1024):.1f} MB"
+                )
+            except Exception as e:
+                logger.error(f"Error preparing clear preview for DC {dc_id}: {e}")
+                folder_list_text = f"(error fetching reports: {e})"
+
+        return (
+            True,
+            {"mode": "update", "dc_id": str(dc_id), "expected_name": dc_name},
+            summary_text,
+            folder_list_text,
+            "",  # reset typed-name input
+            dc_name,
+            {"display": "none"},
+            "modify",  # default segment value when opening
+        )
+
+    @app.callback(
+        [
+            Output("data-collection-creation-name-input-container", "style"),
+            Output("data-collection-creation-description-input-container", "style"),
+            Output("data-collection-creation-type-select-container", "style"),
+            Output("data-collection-creation-table-options-container", "style"),
+            Output("data-collection-creation-multiqc-options-container", "style"),
+            Output("data-collection-creation-action-segment-container", "style"),
+            Output("data-collection-creation-replace-toggle-container", "style"),
+            Output("data-collection-creation-dropzone-container", "style"),
+            Output("data-collection-creation-clear-warning-container", "style"),
+            Output("data-collection-creation-clear-summary-container", "style"),
+            Output("data-collection-creation-clear-confirm-container", "style"),
+            Output("data-collection-creation-title-text", "children"),
+            Output("data-collection-creation-title-text", "c"),
+            Output("data-collection-creation-title-icon", "icon"),
+            Output("data-collection-creation-title-icon", "color"),
+            Output("create-data-collection-creation-submit", "color"),
+            Output("create-data-collection-creation-submit-icon", "icon"),
+        ],
+        [
+            Input("data-collection-modal-mode", "data"),
+            Input("data-collection-creation-type-select", "value"),
+        ],
+    )
+    def update_modal_section_visibility(mode_data, data_type):
+        """Toggle modal sections + title + submit-button color based on mode.
+
+        Sections are wrapped in stable container Divs (built unconditionally
+        in :func:`create_data_collection_modal`); this callback flips each
+        container's ``style.display`` to match the active mode. The title
+        text + icon and the submit button's color/icon are also rebound here.
+        """
+        show: dict = {"width": "100%"}
+        hide: dict = {"display": "none"}
+
+        mode = (mode_data or {}).get("mode") or "create"
+        # Unknown modes fall back to the create-mode visuals.
+        if mode not in ("create", "update", "clear"):
+            mode = "create"
+
+        # Per-mode config for the simple boolean toggles + title/icon.
+        # The data-type-dependent table/multiqc visibility is handled below
+        # because it's the only field that depends on a non-mode input.
+        per_mode = {
+            "create": {
+                "name": show,
+                "description": show,
+                "type": show,
+                "segment": hide,
+                "replace": hide,
+                "dropzone": show,
+                "clear_warning": hide,
+                "clear_summary": hide,
+                "clear_confirm": hide,
+                "title_text": "Create Data Collection",
+                "title_icon": "mdi:database-plus",
+                "submit_icon": "mdi:plus",
+            },
+            "update": {
+                "name": hide,
+                "description": hide,
+                "type": hide,
+                "segment": show,
+                "replace": show,
+                "dropzone": show,
+                "clear_warning": hide,
+                "clear_summary": hide,
+                "clear_confirm": hide,
+                "title_text": "Manage Data Collection",
+                "title_icon": "mdi:database-cog",
+                "submit_icon": "mdi:cloud-upload",
+            },
+            "clear": {
+                "name": hide,
+                "description": hide,
+                "type": hide,
+                "segment": show,
+                "replace": hide,
+                "dropzone": hide,
+                "clear_warning": show,
+                "clear_summary": show,
+                "clear_confirm": show,
+                "title_text": "Manage Data Collection",
+                "title_icon": "mdi:database-cog",
+                "submit_icon": "mdi:database-remove",
+            },
+        }[mode]
+
+        # Table/MultiQC option visibility is only meaningful in create mode;
+        # in update/clear both the type-select and these option blocks are
+        # hidden anyway, so we just gate on the data_type input here.
+        if mode == "create":
+            table_style = hide if data_type == "multiqc" else show
+            multiqc_style = show if data_type == "multiqc" else hide
+        else:
+            table_style = hide
+            multiqc_style = hide
+
+        title_color = "teal"  # title + icon + submit share this color
+        return (
+            per_mode["name"],
+            per_mode["description"],
+            per_mode["type"],
+            table_style,
+            multiqc_style,
+            per_mode["segment"],
+            per_mode["replace"],
+            per_mode["dropzone"],
+            per_mode["clear_warning"],
+            per_mode["clear_summary"],
+            per_mode["clear_confirm"],
+            per_mode["title_text"],
+            title_color,
+            per_mode["title_icon"],
+            title_color,  # icon color shares the title color
+            title_color,
+            per_mode["submit_icon"],
+        )
+
+    # Clientside callback: drive the submit button label from mode + replace toggle.
+    app.clientside_callback(
+        dash.ClientsideFunction(
+            namespace="depictio_multiqc",
+            function_name="compute_modal_submit_label",
+        ),
+        Output("create-data-collection-creation-submit", "children"),
+        Input("data-collection-modal-mode", "data"),
+        Input("data-collection-creation-replace-toggle", "checked"),
+    )
+
+    @app.callback(
+        Output("data-collection-modal-mode", "data", allow_duplicate=True),
+        Input("data-collection-creation-action-segment", "value"),
+        State("data-collection-modal-mode", "data"),
+        prevent_initial_call=True,
+    )
+    def sync_segment_to_mode(segment_value, mode_data):
+        """Flip the mode store when the user toggles the action segment.
+
+        ``modify`` → ``update`` mode (drop folders + replace toggle).
+        ``clear`` → ``clear`` mode (typed-name confirm). The dc_id and
+        expected_name carried by the store are preserved.
+        """
+        if not mode_data or not isinstance(mode_data, dict):
+            raise dash.exceptions.PreventUpdate
+        current_mode = mode_data.get("mode")
+        # The segment is only visible in update/clear modes; ignore the
+        # callback while we're in create mode.
+        if current_mode not in ("update", "clear"):
+            raise dash.exceptions.PreventUpdate
+        target_mode = "clear" if segment_value == "clear" else "update"
+        if target_mode == current_mode:
+            raise dash.exceptions.PreventUpdate
+        return {**mode_data, "mode": target_mode}
 
 
 def generate_cytoscape_elements_from_project_data(data_collections):

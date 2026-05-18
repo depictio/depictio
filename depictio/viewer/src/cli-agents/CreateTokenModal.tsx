@@ -73,6 +73,7 @@ const CreateTokenModal: React.FC<CreateTokenModalProps> = ({
     >
       <Stack
         gap="md"
+        data-testid="create-cli-token-modal"
         onKeyDown={(e) => {
           if (e.key === 'Enter' && !submitting) {
             e.preventDefault();

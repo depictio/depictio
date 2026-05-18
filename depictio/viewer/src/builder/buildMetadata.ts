@@ -7,6 +7,7 @@
  * so no Pydantic validation regressions on POST /dashboards/save.
  */
 import type { StoredMetadata } from 'depictio-react-core';
+import { readMultiqcSelection } from 'depictio-react-core';
 import type { BuilderState } from './store/useBuilderStore';
 import { autoCardTitle } from './card/cardTitle';
 
@@ -43,9 +44,20 @@ export function buildMetadata(state: BuilderState): StoredMetadata {
       return buildImage(state, base, existing);
     case 'map':
       return buildMap(state, base, existing);
+    case 'text':
+      return buildText(state, base, existing);
     default:
       return { ...existing, ...base };
   }
+}
+
+function clampOrder(v: unknown): 1 | 2 | 3 | 4 | 5 | 6 {
+  const n = typeof v === 'number' ? v : Number(v);
+  if (!Number.isFinite(n)) return 1;
+  const t = Math.trunc(n);
+  if (t < 1) return 1;
+  if (t > 6) return 6;
+  return t as 1 | 2 | 3 | 4 | 5 | 6;
 }
 
 // ---- per-type --------------------------------------------------------------
@@ -87,6 +99,14 @@ function buildFigure(
   base: StoredMetadata,
   existing: Record<string, unknown>,
 ): StoredMetadata {
+  // Cross-filtering toggle lives on the figure config (not dict_kwargs) since
+  // it applies to both UI and code modes — keys match the renderer's reads in
+  // packages/depictio-react-core/src/components/ComponentRenderer.tsx
+  // (selection_enabled / scatter_selection source).
+  const c = as<{
+    selection_enabled?: boolean;
+    selection_column?: string;
+  }>(state.config);
   if (state.figureMode === 'code') {
     return {
       ...existing,
@@ -96,6 +116,8 @@ function buildFigure(
       visu_type: state.visuType, // hint for renderers
       // dict_kwargs intentionally cleared in code mode
       dict_kwargs: {},
+      selection_enabled: Boolean(c.selection_enabled),
+      selection_column: c.selection_column,
     };
   }
   return {
@@ -105,6 +127,8 @@ function buildFigure(
     visu_type: state.visuType,
     dict_kwargs: state.dictKwargs,
     code_content: null,
+    selection_enabled: Boolean(c.selection_enabled),
+    selection_column: c.selection_column,
   };
 }
 
@@ -152,6 +176,8 @@ function buildTable(
     striped?: boolean;
     compact?: boolean;
     export_csv?: boolean;
+    row_selection_enabled?: boolean;
+    row_selection_column?: string;
   }>(state.config);
   return {
     ...existing,
@@ -160,6 +186,11 @@ function buildTable(
     striped: c.striped ?? true,
     compact: c.compact ?? false,
     export_csv: c.export_csv ?? false,
+    // Row selection drives `table_selection` filters in
+    // packages/depictio-react-core/src/components/ComponentRenderer.tsx —
+    // mirrors what map / figure do with `selection_enabled`.
+    row_selection_enabled: Boolean(c.row_selection_enabled),
+    row_selection_column: c.row_selection_column,
   };
 }
 
@@ -168,19 +199,20 @@ function buildMultiqc(
   base: StoredMetadata,
   existing: Record<string, unknown>,
 ): StoredMetadata {
-  const c = as<{
-    multiqc_module?: string;
-    multiqc_plot?: string;
-    multiqc_dataset?: string;
-    s3_locations?: string[];
-    is_general_stats?: boolean;
-  }>(state.config);
+  // Persist with `selected_*` keys — the backend's render_multiqc endpoint
+  // and depictio.dash.modules.multiqc_component.models.MultiQCState read
+  // `selected_module`/`selected_plot`/`selected_dataset`. Earlier the
+  // builder used `multiqc_*` here, which silently produced 400s at render.
+  const c = as<{ s3_locations?: string[]; is_general_stats?: boolean }>(state.config);
+  const sel = readMultiqcSelection(state.config as Record<string, unknown>);
   return {
     ...existing,
     ...base,
-    multiqc_module: c.multiqc_module,
-    multiqc_plot: c.multiqc_plot,
-    multiqc_dataset: c.multiqc_dataset,
+    // `|| null` normalizes `undefined` to an explicit null so the wire
+    // shape doesn't depend on JSON's `undefined`-stripping behavior.
+    selected_module: sel.module || null,
+    selected_plot: sel.plot || null,
+    selected_dataset: sel.dataset || null,
     s3_locations: c.s3_locations || [],
     is_general_stats: Boolean(c.is_general_stats),
   };
@@ -205,27 +237,67 @@ function buildImage(
   };
 }
 
-function buildMap(
+function buildText(
   state: BuilderState,
   base: StoredMetadata,
   existing: Record<string, unknown>,
 ): StoredMetadata {
   const c = as<{
+    title?: string;
+    order?: number | string;
+    alignment?: string;
+    body?: string;
+  }>(state.config);
+  return {
+    ...existing,
+    ...base,
+    // Text components are stand-alone — no workflow/DC binding. Ensure these
+    // are explicitly undefined even if `existing` had leftover values from a
+    // prior component reuse.
+    wf_id: undefined,
+    dc_id: undefined,
+    project_id: undefined,
+    title: c.title ?? '',
+    order: clampOrder(c.order ?? 1),
+    alignment:
+      c.alignment === 'center' || c.alignment === 'right' ? c.alignment : 'left',
+    body: c.body ?? '',
+  };
+}
+
+function buildMap(
+  state: BuilderState,
+  base: StoredMetadata,
+  existing: Record<string, unknown>,
+): StoredMetadata {
+  // Schema mirrors MapLiteComponent (depictio/models/components/lite.py) and
+  // what depictio/dash/modules/map_component/utils.py reads from trigger_data.
+  const c = as<{
     map_type?: string;
-    lat?: string;
-    lon?: string;
-    color?: string;
-    size?: string;
+    lat_column?: string;
+    lon_column?: string;
+    color_column?: string;
+    size_column?: string;
+    hover_columns?: string[];
+    map_style?: string;
+    opacity?: number;
+    selection_enabled?: boolean;
+    selection_column?: string;
     title?: string;
   }>(state.config);
   return {
     ...existing,
     ...base,
     map_type: c.map_type ?? 'scatter_map',
-    lat: c.lat,
-    lon: c.lon,
-    color: c.color,
-    size: c.size,
+    lat_column: c.lat_column,
+    lon_column: c.lon_column,
+    color_column: c.color_column,
+    size_column: c.size_column,
+    hover_columns: c.hover_columns ?? [],
+    map_style: c.map_style ?? 'carto-positron',
+    opacity: typeof c.opacity === 'number' ? c.opacity : 1.0,
+    selection_enabled: Boolean(c.selection_enabled),
+    selection_column: c.selection_column,
     title: c.title ?? '',
   };
 }

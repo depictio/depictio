@@ -7,6 +7,7 @@ import FigureRenderer from './FigureRenderer';
 import TableRenderer from './TableRenderer';
 import ImageRenderer from './ImageRenderer';
 import MapRenderer from './MapRenderer';
+import TextRenderer from './TextRenderer';
 import JBrowseRenderer from './JBrowseRenderer';
 import MultiQCRenderer from './MultiQCRenderer';
 import MultiSelectRenderer from './interactive/MultiSelectRenderer';
@@ -140,7 +141,14 @@ const ComponentRenderer: React.FC<ComponentRendererProps> = ({
   }
 
   if (metadata.component_type === 'figure' && dashboardId) {
-    const selectionEnabled = Boolean(metadata.selection_enabled) && !!onFilterChange;
+    // Only scatter / scatter_3d traces carry the per-row customdata we need
+    // for meaningful cross-filter selection. Aggregated visus (histogram,
+    // box, bar, pie, …) would emit per-bin envelopes — hide the reset
+    // affordance there too so chrome stays clean.
+    const isScatterLikeForSelection =
+      metadata.visu_type === 'scatter' || metadata.visu_type === 'scatter_3d';
+    const selectionEnabled =
+      Boolean(metadata.selection_enabled) && !!onFilterChange && isScatterLikeForSelection;
     const onResetSelection =
       selectionEnabled && onFilterChange
         ? () =>
@@ -150,6 +158,7 @@ const ComponentRenderer: React.FC<ComponentRendererProps> = ({
               source: 'scatter_selection',
             })
         : undefined;
+    const sourceFilterActive = isSourceFilterActive(filters, metadata.index, 'scatter_selection');
     return wrapWithChrome(
       'figure',
       metadata,
@@ -161,7 +170,7 @@ const ComponentRenderer: React.FC<ComponentRendererProps> = ({
         onFilterChange={onFilterChange}
         refreshTick={refreshTick}
       />,
-      { onResetFilter: onResetSelection, extraActions, showDragHandle },
+      { onResetFilter: onResetSelection, extraActions, showDragHandle, sourceFilterActive },
     );
   }
 
@@ -190,6 +199,7 @@ const ComponentRenderer: React.FC<ComponentRendererProps> = ({
               source: 'image_selection',
             })
         : undefined;
+    const sourceFilterActive = isSourceFilterActive(filters, metadata.index, 'image_selection');
     return wrapWithChrome(
       'image',
       metadata,
@@ -201,7 +211,7 @@ const ComponentRenderer: React.FC<ComponentRendererProps> = ({
         onFilterChange={onFilterChange}
         refreshTick={refreshTick}
       />,
-      { onResetFilter: onResetSelection, extraActions, showDragHandle },
+      { onResetFilter: onResetSelection, extraActions, showDragHandle, sourceFilterActive },
     );
   }
 
@@ -220,6 +230,7 @@ const ComponentRenderer: React.FC<ComponentRendererProps> = ({
               source: 'map_selection',
             })
         : undefined;
+    const sourceFilterActive = isSourceFilterActive(filters, metadata.index, 'map_selection');
     return wrapWithChrome(
       'map',
       metadata,
@@ -231,7 +242,7 @@ const ComponentRenderer: React.FC<ComponentRendererProps> = ({
         onFilterChange={onFilterChange}
         refreshTick={refreshTick}
       />,
-      { onResetFilter: onResetSelection, extraActions, showDragHandle },
+      { onResetFilter: onResetSelection, extraActions, showDragHandle, sourceFilterActive },
     );
   }
 
@@ -246,6 +257,16 @@ const ComponentRenderer: React.FC<ComponentRendererProps> = ({
         filters={filters}
         refreshTick={refreshTick}
       />,
+      { extraActions, showDragHandle },
+    );
+  }
+
+  if (metadata.component_type === 'text') {
+    return wrapWithChrome(
+      'text',
+      metadata,
+      undefined,
+      <TextRenderer metadata={metadata} />,
       { extraActions, showDragHandle },
     );
   }
@@ -308,6 +329,7 @@ const TableBlock: React.FC<{
           });
         }
       : undefined;
+  const sourceFilterActive = isSourceFilterActive(filters, metadata.index, 'table_selection');
   return wrapWithChrome(
     'table',
     metadata,
@@ -320,9 +342,35 @@ const TableBlock: React.FC<{
       onFilterChange={onFilterChange}
       refreshTick={refreshTick}
     />,
-    { agGridApiRef, onResetFilter: onResetSelection, extraActions, showDragHandle },
+    {
+      agGridApiRef,
+      onResetFilter: onResetSelection,
+      extraActions,
+      showDragHandle,
+      sourceFilterActive,
+    },
   );
 };
+
+/** A filter is "source-active" for this component when an entry exists with
+ *  matching `index`, the expected `source` discriminator, and a non-empty
+ *  value (avoid false-positives for filters that were emitted then cleared
+ *  but kept in the array with `value: []`). */
+function isSourceFilterActive(
+  filters: InteractiveFilter[],
+  componentIndex: string,
+  expectedSource: InteractiveFilter['source'],
+): boolean {
+  for (const f of filters) {
+    if (f.index !== componentIndex) continue;
+    if (f.source !== expectedSource) continue;
+    const v = f.value;
+    if (v == null) continue;
+    if (Array.isArray(v) && v.length === 0) continue;
+    return true;
+  }
+  return false;
+}
 
 const CardRenderer: React.FC<{
   metadata: StoredMetadata;

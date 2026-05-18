@@ -1,55 +1,26 @@
 import React from 'react';
-import { Anchor, Avatar, Button, Group, Loader, Text } from '@mantine/core';
+import { Avatar, Button, Group, Loader, Menu, Text, UnstyledButton } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
 import { useCurrentUser } from '../hooks/useCurrentUser';
+import { dispatchWalkthroughRestart } from '../walkthrough';
 
 /**
  * Profile badge — initials avatar + email-name for logged-in users; outlined
  * "Sign In" button otherwise. Mirrors the Dash sidebar footer avatar slot.
+ *
+ * Clicking the badge opens a small menu with "Profile" + "Take the tour"
+ * (the restart entry point for the walkthrough engine). For unauthenticated
+ * visitors the same menu lets them re-launch the explorer tour.
  */
 const ProfileBadge: React.FC = () => {
-  const { user, authMode, loading } = useCurrentUser();
+  const { user, authMode, isPublicMode, isDemoMode, loading } = useCurrentUser();
 
   if (loading) {
     return <Loader size="xs" />;
   }
 
-  if (authMode === 'single_user') {
-    return (
-      <Anchor
-        href="/profile-beta"
-        underline="never"
-        style={{ color: 'inherit' }}
-      >
-        <Group gap="xs" wrap="nowrap">
-          <Icon icon="mdi:account-circle-outline" width={18} />
-          <Text size="sm" c="dimmed">
-            Single user mode
-          </Text>
-        </Group>
-      </Anchor>
-    );
-  }
-
-  if (authMode === 'unauthenticated') {
-    return (
-      <Anchor
-        href="/profile-beta"
-        underline="never"
-        style={{ color: 'inherit' }}
-      >
-        <Group gap="xs" wrap="nowrap">
-          <Icon icon="mdi:incognito" width={18} />
-          <Text size="sm" c="dimmed">
-            Unauthenticated mode
-          </Text>
-        </Group>
-      </Anchor>
-    );
-  }
-
-  if (!user) {
+  if (!user && authMode === 'standard') {
     return (
       <Button
         component="a"
@@ -64,26 +35,81 @@ const ProfileBadge: React.FC = () => {
     );
   }
 
-  const localPart = user.email.split('@')[0] || user.email;
-  const initials = computeInitials(localPart);
+  const tourId: 'public' | 'builder' =
+    isPublicMode || isDemoMode ? 'public' : 'builder';
+  const tourLabel = tourId === 'public' ? 'Take the demo tour' : 'Take the builder tour';
 
   return (
-    <Anchor
-      href="/profile-beta"
-      underline="never"
-      style={{ color: 'inherit' }}
-    >
-      <Group gap="xs" wrap="nowrap">
-        <Avatar size="sm" radius="xl" color="blue">
-          {initials}
-        </Avatar>
-        <Text size="sm" truncate maw={120}>
-          {localPart}
-        </Text>
-      </Group>
-    </Anchor>
+    <Menu shadow="md" width={210} position="bottom-end" withArrow>
+      <Menu.Target>
+        <UnstyledButton style={{ color: 'inherit' }}>
+          {renderBadgeContent(user, authMode)}
+        </UnstyledButton>
+      </Menu.Target>
+      <Menu.Dropdown>
+        <Menu.Item
+          component="a"
+          href="/profile-beta"
+          leftSection={<Icon icon="mdi:account-circle-outline" width={16} />}
+        >
+          Profile
+        </Menu.Item>
+        <Menu.Item
+          leftSection={<Icon icon="mdi:compass-outline" width={16} />}
+          onClick={() => dispatchWalkthroughRestart(tourId)}
+        >
+          {tourLabel}
+        </Menu.Item>
+      </Menu.Dropdown>
+    </Menu>
   );
 };
+
+type BadgeUser = { email: string } | null;
+
+function renderBadgeContent(user: BadgeUser, authMode: string): React.ReactElement {
+  if (authMode === 'single_user') {
+    return (
+      <Group gap="xs" wrap="nowrap">
+        <Icon icon="mdi:account-circle-outline" width={18} />
+        <Text size="sm" c="dimmed">
+          Single user mode
+        </Text>
+      </Group>
+    );
+  }
+  if (authMode === 'unauthenticated') {
+    return (
+      <Group gap="xs" wrap="nowrap">
+        <Icon icon="mdi:incognito" width={18} />
+        <Text size="sm" c="dimmed">
+          Unauthenticated mode
+        </Text>
+      </Group>
+    );
+  }
+  if (!user) {
+    return (
+      <Group gap="xs" wrap="nowrap">
+        <Icon icon="mdi:account-circle-outline" width={18} />
+        <Text size="sm" c="dimmed">
+          Guest
+        </Text>
+      </Group>
+    );
+  }
+  const localPart = user.email.split('@')[0] || user.email;
+  return (
+    <Group gap="xs" wrap="nowrap">
+      <Avatar size="sm" radius="xl" color="blue">
+        {computeInitials(localPart)}
+      </Avatar>
+      <Text size="sm" truncate maw={120}>
+        {localPart}
+      </Text>
+    </Group>
+  );
+}
 
 function computeInitials(name: string): string {
   const cleaned = name.replace(/[^a-zA-Z0-9._-]/g, '');

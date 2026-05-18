@@ -452,6 +452,8 @@ async def get_current_user_info_optional(
         "is_demo_mode": getattr(settings.auth, "is_demo_mode", False),
         "unauthenticated_mode": getattr(settings.auth, "unauthenticated_mode", False),
         "google_oauth_enabled": settings.auth.google_oauth_enabled,
+        "temporary_user_expiry_hours": settings.auth.temporary_user_expiry_hours,
+        "temporary_user_expiry_minutes": settings.auth.temporary_user_expiry_minutes,
     }
 
 

@@ -180,13 +180,27 @@ export const TemplateChip: React.FC<{
   );
 
   return (
-    <Tooltip label={tooltipLabel} withArrow position="top">
+    <Tooltip
+      label={tooltipLabel}
+      withArrow
+      position="top"
+      withinPortal
+      // Delays let the cursor traverse from the chip to nearby UI without
+      // the tooltip thrashing; closeDelay > openDelay means the tip stays
+      // around long enough to read after a quick hover. The tooltip itself
+      // doesn't intercept clicks (events=false) — clicks always reach the
+      // underlying Anchor.
+      openDelay={150}
+      closeDelay={120}
+      events={{ hover: true, focus: true, touch: false }}
+    >
       <Anchor
         href={docsUrl}
         target="_blank"
         rel="noreferrer"
         underline="never"
         onClick={(e) => e.stopPropagation()}
+        style={{ display: 'inline-flex', alignItems: 'center' }}
       >
         {chip}
       </Anchor>

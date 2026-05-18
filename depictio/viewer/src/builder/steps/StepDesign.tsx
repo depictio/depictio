@@ -3,7 +3,7 @@
  * Used by both CreateComponentPage (final step) and EditComponentPage (only step).
  */
 import React, { useEffect, useMemo, useState } from 'react';
-import { Alert, Button, Group, Stack, Text, Title } from '@mantine/core';
+import { Alert, Button, Center, Stack, Text, Title } from '@mantine/core';
 import { Icon } from '@iconify/react';
 import { notifications } from '@mantine/notifications';
 import { fetchSpecs, upsertComponent } from 'depictio-react-core';
@@ -48,7 +48,9 @@ const StepDesign: React.FC = () => {
     if (!state.componentType) return false;
     if (!state.dashboardId || !state.componentId) return false;
     if (state.mode === 'create') {
-      if (!state.wfId || !state.dcId) return false;
+      // Text components are stand-alone — no workflow/DC binding required.
+      if (state.componentType !== 'text' && (!state.wfId || !state.dcId))
+        return false;
     }
     return true;
   }, [state]);
@@ -115,19 +117,24 @@ const StepDesign: React.FC = () => {
         </Alert>
       )}
 
-      <Group justify="flex-end" mt="md">
+      <Center mt="xl">
         <Button
-          leftSection={<Icon icon="mdi:content-save" width={16} />}
+          variant="filled"
+          color="green"
+          size="xl"
+          leftSection={<Icon icon="mdi:content-save" width={24} />}
           loading={state.saving}
           disabled={!ready || savedRedirect}
           onClick={handleSave}
+          style={{ height: 60, fontSize: 18, fontWeight: 700 }}
+          data-tour-id="component-save"
         >
           {state.mode === 'create' ? 'Create component' : 'Save changes'}
         </Button>
-      </Group>
+      </Center>
 
       {savedRedirect && (
-        <Text size="sm" c="dimmed" ta="right">
+        <Text size="sm" c="dimmed" ta="center">
           Redirecting…
         </Text>
       )}

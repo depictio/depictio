@@ -1,15 +1,24 @@
+import json
 import time
 from datetime import datetime, timedelta
 
 import jwt
 from beanie import PydanticObjectId
 from bson import ObjectId
+from fastapi import HTTPException
 from pydantic import validate_call
 
 from depictio.api.v1.configs.config import ALGORITHM, PRIVATE_KEY
 from depictio.api.v1.configs.logging_init import logger
 from depictio.models.models.base import PyObjectId, convert_objectid_to_str
-from depictio.models.models.users import Group, GroupBeanie, TokenData, UserBase, UserBeanie
+from depictio.models.models.users import (
+    Group,
+    GroupBeanie,
+    TokenBeanie,
+    TokenData,
+    UserBase,
+    UserBeanie,
+)
 
 
 def _dummy_mongodb_connection():
@@ -253,3 +262,35 @@ def update_group_in_users_helper(group_id: ObjectId, group_users: list[UserBase]
         "message": f"Updated group membership for users: {updated_users}",
         "updated_users": updated_users,
     }
+
+
+async def _get_admin_token_localstorage_payload() -> str:
+    """Return the JSON string that the frontend expects in `localStorage['local-store']`.
+
+    Used by the Playwright-driven screenshot endpoint and by the standalone
+    docs-screenshot CLI to inject admin auth into a fresh browser context.
+    """
+    admin_user = await UserBeanie.find_one({"email": "admin@example.com"})
+    if not admin_user:
+        raise HTTPException(status_code=404, detail="Admin user not found")
+
+    token = await TokenBeanie.find_one(
+        {
+            "user_id": admin_user.id,
+            "refresh_expire_datetime": {"$gt": datetime.now()},
+        }
+    )
+    if not token:
+        raise HTTPException(status_code=404, detail="Valid token not found")
+
+    token_data = token.model_dump(exclude_none=True)
+    token_data["_id"] = str(token_data.pop("id", None))
+    token_data["user_id"] = str(token_data["user_id"])
+    token_data["logged_in"] = True
+
+    if isinstance(token_data.get("expire_datetime"), datetime):
+        token_data["expire_datetime"] = token_data["expire_datetime"].strftime("%Y-%m-%d %H:%M:%S")
+    if isinstance(token_data.get("created_at"), datetime):
+        token_data["created_at"] = token_data["created_at"].strftime("%Y-%m-%d %H:%M:%S")
+
+    return json.dumps(token_data)

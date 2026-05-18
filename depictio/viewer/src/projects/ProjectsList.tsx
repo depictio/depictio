@@ -1,9 +1,10 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import {
-  Accordion,
-  Box,
+  Anchor,
+  Badge,
   Button,
   Center,
+  Group,
   Paper,
   Stack,
   Text,
@@ -14,30 +15,26 @@ import { Icon } from '@iconify/react';
 
 import type { ProjectListEntry } from 'depictio-react-core';
 
-import ProjectCard from './ProjectCard';
+import ProjectsToolbar from './ProjectsToolbar';
+import ProjectTableView from './views/ProjectTableView';
+import { useProjectViewPrefs } from './hooks/useProjectViewPrefs';
+import { useProjectPins } from './hooks/useProjectPins';
+import { parseTemplate } from './template';
 
 interface ProjectsListProps {
   projects: ProjectListEntry[];
   currentUserId: string | null;
   isAdmin: boolean;
   /** True in public/demo mode — keeps the empty-state Create Project button
-   *  visible but disabled, with a tooltip explaining why. */
+   *  visible but disabled, with a tooltip explaining why. Also disables the
+   *  pin button so anon visitors don't accumulate per-browser pins that
+   *  bleed across visitor sessions. */
   createDisabled: boolean;
   onCreateClick: () => void;
+  onView: (project: ProjectListEntry) => void;
   onEdit: (project: ProjectListEntry) => void;
   onDelete: (project: ProjectListEntry) => void;
 }
-
-/** Mirrors the Dash projects list layout: a column-header row above an
- *  accordion of project rows. Columns are: Project Type | Visibility |
- *  Permission | (template badge) | Project Name. Each column has a fixed
- *  width so the badges line up vertically across rows. */
-const COLUMN_HEADERS: Array<{ key: string; label: string; width: number }> = [
-  { key: 'type', label: 'Project Type', width: 100 },
-  { key: 'visibility', label: 'Visibility', width: 80 },
-  { key: 'permission', label: 'Permission', width: 80 },
-  { key: 'name', label: 'Project Name', width: 0 }, // 0 = flex
-];
 
 const ProjectsList: React.FC<ProjectsListProps> = ({
   projects,
@@ -45,9 +42,88 @@ const ProjectsList: React.FC<ProjectsListProps> = ({
   isAdmin,
   createDisabled,
   onCreateClick,
+  onView,
   onEdit,
   onDelete,
 }) => {
+  const { prefs, setSearch, setFilters, setOnlyPinned, clearFilters } =
+    useProjectViewPrefs();
+  const { pinnedIds, togglePin } = useProjectPins();
+
+  // Template-source options for the filter popover — derived from the loaded
+  // projects so the dropdown only offers sources actually present.
+  const templateSourceOptions = useMemo(() => {
+    const set = new Set<string>();
+    for (const p of projects) {
+      const t = parseTemplate(p);
+      if (t?.source) set.add(t.source);
+    }
+    return Array.from(set)
+      .sort()
+      .map((s) => ({ value: s, label: s }));
+  }, [projects]);
+
+  // Pipeline: search → filters → onlyPinned → split into sections.
+  const filtered = useMemo(() => {
+    const q = prefs.search.trim().toLowerCase();
+    return projects.filter((p) => {
+      if (q) {
+        const owner = p.permissions?.owners?.[0]?.email ?? '';
+        const tmpl = parseTemplate(p);
+        const haystack = [
+          p.name,
+          owner,
+          tmpl?.full ?? '',
+          tmpl?.source ?? '',
+          tmpl?.repo ?? '',
+        ]
+          .join(' ')
+          .toLowerCase();
+        if (!haystack.includes(q)) return false;
+      }
+      if (prefs.filters.types.length > 0) {
+        const t = p.project_type === 'advanced' ? 'advanced' : 'basic';
+        if (!prefs.filters.types.includes(t)) return false;
+      }
+      if (prefs.filters.visibility === 'public' && !p.is_public) return false;
+      if (prefs.filters.visibility === 'private' && p.is_public) return false;
+      if (prefs.filters.templateSources.length > 0) {
+        const t = parseTemplate(p);
+        if (!t || !prefs.filters.templateSources.includes(t.source)) return false;
+      }
+      if (prefs.onlyPinned) {
+        const id = String(p._id ?? p.id ?? '');
+        if (!pinnedIds.has(id)) return false;
+      }
+      return true;
+    });
+  }, [projects, prefs, pinnedIds]);
+
+  // Pinned-first ordering: pinned rows float to the top of the table while
+  // the rest preserve API order. Keeps a single flat table (per the user's
+  // ask to drop collapsible sections) without losing the pin affordance.
+  const ordered = useMemo<ProjectListEntry[]>(() => {
+    const pinned: ProjectListEntry[] = [];
+    const rest: ProjectListEntry[] = [];
+    for (const p of filtered) {
+      const id = String(p._id ?? p.id ?? '');
+      if (pinnedIds.has(id)) pinned.push(p);
+      else rest.push(p);
+    }
+    return [...pinned, ...rest];
+  }, [filtered, pinnedIds]);
+
+  const pinnedCount = useMemo(
+    () =>
+      filtered.reduce(
+        (n, p) => (pinnedIds.has(String(p._id ?? p.id ?? '')) ? n + 1 : n),
+        0,
+      ),
+    [filtered, pinnedIds],
+  );
+
+  // Bare empty state when there are no projects at all (independent of
+  // search/filter). Mirrors the previous ProjectsList empty-state card.
   if (projects.length === 0) {
     return (
       <Center mih={400}>
@@ -89,84 +165,76 @@ const ProjectsList: React.FC<ProjectsListProps> = ({
     );
   }
 
+  const noResults =
+    filtered.length === 0 &&
+    (prefs.search.trim().length > 0 ||
+      prefs.filters.types.length > 0 ||
+      prefs.filters.visibility !== 'all' ||
+      prefs.filters.templateSources.length > 0 ||
+      prefs.onlyPinned);
+
   return (
-    <Stack gap="xs">
-      {/* Column header row — sits above the accordion. Padding mirrors the
-       *  Accordion.Control inner padding so each header aligns with the
-       *  matching cell below. */}
-      <Box px="md" py={2}>
-        <ColumnHeaderRow />
-      </Box>
-      <Accordion
-        multiple
-        variant="default"
-        chevronPosition="right"
-        styles={{
-          item: {
-            borderTop: '1px solid var(--mantine-color-default-border)',
-            background: 'var(--mantine-color-body)',
-            marginBottom: 0,
-            borderRadius: 0,
-          },
-          control: {
-            paddingTop: 0,
-            paddingBottom: 0,
-            paddingLeft: 16,
-            paddingRight: 16,
-            minHeight: 40,
-          },
-          panel: {
-            paddingLeft: 16,
-            paddingRight: 16,
-          },
-        }}
-      >
-        {projects.map((p) => (
-          <ProjectCard
-            key={(p._id ?? p.id) as string}
-            project={p}
-            currentUserId={currentUserId}
-            isAdmin={isAdmin}
-            onEdit={onEdit}
-            onDelete={onDelete}
-          />
-        ))}
-      </Accordion>
+    <Stack gap="md">
+      <ProjectsToolbar
+        prefs={prefs}
+        templateSourceOptions={templateSourceOptions}
+        pinnedCount={pinnedCount}
+        pinDisabled={createDisabled}
+        setSearch={setSearch}
+        setFilters={setFilters}
+        setOnlyPinned={setOnlyPinned}
+        clearFilters={clearFilters}
+      />
+
+      {createDisabled && (
+        <Paper p="xs" radius="md" withBorder>
+          <Group gap="xs">
+            <Icon icon="mdi:information-outline" width={16} />
+            <Text size="sm" c="dimmed">
+              Pinning is disabled in public mode.
+            </Text>
+          </Group>
+        </Paper>
+      )}
+
+      {noResults ? (
+        <Paper p="xl" radius="md" withBorder>
+          <Stack align="center" gap="sm">
+            <Icon
+              icon="mdi:magnify-close"
+              width={36}
+              color="var(--mantine-color-dimmed)"
+            />
+            <Text fw={500}>No projects match your search</Text>
+            <Text size="sm" c="dimmed">
+              Try a different keyword or
+              <Anchor component="button" onClick={clearFilters} ml={4}>
+                clear filters
+              </Anchor>
+              .
+            </Text>
+            {prefs.search && (
+              <Badge variant="light" color="gray">
+                Searched: <strong>"{prefs.search}"</strong>
+              </Badge>
+            )}
+          </Stack>
+        </Paper>
+      ) : (
+        <ProjectTableView
+          projects={ordered}
+          currentUserId={currentUserId}
+          isAdmin={isAdmin}
+          pinnedIds={pinnedIds}
+          pinDisabled={createDisabled}
+          onView={onView}
+          onEdit={onEdit}
+          onDelete={onDelete}
+          onTogglePin={togglePin}
+        />
+      )}
     </Stack>
   );
 };
-
-const ColumnHeaderRow: React.FC = () => (
-  <Box
-    style={{
-      display: 'flex',
-      alignItems: 'center',
-      gap: 12,
-    }}
-  >
-    {COLUMN_HEADERS.map((col) => {
-      const isFlex = col.width === 0;
-      return (
-        <Text
-          key={col.key}
-          size="xs"
-          fw={600}
-          c="dimmed"
-          tt="capitalize"
-          // Center the fixed-width badge columns so the badges below them
-          // line up under their label. The flexible name column stays
-          // left-aligned to read as a continuation of the project title.
-          ta={isFlex ? 'left' : 'center'}
-          style={{
-            width: isFlex ? undefined : col.width,
-            flex: isFlex ? 1 : undefined,
-          }}
-        >
-          {col.label}
-        </Text>
-      );
-    })}
-  </Box>
-);
 
 export default ProjectsList;

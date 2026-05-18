@@ -8,7 +8,7 @@ from uuid import UUID
 import yaml
 from bson import ObjectId
 from fastapi import APIRouter, Body, Depends, HTTPException
-from fastapi.responses import Response
+from fastapi.responses import JSONResponse, Response
 
 from depictio.api.v1.celery_dispatch import offload_or_run
 from depictio.api.v1.celery_tasks import build_figure_preview as build_figure_preview_task
@@ -240,7 +240,7 @@ async def get_dashboard(
     # multiple users don't pile up real work — they each enqueue a task that
     # mostly no-ops. Cold viewer load drops from ~14 s to <1 s once warm.
     has_multiqc = any(
-        m.get("component_type") == "multiqc" for m in (dashboard_data.get("stored_metadata") or [])
+        m.get("component_type") == "multiqc" for m in (dashboard_dict.get("stored_metadata") or [])
     )
     if has_multiqc:
         try:
@@ -2548,6 +2548,72 @@ async def render_jbrowse_endpoint(
 # ============================================================================
 
 
+def _resolve_selected_keys(component: dict) -> tuple[str | None, str | None, str | None, bool]:
+    """Read MultiQC cascade pick (`selected_*`) with legacy `multiqc_*` fallback.
+
+    Components saved before the React builder rename
+    (depictio/viewer/src/builder/buildMetadata.ts → buildMultiqc) still carry
+    the old key names. ``is_general_stats`` is the canonical GS marker, but
+    older components may have only the cascade pick — cover both.
+    """
+    module = component.get("selected_module") or component.get("multiqc_module")
+    plot = component.get("selected_plot") or component.get("multiqc_plot")
+    dataset = component.get("selected_dataset") or component.get("multiqc_dataset")
+    is_gs = (
+        module == "general_stats"
+        or plot == "general_stats"
+        or bool(component.get("is_general_stats"))
+    )
+    return module, plot, dataset, is_gs
+
+
+def _empty_gs_stub_figure(
+    selected_module: str | None,
+    selected_plot: str | None,
+    selected_dataset: str | None,
+) -> dict:
+    """Empty-figure stub returned when /render_multiqc is hit for a General
+    Stats component. The FE dispatcher should route GS to
+    /render_multiqc_general_stats, but a stale browser bundle can land here;
+    this stub avoids 500'ing on the impossible
+    ``multiqc.get_plot("general_stats", ...)`` call.
+    """
+    return {
+        "figure": {
+            "data": [],
+            "layout": {
+                "annotations": [
+                    {
+                        "text": (
+                            "General Statistics view — please refresh the page "
+                            "(Cmd/Ctrl+Shift+R) so the dashboard router picks up "
+                            "the latest viewer bundle."
+                        ),
+                        "showarrow": False,
+                        "x": 0.5,
+                        "y": 0.5,
+                        "xref": "paper",
+                        "yref": "paper",
+                        "font": {"size": 13},
+                        "align": "center",
+                    }
+                ],
+                "xaxis": {"visible": False},
+                "yaxis": {"visible": False},
+                "margin": {"l": 20, "r": 20, "t": 20, "b": 20},
+            },
+        },
+        "metadata": {
+            "module": selected_module,
+            "plot": selected_plot,
+            "dataset_id": selected_dataset,
+            "filter_applied": False,
+            "selected_sample_count": None,
+            "is_general_stats_stub": True,
+        },
+    }
+
+
 def _resolve_multiqc_sample_filter(
     dashboard_data: dict,
     component: dict,
@@ -2558,7 +2624,13 @@ def _resolve_multiqc_sample_filter(
     Mirrors the simple branch of ``patch_multiqc_plot_with_interactive_filtering``:
       - filters on the MultiQC DC's own ``sample`` column → values used directly
       - filters on a different metadata DC → load the metadata DC with the
-        filters applied, take unique values of its ``sample`` column
+        filters applied, then extract the join column. The join column name is
+        looked up from the project's ``DCLink`` (``link.source_column``) when
+        defined; otherwise falls back to the first match in
+        (``sample``, ``sample_id``, ``sample_name``).
+      - if the link has resolver ``sample_mapping``, the canonical IDs from the
+        metadata DC are expanded into MultiQC sample variants using the live
+        ``sample_mappings`` from the multiqc reports.
 
     Returns an empty list when no resolvable filters are present. Logs but does
     not raise on metadata-DC load failures.
@@ -2576,6 +2648,13 @@ def _resolve_multiqc_sample_filter(
     }
 
     metadata_dc_id: str | None = None
+    # Track the metadata DC's own workflow id — load_deltatable_lite needs the
+    # workflow that owns the metadata DC, not the multiqc component's workflow,
+    # because real projects often have the metadata table on a different
+    # workflow than the multiqc report. Falls back to the multiqc component's
+    # `wf_id` only if the interactive component's stored_metadata doesn't
+    # carry one (legacy components).
+    metadata_wf_id: object | None = None
     direct_sample_values: list[str] = []
     indirect_filter_metadata: list[dict] = []
 
@@ -2596,6 +2675,7 @@ def _resolve_multiqc_sample_filter(
         if comp_dc and comp_dc != multiqc_dc_id_str:
             if metadata_dc_id is None:
                 metadata_dc_id = comp_dc
+                metadata_wf_id = comp_meta.get("wf_id") or comp_meta.get("workflow_id") or wf_id
             if comp_dc == metadata_dc_id:
                 indirect_filter_metadata.append(
                     {
@@ -2606,25 +2686,99 @@ def _resolve_multiqc_sample_filter(
                     }
                 )
 
-    selected_samples: list[str] = list(direct_sample_values)
+    # Pull live sample_mappings from the MultiQC reports so canonical IDs
+    # (e.g. ``NA12878``) get expanded into the variant names that actually
+    # appear in plot traces (``NA12878_R1``, ``NA12878_R2``). Mirrors the Dash
+    # flow which calls ``expand_canonical_samples_to_variants`` unconditionally.
+    sample_mappings: dict[str, list[str]] = {}
+    try:
+        from depictio.api.v1.db import multiqc_collection as _mc
+
+        for rep in _mc.find(
+            {"data_collection_id": multiqc_dc_id_str},
+            {"metadata.sample_mappings": 1},
+        ):
+            m = (rep.get("metadata") or {}).get("sample_mappings") or {}
+            for k, vlist in m.items():
+                bucket = sample_mappings.setdefault(str(k), [])
+                for v in vlist:
+                    sv = str(v)
+                    if sv not in bucket:
+                        bucket.append(sv)
+    except Exception as e:
+        logger.debug(f"_resolve_multiqc_sample_filter: sample_mappings fetch failed: {e}")
+
+    from depictio.dash.modules.multiqc_component.callbacks.core import (
+        expand_canonical_samples_to_variants,
+    )
+
+    selected_samples: list[str] = (
+        expand_canonical_samples_to_variants(
+            list(dict.fromkeys(direct_sample_values)), sample_mappings
+        )
+        if direct_sample_values
+        else []
+    )
 
     if metadata_dc_id and indirect_filter_metadata:
+        from depictio.api.v1.db import projects_collection
         from depictio.api.v1.deltatables_utils import load_deltatable_lite
 
+        # Cross-DC filtering requires an explicit DCLink (metadata_dc_id →
+        # multiqc_dc_id). Without one we don't guess at conventional join-
+        # column names — silently auto-mapping `sample` / `sample_id` /
+        # `sample_name` produced surprising filter behavior when the user
+        # hadn't declared the relationship. Bail with a clear log line so the
+        # user can see why filtering didn't apply and create a link.
+        link_source_column: str | None = None
         try:
+            project_id = dashboard_data.get("project_id")
+            if project_id:
+                project_doc = projects_collection.find_one({"_id": ObjectId(str(project_id))})
+                for lk in (project_doc or {}).get("links", []) or []:
+                    if (
+                        str(lk.get("source_dc_id")) == str(metadata_dc_id)
+                        and str(lk.get("target_dc_id")) == multiqc_dc_id_str
+                        and lk.get("enabled", True)
+                    ):
+                        link_source_column = lk.get("source_column")
+                        break
+        except Exception as e:
+            logger.debug(f"_resolve_multiqc_sample_filter: project link lookup failed: {e}")
+
+        if not link_source_column:
+            logger.info(
+                f"_resolve_multiqc_sample_filter: no enabled DCLink from "
+                f"{metadata_dc_id} → {multiqc_dc_id_str}; cross-DC filter ignored. "
+                f"Create a link with the correct source_column to enable filtering."
+            )
+            return list(dict.fromkeys(selected_samples))
+
+        try:
+            wfid = metadata_wf_id or wf_id
             meta_df = load_deltatable_lite(
-                workflow_id=ObjectId(str(wf_id)) if not isinstance(wf_id, ObjectId) else wf_id,
+                workflow_id=ObjectId(str(wfid)) if not isinstance(wfid, ObjectId) else wfid,
                 data_collection_id=str(metadata_dc_id),
                 metadata=indirect_filter_metadata,
             )
             if meta_df is not None and not meta_df.is_empty():
-                if "sample" in meta_df.columns:
-                    selected_samples.extend(str(s) for s in meta_df["sample"].unique().to_list())
-                else:
+                if link_source_column not in meta_df.columns:
                     logger.warning(
-                        f"_resolve_multiqc_sample_filter: metadata DC {metadata_dc_id} has no "
-                        f"'sample' column; columns={meta_df.columns}"
+                        f"_resolve_multiqc_sample_filter: link.source_column "
+                        f"{link_source_column!r} not in metadata DC {metadata_dc_id}; "
+                        f"available columns={meta_df.columns}"
                     )
+                else:
+                    canonical = [str(s) for s in meta_df[link_source_column].unique().to_list()]
+                    # Always run the canonical→variants expansion. When no
+                    # mappings are available, this returns canonical unchanged.
+                    expanded = expand_canonical_samples_to_variants(canonical, sample_mappings)
+                    logger.debug(
+                        f"_resolve_multiqc_sample_filter: dc={metadata_dc_id} "
+                        f"join_col={link_source_column!r} canonical={len(canonical)} "
+                        f"expanded={len(expanded)} mappings_keys={len(sample_mappings)}"
+                    )
+                    selected_samples.extend(expanded)
         except Exception as e:
             logger.warning(
                 f"_resolve_multiqc_sample_filter: filter resolution on DC {metadata_dc_id} "
@@ -2681,27 +2835,32 @@ def render_multiqc_endpoint(
             status_code=404, detail=f"MultiQC component '{component_id}' not found."
         )
 
-    selected_module = component.get("selected_module")
-    selected_plot = component.get("selected_plot")
-    selected_dataset = component.get("selected_dataset")
-    s3_locations = component.get("s3_locations") or []
+    selected_module, selected_plot, selected_dataset, is_gs = _resolve_selected_keys(component)
 
     dc_id = component.get("dc_id") or component.get("data_collection_id")
 
-    # Direct MongoDB lookup via the process-agnostic helper. It covers both:
+    # Prefer live MongoDB resolution when dc_id is known so append/replace
+    # mutations are picked up immediately (the component's stored snapshot
+    # `s3_locations` goes stale otherwise — that's what made the figure
+    # cache hash the wrong file set after a manage operation). Live lookup
+    # covers:
     # (1) project_doc.workflows[].data_collections[].config.dc_specific_properties.s3_location
     # (2) multiqc_collection (deployed reports), queried by data_collection_id.
-    # No HTTP loop-back, no token needed — both Dash's restore path and this
-    # API route share the same resolution.
-    if not s3_locations and dc_id:
+    # If live returns empty (e.g. YAML-imported example dashboards whose DC
+    # has no per-report rows yet), fall back to the stored snapshot rather
+    # than 400'ing the render — the snapshot is the only source then.
+    s3_locations = component.get("s3_locations") or []
+    if dc_id:
         from depictio.dash.modules.multiqc_component.models import _fetch_s3_locations_from_dc
 
-        s3_locations = _fetch_s3_locations_from_dc(str(dc_id), str(project_id))
+        live_locations = _fetch_s3_locations_from_dc(str(dc_id), str(project_id))
         logger.info(
             f"render_multiqc: _fetch_s3_locations_from_dc"
             f"(dc={dc_id!s}, project={project_id!s})"
-            f" → {len(s3_locations)} s3_location(s)"
+            f" → {len(live_locations)} s3_location(s)"
         )
+        if live_locations:
+            s3_locations = live_locations
 
     if not selected_module or not selected_plot or not s3_locations:
         missing = []
@@ -2721,6 +2880,9 @@ def render_multiqc_endpoint(
             detail=f"MultiQC component is missing: {', '.join(missing)}.",
         )
 
+    if is_gs:
+        return _empty_gs_stub_figure(selected_module, selected_plot, selected_dataset)
+
     import plotly.io as pio
 
     if "mantine_light" not in pio.templates or "mantine_dark" not in pio.templates:
@@ -2738,6 +2900,7 @@ def render_multiqc_endpoint(
 
     from depictio.api.cache import get_cache
     from depictio.dash.modules.figure_component.multiqc_vis import (
+        MULTIQC_CACHE_TTL_SECONDS,
         create_multiqc_plot,
         generate_figure_cache_key,
     )
@@ -2781,32 +2944,140 @@ def render_multiqc_endpoint(
             selected_dataset,
             theme,
             filter_sig=version_filter_sig,
+            dc_id=str(dc_id) if dc_id else None,
         )
 
         t1 = _time.perf_counter()
         cached = cache.get(filter_aware_key)
         timings["cache_get_ms"] = (_time.perf_counter() - t1) * 1000
         cache_hit = cached is not None
+        # Tracks which layer served this request for the TIMING log line.
+        # Possible values: ``redis_filter`` (filter-aware Redis), ``redis_bare``
+        # (Phase 1 bare key), ``disk`` (Phase 2 prerender file), ``build``
+        # (slow fallback through ``create_multiqc_plot``).
+        hit_kind = "redis_filter" if cache_hit else "miss"
+
+        # Cold-start / lock-busy guard: figure cache miss is OK — we'll try
+        # bare Redis and then disk below. But if neither layer holds this
+        # DC's figures (true cold start), falling through to
+        # ``create_multiqc_plot`` would block this request thread on
+        # ``_multiqc_lock`` for the full 30-75s parse+build. Return 202
+        # immediately so the React poll loop picks up each figure as the
+        # build task writes it to disk.
+        #
+        # Phase 2: the "is this DC primed?" check is the prerender ledger.
+        # status=="ready" means the build task has written this DC's figures
+        # to disk — fall through and let the disk-read step below serve the
+        # specific figure. Otherwise enqueue ``build_multiqc_prerender`` and
+        # 202; the task's own ``set_nx`` lock dedups racing render requests.
+        if cached is None and dc_id:
+            from depictio.api.v1.db import multiqc_prerender_collection
+
+            prerender_doc = multiqc_prerender_collection.find_one(
+                {"dc_id": str(dc_id)}, {"status": 1}
+            )
+            prerender_ready = bool(prerender_doc and prerender_doc.get("status") == "ready")
+
+            build_lock_key = f"multiqc:prerender_build_lock:dc={dc_id}"
+            build_running = cache.get(build_lock_key) is not None
+
+            if not prerender_ready or build_running:
+                if not build_running:
+                    from depictio.dash.celery_app import build_multiqc_prerender
+
+                    try:
+                        build_multiqc_prerender.delay(str(dc_id))
+                        logger.info(
+                            f"render_multiqc cid={component_id} dc={dc_id}: cold cache "
+                            f"→ enqueued build_multiqc_prerender({dc_id})"
+                        )
+                    except Exception as exc:
+                        logger.warning(
+                            f"render_multiqc: failed to enqueue build task for dc={dc_id}: {exc}"
+                        )
+                return JSONResponse(
+                    status_code=202,
+                    content={
+                        "status": "preparing",
+                        "dc_id": str(dc_id),
+                        "component_id": component_id,
+                        "message": "MultiQC figures are being prepared.",
+                    },
+                )
 
         if cached is not None:
             fig_dict = cached
         else:
-            t2 = _time.perf_counter()
-            fig = create_multiqc_plot(
-                s3_locations=s3_locations,
-                module=selected_module,
-                plot=selected_plot,
-                dataset_id=selected_dataset,
-                theme=theme,
+            # Fast-path: probe the bare (filter-less, version-less) cache
+            # key written by ``create_multiqc_plot``. The prewarm task
+            # already wrote there, so a hit lets us skip ``create_multiqc_plot``
+            # entirely — which would otherwise reconstruct a ``go.Figure``
+            # from the cached dict (~1.4s on big figures because Plotly's
+            # constructor validates every trace) and then ``to_json`` it
+            # right back. We just want the dict.
+            bare_key = generate_figure_cache_key(
+                s3_locations,
+                selected_module,
+                selected_plot,
+                selected_dataset,
+                theme,
+                dc_id=str(dc_id) if dc_id else None,
             )
-            timings["create_plot_ms"] = (_time.perf_counter() - t2) * 1000
+            t_bare = _time.perf_counter()
+            bare_cached = cache.get(bare_key)
+            timings["bare_get_ms"] = (_time.perf_counter() - t_bare) * 1000
 
-            t3 = _time.perf_counter()
-            if hasattr(fig, "to_json"):
-                fig_dict = json.loads(fig.to_json())
+            if bare_cached is not None:
+                fig_dict = bare_cached
+                timings["create_plot_ms"] = 0.0
+                timings["to_json_ms"] = 0.0
+                hit_kind = "redis_bare"
             else:
-                fig_dict = fig
-            timings["to_json_ms"] = (_time.perf_counter() - t3) * 1000
+                # Phase 2: try the disk-persistent prerender store before
+                # falling through to the slow build path. A hit here means
+                # Redis was cold (FLUSHALL, eviction, container restart) but
+                # the build task previously wrote this figure to disk — we
+                # just read it, opportunistically warm the bare Redis key so
+                # subsequent requests are even faster, and skip the 76s
+                # parse+build entirely.
+                disk_dict: dict | None = None
+                if dc_id:
+                    from depictio.api.v1.services import multiqc_prerender_store
+
+                    t_disk = _time.perf_counter()
+                    disk_dict = multiqc_prerender_store.read_figure(str(dc_id), bare_key)
+                    timings["disk_get_ms"] = (_time.perf_counter() - t_disk) * 1000
+
+                if disk_dict is not None:
+                    fig_dict = disk_dict
+                    timings["create_plot_ms"] = 0.0
+                    timings["to_json_ms"] = 0.0
+                    hit_kind = "disk"
+                    try:
+                        cache.set(bare_key, fig_dict, ttl=MULTIQC_CACHE_TTL_SECONDS)
+                    except Exception as cache_err:
+                        logger.warning(
+                            f"render_multiqc: bare cache warm-from-disk failed: {cache_err}"
+                        )
+                else:
+                    t2 = _time.perf_counter()
+                    fig = create_multiqc_plot(
+                        s3_locations=s3_locations,
+                        module=selected_module,
+                        plot=selected_plot,
+                        dataset_id=selected_dataset,
+                        theme=theme,
+                        dc_id=str(dc_id) if dc_id else None,
+                    )
+                    timings["create_plot_ms"] = (_time.perf_counter() - t2) * 1000
+
+                    t3 = _time.perf_counter()
+                    if hasattr(fig, "to_json"):
+                        fig_dict = json.loads(fig.to_json())
+                    else:
+                        fig_dict = fig
+                    timings["to_json_ms"] = (_time.perf_counter() - t3) * 1000
+                    hit_kind = "build"
 
             if isinstance(fig_dict, dict) and "layout" in fig_dict:
                 fig_dict["layout"].setdefault("uirevision", "persistent")
@@ -2827,7 +3098,7 @@ def render_multiqc_endpoint(
 
             try:
                 t5 = _time.perf_counter()
-                cache.set(filter_aware_key, fig_dict, ttl=7200)
+                cache.set(filter_aware_key, fig_dict, ttl=MULTIQC_CACHE_TTL_SECONDS)
                 timings["cache_set_ms"] = (_time.perf_counter() - t5) * 1000
             except Exception as cache_err:
                 logger.warning(f"render_multiqc: cache.set failed: {cache_err}")
@@ -2835,7 +3106,7 @@ def render_multiqc_endpoint(
         timings["total_ms"] = (_time.perf_counter() - t0) * 1000
         timings_str = " ".join(f"{k}={v:.1f}" for k, v in timings.items())
         logger.info(
-            f"TIMING render_multiqc cid={component_id} hit={cache_hit} "
+            f"TIMING render_multiqc cid={component_id} hit={hit_kind} "
             f"filter={'y' if filter_applied else 'n'} {timings_str}"
         )
 
@@ -2898,10 +3169,18 @@ def render_multiqc_general_stats_endpoint(
     s3_locations = component.get("s3_locations") or []
     dc_id = component.get("dc_id") or component.get("data_collection_id")
 
-    if not s3_locations and dc_id:
+    # Prefer live MongoDB resolution (same fix as render_multiqc): the
+    # component's stored snapshot goes stale after append/replace and would
+    # otherwise feed a stale path into the GS payload cache key. Fall back
+    # to the snapshot only if the live lookup returns empty (covers
+    # YAML-imported example dashboards without per-report rows in
+    # multiqc_collection).
+    if dc_id:
         from depictio.dash.modules.multiqc_component.models import _fetch_s3_locations_from_dc
 
-        s3_locations = _fetch_s3_locations_from_dc(str(dc_id), str(project_id))
+        live_locations = _fetch_s3_locations_from_dc(str(dc_id), str(project_id))
+        if live_locations:
+            s3_locations = live_locations
 
     if not s3_locations:
         raise HTTPException(
@@ -2940,6 +3219,7 @@ def render_multiqc_general_stats_endpoint(
     try:
         from depictio.api.cache import get_cache
         from depictio.dash.modules.figure_component.multiqc_vis import (
+            MULTIQC_CACHE_TTL_SECONDS,
             _get_local_path_for_s3,
         )
         from depictio.dash.modules.multiqc_component.callbacks.core import (
@@ -2950,7 +3230,6 @@ def render_multiqc_general_stats_endpoint(
         )
 
         normalized = _normalize_multiqc_paths(s3_locations)
-        raw_path = normalized[0] if normalized else s3_locations[0]
 
         # React-side cache key — distinct from Dash's `multiqc:gs:` so the two
         # callers don't trample each other's payload shape. Filter signature is
@@ -2959,8 +3238,21 @@ def render_multiqc_general_stats_endpoint(
         # filesystem stat on every request (even cache hits) and any S3-cache
         # refresh cold-evicted the payload. TTL handles invalidation.
         filter_sig = "|".join(sorted(selected_samples)) if selected_samples else "all"
-        cache_key_str = f"{raw_path}::{filter_sig}::general_stats_payload"
-        cache_key = f"multiqc:gs_payload:{hashlib.sha256(cache_key_str.encode()).hexdigest()[:16]}"
+        # Cover the FULL sorted s3_locations set in the key, not just
+        # `raw_path` (= s3_locations[0]). Append-only mutations can leave
+        # `[0]` pointing at the same parquet → key wouldn't change → stale
+        # payload returned even after the figure cache (which keys on the
+        # full sorted list) correctly invalidates. Same shape as
+        # `_generate_figure_cache_key`.
+        all_paths = "|".join(sorted(s3_locations))
+        cache_key_str = f"{all_paths}::{filter_sig}::general_stats_payload"
+        # Embed `dc=<id>` literally so the same `cache.delete_pattern(f"dc={dc_id}")`
+        # invalidation that the figure cache uses also drops every GS payload
+        # variant (theme/filter) for this DC after append/replace/clear.
+        cache_key = (
+            f"multiqc:gs_payload:dc={str(dc_id) if dc_id else 'none'}:"
+            f"{hashlib.sha256(cache_key_str.encode()).hexdigest()[:16]}"
+        )
 
         cache = get_cache()
         _t_get0 = _time.perf_counter()
@@ -2977,9 +3269,13 @@ def render_multiqc_general_stats_endpoint(
             return cached
 
         _t_build0 = _time.perf_counter()
-        parquet_path = _get_local_path_for_s3(raw_path)
+        # Pass every parquet, not just `raw_path`, so the GS table aggregates
+        # samples across all reports in the DC. `_get_local_path_for_s3`
+        # short-circuits on already-cached files, so the per-call cost is
+        # cheap once the local cache is warm.
+        parquet_paths = [_get_local_path_for_s3(p) for p in normalized]
         payload = build_general_stats_payload(
-            parquet_path=parquet_path,
+            parquet_path=parquet_paths,
             show_hidden=show_hidden,
             selected_samples=selected_samples or None,
         )
@@ -2990,7 +3286,7 @@ def render_multiqc_general_stats_endpoint(
 
         try:
             _t_set0 = _time.perf_counter()
-            cache.set(cache_key, payload, ttl=7200)
+            cache.set(cache_key, payload, ttl=MULTIQC_CACHE_TTL_SECONDS)
             timings["cache_set_ms"] = (_time.perf_counter() - _t_set0) * 1000
         except Exception as cache_err:
             logger.warning(f"render_multiqc_general_stats: cache.set failed: {cache_err}")

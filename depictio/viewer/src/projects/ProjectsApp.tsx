@@ -150,6 +150,11 @@ const ProjectsApp: React.FC = () => {
     [refresh],
   );
 
+  const handleView = useCallback((project: ProjectListEntry) => {
+    const projectId = (project._id ?? project.id) as string;
+    if (projectId) window.location.assign(`/projects-beta/${projectId}`);
+  }, []);
+
   const handleDelete = useCallback(
     async (projectId: string) => {
       await apiDeleteProject(projectId);
@@ -204,7 +209,7 @@ const ProjectsApp: React.FC = () => {
               width={22}
               color="var(--mantine-color-teal-6)"
             />
-            <Title order={3} c="teal">
+            <Title order={3} c="teal" data-tour-id="projects-header">
               Projects
             </Title>
           </Group>
@@ -225,6 +230,7 @@ const ProjectsApp: React.FC = () => {
               disabled={isPublic}
               data-disabled={isPublic ? true : undefined}
               style={{ fontFamily: 'Virgil' }}
+              data-tour-id="projects-create"
             >
               + New Project
             </Button>
@@ -263,6 +269,7 @@ const ProjectsApp: React.FC = () => {
               isAdmin={Boolean(user?.is_admin)}
               createDisabled={isPublic}
               onCreateClick={openCreate}
+              onView={handleView}
               onEdit={(p) => setEditTarget(p)}
               onDelete={(p) => setDeleteTarget(p)}
             />

@@ -16,6 +16,7 @@ import {
   fetchDashboard,
   fetchAllDashboards,
   bulkComputeCards,
+  AvailableFilterValuesProvider,
   ComponentRenderer,
   DashboardGrid,
   InteractiveGroupCard,
@@ -29,6 +30,7 @@ import {
 } from 'depictio-react-core';
 import type {
   DashboardData,
+  DashboardPermissions,
   DashboardSummary,
   InteractiveFilter,
   RealtimeMode,
@@ -36,12 +38,9 @@ import type {
 import { notifications } from '@mantine/notifications';
 import { Header, Sidebar, SettingsDrawer } from './chrome';
 import { useSidebarOpen } from './hooks/useSidebarOpen';
-import { useAuthMode } from './auth/hooks/useAuthMode';
-import DemoTour from './demo/DemoTour';
-import DemoModeBanner from './components/DemoModeBanner';
-
-// Demo onboarding UI temporarily disabled — flip to true to re-enable.
-const ENABLE_DEMO_UI = false;
+import { useCurrentUser } from './hooks/useCurrentUser';
+import { isDashboardOwner } from './lib/dashboardOwnership';
+import NotesFooter from './components/NotesFooter';
 
 /**
  * Top-level SPA. Layout:
@@ -80,8 +79,8 @@ const App: React.FC = () => {
   // `sidebar-collapsed` localStorage key the Dash app writes.
   const [desktopOpened, toggleDesktop] = useSidebarOpen();
   const [settingsOpened, { open: openSettings, close: closeSettings }] = useDisclosure(false);
-  const auth = useAuthMode();
-  const isDemoMode = auth.status?.is_demo_mode === true;
+  const { user: currentUser } = useCurrentUser();
+  const isOwner = isDashboardOwner(dashboard, currentUser?.email ?? null);
 
   const dashboardId = extractDashboardId();
   const bulkCtrl = useRef<AbortController | null>(null);
@@ -306,9 +305,10 @@ const App: React.FC = () => {
   );
 
   return (
-    <>
-      {ENABLE_DEMO_UI && isDemoMode && <DemoModeBanner />}
-      <DemoTour active={ENABLE_DEMO_UI && isDemoMode} />
+    <AvailableFilterValuesProvider
+      dashboardMetadata={dashboard?.stored_metadata}
+      projectId={dashboard?.project_id}
+    >
       <AppShell
       header={{ height: 50 }}
       navbar={{
@@ -333,6 +333,7 @@ const App: React.FC = () => {
           onReset={handleResetAllFilters}
           onOpenSettings={openSettings}
           cardsLoading={cardsLoading}
+          isOwner={isOwner}
           rightExtras={
             <>
               {realtimeEnabled && (
@@ -486,6 +487,13 @@ const App: React.FC = () => {
             </Box>
           </div>
         )}
+        {dashboard && dashboardId && (
+          <NotesFooter
+            dashboardId={dashboardId}
+            initialContent={(dashboard.notes_content as string) ?? ''}
+            permissions={dashboard.permissions as DashboardPermissions | undefined}
+          />
+        )}
       </AppShell.Main>
 
       <SettingsDrawer
@@ -494,7 +502,7 @@ const App: React.FC = () => {
         dashboard={dashboard}
       />
     </AppShell>
-    </>
+    </AvailableFilterValuesProvider>
   );
 };
 

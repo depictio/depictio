@@ -3,24 +3,33 @@ import react from '@vitejs/plugin-react';
 import path from 'path';
 
 // Dev-only: serve the SPA's index.html (under base /dashboard-beta/) for any
-// request to /auth*, /dashboards-beta*, /projects-beta*, /about-beta*, or
-// /admin-beta* so those React routes get HMR. Production has the matching
+// non-asset SPA route so React routes get HMR. Production has the matching
 // FastAPI catch-alls in depictio/api/main.py — this plugin only runs when
 // `vite dev` is the server. The browser URL stays untouched, so main.tsx
 // still picks the right tree via pathname matching.
+//
+// Keep this list in sync with the routes resolved in src/main.tsx
+// (resolveTree) and the FastAPI mounts in depictio/api/main.py.
+const SPA_ROUTE_PREFIXES = [
+  'auth',
+  'dashboards-beta',
+  'dashboard-beta-edit',
+  'projects-beta',
+  'about-beta',
+  'admin-beta',
+  'profile-beta',
+  'cli-agents-beta',
+];
+const SPA_ROUTE_RE = new RegExp(
+  `^/(?:${SPA_ROUTE_PREFIXES.join('|')})(/|$|\\?)`,
+);
+
 const authDevFallback = (): Plugin => ({
   name: 'depictio-spa-dev-fallback',
   apply: 'serve',
   configureServer(server) {
     server.middlewares.use((req, _res, next) => {
-      if (
-        req.url &&
-        (/^\/auth(\/|$|\?)/.test(req.url) ||
-          /^\/dashboards-beta(\/|$|\?)/.test(req.url) ||
-          /^\/projects-beta(\/|$|\?)/.test(req.url) ||
-          /^\/about-beta(\/|$|\?)/.test(req.url) ||
-          /^\/admin-beta(\/|$|\?)/.test(req.url))
-      ) {
+      if (req.url && SPA_ROUTE_RE.test(req.url)) {
         req.url = '/dashboard-beta/';
       }
       next();
@@ -96,19 +105,29 @@ export default defineConfig({
         : undefined,
   },
   resolve: {
-    alias: {
+    // Array form so we can use a regex for the plotly.js exact-match alias —
+    // object-form aliases prefix-match, which would also rewrite
+    // `plotly.js/dist/plotly` and break react-plotly.js.
+    alias: [
       // Allow importing shared components directly from source (not the built bundle).
-      'depictio-components': path.resolve(
-        __dirname,
-        '../../packages/depictio-components/src/lib',
-      ),
+      {
+        find: 'depictio-components',
+        replacement: path.resolve(__dirname, '../../packages/depictio-components/src/lib'),
+      },
       // depictio-react-core is a sibling workspace package — alias straight to
       // its src/index.ts so Vite/HMR sees source changes without a build step.
-      'depictio-react-core': path.resolve(
-        __dirname,
-        '../../packages/depictio-react-core/src',
-      ),
-    },
+      {
+        find: 'depictio-react-core',
+        replacement: path.resolve(__dirname, '../../packages/depictio-react-core/src'),
+      },
+      // Force any bare `plotly.js` import to resolve to the prebuilt browser
+      // UMD bundle that react-plotly.js itself uses internally. Otherwise
+      // Vite/esbuild walks `plotly.js/src/traces/image/helpers.js` which has
+      // an unpolyfilled `require('buffer/')` shim and crashes optimizeDeps
+      // with "Could not resolve 'buffer/'". Exact match (regex) keeps subpath
+      // imports (e.g. `plotly.js/dist/plotly`) untouched.
+      { find: /^plotly\.js$/, replacement: 'plotly.js/dist/plotly' },
+    ],
     // Force a single instance of these packages across the whole graph.
     // Without this, depictio-components' own node_modules contributes a
     // duplicate copy of @mantine/core, causing "MantineProvider was not

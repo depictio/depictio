@@ -71,6 +71,13 @@ EXTERNAL_STYLESHEETS = [
     "/assets/dock-animation.css",
 ]
 
+# Shared external scripts for all Dash apps. include_assets_files=False means
+# Dash does NOT auto-discover JS in the assets/ folder, so any custom JS that
+# must run on every page (clientside_callback namespaces, etc.) is listed here.
+EXTERNAL_SCRIPTS = [
+    "/assets/multiqc_folder_upload.js",
+]
+
 
 def create_shared_dash_config():
     """
@@ -188,6 +195,7 @@ def create_management_app(
         server=server,
         url_base_pathname="/",
         external_stylesheets=EXTERNAL_STYLESHEETS,
+        external_scripts=EXTERNAL_SCRIPTS,
         suppress_callback_exceptions=True,
         title="Depictio - Management",
         include_assets_files=False,
@@ -242,6 +250,7 @@ def create_viewer_app(
         server=server,
         url_base_pathname="/dashboard/",
         external_stylesheets=EXTERNAL_STYLESHEETS,
+        external_scripts=EXTERNAL_SCRIPTS,
         suppress_callback_exceptions=True,
         title="Depictio - Dashboard",
         include_assets_files=False,
@@ -297,6 +306,7 @@ def create_editor_app(
         server=server,
         url_base_pathname="/dashboard-edit/",
         external_stylesheets=EXTERNAL_STYLESHEETS,
+        external_scripts=EXTERNAL_SCRIPTS,
         suppress_callback_exceptions=True,
         title="Depictio - Dashboard Editor",
         include_assets_files=False,

@@ -106,6 +106,64 @@ class SimpleCache:
 
         return None
 
+    def set_nx(self, key: str, data: Any, ttl: Optional[int] = None) -> bool:
+        """Atomic "set if not exists" — Redis SETNX semantics.
+
+        Returns True if the caller acquired the key (key was absent), False
+        if another caller already holds it. Used as a distributed lock for
+        deduping work across multiple Celery workers: only the first worker
+        that runs ``set_nx(lock_key, ...)`` proceeds; others bail out.
+
+        Falls back to a non-atomic check-then-set on the in-memory cache
+        when Redis is unavailable — fine for single-process dev, not safe
+        for production multi-worker setups without Redis.
+        """
+        if ttl is None:
+            ttl = self.cache_config.default_ttl
+
+        cache_key = f"{self.cache_config.cache_key_prefix}{key}"
+
+        if self._redis_available and self._redis is not None:
+            try:
+                serialized = pickle.dumps(data)
+                # SET with NX (only if absent) + EX (expiry in seconds).
+                acquired = self._redis.set(cache_key, serialized, nx=True, ex=ttl)
+                return bool(acquired)
+            except Exception as e:
+                logger.warning(f"Redis set_nx failed: {key} - {e}")
+
+        # Memory fallback — racy but acceptable in single-process dev.
+        if key in self._memory_cache:
+            entry = self._memory_cache[key]
+            if time.time() - entry["cached_at"] <= entry["ttl"]:
+                return False
+        self._memory_cache[key] = {"data": data, "cached_at": time.time(), "ttl": ttl}
+        return True
+
+    def delete(self, key: str) -> bool:
+        """Delete a single cached entry by exact key.
+
+        Returns True if a key was removed from either Redis or the in-memory
+        fallback. Failures are logged but never raised — cache hiccups must
+        not break callers.
+        """
+        cache_key = f"{self.cache_config.cache_key_prefix}{key}"
+        removed = False
+
+        if self._redis_available and self._redis is not None:
+            try:
+                deleted = self._redis.delete(cache_key)
+                if isinstance(deleted, int) and deleted > 0:
+                    removed = True
+            except Exception as e:
+                logger.warning(f"Redis delete failed: {key} - {e}")
+
+        if key in self._memory_cache:
+            del self._memory_cache[key]
+            removed = True
+
+        return removed
+
     def delete_pattern(self, pattern: str) -> int:
         """Delete every cached key whose unprefixed name contains ``pattern``.
 

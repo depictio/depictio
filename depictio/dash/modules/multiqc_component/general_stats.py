@@ -217,10 +217,26 @@ def _harmonize_samples(df_metrics: pd.DataFrame, groups: dict, read_mode: str) -
 
 
 def _process_multiqc_data(
-    parquet_path: str, show_hidden: bool = False, read_mode: str = "mean"
+    parquet_path: str | list[str], show_hidden: bool = False, read_mode: str = "mean"
 ) -> tuple:
-    """Process MultiQC parquet data and return formatted DataFrames."""
-    df_raw = pl.read_parquet(parquet_path)
+    """Process MultiQC parquet data and return formatted DataFrames.
+
+    ``parquet_path`` can be a single path (legacy single-report behaviour)
+    or a list of paths — when given a list, every parquet is read and
+    vertically concatenated *before* the pivot, so the GS table aggregates
+    samples across the entire DC. Without this, a multi-report DC only
+    surfaces samples from the first parquet (the historical bug that left
+    appended runs invisible in the GS table).
+    """
+    if isinstance(parquet_path, str):
+        df_raw = pl.read_parquet(parquet_path)
+    else:
+        if not parquet_path:
+            raise ValueError("_process_multiqc_data requires at least one parquet path")
+        # `how="diagonal_relaxed"` so reports with extra columns / different
+        # dtypes don't crash the concat — they just contribute nulls / get
+        # cast to a common dtype, mirroring the CLI aggregator's behaviour.
+        df_raw = pl.concat([pl.read_parquet(p) for p in parquet_path], how="diagonal_relaxed")
     df_general_stats = df_raw.filter(pl.col("anchor") == "general_stats_table")
     df_metrics_pl = df_general_stats.filter(pl.col("type") == "plot_input_row")
 
@@ -994,7 +1010,7 @@ def _column_format_to_json(
 
 
 def _build_mode_payload(
-    parquet_path: str,
+    parquet_path: str | list[str],
     show_hidden: bool,
     read_mode: str,
     selected_samples: list[str] | None = None,
@@ -1051,11 +1067,15 @@ def _build_mode_payload(
 
 
 def build_general_stats_payload(
-    parquet_path: str,
+    parquet_path: str | list[str],
     show_hidden: bool = True,
     selected_samples: list[str] | None = None,
 ) -> dict:
     """JSON-safe payload mirroring `build_general_stats_content` for the React viewer.
+
+    ``parquet_path`` accepts a single path (legacy) or a list of paths to
+    concatenate before pivoting — the React caller passes every parquet for
+    the DC so the GS table aggregates samples across all reports.
 
     Returns:
         {

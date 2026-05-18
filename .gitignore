@@ -276,6 +276,11 @@ depictio/tests/e2e-tests/node_modules/
 depictio/tests/e2e-tests/cypress/screenshots/
 # depictio/tests/e2e-tests/package-lock.json
 
+# pnpm workspace root — `pnpm install` at the repo root creates a top-level
+# node_modules alongside the per-package ones already ignored in each
+# workspace member's own .gitignore.
+/node_modules/
+
 # Backups
 depictio/backups/
 depictio/depictio/backups/

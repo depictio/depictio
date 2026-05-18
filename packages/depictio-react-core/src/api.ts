@@ -244,6 +244,10 @@ export interface DashboardData {
   /** Project-level realtime config — only when ``enabled === true`` should
    *  the viewer mount the WebSocket subscription / live-updates indicator. */
   project_realtime?: { enabled: boolean; debounce_ms: number };
+  /** Free-form rich-text notes / documentation attached to the dashboard.
+   *  Persisted as HTML via the NotesFooter TipTap editor (see
+   *  depictio/viewer/src/components/NotesFooter.tsx). */
+  notes_content?: string;
   [key: string]: unknown;
 }
 
@@ -594,13 +598,31 @@ export async function fetchJBrowseSession(
   return res.json();
 }
 
-/** Server-rendered MultiQC Plotly figure (wraps create_multiqc_plot). */
+/** Backend signals "figure cache is being warmed" via HTTP 202. The viewer
+ *  should show a skeleton + progress and poll until the figure is ready. */
+export interface MultiQCPreparingResponse {
+  status: 'preparing';
+  dc_id: string;
+  component_id: string;
+  message: string;
+}
+
+export type MultiQCRenderResult =
+  | (FigureResponse & { status: 'ready' })
+  | MultiQCPreparingResponse;
+
+/** Server-rendered MultiQC Plotly figure (wraps create_multiqc_plot).
+ *
+ *  Returns a discriminated union: ``status: 'ready'`` when the figure is
+ *  available, ``status: 'preparing'`` when the backend is rebuilding caches
+ *  (HTTP 202). Callers should re-issue the request after a short delay on
+ *  ``preparing``. */
 export async function renderMultiQC(
   dashboardId: string,
   componentId: string,
   filters: InteractiveFilter[],
   theme: 'light' | 'dark' = 'light',
-): Promise<FigureResponse> {
+): Promise<MultiQCRenderResult> {
   const res = await fetch(
     `${API_BASE}/dashboards/render_multiqc/${dashboardId}/${componentId}`,
     {
@@ -609,8 +631,13 @@ export async function renderMultiQC(
       body: JSON.stringify({ filters, theme }),
     },
   );
-  if (!res.ok) throw new Error(`Failed to render MultiQC: ${res.status}`);
-  return res.json();
+  if (res.status === 202) {
+    const body = (await res.json()) as MultiQCPreparingResponse;
+    return { ...body, status: 'preparing' };
+  }
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to render MultiQC');
+  const body = (await res.json()) as FigureResponse;
+  return { ...body, status: 'ready' };
 }
 
 // ---- MultiQC General Statistics ------------------------------------------
@@ -998,6 +1025,31 @@ export async function previewMultiQC(
   return res.json();
 }
 
+/** Cascading module → plot → dataset options for a MultiQC DC.
+ *  Mirrors GET /api/v1/multiqc/builder_options — the same shape consumed by
+ *  the Component Designer's MultiQCBuilder, lifted here for reuse by the
+ *  Project Data Manager's inline DC viewer preview. */
+export interface MultiQCBuilderOptions {
+  modules: string[];
+  plots: Record<string, string[]>;
+  datasets: Record<string, string[]>;
+  s3_locations: string[];
+  general_stats?: Array<{ module: string; plot: string }>;
+}
+
+export async function fetchMultiQCBuilderOptions(
+  dcId: string,
+): Promise<MultiQCBuilderOptions> {
+  const res = await fetch(
+    `${API_BASE}/multiqc/builder_options?data_collection_id=${dcId}`,
+    { headers: authHeaders() },
+  );
+  if (!res.ok) {
+    throw new Error(`Failed to fetch MultiQC options: ${res.status}`);
+  }
+  return res.json();
+}
+
 /** Wraps figure_component/code_mode.py:analyze_constrained_code so the React
  *  builder can validate code mode and round-trip params↔code on mode switch. */
 export interface CodeAnalysis {
@@ -1148,6 +1200,9 @@ function defaultLayoutForType(
       return { x: 0, y, w: 4, h: 4 };
     case 'map':
       return { x: 0, y, w: 4, h: 4 };
+    case 'text':
+      // Section heading / banner — wide and short.
+      return { x: 0, y, w: 8, h: 3 };
     default:
       return { x: 0, y, w: 4, h: 4 };
   }
@@ -1210,6 +1265,26 @@ export async function upsertComponent(
     body: JSON.stringify(payload),
   });
   if (!res.ok) await throwHttpError(res, 'Failed to save component');
+}
+
+/**
+ * Save the `notes_content` field on a dashboard. Mirrors the GET → mutate →
+ * POST round-trip used by `upsertComponent`, so concurrent edits to layout or
+ * components from elsewhere on the page have a small race window where the
+ * last writer wins. Acceptable for this lightweight feature.
+ */
+export async function saveDashboardNotes(
+  dashboardId: string,
+  notesContent: string,
+): Promise<void> {
+  const dashboard = await fetchDashboard(dashboardId);
+  const payload: DashboardData = { ...dashboard, notes_content: notesContent };
+  const res = await fetch(`${API_BASE}/dashboards/save/${dashboardId}`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) await throwHttpError(res, 'Failed to save dashboard notes');
 }
 
 export async function fetchCurrentUser(): Promise<CurrentUser | null> {
@@ -1845,6 +1920,10 @@ export interface CreateDataCollectionUploadInput {
   compression: string;
   hasHeader: boolean;
   file: File;
+  // When both are set, the resulting DC is created with a
+  // DCTableCoordinatesConfig payload so Map components can bind to it.
+  latColumn?: string | null;
+  lonColumn?: string | null;
 }
 
 export interface CreateDataCollectionResult {
@@ -1869,6 +1948,8 @@ export async function createDataCollectionFromUpload(
   if (input.customSeparator) fd.append('custom_separator', input.customSeparator);
   fd.append('compression', input.compression);
   fd.append('has_header', input.hasHeader ? 'true' : 'false');
+  if (input.latColumn) fd.append('lat_column', input.latColumn);
+  if (input.lonColumn) fd.append('lon_column', input.lonColumn);
   fd.append('file', input.file, input.file.name);
 
   // Strip Content-Type so the browser sets the multipart boundary itself.
@@ -2173,6 +2254,31 @@ export async function listAllDashboards(): Promise<AdminDashboard[]> {
   return Array.isArray(data) ? data : [];
 }
 
+/** A seed project currently present in Mongo — minimal shape for the
+ *  Maintenance tab's status row. */
+export interface ExampleProject {
+  id: string;
+  name: string;
+}
+
+export async function listExampleProjects(): Promise<ExampleProject[]> {
+  const res = await fetch(`${API_BASE}/projects/admin/examples`, { headers: authHeaders() });
+  if (!res.ok) await throwHttpError(res, 'Failed to list example projects');
+  const data = await res.json();
+  return Array.isArray(data) ? data : [];
+}
+
+export async function cleanExampleProjects(): Promise<{ deleted: ExampleProject[] }> {
+  const res = await fetch(`${API_BASE}/projects/admin/clean_examples`, {
+    method: 'POST',
+    headers: authHeaders(),
+  });
+  if (!res.ok) await throwHttpError(res, 'Failed to clean example projects');
+  const data = await res.json();
+  const deleted = Array.isArray(data?.deleted) ? (data.deleted as ExampleProject[]) : [];
+  return { deleted };
+}
+
 // ---- Profile + CLI token management (/profile-beta, /cli-agents-beta) -----
 //
 // These wrap the FastAPI endpoints used by the React profile and CLI agents
@@ -2318,3 +2424,341 @@ export async function generateAgentConfig(token: CreatedToken): Promise<CliAgent
   return (await res.json()) as CliAgentConfig;
 }
 
+// =============================================================================
+// Cross-DC links (project-level link CRUD + resolver list)
+// =============================================================================
+
+/** Resolver kinds the backend supports. Mirrors
+ *  `depictio.api.v1.endpoints.links_endpoints.resolvers`. */
+export type LinkResolverName =
+  | 'direct'
+  | 'sample_mapping'
+  | 'pattern'
+  | 'regex'
+  | 'wildcard';
+
+export interface DCLinkConfig {
+  resolver: LinkResolverName;
+  /** Canonical → variant map for ``sample_mapping``. */
+  mappings?: Record<string, string[]>;
+  /** Template like ``{sample}.bam`` for ``pattern``. */
+  pattern?: string;
+  /** Field in the target DC that the resolved values should match. */
+  target_field?: string;
+  case_sensitive?: boolean;
+}
+
+export type LinkTargetType = 'table' | 'multiqc' | 'image';
+
+export interface DCLink {
+  id: string;
+  source_dc_id: string;
+  source_column: string;
+  target_dc_id: string;
+  target_type: LinkTargetType;
+  link_config: DCLinkConfig;
+  description?: string | null;
+  enabled: boolean;
+}
+
+export interface CreateLinkInput {
+  source_dc_id: string;
+  source_column: string;
+  target_dc_id: string;
+  target_type: LinkTargetType;
+  link_config?: DCLinkConfig;
+  description?: string;
+  enabled?: boolean;
+}
+
+export type UpdateLinkInput = Partial<CreateLinkInput>;
+
+export interface ResolverInfo {
+  name: LinkResolverName;
+  label: string;
+  description: string;
+}
+
+export async function listProjectLinks(projectId: string): Promise<DCLink[]> {
+  // Use authFetch (not raw fetch + authHeaders) so a stale access_token gets
+  // silently refreshed and retried instead of bubbling up as a 401 "Invalid
+  // token". The links endpoint uses strict get_current_user — there's no
+  // anonymous fallback to recover from a bad header.
+  const res = await authFetch(`${API_BASE}/links/${projectId}`);
+  if (!res.ok) await throwHttpError(res, 'Failed to list project links');
+  const body = await res.json();
+  // Backend returns either {links: [...]} or [...]; accept both.
+  if (Array.isArray(body)) return body as DCLink[];
+  return (body?.links ?? []) as DCLink[];
+}
+
+export async function createProjectLink(
+  projectId: string,
+  input: CreateLinkInput,
+): Promise<DCLink> {
+  const res = await authFetch(`${API_BASE}/links/${projectId}`, {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to create link');
+  return (await res.json()) as DCLink;
+}
+
+export async function updateProjectLink(
+  projectId: string,
+  linkId: string,
+  input: UpdateLinkInput,
+): Promise<DCLink> {
+  const res = await authFetch(`${API_BASE}/links/${projectId}/${linkId}`, {
+    method: 'PUT',
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to update link');
+  return (await res.json()) as DCLink;
+}
+
+export async function deleteProjectLink(projectId: string, linkId: string): Promise<void> {
+  const res = await authFetch(`${API_BASE}/links/${projectId}/${linkId}`, {
+    method: 'DELETE',
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to delete link');
+}
+
+// Static label/description so the dropdown stays readable even when the
+// backend returns the bare-name list shape from
+// /links/{project_id}/resolvers (response_model=list[str]). Without this,
+// the FE indexed `.name` on a plain string and Mantine Select crashed with
+// "Each option must have value property".
+const RESOLVER_LABELS: Record<string, { label: string; description: string }> = {
+  direct: { label: 'Direct', description: 'Pass source value through unchanged.' },
+  sample_mapping: {
+    label: 'Sample mapping',
+    description: 'Expand a canonical sample ID to all of its MultiQC variants.',
+  },
+  pattern: {
+    label: 'Pattern',
+    description: 'Substitute the source value into a template like {sample}.bam.',
+  },
+  regex: {
+    label: 'Regex',
+    description: 'Match target rows whose target_field matches a regex.',
+  },
+  wildcard: {
+    label: 'Wildcard',
+    description: 'Glob-style * / ? match against the target_field.',
+  },
+};
+
+function normalizeResolver(item: unknown): ResolverInfo | null {
+  if (typeof item === 'string') {
+    const meta = RESOLVER_LABELS[item] || { label: item, description: '' };
+    return { name: item as ResolverInfo['name'], ...meta };
+  }
+  if (item && typeof item === 'object' && 'name' in item) {
+    const o = item as Partial<ResolverInfo>;
+    if (!o.name) return null;
+    const meta = RESOLVER_LABELS[o.name] || {
+      label: o.label || o.name,
+      description: o.description || '',
+    };
+    return {
+      name: o.name,
+      label: o.label || meta.label,
+      description: o.description || meta.description,
+    };
+  }
+  return null;
+}
+
+export async function listLinkResolvers(projectId: string): Promise<ResolverInfo[]> {
+  const res = await fetch(`${API_BASE}/links/${projectId}/resolvers`, {
+    headers: authHeaders(),
+  });
+  if (!res.ok) await throwHttpError(res, 'Failed to list resolvers');
+  const body = await res.json();
+  const raw: unknown[] = Array.isArray(body) ? body : (body?.resolvers ?? []);
+  return raw
+    .map(normalizeResolver)
+    .filter((r): r is ResolverInfo => r !== null);
+}
+
+/** Aggregated canonical → variants map for a MultiQC DC's reports. Used to
+ *  populate the ``sample_mapping`` resolver editor. */
+export async function fetchMultiQCSampleMappings(
+  projectId: string,
+  dcId: string,
+): Promise<Record<string, string[]>> {
+  const res = await fetch(
+    `${API_BASE}/links/${projectId}/multiqc/${dcId}/sample-mappings`,
+    { headers: authHeaders() },
+  );
+  if (!res.ok) await throwHttpError(res, 'Failed to fetch sample mappings');
+  const body = await res.json();
+  if (body?.sample_mappings && typeof body.sample_mappings === 'object') {
+    return body.sample_mappings as Record<string, string[]>;
+  }
+  return (body ?? {}) as Record<string, string[]>;
+}
+
+// =============================================================================
+// MultiQC DC creation + management (multipart uploads)
+// =============================================================================
+
+export interface CreateMultiQCDCInput {
+  projectId: string;
+  name: string;
+  description?: string;
+  /** Each File's `name` is expected to carry the ``webkitRelativePath`` so
+   *  the backend can group reports by parent folder. The
+   *  ``useFolderDropzone`` hook patches this for us. */
+  files: File[];
+}
+
+export interface MultiQCMutationResult {
+  success: boolean;
+  message?: string;
+  data_collection_id?: string;
+  workflow_id?: string;
+  ingested_folders?: string[];
+  skipped_count?: number;
+  deleted_count?: number;
+  fetched_from_s3_count?: number;
+  cleanup_failed?: number;
+}
+
+async function postMultiQCUpload(
+  url: string,
+  files: File[],
+  extraFields: Record<string, string> = {},
+): Promise<MultiQCMutationResult> {
+  const fd = new FormData();
+  for (const [key, value] of Object.entries(extraFields)) fd.append(key, value);
+  for (const file of files) fd.append('files', file, file.name);
+
+  const headers = authHeaders();
+  delete headers['Content-Type'];
+
+  const res = await fetch(url, { method: 'POST', headers, body: fd });
+  if (!res.ok) await throwHttpDetailError(res, 'MultiQC upload failed');
+  return (await res.json()) as MultiQCMutationResult;
+}
+
+export async function createMultiQCDataCollection(
+  input: CreateMultiQCDCInput,
+): Promise<MultiQCMutationResult> {
+  return postMultiQCUpload(
+    `${API_BASE}/datacollections/create_multiqc_from_upload`,
+    input.files,
+    {
+      project_id: input.projectId,
+      name: input.name,
+      description: input.description ?? '',
+    },
+  );
+}
+
+export interface MultiQCUniformityCheckResult {
+  success: boolean;
+  message?: string;
+  report_count: number;
+  skipped_count: number;
+}
+
+/** Dry-run the MultiQC uniformity validator on a list of parquets without
+ *  creating a DC. Returns success on uniform; throws an Error whose `.message`
+ *  is the stringified 422 detail (parseable with the same helper the Create
+ *  modal uses) when the checks find a mismatch. */
+export async function checkMultiQCUniformity(
+  files: File[],
+): Promise<MultiQCUniformityCheckResult> {
+  const fd = new FormData();
+  for (const file of files) fd.append('files', file, file.name);
+  const headers = authHeaders();
+  delete headers['Content-Type'];
+  const res = await fetch(`${API_BASE}/datacollections/multiqc_uniformity_check`, {
+    method: 'POST',
+    headers,
+    body: fd,
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'MultiQC uniformity check failed');
+  return (await res.json()) as MultiQCUniformityCheckResult;
+}
+
+export async function appendMultiQCFiles(
+  dcId: string,
+  files: File[],
+): Promise<MultiQCMutationResult> {
+  return postMultiQCUpload(
+    `${API_BASE}/multiqc/reports/data-collection/${dcId}/append`,
+    files,
+  );
+}
+
+export async function replaceMultiQCFiles(
+  dcId: string,
+  files: File[],
+): Promise<MultiQCMutationResult> {
+  return postMultiQCUpload(
+    `${API_BASE}/multiqc/reports/data-collection/${dcId}/replace`,
+    files,
+  );
+}
+
+/** Wipe every MultiQC report for a DC. Defaults to also deleting the S3
+ *  parquets — the manage modal's Clear flow uses this. */
+export async function clearMultiQCDC(dcId: string, deleteS3 = true): Promise<void> {
+  const url =
+    `${API_BASE}/multiqc/reports/data-collection/${dcId}` +
+    `?delete_s3_files=${deleteS3 ? 'true' : 'false'}`;
+  const res = await authFetch(url, { method: 'DELETE' });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to clear MultiQC DC');
+}
+
+// =============================================================================
+// Table DC manage helpers — append/replace/clear, mirroring the MultiQC ones
+// against /datacollections/{dc_id}/append|replace|data
+// =============================================================================
+
+export interface TableMutationResult {
+  success: boolean;
+  message?: string;
+  data_collection_id: string;
+  rows_total?: number;
+  rows_added?: number;
+  aggregation_version?: number;
+}
+
+async function postTableUpload(url: string, files: File[]): Promise<TableMutationResult> {
+  const fd = new FormData();
+  for (const file of files) fd.append('files', file, file.name);
+
+  const headers = authHeaders();
+  delete headers['Content-Type'];
+
+  const res = await fetch(url, { method: 'POST', headers, body: fd });
+  if (!res.ok) await throwHttpDetailError(res, 'Table upload failed');
+  return (await res.json()) as TableMutationResult;
+}
+
+export async function appendTableFiles(
+  dcId: string,
+  files: File[],
+): Promise<TableMutationResult> {
+  return postTableUpload(`${API_BASE}/datacollections/${dcId}/append`, files);
+}
+
+export async function replaceTableFiles(
+  dcId: string,
+  files: File[],
+): Promise<TableMutationResult> {
+  return postTableUpload(`${API_BASE}/datacollections/${dcId}/replace`, files);
+}
+
+/** Wipe every row for a Table DC while keeping the DC definition. */
+export async function clearTableDC(dcId: string): Promise<TableMutationResult> {
+  const res = await authFetch(`${API_BASE}/datacollections/${dcId}/data`, {
+    method: 'DELETE',
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to clear Table DC');
+  return (await res.json()) as TableMutationResult;
+}

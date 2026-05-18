@@ -256,6 +256,7 @@ const CliAgentsApp: React.FC = () => {
                   mt="md"
                   disabled={isAddDisabled}
                   onClick={openCreate}
+                  data-testid="add-cli-config-btn"
                   styles={{
                     root: {
                       backgroundColor: isAddDisabled ? undefined : brandColors.green,

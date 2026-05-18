@@ -153,31 +153,42 @@ const MapRenderer: React.FC<MapRendererProps> = ({
   }, [figure, selectionEnabled, metadata.selection_mode, refreshTick]);
 
   return (
-    <Paper p="sm" withBorder radius="md" style={{ minHeight: 320 }}>
+    <Paper
+      p="sm"
+      withBorder
+      radius="md"
+      style={{
+        flex: 1,
+        minHeight: 0,
+        height: '100%',
+        display: 'flex',
+        flexDirection: 'column',
+      }}
+    >
       {metadata.title && (
         <Text fw={600} size="sm" mb="xs">
           {metadata.title}
         </Text>
       )}
       {showInitialLoader && (
-        <Stack align="center" justify="center" gap="xs" mih={250}>
+        <Stack align="center" justify="center" gap="xs" style={{ flex: 1 }}>
           <Loader size="sm" />
           <Text size="xs" c="dimmed">Rendering map…</Text>
         </Stack>
       )}
       {error && isInitialLoad && (
-        <Stack mih={250} justify="center" align="center">
+        <Stack style={{ flex: 1 }} justify="center" align="center">
           <Text size="sm" c="red" className="dashboard-error">Map failed: {error}</Text>
         </Stack>
       )}
       {figure && (
-        <div style={{ position: 'relative' }}>
+        <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
           <Plot
             data={(figure.data as any[]) || []}
             layout={layout}
             revision={refreshTick ?? 0}
             config={{ displaylogo: false, responsive: true, scrollZoom: true }}
-            style={{ width: '100%', height: 320 }}
+            style={{ width: '100%', height: '100%' }}
             useResizeHandler
             onSelected={selectionEnabled ? handleSelected : undefined}
             onClick={selectionEnabled ? handleClick : undefined}
