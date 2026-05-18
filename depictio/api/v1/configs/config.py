@@ -18,7 +18,7 @@ settings = Settings()
 initialize_loggers(verbose_level=settings.logging.verbosity_level)
 
 API_BASE_URL = settings.fastapi.internal_url
-DASH_BASE_URL = settings.dash.internal_url
+DASH_BASE_URL = settings.viewer.internal_url
 MONGODB_URL = f"mongodb://{settings.mongodb.service_name}:{settings.mongodb.service_port}"
 _KEYS_DIR = settings.auth.keys_dir
 # The internal API key is now automatically managed via the computed field

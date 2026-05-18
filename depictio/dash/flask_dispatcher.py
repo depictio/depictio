@@ -89,7 +89,7 @@ def create_shared_dash_config():
     dev_mode = os.environ.get("DEPICTIO_DEV_MODE", "false").lower() == "true"
 
     # Check if Dash debug UI should be shown (independent of full dev mode)
-    dash_debug_ui = os.environ.get("DEPICTIO_DASH_DEBUG_UI", "false").lower() == "true"
+    dash_debug_ui = os.environ.get("DEPICTIO_VIEWER_DEBUG_UI", "false").lower() == "true"
     show_debug_ui = dev_mode or dash_debug_ui
 
     # Get the root path of the depictio.dash package
@@ -406,19 +406,19 @@ application = server
 
 if __name__ == "__main__":
     print("=" * 80)
-    print(f"📊 Management:  http://{settings.dash.host}:{settings.dash.external_port}/")
+    print(f"📊 Management:  http://{settings.viewer.host}:{settings.viewer.external_port}/")
     print(
-        f"👁️  Viewer:      http://{settings.dash.host}:{settings.dash.external_port}/dashboard/<id>/"
+        f"👁️  Viewer:      http://{settings.viewer.host}:{settings.viewer.external_port}/dashboard/<id>/"
     )
     print(
-        f"✏️  Editor:      http://{settings.dash.host}:{settings.dash.external_port}/dashboard-edit/<id>/"
+        f"✏️  Editor:      http://{settings.viewer.host}:{settings.viewer.external_port}/dashboard-edit/<id>/"
     )
     print("=" * 80)
 
     # Use Flask's native run() for dev mode
     server.run(
-        host=settings.dash.host,
-        port=settings.dash.service_port,
+        host=settings.viewer.host,
+        port=settings.viewer.service_port,
         debug=dev_mode,
         use_reloader=dev_mode,
         threaded=True,

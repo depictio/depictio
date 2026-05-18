@@ -683,8 +683,8 @@ async def screenshot_dashboard(
         page = await context.new_page()
 
         # Navigate to Dash service
-        logger.info(f"Navigating to Dash service at {settings.dash.internal_url}")
-        await page.goto(settings.dash.internal_url, timeout=90000)
+        logger.info(f"Navigating to Dash service at {settings.viewer.internal_url}")
+        await page.goto(settings.viewer.internal_url, timeout=90000)
 
         # Wait for page to load
         # await page.wait_for_load_state("networkidle")
@@ -739,7 +739,7 @@ async def screenshot_dashboard(
 
         await asyncio.sleep(3)  # Wait for the page to stabilize
         # dashboard_id = "6824cb3b89d2b72169309737"
-        await page.goto(f"{settings.dash.internal_url}/dashboard/{dashboard_id}", timeout=90000)
+        await page.goto(f"{settings.viewer.internal_url}/dashboard/{dashboard_id}", timeout=90000)
         # await page.wait_for_load_state("networkidle")
         await page.reload()
         await asyncio.sleep(10)  # Wait for dashboard to fully load
@@ -858,7 +858,7 @@ async def screenshot_dashboard(
 
         return {
             "success": True,
-            "url": settings.dash.internal_url,
+            "url": settings.viewer.internal_url,
             "message": "Screenshot taken successfully",
             "screenshot_path": output_file,
             # "token": convert_objectid_to_str(token_data),
@@ -868,7 +868,7 @@ async def screenshot_dashboard(
     # except Exception as e:
     #     return {
     #         "success": False,
-    #         "url": settings.dash.internal_url,
+    #         "url": settings.viewer.internal_url,
     #         "error": str(e),
     #         "message": "Failed to take screenshot",
     #     }
@@ -3322,7 +3322,7 @@ def _import_multi_tab_dashboard(
         "title": main_dashboard.title,
         "project_id": str(project_id),
         "tabs": imported_tabs,
-        "dash_url": settings.dash.external_url,
+        "dash_url": settings.viewer.external_url,
     }
 
 
@@ -3539,7 +3539,7 @@ async def import_dashboard_from_yaml(
         "dashboard_id": str(new_dashboard_id),
         "title": dashboard.title,
         "project_id": str(project_id),
-        "dash_url": settings.dash.external_url,
+        "dash_url": settings.viewer.external_url,
     }
 
 

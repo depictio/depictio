@@ -1,9 +1,9 @@
 #!/bin/bash
 
 # Set default values if environment variables are not set
-DASH_HOST=${DEPICTIO_DASH_HOST:-0.0.0.0}
-DASH_PORT=${DEPICTIO_DASH_PORT:-5080}
-DASH_WORKERS=${DEPICTIO_DASH_WORKERS:-4}
+DASH_HOST=${DEPICTIO_VIEWER_HOST:-0.0.0.0}
+DASH_PORT=${DEPICTIO_VIEWER_PORT:-5080}
+DASH_WORKERS=${DEPICTIO_VIEWER_WORKERS:-4}
 
 sleep 5 # Allow time for other services to start
 

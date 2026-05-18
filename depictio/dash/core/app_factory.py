@@ -27,7 +27,7 @@ def create_dash_app():
     dev_mode = os.environ.get("DEPICTIO_DEV_MODE", "false").lower() == "true"
 
     # Check if Dash debug UI should be shown (independent of full dev mode)
-    dash_debug_ui = os.environ.get("DEPICTIO_DASH_DEBUG_UI", "false").lower() == "true"
+    dash_debug_ui = os.environ.get("DEPICTIO_VIEWER_DEBUG_UI", "false").lower() == "true"
     show_debug_ui = dev_mode or dash_debug_ui
 
     # Get the root path of the depictio.dash package

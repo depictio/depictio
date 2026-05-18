@@ -95,7 +95,7 @@ frontend:
     DEPICTIO_AUTH_TEMPORARY_USER_EXPIRY_HOURS: "1"
 
     # Performance - Balanced workers for multiple replicas
-    DEPICTIO_DASH_WORKERS: "4"
+    DEPICTIO_VIEWER_WORKERS: "4"
 
     # Analytics Configuration
     DEPICTIO_ANALYTICS_ENABLED: "true"

@@ -101,7 +101,7 @@ frontend:
     DEPICTIO_AUTH_TEMPORARY_USER_EXPIRY_HOURS: "1"
 
     # Performance - Balanced workers for multiple replicas
-    DEPICTIO_DASH_WORKERS: "1"
+    DEPICTIO_VIEWER_WORKERS: "1"
 
 mongo:
   replicas: 1  # Temporarily single replica to get system working

@@ -692,11 +692,11 @@ async def screenshot_dash_fixed(
             browser = await p.chromium.launch(headless=True)
             page = await browser.new_page(viewport={"width": 1920, "height": 1080})
 
-            dashboard_url = f"{settings.dash.internal_url}/dashboard/{dashboard_id}"
+            dashboard_url = f"{settings.viewer.internal_url}/dashboard/{dashboard_id}"
             logger.info(f"📸 Taking screenshot of: {dashboard_url}")
 
             # Set auth and navigate
-            await page.goto(settings.dash.internal_url)
+            await page.goto(settings.viewer.internal_url)
             await page.evaluate(f"localStorage.setItem('local-store', '{token_data_json}')")
             await page.goto(dashboard_url, timeout=30000)
 

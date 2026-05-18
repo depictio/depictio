@@ -225,7 +225,7 @@ async def generate_dual_theme_screenshots(
         # Get admin authentication token
         token_data = await get_admin_auth_token()
         token_data_json = json.dumps(token_data)
-        dashboard_url = f"{settings.dash.internal_url}/dashboard/{dashboard_id}"
+        dashboard_url = f"{settings.viewer.internal_url}/dashboard/{dashboard_id}"
 
         logger.info(f"Starting dual-theme screenshot for dashboard {dashboard_id}")
 
@@ -234,7 +234,7 @@ async def generate_dual_theme_screenshots(
             page = await browser.new_page(viewport={"width": 1920, "height": 1080})
 
             # Set authentication token before navigation
-            await page.goto(settings.dash.internal_url)
+            await page.goto(settings.viewer.internal_url)
             await page.evaluate(f"localStorage.setItem('local-store', '{token_data_json}')")
 
             # Capture both themes in sequence
