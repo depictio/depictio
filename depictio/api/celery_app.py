@@ -234,20 +234,18 @@ def _warm_multiqc_components(
     cache = get_cache()
 
     # Lazy imports — these modules pull in MultiQC + Plotly which is heavy.
-    from depictio.dash.modules.figure_component.multiqc_vis import (
+    from depictio.api.v1.services.multiqc.dc_lookup import fetch_s3_locations_from_dc
+    from depictio.api.v1.services.multiqc.figures import (
         MULTIQC_CACHE_TTL_SECONDS,
         _generate_figure_cache_key,
         _get_local_path_for_s3,
         create_multiqc_plot,
     )
-    from depictio.dash.modules.figure_component.utils import _get_theme_template
-    from depictio.dash.modules.multiqc_component.callbacks.core import (
-        _normalize_multiqc_paths,
-    )
-    from depictio.dash.modules.multiqc_component.general_stats import (
+    from depictio.api.v1.services.multiqc.general_stats_payload import (
         build_general_stats_payload,
     )
-    from depictio.dash.modules.multiqc_component.models import _fetch_s3_locations_from_dc
+    from depictio.api.v1.services.multiqc.paths import normalize_multiqc_paths
+    from depictio.api.v1.services.multiqc.themes import get_theme_template
 
     seen: set[tuple] = set()
     warmed = 0
@@ -260,11 +258,11 @@ def _warm_multiqc_components(
         s3_locations = comp.get("s3_locations") or []
         if dc_id and comp_project_id:
             try:
-                live_locations = _fetch_s3_locations_from_dc(str(dc_id), str(comp_project_id))
+                live_locations = fetch_s3_locations_from_dc(str(dc_id), str(comp_project_id))
                 if live_locations:
                     s3_locations = live_locations
             except Exception as e:
-                logger.warning(f"prewarm: _fetch_s3_locations_from_dc failed for {dc_id}: {e}")
+                logger.warning(f"prewarm: fetch_s3_locations_from_dc failed for {dc_id}: {e}")
         if not s3_locations:
             failed += 1
             continue
@@ -297,7 +295,7 @@ def _warm_multiqc_components(
 
         if is_general_stats:
             try:
-                normalized = _normalize_multiqc_paths(s3_locations)
+                normalized = normalize_multiqc_paths(s3_locations)
                 filter_sig = "all"
                 all_paths_str = "|".join(sorted(s3_locations))
                 cache_key_str = f"{all_paths_str}::{filter_sig}::general_stats_payload"
@@ -365,7 +363,7 @@ def _warm_multiqc_components(
         # get_figure() round-trip (the dominant cost) — figures are
         # structurally identical between themes; only the template differs.
         try:
-            fig.update_layout(template=_get_theme_template("dark"))
+            fig.update_layout(template=get_theme_template("dark"))
             dark_dict = fig.to_dict()
             dark_key = _generate_figure_cache_key(
                 s3_locations,
@@ -745,7 +743,7 @@ def prewarm_multiqc_dc_all_plots(self, dc_id: str) -> dict:
         fetch_multiqc_builder_options_sync,
     )
     from depictio.api.v1.services import multiqc_prerender_store
-    from depictio.dash.modules.figure_component.multiqc_vis import (
+    from depictio.api.v1.services.multiqc.figures import (
         MULTIQC_CACHE_TTL_SECONDS,
         _generate_figure_cache_key,
         create_multiqc_plot,

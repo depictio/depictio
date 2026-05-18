@@ -226,7 +226,7 @@ def build_multiqc_preview(payload: dict) -> dict:
     """
     from depictio.api.cache import get_cache
     from depictio.api.v1.services import multiqc_prerender_store
-    from depictio.dash.modules.figure_component.multiqc_vis import (
+    from depictio.api.v1.services.multiqc.figures import (
         MULTIQC_CACHE_TTL_SECONDS,
         _generate_figure_cache_key,
         create_multiqc_plot,
@@ -296,8 +296,8 @@ def build_multiqc_preview(payload: dict) -> dict:
     # JSON payload and return its violin figure so the React preview renders
     # the same Plotly trace the runtime ``MultiQCGeneralStats`` shows.
     if module == "general_stats" or plot == "general_stats":
-        from depictio.dash.modules.figure_component.multiqc_vis import _get_local_path_for_s3
-        from depictio.dash.modules.multiqc_component.general_stats import (
+        from depictio.api.v1.services.multiqc.figures import _get_local_path_for_s3
+        from depictio.api.v1.services.multiqc.general_stats_payload import (
             build_general_stats_payload,
         )
 

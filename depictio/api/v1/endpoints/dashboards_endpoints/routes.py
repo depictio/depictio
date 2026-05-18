@@ -2492,7 +2492,7 @@ def render_map_endpoint(
     directly as `trigger_data`. `render_map` reads what it needs via `.get()`.
     """
     from depictio.api.v1.deltatables_utils import load_deltatable_lite
-    from depictio.dash.modules.map_component.utils import render_map
+    from depictio.api.v1.services.map.render import render_map
 
     filters = request.get("filters") or []
     theme = request.get("theme") or "light"
@@ -2914,7 +2914,7 @@ def _resolve_multiqc_sample_filter(
     except Exception as e:
         logger.debug(f"_resolve_multiqc_sample_filter: sample_mappings fetch failed: {e}")
 
-    from depictio.dash.modules.multiqc_component.callbacks.core import (
+    from depictio.api.v1.services.multiqc.patching import (
         expand_canonical_samples_to_variants,
     )
 
@@ -3081,11 +3081,11 @@ def render_multiqc_endpoint(
     # than 400'ing the render — the snapshot is the only source then.
     s3_locations = component.get("s3_locations") or []
     if dc_id:
-        from depictio.dash.modules.multiqc_component.models import _fetch_s3_locations_from_dc
+        from depictio.api.v1.services.multiqc.dc_lookup import fetch_s3_locations_from_dc
 
-        live_locations = _fetch_s3_locations_from_dc(str(dc_id), str(project_id))
+        live_locations = fetch_s3_locations_from_dc(str(dc_id), str(project_id))
         logger.info(
-            f"render_multiqc: _fetch_s3_locations_from_dc"
+            f"render_multiqc: fetch_s3_locations_from_dc"
             f"(dc={dc_id!s}, project={project_id!s})"
             f" → {len(live_locations)} s3_location(s)"
         )
@@ -3129,7 +3129,7 @@ def render_multiqc_endpoint(
     import time as _time
 
     from depictio.api.cache import get_cache
-    from depictio.dash.modules.figure_component.multiqc_vis import (
+    from depictio.api.v1.services.multiqc.figures import (
         MULTIQC_CACHE_TTL_SECONDS,
         create_multiqc_plot,
         generate_figure_cache_key,
@@ -3313,7 +3313,7 @@ def render_multiqc_endpoint(
                 fig_dict["layout"].setdefault("uirevision", "persistent")
 
             if filter_applied:
-                from depictio.dash.modules.multiqc_component.callbacks.core import (
+                from depictio.api.v1.services.multiqc.patching import (
                     patch_multiqc_figures,
                 )
 
@@ -3406,9 +3406,9 @@ def render_multiqc_general_stats_endpoint(
     # YAML-imported example dashboards without per-report rows in
     # multiqc_collection).
     if dc_id:
-        from depictio.dash.modules.multiqc_component.models import _fetch_s3_locations_from_dc
+        from depictio.api.v1.services.multiqc.dc_lookup import fetch_s3_locations_from_dc
 
-        live_locations = _fetch_s3_locations_from_dc(str(dc_id), str(project_id))
+        live_locations = fetch_s3_locations_from_dc(str(dc_id), str(project_id))
         if live_locations:
             s3_locations = live_locations
 
@@ -3448,18 +3448,18 @@ def render_multiqc_general_stats_endpoint(
 
     try:
         from depictio.api.cache import get_cache
-        from depictio.dash.modules.figure_component.multiqc_vis import (
+        from depictio.api.v1.services.multiqc.figures import (
             MULTIQC_CACHE_TTL_SECONDS,
             _get_local_path_for_s3,
         )
-        from depictio.dash.modules.multiqc_component.callbacks.core import (
-            _normalize_multiqc_paths,
-        )
-        from depictio.dash.modules.multiqc_component.general_stats import (
+        from depictio.api.v1.services.multiqc.general_stats_payload import (
             build_general_stats_payload,
         )
+        from depictio.api.v1.services.multiqc.patching import (
+            normalize_multiqc_paths,
+        )
 
-        normalized = _normalize_multiqc_paths(s3_locations)
+        normalized = normalize_multiqc_paths(s3_locations)
 
         # React-side cache key — distinct from Dash's `multiqc:gs:` so the two
         # callers don't trample each other's payload shape. Filter signature is
