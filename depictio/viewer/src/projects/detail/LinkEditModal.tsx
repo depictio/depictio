@@ -356,7 +356,7 @@ const LinkEditModal: React.FC<LinkEditModalProps> = ({
       closeOnClickOutside={!submitting}
       closeOnEscape={!submitting}
     >
-      <Stack gap="md">
+      <Stack gap="md" data-testid="link-edit-modal">
         {error && (
           <Alert color="red" icon={<Icon icon="mdi:alert-circle" width={18} />}>
             {error}

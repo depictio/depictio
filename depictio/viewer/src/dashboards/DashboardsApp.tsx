@@ -303,6 +303,7 @@ const DashboardsApp: React.FC = () => {
             variant="filled"
             size="md"
             onClick={openCreate}
+            data-testid="new-dashboard-btn"
             style={{ fontFamily: 'Virgil' }}
           >
             + New Dashboard
