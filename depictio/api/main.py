@@ -96,11 +96,11 @@ _VIEWER_DIST = Path(__file__).resolve().parent.parent / "viewer" / "dist"
 _VIEWER_ASSETS = _VIEWER_DIST / "assets"
 _VIEWER_INDEX = _VIEWER_DIST / "index.html"
 
-# Dashboard screenshots — written by the auto-screenshot job when a dashboard
-# is viewed (depictio/dash/layouts/save.py). Same files Dash serves at
-# /static/screenshots/{id}_{light|dark}.png; mounting here lets the React
-# /dashboards-beta page reuse them without cross-port hops.
-_SCREENSHOTS_DIR = Path(__file__).resolve().parent.parent / "dash" / "static" / "screenshots"
+# Dashboard screenshots — written by the auto-screenshot job and served back
+# as /static/screenshots/{id}_{light|dark}.png. The path is the canonical
+# screenshot output for both the worker (Playwright writes here) and the
+# React viewer (reads via this mount).
+_SCREENSHOTS_DIR = Path(__file__).resolve().parent / "static" / "screenshots"
 _SCREENSHOTS_DIR.mkdir(parents=True, exist_ok=True)
 app.mount(
     "/static/screenshots",
@@ -108,17 +108,14 @@ app.mount(
     name="dashboard-screenshots",
 )
 
-# Dash workflow logos / icons (used by both viewers). The React viewer
-# references them as ``/assets/images/...`` — same path as the Dash app —
-# so we mount the same dir on the FastAPI origin to avoid cross-port hops.
-# Without this, ``/assets/images/icons/favicon.png`` 404s on port 8055
-# (FastAPI) and the dashboard cards lose their workflow logos.
-_DASH_ASSETS_DIR = Path(__file__).resolve().parent.parent / "dash" / "assets"
-if _DASH_ASSETS_DIR.is_dir():
+# Workflow logos / icons referenced by the React viewer as ``/assets/images/...``.
+# Relocated out of the deleted depictio/dash/assets/ tree.
+_STATIC_ASSETS_DIR = Path(__file__).resolve().parent / "static_assets"
+if _STATIC_ASSETS_DIR.is_dir():
     app.mount(
         "/assets",
-        StaticFiles(directory=str(_DASH_ASSETS_DIR)),
-        name="dash-assets",
+        StaticFiles(directory=str(_STATIC_ASSETS_DIR)),
+        name="static-assets",
     )
 # Require both index.html and assets/ — `dist/` alone may exist as an empty
 # leftover from an interrupted build and would crash StaticFiles at startup.

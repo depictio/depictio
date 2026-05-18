@@ -1,15 +1,9 @@
 # -----------------------------
 # Depictio API image (FastAPI only)
 # -----------------------------
-# Net-new image as part of the Dash → React migration. Carries only what
-# `depictio.api.main:app` needs at runtime: Python + uv-installed deps.
-# No Playwright (worker owns screenshots), no Node, no Dash assets — that
-# trims ~300 MB off the current monolithic _uv image.
-#
-# Until the celery worker module is moved out of depictio/dash/ (migration
-# Layer 5), this image still COPYs the full depictio/ tree so any shared
-# helpers resolve. The unused subpackages aren't imported by the FastAPI
-# entrypoint and add no runtime cost.
+# Carries only what `depictio.api.main:app` needs at runtime: Python +
+# uv-installed deps. No Playwright (worker owns screenshots), no Node,
+# no Dash assets.
 # -----------------------------
 
 FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim AS base

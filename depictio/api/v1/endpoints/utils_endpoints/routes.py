@@ -658,7 +658,7 @@ async def screenshot_dash_fixed(
                 status_code=403, detail="Only dashboard owners can generate screenshots"
             )
 
-    output_folder = "/app/depictio/dash/static/screenshots"
+    output_folder = "/app/depictio/api/static/screenshots"
     output_file = f"{output_folder}/{str(dashboard_id)}.png"
     Path(output_folder).mkdir(parents=True, exist_ok=True)
 

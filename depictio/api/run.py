@@ -5,7 +5,6 @@ from depictio.api.v1.configs.logging_init import logger
 
 RELOAD_DIRS = [
     "/app/depictio/api",
-    "/app/depictio/dash",
     "/app/depictio/cli",
     "/app/depictio/models",
 ]

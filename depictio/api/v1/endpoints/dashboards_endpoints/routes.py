@@ -731,7 +731,7 @@ async def screenshot_dashboard(
     """
     from playwright.async_api import async_playwright
 
-    output_folder = "/app/depictio/dash/static/screenshots"  # Directly set to the desired path
+    output_folder = "/app/depictio/api/static/screenshots"  # Directly set to the desired path
     logger.info(f"Output folder: {output_folder}")
     # try:
     async with async_playwright() as p:

@@ -1,75 +1,20 @@
 """
-Celery worker entry point for Dash background callbacks.
+Celery worker entry point for the FastAPI-only Depictio backend.
 
-This module is imported by Celery workers to register background callback tasks
-without starting the full Flask/Gunicorn web server.
-
-Architecture:
-- Main web process: flask_dispatcher.py → creates apps → registers callbacks
-- Worker process: celery_worker.py → imports apps → discovers registered tasks
-
-This solves the "unregistered task" error by ensuring workers can discover
-background callbacks from Viewer and Editor apps (Management has no background tasks).
-
-Multi-App Background Callback Distribution:
-- Management app: No background tasks (auth, dashboards/projects management)
-- Viewer app: Lite version with background=True for heavy data loading (MB-GB dataframes)
-- Editor app: Full version with all background callbacks (editing + component builder)
+With the Dash front end removed, this module exists solely so Celery workers
+can be launched against the API's task registry. Importing
+``depictio.api.v1.celery_tasks`` triggers the ``@celery_app.task`` decorators,
+ensuring every task defined alongside the API is discoverable on the worker.
 
 Usage:
     celery -A depictio.api.celery_worker:celery_app worker --loglevel=info
 """
 
-# Register FastAPI-side tasks (preview / render offload). Importing the module
-# triggers `@celery_app.task` decorators so the worker can pick them up.
-# Import the Celery app instance
 from depictio.api.celery_app import celery_app
-from depictio.api.v1 import celery_tasks  # noqa: E402, F401
+from depictio.api.v1 import celery_tasks  # noqa: F401  (import for side effects)
 from depictio.api.v1.configs.logging_init import logger
 
-logger.info("=" * 80)
-logger.info("=" * 80)
+_registered_tasks = [name for name in celery_app.tasks.keys() if not name.startswith("celery.")]
+logger.info("Celery worker ready: %d task(s) registered", len(_registered_tasks))
 
-# Import flask_dispatcher to trigger app creation and callback registration
-# This imports celery_app (circular but safe because celery_app is already loaded above)
-# and creates the three Dash apps with background callbacks registered
-
-try:
-    from depictio.dash.flask_dispatcher import app_editor, app_management, app_viewer
-
-    logger.info("   - Management app (no background tasks): %s", app_management)
-    logger.info("   - Viewer app (lite, with background tasks): %s", app_viewer)
-    logger.info("   - Editor app (full, with background tasks): %s", app_editor)
-
-    # The apps are created with background_callback_manager, which automatically
-    # registers background callbacks as Celery tasks when callbacks are wired up
-    # in flask_dispatcher.py (lines 403-424)
-
-    # Count registered tasks (for debugging)
-    registered_tasks = [task for task in celery_app.tasks.keys() if not task.startswith("celery.")]
-    background_callback_tasks = [
-        task for task in registered_tasks if "background_callback_" in task
-    ]
-
-    logger.info("=" * 80)
-    logger.info("=" * 80)
-    logger.debug(f"   Total tasks registered: {len(registered_tasks)}")
-    logger.info(f"   Background callback tasks: {len(background_callback_tasks)}")
-    logger.debug("   Background tasks from: Viewer app (data loading) + Editor app (full)")
-    logger.info("=" * 80)
-
-    if background_callback_tasks:
-        logger.info("   Sample background callback tasks:")
-        for task in background_callback_tasks[:3]:
-            logger.info(f"      - {task[:80]}...")
-    else:
-        logger.warning("⚠️  No background callback tasks found! Check callback registration.")
-
-except Exception as e:
-    logger.error("=" * 80)
-    logger.error(f"❌ CELERY WORKER: Failed to import flask_dispatcher: {e}")
-    logger.error("=" * 80)
-    raise
-
-# Export celery_app for worker command
 __all__ = ["celery_app"]

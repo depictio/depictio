@@ -1,13 +1,10 @@
-name: Build migration images (api / worker / viewer)
+name: Build images (api / worker / viewer)
 
-# Builds the three per-service images introduced for the Dash → React
-# migration (see docker-images/Dockerfile.api / .worker / .viewer). Kept
-# separate from amd64-build.yaml and multi-arch-build.yaml — which still
-# own the existing monolithic `depictio` image — so the new pipeline can
-# evolve without touching prod release builds.
+# Canonical image build pipeline. Builds the three per-service images
+# (see docker-images/Dockerfile.api / .worker / .viewer) on tag pushes
+# and validates them on PRs.
 #
-# Image namespaces are distinct (`depictio-api`, `depictio-worker`,
-# `depictio-viewer`), so tag collisions with the monolith are impossible.
+# Image namespaces: `depictio-api`, `depictio-worker`, `depictio-viewer`.
 
 on:
   pull_request:
@@ -24,7 +21,7 @@ on:
       - "pnpm-lock.yaml"
       - "depictio/**"
       - "packages/**"
-      - ".github/workflows/build-migration-images.yaml"
+      - ".github/workflows/build-images.yaml"
   push:
     tags:
       - "v[0-9]*.[0-9]*.[0-9]*"
@@ -38,9 +35,8 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  # Org owner — the monolithic image lives at ${{ github.repository }}
-  # (`depictio/depictio`). Per-service images use sibling repos under
-  # the same owner so PAT scopes already in place keep working.
+  # Per-service images use sibling repos under the same org owner so
+  # PAT scopes already in place keep working.
   OWNER: ${{ github.repository_owner }}
 
 jobs:
@@ -102,10 +98,8 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.REGISTRY }}/${{ env.OWNER }}/${{ matrix.image }}
-          # `next` is the moving pointer to the latest migration build —
-          # deliberately not `latest`/`stable` so consumers of those tags
-          # on the monolithic image aren't auto-migrated. Cutover will
-          # repoint `latest` once Layer 5 lands.
+          # `next` is the moving pointer to the latest build off the
+          # default branch. Release tags get the explicit version tag.
           tags: |
             type=raw,value=${{ steps.meta-vars.outputs.VERSION }}
             type=raw,value=next,enable=${{ steps.meta-vars.outputs.PUSH == 'true' }}

@@ -80,40 +80,8 @@ services:
       start_period: 30s
     restart: unless-stopped
 
-  depictio-frontend:
-    image: ghcr.io/depictio/depictio:${DEPICTIO_VERSION:-latest}
-    container_name: depictio-frontend
-    ports:
-      - 5080:5080
-    volumes:
-      - depictio_keys:/app/depictio/keys
-    env_file:
-      - path: .env
-        required: false
-    environment:
-      DEPICTIO_AUTH_SINGLE_USER_MODE: "${DEPICTIO_AUTH_SINGLE_USER_MODE:-true}"
-      DEPICTIO_MINIO_ROOT_USER: "${DEPICTIO_MINIO_ROOT_USER:-minio}"
-      DEPICTIO_MINIO_ROOT_PASSWORD: "${DEPICTIO_MINIO_ROOT_PASSWORD:-minio123}"
-    command: ["/app/run_dash.sh"]
-    healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:5080/ > /dev/null"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 60s
-    restart: unless-stopped
-    depends_on:
-      mongo:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      depictio-backend:
-        condition: service_healthy
-      minio:
-        condition: service_healthy
-
   depictio-backend:
-    image: ghcr.io/depictio/depictio:${DEPICTIO_VERSION:-latest}
+    image: ghcr.io/depictio/depictio-api:${DEPICTIO_VERSION:-next}
     container_name: depictio-backend
     ports:
       - 8058:8058
@@ -142,11 +110,21 @@ services:
       minio:
         condition: service_healthy
 
+  depictio-viewer:
+    image: ghcr.io/depictio/depictio-viewer:${DEPICTIO_VERSION:-next}
+    container_name: depictio-viewer
+    ports:
+      - 5080:80
+    restart: unless-stopped
+    depends_on:
+      depictio-backend:
+        condition: service_healthy
+
   depictio-celery-worker:
     container_name: depictio-celery-worker
     # Always enabled - required for design mode (stepper) to work
     # Dashboard editor will fail without Celery worker running
-    image: ghcr.io/depictio/depictio:${DEPICTIO_VERSION:-latest}
+    image: ghcr.io/depictio/depictio-worker:${DEPICTIO_VERSION:-next}
     volumes:
       - depictio_keys:/app/depictio/keys
     env_file:

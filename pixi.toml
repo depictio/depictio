@@ -47,7 +47,6 @@ echo -n "MinIO (9000): " && (curl -s http://localhost:9000/minio/health/live && 
 # =============================================================================
 install-browsers = "playwright install chromium"
 api = { cmd = "python depictio/api/run.py", depends-on = ["install-browsers"] }
-dash = "python depictio/dash/flask_dispatcher.py"
 celery = "celery -A depictio.api.celery_app worker --loglevel=info"
 
 # Start everything (infrastructure + app)

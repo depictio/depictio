@@ -175,7 +175,7 @@ async def get_admin_auth_token() -> dict[str, str]:
 
 async def generate_dual_theme_screenshots(
     dashboard_id: str,
-    output_folder: str = "/app/depictio/dash/static/screenshots",
+    output_folder: str = "/app/depictio/api/static/screenshots",
     user_id: str | None = None,
 ) -> ScreenshotResult:
     """
@@ -194,7 +194,7 @@ async def generate_dual_theme_screenshots(
 
     Args:
         dashboard_id: Dashboard ID to screenshot
-        output_folder: Directory to save screenshots (default: /app/depictio/dash/static/screenshots)
+        output_folder: Directory to save screenshots (default: /app/depictio/api/static/screenshots)
         user_id: Optional user ID for permission validation (recommended for security)
 
     Returns:
@@ -383,7 +383,7 @@ def _react_output_paths(
 
 async def generate_react_dual_theme_screenshots(
     dashboard_id: str,
-    output_folder: str = "/app/depictio/dash/static/screenshots",
+    output_folder: str = "/app/depictio/api/static/screenshots",
     user_id: str | None = None,
     open_settings: bool = False,
     filename_prefix: str = "",

@@ -209,41 +209,6 @@ class TestApplyFilterExpr:
 
 
 # ---------------------------------------------------------------------------
-# compute_multi_values test
-# ---------------------------------------------------------------------------
-
-
-class TestComputeMultiValues:
-    """Test compute_multi_values utility.
-
-    These tests require Dash dependencies (dash_mantine_components) to be installed.
-    """
-
-    def test_compute_multiple_aggregations(self) -> None:
-        pytest.importorskip("dash_mantine_components", reason="Dash deps required")
-        from depictio.dash.modules.card_component.utils import compute_multi_values
-
-        df = pl.DataFrame({"x": [1.0, 2.0, 3.0, 4.0, 5.0]})
-        results = compute_multi_values(
-            df, "x", ["average", "median", "min", "max"], has_filters=True
-        )
-        assert results["average"] == pytest.approx(3.0)
-        assert results["median"] == pytest.approx(3.0)
-        assert results["min"] == pytest.approx(1.0)
-        assert results["max"] == pytest.approx(5.0)
-
-    def test_invalid_aggregation_returns_none(self) -> None:
-        pytest.importorskip("dash_mantine_components", reason="Dash deps required")
-        from depictio.dash.modules.card_component.utils import compute_multi_values
-
-        df = pl.DataFrame({"x": [1.0, 2.0, 3.0]})
-        results = compute_multi_values(df, "x", ["average", "skewness"])
-        # skewness may or may not work depending on Polars version, but should not raise
-        assert "average" in results
-        assert "skewness" in results
-
-
-# ---------------------------------------------------------------------------
 # InteractiveLiteComponent filter_expr tests
 # ---------------------------------------------------------------------------
 

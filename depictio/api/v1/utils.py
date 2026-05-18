@@ -20,7 +20,7 @@ async def clean_screenshots() -> dict[str, bool | str]:
     Returns:
         Dictionary with success status and message.
     """
-    screenshots_dir = os.path.join(BASE_PATH, "dash", "static", "screenshots")
+    screenshots_dir = os.path.join(BASE_PATH, "api", "static", "screenshots")
 
     if not os.path.exists(screenshots_dir):
         return {"success": False, "message": "Screenshots directory does not exist"}

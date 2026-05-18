@@ -15,17 +15,7 @@ dependencies = [
   "cloudpickle==3.1.1",
   "cryptography==45.0.2",
   "colorlog==6.9.0",
-  # Dash and visualization
-  "dash-ace==0.2.1",
-  "dash-bootstrap-components>=2.0.4,<3",
-  "dash-cytoscape==1.0.2",
-  "dash-extensions>=2.0.5,<3",
-  "dash-iconify==0.1.2",
-  "dash-mantine-components==2.1.0",
-  "dash[async]>=4.1,<5",
-  "dash-ag-grid==31.3.1",
-  "dash-dynamic-grid-layout==0.1.3",
-  "dash-dock==0.0.1",
+  # Visualization
   "plotly-express==0.4.1",
   "plotly-complexheatmap",
   "plotly-upset",
@@ -111,7 +101,6 @@ cli = [
 
 [project.scripts]
 depictio-api = "depictio.api.run:main"
-depictio-dash = "depictio.dash.app:main"
 depictio = "depictio.cli.depictio_cli:main"
 
 
@@ -129,7 +118,7 @@ where = ["."]
 include = ["depictio*"]
 
 # [tool.mypy]
-# exclude = ["build/", "depictio/api/", "depictio/dash/"]
+# exclude = ["build/", "depictio/api/"]
 # files = ["depictio/tests/", "depictio/models/", "depictio/cli/"]
 
 [tool.ruff]
@@ -181,7 +170,6 @@ testpaths = [
   "depictio/tests/api",
   "depictio/tests/models",
   "depictio/tests/cli",
-  "depictio/tests/dash",
   "depictio/tests/unit",
 ]
 markers = [

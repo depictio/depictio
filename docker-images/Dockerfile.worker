@@ -1,13 +1,9 @@
 # -----------------------------
 # Depictio Celery worker image
 # -----------------------------
-# Net-new image as part of the Dash → React migration. Owns the heavy
-# Playwright + chromium payload so the API image can stay lean. Runs
-# `celery -A ... worker` against the same Python codebase as the API.
-#
-# Note: run_celery_worker.sh currently targets `depictio.dash.celery_worker`.
-# That move (out of depictio/dash/) is Layer 5 work — until it lands, this
-# image still ships the full depictio/ tree.
+# Owns the heavy Playwright + chromium payload so the API image can stay
+# lean. Runs `celery -A depictio.api.celery_worker worker` against the
+# same Python codebase as the API.
 # -----------------------------
 
 FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim AS base
@@ -22,8 +18,7 @@ LABEL org.opencontainers.image.licenses="MIT"
 WORKDIR /app
 
 # System deps cover Playwright's chromium plus xvfb for any headed paths
-# the worker still uses (kept aligned with _uv.dockerfile so screenshot
-# behaviour stays identical post-split).
+# the worker still uses.
 RUN apt-get update && apt-get install --no-install-recommends -y \
         xvfb \
         xauth \
