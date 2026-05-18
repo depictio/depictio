@@ -128,7 +128,14 @@ const DashboardCard: React.FC<DashboardCardProps> = ({
   const hasMultipleTabs = childTabs.length > 0;
 
   return (
-    <Card shadow="sm" padding="md" radius="md" withBorder style={{ position: 'relative' }}>
+    <Card
+      shadow="sm"
+      padding="md"
+      radius="md"
+      withBorder
+      style={{ position: 'relative' }}
+      data-tour-id="dashboard-card"
+    >
       {onTogglePin && (
         <Tooltip
           label={

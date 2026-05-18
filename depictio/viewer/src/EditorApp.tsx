@@ -41,6 +41,8 @@ import {
 import { useDisclosure } from '@mantine/hooks';
 import { notifications } from '@mantine/notifications';
 import { useSidebarOpen } from './hooks/useSidebarOpen';
+import { useCurrentUser } from './hooks/useCurrentUser';
+import { isDashboardOwner } from './lib/dashboardOwnership';
 import type { Layout } from 'react-grid-layout';
 import 'react-grid-layout/css/styles.css';
 import 'react-resizable/css/styles.css';
@@ -71,13 +73,7 @@ import LeftFilterPanel from './components/LeftFilterPanel';
 import GridItemEditOverlay from './components/GridItemEditOverlay';
 import { Header, Sidebar, SettingsDrawer, TabModal } from './chrome';
 import type { TabModalSubmitPayload } from './chrome';
-import { useAuthMode } from './auth/hooks/useAuthMode';
-import DemoTour from './demo/DemoTour';
-import DemoModeBanner from './components/DemoModeBanner';
 import './chrome/chrome.css';
-
-// Demo onboarding UI temporarily disabled — flip to true to re-enable.
-const ENABLE_DEMO_UI = false;
 
 const API_BASE = '/depictio/api/v1';
 const SAVE_DEBOUNCE_MS = 500;
@@ -160,8 +156,7 @@ const EditorApp: React.FC = () => {
   // Persist across tab/page navigations (matches App.tsx + Dash app).
   const [desktopOpened, toggleDesktop] = useSidebarOpen();
   const [settingsOpened, { open: openSettings, close: closeSettings }] = useDisclosure(false);
-  const auth = useAuthMode();
-  const isDemoMode = auth.status?.is_demo_mode === true;
+  const { user: currentUser, loading: userLoading } = useCurrentUser();
   // Tab modal state — `mode` decides between create vs edit. `target` is the
   // tab being edited (or null for create). `submitting` blocks Save while a
   // request is in flight.
@@ -184,6 +179,21 @@ const EditorApp: React.FC = () => {
     dashboardRef.current = d;
     setDashboard(d);
   }, []);
+
+  const isOwner = isDashboardOwner(dashboard, currentUser?.email ?? null);
+
+  // Editor route is owner-only. Visitors who land here without permission
+  // (typed the URL, opened a public dashboard, etc.) get bounced to the
+  // read-only viewer. We wait for both the dashboard fetch AND the auth
+  // probe so the redirect runs against a known answer, not a transient
+  // null. Backend enforces with 403s on write endpoints regardless.
+  useEffect(() => {
+    if (userLoading) return;
+    if (!dashboard || !dashboardId) return;
+    if (!isOwner) {
+      window.location.replace(`/dashboard-beta/${dashboardId}`);
+    }
+  }, [userLoading, dashboard, dashboardId, isOwner]);
 
   // Keep the browser tab title in sync with the dashboard name.
   useEffect(() => {
@@ -857,8 +867,6 @@ const EditorApp: React.FC = () => {
 
   return (
     <>
-      {ENABLE_DEMO_UI && isDemoMode && <DemoModeBanner />}
-      <DemoTour active={ENABLE_DEMO_UI && isDemoMode} />
     <AppShell
       header={{ height: 50 }}
       navbar={{
@@ -886,6 +894,7 @@ const EditorApp: React.FC = () => {
           mode="edit"
           onAddComponent={handleAddComponent}
           onSave={handleForceSave}
+          isOwner={isOwner}
           rightExtras={
             <>
               {realtimeEnabled && (
@@ -974,6 +983,7 @@ const EditorApp: React.FC = () => {
             <Box
               px={4}
               py={4}
+              data-tour-id="editor-grid"
               style={{
                 height: '100%',
                 minWidth: 0,

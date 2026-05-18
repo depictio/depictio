@@ -1,5 +1,5 @@
 import React from 'react';
-import { ActionIcon, Box, Button, Group, Loader, Title, useMantineColorScheme } from '@mantine/core';
+import { ActionIcon, Box, Button, Group, Loader, Title, Tooltip, useMantineColorScheme } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
 import type { DashboardData, DashboardSummary } from 'depictio-react-core';
@@ -57,6 +57,12 @@ interface HeaderProps {
   onAddComponent?: () => void;
   /** Edit-mode only: invoked when the user clicks "Save". Should force-flush any pending debounced save. */
   onSave?: () => void;
+  /** True when the current user owns this dashboard. When false, the
+   *  Edit / Add component / Save buttons render disabled with a tooltip
+   *  explaining why — the backend enforces the same rule with 403s. The
+   *  default is `true` so callers that haven't been migrated keep working,
+   *  matching prior behavior. */
+  isOwner?: boolean;
   /** Optional element rendered next to the action group (e.g. RealtimeIndicator). */
   rightExtras?: React.ReactNode;
 }
@@ -83,6 +89,7 @@ const Header: React.FC<HeaderProps> = ({
   mode = 'view',
   onAddComponent,
   onSave,
+  isOwner = true,
   rightExtras,
 }) => {
   const { colorScheme } = useMantineColorScheme();
@@ -206,40 +213,61 @@ const Header: React.FC<HeaderProps> = ({
       <Group gap={8} wrap="nowrap" style={{ flexShrink: 0 }}>
         <PoweredBy withRightBorder />
         {mode === 'edit' && onAddComponent && (
-          <Button
-            leftSection={<Icon icon="mdi:plus-circle" width={14} />}
-            color="green"
-            variant="filled"
-            size="xs"
-            onClick={onAddComponent}
-            disabled={!dashboardId}
+          <Tooltip
+            label="You can only edit dashboards you own. Duplicate this one to get your own copy."
+            disabled={isOwner}
+            withArrow
           >
-            Add component
-          </Button>
+            <Button
+              leftSection={<Icon icon="mdi:plus-circle" width={14} />}
+              color="green"
+              variant="filled"
+              size="xs"
+              onClick={onAddComponent}
+              disabled={!dashboardId || !isOwner}
+              data-tour-id="editor-add-component"
+            >
+              Add component
+            </Button>
+          </Tooltip>
         )}
         {mode === 'edit' && onSave && (
-          <Button
-            leftSection={<Icon icon="mdi:content-save" width={14} />}
-            color="teal"
-            variant="filled"
-            size="xs"
-            onClick={onSave}
-            disabled={!dashboardId}
+          <Tooltip
+            label="You can only save dashboards you own. Duplicate this one to get your own copy."
+            disabled={isOwner}
+            withArrow
           >
-            Save
-          </Button>
+            <Button
+              leftSection={<Icon icon="mdi:content-save" width={14} />}
+              color="teal"
+              variant="filled"
+              size="xs"
+              onClick={onSave}
+              disabled={!dashboardId || !isOwner}
+              data-tour-id="editor-save"
+            >
+              Save
+            </Button>
+          </Tooltip>
         )}
         {mode === 'view' ? (
-          <Button
-            leftSection={<Icon icon="mdi:pencil" width={14} />}
-            color="blue"
-            variant="filled"
-            size="xs"
-            onClick={handleEdit}
-            disabled={!dashboardId}
+          <Tooltip
+            label="You can only edit dashboards you own. Duplicate this one to get your own copy."
+            disabled={isOwner}
+            withArrow
           >
-            Edit
-          </Button>
+            <Button
+              leftSection={<Icon icon="mdi:pencil" width={14} />}
+              color="blue"
+              variant="filled"
+              size="xs"
+              onClick={handleEdit}
+              disabled={!dashboardId || !isOwner}
+              data-tour-id="enter-edit-mode"
+            >
+              Edit
+            </Button>
+          </Tooltip>
         ) : (
           <Button
             leftSection={<Icon icon="mdi:eye" width={14} />}

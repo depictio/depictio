@@ -209,7 +209,7 @@ const ProjectsApp: React.FC = () => {
               width={22}
               color="var(--mantine-color-teal-6)"
             />
-            <Title order={3} c="teal">
+            <Title order={3} c="teal" data-tour-id="projects-header">
               Projects
             </Title>
           </Group>
@@ -230,6 +230,7 @@ const ProjectsApp: React.FC = () => {
               disabled={isPublic}
               data-disabled={isPublic ? true : undefined}
               style={{ fontFamily: 'Virgil' }}
+              data-tour-id="projects-create"
             >
               + New Project
             </Button>

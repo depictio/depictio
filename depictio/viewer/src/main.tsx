@@ -38,6 +38,7 @@ import {
   validateSession,
 } from 'depictio-react-core';
 import { depictioTheme } from './theme';
+import { WalkthroughHost } from './walkthrough';
 
 // Client-side route resolution. FastAPI serves index.html for all paths under
 // /dashboard-beta/, /dashboard-beta-edit/, /auth, /dashboards-beta,
@@ -189,6 +190,7 @@ if (isBareRoot) {
           <DatesProvider settings={{ locale: 'en', firstDayOfWeek: 1 }}>
             <Notifications position="bottom-right" />
             <ErrorBoundary>{resolveTree()}</ErrorBoundary>
+            <WalkthroughHost />
           </DatesProvider>
         </MantineProvider>
       </React.StrictMode>,

@@ -61,6 +61,7 @@ const StepType: React.FC = () => {
       <Divider variant="solid" w="100%" />
 
       <div
+        data-tour-id="component-type-grid"
         style={{
           display: 'grid',
           gridTemplateColumns: 'repeat(3, 1fr)',
