@@ -35,7 +35,7 @@ if __name__ == "__main__":
     # This block won't be executed when run with Gunicorn
     # It's here for potential direct execution
     print(
-        f"Starting Dash server on {settings.dash.host}:{settings.dash.service_port} with {settings.dash.workers} workers"
+        f"Starting Dash server on {settings.viewer.host}:{settings.viewer.service_port} with {settings.viewer.workers} workers"
     )
     # Configure process and thread settings properly
     if settings.profiling.enabled:
@@ -48,8 +48,8 @@ if __name__ == "__main__":
         threaded = True
 
     app.run(
-        host=settings.dash.host,
-        port=settings.dash.service_port,
+        host=settings.viewer.host,
+        port=settings.viewer.service_port,
         debug=dev_mode,
         threaded=threaded,
         # Don't pass processes=None to avoid Werkzeug comparison error

@@ -93,7 +93,7 @@ def create_umap_plot(
 
     # Apply UMAP
     # Get the number of workers from Dash configuration for optimal performance
-    n_workers = settings.dash.workers
+    n_workers = settings.viewer.workers
     logger.info(
         f"Running UMAP with n_neighbors={n_neighbors}, min_dist={min_dist}, "
         f"n_components={n_components}, metric={metric}, n_jobs={n_workers}"

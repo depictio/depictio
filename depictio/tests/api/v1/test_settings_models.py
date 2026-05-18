@@ -5,12 +5,12 @@ from pathlib import Path
 from depictio.api.v1.configs.settings_models import (
     AuthConfig,
     # Collections,
-    DashConfig,
     FastAPIConfig,
     # JBrowseConfig,
     MongoDBConfig,
     S3DepictioCLIConfig,
     Settings,
+    ViewerConfig,
 )
 
 
@@ -210,17 +210,17 @@ class TestFastAPIConfig:
             # assert config.internal_api_key == "env_api_key"
 
 
-class TestDashConfig:
+class TestViewerConfig:
     def test_default_values(self):
-        """Test DashConfig with default values."""
+        """Test ViewerConfig with default values."""
         env_to_clear = {
-            "DEPICTIO_DASH_DEBUG": None,
-            "DEPICTIO_DASH_EXTERNAL_PORT": None,
-            "DEPICTIO_DASH_WORKERS": None,
+            "DEPICTIO_VIEWER_DEBUG": None,
+            "DEPICTIO_VIEWER_EXTERNAL_PORT": None,
+            "DEPICTIO_VIEWER_WORKERS": None,
         }
 
         with env_vars(env_to_clear):
-            config = DashConfig()
+            config = ViewerConfig()
 
             assert config.debug is True
             assert config.host == "0.0.0.0"
@@ -229,15 +229,15 @@ class TestDashConfig:
             assert config.external_port == 5080
 
     def test_custom_values(self):
-        """Test DashConfig with custom values."""
+        """Test ViewerConfig with custom values."""
         env_to_clear = {
-            "DEPICTIO_DASH_DEBUG": None,
-            "DEPICTIO_DASH_EXTERNAL_PORT": None,
-            "DEPICTIO_DASH_WORKERS": None,
+            "DEPICTIO_VIEWER_DEBUG": None,
+            "DEPICTIO_VIEWER_EXTERNAL_PORT": None,
+            "DEPICTIO_VIEWER_WORKERS": None,
         }
 
         with env_vars(env_to_clear):
-            config = DashConfig(
+            config = ViewerConfig(
                 debug=False,
                 host="127.0.0.1",
                 service_name="custom_frontend",
@@ -253,15 +253,15 @@ class TestDashConfig:
             assert config.external_port == 3000
 
     def test_env_variables(self):
-        """Test DashConfig with environment variables."""
+        """Test ViewerConfig with environment variables."""
         env = {
-            "DEPICTIO_DASH_DEBUG": "false",
-            "DEPICTIO_DASH_EXTERNAL_PORT": "4000",
-            "DEPICTIO_DASH_WORKERS": "2",
+            "DEPICTIO_VIEWER_DEBUG": "false",
+            "DEPICTIO_VIEWER_EXTERNAL_PORT": "4000",
+            "DEPICTIO_VIEWER_WORKERS": "2",
         }
 
         with env_vars(env):
-            config = DashConfig()
+            config = ViewerConfig()
 
             assert config.debug is False
             assert config.external_port == 4000
@@ -426,7 +426,7 @@ class TestSettings:
             "DEPICTIO_MONGODB_SERVICE_PORT": None,
             "DEPICTIO_MONGODB_EXTERNAL_PORT": None,
             "DEPICTIO_FASTAPI_EXTERNAL_PORT": None,
-            "DEPICTIO_DASH_EXTERNAL_PORT": None,
+            "DEPICTIO_VIEWER_EXTERNAL_PORT": None,
             "DEPICTIO_MINIO_PUBLIC_URL": None,
             # "DEPICTIO_JBROWSE_ENABLED": None,
             "DEPICTIO_AUTH_INTERNAL_API_KEY": None,
@@ -437,7 +437,7 @@ class TestSettings:
 
             assert isinstance(settings.mongodb, MongoDBConfig)
             assert isinstance(settings.fastapi, FastAPIConfig)
-            assert isinstance(settings.dash, DashConfig)
+            assert isinstance(settings.viewer, ViewerConfig)
             assert isinstance(settings.minio, S3DepictioCLIConfig)
             # assert isinstance(settings.jbrowse, JBrowseConfig)
             assert isinstance(settings.auth, AuthConfig)
@@ -445,7 +445,7 @@ class TestSettings:
             # Check a few representative values
             assert settings.mongodb.external_port == 27018
             assert settings.fastapi.external_port == 8058
-            assert settings.dash.external_port == 5080
+            assert settings.viewer.external_port == 5080
             # assert settings.jbrowse.enabled is True
 
     def test_custom_values(self):
@@ -455,7 +455,7 @@ class TestSettings:
             "DEPICTIO_MONGODB_SERVICE_PORT": None,
             "DEPICTIO_MONGODB_EXTERNAL_PORT": None,
             "DEPICTIO_FASTAPI_EXTERNAL_PORT": None,
-            "DEPICTIO_DASH_EXTERNAL_PORT": None,
+            "DEPICTIO_VIEWER_EXTERNAL_PORT": None,
             "DEPICTIO_MINIO_PUBLIC_URL": None,
             "DEPICTIO_JBROWSE_ENABLED": None,
             "DEPICTIO_AUTH_INTERNAL_API_KEY": None,
@@ -465,7 +465,7 @@ class TestSettings:
             # Create custom configs
             mongo_config = MongoDBConfig(service_port=12345, external_port=12345)
             fastapi_config = FastAPIConfig(service_port=9000, external_port=9000)
-            dash_config = DashConfig(service_port=4000, external_port=4000)
+            viewer_config = ViewerConfig(service_port=4000, external_port=4000)
             minio_config = S3DepictioCLIConfig(public_url="https://custom-s3.example.com")
             # jbrowse_config = JBrowseConfig(enabled=False)
             auth_config = AuthConfig()
@@ -473,7 +473,7 @@ class TestSettings:
             settings = Settings(
                 mongodb=mongo_config,
                 fastapi=fastapi_config,
-                dash=dash_config,
+                viewer=viewer_config,
                 minio=minio_config,
                 # jbrowse=jbrowse_config,
                 auth=auth_config,
@@ -481,7 +481,7 @@ class TestSettings:
 
             assert settings.mongodb.external_port == 12345
             assert settings.fastapi.external_port == 9000
-            assert settings.dash.external_port == 4000
+            assert settings.viewer.external_port == 4000
             assert settings.minio.public_url == "https://custom-s3.example.com"
             # assert settings.jbrowse.enabled is False
             assert isinstance(settings.auth, AuthConfig)
@@ -492,7 +492,7 @@ class TestSettings:
             "DEPICTIO_MONGODB_SERVICE_PORT": "54321",
             "DEPICTIO_MONGODB_EXTERNAL_PORT": "54321",
             "DEPICTIO_FASTAPI_EXTERNAL_PORT": "7000",
-            "DEPICTIO_DASH_EXTERNAL_PORT": "6000",
+            "DEPICTIO_VIEWER_EXTERNAL_PORT": "6000",
             "DEPICTIO_MINIO_PUBLIC_URL": "https://env-s3.example.com",
             "DEPICTIO_FASTAPI_PUBLIC_URL": "https://env-fastapi.example.com",
             "DEPICTIO_JBROWSE_ENABLED": "false",
@@ -504,14 +504,14 @@ class TestSettings:
             # to ensure each one is initialized with the current environment variables
             mongodb = MongoDBConfig()
             fastapi = FastAPIConfig()
-            dash = DashConfig()
+            viewer = ViewerConfig()
             minio = S3DepictioCLIConfig()
             # jbrowse = JBrowseConfig()
             auth = AuthConfig()
 
             assert mongodb.external_port == 54321
             assert fastapi.external_port == 7000
-            assert dash.external_port == 6000
+            assert viewer.external_port == 6000
             assert minio.public_url == "https://env-s3.example.com"
             # assert jbrowse.enabled is False
             assert auth.internal_api_key_env == "env_token"
@@ -520,7 +520,7 @@ class TestSettings:
             settings = Settings(
                 mongodb=mongodb,
                 fastapi=fastapi,
-                dash=dash,
+                viewer=viewer,
                 minio=minio,
                 # jbrowse=jbrowse,
                 auth=auth,
@@ -529,7 +529,7 @@ class TestSettings:
             # Verify settings contains our configs
             assert settings.mongodb.external_port == 54321
             assert settings.fastapi.external_port == 7000
-            assert settings.dash.external_port == 6000
+            assert settings.viewer.external_port == 6000
             assert settings.minio.public_url == "https://env-s3.example.com"
             assert settings.fastapi.public_url == "https://env-fastapi.example.com"
             # assert settings.jbrowse.enabled is False

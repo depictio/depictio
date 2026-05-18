@@ -72,20 +72,20 @@ class FastAPIConfig(ServiceConfig):
     model_config = SettingsConfigDict(env_prefix="DEPICTIO_FASTAPI_")
 
 
-class DashConfig(ServiceConfig):
-    """Dash frontend server configuration."""
+class ViewerConfig(ServiceConfig):
+    """Viewer frontend server configuration."""
 
     service_name: str = Field(default="depictio-frontend")
     service_port: int = Field(default=5080)
     external_port: int = Field(default=5080)
-    host: str = Field(default="0.0.0.0", description="Bind address for the Dash server")
+    host: str = Field(default="0.0.0.0", description="Bind address for the viewer server")
     workers: int = Field(default=4, description="Number of Gunicorn worker processes")
-    debug: bool = Field(default=True, description="Enable Dash debug mode with hot reload")
+    debug: bool = Field(default=True, description="Enable debug mode with hot reload")
     auto_generate_figures: bool = Field(
         default=False, description="Enable automatic figure generation in UI mode"
     )
 
-    model_config = SettingsConfigDict(env_prefix="DEPICTIO_DASH_")
+    model_config = SettingsConfigDict(env_prefix="DEPICTIO_VIEWER_")
 
 
 class MongoDBConfig(ServiceConfig):
@@ -850,7 +850,7 @@ class Settings(BaseSettings):
 
     # Core services
     fastapi: FastAPIConfig = Field(default_factory=FastAPIConfig)
-    dash: DashConfig = Field(default_factory=DashConfig)
+    viewer: ViewerConfig = Field(default_factory=ViewerConfig)
     mongodb: MongoDBConfig = Field(default_factory=MongoDBConfig)
     minio: S3DepictioCLIConfig = Field(default_factory=S3DepictioCLIConfig)
     auth: AuthConfig = Field(default_factory=AuthConfig)

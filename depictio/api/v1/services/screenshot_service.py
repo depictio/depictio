@@ -238,11 +238,11 @@ async def generate_dual_theme_screenshots(
         token_data = await get_admin_auth_token()
         token_data_json = json.dumps(token_data)
         # ``no-walkthrough=1`` tells the React viewer's ``WalkthroughHost`` to
-        # short-circuit before mounting either tour engine. The Dash legacy
+        # short-circuit before mounting either tour engine. The legacy
         # ``/dashboard/{id}`` route doesn't render the React walkthrough today,
         # so this is defensive — keeps the PNG clean if/when screenshots ever
         # target ``/dashboard-beta/{id}``.
-        dashboard_url = f"{settings.dash.internal_url}/dashboard/{dashboard_id}?no-walkthrough=1"
+        dashboard_url = f"{settings.viewer.internal_url}/dashboard/{dashboard_id}?no-walkthrough=1"
 
         logger.info(f"Starting dual-theme screenshot for dashboard {dashboard_id}")
 
@@ -251,19 +251,19 @@ async def generate_dual_theme_screenshots(
             page = await browser.new_page(viewport={"width": 1920, "height": 1080})
 
             # Set authentication token before navigation. The very first goto
-            # is also our probe: if the Dash frontend container isn't running
-            # in this compose project, Playwright surfaces ERR_NAME_NOT_RESOLVED
+            # is also our probe: if the viewer container isn't running in
+            # this compose project, Playwright surfaces ERR_NAME_NOT_RESOLVED
             # (or ERR_CONNECTION_*) — skip rather than failing the Celery task.
             try:
-                await page.goto(settings.dash.internal_url)
+                await page.goto(settings.viewer.internal_url)
             except Exception as nav_err:
                 msg = str(nav_err)
                 if any(m in msg for m in HOST_UNREACHABLE_MARKERS):
                     logger.warning(
-                        f"Dash frontend ({settings.dash.internal_url}) is unreachable "
+                        f"Viewer ({settings.viewer.internal_url}) is unreachable "
                         f"from this worker — skipping screenshot for {dashboard_id}. "
-                        "Start the depictio-frontend container or set "
-                        "DEPICTIO_DASH_SERVICE_NAME to a reachable host."
+                        "Start the depictio-viewer container or set "
+                        "DEPICTIO_VIEWER_SERVICE_NAME to a reachable host."
                     )
                     await browser.close()
                     skip_result: ScreenshotResult = {

@@ -10,8 +10,8 @@ data:
   DEPICTIO_FASTAPI_SERVICE_NAME: {{ printf "%s-depictio-backend" .Release.Name | quote }}
   DEPICTIO_FASTAPI_SERVICE_PORT: {{ .Values.backend.env.DEPICTIO_FASTAPI_SERVICE_PORT | quote }}
   DEPICTIO_FASTAPI_PUBLIC_URL: {{ .Values.backend.env.DEPICTIO_FASTAPI_PUBLIC_URL | default (include "depictio.apiUrlWithProtocol" .) | quote }}
-  DEPICTIO_DASH_SERVICE_PORT: {{ .Values.backend.env.DEPICTIO_DASH_SERVICE_PORT | quote }}
-  DEPICTIO_DASH_SERVICE_NAME: {{ printf "%s-depictio-frontend" .Release.Name | quote }}
+  DEPICTIO_VIEWER_SERVICE_PORT: {{ .Values.backend.env.DEPICTIO_VIEWER_SERVICE_PORT | quote }}
+  DEPICTIO_VIEWER_SERVICE_NAME: {{ printf "%s-depictio-frontend" .Release.Name | quote }}
   DEPICTIO_MONGODB_SERVICE_NAME: {{ printf "%s-mongo" .Release.Name | quote }}
   DEPICTIO_MONGODB_WIPE: {{ .Values.backend.env.DEPICTIO_MONGODB_WIPE | quote }}
   DEPICTIO_MONGODB_SERVICE_PORT: {{ .Values.backend.env.DEPICTIO_MONGODB_SERVICE_PORT | quote }}
@@ -97,12 +97,12 @@ metadata:
   namespace: {{ .Release.Namespace }}
 data:
   DEPICTIO_DEV_MODE: {{ .Values.frontend.env.DEPICTIO_DEV_MODE | quote }}
-  DEPICTIO_DASH_DEBUG_UI: {{ .Values.frontend.env.DEPICTIO_DASH_DEBUG_UI | default "false" | quote }}
+  DEPICTIO_VIEWER_DEBUG_UI: {{ .Values.frontend.env.DEPICTIO_VIEWER_DEBUG_UI | default "false" | quote }}
   DEPICTIO_LOGGING_VERBOSITY_LEVEL: {{ .Values.backend.env.DEPICTIO_LOGGING_VERBOSITY_LEVEL | quote }}
   DEPICTIO_FASTAPI_SERVICE_NAME: {{ printf "%s-depictio-backend" .Release.Name | quote }}
   DEPICTIO_FASTAPI_SERVICE_PORT: {{ .Values.frontend.env.DEPICTIO_FASTAPI_SERVICE_PORT | quote }}
   DEPICTIO_FASTAPI_PUBLIC_URL: {{ .Values.backend.env.DEPICTIO_FASTAPI_PUBLIC_URL | default (include "depictio.apiUrlWithProtocol" .) | quote }}
-  DEPICTIO_DASH_SERVICE_PORT: {{ .Values.frontend.env.DEPICTIO_DASH_SERVICE_PORT | quote }}
+  DEPICTIO_VIEWER_SERVICE_PORT: {{ .Values.frontend.env.DEPICTIO_VIEWER_SERVICE_PORT | quote }}
   DEPICTIO_MONGODB_SERVICE_NAME: {{ printf "%s-mongo" .Release.Name | quote }}
   DEPICTIO_MONGODB_SERVICE_PORT: {{ .Values.frontend.env.DEPICTIO_MONGODB_SERVICE_PORT | quote }}
 
@@ -145,7 +145,7 @@ data:
   {{- end }}
 
   # Performance
-  DEPICTIO_DASH_WORKERS: {{ .Values.frontend.env.DEPICTIO_DASH_WORKERS | quote }}
+  DEPICTIO_VIEWER_WORKERS: {{ .Values.frontend.env.DEPICTIO_VIEWER_WORKERS | quote }}
   # Analytics
   DEPICTIO_ANALYTICS_ENABLED: {{ .Values.frontend.env.DEPICTIO_ANALYTICS_ENABLED | default "true" | quote }}
   DEPICTIO_ANALYTICS_SESSION_TIMEOUT_MINUTES: {{ .Values.frontend.env.DEPICTIO_ANALYTICS_SESSION_TIMEOUT_MINUTES | default "30" | quote }}
@@ -211,9 +211,9 @@ data:
   DEPICTIO_FASTAPI_SERVICE_NAME: {{ printf "%s-depictio-backend" .Release.Name | quote }}
   DEPICTIO_FASTAPI_SERVICE_PORT: {{ .Values.backend.env.DEPICTIO_FASTAPI_SERVICE_PORT | quote }}
   DEPICTIO_FASTAPI_PUBLIC_URL: {{ .Values.backend.env.DEPICTIO_FASTAPI_PUBLIC_URL | default (include "depictio.apiUrlWithProtocol" .) | quote }}
-  DEPICTIO_DASH_SERVICE_NAME: {{ printf "%s-depictio-frontend" .Release.Name | quote }}
+  DEPICTIO_VIEWER_SERVICE_NAME: {{ printf "%s-depictio-frontend" .Release.Name | quote }}
   # Use service port (80) not pod port (5080) - Celery connects via K8s service which routes 80 -> 5080
-  DEPICTIO_DASH_SERVICE_PORT: {{ .Values.frontend.service.httpPort | quote }}
+  DEPICTIO_VIEWER_SERVICE_PORT: {{ .Values.frontend.service.httpPort | quote }}
 
   # MinIO/S3 configuration
   DEPICTIO_MINIO_ROOT_USER: {{ .Values.minio.env.DEPICTIO_MINIO_ROOT_USER | default "minio" | quote }}

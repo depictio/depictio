@@ -677,12 +677,12 @@ async def screenshot_dash_fixed(
             # ``no-walkthrough=1`` suppresses the React viewer's walkthrough
             # popover + dim backdrop when the URL ever lands on a beta route.
             dashboard_url = (
-                f"{settings.dash.internal_url}/dashboard/{dashboard_id}?no-walkthrough=1"
+                f"{settings.viewer.internal_url}/dashboard/{dashboard_id}?no-walkthrough=1"
             )
             logger.info(f"📸 Taking screenshot of: {dashboard_url}")
 
             # Set auth and navigate
-            await page.goto(settings.dash.internal_url)
+            await page.goto(settings.viewer.internal_url)
             await page.evaluate(f"localStorage.setItem('local-store', '{token_data_json}')")
             await page.goto(dashboard_url, timeout=30000)
 
