@@ -175,12 +175,14 @@ const Walkthrough: React.FC<WalkthroughProps> = ({ definition, enabled }) => {
           width={340}
           withinPortal
           zIndex={1100}
+          classNames={{ dropdown: 'depictio-walkthrough-popover' }}
         >
           <Popover.Target>
             {/* Invisible proxy positioned over the actual target — keeps the
                 popover anchored without mutating the host element. */}
             <Box
               aria-hidden
+              data-walkthrough="anchor"
               style={{
                 position: 'fixed',
                 top: target.getBoundingClientRect().top,
@@ -196,6 +198,7 @@ const Walkthrough: React.FC<WalkthroughProps> = ({ definition, enabled }) => {
       ) : (
         // Centered card for welcome/end steps with no anchor target.
         <Box
+          data-walkthrough="card"
           style={{
             position: 'fixed',
             top: '50%',

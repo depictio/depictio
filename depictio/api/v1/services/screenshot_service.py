@@ -213,7 +213,12 @@ async def generate_dual_theme_screenshots(
         # Get admin authentication token
         token_data = await get_admin_auth_token()
         token_data_json = json.dumps(token_data)
-        dashboard_url = f"{settings.dash.internal_url}/dashboard/{dashboard_id}"
+        # ``no-walkthrough=1`` tells the React viewer's ``WalkthroughHost`` to
+        # short-circuit before mounting either tour engine. The Dash legacy
+        # ``/dashboard/{id}`` route doesn't render the React walkthrough today,
+        # so this is defensive — keeps the PNG clean if/when screenshots ever
+        # target ``/dashboard-beta/{id}``.
+        dashboard_url = f"{settings.dash.internal_url}/dashboard/{dashboard_id}?no-walkthrough=1"
 
         logger.info(f"Starting dual-theme screenshot for dashboard {dashboard_id}")
 
@@ -398,7 +403,12 @@ async def generate_react_dual_theme_screenshots(
     # the API container this resolves to the docker DNS hostname, on a host
     # invocation it falls back to the external port.
     origin = settings.fastapi.url
-    dashboard_url = f"{origin}/dashboard-beta/{dashboard_id}"
+    # `?no-walkthrough=1` tells the React SPA's WalkthroughHost to bail
+    # before mounting either tour engine, so the captured PNG never
+    # contains the popover, anchor, or dim backdrop — even when the
+    # seeded admin's localStorage would otherwise auto-start the
+    # builder walkthrough on first visit.
+    dashboard_url = f"{origin}/dashboard-beta/{dashboard_id}?no-walkthrough=1"
 
     try:
         token_data = await get_admin_auth_token()

@@ -1,3 +1,4 @@
+import os
 from datetime import datetime
 from typing import Annotated, Any
 
@@ -444,12 +445,22 @@ async def get_current_user_info_optional(
                 "is_admin": True,
             }
 
+    # DEPICTIO_DEV_MODE is consumed by the React viewer to suppress the
+    # walkthrough (and any other onboarding hints) during local development —
+    # devs hot-reload the page constantly and don't need the tour popping back
+    # up every time the auth-builder definition bumps its version. The env var
+    # already gates dev-only behavior elsewhere (Dash hot reload, OAuth state
+    # skip in `auth_endpoints/utils.py`), so we surface it here rather than
+    # adding a parallel knob.
+    is_dev_mode = os.getenv("DEPICTIO_DEV_MODE", "false").lower() in ("true", "1", "yes")
+
     return {
         "auth_mode": auth_mode,
         "user": user_payload,
         "is_public_mode": settings.auth.is_public_mode,
         "is_single_user_mode": settings.auth.is_single_user_mode,
         "is_demo_mode": getattr(settings.auth, "is_demo_mode", False),
+        "is_dev_mode": is_dev_mode,
         "unauthenticated_mode": getattr(settings.auth, "unauthenticated_mode", False),
         "google_oauth_enabled": settings.auth.google_oauth_enabled,
         "temporary_user_expiry_hours": settings.auth.temporary_user_expiry_hours,

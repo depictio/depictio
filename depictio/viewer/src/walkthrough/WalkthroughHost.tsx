@@ -18,11 +18,22 @@ import { authBuilderWalkthrough } from './steps/authBuilder';
  *  duplicate-to-temp-session step can quote the actual TTL the backend will
  *  honour. `useMemo` keeps the definition stable across renders that don't
  *  change those settings — otherwise `useWalkthrough` would treat each
- *  render as a new definition. */
+ *  render as a new definition.
+ *
+ *  Three hard-disable gates short-circuit before either engine mounts:
+ *    1. `/auth` routes — the welcome step has no `route` filter, so without
+ *       this guard `SpotlightBackdrop` paints a full-viewport dim layer on
+ *       top of the sign-in form on first visit.
+ *    2. `DEPICTIO_DEV_MODE=true` — local devs hot-reload constantly and
+ *       don't want the tour relaunching on every version bump.
+ *    3. `?no-walkthrough=1` query flag — set by the screenshot pipeline so
+ *       captured PNGs never contain the popover or backdrop, even if the
+ *       walkthrough would otherwise auto-start for the seeded admin. */
 const WalkthroughHost: React.FC = () => {
   const {
     isPublicMode,
     isDemoMode,
+    isDevMode,
     temporaryUserExpiryHours,
     temporaryUserExpiryMinutes,
     loading,
@@ -36,6 +47,7 @@ const WalkthroughHost: React.FC = () => {
     [temporaryUserExpiryHours, temporaryUserExpiryMinutes],
   );
   if (loading) return null;
+  if (shouldSuppressWalkthrough(isDevMode)) return null;
   const isExplorer = isPublicMode || isDemoMode;
   return (
     <>
@@ -44,5 +56,14 @@ const WalkthroughHost: React.FC = () => {
     </>
   );
 };
+
+function shouldSuppressWalkthrough(isDevMode: boolean): boolean {
+  if (typeof window === 'undefined') return false;
+  if (window.location.pathname.startsWith('/auth')) return true;
+  if (isDevMode) return true;
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('no-walkthrough') === '1') return true;
+  return false;
+}
 
 export default WalkthroughHost;

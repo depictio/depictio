@@ -32,6 +32,10 @@ export interface UseCurrentUserResult {
   /** True when the server is in demo mode (a public_mode variant with a
    *  curated set of read-only example dashboards). */
   isDemoMode: boolean;
+  /** True when the server is in development mode (DEPICTIO_DEV_MODE=true).
+   *  Used to suppress the walkthrough during local dev — devs hot-reload
+   *  constantly and don't need the tour relaunching on every version bump. */
+  isDevMode: boolean;
   /** True when the server runs in single-admin mode (no login UI). */
   isSingleUserMode: boolean;
   /** TTL of a temporary public-mode user, in hours. Used by the walkthrough
@@ -64,6 +68,7 @@ export function useCurrentUser(): UseCurrentUserResult {
   const [authMode, setAuthMode] = useState<AuthMode>('standard');
   const [isPublicMode, setIsPublicMode] = useState<boolean>(false);
   const [isDemoMode, setIsDemoMode] = useState<boolean>(false);
+  const [isDevMode, setIsDevMode] = useState<boolean>(false);
   const [isSingleUserMode, setIsSingleUserMode] = useState<boolean>(false);
   const [temporaryUserExpiryHours, setTemporaryUserExpiryHours] = useState<number>(24);
   const [temporaryUserExpiryMinutes, setTemporaryUserExpiryMinutes] = useState<number>(0);
@@ -93,6 +98,7 @@ export function useCurrentUser(): UseCurrentUserResult {
               is_admin?: boolean;
               is_public_mode?: boolean;
               is_demo_mode?: boolean;
+              is_dev_mode?: boolean;
               is_single_user_mode?: boolean;
               temporary_user_expiry_hours?: number;
               temporary_user_expiry_minutes?: number;
@@ -108,6 +114,7 @@ export function useCurrentUser(): UseCurrentUserResult {
         setAuthMode(mode);
         setIsPublicMode(Boolean(data?.is_public_mode));
         setIsDemoMode(Boolean(data?.is_demo_mode));
+        setIsDevMode(Boolean(data?.is_dev_mode));
         setIsSingleUserMode(Boolean(data?.is_single_user_mode));
         if (typeof data?.temporary_user_expiry_hours === 'number') {
           setTemporaryUserExpiryHours(data.temporary_user_expiry_hours);
@@ -136,6 +143,7 @@ export function useCurrentUser(): UseCurrentUserResult {
     authMode,
     isPublicMode,
     isDemoMode,
+    isDevMode,
     isSingleUserMode,
     temporaryUserExpiryHours,
     temporaryUserExpiryMinutes,
