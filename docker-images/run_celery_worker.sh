@@ -21,6 +21,6 @@ else
 fi
 
 # Start Celery worker - pointing to celery_worker module (imports flask_dispatcher for task discovery)
-exec celery -A depictio.dash.celery_worker:celery_app worker \
+exec celery -A depictio.api.celery_worker:celery_app worker \
     --loglevel=info \
     --concurrency="$CELERY_WORKERS"

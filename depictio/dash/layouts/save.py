@@ -13,13 +13,13 @@ The module is organized into:
 import dash
 from dash import ALL, Input, Output, State
 
+from depictio.api.celery_app import (
+    generate_dashboard_screenshot_dual,
+)
 from depictio.api.v1.configs.logging_init import logger
 from depictio.dash.api_calls import (
     api_call_get_dashboard,
     api_call_save_dashboard,
-)
-from depictio.dash.celery_app import (
-    generate_dashboard_screenshot_dual,
 )
 
 

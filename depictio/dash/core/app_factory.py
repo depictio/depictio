@@ -42,7 +42,7 @@ def create_dash_app():
     background_callback_manager = None
 
     try:
-        from depictio.dash.celery_app import celery_app
+        from depictio.api.celery_app import celery_app
 
         background_callback_manager = dash.CeleryManager(celery_app)
         logger.info("   Note: Celery worker must be running for design mode to work")

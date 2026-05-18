@@ -11,9 +11,9 @@ import logging
 
 from fastapi import APIRouter, Depends, HTTPException
 
+from depictio.api.celery_app import celery_app
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.endpoints.user_endpoints.routes import get_user_or_anonymous
-from depictio.dash.celery_app import celery_app
 from depictio.models.models.users import User
 
 logger = logging.getLogger(__name__)

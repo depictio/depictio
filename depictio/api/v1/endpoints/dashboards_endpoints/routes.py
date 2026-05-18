@@ -244,7 +244,7 @@ async def get_dashboard(
     )
     if has_multiqc:
         try:
-            from depictio.dash.celery_app import prewarm_multiqc_dashboard
+            from depictio.api.celery_app import prewarm_multiqc_dashboard
 
             prewarm_multiqc_dashboard.delay(str(dashboard_id))
         except Exception as e:
@@ -635,7 +635,7 @@ async def save_dashboard(
         # module, and a broad except so a Celery/broker outage never breaks
         # the save response itself.
         try:
-            from depictio.dash.celery_app import generate_dashboard_screenshot_dual
+            from depictio.api.celery_app import generate_dashboard_screenshot_dual
 
             user_id = str(getattr(current_user, "id", "") or "")
             generate_dashboard_screenshot_dual.delay(dashboard_id_str, user_id)
@@ -2983,7 +2983,7 @@ def render_multiqc_endpoint(
 
             if not prerender_ready or build_running:
                 if not build_running:
-                    from depictio.dash.celery_app import build_multiqc_prerender
+                    from depictio.api.celery_app import build_multiqc_prerender
 
                     try:
                         build_multiqc_prerender.delay(str(dc_id))
