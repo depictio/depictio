@@ -6,13 +6,13 @@
  */
 import React, { useEffect, useState } from 'react';
 import {
+  Accordion,
   Group,
   MultiSelect,
   SegmentedControl,
   Select,
   Slider,
   Stack,
-  Switch,
   Text,
   TextInput,
   Title,
@@ -20,6 +20,7 @@ import {
 import { fetchDataCollectionConfig } from 'depictio-react-core';
 import { useBuilderStore } from '../store/useBuilderStore';
 import ColumnSelect from '../shared/ColumnSelect';
+import CrossFilterSection from '../shared/CrossFilterSection';
 import DesignShell from '../shared/DesignShell';
 import MapPreview from './MapPreview';
 
@@ -201,23 +202,17 @@ const MapBuilder: React.FC = () => {
         />
       </Stack>
 
-      <Switch
-        label="Enable cross-filtering selection"
-        checked={selectionEnabled}
-        onChange={(e) =>
-          patchConfig({ selection_enabled: e.currentTarget.checked })
-        }
-        mt="sm"
-      />
-
-      <ColumnSelect
-        label="Selection Column"
-        description="Column to extract from selected points"
-        value={config.selection_column}
-        onChange={(name) => patchConfig({ selection_column: name })}
-        clearable
-        disabled={!selectionEnabled}
-      />
+      <Accordion variant="separated" radius="md" multiple>
+        <CrossFilterSection
+          enabled={selectionEnabled}
+          onEnabledChange={(checked) =>
+            patchConfig({ selection_enabled: checked })
+          }
+          column={config.selection_column}
+          onColumnChange={(name) => patchConfig({ selection_column: name })}
+          columnDescription="Column to extract from selected points"
+        />
+      </Accordion>
     </Stack>
   );
 

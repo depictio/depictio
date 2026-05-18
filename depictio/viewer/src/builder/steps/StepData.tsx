@@ -35,7 +35,18 @@ import type { ColumnSpec } from '../store/useBuilderStore';
 import { getComponentTypeMeta } from '../componentTypes';
 import DataCollectionInfoCard from '../data/DataCollectionInfoCard';
 import DataPreviewTable from '../data/DataPreviewTable';
-import type { DataCollectionInfo } from '../data/DataCollectionInfoCard';
+import type { DataCollectionInfo, JoinDetails } from '../data/DataCollectionInfoCard';
+
+/** Subset of the project-level `joins[]` entry we care about for the
+ *  builder UI. The endpoint returns extra plumbing (workflow_name,
+ *  persist, granularity, etc.) but only these four fields are surfaced. */
+interface ProjectJoin {
+  result_dc_id?: string;
+  left_dc: string;
+  right_dc: string;
+  on_columns: string[];
+  how: string;
+}
 
 const StepData: React.FC = () => {
   const dashboardId = useBuilderStore((s) => s.dashboardId);
@@ -48,6 +59,7 @@ const StepData: React.FC = () => {
   const setCols = useBuilderStore((s) => s.setCols);
 
   const [workflows, setWorkflows] = useState<WorkflowEntry[]>([]);
+  const [projectJoins, setProjectJoins] = useState<ProjectJoin[]>([]);
   const [loadingWorkflows, setLoadingWorkflows] = useState(true);
   const [workflowsError, setWorkflowsError] = useState<string | null>(null);
   // Basic projects synthesize one workflow per uploaded DC (named
@@ -111,6 +123,8 @@ const StepData: React.FC = () => {
       .then(({ project }) => {
         const wfs = project.workflows || [];
         setWorkflows(wfs);
+        const joinsRaw = (project as { joins?: unknown }).joins;
+        setProjectJoins(Array.isArray(joinsRaw) ? (joinsRaw as ProjectJoin[]) : []);
         setWorkflowsError(null);
         const rawType = project.project_type;
         setProjectType(rawType === 'advanced' ? 'advanced' : 'basic');
@@ -199,6 +213,56 @@ const StepData: React.FC = () => {
     [allFlatDcs],
   );
 
+  /** dc_id → JoinDetails lookup, used by the dropdown ``renderOption`` and
+   *  the Data-Collection-Information card to mark joined DCs distinctly.
+   *  Keyed by ``result_dc_id`` which equals the joined DC's own ``_id``. */
+  const joinByDcId = useMemo(() => {
+    const map: Record<string, JoinDetails> = {};
+    for (const j of projectJoins) {
+      if (!j.result_dc_id) continue;
+      map[j.result_dc_id] = {
+        leftDc: j.left_dc,
+        rightDc: j.right_dc,
+        onColumns: Array.isArray(j.on_columns) ? j.on_columns : [],
+        how: j.how || 'inner',
+      };
+    }
+    return map;
+  }, [projectJoins]);
+
+  /** Mantine ``Select`` renderOption — wraps a DC dropdown row with an icon
+   *  reflecting source (joined vs native) and, for joined DCs, a small
+   *  caption naming the input DCs and join column(s). */
+  const renderDcOption = ({ option }: { option: { value: string; label: string } }) => {
+    const join = joinByDcId[option.value];
+    const isJoined = Boolean(join);
+    return (
+      <Group gap={8} wrap="nowrap" align="flex-start">
+        <Icon
+          icon={isJoined ? 'mdi:link-variant' : 'mdi:database'}
+          width={16}
+          color={
+            isJoined
+              ? 'var(--mantine-color-grape-6)'
+              : 'var(--mantine-color-gray-6)'
+          }
+          style={{ marginTop: 2, flexShrink: 0 }}
+        />
+        <Stack gap={2} style={{ minWidth: 0 }}>
+          <Text size="sm" fw={isJoined ? 600 : 400} truncate>
+            {option.label}
+          </Text>
+          {isJoined && (
+            <Text size="xs" c="dimmed" truncate>
+              {join.leftDc} ⋈ {join.rightDc}
+              {join.onColumns.length > 0 ? ` · on ${join.onColumns.join(', ')}` : ''}
+            </Text>
+          )}
+        </Stack>
+      </Group>
+    );
+  };
+
   /** True when no workflow in the project has a DC compatible with the
    *  selected component type. Surfaces a friendly empty-state instead of an
    *  empty Data Collection dropdown. */
@@ -273,6 +337,11 @@ const StepData: React.FC = () => {
           const cfg = cfgR.value as Record<string, unknown> | null;
           const wf = workflows.find((w) => w._id === wfId);
           const dc = wf?.data_collections?.find((d) => d._id === dcId);
+          // ``source`` and ``join`` make the joined DCs visually distinct in
+          // the info card — see DataCollectionInfoCard's Source / Join Inputs
+          // / On Columns / Join Type rows.
+          const source = (cfg?.source as string) || 'native';
+          const join = joinByDcId[dcId];
           setDcInfo({
             workflowId: wfId || '',
             dataCollectionId: dcId,
@@ -292,11 +361,17 @@ const StepData: React.FC = () => {
               shapeR.status === 'fulfilled'
                 ? shapeR.value?.num_columns
                 : null,
+            source,
+            join,
           });
         } else {
           // Even if config fetch fails (e.g. multiqc), still display what we know.
           const wf = workflows.find((w) => w._id === wfId);
           const dc = wf?.data_collections?.find((d) => d._id === dcId);
+          // Config fetch failed but we may still know this DC is a join
+          // result from the project's join definitions — surface that even
+          // without the per-DC config row.
+          const join = joinByDcId[dcId];
           setDcInfo({
             workflowId: wfId || '',
             dataCollectionId: dcId,
@@ -311,6 +386,8 @@ const StepData: React.FC = () => {
               shapeR.status === 'fulfilled'
                 ? shapeR.value?.num_columns
                 : null,
+            source: join ? 'joined' : undefined,
+            join,
           });
         }
       })
@@ -430,6 +507,7 @@ const StepData: React.FC = () => {
             searchable
             disabled={!wfId}
             leftSection={<Icon icon="mdi:database" width={16} />}
+            renderOption={renderDcOption}
           />
         </SimpleGrid>
       ) : (() => {
@@ -447,6 +525,7 @@ const StepData: React.FC = () => {
             searchable
             disabled={loadingWorkflows || flatDcOptions.length === 0}
             leftSection={<Icon icon="mdi:database" width={16} />}
+            renderOption={renderDcOption}
           />
         );
       })()}

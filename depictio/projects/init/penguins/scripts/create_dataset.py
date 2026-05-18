@@ -81,9 +81,17 @@ def process_and_split_data(df, base_dir, species_dirs):
             subset=["bill_length_mm", "bill_depth_mm", "flipper_length_mm"]
         )
 
-        # Add individual ID column (row number within species with "ID" as prefix)
-        # species_data['individual_id'] = range(1, len(species_data) + 1)
-        species_data["individual_id"] = [f"ID_{i}" for i in range(1, len(species_data) + 1)]
+        # Add individual ID column. Prefix with the species (lower-case) so
+        # IDs stay globally unique across the per-species "runs" — otherwise
+        # `ID_1` collides across run_1_adelie / run_2_chinstrap / run_3_gentoo
+        # and inner-joining `physical_features` ⨝ `demographic_data` on
+        # `(individual_id, depictio_run_id)` produces correct rows, but
+        # downstream interactive filters by `individual_id` alone return
+        # one row per run-flavoured copy (×3 fan-out).
+        species_slug = species.lower()
+        species_data["individual_id"] = [
+            f"{species_slug}_{i}" for i in range(1, len(species_data) + 1)
+        ]
 
         # Add metadata
         run_id = f"run_{i}_{species.lower()}"

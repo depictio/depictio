@@ -26,18 +26,49 @@
   top: 12px;
   right: 12px;
   z-index: 5;
-  opacity: 0;
-  transition: opacity 0.15s ease;
   pointer-events: none;
   /* Stay inside the Paper border at narrow widths (e.g. interactive
    * components in the 1/4-width left panel) — no overflow past the frame. */
   max-width: calc(100% - 24px);
-  background: var(--mantine-color-body);
   border-radius: var(--mantine-radius-sm);
   padding: 2px;
 }
-.depictio-component-chrome:hover .depictio-component-actions,
-.depictio-component-chrome:focus-within .depictio-component-actions {
+/* Soft pill background — fades in with the row on hover so the icons stay
+ * legible over busy backgrounds. Promoted to always-visible when the row
+ * is anchored by an active reset (`has-active-reset`) so the lone reset
+ * icon doesn't float without a backdrop. */
+.depictio-component-actions::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: var(--mantine-color-body);
+  border-radius: inherit;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  z-index: -1;
+}
+.depictio-component-chrome:hover .depictio-component-actions::before,
+.depictio-component-chrome:focus-within .depictio-component-actions::before,
+.depictio-component-actions.has-active-reset::before {
+  opacity: 1;
+}
+/* Per-child opacity so the active-reset icon can stay visible while the
+ * rest of the row remains hover-only. (Opacity on the row container would
+ * collapse the whole subtree together.) */
+.depictio-component-actions > * {
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  pointer-events: none;
+}
+.depictio-component-chrome:hover .depictio-component-actions > *,
+.depictio-component-chrome:focus-within .depictio-component-actions > * {
+  opacity: 1;
+  pointer-events: auto;
+}
+/* The reset icon stays visible without hover when its component is the
+ * source of the dashboard's active filter — gives users a persistent
+ * affordance to clear the filter from where it originated. */
+.depictio-component-actions > .depictio-active-reset {
   opacity: 1;
   pointer-events: auto;
 }

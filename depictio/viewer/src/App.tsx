@@ -16,6 +16,7 @@ import {
   fetchDashboard,
   fetchAllDashboards,
   bulkComputeCards,
+  AvailableFilterValuesProvider,
   ComponentRenderer,
   DashboardGrid,
   InteractiveGroupCard,
@@ -304,7 +305,10 @@ const App: React.FC = () => {
   );
 
   return (
-    <>
+    <AvailableFilterValuesProvider
+      dashboardMetadata={dashboard?.stored_metadata}
+      projectId={dashboard?.project_id}
+    >
       <AppShell
       header={{ height: 50 }}
       navbar={{
@@ -498,7 +502,7 @@ const App: React.FC = () => {
         dashboard={dashboard}
       />
     </AppShell>
-    </>
+    </AvailableFilterValuesProvider>
   );
 };
 
