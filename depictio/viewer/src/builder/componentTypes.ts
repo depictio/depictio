@@ -69,6 +69,13 @@ export const COMPONENT_TYPES: ComponentTypeMeta[] = [
     icon: 'mdi:map-marker-multiple',
     iconBg: '#7A5DC7',
   },
+  {
+    type: 'text',
+    label: 'Text',
+    description: 'Section headings and notes to document the dashboard',
+    icon: 'mdi:text-box-edit',
+    iconBg: '#e91e63',
+  },
 ];
 
 export function getComponentTypeMeta(t: ComponentType): ComponentTypeMeta {

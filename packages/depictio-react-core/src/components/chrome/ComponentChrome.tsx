@@ -52,6 +52,8 @@ export function actionsFor(componentType: string): ChromeAction[] {
     case 'image':
     case 'jbrowse':
       return ['metadata'];
+    case 'text':
+      return ['metadata'];
     default:
       return ['metadata'];
   }

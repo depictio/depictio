@@ -19,6 +19,7 @@ export { default as FigureRenderer } from './components/FigureRenderer';
 export { default as TableRenderer } from './components/TableRenderer';
 export { default as ImageRenderer } from './components/ImageRenderer';
 export { default as MapRenderer } from './components/MapRenderer';
+export { default as TextRenderer } from './components/TextRenderer';
 export { default as JBrowseRenderer } from './components/JBrowseRenderer';
 export { default as MultiQCRenderer } from './components/MultiQCRenderer';
 
@@ -94,6 +95,7 @@ export {
   fetchFigureParameterDiscovery,
   fetchFigureVisualizationList,
   upsertComponent,
+  saveDashboardNotes,
   // Auth helpers (React /auth page)
   fetchAuthStatus,
   loginUser,

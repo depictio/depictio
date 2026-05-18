@@ -244,6 +244,10 @@ export interface DashboardData {
   /** Project-level realtime config — only when ``enabled === true`` should
    *  the viewer mount the WebSocket subscription / live-updates indicator. */
   project_realtime?: { enabled: boolean; debounce_ms: number };
+  /** Free-form rich-text notes / documentation attached to the dashboard.
+   *  Persisted as HTML via the NotesFooter TipTap editor (see
+   *  depictio/viewer/src/components/NotesFooter.tsx). */
+  notes_content?: string;
   [key: string]: unknown;
 }
 
@@ -1196,6 +1200,9 @@ function defaultLayoutForType(
       return { x: 0, y, w: 4, h: 4 };
     case 'map':
       return { x: 0, y, w: 4, h: 4 };
+    case 'text':
+      // Section heading / banner — wide and short.
+      return { x: 0, y, w: 8, h: 3 };
     default:
       return { x: 0, y, w: 4, h: 4 };
   }
@@ -1258,6 +1265,26 @@ export async function upsertComponent(
     body: JSON.stringify(payload),
   });
   if (!res.ok) await throwHttpError(res, 'Failed to save component');
+}
+
+/**
+ * Save the `notes_content` field on a dashboard. Mirrors the GET → mutate →
+ * POST round-trip used by `upsertComponent`, so concurrent edits to layout or
+ * components from elsewhere on the page have a small race window where the
+ * last writer wins. Acceptable for this lightweight feature.
+ */
+export async function saveDashboardNotes(
+  dashboardId: string,
+  notesContent: string,
+): Promise<void> {
+  const dashboard = await fetchDashboard(dashboardId);
+  const payload: DashboardData = { ...dashboard, notes_content: notesContent };
+  const res = await fetch(`${API_BASE}/dashboards/save/${dashboardId}`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) await throwHttpError(res, 'Failed to save dashboard notes');
 }
 
 export async function fetchCurrentUser(): Promise<CurrentUser | null> {

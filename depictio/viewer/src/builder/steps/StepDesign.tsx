@@ -48,7 +48,9 @@ const StepDesign: React.FC = () => {
     if (!state.componentType) return false;
     if (!state.dashboardId || !state.componentId) return false;
     if (state.mode === 'create') {
-      if (!state.wfId || !state.dcId) return false;
+      // Text components are stand-alone — no workflow/DC binding required.
+      if (state.componentType !== 'text' && (!state.wfId || !state.dcId))
+        return false;
     }
     return true;
   }, [state]);

@@ -29,6 +29,7 @@ import {
 } from 'depictio-react-core';
 import type {
   DashboardData,
+  DashboardPermissions,
   DashboardSummary,
   InteractiveFilter,
   RealtimeMode,
@@ -38,6 +39,7 @@ import { Header, Sidebar, SettingsDrawer } from './chrome';
 import { useSidebarOpen } from './hooks/useSidebarOpen';
 import { useCurrentUser } from './hooks/useCurrentUser';
 import { isDashboardOwner } from './lib/dashboardOwnership';
+import NotesFooter from './components/NotesFooter';
 
 /**
  * Top-level SPA. Layout:
@@ -480,6 +482,13 @@ const App: React.FC = () => {
               </Box>
             </Box>
           </div>
+        )}
+        {dashboard && dashboardId && (
+          <NotesFooter
+            dashboardId={dashboardId}
+            initialContent={(dashboard.notes_content as string) ?? ''}
+            permissions={dashboard.permissions as DashboardPermissions | undefined}
+          />
         )}
       </AppShell.Main>
 

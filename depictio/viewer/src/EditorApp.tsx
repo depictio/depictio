@@ -63,6 +63,7 @@ import {
 } from 'depictio-react-core';
 import type {
   DashboardData,
+  DashboardPermissions,
   DashboardSummary,
   InteractiveFilter,
   StoredMetadata,
@@ -73,6 +74,7 @@ import LeftFilterPanel from './components/LeftFilterPanel';
 import GridItemEditOverlay from './components/GridItemEditOverlay';
 import { Header, Sidebar, SettingsDrawer, TabModal } from './chrome';
 import type { TabModalSubmitPayload } from './chrome';
+import NotesFooter from './components/NotesFooter';
 import './chrome/chrome.css';
 
 const API_BASE = '/depictio/api/v1';
@@ -1007,6 +1009,13 @@ const EditorApp: React.FC = () => {
               />
             </Box>
           </div>
+        )}
+        {dashboard && dashboardId && (
+          <NotesFooter
+            dashboardId={dashboardId}
+            initialContent={(dashboard.notes_content as string) ?? ''}
+            permissions={dashboard.permissions as DashboardPermissions | undefined}
+          />
         )}
       </AppShell.Main>
 
