@@ -453,6 +453,15 @@ async def get_current_user_info_optional(
     # skip in `auth_endpoints/utils.py`), so we surface it here rather than
     # adding a parallel knob.
     is_dev_mode = os.getenv("DEPICTIO_DEV_MODE", "false").lower() in ("true", "1", "yes")
+    # DEPICTIO_WALKTHROUGH_DISABLED is the explicit kill switch for the
+    # walkthrough independent of dev mode — useful for deployments that just
+    # don't want any onboarding overlay (e.g. embedded iframes, staging envs
+    # used for screenshot capture, internal demos with their own narration).
+    walkthrough_disabled = os.getenv("DEPICTIO_WALKTHROUGH_DISABLED", "false").lower() in (
+        "true",
+        "1",
+        "yes",
+    )
 
     return {
         "auth_mode": auth_mode,
@@ -461,6 +470,7 @@ async def get_current_user_info_optional(
         "is_single_user_mode": settings.auth.is_single_user_mode,
         "is_demo_mode": getattr(settings.auth, "is_demo_mode", False),
         "is_dev_mode": is_dev_mode,
+        "walkthrough_disabled": walkthrough_disabled,
         "unauthenticated_mode": getattr(settings.auth, "unauthenticated_mode", False),
         "google_oauth_enabled": settings.auth.google_oauth_enabled,
         "temporary_user_expiry_hours": settings.auth.temporary_user_expiry_hours,

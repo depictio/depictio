@@ -20,13 +20,16 @@ import { authBuilderWalkthrough } from './steps/authBuilder';
  *  change those settings — otherwise `useWalkthrough` would treat each
  *  render as a new definition.
  *
- *  Three hard-disable gates short-circuit before either engine mounts:
+ *  Four hard-disable gates short-circuit before either engine mounts:
  *    1. `/auth` routes — the welcome step has no `route` filter, so without
  *       this guard `SpotlightBackdrop` paints a full-viewport dim layer on
  *       top of the sign-in form on first visit.
  *    2. `DEPICTIO_DEV_MODE=true` — local devs hot-reload constantly and
  *       don't want the tour relaunching on every version bump.
- *    3. `?no-walkthrough=1` query flag — set by the screenshot pipeline so
+ *    3. `DEPICTIO_WALKTHROUGH_DISABLED=true` — explicit kill switch for
+ *       deployments (embedded iframes, staging, internal demos) that just
+ *       don't want the onboarding overlay at all.
+ *    4. `?no-walkthrough=1` query flag — set by the screenshot pipeline so
  *       captured PNGs never contain the popover or backdrop, even if the
  *       walkthrough would otherwise auto-start for the seeded admin. */
 const WalkthroughHost: React.FC = () => {
@@ -34,6 +37,7 @@ const WalkthroughHost: React.FC = () => {
     isPublicMode,
     isDemoMode,
     isDevMode,
+    walkthroughDisabled,
     temporaryUserExpiryHours,
     temporaryUserExpiryMinutes,
     loading,
@@ -47,7 +51,7 @@ const WalkthroughHost: React.FC = () => {
     [temporaryUserExpiryHours, temporaryUserExpiryMinutes],
   );
   if (loading) return null;
-  if (shouldSuppressWalkthrough(isDevMode)) return null;
+  if (shouldSuppressWalkthrough(isDevMode, walkthroughDisabled)) return null;
   const isExplorer = isPublicMode || isDemoMode;
   return (
     <>
@@ -57,10 +61,11 @@ const WalkthroughHost: React.FC = () => {
   );
 };
 
-function shouldSuppressWalkthrough(isDevMode: boolean): boolean {
+function shouldSuppressWalkthrough(isDevMode: boolean, walkthroughDisabled: boolean): boolean {
   if (typeof window === 'undefined') return false;
   if (window.location.pathname.startsWith('/auth')) return true;
   if (isDevMode) return true;
+  if (walkthroughDisabled) return true;
   const params = new URLSearchParams(window.location.search);
   if (params.get('no-walkthrough') === '1') return true;
   return false;

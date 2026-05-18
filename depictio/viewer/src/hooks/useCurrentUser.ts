@@ -36,6 +36,11 @@ export interface UseCurrentUserResult {
    *  Used to suppress the walkthrough during local dev — devs hot-reload
    *  constantly and don't need the tour relaunching on every version bump. */
   isDevMode: boolean;
+  /** Explicit walkthrough kill switch (DEPICTIO_WALKTHROUGH_DISABLED=true).
+   *  Independent of dev mode — for deployments that just don't want the
+   *  onboarding overlay at all (embedded iframes, staging used for
+   *  screenshot capture, internal demos with their own narration). */
+  walkthroughDisabled: boolean;
   /** True when the server runs in single-admin mode (no login UI). */
   isSingleUserMode: boolean;
   /** TTL of a temporary public-mode user, in hours. Used by the walkthrough
@@ -69,6 +74,7 @@ export function useCurrentUser(): UseCurrentUserResult {
   const [isPublicMode, setIsPublicMode] = useState<boolean>(false);
   const [isDemoMode, setIsDemoMode] = useState<boolean>(false);
   const [isDevMode, setIsDevMode] = useState<boolean>(false);
+  const [walkthroughDisabled, setWalkthroughDisabled] = useState<boolean>(false);
   const [isSingleUserMode, setIsSingleUserMode] = useState<boolean>(false);
   const [temporaryUserExpiryHours, setTemporaryUserExpiryHours] = useState<number>(24);
   const [temporaryUserExpiryMinutes, setTemporaryUserExpiryMinutes] = useState<number>(0);
@@ -99,6 +105,7 @@ export function useCurrentUser(): UseCurrentUserResult {
               is_public_mode?: boolean;
               is_demo_mode?: boolean;
               is_dev_mode?: boolean;
+              walkthrough_disabled?: boolean;
               is_single_user_mode?: boolean;
               temporary_user_expiry_hours?: number;
               temporary_user_expiry_minutes?: number;
@@ -115,6 +122,7 @@ export function useCurrentUser(): UseCurrentUserResult {
         setIsPublicMode(Boolean(data?.is_public_mode));
         setIsDemoMode(Boolean(data?.is_demo_mode));
         setIsDevMode(Boolean(data?.is_dev_mode));
+        setWalkthroughDisabled(Boolean(data?.walkthrough_disabled));
         setIsSingleUserMode(Boolean(data?.is_single_user_mode));
         if (typeof data?.temporary_user_expiry_hours === 'number') {
           setTemporaryUserExpiryHours(data.temporary_user_expiry_hours);
@@ -144,6 +152,7 @@ export function useCurrentUser(): UseCurrentUserResult {
     isPublicMode,
     isDemoMode,
     isDevMode,
+    walkthroughDisabled,
     isSingleUserMode,
     temporaryUserExpiryHours,
     temporaryUserExpiryMinutes,
