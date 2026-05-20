@@ -974,10 +974,23 @@ jobs:
           # Import with dry-run (validates without creating)
           depictio-cli dashboard import ../projects/init/iris/dashboards/overview.yaml --dry-run
 
-          # Actually import dashboard to server
+          # Actually import dashboard to server.
+          # --overwrite: the iris dashboard is auto-seeded at backend init with
+          # the same title as overview.yaml ("Iris Dataset Analysis"), so a plain
+          # import would 409 on title clash. Overwrite is the legitimate path
+          # for re-importing a seeded dashboard.
+          # set +e so a non-zero CLI exit doesn't abort before we echo the
+          # captured stderr/stdout — otherwise the actual error is invisible.
           echo "🔄 Importing dashboard to server..."
-          IMPORT_OUTPUT=$(depictio-cli dashboard import ../projects/init/iris/dashboards/overview.yaml --config admin_config.yaml 2>&1)
+          set +e
+          IMPORT_OUTPUT=$(depictio-cli dashboard import ../projects/init/iris/dashboards/overview.yaml --config admin_config.yaml --overwrite 2>&1)
+          IMPORT_EXIT=$?
+          set -e
           echo "$IMPORT_OUTPUT"
+          if [ $IMPORT_EXIT -ne 0 ]; then
+            echo "❌ depictio-cli dashboard import exited with $IMPORT_EXIT"
+            exit $IMPORT_EXIT
+          fi
 
           # Extract dashboard ID from import output
           DASHBOARD_ID=$(echo "$IMPORT_OUTPUT" | grep "Dashboard ID:" | awk '{print $NF}')
