@@ -317,6 +317,74 @@ async def delete_data_collection_by_id(
     return await _delete_data_collection_by_id(data_collection_id, current_user)
 
 
+@datacollections_endpoint_router.post("/{data_collection_id}/append")
+async def append_table_dc(
+    data_collection_id: str,
+    files: list[UploadFile] = File(...),
+    current_user=Depends(get_current_user),
+):
+    """Append uploaded files to an existing Table DC (preserves rows).
+
+    Mirrors the MultiQC `/append` semantics. Each file is read into memory
+    under per-file 50MB / total 500MB caps before being concatenated with
+    the existing delta-backed rows.
+    """
+    from depictio.api.v1.endpoints.datacollections_endpoints.table_manage import (
+        append_table_uploads,
+    )
+    from depictio.api.v1.endpoints.multiqc_endpoints.routes import (
+        _read_multiqc_uploads_with_caps,
+    )
+
+    decoded_files = await _read_multiqc_uploads_with_caps(files)
+    return await asyncio.to_thread(
+        append_table_uploads,
+        data_collection_id=data_collection_id,
+        decoded_files=decoded_files,
+        current_user=current_user,
+    )
+
+
+@datacollections_endpoint_router.post("/{data_collection_id}/replace")
+async def replace_table_dc(
+    data_collection_id: str,
+    files: list[UploadFile] = File(...),
+    current_user=Depends(get_current_user),
+):
+    """Replace all rows of a Table DC with the uploaded files."""
+    from depictio.api.v1.endpoints.datacollections_endpoints.table_manage import (
+        replace_table_uploads,
+    )
+    from depictio.api.v1.endpoints.multiqc_endpoints.routes import (
+        _read_multiqc_uploads_with_caps,
+    )
+
+    decoded_files = await _read_multiqc_uploads_with_caps(files)
+    return await asyncio.to_thread(
+        replace_table_uploads,
+        data_collection_id=data_collection_id,
+        decoded_files=decoded_files,
+        current_user=current_user,
+    )
+
+
+@datacollections_endpoint_router.delete("/{data_collection_id}/data")
+async def clear_table_dc(
+    data_collection_id: str,
+    current_user=Depends(get_current_user),
+):
+    """Wipe a Table DC's rows on S3 + Mongo, keeping the DC config intact."""
+    from depictio.api.v1.endpoints.datacollections_endpoints.table_manage import (
+        clear_table_data,
+    )
+
+    return await asyncio.to_thread(
+        clear_table_data,
+        data_collection_id=data_collection_id,
+        current_user=current_user,
+    )
+
+
 @datacollections_endpoint_router.post("/create_from_upload")
 async def create_data_collection_from_upload(
     project_id: str = Form(...),
