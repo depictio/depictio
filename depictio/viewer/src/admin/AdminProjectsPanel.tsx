@@ -2,7 +2,6 @@ import React, { useEffect, useMemo, useState } from 'react';
 import {
   Accordion,
   Alert,
-  Badge,
   Center,
   Group,
   List,
@@ -91,26 +90,27 @@ const AdminProjectsPanel: React.FC = () => {
         return (
           <Accordion.Item key={String(projectId)} value={String(projectId)}>
             <Accordion.Control>
-              <Group justify="space-between" wrap="nowrap">
-                <Text fw={500} size="lg" style={{ flex: 1, minWidth: 0 }} truncate>
+              <Stack gap={4} style={{ width: '100%' }}>
+                <Text fw={500} size="lg" truncate>
                   {project.name}
                 </Text>
-                <Group gap="xs">
+                <List
+                  size="sm"
+                  spacing={2}
+                  c="dimmed"
+                  listStyleType="disc"
+                  withPadding
+                >
+                  <List.Item>
+                    Visibility: {project.is_public ? 'Public' : 'Private'}
+                  </List.Item>
                   {project.workflow_system && project.workflow_system !== 'none' && (
-                    <Badge color="grape" variant="light" size="sm" radius="sm">
-                      {project.workflow_system}
-                    </Badge>
+                    <List.Item>
+                      Workflow system: {project.workflow_system}
+                    </List.Item>
                   )}
-                  <Badge
-                    color={project.is_public ? 'green' : 'gray'}
-                    variant="light"
-                    size="md"
-                    radius="sm"
-                  >
-                    {project.is_public ? 'Public' : 'Private'}
-                  </Badge>
-                </Group>
-              </Group>
+                </List>
+              </Stack>
             </Accordion.Control>
             <Accordion.Panel>
               <Stack gap="xs">
