@@ -68,6 +68,40 @@ const SectionHeader: React.FC<{
   </Group>
 );
 
+/** Empty placeholder shown when a section ("Owned", "Public", ...) has no
+ *  dashboards matching the current filters. Mirrors the section's icon/color
+ *  so the user sees *which* bucket is empty at a glance. */
+const EmptySectionCard: React.FC<{
+  icon: string;
+  color: string;
+  label: string;
+}> = ({ icon, color, label }) => (
+  <Paper withBorder radius="md" p="lg">
+    <Group justify="center" gap="md" wrap="nowrap">
+      <div
+        style={{
+          width: 48,
+          height: 48,
+          borderRadius: '50%',
+          background: 'var(--mantine-color-default-hover)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          flexShrink: 0,
+        }}
+      >
+        <Icon icon={icon} width={26} color={color} />
+      </div>
+      <Stack gap={2} style={{ minWidth: 0 }}>
+        <Text fw={600}>No {label.toLowerCase()} dashboards</Text>
+        <Text c="dimmed" size="sm">
+          Dashboards in this group will appear here once they exist.
+        </Text>
+      </Stack>
+    </Group>
+  </Paper>
+);
+
 // Custom chevron with a fixed-size wrapper so the rotation transform doesn't
 // shift the bounding box between open/closed states.
 const FIXED_CHEVRON = (
@@ -536,9 +570,11 @@ const DashboardsList: React.FC<DashboardsListProps> = ({
         <Accordion.Panel>
           <Space h={10} />
           {s.groups.length === 0 ? (
-            <Text c="dimmed" size="sm">
-              Nothing here yet.
-            </Text>
+            <EmptySectionCard
+              icon={s.icon}
+              color={s.iconColor}
+              label={s.label}
+            />
           ) : (
             renderThumbnailsFor(s.groups)
           )}
