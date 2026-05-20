@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useCallback, useRef, useMemo, useDeferredValue } from 'react';
 import {
   AppShell,
+  Button,
   Group,
   Text,
   Loader,
@@ -11,6 +12,7 @@ import {
   Box,
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
+import { Icon } from '@iconify/react';
 
 import {
   fetchDashboard,
@@ -147,12 +149,37 @@ const App: React.FC = () => {
     return () => clearTimeout(timer);
   }, [dashboard, dashboardId, stableFilterKey(filters), refreshTick]);
 
-  const handleFilterChange = useCallback((update: InteractiveFilter) => {
-    // Dedupe by (index, source) so chart selections coexist with the same
-    // component's other filters. Mirrors mergeFiltersBySource in
-    // packages/depictio-react-core/src/selection.ts.
-    setFilters((prev) => mergeFiltersBySource(prev, update));
-  }, []);
+  const handleFilterChange = useCallback(
+    (update: InteractiveFilter) => {
+      // Enrich the emitted filter with the source component's dc_id so the
+      // backend's link-resolver can map cross-DC filters (e.g. metadata →
+      // canonical advanced-viz DCs). Interactive renderers don't include
+      // their own dc_id in the emitted shape; look it up from the dashboard's
+      // stored_metadata by component index.
+      const enriched = ((): InteractiveFilter => {
+        if (update.metadata?.dc_id) return update;
+        const sources = dashboard?.stored_metadata ?? [];
+        const src = sources.find((m) => String(m.index) === String(update.index));
+        const dcId = src?.dc_id;
+        if (!dcId) return update;
+        return {
+          ...update,
+          metadata: {
+            ...(update.metadata ?? {}),
+            dc_id: dcId,
+            column_name: update.column_name ?? update.metadata?.column_name,
+            interactive_component_type:
+              update.interactive_component_type ?? update.metadata?.interactive_component_type,
+          },
+        };
+      })();
+      // Dedupe by (index, source) so chart selections coexist with the same
+      // component's other filters. Mirrors mergeFiltersBySource in
+      // packages/depictio-react-core/src/selection.ts.
+      setFilters((prev) => mergeFiltersBySource(prev, enriched));
+    },
+    [dashboard],
+  );
 
   const handleResetAllFilters = useCallback(() => setFilters([]), []);
 
@@ -326,7 +353,6 @@ const App: React.FC = () => {
           desktopOpened={desktopOpened}
           onToggleMobile={toggleMobile}
           onToggleDesktop={toggleDesktop}
-          onReset={handleResetAllFilters}
           onOpenSettings={openSettings}
           cardsLoading={cardsLoading}
           isOwner={isOwner}
@@ -395,9 +421,19 @@ const App: React.FC = () => {
                 style={{ height: '100%' }}
                 data-tour-id="filter-panel"
               >
-                <Title order={5} mb="sm">
-                  Filters
-                </Title>
+                <Group justify="space-between" align="center" mb="sm" wrap="nowrap">
+                  <Title order={5}>Filters</Title>
+                  <Button
+                    leftSection={<Icon icon="bx:reset" width={12} />}
+                    color="orange"
+                    variant="filled"
+                    size="xs"
+                    onClick={handleResetAllFilters}
+                    disabled={filters.length === 0}
+                  >
+                    Reset all
+                  </Button>
+                </Group>
                 <Stack gap="sm">
                   {leftComponents.length === 0 && (
                     <Text size="sm" c="dimmed">No interactive components.</Text>
@@ -430,16 +466,6 @@ const App: React.FC = () => {
                       mt="xs"
                     >
                       Clear chart selections
-                    </Anchor>
-                  )}
-                  {filters.length > 0 && (
-                    <Anchor
-                      component="button"
-                      onClick={handleResetAllFilters}
-                      size="xs"
-                      mt="xs"
-                    >
-                      Reset all filters
                     </Anchor>
                   )}
                 </Stack>

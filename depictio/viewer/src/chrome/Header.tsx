@@ -48,7 +48,6 @@ interface HeaderProps {
   desktopOpened: boolean;
   onToggleMobile: () => void;
   onToggleDesktop: () => void;
-  onReset: () => void;
   onOpenSettings: () => void;
   cardsLoading?: boolean;
   /** 'view' (default) shows Edit; 'edit' shows View + Add + Save. */
@@ -70,7 +69,7 @@ interface HeaderProps {
 /**
  * Replaces the contents of `<AppShell.Header>`. Three regions:
  *   Left:  Burgers + active-tab icon + dashboard title (with parent breadcrumb)
- *   Right: PoweredBy | Edit | Reset | Settings
+ *   Right: PoweredBy | Edit | Settings (Reset lives in the Filters panel now).
  *
  * Visual parity with `depictio/dash/layouts/header.py:design_header`.
  */
@@ -83,7 +82,6 @@ const Header: React.FC<HeaderProps> = ({
   desktopOpened,
   onToggleMobile,
   onToggleDesktop,
-  onReset,
   onOpenSettings,
   cardsLoading = false,
   mode = 'view',
@@ -280,15 +278,6 @@ const Header: React.FC<HeaderProps> = ({
             Exit Edit
           </Button>
         )}
-        <Button
-          leftSection={<Icon icon="bx:reset" width={14} />}
-          color="orange"
-          variant="filled"
-          size="xs"
-          onClick={onReset}
-        >
-          Reset
-        </Button>
         <Button
           leftSection={<Icon icon="ic:baseline-settings" width={14} />}
           color="gray"
