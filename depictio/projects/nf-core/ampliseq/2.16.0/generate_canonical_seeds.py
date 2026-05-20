@@ -179,9 +179,7 @@ def main() -> None:
     sunburst.write_csv(DATA_ROOT / "sunburst_canonical.tsv", separator="\t")
     print(f"  -> sunburst_canonical.tsv ({sunburst.shape})")
 
-    sankey = _load_recipe("sankey_canonical").transform(
-        {"genus": rel_genus, "metadata": metadata}
-    )
+    sankey = _load_recipe("sankey_canonical").transform({"genus": rel_genus, "metadata": metadata})
     sankey.write_csv(DATA_ROOT / "sankey_canonical.tsv", separator="\t")
     print(f"  -> sankey_canonical.tsv ({sankey.shape})")
 

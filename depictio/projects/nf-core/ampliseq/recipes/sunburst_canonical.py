@@ -40,11 +40,7 @@ def _parse_rank_at(lineage: pl.Expr, position: int) -> pl.Expr:
     """Take the ``position``-th ``;``-separated segment from a QIIME2 lineage
     string. Returns 'Unclassified' for missing / empty segments."""
     seg = lineage.str.split(";").list.get(position, null_on_oob=True).str.strip_chars()
-    return (
-        pl.when(seg.is_null() | (seg == ""))
-        .then(pl.lit("Unclassified"))
-        .otherwise(seg)
-    )
+    return pl.when(seg.is_null() | (seg == "")).then(pl.lit("Unclassified")).otherwise(seg)
 
 
 def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:

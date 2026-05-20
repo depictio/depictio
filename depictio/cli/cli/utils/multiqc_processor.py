@@ -543,6 +543,7 @@ def process_multiqc_data_collection(
                     # MultiQC parquet files are bounded (~25-50 MB), so a
                     # 5 GB threshold keeps every realistic upload single-part.
                     from boto3.s3.transfer import TransferConfig
+
                     _single_part_cfg = TransferConfig(multipart_threshold=5 * 1024**3)
                     s3_client.upload_file(
                         file_path,

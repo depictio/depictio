@@ -44,9 +44,7 @@ def top_n_variable_vst(n: int = 100) -> None:
     df = pl.read_csv(SRC / "hierarchical_heatmap" / "deseq2_vst_matrix.tsv", separator="\t")
     sample_cols = [c for c in df.columns if c != "gene_id"]
     df = (
-        df.with_columns(
-            pl.concat_list([pl.col(c) for c in sample_cols]).list.var().alias("_var")
-        )
+        df.with_columns(pl.concat_list([pl.col(c) for c in sample_cols]).list.var().alias("_var"))
         .sort("_var", descending=True)
         .head(n)
         .drop("_var")
@@ -64,12 +62,14 @@ def melt_rarefaction() -> None:
     melted = df.unpivot(index=id_cols, variable_name="depth_iter", value_name="metric")
     melted = melted.with_columns(
         [
-            pl.col("depth_iter").str.extract(r"depth-(\d+)_iter-\d+", 1).cast(pl.Int64).alias(
-                "depth"
-            ),
-            pl.col("depth_iter").str.extract(r"depth-\d+_iter-(\d+)", 1).cast(pl.Int64).alias(
-                "iter"
-            ),
+            pl.col("depth_iter")
+            .str.extract(r"depth-(\d+)_iter-\d+", 1)
+            .cast(pl.Int64)
+            .alias("depth"),
+            pl.col("depth_iter")
+            .str.extract(r"depth-\d+_iter-(\d+)", 1)
+            .cast(pl.Int64)
+            .alias("iter"),
         ]
     ).drop("depth_iter")
     melted = melted.rename({"sample-id": "sample_id"}).drop_nulls("metric")
@@ -89,7 +89,6 @@ def melt_feature_table() -> None:
     )
     # First column header in the file is `#OTU ID` (preserved as a column name).
     otu_col = df.columns[0]
-    sample_cols = [c for c in df.columns if c != otu_col]
     melted = (
         df.unpivot(index=[otu_col], variable_name="sample_id", value_name="abundance")
         .rename({otu_col: "taxon"})

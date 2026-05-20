@@ -352,11 +352,10 @@ def read_delta_table(
         if "Schema" in str(e) and "not iterable" in str(e):
             try:
                 from deltalake import DeltaTable
+
                 dt = DeltaTable(destination_file, storage_options=opts)
                 df = pl.from_arrow(dt.to_pyarrow_table())
-                logger.debug(
-                    f"Delta table read from {destination_file} via pyarrow fallback."
-                )
+                logger.debug(f"Delta table read from {destination_file} via pyarrow fallback.")
                 return {
                     "result": "success",
                     "message": f"Delta table read from {destination_file} (pyarrow fallback).",
