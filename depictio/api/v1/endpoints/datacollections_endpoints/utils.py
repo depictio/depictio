@@ -461,6 +461,11 @@ def _build_polars_kwargs(
         else:
             polars_kwargs["separator"] = "," if file_format == "csv" else "\t"
         polars_kwargs["has_header"] = has_header
+        # R-emitted CSVs (DESeq2, edgeR, limma, ANCOM-BC, ...) write `NA` for
+        # missing values. Without this, polars infers numeric columns like
+        # padj / log2FoldChange as String and dtype-strict viz validators
+        # (volcano, ma, qq) silently reject every row.
+        polars_kwargs["null_values"] = ["NA", "NaN", ""]
     if compression and compression != "none":
         polars_kwargs["compression"] = compression
     return polars_kwargs

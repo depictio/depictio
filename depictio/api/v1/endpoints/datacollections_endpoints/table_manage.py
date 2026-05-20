@@ -123,6 +123,11 @@ def _read_uploaded_table(
             kwargs = dict(polars_kwargs)
             if file_format == "tsv" and "separator" not in kwargs:
                 kwargs["separator"] = "\t"
+            # Backfill the NA defaults for DCs created before this default
+            # landed. R-emitted CSVs (DESeq2/edgeR/limma/ANCOM-BC) write `NA`
+            # for missing values; without this, padj/log2FoldChange are
+            # inferred as String and dtype-strict viz validators reject them.
+            kwargs.setdefault("null_values", ["NA", "NaN", ""])
             return pl.read_csv(temp_path, **kwargs)
         if file_format == "parquet":
             return pl.read_parquet(temp_path, **polars_kwargs)

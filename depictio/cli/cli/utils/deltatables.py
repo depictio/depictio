@@ -336,8 +336,9 @@ def read_delta_table(
     Raises:
         Exception: If reading the Delta table fails.
     """
+    opts = storage_options.model_dump()
     try:
-        df = pl.read_delta(destination_file, storage_options=storage_options.model_dump())
+        df = pl.read_delta(destination_file, storage_options=opts)
         logger.debug(f"Delta table read from {destination_file}.")
         return {
             "result": "success",
@@ -345,6 +346,26 @@ def read_delta_table(
             "data": df,
         }
     except Exception as e:
+        # polars.read_delta is broken against deltalake>=0.24 (Schema object
+        # is no longer iterable). Fall back to DeltaTable->pyarrow->polars,
+        # which round-trips cleanly.
+        if "Schema" in str(e) and "not iterable" in str(e):
+            try:
+                from deltalake import DeltaTable
+                dt = DeltaTable(destination_file, storage_options=opts)
+                df = pl.from_arrow(dt.to_pyarrow_table())
+                logger.debug(
+                    f"Delta table read from {destination_file} via pyarrow fallback."
+                )
+                return {
+                    "result": "success",
+                    "message": f"Delta table read from {destination_file} (pyarrow fallback).",
+                    "data": df,
+                }
+            except Exception as e2:
+                error_msg = f"Issue when reading Delta table (pyarrow fallback): {e2}"
+                logger.warning(error_msg)
+                return {"result": "error", "message": error_msg}
         error_msg = f"Issue when reading Delta table: {e}"
         logger.warning(error_msg)
         return {"result": "error", "message": error_msg}
