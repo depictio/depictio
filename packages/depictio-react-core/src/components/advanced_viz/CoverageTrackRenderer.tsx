@@ -21,6 +21,7 @@ import {
 } from '../../api';
 import AdvancedVizFrame from './AdvancedVizFrame';
 import { applyDataTheme, applyLayoutTheme } from './plotlyTheme';
+import { GenomeAnnotation, resolveAnnotation } from './genome_annotations';
 
 interface CoverageTrackConfig {
   chromosome_col: string;
@@ -33,6 +34,9 @@ interface CoverageTrackConfig {
   smoothing_window?: number;
   color_by?: 'single' | 'category' | 'sample';
   show_annotation_lane?: boolean;
+  /** Optional bundled-annotation override. Falls back to chromosome-name
+   *  auto-detection when null. See ``genome_annotations/index.ts``. */
+  annotation_id?: string | null;
   chromosomes_filter?: string[] | null;
   samples_filter?: string[] | null;
 }
@@ -45,16 +49,24 @@ interface Props {
 
 const SMOOTHING_CHOICES = [
   { value: '0', label: 'None' },
-  { value: '5', label: '5-bin mean' },
-  { value: '10', label: '10-bin mean' },
-  { value: '20', label: '20-bin mean' },
-  { value: '50', label: '50-bin mean' },
+  { value: '5', label: '5-bin' },
+  { value: '10', label: '10-bin' },
+  { value: '20', label: '20-bin' },
+  { value: '50', label: '50-bin' },
 ];
 
-/** Cap on per-sample subplots — Plotly grid layouts past ~8 rows squeeze too
- *  thin to be useful and add measurable jank. When the user picks more samples
- *  than this, we drop into single-axis multi-trace mode (one line per sample). */
-const MAX_FACETED_SAMPLES = 8;
+/** Soft cap on per-sample subplots used for the *auto-default* picker only.
+ *  The user can still explicitly pick "Per-sample" beyond this — they'll get a
+ *  crowded but functional grid, and a hint nudging them toward Aggregate.
+ *  Plotly handles N stacked rows fine; the bottleneck is human readability. */
+const MAX_FACETED_SAMPLES_AUTO = 8;
+
+/** Above this sample count, default to aggregate view. Individual stacked tracks
+ *  become illegible past ~10 samples regardless of layout, so we collapse to a
+ *  cohort median + IQR ribbon with optional dimmed individual traces. */
+const AGGREGATE_DEFAULT_THRESHOLD = 10;
+
+type ViewMode = 'aggregate' | 'facet' | 'overlay';
 
 const CoverageTrackRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => {
   const config = (metadata.config || {}) as CoverageTrackConfig;
@@ -63,18 +75,21 @@ const CoverageTrackRenderer: React.FC<Props> = ({ metadata, filters, refreshTick
   const isDark = colorScheme === 'dark';
 
   const [yScale, setYScale] = useState<'linear' | 'log'>(config.y_scale ?? 'linear');
-  const [smoothingWindow, setSmoothingWindow] = useState<number>(config.smoothing_window ?? 0);
+  // Bump from 0 → 5 so the default plot is de-noised. 200-bp bins × 5 ≈ 1 kb
+  // rolling window — preserves dropout structure, kills high-frequency wiggle.
+  const [smoothingWindow, setSmoothingWindow] = useState<number>(config.smoothing_window ?? 5);
   const [colorBy, setColorBy] = useState<NonNullable<CoverageTrackConfig['color_by']>>(
     config.color_by ?? (config.category_col ? 'category' : 'sample'),
   );
-  const [showAnnotationLane, setShowAnnotationLane] = useState<boolean>(
-    config.show_annotation_lane ?? true,
-  );
+  // ``viewMode`` is initialised lazily after data arrives (we need the sample
+  // count to choose aggregate-by-default). Until then, hold null.
+  const [viewMode, setViewMode] = useState<ViewMode | null>(null);
+  const [showAnnotationStrip, setShowAnnotationStrip] = useState<boolean>(true);
+  const [showIndividuals, setShowIndividuals] = useState<boolean>(true);
   const [selectedChromosomes, setSelectedChromosomes] = useState<string[]>(
     config.chromosomes_filter ?? [],
   );
   const [selectedSamples, setSelectedSamples] = useState<string[]>(config.samples_filter ?? []);
-  const [facet, setFacet] = useState<boolean>(true);
 
   const [data, setData] = useState<CoverageTrackResult | null>(null);
   const [loading, setLoading] = useState(true);
@@ -176,9 +191,18 @@ const CoverageTrackRenderer: React.FC<Props> = ({ metadata, filters, refreshTick
     config.category_col,
   ]);
 
-  /** Mantine theme palette for categorical traces — primary swatches across hues
-   *  so per-sample / per-category colouring stays distinct in both light + dark
-   *  scheme (Mantine's shade-5 lands in the visible band of every named hue). */
+  // Once data lands, pick a sensible default viewMode: aggregate when there
+  // are many samples (median+ribbon scales), overlay when 1 sample. User can
+  // override; we don't second-guess subsequent loads.
+  useEffect(() => {
+    if (viewMode !== null || !data) return;
+    const n = data.summary.samples.length;
+    if (n === 0 || n === 1) setViewMode('overlay');
+    else if (n <= MAX_FACETED_SAMPLES_AUTO) setViewMode('facet');
+    else setViewMode('aggregate');
+  }, [data, viewMode]);
+
+  /** Mantine theme palette for categorical traces. */
   const palette = useMemo<string[]>(
     () => [
       theme.colors.blue[5],
@@ -197,8 +221,72 @@ const CoverageTrackRenderer: React.FC<Props> = ({ metadata, filters, refreshTick
     [theme.colors],
   );
 
-  const figureSpec = useMemo<{ data: unknown[]; layout: Record<string, unknown> } | null>(() => {
+  /** Resolve a genome annotation — explicit ``annotation_id`` in the config
+   *  wins, otherwise fall back to chromosome-name auto-detection against the
+   *  bound DC's first (or user-selected) chromosome. Returns null when neither
+   *  resolves; the annotation strip is hidden in that case. */
+  const annotation: GenomeAnnotation | null = useMemo(() => {
     if (!data) return null;
+    const chroms = data.summary.chromosomes;
+    const target = selectedChromosomes[0] || chroms[0];
+    return resolveAnnotation(config.annotation_id ?? null, target);
+  }, [data, selectedChromosomes, config.annotation_id]);
+
+  /** Aggregate the long-format rows by position across samples. For each unique
+   *  position we compute min/q1/median/q3/max so the renderer can draw a Tukey-
+   *  style band. Cheap (~150 positions × N samples for SARS-CoV-2 mosdepth). */
+  type Aggregate = {
+    positions: number[];
+    min: number[];
+    q1: number[];
+    median: number[];
+    q3: number[];
+    max: number[];
+  };
+  const aggregate: Aggregate | null = useMemo(() => {
+    if (!data || viewMode !== 'aggregate') return null;
+    const cols = data.columns;
+    const positions = (data.rows[cols.position] as number[]) || [];
+    const values = (data.rows[cols.value] as number[]) || [];
+    if (!positions.length) return null;
+    const byPos = new Map<number, number[]>();
+    for (let i = 0; i < positions.length; i++) {
+      const p = positions[i];
+      const v = values[i];
+      if (!Number.isFinite(v)) continue;
+      const arr = byPos.get(p);
+      if (arr) arr.push(v);
+      else byPos.set(p, [v]);
+    }
+    const sortedPos = Array.from(byPos.keys()).sort((a, b) => a - b);
+    const q = (xs: number[], frac: number) => {
+      if (xs.length === 1) return xs[0];
+      const pos = frac * (xs.length - 1);
+      const lo = Math.floor(pos);
+      const hi = Math.ceil(pos);
+      return lo === hi ? xs[lo] : xs[lo] + (xs[hi] - xs[lo]) * (pos - lo);
+    };
+    const out: Aggregate = {
+      positions: sortedPos,
+      min: [],
+      q1: [],
+      median: [],
+      q3: [],
+      max: [],
+    };
+    for (const p of sortedPos) {
+      const arr = byPos.get(p)!.slice().sort((a, b) => a - b);
+      out.min.push(arr[0]);
+      out.q1.push(q(arr, 0.25));
+      out.median.push(q(arr, 0.5));
+      out.q3.push(q(arr, 0.75));
+      out.max.push(arr[arr.length - 1]);
+    }
+    return out;
+  }, [data, viewMode]);
+
+  const figureSpec = useMemo<{ data: unknown[]; layout: Record<string, unknown> } | null>(() => {
+    if (!data || !viewMode) return null;
     const cols = data.columns;
     const positions = (data.rows[cols.position] as number[]) || [];
     const values = (data.rows[cols.value] as number[]) || [];
@@ -207,27 +295,19 @@ const CoverageTrackRenderer: React.FC<Props> = ({ metadata, filters, refreshTick
       ? ((data.rows[cols.category] as string[]) || [])
       : null;
 
-    // Per-sample slice ranges so we can emit one trace per sample.
-    const samples = data.summary.samples.length
-      ? data.summary.samples
-      : ['(all)'];
+    const samples = data.summary.samples.length ? data.summary.samples : ['(all)'];
     const sampleColor: Record<string, string> = {};
     samples.forEach((s, i) => {
       sampleColor[s] = palette[i % palette.length];
     });
 
-    const categories = categoriesArr
-      ? Array.from(new Set(categoriesArr)).sort()
-      : [];
+    const categories = categoriesArr ? Array.from(new Set(categoriesArr)).sort() : [];
     const categoryColor: Record<string, string> = {};
     categories.forEach((c, i) => {
       categoryColor[c] = palette[i % palette.length];
     });
 
-    const useFacets = facet && samples.length > 1 && samples.length <= MAX_FACETED_SAMPLES;
-    const traces: unknown[] = [];
-
-    // Group row indices by sample for trace emission.
+    // Group row indices by sample so we can emit per-sample slices.
     const sampleRowIdx: Record<string, number[]> = {};
     if (samplesArr) {
       for (let i = 0; i < samplesArr.length; i++) {
@@ -238,143 +318,311 @@ const CoverageTrackRenderer: React.FC<Props> = ({ metadata, filters, refreshTick
       sampleRowIdx['(all)'] = positions.map((_, i) => i);
     }
 
-    function traceColorFor(sample: string): string {
-      if (colorBy === 'sample') return sampleColor[sample] ?? palette[0];
-      // 'single' and 'category' both fall back to the primary swatch — the
-      // category mode then overrides per-point via marker.color below.
-      return palette[0];
+    // Honour the user's view-mode pick regardless of sample count — the
+    // ``MAX_FACETED_SAMPLES_AUTO`` cap only governs the *auto-default* branch
+    // above. Past that cap the user gets a crowded but functional grid; a hint
+    // in the controls nudges them toward aggregate.
+    const useFacets = viewMode === 'facet' && samples.length > 1;
+    const useAggregate = viewMode === 'aggregate' && aggregate !== null;
+
+    const traces: unknown[] = [];
+
+    if (useAggregate && aggregate) {
+      const aggColor = palette[0]; // blue
+      const ribbonFill = isDark ? `${aggColor}55` : `${aggColor}33`;
+
+      // Ghost individual traces (light grey, low opacity). User can hide.
+      if (showIndividuals) {
+        samples.forEach((sample) => {
+          const idxs = sampleRowIdx[sample] || [];
+          const xs = idxs.map((i) => positions[i]);
+          const ys = idxs.map((i) => values[i]);
+          traces.push({
+            type: 'scattergl',
+            mode: 'lines',
+            name: sample,
+            x: xs,
+            y: ys,
+            line: { color: isDark ? 'rgba(255,255,255,0.18)' : 'rgba(0,0,0,0.18)', width: 0.6 },
+            hoverinfo: 'skip',
+            showlegend: false,
+            xaxis: 'x',
+            yaxis: 'y',
+          });
+        });
+      }
+
+      // IQR ribbon: q3 (upper) drawn first, then q1 with fill='tonexty' so the
+      // band is filled between the two. Plotly's tonexty fills toward the
+      // previous trace in the data array, so order matters.
+      traces.push({
+        type: 'scatter',
+        mode: 'lines',
+        name: 'Q3 (75%)',
+        x: aggregate.positions,
+        y: aggregate.q3,
+        line: { color: aggColor, width: 0 },
+        hoverinfo: 'skip',
+        showlegend: false,
+        xaxis: 'x',
+        yaxis: 'y',
+      });
+      traces.push({
+        type: 'scatter',
+        mode: 'lines',
+        name: 'IQR (Q1–Q3)',
+        x: aggregate.positions,
+        y: aggregate.q1,
+        line: { color: aggColor, width: 0 },
+        fill: 'tonexty',
+        fillcolor: ribbonFill,
+        hoverinfo: 'skip',
+        showlegend: true,
+        xaxis: 'x',
+        yaxis: 'y',
+      });
+
+      // Median (bold line, primary colour).
+      traces.push({
+        type: 'scatter',
+        mode: 'lines',
+        name: `Cohort median (n=${samples.length})`,
+        x: aggregate.positions,
+        y: aggregate.median,
+        line: { color: aggColor, width: 2.2 },
+        hovertemplate: `pos %{x:,}<br>median %{y:,.1f}<extra></extra>`,
+        showlegend: true,
+        xaxis: 'x',
+        yaxis: 'y',
+      });
+    } else {
+      // Overlay or facet: emit one trace per sample.
+      samples.forEach((sample, sampleIdx) => {
+        const idxs = sampleRowIdx[sample] || [];
+        const xs = idxs.map((i) => positions[i]);
+        const ys = idxs.map((i) => values[i]);
+        const text = idxs.map((i) =>
+          categoriesArr ? `${sample} · ${categoriesArr[i]}` : sample,
+        );
+        const traceColor =
+          colorBy === 'sample' ? sampleColor[sample] ?? palette[0] : palette[0];
+        const markerColor =
+          colorBy === 'category' && categoriesArr
+            ? idxs.map((i) => categoryColor[categoriesArr[i]] || palette[0])
+            : undefined;
+        const yaxis = useFacets && sampleIdx > 0 ? `y${sampleIdx + 1}` : 'y';
+        traces.push({
+          type: 'scattergl',
+          mode: markerColor ? 'lines+markers' : 'lines',
+          name: sample,
+          x: xs,
+          y: ys,
+          text,
+          hovertemplate: `%{text}<br>pos %{x:,}<br>cov %{y:,.2f}<extra></extra>`,
+          line: { color: traceColor, width: 1.4 },
+          ...(markerColor
+            ? { marker: { color: markerColor, size: 4, line: { width: 0 } } }
+            : {}),
+          fill: useFacets ? 'tozeroy' : 'none',
+          fillcolor: useFacets ? `${traceColor}33` : undefined,
+          xaxis: 'x',
+          yaxis,
+          showlegend: !useFacets,
+        });
+      });
     }
 
-    samples.forEach((sample, sampleIdx) => {
-      const idxs = sampleRowIdx[sample] || [];
-      const xs = idxs.map((i) => positions[i]);
-      const ys = idxs.map((i) => values[i]);
-      const text = idxs.map((i) =>
-        categoriesArr ? `${sample} · ${categoriesArr[i]}` : sample,
-      );
-      const traceColor = traceColorFor(sample);
-      const markerColor =
-        colorBy === 'category' && categoriesArr
-          ? idxs.map((i) => categoryColor[categoriesArr[i]] || palette[0])
-          : undefined;
-      const yaxis = useFacets && sampleIdx > 0 ? `y${sampleIdx + 1}` : 'y';
-      traces.push({
-        type: 'scattergl',
-        mode: markerColor ? 'lines+markers' : 'lines',
-        name: sample,
-        x: xs,
-        y: ys,
-        text,
-        hovertemplate: `%{text}<br>pos %{x:,}<br>cov %{y:,.2f}<extra></extra>`,
-        line: { color: traceColor, width: 1.4 },
-        ...(markerColor
-          ? { marker: { color: markerColor, size: 4, line: { width: 0 } } }
-          : {}),
-        fill: useFacets ? 'tozeroy' : 'none',
-        fillcolor: useFacets ? `${traceColor}33` : undefined,
-        xaxis: 'x',
-        yaxis,
-        showlegend: !useFacets,
-      });
-    });
-
-    // Optional annotation lane: a thin bottom subplot encoding category at each
-    // x position as a coloured bar. Skipped when category_col isn't bound.
-    const annotationLane = Boolean(showAnnotationLane && categoriesArr && categories.length > 0);
+    // ---- Annotation strip (genome-aware) ----------------------------------
+    // Replaces the old category-heatmap annotation lane. When we recognise the
+    // assembly, render labelled gene rectangles aligned to genomic positions.
+    // The strip sits in a thin band [0, ~0.06] at the bottom of the figure.
+    const showStrip = showAnnotationStrip && annotation !== null;
+    const stripHeight = 0.06;
+    const trackBase = showStrip ? stripHeight + 0.03 : 0;
+    const trackArea = 1 - trackBase;
 
     const facetRows = useFacets ? samples.length : 1;
-    const totalRows = facetRows + (annotationLane ? 1 : 0);
+    const rowSize = trackArea / facetRows;
+
     const layout: Record<string, unknown> = {
       template: isDark ? 'plotly_dark' : 'plotly_white',
-      margin: { l: 60, r: 12, t: 8, b: 36 },
+      margin: { l: 80, r: 12, t: 8, b: 32 },
       showlegend: !useFacets,
-      legend: { orientation: 'h', x: 0, y: 1.04, font: { size: 10 } },
+      legend: {
+        orientation: 'h',
+        x: 0,
+        y: 1.04,
+        font: { size: 10 },
+      },
       autosize: true,
-      hovermode: 'closest',
+      hovermode: 'x unified',
       plot_bgcolor: 'rgba(0,0,0,0)',
       paper_bgcolor: 'rgba(0,0,0,0)',
     };
 
-    // Vertical domain layout: split [0,1] across faceted rows + optional ann lane.
-    const annHeight = 0.08;
-    const trackBase = annotationLane ? annHeight + 0.02 : 0;
-    const trackArea = 1 - trackBase;
-    const rowSize = trackArea / facetRows;
     const visibleSamples = useFacets ? samples : samples.slice(0, 1);
     visibleSamples.forEach((sample, sampleIdx) => {
       const key = sampleIdx === 0 ? 'yaxis' : `yaxis${sampleIdx + 1}`;
       const lo = trackBase + sampleIdx * rowSize;
-      const hi = useFacets ? lo + rowSize : 1;
+      const hi = useFacets ? lo + rowSize - 0.005 : trackBase + trackArea;
       layout[key] = {
-        title: {
-          text: useFacets ? sample : config.value_col,
-          font: { size: 10 },
-          standoff: 4,
-        },
+        title:
+          useFacets
+            ? {
+                text: sample,
+                font: { size: 10, color: isDark ? '#dee2e6' : '#495057' },
+                standoff: 6,
+              }
+            : {
+                text: useAggregate ? `${config.value_col} (cohort)` : config.value_col,
+                font: { size: 10 },
+                standoff: 4,
+              },
         type: yScale === 'log' ? 'log' : 'linear',
         domain: [lo, hi],
         zeroline: false,
         showgrid: true,
         gridcolor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)',
+        tickfont: { size: 9 },
       };
     });
+
     layout.xaxis = {
-      title: { text: config.position_col, font: { size: 11 } },
+      title: { text: annotation ? `${annotation.displayName} (bp)` : config.position_col, font: { size: 11 } },
       zeroline: false,
       showgrid: true,
       gridcolor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)',
       anchor: useFacets ? 'free' : 'y',
+      ...(annotation ? { range: [0, annotation.length] } : {}),
     };
 
-    if (annotationLane && categoriesArr) {
-      // Build a heatmap row keyed by category index — one cell per row in the
-      // raw frame. Plotly renders this as a coloured strip; the colorbar is
-      // hidden because the legend below already lists categories.
-      const catIndex: Record<string, number> = {};
-      categories.forEach((c, i) => {
-        catIndex[c] = i;
-      });
-      const zs = categoriesArr.map((c) => (c in catIndex ? catIndex[c] : -1));
-      // Plotly requires ≥2 colorscale stops; duplicate the single colour at both
-      // ends when only one category survives the filter so the lane still
-      // renders instead of falling back to the default Viridis gradient.
-      const colorscale =
-        categories.length === 1
-          ? [
-              [0, categoryColor[categories[0]]],
-              [1, categoryColor[categories[0]]],
-            ]
-          : categories.map((c, i) => [i / (categories.length - 1), categoryColor[c]]);
-      traces.push({
-        type: 'heatmap',
-        x: positions,
-        z: [zs],
-        colorscale,
-        showscale: false,
-        hovertemplate: `pos %{x:,}<br>region: %{text}<extra></extra>`,
-        text: [categoriesArr],
-        xaxis: 'x',
-        yaxis: useFacets ? `y${samples.length + 1}` : 'y2',
-      });
-      const annKey = useFacets ? `yaxis${samples.length + 1}` : 'yaxis2';
-      layout[annKey] = {
-        domain: [0, annHeight],
+    const shapes: Record<string, unknown>[] = [];
+    const annotations: Record<string, unknown>[] = [];
+
+    // Sample names render as y-axis titles (in the left margin) — see the
+    // facet branch of layout[`yaxis${N}`].title above. Keeps labels clear of
+    // the coverage data they describe.
+
+    if (showStrip && annotation) {
+      // Render each gene as a coloured rectangle on a dedicated bottom axis
+      // (yaxis2 when overlay/aggregate, yaxis{N+1} when faceted) so the strip
+      // shares the same x-axis as the coverage panels.
+      const stripAxisKey = useFacets ? `yaxis${samples.length + 1}` : 'yaxis2';
+      const stripAxisRef = useFacets ? `y${samples.length + 1}` : 'y2';
+
+      layout[stripAxisKey] = {
+        domain: [0, stripHeight],
         showticklabels: false,
         showgrid: false,
         zeroline: false,
-        title: { text: config.category_col || 'category', font: { size: 10 } },
+        range: [0, 1],
+        fixedrange: true,
       };
+
+      annotation.features.forEach((feature, i) => {
+        const color = palette[i % palette.length];
+        shapes.push({
+          type: 'rect',
+          xref: 'x',
+          yref: stripAxisRef,
+          x0: feature.start,
+          x1: feature.end,
+          y0: 0.1,
+          y1: 0.9,
+          fillcolor: color,
+          line: { color, width: 0 },
+          opacity: 0.55,
+          layer: 'below',
+        });
+
+        const featureLen = feature.end - feature.start;
+        // Only label features wide enough to fit their name without overlap.
+        // Below ~400bp we drop the label (E, ORF6, ORF7a/b, ORF10 are short).
+        if (featureLen >= 400) {
+          annotations.push({
+            xref: 'x',
+            yref: stripAxisRef,
+            x: (feature.start + feature.end) / 2,
+            y: 0.5,
+            text: feature.name,
+            showarrow: false,
+            font: { size: 10, color: isDark ? '#fff' : '#212529', family: 'Inter, sans-serif' },
+          });
+        }
+      });
+
+      // Subtle alternating background banding across the coverage panels for
+      // each ORF — gives a free spatial reference even without reading the
+      // strip labels. Skipped in aggregate+individuals mode to avoid clutter.
+      if (!useAggregate || !showIndividuals) {
+        annotation.features.forEach((feature, i) => {
+          if (i % 2 !== 0) return; // every other gene
+          shapes.push({
+            type: 'rect',
+            xref: 'x',
+            yref: 'paper',
+            x0: feature.start,
+            x1: feature.end,
+            y0: trackBase,
+            y1: 1,
+            fillcolor: isDark ? 'rgba(255,255,255,0.025)' : 'rgba(0,0,0,0.025)',
+            line: { width: 0 },
+            layer: 'below',
+          });
+        });
+      }
     }
 
-    layout.grid = { rows: totalRows, columns: 1, pattern: 'independent' };
+    layout.shapes = shapes;
+    layout.annotations = annotations;
 
     return { data: traces, layout };
-  }, [data, config, palette, isDark, yScale, colorBy, facet, showAnnotationLane]);
+  }, [
+    data,
+    config,
+    palette,
+    isDark,
+    yScale,
+    colorBy,
+    viewMode,
+    showAnnotationStrip,
+    showIndividuals,
+    annotation,
+    aggregate,
+  ]);
 
   const controls = useMemo(
     () => (
       <Stack gap="xs">
-        <SegmentedControl
+        <Stack gap={4}>
+          <Text size="xs" fw={500}>
+            View
+          </Text>
+          <SegmentedControl
+          size="xs"
+          fullWidth
+          value={viewMode ?? 'overlay'}
+          onChange={(v) => setViewMode(v as ViewMode)}
+          data={[
+            { value: 'aggregate', label: 'Aggregate' },
+            { value: 'facet', label: 'Per-sample' },
+            { value: 'overlay', label: 'Overlay' },
+          ]}
+        />
+        </Stack>
+        {viewMode === 'facet' &&
+        data &&
+        data.summary.samples.length > MAX_FACETED_SAMPLES_AUTO ? (
+          <Text size="xs" c="dimmed">
+            {data.summary.samples.length} samples stacked — Aggregate is usually
+            more legible past ~{MAX_FACETED_SAMPLES_AUTO}.
+          </Text>
+        ) : null}
+        <Stack gap={4}>
+          <Text size="xs" fw={500}>
+            Y-axis scale
+          </Text>
+          <SegmentedControl
           size="xs"
           fullWidth
           value={yScale}
@@ -384,6 +632,7 @@ const CoverageTrackRenderer: React.FC<Props> = ({ metadata, filters, refreshTick
             { value: 'log', label: 'Log' },
           ]}
         />
+        </Stack>
         <Select
           size="xs"
           label="Smoothing"
@@ -391,30 +640,48 @@ const CoverageTrackRenderer: React.FC<Props> = ({ metadata, filters, refreshTick
           onChange={(v) => setSmoothingWindow(Number(v ?? '0'))}
           data={SMOOTHING_CHOICES}
         />
-        <SegmentedControl
+        {viewMode !== 'aggregate' ? (
+          <Stack gap={4}>
+            <Text size="xs" fw={500}>
+              Colour by
+            </Text>
+            <SegmentedControl
+            size="xs"
+            fullWidth
+            value={colorBy}
+            onChange={(v) => setColorBy(v as typeof colorBy)}
+            data={[
+              { value: 'single', label: 'Single' },
+              { value: 'sample', label: 'Sample' },
+              ...(config.category_col ? [{ value: 'category', label: 'Region' }] : []),
+            ]}
+          />
+          </Stack>
+        ) : (
+          <Stack gap={4}>
+            <Text size="xs" fw={500}>
+              Per-sample traces
+            </Text>
+            <Switch
+            size="xs"
+            checked={showIndividuals}
+            onChange={(e) => setShowIndividuals(e.currentTarget.checked)}
+            label="Show individual traces"
+          />
+          </Stack>
+        )}
+        <Stack gap={4}>
+          <Text size="xs" fw={500}>
+            Gene strip
+          </Text>
+          <Switch
           size="xs"
-          fullWidth
-          value={colorBy}
-          onChange={(v) => setColorBy(v as typeof colorBy)}
-          data={[
-            { value: 'single', label: 'Single' },
-            { value: 'sample', label: 'Sample' },
-            ...(config.category_col ? [{ value: 'category', label: 'Region' }] : []),
-          ]}
+          checked={showAnnotationStrip}
+          onChange={(e) => setShowAnnotationStrip(e.currentTarget.checked)}
+          disabled={!annotation}
+          label={annotation ? `Gene strip (${annotation.displayName})` : 'Gene strip (no map)'}
         />
-        <Switch
-          size="xs"
-          checked={facet}
-          onChange={(e) => setFacet(e.currentTarget.checked)}
-          label={`Facet by sample (≤ ${MAX_FACETED_SAMPLES})`}
-        />
-        <Switch
-          size="xs"
-          checked={showAnnotationLane}
-          onChange={(e) => setShowAnnotationLane(e.currentTarget.checked)}
-          disabled={!config.category_col}
-          label="Annotation lane"
-        />
+        </Stack>
         <MultiSelect
           size="xs"
           label="Chromosomes"
@@ -443,17 +710,25 @@ const CoverageTrackRenderer: React.FC<Props> = ({ metadata, filters, refreshTick
         ) : null}
         {computeMs != null && !computeStatus ? (
           <Text size="xs" c="dimmed">
-            Built in {computeMs} ms ({data?.row_count?.toLocaleString() ?? '?'} bins)
+            Built in {computeMs} ms ({data?.row_count?.toLocaleString() ?? '?'} bins,
+            {' '}{data?.summary.samples.length ?? 0} samples)
+          </Text>
+        ) : null}
+        {viewMode === 'aggregate' && data && data.summary.samples.length > AGGREGATE_DEFAULT_THRESHOLD ? (
+          <Text size="xs" c="dimmed">
+            Showing cohort median + IQR ribbon — switch to Per-sample to drill in.
           </Text>
         ) : null}
       </Stack>
     ),
     [
+      viewMode,
       yScale,
       smoothingWindow,
       colorBy,
-      facet,
-      showAnnotationLane,
+      showAnnotationStrip,
+      showIndividuals,
+      annotation,
       selectedChromosomes,
       selectedSamples,
       config.category_col,
@@ -464,9 +739,6 @@ const CoverageTrackRenderer: React.FC<Props> = ({ metadata, filters, refreshTick
     ],
   );
 
-  // Wire the AdvancedVizFrame's "Show data" popover to the aggregated rows
-  // we already fetched for plotting. Column order follows the role binding so
-  // the popover preview reads chrom → start/end → position → value → sample → category.
   const dataColumns = useMemo(() => {
     if (!data) return [] as string[];
     const cols = data.columns;
@@ -487,11 +759,6 @@ const CoverageTrackRenderer: React.FC<Props> = ({ metadata, filters, refreshTick
       {figureSpec ? (
         <Plot
           data={applyDataTheme(figureSpec.data, isDark, theme) as any}
-          // react-plotly.js's Layout type forbids `width: undefined`, but the
-          // underlying Plotly.js library uses it to disable the fixed-size
-          // shortcut. applyLayoutTheme retints every axis + legend + title +
-          // colorbar so dark/light flips reliably without relying on Plotly's
-          // template-vs-layout precedence rules.
           layout={
             applyLayoutTheme(
               { ...(figureSpec.layout as any), width: undefined, height: undefined, autosize: true },

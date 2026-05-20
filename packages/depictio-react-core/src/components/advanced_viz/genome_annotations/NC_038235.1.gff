@@ -1,0 +1,50 @@
+##gff-version 3
+#!gff-spec-version 1.21
+#!processor NCBI annotwriter
+##sequence-region NC_038235.1 1 15222
+##species https://www.ncbi.nlm.nih.gov/Taxonomy/Browser/wwwtax.cgi?id=11250
+NC_038235.1	RefSeq	region	1	15222	.	+	.	ID=NC_038235.1:1..15222;Dbxref=taxon:11250;gb-acronym=HRSV;gbkey=Src;genome=genomic;mol_type=viral cRNA
+NC_038235.1	RefSeq	five_prime_UTR	1	44	.	+	.	ID=id-NC_038235.1:1..44;function=Leader region 5'UTR;gbkey=5'UTR
+NC_038235.1	RefSeq	gene	45	576	.	+	.	ID=gene-DZD21_gp01;Dbxref=GeneID:37607636;Name=NS1;Note=formerly called 1C;gbkey=Gene;gene=NS1;gene_biotype=protein_coding;locus_tag=DZD21_gp01
+NC_038235.1	RefSeq	mRNA	45	576	.	+	.	ID=rna-DZD21_gp01;Parent=gene-DZD21_gp01;Dbxref=GeneID:37607636;gbkey=mRNA;gene=NS1;locus_tag=DZD21_gp01
+NC_038235.1	RefSeq	exon	45	576	.	+	.	ID=exon-DZD21_gp01-1;Parent=rna-DZD21_gp01;Dbxref=GeneID:37607636;gbkey=mRNA;gene=NS1;locus_tag=DZD21_gp01
+NC_038235.1	RefSeq	CDS	99	518	.	+	0	ID=cds-YP_009518850.1;Parent=rna-DZD21_gp01;Dbxref=GenBank:YP_009518850.1,GeneID:37607636;Name=YP_009518850.1;gbkey=CDS;gene=NS1;locus_tag=DZD21_gp01;product=nonstructural protein 1;protein_id=YP_009518850.1
+NC_038235.1	RefSeq	gene	596	1098	.	+	.	ID=gene-DZD21_gp02;Dbxref=GeneID:37607637;Name=NS2;Note=Formerly called 1B;gbkey=Gene;gene=NS2;gene_biotype=protein_coding;locus_tag=DZD21_gp02
+NC_038235.1	RefSeq	mRNA	596	1098	.	+	.	ID=rna-DZD21_gp02;Parent=gene-DZD21_gp02;Dbxref=GeneID:37607637;gbkey=mRNA;gene=NS2;locus_tag=DZD21_gp02
+NC_038235.1	RefSeq	exon	596	1098	.	+	.	ID=exon-DZD21_gp02-1;Parent=rna-DZD21_gp02;Dbxref=GeneID:37607637;gbkey=mRNA;gene=NS2;locus_tag=DZD21_gp02
+NC_038235.1	RefSeq	CDS	628	1002	.	+	0	ID=cds-YP_009518851.1;Parent=rna-DZD21_gp02;Dbxref=GenBank:YP_009518851.1,GeneID:37607637;Name=YP_009518851.1;gbkey=CDS;gene=NS2;locus_tag=DZD21_gp02;product=nonstructural protein 2;protein_id=YP_009518851.1
+NC_038235.1	RefSeq	gene	1125	2327	.	+	.	ID=gene-DZD21_gp03;Dbxref=GeneID:37607638;Name=N;gbkey=Gene;gene=N;gene_biotype=protein_coding;locus_tag=DZD21_gp03
+NC_038235.1	RefSeq	mRNA	1125	2327	.	+	.	ID=rna-DZD21_gp03;Parent=gene-DZD21_gp03;Dbxref=GeneID:37607638;gbkey=mRNA;gene=N;locus_tag=DZD21_gp03
+NC_038235.1	RefSeq	exon	1125	2327	.	+	.	ID=exon-DZD21_gp03-1;Parent=rna-DZD21_gp03;Dbxref=GeneID:37607638;gbkey=mRNA;gene=N;locus_tag=DZD21_gp03
+NC_038235.1	RefSeq	CDS	1140	2315	.	+	0	ID=cds-YP_009518852.1;Parent=rna-DZD21_gp03;Dbxref=GenBank:YP_009518852.1,GeneID:37607638;Name=YP_009518852.1;gbkey=CDS;gene=N;locus_tag=DZD21_gp03;product=nucleoprotein;protein_id=YP_009518852.1
+NC_038235.1	RefSeq	gene	2329	3242	.	+	.	ID=gene-DZD21_gp04;Dbxref=GeneID:37607639;Name=P;gbkey=Gene;gene=P;gene_biotype=protein_coding;locus_tag=DZD21_gp04
+NC_038235.1	RefSeq	mRNA	2329	3242	.	+	.	ID=rna-DZD21_gp04;Parent=gene-DZD21_gp04;Dbxref=GeneID:37607639;gbkey=mRNA;gene=P;locus_tag=DZD21_gp04
+NC_038235.1	RefSeq	exon	2329	3242	.	+	.	ID=exon-DZD21_gp04-1;Parent=rna-DZD21_gp04;Dbxref=GeneID:37607639;gbkey=mRNA;gene=P;locus_tag=DZD21_gp04
+NC_038235.1	RefSeq	CDS	2346	3071	.	+	0	ID=cds-YP_009518853.1;Parent=rna-DZD21_gp04;Dbxref=GenBank:YP_009518853.1,GeneID:37607639;Name=YP_009518853.1;gbkey=CDS;gene=P;locus_tag=DZD21_gp04;product=phosphoprotein;protein_id=YP_009518853.1
+NC_038235.1	RefSeq	gene	3252	4209	.	+	.	ID=gene-DZD21_gp05;Dbxref=GeneID:37607640;Name=M;gbkey=Gene;gene=M;gene_biotype=protein_coding;locus_tag=DZD21_gp05
+NC_038235.1	RefSeq	mRNA	3252	4209	.	+	.	ID=rna-DZD21_gp05;Parent=gene-DZD21_gp05;Dbxref=GeneID:37607640;gbkey=mRNA;gene=M;locus_tag=DZD21_gp05
+NC_038235.1	RefSeq	exon	3252	4209	.	+	.	ID=exon-DZD21_gp05-1;Parent=rna-DZD21_gp05;Dbxref=GeneID:37607640;gbkey=mRNA;gene=M;locus_tag=DZD21_gp05
+NC_038235.1	RefSeq	CDS	3261	4031	.	+	0	ID=cds-YP_009518854.1;Parent=rna-DZD21_gp05;Dbxref=GenBank:YP_009518854.1,GeneID:37607640;Name=YP_009518854.1;gbkey=CDS;gene=M;locus_tag=DZD21_gp05;product=matrix protein;protein_id=YP_009518854.1
+NC_038235.1	RefSeq	gene	4219	4628	.	+	.	ID=gene-DZD21_gp06;Dbxref=GeneID:37607641;Name=SH;gbkey=Gene;gene=SH;gene_biotype=protein_coding;locus_tag=DZD21_gp06
+NC_038235.1	RefSeq	mRNA	4219	4628	.	+	.	ID=rna-DZD21_gp06;Parent=gene-DZD21_gp06;Dbxref=GeneID:37607641;gbkey=mRNA;gene=SH;locus_tag=DZD21_gp06
+NC_038235.1	RefSeq	exon	4219	4628	.	+	.	ID=exon-DZD21_gp06-1;Parent=rna-DZD21_gp06;Dbxref=GeneID:37607641;gbkey=mRNA;gene=SH;locus_tag=DZD21_gp06
+NC_038235.1	RefSeq	CDS	4303	4497	.	+	0	ID=cds-YP_009518855.1;Parent=rna-DZD21_gp06;Dbxref=GenBank:YP_009518855.1,GeneID:37607641;Name=YP_009518855.1;gbkey=CDS;gene=SH;locus_tag=DZD21_gp06;product=small hydrophobic protein;protein_id=YP_009518855.1
+NC_038235.1	RefSeq	gene	4673	5595	.	+	.	ID=gene-DZD21_gp07;Dbxref=GeneID:37607642;Name=G;gbkey=Gene;gene=G;gene_biotype=protein_coding;locus_tag=DZD21_gp07
+NC_038235.1	RefSeq	mRNA	4673	5595	.	+	.	ID=rna-DZD21_gp07;Parent=gene-DZD21_gp07;Dbxref=GeneID:37607642;gbkey=mRNA;gene=G;locus_tag=DZD21_gp07
+NC_038235.1	RefSeq	exon	4673	5595	.	+	.	ID=exon-DZD21_gp07-1;Parent=rna-DZD21_gp07;Dbxref=GeneID:37607642;gbkey=mRNA;gene=G;locus_tag=DZD21_gp07
+NC_038235.1	RefSeq	CDS	4688	5584	.	+	0	ID=cds-YP_009518856.1;Parent=rna-DZD21_gp07;Dbxref=GenBank:YP_009518856.1,GeneID:37607642;Name=YP_009518856.1;gbkey=CDS;gene=G;locus_tag=DZD21_gp07;product=attachment glycoprotein;protein_id=YP_009518856.1
+NC_038235.1	RefSeq	gene	5648	7550	.	+	.	ID=gene-DZD21_gp08;Dbxref=GeneID:37607643;Name=F;gbkey=Gene;gene=F;gene_biotype=protein_coding;locus_tag=DZD21_gp08
+NC_038235.1	RefSeq	mRNA	5648	7550	.	+	.	ID=rna-DZD21_gp08;Parent=gene-DZD21_gp08;Dbxref=GeneID:37607643;gbkey=mRNA;gene=F;locus_tag=DZD21_gp08
+NC_038235.1	RefSeq	exon	5648	7550	.	+	.	ID=exon-DZD21_gp08-1;Parent=rna-DZD21_gp08;Dbxref=GeneID:37607643;gbkey=mRNA;gene=F;locus_tag=DZD21_gp08
+NC_038235.1	RefSeq	CDS	5661	7385	.	+	0	ID=cds-YP_009518857.1;Parent=rna-DZD21_gp08;Dbxref=GenBank:YP_009518857.1,GeneID:37607643;Name=YP_009518857.1;gbkey=CDS;gene=F;locus_tag=DZD21_gp08;product=fusion glycoprotein;protein_id=YP_009518857.1
+NC_038235.1	RefSeq	mRNA	7597	8557	.	+	.	ID=rna-NC_038235.1:7597..8557;gbkey=mRNA;product=22K/M2 protein gene
+NC_038235.1	RefSeq	exon	7597	8557	.	+	.	ID=exon-NC_038235.1:7597..8557-1;Parent=rna-NC_038235.1:7597..8557;gbkey=mRNA;product=22K/M2 protein gene
+NC_038235.1	RefSeq	gene	7597	8557	.	+	.	ID=gene-DZD21_gp09;Dbxref=GeneID:37607644;Name=M2;gbkey=Gene;gene=M2;gene_biotype=protein_coding;locus_tag=DZD21_gp09
+NC_038235.1	RefSeq	CDS	7606	8190	.	+	0	ID=cds-YP_009518858.1;Parent=gene-DZD21_gp09;Dbxref=GenBank:YP_009518858.1,GeneID:37607644;Name=YP_009518858.1;Note=ORF 1%2C matrix protein 2;gbkey=CDS;gene=M2;locus_tag=DZD21_gp09;product=M2-1 protein;protein_id=YP_009518858.1
+NC_038235.1	RefSeq	CDS	8159	8431	.	+	0	ID=cds-YP_009518859.1;Parent=gene-DZD21_gp09;Dbxref=GenBank:YP_009518859.1,GeneID:37607644;Name=YP_009518859.1;Note=ORF 2%2C RNA processivity factor;gbkey=CDS;gene=M2;locus_tag=DZD21_gp09;product=M2-2 protein;protein_id=YP_009518859.1
+NC_038235.1	RefSeq	gene	8489	15067	.	+	.	ID=gene-DZD21_gp10;Dbxref=GeneID:37607645;Name=L;gbkey=Gene;gene=L;gene_biotype=protein_coding;locus_tag=DZD21_gp10
+NC_038235.1	RefSeq	mRNA	8489	15067	.	+	.	ID=rna-DZD21_gp10;Parent=gene-DZD21_gp10;Dbxref=GeneID:37607645;function=viral polymerase;gbkey=mRNA;gene=L;locus_tag=DZD21_gp10
+NC_038235.1	RefSeq	exon	8489	15067	.	+	.	ID=exon-DZD21_gp10-1;Parent=rna-DZD21_gp10;Dbxref=GeneID:37607645;function=viral polymerase;gbkey=mRNA;gene=L;locus_tag=DZD21_gp10
+NC_038235.1	RefSeq	CDS	8498	14995	.	+	0	ID=cds-YP_009518860.1;Parent=rna-DZD21_gp10;Dbxref=GenBank:YP_009518860.1,GeneID:37607645;Name=YP_009518860.1;Note=RNA dependant RNA polymerase%3B RdRp;gbkey=CDS;gene=L;locus_tag=DZD21_gp10;product=polymerase protein;protein_id=YP_009518860.1
+NC_038235.1	RefSeq	three_prime_UTR	15068	15222	.	+	.	ID=id-NC_038235.1:15068..15222;function=Trailer region 3'UTR;gbkey=3'UTR
+
