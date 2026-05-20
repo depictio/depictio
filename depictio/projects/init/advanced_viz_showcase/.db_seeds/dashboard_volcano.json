@@ -1,12 +1,12 @@
 {
   "_id": {
-    "$oid": "646b0f3c1e4a2d7f8e5b8d11"
+    "$oid": "646b0f3c1e4a2d7f8e5b8d00"
   },
   "description": null,
   "flexible_metadata": null,
   "hash": null,
   "dashboard_id": {
-    "$oid": "646b0f3c1e4a2d7f8e5b8d11"
+    "$oid": "646b0f3c1e4a2d7f8e5b8d00"
   },
   "version": 1,
   "tmp_children_data": [],
@@ -83,8 +83,8 @@
   "stored_add_button": {
     "count": 0
   },
-  "title": "Volcano",
-  "subtitle": "Differential analysis with threshold sliders, top-N labels and search",
+  "title": "Advanced Visualisations",
+  "subtitle": "Showcase of advanced visualisation kinds (volcano, manhattan, clustering, …) backed by synthetic fixtures",
   "icon": "mdi:chart-scatter-plot",
   "icon_color": "red",
   "icon_variant": "filled",
@@ -114,12 +114,10 @@
   "project_id": {
     "$oid": "646b0f3c1e4a2d7f8e5b8d00"
   },
-  "is_main_tab": false,
-  "parent_dashboard_id": {
-    "$oid": "646b0f3c1e4a2d7f8e5b8d00"
-  },
-  "tab_order": 1,
-  "main_tab_name": null,
+  "is_main_tab": true,
+  "parent_dashboard_id": null,
+  "tab_order": 0,
+  "main_tab_name": "Volcano",
   "tab_icon": "mdi:chart-scatter-plot",
   "tab_icon_color": "red",
   "parent_dashboard_title": null

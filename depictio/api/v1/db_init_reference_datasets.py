@@ -148,9 +148,10 @@ STATIC_IDS = {
         "dashboards": {
             # Main tab reuses the project_id so get_child_tabs(main_id) finds
             # the children (this is the same convention as ampliseq, whose
-            # main dashboard _id equals project_id 5b8ca2).
-            "advanced_viz_overview": "646b0f3c1e4a2d7f8e5b8d00",
-            "advanced_viz_volcano": "646b0f3c1e4a2d7f8e5b8d11",
+            # main dashboard _id equals project_id 5b8ca2). Volcano is the
+            # main/entry tab; the prior dedicated "overview" landing tab was
+            # dropped to keep the showcase focused on the actual viz kinds.
+            "advanced_viz_volcano": "646b0f3c1e4a2d7f8e5b8d00",
             # PCA reuses the old embedding-tab id (d12).
             "advanced_viz_clustering_pca": "646b0f3c1e4a2d7f8e5b8d12",
             "advanced_viz_manhattan": "646b0f3c1e4a2d7f8e5b8d13",

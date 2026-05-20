@@ -37,7 +37,7 @@ TOKEN_FILE = Path("/tmp/admin_token.txt")
 # One representative dashboard per unique viz_kind. 5 embedding variants
 # (pca, pcoa, tsne, umap, live) all share the embedding renderer — pick one.
 VIZ_MAP: dict[str, str] = {
-    "volcano": "646b0f3c1e4a2d7f8e5b8d11",
+    "volcano": "646b0f3c1e4a2d7f8e5b8d00",
     "ma": "646b0f3c1e4a2d7f8e5b8d40",
     "da_barplot": "646b0f3c1e4a2d7f8e5b8d24",
     "enrichment": "646b0f3c1e4a2d7f8e5b8d26",
