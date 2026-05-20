@@ -1,0 +1,124 @@
+{
+  "_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8e23"
+  },
+  "description": null,
+  "flexible_metadata": null,
+  "hash": null,
+  "dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8e23"
+  },
+  "version": 1,
+  "tmp_children_data": [],
+  "stored_layout_data": [],
+  "stored_children_data": [],
+  "stored_metadata": [
+    {
+      "index": "nfcore-coverage_track",
+      "component_type": "advanced_viz",
+      "title": "Coverage \u2014 mosdepth per-region",
+      "workflow_tag": "nfcore_megatests",
+      "data_collection_tag": "mosdepth_coverage",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8e01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8e12"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "nf-core fixture: mosdepth_coverage",
+        "data_collection_tag": "mosdepth_coverage",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8e12"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-18T00:00:00.000000",
+      "viz_kind": "coverage_track",
+      "config": {
+        "viz_kind": "coverage_track",
+        "chromosome_col": "chrom",
+        "position_col": "start",
+        "end_col": "end",
+        "value_col": "coverage",
+        "sample_col": "sample",
+        "y_scale": "linear",
+        "smoothing_window": 0
+      },
+      "wf_tag": "nf-core/nfcore_megatests",
+      "description": "Read depth along the MN908947.3 reference, mosdepth output from nf-core/viralrecon."
+    }
+  ],
+  "stored_edit_dashboard_mode_button": [],
+  "left_panel_layout_data": [],
+  "right_panel_layout_data": [
+    {
+      "i": "box-nfcore-coverage_track",
+      "x": 0,
+      "y": 0,
+      "w": 12,
+      "h": 8,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    }
+  ],
+  "buttons_data": {
+    "unified_edit_mode": true,
+    "add_components_button": {
+      "count": 0
+    }
+  },
+  "stored_add_button": {
+    "count": 0
+  },
+  "title": "Coverage track (mosdepth)",
+  "subtitle": "Per-region read depth from viralrecon",
+  "icon": "mdi:chart-areaspline",
+  "icon_color": "teal",
+  "icon_variant": "filled",
+  "workflow_system": "nf-core",
+  "notes_content": "",
+  "permissions": {
+    "owners": [
+      {
+        "_id": {
+          "$oid": "67658ba033c8b59ad489d7c7"
+        },
+        "description": null,
+        "flexible_metadata": null,
+        "hash": null,
+        "email": "admin@example.com",
+        "is_admin": true,
+        "is_anonymous": false,
+        "is_temporary": false,
+        "expiration_time": null
+      }
+    ],
+    "editors": [],
+    "viewers": []
+  },
+  "is_public": true,
+  "last_saved_ts": "2026-05-18 14:49:24",
+  "project_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8e00"
+  },
+  "is_main_tab": false,
+  "parent_dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8e00"
+  },
+  "tab_order": 4,
+  "main_tab_name": null,
+  "tab_icon": "mdi:chart-areaspline",
+  "tab_icon_color": "teal",
+  "parent_dashboard_title": null
+}

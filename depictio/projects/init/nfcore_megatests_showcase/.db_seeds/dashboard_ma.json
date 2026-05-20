@@ -1,0 +1,125 @@
+{
+  "_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8e21"
+  },
+  "description": null,
+  "flexible_metadata": null,
+  "hash": null,
+  "dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8e21"
+  },
+  "version": 1,
+  "tmp_children_data": [],
+  "stored_layout_data": [],
+  "stored_children_data": [],
+  "stored_metadata": [
+    {
+      "index": "nfcore-ma",
+      "component_type": "advanced_viz",
+      "title": "MA \u2014 DESeq2 baseMean \u00d7 log2FoldChange",
+      "workflow_tag": "nfcore_megatests",
+      "data_collection_tag": "deseq2_results",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8e01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8e10"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "nf-core fixture: deseq2_results",
+        "data_collection_tag": "deseq2_results",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8e10"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-18T00:00:00.000000",
+      "viz_kind": "ma",
+      "config": {
+        "viz_kind": "ma",
+        "feature_id_col": "gene_id",
+        "avg_log_intensity_col": "baseMean",
+        "log2_fold_change_col": "log2FoldChange",
+        "significance_col": "padj",
+        "log_intensity_is_log": false,
+        "significance_threshold": 0.05,
+        "effect_threshold": 0.5,
+        "top_n_labels": 15
+      },
+      "wf_tag": "nf-core/nfcore_megatests",
+      "description": "Bland-Altman view of the same DESeq2 results: baseMean on x, log2FoldChange on y."
+    }
+  ],
+  "stored_edit_dashboard_mode_button": [],
+  "left_panel_layout_data": [],
+  "right_panel_layout_data": [
+    {
+      "i": "box-nfcore-ma",
+      "x": 0,
+      "y": 0,
+      "w": 12,
+      "h": 8,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    }
+  ],
+  "buttons_data": {
+    "unified_edit_mode": true,
+    "add_components_button": {
+      "count": 0
+    }
+  },
+  "stored_add_button": {
+    "count": 0
+  },
+  "title": "MA (DESeq2)",
+  "subtitle": "DESeq2 MA plot",
+  "icon": "mdi:chart-bell-curve-cumulative",
+  "icon_color": "blue",
+  "icon_variant": "filled",
+  "workflow_system": "nf-core",
+  "notes_content": "",
+  "permissions": {
+    "owners": [
+      {
+        "_id": {
+          "$oid": "67658ba033c8b59ad489d7c7"
+        },
+        "description": null,
+        "flexible_metadata": null,
+        "hash": null,
+        "email": "admin@example.com",
+        "is_admin": true,
+        "is_anonymous": false,
+        "is_temporary": false,
+        "expiration_time": null
+      }
+    ],
+    "editors": [],
+    "viewers": []
+  },
+  "is_public": true,
+  "last_saved_ts": "2026-05-18 14:49:24",
+  "project_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8e00"
+  },
+  "is_main_tab": false,
+  "parent_dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8e00"
+  },
+  "tab_order": 2,
+  "main_tab_name": null,
+  "tab_icon": "mdi:chart-bell-curve-cumulative",
+  "tab_icon_color": "blue",
+  "parent_dashboard_title": null
+}

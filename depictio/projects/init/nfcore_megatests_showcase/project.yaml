@@ -1,0 +1,272 @@
+# nf-core megatests showcase — same shape as advanced_viz_showcase but
+# every DC is backed by a REAL output file pulled from
+# s3://nf-core-awsmegatests/. Lets us verify the canonical column
+# schemas in depictio/models/components/advanced_viz/schemas.py against
+# actual pipeline outputs, not synthetic fixtures.
+#
+# Drop-in viz only: DCs whose raw nf-core output matches a viz's
+# CANONICAL_SCHEMA without reshaping. The four reshape-needing fixtures
+# (da_barplot/rarefaction/stacked_taxonomy/lollipop) are deliberately
+# omitted — they live in dev/advanced_viz_docs_screenshots/fixtures/
+# pending a reshape pipeline.
+#
+# Fixture source: dev/advanced_viz_docs_screenshots/extract_nfcore_fixtures.py
+# (gitignored; re-run to refresh).
+
+id: "646b0f3c1e4a2d7f8e5b8e00"
+name: "nf-core megatests showcase"
+project_type: "advanced"
+is_public: true
+workflows:
+  - id: "646b0f3c1e4a2d7f8e5b8e01"
+    name: "nfcore_megatests"
+    engine:
+      name: "nf-core"
+      version: "1.0"
+    description: "Real nf-core pipeline outputs (differentialabundance, viralrecon, rnaseq) bound to depictio's advanced viz."
+    data_location:
+      structure: "sequencing-runs"
+      runs_regex: "run_*"
+      locations:
+        - /app/depictio/projects/init/nfcore_megatests_showcase/data
+    data_collections:
+
+      # --------------------------------------------------------------
+      # 1. DESeq2 results (nf-core/differentialabundance) — feeds 3 viz:
+      #    volcano, MA, QQ. All three share the same TSV.
+      # --------------------------------------------------------------
+      - id: "646b0f3c1e4a2d7f8e5b8e10"
+        data_collection_tag: "deseq2_results"
+        description: "DESeq2 results table from nf-core/differentialabundance (Condition_treatment-Control-Treated)."
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "/app/depictio/projects/init/nfcore_megatests_showcase/data/deseq2_results.tsv"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+              # DESeq2 (and most R tools) emit `NA` for null numeric values.
+              # Without this, polars reads `padj` as String and the viz's
+              # Float-dtype validators silently filter every row.
+              null_values: ["NA", "NaN", ""]
+            columns_description:
+              gene_id: "Ensembl gene id"
+              baseMean: "Mean of normalised counts across samples (MA x-axis)"
+              log2FoldChange: "Effect size (volcano + MA y-axis)"
+              lfcSE: "Standard error of log2FoldChange"
+              pvalue: "Raw p-value (QQ feed)"
+              padj: "BH-adjusted p-value (volcano significance threshold)"
+
+      # --------------------------------------------------------------
+      # 2. DESeq2 vst() matrix — feeds the Hierarchical Heatmap.
+      #    Wide TSV: first column gene_id, remaining columns are samples.
+      # --------------------------------------------------------------
+      - id: "646b0f3c1e4a2d7f8e5b8e11"
+        data_collection_tag: "deseq2_vst"
+        description: "Variance-stabilised expression matrix from DESeq2 vst() — 25k genes × 24 samples."
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "/app/depictio/projects/init/nfcore_megatests_showcase/data/deseq2_vst.tsv"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+              # DESeq2 (and most R tools) emit `NA` for null numeric values.
+              # Without this, polars reads `padj` as String and the viz's
+              # Float-dtype validators silently filter every row.
+              null_values: ["NA", "NaN", ""]
+            columns_description:
+              gene_id: "Ensembl gene id (row label)"
+
+      # --------------------------------------------------------------
+      # 3. mosdepth per-region coverage (nf-core/viralrecon) — feeds
+      #    the Coverage track viz.
+      # --------------------------------------------------------------
+      - id: "646b0f3c1e4a2d7f8e5b8e12"
+        data_collection_tag: "mosdepth_coverage"
+        description: "Per-region read depth from mosdepth (viralrecon sample 1, MN908947.3 reference)."
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "/app/depictio/projects/init/nfcore_megatests_showcase/data/mosdepth_coverage.tsv"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+              # DESeq2 (and most R tools) emit `NA` for null numeric values.
+              # Without this, polars reads `padj` as String and the viz's
+              # Float-dtype validators silently filter every row.
+              null_values: ["NA", "NaN", ""]
+            columns_description:
+              chrom: "Chromosome / reference contig"
+              start: "Region start position (0-based)"
+              end: "Region end position"
+              coverage: "Mean read depth across the region"
+              sample: "Sample identifier"
+
+      # --------------------------------------------------------------
+      # 4. DESeq2 PCA from nf-core/rnaseq MultiQC — feeds the Embedding
+      #    viz in precomputed mode (sample / x / y → sample_id / dim_1 / dim_2).
+      #    Enriched with a `condition` column derived from sample naming
+      #    convention (WT / RAP1_UNINDUCED / RAP1_IAA_30M) so the embedding
+      #    can colour by cluster.
+      # --------------------------------------------------------------
+      - id: "646b0f3c1e4a2d7f8e5b8e13"
+        data_collection_tag: "rnaseq_pca"
+        description: "PCA projection of DESeq2 vst() from nf-core/rnaseq MultiQC (5 samples × 2 PCs × 3 conditions)."
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "/app/depictio/projects/init/nfcore_megatests_showcase/data/rnaseq_pca.tsv"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+              null_values: ["NA", "NaN", ""]
+            columns_description:
+              Sample: "Sample identifier"
+              x: "PC1 coordinate"
+              y: "PC2 coordinate"
+              condition: "Experimental condition (WT / RAP1_UNINDUCED / RAP1_IAA_30M) — derived from sample name"
+
+      # --------------------------------------------------------------
+      # 5. DESeq2 vst() top-100 most-variable genes — feeds the
+      #    Hierarchical Heatmap. Filtered from the full 25k×24 vst matrix
+      #    by row-variance (top-100) so ComplexHeatmap clustering completes
+      #    in a reasonable time and the visual is readable.
+      # --------------------------------------------------------------
+      - id: "646b0f3c1e4a2d7f8e5b8e14"
+        data_collection_tag: "deseq2_vst_top100"
+        description: "Top-100 most-variable genes from the DESeq2 vst() matrix (24 samples)."
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "/app/depictio/projects/init/nfcore_megatests_showcase/data/deseq2_vst_top100.tsv"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+              null_values: ["NA", "NaN", ""]
+            columns_description:
+              gene_id: "Ensembl gene id (row label)"
+
+      # --------------------------------------------------------------
+      # 6. QIIME2 alpha-rarefaction (Shannon) — feeds the Rarefaction
+      #    viz. Pre-melted from the wide `depth-N_iter-M` format to
+      #    long (sample, depth, iter, metric).
+      # --------------------------------------------------------------
+      - id: "646b0f3c1e4a2d7f8e5b8e15"
+        data_collection_tag: "qiime2_rarefaction"
+        description: "Shannon alpha-rarefaction curves from nf-core/ampliseq QIIME2."
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "/app/depictio/projects/init/nfcore_megatests_showcase/data/qiime2_rarefaction_tidy.tsv"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+              null_values: ["NA", "NaN", ""]
+            columns_description:
+              sample_id: "Sample identifier"
+              depth: "Subsampling depth (x-axis)"
+              iter: "Iteration index (1..10)"
+              metric: "Shannon diversity at this depth"
+
+      # --------------------------------------------------------------
+      # 7. QIIME2 feature-table — feeds the Stacked taxonomy viz.
+      #    Pre-melted from the BIOM-derived wide format (sample columns)
+      #    to long (taxon, sample_id, abundance) with stub rank="OTU".
+      # --------------------------------------------------------------
+      - id: "646b0f3c1e4a2d7f8e5b8e16"
+        data_collection_tag: "qiime2_stacked_taxonomy"
+        description: "ASV abundances from nf-core/ampliseq QIIME2 (single-rank stub)."
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "/app/depictio/projects/init/nfcore_megatests_showcase/data/qiime2_stacked_taxonomy_tidy.tsv"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+              null_values: ["NA", "NaN", ""]
+            columns_description:
+              taxon: "ASV / feature identifier"
+              sample_id: "Sample identifier"
+              abundance: "ASV count (non-zero entries only)"
+              rank: "Taxonomic rank (stub: 'OTU' since feature-table has no lineage)"
+
+      # --------------------------------------------------------------
+      # 8. ANCOM-BC differentials — feeds the DA barplot viz.
+      #    Pre-joined lfc + q-value slices, melted across contrast cols.
+      # --------------------------------------------------------------
+      - id: "646b0f3c1e4a2d7f8e5b8e17"
+        data_collection_tag: "ancombc_da_barplot"
+        description: "ANCOM-BC log-fold-change + q-value table from nf-core/ampliseq (Category-mix8-ASV)."
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "/app/depictio/projects/init/nfcore_megatests_showcase/data/ancombc_da_barplot_tidy.tsv"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+              null_values: ["NA", "NaN", ""]
+            columns_description:
+              feature_id: "ASV identifier"
+              contrast: "Contrast name ((Intercept) or mix8a)"
+              lfc: "ANCOM-BC log-fold-change"
+              significance: "ANCOM-BC q-value"
+
+      # --------------------------------------------------------------
+      # 9. Bracken per-sample taxonomy — feeds the Sunburst viz as a
+      #    single-level (taxonomy_lvl) hierarchy. Real multi-rank lineage
+      #    needs a taxonkit lineage join — out of scope for v1.
+      # --------------------------------------------------------------
+      - id: "646b0f3c1e4a2d7f8e5b8e18"
+        data_collection_tag: "bracken_taxonomy"
+        description: "Bracken per-sample taxonomy (nf-core/taxprofiler MOCK_001)."
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "/app/depictio/projects/init/nfcore_megatests_showcase/data/bracken_sample.tsv"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+              null_values: ["NA", "NaN", ""]
+            columns_description:
+              name: "Taxon name"
+              taxonomy_id: "NCBI taxonomy id"
+              taxonomy_lvl: "Taxonomic rank (S=species, G=genus, ...) — drives sunburst hierarchy"
+              new_est_reads: "Estimated read count (abundance)"
+              fraction_total_reads: "Relative abundance (fraction of total)"
