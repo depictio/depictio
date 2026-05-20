@@ -15,6 +15,7 @@ from depictio.models.components.figure import FigureComponent
 from depictio.models.components.interactive import InteractiveComponent
 from depictio.models.components.map import MapComponent
 from depictio.models.components.table import TableComponent
+from depictio.models.components.text import TextComponent
 
 # Discriminated union of all component types
 # The discriminator uses "component_type" field to determine the correct model
@@ -26,6 +27,7 @@ ComponentMetadata = Annotated[
         InteractiveComponent,
         MapComponent,
         TableComponent,
+        TextComponent,
     ],
     Discriminator("component_type"),
 ]

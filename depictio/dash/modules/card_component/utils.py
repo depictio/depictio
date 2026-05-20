@@ -445,6 +445,8 @@ AGGREGATION_MAPPING = {
     "skewness": "skew",
     "kurtosis": "kurt",
     "percentile": "quantile",
+    "q1": "q1",  # Special handling — 25th percentile
+    "q3": "q3",  # Special handling — 75th percentile
     "nunique": "nunique",
     # Add more mappings if necessary
 }
@@ -500,6 +502,21 @@ def compute_value(data, column_name, aggregation, cols_json=None, has_filters=Fa
             else:
                 logger.error(
                     f"Range aggregation is not supported for non-numeric column '{column_name}'."
+                )
+                new_value = None
+    elif aggregation in ("q1", "q3"):
+        # 25th / 75th percentile — needed for box-plot-style multi-metric cards.
+        q = 0.25 if aggregation == "q1" else 0.75
+        if is_polars:
+            col = data[column_name]
+            new_value = col.quantile(q, interpolation="linear")
+        else:
+            series = data[column_name]
+            if pd.api.types.is_numeric_dtype(series):
+                new_value = float(series.quantile(q))
+            else:
+                logger.error(
+                    f"{aggregation} aggregation not supported for non-numeric column '{column_name}'."
                 )
                 new_value = None
     else:
@@ -655,6 +672,7 @@ def _create_card_stores(
     project_id: str | None = None,
     aggregations: list[str] | None = None,
     filter_expr: str | None = None,
+    secondary_layout: str = "vertical",
 ) -> tuple:
     """Create the store components for card metadata and triggering.
 
@@ -662,6 +680,10 @@ def _create_card_stores(
         project_id: Project ID for cross-DC link resolution.
         aggregations: Optional secondary aggregation functions for multi-metric cards.
         filter_expr: Optional Polars filter expression for conditional aggregation.
+        secondary_layout: How the React viewer should render multi-metric
+            secondaries — 'vertical' (default stack), 'compact' (horizontal
+            strip), or 'box_plot' (Tukey mini-chart fed by the single
+            ``box_plot_stats`` aggregation).
 
     Returns:
         Tuple of (store_component, trigger_store, metadata_store, metadata_initial_store)
@@ -681,6 +703,7 @@ def _create_card_stores(
             "project_id": project_id,
             "aggregation": aggregation,
             "aggregations": aggregations,
+            "secondary_layout": secondary_layout,
             "filter_expr": filter_expr,
             "column_type": column_type,
             "column_name": column_name,
@@ -1234,6 +1257,7 @@ def build_card(**kwargs):
     column_type = kwargs.get("column_type")
     aggregation = kwargs.get("aggregation")
     aggregations = kwargs.get("aggregations")
+    secondary_layout = kwargs.get("secondary_layout", "vertical")
     filter_expr = kwargs.get("filter_expr")
     v = kwargs.get("value")
     build_frame = kwargs.get("build_frame", False)
@@ -1289,6 +1313,7 @@ def build_card(**kwargs):
         project_id=kwargs.get("project_id"),
         aggregations=aggregations,
         filter_expr=filter_expr,
+        secondary_layout=secondary_layout,
     )
 
     # Create card title

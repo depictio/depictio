@@ -1,77 +1,66 @@
 # Palmer Penguins Species Analysis - DashboardDataLite format
 version: 1
 
-title: Penguins Species Analysis
-project_tag: Palmer Penguins Species Comparison
+title: "Penguins Species Analysis"
+subtitle: "Comparative morphology across Adelie, Chinstrap, and Gentoo on three islands"
+project_tag: "Palmer Penguins Species Comparison"
 
 components:
-  # Scatter: Body Mass vs Flipper Length
-  - tag: scatter-mass-flipper
-    component_type: figure
+  # ── Narrative intro ────────────────────────────────────────────────
+  - tag: text-penguins-intro
+    component_type: text
+    title: "Palmer Penguins — Species & Island Morphology"
+    order: 2
+    alignment: left
+    body: |
+      The Palmer Penguins dataset captures **physical measurements**
+      (bill length / depth, flipper length, body mass) and **demographic
+      context** (island, sex, year) for three species — *Adelie*,
+      *Chinstrap*, *Gentoo* — sampled across Biscoe, Dream, and Torgersen
+      islands. This dashboard joins both DCs into a single canonical view
+      and surfaces species-vs-island morphology. Cards expose cohort centre +
+      spread (box-plot strips), top-N species dominance, and a sample
+      coverage gauge. The figures cover the bivariate body-mass × flipper-length
+      space and the sex × species bill structure.
+
+  # ── Multi-metric summary cards ─────────────────────────────────────
+  # Hero: body mass with full box-plot summary
+  - tag: card-body-mass
+    component_type: card
     workflow_tag: penguin_species_analysis
     data_collection_tag: joined_penguins_complete
-    visu_type: scatter
-    dict_kwargs:
-      x: flipper_length_mm
-      y: body_mass_g
-      color: species
-      symbol: island
-      size: bill_length_mm
-      color_discrete_map: '{"Adelie": "#6366f1", "Chinstrap": "#f59e0b", "Gentoo": "#10b981"}'
-      title: Body Mass vs Flipper Length by Species and Island
-      size_max: 15
-      marginal_x: box
-      marginal_y: violin
-      trendline: lowess
-      labels: '{"flipper_length_mm": "Flipper Length (mm)", "body_mass_g": "Body Mass (g)", "bill_length_mm": "Bill Length (mm)", "island": "Island", "species": "Species"}'
+    aggregation: median
+    aggregations:
+      - box_plot_stats
+    secondary_layout: box_plot
+    column_name: body_mass_g
+    column_type: float64
+    icon_name: mdi:weight
+    icon_color: "#F68B33"
+    title_color: "#F68B33"
+    title_font_size: xl
+    value_font_size: xl
+    title: "Body Mass (g)"
 
-  # Box: Bill Length by Species and Sex
-  - tag: box-bill-length
-    component_type: figure
+  # Hero: flipper length with full box-plot summary
+  - tag: card-flipper
+    component_type: card
     workflow_tag: penguin_species_analysis
     data_collection_tag: joined_penguins_complete
-    visu_type: box
-    dict_kwargs:
-      x: species
-      y: bill_length_mm
-      color: sex
-      color_discrete_map: '{"male": "#1976D2", "female": "#E91E63"}'
-      title: Bill Length Distribution by Species and Sex
-      boxmode: group
-      points: all
-      notched: true
-      labels: '{"bill_length_mm": "Bill Length (mm)", "species": "Species", "sex": "Sex"}'
+    aggregation: median
+    aggregations:
+      - box_plot_stats
+    secondary_layout: box_plot
+    column_name: flipper_length_mm
+    column_type: float64
+    icon_name: mdi:ruler
+    icon_color: "#26A69A"
+    title_color: "#26A69A"
+    title_font_size: xl
+    value_font_size: xl
+    title: "Flipper Length (mm)"
 
-  # Histogram: Bill Depth by Species
-  - tag: hist-bill-depth
-    component_type: figure
-    workflow_tag: penguin_species_analysis
-    data_collection_tag: joined_penguins_complete
-    visu_type: histogram
-    dict_kwargs:
-      x: bill_depth_mm
-      color: species
-      color_discrete_map: '{"Adelie": "#6366f1", "Chinstrap": "#f59e0b", "Gentoo": "#10b981"}'
-      title: Bill Depth Distribution by Species
-      barmode: overlay
-      opacity: 0.7
-      nbins: 30
-      marginal: rug
-      labels: '{"bill_depth_mm": "Bill Depth (mm)", "species": "Species"}'
-
-  # Sunburst: Island & Species Distribution (code mode)
-  - tag: sunburst-distribution
-    component_type: figure
-    workflow_tag: penguin_species_analysis
-    data_collection_tag: joined_penguins_complete
-    visu_type: scatter
-    mode: code
-    code_content: >
-      df_modified = df.to_pandas().groupby(['island','species']).agg({'body_mass_g':'mean','bill_length_mm':'count'}).reset_index().rename(columns={'bill_length_mm':'count'})
-
-      fig = px.sunburst(df_modified,path=['island','species'],values='count',color='island',color_discrete_map={"Biscoe":"#6366f1","Dream":"#f59e0b","Torgersen":"#10b981"},title='Palmer Penguins: Island & Species Distribution',hover_data={'body_mass_g':':.0f'})
-
-  # Card: Species Diversity
+  # Species cardinality with top-N breakdown (which species dominates?)
   - tag: card-species
     component_type: card
     workflow_tag: penguin_species_analysis
@@ -79,21 +68,35 @@ components:
     aggregation: nunique
     column_name: species
     column_type: object
+    secondary_layout: top_n
+    breakdown_col: species
+    top_n_count: 3
     icon_name: mdi:penguin
     icon_color: "#8BC34A"
+    title_color: "#8BC34A"
+    title_font_size: xl
+    value_font_size: xl
+    title: "Species"
 
-  # Card: Average Body Mass
-  - tag: card-body-mass
+  # Island cardinality with top-N breakdown (which island dominates?)
+  - tag: card-islands
     component_type: card
     workflow_tag: penguin_species_analysis
     data_collection_tag: joined_penguins_complete
-    aggregation: average
-    column_name: body_mass_g
-    column_type: float64
-    icon_name: mdi:weight
-    icon_color: "#F68B33"
+    aggregation: nunique
+    column_name: island
+    column_type: object
+    secondary_layout: top_n
+    breakdown_col: island
+    top_n_count: 3
+    icon_name: mdi:island
+    icon_color: "#7E57C2"
+    title_color: "#7E57C2"
+    title_font_size: xl
+    value_font_size: xl
+    title: "Islands"
 
-  # Card: Total Individuals
+  # Sample coverage gauge (344 total individuals)
   - tag: card-count
     component_type: card
     workflow_tag: penguin_species_analysis
@@ -101,21 +104,32 @@ components:
     aggregation: count
     column_name: individual_id
     column_type: object
+    secondary_layout: coverage
+    coverage_max: 344
     icon_name: mdi:counter
     icon_color: "#5C6BC0"
+    title_color: "#5C6BC0"
+    title_font_size: xl
+    value_font_size: xl
+    title: "Individuals"
 
-  # Card: Average Flipper Length
-  - tag: card-flipper
+  # Bill length filtered subset (heavy bills: > 50 mm — chinstrap/gentoo zone)
+  - tag: card-heavy-bills
     component_type: card
     workflow_tag: penguin_species_analysis
     data_collection_tag: joined_penguins_complete
-    aggregation: average
-    column_name: flipper_length_mm
+    aggregation: count
+    column_name: bill_length_mm
     column_type: float64
-    icon_name: mdi:ruler
-    icon_color: "#26A69A"
+    filter_expr: "col('bill_length_mm') > 50"
+    icon_name: mdi:filter-check-outline
+    icon_color: "#E91E63"
+    title_color: "#E91E63"
+    title_font_size: lg
+    value_font_size: xl
+    title: "Bill > 50 mm"
 
-  # Interactive: Species filter
+  # ── Interactive filters (left sidebar) ─────────────────────────────
   - tag: filter-species
     component_type: interactive
     workflow_tag: penguin_species_analysis
@@ -126,18 +140,6 @@ components:
     custom_color: "#858585"
     icon_name: mdi:filter
 
-  # Interactive: Body mass range
-  - tag: filter-body-mass
-    component_type: interactive
-    workflow_tag: penguin_species_analysis
-    data_collection_tag: joined_penguins_complete
-    interactive_component_type: RangeSlider
-    column_name: body_mass_g
-    column_type: float64
-    custom_color: "#45B8AC"
-    icon_name: bx:slider-alt
-
-  # Interactive: Island filter
   - tag: filter-island
     component_type: interactive
     workflow_tag: penguin_species_analysis
@@ -148,7 +150,6 @@ components:
     custom_color: "#7E57C2"
     icon_name: mdi:island
 
-  # Interactive: Sex filter
   - tag: filter-sex
     component_type: interactive
     workflow_tag: penguin_species_analysis
@@ -159,7 +160,16 @@ components:
     custom_color: "#EC407A"
     icon_name: mdi:gender-male-female
 
-  # Interactive: Bill length range
+  - tag: filter-body-mass
+    component_type: interactive
+    workflow_tag: penguin_species_analysis
+    data_collection_tag: joined_penguins_complete
+    interactive_component_type: RangeSlider
+    column_name: body_mass_g
+    column_type: float64
+    custom_color: "#45B8AC"
+    icon_name: bx:slider-alt
+
   - tag: filter-bill-length
     component_type: interactive
     workflow_tag: penguin_species_analysis
@@ -170,13 +180,140 @@ components:
     custom_color: "#FF7043"
     icon_name: bx:slider
 
-  # Data table
+  - tag: filter-flipper-length
+    component_type: interactive
+    workflow_tag: penguin_species_analysis
+    data_collection_tag: joined_penguins_complete
+    interactive_component_type: RangeSlider
+    column_name: flipper_length_mm
+    column_type: float64
+    custom_color: "#26A69A"
+    icon_name: bx:slider
+
+  # Scoped: species seen among heavy-bill individuals only.
+  - tag: filter-species-heavy-bills
+    component_type: interactive
+    workflow_tag: penguin_species_analysis
+    data_collection_tag: joined_penguins_complete
+    interactive_component_type: MultiSelect
+    column_name: species
+    column_type: object
+    filter_expr: "col('bill_length_mm') > 50"
+    custom_color: "#E91E63"
+    icon_name: mdi:filter-check
+    title: "Species (bill > 50)"
+
+  # ── Figures ────────────────────────────────────────────────────────
+  - tag: scatter-mass-flipper
+    component_type: figure
+    workflow_tag: penguin_species_analysis
+    data_collection_tag: joined_penguins_complete
+    visu_type: scatter
+    title: "Body Mass vs Flipper Length"
+    description: "Colour = species, symbol = island, size = bill length. Marginal box/violin show per-axis spread."
+    title_size: h3
+    dict_kwargs:
+      x: flipper_length_mm
+      y: body_mass_g
+      color: species
+      symbol: island
+      size: bill_length_mm
+      color_discrete_map: '{"Adelie": "#6366f1", "Chinstrap": "#f59e0b", "Gentoo": "#10b981"}'
+      size_max: 15
+      marginal_x: box
+      marginal_y: violin
+      trendline: lowess
+      labels: '{"flipper_length_mm": "Flipper Length (mm)", "body_mass_g": "Body Mass (g)", "bill_length_mm": "Bill Length (mm)", "island": "Island", "species": "Species"}'
+
+  - tag: scatter-bill-shape
+    component_type: figure
+    workflow_tag: penguin_species_analysis
+    data_collection_tag: joined_penguins_complete
+    visu_type: scatter
+    title: "Bill Shape — Length vs Depth"
+    description: "Bivariate bill morphology. Chinstrap = long & deep; Gentoo = long & shallow; Adelie = short & deep."
+    title_size: h3
+    dict_kwargs:
+      x: bill_length_mm
+      y: bill_depth_mm
+      color: species
+      symbol: sex
+      color_discrete_map: '{"Adelie": "#6366f1", "Chinstrap": "#f59e0b", "Gentoo": "#10b981"}'
+      trendline: ols
+
+  - tag: box-bill-length
+    component_type: figure
+    workflow_tag: penguin_species_analysis
+    data_collection_tag: joined_penguins_complete
+    visu_type: box
+    title: "Bill Length by Species and Sex"
+    description: "Grouped box + all points. Sexual dimorphism is most visible in Gentoo."
+    title_size: h3
+    dict_kwargs:
+      x: species
+      y: bill_length_mm
+      color: sex
+      color_discrete_map: '{"male": "#1976D2", "female": "#E91E63"}'
+      boxmode: group
+      points: all
+      notched: true
+      labels: '{"bill_length_mm": "Bill Length (mm)", "species": "Species", "sex": "Sex"}'
+
+  - tag: box-body-mass
+    component_type: figure
+    workflow_tag: penguin_species_analysis
+    data_collection_tag: joined_penguins_complete
+    visu_type: box
+    title: "Body Mass Distribution by Species"
+    description: "Box + all points; surfaces multi-modal sex dimorphism in Gentoo."
+    title_size: h3
+    dict_kwargs:
+      x: species
+      y: body_mass_g
+      color: species
+      points: all
+      boxmean: sd
+      color_discrete_map: '{"Adelie": "#6366f1", "Chinstrap": "#f59e0b", "Gentoo": "#10b981"}'
+
+  - tag: hist-bill-depth
+    component_type: figure
+    workflow_tag: penguin_species_analysis
+    data_collection_tag: joined_penguins_complete
+    visu_type: histogram
+    title: "Bill Depth Distribution by Species"
+    description: "Overlay histogram with rug; Chinstrap and Adelie overlap heavily on bill depth."
+    title_size: h3
+    dict_kwargs:
+      x: bill_depth_mm
+      color: species
+      color_discrete_map: '{"Adelie": "#6366f1", "Chinstrap": "#f59e0b", "Gentoo": "#10b981"}'
+      barmode: overlay
+      opacity: 0.7
+      nbins: 30
+      marginal: rug
+      labels: '{"bill_depth_mm": "Bill Depth (mm)", "species": "Species"}'
+
+  - tag: sunburst-distribution
+    component_type: figure
+    workflow_tag: penguin_species_analysis
+    data_collection_tag: joined_penguins_complete
+    visu_type: scatter
+    title: "Island × Species Distribution"
+    description: "Hierarchical breakdown of the cohort. Inner ring = island, outer ring = species."
+    title_size: h3
+    mode: code
+    code_content: >
+      df_modified = df.to_pandas().groupby(['island','species']).agg({'body_mass_g':'mean','bill_length_mm':'count'}).reset_index().rename(columns={'bill_length_mm':'count'})
+
+      fig = px.sunburst(df_modified,path=['island','species'],values='count',color='island',color_discrete_map={"Biscoe":"#6366f1","Dream":"#f59e0b","Torgersen":"#10b981"},title='Palmer Penguins: Island & Species Distribution',hover_data={'body_mass_g':':.0f'})
+
+  # ── Data table ─────────────────────────────────────────────────────
   - tag: data-table
     component_type: table
     workflow_tag: penguin_species_analysis
     data_collection_tag: joined_penguins_complete
-    title: Palmer Penguins Data
-    description: Physical measurements and demographics of penguin populations
+    title: "Palmer Penguins Data"
+    description: "Joined physical-features + demographics view used by every tile above."
     title_size: h3
     title_align: left
     page_size: 15

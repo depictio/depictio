@@ -390,6 +390,54 @@ const CardRenderer: React.FC<{
     .map((a) => ({ name: a, value: secondaryValues?.[a] }))
     .filter((row) => row.value !== undefined);
 
+  // ``top_n`` / ``concentration`` layouts read their payload from the
+  // synthetic ``__breakdown__`` key (server-populated when ``breakdown_col``
+  // is bound). Inject it into the rows array — the renderer dispatches on
+  // the row name, not on aggregation order.
+  const breakdown = secondaryValues?.['__breakdown__'] as
+    | {
+        column: string;
+        total: number;
+        top: { name: string; count: number; percent: number }[];
+        top_share: number;
+        unique_values: number;
+      }
+    | undefined;
+  if (breakdown !== undefined) {
+    orderedSecondary.push({ name: '__breakdown__', value: breakdown });
+  }
+
+  // Aggregation description line — sits in the existing card slot just below
+  // the hero value. We enrich it with breakdown info when available so the
+  // "(Count)" line carries useful context (top-N share) without needing its
+  // own dedicated row inside the secondary strip. Restructures vertical
+  // density: instead of stacking ``(Count) / Top 3 cover 83% of N / bar 1 / …``
+  // we get ``(Count · Top 3 = 83%) / bar 1 / …``.
+  const aggDesc = (() => {
+    if (!metadata.aggregation) return undefined;
+    const base = `(${capitalize(metadata.aggregation)})`;
+    const layout = metadata.secondary_layout;
+    if (
+      (layout === 'top_n' || layout === 'concentration') &&
+      breakdown &&
+      Array.isArray(breakdown.top) &&
+      breakdown.top.length > 0
+    ) {
+      const share = Math.round((breakdown.top_share || 0) * 100);
+      return `${base} · Top ${breakdown.top.length} = ${share}%`;
+    }
+    if (
+      layout === 'coverage' &&
+      typeof metadata.coverage_max === 'number' &&
+      typeof value === 'number' &&
+      metadata.coverage_max > 0
+    ) {
+      const pct = Math.round((value / (metadata.coverage_max as number)) * 100);
+      return `${base} · ${pct}% of ${metadata.coverage_max}`;
+    }
+    return base;
+  })();
+
   // While the next bulk-compute is in flight we keep the previous value
   // visible (App.tsx no longer clears `cardValues`), but slightly dim the
   // card to signal "refreshing". 0.6 opacity is enough to read as stale
@@ -414,14 +462,43 @@ const CardRenderer: React.FC<{
         background_color={metadata.background_color}
         title_font_size={metadata.title_font_size || 'md'}
         value_font_size={metadata.value_font_size || 'xl'}
-        aggregation_description={
-          metadata.aggregation ? `(${capitalize(metadata.aggregation)})` : undefined
-        }
+        aggregation_description={aggDesc}
         filter_applied={filterApplied}
+        secondaryStrip={
+          // ``coverage`` layout doesn't rely on the secondary aggregations
+          // array — it reads the card's hero ``value`` + the YAML-declared
+          // ``coverage_max``. So even with empty ``orderedSecondary`` we
+          // still render the strip when the coverage inputs are present.
+          orderedSecondary.length > 0 ||
+          (metadata.secondary_layout === 'coverage' &&
+            typeof metadata.coverage_max === 'number') ? (
+            <SecondaryMetrics
+              rows={orderedSecondary}
+              layout={
+                (metadata.secondary_layout as
+                  | 'vertical'
+                  | 'compact'
+                  | 'box_plot'
+                  | 'top_n'
+                  | 'coverage'
+                  | 'concentration'
+                  | undefined) || 'vertical'
+              }
+              color={
+                (metadata.icon_color as string | undefined) ||
+                (metadata.title_color as string | undefined) ||
+                null
+              }
+              coverageValue={typeof value === 'number' ? value : null}
+              coverageMax={
+                typeof metadata.coverage_max === 'number'
+                  ? (metadata.coverage_max as number)
+                  : null
+              }
+            />
+          ) : undefined
+        }
       />
-      {orderedSecondary.length > 0 ? (
-        <SecondaryMetrics rows={orderedSecondary} />
-      ) : null}
     </div>
   );
 };

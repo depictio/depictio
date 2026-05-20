@@ -7,60 +7,96 @@ subtitle: "Multi-metric summaries and conditional filters on petal measurements"
 project_tag: "Iris Dataset Project Data Analysis"
 
 components:
-  # ── Multi-metric cards ──────────────────────────────────────────────
+  # ── Narrative intro ────────────────────────────────────────────────
+  - tag: text-petal-intro
+    component_type: text
+    title: "Petal Geometry as a Species Signal"
+    order: 2
+    alignment: left
+    body: |
+      Petal length and width are the strongest single discriminators
+      between *Setosa*, *Versicolor*, and *Virginica* in the Iris cohort.
+      The **cards** below give multi-metric strips (box-plot from min/q1/median/q3/max
+      for continuous columns, top-N for categorical) so you can compare cohort
+      centre + spread at a glance. The **filters** include a scoped multi-select
+      that only surfaces varieties present among long-petal samples
+      (petal length > 4 cm). The **figures** drill into the bivariate
+      petal/sepal structure.
 
-  # Hero: average petal length with full statistical breakdown
+  # ── Multi-metric cards ──────────────────────────────────────────────
+  # Hero: petal length with full box-plot summary
   - tag: petal-length-summary
     component_type: card
     workflow_tag: python/iris_workflow
     data_collection_tag: iris_table
-    aggregation: average
+    aggregation: median
     aggregations:
-      - median
-      - std_dev
-      - min
-      - max
+      - box_plot_stats
+    secondary_layout: box_plot
     column_name: petal.length
     column_type: float64
     icon_name: mdi:leaf
     icon_color: "#43A047"
+    title_color: "#43A047"
+    title_font_size: xl
+    value_font_size: xl
     title: "Petal Length"
 
-  # Hero: average petal width with spread metrics
+  # Hero: petal width with box-plot summary
   - tag: petal-width-summary
     component_type: card
     workflow_tag: python/iris_workflow
     data_collection_tag: iris_table
-    aggregation: average
+    aggregation: median
     aggregations:
-      - median
-      - std_dev
-      - min
-      - max
+      - box_plot_stats
+    secondary_layout: box_plot
     column_name: petal.width
     column_type: float64
     icon_name: mdi:arrow-expand-horizontal
     icon_color: "#00897B"
+    title_color: "#00897B"
+    title_font_size: xl
+    value_font_size: xl
     title: "Petal Width"
 
-  # Hero: average sepal length with range
+  # Hero: sepal length comparison
   - tag: sepal-length-overview
     component_type: card
     workflow_tag: python/iris_workflow
     data_collection_tag: iris_table
-    aggregation: average
+    aggregation: median
     aggregations:
-      - min
-      - max
-      - std_dev
+      - box_plot_stats
+    secondary_layout: box_plot
     column_name: sepal.length
     column_type: float64
     icon_name: mdi:flower-outline
     icon_color: "#8E24AA"
+    title_color: "#8E24AA"
+    title_font_size: xl
+    value_font_size: xl
     title: "Sepal Length"
 
-  # ── Conditional aggregation cards ───────────────────────────────────
+  # Cardinality view: which variety dominates the cohort?
+  - tag: variety-cardinality
+    component_type: card
+    workflow_tag: python/iris_workflow
+    data_collection_tag: iris_table
+    aggregation: nunique
+    column_name: variety
+    column_type: object
+    secondary_layout: top_n
+    breakdown_col: variety
+    top_n_count: 3
+    icon_name: mdi:flower-tulip
+    icon_color: "#546E7A"
+    title_color: "#546E7A"
+    title_font_size: xl
+    value_font_size: xl
+    title: "Varieties"
 
+  # ── Conditional aggregation cards ───────────────────────────────────
   # Count of samples with long petals (> 4 cm)
   - tag: long-petal-count
     component_type: card
@@ -72,6 +108,9 @@ components:
     filter_expr: "col('petal.length') > 4"
     icon_name: mdi:filter-check-outline
     icon_color: "#F4511E"
+    title_color: "#F4511E"
+    title_font_size: lg
+    value_font_size: xl
     title: "Petals > 4 cm"
 
   # Average sepal width where petal width is narrow (≤ 0.5)
@@ -85,22 +124,12 @@ components:
     filter_expr: "col('petal.width') <= 0.5"
     icon_name: mdi:target
     icon_color: "#1E88E5"
+    title_color: "#1E88E5"
+    title_font_size: lg
+    value_font_size: xl
     title: "Avg sepal width (narrow petals)"
 
-  # Total sample count
-  - tag: total-samples
-    component_type: card
-    workflow_tag: python/iris_workflow
-    data_collection_tag: iris_table
-    aggregation: count
-    column_name: variety
-    column_type: object
-    icon_name: mdi:counter
-    icon_color: "#546E7A"
-
   # ── Interactive filters ─────────────────────────────────────────────
-
-  # Petal length range slider
   - tag: petal-length-filter
     component_type: interactive
     workflow_tag: python/iris_workflow
@@ -111,7 +140,6 @@ components:
     custom_color: "#43A047"
     icon_name: mdi:ruler
 
-  # Petal width range slider
   - tag: petal-width-filter
     component_type: interactive
     workflow_tag: python/iris_workflow
@@ -122,7 +150,16 @@ components:
     custom_color: "#00897B"
     icon_name: mdi:ruler
 
-  # Variety multi-select
+  - tag: sepal-length-petal-filter
+    component_type: interactive
+    workflow_tag: python/iris_workflow
+    data_collection_tag: iris_table
+    interactive_component_type: RangeSlider
+    column_name: sepal.length
+    column_type: float64
+    custom_color: "#8E24AA"
+    icon_name: mdi:ruler
+
   - tag: variety-picker
     component_type: interactive
     workflow_tag: python/iris_workflow
@@ -133,7 +170,7 @@ components:
     custom_color: "#8E24AA"
     icon_name: mdi:filter-variant
 
-  # Scoped filter: varieties present among long-petal samples only
+  # Scoped: varieties present among long-petal samples only
   - tag: long-petal-variety-filter
     component_type: interactive
     workflow_tag: python/iris_workflow
@@ -147,39 +184,73 @@ components:
     title: "Varieties (petal > 4 cm)"
 
   # ── Figures ─────────────────────────────────────────────────────────
-
-  # Scatter: petal length vs petal width
   - tag: petal-scatter
     component_type: figure
     workflow_tag: python/iris_workflow
     data_collection_tag: iris_table
     visu_type: scatter
+    title: "Petal Length vs Width"
+    description: "The bivariate petal-shape signature — the cleanest variety separator in this dataset."
+    title_size: h3
     dict_kwargs:
       x: petal.length
       y: petal.width
       color: variety
-      title: "Petal Length vs Width"
+      size: sepal.length
+      size_max: 16
 
-  # Box plot: petal length by variety
   - tag: petal-box
     component_type: figure
     workflow_tag: python/iris_workflow
     data_collection_tag: iris_table
     visu_type: box
+    title: "Petal Length by Variety"
+    description: "Box + all points; notched to show median CIs."
+    title_size: h3
     dict_kwargs:
       x: variety
       y: petal.length
-      title: "Petal Length by Variety"
+      color: variety
+      points: all
+      notched: true
 
-  # Histogram: petal width distribution
+  - tag: petal-width-box
+    component_type: figure
+    workflow_tag: python/iris_workflow
+    data_collection_tag: iris_table
+    visu_type: box
+    title: "Petal Width Distribution"
+    description: "Box + all points highlights the bimodal cohort across varieties."
+    title_size: h3
+    dict_kwargs:
+      x: variety
+      y: petal.width
+      color: variety
+      points: all
+      boxmean: sd
+
   - tag: petal-width-histogram
     component_type: figure
     workflow_tag: python/iris_workflow
     data_collection_tag: iris_table
     visu_type: histogram
+    title: "Petal Width Distribution (overlay)"
+    description: "Per-variety overlay; bars semi-transparent to expose overlap."
+    title_size: h3
     dict_kwargs:
       x: petal.width
       color: variety
       nbins: 25
       barmode: overlay
-      title: "Petal Width Distribution"
+      opacity: 0.7
+
+  # ── Data table ─────────────────────────────────────────────────────
+  - tag: petal-data-table
+    component_type: table
+    workflow_tag: python/iris_workflow
+    data_collection_tag: iris_table
+    title: "Iris Measurements"
+    description: "Per-flower sepal + petal measurements, with the assigned variety."
+    title_size: h3
+    title_align: left
+    page_size: 15

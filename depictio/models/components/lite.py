@@ -209,6 +209,59 @@ class CardLiteComponent(BaseLiteComponent):
     title_font_size: str | None = Field(default=None, description="Title font size")
     value_font_size: str | None = Field(default=None, description="Value font size")
 
+    # Multi-metric layout style.
+    #   - ``vertical`` (default): stacked secondary aggregations under the hero
+    #   - ``compact``: horizontal strip of secondary aggregations
+    #   - ``box_plot``: Tukey box-and-whisker from min/q1/median/q3/max
+    #   - ``top_n``: mini horizontal bar chart of the top-N values of
+    #     ``breakdown_col`` (cardinality view for ``count`` / ``nunique``
+    #     cards). Server groups by ``breakdown_col`` + counts + sorts.
+    #   - ``coverage``: horizontal fill bar of ``value / coverage_max`` (e.g.
+    #     "44 of 44 samples"). No extra server compute — the renderer reads
+    #     the card's hero value as the numerator.
+    #   - ``concentration``: same backend as ``top_n`` (groups by
+    #     ``breakdown_col``) but the renderer surfaces only the top-N share
+    #     (e.g. "Top 3 cover 18%").
+    secondary_layout: Literal[
+        "vertical", "compact", "box_plot", "top_n", "coverage", "concentration"
+    ] = Field(
+        default="vertical",
+        description=(
+            "Layout of the secondary strip. ``vertical`` / ``compact`` use the "
+            "``aggregations`` list; ``box_plot`` uses ``box_plot_stats``; ``top_n`` "
+            "and ``concentration`` use ``breakdown_col``; ``coverage`` uses "
+            "``coverage_max``."
+        ),
+    )
+    breakdown_col: str | None = Field(
+        default=None,
+        description=(
+            "Column to group by when ``secondary_layout`` is ``top_n`` or "
+            "``concentration``. The renderer shows the top-N most-frequent values "
+            "of this column (and their share of the total). Ignored otherwise."
+        ),
+    )
+    top_n_count: int = Field(
+        default=3,
+        ge=1,
+        le=5,
+        description=(
+            "Number of values to surface in the secondary strip when "
+            "``secondary_layout`` is ``top_n`` or ``concentration``. Capped at "
+            "5 — past that the strip becomes illegibly cramped at typical card "
+            "sizes (w=2, h=2 ≈ 280×120 px)."
+        ),
+    )
+    coverage_max: float | None = Field(
+        default=None,
+        description=(
+            "Denominator for ``secondary_layout: coverage`` — the theoretical "
+            "maximum the hero value can reach (e.g. 44 samples in the cohort, "
+            "11 SARS-CoV-2 ORFs). When null the renderer falls back to plain "
+            "vertical layout."
+        ),
+    )
+
     @field_validator("column_type")
     @classmethod
     def validate_column_type(cls, v: str | None) -> str | None:
@@ -407,6 +460,37 @@ class InteractiveLiteComponent(BaseLiteComponent):
         elif self.timescale is not None:
             raise ValueError("timescale is only valid for interactive_component_type='Timeline'")
         return self
+
+
+class TextLiteComponent(BaseLiteComponent):
+    """Lite text component for narrative section headers + body paragraphs.
+
+    Used to document and organize dashboards (H1–H6 headings with optional
+    body text). Renderer in `packages/depictio-react-core/src/components/
+    TextRenderer.tsx`.
+
+    Example YAML:
+        - tag: section-overview
+          component_type: text
+          title: Within-Sample Diversity
+          order: 2
+          alignment: left
+          body: |
+            Shannon, observed features, and Faith's PD measure
+            within-sample richness and evenness.
+    """
+
+    component_type: Literal["text"] = "text"
+
+    order: int = Field(default=1, ge=1, le=6, description="Heading level (H1–H6; clamped 1..6)")
+    alignment: Literal["left", "center", "right"] = Field(
+        default="left", description="Text alignment for the title and body"
+    )
+    body: str = Field(default="", description="Optional paragraph below the heading")
+
+    # Text tiles don't bind to a data source — keep these optional/empty.
+    workflow_tag: str = Field(default="", description="Unused for text components")
+    data_collection_tag: str = Field(default="", description="Unused for text components")
 
 
 class TableLiteComponent(BaseLiteComponent):
@@ -678,6 +762,7 @@ LiteComponent = (
     | CardLiteComponent
     | InteractiveLiteComponent
     | TableLiteComponent
+    | TextLiteComponent
     | ImageLiteComponent
     | MultiQCLiteComponent
     | MapLiteComponent

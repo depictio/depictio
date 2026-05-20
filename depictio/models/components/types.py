@@ -66,6 +66,9 @@ AggregationFunction = Literal[
     "skewness",
     "kurtosis",
     "percentile",
+    "q1",
+    "q3",
+    "box_plot_stats",
     "nunique",
     "mode",
 ]

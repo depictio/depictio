@@ -1446,6 +1446,52 @@ def _agg_value(col: Any, aggregation: str) -> Any:
             if mn is None or mx is None:
                 return None
             return float(mx) - float(mn) if isinstance(mn, (int, float)) else None
+        if agg in ("q1", "q3"):
+            q = 0.25 if agg == "q1" else 0.75
+            v = col.quantile(q, interpolation="linear")
+            return float(v) if v is not None else None
+        if agg == "box_plot_stats":
+            # Compound Tukey box-and-whisker payload, computed in one scan.
+            # Returns a dict that flows through `secondary_values[idx]` as the
+            # single value for this aggregation — React reads all 9 fields and
+            # renders whiskers + IQR box + median + mean + outlier dots.
+            import polars as _pl
+
+            numeric = col.cast(_pl.Float64, strict=False).drop_nulls()
+            if numeric.len() == 0:
+                return None
+            mn = float(numeric.min())
+            mx = float(numeric.max())
+            q1 = float(numeric.quantile(0.25, interpolation="linear"))
+            q3 = float(numeric.quantile(0.75, interpolation="linear"))
+            median = float(numeric.median())
+            mean = float(numeric.mean())
+            iqr = q3 - q1
+            fence_lo = q1 - 1.5 * iqr
+            fence_hi = q3 + 1.5 * iqr
+            # Whisker = most extreme data point that's still within the fence.
+            # Falls back to min/max when the fence excludes everything (e.g.
+            # constant column → iqr=0 → both fences land on q1=q3=median).
+            within = numeric.filter((numeric >= fence_lo) & (numeric <= fence_hi))
+            lower_w = float(within.min()) if within.len() else mn
+            upper_w = float(within.max()) if within.len() else mx
+            outliers_series = numeric.filter((numeric < fence_lo) | (numeric > fence_hi))
+            outlier_count = int(outliers_series.len())
+            # Cap the outlier list at 100 — beyond that the dots overlap into
+            # a solid bar at this card scale; the count is exposed separately.
+            outliers = outliers_series.head(100).to_list() if outlier_count else []
+            return {
+                "min": mn,
+                "max": mx,
+                "q1": q1,
+                "q3": q3,
+                "median": median,
+                "mean": mean,
+                "lower_whisker": lower_w,
+                "upper_whisker": upper_w,
+                "outliers": outliers,
+                "outlier_count": outlier_count,
+            }
         if agg == "mode":
             m = col.mode()
             return (
@@ -1785,6 +1831,16 @@ def bulk_compute_cards(
                 logger.debug(
                     f"bulk_compute_cards: {idx} ({aggregation}/{column}) = {values[idx]} (specs)"
                 )
+                # Decide whether the fast path can short-circuit. We can skip
+                # the slow Delta load only if:
+                #   (a) all requested ``secondary_aggs`` are present in the
+                #       precomputed column specs, AND
+                #   (b) no server-side breakdown is needed (``top_n`` /
+                #       ``concentration`` layouts compute counts grouped by
+                #       another column, which the specs don't carry).
+                needs_breakdown = card.get("breakdown_col") and (
+                    card.get("secondary_layout") or "vertical"
+                ) in ("top_n", "concentration")
                 if secondary_aggs:
                     sec: dict[str, Any] = {}
                     all_specs_present = True
@@ -1794,12 +1850,15 @@ def bulk_compute_cards(
                             all_specs_present = False
                             break
                         sec[sa] = float(sv) if isinstance(sv, (int, float)) else sv
-                    if all_specs_present:
+                    if all_specs_present and not needs_breakdown:
                         secondary_values[idx] = sec
                         continue
                     # Fall through to slow path to compute secondary values
-                else:
+                    # and/or the breakdown payload.
+                elif not needs_breakdown:
                     continue
+                # else: fall through to slow path so the breakdown gets
+                # computed even though the hero value came from specs.
 
         # Slow path: load Delta and compute. Required when filters change the
         # input set, or when the precomputed aggregation isn't available.
@@ -1848,10 +1907,88 @@ def bulk_compute_cards(
         values[idx] = _agg_value(df[column], aggregation)
         logger.debug(f"bulk_compute_cards: {idx} ({aggregation}/{column}) = {values[idx]}")
 
+        sec_results: dict[str, Any] = {}
         if secondary_aggs:
-            sec_results: dict[str, Any] = {}
             for sa in secondary_aggs:
                 sec_results[sa] = _agg_value(df[column], sa)
+
+        # ``top_n`` / ``concentration`` secondary layouts: compute a top-N
+        # breakdown over ``breakdown_col`` (per-group aggregate that matches the
+        # hero metric — see below). The renderer reads this payload from
+        # ``sec_results['__breakdown__']`` and chooses how to display it
+        # (mini-bars vs concentration-only line).
+        #
+        # The breakdown's per-group aggregation MUST match the hero ``aggregation``
+        # so the strip's "Top N cover X%" reads against the same denominator as
+        # the card's hero value. e.g. a ``nunique POS`` card grouped by ``GENE``
+        # should compute *distinct POS per gene*, not *row count per gene* —
+        # otherwise the strip's percentages don't add up to the hero metric.
+        breakdown_col = card.get("breakdown_col")
+        sec_layout = card.get("secondary_layout") or "vertical"
+        if (
+            breakdown_col
+            and sec_layout in ("top_n", "concentration")
+            and breakdown_col in df.columns
+        ):
+            try:
+                import polars as _pl
+
+                top_n_count = int(card.get("top_n_count") or 3)
+                top_n_count = max(1, min(top_n_count, 5))
+                hero_agg = (card.get("aggregation") or "count").lower()
+
+                # Pick the per-group aggregation expression mirroring the hero.
+                # Special case: when the breakdown column IS the hero column
+                # (e.g. ``Unique Lineages`` aggregates ``nunique lineage`` and
+                # breaks down by ``lineage``), ``n_unique(column) per group`` is
+                # trivially 1 — useless Pareto. Fall back to row count so the
+                # strip shows the prevalence of each value (`Alpha: 14 rows,
+                # Delta: 9 rows, …`), which is the natural reading.
+                if column == breakdown_col:
+                    agg_expr = _pl.len().alias("__count__")
+                elif hero_agg in ("nunique", "unique"):
+                    agg_expr = _pl.col(column).n_unique().alias("__count__")
+                elif hero_agg == "sum":
+                    agg_expr = _pl.col(column).sum().alias("__count__")
+                else:
+                    # ``count`` and anything else → number of rows per group.
+                    agg_expr = _pl.len().alias("__count__")
+
+                grouped = (
+                    df.lazy()
+                    .group_by(breakdown_col)
+                    .agg(agg_expr)
+                    .sort("__count__", descending=True)
+                    .collect()
+                )
+                total_raw = grouped["__count__"].sum()
+                total = int(total_raw or 0) if total_raw is not None else 0
+                top_rows = grouped.head(top_n_count)
+                names = top_rows[breakdown_col].cast(_pl.Utf8).to_list()
+                counts = [int(c) for c in top_rows["__count__"].to_list()]
+                top_sum = sum(counts)
+                top_share = (top_sum / total) if total > 0 else 0.0
+                sec_results["__breakdown__"] = {
+                    "column": breakdown_col,
+                    "total": total,
+                    "top": [
+                        {
+                            "name": names[i] if i < len(names) else "(null)",
+                            "count": counts[i] if i < len(counts) else 0,
+                            "percent": (counts[i] / total) if total > 0 else 0.0,
+                        }
+                        for i in range(len(names))
+                    ],
+                    "top_share": top_share,
+                    "unique_values": int(grouped.height),
+                    "breakdown_kind": hero_agg,
+                }
+            except Exception as e:
+                logger.warning(
+                    f"bulk_compute_cards: breakdown on {breakdown_col!r} failed for {idx}: {e}"
+                )
+
+        if sec_results:
             secondary_values[idx] = sec_results
 
     return {

@@ -1021,6 +1021,13 @@ class DashboardDataLite(BaseModel):
                         "value": None,
                         "aggregations": comp_dict.get("aggregations"),
                         "filter_expr": comp_dict.get("filter_expr"),
+                        # Multi-metric layout style: vertical / compact /
+                        # box_plot / top_n / coverage / concentration. The
+                        # last three need extra config fields plumbed through:
+                        "secondary_layout": comp_dict.get("secondary_layout", "vertical"),
+                        "breakdown_col": comp_dict.get("breakdown_col"),
+                        "top_n_count": comp_dict.get("top_n_count", 3),
+                        "coverage_max": comp_dict.get("coverage_max"),
                     }
                 )
                 for f in [
@@ -1137,6 +1144,33 @@ class DashboardDataLite(BaseModel):
                 for f in ["selected_module", "selected_plot"]:
                     if comp_dict.get(f):
                         full_comp[f] = comp_dict[f]
+
+            elif comp_type == "advanced_viz":
+                # Carry through the viz_kind + per-kind config block. The React
+                # renderer dispatches on viz_kind; without it the tile renders
+                # as "advanced_viz (unknown kind)" with no payload fetch.
+                viz_kind = comp_dict.get("viz_kind") or (comp_dict.get("config", {}) or {}).get(
+                    "viz_kind"
+                )
+                cfg = comp_dict.get("config") or {}
+                # Mirror viz_kind into config so downstream consumers that read
+                # only one of the two locations both see the same value.
+                if viz_kind and not cfg.get("viz_kind"):
+                    cfg = {**cfg, "viz_kind": viz_kind}
+                full_comp["viz_kind"] = viz_kind
+                full_comp["config"] = cfg
+
+            elif comp_type == "text":
+                # Section-header text tile: TextRenderer.tsx reads `order` (H1-H6),
+                # `alignment`, `body`, and inherits `title` from the base.
+                order = comp_dict.get("order", 1)
+                try:
+                    order_int = max(1, min(6, int(order)))
+                except (TypeError, ValueError):
+                    order_int = 1
+                full_comp["order"] = order_int
+                full_comp["alignment"] = comp_dict.get("alignment", "left")
+                full_comp["body"] = comp_dict.get("body", "")
 
             full_components.append(full_comp)
 

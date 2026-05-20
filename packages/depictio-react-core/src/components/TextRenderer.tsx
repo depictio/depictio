@@ -11,6 +11,51 @@ interface TextRendererProps {
 }
 
 /**
+ * Tiny inline-markdown parser for the body field. Handles the three formats
+ * users reach for in section descriptions:
+ *   `**bold**`   -> <strong>
+ *   `*italic*`   -> <em>
+ *   \`code\`     -> <code>
+ *
+ * We deliberately do NOT pull in react-markdown / remark / rehype — the body
+ * is a single paragraph, and a regex pass is ~30 lines vs ~30 KB of deps.
+ * Anything more complex (links, lists, images) should use a proper image /
+ * table / link component instead.
+ */
+const renderInlineMarkdown = (input: string): React.ReactNode[] => {
+  // Pattern order matters: `code` first (greedy backticks), then `**bold**`
+  // (two-asterisk), then `*italic*` (single-asterisk). The capture groups
+  // come back in lockstep with the split() chunks.
+  const pattern = /(`[^`\n]+`|\*\*[^*\n]+\*\*|\*[^*\n]+\*)/g;
+  const parts = input.split(pattern);
+  return parts.map((part, idx) => {
+    if (!part) return null;
+    if (part.startsWith('**') && part.endsWith('**') && part.length >= 4) {
+      return <strong key={idx}>{part.slice(2, -2)}</strong>;
+    }
+    if (part.startsWith('*') && part.endsWith('*') && part.length >= 3) {
+      return <em key={idx}>{part.slice(1, -1)}</em>;
+    }
+    if (part.startsWith('`') && part.endsWith('`') && part.length >= 3) {
+      return (
+        <code
+          key={idx}
+          style={{
+            background: 'var(--mantine-color-default-hover, rgba(127,127,127,0.12))',
+            padding: '1px 4px',
+            borderRadius: 3,
+            fontSize: '0.92em',
+          }}
+        >
+          {part.slice(1, -1)}
+        </code>
+      );
+    }
+    return <React.Fragment key={idx}>{part}</React.Fragment>;
+  });
+};
+
+/**
  * Pure-presentational renderer for the `text` component_type — section
  * headings + optional body, used to document and organize a dashboard.
  *
@@ -39,23 +84,40 @@ const TextRenderer: React.FC<TextRendererProps> = ({ metadata, placeholder = fal
 
   return (
     <Stack
-      gap="xs"
+      gap={4}
       h="100%"
       justify="flex-start"
-      style={{ textAlign: alignment, width: '100%' }}
+      style={{ textAlign: alignment, width: '100%', padding: 0 }}
     >
       {hasTitle ? (
-        <Title order={order} ta={alignment} style={{ wordBreak: 'break-word' }}>
+        <Title
+          order={order}
+          ta={alignment}
+          style={{ wordBreak: 'break-word', margin: 0, lineHeight: 1.15 }}
+        >
           {rawTitle}
         </Title>
       ) : placeholder ? (
-        <Title order={order} ta={alignment} c="dimmed" style={{ fontStyle: 'italic' }}>
+        <Title
+          order={order}
+          ta={alignment}
+          c="dimmed"
+          style={{ fontStyle: 'italic', margin: 0, lineHeight: 1.15 }}
+        >
           Section title
         </Title>
       ) : null}
       {body ? (
-        <Text ta={alignment} style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
-          {body}
+        <Text
+          ta={alignment}
+          style={{
+            whiteSpace: 'pre-wrap',
+            wordBreak: 'break-word',
+            margin: 0,
+            lineHeight: 1.35,
+          }}
+        >
+          {renderInlineMarkdown(body)}
         </Text>
       ) : null}
     </Stack>
