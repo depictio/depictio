@@ -202,6 +202,13 @@ export {
   enrichFilterWithDcId,
 } from './selection';
 
+// Cross-DC available-values intersection (powers greying-out unavailable
+// options in interactive filter dropdowns).
+export {
+  AvailableFilterValuesProvider,
+  useAvailableSet,
+} from './availableValues';
+
 // Real-time event subscription (WebSocket /events/ws)
 export { useDataCollectionUpdates } from './realtime';
 export type { RealtimeStatus, RealtimeMode, RealtimeEvent } from './realtime';
