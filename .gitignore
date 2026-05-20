@@ -339,3 +339,7 @@ docker-compose.override.yaml
 
 # Dashboard YAML exports — auto-generated/instance-specific, dir created on-demand by loader.py
 depictio/dashboards_yaml/
+
+# Locally-downloaded nf-core fixture files (regenerable via
+# dev/advanced_viz_docs_screenshots/extract_nfcore_fixtures.py)
+dev/advanced_viz_docs_screenshots/fixtures/
