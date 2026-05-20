@@ -225,13 +225,26 @@ def fetch_advanced_viz_data(
             detail="Data collection has no materialised Delta table yet.",
         )
 
+    # Merge filter columns into the projection so the scan-level column
+    # projection doesn't prune the columns the filters need. Without this,
+    # `select_columns=[feature_id, position, category]` would drop `GENE`
+    # before `apply_runtime_filters` runs, then the filter on `GENE` would
+    # silently no-op because the column isn't present on the projected df.
+    filter_cols: set[str] = set()
+    for f in filter_metadata or []:
+        nested = f.get("metadata") if isinstance(f, dict) else None
+        col = (nested or f or {}).get("column_name") if isinstance(f, dict) else None
+        if col:
+            filter_cols.add(col)
+    projection = list(dict.fromkeys([*columns, *filter_cols]))
+
     try:
         df = load_deltatable_lite(
             workflow_id=wf_oid,
             data_collection_id=str(dc_oid),
             metadata=filter_metadata or None,
             limit_rows=limit_rows,
-            select_columns=columns,
+            select_columns=projection,
             init_data=init_data,
         )
     except Exception as exc:
