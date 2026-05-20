@@ -1330,7 +1330,10 @@ jobs:
                    "$TARGET/qiime2/alpha-rarefaction" \
                    "$TARGET/qiime2/barplot" \
                    "$TARGET/qiime2/rel_abundance_tables" \
-                   "$TARGET/qiime2/ancombc/differentials/Category-habitat-level-2"
+                   "$TARGET/qiime2/ancombc/differentials/Category-habitat-level-2" \
+                   "$TARGET/data/qiime2/phylogenetic_tree" \
+                   "$TARGET/data/qiime2/taxonomy" \
+                   "$TARGET/data/qiime2/rel_abundance_tables"
 
           # Download all files needed by recipes + template
           curl -fsSL "$S3_URL/input/Metadata_full.tsv" -o "$TARGET/input/Metadata_full.tsv"
@@ -1343,6 +1346,16 @@ jobs:
             curl -fsSL "$S3_URL/qiime2/ancombc/differentials/Category-habitat-level-2/$f" \
               -o "$TARGET/qiime2/ancombc/differentials/Category-habitat-level-2/$f"
           done
+
+          # Phase E (added in feat(ampliseq) funnel restructure, commit 7b7db7ccf):
+          # template.yaml now declares a phylogenetic_tree_canonical DC (scan: single
+          # filename → tree.nwk) and a phylogenetic_tree_metadata_canonical DC whose
+          # recipe consumes taxonomy.tsv + rel-table-ASV.tsv. Without these files
+          # `depictio-cli run --template` fails at Project validation
+          # (ScanSingle.filename: file does not exist) before any step runs.
+          curl -fsSL "$S3_URL/qiime2/phylogenetic_tree/tree.nwk" -o "$TARGET/data/qiime2/phylogenetic_tree/tree.nwk"
+          curl -fsSL "$S3_URL/qiime2/taxonomy/taxonomy.tsv" -o "$TARGET/data/qiime2/taxonomy/taxonomy.tsv"
+          curl -fsSL "$S3_URL/qiime2/rel_abundance_tables/rel-table-ASV.tsv" -o "$TARGET/data/qiime2/rel_abundance_tables/rel-table-ASV.tsv"
 
           # Generate samplesheet from Metadata_full.tsv (ID column → sampleID)
           echo "sampleID" > "$TARGET/samplesheet.csv"
