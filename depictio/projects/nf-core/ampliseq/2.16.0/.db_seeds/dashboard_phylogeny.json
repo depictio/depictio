@@ -1,0 +1,513 @@
+{
+  "_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8cbf"
+  },
+  "description": null,
+  "flexible_metadata": null,
+  "hash": null,
+  "dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8cbf"
+  },
+  "version": 1,
+  "tmp_children_data": [],
+  "stored_layout_data": [],
+  "stored_children_data": [],
+  "stored_metadata": [
+    {
+      "index": "phylo-card-asvs",
+      "component_type": "card",
+      "title": "Total ASVs",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "phylogenetic_tree_metadata_canonical",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8cdc"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "ASV \u2192 taxonomy mapping for the phylogenetic tree tips",
+        "data_collection_tag": "phylogenetic_tree_metadata_canonical",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8cdc"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-19T00:00:00.000000",
+      "aggregation": "nunique",
+      "column_name": "taxon",
+      "column_type": "object",
+      "value": null,
+      "icon_name": "mdi:dna",
+      "icon_color": "#9C27B0",
+      "title_color": "#9C27B0",
+      "title_font_size": "xl",
+      "value_font_size": "xl",
+      "wf_tag": "nextflow/ampliseq",
+      "secondary_layout": "top_n",
+      "breakdown_col": "Phylum",
+      "top_n_count": 3
+    },
+    {
+      "index": "phylo-card-phyla",
+      "component_type": "card",
+      "title": "Mean classifier confidence",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "phylogenetic_tree_metadata_canonical",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8cdc"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "ASV \u2192 taxonomy mapping for the phylogenetic tree tips",
+        "data_collection_tag": "phylogenetic_tree_metadata_canonical",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8cdc"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-19T00:00:00.000000",
+      "aggregation": "average",
+      "column_name": "confidence",
+      "column_type": "float64",
+      "value": null,
+      "icon_name": "mdi:check-decagram",
+      "icon_color": "#1976D2",
+      "title_color": "#1976D2",
+      "title_font_size": "xl",
+      "value_font_size": "xl",
+      "wf_tag": "nextflow/ampliseq",
+      "secondary_layout": "box_plot",
+      "aggregations": [
+        "box_plot_stats"
+      ]
+    },
+    {
+      "index": "phylo-card-classified",
+      "component_type": "card",
+      "title": "Classified ASVs",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "phylogenetic_tree_metadata_canonical",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8cdc"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "ASV \u2192 taxonomy mapping for the phylogenetic tree tips",
+        "data_collection_tag": "phylogenetic_tree_metadata_canonical",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8cdc"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-19T00:00:00.000000",
+      "aggregation": "nunique",
+      "column_name": "taxon",
+      "column_type": "object",
+      "filter_expr": "col('Phylum').is_not_null() & (col('Phylum') != '')",
+      "value": null,
+      "icon_name": "mdi:check-circle-outline",
+      "icon_color": "#2E7D32",
+      "title_color": "#2E7D32",
+      "title_font_size": "xl",
+      "value_font_size": "xl",
+      "wf_tag": "nextflow/ampliseq",
+      "secondary_layout": "coverage",
+      "coverage_max": 11994
+    },
+    {
+      "index": "phylo-card-genera",
+      "component_type": "card",
+      "title": "Unique Genera",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "phylogenetic_tree_metadata_canonical",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8cdc"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "ASV \u2192 taxonomy mapping for the phylogenetic tree tips",
+        "data_collection_tag": "phylogenetic_tree_metadata_canonical",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8cdc"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-19T00:00:00.000000",
+      "aggregation": "nunique",
+      "column_name": "Genus",
+      "column_type": "object",
+      "value": null,
+      "icon_name": "mdi:format-list-group",
+      "icon_color": "#7B1FA2",
+      "title_color": "#7B1FA2",
+      "title_font_size": "xl",
+      "value_font_size": "xl",
+      "wf_tag": "nextflow/ampliseq",
+      "secondary_layout": "top_n",
+      "breakdown_col": "Family",
+      "top_n_count": 3
+    },
+    {
+      "index": "phylo-section-header",
+      "component_type": "text",
+      "title": "Tree Context",
+      "order": 2,
+      "alignment": "left",
+      "body": "Rooted QIIME2 ASV tree (Newick) with tip coloring by Phylum from classify-sklearn. Branch lengths reflect substitutions per site; tip-to-tip distance approximates phylogenetic distance between ASVs (subject to read-depth bias for rare taxa).",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": null,
+      "dc_config": {},
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-18T00:00:00.000000",
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "phylo-kingdom-filter",
+      "component_type": "interactive",
+      "title": "Kingdom",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "phylogenetic_tree_metadata_canonical",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8cdc"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "ASV \u2192 taxonomy mapping for the phylogenetic tree tips",
+        "data_collection_tag": "phylogenetic_tree_metadata_canonical",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8cdc"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-18T00:00:00.000000",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "Kingdom",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "title_size": "md",
+      "custom_color": "#377EB8",
+      "icon_name": "mdi:bacteria",
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "phylo-phylum-filter",
+      "component_type": "interactive",
+      "title": "Phylum",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "phylogenetic_tree_metadata_canonical",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8cdc"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "ASV \u2192 taxonomy mapping for the phylogenetic tree tips",
+        "data_collection_tag": "phylogenetic_tree_metadata_canonical",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8cdc"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-18T00:00:00.000000",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "Phylum",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "title_size": "md",
+      "custom_color": "#8BC34A",
+      "icon_name": "mdi:bacteria-outline",
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "phylo-tree",
+      "component_type": "advanced_viz",
+      "title": "ASV phylogenetic tree",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "phylogenetic_tree_canonical",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8cdb"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "QIIME2 phylogenetic tree (Newick) \u2014 tips are ASV identifiers",
+        "data_collection_tag": "phylogenetic_tree_canonical",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8cdb"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-18T00:00:00.000000",
+      "viz_kind": "phylogenetic",
+      "config": {
+        "viz_kind": "phylogenetic",
+        "tree_wf_id": "646b0f3c1e4a2d7f8e5b8ca3",
+        "tree_dc_id": "646b0f3c1e4a2d7f8e5b8cdb",
+        "metadata_wf_id": "646b0f3c1e4a2d7f8e5b8ca3",
+        "metadata_dc_id": "646b0f3c1e4a2d7f8e5b8cdc",
+        "taxon_col": "taxon",
+        "color_col": "Phylum",
+        "label_col": null,
+        "default_layout": "circular",
+        "ladderize": true,
+        "show_metadata_strip": false,
+        "show_branch_lengths": false,
+        "show_internal_labels": false,
+        "extra_color_cols": [
+          "Kingdom",
+          "Phylum",
+          "Class",
+          "Order",
+          "Family",
+          "Genus",
+          "Species",
+          "dominant_habitat"
+        ],
+        "category_palettes": {
+          "dominant_habitat": {
+            "Riverwater": "#377EB8",
+            "Groundwater": "#4DAF4A",
+            "Sediment": "#E41A1C",
+            "Soil": "#FF7F00",
+            "Mixed": "#9E9E9E",
+            "Rare": "#BDBDBD",
+            "No abundance": "#ECEFF1"
+          }
+        }
+      },
+      "wf_tag": "nextflow/ampliseq",
+      "description": "Rooted tree of all detected ASVs; tips are coloured by Phylum (from QIIME2's classify-sklearn taxonomy.tsv).",
+      "title_size": "md",
+      "title_align": "left"
+    },
+    {
+      "index": "phylo-table-metadata",
+      "component_type": "table",
+      "title": "ASV taxonomy table",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "phylogenetic_tree_metadata_canonical",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8cdc"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "ASV \u2192 taxonomy mapping for the phylogenetic tree tips",
+        "data_collection_tag": "phylogenetic_tree_metadata_canonical",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8cdc"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-18T00:00:00.000000",
+      "columns": [],
+      "page_size": 12,
+      "sortable": true,
+      "filterable": true,
+      "row_selection_enabled": false,
+      "row_selection_column": null,
+      "wf_tag": "nextflow/ampliseq",
+      "description": "Per-ASV taxonomy classification (Kingdom \u2192 Species) plus classifier confidence",
+      "title_size": "md",
+      "title_align": "left"
+    }
+  ],
+  "stored_edit_dashboard_mode_button": [],
+  "left_panel_layout_data": [
+    {
+      "i": "box-phylo-kingdom-filter",
+      "x": 0,
+      "y": 0,
+      "w": 1,
+      "h": 2,
+      "static": false
+    },
+    {
+      "i": "box-phylo-phylum-filter",
+      "x": 0,
+      "y": 2,
+      "w": 1,
+      "h": 3,
+      "static": false
+    }
+  ],
+  "right_panel_layout_data": [
+    {
+      "i": "box-phylo-card-asvs",
+      "x": 0,
+      "y": 1,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-phylo-card-classified",
+      "x": 2,
+      "y": 1,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-phylo-card-phyla",
+      "x": 4,
+      "y": 1,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-phylo-card-genera",
+      "x": 6,
+      "y": 1,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-phylo-section-header",
+      "x": 0,
+      "y": 0,
+      "w": 8,
+      "h": 1,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-phylo-tree",
+      "x": 0,
+      "y": 3,
+      "w": 8,
+      "h": 12,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-phylo-table-metadata",
+      "x": 0,
+      "y": 15,
+      "w": 8,
+      "h": 6,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    }
+  ],
+  "buttons_data": {
+    "unified_edit_mode": true,
+    "add_components_button": {
+      "count": 0
+    }
+  },
+  "stored_add_button": {
+    "count": 0
+  },
+  "title": "Phylogeny",
+  "subtitle": "QIIME2 phylogenetic tree with ASV taxonomy annotation",
+  "icon": "/assets/images/workflows/nf-core.png",
+  "icon_color": "green",
+  "icon_variant": "filled",
+  "workflow_system": "nf-core",
+  "notes_content": "<h2>Phylogeny</h2><p>Rooted QIIME2 ASV tree (Newick). Branch lengths reflect substitutions per site; tip-to-tip patristic distance approximates evolutionary distance between ASVs. Reading caveats: rooting depends on outgroup choice (the QIIME2 default uses midpoint rooting), and rare ASVs may have unstable placement when sequenced to insufficient depth.</p><p>Tip colour encodes Phylum from classify-sklearn; clicking an internal node selects its clade for export.</p>",
+  "permissions": {
+    "owners": [
+      {
+        "_id": {
+          "$oid": "67658ba033c8b59ad489d7c7"
+        },
+        "description": null,
+        "flexible_metadata": null,
+        "hash": null,
+        "email": "admin@example.com",
+        "is_admin": true,
+        "is_anonymous": false,
+        "is_temporary": false,
+        "expiration_time": null
+      }
+    ],
+    "editors": [],
+    "viewers": []
+  },
+  "is_public": false,
+  "last_saved_ts": "2026-05-18 00:00:00",
+  "project_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8ca2"
+  },
+  "is_main_tab": false,
+  "parent_dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8ca2"
+  },
+  "tab_order": 5,
+  "main_tab_name": null,
+  "tab_icon": "mdi:family-tree",
+  "tab_icon_color": "lime",
+  "parent_dashboard_title": null
+}

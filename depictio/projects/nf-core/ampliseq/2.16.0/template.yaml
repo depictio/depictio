@@ -294,6 +294,196 @@ workflows:
               "sample_id": "Sample identifier"
               "dim_1": "PCoA component 1"
               "dim_2": "PCoA component 2"
+              "habitat": "Sample habitat (used as colour grouping)"
+
+      - data_collection_tag: "da_barplot_canonical"
+        description: "DA-barplot-ready ANCOM-BC results (feature_id/contrast/lfc)"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/ampliseq/da_barplot_canonical.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "feature_id": "Taxon identifier"
+              "contrast": "Statistical contrast"
+              "lfc": "Log-fold change"
+              "significance": "FDR-adjusted p-value (q_val)"
+              "label": "Display label (Phylum)"
+
+      - data_collection_tag: "rarefaction_canonical"
+        description: "Multi-metric rarefaction curves (sample_id/depth/iter + per-metric cols)"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/ampliseq/rarefaction_canonical.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample_id": "Sample identifier"
+              "depth": "Subsampling depth"
+              "iter": "Subsampling iteration"
+              "shannon": "Shannon entropy"
+              "observed_features": "Observed ASV count"
+              "faith_pd": "Faith's Phylogenetic Diversity"
+              "group": "Sample grouping column (habitat) — when metadata present"
+
+      - data_collection_tag: "alpha_diversity_multi_canonical"
+        description: "Per-sample multi-metric alpha-diversity (Shannon/Observed/Faith PD/Evenness)"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/ampliseq/alpha_diversity_multi_canonical.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample_id": "Sample identifier"
+              "habitat": "Habitat type (Riverwater / Groundwater / Sediment / Soil)"
+              "shannon": "Shannon entropy"
+              "observed_features": "Observed ASV count"
+              "faith_pd": "Faith's Phylogenetic Diversity"
+              "evenness": "Pielou's evenness"
+
+      - data_collection_tag: "complex_heatmap_canonical"
+        description: "ComplexHeatmap-ready taxonomy matrix (Phylum × sample)"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/ampliseq/complex_heatmap_canonical.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "Phylum": "Row identifier (use as index_column)"
+              "Kingdom": "Row annotation (use as row_annotation_cols)"
+
+      - data_collection_tag: "sunburst_canonical"
+        description: "Sunburst-ready hierarchical taxonomy (Kingdom/Phylum/taxon + abundance)"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/ampliseq/sunburst_canonical.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "Kingdom": "Top-level taxonomic rank"
+              "Phylum": "Second-level taxonomic rank"
+              "taxon": "Leaf taxonomy string"
+              "abundance": "Relative abundance (leaf weight)"
+              "sample_id": "Sample identifier (optional facet)"
+
+      - data_collection_tag: "sankey_canonical"
+        description: "Sankey-ready hierarchical flow (Kingdom → Phylum → taxon, weight=abundance)"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/ampliseq/sankey_canonical.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "Kingdom": "Sankey step 1"
+              "Phylum": "Sankey step 2"
+              "taxon": "Sankey step 3 (leaf)"
+              "abundance": "Link weight (relative abundance)"
+              "sample_id": "Sample identifier"
+
+      # Tier 2 derivations — UpSet (presence/absence) + Q-Q diagnostic + MA plot.
+      - data_collection_tag: "upset_canonical"
+        description: "UpSet-ready taxon × habitat binary presence matrix"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/ampliseq/upset_canonical.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "taxon": "Taxon identifier"
+
+      - data_collection_tag: "qq_canonical"
+        description: "Q-Q-ready p-value distribution (ANCOM-BC FDR diagnostic)"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/ampliseq/qq_canonical.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "p_value": "Raw p-value (0–1)"
+              "feature_id": "Taxon identifier (hover)"
+              "category": "Contrast (stratification)"
+
+      - data_collection_tag: "ma_canonical"
+        description: "MA-plot-ready (mean log abundance vs lfc) for ANCOM-BC"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/ampliseq/ma_canonical.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "feature_id": "Taxon identifier"
+              "avg_log_intensity": "Mean log10(count + 1) across samples"
+              "log2_fold_change": "ANCOM-BC log-fold change"
+              "significance": "FDR-adjusted p-value"
+              "label": "Display label (Phylum)"
+
+      - data_collection_tag: "bray_curtis_canonical"
+        description: "Sample × sample Bray-Curtis distance matrix (Beta diversity)"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/ampliseq/bray_curtis_canonical.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample identifier (use as index_column; matrix is symmetric)"
+
+      # Phase E — QIIME2 phylogenetic tree (tree.nwk) + tip-level taxonomy
+      # metadata derived from the run's taxonomy.tsv.
+      - data_collection_tag: "phylogenetic_tree_canonical"
+        description: "QIIME2 phylogenetic tree (Newick) — tips are ASV identifiers"
+        config:
+          type: "phylogeny"
+          metatype: "Aggregate"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "{DATA_ROOT}/data/qiime2/phylogenetic_tree/tree.nwk"
+          dc_specific_properties:
+            format: "newick"
+            ladderize: true
+            metadata_dc_tag: "phylogenetic_tree_metadata_canonical"
+            metadata_taxon_column: "taxon"
+
+      - data_collection_tag: "phylogenetic_tree_metadata_canonical"
+        description: "ASV → taxonomy mapping for the phylogenetic tree tips"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/ampliseq/tree_metadata_canonical.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "taxon": "ASV identifier (matches tree.nwk tip labels)"
+              "Kingdom": "Domain (e.g. Bacteria / Archaea)"
+              "Phylum": "Phylum"
+              "Class": "Class"
+              "Order": "Order"
+              "Family": "Family"
+              "Genus": "Genus"
+              "Species": "Species"
+              "confidence": "Classifier confidence (0–1)"
+              "label": "Short display label (Phylum if known)"
 
 # ============================================================================
 # RUNTIME LINKS CONFIGURATION

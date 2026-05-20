@@ -61,17 +61,41 @@ STATIC_IDS = {
             "taxonomy_heatmap": "646b0f3c1e4a2d7f8e5b8caf",
             "ancombc_results": "646b0f3c1e4a2d7f8e5b8caa",
             # Canonical-schema DCs feeding the advanced_viz components — see
-            # depictio/projects/nf-core/ampliseq/recipes/{volcano,stacked_
-            # taxonomy,embedding_pcoa}_canonical.py.
+            # depictio/projects/nf-core/ampliseq/recipes/*_canonical.py.
             "volcano_canonical": "646b0f3c1e4a2d7f8e5b8cb0",
             "stacked_taxonomy_canonical": "646b0f3c1e4a2d7f8e5b8cb1",
             "embedding_pcoa": "646b0f3c1e4a2d7f8e5b8cb2",
+            "da_barplot_canonical": "646b0f3c1e4a2d7f8e5b8cd0",
+            "rarefaction_canonical": "646b0f3c1e4a2d7f8e5b8cd1",
+            "complex_heatmap_canonical": "646b0f3c1e4a2d7f8e5b8cd2",
+            "sunburst_canonical": "646b0f3c1e4a2d7f8e5b8cd3",
+            "sankey_canonical": "646b0f3c1e4a2d7f8e5b8cd4",
+            # ID `5b8cd5` is reserved for the Ordination dashboard's future
+            # standalone seed file (replacing the inline `ampliseq_ordination`
+            # entry below). Don't reuse it for a DC.
+            # Tier 2 derivation DCs.
+            "upset_canonical": "646b0f3c1e4a2d7f8e5b8cd6",
+            "qq_canonical": "646b0f3c1e4a2d7f8e5b8cd7",
+            "ma_canonical": "646b0f3c1e4a2d7f8e5b8cd8",
+            # Phase D — Bray-Curtis sample-distance matrix (symmetric heatmap input).
+            "bray_curtis_canonical": "646b0f3c1e4a2d7f8e5b8cd9",
+            # Phase E — Multi-metric per-sample alpha diversity + tree fixtures.
+            "alpha_diversity_multi_canonical": "646b0f3c1e4a2d7f8e5b8cda",
+            "phylogenetic_tree_canonical": "646b0f3c1e4a2d7f8e5b8cdb",
+            "phylogenetic_tree_metadata_canonical": "646b0f3c1e4a2d7f8e5b8cdc",
         },
         "dashboards": {
             "ampliseq_multiqc": "646b0f3c1e4a2d7f8e5b8cb7",
+            # Phase E — Alpha Diversity (tab 1) + Phylogeny (tab 5) tabs.
+            "ampliseq_alpha_diversity": "646b0f3c1e4a2d7f8e5b8cbe",
             "ampliseq_community": "646b0f3c1e4a2d7f8e5b8cb3",
             "ampliseq_differential": "646b0f3c1e4a2d7f8e5b8cb4",
-            "ampliseq_advanced_viz": "646b0f3c1e4a2d7f8e5b8cc2",
+            # Funnel tab 2: Ordination & Clustering (was "Advanced viz (MVP)").
+            # Embedding PCoA stays here; volcano + stacked_taxonomy moved to
+            # the Differential / Community tabs respectively. Complex Heatmap
+            # added alongside Embedding. Bray-Curtis tile lands in Phase D.
+            "ampliseq_ordination": "646b0f3c1e4a2d7f8e5b8cc2",
+            "ampliseq_phylogeny": "646b0f3c1e4a2d7f8e5b8cbf",
         },
     },
     "ampliseq_base": {

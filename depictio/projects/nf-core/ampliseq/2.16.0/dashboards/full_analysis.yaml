@@ -16,21 +16,21 @@ main_dashboard:
     -   component_type: interactive
         workflow_tag: ampliseq
         data_collection_tag: metadata
-        interactive_component_type: DateRangePicker
-        column_name: sampling_date
-        column_type: datetime
+        interactive_component_type: MultiSelect
+        column_name: ID
+        column_type: object
         display:
             title_size: md
-            custom_color: '#FF6B6B'
-            icon_name: mdi:calendar-range
-        tag: interactive-multiqc-daterange-a1b2c3
-        index: multiqc-daterange
+            custom_color: '#45B8AC'
+            icon_name: mdi:flask
+        tag: interactive-multiqc-sample-filter-78c9c2
+        index: multiqc-sample-filter
         layout:
             x: 0
             y: 0
             w: 1
             h: 3
-        title: Sampling Period
+        title: Sample ID
     -   component_type: interactive
         workflow_tag: ampliseq
         data_collection_tag: metadata
@@ -52,21 +52,21 @@ main_dashboard:
     -   component_type: interactive
         workflow_tag: ampliseq
         data_collection_tag: metadata
-        interactive_component_type: MultiSelect
-        column_name: ID
-        column_type: object
+        interactive_component_type: DateRangePicker
+        column_name: sampling_date
+        column_type: datetime
         display:
             title_size: md
-            custom_color: '#45B8AC'
-            icon_name: mdi:flask
-        tag: interactive-multiqc-sample-filter-78c9c2
-        index: multiqc-sample-filter
+            custom_color: '#FF6B6B'
+            icon_name: mdi:calendar-range
+        tag: interactive-multiqc-daterange-a1b2c3
+        index: multiqc-daterange
         layout:
             x: 0
             y: 5
             w: 1
             h: 3
-        title: Sample ID
+        title: Sampling Period
     -   component_type: multiqc
         workflow_tag: ampliseq
         data_collection_tag: multiqc_data
@@ -152,9 +152,9 @@ main_dashboard:
             w: 4
             h: 5
 tabs:
--   title: Community Analysis
+-   title: Community & Diversity
     # --- optional ---
-    subtitle: Alpha Diversity & Taxonomic Composition
+    subtitle: Alpha diversity, rarefaction, taxonomic composition (sunburst + Sankey + stacked taxonomy)
     tab_order: 1
     tab_icon: mdi:bacteria-outline
     tab_icon_color: teal
@@ -486,21 +486,20 @@ tabs:
     -   component_type: interactive
         workflow_tag: ampliseq
         data_collection_tag: metadata
-        interactive_component_type: DateRangePicker
-        column_name: sampling_date
-        column_type: datetime
+        interactive_component_type: MultiSelect
+        column_name: ID
+        column_type: object
         display:
             title_size: md
-            custom_color: '#FF6B6B'
-            icon_name: mdi:calendar-range
-        tag: interactive-community-daterange-d4e5f6
-        index: community-daterange
+            custom_color: '#45B8AC'
+            icon_name: mdi:flask
+        tag: interactive-sample-78c9c2
         layout:
             x: 0
             y: 0
             w: 1
             h: 3
-        title: Sampling Period
+        title: Sample ID
     -   component_type: interactive
         workflow_tag: ampliseq
         data_collection_tag: metadata
@@ -521,20 +520,21 @@ tabs:
     -   component_type: interactive
         workflow_tag: ampliseq
         data_collection_tag: metadata
-        interactive_component_type: MultiSelect
-        column_name: ID
-        column_type: object
+        interactive_component_type: DateRangePicker
+        column_name: sampling_date
+        column_type: datetime
         display:
             title_size: md
-            custom_color: '#45B8AC'
-            icon_name: mdi:flask
-        tag: interactive-sample-78c9c2
+            custom_color: '#FF6B6B'
+            icon_name: mdi:calendar-range
+        tag: interactive-community-daterange-d4e5f6
+        index: community-daterange
         layout:
             x: 0
             y: 5
             w: 1
             h: 3
-        title: Sample ID
+        title: Sampling Period
     -   component_type: interactive
         workflow_tag: ampliseq
         data_collection_tag: taxonomy_rel_abundance
@@ -613,10 +613,10 @@ tabs:
             w: 1
             h: 3
         title: Relative Abundance Range
--   title: Diff. Abundance
+-   title: Differential Abundance
     # --- optional ---
-    subtitle: ANCOM-BC Volcano Plot
-    tab_order: 2
+    subtitle: ANCOM-BC volcano + DA-barplot per contrast
+    tab_order: 3
     tab_icon: mdi:chart-scatter-plot
     tab_icon_color: red
     icon: /assets/images/workflows/nf-core.png
@@ -884,6 +884,10 @@ tabs:
         workflow_tag: ampliseq
         data_collection_tag: ancombc_results
         # --- optional ---
+        title: ANCOM-BC differential abundance results
+        description: 'Full ANCOM-BC results: feature, contrast, lfc, q-value, kingdom, phylum, w statistic, and significance flag.'
+        title_size: md
+        title_align: left
         row_selection_enabled: false
         # --- generated on export ---
         tag: table-diff-table-results-6655ac

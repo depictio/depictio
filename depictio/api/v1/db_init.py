@@ -204,6 +204,16 @@ async def create_initial_dashboards(admin_user: UserBeanie) -> list[dict | None]
             "static_dc_id": None,
         },
         {
+            "name": "ampliseq_alpha_diversity",
+            "json_path": os.path.join(
+                projects_base,
+                ReferenceDatasetRegistry.DATASET_PATHS["ampliseq"],
+                ".db_seeds",
+                "dashboard_alpha_diversity.json",
+            ),
+            "static_dc_id": None,
+        },
+        {
             "name": "ampliseq_community",
             "json_path": os.path.join(
                 projects_base,
@@ -225,16 +235,27 @@ async def create_initial_dashboards(admin_user: UserBeanie) -> list[dict | None]
             "static_dc_id": None,
         },
         {
-            "name": "ampliseq_advanced_viz",
+            "name": "ampliseq_ordination",
             "json_path": os.path.join(
                 projects_base,
                 ReferenceDatasetRegistry.DATASET_PATHS["ampliseq"],
                 ".db_seeds",
-                "dashboard_advanced_viz.json",
+                "dashboard_ordination.json",
             ),
-            # Showcase tab for the new advanced_viz component family — three
-            # advanced viz (volcano / embedding / stacked taxonomy) bound to
-            # the recipe-derived canonical-schema DCs.
+            # Funnel tab 2: Ordination & Clustering. Embedding PCoA +
+            # Complex Heatmap (clustered taxonomy) sit here. The legacy
+            # "Advanced viz (MVP)" tab has been dissolved — volcano +
+            # stacked_taxonomy tiles moved to differential / community.
+            "static_dc_id": None,
+        },
+        {
+            "name": "ampliseq_phylogeny",
+            "json_path": os.path.join(
+                projects_base,
+                ReferenceDatasetRegistry.DATASET_PATHS["ampliseq"],
+                ".db_seeds",
+                "dashboard_phylogeny.json",
+            ),
             "static_dc_id": None,
         },
         # Standalone advanced-viz showcase project: five tabs (overview +
