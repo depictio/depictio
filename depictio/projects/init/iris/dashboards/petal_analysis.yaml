@@ -13,15 +13,7 @@ components:
     title: "Petal Geometry as a Species Signal"
     order: 2
     alignment: left
-    body: |
-      Petal length and width are the strongest single discriminators
-      between *Setosa*, *Versicolor*, and *Virginica* in the Iris cohort.
-      The **cards** below give multi-metric strips (box-plot from
-      min/q1/median/q3/max for continuous columns, top-N for categorical)
-      so you can compare cohort centre + spread at a glance. The
-      **filters** include a scoped multi-select that only surfaces
-      varieties present among long-petal samples (petal length > 4 cm).
-      The **figures** drill into the bivariate petal/sepal structure.
+    body: "Petal length × width is the cleanest variety separator. Cards summarise distributions, filters scope the cohort."
     layout: {x: 0, y: 0, w: 8, h: 1}
 
   # ── Multi-metric cards ──────────────────────────────────────────────
@@ -135,8 +127,9 @@ components:
     interactive_component_type: RangeSlider
     column_name: petal.length
     column_type: float64
-    custom_color: "#43A047"
+    custom_color: "#55A467"
     icon_name: mdi:ruler
+    title: "Petal length (cm)"
     layout: {x: 0, y: 0, w: 1, h: 3}
 
   - tag: petal-width-filter
@@ -146,8 +139,9 @@ components:
     interactive_component_type: RangeSlider
     column_name: petal.width
     column_type: float64
-    custom_color: "#00897B"
+    custom_color: "#8172B2"
     icon_name: mdi:ruler
+    title: "Petal width (cm)"
     layout: {x: 0, y: 3, w: 1, h: 3}
 
   - tag: sepal-length-petal-filter
@@ -157,8 +151,9 @@ components:
     interactive_component_type: RangeSlider
     column_name: sepal.length
     column_type: float64
-    custom_color: "#8E24AA"
+    custom_color: "#4C72B0"
     icon_name: mdi:ruler
+    title: "Sepal length (cm)"
     layout: {x: 0, y: 6, w: 1, h: 3}
 
   - tag: variety-picker
@@ -168,8 +163,9 @@ components:
     interactive_component_type: MultiSelect
     column_name: variety
     column_type: object
-    custom_color: "#8E24AA"
+    custom_color: "#DD8452"
     icon_name: mdi:filter-variant
+    title: "Variety"
     layout: {x: 0, y: 9, w: 1, h: 3}
 
   - tag: long-petal-variety-filter
@@ -180,9 +176,9 @@ components:
     column_name: variety
     column_type: object
     filter_expr: "col('petal.length') > 4"
-    custom_color: "#F4511E"
+    custom_color: "#C44E52"
     icon_name: mdi:filter-check
-    title: "Varieties (petal > 4 cm)"
+    title: "Variety (petal > 4 cm)"
     layout: {x: 0, y: 12, w: 1, h: 3}
 
   # ── Figures ─────────────────────────────────────────────────────────
@@ -192,14 +188,19 @@ components:
     data_collection_tag: iris_table
     visu_type: scatter
     title: "Petal Length vs Width"
-    description: "The bivariate petal-shape signature — the cleanest variety separator in this dataset."
+    description: "Bivariate petal-shape signature — the cleanest variety separator in this dataset."
     title_size: h3
     dict_kwargs:
       x: petal.length
       y: petal.width
       color: variety
       size: sepal.length
+      symbol: variety
       size_max: 16
+      marginal_x: violin
+      marginal_y: rug
+      opacity: 0.85
+      color_discrete_map: '{"Setosa": "#4C72B0", "Versicolor": "#DD8452", "Virginica": "#55A467"}'
     layout: {x: 0, y: 7, w: 4, h: 5}
 
   - tag: petal-box
@@ -216,6 +217,7 @@ components:
       color: variety
       points: all
       notched: true
+      color_discrete_map: '{"Setosa": "#4C72B0", "Versicolor": "#DD8452", "Virginica": "#55A467"}'
     layout: {x: 4, y: 7, w: 4, h: 5}
 
   - tag: petal-width-box
@@ -224,14 +226,15 @@ components:
     data_collection_tag: iris_table
     visu_type: box
     title: "Petal Width by Variety"
-    description: "Box + all points + mean/SD marker."
+    description: "Box + every observation as a tick — strip-style view."
     title_size: h3
     dict_kwargs:
       x: variety
       y: petal.width
       color: variety
       points: all
-      boxmean: sd
+      notched: true
+      color_discrete_map: '{"Setosa": "#4C72B0", "Versicolor": "#DD8452", "Virginica": "#55A467"}'
     layout: {x: 0, y: 12, w: 4, h: 5}
 
   - tag: petal-width-histogram
@@ -248,6 +251,7 @@ components:
       nbins: 25
       barmode: overlay
       opacity: 0.7
+      color_discrete_map: '{"Setosa": "#4C72B0", "Versicolor": "#DD8452", "Virginica": "#55A467"}'
     layout: {x: 4, y: 12, w: 4, h: 5}
 
   # ── Data table ─────────────────────────────────────────────────────
