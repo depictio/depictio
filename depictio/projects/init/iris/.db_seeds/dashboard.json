@@ -28,7 +28,7 @@
   "tab_icon_color": null,
   "stored_metadata": [
     {
-      "index": "6bdc71ed-208e-4cdc-9a33-cd582814a4bd",
+      "index": "42e99c05-a226-4b0a-ba78-302bb81f1717",
       "component_type": "text",
       "title": "Iris Dataset \u2014 Overview",
       "workflow_tag": "",
@@ -40,14 +40,16 @@
       "dc_config": {},
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-05-20T10:35:55.643356",
+      "last_updated": "2026-05-20T10:41:26.470480",
+      "title_size": "sm",
+      "title_align": "left",
       "order": 2,
       "alignment": "left",
       "body": "Fisher's classic Iris dataset \u2014 **150 flowers** across three varieties\n(*Setosa*, *Versicolor*, *Virginica*). This dashboard surfaces the\ncohort-level structure: cards summarise the four measurement columns\nwith min/median/max strips, the scatter and box plots show species\nseparability on sepal dimensions, and the histogram strip exposes\ndistribution overlap. Use the left filters to narrow down by\nvariety or sepal length and watch every tile re-compute.\n",
       "wf_tag": "python/iris_workflow"
     },
     {
-      "index": "a19758e4-4671-4b96-8951-a29259d317cf",
+      "index": "6d4453de-cf5d-433b-9a59-bf55f2a5b808",
       "component_type": "card",
       "title": "Sepal Length",
       "workflow_tag": "python/iris_workflow",
@@ -70,7 +72,9 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-05-20T10:35:55.643388",
+      "last_updated": "2026-05-20T10:41:26.470516",
+      "title_size": "sm",
+      "title_align": "left",
       "aggregation": "median",
       "column_name": "sepal.length",
       "column_type": "float64",
@@ -91,7 +95,7 @@
       "wf_tag": "python/iris_workflow"
     },
     {
-      "index": "268a0413-5842-4635-b996-da499476637c",
+      "index": "38f4c08e-58f4-4b63-bd8b-2ba8e51dffdd",
       "component_type": "card",
       "title": "Petal Length",
       "workflow_tag": "python/iris_workflow",
@@ -114,7 +118,9 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-05-20T10:35:55.643398",
+      "last_updated": "2026-05-20T10:41:26.470527",
+      "title_size": "sm",
+      "title_align": "left",
       "aggregation": "median",
       "column_name": "petal.length",
       "column_type": "float64",
@@ -135,7 +141,7 @@
       "wf_tag": "python/iris_workflow"
     },
     {
-      "index": "2bfe32dc-43d1-4418-a9e6-669effba9a72",
+      "index": "503d1edf-ef74-4e46-9afa-1997cb3e20e8",
       "component_type": "card",
       "title": "Unique Varieties",
       "workflow_tag": "python/iris_workflow",
@@ -158,7 +164,9 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-05-20T10:35:55.643405",
+      "last_updated": "2026-05-20T10:41:26.470535",
+      "title_size": "sm",
+      "title_align": "left",
       "aggregation": "nunique",
       "column_name": "variety",
       "column_type": "object",
@@ -177,7 +185,7 @@
       "wf_tag": "python/iris_workflow"
     },
     {
-      "index": "cfa87653-a156-4146-aa42-7f683840ff4e",
+      "index": "c467d32a-fccc-457e-a413-9aa1a616e15b",
       "component_type": "card",
       "title": "Sample Count",
       "workflow_tag": "python/iris_workflow",
@@ -200,7 +208,9 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-05-20T10:35:55.643410",
+      "last_updated": "2026-05-20T10:41:26.470546",
+      "title_size": "sm",
+      "title_align": "left",
       "aggregation": "count",
       "column_name": "variety",
       "column_type": "object",
@@ -219,9 +229,9 @@
       "wf_tag": "python/iris_workflow"
     },
     {
-      "index": "eb88757f-61b5-4778-844f-9083eac5aa51",
+      "index": "2a08fdb7-607c-421a-9cd9-16583b408d95",
       "component_type": "card",
-      "title": "Samples w/ sepal > 6 cm",
+      "title": "Sepal > 6 cm",
       "workflow_tag": "python/iris_workflow",
       "data_collection_tag": "iris_table",
       "wf_id": {
@@ -242,7 +252,9 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-05-20T10:35:55.643416",
+      "last_updated": "2026-05-20T10:41:26.470553",
+      "title_size": "sm",
+      "title_align": "left",
       "aggregation": "count",
       "column_name": "sepal.length",
       "column_type": "float64",
@@ -261,7 +273,7 @@
       "wf_tag": "python/iris_workflow"
     },
     {
-      "index": "ccb7df3c-1974-47fa-b9f7-5d7dae15d77a",
+      "index": "aec5ff66-aa72-44b3-8d14-c109b3e6d0f3",
       "component_type": "interactive",
       "title": "",
       "workflow_tag": "python/iris_workflow",
@@ -284,7 +296,8 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-05-20T10:35:55.643423",
+      "last_updated": "2026-05-20T10:41:26.470562",
+      "title_align": "left",
       "interactive_component_type": "RangeSlider",
       "column_name": "sepal.length",
       "column_type": "float64",
@@ -300,7 +313,7 @@
       "wf_tag": "python/iris_workflow"
     },
     {
-      "index": "2eb4de6a-7d42-44ad-a494-d8a9caafe866",
+      "index": "32e70c00-55f1-4610-b593-e9122a8f2cf3",
       "component_type": "interactive",
       "title": "",
       "workflow_tag": "python/iris_workflow",
@@ -323,7 +336,8 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-05-20T10:35:55.643428",
+      "last_updated": "2026-05-20T10:41:26.470568",
+      "title_align": "left",
       "interactive_component_type": "RangeSlider",
       "column_name": "petal.length",
       "column_type": "float64",
@@ -339,7 +353,7 @@
       "wf_tag": "python/iris_workflow"
     },
     {
-      "index": "0a1afc2e-2c86-4db9-8a81-876e0fd68ac1",
+      "index": "912b6d24-b496-4054-99d3-539e8e5efe03",
       "component_type": "interactive",
       "title": "",
       "workflow_tag": "python/iris_workflow",
@@ -362,7 +376,8 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-05-20T10:35:55.643433",
+      "last_updated": "2026-05-20T10:41:26.470573",
+      "title_align": "left",
       "interactive_component_type": "MultiSelect",
       "column_name": "variety",
       "column_type": "object",
@@ -378,7 +393,7 @@
       "wf_tag": "python/iris_workflow"
     },
     {
-      "index": "2f77c556-83cf-4aba-8a79-19dc6925c0fb",
+      "index": "fe41c6ac-ed64-4bac-9bd1-ce8860bb1f01",
       "component_type": "interactive",
       "title": "Varieties (sepal > 6)",
       "workflow_tag": "python/iris_workflow",
@@ -401,7 +416,8 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-05-20T10:35:55.643438",
+      "last_updated": "2026-05-20T10:41:26.470578",
+      "title_align": "left",
       "interactive_component_type": "MultiSelect",
       "column_name": "variety",
       "column_type": "object",
@@ -417,7 +433,7 @@
       "wf_tag": "python/iris_workflow"
     },
     {
-      "index": "50b7b78d-8392-4fce-a8e7-a27d5f468527",
+      "index": "ff642e8a-012c-4b40-a68e-e92baee81340",
       "component_type": "figure",
       "title": "Sepal Length vs Width by Variety",
       "workflow_tag": "python/iris_workflow",
@@ -440,7 +456,10 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-05-20T10:35:55.643450",
+      "last_updated": "2026-05-20T10:41:26.470587",
+      "description": "Colour by variety, marker size by petal length. Species separability is clearest along sepal length.",
+      "title_size": "h3",
+      "title_align": "left",
       "visu_type": "scatter",
       "dict_kwargs": {
         "x": "sepal.length",
@@ -460,7 +479,7 @@
       "wf_tag": "python/iris_workflow"
     },
     {
-      "index": "2cdc3fb7-dac7-4c1f-84bc-dadd1c135cc2",
+      "index": "e08963e4-85ac-4dbd-9a97-5f5b17bc8eac",
       "component_type": "figure",
       "title": "Petal vs Sepal Length",
       "workflow_tag": "python/iris_workflow",
@@ -483,7 +502,10 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-05-20T10:35:55.643455",
+      "last_updated": "2026-05-20T10:41:26.470593",
+      "description": "Petal length is the single strongest discriminator between varieties.",
+      "title_size": "h3",
+      "title_align": "left",
       "visu_type": "scatter",
       "dict_kwargs": {
         "x": "sepal.length",
@@ -502,9 +524,9 @@
       "wf_tag": "python/iris_workflow"
     },
     {
-      "index": "132c9da5-2f73-44f2-b7e9-4681f00051d2",
+      "index": "3a270bf5-c270-4b59-b3cf-e74d44e9c579",
       "component_type": "figure",
-      "title": "Petal Length Distribution by Variety",
+      "title": "Petal Length by Variety",
       "workflow_tag": "python/iris_workflow",
       "data_collection_tag": "iris_table",
       "wf_id": {
@@ -525,7 +547,10 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-05-20T10:35:55.643459",
+      "last_updated": "2026-05-20T10:41:26.470598",
+      "description": "Box + points; notched to show median CIs.",
+      "title_size": "h3",
+      "title_align": "left",
       "visu_type": "box",
       "dict_kwargs": {
         "x": "variety",
@@ -545,9 +570,9 @@
       "wf_tag": "python/iris_workflow"
     },
     {
-      "index": "8f2ff9c4-45fe-46be-af0e-44351dab890d",
+      "index": "9d00f754-96f2-4b9b-bc9d-5e4b4cbf3434",
       "component_type": "figure",
-      "title": "Sepal Width Distribution by Variety",
+      "title": "Sepal Width by Variety",
       "workflow_tag": "python/iris_workflow",
       "data_collection_tag": "iris_table",
       "wf_id": {
@@ -568,7 +593,10 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-05-20T10:35:55.643464",
+      "last_updated": "2026-05-20T10:41:26.470603",
+      "description": "Box + all points + mean/SD marker; surfaces multi-modality in Setosa.",
+      "title_size": "h3",
+      "title_align": "left",
       "visu_type": "box",
       "dict_kwargs": {
         "x": "variety",
@@ -588,7 +616,7 @@
       "wf_tag": "python/iris_workflow"
     },
     {
-      "index": "31e0d006-7f7b-48d3-ba4e-bc25152abb28",
+      "index": "6a64b05e-736c-4565-af5d-007fcba17569",
       "component_type": "figure",
       "title": "Sepal Length Distribution",
       "workflow_tag": "python/iris_workflow",
@@ -611,7 +639,10 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-05-20T10:35:55.643468",
+      "last_updated": "2026-05-20T10:41:26.470607",
+      "description": "Per-variety overlay; bars semi-transparent to expose overlap.",
+      "title_size": "h3",
+      "title_align": "left",
       "visu_type": "histogram",
       "dict_kwargs": {
         "x": "sepal.length",
@@ -631,7 +662,7 @@
       "wf_tag": "python/iris_workflow"
     },
     {
-      "index": "f3300947-e282-474a-a80c-fa72089e04fb",
+      "index": "65765de3-b0fd-4d55-a975-6c63c6f8b79c",
       "component_type": "table",
       "title": "Iris Dataset",
       "workflow_tag": "python/iris_workflow",
@@ -654,23 +685,23 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-05-20T10:35:55.643474",
+      "last_updated": "2026-05-20T10:41:26.470613",
+      "description": "Complete iris flower measurements across the three varieties.",
+      "title_size": "h3",
+      "title_align": "left",
       "columns": [],
       "page_size": 15,
       "sortable": true,
       "filterable": true,
       "row_selection_enabled": false,
       "row_selection_column": null,
-      "description": "Complete iris flower measurements across the three varieties.",
-      "title_size": "h3",
-      "title_align": "left",
       "wf_tag": "python/iris_workflow"
     }
   ],
   "stored_layout_data": [],
   "left_panel_layout_data": [
     {
-      "i": "box-ccb7df3c-1974-47fa-b9f7-5d7dae15d77a",
+      "i": "box-aec5ff66-aa72-44b3-8d14-c109b3e6d0f3",
       "x": 0,
       "y": 0,
       "w": 1,
@@ -678,7 +709,7 @@
       "static": false
     },
     {
-      "i": "box-2eb4de6a-7d42-44ad-a494-d8a9caafe866",
+      "i": "box-32e70c00-55f1-4610-b593-e9122a8f2cf3",
       "x": 0,
       "y": 3,
       "w": 1,
@@ -686,7 +717,7 @@
       "static": false
     },
     {
-      "i": "box-0a1afc2e-2c86-4db9-8a81-876e0fd68ac1",
+      "i": "box-912b6d24-b496-4054-99d3-539e8e5efe03",
       "x": 0,
       "y": 6,
       "w": 1,
@@ -694,7 +725,7 @@
       "static": false
     },
     {
-      "i": "box-2f77c556-83cf-4aba-8a79-19dc6925c0fb",
+      "i": "box-fe41c6ac-ed64-4bac-9bd1-ce8860bb1f01",
       "x": 0,
       "y": 9,
       "w": 1,
@@ -704,11 +735,11 @@
   ],
   "right_panel_layout_data": [
     {
-      "i": "box-6bdc71ed-208e-4cdc-9a33-cd582814a4bd",
+      "i": "box-42e99c05-a226-4b0a-ba78-302bb81f1717",
       "x": 0,
       "y": 0,
-      "w": 16,
-      "h": 12,
+      "w": 8,
+      "h": 1,
       "static": false,
       "resizeHandles": [
         "se",
@@ -719,126 +750,126 @@
       ]
     },
     {
-      "i": "box-a19758e4-4671-4b96-8951-a29259d317cf",
-      "x": 16,
-      "y": 12,
-      "w": 16,
-      "h": 6,
-      "static": true
-    },
-    {
-      "i": "box-268a0413-5842-4635-b996-da499476637c",
-      "x": 32,
-      "y": 18,
-      "w": 16,
-      "h": 6,
-      "static": true
-    },
-    {
-      "i": "box-2bfe32dc-43d1-4418-a9e6-669effba9a72",
+      "i": "box-6d4453de-cf5d-433b-9a59-bf55f2a5b808",
       "x": 0,
-      "y": 24,
-      "w": 16,
-      "h": 6,
+      "y": 1,
+      "w": 4,
+      "h": 2,
       "static": true
     },
     {
-      "i": "box-cfa87653-a156-4146-aa42-7f683840ff4e",
-      "x": 16,
-      "y": 30,
-      "w": 16,
-      "h": 6,
+      "i": "box-38f4c08e-58f4-4b63-bd8b-2ba8e51dffdd",
+      "x": 4,
+      "y": 1,
+      "w": 4,
+      "h": 2,
       "static": true
     },
     {
-      "i": "box-eb88757f-61b5-4778-844f-9083eac5aa51",
-      "x": 32,
-      "y": 36,
-      "w": 16,
-      "h": 6,
-      "static": true
-    },
-    {
-      "i": "box-50b7b78d-8392-4fce-a8e7-a27d5f468527",
-      "x": 16,
-      "y": 42,
-      "w": 16,
-      "h": 12,
-      "static": false,
-      "resizeHandles": [
-        "se",
-        "s",
-        "e",
-        "sw",
-        "w"
-      ]
-    },
-    {
-      "i": "box-2cdc3fb7-dac7-4c1f-84bc-dadd1c135cc2",
-      "x": 32,
-      "y": 54,
-      "w": 16,
-      "h": 12,
-      "static": false,
-      "resizeHandles": [
-        "se",
-        "s",
-        "e",
-        "sw",
-        "w"
-      ]
-    },
-    {
-      "i": "box-132c9da5-2f73-44f2-b7e9-4681f00051d2",
+      "i": "box-503d1edf-ef74-4e46-9afa-1997cb3e20e8",
       "x": 0,
-      "y": 66,
-      "w": 16,
-      "h": 12,
-      "static": false,
-      "resizeHandles": [
-        "se",
-        "s",
-        "e",
-        "sw",
-        "w"
-      ]
+      "y": 3,
+      "w": 4,
+      "h": 2,
+      "static": true
     },
     {
-      "i": "box-8f2ff9c4-45fe-46be-af0e-44351dab890d",
-      "x": 16,
-      "y": 78,
-      "w": 16,
-      "h": 12,
-      "static": false,
-      "resizeHandles": [
-        "se",
-        "s",
-        "e",
-        "sw",
-        "w"
-      ]
+      "i": "box-c467d32a-fccc-457e-a413-9aa1a616e15b",
+      "x": 4,
+      "y": 3,
+      "w": 2,
+      "h": 2,
+      "static": true
     },
     {
-      "i": "box-31e0d006-7f7b-48d3-ba4e-bc25152abb28",
-      "x": 32,
-      "y": 90,
-      "w": 16,
-      "h": 12,
-      "static": false,
-      "resizeHandles": [
-        "se",
-        "s",
-        "e",
-        "sw",
-        "w"
-      ]
+      "i": "box-2a08fdb7-607c-421a-9cd9-16583b408d95",
+      "x": 6,
+      "y": 3,
+      "w": 2,
+      "h": 2,
+      "static": true
     },
     {
-      "i": "box-f3300947-e282-474a-a80c-fa72089e04fb",
+      "i": "box-ff642e8a-012c-4b40-a68e-e92baee81340",
       "x": 0,
-      "y": 102,
-      "w": 48,
-      "h": 20,
+      "y": 5,
+      "w": 4,
+      "h": 5,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-e08963e4-85ac-4dbd-9a97-5f5b17bc8eac",
+      "x": 4,
+      "y": 5,
+      "w": 4,
+      "h": 5,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-3a270bf5-c270-4b59-b3cf-e74d44e9c579",
+      "x": 0,
+      "y": 10,
+      "w": 4,
+      "h": 5,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-9d00f754-96f2-4b9b-bc9d-5e4b4cbf3434",
+      "x": 4,
+      "y": 10,
+      "w": 4,
+      "h": 5,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-6a64b05e-736c-4565-af5d-007fcba17569",
+      "x": 0,
+      "y": 15,
+      "w": 8,
+      "h": 4,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-65765de3-b0fd-4d55-a975-6c63c6f8b79c",
+      "x": 0,
+      "y": 19,
+      "w": 8,
+      "h": 5,
       "static": false,
       "resizeHandles": [
         "se",

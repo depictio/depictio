@@ -21,16 +21,15 @@ components:
       separability on sepal dimensions, and the histogram strip exposes
       distribution overlap. Use the left filters to narrow down by
       variety or sepal length and watch every tile re-compute.
+    layout: {x: 0, y: 0, w: 8, h: 1}
 
   # ── Multi-metric summary cards ─────────────────────────────────────
-  # Hero: sepal length with full statistical breakdown.
   - tag: sepal-length-summary
     component_type: card
     workflow_tag: python/iris_workflow
     data_collection_tag: iris_table
     aggregation: median
-    aggregations:
-      - box_plot_stats
+    aggregations: [box_plot_stats]
     secondary_layout: box_plot
     column_name: sepal.length
     column_type: float64
@@ -40,15 +39,14 @@ components:
     title_font_size: xl
     value_font_size: xl
     title: "Sepal Length"
+    layout: {x: 0, y: 1, w: 4, h: 2}
 
-  # Hero: petal length, complementary to sepal length.
   - tag: petal-length-summary
     component_type: card
     workflow_tag: python/iris_workflow
     data_collection_tag: iris_table
     aggregation: median
-    aggregations:
-      - box_plot_stats
+    aggregations: [box_plot_stats]
     secondary_layout: box_plot
     column_name: petal.length
     column_type: float64
@@ -58,8 +56,8 @@ components:
     title_font_size: xl
     value_font_size: xl
     title: "Petal Length"
+    layout: {x: 4, y: 1, w: 4, h: 2}
 
-  # Variety cardinality + dominant species (top-N breakdown).
   - tag: variety-breakdown
     component_type: card
     workflow_tag: python/iris_workflow
@@ -76,8 +74,8 @@ components:
     title_font_size: xl
     value_font_size: xl
     title: "Unique Varieties"
+    layout: {x: 0, y: 3, w: 4, h: 2}
 
-  # Sample coverage (150 total, gauge view).
   - tag: sample-coverage
     component_type: card
     workflow_tag: python/iris_workflow
@@ -93,8 +91,8 @@ components:
     title_font_size: xl
     value_font_size: xl
     title: "Sample Count"
+    layout: {x: 4, y: 3, w: 2, h: 2}
 
-  # Conditional aggregation — long-sepal subset.
   - tag: large-sepal-count
     component_type: card
     workflow_tag: python/iris_workflow
@@ -108,7 +106,8 @@ components:
     title_color: "#607D8B"
     title_font_size: lg
     value_font_size: xl
-    title: "Samples w/ sepal > 6 cm"
+    title: "Sepal > 6 cm"
+    layout: {x: 6, y: 3, w: 2, h: 2}
 
   # ── Interactive filters (left sidebar) ─────────────────────────────
   - tag: sepal-length-filter
@@ -120,6 +119,7 @@ components:
     column_type: float64
     custom_color: "#9C27B0"
     icon_name: mdi:ruler
+    layout: {x: 0, y: 0, w: 1, h: 3}
 
   - tag: petal-length-filter
     component_type: interactive
@@ -130,6 +130,7 @@ components:
     column_type: float64
     custom_color: "#43A047"
     icon_name: mdi:ruler
+    layout: {x: 0, y: 3, w: 1, h: 3}
 
   - tag: variety-filter
     component_type: interactive
@@ -140,8 +141,8 @@ components:
     column_type: object
     custom_color: "#4CAF50"
     icon_name: mdi:filter-variant
+    layout: {x: 0, y: 6, w: 1, h: 3}
 
-  # Scoped variety filter — varieties seen among large-sepal samples only.
   - tag: large-sepal-variety-filter
     component_type: interactive
     workflow_tag: python/iris_workflow
@@ -153,6 +154,7 @@ components:
     custom_color: "#FF9800"
     icon_name: mdi:filter-check
     title: "Varieties (sepal > 6)"
+    layout: {x: 0, y: 9, w: 1, h: 3}
 
   # ── Figures ────────────────────────────────────────────────────────
   - tag: sepal-scatter
@@ -161,7 +163,7 @@ components:
     data_collection_tag: iris_table
     visu_type: scatter
     title: "Sepal Length vs Width by Variety"
-    description: "Colour by variety. Species separability is clearest along sepal length."
+    description: "Colour by variety, marker size by petal length. Species separability is clearest along sepal length."
     title_size: h3
     dict_kwargs:
       x: sepal.length
@@ -169,6 +171,7 @@ components:
       color: variety
       size: petal.length
       size_max: 18
+    layout: {x: 0, y: 5, w: 4, h: 5}
 
   - tag: petal-vs-sepal
     component_type: figure
@@ -183,13 +186,14 @@ components:
       y: petal.length
       color: variety
       symbol: variety
+    layout: {x: 4, y: 5, w: 4, h: 5}
 
   - tag: petal-box
     component_type: figure
     workflow_tag: python/iris_workflow
     data_collection_tag: iris_table
     visu_type: box
-    title: "Petal Length Distribution by Variety"
+    title: "Petal Length by Variety"
     description: "Box + points; notched to show median CIs."
     title_size: h3
     dict_kwargs:
@@ -198,14 +202,15 @@ components:
       color: variety
       points: all
       notched: true
+    layout: {x: 0, y: 10, w: 4, h: 5}
 
   - tag: sepal-width-box
     component_type: figure
     workflow_tag: python/iris_workflow
     data_collection_tag: iris_table
     visu_type: box
-    title: "Sepal Width Distribution by Variety"
-    description: "Box + all points; surfaces multi-modality in Setosa."
+    title: "Sepal Width by Variety"
+    description: "Box + all points + mean/SD marker; surfaces multi-modality in Setosa."
     title_size: h3
     dict_kwargs:
       x: variety
@@ -213,6 +218,7 @@ components:
       color: variety
       points: all
       boxmean: sd
+    layout: {x: 4, y: 10, w: 4, h: 5}
 
   - tag: sepal-histogram
     component_type: figure
@@ -220,7 +226,7 @@ components:
     data_collection_tag: iris_table
     visu_type: histogram
     title: "Sepal Length Distribution"
-    description: "Per-variety overlay; bars are semi-transparent to expose overlap."
+    description: "Per-variety overlay; bars semi-transparent to expose overlap."
     title_size: h3
     dict_kwargs:
       x: sepal.length
@@ -228,6 +234,7 @@ components:
       nbins: 20
       barmode: overlay
       opacity: 0.7
+    layout: {x: 0, y: 15, w: 8, h: 4}
 
   # ── Data table ─────────────────────────────────────────────────────
   - tag: data-table
@@ -239,3 +246,4 @@ components:
     title_size: h3
     title_align: left
     page_size: 15
+    layout: {x: 0, y: 19, w: 8, h: 5}

@@ -16,22 +16,21 @@ components:
     body: |
       Petal length and width are the strongest single discriminators
       between *Setosa*, *Versicolor*, and *Virginica* in the Iris cohort.
-      The **cards** below give multi-metric strips (box-plot from min/q1/median/q3/max
-      for continuous columns, top-N for categorical) so you can compare cohort
-      centre + spread at a glance. The **filters** include a scoped multi-select
-      that only surfaces varieties present among long-petal samples
-      (petal length > 4 cm). The **figures** drill into the bivariate
-      petal/sepal structure.
+      The **cards** below give multi-metric strips (box-plot from
+      min/q1/median/q3/max for continuous columns, top-N for categorical)
+      so you can compare cohort centre + spread at a glance. The
+      **filters** include a scoped multi-select that only surfaces
+      varieties present among long-petal samples (petal length > 4 cm).
+      The **figures** drill into the bivariate petal/sepal structure.
+    layout: {x: 0, y: 0, w: 8, h: 1}
 
   # ── Multi-metric cards ──────────────────────────────────────────────
-  # Hero: petal length with full box-plot summary
   - tag: petal-length-summary
     component_type: card
     workflow_tag: python/iris_workflow
     data_collection_tag: iris_table
     aggregation: median
-    aggregations:
-      - box_plot_stats
+    aggregations: [box_plot_stats]
     secondary_layout: box_plot
     column_name: petal.length
     column_type: float64
@@ -41,15 +40,14 @@ components:
     title_font_size: xl
     value_font_size: xl
     title: "Petal Length"
+    layout: {x: 0, y: 1, w: 4, h: 2}
 
-  # Hero: petal width with box-plot summary
   - tag: petal-width-summary
     component_type: card
     workflow_tag: python/iris_workflow
     data_collection_tag: iris_table
     aggregation: median
-    aggregations:
-      - box_plot_stats
+    aggregations: [box_plot_stats]
     secondary_layout: box_plot
     column_name: petal.width
     column_type: float64
@@ -59,15 +57,14 @@ components:
     title_font_size: xl
     value_font_size: xl
     title: "Petal Width"
+    layout: {x: 4, y: 1, w: 4, h: 2}
 
-  # Hero: sepal length comparison
   - tag: sepal-length-overview
     component_type: card
     workflow_tag: python/iris_workflow
     data_collection_tag: iris_table
     aggregation: median
-    aggregations:
-      - box_plot_stats
+    aggregations: [box_plot_stats]
     secondary_layout: box_plot
     column_name: sepal.length
     column_type: float64
@@ -77,8 +74,8 @@ components:
     title_font_size: xl
     value_font_size: xl
     title: "Sepal Length"
+    layout: {x: 0, y: 3, w: 4, h: 2}
 
-  # Cardinality view: which variety dominates the cohort?
   - tag: variety-cardinality
     component_type: card
     workflow_tag: python/iris_workflow
@@ -95,9 +92,9 @@ components:
     title_font_size: xl
     value_font_size: xl
     title: "Varieties"
+    layout: {x: 4, y: 3, w: 4, h: 2}
 
   # ── Conditional aggregation cards ───────────────────────────────────
-  # Count of samples with long petals (> 4 cm)
   - tag: long-petal-count
     component_type: card
     workflow_tag: python/iris_workflow
@@ -112,8 +109,8 @@ components:
     title_font_size: lg
     value_font_size: xl
     title: "Petals > 4 cm"
+    layout: {x: 0, y: 5, w: 4, h: 2}
 
-  # Average sepal width where petal width is narrow (≤ 0.5)
   - tag: narrow-petal-sepal-width
     component_type: card
     workflow_tag: python/iris_workflow
@@ -127,7 +124,8 @@ components:
     title_color: "#1E88E5"
     title_font_size: lg
     value_font_size: xl
-    title: "Avg sepal width (narrow petals)"
+    title: "Sepal width (narrow petals)"
+    layout: {x: 4, y: 5, w: 4, h: 2}
 
   # ── Interactive filters ─────────────────────────────────────────────
   - tag: petal-length-filter
@@ -139,6 +137,7 @@ components:
     column_type: float64
     custom_color: "#43A047"
     icon_name: mdi:ruler
+    layout: {x: 0, y: 0, w: 1, h: 3}
 
   - tag: petal-width-filter
     component_type: interactive
@@ -149,6 +148,7 @@ components:
     column_type: float64
     custom_color: "#00897B"
     icon_name: mdi:ruler
+    layout: {x: 0, y: 3, w: 1, h: 3}
 
   - tag: sepal-length-petal-filter
     component_type: interactive
@@ -159,6 +159,7 @@ components:
     column_type: float64
     custom_color: "#8E24AA"
     icon_name: mdi:ruler
+    layout: {x: 0, y: 6, w: 1, h: 3}
 
   - tag: variety-picker
     component_type: interactive
@@ -169,8 +170,8 @@ components:
     column_type: object
     custom_color: "#8E24AA"
     icon_name: mdi:filter-variant
+    layout: {x: 0, y: 9, w: 1, h: 3}
 
-  # Scoped: varieties present among long-petal samples only
   - tag: long-petal-variety-filter
     component_type: interactive
     workflow_tag: python/iris_workflow
@@ -182,6 +183,7 @@ components:
     custom_color: "#F4511E"
     icon_name: mdi:filter-check
     title: "Varieties (petal > 4 cm)"
+    layout: {x: 0, y: 12, w: 1, h: 3}
 
   # ── Figures ─────────────────────────────────────────────────────────
   - tag: petal-scatter
@@ -198,6 +200,7 @@ components:
       color: variety
       size: sepal.length
       size_max: 16
+    layout: {x: 0, y: 7, w: 4, h: 5}
 
   - tag: petal-box
     component_type: figure
@@ -213,14 +216,15 @@ components:
       color: variety
       points: all
       notched: true
+    layout: {x: 4, y: 7, w: 4, h: 5}
 
   - tag: petal-width-box
     component_type: figure
     workflow_tag: python/iris_workflow
     data_collection_tag: iris_table
     visu_type: box
-    title: "Petal Width Distribution"
-    description: "Box + all points highlights the bimodal cohort across varieties."
+    title: "Petal Width by Variety"
+    description: "Box + all points + mean/SD marker."
     title_size: h3
     dict_kwargs:
       x: variety
@@ -228,6 +232,7 @@ components:
       color: variety
       points: all
       boxmean: sd
+    layout: {x: 0, y: 12, w: 4, h: 5}
 
   - tag: petal-width-histogram
     component_type: figure
@@ -243,6 +248,7 @@ components:
       nbins: 25
       barmode: overlay
       opacity: 0.7
+    layout: {x: 4, y: 12, w: 4, h: 5}
 
   # ── Data table ─────────────────────────────────────────────────────
   - tag: petal-data-table
@@ -254,3 +260,4 @@ components:
     title_size: h3
     title_align: left
     page_size: 15
+    layout: {x: 0, y: 17, w: 8, h: 5}

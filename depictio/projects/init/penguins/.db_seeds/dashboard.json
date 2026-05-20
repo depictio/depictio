@@ -28,7 +28,7 @@
   "tab_icon_color": null,
   "stored_metadata": [
     {
-      "index": "a633e5fc-4c72-4b04-bcd7-3332bd397348",
+      "index": "172cd937-94bf-4a07-8006-697d6e6dc057",
       "component_type": "text",
       "title": "Palmer Penguins \u2014 Species & Island Morphology",
       "workflow_tag": "",
@@ -40,14 +40,16 @@
       "dc_config": {},
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-05-20T10:35:55.666771",
+      "last_updated": "2026-05-20T10:41:26.486019",
+      "title_size": "sm",
+      "title_align": "left",
       "order": 2,
       "alignment": "left",
-      "body": "The Palmer Penguins dataset captures **physical measurements**\n(bill length / depth, flipper length, body mass) and **demographic\ncontext** (island, sex, year) for three species \u2014 *Adelie*,\n*Chinstrap*, *Gentoo* \u2014 sampled across Biscoe, Dream, and Torgersen\nislands. This dashboard joins both DCs into a single canonical view\nand surfaces species-vs-island morphology. Cards expose cohort centre +\nspread (box-plot strips), top-N species dominance, and a sample\ncoverage gauge. The figures cover the bivariate body-mass \u00d7 flipper-length\nspace and the sex \u00d7 species bill structure.\n",
+      "body": "The Palmer Penguins dataset captures **physical measurements**\n(bill length / depth, flipper length, body mass) and **demographic\ncontext** (island, sex, year) for three species \u2014 *Adelie*,\n*Chinstrap*, *Gentoo* \u2014 sampled across Biscoe, Dream, and Torgersen\nislands. Both DCs are joined into a single canonical view. Cards\nexpose cohort centre + spread (box-plot strips), top-N species/island\ndominance, and a sample coverage gauge. The figures cover the\nbivariate body-mass \u00d7 flipper-length space and the sex \u00d7 species bill\nstructure.\n",
       "wf_tag": "python/penguin_species_analysis"
     },
     {
-      "index": "ed05a9ef-dd35-4671-a83b-16c9f222bdcb",
+      "index": "6d00c6d1-570b-4197-b4c3-11c95d6ad30c",
       "component_type": "card",
       "title": "Body Mass (g)",
       "workflow_tag": "penguin_species_analysis",
@@ -70,7 +72,9 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-05-20T10:35:55.666792",
+      "last_updated": "2026-05-20T10:41:26.486045",
+      "title_size": "sm",
+      "title_align": "left",
       "aggregation": "median",
       "column_name": "body_mass_g",
       "column_type": "float64",
@@ -91,7 +95,7 @@
       "wf_tag": "python/penguin_species_analysis"
     },
     {
-      "index": "0aa0bf2b-306c-46a4-a0ee-a1b8fa885af7",
+      "index": "b4fed69e-b2fc-4c0e-827a-12d39b016c28",
       "component_type": "card",
       "title": "Flipper Length (mm)",
       "workflow_tag": "penguin_species_analysis",
@@ -114,7 +118,9 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-05-20T10:35:55.666800",
+      "last_updated": "2026-05-20T10:41:26.486054",
+      "title_size": "sm",
+      "title_align": "left",
       "aggregation": "median",
       "column_name": "flipper_length_mm",
       "column_type": "float64",
@@ -135,7 +141,7 @@
       "wf_tag": "python/penguin_species_analysis"
     },
     {
-      "index": "807cf760-06cf-4888-9157-011acc6552b3",
+      "index": "5091d637-43ce-49e0-bb52-a02096a11c89",
       "component_type": "card",
       "title": "Species",
       "workflow_tag": "penguin_species_analysis",
@@ -158,7 +164,9 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-05-20T10:35:55.666809",
+      "last_updated": "2026-05-20T10:41:26.486061",
+      "title_size": "sm",
+      "title_align": "left",
       "aggregation": "nunique",
       "column_name": "species",
       "column_type": "object",
@@ -177,7 +185,7 @@
       "wf_tag": "python/penguin_species_analysis"
     },
     {
-      "index": "f93c42cc-209d-4b0e-97e3-3822b19c6c49",
+      "index": "0cb4f138-ffc4-4949-ad46-82eaf61ddd08",
       "component_type": "card",
       "title": "Islands",
       "workflow_tag": "penguin_species_analysis",
@@ -200,7 +208,9 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-05-20T10:35:55.666814",
+      "last_updated": "2026-05-20T10:41:26.486067",
+      "title_size": "sm",
+      "title_align": "left",
       "aggregation": "nunique",
       "column_name": "island",
       "column_type": "object",
@@ -219,7 +229,7 @@
       "wf_tag": "python/penguin_species_analysis"
     },
     {
-      "index": "f6e051b9-eccd-4643-95d9-1835dabdd2d7",
+      "index": "21da8947-f5cb-4028-85ea-cee45d30600b",
       "component_type": "card",
       "title": "Individuals",
       "workflow_tag": "penguin_species_analysis",
@@ -242,7 +252,9 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-05-20T10:35:55.666819",
+      "last_updated": "2026-05-20T10:41:26.486074",
+      "title_size": "sm",
+      "title_align": "left",
       "aggregation": "count",
       "column_name": "individual_id",
       "column_type": "object",
@@ -261,7 +273,7 @@
       "wf_tag": "python/penguin_species_analysis"
     },
     {
-      "index": "7095fc2f-fec8-46b4-a5db-9b6060931460",
+      "index": "608df786-5239-44a6-a931-95e4d85d78ea",
       "component_type": "card",
       "title": "Bill > 50 mm",
       "workflow_tag": "penguin_species_analysis",
@@ -284,7 +296,9 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-05-20T10:35:55.666824",
+      "last_updated": "2026-05-20T10:41:26.486079",
+      "title_size": "sm",
+      "title_align": "left",
       "aggregation": "count",
       "column_name": "bill_length_mm",
       "column_type": "float64",
@@ -303,7 +317,7 @@
       "wf_tag": "python/penguin_species_analysis"
     },
     {
-      "index": "67a1bab8-fe8d-4df2-acd2-37f348a0bb67",
+      "index": "728a81a5-1095-4882-9f53-32cc4698fe6f",
       "component_type": "interactive",
       "title": "",
       "workflow_tag": "penguin_species_analysis",
@@ -326,7 +340,8 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-05-20T10:35:55.666831",
+      "last_updated": "2026-05-20T10:41:26.486088",
+      "title_align": "left",
       "interactive_component_type": "MultiSelect",
       "column_name": "species",
       "column_type": "object",
@@ -342,7 +357,7 @@
       "wf_tag": "python/penguin_species_analysis"
     },
     {
-      "index": "6f524781-e191-4af1-83e3-6841c9481d50",
+      "index": "0833f96b-a697-4f4d-8929-837f4e556fdc",
       "component_type": "interactive",
       "title": "",
       "workflow_tag": "penguin_species_analysis",
@@ -365,7 +380,8 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-05-20T10:35:55.666836",
+      "last_updated": "2026-05-20T10:41:26.486094",
+      "title_align": "left",
       "interactive_component_type": "MultiSelect",
       "column_name": "island",
       "column_type": "object",
@@ -381,7 +397,7 @@
       "wf_tag": "python/penguin_species_analysis"
     },
     {
-      "index": "a45ce0c9-0294-4171-add9-f90d9852247c",
+      "index": "83d8dfd1-ebf1-46b7-907d-100b783b80a1",
       "component_type": "interactive",
       "title": "",
       "workflow_tag": "penguin_species_analysis",
@@ -404,7 +420,8 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-05-20T10:35:55.666840",
+      "last_updated": "2026-05-20T10:41:26.486099",
+      "title_align": "left",
       "interactive_component_type": "MultiSelect",
       "column_name": "sex",
       "column_type": "object",
@@ -420,7 +437,7 @@
       "wf_tag": "python/penguin_species_analysis"
     },
     {
-      "index": "b1a7a902-9366-4a9d-b235-abb2b486c62d",
+      "index": "434db343-b288-4b53-9157-ed35584e21cb",
       "component_type": "interactive",
       "title": "",
       "workflow_tag": "penguin_species_analysis",
@@ -443,7 +460,8 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-05-20T10:35:55.666845",
+      "last_updated": "2026-05-20T10:41:26.486104",
+      "title_align": "left",
       "interactive_component_type": "RangeSlider",
       "column_name": "body_mass_g",
       "column_type": "float64",
@@ -459,7 +477,7 @@
       "wf_tag": "python/penguin_species_analysis"
     },
     {
-      "index": "6362cdc8-837e-4702-822b-5473b99920eb",
+      "index": "fc052e86-9933-4896-9f15-1f3e28f9a31b",
       "component_type": "interactive",
       "title": "",
       "workflow_tag": "penguin_species_analysis",
@@ -482,7 +500,8 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-05-20T10:35:55.666849",
+      "last_updated": "2026-05-20T10:41:26.486109",
+      "title_align": "left",
       "interactive_component_type": "RangeSlider",
       "column_name": "bill_length_mm",
       "column_type": "float64",
@@ -498,7 +517,7 @@
       "wf_tag": "python/penguin_species_analysis"
     },
     {
-      "index": "5c96f559-dd1f-4688-ac69-d62f4533f8ac",
+      "index": "dd34a045-574f-4fe6-a1f9-cd8e97c083fd",
       "component_type": "interactive",
       "title": "",
       "workflow_tag": "penguin_species_analysis",
@@ -521,7 +540,8 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-05-20T10:35:55.666853",
+      "last_updated": "2026-05-20T10:41:26.486114",
+      "title_align": "left",
       "interactive_component_type": "RangeSlider",
       "column_name": "flipper_length_mm",
       "column_type": "float64",
@@ -537,7 +557,7 @@
       "wf_tag": "python/penguin_species_analysis"
     },
     {
-      "index": "79248299-cd72-4c0a-b472-b5e273a2a296",
+      "index": "7a09784d-b2c9-4e84-846d-125750374d57",
       "component_type": "interactive",
       "title": "Species (bill > 50)",
       "workflow_tag": "penguin_species_analysis",
@@ -560,7 +580,8 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-05-20T10:35:55.666857",
+      "last_updated": "2026-05-20T10:41:26.486119",
+      "title_align": "left",
       "interactive_component_type": "MultiSelect",
       "column_name": "species",
       "column_type": "object",
@@ -576,7 +597,7 @@
       "wf_tag": "python/penguin_species_analysis"
     },
     {
-      "index": "bdaea20b-a642-4d6d-bd65-c5930945b0b8",
+      "index": "909ed0b1-6b92-4b13-b9d0-c771ebe1d3c1",
       "component_type": "figure",
       "title": "Body Mass vs Flipper Length",
       "workflow_tag": "penguin_species_analysis",
@@ -599,7 +620,10 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-05-20T10:35:55.666866",
+      "last_updated": "2026-05-20T10:41:26.486128",
+      "description": "Colour = species, symbol = island, size = bill length. Marginal box/violin show per-axis spread.",
+      "title_size": "h3",
+      "title_align": "left",
       "visu_type": "scatter",
       "dict_kwargs": {
         "x": "flipper_length_mm",
@@ -625,7 +649,7 @@
       "wf_tag": "python/penguin_species_analysis"
     },
     {
-      "index": "f2d61c19-7d05-4eb0-a79f-e2cdb7095b3a",
+      "index": "d64b243f-8249-4ed6-83b6-733008fcdd0a",
       "component_type": "figure",
       "title": "Bill Shape \u2014 Length vs Depth",
       "workflow_tag": "penguin_species_analysis",
@@ -648,7 +672,10 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-05-20T10:35:55.666871",
+      "last_updated": "2026-05-20T10:41:26.486134",
+      "description": "Bivariate bill morphology. Chinstrap = long & deep; Gentoo = long & shallow; Adelie = short & deep.",
+      "title_size": "h3",
+      "title_align": "left",
       "visu_type": "scatter",
       "dict_kwargs": {
         "x": "bill_length_mm",
@@ -669,7 +696,7 @@
       "wf_tag": "python/penguin_species_analysis"
     },
     {
-      "index": "c3061e00-7881-49cf-a89d-bbd99d66b96e",
+      "index": "e317ada3-44d4-423c-8bf5-a4cc8346a6b9",
       "component_type": "figure",
       "title": "Bill Length by Species and Sex",
       "workflow_tag": "penguin_species_analysis",
@@ -692,7 +719,10 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-05-20T10:35:55.666875",
+      "last_updated": "2026-05-20T10:41:26.486146",
+      "description": "Grouped box + all points. Sexual dimorphism is most visible in Gentoo.",
+      "title_size": "h3",
+      "title_align": "left",
       "visu_type": "box",
       "dict_kwargs": {
         "x": "species",
@@ -715,7 +745,7 @@
       "wf_tag": "python/penguin_species_analysis"
     },
     {
-      "index": "e909651c-e19a-4d11-9d09-b046dcc4a669",
+      "index": "c300834f-252b-4637-9087-e1e8e1cb26f7",
       "component_type": "figure",
       "title": "Body Mass Distribution by Species",
       "workflow_tag": "penguin_species_analysis",
@@ -738,7 +768,10 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-05-20T10:35:55.666879",
+      "last_updated": "2026-05-20T10:41:26.486150",
+      "description": "Box + all points + mean/SD marker; surfaces multi-modal sex dimorphism in Gentoo.",
+      "title_size": "h3",
+      "title_align": "left",
       "visu_type": "box",
       "dict_kwargs": {
         "x": "species",
@@ -759,7 +792,7 @@
       "wf_tag": "python/penguin_species_analysis"
     },
     {
-      "index": "7c67e0b8-32e6-4bd9-85e3-23b4c151ee62",
+      "index": "aab68f8d-cafc-4c90-a068-bafad3c435a7",
       "component_type": "figure",
       "title": "Bill Depth Distribution by Species",
       "workflow_tag": "penguin_species_analysis",
@@ -782,7 +815,10 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-05-20T10:35:55.666883",
+      "last_updated": "2026-05-20T10:41:26.486155",
+      "description": "Overlay histogram with rug; Chinstrap and Adelie overlap heavily on bill depth.",
+      "title_size": "h3",
+      "title_align": "left",
       "visu_type": "histogram",
       "dict_kwargs": {
         "x": "bill_depth_mm",
@@ -805,7 +841,7 @@
       "wf_tag": "python/penguin_species_analysis"
     },
     {
-      "index": "4a8aa0fd-0090-44a6-b31a-4786b5437d64",
+      "index": "c851b95d-96ae-4082-bb97-6b6ca6c79c7d",
       "component_type": "figure",
       "title": "Island \u00d7 Species Distribution",
       "workflow_tag": "penguin_species_analysis",
@@ -828,7 +864,10 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-05-20T10:35:55.666886",
+      "last_updated": "2026-05-20T10:41:26.486159",
+      "description": "Hierarchical breakdown of the cohort. Inner ring = island, outer ring = species.",
+      "title_size": "h3",
+      "title_align": "left",
       "visu_type": "scatter",
       "dict_kwargs": {},
       "mode": "code",
@@ -842,7 +881,7 @@
       "wf_tag": "python/penguin_species_analysis"
     },
     {
-      "index": "b9ff5a34-d7c4-4da3-ba65-0838fcae617d",
+      "index": "247b4716-f3ac-45ce-a439-8db91094b76c",
       "component_type": "table",
       "title": "Palmer Penguins Data",
       "workflow_tag": "penguin_species_analysis",
@@ -865,23 +904,23 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-05-20T10:35:55.666892",
+      "last_updated": "2026-05-20T10:41:26.486165",
+      "description": "Joined physical-features + demographics view used by every tile above.",
+      "title_size": "h3",
+      "title_align": "left",
       "columns": [],
       "page_size": 15,
       "sortable": true,
       "filterable": true,
       "row_selection_enabled": false,
       "row_selection_column": null,
-      "description": "Joined physical-features + demographics view used by every tile above.",
-      "title_size": "h3",
-      "title_align": "left",
       "wf_tag": "python/penguin_species_analysis"
     }
   ],
   "stored_layout_data": [],
   "left_panel_layout_data": [
     {
-      "i": "box-67a1bab8-fe8d-4df2-acd2-37f348a0bb67",
+      "i": "box-728a81a5-1095-4882-9f53-32cc4698fe6f",
       "x": 0,
       "y": 0,
       "w": 1,
@@ -889,7 +928,7 @@
       "static": false
     },
     {
-      "i": "box-6f524781-e191-4af1-83e3-6841c9481d50",
+      "i": "box-0833f96b-a697-4f4d-8929-837f4e556fdc",
       "x": 0,
       "y": 3,
       "w": 1,
@@ -897,7 +936,7 @@
       "static": false
     },
     {
-      "i": "box-a45ce0c9-0294-4171-add9-f90d9852247c",
+      "i": "box-83d8dfd1-ebf1-46b7-907d-100b783b80a1",
       "x": 0,
       "y": 6,
       "w": 1,
@@ -905,7 +944,7 @@
       "static": false
     },
     {
-      "i": "box-b1a7a902-9366-4a9d-b235-abb2b486c62d",
+      "i": "box-434db343-b288-4b53-9157-ed35584e21cb",
       "x": 0,
       "y": 9,
       "w": 1,
@@ -913,7 +952,7 @@
       "static": false
     },
     {
-      "i": "box-6362cdc8-837e-4702-822b-5473b99920eb",
+      "i": "box-fc052e86-9933-4896-9f15-1f3e28f9a31b",
       "x": 0,
       "y": 12,
       "w": 1,
@@ -921,7 +960,7 @@
       "static": false
     },
     {
-      "i": "box-5c96f559-dd1f-4688-ac69-d62f4533f8ac",
+      "i": "box-dd34a045-574f-4fe6-a1f9-cd8e97c083fd",
       "x": 0,
       "y": 15,
       "w": 1,
@@ -929,7 +968,7 @@
       "static": false
     },
     {
-      "i": "box-79248299-cd72-4c0a-b472-b5e273a2a296",
+      "i": "box-7a09784d-b2c9-4e84-846d-125750374d57",
       "x": 0,
       "y": 18,
       "w": 1,
@@ -939,11 +978,11 @@
   ],
   "right_panel_layout_data": [
     {
-      "i": "box-a633e5fc-4c72-4b04-bcd7-3332bd397348",
+      "i": "box-172cd937-94bf-4a07-8006-697d6e6dc057",
       "x": 0,
       "y": 0,
-      "w": 16,
-      "h": 12,
+      "w": 8,
+      "h": 1,
       "static": false,
       "resizeHandles": [
         "se",
@@ -954,59 +993,134 @@
       ]
     },
     {
-      "i": "box-ed05a9ef-dd35-4671-a83b-16c9f222bdcb",
-      "x": 16,
+      "i": "box-6d00c6d1-570b-4197-b4c3-11c95d6ad30c",
+      "x": 0,
+      "y": 1,
+      "w": 4,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-b4fed69e-b2fc-4c0e-827a-12d39b016c28",
+      "x": 4,
+      "y": 1,
+      "w": 4,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-5091d637-43ce-49e0-bb52-a02096a11c89",
+      "x": 0,
+      "y": 3,
+      "w": 4,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-0cb4f138-ffc4-4949-ad46-82eaf61ddd08",
+      "x": 4,
+      "y": 3,
+      "w": 4,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-21da8947-f5cb-4028-85ea-cee45d30600b",
+      "x": 0,
+      "y": 5,
+      "w": 4,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-608df786-5239-44a6-a931-95e4d85d78ea",
+      "x": 4,
+      "y": 5,
+      "w": 4,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-909ed0b1-6b92-4b13-b9d0-c771ebe1d3c1",
+      "x": 0,
+      "y": 7,
+      "w": 8,
+      "h": 5,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-d64b243f-8249-4ed6-83b6-733008fcdd0a",
+      "x": 0,
       "y": 12,
-      "w": 16,
-      "h": 6,
-      "static": true
+      "w": 4,
+      "h": 5,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
     },
     {
-      "i": "box-0aa0bf2b-306c-46a4-a0ee-a1b8fa885af7",
-      "x": 32,
-      "y": 18,
-      "w": 16,
-      "h": 6,
-      "static": true
+      "i": "box-e317ada3-44d4-423c-8bf5-a4cc8346a6b9",
+      "x": 4,
+      "y": 12,
+      "w": 4,
+      "h": 5,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
     },
     {
-      "i": "box-807cf760-06cf-4888-9157-011acc6552b3",
+      "i": "box-c300834f-252b-4637-9087-e1e8e1cb26f7",
       "x": 0,
-      "y": 24,
-      "w": 16,
-      "h": 6,
-      "static": true
+      "y": 17,
+      "w": 4,
+      "h": 5,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
     },
     {
-      "i": "box-f93c42cc-209d-4b0e-97e3-3822b19c6c49",
-      "x": 16,
-      "y": 30,
-      "w": 16,
-      "h": 6,
-      "static": true
+      "i": "box-aab68f8d-cafc-4c90-a068-bafad3c435a7",
+      "x": 4,
+      "y": 17,
+      "w": 4,
+      "h": 5,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
     },
     {
-      "i": "box-f6e051b9-eccd-4643-95d9-1835dabdd2d7",
-      "x": 32,
-      "y": 36,
-      "w": 16,
-      "h": 6,
-      "static": true
-    },
-    {
-      "i": "box-7095fc2f-fec8-46b4-a5db-9b6060931460",
+      "i": "box-c851b95d-96ae-4082-bb97-6b6ca6c79c7d",
       "x": 0,
-      "y": 42,
-      "w": 16,
-      "h": 6,
-      "static": true
-    },
-    {
-      "i": "box-bdaea20b-a642-4d6d-bd65-c5930945b0b8",
-      "x": 32,
-      "y": 48,
-      "w": 16,
-      "h": 12,
+      "y": 22,
+      "w": 8,
+      "h": 5,
       "static": false,
       "resizeHandles": [
         "se",
@@ -1017,86 +1131,11 @@
       ]
     },
     {
-      "i": "box-f2d61c19-7d05-4eb0-a79f-e2cdb7095b3a",
+      "i": "box-247b4716-f3ac-45ce-a439-8db91094b76c",
       "x": 0,
-      "y": 60,
-      "w": 16,
-      "h": 12,
-      "static": false,
-      "resizeHandles": [
-        "se",
-        "s",
-        "e",
-        "sw",
-        "w"
-      ]
-    },
-    {
-      "i": "box-c3061e00-7881-49cf-a89d-bbd99d66b96e",
-      "x": 16,
-      "y": 72,
-      "w": 16,
-      "h": 12,
-      "static": false,
-      "resizeHandles": [
-        "se",
-        "s",
-        "e",
-        "sw",
-        "w"
-      ]
-    },
-    {
-      "i": "box-e909651c-e19a-4d11-9d09-b046dcc4a669",
-      "x": 32,
-      "y": 84,
-      "w": 16,
-      "h": 12,
-      "static": false,
-      "resizeHandles": [
-        "se",
-        "s",
-        "e",
-        "sw",
-        "w"
-      ]
-    },
-    {
-      "i": "box-7c67e0b8-32e6-4bd9-85e3-23b4c151ee62",
-      "x": 0,
-      "y": 96,
-      "w": 16,
-      "h": 12,
-      "static": false,
-      "resizeHandles": [
-        "se",
-        "s",
-        "e",
-        "sw",
-        "w"
-      ]
-    },
-    {
-      "i": "box-4a8aa0fd-0090-44a6-b31a-4786b5437d64",
-      "x": 16,
-      "y": 108,
-      "w": 16,
-      "h": 12,
-      "static": false,
-      "resizeHandles": [
-        "se",
-        "s",
-        "e",
-        "sw",
-        "w"
-      ]
-    },
-    {
-      "i": "box-b9ff5a34-d7c4-4da3-ba65-0838fcae617d",
-      "x": 32,
-      "y": 120,
-      "w": 48,
-      "h": 20,
+      "y": 27,
+      "w": 8,
+      "h": 5,
       "static": false,
       "resizeHandles": [
         "se",
