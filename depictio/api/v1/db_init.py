@@ -298,6 +298,31 @@ async def create_initial_dashboards(admin_user: UserBeanie) -> list[dict | None]
                 "categorical_flow",
             )
         ),
+        # nf-core/viralrecon multi-tab dashboard. Seed JSONs are snapshotted
+        # from a local CLI ingest of viralrecon test_illumina output — see
+        # depictio/projects/nf-core/viralrecon/3.0.0/CLAUDE.md +
+        # generate_seeds.sh. The recipe canonical DCs are required for these
+        # to render; without local data files, scan-time DCs end up empty but
+        # the dashboards still load (just with missing tiles).
+        *(
+            {
+                "name": f"viralrecon_{slug}",
+                "json_path": os.path.join(
+                    projects_base,
+                    ReferenceDatasetRegistry.DATASET_PATHS["viralrecon"],
+                    ".db_seeds",
+                    f"dashboard_{slug}.json",
+                ),
+                "static_dc_id": None,
+            }
+            for slug in (
+                "multiqc",
+                "coverage_depth",
+                "lineage_clustering",
+                "variants",
+                "sample_qc",
+            )
+        ),
     ]
 
     results = []

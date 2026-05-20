@@ -1,0 +1,1056 @@
+{
+  "_id": {
+    "$oid": "746b0f3c1e4a2d7f8e5b9cb4"
+  },
+  "description": null,
+  "flexible_metadata": null,
+  "hash": null,
+  "dashboard_id": {
+    "$oid": "746b0f3c1e4a2d7f8e5b9cb4"
+  },
+  "version": 1,
+  "tmp_children_data": [],
+  "stored_layout_data": [],
+  "stored_children_data": [],
+  "stored_metadata": [
+    {
+      "index": "435435f6-d76a-44ed-99ad-8230f5f246b6",
+      "component_type": "text",
+      "title": "Variants \u2014 per-call AF track, effect-class breakdowns, sample \u00d7 gene matrix",
+      "workflow_tag": "viralrecon",
+      "data_collection_tag": "summary_metrics",
+      "wf_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c01"
+      },
+      "dc_id": {
+        "$oid": "6a0e273941cd17ba0abd928c"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Per-sample alignment, coverage, and variant calling summary metrics",
+        "data_collection_tag": "summary_metrics",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "6a0e273941cd17ba0abd928c"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-20T21:27:37.194793",
+      "title_size": "sm",
+      "title_align": "left",
+      "order": 3,
+      "alignment": "left",
+      "body": "All variant analysis lives here. **Top**: per-call AF along the genome (Manhattan); **Middle**: per-gene / per-sample effect-class bars + lollipop; **Bottom**: sample \u00d7 gene oncoplot (lineage signature).",
+      "wf_tag": "nextflow/viralrecon"
+    },
+    {
+      "index": "c4a8d3c0-b893-4348-a0c4-7d9276ae7548",
+      "component_type": "card",
+      "title": "Total Variant Calls",
+      "workflow_tag": "viralrecon",
+      "data_collection_tag": "variants_long",
+      "wf_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c01"
+      },
+      "dc_id": {
+        "$oid": "6a0e273941cd17ba0abd928e"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Per-sample variant calls with functional annotations",
+        "data_collection_tag": "variants_long",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "6a0e273941cd17ba0abd928e"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-20T21:27:37.194824",
+      "title_size": "sm",
+      "title_align": "left",
+      "aggregation": "count",
+      "column_name": "POS",
+      "column_type": "int64",
+      "value": null,
+      "aggregations": null,
+      "filter_expr": null,
+      "secondary_layout": "top_n",
+      "breakdown_col": "sample",
+      "top_n_count": 3,
+      "coverage_max": null,
+      "icon_name": "mdi:dna",
+      "icon_color": "#FF9800",
+      "title_color": "#FF9800",
+      "title_font_size": "xl",
+      "value_font_size": "xl",
+      "wf_tag": "nextflow/viralrecon"
+    },
+    {
+      "index": "9cc16641-a9da-47fd-ac4e-9438fd672ded",
+      "component_type": "card",
+      "title": "Distinct Positions",
+      "workflow_tag": "viralrecon",
+      "data_collection_tag": "variants_long",
+      "wf_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c01"
+      },
+      "dc_id": {
+        "$oid": "6a0e273941cd17ba0abd928e"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Per-sample variant calls with functional annotations",
+        "data_collection_tag": "variants_long",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "6a0e273941cd17ba0abd928e"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-20T21:27:37.194840",
+      "title_size": "sm",
+      "title_align": "left",
+      "aggregation": "nunique",
+      "column_name": "POS",
+      "column_type": "int64",
+      "value": null,
+      "aggregations": null,
+      "filter_expr": null,
+      "secondary_layout": "top_n",
+      "breakdown_col": "GENE",
+      "top_n_count": 3,
+      "coverage_max": null,
+      "icon_name": "mdi:map-marker",
+      "icon_color": "#FF9800",
+      "title_color": "#FF9800",
+      "title_font_size": "xl",
+      "value_font_size": "xl",
+      "wf_tag": "nextflow/viralrecon"
+    },
+    {
+      "index": "b659fa26-3c51-4492-9eae-78c3c864aac5",
+      "component_type": "card",
+      "title": "Samples w/ variants",
+      "workflow_tag": "viralrecon",
+      "data_collection_tag": "variants_long",
+      "wf_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c01"
+      },
+      "dc_id": {
+        "$oid": "6a0e273941cd17ba0abd928e"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Per-sample variant calls with functional annotations",
+        "data_collection_tag": "variants_long",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "6a0e273941cd17ba0abd928e"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-20T21:27:37.194857",
+      "title_size": "sm",
+      "title_align": "left",
+      "aggregation": "nunique",
+      "column_name": "sample",
+      "column_type": "object",
+      "value": null,
+      "aggregations": null,
+      "filter_expr": null,
+      "secondary_layout": "coverage",
+      "breakdown_col": null,
+      "top_n_count": 3,
+      "coverage_max": 44.0,
+      "icon_name": "mdi:flask",
+      "icon_color": "#45B8AC",
+      "title_color": "#45B8AC",
+      "title_font_size": "xl",
+      "value_font_size": "xl",
+      "wf_tag": "nextflow/viralrecon"
+    },
+    {
+      "index": "45257c0d-4b5e-4618-991f-5e9396e23b31",
+      "component_type": "card",
+      "title": "Unique AA Changes",
+      "workflow_tag": "viralrecon",
+      "data_collection_tag": "variants_long",
+      "wf_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c01"
+      },
+      "dc_id": {
+        "$oid": "6a0e273941cd17ba0abd928e"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Per-sample variant calls with functional annotations",
+        "data_collection_tag": "variants_long",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "6a0e273941cd17ba0abd928e"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-20T21:27:37.194870",
+      "title_size": "sm",
+      "title_align": "left",
+      "aggregation": "nunique",
+      "column_name": "AA",
+      "column_type": "object",
+      "value": null,
+      "aggregations": null,
+      "filter_expr": null,
+      "secondary_layout": "top_n",
+      "breakdown_col": "EFFECT",
+      "top_n_count": 3,
+      "coverage_max": null,
+      "icon_name": "mdi:alpha",
+      "icon_color": "#F44336",
+      "title_color": "#F44336",
+      "title_font_size": "xl",
+      "value_font_size": "xl",
+      "wf_tag": "nextflow/viralrecon"
+    },
+    {
+      "index": "adv-manh-track",
+      "component_type": "advanced_viz",
+      "title": "Variant frequencies along the genome",
+      "workflow_tag": "viralrecon",
+      "data_collection_tag": "manhattan_variants_canonical",
+      "wf_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c01"
+      },
+      "dc_id": {
+        "$oid": "6a0e273941cd17ba0abd9290"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Manhattan-ready variant calls (chr/pos/score) for the advanced viz family",
+        "data_collection_tag": "manhattan_variants_canonical",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "6a0e273941cd17ba0abd9290"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-20T21:27:37.194894",
+      "description": "One dot per variant call \u00b7 y = AF \u00b7 above 0.5 = consensus, below = subconsensus.",
+      "title_size": "h3",
+      "title_align": "left",
+      "viz_kind": "manhattan",
+      "config": {
+        "viz_kind": "manhattan",
+        "chr_col": "chr",
+        "pos_col": "pos",
+        "score_col": "score",
+        "feature_col": "variant_label",
+        "effect_col": null,
+        "score_kind": "Allele frequency (AF)",
+        "score_threshold": 0.5,
+        "marker_size_above": 6,
+        "marker_size_below": 4,
+        "marker_size_uniform": 5,
+        "highlight": "above",
+        "color_by_columns": [
+          "effect",
+          "lineage",
+          "sample"
+        ],
+        "default_color_by": "effect"
+      },
+      "wf_tag": "nextflow/viralrecon"
+    },
+    {
+      "index": "var-sample-filter",
+      "component_type": "interactive",
+      "title": "Sample ID",
+      "workflow_tag": "viralrecon",
+      "data_collection_tag": "variants_long",
+      "wf_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c01"
+      },
+      "dc_id": {
+        "$oid": "6a0e273941cd17ba0abd928e"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Per-sample variant calls with functional annotations",
+        "data_collection_tag": "variants_long",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "6a0e273941cd17ba0abd928e"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-20T21:27:37.194912",
+      "title_size": "md",
+      "title_align": "left",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "sample",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": null,
+      "timescale": null,
+      "show_marks": null,
+      "custom_color": "#45B8AC",
+      "icon_name": "mdi:flask",
+      "wf_tag": "nextflow/viralrecon"
+    },
+    {
+      "index": "var-gene-filter",
+      "component_type": "interactive",
+      "title": "Gene",
+      "workflow_tag": "viralrecon",
+      "data_collection_tag": "variants_long",
+      "wf_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c01"
+      },
+      "dc_id": {
+        "$oid": "6a0e273941cd17ba0abd928e"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Per-sample variant calls with functional annotations",
+        "data_collection_tag": "variants_long",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "6a0e273941cd17ba0abd928e"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-20T21:27:37.194927",
+      "title_size": "md",
+      "title_align": "left",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "GENE",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": null,
+      "timescale": null,
+      "show_marks": null,
+      "custom_color": "#4CAF50",
+      "icon_name": "mdi:dna",
+      "wf_tag": "nextflow/viralrecon"
+    },
+    {
+      "index": "var-effect-filter",
+      "component_type": "interactive",
+      "title": "Variant Effect",
+      "workflow_tag": "viralrecon",
+      "data_collection_tag": "variants_long",
+      "wf_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c01"
+      },
+      "dc_id": {
+        "$oid": "6a0e273941cd17ba0abd928e"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Per-sample variant calls with functional annotations",
+        "data_collection_tag": "variants_long",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "6a0e273941cd17ba0abd928e"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-20T21:27:37.194940",
+      "title_size": "md",
+      "title_align": "left",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "EFFECT",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": null,
+      "timescale": null,
+      "show_marks": null,
+      "custom_color": "#9C27B0",
+      "icon_name": "mdi:alert-circle",
+      "wf_tag": "nextflow/viralrecon"
+    },
+    {
+      "index": "var-af-slider",
+      "component_type": "interactive",
+      "title": "Allele Frequency",
+      "workflow_tag": "viralrecon",
+      "data_collection_tag": "variants_long",
+      "wf_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c01"
+      },
+      "dc_id": {
+        "$oid": "6a0e273941cd17ba0abd928e"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Per-sample variant calls with functional annotations",
+        "data_collection_tag": "variants_long",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "6a0e273941cd17ba0abd928e"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-20T21:27:37.194953",
+      "title_size": "md",
+      "title_align": "left",
+      "interactive_component_type": "RangeSlider",
+      "column_name": "AF",
+      "column_type": "float64",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": null,
+      "timescale": null,
+      "show_marks": null,
+      "custom_color": "#F44336",
+      "icon_name": "mdi:percent",
+      "wf_tag": "nextflow/viralrecon"
+    },
+    {
+      "index": "a2d04128-8318-454a-83fe-f566ec462962",
+      "component_type": "figure",
+      "title": "Variant counts by gene & functional class",
+      "workflow_tag": "viralrecon",
+      "data_collection_tag": "variants_long",
+      "wf_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c01"
+      },
+      "dc_id": {
+        "$oid": "6a0e273941cd17ba0abd928e"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Per-sample variant calls with functional annotations",
+        "data_collection_tag": "variants_long",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "6a0e273941cd17ba0abd928e"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-20T21:27:37.194967",
+      "description": "Stacked counts per gene (MISSENSE / SILENT / NONSENSE / OTHER).",
+      "title_size": "h3",
+      "title_align": "left",
+      "visu_type": "bar",
+      "dict_kwargs": {},
+      "mode": "code",
+      "code_content": "df_modified = df.group_by(['GENE', 'FUNCLASS']).agg(pl.count().alias('count')).sort('count', descending=True)\nfig = px.bar(df_modified.to_pandas(), x='GENE', y='count', color='FUNCLASS',\n    labels={'GENE': 'Gene', 'count': 'Number of Variants', 'FUNCLASS': 'Functional Class'},\n    barmode='stack')\nfig.update_layout(xaxis={'categoryorder': 'total descending'})\nfig.update_xaxes(tickangle=-45)\n",
+      "displayed_data_count": 0,
+      "total_data_count": 0,
+      "was_sampled": false,
+      "filter_applied": false,
+      "selection_enabled": false,
+      "selection_column": null,
+      "wf_tag": "nextflow/viralrecon"
+    },
+    {
+      "index": "9ffc1d05-61c5-434a-abee-f033cc870332",
+      "component_type": "figure",
+      "title": "Variants per sample",
+      "workflow_tag": "viralrecon",
+      "data_collection_tag": "variants_long",
+      "wf_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c01"
+      },
+      "dc_id": {
+        "$oid": "6a0e273941cd17ba0abd928e"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Per-sample variant calls with functional annotations",
+        "data_collection_tag": "variants_long",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "6a0e273941cd17ba0abd928e"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-20T21:27:37.194981",
+      "description": "Variant burden per sample, stacked by FUNCLASS.",
+      "title_size": "h3",
+      "title_align": "left",
+      "visu_type": "bar",
+      "dict_kwargs": {},
+      "mode": "code",
+      "code_content": "df_modified = df.group_by(['sample', 'FUNCLASS']).agg(pl.count().alias('count')).sort('sample')\nfig = px.bar(df_modified.to_pandas(), x='sample', y='count', color='FUNCLASS',\n    labels={'sample': 'Sample', 'count': 'Number of Variants', 'FUNCLASS': 'Functional Class'},\n    barmode='stack')\nfig.update_xaxes(tickangle=-45, tickfont={'size': 9})\n",
+      "displayed_data_count": 0,
+      "total_data_count": 0,
+      "was_sampled": false,
+      "filter_applied": false,
+      "selection_enabled": false,
+      "selection_column": null,
+      "wf_tag": "nextflow/viralrecon"
+    },
+    {
+      "index": "adv-var-lollipop",
+      "component_type": "advanced_viz",
+      "title": "Variant tracks per gene (lollipop)",
+      "workflow_tag": "viralrecon",
+      "data_collection_tag": "lollipop_canonical",
+      "wf_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c01"
+      },
+      "dc_id": {
+        "$oid": "6a0e273941cd17ba0abd929c"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Lollipop-ready variant tracks (feature_id=GENE / position=POS / category=EFFECT)",
+        "data_collection_tag": "lollipop_canonical",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "6a0e273941cd17ba0abd929c"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-20T21:27:37.194998",
+      "description": "One sub-panel per gene. Each lollipop = variant; colour = effect class; height = AF. Top 6 most-mutated genes.",
+      "title_size": "h3",
+      "title_align": "left",
+      "viz_kind": "lollipop",
+      "config": {
+        "viz_kind": "lollipop",
+        "feature_id_col": "feature_id",
+        "position_col": "position",
+        "category_col": "category",
+        "effect_col": "effect",
+        "max_subplot_genes": 6
+      },
+      "wf_tag": "nextflow/viralrecon"
+    },
+    {
+      "index": "189d20d4-df12-47e8-a8ca-f099d14b21a8",
+      "component_type": "table",
+      "title": "Variants table",
+      "workflow_tag": "viralrecon",
+      "data_collection_tag": "variants_long",
+      "wf_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c01"
+      },
+      "dc_id": {
+        "$oid": "6a0e273941cd17ba0abd928e"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Per-sample variant calls with functional annotations",
+        "data_collection_tag": "variants_long",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "6a0e273941cd17ba0abd928e"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-20T21:27:37.195012",
+      "description": "All variant calls. Use the filter strip above to drill into specific genes / effects.",
+      "title_size": "h3",
+      "title_align": "left",
+      "columns": [],
+      "page_size": 10,
+      "sortable": true,
+      "filterable": true,
+      "row_selection_enabled": false,
+      "row_selection_column": null,
+      "wf_tag": "nextflow/viralrecon"
+    },
+    {
+      "index": "9a8c01bf-eb9c-4d08-bd11-0ad34ae321ab",
+      "component_type": "text",
+      "title": "Sample \u00d7 Gene mutation matrix",
+      "workflow_tag": "viralrecon",
+      "data_collection_tag": "summary_metrics",
+      "wf_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c01"
+      },
+      "dc_id": {
+        "$oid": "6a0e273941cd17ba0abd928c"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Per-sample alignment, coverage, and variant calling summary metrics",
+        "data_collection_tag": "summary_metrics",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "6a0e273941cd17ba0abd928c"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-20T21:27:37.195026",
+      "title_size": "sm",
+      "title_align": "left",
+      "order": 3,
+      "alignment": "left",
+      "body": "Co-occurrence view \u2014 rows = samples, columns = genes, each cell encodes the variant effect class. Rows / columns reordered to surface shared mutation repertoires (lineage signature).",
+      "wf_tag": "nextflow/viralrecon"
+    },
+    {
+      "index": "87485b6b-252f-4fb2-afe1-44abb5f9824e",
+      "component_type": "card",
+      "title": "Samples (oncoplot)",
+      "workflow_tag": "viralrecon",
+      "data_collection_tag": "oncoplot_canonical",
+      "wf_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c01"
+      },
+      "dc_id": {
+        "$oid": "6a0e273941cd17ba0abd929e"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Oncoplot-ready variant matrix (sample_id \u00d7 gene \u00d7 mutation_type)",
+        "data_collection_tag": "oncoplot_canonical",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "6a0e273941cd17ba0abd929e"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-20T21:27:37.195043",
+      "title_size": "sm",
+      "title_align": "left",
+      "aggregation": "nunique",
+      "column_name": "sample_id",
+      "column_type": "object",
+      "value": null,
+      "aggregations": null,
+      "filter_expr": null,
+      "secondary_layout": "coverage",
+      "breakdown_col": null,
+      "top_n_count": 3,
+      "coverage_max": 44.0,
+      "icon_name": "mdi:flask",
+      "icon_color": "#45B8AC",
+      "title_color": "#45B8AC",
+      "title_font_size": "xl",
+      "value_font_size": "xl",
+      "wf_tag": "nextflow/viralrecon"
+    },
+    {
+      "index": "f9a2c21d-7f5b-43e0-846c-7b604b66ee4d",
+      "component_type": "card",
+      "title": "Genes (oncoplot)",
+      "workflow_tag": "viralrecon",
+      "data_collection_tag": "oncoplot_canonical",
+      "wf_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c01"
+      },
+      "dc_id": {
+        "$oid": "6a0e273941cd17ba0abd929e"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Oncoplot-ready variant matrix (sample_id \u00d7 gene \u00d7 mutation_type)",
+        "data_collection_tag": "oncoplot_canonical",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "6a0e273941cd17ba0abd929e"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-20T21:27:37.195058",
+      "title_size": "sm",
+      "title_align": "left",
+      "aggregation": "nunique",
+      "column_name": "gene",
+      "column_type": "object",
+      "value": null,
+      "aggregations": null,
+      "filter_expr": null,
+      "secondary_layout": "coverage",
+      "breakdown_col": null,
+      "top_n_count": 3,
+      "coverage_max": 11.0,
+      "icon_name": "mdi:biology",
+      "icon_color": "#4CAF50",
+      "title_color": "#4CAF50",
+      "title_font_size": "xl",
+      "value_font_size": "xl",
+      "wf_tag": "nextflow/viralrecon"
+    },
+    {
+      "index": "onco-mutation-filter",
+      "component_type": "interactive",
+      "title": "Mutation Type",
+      "workflow_tag": "viralrecon",
+      "data_collection_tag": "oncoplot_canonical",
+      "wf_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c01"
+      },
+      "dc_id": {
+        "$oid": "6a0e273941cd17ba0abd929e"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Oncoplot-ready variant matrix (sample_id \u00d7 gene \u00d7 mutation_type)",
+        "data_collection_tag": "oncoplot_canonical",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "6a0e273941cd17ba0abd929e"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-20T21:27:37.195073",
+      "title_size": "md",
+      "title_align": "left",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "mutation_type",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": null,
+      "timescale": null,
+      "show_marks": null,
+      "custom_color": "#9C27B0",
+      "icon_name": "mdi:alert-circle",
+      "wf_tag": "nextflow/viralrecon"
+    },
+    {
+      "index": "adv-onco-matrix",
+      "component_type": "advanced_viz",
+      "title": "Sample \u00d7 gene mutation matrix",
+      "workflow_tag": "viralrecon",
+      "data_collection_tag": "oncoplot_canonical",
+      "wf_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c01"
+      },
+      "dc_id": {
+        "$oid": "6a0e273941cd17ba0abd929e"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Oncoplot-ready variant matrix (sample_id \u00d7 gene \u00d7 mutation_type)",
+        "data_collection_tag": "oncoplot_canonical",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "6a0e273941cd17ba0abd929e"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-20T21:27:37.195088",
+      "description": "Each cell encodes the variant effect class. Rows / columns reordered to surface co-occurring mutations.",
+      "title_size": "h3",
+      "title_align": "left",
+      "viz_kind": "oncoplot",
+      "config": {
+        "viz_kind": "oncoplot",
+        "sample_id_col": "sample_id",
+        "gene_col": "gene",
+        "mutation_type_col": "mutation_type"
+      },
+      "wf_tag": "nextflow/viralrecon"
+    }
+  ],
+  "stored_edit_dashboard_mode_button": [],
+  "left_panel_layout_data": [
+    {
+      "i": "box-var-sample-filter",
+      "x": 0,
+      "y": 8,
+      "w": 2,
+      "h": 3,
+      "static": false
+    },
+    {
+      "i": "box-var-gene-filter",
+      "x": 2,
+      "y": 8,
+      "w": 2,
+      "h": 3,
+      "static": false
+    },
+    {
+      "i": "box-var-effect-filter",
+      "x": 4,
+      "y": 8,
+      "w": 2,
+      "h": 3,
+      "static": false
+    },
+    {
+      "i": "box-var-af-slider",
+      "x": 6,
+      "y": 8,
+      "w": 2,
+      "h": 3,
+      "static": false
+    },
+    {
+      "i": "box-onco-mutation-filter",
+      "x": 6,
+      "y": 28,
+      "w": 2,
+      "h": 2,
+      "static": false
+    }
+  ],
+  "right_panel_layout_data": [
+    {
+      "i": "box-435435f6-d76a-44ed-99ad-8230f5f246b6",
+      "x": 0,
+      "y": 0,
+      "w": 8,
+      "h": 1,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-c4a8d3c0-b893-4348-a0c4-7d9276ae7548",
+      "x": 0,
+      "y": 1,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-9cc16641-a9da-47fd-ac4e-9438fd672ded",
+      "x": 2,
+      "y": 1,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-b659fa26-3c51-4492-9eae-78c3c864aac5",
+      "x": 4,
+      "y": 1,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-45257c0d-4b5e-4618-991f-5e9396e23b31",
+      "x": 6,
+      "y": 1,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-adv-manh-track",
+      "x": 0,
+      "y": 3,
+      "w": 8,
+      "h": 5,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-a2d04128-8318-454a-83fe-f566ec462962",
+      "x": 0,
+      "y": 11,
+      "w": 4,
+      "h": 5,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-9ffc1d05-61c5-434a-abee-f033cc870332",
+      "x": 4,
+      "y": 11,
+      "w": 4,
+      "h": 5,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-adv-var-lollipop",
+      "x": 0,
+      "y": 16,
+      "w": 8,
+      "h": 6,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-189d20d4-df12-47e8-a8ca-f099d14b21a8",
+      "x": 0,
+      "y": 22,
+      "w": 8,
+      "h": 5,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-9a8c01bf-eb9c-4d08-bd11-0ad34ae321ab",
+      "x": 0,
+      "y": 27,
+      "w": 8,
+      "h": 1,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-87485b6b-252f-4fb2-afe1-44abb5f9824e",
+      "x": 0,
+      "y": 28,
+      "w": 3,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-f9a2c21d-7f5b-43e0-846c-7b604b66ee4d",
+      "x": 3,
+      "y": 28,
+      "w": 3,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-adv-onco-matrix",
+      "x": 0,
+      "y": 30,
+      "w": 8,
+      "h": 8,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    }
+  ],
+  "buttons_data": {
+    "unified_edit_mode": true,
+    "add_components_button": {
+      "count": 0
+    }
+  },
+  "stored_add_button": {
+    "count": 0
+  },
+  "title": "Variants",
+  "subtitle": "Per-Call AF Track + Per-Gene / Per-Sample Effect Breakdowns + Sample \u00d7 Gene Co-Occurrence",
+  "icon": "/assets/images/workflows/nf-core.png",
+  "icon_color": "green",
+  "icon_variant": "filled",
+  "workflow_system": "nf-core",
+  "notes_content": "",
+  "permissions": {
+    "owners": [
+      {
+        "_id": {
+          "$oid": "67658ba033c8b59ad489d7c7"
+        },
+        "description": null,
+        "flexible_metadata": null,
+        "hash": null,
+        "email": "admin@example.com",
+        "is_admin": false,
+        "is_anonymous": false,
+        "is_temporary": false,
+        "expiration_time": null
+      }
+    ],
+    "editors": [],
+    "viewers": []
+  },
+  "is_public": false,
+  "last_saved_ts": "2026-05-20 21:27:37",
+  "project_id": {
+    "$oid": "746b0f3c1e4a2d7f8e5b9ca2"
+  },
+  "is_main_tab": false,
+  "parent_dashboard_id": {
+    "$oid": "746b0f3c1e4a2d7f8e5b9ca2"
+  },
+  "tab_order": 4,
+  "main_tab_name": null,
+  "tab_icon": "mdi:dna",
+  "tab_icon_color": "orange",
+  "parent_dashboard_title": null,
+  "project_realtime": null
+}
