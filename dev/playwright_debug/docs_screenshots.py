@@ -16,10 +16,12 @@ Shots register themselves in REGISTRY; future releases add new shots in this fil
 and select them via repeated --shot flags. No release version is hardcoded outside
 that single --version flag.
 """
+
 from __future__ import annotations
 
 import asyncio
 import json
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Awaitable, Callable
@@ -27,6 +29,15 @@ from typing import Awaitable, Callable
 import typer
 import yaml
 from playwright.async_api import Page, async_playwright
+
+# Repo-rooted import so the script runs from anywhere (e.g. via `python
+# dev/playwright_debug/docs_screenshots.py ...`) without a packaged install.
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+
+from depictio.api.v1.services.screenshot_helpers import (  # noqa: E402
+    build_localstorage_init_script,
+    dismiss_notifications,
+)
 
 app = typer.Typer(add_completion=False, no_args_is_help=True)
 
@@ -102,21 +113,13 @@ async def _page_shot(ctx: ShotContext, route: str, name: str, wait_ms: int = 120
     Uses `domcontentloaded` (not `networkidle`) because dashboard pages keep a
     realtime websocket open — networkidle never resolves there. wait_ms covers
     the time between DOMContentLoaded and grid/chart settle.
-
-    Also dismisses any visible Mantine notifications before screenshotting —
-    some endpoints (e.g. /links/{project_id}) reject the single-user-mode
-    anonymous token and surface red error toasts that would otherwise clutter
-    the shot.
     """
     await ctx.page.goto(f"{ctx.viewer_url}{route}", wait_until="domcontentloaded")
     await ctx.page.wait_for_timeout(wait_ms)
-    await ctx.page.evaluate(
-        """() => {
-            document.querySelectorAll(
-                '[data-mantine-notification-root], .mantine-Notifications-notification, .mantine-Notification-root'
-            ).forEach(n => n.remove());
-        }"""
-    )
+    # Strip toasts — some endpoints (e.g. /links/{project_id}) reject the
+    # single-user-mode anonymous token and surface red error toasts that
+    # would otherwise sit on top of the shot.
+    await dismiss_notifications(ctx.page)
     target = ctx.output_dir / f"{name}.png"
     target.parent.mkdir(parents=True, exist_ok=True)
     await ctx.page.screenshot(path=str(target), full_page=False)
@@ -292,9 +295,7 @@ def run(
     names = shot or sorted(REGISTRY)
     unknown = [n for n in names if n not in REGISTRY]
     if unknown:
-        raise typer.BadParameter(
-            f"Unknown shot(s): {unknown}. Run `list` to see available names."
-        )
+        raise typer.BadParameter(f"Unknown shot(s): {unknown}. Run `list` to see available names.")
     typer.echo(f"📸 Capturing {len(names)} shot(s) into {output_dir}")
     asyncio.run(
         _run(
@@ -324,13 +325,12 @@ async def _run(
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=headless)
         context = await browser.new_context(viewport={"width": vw, "height": vh})
-        # Inject the localStorage token via init script so it is present BEFORE
-        # any page script runs — previously some early API calls (listProjectLinks,
-        # listChildTabs) fired before our setItem and surfaced "401 invalid token"
-        # toasts in the screenshot.
-        await context.add_init_script(
-            f"window.localStorage.setItem('local-store', {json.dumps(token_payload)});"
-        )
+        # Seed auth + theme in localStorage via init script so they are present
+        # BEFORE any page script runs — early API calls (listProjectLinks,
+        # listChildTabs) and the SPA's readInitialColorScheme both fire on first
+        # paint, so a post-navigation setItem is too late. Theme defaults to
+        # light so docs shots stay consistent across runs.
+        await context.add_init_script(build_localstorage_init_script(token_payload, "light"))
         page = await context.new_page()
         ctx = ShotContext(
             page=page,

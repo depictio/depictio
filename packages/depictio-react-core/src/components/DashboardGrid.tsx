@@ -186,7 +186,11 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
       cols={8}
       rowHeight={100}
       width={containerWidth}
-      margin={[12, 12]}
+      // Asymmetric grid gap: horizontal stays at 12 px (visual breathing room
+      // between side-by-side cards / plots) but vertical drops to 4 px so
+      // stacked rows feel tightly packed — short text intros, Manhattan→
+      // filter-strip transitions, etc. no longer have a wasteful gap.
+      margin={[12, 4]}
       containerPadding={[0, 0]}
       isDraggable={isDraggable}
       isResizable={isResizable}
@@ -327,7 +331,34 @@ function normalizeLayout(
   });
 
   if (matched.length === 0 && missingLayout.length === 0) return [];
-  return [...matched, ...missingLayout];
+  const merged = [...matched, ...missingLayout];
+  // In view mode every item is `static: true` so react-grid-layout's built-in
+  // vertical compaction is a no-op — gaps left behind by filtered-out items
+  // (interactive components routed to the left rail rather than the main grid)
+  // stay in the layout. Run a one-shot manual compaction so y values close up.
+  // In editor mode (interactive=true) we leave the layout untouched: items are
+  // non-static there, RGL compacts naturally after every drag/resize.
+  return interactive ? merged : compactVerticallyForStatic(merged);
+}
+
+/**
+ * Shelf-pack `items` vertically so each one sits at the lowest non-colliding y.
+ * Only used in view mode where every item is `static: true` and RGL's built-in
+ * `compactType="vertical"` is skipped. Mirrors RGL's compaction semantics:
+ * items keep their x/w, sort by current (y, x) for stability, then snap up.
+ */
+function compactVerticallyForStatic(items: Layout[]): Layout[] {
+  const sorted = [...items].sort((a, b) => (a.y - b.y) || (a.x - b.x));
+  const placed: Layout[] = [];
+  for (const item of sorted) {
+    let y = 0;
+    for (const p of placed) {
+      const xOverlap = !(p.x + p.w <= item.x || item.x + item.w <= p.x);
+      if (xOverlap) y = Math.max(y, p.y + p.h);
+    }
+    placed.push({ ...item, y });
+  }
+  return placed;
 }
 
 /** Default w/h per component_type — mirrors Dash's DUAL_PANEL_DIMENSIONS. */

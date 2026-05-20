@@ -124,10 +124,15 @@ const StepDesign: React.FC = () => {
           size="xl"
           leftSection={<Icon icon="mdi:content-save" width={24} />}
           loading={state.saving}
-          disabled={!ready || savedRedirect}
+          disabled={!ready || savedRedirect || !state.previewReady}
           onClick={handleSave}
           style={{ height: 60, fontSize: 18, fontWeight: 700 }}
           data-tour-id="component-save"
+          title={
+            !state.previewReady
+              ? 'Bind all required columns before creating'
+              : undefined
+          }
         >
           {state.mode === 'create' ? 'Create component' : 'Save changes'}
         </Button>

@@ -45,44 +45,21 @@ def health_check(self):
 )
 def generate_dashboard_screenshot(self, dashboard_id: str) -> dict:
     """
-    Generate dashboard screenshot in background (legacy single-theme).
+    Generate dashboard screenshot in background (legacy single-theme task).
 
-    This task is fire-and-forget - the user doesn't wait for it.
-    Screenshot failures are logged but don't affect the save operation.
-
-    NOTE: This is the legacy single-theme screenshot task. For new code,
-    use generate_dashboard_screenshot_dual for dual-theme support.
-
-    Args:
-        dashboard_id: The dashboard ID to screenshot.
-
-    Returns:
-        dict with status and details.
+    DEPRECATED: kept for emergency rollback. The active path is
+    `generate_dashboard_screenshot_dual` (dual-theme, React SPA driven).
+    This task previously hit `/screenshot-dash-fixed` directly; it now logs
+    a deprecation warning and returns immediately without producing a
+    screenshot. No internal caller routes through this task.
     """
-    import httpx
-
-    from depictio.api.v1.configs.config import API_BASE_URL
     from depictio.api.v1.configs.logging_init import logger
 
-    try:
-        screenshot_timeout = settings.performance.screenshot_api_timeout
-        response = httpx.get(
-            f"{API_BASE_URL}/depictio/api/v1/utils/screenshot-dash-fixed/{dashboard_id}",
-            timeout=screenshot_timeout,
-        )
-
-        if response.status_code == 200:
-            logger.info(f"Background screenshot completed for dashboard {dashboard_id}")
-            return {"status": "success", "dashboard_id": dashboard_id}
-        else:
-            logger.warning(
-                f"Background screenshot failed for {dashboard_id}: {response.status_code}"
-            )
-            return {"status": "failed", "dashboard_id": dashboard_id, "code": response.status_code}
-
-    except Exception as e:
-        logger.error(f"Background screenshot error for {dashboard_id}: {e}")
-        return {"status": "error", "dashboard_id": dashboard_id, "error": str(e)}
+    logger.warning(
+        "generate_dashboard_screenshot (single-theme, Dash-targeted) is deprecated "
+        "and is a no-op — use generate_dashboard_screenshot_dual instead."
+    )
+    return {"status": "deprecated", "dashboard_id": dashboard_id}
 
 
 @celery_app.task(
@@ -90,20 +67,19 @@ def generate_dashboard_screenshot(self, dashboard_id: str) -> dict:
 )
 def generate_dashboard_screenshot_dual(self, dashboard_id: str, user_id: str) -> dict:
     """
-    Generate dual-theme dashboard screenshots asynchronously with deduplication and permission validation.
+    Generate dual-theme dashboard screenshots asynchronously with deduplication
+    and permission validation.
 
-    Captures both light and dark mode screenshots in a single browser call
-    for efficiency (~40% time savings vs. two separate calls).
+    Captures both light and dark mode shots in a single browser session.
+    Now drives the **React SPA** at `{fastapi.url}/dashboard-beta/{id}`; the
+    output filenames stay `{id}_light.png` / `{id}_dark.png` so existing
+    dashboard-card consumers keep working unchanged.
 
-    Includes:
-    - Deduplication logic to prevent duplicate screenshot requests for the same dashboard
-    - Permission validation to ensure only dashboard owners can generate screenshots
-
-    This task is fire-and-forget - the user doesn't wait for it.
-    Screenshot failures are logged but don't affect the save operation.
-
-    **Architecture**: Uses direct Playwright execution (no HTTP indirection)
-    for better performance (~200-500ms faster) and centralized logging.
+    Task signature is preserved (callers in `depictio/dash/layouts/save.py`
+    and `depictio/api/v1/endpoints/dashboards_endpoints/routes.py` don't
+    change). The Dash-targeted body lives at
+    `screenshot_service.generate_dual_theme_screenshots` for emergency
+    rollback only.
 
     Args:
         dashboard_id: The dashboard ID to screenshot.
@@ -119,7 +95,9 @@ def generate_dashboard_screenshot_dual(self, dashboard_id: str, user_id: str) ->
     from motor.motor_asyncio import AsyncIOMotorClient
 
     from depictio.api.v1.configs.logging_init import logger
-    from depictio.api.v1.services.screenshot_service import generate_dual_theme_screenshots
+    from depictio.api.v1.services.screenshot_service import (
+        generate_react_dual_theme_screenshots,
+    )
     from depictio.models.models.users import TokenBeanie, UserBeanie
 
     # Check for duplicate active tasks to avoid redundant screenshot generation
@@ -164,7 +142,7 @@ def generate_dashboard_screenshot_dual(self, dashboard_id: str, user_id: str) ->
                 database=client[settings.mongodb.db_name],
                 document_models=[TokenBeanie, UserBeanie],
             )
-            return await generate_dual_theme_screenshots(dashboard_id, user_id=user_id)
+            return await generate_react_dual_theme_screenshots(dashboard_id, user_id=user_id)
         finally:
             client.close()
 

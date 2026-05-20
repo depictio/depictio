@@ -974,10 +974,23 @@ jobs:
           # Import with dry-run (validates without creating)
           depictio-cli dashboard import ../projects/init/iris/dashboards/overview.yaml --dry-run
 
-          # Actually import dashboard to server
+          # Actually import dashboard to server.
+          # --overwrite: the iris dashboard is auto-seeded at backend init with
+          # the same title as overview.yaml ("Iris Dataset Analysis"), so a plain
+          # import would 409 on title clash. Overwrite is the legitimate path
+          # for re-importing a seeded dashboard.
+          # set +e so a non-zero CLI exit doesn't abort before we echo the
+          # captured stderr/stdout — otherwise the actual error is invisible.
           echo "🔄 Importing dashboard to server..."
-          IMPORT_OUTPUT=$(depictio-cli dashboard import ../projects/init/iris/dashboards/overview.yaml --config admin_config.yaml 2>&1)
+          set +e
+          IMPORT_OUTPUT=$(depictio-cli dashboard import ../projects/init/iris/dashboards/overview.yaml --config admin_config.yaml --overwrite 2>&1)
+          IMPORT_EXIT=$?
+          set -e
           echo "$IMPORT_OUTPUT"
+          if [ $IMPORT_EXIT -ne 0 ]; then
+            echo "❌ depictio-cli dashboard import exited with $IMPORT_EXIT"
+            exit $IMPORT_EXIT
+          fi
 
           # Extract dashboard ID from import output
           DASHBOARD_ID=$(echo "$IMPORT_OUTPUT" | grep "Dashboard ID:" | awk '{print $NF}')
@@ -1317,7 +1330,10 @@ jobs:
                    "$TARGET/qiime2/alpha-rarefaction" \
                    "$TARGET/qiime2/barplot" \
                    "$TARGET/qiime2/rel_abundance_tables" \
-                   "$TARGET/qiime2/ancombc/differentials/Category-habitat-level-2"
+                   "$TARGET/qiime2/ancombc/differentials/Category-habitat-level-2" \
+                   "$TARGET/data/qiime2/phylogenetic_tree" \
+                   "$TARGET/data/qiime2/taxonomy" \
+                   "$TARGET/data/qiime2/rel_abundance_tables"
 
           # Download all files needed by recipes + template
           curl -fsSL "$S3_URL/input/Metadata_full.tsv" -o "$TARGET/input/Metadata_full.tsv"
@@ -1330,6 +1346,16 @@ jobs:
             curl -fsSL "$S3_URL/qiime2/ancombc/differentials/Category-habitat-level-2/$f" \
               -o "$TARGET/qiime2/ancombc/differentials/Category-habitat-level-2/$f"
           done
+
+          # Phase E (added in feat(ampliseq) funnel restructure, commit 7b7db7ccf):
+          # template.yaml now declares a phylogenetic_tree_canonical DC (scan: single
+          # filename → tree.nwk) and a phylogenetic_tree_metadata_canonical DC whose
+          # recipe consumes taxonomy.tsv + rel-table-ASV.tsv. Without these files
+          # `depictio-cli run --template` fails at Project validation
+          # (ScanSingle.filename: file does not exist) before any step runs.
+          curl -fsSL "$S3_URL/qiime2/phylogenetic_tree/tree.nwk" -o "$TARGET/data/qiime2/phylogenetic_tree/tree.nwk"
+          curl -fsSL "$S3_URL/qiime2/taxonomy/taxonomy.tsv" -o "$TARGET/data/qiime2/taxonomy/taxonomy.tsv"
+          curl -fsSL "$S3_URL/qiime2/rel_abundance_tables/rel-table-ASV.tsv" -o "$TARGET/data/qiime2/rel_abundance_tables/rel-table-ASV.tsv"
 
           # Generate samplesheet from Metadata_full.tsv (ID column → sampleID)
           echo "sampleID" > "$TARGET/samplesheet.csv"

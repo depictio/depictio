@@ -2,7 +2,8 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import GridLayout, { Layout } from 'react-grid-layout';
 import 'react-grid-layout/css/styles.css';
 import 'react-resizable/css/styles.css';
-import { Paper, Title, Stack, Text } from '@mantine/core';
+import { Paper, Title, Stack, Text, Group, Button } from '@mantine/core';
+import { Icon } from '@iconify/react';
 
 import { ComponentRenderer } from 'depictio-react-core';
 import type {
@@ -27,6 +28,8 @@ interface LeftFilterPanelProps {
   layoutData: unknown;
   filters: InteractiveFilter[];
   onFilterChange: (filter: InteractiveFilter) => void;
+  /** Clears every active filter. Header button is disabled when no filters exist. */
+  onResetAllFilters?: () => void;
   onLeftLayoutChange: (newLayout: Layout[]) => void;
   editMode: boolean;
   onDeleteComponent: (componentId: string) => void;
@@ -98,6 +101,7 @@ const LeftFilterPanel: React.FC<LeftFilterPanelProps> = ({
   layoutData,
   filters,
   onFilterChange,
+  onResetAllFilters,
   onLeftLayoutChange,
   editMode,
   onDeleteComponent,
@@ -133,9 +137,21 @@ const LeftFilterPanel: React.FC<LeftFilterPanelProps> = ({
       style={{ height: '100%', overflow: 'hidden' }}
       data-tour-id="filter-panel"
     >
-      <Title order={5} mb="sm">
-        Filters
-      </Title>
+      <Group justify="space-between" align="center" mb="sm" wrap="nowrap">
+        <Title order={5}>Filters</Title>
+        {onResetAllFilters && (
+          <Button
+            leftSection={<Icon icon="bx:reset" width={12} />}
+            color="orange"
+            variant="filled"
+            size="xs"
+            onClick={onResetAllFilters}
+            disabled={filters.length === 0}
+          >
+            Reset all
+          </Button>
+        )}
+      </Group>
       {interactiveComponents.length === 0 ? (
         <Stack gap="sm">
           <Text size="sm" c="dimmed">

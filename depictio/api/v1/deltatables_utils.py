@@ -887,7 +887,33 @@ def _load_large_dataframe(
 
     # Apply filters at scan level for large DataFrames
     if metadata and not load_for_options:
-        filter_expressions = process_metadata_and_filter(metadata)
+        # Skip filters whose column isn't present on this DC — happens when a
+        # cross-DC filter (e.g. metadata.habitat) is also being applied to a
+        # canonical advanced-viz DC keyed on sample_id. The link resolver
+        # appends the translated sample_id filter, so we can safely drop the
+        # untranslated habitat filter here instead of failing the whole load
+        # with a polars ColumnNotFoundError.
+        try:
+            available_cols = set(delta_scan.collect_schema().names())
+        except Exception:
+            available_cols = None
+
+        usable_metadata = metadata
+        if available_cols is not None:
+            usable_metadata = []
+            for component in metadata:
+                meta = component.get("metadata") or {}
+                col = component.get("column_name") or meta.get("column_name")
+                if col and col not in available_cols:
+                    logger.info(
+                        "Skipping filter on column %r — not present in DC (available: %s)",
+                        col,
+                        sorted(available_cols),
+                    )
+                    continue
+                usable_metadata.append(component)
+
+        filter_expressions = process_metadata_and_filter(usable_metadata)
 
         if filter_expressions:
             combined_filter = filter_expressions[0]

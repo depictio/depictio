@@ -1,0 +1,124 @@
+{
+  "_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d13"
+  },
+  "description": null,
+  "flexible_metadata": null,
+  "hash": null,
+  "dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d13"
+  },
+  "version": 1,
+  "tmp_children_data": [],
+  "stored_layout_data": [],
+  "stored_children_data": [],
+  "stored_metadata": [
+    {
+      "index": "man-manhattan",
+      "component_type": "advanced_viz",
+      "title": "Manhattan plot \u2014 chr \u00d7 score",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "manhattan_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d04"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Synthetic Manhattan fixture",
+        "data_collection_tag": "manhattan_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d04"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "viz_kind": "manhattan",
+      "config": {
+        "viz_kind": "manhattan",
+        "chr_col": "chr",
+        "pos_col": "pos",
+        "score_col": "score",
+        "feature_col": "feature",
+        "score_kind": "-log10(padj)",
+        "score_threshold": 5.0,
+        "top_n_labels": 8
+      },
+      "wf_tag": "python/advanced_viz_demo",
+      "description": "Per-chromosome significance with alternating bands and top-N locus labels. Tune the threshold line in Settings \u2699."
+    }
+  ],
+  "stored_edit_dashboard_mode_button": [],
+  "left_panel_layout_data": [],
+  "right_panel_layout_data": [
+    {
+      "i": "box-man-manhattan",
+      "x": 0,
+      "y": 0,
+      "w": 12,
+      "h": 8,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    }
+  ],
+  "buttons_data": {
+    "unified_edit_mode": true,
+    "add_components_button": {
+      "count": 0
+    }
+  },
+  "stored_add_button": {
+    "count": 0
+  },
+  "title": "Manhattan",
+  "subtitle": "Generic chr/pos/score with threshold line, alternating bands and top-N locus labels",
+  "icon": "mdi:chart-line-stacked",
+  "icon_color": "orange",
+  "icon_variant": "filled",
+  "workflow_system": "python",
+  "notes_content": "",
+  "permissions": {
+    "owners": [
+      {
+        "_id": {
+          "$oid": "67658ba033c8b59ad489d7c7"
+        },
+        "description": null,
+        "flexible_metadata": null,
+        "hash": null,
+        "email": "admin@example.com",
+        "is_admin": true,
+        "is_anonymous": false,
+        "is_temporary": false,
+        "expiration_time": null
+      }
+    ],
+    "editors": [],
+    "viewers": []
+  },
+  "is_public": true,
+  "last_saved_ts": "2026-05-12 00:00:00",
+  "project_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d00"
+  },
+  "is_main_tab": false,
+  "parent_dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d00"
+  },
+  "tab_order": 2,
+  "main_tab_name": null,
+  "tab_icon": "mdi:chart-line-stacked",
+  "tab_icon_color": "orange",
+  "parent_dashboard_title": null
+}

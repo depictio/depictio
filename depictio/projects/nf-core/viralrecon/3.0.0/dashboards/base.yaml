@@ -1,1105 +1,1186 @@
 version: 1
 main_dashboard:
-    title: nf-core/viralrecon
-    subtitle: MultiQC Analysis - Sequencing, Alignment & Variant Calling QC
-    project_tag: Viralrecon Viral Genome Analysis
-    main_tab_name: MultiQC
-    tab_icon: /assets/images/logos/multiqc.png
-    tab_icon_color: orange
-    icon: /assets/images/workflows/nf-core.png
-    icon_color: green
-    workflow_system: nf-core
-    dashboard_id: 746b0f3c1e4a2d7f8e5b9ca2
-    components:
-    -   component_type: interactive
-        workflow_tag: viralrecon
-        data_collection_tag: summary_metrics
-        interactive_component_type: MultiSelect
-        column_name: sample
-        column_type: object
-        display:
-            title_size: md
-            custom_color: '#45B8AC'
-            icon_name: mdi:flask
-        tag: interactive-mqc-sample-filter-a1b2c3
-        index: mqc-sample-filter
-        layout:
-            x: 0
-            y: 0
-            w: 1
-            h: 3
-        title: Sample ID
-    -   component_type: interactive
-        workflow_tag: viralrecon
-        data_collection_tag: summary_metrics
-        interactive_component_type: MultiSelect
-        column_name: lineage
-        column_type: object
-        display:
-            title_size: md
-            custom_color: '#E74C3C'
-            icon_name: mdi:virus
-        tag: interactive-mqc-lineage-filter-d4e5f6
-        index: mqc-lineage-filter
-        layout:
-            x: 0
-            y: 3
-            w: 1
-            h: 3
-        title: Lineage
-    -   component_type: multiqc
-        workflow_tag: viralrecon
-        data_collection_tag: multiqc_data
-        selected_module: general_stats
-        selected_plot: general_stats
-        tag: multiqc-general-stats-table-v1a2b3
-        layout:
-            x: 0
-            y: 0
-            w: 8
-            h: 5
-    -   component_type: multiqc
-        workflow_tag: viralrecon
-        data_collection_tag: multiqc_data
-        selected_module: fastp
-        selected_plot: Filtered Reads
-        tag: multiqc-fastp-filtered-reads-c4d5e6
-        layout:
-            x: 0
-            y: 5
-            w: 4
-            h: 5
-    -   component_type: multiqc
-        workflow_tag: viralrecon
-        data_collection_tag: multiqc_data
-        selected_module: bowtie2
-        selected_plot: Paired-end alignments
-        tag: multiqc-bowtie2-alignment-f7g8h9
-        layout:
-            x: 4
-            y: 5
-            w: 4
-            h: 5
-    -   component_type: multiqc
-        workflow_tag: viralrecon
-        data_collection_tag: multiqc_data
-        selected_module: mosdepth
-        selected_plot: Cumulative coverage distribution
-        tag: multiqc-mosdepth-coverage-l3m4n5
-        layout:
-            x: 0
-            y: 10
-            w: 4
-            h: 5
-    -   component_type: multiqc
-        workflow_tag: viralrecon
-        data_collection_tag: multiqc_data
-        selected_module: kraken
-        selected_plot: Top taxa
-        tag: multiqc-kraken-taxa-d4e5f6
-        layout:
-            x: 4
-            y: 10
-            w: 4
-            h: 5
-    -   component_type: multiqc
-        workflow_tag: viralrecon
-        data_collection_tag: multiqc_data
-        selected_module: ivar_variants
-        selected_plot: ivar_variants-section
-        tag: multiqc-ivar-variants-o6p7q8
-        layout:
-            x: 0
-            y: 15
-            w: 4
-            h: 5
-    -   component_type: multiqc
-        workflow_tag: viralrecon
-        data_collection_tag: multiqc_data
-        selected_module: quast_variants
-        selected_plot: Number of Contigs
-        tag: multiqc-quast-contigs-u2v3w4
-        layout:
-            x: 4
-            y: 15
-            w: 4
-            h: 5
-    -   component_type: multiqc
-        workflow_tag: viralrecon
-        data_collection_tag: multiqc_data
-        selected_module: snpeff
-        selected_plot: Variant Effects by Impact
-        tag: multiqc-snpeff-effects-r9s0t1
-        layout:
-            x: 0
-            y: 20
-            w: 4
-            h: 5
-    -   component_type: multiqc
-        workflow_tag: viralrecon
-        data_collection_tag: multiqc_data
-        selected_module: bcftools
-        selected_plot: Variant Substitution Types
-        tag: multiqc-bcftools-subtypes-j0k1l2
-        layout:
-            x: 4
-            y: 20
-            w: 4
-            h: 5
-    -   component_type: multiqc
-        workflow_tag: viralrecon
-        data_collection_tag: multiqc_data
-        selected_module: fastqc
-        selected_plot: Sequence Quality Histograms
-        tag: multiqc-fastqc-quality-d4e5f6
-        layout:
-            x: 0
-            y: 25
-            w: 4
-            h: 5
-    -   component_type: multiqc
-        workflow_tag: viralrecon
-        data_collection_tag: multiqc_data
-        selected_module: mosdepth
-        selected_plot: Average coverage per contig
-        tag: multiqc-mosdepth-contig-a1b2c3
-        layout:
-            x: 4
-            y: 25
-            w: 4
-            h: 5
+  title: nf-core/viralrecon
+  subtitle: MultiQC Analysis - Sequencing, Alignment & Variant Calling QC
+  project_tag: Viralrecon Viral Genome Analysis
+  main_tab_name: MultiQC
+  tab_icon: /assets/images/logos/multiqc.png
+  tab_icon_color: orange
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  dashboard_id: 746b0f3c1e4a2d7f8e5b9ca2
+  components:
+  - component_type: text
+    tag: text-main-intro
+    title: MultiQC Pipeline QC Overview
+    order: 3
+    alignment: left
+    body: Per-sample QC metrics aggregated from every stage of the nf-core/viralrecon pipeline. Start here to triage which samples to drill into. The tiles are grouped into **Read QC** (fastp + Kraken2),
+      **Alignment & Coverage** (bowtie2 + mosdepth), **Variants & Assembly** (iVar / snpEff / bcftools / QUAST), then **FastQC** sanity checks at the bottom.
+    workflow_tag: viralrecon
+    data_collection_tag: summary_metrics
+    layout:
+      x: 0
+      y: 0
+      w: 8
+      h: 1
+  - component_type: interactive
+    workflow_tag: viralrecon
+    data_collection_tag: summary_metrics
+    interactive_component_type: MultiSelect
+    column_name: sample
+    column_type: object
+    display:
+      title_size: md
+      custom_color: '#45B8AC'
+      icon_name: mdi:flask
+    tag: interactive-mqc-sample-filter-a1b2c3
+    index: mqc-sample-filter
+    layout:
+      x: 0
+      y: 2
+      w: 1
+      h: 2
+    title: Sample ID
+  - component_type: interactive
+    workflow_tag: viralrecon
+    data_collection_tag: summary_metrics
+    interactive_component_type: MultiSelect
+    column_name: lineage
+    column_type: object
+    display:
+      title_size: md
+      custom_color: '#E74C3C'
+      icon_name: mdi:virus
+    tag: interactive-mqc-lineage-filter-d4e5f6
+    index: mqc-lineage-filter
+    layout:
+      x: 0
+      y: 4
+      w: 1
+      h: 2
+    title: Lineage
+  - component_type: multiqc
+    workflow_tag: viralrecon
+    data_collection_tag: multiqc_data
+    selected_module: general_stats
+    selected_plot: general_stats
+    tag: multiqc-general-stats-table-v1a2b3
+    title: MultiQC general statistics
+    description: Per-sample KPIs across the full pipeline. The QC triage entry point.
+    title_size: h3
+    layout:
+      x: 0
+      y: 1
+      w: 8
+      h: 4
+  - component_type: multiqc
+    workflow_tag: viralrecon
+    data_collection_tag: multiqc_data
+    selected_module: fastp
+    selected_plot: Filtered Reads
+    tag: multiqc-fastp-filtered-reads-c4d5e6
+    title: fastp - filtered reads
+    description: Reads retained vs filtered before alignment.
+    title_size: h3
+    layout:
+      x: 0
+      y: 5
+      w: 4
+      h: 4
+  - component_type: multiqc
+    workflow_tag: viralrecon
+    data_collection_tag: multiqc_data
+    selected_module: kraken
+    selected_plot: Top taxa
+    tag: multiqc-kraken-taxa-d4e5f6
+    title: Kraken2 - top taxa
+    description: Off-target reads = contamination / low viral load.
+    title_size: h3
+    layout:
+      x: 4
+      y: 5
+      w: 4
+      h: 4
+  - component_type: multiqc
+    workflow_tag: viralrecon
+    data_collection_tag: multiqc_data
+    selected_module: bowtie2
+    selected_plot: Paired-end alignments
+    tag: multiqc-bowtie2-alignment-f7g8h9
+    title: bowtie2 - paired-end alignment
+    description: Uniquely / multi-mapped / unmapped read fractions.
+    title_size: h3
+    layout:
+      x: 0
+      y: 9
+      w: 4
+      h: 4
+  - component_type: multiqc
+    workflow_tag: viralrecon
+    data_collection_tag: multiqc_data
+    selected_module: mosdepth
+    selected_plot: Cumulative coverage distribution
+    tag: multiqc-mosdepth-coverage-l3m4n5
+    title: mosdepth - cumulative coverage
+    description: Genome fraction covered at >= X depth, per sample.
+    title_size: h3
+    layout:
+      x: 4
+      y: 9
+      w: 4
+      h: 4
+  - component_type: multiqc
+    workflow_tag: viralrecon
+    data_collection_tag: multiqc_data
+    selected_module: ivar_variants
+    selected_plot: ivar_variants-section
+    tag: multiqc-ivar-variants-o6p7q8
+    title: iVar - variant counts
+    description: Raw iVar variant calls per sample.
+    title_size: h3
+    layout:
+      x: 0
+      y: 13
+      w: 4
+      h: 4
+  - component_type: multiqc
+    workflow_tag: viralrecon
+    data_collection_tag: multiqc_data
+    selected_module: snpeff
+    selected_plot: Variant Effects by Impact
+    tag: multiqc-snpeff-effects-r9s0t1
+    title: snpEff - effects by impact
+    description: HIGH / MODERATE / LOW / MODIFIER per sample.
+    title_size: h3
+    layout:
+      x: 4
+      y: 13
+      w: 4
+      h: 4
+  - component_type: multiqc
+    workflow_tag: viralrecon
+    data_collection_tag: multiqc_data
+    selected_module: bcftools
+    selected_plot: Variant Substitution Types
+    tag: multiqc-bcftools-subtypes-j0k1l2
+    title: bcftools - substitution types
+    description: Transitions vs transversions per sample.
+    title_size: h3
+    layout:
+      x: 0
+      y: 17
+      w: 4
+      h: 4
+  - component_type: multiqc
+    workflow_tag: viralrecon
+    data_collection_tag: multiqc_data
+    selected_module: quast_variants
+    selected_plot: Number of Contigs
+    tag: multiqc-quast-contigs-u2v3w4
+    title: QUAST - number of contigs
+    description: Assembly contiguity per sample.
+    title_size: h3
+    layout:
+      x: 4
+      y: 17
+      w: 4
+      h: 4
+  - component_type: multiqc
+    workflow_tag: viralrecon
+    data_collection_tag: multiqc_data
+    selected_module: fastqc
+    selected_plot: Sequence Quality Histograms
+    tag: multiqc-fastqc-quality-d4e5f6
+    title: FastQC - sequence quality histograms
+    description: Per-position mean quality across all samples - primary read-QC signal.
+    title_size: h3
+    layout:
+      x: 0
+      y: 21
+      w: 8
+      h: 5
+  - component_type: multiqc
+    workflow_tag: viralrecon
+    data_collection_tag: multiqc_data
+    selected_module: fastqc
+    selected_plot: Status Checks
+    tag: multiqc-fastqc-status-checks-a1b2c3
+    title: FastQC - status checks
+    description: Pass/Warn/Fail status per FastQC module per sample. Red columns flag systematic library / sequencing issues.
+    title_size: h3
+    layout:
+      x: 0
+      y: 26
+      w: 8
+      h: 5
 tabs:
--   title: Coverage & Depth
-    subtitle: Amplicon Coverage, Genome Coverage & Coverage Heatmap (mosdepth)
-    tab_order: 1
-    tab_icon: mdi:chart-areaspline
-    tab_icon_color: teal
-    icon: /assets/images/workflows/nf-core.png
-    icon_color: green
-    workflow_system: nf-core
-    dashboard_id: 746b0f3c1e4a2d7f8e5b9cb5
-    components:
-    -   component_type: card
-        workflow_tag: viralrecon
-        data_collection_tag: mosdepth_amplicon_coverage
-        aggregation: count
-        column_name: sample
-        column_type: object
-        display:
-            icon_name: mdi:flask
-            icon_color: '#45B8AC'
-            title_color: '#45B8AC'
-            title_font_size: xl
-            value_font_size: xl
-        tag: card-cov-total-samples-a1b2c3
-        layout:
-            x: 0
-            y: 0
-            w: 2
-            h: 2
-        title: Total Samples
-    -   component_type: card
-        workflow_tag: viralrecon
-        data_collection_tag: mosdepth_amplicon_coverage
-        aggregation: nunique
-        column_name: region
-        column_type: object
-        display:
-            icon_name: mdi:dna
-            icon_color: '#FF9800'
-            title_color: '#FF9800'
-            title_font_size: xl
-            value_font_size: xl
-        tag: card-cov-total-amplicons-d4e5f6
-        layout:
-            x: 2
-            y: 0
-            w: 2
-            h: 2
-        title: Amplicons Tracked
-    -   component_type: card
-        workflow_tag: viralrecon
-        data_collection_tag: mosdepth_amplicon_coverage
-        aggregation: average
-        aggregations:
-        - median
-        - min
-        - max
-        column_name: coverage
-        column_type: float64
-        icon_name: mdi:chart-areaspline
-        icon_color: '#009688'
-        tag: card-cov-amplicon-stats-g7h8i9
-        layout:
-            x: 4
-            y: 0
-            w: 2
-            h: 5
-        title: Amplicon Coverage
-    -   component_type: card
-        workflow_tag: viralrecon
-        data_collection_tag: mosdepth_genome_coverage
-        aggregation: average
-        aggregations:
-        - median
-        - min
-        - max
-        column_name: coverage
-        column_type: float64
-        icon_name: mdi:chart-line
-        icon_color: '#2196F3'
-        tag: card-cov-genome-stats-j0k1l2
-        layout:
-            x: 6
-            y: 0
-            w: 2
-            h: 5
-        title: Genome Coverage
-    -   component_type: interactive
-        workflow_tag: viralrecon
-        data_collection_tag: mosdepth_amplicon_coverage
-        interactive_component_type: MultiSelect
-        column_name: sample
-        column_type: object
-        display:
-            title_size: md
-            custom_color: '#45B8AC'
-            icon_name: mdi:flask
-        tag: interactive-cov-sample-filter-m3n4o5
-        index: cov-sample-filter
-        layout:
-            x: 0
-            y: 0
-            w: 1
-            h: 4
-        title: Sample ID
-    -   component_type: figure
-        workflow_tag: viralrecon
-        data_collection_tag: mosdepth_genome_coverage
-        visu_type: line
-        figure_params:
-            x: start
-            y: coverage
-            color: sample
-            title: Genome Coverage per Sample
-            labels:
-                start: Position (bp)
-                coverage: Coverage Depth
-                sample: Sample
-        mode: code
-        code_content: |
-            df_modified = df.to_pandas().sort_values(['sample', 'start'])
-            fig = px.line(
-                df_modified,
-                x='start', y='coverage', color='sample',
-                title='Genome Coverage per Sample (200bp windows)',
-                labels={'start': 'Position (bp)', 'coverage': 'Coverage Depth', 'sample': 'Sample'},
-                log_y=True
-            )
-            fig.update_layout(hovermode='x unified', legend=dict(orientation='h', yanchor='bottom', y=1.02))
-        selection_enabled: false
-        tag: figure-cov-genome-coverage-p6q7r8
-        layout:
-            x: 0
-            y: 3
-            w: 8
-            h: 6
-    -   component_type: figure
-        workflow_tag: viralrecon
-        data_collection_tag: mosdepth_amplicon_heatmap
-        visu_type: heatmap
-        dict_kwargs:
-            index_column: sample
-            cluster_rows: true
-            cluster_cols: false
-            normalize: none
-            colorscale: Viridis
-            name: log10(Cov+1)
-            width: 1000
-            height: 700
-        selection_enabled: false
-        tag: figure-cov-heatmap-v2w3x4
-        title: Amplicon Coverage Heatmap
-        description: Log10-scaled coverage across all amplicons and samples. Rows clustered by similarity. Dark/blue = low coverage (amplicon dropout), bright/yellow = high coverage.
-        title_size: h2
-        layout:
-            x: 0
-            y: 9
-            w: 8
-            h: 8
-    -   component_type: table
-        workflow_tag: viralrecon
-        data_collection_tag: mosdepth_amplicon_coverage
-        row_selection_enabled: false
-        tag: table-cov-amplicon-y5z6a7
-        title: Amplicon Coverage Data
-        description: Per-amplicon median coverage depth for each sample. Use to identify amplicon dropout or coverage imbalance.
-        title_size: h2
-        layout:
-            x: 0
-            y: 17
-            w: 8
-            h: 5
-    -   component_type: table
-        workflow_tag: viralrecon
-        data_collection_tag: mosdepth_genome_coverage
-        row_selection_enabled: false
-        tag: table-cov-genome-b8c9d0
-        title: Genome Coverage Data
-        description: Genome-wide coverage in 200bp windows for each sample. Use to identify regions with low sequencing depth.
-        title_size: h2
-        layout:
-            x: 0
-            y: 22
-            w: 8
-            h: 5
--   title: Lineage Analysis
-    subtitle: Pangolin Lineage & Nextclade Clade Assignments
-    tab_order: 2
-    tab_icon: mdi:virus
-    tab_icon_color: red
-    icon: /assets/images/workflows/nf-core.png
-    icon_color: green
-    workflow_system: nf-core
-    dashboard_id: 746b0f3c1e4a2d7f8e5b9cb3
-    components:
-    -   component_type: card
-        workflow_tag: viralrecon
-        data_collection_tag: summary_metrics
-        aggregation: count
-        column_name: sample
-        column_type: object
-        display:
-            icon_name: mdi:flask
-            icon_color: '#45B8AC'
-            title_color: '#45B8AC'
-            title_font_size: xl
-            value_font_size: xl
-        tag: card-lin-total-samples-a1b2c3
-        layout:
-            x: 0
-            y: 0
-            w: 2
-            h: 2
-        title: Total Samples
-    -   component_type: card
-        workflow_tag: viralrecon
-        data_collection_tag: pangolin_lineages
-        aggregation: nunique
-        column_name: lineage
-        column_type: object
-        display:
-            icon_name: mdi:virus
-            icon_color: '#E74C3C'
-            title_color: '#E74C3C'
-            title_font_size: xl
-            value_font_size: xl
-        tag: card-lin-unique-lineages-d4e5f6
-        layout:
-            x: 2
-            y: 0
-            w: 2
-            h: 2
-        title: Unique Lineages
-    -   component_type: card
-        workflow_tag: viralrecon
-        data_collection_tag: nextclade_results
-        aggregation: nunique
-        column_name: clade
-        column_type: object
-        display:
-            icon_name: mdi:family-tree
-            icon_color: '#9C27B0'
-            title_color: '#9C27B0'
-            title_font_size: xl
-            value_font_size: xl
-        tag: card-lin-unique-clades-g7h8i9
-        layout:
-            x: 4
-            y: 0
-            w: 2
-            h: 2
-        title: Unique Clades
-    -   component_type: card
-        workflow_tag: viralrecon
-        data_collection_tag: summary_metrics
-        aggregation: average
-        column_name: pct_genome_covered_10x
-        column_type: float64
-        display:
-            icon_name: mdi:chart-line
-            icon_color: '#2196F3'
-            title_color: '#2196F3'
-            title_font_size: xl
-            value_font_size: xl
-        tag: card-lin-avg-genome-cov-j0k1l2
-        layout:
-            x: 6
-            y: 0
-            w: 2
-            h: 2
-        title: Avg Genome Coverage (10x)
-    -   component_type: interactive
-        workflow_tag: viralrecon
-        data_collection_tag: summary_metrics
-        interactive_component_type: MultiSelect
-        column_name: sample
-        column_type: object
-        display:
-            title_size: md
-            custom_color: '#45B8AC'
-            icon_name: mdi:flask
-        tag: interactive-lin-sample-filter-m3n4o5
-        index: lin-sample-filter
-        layout:
-            x: 0
-            y: 0
-            w: 1
-            h: 3
-        title: Sample ID
-    -   component_type: interactive
-        workflow_tag: viralrecon
-        data_collection_tag: pangolin_lineages
-        interactive_component_type: MultiSelect
-        column_name: lineage
-        column_type: object
-        display:
-            title_size: md
-            custom_color: '#E74C3C'
-            icon_name: mdi:virus
-        tag: interactive-lin-lineage-filter-p6q7r8
-        index: lin-lineage-filter
-        layout:
-            x: 0
-            y: 3
-            w: 1
-            h: 3
-        title: Lineage
-    -   component_type: interactive
-        workflow_tag: viralrecon
-        data_collection_tag: nextclade_results
-        interactive_component_type: MultiSelect
-        column_name: clade
-        column_type: object
-        display:
-            title_size: md
-            custom_color: '#9C27B0'
-            icon_name: mdi:family-tree
-        tag: interactive-lin-clade-filter-s9t0u1
-        index: lin-clade-filter
-        layout:
-            x: 0
-            y: 6
-            w: 1
-            h: 2
-        title: Clade
-    -   component_type: interactive
-        workflow_tag: viralrecon
-        data_collection_tag: nextclade_results
-        interactive_component_type: MultiSelect
-        column_name: qc_overallStatus
-        column_type: object
-        display:
-            title_size: md
-            custom_color: '#4CAF50'
-            icon_name: mdi:check-circle
-        tag: interactive-lin-qc-status-filter-v2w3x4
-        index: lin-qc-status-filter
-        layout:
-            x: 0
-            y: 8
-            w: 1
-            h: 2
-        title: QC Status
-    -   component_type: figure
-        workflow_tag: viralrecon
-        data_collection_tag: pangolin_lineages
-        visu_type: bar
-        figure_params:
-            x: lineage
-            y: count
-            color: lineage
-            title: Pangolin Lineage Distribution
-            labels:
-                lineage: Lineage
-                count: Number of Samples
-        mode: code
-        code_content: |
-            df_modified = df.group_by('lineage').agg(pl.count().alias('count')).sort('count', descending=True)
-            fig = px.bar(
-                df_modified.to_pandas(),
-                x='lineage', y='count', color='lineage',
-                title='Pangolin Lineage Distribution',
-                labels={'lineage': 'Lineage', 'count': 'Number of Samples'}
-            )
-            fig.update_layout(xaxis={'categoryorder': 'total descending'}, showlegend=False)
-            fig.update_xaxes(tickangle=-45)
-        selection_enabled: false
-        tag: figure-lin-lineage-dist-b8c9d0
-        layout:
-            x: 0
-            y: 2
-            w: 4
-            h: 5
-    -   component_type: figure
-        workflow_tag: viralrecon
-        data_collection_tag: nextclade_results
-        visu_type: bar
-        figure_params:
-            x: qc_overallStatus
-            y: count
-            color: qc_overallStatus
-            title: Nextclade QC Status Overview
-        mode: code
-        code_content: |
-            df_modified = df.group_by('qc_overallStatus').agg(pl.count().alias('count')).sort('count', descending=True)
-            fig = px.bar(
-                df_modified.to_pandas(),
-                x='qc_overallStatus', y='count',
-                color='qc_overallStatus',
-                color_discrete_map={'good': '#4CAF50', 'mediocre': '#FF9800', 'bad': '#F44336'},
-                title='Nextclade QC Status Overview',
-                labels={'qc_overallStatus': 'QC Status', 'count': 'Number of Samples'}
-            )
-            fig.update_layout(showlegend=False)
-        selection_enabled: false
-        tag: figure-lin-nextclade-qc-e1f2g3
-        layout:
-            x: 4
-            y: 2
-            w: 4
-            h: 5
-    -   component_type: figure
-        workflow_tag: viralrecon
-        data_collection_tag: nextclade_results
-        visu_type: bar
-        figure_params:
-            x: clade
-            y: count
-            color: clade
-            title: Nextclade Clade Distribution
-            labels:
-                clade: Clade
-                count: Number of Samples
-        mode: code
-        code_content: |
-            df_modified = df.group_by('clade').agg(pl.count().alias('count')).sort('count', descending=True)
-            fig = px.bar(
-                df_modified.to_pandas(),
-                x='clade', y='count', color='clade',
-                title='Nextclade Clade Distribution',
-                labels={'clade': 'Clade', 'count': 'Number of Samples'}
-            )
-            fig.update_layout(xaxis={'categoryorder': 'total descending'}, showlegend=False)
-            fig.update_xaxes(tickangle=-45)
-        selection_enabled: false
-        tag: figure-lin-clade-dist-h4i5j6
-        layout:
-            x: 0
-            y: 7
-            w: 4
-            h: 5
-    -   component_type: figure
-        workflow_tag: viralrecon
-        data_collection_tag: summary_metrics
-        visu_type: scatter
-        figure_params:
-            x: coverage_median
-            y: num_variants_total
-            color: lineage
-            hover_data:
-            - sample
-            - pct_genome_covered_10x
-            title: Coverage vs Total Variants by Lineage
-            labels:
-                coverage_median: Median Coverage Depth
-                num_variants_total: Total Variants
-                lineage: Lineage
-        mode: code
-        code_content: |
-            fig = px.scatter(
-                df.to_pandas(),
-                x='coverage_median', y='num_variants_total',
-                color='lineage',
-                hover_data=['sample', 'pct_genome_covered_10x'],
-                title='Coverage vs Total Variants by Lineage',
-                labels={'coverage_median': 'Median Coverage Depth', 'num_variants_total': 'Total Variants', 'lineage': 'Lineage'},
-                size_max=12
-            )
-            fig.update_traces(marker=dict(size=10, line=dict(width=1, color='DarkSlateGrey')))
-        selection_enabled: false
-        tag: figure-lin-coverage-vs-variants-k7l8m9
-        layout:
-            x: 4
-            y: 7
-            w: 4
-            h: 5
-    -   component_type: figure
-        workflow_tag: viralrecon
-        data_collection_tag: summary_metrics
-        visu_type: bar
-        figure_params:
-            x: sample
-            y: pct_genome_covered_10x
-            color: lineage
-            title: Genome Coverage per Sample (>= 10x Depth)
-            labels:
-                sample: Sample
-                pct_genome_covered_10x: '% Genome >= 10x'
-                lineage: Lineage
-        mode: code
-        code_content: |
-            df_modified = df.sort('pct_genome_covered_10x', descending=True)
-            fig = px.bar(
-                df_modified.to_pandas(),
-                x='sample', y='pct_genome_covered_10x',
-                color='lineage',
-                title='Genome Coverage per Sample (>= 10x Depth)',
-                labels={'sample': 'Sample', 'pct_genome_covered_10x': '% Genome >= 10x', 'lineage': 'Lineage'}
-            )
-            fig.add_hline(y=80, line_dash='dash', line_color='red', annotation_text='80% threshold')
-            fig.update_xaxes(tickangle=-45, tickfont={'size': 9})
-        selection_enabled: false
-        tag: figure-lin-genome-coverage-n0o1p2
-        layout:
-            x: 0
-            y: 12
-            w: 8
-            h: 5
-    -   component_type: figure
-        workflow_tag: viralrecon
-        data_collection_tag: nextclade_results
-        visu_type: scatter
-        figure_params:
-            x: totalSubstitutions
-            y: totalDeletions
-            color: clade
-            hover_data:
-            - sample
-            - qc_overallStatus
-            - coverage
-            title: Nextclade - Substitutions vs Deletions by Clade
-            labels:
-                totalSubstitutions: Total Substitutions
-                totalDeletions: Total Deletions
-                clade: Clade
-        mode: code
-        code_content: |
-            fig = px.scatter(
-                df.to_pandas(),
-                x='totalSubstitutions', y='totalDeletions',
-                color='clade',
-                hover_data=['sample', 'qc_overallStatus', 'coverage'],
-                title='Nextclade - Substitutions vs Deletions by Clade',
-                labels={'totalSubstitutions': 'Total Substitutions', 'totalDeletions': 'Total Deletions', 'clade': 'Clade'},
-                opacity=0.8
-            )
-            fig.update_traces(marker=dict(size=10, line=dict(width=1, color='DarkSlateGrey')))
-        selection_enabled: false
-        tag: figure-lin-nextclade-scatter-q3r4s5
-        layout:
-            x: 0
-            y: 17
-            w: 8
-            h: 5
-    -   component_type: table
-        workflow_tag: viralrecon
-        data_collection_tag: pangolin_lineages
-        row_selection_enabled: false
-        tag: table-lin-pangolin-t6u7v8
-        title: Pangolin Lineage Assignments
-        description: Per-sample PANGO lineage designation, conflict scores, and QC status from Pangolin.
-        title_size: h2
-        layout:
-            x: 0
-            y: 22
-            w: 8
-            h: 5
-    -   component_type: table
-        workflow_tag: viralrecon
-        data_collection_tag: nextclade_results
-        row_selection_enabled: false
-        tag: table-lin-nextclade-w9x0y1
-        title: Nextclade Clade Assignments
-        description: Per-sample Nextclade clade, substitutions, deletions, coverage, and QC metrics.
-        title_size: h2
-        layout:
-            x: 0
-            y: 27
-            w: 8
-            h: 5
-    -   component_type: table
-        workflow_tag: viralrecon
-        data_collection_tag: summary_metrics
-        row_selection_enabled: false
-        tag: table-lin-summary-metrics-z2a3b4
-        title: Summary Metrics
-        description: Per-sample alignment, coverage, and variant calling summary from MultiQC.
-        title_size: h2
-        layout:
-            x: 0
-            y: 32
-            w: 8
-            h: 5
--   title: Variant Landscape
-    subtitle: Variant Calls, Functional Effects & Mutation Analysis
-    tab_order: 3
-    tab_icon: mdi:dna
-    tab_icon_color: orange
-    icon: /assets/images/workflows/nf-core.png
-    icon_color: green
-    workflow_system: nf-core
-    dashboard_id: 746b0f3c1e4a2d7f8e5b9cb4
-    components:
-    -   component_type: card
-        workflow_tag: viralrecon
-        data_collection_tag: variants_long
-        aggregation: count
-        column_name: POS
-        column_type: int64
-        display:
-            icon_name: mdi:dna
-            icon_color: '#FF9800'
-            title_color: '#FF9800'
-            title_font_size: xl
-            value_font_size: xl
-        tag: card-var-total-variants-c5d6e7
-        layout:
-            x: 0
-            y: 0
-            w: 2
-            h: 2
-        title: Total Variants
-    -   component_type: card
-        workflow_tag: viralrecon
-        data_collection_tag: variants_long
-        aggregation: nunique
-        column_name: GENE
-        column_type: object
-        display:
-            icon_name: mdi:biology
-            icon_color: '#4CAF50'
-            title_color: '#4CAF50'
-            title_font_size: xl
-            value_font_size: xl
-        tag: card-var-unique-genes-f8g9h0
-        layout:
-            x: 2
-            y: 0
-            w: 2
-            h: 2
-        title: Unique Genes
-    -   component_type: card
-        workflow_tag: viralrecon
-        data_collection_tag: variants_long
-        aggregation: average
-        column_name: AF
-        column_type: float64
-        display:
-            icon_name: mdi:percent
-            icon_color: '#F44336'
-            title_color: '#F44336'
-            title_font_size: xl
-            value_font_size: xl
-        tag: card-var-mean-af-i1j2k3
-        layout:
-            x: 4
-            y: 0
-            w: 2
-            h: 2
-        title: Mean Allele Freq
-    -   component_type: card
-        workflow_tag: viralrecon
-        data_collection_tag: variants_long
-        aggregation: nunique
-        column_name: AA
-        column_type: object
-        display:
-            icon_name: mdi:molecule
-            icon_color: '#9C27B0'
-            title_color: '#9C27B0'
-            title_font_size: xl
-            value_font_size: xl
-        tag: card-var-unique-mutations-l4m5n6
-        layout:
-            x: 6
-            y: 0
-            w: 2
-            h: 2
-        title: Unique AA Changes
-    -   component_type: interactive
-        workflow_tag: viralrecon
-        data_collection_tag: variants_long
-        interactive_component_type: MultiSelect
-        column_name: sample
-        column_type: object
-        display:
-            title_size: md
-            custom_color: '#45B8AC'
-            icon_name: mdi:flask
-        tag: interactive-var-sample-filter-o7p8q9
-        index: var-sample-filter
-        layout:
-            x: 0
-            y: 0
-            w: 1
-            h: 3
-        title: Sample ID
-    -   component_type: interactive
-        workflow_tag: viralrecon
-        data_collection_tag: variants_long
-        interactive_component_type: MultiSelect
-        column_name: GENE
-        column_type: object
-        display:
-            title_size: md
-            custom_color: '#4CAF50'
-            icon_name: mdi:dna
-        tag: interactive-var-gene-filter-r0s1t2
-        index: var-gene-filter
-        layout:
-            x: 0
-            y: 3
-            w: 1
-            h: 3
-        title: Gene
-    -   component_type: interactive
-        workflow_tag: viralrecon
-        data_collection_tag: variants_long
-        interactive_component_type: MultiSelect
-        column_name: EFFECT
-        column_type: object
-        display:
-            title_size: md
-            custom_color: '#9C27B0'
-            icon_name: mdi:alert-circle
-        tag: interactive-var-effect-filter-u3v4w5
-        index: var-effect-filter
-        layout:
-            x: 0
-            y: 6
-            w: 1
-            h: 2
-        title: Variant Effect
-    -   component_type: interactive
-        workflow_tag: viralrecon
-        data_collection_tag: variants_long
-        interactive_component_type: MultiSelect
-        column_name: FUNCLASS
-        column_type: object
-        display:
-            title_size: md
-            custom_color: '#FF9800'
-            icon_name: mdi:shape
-        tag: interactive-var-funclass-filter-x6y7z8
-        index: var-funclass-filter
-        layout:
-            x: 0
-            y: 8
-            w: 1
-            h: 2
-        title: Functional Class
-    -   component_type: interactive
-        workflow_tag: viralrecon
-        data_collection_tag: variants_long
-        interactive_component_type: RangeSlider
-        column_name: AF
-        column_type: float64
-        display:
-            title_size: md
-            custom_color: '#F44336'
-            icon_name: mdi:percent
-        tag: interactive-var-af-slider-a9b0c1
-        index: var-af-slider
-        layout:
-            x: 0
-            y: 10
-            w: 1
-            h: 3
-        title: Allele Frequency
-    -   component_type: interactive
-        workflow_tag: viralrecon
-        data_collection_tag: variants_long
-        interactive_component_type: RangeSlider
-        column_name: DP
-        column_type: int64
-        display:
-            title_size: md
-            custom_color: '#2196F3'
-            icon_name: mdi:layers
-        tag: interactive-var-dp-slider-d2e3f4
-        index: var-dp-slider
-        layout:
-            x: 0
-            y: 13
-            w: 1
-            h: 3
-        title: Read Depth
-    -   component_type: figure
-        workflow_tag: viralrecon
-        data_collection_tag: variants_long
-        visu_type: scatter
-        figure_params:
-            x: POS
-            y: AF
-            color: GENE
-            hover_data:
-            - sample
-            - EFFECT
-            - AA
-            - mutation_label
-            title: Variant Landscape - Allele Frequency vs Genome Position
-            labels:
-                POS: Genome Position
-                AF: Allele Frequency
-                GENE: Gene
-        mode: code
-        code_content: |
-            fig = px.scatter(
-                df.to_pandas(),
-                x='POS', y='AF', color='GENE',
-                hover_data=['sample', 'EFFECT', 'AA', 'mutation_label'],
-                title='Variant Landscape - Allele Frequency vs Genome Position',
-                labels={'POS': 'Genome Position', 'AF': 'Allele Frequency', 'GENE': 'Gene'},
-                opacity=0.7
-            )
-            fig.update_traces(marker=dict(size=6))
-            fig.update_layout(xaxis_title='Genome Position (nt)', yaxis_title='Allele Frequency')
-        selection_enabled: false
-        tag: figure-var-variant-landscape-g5h6i7
-        layout:
-            x: 0
-            y: 2
-            w: 8
-            h: 6
-    -   component_type: figure
-        workflow_tag: viralrecon
-        data_collection_tag: variants_long
-        visu_type: bar
-        figure_params:
-            x: GENE
-            y: count
-            color: FUNCLASS
-            title: Variant Count by Gene and Functional Class
-            labels:
-                GENE: Gene
-                count: Number of Variants
-                FUNCLASS: Functional Class
-        mode: code
-        code_content: |
-            df_modified = df.group_by(['GENE', 'FUNCLASS']).agg(pl.count().alias('count')).sort('count', descending=True)
-            fig = px.bar(
-                df_modified.to_pandas(),
-                x='GENE', y='count', color='FUNCLASS',
-                title='Variant Count by Gene and Functional Class',
-                labels={'GENE': 'Gene', 'count': 'Number of Variants', 'FUNCLASS': 'Functional Class'},
-                barmode='stack'
-            )
-            fig.update_layout(xaxis={'categoryorder': 'total descending'})
-            fig.update_xaxes(tickangle=-45)
-        selection_enabled: false
-        tag: figure-var-mutations-by-gene-j8k9l0
-        layout:
-            x: 0
-            y: 8
-            w: 4
-            h: 5
-    -   component_type: figure
-        workflow_tag: viralrecon
-        data_collection_tag: variants_long
-        visu_type: bar
-        figure_params:
-            x: EFFECT
-            y: count
-            color: EFFECT
-            title: Variant Effect Distribution
-            labels:
-                EFFECT: Variant Effect
-                count: Number of Variants
-        mode: code
-        code_content: |
-            df_modified = df.group_by('EFFECT').agg(pl.count().alias('count')).sort('count', descending=True)
-            fig = px.bar(
-                df_modified.to_pandas(),
-                x='EFFECT', y='count', color='EFFECT',
-                title='Variant Effect Distribution',
-                labels={'EFFECT': 'Variant Effect', 'count': 'Number of Variants'}
-            )
-            fig.update_layout(xaxis={'categoryorder': 'total descending'}, showlegend=False)
-            fig.update_xaxes(tickangle=-45)
-        selection_enabled: false
-        tag: figure-var-effect-dist-m1n2o3
-        layout:
-            x: 4
-            y: 8
-            w: 4
-            h: 5
-    -   component_type: figure
-        workflow_tag: viralrecon
-        data_collection_tag: variants_long
-        visu_type: pie
-        figure_params:
-            names: FUNCLASS
-            values: count
-            title: Variant Functional Class Distribution
-        mode: code
-        code_content: |
-            df_modified = df.group_by('FUNCLASS').agg(pl.count().alias('count'))
-            fig = px.pie(
-                df_modified.to_pandas(),
-                names='FUNCLASS', values='count',
-                title='Variant Functional Class Distribution',
-                hole=0.3
-            )
-            fig.update_traces(textposition='inside', textinfo='percent+label')
-        selection_enabled: false
-        tag: figure-var-funclass-pie-p4q5r6
-        layout:
-            x: 0
-            y: 13
-            w: 4
-            h: 5
-    -   component_type: figure
-        workflow_tag: viralrecon
-        data_collection_tag: variants_long
-        visu_type: bar
-        figure_params:
-            x: sample
-            y: count
-            color: FUNCLASS
-            title: Variant Count per Sample
-            labels:
-                sample: Sample
-                count: Number of Variants
-                FUNCLASS: Functional Class
-        mode: code
-        code_content: |
-            df_modified = df.group_by(['sample', 'FUNCLASS']).agg(pl.count().alias('count')).sort('sample')
-            fig = px.bar(
-                df_modified.to_pandas(),
-                x='sample', y='count', color='FUNCLASS',
-                title='Variant Count per Sample',
-                labels={'sample': 'Sample', 'count': 'Number of Variants', 'FUNCLASS': 'Functional Class'},
-                barmode='stack'
-            )
-            fig.update_xaxes(tickangle=-45, tickfont={'size': 9})
-        selection_enabled: false
-        tag: figure-var-per-sample-count-s7t8u9
-        layout:
-            x: 4
-            y: 13
-            w: 4
-            h: 5
-    -   component_type: table
-        workflow_tag: viralrecon
-        data_collection_tag: variants_long
-        row_selection_enabled: false
-        tag: table-var-variants-v0w1x2
-        title: Variants Long Table
-        description: All variant calls with position, allele frequency, gene, effect, amino acid change, and lineage. Filter by sample, gene, or effect to explore specific mutations.
-        title_size: h2
-        layout:
-            x: 0
-            y: 18
-            w: 8
-            h: 6
+- title: Coverage & Depth
+  subtitle: Amplicon and Genome Coverage (mosdepth)
+  tab_order: 1
+  tab_icon: mdi:chart-areaspline
+  tab_icon_color: teal
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  dashboard_id: 746b0f3c1e4a2d7f8e5b9cb5
+  components:
+  - component_type: text
+    tag: text-coverage-and-depth-intro
+    title: Coverage & Depth - Amplicon and Genome Coverage
+    order: 3
+    alignment: left
+    body: Did each sample's amplicons get adequate sequencing depth? The **genome track** shows per-position coverage (log y-axis); look for systematic drop-outs across samples. The **clustered amplicon
+      heatmap** flags amplicons that consistently fail (dark rows). The tables below carry the underlying numbers for ad-hoc inspection.
+    workflow_tag: viralrecon
+    data_collection_tag: summary_metrics
+    layout:
+      x: 0
+      y: 0
+      w: 8
+      h: 1
+  - component_type: card
+    workflow_tag: viralrecon
+    data_collection_tag: mosdepth_amplicon_coverage
+    aggregation: nunique
+    column_name: region
+    column_type: object
+    # Coverage gauge: ARTIC v3 has 99 amplicons. Top-N by sample is degenerate
+    # here because every healthy sample sees all 99 — a bar chart would just
+    # show 99 / 99 / 99 with no Pareto signal. The gauge surfaces "% of
+    # primer scheme captured" directly.
+    secondary_layout: coverage
+    coverage_max: 99
+    display:
+      icon_name: mdi:dna
+      icon_color: '#FF9800'
+      title_color: '#FF9800'
+      title_font_size: xl
+      value_font_size: xl
+    tag: card-cov-amplicons-d4e5f6
+    layout:
+      x: 0
+      y: 1
+      w: 2
+      h: 2
+    title: Amplicons Tracked
+  - component_type: card
+    workflow_tag: viralrecon
+    data_collection_tag: mosdepth_amplicon_coverage
+    aggregation: median
+    aggregations:
+    - box_plot_stats
+    column_name: coverage
+    column_type: float64
+    secondary_layout: box_plot
+    icon_name: mdi:chart-areaspline
+    icon_color: '#009688'
+    tag: card-cov-amplicon-stats-g7h8i9
+    layout:
+      x: 2
+      y: 1
+      w: 3
+      h: 2
+    title: Amplicon Coverage
+  - component_type: card
+    workflow_tag: viralrecon
+    data_collection_tag: mosdepth_genome_coverage
+    aggregation: median
+    aggregations:
+    - box_plot_stats
+    column_name: coverage
+    column_type: float64
+    secondary_layout: box_plot
+    icon_name: mdi:chart-line
+    icon_color: '#2196F3'
+    tag: card-cov-genome-stats-j0k1l2
+    layout:
+      x: 5
+      y: 1
+      w: 3
+      h: 2
+    title: Genome Coverage
+  - component_type: interactive
+    workflow_tag: viralrecon
+    data_collection_tag: mosdepth_amplicon_coverage
+    interactive_component_type: MultiSelect
+    column_name: sample
+    column_type: object
+    display:
+      title_size: md
+      custom_color: '#45B8AC'
+      icon_name: mdi:flask
+    tag: interactive-cov-sample-filter-m3n4o5
+    index: cov-sample-filter
+    layout:
+      x: 0
+      y: 2
+      w: 1
+      h: 2
+    title: Sample ID
+  - component_type: advanced_viz
+    workflow_tag: viralrecon
+    data_collection_tag: coverage_track_canonical
+    viz_kind: coverage_track
+    config:
+      viz_kind: coverage_track
+      chromosome_col: chromosome
+      position_col: position
+      value_col: value
+      end_col: end
+      sample_col: sample
+      # Linear y-axis on a smoothed signal is more legible than log on raw bins —
+      # 200-bp bins × 5 ≈ 1 kb rolling window kills the high-frequency wiggle
+      # without flattening the amplicon dropouts.
+      y_scale: linear
+      smoothing_window: 5
+      # ``show_annotation_lane`` used to drive a per-position category strip
+      # (annotation_col-fed). The new renderer ignores it for SARS-CoV-2 and
+      # auto-renders the ORF gene strip from the bundled genome annotation.
+      show_annotation_lane: false
+    tag: adv-cov-genome-track-p6q7r8
+    index: adv-cov-genome-track
+    title: Genome coverage track per sample
+    description: Per-position genome coverage (log y-axis), one sub-track per sample. Drop-outs stand out as gaps.
+    title_size: h3
+    layout:
+      x: 0
+      y: 3
+      w: 8
+      h: 6
+  - component_type: advanced_viz
+    workflow_tag: viralrecon
+    data_collection_tag: complex_heatmap_canonical
+    viz_kind: complex_heatmap
+    config:
+      viz_kind: complex_heatmap
+      index_column: sample
+      cluster_rows: true
+      cluster_cols: false
+      normalize: none
+      colorscale: Viridis
+      show_row_dendrogram: true
+      show_col_dendrogram: false
+    tag: adv-cov-heatmap-v2w3x4
+    index: adv-cov-heatmap
+    title: Amplicon coverage heatmap (clustered)
+    description: Log10-scaled per-amplicon coverage; rows clustered. Dark = dropout, bright = high coverage.
+    title_size: h3
+    layout:
+      x: 0
+      y: 9
+      w: 8
+      h: 6
+  - component_type: table
+    workflow_tag: viralrecon
+    data_collection_tag: mosdepth_amplicon_coverage
+    row_selection_enabled: false
+    tag: table-cov-amplicon-y5z6a7
+    title: Amplicon coverage table
+    description: Per-amplicon median coverage depth for each sample.
+    title_size: h3
+    layout:
+      x: 0
+      y: 15
+      w: 8
+      h: 4
+- title: Lineage & Clustering
+  subtitle: Pangolin / Nextclade typing + classification funnel + variant-profile PCA
+  tab_order: 2
+  tab_icon: mdi:virus
+  tab_icon_color: red
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  dashboard_id: 746b0f3c1e4a2d7f8e5b9cb3
+  components:
+  - component_type: text
+    tag: text-lineage-and-clustering-intro
+    title: Lineage & Clustering - Pangolin, Nextclade & Variant-Profile PCA
+    order: 3
+    alignment: left
+    body: Three complementary views of viral lineage. **Pangolin / Nextclade bar charts** show classification frequencies. The **Sankey** traces each sample's path QC -> Pangolin lineage -> Nextclade clade;
+      mismatched calls show up as crossing ribbons. The **PCA** clusters samples by their mutation profile - points are coloured by lineage, so well-defined lineage groups appear as distinct clusters.
+    workflow_tag: viralrecon
+    data_collection_tag: summary_metrics
+    layout:
+      x: 0
+      y: 0
+      w: 8
+      h: 1
+  - component_type: card
+    workflow_tag: viralrecon
+    data_collection_tag: pangolin_lineages
+    aggregation: nunique
+    column_name: lineage
+    column_type: object
+    # Pangolin lineages aren't bounded (thousands possible), so coverage
+    # doesn't fit. top_n shows the cohort's dominant lineages directly.
+    secondary_layout: top_n
+    breakdown_col: lineage
+    top_n_count: 3
+    display:
+      icon_name: mdi:virus
+      icon_color: '#E74C3C'
+      title_color: '#E74C3C'
+      title_font_size: xl
+      value_font_size: xl
+    tag: card-lin-unique-lineages-d4e5f6
+    layout:
+      x: 0
+      y: 1
+      w: 4
+      h: 2
+    title: Unique Lineages
+  - component_type: card
+    workflow_tag: viralrecon
+    data_collection_tag: nextclade_results
+    aggregation: nunique
+    column_name: clade
+    column_type: object
+    # Same story as lineages — top_n shows which Nextclade clades dominate
+    # the cohort, which is more useful than a count alone.
+    secondary_layout: top_n
+    breakdown_col: clade
+    top_n_count: 3
+    display:
+      icon_name: mdi:family-tree
+      icon_color: '#9C27B0'
+      title_color: '#9C27B0'
+      title_font_size: xl
+      value_font_size: xl
+    tag: card-lin-unique-clades-g7h8i9
+    layout:
+      x: 4
+      y: 1
+      w: 4
+      h: 2
+    title: Unique Clades
+  - component_type: interactive
+    workflow_tag: viralrecon
+    data_collection_tag: summary_metrics
+    interactive_component_type: MultiSelect
+    column_name: sample
+    column_type: object
+    display:
+      title_size: md
+      custom_color: '#45B8AC'
+      icon_name: mdi:flask
+    tag: interactive-lin-sample-filter-m3n4o5
+    index: lin-sample-filter
+    layout:
+      x: 0
+      y: 2
+      w: 1
+      h: 2
+    title: Sample ID
+  - component_type: interactive
+    workflow_tag: viralrecon
+    data_collection_tag: pangolin_lineages
+    interactive_component_type: MultiSelect
+    column_name: lineage
+    column_type: object
+    display:
+      title_size: md
+      custom_color: '#E74C3C'
+      icon_name: mdi:virus
+    tag: interactive-lin-lineage-filter-p6q7r8
+    index: lin-lineage-filter
+    layout:
+      x: 0
+      y: 4
+      w: 1
+      h: 2
+    title: Lineage
+  - component_type: interactive
+    workflow_tag: viralrecon
+    data_collection_tag: nextclade_results
+    interactive_component_type: MultiSelect
+    column_name: clade
+    column_type: object
+    display:
+      title_size: md
+      custom_color: '#9C27B0'
+      icon_name: mdi:family-tree
+    tag: interactive-lin-clade-filter-s9t0u1
+    index: lin-clade-filter
+    layout:
+      x: 0
+      y: 6
+      w: 1
+      h: 2
+    title: Clade
+  - component_type: figure
+    workflow_tag: viralrecon
+    data_collection_tag: pangolin_lineages
+    visu_type: bar
+    mode: code
+    code_content: "df_modified = df.group_by('lineage').agg(pl.count().alias('count')).sort('count', descending=True)\nfig = px.bar(df_modified.to_pandas(), x='lineage', y='count', color='lineage',\n    labels={'lineage': 'Lineage', 'count': 'Number of Samples'})\nfig.update_layout(xaxis={'categoryorder': 'total descending'}, showlegend=False)\nfig.update_xaxes(tickangle=-45)\n"
+    selection_enabled: false
+    tag: figure-lin-lineage-dist-b8c9d0
+    title: Pangolin lineage distribution
+    description: Number of samples per PANGO lineage, sorted by frequency.
+    title_size: h3
+    layout:
+      x: 0
+      y: 3
+      w: 4
+      h: 4
+  - component_type: figure
+    workflow_tag: viralrecon
+    data_collection_tag: nextclade_results
+    visu_type: bar
+    mode: code
+    code_content: "df_modified = df.group_by('clade').agg(pl.count().alias('count')).sort('count', descending=True)\nfig = px.bar(df_modified.to_pandas(), x='clade', y='count', color='clade',\n    labels={'clade': 'Clade', 'count': 'Number of Samples'})\nfig.update_layout(xaxis={'categoryorder': 'total descending'}, showlegend=False)\nfig.update_xaxes(tickangle=-45)\n"
+    selection_enabled: false
+    tag: figure-lin-clade-dist-h4i5j6
+    title: Nextclade clade distribution
+    description: WHO-style clade designations, complementary to Pangolin lineage.
+    title_size: h3
+    layout:
+      x: 4
+      y: 3
+      w: 4
+      h: 4
+  - component_type: advanced_viz
+    workflow_tag: viralrecon
+    data_collection_tag: sankey_canonical
+    viz_kind: sankey
+    config:
+      viz_kind: sankey
+      step_cols:
+      - qc_status
+      - lineage
+      - clade
+      value_col: null
+      sort_mode: total_flow
+      color_mode: source
+      link_opacity: 0.5
+      min_link_value: 0.0
+      show_node_labels: true
+    tag: adv-lin-sankey
+    index: adv-lin-sankey
+    title: Classification sankey (QC -> lineage -> clade)
+    description: Ribbon width = samples on that path. Surfaces mismatched calls and dominant lineage->clade pairs.
+    title_size: h3
+    layout:
+      x: 0
+      y: 7
+      w: 8
+      h: 6
+  - component_type: advanced_viz
+    workflow_tag: viralrecon
+    data_collection_tag: variant_feature_matrix_canonical
+    viz_kind: embedding
+    config:
+      viz_kind: embedding
+      sample_id_col: sample_id
+      dim_1_col: dim_1
+      dim_2_col: dim_2
+      compute_method: pca
+      color_col: lineage
+      cluster_col: clade
+      point_size: 8
+      show_density: false
+    tag: adv-lin-embedding
+    index: adv-lin-embedding
+    title: Variant-profile PCA embedding (coloured by lineage)
+    description: 2D PCA of the sample x mutation binary matrix. Points coloured by Pangolin lineage, marker shape encodes Nextclade clade. Samples sharing variants cluster together.
+    title_size: h3
+    layout:
+      x: 0
+      y: 13
+      w: 8
+      h: 6
+  - component_type: table
+    workflow_tag: viralrecon
+    data_collection_tag: pangolin_lineages
+    row_selection_enabled: false
+    tag: table-lin-pangolin-t6u7v8
+    title: Pangolin lineage assignments
+    description: Per-sample lineage, conflict, scorpio, QC status.
+    title_size: h3
+    layout:
+      x: 0
+      y: 19
+      w: 4
+      h: 4
+  - component_type: table
+    workflow_tag: viralrecon
+    data_collection_tag: nextclade_results
+    row_selection_enabled: false
+    tag: table-lin-nextclade-w9x0y1
+    title: Nextclade clade assignments
+    description: Per-sample clade, substitutions, deletions, QC.
+    title_size: h3
+    layout:
+      x: 4
+      y: 19
+      w: 4
+      h: 4
+- title: Sample QC
+  subtitle: Per-Sample Coverage, Variant Yield, Substitution Patterns & Genome Completeness
+  tab_order: 3
+  tab_icon: mdi:stethoscope
+  tab_icon_color: indigo
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  dashboard_id: 746b0f3c1e4a2d7f8e5b9cc2
+  components:
+  - component_type: text
+    tag: text-sample-qc-diagnostics-intro
+    title: Sample QC Diagnostics - Coverage vs Variant Yield
+    order: 3
+    alignment: left
+    body: Diagnostic plots to catch problematic samples before drawing biological conclusions. The **coverage-vs-variants scatter** flags low-coverage samples with inflated / deflated variant counts (usually
+      partial drop-out or contamination). The **substitutions-vs-deletions** plot surfaces clade-specific deletion patterns or assembly artefacts. The bar at the bottom shows the per-sample % >= 10x with
+      the 80% reliability cut-off.
+    workflow_tag: viralrecon
+    data_collection_tag: summary_metrics
+    layout:
+      x: 0
+      y: 0
+      w: 8
+      h: 1
+  - component_type: card
+    workflow_tag: viralrecon
+    data_collection_tag: summary_metrics
+    aggregation: average
+    column_name: pct_genome_covered_10x
+    column_type: float64
+    aggregations:
+      - box_plot_stats
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:chart-line
+      icon_color: '#2196F3'
+      title_color: '#2196F3'
+      title_font_size: xl
+      value_font_size: xl
+    tag: card-qcdx-avg-10x-d4e5f6
+    layout:
+      x: 0
+      y: 1
+      w: 4
+      h: 2
+    title: Avg % Genome >= 10x
+  - component_type: card
+    workflow_tag: viralrecon
+    data_collection_tag: summary_metrics
+    aggregation: median
+    column_name: num_variants_total
+    column_type: float64
+    aggregations:
+      - box_plot_stats
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:dna
+      icon_color: '#FF9800'
+      title_color: '#FF9800'
+      title_font_size: xl
+      value_font_size: xl
+    tag: card-qcdx-median-variants-g7h8i9
+    layout:
+      x: 4
+      y: 1
+      w: 4
+      h: 2
+    title: Median Variants / Sample
+  - component_type: interactive
+    workflow_tag: viralrecon
+    data_collection_tag: summary_metrics
+    interactive_component_type: MultiSelect
+    column_name: sample
+    column_type: object
+    display:
+      title_size: md
+      custom_color: '#45B8AC'
+      icon_name: mdi:flask
+    tag: interactive-qcdx-sample-filter-j0k1l2
+    index: qcdx-sample-filter
+    layout:
+      x: 0
+      y: 2
+      w: 1
+      h: 2
+    title: Sample ID
+  - component_type: interactive
+    workflow_tag: viralrecon
+    data_collection_tag: summary_metrics
+    interactive_component_type: MultiSelect
+    column_name: lineage
+    column_type: object
+    display:
+      title_size: md
+      custom_color: '#E74C3C'
+      icon_name: mdi:virus
+    tag: interactive-qcdx-lineage-filter-m3n4o5
+    index: qcdx-lineage-filter
+    layout:
+      x: 0
+      y: 4
+      w: 1
+      h: 2
+    title: Lineage
+  - component_type: figure
+    workflow_tag: viralrecon
+    data_collection_tag: summary_metrics
+    visu_type: scatter
+    mode: code
+    code_content: "fig = px.scatter(df.to_pandas(), x='coverage_median', y='num_variants_total',\n    color='lineage', hover_data=['sample', 'pct_genome_covered_10x'],\n    labels={'coverage_median': 'Median Coverage Depth', 'num_variants_total': 'Total Variants', 'lineage': 'Lineage'},\n    size_max=12)\nfig.update_traces(marker=dict(size=10, line=dict(width=1, color='DarkSlateGrey')))\n"
+    selection_enabled: false
+    tag: figure-qcdx-coverage-vs-variants-p6q7r8
+    title: Median coverage vs total variants
+    description: Spot low-coverage samples with inflated / deflated variant counts.
+    title_size: h3
+    layout:
+      x: 0
+      y: 3
+      w: 4
+      h: 4
+  - component_type: figure
+    workflow_tag: viralrecon
+    data_collection_tag: nextclade_results
+    visu_type: scatter
+    mode: code
+    code_content: "fig = px.scatter(df.to_pandas(), x='totalSubstitutions', y='totalDeletions',\n    color='clade', hover_data=['sample', 'qc_overallStatus', 'coverage'],\n    labels={'totalSubstitutions': 'Total Substitutions', 'totalDeletions': 'Total Deletions', 'clade': 'Clade'},\n    opacity=0.8)\nfig.update_traces(marker=dict(size=10, line=dict(width=1, color='DarkSlateGrey')))\n"
+    selection_enabled: false
+    tag: figure-qcdx-nextclade-scatter-s9t0u1
+    title: Nextclade substitutions vs deletions
+    description: Per-sample mutation profile shape. Outliers signal clade-specific patterns.
+    title_size: h3
+    layout:
+      x: 4
+      y: 3
+      w: 4
+      h: 4
+  - component_type: figure
+    workflow_tag: viralrecon
+    data_collection_tag: summary_metrics
+    visu_type: bar
+    mode: code
+    code_content: "df_modified = df.sort('pct_genome_covered_10x', descending=True)\nfig = px.bar(df_modified.to_pandas(), x='sample', y='pct_genome_covered_10x',\n    color='lineage',\n    labels={'sample': 'Sample', 'pct_genome_covered_10x': '% Genome >= 10x', 'lineage': 'Lineage'})\nfig.add_hline(y=80, line_dash='dash', line_color='red', annotation_text='80% threshold')\nfig.update_xaxes(tickangle=-45, tickfont={'size': 9})\n"
+    selection_enabled: false
+    tag: figure-qcdx-genome-coverage-v2w3x4
+    title: Genome coverage per sample (>=10x)
+    description: Per-sample %-genome >=10x, sorted. Red = 80% reliability cut-off.
+    title_size: h3
+    layout:
+      x: 0
+      y: 7
+      w: 8
+      h: 4
+  - component_type: table
+    workflow_tag: viralrecon
+    data_collection_tag: summary_metrics
+    row_selection_enabled: false
+    tag: table-qcdx-summary-metrics-y5z6a7
+    title: Summary metrics
+    description: Per-sample alignment, coverage, and variant calling summary - QC backbone for downstream tabs.
+    title_size: h3
+    layout:
+      x: 0
+      y: 11
+      w: 8
+      h: 4
+- title: Variants
+  subtitle: Per-Call AF Track + Per-Gene / Per-Sample Effect Breakdowns + Sample × Gene Co-Occurrence
+  tab_order: 4
+  tab_icon: mdi:dna
+  tab_icon_color: orange
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  dashboard_id: 746b0f3c1e4a2d7f8e5b9cb4
+  components:
+  # Tab intro.
+  - component_type: text
+    tag: text-variants-intro
+    title: Variants — per-call AF track, effect-class breakdowns, sample × gene matrix
+    order: 3
+    alignment: left
+    body: 'All variant analysis lives here. **Top**: per-call AF along the genome (Manhattan); **Middle**: per-gene / per-sample effect-class bars + lollipop; **Bottom**: sample × gene oncoplot (lineage signature).'
+    workflow_tag: viralrecon
+    data_collection_tag: summary_metrics
+    layout:
+      x: 0
+      y: 0
+      w: 8
+      h: 1
+  # Top row: 4 cards in 8-col layout, w=2 each. Each card surfaces a
+  # complementary multi-metric strip (top-N / coverage / box-plot) so the
+  # hero value isn't an isolated number.
+  - component_type: card
+    workflow_tag: viralrecon
+    data_collection_tag: variants_long
+    aggregation: count
+    column_name: POS
+    column_type: int64
+    # Volume card → break down by SAMPLE so the strip surfaces "who has the
+    # most variant calls?" — flags outlier-rich samples directly. The other
+    # two cardinality cards (Distinct Positions by GENE, Unique AA by EFFECT)
+    # cover the "where" and "what" angles, no redundancy.
+    secondary_layout: top_n
+    breakdown_col: sample
+    top_n_count: 3
+    display:
+      icon_name: mdi:dna
+      icon_color: '#FF9800'
+      title_color: '#FF9800'
+      title_font_size: xl
+      value_font_size: xl
+    tag: card-var-total-variants-c5d6e7
+    layout:
+      x: 0
+      y: 1
+      w: 2
+      h: 2
+    title: Total Variant Calls
+  - component_type: card
+    workflow_tag: viralrecon
+    data_collection_tag: variants_long
+    aggregation: nunique
+    column_name: POS
+    column_type: int64
+    secondary_layout: top_n
+    breakdown_col: GENE
+    top_n_count: 3
+    display:
+      icon_name: mdi:map-marker
+      icon_color: '#FF9800'
+      title_color: '#FF9800'
+      title_font_size: xl
+      value_font_size: xl
+    tag: card-var-distinct-positions-x1y2z3
+    layout:
+      x: 2
+      y: 1
+      w: 2
+      h: 2
+    title: Distinct Positions
+  - component_type: card
+    workflow_tag: viralrecon
+    data_collection_tag: variants_long
+    aggregation: nunique
+    column_name: sample
+    column_type: object
+    # Coverage gauge: 44 samples in the cohort. Top-N by gene here is marginal
+    # (each major gene has variants in ~all samples → bars all near max → no
+    # Pareto signal). The gauge directly answers "do all samples carry calls?".
+    secondary_layout: coverage
+    coverage_max: 44
+    display:
+      icon_name: mdi:flask
+      icon_color: '#45B8AC'
+      title_color: '#45B8AC'
+      title_font_size: xl
+      value_font_size: xl
+    tag: card-var-samples-with-calls-i1j2k3
+    layout:
+      x: 4
+      y: 1
+      w: 2
+      h: 2
+    title: Samples w/ variants
+  - component_type: card
+    workflow_tag: viralrecon
+    data_collection_tag: variants_long
+    aggregation: nunique
+    column_name: AA
+    column_type: object
+    # Protein-change diversity → break down by EFFECT so the strip answers
+    # "what KIND of protein changes dominate?" (missense vs synonymous vs
+    # stop_gained vs frameshift …). Complements the GENE breakdown on
+    # Distinct Positions — no overlap.
+    secondary_layout: top_n
+    breakdown_col: EFFECT
+    top_n_count: 3
+    display:
+      icon_name: mdi:alpha
+      icon_color: '#F44336'
+      title_color: '#F44336'
+      title_font_size: xl
+      value_font_size: xl
+    tag: card-var-unique-aa-m6n7o8
+    layout:
+      x: 6
+      y: 1
+      w: 2
+      h: 2
+    title: Unique AA Changes
+  # Hero: per-call AF track (Manhattan) along the full genome. Full-width
+  # row by itself — the Manhattan needs the full 8 columns to be legible at
+  # 30 kb resolution; left-rail filters apply tab-wide regardless of physical
+  # placement, so we put them under Manhattan with the bars/lollipop block.
+  - component_type: advanced_viz
+    workflow_tag: viralrecon
+    data_collection_tag: manhattan_variants_canonical
+    viz_kind: manhattan
+    config:
+      viz_kind: manhattan
+      chr_col: chr
+      pos_col: pos
+      score_col: score
+      feature_col: variant_label
+      score_kind: Allele frequency (AF)
+      score_threshold: 0.5
+      color_by_columns:
+        - effect
+        - lineage
+        - sample
+      default_color_by: effect
+    tag: adv-manh-track
+    index: adv-manh-track
+    title: Variant frequencies along the genome
+    description: One dot per variant call · y = AF · above 0.5 = consensus, below = subconsensus.
+    title_size: h3
+    layout:
+      x: 0
+      y: 3
+      w: 8
+      h: 5
+  # Hero: per-call AF track (Manhattan) along the full genome. Full-width row
+  # already declared above (y=4..9). Below, filters sit as a horizontal strip
+  # so every subsequent plot can span the full 8-col width without sharing
+  # the row with a left rail.
+  - component_type: interactive
+    workflow_tag: viralrecon
+    data_collection_tag: variants_long
+    interactive_component_type: MultiSelect
+    column_name: sample
+    column_type: object
+    display:
+      title_size: md
+      custom_color: '#45B8AC'
+      icon_name: mdi:flask
+    tag: interactive-var-sample-filter-o7p8q9
+    index: var-sample-filter
+    layout:
+      x: 0
+      y: 8
+      w: 2
+      h: 3
+    title: Sample ID
+  - component_type: interactive
+    workflow_tag: viralrecon
+    data_collection_tag: variants_long
+    interactive_component_type: MultiSelect
+    column_name: GENE
+    column_type: object
+    display:
+      title_size: md
+      custom_color: '#4CAF50'
+      icon_name: mdi:dna
+    tag: interactive-var-gene-filter-r0s1t2
+    index: var-gene-filter
+    layout:
+      x: 2
+      y: 8
+      w: 2
+      h: 3
+    title: Gene
+  - component_type: interactive
+    workflow_tag: viralrecon
+    data_collection_tag: variants_long
+    interactive_component_type: MultiSelect
+    column_name: EFFECT
+    column_type: object
+    display:
+      title_size: md
+      custom_color: '#9C27B0'
+      icon_name: mdi:alert-circle
+    tag: interactive-var-effect-filter-u3v4w5
+    index: var-effect-filter
+    layout:
+      x: 4
+      y: 8
+      w: 2
+      h: 3
+    title: Variant Effect
+  - component_type: interactive
+    workflow_tag: viralrecon
+    data_collection_tag: variants_long
+    interactive_component_type: RangeSlider
+    column_name: AF
+    column_type: float64
+    display:
+      title_size: md
+      custom_color: '#F44336'
+      icon_name: mdi:percent
+    tag: interactive-var-af-slider-a9b0c1
+    index: var-af-slider
+    layout:
+      x: 6
+      y: 8
+      w: 2
+      h: 3
+    title: Allele Frequency
+  # Per-gene + per-sample effect-class summaries — side by side, full row.
+  - component_type: figure
+    workflow_tag: viralrecon
+    data_collection_tag: variants_long
+    visu_type: bar
+    mode: code
+    code_content: "df_modified = df.group_by(['GENE', 'FUNCLASS']).agg(pl.count().alias('count')).sort('count', descending=True)\nfig = px.bar(df_modified.to_pandas(), x='GENE', y='count', color='FUNCLASS',\n    labels={'GENE': 'Gene', 'count': 'Number of Variants', 'FUNCLASS': 'Functional Class'},\n    barmode='stack')\nfig.update_layout(xaxis={'categoryorder': 'total descending'})\nfig.update_xaxes(tickangle=-45)\n"
+    selection_enabled: false
+    tag: figure-var-mutations-by-gene-j8k9l0
+    title: Variant counts by gene & functional class
+    description: Stacked counts per gene (MISSENSE / SILENT / NONSENSE / OTHER).
+    title_size: h3
+    layout:
+      x: 0
+      y: 11
+      w: 4
+      h: 5
+  - component_type: figure
+    workflow_tag: viralrecon
+    data_collection_tag: variants_long
+    visu_type: bar
+    mode: code
+    code_content: "df_modified = df.group_by(['sample', 'FUNCLASS']).agg(pl.count().alias('count')).sort('sample')\nfig = px.bar(df_modified.to_pandas(), x='sample', y='count', color='FUNCLASS',\n    labels={'sample': 'Sample', 'count': 'Number of Variants', 'FUNCLASS': 'Functional Class'},\n    barmode='stack')\nfig.update_xaxes(tickangle=-45, tickfont={'size': 9})\n"
+    selection_enabled: false
+    tag: figure-var-per-sample-count-s7t8u9
+    title: Variants per sample
+    description: Variant burden per sample, stacked by FUNCLASS.
+    title_size: h3
+    layout:
+      x: 4
+      y: 11
+      w: 4
+      h: 5
+  # Per-gene lollipop sub-panels — drill-into-gene view. Full width.
+  - component_type: advanced_viz
+    workflow_tag: viralrecon
+    data_collection_tag: lollipop_canonical
+    viz_kind: lollipop
+    config:
+      viz_kind: lollipop
+      feature_id_col: feature_id
+      position_col: position
+      category_col: category
+      effect_col: effect
+      max_subplot_genes: 6
+    tag: adv-var-lollipop
+    index: adv-var-lollipop
+    title: Variant tracks per gene (lollipop)
+    description: One sub-panel per gene. Each lollipop = variant; colour = effect class; height = AF. Top 6 most-mutated genes.
+    title_size: h3
+    layout:
+      x: 0
+      y: 16
+      w: 8
+      h: 6
+  # Variants table (all calls).
+  - component_type: table
+    workflow_tag: viralrecon
+    data_collection_tag: variants_long
+    row_selection_enabled: false
+    tag: table-var-variants-v0w1x2
+    title: Variants table
+    description: All variant calls. Use the filter strip above to drill into specific genes / effects.
+    title_size: h3
+    layout:
+      x: 0
+      y: 22
+      w: 8
+      h: 5
+  # ============================================================
+  # Sample × gene co-occurrence section (merged from Variant Oncoplot tab).
+  # Bound to oncoplot_canonical DC (different from variants_long), so it
+  # carries its own Mutation Type filter; gene-level filtering is done via
+  # the oncoplot's interactive columns (click-on-column / hover).
+  # ============================================================
+  - component_type: text
+    tag: text-onco-section
+    title: Sample × Gene mutation matrix
+    order: 3
+    alignment: left
+    body: 'Co-occurrence view — rows = samples, columns = genes, each cell encodes the variant effect class. Rows / columns reordered to surface shared mutation repertoires (lineage signature).'
+    workflow_tag: viralrecon
+    data_collection_tag: summary_metrics
+    layout:
+      x: 0
+      y: 27
+      w: 8
+      h: 1
+  - component_type: card
+    workflow_tag: viralrecon
+    data_collection_tag: oncoplot_canonical
+    aggregation: nunique
+    column_name: sample_id
+    column_type: object
+    secondary_layout: coverage
+    coverage_max: 44
+    display:
+      icon_name: mdi:flask
+      icon_color: '#45B8AC'
+      title_color: '#45B8AC'
+      title_font_size: xl
+      value_font_size: xl
+    tag: card-onco-samples-a1b2c3
+    layout:
+      x: 0
+      y: 28
+      w: 3
+      h: 2
+    title: Samples (oncoplot)
+  - component_type: card
+    workflow_tag: viralrecon
+    data_collection_tag: oncoplot_canonical
+    aggregation: nunique
+    column_name: gene
+    column_type: object
+    secondary_layout: coverage
+    coverage_max: 11
+    display:
+      icon_name: mdi:biology
+      icon_color: '#4CAF50'
+      title_color: '#4CAF50'
+      title_font_size: xl
+      value_font_size: xl
+    tag: card-onco-genes-d4e5f6
+    layout:
+      x: 3
+      y: 28
+      w: 3
+      h: 2
+    title: Genes (oncoplot)
+  - component_type: interactive
+    workflow_tag: viralrecon
+    data_collection_tag: oncoplot_canonical
+    interactive_component_type: MultiSelect
+    column_name: mutation_type
+    column_type: object
+    display:
+      title_size: md
+      custom_color: '#9C27B0'
+      icon_name: mdi:alert-circle
+    tag: interactive-onco-mutation-filter-j0k1l2
+    index: onco-mutation-filter
+    layout:
+      x: 6
+      y: 28
+      w: 2
+      h: 2
+    title: Mutation Type
+  - component_type: advanced_viz
+    workflow_tag: viralrecon
+    data_collection_tag: oncoplot_canonical
+    viz_kind: oncoplot
+    config:
+      viz_kind: oncoplot
+      sample_id_col: sample_id
+      gene_col: gene
+      mutation_type_col: mutation_type
+    tag: adv-onco-matrix
+    index: adv-onco-matrix
+    title: Sample × gene mutation matrix
+    description: Each cell encodes the variant effect class. Rows / columns reordered to surface co-occurring mutations.
+    title_size: h3
+    layout:
+      x: 0
+      y: 30
+      w: 8
+      h: 8

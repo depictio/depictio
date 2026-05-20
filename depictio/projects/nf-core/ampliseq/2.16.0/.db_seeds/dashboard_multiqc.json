@@ -14,9 +14,28 @@
   "stored_children_data": [],
   "stored_metadata": [
     {
-      "index": "multiqc-sampling-date",
+      "index": "multiqc-section-header",
+      "component_type": "text",
+      "title": "QC Overview",
+      "order": 2,
+      "alignment": "left",
+      "body": "MultiQC aggregates per-sample quality control metrics from FastQC, Cutadapt and DADA2. Watch adapter content, GC%, and per-base sequence quality for outlier samples.",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": null,
+      "dc_config": {},
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-18T00:00:00.000000",
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "multiqc-sample-filter",
       "component_type": "interactive",
-      "title": "Sampling Period",
+      "title": "Sample ID",
       "workflow_tag": "ampliseq",
       "data_collection_tag": "metadata",
       "wf_id": {
@@ -37,15 +56,15 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-02-25T13:35:41.184125",
-      "interactive_component_type": "DateRangePicker",
-      "column_name": "sampling_date",
-      "column_type": "datetime",
+      "last_updated": "2026-02-25T13:35:41.184161",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "sample",
+      "column_type": "object",
       "value": null,
       "default_state": null,
       "title_size": "md",
-      "custom_color": "#FF6B6B",
-      "icon_name": "mdi:calendar-range",
+      "custom_color": "#45B8AC",
+      "icon_name": "mdi:flask",
       "wf_tag": "nextflow/ampliseq"
     },
     {
@@ -84,9 +103,9 @@
       "wf_tag": "nextflow/ampliseq"
     },
     {
-      "index": "multiqc-sample-filter",
+      "index": "multiqc-sampling-date",
       "component_type": "interactive",
-      "title": "Sample ID",
+      "title": "Sampling Period",
       "workflow_tag": "ampliseq",
       "data_collection_tag": "metadata",
       "wf_id": {
@@ -107,15 +126,15 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-02-25T13:35:41.184161",
-      "interactive_component_type": "MultiSelect",
-      "column_name": "sample",
-      "column_type": "object",
+      "last_updated": "2026-02-25T13:35:41.184125",
+      "interactive_component_type": "DateRangePicker",
+      "column_name": "sampling_date",
+      "column_type": "datetime",
       "value": null,
       "default_state": null,
       "title_size": "md",
-      "custom_color": "#45B8AC",
-      "icon_name": "mdi:flask",
+      "custom_color": "#FF6B6B",
+      "icon_name": "mdi:calendar-range",
       "wf_tag": "nextflow/ampliseq"
     },
     {
@@ -320,12 +339,215 @@
       "selected_module": "cutadapt",
       "selected_plot": "Trimmed Sequence Lengths (5')",
       "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "component_type": "multiqc",
+      "title": "",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "multiqc_data",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca4"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "MultiQC report data",
+        "data_collection_tag": "multiqc_data",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8ca4"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-02-25T13:35:41.184185",
+      "wf_tag": "nextflow/ampliseq",
+      "index": "35ac5556-82a3-4e29-b6c3-3036cb9a7203",
+      "selected_module": "fastqc",
+      "selected_plot": "Per Sequence Quality Scores"
+    },
+    {
+      "component_type": "multiqc",
+      "title": "",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "multiqc_data",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca4"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "MultiQC report data",
+        "data_collection_tag": "multiqc_data",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8ca4"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-02-25T13:35:41.184185",
+      "wf_tag": "nextflow/ampliseq",
+      "index": "c10d2d82-7120-4107-90e5-38c89e6dc5bb",
+      "selected_module": "fastqc",
+      "selected_plot": "Sequence Duplication Levels"
+    },
+    {
+      "component_type": "multiqc",
+      "title": "",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "multiqc_data",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca4"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "MultiQC report data",
+        "data_collection_tag": "multiqc_data",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8ca4"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-02-25T13:35:41.184185",
+      "wf_tag": "nextflow/ampliseq",
+      "index": "88a21875-9487-46aa-b1c8-d2728ade5a42",
+      "selected_module": "fastqc",
+      "selected_plot": "Sequence Length Distribution"
+    },
+    {
+      "component_type": "multiqc",
+      "title": "",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "multiqc_data",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca4"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "MultiQC report data",
+        "data_collection_tag": "multiqc_data",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8ca4"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-02-25T13:35:41.184185",
+      "wf_tag": "nextflow/ampliseq",
+      "index": "d90ff7e7-bb03-48e6-a119-99fee17de243",
+      "selected_module": "fastqc",
+      "selected_plot": "Status Checks"
+    },
+    {
+      "component_type": "multiqc",
+      "title": "",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "multiqc_data",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca4"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "MultiQC report data",
+        "data_collection_tag": "multiqc_data",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8ca4"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-02-25T13:35:41.184185",
+      "wf_tag": "nextflow/ampliseq",
+      "index": "84cbb126-3ff2-4edc-8c9c-526ad08f9134",
+      "selected_module": "fastqc",
+      "selected_plot": "Per Base N Content"
+    },
+    {
+      "component_type": "multiqc",
+      "title": "",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "multiqc_data",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca4"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "MultiQC report data",
+        "data_collection_tag": "multiqc_data",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8ca4"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-02-25T13:35:41.184185",
+      "wf_tag": "nextflow/ampliseq",
+      "index": "f3699d24-8b3f-4acb-8be8-77e65d814026",
+      "selected_module": "fastqc",
+      "selected_plot": "Top overrepresented sequences"
+    },
+    {
+      "component_type": "multiqc",
+      "title": "",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "multiqc_data",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca4"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "MultiQC report data",
+        "data_collection_tag": "multiqc_data",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8ca4"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-02-25T13:35:41.184185",
+      "wf_tag": "nextflow/ampliseq",
+      "index": "ea91fa74-e3f6-46dd-83c2-b97d3523ae02",
+      "selected_module": "fastqc",
+      "selected_plot": "Overrepresented sequences by sample"
     }
   ],
   "stored_edit_dashboard_mode_button": [],
   "left_panel_layout_data": [
     {
-      "i": "box-multiqc-sampling-date",
+      "i": "box-multiqc-sample-filter",
       "x": 0,
       "y": 0,
       "w": 1,
@@ -341,7 +563,7 @@
       "static": false
     },
     {
-      "i": "box-multiqc-sample-filter",
+      "i": "box-multiqc-sampling-date",
       "x": 0,
       "y": 5,
       "w": 1,
@@ -351,9 +573,24 @@
   ],
   "right_panel_layout_data": [
     {
-      "i": "box-8a810350-66a2-41cb-a441-66d3952566a2",
+      "i": "box-multiqc-section-header",
       "x": 0,
       "y": 0,
+      "w": 8,
+      "h": 1,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-8a810350-66a2-41cb-a441-66d3952566a2",
+      "x": 0,
+      "y": 1,
       "w": 8,
       "h": 5,
       "static": false,
@@ -368,7 +605,7 @@
     {
       "i": "box-821d4402-2453-4a57-9bff-3e974e7feca6",
       "x": 0,
-      "y": 5,
+      "y": 6,
       "w": 8,
       "h": 4,
       "static": false,
@@ -383,7 +620,7 @@
     {
       "i": "box-3cba95f0-436f-4724-b77b-549d70befc9a",
       "x": 0,
-      "y": 9,
+      "y": 10,
       "w": 8,
       "h": 4,
       "static": false,
@@ -398,7 +635,7 @@
     {
       "i": "box-8683d0c6-3e05-4f81-bbf9-523fa631ecaa",
       "x": 0,
-      "y": 13,
+      "y": 14,
       "w": 4,
       "h": 5,
       "static": false,
@@ -413,7 +650,7 @@
     {
       "i": "box-e17a3941-fe4a-43f8-8ab6-6f6ed34bfeab",
       "x": 4,
-      "y": 13,
+      "y": 14,
       "w": 4,
       "h": 5,
       "static": false,
@@ -428,7 +665,7 @@
     {
       "i": "box-1d61d8eb-7c34-4fd3-9925-b8d7c126fcca",
       "x": 0,
-      "y": 18,
+      "y": 19,
       "w": 4,
       "h": 5,
       "static": false,
@@ -443,7 +680,112 @@
     {
       "i": "box-51f5ac5f-9580-4ded-b10d-9b7fc53de1ff",
       "x": 4,
-      "y": 18,
+      "y": 19,
+      "w": 4,
+      "h": 5,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-35ac5556-82a3-4e29-b6c3-3036cb9a7203",
+      "x": 0,
+      "y": 24,
+      "w": 4,
+      "h": 5,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-c10d2d82-7120-4107-90e5-38c89e6dc5bb",
+      "x": 4,
+      "y": 24,
+      "w": 4,
+      "h": 5,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-88a21875-9487-46aa-b1c8-d2728ade5a42",
+      "x": 0,
+      "y": 29,
+      "w": 4,
+      "h": 5,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-d90ff7e7-bb03-48e6-a119-99fee17de243",
+      "x": 0,
+      "y": 44,
+      "w": 8,
+      "h": 6,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-84cbb126-3ff2-4edc-8c9c-526ad08f9134",
+      "x": 4,
+      "y": 34,
+      "w": 4,
+      "h": 5,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-f3699d24-8b3f-4acb-8be8-77e65d814026",
+      "x": 0,
+      "y": 39,
+      "w": 4,
+      "h": 5,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-ea91fa74-e3f6-46dd-83c2-b97d3523ae02",
+      "x": 4,
+      "y": 39,
       "w": 4,
       "h": 5,
       "static": false,
@@ -471,7 +813,7 @@
   "icon_color": "green",
   "icon_variant": "filled",
   "workflow_system": "nf-core",
-  "notes_content": "",
+  "notes_content": "<h2>MultiQC notes</h2><p>This tab aggregates per-sample quality reports from the nf-core/ampliseq pipeline. The most informative panels are typically <b>FastQC per-base sequence quality</b>, <b>Cutadapt adapter content</b>, and <b>DADA2 read-tracking</b>.</p><p>Look for samples with elevated GC%, sudden quality drop-off in the last 50\u2013100 bp, or unusual adapter contamination \u2014 these often correlate with sequencing batch effects and may justify exclusion before alpha/beta diversity analysis.</p><p>Sample- and habitat-level filters at the top of the tab compose forward into the Community, Ordination and Differential tabs.</p>",
   "permissions": {
     "owners": [
       {

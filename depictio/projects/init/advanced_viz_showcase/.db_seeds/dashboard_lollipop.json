@@ -1,0 +1,122 @@
+{
+  "_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d42"
+  },
+  "description": null,
+  "flexible_metadata": null,
+  "hash": null,
+  "dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d42"
+  },
+  "version": 1,
+  "tmp_children_data": [],
+  "stored_layout_data": [],
+  "stored_children_data": [],
+  "stored_metadata": [
+    {
+      "index": "lol-plot",
+      "component_type": "advanced_viz",
+      "title": "Lollipop plot \u2014 variants by consequence",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "lollipop_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d31"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Variant tracks fixture",
+        "data_collection_tag": "lollipop_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d31"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-13T00:00:00.000000",
+      "viz_kind": "lollipop",
+      "config": {
+        "viz_kind": "lollipop",
+        "feature_id_col": "feature_id",
+        "position_col": "position",
+        "category_col": "category",
+        "effect_col": "effect",
+        "max_subplot_genes": 6
+      },
+      "wf_tag": "python/advanced_viz_demo",
+      "description": "Per-gene variant tracks coloured by consequence. Marker size encodes effect strength."
+    }
+  ],
+  "stored_edit_dashboard_mode_button": [],
+  "left_panel_layout_data": [],
+  "right_panel_layout_data": [
+    {
+      "i": "box-lol-plot",
+      "x": 0,
+      "y": 0,
+      "w": 12,
+      "h": 8,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    }
+  ],
+  "buttons_data": {
+    "unified_edit_mode": true,
+    "add_components_button": {
+      "count": 0
+    }
+  },
+  "stored_add_button": {
+    "count": 0
+  },
+  "title": "Lollipop plot",
+  "subtitle": "Variant tracks along cancer genes",
+  "icon": "mdi:chart-timeline-variant",
+  "icon_color": "blue",
+  "icon_variant": "filled",
+  "workflow_system": "python",
+  "notes_content": "",
+  "permissions": {
+    "owners": [
+      {
+        "_id": {
+          "$oid": "67658ba033c8b59ad489d7c7"
+        },
+        "description": null,
+        "flexible_metadata": null,
+        "hash": null,
+        "email": "admin@example.com",
+        "is_admin": true,
+        "is_anonymous": false,
+        "is_temporary": false,
+        "expiration_time": null
+      }
+    ],
+    "editors": [],
+    "viewers": []
+  },
+  "is_public": true,
+  "last_saved_ts": "2026-05-13 00:00:00",
+  "project_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d00"
+  },
+  "is_main_tab": false,
+  "parent_dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d00"
+  },
+  "tab_order": 18,
+  "main_tab_name": null,
+  "tab_icon": "mdi:chart-timeline-variant",
+  "tab_icon_color": "blue",
+  "parent_dashboard_title": null
+}

@@ -66,36 +66,54 @@ workflows:
             s3_location: null
             modules:
               - "fastp"
+              - "fastqc"
               - "bowtie2"
               - "samtools"
               - "picard"
               - "mosdepth"
               - "ivar"
+              - "ivar_variants"
               - "bcftools"
               - "snpeff"
               - "pangolin"
               - "nextclade"
               - "quast"
+              - "quast_variants"
+              - "kraken"
               - "freyja"
             plots:
               fastp:
                 - "Filtered Reads"
                 - "Insert Sizes"
+              fastqc:
+                - "Sequence Quality Histograms"
+                - "Status Checks"
               bowtie2:
                 - "SE"
                 - "PE"
+                - "Paired-end alignments"
               samtools:
                 - "Alignment Metrics"
               mosdepth:
                 - "Coverage Distribution"
+                - "Cumulative coverage distribution"
                 - "Coverage Per Contig"
+                - "Average coverage per contig"
               ivar:
                 - "Variants Counts"
+              ivar_variants:
+                - "ivar_variants-section"
               snpeff:
                 - "Variant Effects by Genomic Region"
                 - "Variant Effects by Impact"
               quast:
                 - "Assembly Statistics"
+              quast_variants:
+                - "Number of Contigs"
+              bcftools:
+                - "Variant Substitution Types"
+              kraken:
+                - "Top taxa"
 
       # ----------------------------------------------------------------
       # Recipe-transformed data collections (Aggregated metatype)
@@ -149,6 +167,24 @@ workflows:
               "EFFECT": "Variant effect (e.g., missense, synonymous)"
               "FUNCLASS": "Functional class (SILENT, MISSENSE, NONSENSE)"
               "mutation_label": "Formatted mutation label (GENE:REFposALT)"
+
+      - data_collection_tag: "manhattan_variants_canonical"
+        description: "Manhattan-ready variant calls (chr/pos/score) for the advanced viz family"
+        config:
+          type: "Table"
+          metatype: "Aggregated"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/viralrecon/manhattan_variants_canonical.py"
+          dc_specific_properties:
+            format: "CSV"
+            columns_description:
+              "chr": "Chromosome / reference sequence (renamed from CHROM)"
+              "pos": "Genomic position"
+              "score": "-log10(1 - AF) clipped; high = high-AF variant"
+              "feature": "Gene annotation"
+              "effect": "Allele frequency (signed effect proxy)"
+              "sample": "Sample identifier"
 
       - data_collection_tag: "pangolin_lineages"
         description: "Pangolin lineage assignments for each sample"
@@ -254,6 +290,117 @@ workflows:
             format: "TSV"
             columns_description:
               "sample": "Sample identifier (row index)"
+
+      # ----------------------------------------------------------------
+      # Advanced-viz canonical-schema DCs (consume the upstream typed DCs
+      # above via dc_ref and rename to the role-based schema required by
+      # depictio/models/components/advanced_viz/schemas.py).
+      # ----------------------------------------------------------------
+
+      - data_collection_tag: "lollipop_canonical"
+        description: "Lollipop-ready variant tracks (feature_id=GENE / position=POS / category=EFFECT)"
+        config:
+          type: "Table"
+          metatype: "Aggregated"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/viralrecon/lollipop_canonical.py"
+          dc_specific_properties:
+            format: "CSV"
+            columns_description:
+              "feature_id": "Gene the variant is on"
+              "position": "Genomic position"
+              "category": "Variant effect class (missense / synonymous / nonsense / ...)"
+              "effect": "Allele frequency (size encoding)"
+
+      - data_collection_tag: "oncoplot_canonical"
+        description: "Oncoplot-ready variant matrix (sample_id × gene × mutation_type)"
+        config:
+          type: "Table"
+          metatype: "Aggregated"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/viralrecon/oncoplot_canonical.py"
+          dc_specific_properties:
+            format: "CSV"
+            columns_description:
+              "sample_id": "Sample identifier"
+              "gene": "Gene annotation"
+              "mutation_type": "Variant effect (cell colour)"
+              "mutation_label": "Formatted mutation label (hover)"
+
+      - data_collection_tag: "complex_heatmap_canonical"
+        description: "ComplexHeatmap-ready amplicon-coverage matrix (samples × amplicons)"
+        config:
+          type: "Table"
+          metatype: "Aggregated"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/viralrecon/complex_heatmap_canonical.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample identifier (use as index_column)"
+
+      - data_collection_tag: "coverage_track_canonical"
+        description: "Coverage-track-ready genome-coverage tracks (chromosome / position / value)"
+        config:
+          type: "Table"
+          metatype: "Aggregated"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/viralrecon/coverage_track_canonical.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "chromosome": "Chromosome / reference sequence (renamed from chrom)"
+              "position": "Window start position"
+              "value": "Mean coverage depth"
+              "end": "Window end position"
+              "sample": "Sample identifier (faceting)"
+
+      - data_collection_tag: "sankey_canonical"
+        description: "Sankey-ready classification funnel (qc_status → lineage → clade)"
+        config:
+          type: "Table"
+          metatype: "Aggregated"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/viralrecon/sankey_canonical.py"
+          dc_specific_properties:
+            format: "CSV"
+            columns_description:
+              "sample": "Sample identifier"
+              "qc_status": "Pangolin QC status"
+              "lineage": "PANGO lineage"
+              "clade": "Nextclade clade"
+
+      # Tier 2 derivations — UpSet (mutation × lineage) + live PCA feature matrix.
+      - data_collection_tag: "upset_canonical"
+        description: "UpSet-ready mutation × lineage binary membership matrix"
+        config:
+          type: "Table"
+          metatype: "Aggregated"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/viralrecon/upset_canonical.py"
+          dc_specific_properties:
+            format: "CSV"
+            columns_description:
+              "mutation_label": "Variant identifier (formatted GENE:REFposALT)"
+
+      - data_collection_tag: "variant_feature_matrix_canonical"
+        description: "Sample × mutation binary matrix for live PCA / UMAP embedding"
+        config:
+          type: "Table"
+          metatype: "Aggregated"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/viralrecon/variant_feature_matrix_canonical.py"
+          dc_specific_properties:
+            format: "CSV"
+            columns_description:
+              "sample_id": "Sample identifier (row index)"
 
 # ============================================================================
 # RUNTIME LINKS CONFIGURATION

@@ -10,6 +10,7 @@ import type { StoredMetadata } from 'depictio-react-core';
 import { readMultiqcSelection } from 'depictio-react-core';
 import type { BuilderState } from './store/useBuilderStore';
 import { autoCardTitle } from './card/cardTitle';
+import { buildAdvancedVizConfigBlob } from './advanced_viz/configBlob';
 
 /** Augment an unknown record with type-narrowing safety. */
 function as<T extends Record<string, unknown>>(v: unknown): T {
@@ -46,6 +47,8 @@ export function buildMetadata(state: BuilderState): StoredMetadata {
       return buildMap(state, base, existing);
     case 'text':
       return buildText(state, base, existing);
+    case 'advanced_viz':
+      return buildAdvancedViz(state, base, existing);
     default:
       return { ...existing, ...base };
   }
@@ -262,6 +265,23 @@ function buildText(
     alignment:
       c.alignment === 'center' || c.alignment === 'right' ? c.alignment : 'left',
     body: c.body ?? '',
+  };
+}
+
+function buildAdvancedViz(
+  state: BuilderState,
+  base: StoredMetadata,
+  existing: Record<string, unknown>,
+): StoredMetadata {
+  const c = as<{
+    viz_kind?: string;
+    column_mapping?: Record<string, string | string[]>;
+  }>(state.config);
+  return {
+    ...existing,
+    ...base,
+    viz_kind: c.viz_kind,
+    config: buildAdvancedVizConfigBlob(c.viz_kind, c.column_mapping || {}),
   };
 }
 

@@ -3,96 +3,89 @@
 version: 1
 
 title: "Iris Dataset Analysis"
-subtitle: "A minimal dashboard showcasing the Iris dataset"
-project_tag: "Iris Dataset Project Data Analysis"  # Server looks up project by name
+subtitle: "Overview of sepal/petal measurements across the three Iris varieties"
+project_tag: "Iris Dataset Project Data Analysis"
 
 components:
-  # Scatter plot of sepal dimensions by variety
-  - tag: sepal-scatter
-    component_type: figure
-    workflow_tag: python/iris_workflow
-    data_collection_tag: iris_table
-    visu_type: scatter
-    dict_kwargs:
-      x: sepal.length
-      y: sepal.width
-      color: variety
-      title: "Sepal Dimensions by Variety"
+  # ── Narrative intro ────────────────────────────────────────────────
+  - tag: text-overview-intro
+    component_type: text
+    title: "Iris Dataset — Overview"
+    order: 2
+    alignment: left
+    body: "Fisher's classic 150-flower dataset across three varieties (*Setosa*, *Versicolor*, *Virginica*). Filters on the left refine every tile."
+    layout: {x: 0, y: 0, w: 8, h: 1}
 
-  # Box plot of petal lengths
-  - tag: petal-box
-    component_type: figure
-    workflow_tag: python/iris_workflow
-    data_collection_tag: iris_table
-    visu_type: box
-    dict_kwargs:
-      x: variety
-      y: petal.length
-      title: "Petal Length Distribution"
-
-  # Histogram of sepal length
-  - tag: sepal-histogram
-    component_type: figure
-    workflow_tag: python/iris_workflow
-    data_collection_tag: iris_table
-    visu_type: histogram
-    dict_kwargs:
-      x: sepal.length
-      color: variety
-      nbins: 20
-      barmode: overlay
-
-  # Card: Average sepal length
-  - tag: avg-sepal-length
+  # ── Multi-metric summary cards ─────────────────────────────────────
+  - tag: sepal-length-summary
     component_type: card
     workflow_tag: python/iris_workflow
     data_collection_tag: iris_table
-    aggregation: average
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
     column_name: sepal.length
     column_type: float64
     icon_name: mdi:flower-outline
     icon_color: "#9C27B0"
+    title_color: "#9C27B0"
+    title_font_size: xl
+    value_font_size: xl
+    title: "Sepal Length"
+    layout: {x: 0, y: 1, w: 4, h: 2}
 
-  # Card: Count of samples
-  - tag: sample-count
+  - tag: petal-length-summary
     component_type: card
     workflow_tag: python/iris_workflow
     data_collection_tag: iris_table
-    aggregation: count
-    column_name: variety
-    column_type: object
-    icon_name: mdi:counter
-    icon_color: "#4CAF50"
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: petal.length
+    column_type: float64
+    icon_name: mdi:leaf
+    icon_color: "#43A047"
+    title_color: "#43A047"
+    title_font_size: xl
+    value_font_size: xl
+    title: "Petal Length"
+    layout: {x: 4, y: 1, w: 4, h: 2}
 
-  # Card: Unique varieties
-  - tag: unique-varieties
+  - tag: variety-breakdown
     component_type: card
     workflow_tag: python/iris_workflow
     data_collection_tag: iris_table
     aggregation: nunique
     column_name: variety
     column_type: object
+    secondary_layout: top_n
+    breakdown_col: variety
+    top_n_count: 3
     icon_name: mdi:flower-tulip
     icon_color: "#2196F3"
+    title_color: "#2196F3"
+    title_font_size: xl
+    value_font_size: xl
+    title: "Unique Varieties"
+    layout: {x: 0, y: 3, w: 4, h: 2}
 
-  # Card: Multi-metric summary of sepal length (hero + secondary metrics)
-  - tag: sepal-length-summary
+  - tag: sample-coverage
     component_type: card
     workflow_tag: python/iris_workflow
     data_collection_tag: iris_table
-    aggregation: average
-    aggregations:
-      - median
-      - std_dev
-      - min
-      - max
-    column_name: sepal.length
-    column_type: float64
-    icon_name: mdi:chart-box-outline
-    icon_color: "#FF5722"
-    title: "Sepal Length Summary"
+    aggregation: count
+    column_name: variety
+    column_type: object
+    secondary_layout: coverage
+    coverage_max: 150
+    icon_name: mdi:counter
+    icon_color: "#4CAF50"
+    title_color: "#4CAF50"
+    title_font_size: xl
+    value_font_size: xl
+    title: "Sample Count"
+    layout: {x: 4, y: 3, w: 2, h: 2}
 
-  # Card: Conditional aggregation — count of samples with sepal.length > 6
   - tag: large-sepal-count
     component_type: card
     workflow_tag: python/iris_workflow
@@ -103,9 +96,13 @@ components:
     filter_expr: "col('sepal.length') > 6"
     icon_name: mdi:filter-check-outline
     icon_color: "#607D8B"
-    title: "Samples with sepal > 6"
+    title_color: "#607D8B"
+    title_font_size: lg
+    value_font_size: xl
+    title: "Sepal > 6 cm"
+    layout: {x: 6, y: 3, w: 2, h: 2}
 
-  # Interactive filter: Sepal length range
+  # ── Interactive filters (left sidebar) ─────────────────────────────
   - tag: sepal-length-filter
     component_type: interactive
     workflow_tag: python/iris_workflow
@@ -113,10 +110,23 @@ components:
     interactive_component_type: RangeSlider
     column_name: sepal.length
     column_type: float64
-    custom_color: "#9C27B0"
+    custom_color: "#4C72B0"
     icon_name: mdi:ruler
+    title: "Sepal length (cm)"
+    layout: {x: 0, y: 0, w: 1, h: 3}
 
-  # Interactive filter: Variety selection
+  - tag: petal-length-filter
+    component_type: interactive
+    workflow_tag: python/iris_workflow
+    data_collection_tag: iris_table
+    interactive_component_type: RangeSlider
+    column_name: petal.length
+    column_type: float64
+    custom_color: "#55A467"
+    icon_name: mdi:ruler
+    title: "Petal length (cm)"
+    layout: {x: 0, y: 3, w: 1, h: 3}
+
   - tag: variety-filter
     component_type: interactive
     workflow_tag: python/iris_workflow
@@ -124,10 +134,11 @@ components:
     interactive_component_type: MultiSelect
     column_name: variety
     column_type: object
-    custom_color: "#4CAF50"
+    custom_color: "#DD8452"
     icon_name: mdi:filter-variant
+    title: "Variety"
+    layout: {x: 0, y: 6, w: 1, h: 3}
 
-  # Interactive filter: Scoped variety selector — only shows varieties with sepal > 6
   - tag: large-sepal-variety-filter
     component_type: interactive
     workflow_tag: python/iris_workflow
@@ -136,17 +147,105 @@ components:
     column_name: variety
     column_type: object
     filter_expr: "col('sepal.length') > 6"
-    custom_color: "#FF9800"
+    custom_color: "#C44E52"
     icon_name: mdi:filter-check
-    title: "Varieties (sepal > 6)"
+    title: "Variety (sepal > 6 cm)"
+    layout: {x: 0, y: 9, w: 1, h: 3}
 
-  # Data table
+  # ── Figures ────────────────────────────────────────────────────────
+  # Hero: scatter matrix across all 4 measurement columns. Both halves
+  # rendered for symmetry; diagonal acts as a per-variable distribution
+  # tick strip. Rendered via code mode because `scatter_matrix` is a
+  # plotly-express figure factory, not one of the core six visu_types
+  # supported by the lite YAML schema.
+  - tag: iris-scatter-matrix
+    component_type: figure
+    workflow_tag: python/iris_workflow
+    data_collection_tag: iris_table
+    visu_type: scatter
+    mode: code
+    title: "Iris pairwise measurements"
+    description: "Scatter matrix across all four measurements (seaborn deep palette). Off-diagonal = pairwise scatter, diagonal = per-variable distribution."
+    title_size: h3
+    code_content: |
+      df_pd = df.to_pandas()
+      fig = px.scatter_matrix(
+          df_pd,
+          dimensions=['sepal.length', 'sepal.width', 'petal.length', 'petal.width'],
+          color='variety',
+          color_discrete_map={'Setosa': '#4C72B0', 'Versicolor': '#DD8452', 'Virginica': '#55A467'},
+          labels={'sepal.length': 'Sepal L', 'sepal.width': 'Sepal W', 'petal.length': 'Petal L', 'petal.width': 'Petal W'},
+      )
+      fig.update_traces(diagonal_visible=True, showupperhalf=True, marker=dict(size=4, opacity=0.75, line=dict(width=0.4, color='white')))
+      fig.update_layout(dragmode='select')
+    layout: {x: 0, y: 5, w: 8, h: 7}
+
+  - tag: sepal-histogram
+    component_type: figure
+    workflow_tag: python/iris_workflow
+    data_collection_tag: iris_table
+    visu_type: histogram
+    title: "Sepal Length Distribution (overlay)"
+    description: "Per-variety overlay; bars semi-transparent to expose overlap."
+    title_size: h3
+    dict_kwargs:
+      x: sepal.length
+      color: variety
+      nbins: 20
+      barmode: overlay
+      opacity: 0.7
+      color_discrete_map: '{"Setosa": "#4C72B0", "Versicolor": "#DD8452", "Virginica": "#55A467"}'
+    layout: {x: 0, y: 12, w: 4, h: 5}
+
+  - tag: petal-box
+    component_type: figure
+    workflow_tag: python/iris_workflow
+    data_collection_tag: iris_table
+    visu_type: box
+    title: "Petal Length by Variety"
+    description: "Box + all points; notched to show median CIs."
+    title_size: h3
+    dict_kwargs:
+      x: variety
+      y: petal.length
+      color: variety
+      points: all
+      notched: true
+      color_discrete_map: '{"Setosa": "#4C72B0", "Versicolor": "#DD8452", "Virginica": "#55A467"}'
+    layout: {x: 4, y: 12, w: 4, h: 5}
+
+  # Bivariate scatter with marginal distributions (violin top, rug right).
+  # Five visual channels: x, y, color, size, symbol — packs four numeric
+  # columns + the variety category into a single tile.
+  - tag: sepal-petal-bivariate
+    component_type: figure
+    workflow_tag: python/iris_workflow
+    data_collection_tag: iris_table
+    visu_type: scatter
+    title: "Sepal vs Petal Length (bivariate + marginals)"
+    description: "Colour + symbol = variety, size = sepal width. Top marginal = violin, right marginal = rug ticks."
+    title_size: h3
+    dict_kwargs:
+      x: sepal.length
+      y: petal.length
+      color: variety
+      size: sepal.width
+      symbol: variety
+      size_max: 18
+      marginal_x: violin
+      marginal_y: rug
+      opacity: 0.85
+      color_discrete_map: '{"Setosa": "#4C72B0", "Versicolor": "#DD8452", "Virginica": "#55A467"}'
+    layout: {x: 0, y: 17, w: 8, h: 5}
+
+  # ── Data table ─────────────────────────────────────────────────────
   - tag: data-table
     component_type: table
     workflow_tag: python/iris_workflow
     data_collection_tag: iris_table
-    title: Iris Dataset
-    description: Complete iris flower measurements across three species
+    title: "Iris Dataset"
+    description: "Complete iris flower measurements across the three varieties."
     title_size: h3
     title_align: left
     page_size: 15
+    layout: {x: 0, y: 22, w: 8, h: 5}

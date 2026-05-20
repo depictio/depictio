@@ -26,7 +26,6 @@ import React, {
   useCallback,
   useRef,
   useMemo,
-  useDeferredValue,
 } from 'react';
 import {
   AppShell,
@@ -57,6 +56,7 @@ import {
   updateTab,
   DashboardGrid,
   mergeFiltersBySource,
+  enrichFilterWithDcId,
   useDataCollectionUpdates,
   RealtimeIndicator,
   useRealtimeJournal,
@@ -145,9 +145,6 @@ const EditorApp: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState<InteractiveFilter[]>([]);
-  // Deferred copy for heavy renderers (figures / tables / maps / image grid)
-  // so a slider drag doesn't refetch on every step. See App.tsx for context.
-  const deferredFilters = useDeferredValue(filters);
   const [cardValues, setCardValues] = useState<Record<string, unknown>>({});
   const [cardSecondaryValues, setCardSecondaryValues] = useState<
     Record<string, Record<string, unknown>>
@@ -254,9 +251,13 @@ const EditorApp: React.FC = () => {
     return () => clearTimeout(timer);
   }, [dashboard, dashboardId, stableFilterKey(filters)]);
 
-  const handleFilterChange = useCallback((update: InteractiveFilter) => {
-    setFilters((prev) => mergeFiltersBySource(prev, update));
-  }, []);
+  const handleFilterChange = useCallback(
+    (update: InteractiveFilter) => {
+      const enriched = enrichFilterWithDcId(update, dashboard?.stored_metadata);
+      setFilters((prev) => mergeFiltersBySource(prev, enriched));
+    },
+    [dashboard],
+  );
 
   /** Debounced save: schedule a POST 500ms after the last layout mutation. */
   const scheduleSave = useCallback(
@@ -890,7 +891,6 @@ const EditorApp: React.FC = () => {
           desktopOpened={desktopOpened}
           onToggleMobile={toggleMobile}
           onToggleDesktop={toggleDesktop}
-          onReset={handleResetAllFilters}
           onOpenSettings={openSettings}
           cardsLoading={cardsLoading}
           mode="edit"
@@ -976,6 +976,7 @@ const EditorApp: React.FC = () => {
                 layoutData={dashboard.left_panel_layout_data}
                 filters={filters}
                 onFilterChange={handleFilterChange}
+                onResetAllFilters={handleResetAllFilters}
                 onLeftLayoutChange={handleLeftLayoutChange}
                 editMode={true}
                 onDeleteComponent={handleDeleteComponent}
@@ -998,7 +999,7 @@ const EditorApp: React.FC = () => {
                 cardComponents={cardComponents}
                 otherComponents={otherComponents}
                 layoutData={dashboard.right_panel_layout_data}
-                filters={deferredFilters}
+                filters={filters}
                 onFilterChange={handleFilterChange}
                 cardValues={cardValues}
                 cardSecondaryValues={cardSecondaryValues}

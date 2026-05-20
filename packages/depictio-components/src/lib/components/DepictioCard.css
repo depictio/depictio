@@ -1,0 +1,69 @@
+/**
+ * DepictioCard layout responsiveness.
+ *
+ * The card's outer wrapper opts into container queries via
+ * ``container-type: inline-size``. When the card's *own* width crosses the
+ * ``--wide-threshold`` (~400px ≈ ``w >= 4`` slots in the 8-col grid), we
+ * switch to a "wide" presentation: the icon stops sitting cramped in the
+ * top-right corner and becomes a larger, vertically-centred anchor that
+ * actually balances the content cluster on the left. This avoids the
+ * "marooned icon" look that happens when 2-card rows force ``w=4`` cards.
+ *
+ * No JS / no resize observers — pure CSS, so the layout flips instantly
+ * whenever react-grid-layout resizes the card.
+ */
+.depictio-card {
+  container-type: inline-size;
+  container-name: depictio-card;
+  /* Dimmed 1.5px frame — visible enough to delimit cards from neighbouring
+     tiles but not loud. Slightly larger radius (12px) makes the cards feel
+     more like rounded chips and less like the default Paper rectangles.
+     ``!important`` is required to win over Mantine's ``withBorder`` shorthand
+     declaration (``border: 1px solid …``) which would otherwise reset our
+     ``border-width`` because shorthand always sets all border properties. */
+  border: 1.5px solid
+    light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-5)) !important;
+  border-radius: 12px !important;
+}
+
+.depictio-card-icon {
+  /* Narrow / default presentation: top-right anchored, small. */
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  opacity: 0.3;
+  pointer-events: none;
+  z-index: 1;
+  transition: top 120ms ease-out, right 120ms ease-out, transform 120ms ease-out;
+}
+
+.depictio-card-icon svg {
+  width: 40px;
+  height: 40px;
+  transition: width 120ms ease-out, height 120ms ease-out;
+}
+
+/* When the card itself is wide (≈ ``w >= 4`` in the 8-col grid), centre the
+   icon vertically on the right side and scale it up so it visually anchors
+   the empty right half of the card. Keeps opacity low so it reads as a
+   watermark, not a competing focus point with the value text. */
+@container depictio-card (min-width: 400px) {
+  .depictio-card-icon {
+    top: 50%;
+    right: 24px;
+    transform: translateY(-50%);
+  }
+
+  .depictio-card-icon svg {
+    width: 72px;
+    height: 72px;
+  }
+}
+
+/* Extra-wide cards (``w >= 6``) get an even bigger watermark icon. */
+@container depictio-card (min-width: 600px) {
+  .depictio-card-icon svg {
+    width: 96px;
+    height: 96px;
+  }
+}

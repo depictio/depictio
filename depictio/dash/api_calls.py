@@ -841,7 +841,15 @@ def api_call_screenshot_dashboard(dashboard_id: str, TOKEN: str) -> bool:
 
     Returns:
         bool: True if successful, False otherwise
+
+    DEPRECATED: this helper drives the legacy Dash screenshot endpoint.
+    The active path is `generate_dashboard_screenshot_dual.delay(...)` which
+    now routes through the React SPA. Function retained for rollback only.
     """
+    logger.warning(
+        "api_call_screenshot_dashboard is deprecated — Dash-targeted screenshot "
+        "endpoint is no longer the active path."
+    )
     try:
         # Use dedicated screenshot API timeout (configurable per environment)
         # Production environments need generous timeouts due to:

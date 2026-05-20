@@ -1,0 +1,123 @@
+{
+  "_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8e28"
+  },
+  "description": null,
+  "flexible_metadata": null,
+  "hash": null,
+  "dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8e28"
+  },
+  "version": 1,
+  "tmp_children_data": [],
+  "stored_layout_data": [],
+  "stored_children_data": [],
+  "stored_metadata": [
+    {
+      "index": "nfcore-da_barplot",
+      "component_type": "advanced_viz",
+      "title": "DA barplot \u2014 ANCOM-BC differentials",
+      "workflow_tag": "nfcore_megatests",
+      "data_collection_tag": "ancombc_da_barplot",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8e01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8e17"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "nf-core fixture: ancombc_da_barplot",
+        "data_collection_tag": "ancombc_da_barplot",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8e17"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-18T00:00:00.000000",
+      "viz_kind": "da_barplot",
+      "config": {
+        "viz_kind": "da_barplot",
+        "feature_id_col": "feature_id",
+        "contrast_col": "contrast",
+        "lfc_col": "lfc",
+        "significance_col": "significance",
+        "contrast_view": "all",
+        "top_n": 20
+      },
+      "wf_tag": "nf-core/nfcore_megatests",
+      "description": "Per-contrast log-fold-change bars from nf-core/ampliseq ANCOM-BC (Category-mix8-ASV). Two contrasts: (Intercept) + mix8a."
+    }
+  ],
+  "stored_edit_dashboard_mode_button": [],
+  "left_panel_layout_data": [],
+  "right_panel_layout_data": [
+    {
+      "i": "box-nfcore-da_barplot",
+      "x": 0,
+      "y": 0,
+      "w": 12,
+      "h": 8,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    }
+  ],
+  "buttons_data": {
+    "unified_edit_mode": true,
+    "add_components_button": {
+      "count": 0
+    }
+  },
+  "stored_add_button": {
+    "count": 0
+  },
+  "title": "DA barplot (ANCOM-BC)",
+  "subtitle": "Differential abundance from QIIME2 ANCOM-BC",
+  "icon": "mdi:view-grid-plus-outline",
+  "icon_color": "lime",
+  "icon_variant": "filled",
+  "workflow_system": "nf-core",
+  "notes_content": "",
+  "permissions": {
+    "owners": [
+      {
+        "_id": {
+          "$oid": "67658ba033c8b59ad489d7c7"
+        },
+        "description": null,
+        "flexible_metadata": null,
+        "hash": null,
+        "email": "admin@example.com",
+        "is_admin": true,
+        "is_anonymous": false,
+        "is_temporary": false,
+        "expiration_time": null
+      }
+    ],
+    "editors": [],
+    "viewers": []
+  },
+  "is_public": true,
+  "last_saved_ts": "2026-05-18 14:49:24",
+  "project_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8e00"
+  },
+  "is_main_tab": false,
+  "parent_dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8e00"
+  },
+  "tab_order": 9,
+  "main_tab_name": null,
+  "tab_icon": "mdi:view-grid-plus-outline",
+  "tab_icon_color": "lime",
+  "parent_dashboard_title": null
+}

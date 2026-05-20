@@ -1,74 +1,101 @@
-# Screenshot System — Dash 3+ Component Targeting
+# Screenshot System — React SPA Capture
 
-## Problem
+## Overview
 
-With Dash 3+ and Mantine AppShell, targeting `.mantine-AppShell-main` captures the full viewport (1920x1080) including navbar/header. Parent containers (`#page-content`, `#draggable`, `.react-grid-layout`) collapse to 0px height with absolutely positioned children.
+Production dashboard screenshots drive the **React SPA** at
+`{settings.fastapi.url}/dashboard-beta/{id}` via Playwright. The Dash path
+(`/dashboard/{id}`) is deprecated and retained only for emergency rollback.
 
-## Solution: Component-Based Composite Screenshots
+## Active Pipeline
 
-**Primary method**: Target individual `.react-grid-item` elements, calculate bounding box, capture composite area.
-
-**Fallback chain**:
-1. Component composite screenshot (preferred)
-2. AppShell main element (legacy)
-3. Full page screenshot (final fallback)
-
-## Implementation
-
-**Location**: `routes.py:screenshot_dash_fixed()`
-
-```python
-# Wait for components to render with meaningful dimensions
-await page.wait_for_function("""
-    () => {
-        const components = document.querySelectorAll('.react-grid-item');
-        if (components.length === 0) return false;
-        for (let component of components) {
-            const rect = component.getBoundingClientRect();
-            if (rect.width > 0 && rect.height > 0) return true;
-        }
-        return false;
-    }
-""", timeout=10000)
-
-# Calculate bounding box of all components
-composite_element = await page.evaluate("""
-    () => {
-        const components = document.querySelectorAll('.react-grid-item');
-        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-        components.forEach(c => {
-            const rect = c.getBoundingClientRect();
-            minX = Math.min(minX, rect.left);
-            minY = Math.min(minY, rect.top);
-            maxX = Math.max(maxX, rect.right);
-            maxY = Math.max(maxY, rect.bottom);
-        });
-        const container = document.createElement('div');
-        container.id = 'temp-screenshot-container';
-        container.style.cssText = `position:absolute;left:${minX}px;top:${minY}px;width:${maxX-minX}px;height:${maxY-minY}px`;
-        document.body.appendChild(container);
-        return { width: maxX - minX, height: maxY - minY, componentCount: components.length };
-    }
-""")
-
-# Screenshot composite area, then clean up temp element
-temp_container = await page.query_selector('#temp-screenshot-container')
-await temp_container.screenshot(path=output_file)
+```
+save.py (or auto-screenshot trigger)
+  └─ generate_dashboard_screenshot_dual.delay(dashboard_id, user_id)   (Celery)
+       └─ screenshot_service.generate_react_dual_theme_screenshots()
+            └─ Playwright → /dashboard-beta/{id} (light + dark)
+                 └─ writes {dashboard_id}_{theme}.png to static/screenshots/
 ```
 
-## Testing
+The output filenames (`{id}_light.png` / `{id}_dark.png`) are backward-
+compatible with the dashboard-card UI that previously read Dash-generated
+shots from the same folder — no frontend lookup change was needed.
 
-**Debug script**: `dev/playwright_debug/mantine_appshell_debug.py`
-- Uses credentials from `depictio/.depictio/admin_config.yaml`
-- Validates individual `.react-grid-item` targeting
-- Creates both individual and composite screenshots
+## Modules
 
-## Key Notes
+- **`depictio/api/v1/services/screenshot_helpers.py`** — shared Playwright
+  primitives (init-script builder, theme/grid waits, chrome hider,
+  notification dismisser, host-unreachable markers). Single source of
+  truth for the wait/inject patterns; reused by the backend service AND
+  the dev docs-capture script.
+- **`depictio/api/v1/services/screenshot_service.py`** —
+  `generate_react_dual_theme_screenshots()` (active),
+  `generate_dual_theme_screenshots()` (Dash, **deprecated**, logs warning),
+  `get_admin_auth_token()` (MongoDB-backed, runs in API container).
+- **`depictio/dash/celery_app.py`** —
+  `generate_dashboard_screenshot_dual` (active task; signature preserved
+  for existing callers; body now calls the React variant).
+- **`depictio/api/v1/endpoints/utils_endpoints/routes.py`** —
+  `/screenshot-react-dual/{id}` (active), `/screenshot-dash-fixed/{id}`
+  and `/screenshot-dash-dual/{id}` (both **deprecated**, marked
+  `deprecated=True`, log warnings on call).
 
-- Requires `.react-grid-item` components to be present and rendered
-- Includes smart waiting for component rendering with proper dimensions
-- Graceful fallback if component targeting fails
-- Temp DOM elements are cleaned up after screenshot
+## Why React over Dash
+
+- Mantine popovers portal to `document.body`, which `.mantine-AppShell-main`
+  element-screenshots clip off. The React variant detects an open popover
+  (`open_settings=True` for advanced-viz docs flow) and switches to a
+  viewport capture so the popover survives the crop.
+- Plotly-React renders match the bundle users see; the Dash variant was
+  occasionally racing the React grid-layout pass and producing 0-height
+  components.
+- One auth + theme bootstrap: `apply_init_script` seeds `local-store` and
+  `theme-store` in localStorage before navigation, avoiding the
+  post-navigation `evaluate` window (during which the SPA's `isBareRoot`
+  redirect can void it).
+
+## Token Loaders — Security Split
+
+Two loaders intentionally do NOT share a module:
+
+- **`get_admin_auth_token()`** (screenshot_service.py) — reads from MongoDB
+  inside the API container. Used by the production service.
+- **`_load_token_payload()`** (`dev/playwright_debug/docs_screenshots.py`)
+  — reads `depictio/.depictio/admin_config.yaml` from disk. Host-only;
+  used by the docs script.
+
+They run in different trust boundaries; the API process should not need
+file-system access to `admin_config.yaml`. Keep the loaders adjacent to
+their callers.
+
+## Filename Convention
+
+`generate_react_dual_theme_screenshots(filename_prefix="")` (default)
+writes:
+
+- `{output_folder}/{dashboard_id}_light.png`
+- `{output_folder}/{dashboard_id}_dark.png`
+
+Pass a non-empty `filename_prefix` (e.g. `docs`) to keep parallel batches
+from clobbering canonical shots:
+
+- `{output_folder}/{filename_prefix}_{dashboard_id}_light.png`
+- `{output_folder}/{filename_prefix}_{dashboard_id}_dark.png`
+
+## Rendering Waits
+
+`wait_for_dashboard_content` blocks until at least one `.react-grid-item`
+reports a non-zero bounding box. `wait_for_theme_applied` blocks on
+`[data-mantine-color-scheme="..."]` so the first frame is in the requested
+theme. Both use `settings.performance.screenshot_content_wait`. After
+both pass, the service adds an extra `screenshot_stabilization_wait` to
+let Plotly finish drawing before the capture.
+
+## Debug / Manual Triggers
+
+- **`dev/playwright_debug/docs_screenshots.py`** — docs captures (Vite dev
+  at `:5173`). Uses the file-based token loader and the shared helpers.
+- **`dev/advanced_viz_docs_screenshots/capture_react_screenshots.py`** —
+  hits `/screenshot-react-dual/{id}` over HTTP, one viz_kind at a time.
 
 
 <claude-mem-context>

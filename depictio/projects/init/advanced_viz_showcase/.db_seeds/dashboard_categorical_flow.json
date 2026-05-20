@@ -1,0 +1,128 @@
+{
+  "_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d47"
+  },
+  "description": null,
+  "flexible_metadata": null,
+  "hash": null,
+  "dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d47"
+  },
+  "version": 1,
+  "tmp_children_data": [],
+  "stored_layout_data": [],
+  "stored_children_data": [],
+  "stored_metadata": [
+    {
+      "index": "flow-sankey",
+      "component_type": "advanced_viz",
+      "title": "Categorical flow",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "categorical_flow_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d51"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Per-sample lineage classification",
+        "data_collection_tag": "categorical_flow_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d51"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-14T00:00:00.000000",
+      "viz_kind": "sankey",
+      "config": {
+        "viz_kind": "sankey",
+        "step_cols": [
+          "qc_status",
+          "lineage",
+          "clade"
+        ],
+        "value_col": null,
+        "sort_mode": "total_flow",
+        "color_mode": "source",
+        "link_opacity": 0.5,
+        "min_link_value": 0.0,
+        "show_node_labels": true
+      },
+      "wf_tag": "python/advanced_viz_demo",
+      "description": "Sankey flow across qc_status \u2192 lineage \u2192 clade. Server-side aggregation via Celery; sort / colour / opacity / threshold live in the Settings \u2699 popover."
+    }
+  ],
+  "stored_edit_dashboard_mode_button": [],
+  "left_panel_layout_data": [],
+  "right_panel_layout_data": [
+    {
+      "i": "box-flow-sankey",
+      "x": 0,
+      "y": 0,
+      "w": 12,
+      "h": 8,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    }
+  ],
+  "buttons_data": {
+    "unified_edit_mode": true,
+    "add_components_button": {
+      "count": 0
+    }
+  },
+  "stored_add_button": {
+    "count": 0
+  },
+  "title": "Categorical flow (Sankey)",
+  "subtitle": "Per-sample classification flow across QC \u2192 Pangolin lineage \u2192 Nextclade clade. Server-side aggregation via Celery + categorical filtering.",
+  "icon": "mdi:chart-sankey",
+  "icon_color": "violet",
+  "icon_variant": "filled",
+  "workflow_system": "python",
+  "notes_content": "",
+  "permissions": {
+    "owners": [
+      {
+        "_id": {
+          "$oid": "67658ba033c8b59ad489d7c7"
+        },
+        "description": null,
+        "flexible_metadata": null,
+        "hash": null,
+        "email": "admin@example.com",
+        "is_admin": true,
+        "is_anonymous": false,
+        "is_temporary": false,
+        "expiration_time": null
+      }
+    ],
+    "editors": [],
+    "viewers": []
+  },
+  "is_public": true,
+  "last_saved_ts": "2026-05-14 00:00:00",
+  "project_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d00"
+  },
+  "is_main_tab": false,
+  "parent_dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d00"
+  },
+  "tab_order": 23,
+  "main_tab_name": null,
+  "tab_icon": "mdi:chart-sankey",
+  "tab_icon_color": "violet",
+  "parent_dashboard_title": null
+}

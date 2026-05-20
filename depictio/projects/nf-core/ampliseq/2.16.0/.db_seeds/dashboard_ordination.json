@@ -1,0 +1,421 @@
+{
+  "_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8cc2"
+  },
+  "description": null,
+  "flexible_metadata": null,
+  "hash": null,
+  "dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8cc2"
+  },
+  "version": 1,
+  "tmp_children_data": [],
+  "stored_layout_data": [],
+  "stored_children_data": [],
+  "stored_metadata": [
+    {
+      "index": "ord-section-header",
+      "component_type": "text",
+      "title": "Sample Relationships",
+      "order": 2,
+      "alignment": "left",
+      "body": "PCoA projects sample-to-sample Bray-Curtis distances into 2D \u2014 samples that cluster share community composition. The clustered taxonomy heatmap and the symmetric distance matrix below give complementary views of the same structure.",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": null,
+      "dc_config": {},
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-18T00:00:00.000000",
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "ord-sample-filter",
+      "component_type": "interactive",
+      "title": "Sample ID",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "metadata",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca5"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Sample metadata for ampliseq analysis",
+        "data_collection_tag": "metadata",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8ca5"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-18T00:00:00.000000",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "sample",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "title_size": "md",
+      "custom_color": "#45B8AC",
+      "icon_name": "mdi:flask",
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "ord-habitat-filter",
+      "component_type": "interactive",
+      "title": "Habitat",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "metadata",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca5"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Sample metadata for ampliseq analysis",
+        "data_collection_tag": "metadata",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8ca5"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-18T00:00:00.000000",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "habitat",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "title_size": "md",
+      "custom_color": "#984EA3",
+      "icon_name": "mdi:earth",
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "ord-embedding",
+      "component_type": "advanced_viz",
+      "title": "Sample ordination (PCoA, Bray-Curtis)",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "embedding_pcoa",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8cb2"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Sample embedding (PCoA on Bray-Curtis) ready for the embedding viz",
+        "data_collection_tag": "embedding_pcoa",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8cb2"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-18T00:00:00.000000",
+      "viz_kind": "embedding",
+      "config": {
+        "viz_kind": "embedding",
+        "sample_id_col": "sample_id",
+        "dim_1_col": "dim_1",
+        "dim_2_col": "dim_2",
+        "color_col": "habitat",
+        "point_size": 10,
+        "show_density": false,
+        "category_palette": {
+          "Riverwater": "#377EB8",
+          "Groundwater": "#4DAF4A",
+          "Sediment": "#E41A1C",
+          "Soil": "#FF7F00"
+        }
+      },
+      "wf_tag": "nextflow/ampliseq",
+      "description": "PCoA on Bray-Curtis distances \u2014 explained-variance percentages appear in axis labels when available.",
+      "title_size": "md",
+      "title_align": "left"
+    },
+    {
+      "index": "ord-complex-heatmap",
+      "component_type": "advanced_viz",
+      "title": "Taxonomy heatmap (clustered)",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "complex_heatmap_canonical",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8cd2"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "ComplexHeatmap-ready taxonomy matrix (Phylum \u00d7 sample)",
+        "data_collection_tag": "complex_heatmap_canonical",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8cd2"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-18T00:00:00.000000",
+      "viz_kind": "complex_heatmap",
+      "config": {
+        "viz_kind": "complex_heatmap",
+        "matrix_wf_id": "646b0f3c1e4a2d7f8e5b8ca3",
+        "matrix_dc_id": "646b0f3c1e4a2d7f8e5b8cd2",
+        "index_column": "Phylum",
+        "row_annotation_cols": [
+          "Kingdom"
+        ],
+        "cluster_rows": true,
+        "cluster_cols": true,
+        "cluster_method": "ward",
+        "cluster_metric": "euclidean",
+        "normalize": "row_z",
+        "col_annotations": {
+          "habitat": {
+            "SRR10070130": "Riverwater",
+            "SRR10070131": "Riverwater",
+            "SRR10070132": "Groundwater",
+            "SRR10070133": "Groundwater",
+            "SRR10070134": "Riverwater",
+            "SRR10070141": "Groundwater",
+            "SRR10070149": "Sediment",
+            "SRR10070150": "Sediment",
+            "SRR10070151": "Sediment",
+            "SRR10102392": "Soil",
+            "SRR10102393": "Soil",
+            "SRR10102394": "Soil"
+          }
+        },
+        "col_annotation_colors": {
+          "habitat": {
+            "Riverwater": "#377EB8",
+            "Groundwater": "#4DAF4A",
+            "Sediment": "#E41A1C",
+            "Soil": "#FF7F00"
+          }
+        }
+      },
+      "wf_tag": "nextflow/ampliseq",
+      "description": "Taxonomy \u00d7 sample matrix with hierarchical clustering on both axes (Ward + Euclidean by default).",
+      "title_size": "md",
+      "title_align": "left"
+    },
+    {
+      "index": "ord-bray-curtis",
+      "component_type": "advanced_viz",
+      "title": "Sample distances (Bray-Curtis)",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "bray_curtis_canonical",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8cd9"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Sample \u00d7 sample Bray-Curtis distance matrix (Beta diversity)",
+        "data_collection_tag": "bray_curtis_canonical",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8cd9"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-18T00:00:00.000000",
+      "viz_kind": "complex_heatmap",
+      "config": {
+        "viz_kind": "complex_heatmap",
+        "matrix_wf_id": "646b0f3c1e4a2d7f8e5b8ca3",
+        "matrix_dc_id": "646b0f3c1e4a2d7f8e5b8cd9",
+        "index_column": "sample",
+        "row_annotation_cols": [],
+        "cluster_rows": true,
+        "cluster_cols": true,
+        "cluster_method": "ward",
+        "cluster_metric": "euclidean",
+        "normalize": "none",
+        "colorscale": "Viridis",
+        "col_annotations": {
+          "habitat": {
+            "SRR10070130": "Riverwater",
+            "SRR10070131": "Riverwater",
+            "SRR10070132": "Groundwater",
+            "SRR10070133": "Groundwater",
+            "SRR10070134": "Riverwater",
+            "SRR10070141": "Groundwater",
+            "SRR10070149": "Sediment",
+            "SRR10070150": "Sediment",
+            "SRR10070151": "Sediment",
+            "SRR10102392": "Soil",
+            "SRR10102393": "Soil",
+            "SRR10102394": "Soil"
+          }
+        },
+        "col_annotation_colors": {
+          "habitat": {
+            "Riverwater": "#377EB8",
+            "Groundwater": "#4DAF4A",
+            "Sediment": "#E41A1C",
+            "Soil": "#FF7F00"
+          }
+        }
+      },
+      "wf_tag": "nextflow/ampliseq",
+      "description": "Symmetric sample \u00d7 sample Bray-Curtis distance matrix \u2014 dark cells = similar communities.",
+      "title_size": "md",
+      "title_align": "left"
+    }
+  ],
+  "stored_edit_dashboard_mode_button": [],
+  "left_panel_layout_data": [
+    {
+      "i": "box-ord-sample-filter",
+      "x": 0,
+      "y": 0,
+      "w": 1,
+      "h": 3,
+      "static": false
+    },
+    {
+      "i": "box-ord-habitat-filter",
+      "x": 0,
+      "y": 3,
+      "w": 1,
+      "h": 2,
+      "static": false
+    }
+  ],
+  "right_panel_layout_data": [
+    {
+      "i": "box-ord-section-header",
+      "x": 0,
+      "y": 0,
+      "w": 8,
+      "h": 1,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-ord-embedding",
+      "x": 0,
+      "y": 1,
+      "w": 4,
+      "h": 6,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-ord-bray-curtis",
+      "x": 4,
+      "y": 1,
+      "w": 4,
+      "h": 6,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-ord-complex-heatmap",
+      "x": 0,
+      "y": 8,
+      "w": 8,
+      "h": 8,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    }
+  ],
+  "buttons_data": {
+    "unified_edit_mode": true,
+    "add_components_button": {
+      "count": 0
+    }
+  },
+  "stored_add_button": {
+    "count": 0
+  },
+  "title": "Ordination & Clustering",
+  "subtitle": "Sample-relationship structure: PCoA on Bray-Curtis + clustered taxonomy heatmap",
+  "icon": "/assets/images/workflows/nf-core.png",
+  "icon_color": "green",
+  "icon_variant": "filled",
+  "workflow_system": "nf-core",
+  "notes_content": "<h2>Ordination &amp; Clustering</h2><p>PCoA on Bray-Curtis distances projects sample-to-sample dissimilarity into 2D. Samples that cluster share community composition; axis percentages (when reported) tell you how much variance each component captures. Three or fewer percent on a primary axis usually means the structure isn't well-separated.</p><p>The two complex-heatmaps below show the same information from different angles: the taxonomy-clustered matrix highlights which taxa drive the sample groupings, while the symmetric Bray-Curtis matrix shows pairwise distances directly (dark = similar).</p>",
+  "permissions": {
+    "owners": [
+      {
+        "_id": {
+          "$oid": "67658ba033c8b59ad489d7c7"
+        },
+        "description": null,
+        "flexible_metadata": null,
+        "hash": null,
+        "email": "admin@example.com",
+        "is_admin": true,
+        "is_anonymous": false,
+        "is_temporary": false,
+        "expiration_time": null
+      }
+    ],
+    "editors": [],
+    "viewers": []
+  },
+  "is_public": false,
+  "last_saved_ts": "2026-05-18 00:00:00",
+  "project_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8ca2"
+  },
+  "is_main_tab": false,
+  "parent_dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8ca2"
+  },
+  "tab_order": 3,
+  "main_tab_name": null,
+  "tab_icon": "mdi:chart-scatter-plot-hexbin",
+  "tab_icon_color": "pink",
+  "parent_dashboard_title": null
+}

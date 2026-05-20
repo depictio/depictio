@@ -14,6 +14,25 @@
   "stored_children_data": [],
   "stored_metadata": [
     {
+      "index": "diff-section-header",
+      "component_type": "text",
+      "title": "ANCOM-BC Differentials",
+      "order": 2,
+      "alignment": "left",
+      "body": "ANCOM-BC compositional bias-corrected log-fold changes per contrast (e.g. Riverwater vs Groundwater). The volcano shows effect size vs significance; the DA-barplot ranks top taxa per contrast. Use q < 0.05 as the default cutoff.",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": null,
+      "dc_config": {},
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-18T00:00:00.000000",
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
       "index": "diff-contrast-filter",
       "component_type": "interactive",
       "title": "Contrast",
@@ -213,7 +232,7 @@
       "cols_json": {},
       "parent_index": null,
       "last_updated": "2026-02-24T17:50:53.630957",
-      "aggregation": "count",
+      "aggregation": "nunique",
       "column_name": "id",
       "column_type": "object",
       "value": null,
@@ -222,7 +241,10 @@
       "title_color": "#45B8AC",
       "title_font_size": "xl",
       "value_font_size": "xl",
-      "wf_tag": "nextflow/ampliseq"
+      "wf_tag": "nextflow/ampliseq",
+      "secondary_layout": "top_n",
+      "breakdown_col": "Phylum",
+      "top_n_count": 3
     },
     {
       "index": "diff-card-significant",
@@ -249,7 +271,7 @@
       "cols_json": {},
       "parent_index": null,
       "last_updated": "2026-02-24T17:50:53.630963",
-      "aggregation": "count",
+      "aggregation": "nunique",
       "column_name": "id",
       "column_type": "object",
       "value": null,
@@ -258,12 +280,15 @@
       "title_color": "#E74C3C",
       "title_font_size": "xl",
       "value_font_size": "xl",
-      "wf_tag": "nextflow/ampliseq"
+      "wf_tag": "nextflow/ampliseq",
+      "filter_expr": "col('q_val') < 0.05",
+      "secondary_layout": "coverage",
+      "coverage_max": 32
     },
     {
       "index": "diff-card-phyla",
       "component_type": "card",
-      "title": "Unique Phyla",
+      "title": "Phyla with significant hits",
       "workflow_tag": "ampliseq",
       "data_collection_tag": "ancombc_results",
       "wf_id": {
@@ -294,12 +319,16 @@
       "title_color": "#8BC34A",
       "title_font_size": "xl",
       "value_font_size": "xl",
-      "wf_tag": "nextflow/ampliseq"
+      "wf_tag": "nextflow/ampliseq",
+      "filter_expr": "col('q_val') < 0.05",
+      "secondary_layout": "top_n",
+      "breakdown_col": "Phylum",
+      "top_n_count": 3
     },
     {
       "index": "diff-card-max-effect",
       "component_type": "card",
-      "title": "Max Log-Fold Change",
+      "title": "Log-Fold Change distribution",
       "workflow_tag": "ampliseq",
       "data_collection_tag": "ancombc_results",
       "wf_id": {
@@ -321,7 +350,7 @@
       "cols_json": {},
       "parent_index": null,
       "last_updated": "2026-02-24T17:50:53.630972",
-      "aggregation": "max",
+      "aggregation": "median",
       "column_name": "lfc",
       "column_type": "float64",
       "value": null,
@@ -330,111 +359,16 @@
       "title_color": "#F68B33",
       "title_font_size": "xl",
       "value_font_size": "xl",
-      "wf_tag": "nextflow/ampliseq"
-    },
-    {
-      "index": "4aae0c2f-7b94-4b20-b3ee-90dcd8444b4f",
-      "component_type": "figure",
-      "title": "",
-      "workflow_tag": "ampliseq",
-      "data_collection_tag": "ancombc_results",
-      "wf_id": {
-        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
-      },
-      "dc_id": {
-        "$oid": "646b0f3c1e4a2d7f8e5b8caa"
-      },
-      "dc_config": {
-        "type": null,
-        "metatype": null,
-        "description": "ANCOM-BC differential abundance (habitat, Phylum level)",
-        "data_collection_tag": "ancombc_results",
-        "dc_specific_properties": null,
-        "_id": {
-          "$oid": "646b0f3c1e4a2d7f8e5b8caa"
-        }
-      },
-      "cols_json": {},
-      "parent_index": null,
-      "last_updated": "2026-02-24T17:50:53.630984",
-      "visu_type": "scatter",
-      "dict_kwargs": {
-        "color": "Phylum",
-        "facet_col": "contrast",
-        "hover_data": [
-          "id",
-          "q_val"
-        ],
-        "labels": {
-          "Phylum": "Phylum",
-          "lfc": "Log-Fold Change",
-          "neg_log10_qval": "-log10(q-value)"
-        },
-        "title": "ANCOM-BC Volcano Plot",
-        "x": "lfc",
-        "y": "neg_log10_qval"
-      },
-      "mode": "code",
-      "code_content": "fig = px.scatter(\n    df.to_pandas(),\n    x='lfc', y='neg_log10_qval', color='Phylum',\n    facet_col='contrast',\n    hover_data=['id', 'q_val'],\n    title='ANCOM-BC Volcano Plot',\n    labels={'lfc': 'Log-Fold Change', 'neg_log10_qval': '-log10(q-value)'}\n)\nfig.add_hline(y=-np.log10(0.05), line_dash='dash', line_color='red', annotation_text='q=0.05')\nfig.add_vline(x=0, line_dash='dash', line_color='gray')",
-      "displayed_data_count": 0,
-      "total_data_count": 0,
-      "was_sampled": false,
-      "filter_applied": false,
-      "selection_enabled": false,
-      "selection_column": null,
-      "wf_tag": "nextflow/ampliseq"
-    },
-    {
-      "index": "diff-bar-top-taxa",
-      "component_type": "figure",
-      "title": "",
-      "workflow_tag": "ampliseq",
-      "data_collection_tag": "ancombc_results",
-      "wf_id": {
-        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
-      },
-      "dc_id": {
-        "$oid": "646b0f3c1e4a2d7f8e5b8caa"
-      },
-      "dc_config": {
-        "type": null,
-        "metatype": null,
-        "description": "ANCOM-BC differential abundance (habitat, Phylum level)",
-        "data_collection_tag": "ancombc_results",
-        "dc_specific_properties": null,
-        "_id": {
-          "$oid": "646b0f3c1e4a2d7f8e5b8caa"
-        }
-      },
-      "cols_json": {},
-      "parent_index": null,
-      "last_updated": "2026-02-24T17:50:53.630991",
-      "visu_type": "bar",
-      "dict_kwargs": {
-        "color": "Phylum",
-        "facet_col": "contrast",
-        "labels": {
-          "Phylum": "Phylum",
-          "lfc": "Log-Fold Change"
-        },
-        "title": "Top Differential Taxa by Log-Fold Change",
-        "x": "Phylum",
-        "y": "lfc"
-      },
-      "mode": "code",
-      "code_content": "df_sig = df.filter(pl.col('significant') == True)\ndf_top = df_sig.with_columns(pl.col('lfc').abs().alias('abs_lfc')).sort('abs_lfc', descending=True).group_by('contrast').head(10)\ndf_plot = df_top.sort(['contrast', 'lfc'])\nfig = px.bar(\n    df_plot.to_pandas(),\n    x='Phylum', y='lfc', color='Phylum',\n    facet_col='contrast',\n    title='Top Significant Taxa by Log-Fold Change (per contrast)',\n    labels={'Phylum': 'Phylum', 'lfc': 'Log-Fold Change'}\n)\nfig.update_xaxes(matches=None, tickangle=-45, tickfont={'size': 9})\nfig.for_each_xaxis(lambda axis: axis.update(categoryorder='total ascending'))\nfig.add_hline(y=0, line_dash='solid', line_color='gray', line_width=0.5)",
-      "displayed_data_count": 0,
-      "total_data_count": 0,
-      "was_sampled": false,
-      "filter_applied": false,
-      "selection_enabled": false,
-      "selection_column": null,
-      "wf_tag": "nextflow/ampliseq"
+      "wf_tag": "nextflow/ampliseq",
+      "aggregations": [
+        "box_plot_stats"
+      ],
+      "secondary_layout": "box_plot"
     },
     {
       "index": "diff-table-results",
       "component_type": "table",
-      "title": "",
+      "title": "ANCOM-BC differential abundance results",
       "workflow_tag": "ampliseq",
       "data_collection_tag": "ancombc_results",
       "wf_id": {
@@ -462,7 +396,95 @@
       "filterable": true,
       "row_selection_enabled": false,
       "row_selection_column": null,
-      "wf_tag": "nextflow/ampliseq"
+      "wf_tag": "nextflow/ampliseq",
+      "description": "Full ANCOM-BC results: feature, contrast, lfc, q-value, kingdom, phylum, w statistic, and significance flag.",
+      "title_size": "md",
+      "title_align": "left"
+    },
+    {
+      "index": "adv-volcano",
+      "component_type": "advanced_viz",
+      "title": "Volcano (advanced viz)",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "volcano_canonical",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8cb0"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Volcano-ready ANCOM-BC results (feature_id/effect_size/significance)",
+        "data_collection_tag": "volcano_canonical",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8cb0"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-18T00:00:00.000000",
+      "viz_kind": "volcano",
+      "config": {
+        "viz_kind": "volcano",
+        "feature_id_col": "feature_id",
+        "effect_size_col": "effect_size",
+        "significance_col": "significance",
+        "label_col": "label",
+        "category_col": "category",
+        "significance_is_neg_log10": false,
+        "significance_threshold": 0.05,
+        "effect_threshold": 1.0,
+        "top_n_labels": 6
+      },
+      "wf_tag": "nextflow/ampliseq",
+      "description": "ANCOM-BC log-fold change vs FDR-adjusted p-value; significant taxa are coloured by contrast and labelled.",
+      "title_size": "md",
+      "title_align": "left"
+    },
+    {
+      "index": "adv-da-barplot",
+      "component_type": "advanced_viz",
+      "title": "Differential-abundance bars (per contrast)",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "da_barplot_canonical",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8cd0"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "DA-barplot-ready ANCOM-BC results (feature_id/contrast/lfc)",
+        "data_collection_tag": "da_barplot_canonical",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8cd0"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-18T00:00:00.000000",
+      "viz_kind": "da_barplot",
+      "config": {
+        "viz_kind": "da_barplot",
+        "feature_id_col": "feature_id",
+        "contrast_col": "contrast",
+        "lfc_col": "lfc",
+        "significance_col": "significance",
+        "label_col": "label",
+        "significance_threshold": 0.05,
+        "top_n": 15,
+        "contrast_view": "all"
+      },
+      "wf_tag": "nextflow/ampliseq",
+      "description": "Top differentially-abundant taxa per contrast, ranked by |log-fold change|. q < 0.05 highlighted.",
+      "title_size": "md",
+      "title_align": "left"
     }
   ],
   "stored_edit_dashboard_mode_button": [],
@@ -510,43 +532,11 @@
   ],
   "right_panel_layout_data": [
     {
-      "i": "box-diff-card-total-taxa",
+      "i": "box-diff-section-header",
       "x": 0,
       "y": 0,
-      "w": 2,
-      "h": 2,
-      "static": true
-    },
-    {
-      "i": "box-diff-card-significant",
-      "x": 2,
-      "y": 0,
-      "w": 2,
-      "h": 2,
-      "static": true
-    },
-    {
-      "i": "box-diff-card-phyla",
-      "x": 4,
-      "y": 0,
-      "w": 2,
-      "h": 2,
-      "static": true
-    },
-    {
-      "i": "box-diff-card-max-effect",
-      "x": 6,
-      "y": 0,
-      "w": 2,
-      "h": 2,
-      "static": true
-    },
-    {
-      "i": "box-4aae0c2f-7b94-4b20-b3ee-90dcd8444b4f",
-      "x": 0,
-      "y": 2,
       "w": 8,
-      "h": 6,
+      "h": 1,
       "static": false,
       "resizeHandles": [
         "se",
@@ -557,9 +547,56 @@
       ]
     },
     {
-      "i": "box-diff-bar-top-taxa",
+      "i": "box-diff-card-total-taxa",
       "x": 0,
-      "y": 9,
+      "y": 1,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-diff-card-significant",
+      "x": 2,
+      "y": 1,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-diff-card-phyla",
+      "x": 4,
+      "y": 1,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-diff-card-max-effect",
+      "x": 6,
+      "y": 1,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-adv-volcano",
+      "x": 0,
+      "y": 3,
+      "w": 8,
+      "h": 8,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-adv-da-barplot",
+      "x": 0,
+      "y": 11,
       "w": 8,
       "h": 8,
       "static": false,
@@ -574,7 +611,7 @@
     {
       "i": "box-diff-table-results",
       "x": 0,
-      "y": 17,
+      "y": 19,
       "w": 8,
       "h": 6,
       "static": false,
@@ -596,13 +633,13 @@
   "stored_add_button": {
     "count": 0
   },
-  "title": "Diff. Abundance",
-  "subtitle": "ANCOM-BC Volcano Plot",
+  "title": "Differential Abundance",
+  "subtitle": "ANCOM-BC volcano + DA-barplot per contrast",
   "icon": "/assets/images/workflows/nf-core.png",
   "icon_color": "green",
   "icon_variant": "filled",
   "workflow_system": "nf-core",
-  "notes_content": "",
+  "notes_content": "<h2>Differential Abundance</h2><p>ANCOM-BC results per contrast. The default cutoff is q &lt; 0.05 (FDR-adjusted). The volcano shows effect size (log-fold change) vs significance; the DA-barplot ranks top taxa per contrast.</p><p>Use them together: a tile that's significant on the volcano but ranks low on the barplot has small effect size; a high-ranking barplot taxon that doesn't pass the volcano threshold is likely under-powered.</p>",
   "permissions": {
     "owners": [
       {
@@ -631,7 +668,7 @@
   "parent_dashboard_id": {
     "$oid": "646b0f3c1e4a2d7f8e5b8ca2"
   },
-  "tab_order": 2,
+  "tab_order": 4,
   "main_tab_name": null,
   "tab_icon": "mdi:chart-scatter-plot",
   "tab_icon_color": "red",

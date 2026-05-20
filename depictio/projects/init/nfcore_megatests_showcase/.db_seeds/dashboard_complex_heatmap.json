@@ -1,0 +1,125 @@
+{
+  "_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8e25"
+  },
+  "description": null,
+  "flexible_metadata": null,
+  "hash": null,
+  "dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8e25"
+  },
+  "version": 1,
+  "tmp_children_data": [],
+  "stored_layout_data": [],
+  "stored_children_data": [],
+  "stored_metadata": [
+    {
+      "index": "nfcore-complex_heatmap",
+      "component_type": "advanced_viz",
+      "title": "Hierarchical Heatmap \u2014 DESeq2 vst()",
+      "workflow_tag": "nfcore_megatests",
+      "data_collection_tag": "deseq2_vst_top100",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8e01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8e14"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "nf-core fixture: deseq2_vst_top100",
+        "data_collection_tag": "deseq2_vst_top100",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8e14"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-18T00:00:00.000000",
+      "viz_kind": "complex_heatmap",
+      "config": {
+        "viz_kind": "complex_heatmap",
+        "matrix_wf_id": "646b0f3c1e4a2d7f8e5b8e01",
+        "matrix_dc_id": "646b0f3c1e4a2d7f8e5b8e14",
+        "index_column": "gene_id",
+        "cluster_rows": true,
+        "cluster_cols": true,
+        "cluster_method": "ward",
+        "cluster_metric": "euclidean",
+        "normalize": "row_z"
+      },
+      "wf_tag": "nf-core/nfcore_megatests",
+      "description": "Clustered heatmap of the top-100 most-variable genes from the DESeq2 vst() matrix (24 samples \u00d7 100 genes)."
+    }
+  ],
+  "stored_edit_dashboard_mode_button": [],
+  "left_panel_layout_data": [],
+  "right_panel_layout_data": [
+    {
+      "i": "box-nfcore-complex_heatmap",
+      "x": 0,
+      "y": 0,
+      "w": 12,
+      "h": 8,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    }
+  ],
+  "buttons_data": {
+    "unified_edit_mode": true,
+    "add_components_button": {
+      "count": 0
+    }
+  },
+  "stored_add_button": {
+    "count": 0
+  },
+  "title": "Hierarchical Heatmap (DESeq2 vst)",
+  "subtitle": "Top-100 most-variable genes",
+  "icon": "mdi:grid",
+  "icon_color": "orange",
+  "icon_variant": "filled",
+  "workflow_system": "nf-core",
+  "notes_content": "",
+  "permissions": {
+    "owners": [
+      {
+        "_id": {
+          "$oid": "67658ba033c8b59ad489d7c7"
+        },
+        "description": null,
+        "flexible_metadata": null,
+        "hash": null,
+        "email": "admin@example.com",
+        "is_admin": true,
+        "is_anonymous": false,
+        "is_temporary": false,
+        "expiration_time": null
+      }
+    ],
+    "editors": [],
+    "viewers": []
+  },
+  "is_public": true,
+  "last_saved_ts": "2026-05-18 14:49:24",
+  "project_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8e00"
+  },
+  "is_main_tab": false,
+  "parent_dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8e00"
+  },
+  "tab_order": 6,
+  "main_tab_name": null,
+  "tab_icon": "mdi:grid",
+  "tab_icon_color": "orange",
+  "parent_dashboard_title": null
+}

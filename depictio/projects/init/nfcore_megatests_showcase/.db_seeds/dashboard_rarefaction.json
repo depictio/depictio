@@ -1,0 +1,122 @@
+{
+  "_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8e26"
+  },
+  "description": null,
+  "flexible_metadata": null,
+  "hash": null,
+  "dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8e26"
+  },
+  "version": 1,
+  "tmp_children_data": [],
+  "stored_layout_data": [],
+  "stored_children_data": [],
+  "stored_metadata": [
+    {
+      "index": "nfcore-rarefaction",
+      "component_type": "advanced_viz",
+      "title": "Rarefaction \u2014 QIIME2 Shannon alpha-diversity",
+      "workflow_tag": "nfcore_megatests",
+      "data_collection_tag": "qiime2_rarefaction",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8e01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8e15"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "nf-core fixture: qiime2_rarefaction",
+        "data_collection_tag": "qiime2_rarefaction",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8e15"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-18T00:00:00.000000",
+      "viz_kind": "rarefaction",
+      "config": {
+        "viz_kind": "rarefaction",
+        "sample_id_col": "sample_id",
+        "depth_col": "depth",
+        "metric_col": "metric",
+        "iter_col": "iter",
+        "show_ci": true
+      },
+      "wf_tag": "nf-core/nfcore_megatests",
+      "description": "Shannon diversity vs subsampling depth (5 samples \u00d7 30 depths \u00d7 10 iterations), pre-melted from QIIME2's wide alpha-rarefaction output."
+    }
+  ],
+  "stored_edit_dashboard_mode_button": [],
+  "left_panel_layout_data": [],
+  "right_panel_layout_data": [
+    {
+      "i": "box-nfcore-rarefaction",
+      "x": 0,
+      "y": 0,
+      "w": 12,
+      "h": 8,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    }
+  ],
+  "buttons_data": {
+    "unified_edit_mode": true,
+    "add_components_button": {
+      "count": 0
+    }
+  },
+  "stored_add_button": {
+    "count": 0
+  },
+  "title": "Rarefaction (QIIME2 Shannon)",
+  "subtitle": "Alpha-diversity vs sequencing depth",
+  "icon": "mdi:chart-line",
+  "icon_color": "cyan",
+  "icon_variant": "filled",
+  "workflow_system": "nf-core",
+  "notes_content": "",
+  "permissions": {
+    "owners": [
+      {
+        "_id": {
+          "$oid": "67658ba033c8b59ad489d7c7"
+        },
+        "description": null,
+        "flexible_metadata": null,
+        "hash": null,
+        "email": "admin@example.com",
+        "is_admin": true,
+        "is_anonymous": false,
+        "is_temporary": false,
+        "expiration_time": null
+      }
+    ],
+    "editors": [],
+    "viewers": []
+  },
+  "is_public": true,
+  "last_saved_ts": "2026-05-18 14:49:24",
+  "project_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8e00"
+  },
+  "is_main_tab": false,
+  "parent_dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8e00"
+  },
+  "tab_order": 7,
+  "main_tab_name": null,
+  "tab_icon": "mdi:chart-line",
+  "tab_icon_color": "cyan",
+  "parent_dashboard_title": null
+}

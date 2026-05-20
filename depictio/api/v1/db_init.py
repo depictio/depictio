@@ -204,6 +204,16 @@ async def create_initial_dashboards(admin_user: UserBeanie) -> list[dict | None]
             "static_dc_id": None,
         },
         {
+            "name": "ampliseq_alpha_diversity",
+            "json_path": os.path.join(
+                projects_base,
+                ReferenceDatasetRegistry.DATASET_PATHS["ampliseq"],
+                ".db_seeds",
+                "dashboard_alpha_diversity.json",
+            ),
+            "static_dc_id": None,
+        },
+        {
             "name": "ampliseq_community",
             "json_path": os.path.join(
                 projects_base,
@@ -224,6 +234,71 @@ async def create_initial_dashboards(admin_user: UserBeanie) -> list[dict | None]
             ),
             "static_dc_id": None,
         },
+        {
+            "name": "ampliseq_ordination",
+            "json_path": os.path.join(
+                projects_base,
+                ReferenceDatasetRegistry.DATASET_PATHS["ampliseq"],
+                ".db_seeds",
+                "dashboard_ordination.json",
+            ),
+            # Funnel tab 2: Ordination & Clustering. Embedding PCoA +
+            # Complex Heatmap (clustered taxonomy) sit here. The legacy
+            # "Advanced viz (MVP)" tab has been dissolved — volcano +
+            # stacked_taxonomy tiles moved to differential / community.
+            "static_dc_id": None,
+        },
+        {
+            "name": "ampliseq_phylogeny",
+            "json_path": os.path.join(
+                projects_base,
+                ReferenceDatasetRegistry.DATASET_PATHS["ampliseq"],
+                ".db_seeds",
+                "dashboard_phylogeny.json",
+            ),
+            "static_dc_id": None,
+        },
+        # Standalone advanced-viz showcase project: five tabs (overview +
+        # one per viz_kind) backed by synthetic TSV fixtures. Decoupled from
+        # any real pipeline so the demo never breaks if upstream data shifts.
+        *(
+            {
+                "name": f"advanced_viz_{slug}",
+                "json_path": os.path.join(
+                    projects_base,
+                    ReferenceDatasetRegistry.DATASET_PATHS["advanced_viz_showcase"],
+                    ".db_seeds",
+                    f"dashboard_{slug}.json",
+                ),
+                "static_dc_id": None,
+            }
+            for slug in (
+                "overview",
+                "volcano",
+                "manhattan",
+                "stacked_taxonomy",
+                "clustering_pca",
+                "clustering_umap",
+                "clustering_tsne",
+                "clustering_pcoa",
+                "phylogeny",
+                "clustering_live",
+                "rarefaction",
+                "ancombc",
+                "da_barplot",
+                "enrichment",
+                "complex_heatmap",
+                "upset",
+                "ma",
+                "dotplot",
+                "lollipop",
+                "qq",
+                "sunburst",
+                "oncoplot",
+                "coverage_track",
+                "categorical_flow",
+            )
+        ),
     ]
 
     results = []

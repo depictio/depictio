@@ -1,0 +1,123 @@
+{
+  "_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d41"
+  },
+  "description": null,
+  "flexible_metadata": null,
+  "hash": null,
+  "dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d41"
+  },
+  "version": 1,
+  "tmp_children_data": [],
+  "stored_layout_data": [],
+  "stored_children_data": [],
+  "stored_metadata": [
+    {
+      "index": "dot-plot",
+      "component_type": "advanced_viz",
+      "title": "Marker dot plot",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "dotplot_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d30"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Single-cell marker dot plot fixture",
+        "data_collection_tag": "dotplot_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d30"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-13T00:00:00.000000",
+      "viz_kind": "dot_plot",
+      "config": {
+        "viz_kind": "dot_plot",
+        "cluster_col": "cluster",
+        "gene_col": "gene",
+        "mean_expression_col": "mean_expression",
+        "frac_expressing_col": "frac_expressing",
+        "max_dot_size": 22,
+        "min_dot_size": 2
+      },
+      "wf_tag": "python/advanced_viz_demo",
+      "description": "Mean expression (colour) \u00d7 fraction expressing (size) across 6 PBMC-like clusters."
+    }
+  ],
+  "stored_edit_dashboard_mode_button": [],
+  "left_panel_layout_data": [],
+  "right_panel_layout_data": [
+    {
+      "i": "box-dot-plot",
+      "x": 0,
+      "y": 0,
+      "w": 12,
+      "h": 8,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    }
+  ],
+  "buttons_data": {
+    "unified_edit_mode": true,
+    "add_components_button": {
+      "count": 0
+    }
+  },
+  "stored_add_button": {
+    "count": 0
+  },
+  "title": "Dot plot",
+  "subtitle": "Single-cell marker expression \u00d7 cluster",
+  "icon": "mdi:dots-grid",
+  "icon_color": "teal",
+  "icon_variant": "filled",
+  "workflow_system": "python",
+  "notes_content": "",
+  "permissions": {
+    "owners": [
+      {
+        "_id": {
+          "$oid": "67658ba033c8b59ad489d7c7"
+        },
+        "description": null,
+        "flexible_metadata": null,
+        "hash": null,
+        "email": "admin@example.com",
+        "is_admin": true,
+        "is_anonymous": false,
+        "is_temporary": false,
+        "expiration_time": null
+      }
+    ],
+    "editors": [],
+    "viewers": []
+  },
+  "is_public": true,
+  "last_saved_ts": "2026-05-13 00:00:00",
+  "project_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d00"
+  },
+  "is_main_tab": false,
+  "parent_dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d00"
+  },
+  "tab_order": 17,
+  "main_tab_name": null,
+  "tab_icon": "mdi:dots-grid",
+  "tab_icon_color": "teal",
+  "parent_dashboard_title": null
+}

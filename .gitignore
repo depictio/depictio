@@ -156,6 +156,8 @@ dump.rdb
 !depictio/projects/nf-core/ampliseq/2.16.0/*.tsv
 !depictio/projects/nf-core/ampliseq/2.16.0/input/*.tsv
 !depictio/projects/nf-core/ampliseq/2.16.0/input/samplesheet.csv
+# Allow advanced_viz_showcase synthetic fixtures
+!depictio/projects/init/advanced_viz_showcase/data/*.tsv
 
 # Local-only projects (not version controlled)
 depictio/projects/reference/pools/
@@ -342,3 +344,16 @@ docker-compose.override.yaml
 
 # Dashboard YAML exports — auto-generated/instance-specific, dir created on-demand by loader.py
 depictio/dashboards_yaml/
+
+# Locally-downloaded nf-core fixture files (regenerable via
+# dev/advanced_viz_docs_screenshots/extract_nfcore_fixtures.py)
+dev/advanced_viz_docs_screenshots/fixtures/
+
+# Node modules (any package directory)
+**/node_modules/
+
+# IDE / editor settings
+**/.vscode/
+
+# Generated CLI configs (emitted by upload.sh on the fly)
+**/.cli_config.generated.yaml

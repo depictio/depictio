@@ -92,6 +92,7 @@ MAP_STYLES: tuple[str, ...] = (
 AGGREGATION_COMPATIBILITY: dict[str, list[str]] = {
     "int64": [
         "count",
+        "nunique",
         "sum",
         "average",
         "median",
@@ -102,9 +103,13 @@ AGGREGATION_COMPATIBILITY: dict[str, list[str]] = {
         "std_dev",
         "skewness",
         "kurtosis",
+        "q1",
+        "q3",
+        "box_plot_stats",
     ],
     "float64": [
         "count",
+        "nunique",
         "sum",
         "average",
         "median",
@@ -114,6 +119,9 @@ AGGREGATION_COMPATIBILITY: dict[str, list[str]] = {
         "variance",
         "std_dev",
         "percentile",
+        "q1",
+        "q3",
+        "box_plot_stats",
         "skewness",
         "kurtosis",
     ],

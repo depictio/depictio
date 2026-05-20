@@ -1,0 +1,128 @@
+{
+  "_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d22"
+  },
+  "description": null,
+  "flexible_metadata": null,
+  "hash": null,
+  "dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d22"
+  },
+  "version": 1,
+  "tmp_children_data": [],
+  "stored_layout_data": [],
+  "stored_children_data": [],
+  "stored_metadata": [
+    {
+      "index": "rare-curves",
+      "component_type": "advanced_viz",
+      "title": "Rarefaction curves (Faith PD)",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "rarefaction_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d20"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Alpha-diversity rises with sequencing depth then plateaus. Drag the Habitat filter to colour-segregate; tune Top-N samples and \u00b1SE band in the Settings popover.",
+        "data_collection_tag": "rarefaction_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d20"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "viz_kind": "rarefaction",
+      "config": {
+        "viz_kind": "rarefaction",
+        "sample_id_col": "sample_id",
+        "depth_col": "depth",
+        "metric_col": "faith_pd",
+        "metric_options": [
+          "faith_pd",
+          "observed_features",
+          "shannon"
+        ],
+        "iter_col": "iter",
+        "group_col": "habitat",
+        "show_ci": true
+      },
+      "wf_tag": "python/advanced_viz_demo",
+      "description": "Alpha-diversity rises with sequencing depth then plateaus. Drag the Habitat filter to colour-segregate; tune Top-N samples and \u00b1SE band in the Settings popover."
+    }
+  ],
+  "stored_edit_dashboard_mode_button": [],
+  "left_panel_layout_data": [],
+  "right_panel_layout_data": [
+    {
+      "i": "box-rare-curves",
+      "x": 0,
+      "y": 0,
+      "w": 12,
+      "h": 8,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    }
+  ],
+  "buttons_data": {
+    "unified_edit_mode": true,
+    "add_components_button": {
+      "count": 0
+    }
+  },
+  "stored_add_button": {
+    "count": 0
+  },
+  "title": "Rarefaction",
+  "subtitle": "Alpha-diversity vs sequencing depth across 18 samples in 3 habitats (gut / skin / soil).",
+  "icon": "mdi:chart-line",
+  "icon_color": "cyan",
+  "icon_variant": "filled",
+  "workflow_system": "python",
+  "notes_content": "",
+  "permissions": {
+    "owners": [
+      {
+        "_id": {
+          "$oid": "67658ba033c8b59ad489d7c7"
+        },
+        "description": null,
+        "flexible_metadata": null,
+        "hash": null,
+        "email": "admin@example.com",
+        "is_admin": true,
+        "is_anonymous": false,
+        "is_temporary": false,
+        "expiration_time": null
+      }
+    ],
+    "editors": [],
+    "viewers": []
+  },
+  "is_public": true,
+  "last_saved_ts": "2026-05-12 00:00:00",
+  "project_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d00"
+  },
+  "is_main_tab": false,
+  "parent_dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d00"
+  },
+  "tab_order": 10,
+  "main_tab_name": null,
+  "tab_icon": "mdi:chart-line",
+  "tab_icon_color": "cyan",
+  "parent_dashboard_title": null
+}

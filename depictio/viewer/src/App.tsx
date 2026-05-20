@@ -1,6 +1,7 @@
-import React, { useEffect, useState, useCallback, useRef, useMemo, useDeferredValue } from 'react';
+import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import {
   AppShell,
+  Button,
   Group,
   Text,
   Loader,
@@ -11,6 +12,7 @@ import {
   Box,
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
+import { Icon } from '@iconify/react';
 
 import {
   fetchDashboard,
@@ -23,6 +25,7 @@ import {
   TopPanel,
   groupInteractiveComponents,
   mergeFiltersBySource,
+  enrichFilterWithDcId,
   hasSelectionFilters,
   useDataCollectionUpdates,
   RealtimeIndicator,
@@ -63,12 +66,6 @@ const App: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState<InteractiveFilter[]>([]);
-  // Heavy renderers (figures / tables / maps / image grid) consume a deferred
-  // copy of the filter array — React batches updates while the user is still
-  // interacting (slider drag, multi-select typing) so the figure/table fetch
-  // doesn't re-fire on every intermediate value. Interactive controls keep
-  // using the live ``filters`` so they stay snappy under input.
-  const deferredFilters = useDeferredValue(filters);
   const [cardValues, setCardValues] = useState<Record<string, unknown>>({});
   const [cardSecondaryValues, setCardSecondaryValues] = useState<
     Record<string, Record<string, unknown>>
@@ -148,12 +145,16 @@ const App: React.FC = () => {
     return () => clearTimeout(timer);
   }, [dashboard, dashboardId, stableFilterKey(filters), refreshTick]);
 
-  const handleFilterChange = useCallback((update: InteractiveFilter) => {
-    // Dedupe by (index, source) so chart selections coexist with the same
-    // component's other filters. Mirrors mergeFiltersBySource in
-    // packages/depictio-react-core/src/selection.ts.
-    setFilters((prev) => mergeFiltersBySource(prev, update));
-  }, []);
+  const handleFilterChange = useCallback(
+    (update: InteractiveFilter) => {
+      const enriched = enrichFilterWithDcId(update, dashboard?.stored_metadata);
+      // Dedupe by (index, source) so chart selections coexist with the same
+      // component's other filters. Mirrors mergeFiltersBySource in
+      // packages/depictio-react-core/src/selection.ts.
+      setFilters((prev) => mergeFiltersBySource(prev, enriched));
+    },
+    [dashboard],
+  );
 
   const handleResetAllFilters = useCallback(() => setFilters([]), []);
 
@@ -330,7 +331,6 @@ const App: React.FC = () => {
           desktopOpened={desktopOpened}
           onToggleMobile={toggleMobile}
           onToggleDesktop={toggleDesktop}
-          onReset={handleResetAllFilters}
           onOpenSettings={openSettings}
           cardsLoading={cardsLoading}
           isOwner={isOwner}
@@ -399,9 +399,19 @@ const App: React.FC = () => {
                 style={{ height: '100%' }}
                 data-tour-id="filter-panel"
               >
-                <Title order={5} mb="sm">
-                  Filters
-                </Title>
+                <Group justify="space-between" align="center" mb="sm" wrap="nowrap">
+                  <Title order={5}>Filters</Title>
+                  <Button
+                    leftSection={<Icon icon="bx:reset" width={12} />}
+                    color="orange"
+                    variant="filled"
+                    size="xs"
+                    onClick={handleResetAllFilters}
+                    disabled={filters.length === 0}
+                  >
+                    Reset all
+                  </Button>
+                </Group>
                 <Stack gap="sm">
                   {leftComponents.length === 0 && (
                     <Text size="sm" c="dimmed">No interactive components.</Text>
@@ -436,16 +446,6 @@ const App: React.FC = () => {
                       Clear chart selections
                     </Anchor>
                   )}
-                  {filters.length > 0 && (
-                    <Anchor
-                      component="button"
-                      onClick={handleResetAllFilters}
-                      size="xs"
-                      mt="xs"
-                    >
-                      Reset all filters
-                    </Anchor>
-                  )}
                 </Stack>
               </Paper>
             </Box>
@@ -473,7 +473,7 @@ const App: React.FC = () => {
                   dashboardId={dashboardId!}
                   metadataList={rightComponents}
                   layoutData={dashboard.right_panel_layout_data}
-                  filters={deferredFilters}
+                  filters={filters}
                   onFilterChange={handleFilterChange}
                   cardValues={cardValues}
                   cardSecondaryValues={cardSecondaryValues}

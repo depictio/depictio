@@ -1,0 +1,127 @@
+{
+  "_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d46"
+  },
+  "description": null,
+  "flexible_metadata": null,
+  "hash": null,
+  "dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d46"
+  },
+  "version": 1,
+  "tmp_children_data": [],
+  "stored_layout_data": [],
+  "stored_children_data": [],
+  "stored_metadata": [
+    {
+      "index": "cov-track",
+      "component_type": "advanced_viz",
+      "title": "Coverage track",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "coverage_track_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d50"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Coverage tracks",
+        "data_collection_tag": "coverage_track_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d50"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-14T00:00:00.000000",
+      "viz_kind": "coverage_track",
+      "config": {
+        "viz_kind": "coverage_track",
+        "chromosome_col": "chrom",
+        "position_col": "position",
+        "value_col": "coverage",
+        "end_col": "end",
+        "sample_col": "sample",
+        "category_col": "gene_region",
+        "y_scale": "linear",
+        "smoothing_window": 0,
+        "color_by": "category",
+        "show_annotation_lane": true
+      },
+      "wf_tag": "python/advanced_viz_demo",
+      "description": "Read-depth tracks along the SARS-CoV-2 reference. Sample multi-select faceting, gene-region colouring lane, log/linear y-scale, rolling-mean smoothing \u2014 all live in the Settings \u2699 popover."
+    }
+  ],
+  "stored_edit_dashboard_mode_button": [],
+  "left_panel_layout_data": [],
+  "right_panel_layout_data": [
+    {
+      "i": "box-cov-track",
+      "x": 0,
+      "y": 0,
+      "w": 12,
+      "h": 8,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    }
+  ],
+  "buttons_data": {
+    "unified_edit_mode": true,
+    "add_components_button": {
+      "count": 0
+    }
+  },
+  "stored_add_button": {
+    "count": 0
+  },
+  "title": "Coverage track",
+  "subtitle": "Read-depth signal along a coordinate axis (mosdepth-style). Multi-sample faceting + SARS-CoV-2 gene-region annotation lane.",
+  "icon": "mdi:chart-areaspline-variant",
+  "icon_color": "blue",
+  "icon_variant": "filled",
+  "workflow_system": "python",
+  "notes_content": "",
+  "permissions": {
+    "owners": [
+      {
+        "_id": {
+          "$oid": "67658ba033c8b59ad489d7c7"
+        },
+        "description": null,
+        "flexible_metadata": null,
+        "hash": null,
+        "email": "admin@example.com",
+        "is_admin": true,
+        "is_anonymous": false,
+        "is_temporary": false,
+        "expiration_time": null
+      }
+    ],
+    "editors": [],
+    "viewers": []
+  },
+  "is_public": true,
+  "last_saved_ts": "2026-05-14 00:00:00",
+  "project_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d00"
+  },
+  "is_main_tab": false,
+  "parent_dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d00"
+  },
+  "tab_order": 22,
+  "main_tab_name": null,
+  "tab_icon": "mdi:chart-areaspline-variant",
+  "tab_icon_color": "blue",
+  "parent_dashboard_title": null
+}

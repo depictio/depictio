@@ -1,0 +1,125 @@
+{
+  "_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d23"
+  },
+  "description": null,
+  "flexible_metadata": null,
+  "hash": null,
+  "dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d23"
+  },
+  "version": 1,
+  "tmp_children_data": [],
+  "stored_layout_data": [],
+  "stored_children_data": [],
+  "stored_metadata": [
+    {
+      "index": "bc-bar",
+      "component_type": "advanced_viz",
+      "title": "Differential abundance (ANCOM-BC demo)",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "ancombc_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d21"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Top-N taxa by |lfc| per contrast. Bars are coloured by direction (blue = up, red = down). Bars with q > threshold are greyed out. Switch tabs to drill into a single contrast or use the 'All' tab for faceted side-by-side comparison.",
+        "data_collection_tag": "ancombc_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d21"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "viz_kind": "da_barplot",
+      "config": {
+        "viz_kind": "da_barplot",
+        "feature_id_col": "feature_id",
+        "contrast_col": "contrast",
+        "lfc_col": "lfc",
+        "significance_col": "significance",
+        "label_col": "label",
+        "significance_threshold": 0.05,
+        "top_n": 15,
+        "contrast_view": "all"
+      },
+      "wf_tag": "python/advanced_viz_demo",
+      "description": "Top-N taxa by |lfc| per contrast. Bars are coloured by direction (blue = up, red = down). Bars with q > threshold are greyed out. Switch tabs to drill into a single contrast or use the 'All' tab for faceted side-by-side comparison."
+    }
+  ],
+  "stored_edit_dashboard_mode_button": [],
+  "left_panel_layout_data": [],
+  "right_panel_layout_data": [
+    {
+      "i": "box-bc-bar",
+      "x": 0,
+      "y": 0,
+      "w": 12,
+      "h": 8,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    }
+  ],
+  "buttons_data": {
+    "unified_edit_mode": true,
+    "add_components_button": {
+      "count": 0
+    }
+  },
+  "stored_add_button": {
+    "count": 0
+  },
+  "title": "Differential abundance (with filters & cards)",
+  "subtitle": "Signed-LFC horizontal bars of differentially-abundant taxa from an ANCOM-BC-style output. Use the contrast filter on the left or switch tabs in-viz to pick a contrast (or 'All' for faceted side-by-side).",
+  "icon": "mdi:chart-bar",
+  "icon_color": "red",
+  "icon_variant": "filled",
+  "workflow_system": "python",
+  "notes_content": "",
+  "permissions": {
+    "owners": [
+      {
+        "_id": {
+          "$oid": "67658ba033c8b59ad489d7c7"
+        },
+        "description": null,
+        "flexible_metadata": null,
+        "hash": null,
+        "email": "admin@example.com",
+        "is_admin": true,
+        "is_anonymous": false,
+        "is_temporary": false,
+        "expiration_time": null
+      }
+    ],
+    "editors": [],
+    "viewers": []
+  },
+  "is_public": true,
+  "last_saved_ts": "2026-05-12 00:00:00",
+  "project_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d00"
+  },
+  "is_main_tab": false,
+  "parent_dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d00"
+  },
+  "tab_order": 11,
+  "main_tab_name": null,
+  "tab_icon": "mdi:chart-bar",
+  "tab_icon_color": "red",
+  "parent_dashboard_title": null
+}

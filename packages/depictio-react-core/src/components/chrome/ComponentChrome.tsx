@@ -54,6 +54,13 @@ export function actionsFor(componentType: string): ChromeAction[] {
       return ['metadata', 'fullscreen', 'download', 'reset'];
     case 'interactive':
       return ['metadata', 'reset'];
+    case 'advanced_viz':
+      // metadata + fullscreen + reset. Download is dropped — advanced viz
+      // export is handled by the Settings popover (Newick export for trees,
+      // PNG snapshots are out-of-scope for the multi-trace plotly figures).
+      // The Settings + Show-data ActionIcons are injected via extraActions
+      // from ComponentRenderer's advanced_viz dispatch.
+      return ['metadata', 'fullscreen', 'reset'];
     case 'card':
     case 'image':
     case 'jbrowse':
@@ -73,6 +80,7 @@ export function orientationFor(componentType: string): 'horizontal' | 'vertical'
     case 'figure':
     case 'multiqc':
     case 'map':
+    case 'advanced_viz':
       return 'vertical';
     default:
       return 'horizontal';
@@ -200,17 +208,44 @@ const ComponentChrome: React.FC<ComponentChromeProps> = ({
             </span>
           );
         })}
-        {extraActions && (
-          <span
-            className="dgl-no-drag"
-            style={{ display: 'inline-flex', alignItems: 'center' }}
-            onMouseDown={(e) => e.stopPropagation()}
-            onTouchStart={(e) => e.stopPropagation()}
-            onPointerDown={(e) => e.stopPropagation()}
-          >
-            {extraActions}
-          </span>
-        )}
+        {/* Per-child wrap so each extra action becomes its own flex item in
+         *  the chrome row (= one cell in the vertical column for figure /
+         *  map / multiqc / advanced_viz). Wrapping all extras in a single
+         *  span would force them to share one slot and break the vertical
+         *  orientation. */}
+        {extraActions
+          ? React.Children.toArray(
+              // Flatten fragments so <>{a}{b}</> contributes two children.
+              ((): React.ReactNode[] => {
+                const collected: React.ReactNode[] = [];
+                const walk = (node: React.ReactNode) => {
+                  if (node == null || node === false) return;
+                  if (Array.isArray(node)) {
+                    node.forEach(walk);
+                    return;
+                  }
+                  if (React.isValidElement(node) && node.type === React.Fragment) {
+                    React.Children.forEach((node.props as any).children, walk);
+                    return;
+                  }
+                  collected.push(node);
+                };
+                walk(extraActions);
+                return collected;
+              })(),
+            ).map((child, i) => (
+              <span
+                key={`extra-${i}`}
+                className="dgl-no-drag"
+                style={{ display: 'inline-flex', alignItems: 'center' }}
+                onMouseDown={(e) => e.stopPropagation()}
+                onTouchStart={(e) => e.stopPropagation()}
+                onPointerDown={(e) => e.stopPropagation()}
+              >
+                {child}
+              </span>
+            ))
+          : null}
       </Group>
       {children}
     </div>

@@ -46,12 +46,16 @@ import {
   createDataCollectionFromUpload,
   createMultiQCDataCollection,
   checkMultiQCUniformity,
+  suggestFromColumns,
+  fetchVizSuggestions,
 } from 'depictio-react-core';
 import type {
   ProjectListEntry,
   PreviewResult,
   MultiQCReportSummary,
   DCLink,
+  SuggestFromColumnsResponse,
+  VizSuggestionsResponse,
 } from 'depictio-react-core';
 import LinksSection from './LinksSection';
 import ManageDataCollectionModal, {
@@ -508,6 +512,7 @@ const ProjectDetailApp: React.FC = () => {
               {selectedDc && (
                 <DataCollectionViewer
                   dc={selectedDc}
+                  projectType={projectType}
                   allDataCollections={dataCollections}
                   joins={
                     ((project as Record<string, unknown>).joins as
@@ -899,6 +904,84 @@ const TableFileDropZone: React.FC<{
   </>
 );
 
+/** Two-column lat/lon picker for the coordinates DC fallback. CSV/TSV gets
+ *  Selects bound to the parsed header; non-delimited formats (Parquet) fall
+ *  back to free-text TextInputs since we can't peek the header client-side. */
+const CoordColumnPickers: React.FC<{
+  isDelimited: boolean;
+  csvColumns: string[];
+  parsingHeader: boolean;
+  latColumn: string | null;
+  lonColumn: string | null;
+  onLatChange: (col: string | null) => void;
+  onLonChange: (col: string | null) => void;
+  disabled: boolean;
+}> = ({
+  isDelimited,
+  csvColumns,
+  parsingHeader,
+  latColumn,
+  lonColumn,
+  onLatChange,
+  onLonChange,
+  disabled,
+}) => {
+  if (!isDelimited) {
+    return (
+      <SimpleGrid cols={2} spacing="sm">
+        <TextInput
+          label="Latitude column"
+          placeholder="e.g. latitude"
+          value={latColumn ?? ''}
+          onChange={(e) => onLatChange(e.currentTarget.value || null)}
+          disabled={disabled}
+          required
+        />
+        <TextInput
+          label="Longitude column"
+          placeholder="e.g. longitude"
+          value={lonColumn ?? ''}
+          onChange={(e) => onLonChange(e.currentTarget.value || null)}
+          disabled={disabled}
+          required
+        />
+      </SimpleGrid>
+    );
+  }
+  let placeholder: string;
+  if (parsingHeader) placeholder = 'Reading header…';
+  else if (csvColumns.length) placeholder = 'Pick column';
+  else placeholder = 'No columns found';
+  const colsDisabled = disabled || parsingHeader || csvColumns.length === 0;
+  return (
+    <SimpleGrid cols={2} spacing="sm">
+      <Select
+        label="Latitude column"
+        placeholder={placeholder}
+        data={csvColumns}
+        value={latColumn}
+        onChange={onLatChange}
+        disabled={colsDisabled}
+        required
+        leftSection={parsingHeader ? <Loader size="xs" /> : undefined}
+        searchable
+        nothingFoundMessage="No matching columns"
+      />
+      <Select
+        label="Longitude column"
+        placeholder={placeholder}
+        data={csvColumns}
+        value={lonColumn}
+        onChange={onLonChange}
+        disabled={colsDisabled}
+        required
+        searchable
+        nothingFoundMessage="No matching columns"
+      />
+    </SimpleGrid>
+  );
+};
+
 const CreateDataCollectionModal: React.FC<{
   opened: boolean;
   projectType: 'basic' | 'advanced';
@@ -932,6 +1015,12 @@ const CreateDataCollectionModal: React.FC<{
   // (DCTableCoordinatesConfig). Auto-flips on when detection succeeds; can be
   // toggled manually for non-delimited formats where we can't peek the header.
   const [coordsConfirmed, setCoordsConfirmed] = useState(false);
+  // Suggestion engine match for the parsed header — producers (DESeq2,
+  // mosdepth, Bracken, …) fingerprinted on column names alone. When a
+  // match lands, the coordinates fallback gets demoted and a passive
+  // "looks like X" Alert takes its place. See
+  // POST /datacollections/suggest-from-columns.
+  const [suggestions, setSuggestions] = useState<SuggestFromColumnsResponse | null>(null);
 
   // MultiQC folder dropzone — owned by the modal so close-and-reopen clears it.
   const multiqcDropzone = useFolderDropzone({
@@ -1002,10 +1091,56 @@ const CreateDataCollectionModal: React.FC<{
     () => detectCoordinatesColumns(csvColumns),
     [csvColumns],
   );
+
+  // Call the suggestion engine whenever the parsed header changes. The
+  // backend matches known producer fingerprints on column names alone —
+  // no dtype inference needed — so this works as soon as we have the
+  // CSV/TSV header. AbortController prevents a slow earlier response from
+  // stomping a newer one if the user thrashes the separator field.
+  // Failures are silent: missing suggestions just falls back to the
+  // coordinates toggle.
+  useEffect(() => {
+    if (!csvColumns.length) {
+      setSuggestions(null);
+      return;
+    }
+    const controller = new AbortController();
+    suggestFromColumns(csvColumns, controller.signal)
+      .then(setSuggestions)
+      .catch((err) => {
+        if (err?.name !== 'AbortError') setSuggestions(null);
+      });
+    return () => controller.abort();
+  }, [csvColumns]);
+
+  // When a producer fingerprint matches, the coordinates fallback is
+  // demoted. Coords stays available as an explicit alternative only when
+  // nothing else is detected (or when the header is unreadable, e.g.
+  // Parquet).
+  const hasVizMatch = Boolean(suggestions && suggestions.producers.length > 0);
+
+  // Auto-confirm coords on lat/lon header detection — UNLESS the producer
+  // engine matched, in which case we don't want to ship lat/lon metadata
+  // on, say, a DESeq2 results table whose columns happened to fuzzy-match.
+  // Both branches are gated by per-file refs so:
+  //   - a user who toggles the switch off doesn't have it flipped back on
+  //   - a user who manually picked lat/lon doesn't see them wiped on every
+  //     re-render after the producer match resolves (the reset fires once
+  //     per file, then stays out of the way).
   const autoConfirmedForFileRef = useRef<File | null>(null);
+  const vizResetForFileRef = useRef<File | null>(null);
   useEffect(() => {
     if (!file) {
       autoConfirmedForFileRef.current = null;
+      vizResetForFileRef.current = null;
+      return;
+    }
+    if (hasVizMatch) {
+      if (vizResetForFileRef.current === file) return;
+      vizResetForFileRef.current = file;
+      setCoordsConfirmed(false);
+      setLatColumn(null);
+      setLonColumn(null);
       return;
     }
     if (!coordsGuess) return;
@@ -1014,7 +1149,7 @@ const CreateDataCollectionModal: React.FC<{
     setLatColumn(coordsGuess.latColumn);
     setLonColumn(coordsGuess.lonColumn);
     setCoordsConfirmed(true);
-  }, [file, coordsGuess]);
+  }, [file, coordsGuess, hasVizMatch]);
 
   // Reset everything when the modal closes — otherwise re-opening shows stale
   // state from the previous attempt.
@@ -1036,6 +1171,7 @@ const CreateDataCollectionModal: React.FC<{
       setLonColumn(null);
       setCoordsConfirmed(false);
       setParsingHeader(false);
+      setSuggestions(null);
       multiqcDropzone.clear();
       tableDropzone.clear();
     }
@@ -1320,102 +1456,73 @@ const CreateDataCollectionModal: React.FC<{
                   tableDropzone.clear();
                 }}
               />
-              {file && coordsGuess && coordsConfirmed && (
+              {file && hasVizMatch && suggestions && (
                 <Alert
-                  color="teal"
+                  color="violet"
                   variant="light"
-                  icon={
-                    <Icon icon="mdi:map-marker-radius-outline" width={18} />
-                  }
-                  title="Looks like a coordinates table"
+                  icon={<Icon icon="mdi:auto-fix" width={18} />}
+                  title="Looks like a known tool output"
                 >
-                  <Text size="sm">
-                    We detected latitude / longitude columns. This data
-                    collection will be saved with coordinates metadata so it
-                    can power Map components. Pick different columns below or
-                    turn off the toggle to save it as a plain table.
-                  </Text>
+                  <Stack gap={4}>
+                    {suggestions.producers.slice(0, 2).map((p) => (
+                      <Text size="sm" key={p.name}>
+                        <Text span fw={600}>
+                          {p.tool}
+                        </Text>
+                        {' — '}
+                        {p.description}
+                        {p.feeds_viz.length > 0 && (
+                          <>
+                            {' '}
+                            <Text span c="dimmed" size="xs">
+                              (feeds: {p.feeds_viz.join(', ')})
+                            </Text>
+                          </>
+                        )}
+                      </Text>
+                    ))}
+                    <Text size="xs" c="dimmed">
+                      Detected from the column header — no action needed. The
+                      hint is saved with the data collection so the component
+                      builder can pre-fill bindings.
+                    </Text>
+                  </Stack>
                 </Alert>
               )}
-              {file && (
-                <Switch
-                  label="Save as a coordinates table"
-                  description="Adds latitude / longitude column metadata so the data collection can power Map components."
-                  checked={coordsConfirmed}
-                  disabled={submitting}
-                  onChange={(e) => {
-                    const next = e.currentTarget.checked;
-                    setCoordsConfirmed(next);
-                    if (!next) {
-                      setLatColumn(null);
-                      setLonColumn(null);
-                    } else if (coordsGuess) {
-                      setLatColumn((prev) => prev ?? coordsGuess.latColumn);
-                      setLonColumn((prev) => prev ?? coordsGuess.lonColumn);
-                    }
-                  }}
-                />
-              )}
-              {file && coordsConfirmed && (fileFormat === 'csv' || fileFormat === 'tsv') && (() => {
-                let placeholder: string;
-                if (parsingHeader) placeholder = 'Reading header…';
-                else if (csvColumns.length) placeholder = 'Pick column';
-                else placeholder = 'No columns found';
-                const colsDisabled =
-                  submitting || parsingHeader || csvColumns.length === 0;
-                return (
-                  <SimpleGrid cols={2} spacing="sm">
-                    <Select
-                      label="Latitude column"
-                      placeholder={placeholder}
-                      data={csvColumns}
-                      value={latColumn}
-                      onChange={setLatColumn}
-                      disabled={colsDisabled}
-                      required
-                      leftSection={
-                        parsingHeader ? <Loader size="xs" /> : undefined
-                      }
-                      searchable
-                      nothingFoundMessage="No matching columns"
+              {file && !hasVizMatch && (
+                <Paper p="sm" withBorder radius="sm" bg="var(--mantine-color-default-hover)">
+                  <Stack gap="xs">
+                    <Switch
+                      label="Save as a coordinates table"
+                      description="Adds latitude / longitude column metadata so the data collection can power Map components."
+                      checked={coordsConfirmed}
+                      disabled={submitting}
+                      onChange={(e) => {
+                        const next = e.currentTarget.checked;
+                        setCoordsConfirmed(next);
+                        if (!next) {
+                          setLatColumn(null);
+                          setLonColumn(null);
+                        } else if (coordsGuess) {
+                          setLatColumn((prev) => prev ?? coordsGuess.latColumn);
+                          setLonColumn((prev) => prev ?? coordsGuess.lonColumn);
+                        }
+                      }}
                     />
-                    <Select
-                      label="Longitude column"
-                      placeholder={placeholder}
-                      data={csvColumns}
-                      value={lonColumn}
-                      onChange={setLonColumn}
-                      disabled={colsDisabled}
-                      required
-                      searchable
-                      nothingFoundMessage="No matching columns"
-                    />
-                  </SimpleGrid>
-                );
-              })()}
-              {file && coordsConfirmed && fileFormat !== 'csv' && fileFormat !== 'tsv' && (
-                <SimpleGrid cols={2} spacing="sm">
-                  <TextInput
-                    label="Latitude column"
-                    placeholder="e.g. latitude"
-                    value={latColumn ?? ''}
-                    onChange={(e) =>
-                      setLatColumn(e.currentTarget.value || null)
-                    }
-                    disabled={submitting}
-                    required
-                  />
-                  <TextInput
-                    label="Longitude column"
-                    placeholder="e.g. longitude"
-                    value={lonColumn ?? ''}
-                    onChange={(e) =>
-                      setLonColumn(e.currentTarget.value || null)
-                    }
-                    disabled={submitting}
-                    required
-                  />
-                </SimpleGrid>
+                    {coordsConfirmed && (
+                      <CoordColumnPickers
+                        isDelimited={fileFormat === 'csv' || fileFormat === 'tsv'}
+                        csvColumns={csvColumns}
+                        parsingHeader={parsingHeader}
+                        latColumn={latColumn}
+                        lonColumn={lonColumn}
+                        onLatChange={setLatColumn}
+                        onLonChange={setLonColumn}
+                        disabled={submitting}
+                      />
+                    )}
+                  </Stack>
+                </Paper>
               )}
             </Stack>
           </Tabs.Panel>
@@ -2137,6 +2244,7 @@ const DataCollectionsManagerSection: React.FC<{
               <DataCollectionRow
                 key={id}
                 dc={dc}
+                projectType={projectType}
                 selected={isSelected}
                 canMutate={canMutate}
                 onClick={() => onSelect(isSelected ? null : id)}
@@ -2197,6 +2305,7 @@ const StatCard: React.FC<{
 
 const DataCollectionRow: React.FC<{
   dc: DataCollectionShape;
+  projectType: 'basic' | 'advanced';
   selected: boolean;
   canMutate: boolean;
   onClick: () => void;
@@ -2204,7 +2313,7 @@ const DataCollectionRow: React.FC<{
   onDelete: () => void;
   /** Set for both MultiQC and Table DCs — opens the unified Manage Data modal. */
   onManage?: () => void;
-}> = ({ dc, selected, canMutate, onClick, onRename, onDelete, onManage }) => {
+}> = ({ dc, projectType, selected, canMutate, onClick, onRename, onDelete, onManage }) => {
   const type = (dc.config?.type as string | undefined) || 'unknown';
   const metatype = (dc.config?.metatype as string | undefined) || null;
   const isTable = type === 'table';
@@ -2269,12 +2378,15 @@ const DataCollectionRow: React.FC<{
               COORDINATES
             </Badge>
           )}
-          {metatype && (
+          {/* Metatype badges only mean something for advanced (CLI) projects
+           *  that fan multiple files into one DC. Basic projects upload one
+           *  file per DC, so suppress the noise. */}
+          {projectType === 'advanced' && metatype && (
             <Badge color="gray" variant="light" size="sm" radius="sm">
               {metatype.toUpperCase()}
             </Badge>
           )}
-          {isAggregate && !metatype && !isCoordTable && (
+          {projectType === 'advanced' && isAggregate && !metatype && !isCoordTable && (
             <Badge color="orange" variant="light" size="sm" radius="sm">
               AGGREGATE
             </Badge>
@@ -2327,6 +2439,7 @@ const DataCollectionRow: React.FC<{
 
 const DataCollectionViewer: React.FC<{
   dc: DataCollectionShape;
+  projectType: 'basic' | 'advanced';
   allDataCollections: DataCollectionShape[];
   joins: Array<{
     dc1?: string;
@@ -2342,7 +2455,7 @@ const DataCollectionViewer: React.FC<{
     target_field?: string;
     enabled?: boolean;
   }>;
-}> = ({ dc, allDataCollections, joins, links }) => {
+}> = ({ dc, projectType, allDataCollections, joins, links }) => {
   const dcId = (dc._id ?? dc.id) as string;
   const type = (dc.config?.type as string | undefined) || 'unknown';
   const metatype = (dc.config?.metatype as string | undefined) || null;
@@ -2356,6 +2469,32 @@ const DataCollectionViewer: React.FC<{
   const isTable = type.toLowerCase() === 'table';
   const isCoordTable = dcHasCoordinates(dc);
   const isAggregate = isTable && (metatype || '').toLowerCase() !== 'metadata';
+
+  // Detected producer / viz-kind suggestions for this DC. Mirrors the
+  // modal's passive "Looks like a known tool output" badge — surfaced in
+  // the viewer so users can discover the affinity post-creation.
+  // Only tables make sense to fingerprint; MultiQC has its own viewer.
+  const [vizSuggestions, setVizSuggestions] =
+    useState<VizSuggestionsResponse | null>(null);
+  useEffect(() => {
+    if (!isTable) {
+      setVizSuggestions(null);
+      return;
+    }
+    let cancelled = false;
+    fetchVizSuggestions(dcId)
+      .then((res) => {
+        if (!cancelled) setVizSuggestions(res);
+      })
+      .catch(() => {
+        if (!cancelled) setVizSuggestions(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [dcId, isTable]);
+  const detectedProducer = vizSuggestions?.producers?.[0] ?? null;
+  const detectedVizKinds = vizSuggestions?.viz_kinds ?? [];
 
   return (
     <Paper withBorder radius="md" p="lg">
@@ -2400,7 +2539,61 @@ const DataCollectionViewer: React.FC<{
               COORDINATES
             </Badge>
           )}
+          {detectedProducer && (
+            <Badge
+              color="violet"
+              variant="light"
+              size="sm"
+              radius="sm"
+              leftSection={<Icon icon="mdi:auto-fix" width={12} />}
+              title={detectedProducer.description}
+            >
+              {detectedProducer.tool.toUpperCase()}
+            </Badge>
+          )}
         </Group>
+        {detectedProducer && (
+          <Alert
+            color="violet"
+            variant="light"
+            icon={<Icon icon="mdi:auto-fix" width={18} />}
+            title={`Detected as ${detectedProducer.tool}`}
+          >
+            <Stack gap={4}>
+              <Text size="sm">{detectedProducer.description}</Text>
+              {detectedProducer.feeds_viz.length > 0 && (
+                <Text size="xs" c="dimmed">
+                  Feeds advanced viz:{' '}
+                  <Text span fw={600}>
+                    {detectedProducer.feeds_viz.join(', ')}
+                  </Text>
+                </Text>
+              )}
+            </Stack>
+          </Alert>
+        )}
+        {!detectedProducer && detectedVizKinds.length > 0 && (
+          <Alert
+            color="violet"
+            variant="light"
+            icon={<Icon icon="mdi:chart-scatter-plot" width={18} />}
+            title="Compatible advanced visualizations"
+          >
+            <Group gap={4}>
+              {detectedVizKinds.slice(0, 6).map((v) => (
+                <Badge
+                  key={v.viz_kind}
+                  color="violet"
+                  variant="outline"
+                  size="sm"
+                  radius="sm"
+                >
+                  {v.viz_kind}
+                </Badge>
+              ))}
+            </Group>
+          </Alert>
+        )}
 
         <SimpleGrid cols={{ base: 1, md: 2 }} spacing="md">
           <Card withBorder radius="md" p="md">
@@ -2429,7 +2622,11 @@ const DataCollectionViewer: React.FC<{
                   </Group>
                 }
               />
-              {metatype ? (
+              {/* Metatype (Metadata vs Aggregate) is meaningful only for
+               *  CLI-driven advanced projects that fan multiple files into
+               *  one DC. Basic projects upload exactly one file per DC, so
+               *  the distinction adds noise without adding information. */}
+              {projectType === 'advanced' && metatype ? (
                 <DetailRow
                   label="Metatype"
                   badge={
@@ -2438,7 +2635,7 @@ const DataCollectionViewer: React.FC<{
                     </Badge>
                   }
                 />
-              ) : isAggregate && !isCoordTable ? (
+              ) : projectType === 'advanced' && isAggregate && !isCoordTable ? (
                 <DetailRow
                   label="Metatype"
                   badge={

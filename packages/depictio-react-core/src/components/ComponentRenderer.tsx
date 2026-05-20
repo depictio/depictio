@@ -10,6 +10,25 @@ import MapRenderer from './MapRenderer';
 import TextRenderer from './TextRenderer';
 import JBrowseRenderer from './JBrowseRenderer';
 import MultiQCRenderer from './MultiQCRenderer';
+import VolcanoRenderer from './advanced_viz/VolcanoRenderer';
+import EmbeddingRenderer from './advanced_viz/EmbeddingRenderer';
+import ManhattanRenderer from './advanced_viz/ManhattanRenderer';
+import StackedTaxonomyRenderer from './advanced_viz/StackedTaxonomyRenderer';
+import PhylogeneticRenderer from './advanced_viz/PhylogeneticRenderer';
+import RarefactionRenderer from './advanced_viz/RarefactionRenderer';
+import DaBarplotRenderer from './advanced_viz/DaBarplotRenderer';
+import EnrichmentRenderer from './advanced_viz/EnrichmentRenderer';
+import ComplexHeatmapRenderer from './advanced_viz/ComplexHeatmapRenderer';
+import UpsetRenderer from './advanced_viz/UpsetRenderer';
+import MARenderer from './advanced_viz/MARenderer';
+import DotPlotRenderer from './advanced_viz/DotPlotRenderer';
+import LollipopRenderer from './advanced_viz/LollipopRenderer';
+import QQRenderer from './advanced_viz/QQRenderer';
+import SunburstRenderer from './advanced_viz/SunburstRenderer';
+import OncoplotRenderer from './advanced_viz/OncoplotRenderer';
+import CoverageTrackRenderer from './advanced_viz/CoverageTrackRenderer';
+import SankeyRenderer from './advanced_viz/SankeyRenderer';
+import { AdvancedVizExtrasProvider } from './advanced_viz/AdvancedVizExtras';
 import MultiSelectRenderer from './interactive/MultiSelectRenderer';
 import RangeSliderRenderer from './interactive/RangeSliderRenderer';
 import SliderRenderer from './interactive/SliderRenderer';
@@ -286,6 +305,18 @@ const ComponentRenderer: React.FC<ComponentRendererProps> = ({
     );
   }
 
+  if (metadata.component_type === 'advanced_viz') {
+    return (
+      <AdvancedVizDispatch
+        metadata={metadata}
+        filters={filters}
+        refreshTick={refreshTick}
+        extraActions={extraActions}
+        showDragHandle={showDragHandle}
+      />
+    );
+  }
+
   return (
     <div className="dashboard-error" style={{ fontSize: '0.75rem' }}>
       Component type "{metadata.component_type}" not yet ported.
@@ -396,6 +427,54 @@ const CardRenderer: React.FC<{
     .map((a) => ({ name: a, value: secondaryValues?.[a] }))
     .filter((row) => row.value !== undefined);
 
+  // ``top_n`` / ``concentration`` layouts read their payload from the
+  // synthetic ``__breakdown__`` key (server-populated when ``breakdown_col``
+  // is bound). Inject it into the rows array — the renderer dispatches on
+  // the row name, not on aggregation order.
+  const breakdown = secondaryValues?.['__breakdown__'] as
+    | {
+        column: string;
+        total: number;
+        top: { name: string; count: number; percent: number }[];
+        top_share: number;
+        unique_values: number;
+      }
+    | undefined;
+  if (breakdown !== undefined) {
+    orderedSecondary.push({ name: '__breakdown__', value: breakdown });
+  }
+
+  // Aggregation description line — sits in the existing card slot just below
+  // the hero value. We enrich it with breakdown info when available so the
+  // "(Count)" line carries useful context (top-N share) without needing its
+  // own dedicated row inside the secondary strip. Restructures vertical
+  // density: instead of stacking ``(Count) / Top 3 cover 83% of N / bar 1 / …``
+  // we get ``(Count · Top 3 = 83%) / bar 1 / …``.
+  const aggDesc = (() => {
+    if (!metadata.aggregation) return undefined;
+    const base = `(${capitalize(metadata.aggregation)})`;
+    const layout = metadata.secondary_layout;
+    if (
+      (layout === 'top_n' || layout === 'concentration') &&
+      breakdown &&
+      Array.isArray(breakdown.top) &&
+      breakdown.top.length > 0
+    ) {
+      const share = Math.round((breakdown.top_share || 0) * 100);
+      return `${base} · Top ${breakdown.top.length} = ${share}%`;
+    }
+    if (
+      layout === 'coverage' &&
+      typeof metadata.coverage_max === 'number' &&
+      typeof value === 'number' &&
+      metadata.coverage_max > 0
+    ) {
+      const pct = Math.round((value / (metadata.coverage_max as number)) * 100);
+      return `${base} · ${pct}% of ${metadata.coverage_max}`;
+    }
+    return base;
+  })();
+
   // While the next bulk-compute is in flight we keep the previous value
   // visible (App.tsx no longer clears `cardValues`), but slightly dim the
   // card to signal "refreshing". 0.6 opacity is enough to read as stale
@@ -420,14 +499,43 @@ const CardRenderer: React.FC<{
         background_color={metadata.background_color}
         title_font_size={metadata.title_font_size || 'md'}
         value_font_size={metadata.value_font_size || 'xl'}
-        aggregation_description={
-          metadata.aggregation ? `(${capitalize(metadata.aggregation)})` : undefined
-        }
+        aggregation_description={aggDesc}
         filter_applied={filterApplied}
+        secondaryStrip={
+          // ``coverage`` layout doesn't rely on the secondary aggregations
+          // array — it reads the card's hero ``value`` + the YAML-declared
+          // ``coverage_max``. So even with empty ``orderedSecondary`` we
+          // still render the strip when the coverage inputs are present.
+          orderedSecondary.length > 0 ||
+          (metadata.secondary_layout === 'coverage' &&
+            typeof metadata.coverage_max === 'number') ? (
+            <SecondaryMetrics
+              rows={orderedSecondary}
+              layout={
+                (metadata.secondary_layout as
+                  | 'vertical'
+                  | 'compact'
+                  | 'box_plot'
+                  | 'top_n'
+                  | 'coverage'
+                  | 'concentration'
+                  | undefined) || 'vertical'
+              }
+              color={
+                (metadata.icon_color as string | undefined) ||
+                (metadata.title_color as string | undefined) ||
+                null
+              }
+              coverageValue={typeof value === 'number' ? value : null}
+              coverageMax={
+                typeof metadata.coverage_max === 'number'
+                  ? (metadata.coverage_max as number)
+                  : null
+              }
+            />
+          ) : undefined
+        }
       />
-      {orderedSecondary.length > 0 ? (
-        <SecondaryMetrics rows={orderedSecondary} />
-      ) : null}
     </div>
   );
 };
@@ -450,3 +558,94 @@ function formatValue(v: unknown): string | number {
   }
   return String(v);
 }
+
+interface AdvancedVizDispatchProps {
+  metadata: StoredMetadata;
+  filters: InteractiveFilter[];
+  refreshTick?: number;
+  extraActions?: React.ReactNode;
+  showDragHandle?: boolean;
+}
+
+/**
+ * Per-component sub-renderer for the advanced_viz family.
+ *
+ * Holds a useState for the Settings + Show-data popovers the framed renderer
+ * publishes via AdvancedVizExtrasContext. The published JSX is appended to
+ * the standard chrome icons (metadata + fullscreen + reset) via the
+ * `extraActions` slot so all the action icons land in the same hover-revealed
+ * row with matching Mantine styling.
+ */
+const AdvancedVizDispatch: React.FC<AdvancedVizDispatchProps> = ({
+  metadata,
+  filters,
+  refreshTick,
+  extraActions,
+  showDragHandle,
+}) => {
+  const [publishedExtras, setPublishedExtras] = React.useState<React.ReactNode>(null);
+
+  const vizKind = (metadata.viz_kind as string) || '';
+  const advProps = { metadata, filters, refreshTick };
+  let inner: React.ReactNode;
+  if (vizKind === 'volcano') {
+    inner = <VolcanoRenderer {...(advProps as any)} />;
+  } else if (vizKind === 'embedding') {
+    inner = <EmbeddingRenderer {...(advProps as any)} />;
+  } else if (vizKind === 'manhattan') {
+    inner = <ManhattanRenderer {...(advProps as any)} />;
+  } else if (vizKind === 'stacked_taxonomy') {
+    inner = <StackedTaxonomyRenderer {...(advProps as any)} />;
+  } else if (vizKind === 'phylogenetic') {
+    inner = <PhylogeneticRenderer {...(advProps as any)} />;
+  } else if (vizKind === 'rarefaction') {
+    inner = <RarefactionRenderer {...(advProps as any)} />;
+  } else if (vizKind === 'da_barplot' || vizKind === 'ancombc_differentials') {
+    // ancombc_differentials was collapsed into da_barplot — legacy persisted
+    // dashboards still carry the old kind string and need the same renderer.
+    inner = <DaBarplotRenderer {...(advProps as any)} />;
+  } else if (vizKind === 'enrichment') {
+    inner = <EnrichmentRenderer {...(advProps as any)} />;
+  } else if (vizKind === 'complex_heatmap') {
+    inner = <ComplexHeatmapRenderer {...(advProps as any)} />;
+  } else if (vizKind === 'upset_plot') {
+    inner = <UpsetRenderer {...(advProps as any)} />;
+  } else if (vizKind === 'ma') {
+    inner = <MARenderer {...(advProps as any)} />;
+  } else if (vizKind === 'dot_plot') {
+    inner = <DotPlotRenderer {...(advProps as any)} />;
+  } else if (vizKind === 'lollipop') {
+    inner = <LollipopRenderer {...(advProps as any)} />;
+  } else if (vizKind === 'qq') {
+    inner = <QQRenderer {...(advProps as any)} />;
+  } else if (vizKind === 'sunburst') {
+    inner = <SunburstRenderer {...(advProps as any)} />;
+  } else if (vizKind === 'oncoplot') {
+    inner = <OncoplotRenderer {...(advProps as any)} />;
+  } else if (vizKind === 'coverage_track') {
+    inner = <CoverageTrackRenderer {...(advProps as any)} />;
+  } else if (vizKind === 'sankey') {
+    inner = <SankeyRenderer {...(advProps as any)} />;
+  } else {
+    inner = (
+      <div className="dashboard-error" style={{ fontSize: '0.75rem' }}>
+        Unknown advanced viz kind: "{vizKind}"
+      </div>
+    );
+  }
+
+  const combinedExtras = publishedExtras || extraActions ? (
+    <>
+      {publishedExtras}
+      {extraActions}
+    </>
+  ) : undefined;
+
+  return wrapWithChrome(
+    'advanced_viz',
+    metadata,
+    undefined,
+    <AdvancedVizExtrasProvider onChange={setPublishedExtras}>{inner}</AdvancedVizExtrasProvider>,
+    { extraActions: combinedExtras, showDragHandle },
+  );
+};

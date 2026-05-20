@@ -537,7 +537,20 @@ def process_multiqc_data_collection(
                     logger.info(
                         f"Uploading file {i + 1}/{len(individual_file_metadata)}: {file_path}"
                     )
-                    s3_client.upload_file(file_path, CLI_config.s3_storage.bucket, s3_key)
+                    # Force single-part PUT: MinIO + path-style addressing
+                    # rejects boto3 multipart CompleteMultipartUpload with
+                    # AccessDenied (signature drift on the manifest XML).
+                    # MultiQC parquet files are bounded (~25-50 MB), so a
+                    # 5 GB threshold keeps every realistic upload single-part.
+                    from boto3.s3.transfer import TransferConfig
+
+                    _single_part_cfg = TransferConfig(multipart_threshold=5 * 1024**3)
+                    s3_client.upload_file(
+                        file_path,
+                        CLI_config.s3_storage.bucket,
+                        s3_key,
+                        Config=_single_part_cfg,
+                    )
                     s3_location = f"s3://{CLI_config.s3_storage.bucket}/{s3_key}"
                     logger.info(f"Successfully uploaded {file_path} to {s3_location}")
 
