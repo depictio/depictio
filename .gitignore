@@ -343,3 +343,12 @@ depictio/dashboards_yaml/
 # Locally-downloaded nf-core fixture files (regenerable via
 # dev/advanced_viz_docs_screenshots/extract_nfcore_fixtures.py)
 dev/advanced_viz_docs_screenshots/fixtures/
+
+# Node modules (any package directory)
+**/node_modules/
+
+# IDE / editor settings
+**/.vscode/
+
+# Generated CLI configs (emitted by upload.sh on the fly)
+**/.cli_config.generated.yaml
