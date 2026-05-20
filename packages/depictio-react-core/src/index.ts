@@ -23,6 +23,11 @@ export { default as TextRenderer } from './components/TextRenderer';
 export { default as JBrowseRenderer } from './components/JBrowseRenderer';
 export { default as MultiQCRenderer } from './components/MultiQCRenderer';
 
+// Card helpers — exposed so the builder preview in `depictio/viewer` can
+// render the same SecondaryMetrics strip the dashboard grid renders.
+export { default as SecondaryMetrics } from './components/card/SecondaryMetrics';
+export type { SecondaryLayout } from './components/card/SecondaryMetrics';
+
 // Interactive renderers
 export { default as MultiSelectRenderer } from './components/interactive/MultiSelectRenderer';
 export { default as RangeSliderRenderer } from './components/interactive/RangeSliderRenderer';
@@ -170,6 +175,8 @@ export {
   fetchAdvancedVizKinds,
   fetchAdvancedVizData,
   fetchPolarsSchema,
+  suggestFromColumns,
+  fetchVizSuggestions,
   fetchPhylogenyNewick,
   dispatchComputeEmbedding,
   pollComputeEmbedding,
@@ -178,7 +185,13 @@ export {
   dispatchUpset,
   pollUpset,
 } from './api';
-export type { TableMutationResult } from './api';
+export type {
+  TableMutationResult,
+  ProducerSuggestion,
+  SuggestFromColumnsResponse,
+  VizKindSuggestion,
+  VizSuggestionsResponse,
+} from './api';
 // Selection-as-filter helpers (Plotly/AG Grid → InteractiveFilter)
 export {
   extractScatterSelection,

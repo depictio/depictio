@@ -37,6 +37,7 @@ import {
   AdvancedVizKindDescriptor,
   fetchAdvancedVizKinds,
   fetchPolarsSchema,
+  fetchVizSuggestions,
 } from 'depictio-react-core';
 import { useBuilderStore } from '../store/useBuilderStore';
 import AdvancedVizPreview from './AdvancedVizPreview';
@@ -177,22 +178,35 @@ const OPTIONAL_ROLES: Record<AdvancedVizKind, Record<string, string[]>> = {
  *  there's one source of truth for "what columns this role can come from".
  *  Adding an alias here makes more DCs viable for the kind it appears in. */
 const ROLE_ALIASES: Record<string, string[]> = {
-  feature_id: ['feature_id', 'gene', 'id', 'feature', 'taxon'],
+  feature_id: [
+    'feature_id',
+    'featureid',
+    'gene_id',
+    'geneid',
+    'gene',
+    'transcript_id',
+    'protein_id',
+    'id',
+    'feature',
+    'feature_name',
+    'symbol',
+    'taxon',
+  ],
   effect_size: ['effect_size', 'lfc', 'log2foldchange', 'log2fc', 'effect'],
   significance: ['significance', 'padj', 'q_val', 'qvalue', 'pvalue', 'p_val', 'p_value'],
   sample_id: ['sample_id', 'sample', 'sampleid', 'sample_name'],
-  dim_1: ['dim_1', 'pc1', 'umap1', 'tsne1'],
-  dim_2: ['dim_2', 'pc2', 'umap2', 'tsne2'],
+  dim_1: ['dim_1', 'pc1', 'umap1', 'tsne1', 'x'],
+  dim_2: ['dim_2', 'pc2', 'umap2', 'tsne2', 'y'],
   chr: ['chr', 'chrom', 'chromosome'],
   pos: ['pos', 'position', 'start'],
   score: ['score', 'pvalue', 'p_val', 'qvalue', 'q_val', 'neg_log10_qval'],
   taxon: ['taxon', 'taxonomy', 'name'],
-  rank: ['rank', 'level'],
-  abundance: ['abundance', 'rel_abundance', 'count', 'value'],
+  rank: ['rank', 'level', 'taxonomy_lvl'],
+  abundance: ['abundance', 'rel_abundance', 'count', 'value', 'new_est_reads'],
   avg_log_intensity: ['avg_log_intensity', 'mean_intensity', 'basemean'],
-  log2_fold_change: ['log2_fold_change', 'lfc', 'log2fc', 'effect_size'],
+  log2_fold_change: ['log2_fold_change', 'log2foldchange', 'lfc', 'log2fc', 'effect_size'],
   cluster: ['cluster', 'cell_type', 'group'],
-  gene: ['gene', 'feature_id', 'symbol'],
+  gene: ['gene', 'gene_id', 'geneid', 'feature_id', 'symbol'],
   mean_expression: ['mean_expression', 'expression', 'mean_expr'],
   frac_expressing: ['frac_expressing', 'pct_expressing', 'fraction'],
   position: ['position', 'pos', 'start'],
@@ -203,14 +217,14 @@ const ROLE_ALIASES: Record<string, string[]> = {
   label: ['label', 'name', 'category', 'contrast'],
   source: ['source', 'pathway', 'term', 'set'],
   effect: ['effect', 'effect_size', 'lfc'],
-  feature: ['feature', 'feature_id', 'gene', 'id', 'name'],
+  feature: ['feature', 'feature_id', 'gene', 'gene_id', 'id', 'name'],
   contrast: ['contrast', 'comparison', 'condition', 'group'],
   lfc: ['lfc', 'log2foldchange', 'log2_fold_change', 'log2fc', 'effect_size'],
   term: ['term', 'pathway', 'go_term', 'gene_set', 'set'],
   nes: ['nes', 'enrichment_score', 'es'],
   padj: ['padj', 'qvalue', 'q_val', 'p_adj', 'fdr'],
   gene_count: ['gene_count', 'set_size', 'size', 'n_genes', 'count'],
-  index: ['index', 'feature_id', 'gene', 'id', 'name', 'row_id', 'sample_id', 'sample'],
+  index: ['index', 'feature_id', 'gene', 'gene_id', 'id', 'name', 'row_id', 'sample_id', 'sample'],
   depth: ['depth', 'sample_depth', 'reads', 'subsample_depth'],
   metric: ['metric', 'shannon', 'faith_pd', 'observed_features', 'value'],
 };
@@ -224,7 +238,11 @@ const ROLE_ALIASES: Record<string, string[]> = {
  *  (Int) are UpSet-style data, not a continuous matrix for clustering —
  *  upset_demo was leaking through MIN_NUMERIC_COLS before this fix. */
 const MIN_FLOAT_COLS: Partial<Record<AdvancedVizKind, number>> = {
-  complex_heatmap: 4,
+  // Bumped from 4 → 8: a real expression matrix has many sample columns,
+  // whereas a DESeq2/edgeR results table has exactly 6 float stats
+  // (baseMean, log2FoldChange, lfcSE, stat, pvalue, padj) and was leaking
+  // through at 4. Combined with STAT_LIKE_FLOAT_COL_NAMES below.
+  complex_heatmap: 8,
 };
 // UpSet's set-membership columns are 0/1 indicators — typed as Int by polars.
 // Requiring ≥3 Int columns filters out DCs with only float measurements
@@ -232,6 +250,16 @@ const MIN_FLOAT_COLS: Partial<Record<AdvancedVizKind, number>> = {
 const MIN_INT_COLS: Partial<Record<AdvancedVizKind, number>> = {
   upset_plot: 3,
 };
+// Sankey needs ≥2 categorical (String-like) columns to make a flow. Without
+// this, sankey's empty REQUIRED_ROLES makes it match every DC.
+const MIN_STRING_COLS: Partial<Record<AdvancedVizKind, number>> = {
+  sankey: 2,
+};
+// Reject `complex_heatmap` when *every* float column looks like a statistic
+// (baseMean, log2FoldChange, padj…) — those are DESeq2-style results, not a
+// continuous sample×feature matrix.
+const STAT_LIKE_FLOAT_COL_NAMES =
+  /^(basemean|log2foldchange|lfcse|stat|pvalue|padj|qvalue|p_?val|fdr|log2fc|effect_size|significance|nes|es|score)$/i;
 
 /** Kinds that need a specific DC `config.type` regardless of column matching.
  *  Phylogenetic requires a phylogeny-type DC (the .nwk tree file); any Table
@@ -306,13 +334,19 @@ function unmetReason(
   }
 
   const required = REQUIRED_ROLES[kind];
+  // Normalize column-name separators: schemas in the wild use `sample-id`,
+  // `sample.id`, `Sample ID` etc. for the same role. Mapping all non-alnum
+  // separators to `_` aligns the alias list (which uses snake_case) with
+  // common pipeline conventions.
+  const normalize = (s: string) =>
+    s.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
   const lowerSchema = Object.entries(schema).map(([name, dtype]) => ({
-    name: name.toLowerCase(),
+    name: normalize(name),
     dtype,
   }));
   const missing: string[] = [];
   for (const [role, accepted] of Object.entries(required)) {
-    const aliases = ROLE_ALIASES[role];
+    const aliases = ROLE_ALIASES[role]?.map(normalize);
     const hasDtype = lowerSchema.some(({ dtype }) => accepted.includes(dtype));
     const hasNameMatch = aliases
       ? lowerSchema.some(
@@ -347,6 +381,35 @@ function unmetReason(
     NUMERIC_INT,
     'integer columns (binary 0/1 set indicators)',
   );
+  checkMinDtypeCount(
+    MIN_STRING_COLS[kind],
+    STRING_LIKE,
+    'string columns (categorical flow steps)',
+  );
+
+  // ComplexHeatmap: reject when every float column has a stats-like name
+  // (DESeq2 results table is structurally a wide matrix but semantically
+  // 6 statistics, not 6 samples).
+  if (kind === 'complex_heatmap') {
+    const floatCols = lowerSchema.filter(({ dtype }) => NUMERIC_FLOAT.includes(dtype));
+    if (
+      floatCols.length > 0 &&
+      floatCols.every(({ name }) => STAT_LIKE_FLOAT_COL_NAMES.test(name))
+    ) {
+      missing.push('float columns look like statistics, not a sample matrix');
+    }
+  }
+
+  // Sankey: a categorical flow doesn't have stat columns. The MIN_STRING_COLS
+  // gate alone passes for results tables that bundle label/category metadata
+  // (volcano_demo has feature_id + label + category = 3 strings), so add a
+  // negative signal — any stat-like float column disqualifies the DC.
+  if (kind === 'sankey') {
+    const floatCols = lowerSchema.filter(({ dtype }) => NUMERIC_FLOAT.includes(dtype));
+    if (floatCols.some(({ name }) => STAT_LIKE_FLOAT_COL_NAMES.test(name))) {
+      missing.push('contains statistic columns — not a categorical flow');
+    }
+  }
   if (missing.length === 0) return null;
   return `Needs: ${missing.join(', ')}`;
 }
@@ -406,7 +469,34 @@ const AdvancedVizBuilder: React.FC = () => {
     };
   }, [dcId]);
 
+  // Producer-driven viz_kind pre-selection. When the bound DC matches a
+  // known tool fingerprint (DESeq2, mosdepth, …), the producer registry's
+  // `feeds_viz[0]` is the canonical default viz for that data shape. Skip
+  // when the user (or edit-mode rehydration) has already picked a kind.
   const selectedKind = config.viz_kind || null;
+  useEffect(() => {
+    if (!dcId || selectedKind) return;
+    let cancelled = false;
+    fetchVizSuggestions(dcId)
+      .then((res) => {
+        if (cancelled) return;
+        const primary = res.producers.find((p) => p.feeds_viz.length > 0);
+        if (primary) {
+          patchConfig({
+            viz_kind: primary.feeds_viz[0] as AdvancedVizKind,
+            column_mapping: {},
+          });
+        }
+      })
+      .catch(() => {
+        // Silent — picker falls back to manual selection.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [dcId, selectedKind, patchConfig]);
+
+
   const columnMapping = useMemo(
     () => (config.column_mapping || {}) as Record<string, string | string[]>,
     [config.column_mapping],
@@ -452,20 +542,26 @@ const AdvancedVizBuilder: React.FC = () => {
     if (Object.keys(columnMapping).length > 0) return;
 
     const suggest: Record<string, string> = {};
-    const lower = Object.keys(schema).reduce<Record<string, string>>((acc, c) => {
-      acc[c.toLowerCase()] = c;
-      return acc;
-    }, {});
+    // Same hyphen/dot normalization as unmetReason — see comment there.
+    const normalize = (s: string) =>
+      s.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+    const normalizedToOriginal = Object.keys(schema).reduce<Record<string, string>>(
+      (acc, c) => {
+        acc[normalize(c)] = c;
+        return acc;
+      },
+      {},
+    );
     const liveEmbeddingSuggest =
       selectedKind === 'embedding' && embeddingMode === 'live';
     const rolesToSuggest = liveEmbeddingSuggest
       ? { sample_id: REQUIRED_ROLES.embedding.sample_id }
       : REQUIRED_ROLES[selectedKind];
     for (const role of Object.keys(rolesToSuggest)) {
-      const aliases = ROLE_ALIASES[role] || [role];
+      const aliases = (ROLE_ALIASES[role] || [role]).map(normalize);
       for (const alias of aliases) {
-        if (lower[alias]) {
-          suggest[role] = lower[alias];
+        if (normalizedToOriginal[alias]) {
+          suggest[role] = normalizedToOriginal[alias];
           break;
         }
       }

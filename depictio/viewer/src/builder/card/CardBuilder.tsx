@@ -6,6 +6,7 @@
 import React, { useEffect, useMemo } from 'react';
 import {
   ColorInput,
+  NumberInput,
   Select,
   Stack,
   TextInput,
@@ -77,12 +78,109 @@ const ICON_OPTIONS: { value: string; label: string }[] = [
   { value: 'mdi:check-circle', label: 'Check circle' },
 ];
 
+/** Multi-metric style options. The Select carries a single token that maps
+ *  to a ``(aggregations, secondary_layout, …)`` config bundle on save.
+ *
+ *  Distribution-style layouts (vertical / compact / box_plot) target numeric
+ *  columns and surface scalar aggregations. The three cardinality-style
+ *  layouts (top_n / coverage / concentration) target ``count`` / ``nunique``
+ *  aggregations and need an extra config field — the builder exposes those
+ *  fields conditionally below the Select. */
+type MultiMetricStyle =
+  | 'single'
+  | 'vertical'
+  | 'compact'
+  | 'box_plot'
+  | 'top_n'
+  | 'coverage'
+  | 'concentration';
+const MULTI_METRIC_OPTIONS: {
+  value: MultiMetricStyle;
+  label: string;
+  group?: string;
+}[] = [
+  { value: 'single', label: 'Single metric (no extras)' },
+  { value: 'vertical', label: 'Vertical list (median / min / max)', group: 'Distribution' },
+  { value: 'compact', label: 'Compact strip (median / min / max)', group: 'Distribution' },
+  { value: 'box_plot', label: 'Box-plot (Tukey: IQR + whiskers + outliers)', group: 'Distribution' },
+  { value: 'top_n', label: 'Top-N bars (most frequent values of a column)', group: 'Cardinality' },
+  { value: 'coverage', label: 'Coverage gauge (current / theoretical max)', group: 'Cardinality' },
+  { value: 'concentration', label: 'Concentration (top-N share + names)', group: 'Cardinality' },
+];
+
+/** Convert (aggregations, secondary_layout) saved on the metadata back into
+ *  the Select token. Used on edit re-open. */
+function inferMultiMetricStyle(
+  aggs: string[] | null | undefined,
+  layout: string | null | undefined,
+): MultiMetricStyle {
+  if (layout === 'top_n') return 'top_n';
+  if (layout === 'coverage') return 'coverage';
+  if (layout === 'concentration') return 'concentration';
+  if (!aggs || aggs.length === 0) return 'single';
+  if (layout === 'box_plot' || (aggs.length === 1 && aggs[0] === 'box_plot_stats')) {
+    return 'box_plot';
+  }
+  if (layout === 'compact') return 'compact';
+  return 'vertical';
+}
+
+/** Apply a Select token onto config: writes back the (aggregations,
+ *  secondary_layout, breakdown_col, coverage_max, top_n_count) bundle the
+ *  dashboard renderer + server reads. Switching between styles clears the
+ *  irrelevant fields so stale values don't pollute the saved metadata. */
+function multiMetricStyleToConfig(style: MultiMetricStyle): {
+  aggregations: string[] | null;
+  secondary_layout:
+    | 'vertical'
+    | 'compact'
+    | 'box_plot'
+    | 'top_n'
+    | 'coverage'
+    | 'concentration';
+  breakdown_col: string | null;
+  coverage_max: number | null;
+  top_n_count: number;
+} {
+  const base = { breakdown_col: null, coverage_max: null, top_n_count: 3 } as const;
+  switch (style) {
+    case 'box_plot':
+      return { ...base, aggregations: ['box_plot_stats'], secondary_layout: 'box_plot' };
+    case 'compact':
+      return { ...base, aggregations: ['median', 'min', 'max'], secondary_layout: 'compact' };
+    case 'vertical':
+      return { ...base, aggregations: ['median', 'min', 'max'], secondary_layout: 'vertical' };
+    case 'top_n':
+      // Cardinality strips don't use the ``aggregations`` array — the
+      // breakdown is computed server-side via ``breakdown_col`` instead.
+      return { ...base, aggregations: null, secondary_layout: 'top_n' };
+    case 'coverage':
+      return { ...base, aggregations: null, secondary_layout: 'coverage' };
+    case 'concentration':
+      return { ...base, aggregations: null, secondary_layout: 'concentration' };
+    case 'single':
+    default:
+      return { ...base, aggregations: null, secondary_layout: 'vertical' };
+  }
+}
+
 const CardBuilder: React.FC = () => {
   const config = useBuilderStore((s) => s.config) as {
     title?: string;
     column_name?: string;
     column_type?: string;
     aggregation?: string;
+    aggregations?: string[] | null;
+    secondary_layout?:
+      | 'vertical'
+      | 'compact'
+      | 'box_plot'
+      | 'top_n'
+      | 'coverage'
+      | 'concentration';
+    breakdown_col?: string | null;
+    coverage_max?: number | null;
+    top_n_count?: number;
     background_color?: string;
     title_color?: string;
     icon_name?: string;
@@ -99,9 +197,19 @@ const CardBuilder: React.FC = () => {
       title_font_size: config.title_font_size ?? 'md',
       background_color: config.background_color ?? '',
       title_color: config.title_color ?? '',
+      // Multi-metric defaults — preserve whatever was saved, otherwise
+      // single-metric mode. Null `aggregations` is the "no extras" signal
+      // the dashboard renderer checks before drawing SecondaryMetrics.
+      aggregations: config.aggregations ?? null,
+      secondary_layout: config.secondary_layout ?? 'vertical',
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const multiMetricStyle: MultiMetricStyle = useMemo(
+    () => inferMultiMetricStyle(config.aggregations, config.secondary_layout),
+    [config.aggregations, config.secondary_layout],
+  );
 
   // Aggregation options follow the column's type, mirroring
   // depictio/api/v1/utils.py:agg_functions[type]['card_methods'].
@@ -162,6 +270,65 @@ const CardBuilder: React.FC = () => {
         disabled={!config.column_type || aggOptions.length === 0}
         required
       />
+
+      <Select
+        label="Multi-metric style"
+        description="Pick a secondary strip layout. Distribution group (vertical / compact / box-plot) targets numeric columns; cardinality group (top-N / coverage / concentration) targets count / nunique cards."
+        data={MULTI_METRIC_OPTIONS}
+        value={multiMetricStyle}
+        onChange={(val) => {
+          if (!val) return;
+          patchConfig(multiMetricStyleToConfig(val as MultiMetricStyle));
+        }}
+        allowDeselect={false}
+        leftSection={<Icon icon="mdi:chart-box-outline" width={14} />}
+      />
+
+      {/* Conditional fields for the cardinality-style layouts. ``top_n`` and
+          ``concentration`` need a categorical breakdown column + a row count;
+          ``coverage`` needs the theoretical max value (denominator). Hidden
+          when the user picks a distribution-style layout. */}
+      {(multiMetricStyle === 'top_n' || multiMetricStyle === 'concentration') && (
+        <>
+          <ColumnSelect
+            label="Breakdown column"
+            description="Categorical column to group by. The strip shows the top-N most-frequent values."
+            value={config.breakdown_col ?? null}
+            onChange={(name) => patchConfig({ breakdown_col: name })}
+            categoricalOnly
+            required
+            clearable={false}
+          />
+          <NumberInput
+            label="Top N"
+            description="How many values to surface (1–5; past 5 the strip becomes illegibly cramped at typical card widths)."
+            value={config.top_n_count ?? 3}
+            onChange={(val) =>
+              patchConfig({ top_n_count: Math.max(1, Math.min(5, Number(val) || 3)) })
+            }
+            min={1}
+            max={5}
+            step={1}
+            leftSection={<Icon icon="mdi:format-list-numbered" width={14} />}
+          />
+        </>
+      )}
+      {multiMetricStyle === 'coverage' && (
+        <NumberInput
+          label="Coverage max"
+          description="Theoretical maximum the hero value can reach (e.g. 44 samples / 11 ORFs / 99 amplicons). The strip renders ``value / max`` as a fill bar."
+          value={config.coverage_max ?? undefined}
+          onChange={(val) =>
+            patchConfig({
+              coverage_max: val === '' || val === undefined ? null : Number(val),
+            })
+          }
+          min={1}
+          step={1}
+          leftSection={<Icon icon="mdi:gauge" width={14} />}
+          required
+        />
+      )}
 
       <Title order={6} fw={700} mt="sm">
         Card Styling

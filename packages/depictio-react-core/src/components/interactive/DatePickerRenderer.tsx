@@ -139,6 +139,11 @@ const DatePickerRenderer: React.FC<{
   const displayTitle =
     metadata.title ||
     (metadata.column_name ? `Date range on ${metadata.column_name}` : '');
+  const titleSize =
+    ((metadata as Record<string, unknown>).title_size as
+      | 'xs' | 'sm' | 'md' | 'lg' | 'xl' | undefined) ||
+    metadata.title_font_size ||
+    'md';
   const iconCol = metadata.icon_color || 'var(--mantine-color-blue-6)';
 
   if (loading) {
@@ -191,7 +196,7 @@ const DatePickerRenderer: React.FC<{
                 style={{ color: iconCol, flexShrink: 0 }}
               />
             )}
-            <Text fw={600} size="sm" lineClamp={1}>
+            <Text fw={600} size={titleSize} lineClamp={1}>
               {displayTitle}
             </Text>
           </Group>
