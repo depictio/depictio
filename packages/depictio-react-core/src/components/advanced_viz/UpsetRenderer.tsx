@@ -28,12 +28,19 @@ interface UpsetPlotConfig {
   matrix_wf_id: string;
   matrix_dc_id: string;
   set_columns?: string[] | null;
+  /** Optional per-set colour overrides (set name → hex). Forwarded to the
+   *  plotly-upset library so set-size bars + dots + intersection bars use
+   *  the project's domain palette (e.g. habitat → Set1). */
+  set_colors?: Record<string, string> | null;
   sort_by?: 'cardinality' | 'degree' | 'degree-cardinality' | 'input';
   sort_order?: 'descending' | 'ascending';
   min_size?: number;
   max_degree?: number | null;
   show_set_sizes?: boolean;
   color_intersections_by?: 'none' | 'set' | 'degree';
+  /** Pre-select these columns as annotation tracks on first render. Users
+   *  can still add/remove via the MultiSelect — this only seeds the default. */
+  default_annotation_cols?: string[] | null;
 }
 
 interface Props {
@@ -71,7 +78,9 @@ const UpsetRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => {
   // them through UpSetPlot.from_dataframe(annotations=...). Library
   // auto-detects numeric vs categorical and renders one extra track per
   // column. Gated by the master annotations switch.
-  const [annotationCols, setAnnotationCols] = useState<string[]>([]);
+  const [annotationCols, setAnnotationCols] = useState<string[]>(
+    config.default_annotation_cols ?? [],
+  );
   const [dcSchema, setDcSchema] = useState<Record<string, string> | null>(null);
 
   useEffect(() => {
@@ -125,6 +134,7 @@ const UpsetRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => {
       wf_id: metadata.wf_id,
       dc_id: metadata.dc_id,
       set_columns: config.set_columns ?? null,
+      set_colors: config.set_colors ?? null,
       annotation_cols: effectiveAnnotationCols.length > 0 ? effectiveAnnotationCols : null,
       sort_by: sortBy,
       sort_order: sortOrder,
@@ -280,20 +290,30 @@ const UpsetRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => {
           onChange={(e) => setShowAnnotations(e.currentTarget.checked)}
           label="Show annotations"
         />
-        <Switch
+        <Stack gap={4}>
+          <Text size="xs" fw={500}>
+            Show
+          </Text>
+          <Switch
           size="xs"
           checked={showSetSizes}
           onChange={(e) => setShowSetSizes(e.currentTarget.checked)}
           disabled={!showAnnotations}
           label="Show set-size bars"
         />
-        <Switch
+        </Stack>
+        <Stack gap={4}>
+          <Text size="xs" fw={500}>
+            Intersections
+          </Text>
+          <Switch
           size="xs"
           checked={showValues}
           onChange={(e) => setShowValues(e.currentTarget.checked)}
           disabled={!showAnnotations}
           label="Intersection count labels"
         />
+        </Stack>
         <MultiSelect
           size="xs"
           label="Annotation tracks"

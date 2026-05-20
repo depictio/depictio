@@ -59,6 +59,7 @@ export interface StableColorMap {
 export function stableColorMap(
   allValues: readonly (string | null | undefined)[],
   palette: readonly string[] = TAB10_PALETTE,
+  overrides?: Record<string, string> | null,
 ): StableColorMap {
   const cleaned = Array.from(
     new Set(
@@ -72,6 +73,15 @@ export function stableColorMap(
   );
   const lookup = new Map<string, string>();
   sorted.forEach((v, i) => lookup.set(v, palette[i % palette.length]));
+  // Apply explicit overrides last so they win over palette-index assignments.
+  // This is the channel through which dashboards pin domain-specific colours
+  // (habitat → Set1 mapping, lineage → Pango palette, etc.) without forking
+  // the renderer per project.
+  if (overrides) {
+    for (const [key, colour] of Object.entries(overrides)) {
+      if (key && colour) lookup.set(key, colour);
+    }
+  }
 
   return {
     get(value: string): string {
@@ -85,3 +95,15 @@ export function stableColorMap(
     universe: sorted,
   };
 }
+
+/** Set1-derived habitat palette used by nf-core/ampliseq dashboards. Mirrors
+ *  the inline ``color_discrete_map`` in the alpha-diversity boxplot so the
+ *  PCoA, boxplot, UpSet set bars and any other habitat-coloured tile share
+ *  one mapping. Keys MUST match the canonical habitat values emitted by the
+ *  recipes (no whitespace tolerance, case sensitive). */
+export const AMPLISEQ_HABITAT_COLORS: Record<string, string> = {
+  Riverwater: '#377EB8',
+  Groundwater: '#4DAF4A',
+  Sediment: '#E41A1C',
+  Soil: '#FF7F00',
+};

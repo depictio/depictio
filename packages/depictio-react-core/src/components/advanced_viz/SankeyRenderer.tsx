@@ -26,7 +26,18 @@ import { applyDataTheme, applyLayoutTheme } from './plotlyTheme';
 
 interface SankeyConfig {
   step_cols: string[];
+  /** Full ordered list of ranks/columns the user can wire as steps. The
+   *  in-viz Depth slider picks the prefix slice. When unset, the renderer
+   *  falls back to ``step_cols`` (i.e. depth control becomes a no-op). */
+  available_step_cols?: string[] | null;
   value_col?: string | null;
+  /** Human label for the value column shown in hover tooltips. Defaults to
+   *  the column name. Use for example "rel. abundance" when value_col is
+   *  "abundance" but the units are fractions of 1. */
+  value_label?: string | null;
+  /** "fraction" → display value × 100% in hover. "count" → integer flow.
+   *  "raw" (default) → just the number as-is. */
+  value_format?: 'raw' | 'fraction' | 'count' | null;
   sort_mode?: 'alphabetical' | 'total_flow' | 'input';
   color_mode?: 'source' | 'target' | 'step';
   link_opacity?: number;
@@ -55,6 +66,23 @@ const SankeyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => 
   const { colorScheme } = useMantineColorScheme();
   const isDark = colorScheme === 'dark';
 
+  // Master list of step columns the user can choose from. Falls back to the
+  // configured step_cols when the dashboard didn't supply an extended list,
+  // so the depth slider degrades gracefully into a fixed-length step view.
+  const allSteps = useMemo<string[]>(
+    () =>
+      Array.isArray(config.available_step_cols) && config.available_step_cols.length >= 2
+        ? config.available_step_cols
+        : config.step_cols || [],
+    [config.available_step_cols, config.step_cols],
+  );
+  // Initial depth: prefer the configured step_cols length so dashboards can
+  // override; otherwise fall back to 3 (a balanced default that picks the
+  // first three ranks, e.g. Kingdom → Phylum → Class for taxonomy DCs).
+  const [depth, setDepth] = useState<number>(
+    Math.max(2, Math.min(allSteps.length, (config.step_cols || []).length || 3)),
+  );
+  const effectiveStepCols = useMemo<string[]>(() => allSteps.slice(0, depth), [allSteps, depth]);
   const [sortMode, setSortMode] = useState<NonNullable<SankeyConfig['sort_mode']>>(
     config.sort_mode ?? 'total_flow',
   );
@@ -79,19 +107,22 @@ const SankeyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => 
   const [stepOptions, setStepOptions] = useState<Record<string, string[]>>({});
 
   useEffect(() => {
-    if (!metadata.wf_id || !metadata.dc_id || !config.step_cols?.length) return;
+    if (!metadata.wf_id || !metadata.dc_id || !effectiveStepCols.length) return;
     let cancelled = false;
     fetchAdvancedVizData(
       metadata.wf_id,
       metadata.dc_id,
-      config.step_cols,
+      // Fetch the WHOLE possible-step universe, not just the depth-sliced
+      // active prefix — so the step-filter MultiSelects keep working when the
+      // user expands depth without a refetch.
+      allSteps,
       filters,
       5000,
     )
       .then((res) => {
         if (cancelled) return;
         const opts: Record<string, string[]> = {};
-        for (const col of config.step_cols) {
+        for (const col of allSteps) {
           const vals = (res.rows[col] as unknown[]) || [];
           opts[col] = Array.from(new Set(vals.map((v) => String(v ?? '')))).sort();
         }
@@ -104,7 +135,7 @@ const SankeyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => 
     return () => {
       cancelled = true;
     };
-  }, [metadata.wf_id, metadata.dc_id, JSON.stringify(config.step_cols), JSON.stringify(filters), refreshTick]);
+  }, [metadata.wf_id, metadata.dc_id, JSON.stringify(allSteps), JSON.stringify(filters), refreshTick]);
 
   useEffect(() => {
     if (!metadata.wf_id || !metadata.dc_id) {
@@ -112,7 +143,7 @@ const SankeyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => 
       setLoading(false);
       return;
     }
-    if (!config.step_cols || config.step_cols.length < 2) {
+    if (!effectiveStepCols || effectiveStepCols.length < 2) {
       setError('Sankey: ≥2 step columns required');
       setLoading(false);
       return;
@@ -126,7 +157,7 @@ const SankeyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => 
     const payload = {
       wf_id: metadata.wf_id,
       dc_id: metadata.dc_id,
-      step_cols: config.step_cols,
+      step_cols: effectiveStepCols,
       value_col: config.value_col ?? null,
       sort_mode: sortMode,
       min_link_value: minLinkValue,
@@ -191,7 +222,7 @@ const SankeyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => 
     metadata.dc_id,
     JSON.stringify(filters),
     refreshTick,
-    JSON.stringify(config.step_cols),
+    JSON.stringify(effectiveStepCols),
     config.value_col,
     sortMode,
     minLinkValue,
@@ -256,6 +287,47 @@ const SankeyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => 
       hexWithAlpha(baseColorFor(src, link.target[i]), linkOpacity),
     );
 
+    // Per-link total flow used as the denominator for the percentage shown
+    // in the hover. Plotly's Sankey doesn't expose the trace total via
+    // customdata, so we bake the share into the customdata array per link.
+    const totalFlow = link.value.reduce((acc, v) => acc + (Number.isFinite(v) ? v : 0), 0) || 1;
+
+    // Resolve the human-readable value-axis labels for the hover tooltip.
+    // - When value_label is set in config we use it as-is.
+    // - Otherwise fall back to value_col (when present) or the generic "flow".
+    const valueAxisLabel = (config.value_label || config.value_col || 'flow') as string;
+    const valueFormat = (config.value_format || 'raw') as 'raw' | 'fraction' | 'count';
+
+    // Resolve the source / target step names from the server-supplied
+    // step_cols. This makes the hover line read e.g.
+    // "Phylum: Proteobacteria → Class: Gammaproteobacteria" instead of just
+    // "Proteobacteria → Gammaproteobacteria" — much clearer when several
+    // ranks have overlapping taxon names (Unclassified appears at every rank).
+    const stepCols = result.step_cols;
+    const sourceStepNames = link.source.map((s) => stepCols[nodes[s]?.step_index ?? 0] || '');
+    const targetStepNames = link.target.map((t) => stepCols[nodes[t]?.step_index ?? 0] || '');
+
+    // Pre-format values per the configured display mode so Plotly's
+    // hovertemplate can read them directly. customdata layout:
+    //   [0] source rank name
+    //   [1] target rank name
+    //   [2] formatted value string (e.g. "0.234" or "23.4%")
+    //   [3] % of total flow (always pre-formatted to one decimal)
+    const formatValue = (v: number): string => {
+      if (!Number.isFinite(v)) return '—';
+      if (valueFormat === 'count') return v.toLocaleString();
+      if (valueFormat === 'fraction') return `${(v * 100).toFixed(2)}%`;
+      // 'raw': adapt precision to magnitude so we don't print 0.0000 for
+      // small abundance values or 12345.678 for absolute counts.
+      return Math.abs(v) < 1 ? v.toFixed(4) : v.toFixed(2);
+    };
+    const linkCustomdata = link.value.map((v, i) => [
+      sourceStepNames[i],
+      targetStepNames[i],
+      formatValue(v),
+      ((v / totalFlow) * 100).toFixed(1),
+    ]);
+
     const nodeLabels = showNodeLabels ? nodes.map((n) => n.label) : nodes.map(() => '');
     fig.data[0] = {
       ...trace,
@@ -264,11 +336,23 @@ const SankeyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => 
         label: nodeLabels,
         color: nodeColors,
         line: { color: isDark ? theme.colors.dark[5] : theme.colors.gray[0], width: 0.5 },
+        // Per-node hover shows the rank → taxon and the total flow through
+        // the node. Plotly substitutes `%{value}` with the summed in/out flow
+        // it computed when laying out the trace.
+        customdata: nodes.map((n) => [stepCols[n.step_index] || '']),
+        hovertemplate:
+          '<b>%{customdata[0]}: %{label}</b><br>' +
+          `Total ${valueAxisLabel}: %{value}<extra></extra>`,
       },
       link: {
         ...link,
         color: linkColors,
-        hovertemplate: '%{source.label} → %{target.label}<br>flow %{value}<extra></extra>',
+        customdata: linkCustomdata,
+        hovertemplate:
+          '<b>%{customdata[0]}: %{source.label}</b> → ' +
+          '<b>%{customdata[1]}: %{target.label}</b><br>' +
+          `${valueAxisLabel}: %{customdata[2]}<br>` +
+          'share of total flow: %{customdata[3]}%<extra></extra>',
       },
     };
 
@@ -286,35 +370,82 @@ const SankeyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => 
         },
       },
     };
-  }, [result, palette, colorMode, linkOpacity, showNodeLabels, isDark, theme.colors]);
+  }, [
+    result,
+    palette,
+    colorMode,
+    linkOpacity,
+    showNodeLabels,
+    isDark,
+    theme.colors,
+    config.value_col,
+    config.value_label,
+    config.value_format,
+  ]);
 
   const controls = useMemo(
     () => (
       <Stack gap="xs">
-        <SegmentedControl
-          size="xs"
-          fullWidth
-          value={sortMode}
-          onChange={(v) => setSortMode(v as typeof sortMode)}
-          data={[
-            { value: 'total_flow', label: 'By flow' },
-            { value: 'alphabetical', label: 'A–Z' },
-            { value: 'input', label: 'Input' },
-          ]}
-        />
-        <SegmentedControl
-          size="xs"
-          fullWidth
-          value={colorMode}
-          onChange={(v) => setColorMode(v as typeof colorMode)}
-          data={[
-            { value: 'source', label: 'Source' },
-            { value: 'target', label: 'Target' },
-            { value: 'step', label: 'Step' },
-          ]}
-        />
-        <Stack gap={2}>
-          <Text size="xs" c="dimmed">
+        {/* Depth picker — SegmentedControl chosen over Slider because (a) the
+            value set is tiny (2..available_step_cols.length, typically 2–6)
+            and (b) Slider marks visually bleed into the SegmentedControl
+            below it, making the popover layout confusing. Hidden entirely
+            when the dashboard didn't supply an available_step_cols list
+            longer than the configured step_cols. */}
+        {allSteps.length > 2 ? (
+          <Stack gap={4}>
+            {/* Match Mantine's default input-label style (fw=500, size=xs)
+                so this label visually aligns with the NumberInput / Switch /
+                MultiSelect labels below in the same popover. */}
+            <Text size="xs" fw={500}>
+              Depth — {effectiveStepCols.join(' → ')}
+            </Text>
+            <SegmentedControl
+              size="xs"
+              fullWidth
+              value={String(depth)}
+              onChange={(v) => setDepth(Number(v))}
+              data={Array.from({ length: allSteps.length - 1 }, (_, i) => {
+                const n = i + 2;
+                return { value: String(n), label: String(n) };
+              })}
+            />
+          </Stack>
+        ) : null}
+        <Stack gap={4}>
+          <Text size="xs" fw={500}>
+            Sort nodes
+          </Text>
+          <SegmentedControl
+            size="xs"
+            fullWidth
+            value={sortMode}
+            onChange={(v) => setSortMode(v as typeof sortMode)}
+            data={[
+              { value: 'total_flow', label: 'By flow' },
+              { value: 'alphabetical', label: 'A–Z' },
+              { value: 'input', label: 'Input' },
+            ]}
+          />
+        </Stack>
+        <Stack gap={4}>
+          <Text size="xs" fw={500}>
+            Colour links by
+          </Text>
+          <SegmentedControl
+            size="xs"
+            fullWidth
+            value={colorMode}
+            onChange={(v) => setColorMode(v as typeof colorMode)}
+            data={[
+              { value: 'source', label: 'Source' },
+              { value: 'target', label: 'Target' },
+              { value: 'step', label: 'Step' },
+            ]}
+          />
+        </Stack>
+        <Stack gap={4}>
+          <Text size="xs" fw={500}>
             Link opacity
           </Text>
           <Slider
@@ -335,13 +466,18 @@ const SankeyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => 
           min={0}
           step={1}
         />
-        <Switch
-          size="xs"
-          checked={showNodeLabels}
-          onChange={(e) => setShowNodeLabels(e.currentTarget.checked)}
-          label="Show node labels"
-        />
-        {(config.step_cols || []).map((col) => (
+        <Stack gap={4}>
+          <Text size="xs" fw={500}>
+            Labels
+          </Text>
+          <Switch
+            size="xs"
+            checked={showNodeLabels}
+            onChange={(e) => setShowNodeLabels(e.currentTarget.checked)}
+            label="Show node labels"
+          />
+        </Stack>
+        {effectiveStepCols.map((col) => (
           <MultiSelect
             key={col}
             size="xs"
@@ -367,6 +503,9 @@ const SankeyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => 
       </Stack>
     ),
     [
+      allSteps,
+      depth,
+      effectiveStepCols,
       sortMode,
       colorMode,
       linkOpacity,
@@ -374,7 +513,6 @@ const SankeyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => 
       showNodeLabels,
       stepFilters,
       stepOptions,
-      config.step_cols,
       computeStatus,
       computeMs,
       result,
@@ -389,7 +527,7 @@ const SankeyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => 
       loading={loading}
       error={error}
       dataRows={dataRows ?? undefined}
-      dataColumns={config.step_cols}
+      dataColumns={effectiveStepCols}
     >
       {figureSpec ? (
         <Plot

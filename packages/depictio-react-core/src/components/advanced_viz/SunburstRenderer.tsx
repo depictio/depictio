@@ -4,6 +4,7 @@ import {
   Select,
   Stack,
   Switch,
+  Text,
   useMantineColorScheme,
   useMantineTheme,
 } from '@mantine/core';
@@ -22,6 +23,10 @@ import { applyDataTheme, applyLayoutTheme, plotlyThemeFragment } from './plotlyT
 interface SunburstConfig {
   rank_cols: string[];
   abundance_col: string;
+  /** Per-value colour overrides for whichever rank is selected as the colour
+   *  key. Wins over palette-index cycling so domain colours (e.g. Habitat
+   *  → Set1) stay consistent across tiles. */
+  category_palette?: Record<string, string> | null;
 }
 
 interface Props {
@@ -49,6 +54,10 @@ const SunburstRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =
   // Default to 3 rings: shows hierarchy at a glance without thin outer slivers
   // that make the chart read as a sankey.
   const DEFAULT_DEPTH = Math.min(3, ranks.length);
+  // `startRankIdx` picks which rank is the innermost ring. Choosing a deeper
+  // start (e.g. Kingdom instead of Habitat) collapses the outer split — useful
+  // for "all habitats mixed" taxonomy views.
+  const [startRankIdx, setStartRankIdx] = useState<number>(0);
   const [colourByIdx, setColourByIdx] = useState<number>(0);
   const [maxDepth, setMaxDepth] = useState<number>(DEFAULT_DEPTH);
   const [palette, setPalette] = useState<'tab10' | 'tab20'>('tab20');
@@ -57,8 +66,19 @@ const SunburstRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =
 
   useEffect(() => {
     setMaxDepth(Math.min(3, ranks.length));
+    setStartRankIdx((prev) => (prev >= ranks.length ? 0 : prev));
     setColourByIdx((prev) => (prev >= ranks.length ? 0 : prev));
   }, [ranks.length]);
+
+  // Keep colour-by inside the visible window when start/depth changes.
+  useEffect(() => {
+    const end = Math.min(ranks.length, startRankIdx + maxDepth);
+    setColourByIdx((prev) => {
+      if (prev < startRankIdx) return startRankIdx;
+      if (prev >= end) return Math.max(startRankIdx, end - 1);
+      return prev;
+    });
+  }, [startRankIdx, maxDepth, ranks.length]);
 
   const requiredCols = useMemo(
     () => [...ranks, config.abundance_col].filter(Boolean) as string[],
@@ -113,8 +133,11 @@ const SunburstRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =
 
   const figure = useMemo(() => {
     if (!rows) return null;
-    const depth = Math.max(1, Math.min(ranks.length, maxDepth));
-    const visibleRanks = ranks.slice(0, depth);
+    const start = Math.max(0, Math.min(ranks.length - 1, startRankIdx));
+    const depth = Math.max(1, Math.min(ranks.length - start, maxDepth));
+    const visibleRanks = ranks.slice(start, start + depth);
+    // Re-base the colour-by index into the visible-rank slice.
+    const localColourIdx = Math.max(0, Math.min(visibleRanks.length - 1, colourByIdx - start));
     const abundance = (rows[config.abundance_col] || []) as number[];
     const rankValues = visibleRanks.map((r) => (rows[r] || []) as (string | number | null)[]);
 
@@ -140,7 +163,7 @@ const SunburstRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =
         const label = String(raw);
         pathId = pathId ? `${pathId} | ${label}` : label;
         // Remember the value of the selected "colour by" rank seen on this path.
-        if (r === colourByIdx) colourKey = label;
+        if (r === localColourIdx) colourKey = label;
         const existing = nodes.get(pathId);
         if (existing) {
           existing.value += v;
@@ -182,6 +205,7 @@ const SunburstRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =
     const colourSource = stableColorMap(
       colourRankUniverse ?? Array.from(new Set(colourKeys)),
       paletteArr as readonly string[],
+      config.category_palette ?? null,
     );
     const colors = colourKeys.map((k) => colourSource.get(k) ?? (isDark ? '#888' : '#aaa'));
 
@@ -215,27 +239,42 @@ const SunburstRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =
         autosize: true,
       },
     };
-  }, [rows, config, ranks, maxDepth, colourByIdx, palette, showCounts, minPercent, colorScheme, theme, colourRankUniverse]);
+  }, [rows, config, ranks, startRankIdx, maxDepth, colourByIdx, palette, showCounts, minPercent, colorScheme, theme, colourRankUniverse, isDark]);
 
   const controls = useMemo(
-    () => (
+    () => {
+      const visibleEnd = Math.min(ranks.length, startRankIdx + maxDepth);
+      const colourOptions = ranks
+        .map((r, i) => ({ value: String(i), label: r, idx: i }))
+        .filter((o) => o.idx >= startRankIdx && o.idx < visibleEnd);
+      const maxDepthAllowed = Math.max(1, ranks.length - startRankIdx);
+      return (
       <Stack gap="xs">
+        <Select
+          size="xs"
+          label="Start from rank"
+          description="Innermost ring — pick a deeper rank to collapse outer splits"
+          value={String(startRankIdx)}
+          onChange={(v) => v != null && setStartRankIdx(Number(v))}
+          data={ranks.map((r, i) => ({ value: String(i), label: r }))}
+          allowDeselect={false}
+        />
         <Select
           size="xs"
           label="Colour by rank"
           value={String(colourByIdx)}
           onChange={(v) => v != null && setColourByIdx(Number(v))}
-          data={ranks.map((r, i) => ({ value: String(i), label: r }))}
+          data={colourOptions.map(({ value, label }) => ({ value, label }))}
           allowDeselect={false}
         />
         <NumberInput
           size="xs"
           label="Max depth"
-          description={`1–${ranks.length}; 3 keeps rings readable`}
+          description={`1–${maxDepthAllowed}; 3 keeps rings readable`}
           value={maxDepth}
-          onChange={(v) => setMaxDepth(Math.max(1, Math.min(ranks.length, Number(v) || 1)))}
+          onChange={(v) => setMaxDepth(Math.max(1, Math.min(maxDepthAllowed, Number(v) || 1)))}
           min={1}
-          max={ranks.length}
+          max={maxDepthAllowed}
         />
         <Select
           size="xs"
@@ -259,15 +298,21 @@ const SunburstRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =
           step={0.5}
           decimalScale={1}
         />
-        <Switch
+        <Stack gap={4}>
+          <Text size="xs" fw={500}>
+            Show
+          </Text>
+          <Switch
           size="xs"
           checked={showCounts}
           onChange={(e) => setShowCounts(e.currentTarget.checked)}
           label="Show % on arcs"
         />
+        </Stack>
       </Stack>
-    ),
-    [colourByIdx, ranks, maxDepth, palette, minPercent, showCounts],
+      );
+    },
+    [colourByIdx, ranks, startRankIdx, maxDepth, palette, minPercent, showCounts],
   );
 
   return (

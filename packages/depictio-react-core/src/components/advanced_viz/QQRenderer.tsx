@@ -5,6 +5,7 @@ import {
   NumberInput,
   Stack,
   Switch,
+  Text,
   useMantineColorScheme,
   useMantineTheme,
 } from '@mantine/core';
@@ -168,7 +169,10 @@ const QQRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => {
         }
         const s = buildSeries(idxs);
         if (s.n === 0) continue;
-        allExpectedMax = Math.max(allExpectedMax, s.expected[s.n - 1]);
+        // `expected` is built as -log10((k+1)/(n+1)) over ascending p — so it
+        // descends from k=0 (smallest p) to k=n-1 (closest to 0). The max is
+        // at index 0, NOT n-1.
+        allExpectedMax = Math.max(allExpectedMax, s.expected[0]);
         allObservedMax = Math.max(allObservedMax, ...s.observed);
         allPs.push(...s.ps);
         lambdaByCat.push({ cat: c, lambda: lambdaFor(s.ps) });
@@ -188,7 +192,7 @@ const QQRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => {
       lambdaOverall = lambdaFor(allPs.sort((a, b) => a - b));
     } else {
       const s = buildSeries(ps.map((_, i) => i));
-      allExpectedMax = s.expected[s.n - 1] ?? 0;
+      allExpectedMax = s.expected[0] ?? 0;
       allObservedMax = Math.max(0, ...s.observed);
       lambdaOverall = lambdaFor(s.ps);
       traces.push({
@@ -268,7 +272,13 @@ const QQRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => {
       );
     }
 
-    const upper = Math.max(allExpectedMax, allObservedMax) * 1.05;
+    // Independent axis ranges (qqman / Hail convention): X bounded by
+    // expected_max (~log10(N)), Y free to grow with significant hits. The
+    // identity diagonal still spans both corners — it visibly exits the X
+    // frame when the observed tail breaks from null, which is informative.
+    const xUpper = allExpectedMax * 1.05;
+    const yUpper = allObservedMax * 1.05;
+    const diagonalUpper = Math.max(xUpper, yUpper);
     const annotations: any[] = [];
     if (!Number.isNaN(lambdaOverall)) {
       annotations.push({
@@ -296,12 +306,12 @@ const QQRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => {
         xaxis: {
           ...plotlyAxisOverrides(isDark, theme),
           title: { text: '-log10(expected)' },
-          range: [0, upper],
+          range: [0, xUpper],
         },
         yaxis: {
           ...plotlyAxisOverrides(isDark, theme),
           title: { text: '-log10(observed)' },
-          range: [0, upper],
+          range: [0, yUpper],
         },
         shapes: showIdentity
           ? [
@@ -309,8 +319,8 @@ const QQRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => {
                 type: 'line' as const,
                 x0: 0,
                 y0: 0,
-                x1: upper,
-                y1: upper,
+                x1: diagonalUpper,
+                y1: diagonalUpper,
                 line: { dash: 'dash', color: isDark ? '#ddd' : '#444', width: 1 },
               },
             ]
@@ -341,19 +351,29 @@ const QQRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => {
             ))}
           </Stack>
         ) : null}
-        <Switch
+        <Stack gap={4}>
+          <Text size="xs" fw={500}>
+            Identity
+          </Text>
+          <Switch
           size="xs"
           checked={showIdentity}
           onChange={(e) => setShowIdentity(e.currentTarget.checked)}
           label="Identity line"
         />
-        <Switch
+        </Stack>
+        <Stack gap={4}>
+          <Text size="xs" fw={500}>
+            95%
+          </Text>
+          <Switch
           size="xs"
           checked={showCi}
           onChange={(e) => setShowCi(e.currentTarget.checked)}
           label="95% null CI band"
           disabled={Boolean(config.category_col)}
         />
+        </Stack>
         <Group gap="xs" grow>
           <NumberInput
             size="xs"

@@ -652,7 +652,7 @@ class UpSetPlot:
             height=self.height,
             plot_bgcolor="rgba(0,0,0,0)",
             paper_bgcolor="white",
-            margin={"l": 5, "r": 20, "t": top_margin, "b": 20},
+            margin={"l": 140, "r": 20, "t": top_margin, "b": 20},
             font={"family": FONT_FAMILY, "size": 11},
             barmode="stack",
             showlegend=True,

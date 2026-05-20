@@ -3,6 +3,7 @@ import {
   NumberInput,
   Stack,
   Switch,
+  Text,
   TextInput,
   useMantineColorScheme,
   useMantineTheme,
@@ -261,12 +262,17 @@ const MARenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => {
           onChange={(e) => setSearch(e.currentTarget.value)}
           placeholder="gene"
         />
-        <Switch
+        <Stack gap={4}>
+          <Text size="xs" fw={500}>
+            Labels
+          </Text>
+          <Switch
           size="xs"
           checked={showLabels}
           onChange={(e) => setShowLabels(e.currentTarget.checked)}
           label="Labels"
         />
+        </Stack>
       </Stack>
     ),
     [config.significance_col, sigThreshold, fcThreshold, topN, search, showLabels],

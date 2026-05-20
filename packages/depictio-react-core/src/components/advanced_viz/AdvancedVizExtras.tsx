@@ -1,4 +1,4 @@
-import React, { createContext, useMemo } from 'react';
+import React, { createContext, useMemo, useState } from 'react';
 import {
   ActionIcon,
   Badge,
@@ -73,13 +73,12 @@ export const AdvancedVizSettingsPopover: React.FC<SettingsPopoverProps> = ({ con
   // "click outside" detector and closing Settings before `onChange` could
   // commit (so users couldn't change the embedding compute method). The
   // popover can still be dismissed by clicking the settings icon again
-  // (Mantine toggles on target click) or by pressing Escape.
+  // (Mantine toggles on target click), pressing Escape, or via the
+  // explicit close-X button in the dropdown header.
   //
-  // trapFocus is also off: with it on, clicking the chevron up/down buttons
-  // inside a Mantine NumberInput moves focus to the buttons, and Mantine's
-  // focus trap then races against React's event re-rendering — the user
-  // sees the popover "freeze" (still visible but no click registers).
-  // Without trapFocus, the popover behaves like a normal floating panel.
+  // Controlled `opened` state so the in-dropdown close-X can dismiss it;
+  // also keeps Mantine's target-click toggle working.
+  const [opened, setOpened] = useState(false);
   return (
     <Popover
       position="bottom-end"
@@ -87,6 +86,8 @@ export const AdvancedVizSettingsPopover: React.FC<SettingsPopoverProps> = ({ con
       withArrow
       closeOnClickOutside={false}
       closeOnEscape
+      opened={opened}
+      onChange={setOpened}
     >
       <Popover.Target>
         <ActionIcon
@@ -95,15 +96,28 @@ export const AdvancedVizSettingsPopover: React.FC<SettingsPopoverProps> = ({ con
           size="sm"
           aria-label="Viz settings"
           title="Viz settings"
+          onClick={() => setOpened((v) => !v)}
         >
           <Icon icon="tabler:adjustments-horizontal" width={16} height={16} />
         </ActionIcon>
       </Popover.Target>
       <Popover.Dropdown p="sm" style={{ maxWidth: 380 }}>
         <Stack gap="xs">
-          <Text size="xs" fw={600} c="dimmed">
-            Viz controls
-          </Text>
+          <Group justify="space-between" wrap="nowrap" gap="xs">
+            <Text size="xs" fw={600} c="dimmed">
+              Viz controls
+            </Text>
+            <ActionIcon
+              variant="subtle"
+              size="xs"
+              color="gray"
+              aria-label="Close viz controls"
+              title="Close"
+              onClick={() => setOpened(false)}
+            >
+              <Icon icon="tabler:x" width={14} height={14} />
+            </ActionIcon>
+          </Group>
           {controls}
         </Stack>
       </Popover.Dropdown>
@@ -218,14 +232,21 @@ export const AdvancedVizDataPopover: React.FC<DataPopoverProps> = ({
           // shade-1 (visible against a white grid) and the deeper shade-9 with
           // reduced opacity (visible against the dark grid) — shade-1 alone
           // washes out in dark mode.
+          //
+          // ``tierSortRank`` carries the user's ``selectedOrder`` (e.g. flipped
+          // to ['BELOW'] when the renderer pins highlight=below). Only rows in
+          // selectedOrder get a coloured tint; the rest stay neutral so the
+          // table emphasis tracks the chips + plot markers.
           const v = params.value as string | undefined;
           if (!v) return null;
+          if (tierSortRank && !tierSortRank.has(v)) return null;
           const tint = (name: string) =>
             `light-dark(var(--mantine-color-${name}-1), color-mix(in srgb, var(--mantine-color-${name}-9) 35%, transparent))`;
           if (v === 'UP') return { background: tint('pink'), fontWeight: 600 };
           if (v === 'DN') return { background: tint('blue'), fontWeight: 600 };
           if (v === 'HIT' || v === 'ABOVE')
             return { background: tint('teal'), fontWeight: 600 };
+          if (v === 'BELOW') return { background: tint('orange'), fontWeight: 600 };
           return null;
         },
       });

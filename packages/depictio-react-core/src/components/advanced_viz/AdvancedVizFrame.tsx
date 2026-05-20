@@ -52,13 +52,24 @@ interface AdvancedVizFrameProps {
 }
 
 /** Subtle Mantine theme colour for each canonical tier name (no hardcoded
- *  literals — respects `feedback_mantine_defaults_no_custom_colors`). */
-const TIER_COLORS: Record<string, string> = {
+ *  literals — respects `feedback_mantine_defaults_no_custom_colors`).
+ *
+ *  ``BELOW`` is orange (not gray) so that when a renderer flips the
+ *  highlight to the below-threshold population, its chip and table tint
+ *  actually pop. Renderers that don't want this can pin a different colour
+ *  via ``selectedOrder`` semantics — chips outside ``selectedOrder`` always
+ *  fall back to gray regardless of their natural colour.
+ *
+ *  Exported so per-viz renderers (e.g. ManhattanRenderer) can paint their
+ *  Plotly markers with the same Mantine palette names — the chip, table
+ *  tint, and dot colours all stay in sync without each renderer
+ *  reinventing the mapping. */
+export const TIER_COLORS: Record<string, string> = {
   UP: 'pink',
   DN: 'blue',
   HIT: 'teal',
   ABOVE: 'teal',
-  BELOW: 'gray',
+  BELOW: 'orange',
   NS: 'gray',
   MISS: 'gray',
 };
@@ -144,17 +155,36 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
             ) : null}
             {counts && Object.keys(counts).length > 0 ? (
               <Group gap={4} wrap="nowrap" mt={2}>
-                {Object.entries(counts).map(([label, n]) => (
-                  <Badge
-                    key={label}
-                    size="xs"
-                    radius="sm"
-                    variant="light"
-                    color={TIER_COLORS[label] ?? 'gray'}
-                  >
-                    {label}: {n.toLocaleString()}
-                  </Badge>
-                ))}
+                {Object.entries(counts).map(([label, n]) => {
+                  // When ``tierAnnotation.selectedOrder`` is provided, that's
+                  // the source of truth for which tier is "highlighted" — chips
+                  // for selected tiers get the canonical hit colour, the rest
+                  // dim to gray. This keeps the chips, plot markers, and data
+                  // table consistent when the user flips highlight above/below.
+                  // Without selectedOrder (no threshold set), fall back to the
+                  // per-tier palette.
+                  const selected = tierAnnotation?.selectedOrder;
+                  const respectSelection = Array.isArray(selected) && selected.length > 0;
+                  const isSelected = respectSelection
+                    ? selected.includes(label)
+                    : true;
+                  const color = respectSelection
+                    ? isSelected
+                      ? TIER_COLORS[label] ?? 'teal'
+                      : 'gray'
+                    : TIER_COLORS[label] ?? 'gray';
+                  return (
+                    <Badge
+                      key={label}
+                      size="xs"
+                      radius="sm"
+                      variant={isSelected ? 'light' : 'outline'}
+                      color={color}
+                    >
+                      {label}: {n.toLocaleString()}
+                    </Badge>
+                  );
+                })}
               </Group>
             ) : null}
           </Stack>

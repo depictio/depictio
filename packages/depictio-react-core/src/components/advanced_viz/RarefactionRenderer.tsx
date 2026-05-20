@@ -5,6 +5,7 @@ import {
   Stack,
   Switch,
   Tabs,
+  Text,
   useMantineColorScheme,
   useMantineTheme,
 } from '@mantine/core';
@@ -38,6 +39,10 @@ interface RarefactionConfig {
   metric_options?: string[] | null;
   iter_col?: string | null;
   group_col?: string | null;
+  /** Explicit value→colour overrides for the group-column categories. Pins
+   *  domain palettes (e.g. habitat → Set1) across PCoA + UpSet + heatmap +
+   *  rarefaction so the same category maps to the same colour everywhere. */
+  category_palette?: Record<string, string> | null;
   show_ci?: boolean;
 }
 
@@ -46,6 +51,61 @@ interface Props {
   filters: InteractiveFilter[];
   refreshTick?: number;
 }
+
+// Stable Tabs.styles object so Mantine doesn't see a new prop identity on
+// every parent render (which previously caused the inner Plot to receive
+// fresh data/layout objects and lose its zoom box state mid-interaction).
+const TABS_STYLES = {
+  root: { display: 'flex', flexDirection: 'column' as const, height: '100%' },
+};
+const PLOT_CONTAINER_STYLE = {
+  flex: 1,
+  minHeight: 0,
+  position: 'relative' as const,
+};
+const PLOT_STYLE = { width: '100%', height: '100%' };
+const PLOT_CONFIG = {
+  displaylogo: false,
+  responsive: true,
+  displayModeBar: true,
+  modeBarButtonsToRemove: ['select2d', 'lasso2d', 'autoScale2d'],
+  // Scroll-zoom OFF: capturing the wheel breaks page-level scrolling when
+  // the mouse happens to be over the rarefaction tile. Box-zoom via the
+  // modebar Zoom button stays available for explicit zoom interaction.
+  scrollZoom: false,
+};
+
+/**
+ * Pure presentation wrapper around <Plot>. Memoised on (figure ref,
+ * isDark, theme) so parent re-renders triggered by filter / refresh state
+ * don't churn the data + layout props passed to Plotly — that churn was
+ * forcing Plotly.react() to rebuild the figure and dropping any in-flight
+ * zoom box selection mid-drag.
+ */
+const RarefactionPlot = React.memo<{
+  figure: { data?: unknown[]; layout?: Record<string, unknown> };
+  isDark: boolean;
+  theme: ReturnType<typeof useMantineTheme>;
+}>(({ figure, isDark, theme }) => {
+  const themedData = useMemo(
+    () => applyDataTheme(figure.data, isDark, theme),
+    [figure.data, isDark, theme],
+  );
+  const themedLayout = useMemo(
+    () => applyLayoutTheme(figure.layout as any, isDark, theme),
+    [figure.layout, isDark, theme],
+  );
+  return (
+    <Plot
+      data={themedData as any}
+      layout={themedLayout as any}
+      useResizeHandler
+      style={PLOT_STYLE}
+      config={PLOT_CONFIG as any}
+    />
+  );
+});
+RarefactionPlot.displayName = 'RarefactionPlot';
 
 // Shared tab10 palette via colors.ts so cross-viz colour assignments stay
 // in sync. The local alias keeps the index-based fallback ergonomic.
@@ -184,8 +244,15 @@ const RarefactionRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }
     const sampleGroup = new Map<string, string>();
     for (let i = 0; i < sampleIds.length; i++) {
       const sid = String(sampleIds[i] ?? '');
-      const d = Number(depths[i]);
-      const v = Number(metrics[i]);
+      // Explicit null/undefined check first — Number(null) is 0 (passes
+      // Number.isFinite) which would plant a spurious value=0 datapoint
+      // at depths the sample never reached and produce a visible drop at
+      // each curve's tail.
+      const rawDepth = depths[i];
+      const rawMetric = metrics[i];
+      if (rawDepth == null || rawMetric == null) continue;
+      const d = Number(rawDepth);
+      const v = Number(rawMetric);
       if (!Number.isFinite(d) || !Number.isFinite(v)) continue;
       let byDepth = perSample.get(sid);
       if (!byDepth) {
@@ -215,7 +282,11 @@ const RarefactionRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }
     // Use the full distinct-value universe when available so the colour for
     // each group is invariant under filtering. Falls back to the filtered
     // ordering when the unique-values endpoint hasn't responded yet.
-    const colourSource = stableColorMap(groupUniverse ?? uniqGroups, PALETTE);
+    const colourSource = stableColorMap(
+      groupUniverse ?? uniqGroups,
+      PALETTE,
+      config.category_palette ?? null,
+    );
     const colourForGroup = new Map<string, string>(
       uniqGroups.map((g) => [g, colourSource.get(g)]),
     );
@@ -298,9 +369,15 @@ const RarefactionRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }
           bgcolor: 'rgba(0,0,0,0)',
         },
         autosize: true,
+        // Preserve user zoom / pan across re-renders (filter changes, refresh
+        // ticks, theme switch). uirevision must change when the underlying
+        // axis scale changes — switching metric is the only case where we
+        // want autorange to reset.
+        uirevision: `rarefaction:${metadata.dc_id}:${activeMetric}`,
+        dragmode: 'zoom',
       },
     };
-  }, [rows, config, isDark, theme, showCI, topN, groupBy, activeMetric]);
+  }, [rows, config, isDark, theme, showCI, topN, groupBy, activeMetric, metadata.dc_id]);
 
   // Available metric columns. Prefer the config allowlist; merge in schema-
   // discovered numeric columns so a stale dashboard JSON (config.metric_options
@@ -361,12 +438,17 @@ const RarefactionRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }
         min={1}
         max={200}
       />
-      <Switch
-        size="xs"
-        checked={showCI}
-        onChange={(e) => setShowCI(e.currentTarget.checked)}
-        label="Show error bars (±SE)"
-      />
+      <Stack gap={4}>
+        <Text size="xs" fw={500}>
+          Error
+        </Text>
+        <Switch
+          size="xs"
+          checked={showCI}
+          onChange={(e) => setShowCI(e.currentTarget.checked)}
+          label="Error bars (±SE)"
+        />
+      </Stack>
     </Stack>
   );
 
@@ -390,7 +472,7 @@ const RarefactionRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }
           onChange={(v) => v && setActiveMetric(v)}
           variant="outline"
           radius="sm"
-          styles={{ root: { display: 'flex', flexDirection: 'column', height: '100%' } }}
+          styles={TABS_STYLES}
           keepMounted={false}
         >
           <Tabs.List>
@@ -400,26 +482,18 @@ const RarefactionRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }
               </Tabs.Tab>
             ))}
           </Tabs.List>
-          <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
+          <div style={PLOT_CONTAINER_STYLE}>
             {figure ? (
-              <Plot
-                data={applyDataTheme(figure.data, isDark, theme) as any}
-                layout={applyLayoutTheme(figure.layout as any, isDark, theme) as any}
-                useResizeHandler
-                style={{ width: '100%', height: '100%' }}
-                config={{ displaylogo: false, responsive: true } as any}
+              <RarefactionPlot
+                figure={figure}
+                isDark={isDark}
+                theme={theme}
               />
             ) : null}
           </div>
         </Tabs>
       ) : figure ? (
-        <Plot
-          data={applyDataTheme(figure.data, isDark, theme) as any}
-          layout={applyLayoutTheme(figure.layout as any, isDark, theme) as any}
-          useResizeHandler
-          style={{ width: '100%', height: '100%' }}
-          config={{ displaylogo: false, responsive: true } as any}
-        />
+        <RarefactionPlot figure={figure} isDark={isDark} theme={theme} />
       ) : null}
     </AdvancedVizFrame>
   );

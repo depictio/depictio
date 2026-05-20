@@ -1,5 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Stack, Switch, useMantineColorScheme, useMantineTheme } from '@mantine/core';
+import {
+  Stack,
+  Switch,
+  Text,
+  useMantineColorScheme,
+  useMantineTheme,
+} from '@mantine/core';
 import Plot from 'react-plotly.js';
 
 import {
@@ -206,7 +212,11 @@ const OncoplotRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =
       ],
       layout: {
         ...plotlyThemeFragment(isDark, theme),
-        margin: { l: 100, r: 100, t: 50, b: 100 },
+        // Left margin sized for the longest gene label (y-axis tick text)
+        // plus the y-axis title — 100px was too tight for typical SARS-CoV-2
+        // gene names like "CHR_START-orf1ab" that overflowed into clipped
+        // territory. 160px gives ~12 chars at default font + axis title room.
+        margin: { l: 160, r: 100, t: 50, b: 100 },
         xaxis: {
           ...plotlyAxisOverrides(isDark, theme),
           domain: [0, 0.85],
@@ -248,12 +258,17 @@ const OncoplotRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =
   const controls = useMemo(
     () => (
       <Stack gap="xs">
-        <Switch
+        <Stack gap={4}>
+          <Text size="xs" fw={500}>
+            Sort
+          </Text>
+          <Switch
           size="xs"
           checked={sortByFreq}
           onChange={(e) => setSortByFreq(e.currentTarget.checked)}
           label="Sort by mutation frequency"
         />
+        </Stack>
       </Stack>
     ),
     [sortByFreq],

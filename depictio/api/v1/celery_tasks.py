@@ -619,6 +619,10 @@ def compute_complex_heatmap(payload: dict) -> dict:
     index_column = payload.get("index_column") or "sample_id"
     value_columns = payload.get("value_columns")
     row_annotation_cols = list(payload.get("row_annotation_cols") or [])
+    # Column annotations: pre-built per-column category map shipped by the
+    # dashboard config. Shape: {annotation_name: {col_label: category_value}}.
+    # Aligned to value_columns order below and forwarded as a top strip.
+    col_annotations_map = payload.get("col_annotations") or None
     cluster_rows = bool(payload.get("cluster_rows", True))
     cluster_cols = bool(payload.get("cluster_cols", True))
     cluster_method = str(payload.get("cluster_method") or "ward")
@@ -783,11 +787,75 @@ def compute_complex_heatmap(payload: dict) -> dict:
                 # Numeric / unknown — let the library auto-pick the track type.
                 annotations_spec[ann_col] = {}
         hm_kwargs["row_annotations"] = annotations_spec
+    # Column annotations — align dashboard-supplied {col: category} maps to the
+    # current value_columns order, then forward as a top strip.
+    #
+    # Palette choice: Dark2 (saturated sibling of the Set2 pastel used for the
+    # row-annotation track). Same hue families, different value range — so col
+    # vs row tracks read as distinct families at a glance instead of looking
+    # like two views of the same dimension. Source: matplotlib qualitative
+    # Dark2.
+    #
+    # Dashboards can override per-annotation via the `col_annotation_colors`
+    # payload field (shape: {annotation_name: {value: hex}}), e.g. to pin
+    # habitat → Set1 across PCoA + UpSet + heatmap.
+    if col_annotations_map and isinstance(col_annotations_map, dict):
+        _COL_PALETTE = [
+            "#1b9e77",
+            "#d95f02",
+            "#7570b3",
+            "#e7298a",
+            "#66a61e",
+            "#e6ab02",
+            "#a6761d",
+            "#666666",
+        ]
+        col_annotation_colors = payload.get("col_annotation_colors") or {}
+        col_ann_kwargs: dict[str, Any] = {}
+        for ann_name, value_map in col_annotations_map.items():
+            if not isinstance(value_map, dict):
+                continue
+            ordered_values = [str(value_map.get(c, "—")) for c in value_columns]
+            uniq = sorted(set(v for v in ordered_values if v not in ("", "—")))
+            # Dashboard-supplied palette override wins; otherwise palette-cycle.
+            override = (col_annotation_colors.get(ann_name) or {}) if isinstance(
+                col_annotation_colors.get(ann_name), dict
+            ) else {}
+            colors = {
+                v: override.get(v) or _COL_PALETTE[i % len(_COL_PALETTE)]
+                for i, v in enumerate(uniq)
+            }
+            colors.setdefault("—", "rgba(150,150,150,0.4)")
+            col_ann_kwargs[ann_name] = {
+                "values": ordered_values,
+                "type": "categorical",
+                "colors": colors,
+            }
+        if col_ann_kwargs:
+            hm_kwargs["col_annotations"] = col_ann_kwargs
     if colorscale:
         hm_kwargs["colorscale"] = colorscale
 
     hm = ComplexHeatmap.from_dataframe(pdf, **hm_kwargs)
     fig = hm.to_plotly()
+    # Margin tweaks for the React viewer:
+    #   - b=110: x-tick labels rotated 45° don't get clipped (~14 char @10pt)
+    #   - r=200: row-annotation legend + col-annotation legend + colorbar all
+    #     stack on the right when the figure is rendered standalone. The lib
+    #     defaults to ~30px which works when its own baked-in width=900 is
+    #     used, but we strip width/height in the renderer to fit the chrome
+    #     panel — meaning the legend cluster gets clipped at 30px.
+    try:
+        existing_margin = fig.layout.margin
+        new_margin = dict(
+            l=getattr(existing_margin, "l", None) or 60,
+            r=max(getattr(existing_margin, "r", 30) or 30, 200),
+            t=getattr(existing_margin, "t", None) or 60,
+            b=max(getattr(existing_margin, "b", 50) or 50, 110),
+        )
+        fig.update_layout(margin=new_margin)
+    except Exception:  # pragma: no cover — defensive against library-shape changes
+        fig.update_layout(margin=dict(l=60, r=200, t=60, b=110))
     # Round-trip through plotly's JSON serializer so numpy ndarrays in trace
     # arrays / shape coords become plain lists/numbers. Without this, Celery's
     # JSON result backend chokes with "Object of type ndarray is not JSON
@@ -847,6 +915,12 @@ def compute_upset(payload: dict) -> dict:
     show_set_sizes = bool(payload.get("show_set_sizes", True))
     show_values = bool(payload.get("show_values", False))
     color_intersections_by = payload.get("color_intersections_by") or "none"
+    # Optional per-set colour map ({set_name: hex}). Forwarded to UpSetPlot
+    # so set-size bars + matrix dots + intersection bars (when
+    # color_intersections_by="set") use project-specific palettes — e.g.
+    # nf-core/ampliseq habitats: Riverwater #377EB8 / Groundwater #4DAF4A /
+    # Sediment #E41A1C / Soil #FF7F00.
+    set_colors = payload.get("set_colors") or None
     # Extra annotation tracks (per-intersection summaries). User-selected
     # non-set columns from the DC schema; library auto-detects numeric vs
     # categorical and renders a track per column above the intersection bars.
@@ -892,6 +966,8 @@ def compute_upset(payload: dict) -> dict:
         kwargs["max_degree"] = int(max_degree)
     if color_intersections_by in ("set", "degree"):
         kwargs["color_intersections_by"] = color_intersections_by
+    if set_colors:
+        kwargs["set_colors"] = set_colors
 
     # Distinct categorical palette for annotation tracks — picked to avoid
     # collision with the library's default UPSET_PALETTE that drives the

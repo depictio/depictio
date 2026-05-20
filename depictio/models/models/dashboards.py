@@ -939,7 +939,7 @@ class DashboardDataLite(BaseModel):
 
         def build_base_component(comp_dict: dict[str, Any]) -> dict[str, Any]:
             """Build base component with common fields."""
-            return {
+            base: dict[str, Any] = {
                 "index": comp_dict.get("index") or str(uuid.uuid4()),
                 "component_type": comp_dict.get("component_type", "figure"),
                 "title": comp_dict.get("title", ""),
@@ -952,6 +952,13 @@ class DashboardDataLite(BaseModel):
                 "parent_index": None,
                 "last_updated": datetime.now().isoformat(),
             }
+            # Title / description / title_size / title_align are common BaseLiteComponent
+            # fields — propagate them uniformly so the React renderer sees them
+            # on every tile type (figure, table, multiqc, advanced_viz, …).
+            for header_field in ("description", "title_size", "title_align"):
+                if comp_dict.get(header_field):
+                    base[header_field] = comp_dict[header_field]
+            return base
 
         full_dict: dict[str, Any] = {
             "title": self.title,

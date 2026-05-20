@@ -8,7 +8,7 @@ its ``config`` field; Pydantic discriminates by ``viz_kind``.
 
 from __future__ import annotations
 
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -74,6 +74,15 @@ class EmbeddingConfig(_BaseVizConfig):
     color_col: str | None = Field(
         default=None, description="Optional column for point colouring (metadata or expression)"
     )
+    category_palette: dict[str, str] | None = Field(
+        default=None,
+        description=(
+            "Explicit value→colour overrides for the categorical colour column. "
+            "Wins over the default palette-index assignment so dashboards can "
+            "pin domain-specific colours (e.g. habitat → Set1 palette) without "
+            "forking the renderer per project."
+        ),
+    )
 
     # --- Live-compute mode -------------------------------------------------
     # When `compute_method` is set, the renderer ignores dim_1_col/dim_2_col
@@ -123,6 +132,62 @@ class ManhattanConfig(_BaseVizConfig):
     score_threshold: float | None = Field(
         default=None, description="Horizontal threshold line; None hides it"
     )
+    marker_size_above: int = Field(
+        default=6,
+        ge=1,
+        le=30,
+        description=(
+            "Marker size (px) for points at or above ``score_threshold``. "
+            "Only used when a threshold is set."
+        ),
+    )
+    marker_size_below: int = Field(
+        default=4,
+        ge=1,
+        le=30,
+        description=(
+            "Marker size (px) for points below ``score_threshold``. Lower than "
+            "``marker_size_above`` by default so the eye lands on the hits, but "
+            "tunable when the sub-threshold population is the interesting one "
+            "(e.g. minority-allele variant discovery)."
+        ),
+    )
+    marker_size_uniform: int = Field(
+        default=5,
+        ge=1,
+        le=30,
+        description="Marker size when no threshold is set (uniform sizing).",
+    )
+    highlight: Literal["above", "below", "none"] = Field(
+        default="above",
+        description=(
+            "Which side of ``score_threshold`` gets emphasised. ``above`` (default) "
+            "colours and enlarges points at/above the threshold and dims those "
+            "below — the GWAS / consensus-variant default. ``below`` inverts it "
+            "(useful when minority alleles or sub-threshold candidates are the "
+            "interesting population). ``none`` colours both sides equally; the "
+            "threshold line is still drawn for reference. No effect when "
+            "``score_threshold`` is None."
+        ),
+    )
+    color_by_columns: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Extra columns to fetch alongside the required ones, exposed in the "
+            "viz controls' Colour-by dropdown. The renderer auto-detects numeric "
+            "vs categorical (continuous colorscale vs palette). ``Chromosome`` "
+            "(default) and ``Score`` (the y-axis column) are always available "
+            "without listing them here. Typical viralrecon usage: "
+            "``['effect', 'lineage', 'sample']``."
+        ),
+    )
+    default_color_by: str | None = Field(
+        default=None,
+        description=(
+            "Initial value for the Colour-by dropdown. Either ``Chromosome``, "
+            "``Score``, or one of ``color_by_columns``. Defaults to ``Chromosome``."
+        ),
+    )
 
 
 class StackedTaxonomyConfig(_BaseVizConfig):
@@ -143,6 +208,20 @@ class StackedTaxonomyConfig(_BaseVizConfig):
     sort_by: Literal["abundance", "alphabetical"] = Field(default="abundance")
     normalise_to_one: bool = Field(
         default=True, description="Force each sample's bars to sum to 1 (true % composition)"
+    )
+    annotation_strips: list[dict[str, Any]] | None = Field(
+        default=None,
+        description=(
+            "Generic per-sample categorical annotation strips drawn above or "
+            "below the stacked bars. Each entry is a dict with keys: "
+            "``column`` (str, required — DC column to read per-sample value), "
+            "``label`` (str, optional — strip label; defaults to column name), "
+            "``position`` ('top' | 'bottom', default 'bottom'), "
+            "``palette`` ({value: hex}, optional — overrides default cycling). "
+            "Reusable across any per-sample categorical metadata (habitat, "
+            "batch, treatment, timepoint). Renderer pulls the required columns "
+            "automatically — no recipe change needed beyond emitting the column."
+        ),
     )
 
 
@@ -166,6 +245,14 @@ class RarefactionConfig(_BaseVizConfig):
     )
     group_col: str | None = Field(
         default=None, description="Optional categorical column for line colour grouping"
+    )
+    category_palette: dict[str, str] | None = Field(
+        default=None,
+        description=(
+            "Explicit value→colour overrides for the group_col categories. "
+            "Pins domain palettes (e.g. habitat → Set1) across PCoA + UpSet + "
+            "heatmap + rarefaction for cross-tab consistency."
+        ),
     )
     show_ci: bool = Field(default=True, description="Shade ±1 SE band around each sample's curve")
 
@@ -251,6 +338,28 @@ class ComplexHeatmapConfig(_BaseVizConfig):
         default_factory=list,
         description="Categorical columns from the DC rendered as a right-side annotation strip",
     )
+    col_annotations: dict[str, dict[str, str]] | None = Field(
+        default=None,
+        description=(
+            "Per-column categorical annotations rendered as a top strip. Shape: "
+            "``{annotation_name: {column_label: category_value}}``. E.g. "
+            "``{'habitat': {'SRR10070130': 'Riverwater', 'SRR10070131': 'Riverwater', ...}}``. "
+            "The renderer aligns the values to the matrix's column order. Use when "
+            "per-sample metadata (treatment / habitat / batch) needs to live on the "
+            "column axis without joining a second DC."
+        ),
+    )
+    col_annotation_colors: dict[str, dict[str, str]] | None = Field(
+        default=None,
+        description=(
+            "Optional per-annotation colour overrides for the column-annotation "
+            "track. Shape: ``{annotation_name: {category_value: hex}}``. When "
+            "unset the server picks colours from a Dark2 palette (chosen to "
+            "contrast with the row-track's Set2 pastels so the two tracks "
+            "read as distinct families). Use to pin domain palettes (e.g. "
+            "habitat → Set1) across PCoA + UpSet + heatmap."
+        ),
+    )
     cluster_rows: bool = Field(default=True)
     cluster_cols: bool = Field(default=True)
     cluster_method: Literal["ward", "single", "complete", "average"] = Field(default="ward")
@@ -287,6 +396,14 @@ class UpsetPlotConfig(_BaseVizConfig):
     )
     show_set_sizes: bool = Field(default=True, description="Show horizontal set-size bar chart")
     color_intersections_by: Literal["none", "set", "degree"] = Field(default="none")
+    set_colors: dict[str, str] | None = Field(
+        default=None,
+        description=(
+            "Optional per-set colour overrides (set name → hex). Drives set-size "
+            "bars + matrix dots + intersection bars when color_intersections_by='set'. "
+            "Use to pin domain palettes (e.g. habitat → Set1) consistently across tiles."
+        ),
+    )
 
 
 class PhylogeneticConfig(_BaseVizConfig):
@@ -321,6 +438,25 @@ class PhylogeneticConfig(_BaseVizConfig):
     )
     label_col: str | None = Field(
         default=None, description="Metadata column shown alongside the tip label (e.g. clade name)"
+    )
+    extra_color_cols: list[str] | None = Field(
+        default=None,
+        description=(
+            "Extra metadata columns to pre-fetch so they appear in the viz "
+            "'Colour by' Select. Typical use: taxonomic ranks on ASV trees "
+            "(Kingdom/Phylum/Class/Order/Family/Genus/Species) so the user can "
+            "re-colour tips at a different rank without reloading."
+        ),
+    )
+    category_palettes: dict[str, dict[str, str]] | None = Field(
+        default=None,
+        description=(
+            "Per-column palette overrides for the 'Colour by' selector. Shape: "
+            "``{column_name: {category_value: hex}}``. Use to pin domain "
+            "palettes — e.g. ``dominant_habitat → Set1`` — so the same category "
+            "lands on the same colour across PCoA, UpSet, heatmap and phylogeny "
+            "tiles."
+        ),
     )
 
     # Display defaults (all editable from the viz controls).
@@ -446,6 +582,15 @@ class SunburstConfig(_BaseVizConfig):
         ..., min_length=2, description="Hierarchical rank columns from root to leaf"
     )
     abundance_col: str = Field(..., description="Leaf abundance weight column")
+    category_palette: dict[str, str] | None = Field(
+        default=None,
+        description=(
+            "Explicit value→colour overrides for the colour-key categories "
+            "(whichever rank the user's `Colour by` picker chooses). Use to pin "
+            "domain palettes (e.g. Habitat → Set1) so the same category lands "
+            "on the same colour as the matching PCoA / UpSet / heatmap tiles."
+        ),
+    )
 
 
 class CoverageTrackConfig(_BaseVizConfig):
@@ -481,10 +626,14 @@ class CoverageTrackConfig(_BaseVizConfig):
     # Display defaults — editable from the viz Settings popover.
     y_scale: Literal["linear", "log"] = Field(default="linear")
     smoothing_window: int = Field(
-        default=0,
+        default=5,
         ge=0,
         le=200,
-        description="Rolling-mean window in bins (0 disables smoothing)",
+        description=(
+            "Rolling-mean window in bins (0 disables smoothing). Default 5 ≈ 1 kb "
+            "at 200-bp mosdepth bins — kills high-frequency wiggle without flattening "
+            "amplicon-scale dropouts. Set to 0 explicitly to disable."
+        ),
     )
     color_by: Literal["single", "category", "sample"] = Field(
         default="single", description="Trace colour assignment mode"
@@ -492,6 +641,17 @@ class CoverageTrackConfig(_BaseVizConfig):
     show_annotation_lane: bool = Field(
         default=True,
         description="Render a thin annotation strip below the coverage when category_col is bound",
+    )
+    annotation_id: str | None = Field(
+        default=None,
+        description=(
+            "Optional bundled-annotation override. When null (default), the renderer "
+            "auto-detects the assembly from the bound DC's chromosome value (e.g. "
+            "``MN908947.3`` → SARS-CoV-2). Pin this when your data uses a non-standard "
+            "chromosome name (e.g. internal isolate IDs) but corresponds to a known "
+            "assembly. See depictio-react-core's genome_annotations registry for valid "
+            "IDs (``sars_cov_2``, ``rsv_a``, ``hiv_1``, ``mpox``, ``hbv``)."
+        ),
     )
     chromosomes_filter: list[str] | None = Field(
         default=None,
@@ -521,9 +681,33 @@ class SankeyConfig(_BaseVizConfig):
         min_length=2,
         description="Ordered categorical columns from source to leaf (≥2 levels)",
     )
+    available_step_cols: list[str] | None = Field(
+        default=None,
+        description=(
+            "Full ordered list of columns the user can wire as steps. When set, "
+            "the renderer exposes a Depth slider that picks the first N columns "
+            "from this list. ``step_cols`` is the initial prefix; leaving it "
+            "unset locks the diagram to ``step_cols``."
+        ),
+    )
     value_col: str | None = Field(
         default=None,
         description="Optional numeric weight column; null → each row counts as 1",
+    )
+    value_label: str | None = Field(
+        default=None,
+        description=(
+            "Human-readable label for the value column shown in hover tooltips. "
+            "Defaults to ``value_col`` when unset (e.g. 'abundance')."
+        ),
+    )
+    value_format: Literal["raw", "fraction", "count"] = Field(
+        default="raw",
+        description=(
+            "Hover display mode: 'fraction' multiplies by 100 and appends '%'; "
+            "'count' uses thousands separators; 'raw' adapts decimal precision "
+            "to magnitude."
+        ),
     )
 
     # Display defaults — editable from the Settings popover.

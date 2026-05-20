@@ -6,6 +6,7 @@ import {
   Select,
   Stack,
   Switch,
+  Text,
   TextInput,
   useMantineColorScheme,
   useMantineTheme,
@@ -33,6 +34,14 @@ interface PhylogeneticConfig {
   taxon_col?: string;
   color_col?: string | null;
   label_col?: string | null;
+  /** Extra metadata columns to fetch alongside color_col / label_col, so
+   *  they show up in the "Colour by" Select. Use for taxonomic ranks on
+   *  ASV trees (Kingdom / Phylum / Class / Order / Family / Genus / Species). */
+  extra_color_cols?: string[] | null;
+  /** Per-column palette overrides for the "Colour by" selector. Shape:
+   *  ``{column_name: {category_value: hex}}``. Lets dashboards pin domain
+   *  palettes (e.g. dominant_habitat → Set1) consistently across tiles. */
+  category_palettes?: Record<string, Record<string, string>> | null;
   default_layout?: Layout;
   ladderize?: boolean;
   show_metadata_strip?: boolean;
@@ -130,6 +139,13 @@ const PhylogeneticRenderer: React.FC<Props> = ({ metadata, filters, refreshTick 
     const wantedCols: string[] = [taxonCol];
     if (config.color_col) wantedCols.push(config.color_col);
     if (config.label_col) wantedCols.push(config.label_col);
+    // Extra columns surfaced as alternative colour-by options in the
+    // controls popover. Typical use: taxonomic ranks for an ASV tree
+    // (Kingdom / Phylum / Class / …) so the user can re-colour the tips
+    // at a different level without reloading the page.
+    if (Array.isArray(config.extra_color_cols)) {
+      for (const c of config.extra_color_cols) if (c) wantedCols.push(c);
+    }
     const metaP =
       config.metadata_wf_id && config.metadata_dc_id
         ? fetchAdvancedVizData(
@@ -210,7 +226,15 @@ const PhylogeneticRenderer: React.FC<Props> = ({ metadata, filters, refreshTick 
       if (!uniqueValues.includes(v)) uniqueValues.push(v);
     }
     uniqueValues.sort();
-    const colourSource = stableColorMap(colorUniverse ?? uniqueValues, PALETTE);
+    // Per-column palette override pulled from the dashboard config — keeps
+    // habitat-style category colours stable across PCoA / UpSet / heatmap /
+    // phylogeny tiles. Falls back to PALETTE-index assignment otherwise.
+    const palettesByCol = config.category_palettes || {};
+    const colourSource = stableColorMap(
+      colorUniverse ?? uniqueValues,
+      PALETTE,
+      colorCol ? palettesByCol[colorCol] || null : null,
+    );
     for (const leaf of tree.leaves) {
       const row = tipMeta.get(leaf.name ?? '');
       const v = row ? String(row[colorCol] ?? '—') : '—';
@@ -360,6 +384,15 @@ const PhylogeneticRenderer: React.FC<Props> = ({ metadata, filters, refreshTick 
     const tipBorders: string[] = [];
     const tipOpacities: number[] = [];
     const tipIds: number[] = [];
+    // Per-tip customdata: [internal_id, ...metadata_values]. We thread the
+    // metadata columns through Plotly's customdata so the hovertemplate can
+    // pick them up by index without per-trace string interpolation.
+    const tipCustomdata: (number | string)[][] = [];
+    // Hover columns: every metadata column except the taxon (already in
+    // %{text}). Order matters because hovertemplate references customdata
+    // by integer index — see the template assembly below.
+    const taxonCol = config.taxon_col || 'taxon';
+    const hoverCols = metaCols.filter((c) => c !== taxonCol);
 
     const searchLc = search.trim().toLowerCase();
     for (const leaf of tree.leaves) {
@@ -377,18 +410,50 @@ const PhylogeneticRenderer: React.FC<Props> = ({ metadata, filters, refreshTick 
         isSearchMatch ? '#FAB005' : isHi ? '#E64980' : isDark ? 'rgba(255,255,255,0.6)' : 'rgba(0,0,0,0.4)',
       );
       tipOpacities.push(inScope ? 1 : 0.25);
+      // customdata: [leaf.id, ...meta values for each hoverCol]. Falls back to
+      // '—' so the hover line stays aligned even when a rank isn't resolved.
+      const row = tipMeta.get(name) || {};
+      const customRow: (number | string)[] = [leaf.id];
+      for (const c of hoverCols) {
+        const v = row[c];
+        customRow.push(v == null || v === '' ? '—' : String(v));
+      }
+      tipCustomdata.push(customRow);
     }
 
+    // For dense trees the tip-label text becomes unreadable noise (ASV hash
+    // ids overlap each other). Threshold matches the QIIME2 q2-emperor
+    // default: tip text only when there are <= 80 tips. Hover still shows
+    // the full name. Always-text on small trees; markers-only on big ones.
+    const tipTextMode = tree.leaves.length <= 80 ? 'markers+text' : 'markers';
+    // scattergl renders 10x+ faster for large tip counts and keeps pan/zoom
+    // responsive on 10k+ tip trees. Plain scatter is preferable for small
+    // trees because it supports text-mode rendering and richer hover boxes
+    // out of the box, but at scale the WebGL trade-off is the right call.
+    const tipTraceType = tree.leaves.length > 500 ? 'scattergl' : 'scatter';
+
+    // Build a hover template that shows the taxon (text) followed by each
+    // metadata rank on its own line. Index [0] is leaf.id (used by the click
+    // handler); metadata starts at index [1]. When no metadata columns exist
+    // the template falls back to just the tip name.
+    const hoverLines = hoverCols.map(
+      (col, i) => `<b>${col}</b>: %{customdata[${i + 1}]}`,
+    );
+    const hoverTpl =
+      hoverLines.length > 0
+        ? `<b>%{text}</b><br>${hoverLines.join('<br>')}<extra></extra>`
+        : '%{text}<extra></extra>';
+
     traces.push({
-      type: 'scatter' as const,
-      mode: 'markers+text',
+      type: tipTraceType,
+      mode: tipTextMode,
       x: tipXs,
       y: tipYs,
       text: tipLabels,
-      customdata: tipIds,
+      customdata: tipCustomdata,
       textposition: layout === 'rectangular' || layout === 'diagonal' ? 'middle right' : 'top center',
       textfont: { size: 10, color: isDark ? '#e9ecef' : '#212529' },
-      hovertemplate: '%{text}<extra></extra>',
+      hovertemplate: hoverTpl,
       marker: {
         size: tipSizes,
         color: tipColours,
@@ -471,13 +536,18 @@ const PhylogeneticRenderer: React.FC<Props> = ({ metadata, filters, refreshTick 
 
   const controls = (
     <Stack gap="xs">
-      <SegmentedControl
+      <Stack gap={4}>
+        <Text size="xs" fw={500}>
+          Mode
+        </Text>
+        <SegmentedControl
         size="xs"
         data={LAYOUTS}
         value={layout}
         onChange={(v) => setLayout(v as Layout)}
         fullWidth
       />
+      </Stack>
       <TextInput
         size="xs"
         label="Search tip"
@@ -495,24 +565,39 @@ const PhylogeneticRenderer: React.FC<Props> = ({ metadata, filters, refreshTick 
           clearable
         />
       ) : null}
-      <Switch
+      <Stack gap={4}>
+        <Text size="xs" fw={500}>
+          Ladderise
+        </Text>
+        <Switch
         size="xs"
         checked={doLadderise}
         onChange={(e) => setDoLadderise(e.currentTarget.checked)}
         label="Ladderise"
       />
-      <Switch
+      </Stack>
+      <Stack gap={4}>
+        <Text size="xs" fw={500}>
+          Strip
+        </Text>
+        <Switch
         size="xs"
         checked={showStrip}
         onChange={(e) => setShowStrip(e.currentTarget.checked)}
         label="Metadata strip"
       />
-      <Switch
+      </Stack>
+      <Stack gap={4}>
+        <Text size="xs" fw={500}>
+          Branch lengths
+        </Text>
+        <Switch
         size="xs"
         checked={showBranchLengths}
         onChange={(e) => setShowBranchLengths(e.currentTarget.checked)}
         label="Branch lengths"
       />
+      </Stack>
       {highlightedRootId != null ? (
         <Group gap="xs" grow>
           <Button size="compact-xs" variant="light" color="pink" onClick={() => setHighlightedRootId(null)}>
@@ -543,6 +628,7 @@ const PhylogeneticRenderer: React.FC<Props> = ({ metadata, filters, refreshTick 
               background: stableColorMap(
                 colorUniverse ?? tipColors.categories,
                 PALETTE,
+                colorCol ? (config.category_palettes || {})[colorCol] || null : null,
               ).get(cat),
               }}
             />
@@ -556,7 +642,12 @@ const PhylogeneticRenderer: React.FC<Props> = ({ metadata, filters, refreshTick 
   const onPlotClick = (event: any) => {
     const cd = event?.points?.[0]?.customdata;
     if (cd == null) return;
-    setHighlightedRootId((prev) => (prev === cd ? null : cd));
+    // customdata is now an array [leaf.id, ...metadata]. The leaf id lives
+    // at index 0; older internal-node traces still pass a bare number, so
+    // accept either shape.
+    const id = Array.isArray(cd) ? cd[0] : cd;
+    if (id == null) return;
+    setHighlightedRootId((prev) => (prev === id ? null : (id as number)));
   };
 
   return (

@@ -955,12 +955,25 @@ class ComplexHeatmap:
         elif self.title:
             top_margin = 50
 
+        # Dynamic bottom margin to fit rotated column labels.
+        # Labels are placed at -90deg when > 20 cols, otherwise -45deg.
+        # Char-pixel approximation: width ~6px per char at the configured font
+        # size. For -90deg labels the visual *height* equals char-count * 6;
+        # for -45deg it's ~0.7 of that. Always reserve a 14px gap for the
+        # tick-mark plus tickfont.
+        max_col_label_len = max((len(lbl) for lbl in self._col_labels), default=0)
+        col_tickangle_deg = 90 if len(self._col_labels) > 20 else 45
+        col_label_px = int(
+            max_col_label_len * 6 * (1.0 if col_tickangle_deg == 90 else 0.7)
+        )
+        bottom_margin = max(20, col_label_px + 14)
+
         fig.update_layout(
             width=self.width,
             height=self.height,
             plot_bgcolor="rgba(0,0,0,0)",
             paper_bgcolor="white",
-            margin={"l": left_margin, "r": right_margin, "t": top_margin, "b": 5},
+            margin={"l": left_margin, "r": right_margin, "t": top_margin, "b": bottom_margin},
             font={"family": FONT_FAMILY, "size": 11},
             legend={
                 "x": legend_x_frac,

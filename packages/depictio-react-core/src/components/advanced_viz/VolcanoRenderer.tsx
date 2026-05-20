@@ -3,6 +3,7 @@ import {
   NumberInput,
   Stack,
   Switch,
+  Text,
   TextInput,
   Tooltip,
   useMantineColorScheme,
@@ -163,11 +164,20 @@ const VolcanoRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =>
             if (y == null) return null;
             const labelMe = matchedIdx ? matchedIdx.has(i) : topIdx.has(i);
             if (!labelMe) return null;
+            // Place each label slightly above its point with a thin connector
+            // arrow. This keeps the (x, y) anchor on the point while moving
+            // text-bounding-box up by 16px — far cleaner when several
+            // top-N labels cluster near the same effect/significance corner.
             return {
               x,
               y,
               text: String(labels[i] ?? ids[i] ?? ''),
-              showarrow: false,
+              showarrow: true,
+              arrowhead: 0,
+              arrowwidth: 0.6,
+              arrowcolor: 'rgba(120,120,120,0.6)',
+              ax: 0,
+              ay: -16,
               font: { size: 10 },
             };
           })
@@ -302,12 +312,17 @@ const VolcanoRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =>
           onChange={(e) => setSearch(e.currentTarget.value)}
           placeholder="gene / taxon"
         />
-        <Switch
-          size="xs"
-          checked={showLabels}
-          onChange={(e) => setShowLabels(e.currentTarget.checked)}
-          label="Labels"
-        />
+        <Stack gap={4}>
+          <Text size="xs" fw={500}>
+            Top-n
+          </Text>
+          <Switch
+            size="xs"
+            checked={showLabels}
+            onChange={(e) => setShowLabels(e.currentTarget.checked)}
+            label="Top-N labels"
+          />
+        </Stack>
       </Stack>
     ),
     [sigThreshold, effectThreshold, topN, search, showLabels],

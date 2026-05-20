@@ -4,6 +4,7 @@ import {
   Select,
   Stack,
   Switch,
+  Text,
   useMantineColorScheme,
   useMantineTheme,
 } from '@mantine/core';
@@ -19,6 +20,21 @@ import { stableColorMap } from '../../colors';
 import AdvancedVizFrame from './AdvancedVizFrame';
 import { applyDataTheme, applyLayoutTheme, plotlyAxisOverrides, plotlyThemeFragment } from './plotlyTheme';
 
+/** Generic per-sample categorical annotation strip drawn above/below the
+ *  stacked bars. Reusable across any viz with a sample axis when the DC
+ *  carries a categorical metadata column the user wants visualised as a
+ *  colour band (habitat, batch, treatment, timepoint, …). */
+interface AnnotationStrip {
+  /** Metadata column in the DC; values are looked up per sample. */
+  column: string;
+  /** Optional label shown to the left of the strip. Defaults to `column`. */
+  label?: string;
+  /** Where to draw the strip relative to the chart. */
+  position?: 'top' | 'bottom';
+  /** Per-category colour overrides; falls back to TAB10-style cycling. */
+  palette?: Record<string, string> | null;
+}
+
 interface StackedTaxonomyConfig {
   sample_id_col: string;
   taxon_col: string;
@@ -28,6 +44,10 @@ interface StackedTaxonomyConfig {
   top_n?: number;
   sort_by?: 'abundance' | 'alphabetical';
   normalise_to_one?: boolean;
+  /** Categorical annotation strips drawn alongside the bars. Each strip
+   *  reads its values from the row's metadata column at the matching
+   *  sample. Renderer ensures the fetched column list includes these. */
+  annotation_strips?: AnnotationStrip[] | null;
 }
 
 interface Props {
@@ -78,12 +98,20 @@ const StackedTaxonomyRenderer: React.FC<Props> = ({ metadata, filters, refreshTi
   }, [metadata.dc_id, config.taxon_col]);
 
   const requiredCols = useMemo(
-    () => [
-      config.sample_id_col,
-      config.taxon_col,
-      config.rank_col,
-      config.abundance_col,
-    ].filter(Boolean) as string[],
+    () => {
+      const base = [
+        config.sample_id_col,
+        config.taxon_col,
+        config.rank_col,
+        config.abundance_col,
+      ].filter(Boolean) as string[];
+      // Append columns required by any annotation strip so the renderer can
+      // look up per-sample categorical values without a second fetch.
+      for (const s of config.annotation_strips ?? []) {
+        if (s.column && !base.includes(s.column)) base.push(s.column);
+      }
+      return base;
+    },
     [config],
   );
 
@@ -201,13 +229,90 @@ const StackedTaxonomyRenderer: React.FC<Props> = ({ metadata, filters, refreshTi
         marker: { color: t === 'Other' ? '#adb5bd' : colourSource.get(t) },
       }));
 
+    // Annotation strips — one row of per-sample coloured rectangles per
+    // configured strip. Positions are paper-relative (yref='paper') so the
+    // strip stays anchored regardless of y-axis range. Drawn via shapes
+    // because Plotly's bar trace doesn't expose row-level decorations and a
+    // second subplot would require a layout overhaul.
+    const strips = (config.annotation_strips ?? []).filter((s) => s && s.column);
+    const stripShapes: Record<string, unknown>[] = [];
+    const stripAnnotations: Record<string, unknown>[] = [];
+    if (strips.length > 0) {
+      const sampleCol = rows[config.sample_id_col] as unknown[] | undefined;
+      const STRIP_BAND = 0.04; // each strip occupies ~4% of paper height
+      const STRIP_GAP = 0.01;
+      const bottomBase = -0.18; // start below x-axis (room for labels)
+      const topBase = 1.02; // start just above plot area
+      let bottomCursor = bottomBase;
+      let topCursor = topBase;
+      for (const strip of strips) {
+        // Build sample → category map from the fetched rows.
+        const sampleToValue = new Map<string, string>();
+        const stripCol = rows[strip.column] as unknown[] | undefined;
+        if (sampleCol && stripCol) {
+          for (let i = 0; i < sampleCol.length; i++) {
+            const k = String(sampleCol[i] ?? '');
+            if (!sampleToValue.has(k)) {
+              sampleToValue.set(k, String(stripCol[i] ?? '—'));
+            }
+          }
+        }
+        // Stable category→colour for THIS strip's categories.
+        const uniq = Array.from(new Set(sampleToValue.values())).sort();
+        const stripPalette = stableColorMap(uniq, PALETTE, strip.palette ?? null);
+
+        const isBottom = (strip.position ?? 'bottom') === 'bottom';
+        const y0 = isBottom ? bottomCursor - STRIP_BAND : topCursor;
+        const y1 = isBottom ? bottomCursor : topCursor + STRIP_BAND;
+        if (isBottom) bottomCursor = y0 - STRIP_GAP;
+        else topCursor = y1 + STRIP_GAP;
+
+        // Per-sample coloured rectangles aligned to the x-axis category ticks.
+        orderedSamples.forEach((s, i) => {
+          const v = sampleToValue.get(s) ?? '—';
+          stripShapes.push({
+            type: 'rect',
+            xref: 'x',
+            yref: 'paper',
+            x0: i - 0.5,
+            x1: i + 0.5,
+            y0,
+            y1,
+            fillcolor: stripPalette.get(v),
+            line: { width: 0 },
+            layer: 'above',
+          });
+        });
+        // Label on the LEFT of the strip (paper x=0, anchored right).
+        stripAnnotations.push({
+          xref: 'paper',
+          yref: 'paper',
+          x: -0.005,
+          y: (y0 + y1) / 2,
+          xanchor: 'right',
+          yanchor: 'middle',
+          text: strip.label || strip.column,
+          showarrow: false,
+          font: { size: 10, color: isDark ? '#ced4da' : '#495057' },
+        });
+      }
+    }
+    // Need extra bottom margin when strips are drawn below; extra top when
+    // above. Cap at ~120px to keep the bars readable.
+    const bottomStrips = strips.filter((s) => (s.position ?? 'bottom') === 'bottom').length;
+    const topStrips = strips.length - bottomStrips;
+    const bMargin = 70 + bottomStrips * 22;
+    const tMargin = 30 + topStrips * 22;
+
     return {
       figure: {
         data,
         layout: {
           ...plotlyThemeFragment(isDark, theme),
           barmode: 'stack' as const,
-          margin: { l: 60, r: 20, t: 30, b: 70 },
+          margin: { l: 60, r: 20, t: tMargin, b: bMargin },
+          shapes: stripShapes,
+          annotations: stripAnnotations,
           xaxis: {
             ...plotlyAxisOverrides(isDark, theme),
             title: { text: config.sample_id_col },
@@ -271,25 +376,40 @@ const StackedTaxonomyRenderer: React.FC<Props> = ({ metadata, filters, refreshTi
         min={1}
         max={50}
       />
-      <Switch
+      <Stack gap={4}>
+        <Text size="xs" fw={500}>
+          Normalise
+        </Text>
+        <Switch
         size="xs"
         checked={normalise}
         onChange={(e) => setNormalise(e.currentTarget.checked)}
         label="Normalise"
       />
-      <Switch
+      </Stack>
+      <Stack gap={4}>
+        <Text size="xs" fw={500}>
+          Legend
+        </Text>
+        <Switch
         size="xs"
         checked={showLegend}
         onChange={(e) => setShowLegend(e.currentTarget.checked)}
         label="Legend"
       />
+      </Stack>
       {!normalise ? (
-        <Switch
+        <Stack gap={4}>
+          <Text size="xs" fw={500}>
+            Scale
+          </Text>
+          <Switch
           size="xs"
           checked={logY}
           onChange={(e) => setLogY(e.currentTarget.checked)}
           label="Log y"
         />
+        </Stack>
       ) : null}
     </Stack>
   );

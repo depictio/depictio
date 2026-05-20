@@ -37,6 +37,9 @@ interface EmbeddingConfig {
   dim_3_col?: string | null;
   cluster_col?: string | null;
   color_col?: string | null;
+  /** Explicit value→colour overrides for the categorical colour column.
+   *  Wins over the default palette-index assignment from stableColorMap. */
+  category_palette?: Record<string, string> | null;
   point_size?: number;
   show_density?: boolean;
   // Live-compute mode (see PhylogeneticConfig / EmbeddingConfig in
@@ -368,7 +371,11 @@ const EmbeddingRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) 
     if (isCategorical && colorValues) {
       const categories = Array.from(new Set(colorValues.map((v) => String(v))));
       categories.sort();
-      const colourSource = stableColorMap(colorUniverse ?? categories, TAB10_PALETTE);
+      const colourSource = stableColorMap(
+        colorUniverse ?? categories,
+        TAB10_PALETTE,
+        config.category_palette ?? null,
+      );
       const centroids: { x: number; y: number; z?: number; label: string }[] = [];
       for (let ci = 0; ci < categories.length; ci++) {
         const cat = categories[ci];
@@ -690,16 +697,21 @@ const EmbeddingRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) 
         {/* View 2D/3D toggle. In precomputed mode this is only meaningful when
             the DC has a dim_3_col; in live mode the user can opt into 3D and
             n_components flips to 3 automatically. */}
-        <SegmentedControl
-          size="xs"
-          value={view3D ? '3d' : '2d'}
-          onChange={(v) => setView3D(v === '3d')}
-          data={[
-            { value: '2d', label: '2D' },
-            { value: '3d', label: '3D' },
-          ]}
-          disabled={!liveMode && !has3DConfigured}
-        />
+        <Stack gap={4}>
+          <Text size="xs" fw={500}>
+            View
+          </Text>
+          <SegmentedControl
+            size="xs"
+            value={view3D ? '3d' : '2d'}
+            onChange={(v) => setView3D(v === '3d')}
+            data={[
+              { value: '2d', label: '2D' },
+              { value: '3d', label: '3D' },
+            ]}
+            disabled={!liveMode && !has3DConfigured}
+          />
+        </Stack>
         <Group gap="xs" grow>
           <NumberInput
             size="xs"
@@ -721,12 +733,17 @@ const EmbeddingRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) 
           ) : null}
         </Group>
         {colorByIsNumeric ? (
-          <Switch
-            size="xs"
-            checked={reverseScale}
-            onChange={(e) => setReverseScale(e.currentTarget.checked)}
-            label="Reverse colourscale"
-          />
+          <Stack gap={4}>
+            <Text size="xs" fw={500}>
+              Colourscale
+            </Text>
+            <Switch
+              size="xs"
+              checked={reverseScale}
+              onChange={(e) => setReverseScale(e.currentTarget.checked)}
+              label="Reverse"
+            />
+          </Stack>
         ) : null}
         {hoverCandidates.length > 0 ? (
           <MultiSelect
@@ -741,13 +758,18 @@ const EmbeddingRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) 
             maxValues={6}
           />
         ) : null}
-        <Switch
-          size="xs"
-          checked={showDensity}
-          onChange={(e) => setShowDensity(e.currentTarget.checked)}
-          label="Density overlay"
-          disabled={view3D}
-        />
+        <Stack gap={4}>
+          <Text size="xs" fw={500}>
+            Density
+          </Text>
+          <Switch
+            size="xs"
+            checked={showDensity}
+            onChange={(e) => setShowDensity(e.currentTarget.checked)}
+            label="Density overlay"
+            disabled={view3D}
+          />
+        </Stack>
         {showDensity && !view3D ? (
           <Group gap="xs" grow>
             <NumberInput
@@ -770,19 +792,29 @@ const EmbeddingRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) 
             />
           </Group>
         ) : null}
-        <Switch
-          size="xs"
-          checked={showCentroids}
-          onChange={(e) => setShowCentroids(e.currentTarget.checked)}
-          label="Cluster labels"
-        />
-        <Switch
-          size="xs"
-          checked={markerOutline}
-          onChange={(e) => setMarkerOutline(e.currentTarget.checked)}
-          label="Marker outline"
-          disabled={view3D}
-        />
+        <Stack gap={4}>
+          <Text size="xs" fw={500}>
+            Annotations
+          </Text>
+          <Switch
+            size="xs"
+            checked={showCentroids}
+            onChange={(e) => setShowCentroids(e.currentTarget.checked)}
+            label="Cluster centroids"
+          />
+        </Stack>
+        <Stack gap={4}>
+          <Text size="xs" fw={500}>
+            Markers
+          </Text>
+          <Switch
+            size="xs"
+            checked={markerOutline}
+            onChange={(e) => setMarkerOutline(e.currentTarget.checked)}
+            label="Outline"
+            disabled={view3D}
+          />
+        </Stack>
         <Select
           size="xs"
           label="Legend"

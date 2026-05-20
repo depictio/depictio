@@ -5,6 +5,7 @@ import {
   Select,
   Stack,
   Switch,
+  Text,
   useMantineColorScheme,
   useMantineTheme,
 } from '@mantine/core';
@@ -425,25 +426,40 @@ const LollipopRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =
           max={20}
           disabled={!config.effect_col}
         />
-        <Switch
+        <Stack gap={4}>
+          <Text size="xs" fw={500}>
+            Scale
+          </Text>
+          <Switch
           size="xs"
           checked={scalePointsByEffect}
           onChange={(e) => setScalePointsByEffect(e.currentTarget.checked)}
           label="Scale points by |effect|"
           disabled={!config.effect_col}
         />
-        <Switch
+        </Stack>
+        <Stack gap={4}>
+          <Text size="xs" fw={500}>
+            Show
+          </Text>
+          <Switch
           size="xs"
           checked={showStems}
           onChange={(e) => setShowStems(e.currentTarget.checked)}
           label="Show stems"
         />
-        <Switch
+        </Stack>
+        <Stack gap={4}>
+          <Text size="xs" fw={500}>
+            Markers
+          </Text>
+          <Switch
           size="xs"
           checked={markerOutline}
           onChange={(e) => setMarkerOutline(e.currentTarget.checked)}
           label="Marker outline"
         />
+        </Stack>
       </Stack>
     ),
     [

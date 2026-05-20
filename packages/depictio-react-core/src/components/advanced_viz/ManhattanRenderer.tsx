@@ -1,8 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
+  Input,
   MultiSelect,
   NumberInput,
+  SegmentedControl,
+  Select,
   Stack,
+  Text,
   useMantineColorScheme,
   useMantineTheme,
 } from '@mantine/core';
@@ -13,8 +17,10 @@ import {
   InteractiveFilter,
   StoredMetadata,
 } from '../../api';
-import AdvancedVizFrame from './AdvancedVizFrame';
+import AdvancedVizFrame, { TIER_COLORS } from './AdvancedVizFrame';
 import { applyDataTheme, applyLayoutTheme, plotlyAxisOverrides, plotlyThemeFragment } from './plotlyTheme';
+
+type Highlight = 'above' | 'below' | 'none';
 
 interface ManhattanConfig {
   chr_col: string;
@@ -25,7 +31,17 @@ interface ManhattanConfig {
   score_kind?: string;
   score_threshold?: number | null;
   top_n_labels?: number | null;
+  marker_size_above?: number;
+  marker_size_below?: number;
+  marker_size_uniform?: number;
+  highlight?: Highlight;
+  /** Extra columns to fetch + expose in the Colour-by dropdown. */
+  color_by_columns?: string[];
 }
+
+/** Sentinel values for the Colour-by Select that aren't real DC columns. */
+const COLOR_BY_CHROMOSOME = '__chromosome__';
+const COLOR_BY_SCORE = '__score__';
 
 interface Props {
   metadata: StoredMetadata & { viz_kind?: string; config?: ManhattanConfig };
@@ -68,10 +84,29 @@ const ManhattanRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) 
     config.top_n_labels ?? 8,
   );
   const [selectedChrs, setSelectedChrs] = useState<string[]>([]);
+  const [markerSizeAbove, setMarkerSizeAbove] = useState<number>(
+    config.marker_size_above ?? 6,
+  );
+  const [markerSizeBelow, setMarkerSizeBelow] = useState<number>(
+    config.marker_size_below ?? 4,
+  );
+  const [markerSizeUniform, setMarkerSizeUniform] = useState<number>(
+    config.marker_size_uniform ?? 5,
+  );
+  const [highlight, setHighlight] = useState<Highlight>(config.highlight ?? 'above');
+  const [colorBy, setColorBy] = useState<string>(
+    (config as { default_color_by?: string }).default_color_by ?? COLOR_BY_CHROMOSOME,
+  );
 
   const requiredCols = useMemo(() => {
     const cols = [config.chr_col, config.pos_col, config.score_col].filter(Boolean) as string[];
     if (config.feature_col) cols.push(config.feature_col);
+    // Fetch the user-declared colour-by columns alongside so swapping colour
+    // mode doesn't require a re-fetch (the data endpoint caps at 100k rows
+    // which is plenty for variant tracks).
+    for (const c of config.color_by_columns ?? []) {
+      if (!cols.includes(c)) cols.push(c);
+    }
     return cols;
   }, [config]);
 
@@ -168,12 +203,147 @@ const ManhattanRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) 
     const tiers: ('ABOVE' | 'BELOW')[] | null = hasThreshold
       ? scores.map((s) => (s != null && s >= (scoreThreshold as number) ? 'ABOVE' : 'BELOW'))
       : null;
+
+    // Marker colouring rules — composed from two orthogonal axes:
+    //  1) ``colorBy`` (Colour-by Select): chromosome / score / any extra
+    //     fetched column. Categorical columns get hash→palette assignment;
+    //     numeric columns (incl. ``score`` itself) use a continuous teal-
+    //     orange gradient that matches the tier palette so the chip ↔ dot
+    //     visual language stays consistent. Chromosome mode keeps the
+    //     canonical GWAS-style chromosome palette + the tier palette as a
+    //     special case when a threshold is set.
+    //  2) ``highlight`` (when a threshold is set): the dimmed tier overrides
+    //     whatever colour rule (1) produced and falls back to grey. This is
+    //     what lets the user emphasise consensus vs subconsensus regardless
+    //     of which Colour-by mode they picked.
+    const dimColor = 'rgba(160,160,160,0.45)';
+    const tierColorHex = (tier: 'ABOVE' | 'BELOW') => {
+      const name = TIER_COLORS[tier];
+      const swatch = (theme.colors as Record<string, readonly string[]>)[name];
+      return swatch?.[5] ?? colorByChr.values().next().value ?? '#777';
+    };
+
+    // Detect numeric vs categorical for an arbitrary colour-by column.
+    const colorByValues =
+      colorBy === COLOR_BY_CHROMOSOME || colorBy === COLOR_BY_SCORE
+        ? null
+        : (rows[colorBy] as (string | number | null)[] | undefined) ?? null;
+    const colorByIsNumeric =
+      colorBy === COLOR_BY_SCORE ||
+      (colorByValues != null &&
+        colorByValues.find((v) => v != null) != null &&
+        typeof colorByValues.find((v) => v != null) === 'number');
+
+    // Hex helpers for the palette + gradient endpoints.
+    const tealHex = tierColorHex('ABOVE');
+    const orangeHex = tierColorHex('BELOW');
+
+    /** Linear interpolate between two #rrggbb colours. */
+    const lerp = (a: string, b: string, t: number) => {
+      const tt = Math.max(0, Math.min(1, t));
+      const pa = [
+        parseInt(a.slice(1, 3), 16),
+        parseInt(a.slice(3, 5), 16),
+        parseInt(a.slice(5, 7), 16),
+      ];
+      const pb = [
+        parseInt(b.slice(1, 3), 16),
+        parseInt(b.slice(3, 5), 16),
+        parseInt(b.slice(5, 7), 16),
+      ];
+      const mix = pa.map((c, j) => Math.round(c + (pb[j] - c) * tt));
+      return `rgb(${mix[0]},${mix[1]},${mix[2]})`;
+    };
+
+    // Continuous gradient for numeric colour-by: orange (low) → teal (high)
+    // so it matches the tier palette semantics (low score = below threshold
+    // = orange; high score = above = teal).
+    const numericSrc = colorBy === COLOR_BY_SCORE ? scores : (colorByValues as number[] | null) ?? null;
+    let numericMin = 0;
+    let numericMax = 1;
+    if (colorByIsNumeric && numericSrc) {
+      let lo = Infinity;
+      let hi = -Infinity;
+      for (const v of numericSrc) {
+        if (typeof v === 'number' && Number.isFinite(v)) {
+          if (v < lo) lo = v;
+          if (v > hi) hi = v;
+        }
+      }
+      if (lo < hi) {
+        numericMin = lo;
+        numericMax = hi;
+      }
+    }
+    const numericColor = (v: number) =>
+      lerp(orangeHex, tealHex, (v - numericMin) / Math.max(1e-9, numericMax - numericMin));
+
+    // Categorical palette assignment for non-numeric colour-by. The
+    // ``categoricalLegendItems`` list is exposed to the figure builder so it
+    // can emit one invisible legend trace per value — Plotly then draws a
+    // proper colour legend the user can read.
+    let categoricalColor: ((idx: number) => string) | null = null;
+    let categoricalLegendItems: { name: string; color: string }[] = [];
+    if (colorByValues && !colorByIsNumeric) {
+      const uniqueVals: string[] = [];
+      const seen = new Set<string>();
+      for (const v of colorByValues) {
+        const s = v == null ? '∅' : String(v);
+        if (!seen.has(s)) {
+          seen.add(s);
+          uniqueVals.push(s);
+        }
+      }
+      const map = new Map(uniqueVals.map((v, i) => [v, _palette[i % _palette.length]]));
+      categoricalColor = (i: number) => {
+        const v = colorByValues[i];
+        const key = v == null ? '∅' : String(v);
+        return map.get(key) ?? '#777';
+      };
+      categoricalLegendItems = uniqueVals.map((v) => ({
+        name: v,
+        color: map.get(v) ?? '#777',
+      }));
+    }
+
     const colors = chrs.map((c, i) => {
+      // Inactive chromosomes (filtered out via the chromosome dropdown) always
+      // dim, regardless of colour-by mode.
       if (!activeChrs.has(c)) return 'rgba(200,200,200,0.3)';
-      if (tiers && tiers[i] === 'BELOW') return 'rgba(160,160,160,0.45)';
+
+      // Highlight-driven dimming wins over colour-by for the non-highlighted
+      // tier — same logic as before, just composed with arbitrary colour rules.
+      if (tiers && highlight !== 'none') {
+        const isAbove = tiers[i] === 'ABOVE';
+        const isHighlighted = highlight === 'above' ? isAbove : !isAbove;
+        if (!isHighlighted) return dimColor;
+      }
+
+      // Highlighted (or no-threshold) points: paint by the Colour-by mode.
+      if (colorBy === COLOR_BY_CHROMOSOME) {
+        // Chromosome mode → tier palette if a threshold is set (so chip ↔ dot
+        // colours match), otherwise the canonical chromosome palette.
+        if (tiers) return tierColorHex(tiers[i]);
+        return colorByChr.get(c) || '#777';
+      }
+      if (colorByIsNumeric && numericSrc) {
+        const v = numericSrc[i];
+        if (typeof v !== 'number' || !Number.isFinite(v)) return dimColor;
+        return numericColor(v);
+      }
+      if (categoricalColor) return categoricalColor(i);
+      // Fallback to chromosome palette if the chosen column had no usable data.
       return colorByChr.get(c) || '#777';
     });
-    const sizes = tiers ? tiers.map((t) => (t === 'ABOVE' ? 6 : 4)) : 5;
+    const sizes = tiers
+      ? tiers.map((t) => {
+          const isAbove = t === 'ABOVE';
+          if (highlight === 'none') return isAbove ? markerSizeAbove : markerSizeBelow;
+          const isHighlighted = highlight === 'above' ? isAbove : !isAbove;
+          // Highlighted tier gets the larger size, dimmed tier the smaller.
+          return isHighlighted ? markerSizeAbove : markerSizeBelow;
+        })
+      : markerSizeUniform;
 
     // 3) Alternating background band shapes — one per chromosome.
     const bandFill = isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.04)';
@@ -215,21 +385,30 @@ const ManhattanRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) 
     }
 
     // 5) Top-N label annotations. Use the feature column when present,
-    //    fall back to "chr:pos". Two filters apply:
+    //    fall back to "chr:pos". Three filters apply:
     //    a) active chromosomes — chromosome dropdown narrows labels.
-    //    b) score threshold (when set) — only label "hits" (score >= threshold)
-    //       so labels match the recolored markers. Without (b) the top-N list
-    //       was just the highest-scoring points overall, which often disagrees
-    //       with what the user set the threshold for.
+    //    b) score threshold (when set) — only label the highlighted tier so
+    //       labels match the recoloured markers. ``highlight === 'above'``
+    //       labels the high-score side (classic GWAS hits); ``below`` labels
+    //       the sub-threshold candidates (minority-allele hunting).
+    //    c) sort direction follows the highlight target — highest scores first
+    //       when highlighting above, lowest first when highlighting below.
     const annotations: any[] = [];
     if (topNLabels > 0) {
       const candidates: number[] = [];
       for (let i = 0; i < scores.length; i++) {
         if (!activeChrs.has(chrs[i])) continue;
-        if (hasThreshold && (scores[i] == null || scores[i] < (scoreThreshold as number))) continue;
+        if (hasThreshold && highlight !== 'none') {
+          const isAbove = scores[i] != null && scores[i] >= (scoreThreshold as number);
+          const isHighlighted = highlight === 'above' ? isAbove : !isAbove;
+          if (!isHighlighted) continue;
+        }
         candidates.push(i);
       }
-      candidates.sort((a, b) => (scores[b] ?? -Infinity) - (scores[a] ?? -Infinity));
+      const direction = hasThreshold && highlight === 'below' ? 1 : -1;
+      candidates.sort(
+        (a, b) => direction * ((scores[a] ?? Infinity) - (scores[b] ?? Infinity)),
+      );
       const top = candidates.slice(0, topNLabels);
       for (const i of top) {
         const labelRaw = feats.length > 0 ? feats[i] : null;
@@ -269,42 +448,133 @@ const ManhattanRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) 
         )
       : undefined;
 
+    // Main scatter trace (all points). For numeric colour-by we attach a
+    // continuous colorscale + colorbar so the gradient reads as a legend.
+    const mainTrace: Record<string, unknown> = {
+      type: 'scattergl' as const,
+      mode: 'markers' as const,
+      x: xs,
+      y: scores,
+      text: feats.length > 0 ? feats.map((v) => String(v ?? '')) : chrs,
+      customdata: chrs,
+      hovertemplate:
+        `chr %{customdata}, pos %{x}<br>score: %{y}<br>%{text}<extra></extra>`,
+      marker: { color: colors, size: sizes, opacity: 0.85 },
+      showlegend: false,
+    };
+
+    // Invisible legend traces — one per categorical value — so Plotly draws a
+    // proper colour legend the user can decode. Same pattern as
+    // OncoplotRenderer uses for mutation-type colours.
+    const legendTraces = categoricalLegendItems.map((item) => ({
+      type: 'scatter' as const,
+      mode: 'markers' as const,
+      x: [null as unknown as number],
+      y: [null as unknown as number],
+      name: item.name,
+      marker: { color: item.color, size: 10 },
+      showlegend: true,
+      hoverinfo: 'skip' as const,
+    }));
+
+    // Colorbar trace for numeric colour-by — invisible scatter that just
+    // hosts the colorscale + colorbar config. Plotly renders the bar to the
+    // right of the plot area.
+    const numericColorbarTrace =
+      colorByIsNumeric && numericSrc
+        ? [
+            {
+              type: 'scatter' as const,
+              mode: 'markers' as const,
+              x: [null as unknown as number],
+              y: [null as unknown as number],
+              showlegend: false,
+              hoverinfo: 'skip' as const,
+              marker: {
+                color: [numericMin, numericMax],
+                colorscale: [
+                  [0, orangeHex],
+                  [1, tealHex],
+                ],
+                cmin: numericMin,
+                cmax: numericMax,
+                showscale: true,
+                colorbar: {
+                  title: {
+                    text:
+                      colorBy === COLOR_BY_SCORE
+                        ? config.score_kind || config.score_col
+                        : colorBy,
+                    side: 'right' as const,
+                  },
+                  thickness: 12,
+                  len: 0.9,
+                  x: 1.02,
+                  xpad: 0,
+                },
+                size: 0.001,
+              },
+            },
+          ]
+        : [];
+
+    const showLegend = legendTraces.length > 0;
+
     return {
       figure: {
-        data: [
-          {
-            type: 'scattergl' as const,
-            mode: 'markers' as const,
-            x: xs,
-            y: scores,
-            text: feats.length > 0 ? feats.map((v) => String(v ?? '')) : chrs,
-            customdata: chrs,
-            hovertemplate:
-              `chr %{customdata}, pos %{x}<br>score: %{y}<br>%{text}<extra></extra>`,
-            marker: { color: colors, size: sizes, opacity: 0.85 },
-          },
-        ],
+        data: [mainTrace, ...legendTraces, ...numericColorbarTrace],
         layout: {
           ...plotlyThemeFragment(isDark, theme),
-          margin: { l: 55, r: 20, t: 20, b: 50 },
+          // Slightly more right margin to give the colorbar / legend breathing
+          // room so it doesn't crowd the plot area.
+          // Bottom margin: for single-chromosome datasets (viral genomes etc.)
+          // the chromosome name is shown in the tile description, so we hide
+          // ticks entirely and trim margin.b to a minimum. Multi-chromosome
+          // datasets still need ~22 px for the tick labels.
+          margin: {
+            l: 55,
+            r: showLegend || numericColorbarTrace.length ? 110 : 20,
+            t: 10,
+            b: allChrs.length <= 1 ? 8 : 22,
+          },
           xaxis: {
             ...plotlyAxisOverrides(isDark, theme),
-            title: { text: 'Chromosome' },
+            // No axis title — the chromosome tick labels are the axis label.
+            // Removes ~22 px of dead space under the plot.
             zeroline: false,
             showgrid: false,
             tickmode: 'array',
             tickvals,
             ticktext,
+            showticklabels: allChrs.length > 1,
             range: [0, totalSpan],
           },
           yaxis: {
             ...plotlyAxisOverrides(isDark, theme),
             title: { text: config.score_kind || config.score_col },
             zeroline: false,
+            // Clamp range for bounded score types. Plotly's autorange
+            // over-pads when annotation labels sit at the data ceiling
+            // (variant labels at AF=1), which is what created the giant
+            // [-1, 4] empty band under the variant dots.
+            ...(/(af|allele frequency|frequency|proportion|fraction)/i.test(
+              String(config.score_kind || ''),
+            )
+              ? { range: [0, 1.05], autorange: false, fixedrange: false }
+              : {}),
           },
           shapes: layoutShapes,
           annotations,
-          showlegend: false,
+          showlegend: showLegend,
+          legend: showLegend
+            ? {
+                orientation: 'v' as const,
+                x: 1.02,
+                y: 1,
+                font: { size: 10 },
+                title: { text: typeof colorBy === 'string' ? colorBy : '', font: { size: 10 } },
+              }
+            : undefined,
           autosize: true,
         },
       },
@@ -312,13 +582,53 @@ const ManhattanRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) 
       tiers,
       counts,
     };
-  }, [rows, config, scoreThreshold, selectedChrs, topNLabels, colorScheme, theme]);
+  }, [
+    rows,
+    config,
+    scoreThreshold,
+    selectedChrs,
+    topNLabels,
+    markerSizeAbove,
+    markerSizeBelow,
+    markerSizeUniform,
+    highlight,
+    colorBy,
+    colorScheme,
+    theme,
+  ]);
 
   // Memoised so AdvancedVizFrame's `extras` useMemo stays stable between
   // renders — see VolcanoRenderer for the full reasoning.
+  const hasThreshold = scoreThreshold != null && Number.isFinite(scoreThreshold);
+
+  // Build Colour-by Select options from the live data — always include the two
+  // sentinels (Chromosome / Score), then any extra ``color_by_columns`` that
+  // actually came back in ``rows`` (so a stale config doesn't surface a column
+  // the DC no longer has).
+  const colorByOptions = useMemo(() => {
+    const opts: { value: string; label: string }[] = [
+      { value: COLOR_BY_CHROMOSOME, label: 'Chromosome' },
+      { value: COLOR_BY_SCORE, label: `${config.score_kind || 'Score'} (continuous)` },
+    ];
+    for (const c of config.color_by_columns ?? []) {
+      if (rows && c in rows) opts.push({ value: c, label: c });
+    }
+    return opts;
+  }, [config.color_by_columns, config.score_kind, rows]);
+
   const controls = useMemo(
     () => (
       <Stack gap="xs">
+        {colorByOptions.length > 2 ? (
+          <Select
+            size="xs"
+            label="Colour by"
+            value={colorBy}
+            onChange={(v) => setColorBy(v ?? COLOR_BY_CHROMOSOME)}
+            data={colorByOptions}
+            allowDeselect={false}
+          />
+        ) : null}
         <NumberInput
           size="xs"
           label="Threshold"
@@ -334,6 +644,65 @@ const ManhattanRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) 
           min={0}
           max={50}
         />
+        {hasThreshold ? (
+          <>
+            <Input.Wrapper label="Highlight" size="xs">
+              <Stack gap={4}>
+                <Text size="xs" fw={500}>
+                  Mode
+                </Text>
+                <SegmentedControl
+                size="xs"
+                fullWidth
+                value={highlight}
+                onChange={(v) => setHighlight(v as Highlight)}
+                data={[
+                  { value: 'above', label: 'Above' },
+                  { value: 'below', label: 'Below' },
+                  { value: 'none', label: 'Both' },
+                ]}
+              />
+              </Stack>
+            </Input.Wrapper>
+            <NumberInput
+              size="xs"
+              label={
+                highlight === 'below'
+                  ? 'Marker size (below — highlighted)'
+                  : highlight === 'above'
+                  ? 'Marker size (above — highlighted)'
+                  : 'Marker size (above)'
+              }
+              value={markerSizeAbove}
+              onChange={(v) => setMarkerSizeAbove(Math.max(1, Number(v) || 1))}
+              min={1}
+              max={30}
+            />
+            <NumberInput
+              size="xs"
+              label={
+                highlight === 'below'
+                  ? 'Marker size (above — dimmed)'
+                  : highlight === 'above'
+                  ? 'Marker size (below — dimmed)'
+                  : 'Marker size (below)'
+              }
+              value={markerSizeBelow}
+              onChange={(v) => setMarkerSizeBelow(Math.max(1, Number(v) || 1))}
+              min={1}
+              max={30}
+            />
+          </>
+        ) : (
+          <NumberInput
+            size="xs"
+            label="Marker size"
+            value={markerSizeUniform}
+            onChange={(v) => setMarkerSizeUniform(Math.max(1, Number(v) || 1))}
+            min={1}
+            max={30}
+          />
+        )}
         <MultiSelect
           size="xs"
           label="Chromosomes"
@@ -346,19 +715,41 @@ const ManhattanRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) 
         />
       </Stack>
     ),
-    [scoreThreshold, topNLabels, selectedChrs, allChrs],
+    [
+      scoreThreshold,
+      hasThreshold,
+      topNLabels,
+      markerSizeAbove,
+      markerSizeBelow,
+      markerSizeUniform,
+      highlight,
+      colorBy,
+      colorByOptions,
+      selectedChrs,
+      allChrs,
+    ],
   );
 
+  // ``selectedOrder`` drives which tier gets the "selected" treatment in the
+  // top counts chips AND the Show-data table row highlighting. Follow the
+  // user's highlight pick so the chips, table rows, and plot markers all agree
+  // on which side of the threshold is the interesting one. ``none`` selects
+  // both tiers so neither dims.
   const tierAnnotation = useMemo(
     () =>
       tiers
         ? {
             values: tiers,
-            selectedOrder: ['ABOVE'],
+            selectedOrder:
+              highlight === 'below'
+                ? ['BELOW']
+                : highlight === 'none'
+                ? ['ABOVE', 'BELOW']
+                : ['ABOVE'],
             columnLabel: 'threshold',
           }
         : undefined,
-    [tiers],
+    [tiers, highlight],
   );
 
   return (

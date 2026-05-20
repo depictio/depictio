@@ -5,6 +5,7 @@ import {
   Select,
   Stack,
   Switch,
+  Text,
   useMantineColorScheme,
   useMantineTheme,
 } from '@mantine/core';
@@ -282,18 +283,28 @@ const DotPlotRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =>
           data={['Viridis', 'Plasma', 'Inferno', 'Magma', 'Cividis', 'RdBu', 'Spectral']}
           allowDeselect={false}
         />
-        <Switch
+        <Stack gap={4}>
+          <Text size="xs" fw={500}>
+            Direction
+          </Text>
+          <Switch
           size="xs"
           checked={reverseScale}
           onChange={(e) => setReverseScale(e.currentTarget.checked)}
           label="Reverse colourscale"
         />
-        <Switch
+        </Stack>
+        <Stack gap={4}>
+          <Text size="xs" fw={500}>
+            Sort
+          </Text>
+          <Switch
           size="xs"
           checked={logTransform}
           onChange={(e) => setLogTransform(e.currentTarget.checked)}
           label={`log10(${config.mean_expression_col}+1)`}
         />
+        </Stack>
         <Group gap="xs" grow>
           <Select
             size="xs"
@@ -347,12 +358,17 @@ const DotPlotRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =>
           min={0}
           max={40}
         />
-        <Switch
+        <Stack gap={4}>
+          <Text size="xs" fw={500}>
+            Markers
+          </Text>
+          <Switch
           size="xs"
           checked={markerOutline}
           onChange={(e) => setMarkerOutline(e.currentTarget.checked)}
           label="Marker outline"
         />
+        </Stack>
       </Stack>
     ),
     [

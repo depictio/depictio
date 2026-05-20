@@ -46,14 +46,6 @@
   opacity: 1;
   pointer-events: auto;
 }
-/* Advanced-viz keeps its action row visible at all times — the settings +
- * data popovers live here and the hover-fade was hiding them while the user
- * interacted with their open dropdowns (mouse over the popover content =
- * mouse outside the chrome = fade triggers). */
-.depictio-component-chrome.depictio-chrome-pin-actions .depictio-component-actions {
-  opacity: 1;
-  pointer-events: auto;
-}
 /* Vertical stack for figure/multiqc/map — mirrors the Dash editor's
  * `button_configs[type].orientation == "vertical"` from layouts/edit.py. */
 .depictio-component-actions.depictio-actions-vertical {

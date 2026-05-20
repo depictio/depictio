@@ -29,6 +29,14 @@ interface ComplexHeatmapConfig {
   index_column: string;
   value_columns?: string[] | null;
   row_annotation_cols?: string[];
+  /** Per-column categorical annotations rendered as a top strip.
+   *  Shape: ``{annotation_name: {column_label: category_value}}``.
+   *  Aligned to value_columns order server-side. */
+  col_annotations?: Record<string, Record<string, string>> | null;
+  /** Optional palette overrides for the col-annotation track. Shape:
+   *  ``{annotation_name: {category_value: hex}}``. Lets dashboards pin
+   *  domain colours (e.g. habitat → Set1) across PCoA / UpSet / heatmap. */
+  col_annotation_colors?: Record<string, Record<string, string>> | null;
   cluster_rows?: boolean;
   cluster_cols?: boolean;
   cluster_method?: 'ward' | 'single' | 'complete' | 'average';
@@ -94,6 +102,8 @@ const ComplexHeatmapRenderer: React.FC<Props> = ({ metadata, filters, refreshTic
       index_column: config.index_column,
       value_columns: config.value_columns ?? null,
       row_annotation_cols: rowAnnotationCols,
+      col_annotations: config.col_annotations ?? null,
+      col_annotation_colors: config.col_annotation_colors ?? null,
       cluster_rows: clusterRows,
       cluster_cols: clusterCols,
       cluster_method: clusterMethod,
@@ -254,18 +264,28 @@ const ComplexHeatmapRenderer: React.FC<Props> = ({ metadata, filters, refreshTic
             { value: 'average', label: 'Average' },
           ]}
         />
-        <Switch
+        <Stack gap={4}>
+          <Text size="xs" fw={500}>
+            Cluster rows
+          </Text>
+          <Switch
           size="xs"
           checked={clusterRows}
           onChange={(e) => setClusterRows(e.currentTarget.checked)}
           label="Cluster rows"
         />
-        <Switch
+        </Stack>
+        <Stack gap={4}>
+          <Text size="xs" fw={500}>
+            Cluster cols
+          </Text>
+          <Switch
           size="xs"
           checked={clusterCols}
           onChange={(e) => setClusterCols(e.currentTarget.checked)}
           label="Cluster columns"
         />
+        </Stack>
         <MultiSelect
           size="xs"
           label="Row annotations"
