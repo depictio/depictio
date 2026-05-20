@@ -476,7 +476,7 @@
   "icon_color": "green",
   "icon_variant": "filled",
   "workflow_system": "nf-core",
-  "notes_content": "<h2>Phylogeny</h2><p>Rooted QIIME2 ASV tree (Newick). Branch lengths reflect substitutions per site; tip-to-tip patristic distance approximates evolutionary distance between ASVs. Reading caveats: rooting depends on outgroup choice (the QIIME2 default uses midpoint rooting), and rare ASVs may have unstable placement when sequenced to insufficient depth.</p><p>Tip colour encodes Phylum from classify-sklearn; clicking an internal node selects its clade for export.</p>",
+  "notes_content": "<h2>Phylogeny</h2><p>Rooted QIIME2 ASV tree (Newick). Branch lengths reflect substitutions per site; tip-to-tip patristic distance approximates evolutionary distance between ASVs. Reading caveats: rooting depends on outgroup choice (the QIIME2 default uses midpoint rooting), and rare ASVs may have unstable placement when sequenced to insufficient depth.</p><p>Tip colour encodes Phylum from classify-sklearn; clicking an internal node selects its clade for export.</p><p><b>Known limitation:</b> the Kingdom / Phylum filters at the top of this tab currently filter only the taxonomy table below — the tree itself is rendered from the raw Newick file and is not pruned to the filtered tip set. Tip-level pruning needs renderer-side support and is tracked separately.</p>",
   "permissions": {
     "owners": [
       {

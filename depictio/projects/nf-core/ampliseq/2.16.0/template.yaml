@@ -508,7 +508,7 @@ links:
 
   # Link 2: Metadata -> Alpha Diversity
   - source_dc_tag: "metadata"
-    source_column: "ID"
+    source_column: "sample"
     target_dc_tag: "alpha_diversity"
     target_type: "table"
     link_config:
@@ -519,7 +519,7 @@ links:
 
   # Link 3: Metadata -> Alpha Rarefaction
   - source_dc_tag: "metadata"
-    source_column: "ID"
+    source_column: "sample"
     target_dc_tag: "alpha_rarefaction"
     target_type: "table"
     link_config:
@@ -530,7 +530,7 @@ links:
 
   # Link 4: Metadata -> Taxonomy Composition
   - source_dc_tag: "metadata"
-    source_column: "ID"
+    source_column: "sample"
     target_dc_tag: "taxonomy_composition"
     target_type: "table"
     link_config:
@@ -541,7 +541,7 @@ links:
 
   # Link 5: Metadata -> Taxonomy Rel Abundance
   - source_dc_tag: "metadata"
-    source_column: "ID"
+    source_column: "sample"
     target_dc_tag: "taxonomy_rel_abundance"
     target_type: "table"
     link_config:
@@ -563,7 +563,7 @@ links:
 
   # Link 7: Metadata -> Taxonomy Heatmap (extended: enables habitat/city filtering)
   - source_dc_tag: "metadata"
-    source_column: "ID"
+    source_column: "sample"
     target_dc_tag: "taxonomy_heatmap"
     target_type: "table"
     link_config:
@@ -572,4 +572,123 @@ links:
     description: "Filter taxonomy heatmap by metadata samples"
     enabled: true
 
-  # Note: ANCOM-BC results are not linked (no sample column — habitat-level results only)
+  # --------------------------------------------------------------------------
+  # Links 8-15: Metadata -> canonical advanced-viz DCs (sample_id-keyed).
+  # Wire interactive metadata filters (sample, habitat, sampling_date) into
+  # the canonical DCs that drive Alpha-diversity / Community / Ordination
+  # plots. Without these, filters on the metadata DC silently no-op against
+  # the advanced-viz plots.
+  # --------------------------------------------------------------------------
+  - source_dc_tag: "metadata"
+    source_column: "sample"
+    target_dc_tag: "alpha_diversity_multi_canonical"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample_id"
+    description: "Filter per-sample multi-metric alpha-diversity by metadata samples"
+    enabled: true
+
+  - source_dc_tag: "metadata"
+    source_column: "sample"
+    target_dc_tag: "rarefaction_canonical"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample_id"
+    description: "Filter multi-metric rarefaction curves by metadata samples"
+    enabled: true
+
+  - source_dc_tag: "metadata"
+    source_column: "sample"
+    target_dc_tag: "stacked_taxonomy_canonical"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample_id"
+    description: "Filter stacked-taxonomy bars by metadata samples"
+    enabled: true
+
+  - source_dc_tag: "metadata"
+    source_column: "sample"
+    target_dc_tag: "embedding_pcoa"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample_id"
+    description: "Filter PCoA embedding by metadata samples"
+    enabled: true
+
+  - source_dc_tag: "metadata"
+    source_column: "sample"
+    target_dc_tag: "sunburst_canonical"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample_id"
+    description: "Filter sunburst by metadata samples"
+    enabled: true
+
+  - source_dc_tag: "metadata"
+    source_column: "sample"
+    target_dc_tag: "sankey_canonical"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample_id"
+    description: "Filter sankey flows by metadata samples"
+    enabled: true
+
+  # complex_heatmap_canonical and bray_curtis_canonical are wide matrices
+  # (sample IDs are columns, not rows). Link uses target_field 'sample' for
+  # the row index; wide-matrix column subsetting requires renderer support
+  # (tracked separately).
+  - source_dc_tag: "metadata"
+    source_column: "sample"
+    target_dc_tag: "complex_heatmap_canonical"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter complex heatmap by metadata samples (best-effort on wide matrix)"
+    enabled: true
+
+  - source_dc_tag: "metadata"
+    source_column: "sample"
+    target_dc_tag: "bray_curtis_canonical"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter Bray-Curtis distances by metadata samples (best-effort on wide matrix)"
+    enabled: true
+
+  # --------------------------------------------------------------------------
+  # Links 16-17: ANCOM-BC results -> volcano / DA-barplot via shared
+  # `contrast` column. Lets the Differential-Abundance tab's Contrast filter
+  # restrict the volcano and DA-barplot to one habitat comparison at a time.
+  # --------------------------------------------------------------------------
+  - source_dc_tag: "ancombc_results"
+    source_column: "contrast"
+    target_dc_tag: "volcano_canonical"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "contrast"
+    description: "Restrict volcano to selected contrast"
+    enabled: true
+
+  - source_dc_tag: "ancombc_results"
+    source_column: "contrast"
+    target_dc_tag: "da_barplot_canonical"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "contrast"
+    description: "Restrict DA-barplot to selected contrast"
+    enabled: true
+
+  # upset_canonical is per-habitat (no sample_id col) — not linked.
+  # phylogenetic_tree_canonical is a Newick file (no row filtering applicable).
+  # phylogenetic_tree_metadata_canonical tip pruning requires React renderer
+  # support — tracked as a follow-up.

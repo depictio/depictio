@@ -24,7 +24,10 @@ from bson import ObjectId
 from fastapi import APIRouter, Body, Depends, HTTPException
 from fastapi.responses import PlainTextResponse
 
-from depictio.api.v1.endpoints.user_endpoints.routes import get_user_or_anonymous
+from depictio.api.v1.endpoints.user_endpoints.routes import (
+    get_user_or_anonymous,
+    oauth2_scheme_optional,
+)
 from depictio.models.components.advanced_viz.schemas import CANONICAL_SCHEMAS
 from depictio.models.components.types import AdvancedVizKind
 from depictio.models.models.base import PyObjectId
@@ -32,6 +35,74 @@ from depictio.models.models.base import PyObjectId
 logger = logging.getLogger(__name__)
 
 advanced_viz_endpoint_router = APIRouter()
+
+
+def _resolve_link_filters_for_dc(
+    filters: list[dict],
+    wf_id: str,
+    target_dc_id: str,
+    access_token: str | None,
+    component_type: str,
+) -> list[dict]:
+    """Extend React-supplied filters via DC links, looking up project by wf_id.
+
+    Mirrors ``dashboards_endpoints._resolve_link_filters`` but resolves the
+    owning project from the workflow id (advanced-viz endpoints don't receive
+    a dashboard id in their payload, so we can't fetch project_id off the
+    dashboard doc).
+    """
+    if not filters or not target_dc_id or not access_token:
+        return list(filters)
+
+    from depictio.api.v1.db import projects_collection
+    from depictio.api.v1.endpoints.dashboards_endpoints.routes import (
+        _resolve_link_filters,
+    )
+
+    try:
+        wf_oid = ObjectId(str(wf_id))
+    except Exception:
+        return list(filters)
+
+    project_doc = projects_collection.find_one({"workflows._id": wf_oid}, {"_id": 1})
+    if not project_doc:
+        return list(filters)
+
+    return _resolve_link_filters(
+        filters=filters,
+        target_dc_id=str(target_dc_id),
+        project_id=project_doc["_id"],
+        access_token=access_token,
+        component_type=component_type,
+    )
+
+
+def _apply_link_filters_to_payload(
+    payload: dict,
+    access_token: str | None,
+    component_type: str,
+) -> None:
+    """Mutate ``payload["filter_metadata"]`` in place with link-resolved filters.
+
+    Called by every advanced-viz compute dispatcher *before* the cache key is
+    computed so that link-derived filters participate in the cache namespace
+    (different filter state ⇒ different cache entry).
+    """
+    wf_id = payload.get("wf_id")
+    dc_id = payload.get("dc_id")
+    filters = payload.get("filter_metadata") or []
+    if not wf_id or not dc_id or not filters:
+        return
+
+    resolved = _resolve_link_filters_for_dc(
+        filters=filters,
+        wf_id=str(wf_id),
+        target_dc_id=str(dc_id),
+        access_token=access_token,
+        component_type=component_type,
+    )
+    if resolved is not filters:
+        payload["filter_metadata"] = resolved
 
 
 _KIND_METADATA: dict[AdvancedVizKind, dict[str, Any]] = {
@@ -160,6 +231,7 @@ def list_kinds(current_user=Depends(get_user_or_anonymous)) -> list[dict[str, An
 def fetch_advanced_viz_data(
     payload: dict = Body(...),
     current_user=Depends(get_user_or_anonymous),
+    access_token: str | None = Depends(oauth2_scheme_optional),
 ) -> dict[str, Any]:
     """Project requested columns from a DC, apply filter metadata, return rows.
 
@@ -190,6 +262,18 @@ def fetch_advanced_viz_data(
         raise HTTPException(status_code=400, detail="wf_id and dc_id are required")
     if not columns or not isinstance(columns, list):
         raise HTTPException(status_code=400, detail="columns must be a non-empty list")
+
+    # Extend the React-supplied filters with any link-resolved filters that
+    # target this DC. Without this, a filter set on `metadata` (column `ID`)
+    # would silently no-op against a canonical advanced-viz DC keyed on
+    # `sample_id`, leaving the plot unfiltered.
+    filter_metadata = _resolve_link_filters_for_dc(
+        filters=filter_metadata,
+        wf_id=str(wf_id),
+        target_dc_id=str(dc_id),
+        access_token=access_token,
+        component_type="advanced_viz/data",
+    )
 
     # Cap at 100k rows by default — advanced viz are rendered client-side and
     # plotly chokes on huge frames. Recipes are the right place to pre-reduce.
@@ -230,13 +314,48 @@ def fetch_advanced_viz_data(
     # `select_columns=[feature_id, position, category]` would drop `GENE`
     # before `apply_runtime_filters` runs, then the filter on `GENE` would
     # silently no-op because the column isn't present on the projected df.
+    #
+    # Schema-guarded: filters from link-resolved cross-DC filtering may name
+    # columns that don't exist on this DC (e.g. a `habitat` filter coming via
+    # metadata applied to sankey_canonical, which only has `Habitat` row+col).
+    # Reading the lazy schema once lets us (a) drop the unusable filter from
+    # the metadata list and (b) avoid passing missing columns to .select(),
+    # which would otherwise fail at collect() with ColumnNotFoundError.
+    try:
+        from depictio.api.v1.deltatables_utils import _create_delta_scan
+
+        _scan = _create_delta_scan(
+            init_data[str(dc_id)]["delta_location"],
+            init_data[str(dc_id)].get("dc_type"),
+        )
+        available_cols = set(_scan.collect_schema().names())
+    except Exception as _exc:
+        logger.warning("advanced_viz/data: schema introspection failed: %s", _exc)
+        available_cols = None
+
     filter_cols: set[str] = set()
-    for f in filter_metadata or []:
-        nested = f.get("metadata") if isinstance(f, dict) else None
-        col = (nested or f or {}).get("column_name") if isinstance(f, dict) else None
-        if col:
-            filter_cols.add(col)
+    if filter_metadata:
+        kept_filters: list[dict] = []
+        for f in filter_metadata:
+            nested = f.get("metadata") if isinstance(f, dict) else None
+            col = (f.get("column_name") if isinstance(f, dict) else None) or (
+                (nested or {}).get("column_name") if nested else None
+            )
+            if available_cols is not None and col and col not in available_cols:
+                logger.info(
+                    "advanced_viz/data: dropping cross-DC filter on column %r — not in DC %s",
+                    col,
+                    dc_id,
+                )
+                continue
+            if col:
+                filter_cols.add(col)
+            kept_filters.append(f)
+        filter_metadata = kept_filters
+
     projection = list(dict.fromkeys([*columns, *filter_cols]))
+    if available_cols is not None:
+        projection = [c for c in projection if c in available_cols]
 
     try:
         df = load_deltatable_lite(
@@ -293,6 +412,7 @@ def _compute_cache_key(payload: dict) -> str:
 def dispatch_compute_embedding(
     payload: dict = Body(...),
     current_user=Depends(get_user_or_anonymous),
+    access_token: str | None = Depends(oauth2_scheme_optional),
 ) -> dict[str, Any]:
     """Dispatch a clustering / dim-reduction Celery task.
 
@@ -311,6 +431,8 @@ def dispatch_compute_embedding(
         raise HTTPException(status_code=400, detail=f"Unsupported method: {method!r}")
     if not payload.get("wf_id") or not payload.get("dc_id"):
         raise HTTPException(status_code=400, detail="wf_id and dc_id are required")
+
+    _apply_link_filters_to_payload(payload, access_token, "embedding")
 
     cache = db["compute_results"]
     cache_key = _compute_cache_key(payload)
@@ -447,12 +569,15 @@ def poll_compute_embedding(
 def dispatch_compute_complex_heatmap(
     payload: dict = Body(...),
     current_user=Depends(get_user_or_anonymous),
+    access_token: str | None = Depends(oauth2_scheme_optional),
 ) -> dict[str, Any]:
     """Dispatch a ComplexHeatmap Celery task. Same dispatch + poll +
     cache contract as ``compute_embedding`` — different task name and
     namespace under the same ``compute_results`` collection."""
     import time
     from datetime import datetime, timezone
+
+    _apply_link_filters_to_payload(payload, access_token, "complex_heatmap")
 
     from depictio.api.v1.celery_tasks import compute_complex_heatmap as compute_task
     from depictio.api.v1.db import db
@@ -582,11 +707,14 @@ def poll_compute_complex_heatmap(
 def dispatch_compute_upset(
     payload: dict = Body(...),
     current_user=Depends(get_user_or_anonymous),
+    access_token: str | None = Depends(oauth2_scheme_optional),
 ) -> dict[str, Any]:
     """Dispatch an UpSet-plot Celery task. Same dispatch + poll + cache
     contract as ``compute_complex_heatmap`` (cache namespace = upset_plot)."""
     import time
     from datetime import datetime, timezone
+
+    _apply_link_filters_to_payload(payload, access_token, "upset")
 
     from depictio.api.v1.celery_tasks import compute_upset as compute_task
     from depictio.api.v1.db import db
@@ -827,10 +955,12 @@ def _poll_compute(job_id: str) -> dict[str, Any]:
 def dispatch_compute_coverage_track(
     payload: dict = Body(...),
     current_user=Depends(get_user_or_anonymous),
+    access_token: str | None = Depends(oauth2_scheme_optional),
 ) -> dict[str, Any]:
     """Dispatch a coverage-track aggregation Celery task."""
     from depictio.api.v1.celery_tasks import compute_coverage_track as compute_task
 
+    _apply_link_filters_to_payload(payload, access_token, "coverage_track")
     return _dispatch_compute(payload, "coverage_track", compute_task)
 
 
@@ -847,10 +977,12 @@ def poll_compute_coverage_track(
 def dispatch_compute_sankey(
     payload: dict = Body(...),
     current_user=Depends(get_user_or_anonymous),
+    access_token: str | None = Depends(oauth2_scheme_optional),
 ) -> dict[str, Any]:
     """Dispatch a Sankey / categorical-flow Celery task."""
     from depictio.api.v1.celery_tasks import compute_sankey as compute_task
 
+    _apply_link_filters_to_payload(payload, access_token, "sankey")
     return _dispatch_compute(payload, "sankey", compute_task)
 
 

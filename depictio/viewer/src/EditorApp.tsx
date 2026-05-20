@@ -1023,7 +1023,7 @@ const EditorApp: React.FC = () => {
                 cardComponents={cardComponents}
                 otherComponents={otherComponents}
                 layoutData={dashboard.right_panel_layout_data}
-                filters={deferredFilters}
+                filters={filters}
                 onFilterChange={handleFilterChange}
                 cardValues={cardValues}
                 cardSecondaryValues={cardSecondaryValues}

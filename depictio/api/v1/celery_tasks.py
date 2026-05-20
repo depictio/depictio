@@ -695,6 +695,37 @@ def compute_complex_heatmap(payload: dict) -> dict:
     if not value_columns:
         raise ValueError("compute_complex_heatmap: no numeric value columns found")
 
+    # Wide-matrix sample subsetting: sample IDs are MATRIX COLUMNS, not rows.
+    # process_metadata_and_filter's row-filter skips the value-column subset
+    # silently (the DC has no `sample` / `sample_id` ROW column). Mirror that
+    # subset here by intersecting value_columns with the filter values whose
+    # column references the sample identifier — covers both link-translated
+    # filters (column_name = "sample"/"sample_id") and direct sample picks.
+    sample_filter_values: set[str] = set()
+    for f in filter_metadata or []:
+        meta = f.get("metadata") if isinstance(f, dict) else {}
+        col = (f.get("column_name") if isinstance(f, dict) else None) or (
+            (meta or {}).get("column_name") if meta else None
+        )
+        if col not in ("sample", "sample_id"):
+            continue
+        val = f.get("value") if isinstance(f, dict) else None
+        if val in (None, [], ""):
+            continue
+        if isinstance(val, (list, tuple, set)):
+            sample_filter_values.update(str(v) for v in val)
+        else:
+            sample_filter_values.add(str(val))
+    if sample_filter_values:
+        narrowed = [c for c in value_columns if c in sample_filter_values]
+        if narrowed:
+            logger.info(
+                "compute_complex_heatmap: narrowing value_columns %d -> %d via sample filter",
+                len(value_columns),
+                len(narrowed),
+            )
+            value_columns = narrowed
+
     pdf = df.select([index_column] + value_columns + row_annotation_cols).to_pandas()
 
     # Translate depictio normalize vocab → plotly-complexheatmap normalize_data
@@ -950,6 +981,37 @@ def compute_upset(payload: dict) -> dict:
     )
     load_ms = int((time.monotonic() - started) * 1000)
     logger.info("compute_upset: loaded %d rows in %dms", df.height, load_ms)
+
+    # Wide-matrix set subsetting: habitats are MATRIX COLUMNS, not rows. A
+    # habitat filter from the metadata DC can't filter rows here (the DC has
+    # no `habitat` column — habitats are the set_columns themselves). Mirror
+    # the column filter by intersecting set_columns with the filter values.
+    habitat_filter_values: set[str] = set()
+    for f in filter_metadata or []:
+        meta = f.get("metadata") if isinstance(f, dict) else {}
+        col = (f.get("column_name") if isinstance(f, dict) else None) or (
+            (meta or {}).get("column_name") if meta else None
+        )
+        if col not in ("habitat", "Habitat"):
+            continue
+        val = f.get("value") if isinstance(f, dict) else None
+        if val in (None, [], ""):
+            continue
+        if isinstance(val, (list, tuple, set)):
+            habitat_filter_values.update(str(v) for v in val)
+        else:
+            habitat_filter_values.add(str(val))
+    if habitat_filter_values:
+        all_cols = list(set_columns) if set_columns else [
+            c for c in df.columns if c in habitat_filter_values or c not in ("taxon",)
+        ]
+        narrowed = [c for c in (set_columns or df.columns) if c in habitat_filter_values]
+        if narrowed:
+            logger.info(
+                "compute_upset: narrowing set_columns to %d habitat(s) via filter",
+                len(narrowed),
+            )
+            set_columns = narrowed
 
     pdf = df.to_pandas()
     compute_started = time.monotonic()

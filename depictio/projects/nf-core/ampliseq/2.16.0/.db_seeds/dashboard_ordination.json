@@ -58,7 +58,7 @@
       "parent_index": null,
       "last_updated": "2026-05-18T00:00:00.000000",
       "interactive_component_type": "MultiSelect",
-      "column_name": "ID",
+      "column_name": "sample",
       "column_type": "object",
       "value": null,
       "default_state": null,

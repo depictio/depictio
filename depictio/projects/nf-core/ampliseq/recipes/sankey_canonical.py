@@ -65,11 +65,7 @@ def _parse_rank_at(lineage: pl.Expr, position: int) -> pl.Expr:
     ``Bacteria;Proteobacteria;;;;`` for a Class-level-unknown row).
     """
     seg = lineage.str.split(";").list.get(position, null_on_oob=True).str.strip_chars()
-    return (
-        pl.when(seg.is_null() | (seg == ""))
-        .then(pl.lit("Unclassified"))
-        .otherwise(seg)
-    )
+    return pl.when(seg.is_null() | (seg == "")).then(pl.lit("Unclassified")).otherwise(seg)
 
 
 def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
@@ -93,13 +89,26 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
     # Parse the lineage string into per-rank columns by positional split.
     # Missing intermediate ranks (adjacent ``;``) cleanly resolve to
     # 'Unclassified'.
-    rank_exprs = [_parse_rank_at(pl.col(lineage_col), i).alias(name) for i, name in enumerate(_RANKS_BY_POSITION)]
+    rank_exprs = [
+        _parse_rank_at(pl.col(lineage_col), i).alias(name)
+        for i, name in enumerate(_RANKS_BY_POSITION)
+    ]
     long = long.with_columns(rank_exprs).drop(lineage_col)
 
     long = long.with_columns(
         pl.col("sample_id").cast(pl.Utf8),
         pl.col("abundance").cast(pl.Float64, strict=False),
     )
+
+    # Per-sample relative abundance sums to ~1.0 per sample. The Sankey
+    # renderer (compute_sankey) sums weights across all matching rows when
+    # grouping by step columns — so with N samples the cumulative flow into
+    # the root would be ~N (e.g. 12.0 ≈ 1200%). Pre-divide by sample count
+    # so the renderer's sum yields the mean-per-sample abundance, restoring
+    # the natural 0-1 (0-100%) reading at the root.
+    n_samples = long.select(pl.col("sample_id").n_unique()).item()
+    if n_samples > 1:
+        long = long.with_columns(pl.col("abundance") / n_samples)
 
     # Drop zero-abundance rows so the Sankey doesn't include hair-thin links
     # that visually clutter the diagram (and contribute nothing to flow).

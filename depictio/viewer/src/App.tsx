@@ -495,7 +495,7 @@ const App: React.FC = () => {
                   dashboardId={dashboardId!}
                   metadataList={rightComponents}
                   layoutData={dashboard.right_panel_layout_data}
-                  filters={deferredFilters}
+                  filters={filters}
                   onFilterChange={handleFilterChange}
                   cardValues={cardValues}
                   cardSecondaryValues={cardSecondaryValues}
