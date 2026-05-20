@@ -2,6 +2,7 @@ import asyncio
 
 from bson import ObjectId
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from pydantic import BaseModel, Field
 
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
@@ -47,6 +48,118 @@ async def polars_schema(
     bindings (see depictio/models/components/advanced_viz/schemas.py).
     """
     return await _get_data_collection_polars_schema(data_collection_id, current_user)
+
+
+@datacollections_endpoint_router.get("/viz-suggestions/{data_collection_id}")
+async def viz_suggestions(
+    data_collection_id: PyObjectId,
+    min_confidence: float = 1.0,
+    current_user: str = Depends(get_user_or_anonymous),
+) -> dict:
+    """Reverse-lookup viz kinds + known producers compatible with this DC.
+
+    Drives the React DC card's "Suggested visualisations" chip row and the
+    component-creation flow's DC pre-filter. Both surfaces share the same
+    pure-Python suggestion engine in
+    `depictio/models/components/advanced_viz/schemas.py`:
+
+      - `viz_kinds`: every AdvancedVizKind whose required role schema can be
+        satisfied by some column-dtype combination in this DC. Each entry
+        carries per-role candidate columns the UI uses to pre-fill bindings.
+      - `producers`: known tool outputs (DESeq2 results, mosdepth coverage,
+        Bracken, …) whose column-name fingerprint matches this DC. When a
+        producer matches, the UI can pre-fill bindings exactly rather than
+        guessing.
+
+    Query params:
+        min_confidence: 0.0-1.0 — minimum fraction of required roles that
+            must have a candidate column for a viz kind to appear in the
+            suggestions list. Default 1.0 = strict (only full matches).
+    """
+    from depictio.models.components.advanced_viz.producers import get_producer
+    from depictio.models.components.advanced_viz.schemas import (
+        suggest_producers,
+        suggest_viz_kinds,
+    )
+
+    schema = await _get_data_collection_polars_schema(data_collection_id, current_user)
+
+    viz = suggest_viz_kinds(schema, min_confidence=min_confidence)
+    producer_hits = suggest_producers(schema)
+
+    producers = []
+    for name, ratio in producer_hits:
+        p = get_producer(name)
+        producers.append(
+            {
+                "name": name,
+                "confidence": ratio,
+                "tool": p.tool if p else name,
+                "description": p.description if p else "",
+                "feeds_viz": list(p.feeds_viz) if p else [],
+            }
+        )
+
+    return {
+        "data_collection_id": str(data_collection_id),
+        "schema": schema,
+        "viz_kinds": [
+            {
+                "viz_kind": s.viz_kind,
+                "confidence": s.confidence,
+                "role_candidates": s.role_candidates,
+            }
+            for s in viz
+        ],
+        "producers": producers,
+    }
+
+
+class SuggestFromColumnsRequest(BaseModel):
+    """Body for the pre-DC viz suggestion endpoint.
+
+    The DC creation modal calls this with just column names parsed from the
+    file header — before the file is uploaded. Producer fingerprints match on
+    column names alone, so name-only input is enough to detect DESeq2 results,
+    mosdepth, Bracken, QIIME2, etc.
+    """
+
+    columns: list[str] = Field(..., min_length=1)
+
+
+@datacollections_endpoint_router.post("/suggest-from-columns")
+async def suggest_from_columns(
+    body: SuggestFromColumnsRequest,
+    current_user: str = Depends(get_user_or_anonymous),
+) -> dict:
+    """Run the producer suggestion engine on a bare column list (no DC required).
+
+    Used by the DC-creation modal to decide whether to surface a passive
+    "looks like X" hint vs. the coordinates fallback toggle. Only producer
+    fingerprints run here — viz-kind reverse lookup needs dtype info that
+    isn't available until the file is parsed server-side.
+    """
+    from depictio.models.components.advanced_viz.producers import get_producer
+    from depictio.models.components.advanced_viz.schemas import suggest_producers
+
+    # suggest_producers only inspects schema keys; the dtype values are unused
+    # by the fingerprint path, so a sentinel value is fine.
+    producer_hits = suggest_producers({c: "" for c in body.columns})
+
+    producers: list[dict] = []
+    for name, ratio in producer_hits:
+        p = get_producer(name)
+        producers.append(
+            {
+                "name": name,
+                "confidence": ratio,
+                "tool": p.tool if p else name,
+                "description": p.description if p else "",
+                "feeds_viz": list(p.feeds_viz) if p else [],
+            }
+        )
+
+    return {"producers": producers}
 
 
 @datacollections_endpoint_router.delete("/delete/{workflow_id}/{data_collection_id}")

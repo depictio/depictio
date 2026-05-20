@@ -519,6 +519,69 @@ export async function fetchPolarsSchema(dcId: string): Promise<Record<string, st
   return res.json();
 }
 
+export interface ProducerSuggestion {
+  name: string;
+  confidence: number;
+  tool: string;
+  description: string;
+  feeds_viz: string[];
+}
+
+export interface VizKindSuggestion {
+  viz_kind: string;
+  confidence: number;
+  role_candidates: Record<string, string[]>;
+}
+
+export interface SuggestFromColumnsResponse {
+  producers: ProducerSuggestion[];
+}
+
+export interface VizSuggestionsResponse {
+  data_collection_id: string;
+  schema: Record<string, string>;
+  viz_kinds: VizKindSuggestion[];
+  producers: ProducerSuggestion[];
+}
+
+/** Full producer + viz-kind suggestions for an existing DC. Reads the DC's
+ *  inferred polars schema server-side, then runs the same suggestion
+ *  engine as the modal — but with dtypes available, so the viz_kinds list
+ *  is populated too. */
+export async function fetchVizSuggestions(
+  dcId: string,
+): Promise<VizSuggestionsResponse> {
+  const res = await fetch(
+    `${API_BASE}/datacollections/viz-suggestions/${dcId}`,
+    { headers: authHeaders() },
+  );
+  if (!res.ok) throw new Error(`Failed to fetch viz suggestions: ${res.status}`);
+  return res.json();
+}
+
+/** Run the producer suggestion engine on a bare column list (no DC required).
+ *  Used by the DC-creation modal to decide whether to surface a passive
+ *  "looks like X" hint vs. the coordinates fallback toggle. Producers are
+ *  matched on column names alone — dtype info isn't available until the
+ *  file is parsed server-side.
+ *
+ *  `signal` lets callers abort superseded requests (e.g. the user editing
+ *  the CSV separator quickly enough to dispatch two fetches back-to-back).
+ *  Without it the slower response can stomp the newer state. */
+export async function suggestFromColumns(
+  columns: string[],
+  signal?: AbortSignal,
+): Promise<SuggestFromColumnsResponse> {
+  const res = await fetch(`${API_BASE}/datacollections/suggest-from-columns`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: JSON.stringify({ columns }),
+    signal,
+  });
+  if (!res.ok) throw new Error(`Failed to fetch suggestions: ${res.status}`);
+  return res.json();
+}
+
 export interface AdvancedVizDataResponse {
   columns: string[];
   rows: Record<string, unknown[]>;

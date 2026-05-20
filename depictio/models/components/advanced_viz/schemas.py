@@ -259,12 +259,115 @@ def validate_binding(config: VizConfig, dc_schema: dict[str, str]) -> list[Bindi
     return errors
 
 
+# ---------------------------------------------------------------------------
+# Reverse-lookup: "given a DC schema, which viz kinds / producers fit?"
+#
+# Drives the React DC card "Suggested visualisations" chips and the
+# component-creation flow's DC pre-filter. Pure functions — no DB, no IO,
+# no DC mutation. Testable against any (col → dtype) dict.
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class VizSuggestion:
+    """A viz kind that a DC could feasibly satisfy plus the matching detail.
+
+    confidence is 0.0 - 1.0 = fraction of required roles satisfied.
+    A confidence of 1.0 means every required role has at least one
+    candidate column with a compatible dtype.
+
+    role_candidates maps each required role → list of column names whose
+    dtype is in the role's accepted set. The UI uses this to pre-fill
+    the binding dropdowns at component-creation time.
+    """
+
+    viz_kind: AdvancedVizKind
+    confidence: float
+    role_candidates: dict[str, list[str]]
+    producer_name: str | None = None  # populated when a Producer fingerprint matches
+
+
+def suggest_viz_kinds(
+    dc_schema: dict[str, str],
+    min_confidence: float = 1.0,
+) -> list[VizSuggestion]:
+    """Return viz kinds whose required roles can be satisfied by `dc_schema`.
+
+    Args:
+        dc_schema: Map of column name → polars dtype name (the strings
+            polars emits via `str(dtype)`).
+        min_confidence: Minimum fraction of required roles that must have
+            at least one dtype-compatible candidate column. Default 1.0
+            = only return viz kinds where every required role has a
+            candidate. Drop to ~0.7 to surface "almost a match" viz kinds
+            in an exploratory UI.
+
+    Returns:
+        Sorted (by confidence desc, then viz_kind asc) list of
+        VizSuggestion. Empty when nothing fits.
+    """
+    suggestions: list[VizSuggestion] = []
+    for kind, required in CANONICAL_SCHEMAS.items():
+        if not required:
+            # Schemas with no required roles (sankey, upset_plot, sunburst-ish)
+            # would match every DC — skip them in the suggestion engine; users
+            # who want those pick them from the catalog directly.
+            continue
+        role_candidates: dict[str, list[str]] = {}
+        satisfied = 0
+        for role, accepted in required.items():
+            matches = [col for col, dtype in dc_schema.items() if dtype in accepted]
+            role_candidates[role] = matches
+            if matches:
+                satisfied += 1
+        confidence = satisfied / len(required)
+        if confidence >= min_confidence:
+            suggestions.append(
+                VizSuggestion(viz_kind=kind, confidence=confidence, role_candidates=role_candidates)
+            )
+    suggestions.sort(key=lambda s: (-s.confidence, s.viz_kind))
+    return suggestions
+
+
+def suggest_producers(dc_schema: dict[str, str]) -> list[tuple[str, float]]:
+    """Identify known tool outputs whose required_columns fingerprint matches.
+
+    Producer fingerprints are stricter than viz suggestions — they look at
+    actual column NAMES (case-sensitive), not just dtype shapes. When a DC
+    matches a producer, we can pre-fill role bindings exactly (via the
+    producer's role_mapping) instead of guessing.
+
+    Returns:
+        Sorted list of (producer_name, match_ratio). match_ratio = fraction
+        of the producer's required_columns present in dc_schema. Only
+        producers with match_ratio == 1.0 (full fingerprint match) are
+        meaningful — anything less is coincidence.
+    """
+    # Lazy import to keep schemas.py import-cheap.
+    from depictio.models.components.advanced_viz.producers import KNOWN_PRODUCERS
+
+    matches: list[tuple[str, float]] = []
+    cols = set(dc_schema.keys())
+    for p in KNOWN_PRODUCERS:
+        if not p.required_columns:
+            continue  # non-tabular producers (e.g. Newick) don't fingerprint
+        present = len(p.required_columns & cols)
+        ratio = present / len(p.required_columns)
+        if ratio == 1.0:
+            matches.append((p.name, ratio))
+    matches.sort(key=lambda m: (-m[1], m[0]))
+    return matches
+
+
 __all__ = [
     "BindingError",
     "CANONICAL_SCHEMAS",
     "EmbeddingConfig",
     "ManhattanConfig",
     "StackedTaxonomyConfig",
+    "VizSuggestion",
     "VolcanoConfig",
+    "suggest_producers",
+    "suggest_viz_kinds",
     "validate_binding",
 ]
