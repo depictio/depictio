@@ -26,7 +26,6 @@ import React, {
   useCallback,
   useRef,
   useMemo,
-  useDeferredValue,
 } from 'react';
 import {
   AppShell,
@@ -57,6 +56,7 @@ import {
   updateTab,
   DashboardGrid,
   mergeFiltersBySource,
+  enrichFilterWithDcId,
   useDataCollectionUpdates,
   RealtimeIndicator,
   useRealtimeJournal,
@@ -145,9 +145,6 @@ const EditorApp: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState<InteractiveFilter[]>([]);
-  // Deferred copy for heavy renderers (figures / tables / maps / image grid)
-  // so a slider drag doesn't refetch on every step. See App.tsx for context.
-  const deferredFilters = useDeferredValue(filters);
   const [cardValues, setCardValues] = useState<Record<string, unknown>>({});
   const [cardSecondaryValues, setCardSecondaryValues] = useState<
     Record<string, Record<string, unknown>>
@@ -256,28 +253,7 @@ const EditorApp: React.FC = () => {
 
   const handleFilterChange = useCallback(
     (update: InteractiveFilter) => {
-      // Enrich the emitted filter with the source component's dc_id so the
-      // backend's link-resolver can map cross-DC filters (e.g. metadata →
-      // canonical advanced-viz DCs). Interactive renderers don't include
-      // their own dc_id in the emitted shape; look it up from the
-      // dashboard's stored_metadata by component index.
-      const enriched = ((): InteractiveFilter => {
-        if (update.metadata?.dc_id) return update;
-        const sources = dashboard?.stored_metadata ?? [];
-        const src = sources.find((m) => String(m.index) === String(update.index));
-        const dcId = src?.dc_id;
-        if (!dcId) return update;
-        return {
-          ...update,
-          metadata: {
-            ...(update.metadata ?? {}),
-            dc_id: dcId,
-            column_name: update.column_name ?? update.metadata?.column_name,
-            interactive_component_type:
-              update.interactive_component_type ?? update.metadata?.interactive_component_type,
-          },
-        };
-      })();
+      const enriched = enrichFilterWithDcId(update, dashboard?.stored_metadata);
       setFilters((prev) => mergeFiltersBySource(prev, enriched));
     },
     [dashboard],

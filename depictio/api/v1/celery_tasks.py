@@ -849,9 +849,11 @@ def compute_complex_heatmap(payload: dict) -> dict:
             ordered_values = [str(value_map.get(c, "—")) for c in value_columns]
             uniq = sorted(set(v for v in ordered_values if v not in ("", "—")))
             # Dashboard-supplied palette override wins; otherwise palette-cycle.
-            override = (col_annotation_colors.get(ann_name) or {}) if isinstance(
-                col_annotation_colors.get(ann_name), dict
-            ) else {}
+            override = (
+                (col_annotation_colors.get(ann_name) or {})
+                if isinstance(col_annotation_colors.get(ann_name), dict)
+                else {}
+            )
             colors = {
                 v: override.get(v) or _COL_PALETTE[i % len(_COL_PALETTE)]
                 for i, v in enumerate(uniq)
@@ -1001,11 +1003,8 @@ def compute_upset(payload: dict) -> dict:
             habitat_filter_values.update(str(v) for v in val)
         else:
             habitat_filter_values.add(str(val))
-    if habitat_filter_values:
-        all_cols = list(set_columns) if set_columns else [
-            c for c in df.columns if c in habitat_filter_values or c not in ("taxon",)
-        ]
-        narrowed = [c for c in (set_columns or df.columns) if c in habitat_filter_values]
+    if habitat_filter_values and set_columns:
+        narrowed = [c for c in set_columns if c in habitat_filter_values]
         if narrowed:
             logger.info(
                 "compute_upset: narrowing set_columns to %d habitat(s) via filter",

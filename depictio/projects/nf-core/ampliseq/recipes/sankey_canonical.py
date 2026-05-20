@@ -106,6 +106,19 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
     # the root would be ~N (e.g. 12.0 ≈ 1200%). Pre-divide by sample count
     # so the renderer's sum yields the mean-per-sample abundance, restoring
     # the natural 0-1 (0-100%) reading at the root.
+    #
+    # CAVEATS — this normalisation is RENDERER-COUPLED:
+    #  1. Output is meaningful only under sum-aggregation viz (Sankey). Other
+    #     consumers (table view, future bar/violin plots) will see abundance
+    #     values that are mean-per-sample, not relative-per-sample.
+    #  2. The divisor is computed at recipe time on the FULL sample set. A
+    #     cross-DC sample filter (e.g. one habitat → 3 of 12 samples) does
+    #     NOT recompute it — the renderer's sum then reads ~3/12 at the root
+    #     instead of ~1.0. Acceptable today because all dashboards using
+    #     this DC show the full sample universe; revisit if per-sample
+    #     filtering becomes common.
+    # Proper fix is moving the divisor into compute_sankey via a new
+    # `normalise_by_col` payload field — left as follow-up.
     n_samples = long.select(pl.col("sample_id").n_unique()).item()
     if n_samples > 1:
         long = long.with_columns(pl.col("abundance") / n_samples)

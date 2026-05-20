@@ -9,7 +9,7 @@
  * from Plotly/AG Grid events and to merge / clear by ``(index, source)``.
  */
 
-import type { InteractiveFilter, InteractiveFilterSource } from './api';
+import type { InteractiveFilter, InteractiveFilterSource, StoredMetadata } from './api';
 
 /**
  * Pick selection values from a Plotly ``selectedData`` / ``clickData`` event.
@@ -119,4 +119,32 @@ export function clearFiltersBySource(
  */
 export function hasSelectionFilters(filters: InteractiveFilter[]): boolean {
   return filters.some((f) => f.source !== undefined);
+}
+
+/**
+ * Enrich an emitted filter with its source component's ``dc_id`` (looked up
+ * from the dashboard's ``stored_metadata`` by index) so the backend's
+ * link-resolver can map cross-DC filters. Interactive renderers don't carry
+ * their own dc_id in the emitted shape — this lookup is the single source of
+ * truth for the view and editor apps. Returns the update unchanged when a
+ * dc_id is already present or no matching source can be found.
+ */
+export function enrichFilterWithDcId(
+  update: InteractiveFilter,
+  storedMetadata: StoredMetadata[] | undefined,
+): InteractiveFilter {
+  if (update.metadata?.dc_id) return update;
+  const src = (storedMetadata ?? []).find((m) => String(m.index) === String(update.index));
+  const dcId = src?.dc_id;
+  if (!dcId) return update;
+  return {
+    ...update,
+    metadata: {
+      ...(update.metadata ?? {}),
+      dc_id: dcId,
+      column_name: update.column_name ?? update.metadata?.column_name,
+      interactive_component_type:
+        update.interactive_component_type ?? update.metadata?.interactive_component_type,
+    },
+  };
 }

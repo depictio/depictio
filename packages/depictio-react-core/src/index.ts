@@ -199,6 +199,7 @@ export {
   mergeFiltersBySource,
   clearFiltersBySource,
   hasSelectionFilters,
+  enrichFilterWithDcId,
 } from './selection';
 
 // Real-time event subscription (WebSocket /events/ws)
