@@ -1448,7 +1448,7 @@ jobs:
             variants/bowtie2/mosdepth/genome/all_samples.mosdepth.coverage.tsv \
             variants/bowtie2/mosdepth/amplicon/all_samples.mosdepth.heatmap.tsv; do
             path="/app/depictio/projects/nf-core/viralrecon/3.0.0/run_1/$f"
-            if docker compose exec -T depictio test -f "$path"; then
+            if docker compose exec -T depictio-backend test -f "$path"; then
               echo "✅ $path"
             else
               echo "❌ MISSING: $path"
