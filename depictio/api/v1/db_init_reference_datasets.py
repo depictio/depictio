@@ -144,6 +144,11 @@ STATIC_IDS = {
             "dotplot_demo": "646b0f3c1e4a2d7f8e5b8d30",
             "lollipop_demo": "646b0f3c1e4a2d7f8e5b8d31",
             "oncoplot_demo": "646b0f3c1e4a2d7f8e5b8d32",
+            # Coverage-track + categorical-flow demos added later — IDs were
+            # already baked into the seed dashboards (`8d50` / `8d51`) but
+            # never registered here, so seeded deploys 404'd on these tiles.
+            "coverage_track_demo": "646b0f3c1e4a2d7f8e5b8d50",
+            "categorical_flow_demo": "646b0f3c1e4a2d7f8e5b8d51",
         },
         "dashboards": {
             # Main tab reuses the project_id so get_child_tabs(main_id) finds
