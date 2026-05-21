@@ -414,17 +414,6 @@ const DashboardsList: React.FC<DashboardsListProps> = ({
         clearFilters={clearFilters}
       />
 
-      {pinDisabled && (
-        <Paper p="xs" radius="md" withBorder>
-          <Group gap="xs">
-            <Icon icon="mdi:information-outline" width={16} />
-            <Text size="sm" c="dimmed">
-              Pinning and recently-opened tracking are disabled in public mode.
-            </Text>
-          </Group>
-        </Paper>
-      )}
-
       {noResults ? (
         <Paper p="xl" radius="md" withBorder>
           <Stack align="center" gap="sm">
