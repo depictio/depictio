@@ -30,12 +30,18 @@ import {
   screenshotUrl,
 } from './lib/format';
 import { dashboardHrefFor, dashboardLinkClickHandler } from './lib/dashboardLinks';
+import { parseTemplateOrigin, TemplateChip } from '../projects/template';
 
 interface DashboardCardProps {
   dashboard: DashboardListEntry;
   childTabs?: DashboardListEntry[];
   isOwner: boolean;
   projectName?: string;
+  /** Raw `template_origin` from the dashboard's owning project (when the
+   *  project was instantiated from a template). Renders a TemplateChip
+   *  alongside the project badge so users can spot template-derived
+   *  dashboards at a glance and follow the chip to the template's docs. */
+  projectTemplateOrigin?: unknown;
   pinned?: boolean;
   pinDisabled?: boolean;
   onTogglePin?: () => void;
@@ -107,6 +113,7 @@ const DashboardCard: React.FC<DashboardCardProps> = ({
   childTabs = [],
   isOwner,
   projectName,
+  projectTemplateOrigin,
   pinned = false,
   pinDisabled = false,
   onTogglePin,
@@ -116,6 +123,7 @@ const DashboardCard: React.FC<DashboardCardProps> = ({
   onDuplicate,
   onExport,
 }) => {
+  const parsedTemplate = parseTemplateOrigin(projectTemplateOrigin);
   const { colorScheme } = useMantineColorScheme();
   const theme: 'light' | 'dark' = colorScheme === 'dark' ? 'dark' : 'light';
 
@@ -297,6 +305,9 @@ const DashboardCard: React.FC<DashboardCardProps> = ({
               Project: {projectName}
             </Badge>
           </Tooltip>
+        )}
+        {parsedTemplate && (
+          <TemplateChip parsed={parsedTemplate} verbose />
         )}
         {ownerEmail && (
           <Tooltip label={`Owner: ${ownerEmail}`} withinPortal>

@@ -27,6 +27,7 @@ import {
   type GroupedDashboards,
   groupByParent,
   projectNameLookup,
+  projectTemplateLookup,
 } from './lib/splitDefaultSections';
 
 interface DashboardsListProps {
@@ -142,6 +143,13 @@ const DashboardsList: React.FC<DashboardsListProps> = ({
   onBulkDelete,
 }) => {
   const projectNames = useMemo(() => projectNameLookup(projects), [projects]);
+  // Per-project template_origin so the cards can render a TemplateChip
+  // without re-fetching the project. Only populated for projects that were
+  // instantiated from a template (`projectTemplateLookup` omits the rest).
+  const projectTemplates = useMemo(
+    () => projectTemplateLookup(projects),
+    [projects],
+  );
   const {
     prefs,
     setView,
@@ -337,6 +345,7 @@ const DashboardsList: React.FC<DashboardsListProps> = ({
       <DashboardThumbnailView
         groups={groups}
         projectNames={projectNames}
+        projectTemplates={projectTemplates}
         currentUserEmail={currentUserEmail}
         pinnedIds={pinnedIds}
         pinDisabled={pinDisabled}
@@ -350,6 +359,7 @@ const DashboardsList: React.FC<DashboardsListProps> = ({
     ),
     [
       projectNames,
+      projectTemplates,
       currentUserEmail,
       pinnedIds,
       pinDisabled,

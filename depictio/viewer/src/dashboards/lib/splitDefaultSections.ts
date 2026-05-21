@@ -124,3 +124,19 @@ export function projectNameLookup(
   }
   return map;
 }
+
+/** Per-project `template_origin` blob (or string), keyed by project id, for
+ *  the dashboard cards to render a TemplateChip without having to fetch the
+ *  project again. Projects without a template_origin are omitted so a simple
+ *  `.get(id)` doubles as a "was-this-from-a-template?" check. */
+export function projectTemplateLookup(
+  projects: { _id?: string; id?: string; template_origin?: unknown }[],
+): Map<string, unknown> {
+  const map = new Map<string, unknown>();
+  for (const p of projects) {
+    const id = String(p._id ?? p.id ?? '');
+    if (!id) continue;
+    if (p.template_origin) map.set(id, p.template_origin);
+  }
+  return map;
+}

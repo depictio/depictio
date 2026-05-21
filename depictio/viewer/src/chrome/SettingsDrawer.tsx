@@ -15,6 +15,7 @@ import { Icon } from '@iconify/react';
 
 import type { DashboardData } from 'depictio-react-core';
 import { fetchProject } from 'depictio-react-core';
+import { parseTemplateOrigin, TemplateChip } from '../projects/template';
 
 interface SettingsDrawerProps {
   opened: boolean;
@@ -50,6 +51,11 @@ const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
   dashboard,
 }) => {
   const [projectName, setProjectName] = useState<string | null>(null);
+  // Raw template_origin blob from the dashboard's owning project (when
+  // instantiated from a template). Fetched alongside the project name so
+  // the drawer can render a TemplateChip linking to the docs.
+  const [projectTemplateOrigin, setProjectTemplateOrigin] =
+    useState<unknown>(null);
 
   const dashboardId =
     (dashboard?.dashboard_id as string | undefined) ||
@@ -76,25 +82,35 @@ const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
   const parentDashboardId =
     (dashboard?.parent_dashboard_id as string | undefined) || null;
 
-  // Resolve project_id → project.name asynchronously. Skip enrichment to
-  // keep the request small (we only need the name).
+  // Resolve project_id → project.name + template_origin asynchronously.
+  // Skip enrichment to keep the request small (we only need name +
+  // template_origin, which the lite payload already carries).
   useEffect(() => {
     if (!projectId || !opened) {
       setProjectName(null);
+      setProjectTemplateOrigin(null);
       return;
     }
     let cancelled = false;
     fetchProject(projectId, { skipEnrichment: true })
       .then(({ project }) => {
-        if (!cancelled) setProjectName(project.name ?? null);
+        if (cancelled) return;
+        setProjectName(project.name ?? null);
+        setProjectTemplateOrigin(
+          (project as { template_origin?: unknown }).template_origin ?? null,
+        );
       })
       .catch(() => {
-        if (!cancelled) setProjectName(null);
+        if (cancelled) return;
+        setProjectName(null);
+        setProjectTemplateOrigin(null);
       });
     return () => {
       cancelled = true;
     };
   }, [projectId, opened]);
+
+  const parsedTemplate = parseTemplateOrigin(projectTemplateOrigin);
 
   return (
     <Drawer
@@ -142,6 +158,14 @@ const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
               )
             }
           />
+          {parsedTemplate && (
+            <MetaRow
+              icon="mdi:source-branch"
+              iconColor="var(--mantine-color-green-6)"
+              label="Template"
+              value={<TemplateChip parsed={parsedTemplate} verbose />}
+            />
+          )}
           {ownerEmail && (
             <MetaRow
               icon="mdi:account-circle-outline"

@@ -19,14 +19,23 @@ export interface ParsedTemplate {
  *  a plain string and with shorter ids that omit the version segment. Returns
  *  null when the project wasn't created from a template. */
 export function parseTemplate(project: ProjectListEntry): ParsedTemplate | null {
-  const origin = project.template_origin as
-    | { template_id?: string }
-    | string
-    | undefined;
+  return parseTemplateOrigin(project.template_origin);
+}
+
+/** Same as `parseTemplate` but accepts the raw `template_origin` value
+ *  directly — for callers that already have it on hand (dashboard list
+ *  cards, settings drawer) and don't want to fabricate a fake
+ *  `ProjectListEntry` to call it. */
+export function parseTemplateOrigin(origin: unknown): ParsedTemplate | null {
   let raw: string | null = null;
-  if (typeof origin === 'string') raw = origin.trim();
-  else if (origin && typeof origin === 'object' && origin.template_id) {
-    raw = origin.template_id.trim();
+  if (typeof origin === 'string') {
+    raw = origin.trim();
+  } else if (
+    origin &&
+    typeof origin === 'object' &&
+    typeof (origin as { template_id?: unknown }).template_id === 'string'
+  ) {
+    raw = ((origin as { template_id: string }).template_id || '').trim();
   }
   if (!raw) return null;
   const parts = raw.split('/').map((s) => s.trim()).filter(Boolean);
