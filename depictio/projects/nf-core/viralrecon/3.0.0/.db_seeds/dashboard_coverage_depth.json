@@ -22,18 +22,14 @@
       "wf_id": {
         "$oid": "746b0f3c1e4a2d7f8e5b9c01"
       },
-      "dc_id": {
-        "$oid": "6a0e273941cd17ba0abd928c"
-      },
+      "dc_id": null,
       "dc_config": {
         "type": null,
         "metatype": null,
         "description": "Per-sample alignment, coverage, and variant calling summary metrics",
         "data_collection_tag": "summary_metrics",
         "dc_specific_properties": null,
-        "_id": {
-          "$oid": "6a0e273941cd17ba0abd928c"
-        }
+        "_id": null
       },
       "cols_json": {},
       "parent_index": null,
@@ -226,7 +222,7 @@
         "$oid": "746b0f3c1e4a2d7f8e5b9c01"
       },
       "dc_id": {
-        "$oid": "6a0e273941cd17ba0abd92a2"
+        "$oid": "746b0f3c1e4a2d7f8e5b9c1c"
       },
       "dc_config": {
         "type": null,
@@ -235,7 +231,7 @@
         "data_collection_tag": "coverage_track_canonical",
         "dc_specific_properties": null,
         "_id": {
-          "$oid": "6a0e273941cd17ba0abd92a2"
+          "$oid": "746b0f3c1e4a2d7f8e5b9c1c"
         }
       },
       "cols_json": {},
@@ -273,7 +269,7 @@
         "$oid": "746b0f3c1e4a2d7f8e5b9c01"
       },
       "dc_id": {
-        "$oid": "6a0e273941cd17ba0abd92a0"
+        "$oid": "746b0f3c1e4a2d7f8e5b9c1b"
       },
       "dc_config": {
         "type": null,
@@ -282,7 +278,7 @@
         "data_collection_tag": "complex_heatmap_canonical",
         "dc_specific_properties": null,
         "_id": {
-          "$oid": "6a0e273941cd17ba0abd92a0"
+          "$oid": "746b0f3c1e4a2d7f8e5b9c1b"
         }
       },
       "cols_json": {},
