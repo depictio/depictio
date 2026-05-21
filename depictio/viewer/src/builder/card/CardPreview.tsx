@@ -33,12 +33,14 @@ function buildPreviewRows(
   aggregations: string[] | null | undefined,
   layout: SecondaryLayout,
 ): { name: string; value: unknown }[] {
-  if (!aggregations || aggregations.length === 0) return [];
-
   // Box-plot needs a compound payload — synthesise one from whatever specs
   // we have. Quartiles aren't precomputed; estimate them so the shape is
   // visible. The saved card pulls real q1/q3/outliers from the server.
-  if (layout === 'box_plot' && aggregations.includes('box_plot_stats')) {
+  if (
+    layout === 'box_plot' &&
+    aggregations &&
+    aggregations.includes('box_plot_stats')
+  ) {
     const min = pickNum(specs, 'min');
     const max = pickNum(specs, 'max');
     const median =
@@ -72,10 +74,63 @@ function buildPreviewRows(
     ];
   }
 
+  if (!aggregations || aggregations.length === 0) return [];
+
   // Vertical / compact: just pull scalar values from specs by aggregation name.
   return aggregations
     .map((agg) => ({ name: agg, value: pickNum(specs, agg) }))
     .filter((r) => r.value !== undefined);
+}
+
+/** Synthesise a ``__breakdown__`` payload (same shape the server emits via
+ *  ``bulk_compute_cards``) from the breakdown column's precomputed specs so
+ *  the top-N / concentration previews show a representative strip without
+ *  needing a live data fetch. Categories: prefer ``unique_values`` (the
+ *  precomputed sample list of distinct names) — fall back to ``placeholder
+ *  bucket`` labels when only ``nunique`` is available. Counts are
+ *  approximated by spreading the total uniformly across the top-N buckets;
+ *  the saved card recomputes the real distribution from the live data. */
+function buildBreakdownPreview(
+  breakdownSpecs: Specs,
+  topNCount: number,
+): {
+  column: string;
+  total: number;
+  top: { name: string; count: number; percent: number }[];
+  top_share: number;
+  unique_values: number;
+} | null {
+  if (!breakdownSpecs) return null;
+  const nunique = pickNum(breakdownSpecs, 'nunique');
+  const uniqueValuesRaw = breakdownSpecs['unique_values'];
+  const uniqueList: string[] = Array.isArray(uniqueValuesRaw)
+    ? (uniqueValuesRaw as unknown[]).map((v) => String(v))
+    : [];
+  if (nunique === undefined && uniqueList.length === 0) return null;
+  const totalUnique = nunique ?? uniqueList.length;
+  const n = Math.max(1, Math.min(topNCount, totalUnique));
+  // Use real names when available, otherwise synthesise placeholder buckets.
+  const names: string[] = uniqueList.length
+    ? uniqueList.slice(0, n)
+    : Array.from({ length: n }, (_, i) => `Bucket ${i + 1}`);
+  // Spread a notional "100 rows" uniformly across the top-N so percents
+  // render to something legible (e.g. 33% / 33% / 34% for n=3). Real data
+  // gets surfaced when the card is saved + bulk-computed.
+  const totalRows = 100;
+  const perBucket = Math.floor(totalRows / n);
+  const remainder = totalRows - perBucket * n;
+  const top = names.map((name, i) => {
+    const count = perBucket + (i < remainder ? 1 : 0);
+    return { name, count, percent: count / totalRows };
+  });
+  const topShare = top.reduce((acc, r) => acc + r.percent, 0);
+  return {
+    column: '__preview__',
+    total: totalRows,
+    top,
+    top_share: topShare,
+    unique_values: totalUnique,
+  };
 }
 
 const CardPreview: React.FC = () => {
@@ -86,6 +141,9 @@ const CardPreview: React.FC = () => {
     aggregation?: string;
     aggregations?: string[] | null;
     secondary_layout?: SecondaryLayout;
+    breakdown_col?: string | null;
+    coverage_max?: number | null;
+    top_n_count?: number;
     background_color?: string;
     title_color?: string;
     icon_name?: string;
@@ -121,8 +179,46 @@ const CardPreview: React.FC = () => {
     config.aggregations,
     layout,
   );
+
+  // top_n / concentration: synthesise a __breakdown__ row from the breakdown
+  // column's precomputed unique_values so the strip renders without a live
+  // data fetch. coverage: pass the hero value + coverage_max directly to the
+  // strip. Both fall back to "no strip" when the user hasn't filled in the
+  // required config (breakdown_col / coverage_max).
+  let stripRows: { name: string; value: unknown }[] = secondaryRows;
+  let coverageValue: number | null = null;
+  let coverageMax: number | null = null;
+  if (layout === 'top_n' || layout === 'concentration') {
+    const breakdownCol =
+      config.breakdown_col && cols.find((c) => c.name === config.breakdown_col);
+    const payload = buildBreakdownPreview(
+      breakdownCol ? (breakdownCol.specs as Specs) : undefined,
+      config.top_n_count ?? 3,
+    );
+    if (payload) {
+      payload.column = config.breakdown_col ?? '__preview__';
+      stripRows = [{ name: '__breakdown__', value: payload }];
+    }
+  } else if (layout === 'coverage') {
+    if (
+      typeof config.coverage_max === 'number' &&
+      config.coverage_max > 0 &&
+      typeof rawValue === 'number' &&
+      Number.isFinite(rawValue)
+    ) {
+      coverageValue = rawValue;
+      coverageMax = config.coverage_max;
+    }
+  }
+
+  const showStrip =
+    stripRows.length > 0 ||
+    (layout === 'coverage' &&
+      typeof coverageMax === 'number' &&
+      typeof coverageValue === 'number');
   const showApproxHint =
-    layout === 'box_plot' && secondaryRows.length > 0;
+    (layout === 'box_plot' && secondaryRows.length > 0) ||
+    ((layout === 'top_n' || layout === 'concentration') && stripRows.length > 0);
 
   return (
     <PreviewPanel minHeight={200}>
@@ -137,15 +233,20 @@ const CardPreview: React.FC = () => {
             title_font_size={config.title_font_size ?? 'md'}
             value_font_size="xl"
             secondaryStrip={
-              secondaryRows.length > 0 ? (
-                <SecondaryMetrics rows={secondaryRows} layout={layout} />
+              showStrip ? (
+                <SecondaryMetrics
+                  rows={stripRows}
+                  layout={layout}
+                  coverageValue={coverageValue}
+                  coverageMax={coverageMax}
+                />
               ) : undefined
             }
           />
           {showApproxHint ? (
             <Text size="10" c="dimmed" ta="center" mt={2} style={{ fontSize: 10 }}>
-              Preview Q1 / Q3 / outliers are estimated; the saved card recomputes
-              from the live data.
+              Preview values are estimated; the saved card recomputes from the
+              live data.
             </Text>
           ) : null}
         </div>
