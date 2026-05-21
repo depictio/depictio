@@ -1,0 +1,45 @@
+sample	lineage	conflict	ambiguity_score	scorpio_call	scorpio_support	scorpio_conflict	scorpio_notes	pangolin_version	note	qc_status
+SAMPLE_01	Unassigned			""			""	4.3.1	""	fail
+SAMPLE_02	B.1.1.7	0.0		Alpha (B.1.1.7-like)	0.91	0.09	scorpio call: Alt alleles 21; Ref alleles 2; Amb alleles 0; Oth alleles 0	4.3.1	Usher placements: B.1.1.7(1/1)	pass
+SAMPLE_03	B.1.1.7	0.0		Alpha (B.1.1.7-like)	0.87	0.09	scorpio call: Alt alleles 20; Ref alleles 2; Amb alleles 0; Oth alleles 1	4.3.1	Usher placements: B.1.1.7(1/1)	pass
+SAMPLE_04	B.1.1.7	0.0		Alpha (B.1.1.7-like)	0.91	0.09	scorpio call: Alt alleles 21; Ref alleles 2; Amb alleles 0; Oth alleles 0	4.3.1	Usher placements: B.1.1.7(1/1)	pass
+SAMPLE_05	B.1.1.7	0.0		Alpha (B.1.1.7-like)	0.91	0.09	scorpio call: Alt alleles 21; Ref alleles 2; Amb alleles 0; Oth alleles 0	4.3.1	Usher placements: B.1.1.7(1/1)	pass
+SAMPLE_06	AC.1	0.0		""			""	4.3.1	Assigned from designation hash.	pass
+SAMPLE_07	B.1.1.7	0.0		Alpha (B.1.1.7-like)	0.91	0.09	scorpio call: Alt alleles 21; Ref alleles 2; Amb alleles 0; Oth alleles 0	4.3.1	Usher placements: B.1.1.7(1/1)	pass
+SAMPLE_08	AC.1	0.0		""			""	4.3.1	Assigned from designation hash.	pass
+SAMPLE_09	B.1.1.7	0.0		Alpha (B.1.1.7-like)	0.83	0.09	scorpio call: Alt alleles 19; Ref alleles 2; Amb alleles 2; Oth alleles 0	4.3.1	Usher placements: B.1.1.7(1/1)	pass
+SAMPLE_10	B.1.1.7	0.0		Alpha (B.1.1.7-like)	0.87	0.09	scorpio call: Alt alleles 20; Ref alleles 2; Amb alleles 0; Oth alleles 1	4.3.1	Usher placements: B.1.1.7(1/1)	pass
+SAMPLE_11	B.1.1.7	0.0		Alpha (B.1.1.7-like)	0.87	0.09	scorpio call: Alt alleles 20; Ref alleles 2; Amb alleles 0; Oth alleles 1	4.3.1	Usher placements: B.1.1.7(1/1)	pass
+SAMPLE_12	B.1.1.7	0.0		Alpha (B.1.1.7-like)	0.87	0.09	scorpio call: Alt alleles 20; Ref alleles 2; Amb alleles 0; Oth alleles 1	4.3.1	Usher placements: B.1.1.7(1/1)	pass
+SAMPLE_13	Unassigned			""			""	4.3.1	""	fail
+SAMPLE_14	B.1.1.7	0.0		Alpha (B.1.1.7-like)	0.91	0.09	scorpio call: Alt alleles 21; Ref alleles 2; Amb alleles 0; Oth alleles 0	4.3.1	Usher placements: B.1.1.7(1/1)	pass
+SAMPLE_15	B.1.1.7	0.0		Alpha (B.1.1.7-like)	0.87	0.09	scorpio call: Alt alleles 20; Ref alleles 2; Amb alleles 0; Oth alleles 1	4.3.1	Usher placements: B.1.1.7(1/1)	pass
+SAMPLE_16	B.1.1.7	0.0		Alpha (B.1.1.7-like)	0.91	0.09	scorpio call: Alt alleles 21; Ref alleles 2; Amb alleles 0; Oth alleles 0	4.3.1	Usher placements: B.1.1.7(1/1)	pass
+SAMPLE_17	B.1.1.7	0.0		Alpha (B.1.1.7-like)	0.87	0.09	scorpio call: Alt alleles 20; Ref alleles 2; Amb alleles 1; Oth alleles 0	4.3.1	Usher placements: B.1.1.7(1/1)	pass
+SAMPLE_18	B.1.1.7	0.0		Alpha (B.1.1.7-like)	0.91	0.09	scorpio call: Alt alleles 21; Ref alleles 2; Amb alleles 0; Oth alleles 0	4.3.1	Usher placements: B.1.1.7(1/1)	pass
+SAMPLE_19	Unassigned			""			""	4.3.1	""	fail
+SAMPLE_20	Unassigned			""			""	4.3.1	""	fail
+SAMPLE_21	Unassigned			""			""	4.3.1	""	fail
+SAMPLE_24	B.1.1.7	0.0		Alpha (B.1.1.7-like)	0.91	0.09	scorpio call: Alt alleles 21; Ref alleles 2; Amb alleles 0; Oth alleles 0	4.3.1	Usher placements: B.1.1.7(1/1)	pass
+SAMPLE_25	B.1.1.7	0.0		Alpha (B.1.1.7-like)	0.87	0.09	scorpio call: Alt alleles 20; Ref alleles 2; Amb alleles 0; Oth alleles 1	4.3.1	Usher placements: B.1.1.7(1/1)	pass
+SAMPLE_27	Unassigned			""			""	4.3.1	""	fail
+SAMPLE_28	B.1.1.7	0.0		Alpha (B.1.1.7-like)	0.87	0.09	scorpio call: Alt alleles 20; Ref alleles 2; Amb alleles 0; Oth alleles 1	4.3.1	Usher placements: B.1.1.7(1/1)	pass
+SAMPLE_29	B.1.1.7	0.0		Alpha (B.1.1.7-like)	0.74	0.09	scorpio call: Alt alleles 17; Ref alleles 2; Amb alleles 3; Oth alleles 1	4.3.1	Usher placements: B.1.1.7(1/1)	pass
+SAMPLE_30	B.1.1.7	0.0		Alpha (B.1.1.7-like)	0.87	0.09	scorpio call: Alt alleles 20; Ref alleles 2; Amb alleles 0; Oth alleles 1	4.3.1	Usher placements: B.1.1.7(1/1)	pass
+SAMPLE_31	Unassigned			""			""	4.3.1	""	fail
+SAMPLE_32	B.1.1.7	0.0		Alpha (B.1.1.7-like)	0.87	0.09	scorpio call: Alt alleles 20; Ref alleles 2; Amb alleles 0; Oth alleles 1	4.3.1	Usher placements: B.1.1.7(1/1)	pass
+SAMPLE_33	B.1.1.7	0.0		Alpha (B.1.1.7-like)	0.91	0.09	scorpio call: Alt alleles 21; Ref alleles 2; Amb alleles 0; Oth alleles 0	4.3.1	Usher placements: B.1.1.7(1/1)	pass
+SAMPLE_34	B.1.1.7	0.0		Alpha (B.1.1.7-like)	0.87	0.09	scorpio call: Alt alleles 20; Ref alleles 2; Amb alleles 0; Oth alleles 1	4.3.1	Usher placements: B.1.1.7(1/1)	pass
+SAMPLE_35	B.1.1.7	0.0		Alpha (B.1.1.7-like)	0.91	0.09	scorpio call: Alt alleles 21; Ref alleles 2; Amb alleles 0; Oth alleles 0	4.3.1	Usher placements: B.1.1.7(1/1)	pass
+SAMPLE_36	B.1.1.7	0.0		Alpha (B.1.1.7-like)	0.87	0.09	scorpio call: Alt alleles 20; Ref alleles 2; Amb alleles 0; Oth alleles 1	4.3.1	Usher placements: B.1.1.7(1/1)	pass
+SAMPLE_37	B.1.1.7	0.0		Alpha (B.1.1.7-like)	0.91	0.09	scorpio call: Alt alleles 21; Ref alleles 2; Amb alleles 0; Oth alleles 0	4.3.1	Usher placements: B.1.1.7(1/1)	pass
+SAMPLE_38	B.1.1.7	0.0		Alpha (B.1.1.7-like)	0.87	0.09	scorpio call: Alt alleles 20; Ref alleles 2; Amb alleles 0; Oth alleles 1	4.3.1	Usher placements: B.1.1.7(1/1)	pass
+SAMPLE_40	B.1.1.7			Alpha (B.1.1.7-like)	0.7	0.04	scorpio call: Alt alleles 16; Ref alleles 1; Amb alleles 6; Oth alleles 0	4.3.1	scorpio called lineage B.1.1.7	fail
+SAMPLE_41	B.1.1.7	0.0		Alpha (B.1.1.7-like)	0.91	0.09	scorpio call: Alt alleles 21; Ref alleles 2; Amb alleles 0; Oth alleles 0	4.3.1	Usher placements: B.1.1.7(1/1)	pass
+SAMPLE_42	B.1.1.7	0.0		Alpha (B.1.1.7-like)	0.87	0.09	scorpio call: Alt alleles 20; Ref alleles 2; Amb alleles 0; Oth alleles 1	4.3.1	Usher placements: B.1.1.7(1/1)	pass
+SAMPLE_43	B.1.1.7	0.0		Alpha (B.1.1.7-like)	0.87	0.09	scorpio call: Alt alleles 20; Ref alleles 2; Amb alleles 0; Oth alleles 1	4.3.1	Usher placements: B.1.1.7(1/1)	pass
+SAMPLE_44	B.1.1.7	0.0		Alpha (B.1.1.7-like)	0.87	0.09	scorpio call: Alt alleles 20; Ref alleles 2; Amb alleles 0; Oth alleles 1	4.3.1	Usher placements: B.1.1.7(1/1)	pass
+SAMPLE_45	B.1.1.7	0.0		Alpha (B.1.1.7-like)	0.87	0.09	scorpio call: Alt alleles 20; Ref alleles 2; Amb alleles 0; Oth alleles 1	4.3.1	Usher placements: B.1.1.7(1/1)	pass
+SAMPLE_46	B.1.1.7	0.0		Alpha (B.1.1.7-like)	0.87	0.09	scorpio call: Alt alleles 20; Ref alleles 2; Amb alleles 0; Oth alleles 1	4.3.1	Usher placements: B.1.1.7(1/1)	pass
+SAMPLE_47	B.1.1.7	0.0		Alpha (B.1.1.7-like)	0.91	0.09	scorpio call: Alt alleles 21; Ref alleles 2; Amb alleles 0; Oth alleles 0	4.3.1	Usher placements: B.1.1.7(1/1)	pass
+SAMPLE_48	B.1.1.7	0.0		Alpha (B.1.1.7-like)	0.87	0.09	scorpio call: Alt alleles 20; Ref alleles 2; Amb alleles 0; Oth alleles 1	4.3.1	Usher placements: B.1.1.7(1/1)	pass

@@ -161,6 +161,10 @@ dump.rdb
 # Allow nf-core viralrecon bundled mosdepth TSVs (4 files under run_1/variants/bowtie2/mosdepth)
 !depictio/projects/nf-core/viralrecon/3.0.0/run_1/variants/bowtie2/mosdepth/amplicon/*.tsv
 !depictio/projects/nf-core/viralrecon/3.0.0/run_1/variants/bowtie2/mosdepth/genome/*.tsv
+# Allow nf-core viralrecon canonical seed TSVs (recipe outputs materialised once
+# and committed so init resolver can convert recipe DCs → file_scan instead of
+# pruning them on every fresh deploy)
+!depictio/projects/nf-core/viralrecon/3.0.0/*.tsv
 # Allow advanced_viz_showcase synthetic fixtures
 !depictio/projects/init/advanced_viz_showcase/data/*.tsv
 

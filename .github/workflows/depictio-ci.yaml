@@ -1436,26 +1436,49 @@ jobs:
 
       - name: Verify bundled viralrecon test data is in the image
         run: |
-          # The 4 files below are bundled by `feat(viralrecon): bundle minimal
-          # scan-target test data into the image` so a fresh deploy can scan
-          # viralrecon without any kubectl cp / external download. If any of
-          # them goes missing (.dockerignore tightening, .gitignore drop,
-          # accidental rm) every viralrecon dashboard tile will 404 on a
-          # fresh helm install — catch it here, not in production.
+          # Two groups of bundled assets keep viralrecon dashboards renderable
+          # out-of-the-box on a fresh helm install:
+          #
+          # 1. Raw nf-core outputs under run_1/ matching the template's scan
+          #    patterns (multiqc + 3 mosdepth TSVs).
+          # 2. Canonical seed TSVs at the project root — recipe outputs
+          #    materialised once and committed so the init resolver's Step 5
+          #    converts each recipe DC to a file_scan DC instead of pruning it.
+          #
+          # If any goes missing (.dockerignore tightening, .gitignore drop,
+          # accidental rm), the corresponding dashboard tiles 404 on every
+          # fresh deploy — catch it here, not in production.
+          PROJ=/app/depictio/projects/nf-core/viralrecon/3.0.0
+          MISSED=0
           for f in \
-            multiqc/multiqc_data/multiqc.parquet \
-            variants/bowtie2/mosdepth/amplicon/all_samples.mosdepth.coverage.tsv \
-            variants/bowtie2/mosdepth/genome/all_samples.mosdepth.coverage.tsv \
-            variants/bowtie2/mosdepth/amplicon/all_samples.mosdepth.heatmap.tsv; do
-            path="/app/depictio/projects/nf-core/viralrecon/3.0.0/run_1/$f"
-            if docker compose exec -T depictio-backend test -f "$path"; then
-              echo "✅ $path"
+            $PROJ/run_1/multiqc/multiqc_data/multiqc.parquet \
+            $PROJ/run_1/variants/bowtie2/mosdepth/amplicon/all_samples.mosdepth.coverage.tsv \
+            $PROJ/run_1/variants/bowtie2/mosdepth/genome/all_samples.mosdepth.coverage.tsv \
+            $PROJ/run_1/variants/bowtie2/mosdepth/amplicon/all_samples.mosdepth.heatmap.tsv \
+            $PROJ/summary_metrics.tsv \
+            $PROJ/variants_long.tsv \
+            $PROJ/manhattan_variants_canonical.tsv \
+            $PROJ/pangolin_lineages.tsv \
+            $PROJ/nextclade_results.tsv \
+            $PROJ/mosdepth_amplicon_coverage.tsv \
+            $PROJ/mosdepth_genome_coverage.tsv \
+            $PROJ/mosdepth_amplicon_heatmap.tsv \
+            $PROJ/lollipop_canonical.tsv \
+            $PROJ/oncoplot_canonical.tsv \
+            $PROJ/complex_heatmap_canonical.tsv \
+            $PROJ/coverage_track_canonical.tsv \
+            $PROJ/sankey_canonical.tsv \
+            $PROJ/upset_canonical.tsv \
+            $PROJ/variant_feature_matrix_canonical.tsv; do
+            if docker compose exec -T depictio-backend test -f "$f"; then
+              echo "✅ $f"
             else
-              echo "❌ MISSING: $path"
-              exit 1
+              echo "❌ MISSING: $f"
+              MISSED=$((MISSED+1))
             fi
           done
-          echo "✅ Bundled viralrecon test data verified in image"
+          [ "$MISSED" -gt 0 ] && exit 1
+          echo "✅ All bundled viralrecon assets verified in image"
 
       - name: Upload logs on failure
         if: failure()
