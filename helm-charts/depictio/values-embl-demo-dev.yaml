@@ -6,35 +6,49 @@
 #   - values-embl-demo-base.yaml (EMBL infrastructure + demo mode)
 #   - values-embl-secrets.yaml (S3 credentials)
 #
-# Resource budget per namespace: ~8 CPU / 16Gi (shared 32 CPU / 64Gi across 4 namespaces)
+# Tenant quota: 32 CPU / 64 GiB / 30 pods, shared between this env and
+# values-embl-demo.yaml. Per-env target: ~6 CPU / 12 GiB requests,
+# ~14 CPU / 28 GiB limits — two envs sum to ~28 / 56 limits with margin
+# for mongo-init / wipe-job hooks.
+#
+# Celery gets the largest share because it's the advanced-viz compute
+# bottleneck — concurrency bumped to 8 (`replicas: 1` kept; multi-replica
+# celery isn't supported yet on this chart). Dash frontend slimmed because
+# the React viewer (served as static assets by the backend at
+# /dashboard-beta) is taking over.
 
 # Demo environment configuration - auto-wipe on upgrades
 demo:
   autoWipeOnUpgrade: true  # Delete PVCs before each upgrade for fresh demo state
 
-# Celery worker - handles background tasks (screenshots, figure rendering)
+# Celery worker — biggest share of the budget because it's the
+# advanced-viz compute bottleneck (volcano / heatmap / coverage_track /
+# sankey / upset / etc.). Threads pool, so the GIL doesn't bottleneck
+# polars (most compute is in C extensions).
 celery:
   enabled: true
-  replicas: 1
+  replicas: 1   # multi-replica celery not validated yet on this chart
   resources:
     requests:
-      memory: "1Gi"
-      cpu: "500m"
+      memory: "6Gi"
+      cpu: "3"
     limits:
-      memory: "3Gi"
-      cpu: "2"
+      memory: "16Gi"
+      cpu: "8"
   env:
-    DEPICTIO_CELERY_WORKERS: "2"  # Celery concurrency (parallel tasks)
+    DEPICTIO_CELERY_WORKERS: "8"  # parallel tasks per worker (was 2)
 
-# Backend API - can use multiple workers
+# Backend API — serves both Dash AJAX *and* the React viewer SPA + its
+# data-fetching endpoints (render_figure, bulk_compute_cards, …), so React
+# adoption raises backend load.
 backend:
   resources:
     requests:
-      memory: "2Gi"
-      cpu: "1"
-    limits:
       memory: "4Gi"
       cpu: "2"
+    limits:
+      memory: "8Gi"
+      cpu: "4"
   env:
     # Demo mode with guided tour tooltips
     DEPICTIO_AUTH_DEMO_MODE: "true"
@@ -51,15 +65,17 @@ backend:
     # Explicit API URL to match ingress host (for browser-based requests)
     DEPICTIO_FASTAPI_PUBLIC_URL: "https://dev.api.demo.depictio.embl.org"
 
-# Frontend Dash - LIMITED TO 1 WORKER (state_manager limitation)
+# Frontend Dash — being phased out in favour of the React viewer (served
+# from the backend container at /dashboard-beta). Halved to free budget
+# for backend + celery. Still single-worker (state_manager limitation).
 frontend:
   resources:
     requests:
-      memory: "2Gi"
-      cpu: "500m"
+      memory: "512Mi"
+      cpu: "250m"
     limits:
-      memory: "4Gi"
-      cpu: "1"  # Single worker doesn't benefit from more CPU
+      memory: "1Gi"
+      cpu: "500m"
   env:
     # Demo mode with guided tour tooltips
     DEPICTIO_AUTH_DEMO_MODE: "true"
