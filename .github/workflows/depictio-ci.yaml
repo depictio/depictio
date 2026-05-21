@@ -1434,6 +1434,29 @@ jobs:
 
           echo "✅ Ampliseq template & recipe full execution verified"
 
+      - name: Verify bundled viralrecon test data is in the image
+        run: |
+          # The 4 files below are bundled by `feat(viralrecon): bundle minimal
+          # scan-target test data into the image` so a fresh deploy can scan
+          # viralrecon without any kubectl cp / external download. If any of
+          # them goes missing (.dockerignore tightening, .gitignore drop,
+          # accidental rm) every viralrecon dashboard tile will 404 on a
+          # fresh helm install — catch it here, not in production.
+          for f in \
+            multiqc/multiqc_data/multiqc.parquet \
+            variants/bowtie2/mosdepth/amplicon/all_samples.mosdepth.coverage.tsv \
+            variants/bowtie2/mosdepth/genome/all_samples.mosdepth.coverage.tsv \
+            variants/bowtie2/mosdepth/amplicon/all_samples.mosdepth.heatmap.tsv; do
+            path="/app/depictio/projects/nf-core/viralrecon/3.0.0/run_1/$f"
+            if docker compose exec -T depictio-backend test -f "$path"; then
+              echo "✅ $path"
+            else
+              echo "❌ MISSING: $path"
+              exit 1
+            fi
+          done
+          echo "✅ Bundled viralrecon test data verified in image"
+
       - name: Upload logs on failure
         if: failure()
         run: docker compose logs > cli-comprehensive-logs.txt
