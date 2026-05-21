@@ -169,6 +169,61 @@ def test_producer_fingerprint_works_without_dtypes() -> None:
     assert "deseq2_results" in matches
 
 
+def test_ancombc_joined_results_suggests_volcano_and_da_barplot() -> None:
+    """Joined ANCOM-BC results (ampliseq `ancombc.py` recipe output) must
+    fingerprint as `ancombc_results_joined`, which feeds volcano + da_barplot.
+    Regression for the React DC creation modal: uploading the joined TSV
+    previously surfaced no producer hint at all."""
+    schema = {col: "" for col in ("id", "contrast", "lfc", "q_val", "w")}
+    matches = {name for name, _ in suggest_producers(schema)}
+    assert "ancombc_results_joined" in matches
+
+
+def test_volcano_canonical_table_fingerprint() -> None:
+    """Files already in canonical volcano shape (feature_id / effect_size /
+    significance) must light up — used by ampliseq's `volcano_canonical`
+    DC and any hand-curated DE results saved with role-named columns."""
+    schema = {col: "" for col in ("feature_id", "effect_size", "significance")}
+    matches = {name for name, _ in suggest_producers(schema)}
+    assert "volcano_canonical_table" in matches
+
+
+def test_da_barplot_canonical_table_fingerprint() -> None:
+    schema = {col: "" for col in ("feature_id", "contrast", "lfc")}
+    matches = {name for name, _ in suggest_producers(schema)}
+    assert "da_barplot_canonical_table" in matches
+
+
+def test_viralrecon_variants_long_fingerprint() -> None:
+    """nf-core/viralrecon `variants_long` DC — sample × CHROM × POS × REF ×
+    ALT × GENE × EFFECT. Distinct from raw VCF (`ivar_variants_vcf`,
+    fingerprinted on `#CHROM`)."""
+    schema = {
+        col: ""
+        for col in (
+            "sample",
+            "CHROM",
+            "POS",
+            "REF",
+            "ALT",
+            "GENE",
+            "EFFECT",
+            "AF",
+        )
+    }
+    matches = {name for name, _ in suggest_producers(schema)}
+    assert "viralrecon_variants_long" in matches
+    assert "ivar_variants_vcf" not in matches  # would fire on raw `#CHROM`
+
+
+def test_ancombc_lfc_slice_no_longer_fires_on_bare_id_column() -> None:
+    """Regression: the old `{id}` fingerprint matched every TSV with an `id`
+    column, polluting suggestions on unrelated tables. The producer is
+    strengthened to `{id, lfc}` so it only fires on real slice files."""
+    bare_id = {"id": "", "name": "", "value": ""}
+    assert "ancombc_lfc_slice" not in {name for name, _ in suggest_producers(bare_id)}
+
+
 def test_suggest_producers_returns_multiple_on_ambiguous_schemas() -> None:
     # Bracken's fingerprint includes name + taxonomy_id + taxonomy_lvl which
     # is unusual enough that no other producer in the registry collides.

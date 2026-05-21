@@ -158,16 +158,235 @@ KNOWN_PRODUCERS: tuple[Producer, ...] = (
         name="ancombc_lfc_slice",
         tool="ANCOM-BC differentials",
         description="Per-contrast log-fold-change slice (one CSV per contrast group).",
-        required_columns=frozenset({"id"}),
+        # `id` alone would fingerprint nearly every TSV — pair it with `lfc`
+        # so this only fires on real ANCOM-BC slice files.
+        required_columns=frozenset({"id", "lfc"}),
         feeds_viz=("da_barplot",),
         role_mapping={
             "da_barplot": {
                 "feature_id": "id",
-                # contrast + lfc come from melting the contrast columns
-                # (e.g. (Intercept), mix8a, …) and joining with q_val_slice.
+                "lfc": "lfc",
             }
         },
         notes="One of a pair — join with q_val_slice.csv on `id`, then melt across contrast cols.",
+    ),
+    Producer(
+        name="ancombc_results_joined",
+        tool="ANCOM-BC (joined results)",
+        description="Long-form ANCOM-BC results table (id × contrast × lfc × q_val).",
+        required_columns=frozenset({"id", "contrast", "lfc", "q_val"}),
+        feeds_viz=("volcano", "da_barplot"),
+        role_mapping={
+            "volcano": {
+                "feature_id": "id",
+                "effect_size": "lfc",
+                "significance": "q_val",
+            },
+            "da_barplot": {
+                "feature_id": "id",
+                "contrast": "contrast",
+                "lfc": "lfc",
+                "significance": "q_val",
+            },
+        },
+        notes="Produced by the ampliseq `ancombc.py` recipe from per-contrast slice files.",
+    ),
+    Producer(
+        name="viralrecon_variants_long",
+        tool="nf-core/viralrecon variants (long)",
+        description="Per-sample variant calls with functional annotations.",
+        required_columns=frozenset({"sample", "CHROM", "POS", "REF", "ALT", "GENE"}),
+        feeds_viz=("lollipop", "oncoplot", "manhattan"),
+        role_mapping={
+            "lollipop": {
+                "feature_id": "GENE",
+                "position": "POS",
+                "category": "EFFECT",
+            },
+            "oncoplot": {
+                "sample_id": "sample",
+                "gene": "GENE",
+                "mutation_type": "EFFECT",
+            },
+            "manhattan": {
+                "chr": "CHROM",
+                "pos": "POS",
+                "score": "AF",
+            },
+        },
+        notes="Distinct from `ivar_variants_vcf`: long-form (no `#CHROM`, has `sample` per row).",
+    ),
+    # ------------------------------------------------------------------
+    # Canonical-schema fingerprints — match DCs whose columns already use
+    # the advanced-viz role names verbatim (i.e. files coming out of an
+    # nf-core canonical recipe, or hand-curated to match). Each producer
+    # mirrors one entry in CANONICAL_SCHEMAS where the role-name set is
+    # discriminating enough to fingerprint reliably.
+    # ------------------------------------------------------------------
+    Producer(
+        name="volcano_canonical_table",
+        tool="Canonical volcano table",
+        description="Differential-expression / abundance table with role-named columns.",
+        required_columns=frozenset({"feature_id", "effect_size", "significance"}),
+        feeds_viz=("volcano",),
+        role_mapping={
+            "volcano": {
+                "feature_id": "feature_id",
+                "effect_size": "effect_size",
+                "significance": "significance",
+            }
+        },
+    ),
+    Producer(
+        name="da_barplot_canonical_table",
+        tool="Canonical DA barplot table",
+        description="Differential-abundance per-contrast log-fold-change table.",
+        required_columns=frozenset({"feature_id", "contrast", "lfc"}),
+        feeds_viz=("da_barplot",),
+        role_mapping={
+            "da_barplot": {
+                "feature_id": "feature_id",
+                "contrast": "contrast",
+                "lfc": "lfc",
+            }
+        },
+    ),
+    Producer(
+        name="manhattan_canonical_table",
+        tool="Canonical Manhattan table",
+        description="Genome-wide variant / association track (chr × pos × score).",
+        required_columns=frozenset({"chr", "pos", "score"}),
+        feeds_viz=("manhattan",),
+        role_mapping={"manhattan": {"chr": "chr", "pos": "pos", "score": "score"}},
+    ),
+    Producer(
+        name="lollipop_canonical_table",
+        tool="Canonical lollipop table",
+        description="Per-feature positional variants (feature_id × position × category).",
+        required_columns=frozenset({"feature_id", "position", "category"}),
+        feeds_viz=("lollipop",),
+        role_mapping={
+            "lollipop": {
+                "feature_id": "feature_id",
+                "position": "position",
+                "category": "category",
+            }
+        },
+    ),
+    Producer(
+        name="oncoplot_canonical_table",
+        tool="Canonical oncoplot table",
+        description="Sample × gene × mutation_type matrix in long form.",
+        required_columns=frozenset({"sample_id", "gene", "mutation_type"}),
+        feeds_viz=("oncoplot",),
+        role_mapping={
+            "oncoplot": {
+                "sample_id": "sample_id",
+                "gene": "gene",
+                "mutation_type": "mutation_type",
+            }
+        },
+    ),
+    Producer(
+        name="coverage_track_canonical_table",
+        tool="Canonical coverage track",
+        description="Per-window coverage depth (chromosome × position × value).",
+        required_columns=frozenset({"chromosome", "position", "value"}),
+        feeds_viz=("coverage_track",),
+        role_mapping={
+            "coverage_track": {
+                "chromosome": "chromosome",
+                "position": "position",
+                "value": "value",
+            }
+        },
+    ),
+    Producer(
+        name="embedding_canonical_table",
+        tool="Canonical embedding table",
+        description="2D sample projection (sample_id × dim_1 × dim_2) — PCA / UMAP / PCoA.",
+        required_columns=frozenset({"sample_id", "dim_1", "dim_2"}),
+        feeds_viz=("embedding",),
+        role_mapping={
+            "embedding": {
+                "sample_id": "sample_id",
+                "dim_1": "dim_1",
+                "dim_2": "dim_2",
+            }
+        },
+    ),
+    Producer(
+        name="stacked_taxonomy_canonical_table",
+        tool="Canonical stacked taxonomy",
+        description="Per-sample taxonomic abundance (sample_id × taxon × rank × abundance).",
+        required_columns=frozenset({"sample_id", "taxon", "rank", "abundance"}),
+        feeds_viz=("stacked_taxonomy",),
+        role_mapping={
+            "stacked_taxonomy": {
+                "sample_id": "sample_id",
+                "taxon": "taxon",
+                "rank": "rank",
+                "abundance": "abundance",
+            }
+        },
+    ),
+    Producer(
+        name="rarefaction_canonical_table",
+        tool="Canonical rarefaction table",
+        description="Alpha-diversity rarefaction curve (sample_id × depth × metric).",
+        required_columns=frozenset({"sample_id", "depth", "metric"}),
+        feeds_viz=("rarefaction",),
+        role_mapping={
+            "rarefaction": {
+                "sample_id": "sample_id",
+                "depth": "depth",
+                "metric": "metric",
+            }
+        },
+    ),
+    Producer(
+        name="ma_canonical_table",
+        tool="Canonical MA-plot table",
+        description="Differential-expression MA shape (feature_id × avg_log_intensity × log2_fold_change).",
+        required_columns=frozenset({"feature_id", "avg_log_intensity", "log2_fold_change"}),
+        feeds_viz=("ma",),
+        role_mapping={
+            "ma": {
+                "feature_id": "feature_id",
+                "avg_log_intensity": "avg_log_intensity",
+                "log2_fold_change": "log2_fold_change",
+            }
+        },
+    ),
+    Producer(
+        name="dot_plot_canonical_table",
+        tool="Canonical dot-plot table",
+        description="Single-cell marker summary (cluster × gene × mean_expression × frac_expressing).",
+        required_columns=frozenset({"cluster", "gene", "mean_expression", "frac_expressing"}),
+        feeds_viz=("dot_plot",),
+        role_mapping={
+            "dot_plot": {
+                "cluster": "cluster",
+                "gene": "gene",
+                "mean_expression": "mean_expression",
+                "frac_expressing": "frac_expressing",
+            }
+        },
+    ),
+    Producer(
+        name="enrichment_canonical_table",
+        tool="Canonical enrichment table",
+        description="Pathway enrichment results (term × NES × padj × gene_count).",
+        required_columns=frozenset({"term", "nes", "padj", "gene_count"}),
+        feeds_viz=("enrichment",),
+        role_mapping={
+            "enrichment": {
+                "term": "term",
+                "nes": "nes",
+                "padj": "padj",
+                "gene_count": "gene_count",
+            }
+        },
     ),
     Producer(
         name="ivar_variants_vcf",
