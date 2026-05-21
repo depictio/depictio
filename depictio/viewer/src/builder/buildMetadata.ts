@@ -75,6 +75,17 @@ function buildCard(
     column_name?: string;
     column_type?: string;
     aggregation?: string;
+    aggregations?: string[] | null;
+    secondary_layout?:
+      | 'vertical'
+      | 'compact'
+      | 'box_plot'
+      | 'top_n'
+      | 'coverage'
+      | 'concentration';
+    breakdown_col?: string | null;
+    coverage_max?: number | null;
+    top_n_count?: number;
     background_color?: string;
     title_color?: string;
     icon_name?: string;
@@ -90,6 +101,17 @@ function buildCard(
     column_name: c.column_name,
     column_type: c.column_type,
     aggregation: c.aggregation,
+    // Multi-metric block — only persist when the user picked a non-default
+    // layout. ``null`` is the wire-level "no extras" signal the dashboard
+    // renderer + server check; ``undefined`` would be stripped by JSON and
+    // confuse the bulk_compute path. The StoredMetadata interface types
+    // these loosely (``string[]`` etc.), so cast through ``as unknown`` to
+    // satisfy the typeguard without widening the public type.
+    aggregations: (c.aggregations ?? null) as unknown as string[] | undefined,
+    secondary_layout: c.secondary_layout ?? 'vertical',
+    breakdown_col: (c.breakdown_col ?? null) as unknown as string | undefined,
+    coverage_max: (c.coverage_max ?? null) as unknown as number | undefined,
+    top_n_count: typeof c.top_n_count === 'number' ? c.top_n_count : 3,
     background_color: c.background_color || '',
     title_color: c.title_color || '',
     icon_name: c.icon_name || 'mdi:chart-line',

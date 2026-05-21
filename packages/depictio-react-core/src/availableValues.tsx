@@ -121,6 +121,28 @@ function expandWithPrefixes(name: string): string[] {
   return base !== name ? [name, base] : [name];
 }
 
+// MultiQC DCs don't expose row-level data — only a per-project sample-name
+// list (via sample_mappings). That list is column-agnostic, so including it
+// in the "available values" intersection is only meaningful when the
+// filter's column conceptually IS the sample identifier. For any other
+// column (habitat, condition, timepoint, …) the intersection of habitat
+// values against sample names is the empty set, which would grey out every
+// option. This allowlist matches the column naming conventions depictio
+// pipelines use for the sample link (case-insensitive).
+const SAMPLE_COLUMN_NAMES = new Set([
+  'sample',
+  'sample_id',
+  'sample_name',
+  'sampleid',
+  'samplename',
+  'sample-id',
+  'sample-name',
+]);
+
+function isSampleColumn(columnName: string): boolean {
+  return SAMPLE_COLUMN_NAMES.has(columnName.toLowerCase());
+}
+
 export interface AvailableFilterValuesProviderProps {
   dashboardMetadata: StoredMetadata[] | undefined;
   /** Project ID — required to resolve MultiQC sample mappings (the
@@ -178,7 +200,13 @@ export const AvailableFilterValuesProvider: React.FC<
       // present). Treating the filter's source DC as a regular delta-table
       // DC means `fetchUniqueValues(dc, column)` returns the full set of
       // metadata-declared values; the data DCs then trim it.
-      const fetchTargets: DataDcEntry[] = [...dcs];
+      const fetchTargets: DataDcEntry[] = dcs.filter(
+        // MultiQC DCs contribute only when filtering by a sample-like
+        // column — otherwise their sample-name list intersected against
+        // an unrelated column (habitat, condition, …) yields ∅ and greys
+        // out every option. See `isSampleColumn` above.
+        (d) => d.type !== 'multiqc' || isSampleColumn(columnName),
+      );
       if (!fetchTargets.some((d) => d.dcId === dcId)) {
         fetchTargets.push({ dcId, type: 'interactive_source' });
       }

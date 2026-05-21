@@ -2504,9 +2504,11 @@ export async function deleteDashboard(dashboardId: string): Promise<void> {
 }
 
 /** Duplicate a dashboard. Mirrors handle_dashboard_duplication() in
- *  depictio/dash/layouts/dashboards_management.py:2240-2289: fetch the source,
- *  rewrite id/title/permissions, save under a fresh id. Screenshot files are
- *  not copied — they'll regenerate the next time the new dashboard is viewed.
+ *  depictio/dash/layouts/dashboards_management.py:2203-2403: fetch the source,
+ *  rewrite id/title/permissions, save under a fresh id, then enumerate child
+ *  tabs via /dashboards/tabs and clone each one pointing at the new main tab.
+ *  Screenshot files are not copied — they'll regenerate the next time the new
+ *  dashboard is viewed.
  */
 export async function duplicateDashboard(sourceDashboardId: string): Promise<string> {
   const me = await fetchCurrentUser();
@@ -2536,6 +2538,53 @@ export async function duplicateDashboard(sourceDashboardId: string): Promise<str
     body: JSON.stringify(payload),
   });
   if (!res.ok) await throwHttpError(res, 'Failed to duplicate dashboard');
+
+  // Enumerate child tabs of the source. Endpoint returns 400 when the source
+  // is itself a child tab — in that case there's nothing to enumerate, so we
+  // silently swallow non-2xx responses.
+  try {
+    const tabsRes = await fetch(`${API_BASE}/dashboards/tabs/${sourceDashboardId}`, {
+      headers: authHeaders(),
+    });
+    if (tabsRes.ok) {
+      const tabsData = (await tabsRes.json()) as {
+        child_tabs?: Array<{ dashboard_id: string; tab_order?: number; title?: string }>;
+      };
+      const childTabs = tabsData.child_tabs ?? [];
+      for (const child of childTabs) {
+        const childSource = (await fetchDashboard(child.dashboard_id)) as Record<
+          string,
+          unknown
+        >;
+        const newChildId = generateObjectId();
+        const childPayload: Record<string, unknown> = {
+          ...childSource,
+          dashboard_id: newChildId,
+          _id: newChildId,
+          title: child.title ?? (childSource.title as string) ?? 'Tab',
+          permissions: { owners: [ownerEntry], editors: [], viewers: [] },
+          is_public: false,
+          is_main_tab: false,
+          parent_dashboard_id: newId,
+          tab_order: child.tab_order ?? (childSource.tab_order as number) ?? 0,
+          last_saved_ts: '',
+        };
+        const childRes = await fetch(`${API_BASE}/dashboards/save/${newChildId}`, {
+          method: 'POST',
+          headers: authHeaders(),
+          body: JSON.stringify(childPayload),
+        });
+        if (!childRes.ok) {
+          await throwHttpError(childRes, 'Failed to duplicate child tab');
+        }
+      }
+    }
+  } catch (err) {
+    // Don't leave the new main orphaned with no clear signal if child copy
+    // fails — re-throw so the caller's toast surfaces the error.
+    throw err;
+  }
+
   return newId;
 }
 
@@ -2693,14 +2742,23 @@ export interface AdminDashboard {
   dashboard_id: string;
   title?: string;
   is_public?: boolean;
+  is_main_tab?: boolean;
+  parent_dashboard_id?: string | null;
+  main_tab_name?: string;
+  project_id?: string;
   last_saved_ts?: string;
   permissions?: DashboardPermissions;
   stored_metadata?: unknown[];
   [key: string]: unknown;
 }
 
-export async function listAllDashboards(): Promise<AdminDashboard[]> {
-  const res = await fetch(`${API_BASE}/dashboards/list_all`, { headers: authHeaders() });
+export async function listAllDashboards(
+  includeChildTabs = false,
+): Promise<AdminDashboard[]> {
+  const qs = includeChildTabs ? '?include_child_tabs=true' : '';
+  const res = await fetch(`${API_BASE}/dashboards/list_all${qs}`, {
+    headers: authHeaders(),
+  });
   if (!res.ok) await throwHttpError(res, 'Failed to list all dashboards');
   const data = await res.json();
   return Array.isArray(data) ? data : [];

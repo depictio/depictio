@@ -19,6 +19,7 @@ import ThemeToggle from './ThemeToggle';
 import ServerStatusBadge from './ServerStatusBadge';
 import ProfileBadge from './ProfileBadge';
 import AuthModeBadge from './AuthModeBadge';
+import { dashboardHref } from '../dashboards/lib/dashboardLinks';
 import './chrome.css';
 
 /** True for path-like icon values (PNG/SVG file URLs) — these came from the
@@ -157,20 +158,24 @@ const Sidebar: React.FC<SidebarProps> = ({
   const firstChildId = childTabs[0]?.dashboard_id ?? null;
   const lastChildId = childTabs[childTabs.length - 1]?.dashboard_id ?? null;
 
+  // Each tab pill is rendered as an `<a href>` (see `renderRoot` on
+  // `Tabs.Tab` below) so middle-click / Cmd+Click / Ctrl+Click open the
+  // target tab in a new browser tab natively. Left-click follows the
+  // anchor's default navigation, so this onChange only needs to handle the
+  // synthetic "+ Add tab" pill — regular tab switches just let the browser
+  // follow the link.
+  const linkMode: 'view' | 'edit' = window.location.pathname.startsWith(
+    '/dashboard-beta-edit/',
+  )
+    ? 'edit'
+    : 'view';
+
   const handleTabChange = (value: string | null) => {
-    if (!value) return;
-    if (value === ADD_TAB_VALUE) {
-      onAddTab?.();
-      return;
-    }
-    if (value === activeId) return;
-    // Preserve the current mode (view ↔ edit) when switching tabs so users
-    // don't bounce back to read-only every time they change tab in the editor.
-    const isEditPath = window.location.pathname.startsWith('/dashboard-beta-edit/');
-    const target = isEditPath
-      ? `/dashboard-beta-edit/${value}`
-      : `/dashboard-beta/${value}`;
-    window.location.assign(target);
+    // Regular tab clicks are handled by the `<a href>` root element — only the
+    // synthetic "+ Add tab" pill needs an in-process handler. (Clicking the
+    // already-active tab is a no-op because the anchor navigates to the same
+    // URL the browser is on.)
+    if (value === ADD_TAB_VALUE) onAddTab?.();
   };
 
   return (
@@ -311,6 +316,11 @@ const Sidebar: React.FC<SidebarProps> = ({
                       rightSection={rightSection}
                       pl="xs"
                       pr={isEdit ? 4 : undefined}
+                      // Render the tab as an anchor so browser-level
+                      // open-in-new-tab (middle/Cmd+Click) works natively.
+                      renderRoot={(props) => (
+                        <a {...props} href={dashboardHref(d.dashboard_id, linkMode)} />
+                      )}
                     >
                       <span className="depictio-chrome-tab-label">{label}</span>
                     </Tabs.Tab>

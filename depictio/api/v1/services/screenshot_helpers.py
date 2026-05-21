@@ -134,7 +134,14 @@ async def wait_for_plotly_drawn(page: Page, timeout_ms: int = 3000) -> bool:
 
 
 async def hide_ui_chrome(page: Page) -> None:
-    """Hide navbar, header, Dash debug menu, and zero out AppShell padding."""
+    """Hide navbar, header, Dash debug menu, walkthrough overlays, and zero out AppShell padding.
+
+    The walkthrough strip is defensive: the React `WalkthroughHost` already
+    honours `?no-walkthrough=1` and the screenshot pipeline appends that
+    flag, but if either the gate races the mount or a stale DOM lingers,
+    these selectors guarantee no popover/backdrop/anchor survives into the
+    captured PNG.
+    """
     await page.evaluate(
         """() => {
             const sel = (q) => document.querySelector(q);
@@ -144,6 +151,12 @@ async def hide_ui_chrome(page: Page) -> None:
             if (header) header.style.display = 'none';
             const debugMenu = sel('.dash-debug-menu__outer');
             if (debugMenu) debugMenu.style.display = 'none';
+            document.querySelectorAll('[data-walkthrough]').forEach((el) => {
+                el.style.display = 'none';
+            });
+            document.querySelectorAll('.depictio-walkthrough-popover').forEach((el) => {
+                el.style.display = 'none';
+            });
             const pageContent = sel('#page-content');
             if (pageContent) {
                 pageContent.style.padding = '0';

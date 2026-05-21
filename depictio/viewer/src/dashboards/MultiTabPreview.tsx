@@ -13,6 +13,7 @@ import { Carousel } from '@mantine/carousel';
 import { Icon } from '@iconify/react';
 
 import type { DashboardListEntry } from 'depictio-react-core';
+import { dashboardHref, dashboardLinkClickHandler } from './lib/dashboardLinks';
 
 interface MultiTabPreviewProps {
   parent: DashboardListEntry;
@@ -122,8 +123,11 @@ const MultiTabPreview: React.FC<MultiTabPreviewProps> = ({
             {slides.map((slide) => (
               <Carousel.Slide key={slide.id}>
                 <UnstyledButton
-                  onClick={() => onTabClick?.(slide.id)}
-                  disabled={!onTabClick}
+                  component="a"
+                  href={dashboardHref(slide.id)}
+                  onClick={dashboardLinkClickHandler(
+                    onTabClick && (() => onTabClick(slide.id)),
+                  )}
                   aria-label={`Open ${slide.title}`}
                   style={{ display: 'block', width: '100%', height: '100%' }}
                 >
@@ -136,20 +140,23 @@ const MultiTabPreview: React.FC<MultiTabPreviewProps> = ({
           </Carousel>
         </div>
       </HoverCard.Target>
-      <HoverCard.Dropdown p="xs" w={520}>
+      <HoverCard.Dropdown p="xs" w={720}>
         <Stack gap="xs">
-          <Carousel slideSize="100%" slideGap={0} withIndicators controlSize={24}>
+          <Carousel slideSize="100%" slideGap={0} withIndicators controlSize={28}>
             {slides.map((slide) => (
               <Carousel.Slide key={slide.id}>
                 <UnstyledButton
-                  onClick={() => onTabClick?.(slide.id)}
-                  disabled={!onTabClick}
+                  component="a"
+                  href={dashboardHref(slide.id)}
+                  onClick={dashboardLinkClickHandler(
+                    onTabClick && (() => onTabClick(slide.id)),
+                  )}
                   aria-label={`Open ${slide.title}`}
-                  style={{ display: 'block', width: '100%' }}
+                  style={{ display: 'block', width: '100%', color: 'inherit' }}
                 >
                   <Stack gap={4}>
                     <AspectRatio ratio={16 / 10}>
-                      <SlideImage slide={slide} theme={theme} iconSize={64} />
+                      <SlideImage slide={slide} theme={theme} iconSize={72} />
                     </AspectRatio>
                     <Text
                       size="sm"

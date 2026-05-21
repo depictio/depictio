@@ -674,7 +674,11 @@ async def screenshot_dash_fixed(
             browser = await p.chromium.launch(headless=True)
             page = await browser.new_page(viewport={"width": 1920, "height": 1080})
 
-            dashboard_url = f"{settings.dash.internal_url}/dashboard/{dashboard_id}"
+            # ``no-walkthrough=1`` suppresses the React viewer's walkthrough
+            # popover + dim backdrop when the URL ever lands on a beta route.
+            dashboard_url = (
+                f"{settings.dash.internal_url}/dashboard/{dashboard_id}?no-walkthrough=1"
+            )
             logger.info(f"📸 Taking screenshot of: {dashboard_url}")
 
             # Set auth and navigate
@@ -725,6 +729,15 @@ async def screenshot_dash_fixed(
                         if (header) {
                             header.style.display = 'none';
                         }
+
+                        // Defensive walkthrough strip — see hide_ui_chrome in
+                        // screenshot_service.py for the rationale.
+                        document.querySelectorAll('[data-walkthrough]').forEach((el) => {
+                            el.style.display = 'none';
+                        });
+                        document.querySelectorAll('.depictio-walkthrough-popover').forEach((el) => {
+                            el.style.display = 'none';
+                        });
 
                         // Remove any padding/margin from page-content to eliminate white space
                         const pageContent = document.querySelector('#page-content');

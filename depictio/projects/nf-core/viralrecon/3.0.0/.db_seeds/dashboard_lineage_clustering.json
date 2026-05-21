@@ -1,0 +1,709 @@
+{
+  "_id": {
+    "$oid": "746b0f3c1e4a2d7f8e5b9cb3"
+  },
+  "description": null,
+  "flexible_metadata": null,
+  "hash": null,
+  "dashboard_id": {
+    "$oid": "746b0f3c1e4a2d7f8e5b9cb3"
+  },
+  "version": 1,
+  "tmp_children_data": [],
+  "stored_layout_data": [],
+  "stored_children_data": [],
+  "stored_metadata": [
+    {
+      "index": "7db5d9f3-69e1-4a04-974e-986d30351590",
+      "component_type": "text",
+      "title": "Lineage & Clustering - Pangolin, Nextclade & Variant-Profile PCA",
+      "workflow_tag": "viralrecon",
+      "data_collection_tag": "summary_metrics",
+      "wf_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c01"
+      },
+      "dc_id": {
+        "$oid": "6a0e273941cd17ba0abd928c"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Per-sample alignment, coverage, and variant calling summary metrics",
+        "data_collection_tag": "summary_metrics",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "6a0e273941cd17ba0abd928c"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-20T21:27:37.092210",
+      "title_size": "sm",
+      "title_align": "left",
+      "order": 3,
+      "alignment": "left",
+      "body": "Three complementary views of viral lineage. **Pangolin / Nextclade bar charts** show classification frequencies. The **Sankey** traces each sample's path QC -> Pangolin lineage -> Nextclade clade; mismatched calls show up as crossing ribbons. The **PCA** clusters samples by their mutation profile - points are coloured by lineage, so well-defined lineage groups appear as distinct clusters.",
+      "wf_tag": "nextflow/viralrecon"
+    },
+    {
+      "index": "a19ba555-7d6b-486b-94cb-f3973132db1b",
+      "component_type": "card",
+      "title": "Unique Lineages",
+      "workflow_tag": "viralrecon",
+      "data_collection_tag": "pangolin_lineages",
+      "wf_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c01"
+      },
+      "dc_id": {
+        "$oid": "6a0e273941cd17ba0abd9292"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Pangolin lineage assignments for each sample",
+        "data_collection_tag": "pangolin_lineages",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "6a0e273941cd17ba0abd9292"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-20T21:27:37.092233",
+      "title_size": "sm",
+      "title_align": "left",
+      "aggregation": "nunique",
+      "column_name": "lineage",
+      "column_type": "object",
+      "value": null,
+      "aggregations": null,
+      "filter_expr": null,
+      "secondary_layout": "top_n",
+      "breakdown_col": "lineage",
+      "top_n_count": 3,
+      "coverage_max": null,
+      "icon_name": "mdi:virus",
+      "icon_color": "#E74C3C",
+      "title_color": "#E74C3C",
+      "title_font_size": "xl",
+      "value_font_size": "xl",
+      "wf_tag": "nextflow/viralrecon"
+    },
+    {
+      "index": "cdf90c47-9d8f-49ca-86b8-fb01a0646375",
+      "component_type": "card",
+      "title": "Unique Clades",
+      "workflow_tag": "viralrecon",
+      "data_collection_tag": "nextclade_results",
+      "wf_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c01"
+      },
+      "dc_id": {
+        "$oid": "6a0e273941cd17ba0abd9294"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Nextclade clade assignments and sequence quality metrics",
+        "data_collection_tag": "nextclade_results",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "6a0e273941cd17ba0abd9294"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-20T21:27:37.092242",
+      "title_size": "sm",
+      "title_align": "left",
+      "aggregation": "nunique",
+      "column_name": "clade",
+      "column_type": "object",
+      "value": null,
+      "aggregations": null,
+      "filter_expr": null,
+      "secondary_layout": "top_n",
+      "breakdown_col": "clade",
+      "top_n_count": 3,
+      "coverage_max": null,
+      "icon_name": "mdi:family-tree",
+      "icon_color": "#9C27B0",
+      "title_color": "#9C27B0",
+      "title_font_size": "xl",
+      "value_font_size": "xl",
+      "wf_tag": "nextflow/viralrecon"
+    },
+    {
+      "index": "lin-sample-filter",
+      "component_type": "interactive",
+      "title": "Sample ID",
+      "workflow_tag": "viralrecon",
+      "data_collection_tag": "summary_metrics",
+      "wf_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c01"
+      },
+      "dc_id": {
+        "$oid": "6a0e273941cd17ba0abd928c"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Per-sample alignment, coverage, and variant calling summary metrics",
+        "data_collection_tag": "summary_metrics",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "6a0e273941cd17ba0abd928c"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-20T21:27:37.092256",
+      "title_size": "md",
+      "title_align": "left",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "sample",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": null,
+      "timescale": null,
+      "show_marks": null,
+      "custom_color": "#45B8AC",
+      "icon_name": "mdi:flask",
+      "wf_tag": "nextflow/viralrecon"
+    },
+    {
+      "index": "lin-lineage-filter",
+      "component_type": "interactive",
+      "title": "Lineage",
+      "workflow_tag": "viralrecon",
+      "data_collection_tag": "pangolin_lineages",
+      "wf_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c01"
+      },
+      "dc_id": {
+        "$oid": "6a0e273941cd17ba0abd9292"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Pangolin lineage assignments for each sample",
+        "data_collection_tag": "pangolin_lineages",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "6a0e273941cd17ba0abd9292"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-20T21:27:37.092264",
+      "title_size": "md",
+      "title_align": "left",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "lineage",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": null,
+      "timescale": null,
+      "show_marks": null,
+      "custom_color": "#E74C3C",
+      "icon_name": "mdi:virus",
+      "wf_tag": "nextflow/viralrecon"
+    },
+    {
+      "index": "lin-clade-filter",
+      "component_type": "interactive",
+      "title": "Clade",
+      "workflow_tag": "viralrecon",
+      "data_collection_tag": "nextclade_results",
+      "wf_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c01"
+      },
+      "dc_id": {
+        "$oid": "6a0e273941cd17ba0abd9294"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Nextclade clade assignments and sequence quality metrics",
+        "data_collection_tag": "nextclade_results",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "6a0e273941cd17ba0abd9294"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-20T21:27:37.092270",
+      "title_size": "md",
+      "title_align": "left",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "clade",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": null,
+      "timescale": null,
+      "show_marks": null,
+      "custom_color": "#9C27B0",
+      "icon_name": "mdi:family-tree",
+      "wf_tag": "nextflow/viralrecon"
+    },
+    {
+      "index": "16d23bf9-7e6b-458f-b3f7-bca27e6fab1c",
+      "component_type": "figure",
+      "title": "Pangolin lineage distribution",
+      "workflow_tag": "viralrecon",
+      "data_collection_tag": "pangolin_lineages",
+      "wf_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c01"
+      },
+      "dc_id": {
+        "$oid": "6a0e273941cd17ba0abd9292"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Pangolin lineage assignments for each sample",
+        "data_collection_tag": "pangolin_lineages",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "6a0e273941cd17ba0abd9292"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-20T21:27:37.092279",
+      "description": "Number of samples per PANGO lineage, sorted by frequency.",
+      "title_size": "h3",
+      "title_align": "left",
+      "visu_type": "bar",
+      "dict_kwargs": {},
+      "mode": "code",
+      "code_content": "df_modified = df.group_by('lineage').agg(pl.count().alias('count')).sort('count', descending=True)\nfig = px.bar(df_modified.to_pandas(), x='lineage', y='count', color='lineage',\n    labels={'lineage': 'Lineage', 'count': 'Number of Samples'})\nfig.update_layout(xaxis={'categoryorder': 'total descending'}, showlegend=False)\nfig.update_xaxes(tickangle=-45)\n",
+      "displayed_data_count": 0,
+      "total_data_count": 0,
+      "was_sampled": false,
+      "filter_applied": false,
+      "selection_enabled": false,
+      "selection_column": null,
+      "wf_tag": "nextflow/viralrecon"
+    },
+    {
+      "index": "478db22f-a623-46f9-b430-55bd489b82f0",
+      "component_type": "figure",
+      "title": "Nextclade clade distribution",
+      "workflow_tag": "viralrecon",
+      "data_collection_tag": "nextclade_results",
+      "wf_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c01"
+      },
+      "dc_id": {
+        "$oid": "6a0e273941cd17ba0abd9294"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Nextclade clade assignments and sequence quality metrics",
+        "data_collection_tag": "nextclade_results",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "6a0e273941cd17ba0abd9294"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-20T21:27:37.092285",
+      "description": "WHO-style clade designations, complementary to Pangolin lineage.",
+      "title_size": "h3",
+      "title_align": "left",
+      "visu_type": "bar",
+      "dict_kwargs": {},
+      "mode": "code",
+      "code_content": "df_modified = df.group_by('clade').agg(pl.count().alias('count')).sort('count', descending=True)\nfig = px.bar(df_modified.to_pandas(), x='clade', y='count', color='clade',\n    labels={'clade': 'Clade', 'count': 'Number of Samples'})\nfig.update_layout(xaxis={'categoryorder': 'total descending'}, showlegend=False)\nfig.update_xaxes(tickangle=-45)\n",
+      "displayed_data_count": 0,
+      "total_data_count": 0,
+      "was_sampled": false,
+      "filter_applied": false,
+      "selection_enabled": false,
+      "selection_column": null,
+      "wf_tag": "nextflow/viralrecon"
+    },
+    {
+      "index": "adv-lin-sankey",
+      "component_type": "advanced_viz",
+      "title": "Classification sankey (QC -> lineage -> clade)",
+      "workflow_tag": "viralrecon",
+      "data_collection_tag": "sankey_canonical",
+      "wf_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c01"
+      },
+      "dc_id": {
+        "$oid": "6a0e273941cd17ba0abd92a4"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Sankey-ready classification funnel (qc_status \u2192 lineage \u2192 clade)",
+        "data_collection_tag": "sankey_canonical",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "6a0e273941cd17ba0abd92a4"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-20T21:27:37.092301",
+      "description": "Ribbon width = samples on that path. Surfaces mismatched calls and dominant lineage->clade pairs.",
+      "title_size": "h3",
+      "title_align": "left",
+      "viz_kind": "sankey",
+      "config": {
+        "viz_kind": "sankey",
+        "step_cols": [
+          "qc_status",
+          "lineage",
+          "clade"
+        ],
+        "available_step_cols": null,
+        "value_col": null,
+        "value_label": null,
+        "value_format": "raw",
+        "sort_mode": "total_flow",
+        "color_mode": "source",
+        "link_opacity": 0.5,
+        "min_link_value": 0.0,
+        "show_node_labels": true
+      },
+      "wf_tag": "nextflow/viralrecon"
+    },
+    {
+      "index": "adv-lin-embedding",
+      "component_type": "advanced_viz",
+      "title": "Variant-profile PCA embedding (coloured by lineage)",
+      "workflow_tag": "viralrecon",
+      "data_collection_tag": "variant_feature_matrix_canonical",
+      "wf_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c01"
+      },
+      "dc_id": {
+        "$oid": "6a0e273941cd17ba0abd92a8"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Sample \u00d7 mutation binary matrix for live PCA / UMAP embedding",
+        "data_collection_tag": "variant_feature_matrix_canonical",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "6a0e273941cd17ba0abd92a8"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-20T21:27:37.092310",
+      "description": "2D PCA of the sample x mutation binary matrix. Points coloured by Pangolin lineage, marker shape encodes Nextclade clade. Samples sharing variants cluster together.",
+      "title_size": "h3",
+      "title_align": "left",
+      "viz_kind": "embedding",
+      "config": {
+        "viz_kind": "embedding",
+        "sample_id_col": "sample_id",
+        "dim_1_col": "dim_1",
+        "dim_2_col": "dim_2",
+        "dim_3_col": null,
+        "cluster_col": "clade",
+        "color_col": "lineage",
+        "category_palette": null,
+        "compute_method": "pca",
+        "umap_n_neighbors": 15,
+        "umap_min_dist": 0.1,
+        "tsne_perplexity": 30.0,
+        "tsne_n_iter": 1000,
+        "pcoa_distance": "bray_curtis",
+        "show_density": false,
+        "point_size": 8
+      },
+      "wf_tag": "nextflow/viralrecon"
+    },
+    {
+      "index": "3625bec7-ebd4-4e86-9bc2-7a97cc1feb2e",
+      "component_type": "table",
+      "title": "Pangolin lineage assignments",
+      "workflow_tag": "viralrecon",
+      "data_collection_tag": "pangolin_lineages",
+      "wf_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c01"
+      },
+      "dc_id": {
+        "$oid": "6a0e273941cd17ba0abd9292"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Pangolin lineage assignments for each sample",
+        "data_collection_tag": "pangolin_lineages",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "6a0e273941cd17ba0abd9292"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-20T21:27:37.092317",
+      "description": "Per-sample lineage, conflict, scorpio, QC status.",
+      "title_size": "h3",
+      "title_align": "left",
+      "columns": [],
+      "page_size": 10,
+      "sortable": true,
+      "filterable": true,
+      "row_selection_enabled": false,
+      "row_selection_column": null,
+      "wf_tag": "nextflow/viralrecon"
+    },
+    {
+      "index": "e75731e2-0f84-4291-aba0-b18e547a40f8",
+      "component_type": "table",
+      "title": "Nextclade clade assignments",
+      "workflow_tag": "viralrecon",
+      "data_collection_tag": "nextclade_results",
+      "wf_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c01"
+      },
+      "dc_id": {
+        "$oid": "6a0e273941cd17ba0abd9294"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Nextclade clade assignments and sequence quality metrics",
+        "data_collection_tag": "nextclade_results",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "6a0e273941cd17ba0abd9294"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-20T21:27:37.092323",
+      "description": "Per-sample clade, substitutions, deletions, QC.",
+      "title_size": "h3",
+      "title_align": "left",
+      "columns": [],
+      "page_size": 10,
+      "sortable": true,
+      "filterable": true,
+      "row_selection_enabled": false,
+      "row_selection_column": null,
+      "wf_tag": "nextflow/viralrecon"
+    }
+  ],
+  "stored_edit_dashboard_mode_button": [],
+  "left_panel_layout_data": [
+    {
+      "i": "box-lin-sample-filter",
+      "x": 0,
+      "y": 2,
+      "w": 1,
+      "h": 2,
+      "static": false
+    },
+    {
+      "i": "box-lin-lineage-filter",
+      "x": 0,
+      "y": 4,
+      "w": 1,
+      "h": 2,
+      "static": false
+    },
+    {
+      "i": "box-lin-clade-filter",
+      "x": 0,
+      "y": 6,
+      "w": 1,
+      "h": 2,
+      "static": false
+    }
+  ],
+  "right_panel_layout_data": [
+    {
+      "i": "box-7db5d9f3-69e1-4a04-974e-986d30351590",
+      "x": 0,
+      "y": 0,
+      "w": 8,
+      "h": 1,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-a19ba555-7d6b-486b-94cb-f3973132db1b",
+      "x": 0,
+      "y": 1,
+      "w": 4,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-cdf90c47-9d8f-49ca-86b8-fb01a0646375",
+      "x": 4,
+      "y": 1,
+      "w": 4,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-16d23bf9-7e6b-458f-b3f7-bca27e6fab1c",
+      "x": 0,
+      "y": 3,
+      "w": 4,
+      "h": 4,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-478db22f-a623-46f9-b430-55bd489b82f0",
+      "x": 4,
+      "y": 3,
+      "w": 4,
+      "h": 4,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-adv-lin-sankey",
+      "x": 0,
+      "y": 7,
+      "w": 8,
+      "h": 6,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-adv-lin-embedding",
+      "x": 0,
+      "y": 13,
+      "w": 8,
+      "h": 6,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-3625bec7-ebd4-4e86-9bc2-7a97cc1feb2e",
+      "x": 0,
+      "y": 19,
+      "w": 4,
+      "h": 4,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-e75731e2-0f84-4291-aba0-b18e547a40f8",
+      "x": 4,
+      "y": 19,
+      "w": 4,
+      "h": 4,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    }
+  ],
+  "buttons_data": {
+    "unified_edit_mode": true,
+    "add_components_button": {
+      "count": 0
+    }
+  },
+  "stored_add_button": {
+    "count": 0
+  },
+  "title": "Lineage & Clustering",
+  "subtitle": "Pangolin / Nextclade typing + classification funnel + variant-profile PCA",
+  "icon": "/assets/images/workflows/nf-core.png",
+  "icon_color": "green",
+  "icon_variant": "filled",
+  "workflow_system": "nf-core",
+  "notes_content": "",
+  "permissions": {
+    "owners": [
+      {
+        "_id": {
+          "$oid": "67658ba033c8b59ad489d7c7"
+        },
+        "description": null,
+        "flexible_metadata": null,
+        "hash": null,
+        "email": "admin@example.com",
+        "is_admin": false,
+        "is_anonymous": false,
+        "is_temporary": false,
+        "expiration_time": null
+      }
+    ],
+    "editors": [],
+    "viewers": []
+  },
+  "is_public": false,
+  "last_saved_ts": "2026-05-20 21:27:37",
+  "project_id": {
+    "$oid": "746b0f3c1e4a2d7f8e5b9ca2"
+  },
+  "is_main_tab": false,
+  "parent_dashboard_id": {
+    "$oid": "746b0f3c1e4a2d7f8e5b9ca2"
+  },
+  "tab_order": 2,
+  "main_tab_name": null,
+  "tab_icon": "mdi:virus",
+  "tab_icon_color": "red",
+  "parent_dashboard_title": null,
+  "project_realtime": null
+}

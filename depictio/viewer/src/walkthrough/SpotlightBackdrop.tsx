@@ -80,6 +80,7 @@ const SpotlightBackdrop: React.FC<SpotlightBackdropProps> = ({
     return (
       <div
         aria-hidden
+        data-walkthrough="backdrop"
         style={{
           position: 'fixed',
           inset: 0,
@@ -96,6 +97,7 @@ const SpotlightBackdrop: React.FC<SpotlightBackdropProps> = ({
   return (
     <div
       aria-hidden
+      data-walkthrough="backdrop"
       style={{
         position: 'fixed',
         top: rect.top - padding,

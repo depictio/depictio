@@ -141,7 +141,8 @@ const isBoxPlotStats = (v: unknown): v is BoxPlotStats => {
     typeof o.max === 'number' &&
     typeof o.q1 === 'number' &&
     typeof o.q3 === 'number' &&
-    typeof o.median === 'number'
+    typeof o.median === 'number' &&
+    Array.isArray(o.outliers)
   );
 };
 
@@ -384,8 +385,12 @@ const BoxPlotMetric: React.FC<{
             }}
           />
           {/* Outlier dots — each datum outside the fence. Capped at 100 by
-              the server; remaining count surfaces in the tooltip. */}
-          {s.outliers.map((v, i) => (
+              the server; remaining count surfaces in the tooltip.
+              Defensive coalesce: older bulk_compute payloads can omit the
+              ``outliers`` array entirely (only the scalar ``outlier_count``
+              is set), and the typeguard predates the field-required check —
+              so treat a missing array as "no outliers" rather than crash. */}
+          {(s.outliers ?? []).map((v, i) => (
             <Box
               key={`out-${i}`}
               style={{

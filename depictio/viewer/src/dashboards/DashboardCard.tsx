@@ -3,9 +3,11 @@ import {
   ActionIcon,
   AspectRatio,
   Badge,
+  Box,
   Card,
   Center,
   Group,
+  HoverCard,
   Stack,
   Space,
   Text,
@@ -27,12 +29,19 @@ import {
   resolveAssetUrl,
   screenshotUrl,
 } from './lib/format';
+import { dashboardHrefFor, dashboardLinkClickHandler } from './lib/dashboardLinks';
+import { parseTemplateOrigin, TemplateChip } from '../projects/template';
 
 interface DashboardCardProps {
   dashboard: DashboardListEntry;
   childTabs?: DashboardListEntry[];
   isOwner: boolean;
   projectName?: string;
+  /** Raw `template_origin` from the dashboard's owning project (when the
+   *  project was instantiated from a template). Renders a TemplateChip
+   *  alongside the project badge so users can spot template-derived
+   *  dashboards at a glance and follow the chip to the template's docs. */
+  projectTemplateOrigin?: unknown;
   pinned?: boolean;
   pinDisabled?: boolean;
   onTogglePin?: () => void;
@@ -104,6 +113,7 @@ const DashboardCard: React.FC<DashboardCardProps> = ({
   childTabs = [],
   isOwner,
   projectName,
+  projectTemplateOrigin,
   pinned = false,
   pinDisabled = false,
   onTogglePin,
@@ -113,6 +123,7 @@ const DashboardCard: React.FC<DashboardCardProps> = ({
   onDuplicate,
   onExport,
 }) => {
+  const parsedTemplate = parseTemplateOrigin(projectTemplateOrigin);
   const { colorScheme } = useMantineColorScheme();
   const theme: 'light' | 'dark' = colorScheme === 'dark' ? 'dark' : 'light';
 
@@ -126,6 +137,13 @@ const DashboardCard: React.FC<DashboardCardProps> = ({
   const titleText = dashboard.title || dashboard.dashboard_id;
   const totalTabs = childTabs.length + 1;
   const hasMultipleTabs = childTabs.length > 0;
+  const dashboardHrefStr = dashboardHrefFor(dashboard);
+  const handleOpen = dashboardLinkClickHandler(() => onView(dashboard));
+  const thumbnailSrc = screenshotUrl(
+    dashboard.dashboard_id,
+    theme,
+    dashboard.last_saved_ts,
+  );
 
   return (
     <Card
@@ -182,9 +200,6 @@ const DashboardCard: React.FC<DashboardCardProps> = ({
               parent={dashboard}
               childTabs={childTabs}
               theme={theme}
-              // Route each slide click to its OWN tab's dashboard ID, not
-              // the parent's. The parent slide (index 0) routes via its own
-              // ``slide.id`` which equals ``dashboard.dashboard_id``.
               onTabClick={(tabDashboardId) => {
                 const target =
                   tabDashboardId === dashboard.dashboard_id
@@ -196,13 +211,44 @@ const DashboardCard: React.FC<DashboardCardProps> = ({
               }}
             />
           ) : (
-            <UnstyledButton
-              onClick={() => onView(dashboard)}
-              style={{ width: '100%', height: '100%', display: 'block' }}
-              aria-label={`Open ${titleText}`}
+            <HoverCard
+              position="right"
+              openDelay={250}
+              closeDelay={100}
+              shadow="lg"
+              withinPortal
+              offset={12}
             >
-              <SingleThumbnail dashboard={dashboard} theme={theme} />
-            </UnstyledButton>
+              <HoverCard.Target>
+                <UnstyledButton
+                  component="a"
+                  href={dashboardHrefStr}
+                  onClick={handleOpen}
+                  style={{ width: '100%', height: '100%', display: 'block' }}
+                  aria-label={`Open ${titleText}`}
+                >
+                  <SingleThumbnail dashboard={dashboard} theme={theme} />
+                </UnstyledButton>
+              </HoverCard.Target>
+              <HoverCard.Dropdown p={0} style={{ overflow: 'hidden' }}>
+                <Box w={720}>
+                  <AspectRatio ratio={16 / 10}>
+                    <img
+                      src={thumbnailSrc}
+                      alt=""
+                      loading="lazy"
+                      decoding="async"
+                      style={{
+                        width: '100%',
+                        height: '100%',
+                        objectFit: 'cover',
+                        display: 'block',
+                      }}
+                    />
+                  </AspectRatio>
+                </Box>
+              </HoverCard.Dropdown>
+            </HoverCard>
           )}
         </AspectRatio>
       </Card.Section>
@@ -213,8 +259,10 @@ const DashboardCard: React.FC<DashboardCardProps> = ({
         <HeaderIcon icon={dashboardIcon} color={dashboardIconColor} />
         <Stack gap={2} style={{ flex: 1, minWidth: 0 }}>
           <UnstyledButton
-            onClick={() => onView(dashboard)}
-            style={{ textAlign: 'left' }}
+            component="a"
+            href={dashboardHrefStr}
+            onClick={handleOpen}
+            style={{ textAlign: 'left', color: 'inherit' }}
           >
             <Title
               order={4}
@@ -257,6 +305,9 @@ const DashboardCard: React.FC<DashboardCardProps> = ({
               Project: {projectName}
             </Badge>
           </Tooltip>
+        )}
+        {parsedTemplate && (
+          <TemplateChip parsed={parsedTemplate} verbose />
         )}
         {ownerEmail && (
           <Tooltip label={`Owner: ${ownerEmail}`} withinPortal>

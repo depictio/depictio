@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   Alert,
-  Badge,
   Button,
   Card,
   Group,
@@ -20,13 +19,15 @@ import { cleanExampleProjects, listExampleProjects } from 'depictio-react-core';
 import type { ExampleProject } from 'depictio-react-core';
 
 /**
- * Admin > Maintenance tab. Single action today: wipe the seed example projects
- * (iris, penguins, nf-core/ampliseq) and everything attached to them. Server
- * cascades via the same path as the per-project delete endpoint.
+ * Admin > Maintenance tab. Single action today: wipe the bundled seed
+ * projects (iris, penguins, nf-core/ampliseq, Advanced Visualisations,
+ * nf-core/viralrecon) and everything attached to them. The server's
+ * SEED_PROJECT_IDS tuple is the source of truth — this panel just renders
+ * whichever subset is currently present and cascades the delete.
  *
  * Safety: requires typing "DELETE" in the confirm modal because this removes
- * three projects at once. Mirrors the single-dashboard delete modal's danger
- * styling, but with stricter confirmation.
+ * multiple projects at once. Mirrors the single-dashboard delete modal's
+ * danger styling, but with stricter confirmation.
  */
 const CONFIRM_PHRASE = 'DELETE';
 
@@ -97,9 +98,10 @@ const AdminMaintenancePanel: React.FC = () => {
                 <Title order={5}>Clean example projects</Title>
               </Group>
               <Text size="sm" c="dimmed">
-                Removes the seed projects (iris, penguins, nf-core/ampliseq) and
-                everything they own: dashboards, workflows, data collections, and
-                Delta-table objects in S3.
+                Removes every bundled seed project (iris, penguins,
+                Advanced Visualisations, nf-core/ampliseq, nf-core/viralrecon)
+                and everything attached: dashboards, workflows, data
+                collections, MultiQC reports, and Delta-table objects in S3.
               </Text>
             </Stack>
             <Button
@@ -134,15 +136,24 @@ const AdminMaintenancePanel: React.FC = () => {
           ) : (
             <Stack gap={4}>
               <Text size="xs" c="dimmed" tt="uppercase" fw={600}>
-                Currently present
+                Currently present ({examples.length})
               </Text>
-              <Group gap="xs" wrap="wrap">
+              <List
+                size="sm"
+                spacing={2}
+                listStyleType="disc"
+                withPadding
+                c="dimmed"
+              >
                 {examples.map((p) => (
-                  <Badge key={p.id} color="orange" variant="light" size="lg">
-                    {p.name || p.id}
-                  </Badge>
+                  <List.Item key={p.id}>
+                    <Text component="span">{p.name || p.id}</Text>
+                    <Text component="span" c="dimmed" size="xs" ml={6}>
+                      ({p.id})
+                    </Text>
+                  </List.Item>
                 ))}
-              </Group>
+              </List>
             </Stack>
           )}
         </Stack>

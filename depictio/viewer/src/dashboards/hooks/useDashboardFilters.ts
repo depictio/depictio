@@ -125,11 +125,18 @@ function defaultSections(
       groups: split.public_,
     },
     {
-      key: 'example',
-      label: 'Example',
+      key: 'nfcore',
+      label: 'nf-core dashboards',
+      icon: 'simple-icons:nfcore',
+      iconColor: 'var(--mantine-color-lime-7)',
+      groups: split.nfcore,
+    },
+    {
+      key: 'demo',
+      label: 'Demo dashboards',
       icon: 'mdi:school-outline',
       iconColor: 'var(--mantine-color-orange-6)',
-      groups: split.examples,
+      groups: split.demo,
     },
   ];
 }
@@ -210,10 +217,10 @@ function groupByKey(
  *  the renderer should iterate, plus a flat filtered list for empty-state /
  *  count UI.
  *
- *  Note: example dashboards are split into a separate section by default,
- *  but when group-by ≠ 'none' we want them to bucket with their natural
- *  group (project/owner/etc.) instead of being hidden in their own
- *  "Examples" pile. */
+ *  Note: demo + nf-core dashboards are split into dedicated sections by
+ *  default, but when group-by ≠ 'none' we want them to bucket with their
+ *  natural group (project/owner/etc.) instead of being hidden in their own
+ *  "Demo"/"nf-core" piles. */
 export interface UseDashboardFiltersResult {
   sections: DashboardSection[];
   totalAfterSearch: number;

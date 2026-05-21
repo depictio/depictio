@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Paper, Stack, Group, Text } from '@mantine/core';
 import { DatePickerInput } from '@mantine/dates';
 import { Icon } from '@iconify/react';
@@ -90,6 +90,16 @@ const DatePickerRenderer: React.FC<{
   const [bounds, setBounds] = useState<{ min: Date | null; max: Date | null } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // Mantine's DatePickerInput is fully controlled. When the user clicks the
+  // first date in a range, Mantine fires onChange with [Date, null] —
+  // we only emit upward once BOTH ends are picked, so we need to track that
+  // intermediate state locally; otherwise the controlled value prop never
+  // changes and Mantine keeps restarting on every click, so the user can
+  // never finish picking a range. The initial value mirrors the full
+  // bounds so the picker shows "oldest → most recent" by default.
+  const [pickerValue, setPickerValue] = useState<[Date | null, Date | null]>(
+    [null, null],
+  );
 
   useEffect(() => {
     if (!metadata.dc_id || !metadata.column_name) {
@@ -128,13 +138,27 @@ const DatePickerRenderer: React.FC<{
   }, [metadata.dc_id, metadata.column_name]);
 
   const filterEntry = filters.find((f) => f.index === metadata.index);
-  const selected: [Date | null, Date | null] = (() => {
+  const selected: [Date | null, Date | null] = useMemo(() => {
     const v = filterEntry?.value;
     if (Array.isArray(v) && v.length === 2) {
       return [coerceToDate(v[0]), coerceToDate(v[1])];
     }
     return [null, null];
-  })();
+  }, [filterEntry]);
+
+  // Sync local picker state with the parent filter when one is set, or
+  // default to the full bounds (oldest → most recent) on first load /
+  // after an external reset. Picker-internal updates come through
+  // Mantine's onChange and don't go through this effect.
+  useEffect(() => {
+    if (filterEntry?.value) {
+      setPickerValue(selected);
+    } else if (bounds?.min && bounds?.max) {
+      setPickerValue([bounds.min, bounds.max]);
+    } else {
+      setPickerValue([null, null]);
+    }
+  }, [filterEntry, selected, bounds]);
 
   const displayTitle =
     metadata.title ||
@@ -162,14 +186,10 @@ const DatePickerRenderer: React.FC<{
     );
   }
 
-  // Default the picker to the full bounds when no filter is set. When bounds
-  // are missing (older DC without precomputed datetime specs), leave the
-  // initial value empty — the user can still pick a range, just without
-  // min/max constraints on the calendar.
-  const value: [Date | null, Date | null] = [
-    selected[0] ?? bounds.min ?? null,
-    selected[1] ?? bounds.max ?? null,
-  ];
+  // pickerValue holds either the parent's filter (synced via the effect
+  // above) or the current in-progress picks. Either way, it's the single
+  // source of truth that Mantine reads from.
+  const value: [Date | null, Date | null] = pickerValue;
 
   return (
     <Paper
@@ -216,8 +236,13 @@ const DatePickerRenderer: React.FC<{
           allowSingleDateInRange
           onChange={(next: [Date | null, Date | null] | null) => {
             const [a, b] = (next ?? [null, null]) as [Date | null, Date | null];
-            // Wait until both ends are picked before emitting (Mantine fires
-            // intermediate values as the user clicks first the start, then end).
+            // Always reflect Mantine's intermediate value locally so the
+            // controlled picker actually advances through partial picks.
+            // Without this, the controlled `value` prop is constant and
+            // Mantine restarts on every click (the user can only ever pick
+            // a "start" date and never the "end").
+            setPickerValue([a, b]);
+            // Wait until both ends are picked before emitting upward.
             if (!a || !b) return;
             const isoA = toIsoDateString(a);
             const isoB = toIsoDateString(b);

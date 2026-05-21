@@ -874,6 +874,16 @@ class Settings(BaseSettings):
     google_analytics: GoogleAnalyticsConfig = Field(default_factory=GoogleAnalyticsConfig)
     profiling: ProfilingConfig = Field(default_factory=ProfilingConfig)
 
+    disable_example_dashboards: bool = Field(
+        default=False,
+        description=(
+            "Skip seeding the bundled reference projects and dashboards "
+            "(iris, penguins, advanced visualisations, ampliseq, viralrecon) "
+            "on API startup. Useful for clean-slate deployments where the "
+            "demo content is not desired."
+        ),
+    )
+
     model_config = SettingsConfigDict(
         env_prefix="DEPICTIO_",
         env_file=".env",

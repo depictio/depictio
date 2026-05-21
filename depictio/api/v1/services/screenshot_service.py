@@ -213,7 +213,12 @@ async def generate_dual_theme_screenshots(
         # Get admin authentication token
         token_data = await get_admin_auth_token()
         token_data_json = json.dumps(token_data)
-        dashboard_url = f"{settings.dash.internal_url}/dashboard/{dashboard_id}"
+        # ``no-walkthrough=1`` tells the React viewer's ``WalkthroughHost`` to
+        # short-circuit before mounting either tour engine. The Dash legacy
+        # ``/dashboard/{id}`` route doesn't render the React walkthrough today,
+        # so this is defensive — keeps the PNG clean if/when screenshots ever
+        # target ``/dashboard-beta/{id}``.
+        dashboard_url = f"{settings.dash.internal_url}/dashboard/{dashboard_id}?no-walkthrough=1"
 
         logger.info(f"Starting dual-theme screenshot for dashboard {dashboard_id}")
 
@@ -398,7 +403,12 @@ async def generate_react_dual_theme_screenshots(
     # the API container this resolves to the docker DNS hostname, on a host
     # invocation it falls back to the external port.
     origin = settings.fastapi.url
-    dashboard_url = f"{origin}/dashboard-beta/{dashboard_id}"
+    # `?no-walkthrough=1` tells the React SPA's WalkthroughHost to bail
+    # before mounting either tour engine, so the captured PNG never
+    # contains the popover, anchor, or dim backdrop — even when the
+    # seeded admin's localStorage would otherwise auto-start the
+    # builder walkthrough on first visit.
+    dashboard_url = f"{origin}/dashboard-beta/{dashboard_id}?no-walkthrough=1"
 
     try:
         token_data = await get_admin_auth_token()
@@ -489,13 +499,28 @@ async def generate_react_dual_theme_screenshots(
                     # Mantine popovers portal to document.body, so they sit
                     # outside the AppShell.Main DOM bbox — element.screenshot()
                     # would clip them off. Fall back to a viewport capture.
-                    await page.screenshot(path=output_path, full_page=False)
+                    await page.screenshot(
+                        path=output_path,
+                        full_page=False,
+                        timeout=settings.performance.screenshot_capture_timeout,
+                    )
                 else:
                     main_element = await page.query_selector(".mantine-AppShell-main")
                     if main_element:
-                        await main_element.screenshot(path=output_path)
+                        # Honour the configured capture timeout instead of
+                        # Playwright's default 30s — phylogeny / advanced-viz
+                        # heavy tabs do animated layout passes that the default
+                        # "wait for stable" can't catch in time.
+                        await main_element.screenshot(
+                            path=output_path,
+                            timeout=settings.performance.screenshot_capture_timeout,
+                        )
                     else:
-                        await page.screenshot(path=output_path, full_page=False)
+                        await page.screenshot(
+                            path=output_path,
+                            full_page=False,
+                            timeout=settings.performance.screenshot_capture_timeout,
+                        )
 
                 await context.close()
 

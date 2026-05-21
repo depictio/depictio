@@ -273,7 +273,6 @@ async def create_initial_dashboards(admin_user: UserBeanie) -> list[dict | None]
                 "static_dc_id": None,
             }
             for slug in (
-                "overview",
                 "volcano",
                 "manhattan",
                 "stacked_taxonomy",
@@ -297,6 +296,31 @@ async def create_initial_dashboards(admin_user: UserBeanie) -> list[dict | None]
                 "oncoplot",
                 "coverage_track",
                 "categorical_flow",
+            )
+        ),
+        # nf-core/viralrecon multi-tab dashboard. Seed JSONs are snapshotted
+        # from a local CLI ingest of viralrecon test_illumina output — see
+        # depictio/projects/nf-core/viralrecon/3.0.0/CLAUDE.md +
+        # generate_seeds.sh. The recipe canonical DCs are required for these
+        # to render; without local data files, scan-time DCs end up empty but
+        # the dashboards still load (just with missing tiles).
+        *(
+            {
+                "name": f"viralrecon_{slug}",
+                "json_path": os.path.join(
+                    projects_base,
+                    ReferenceDatasetRegistry.DATASET_PATHS["viralrecon"],
+                    ".db_seeds",
+                    f"dashboard_{slug}.json",
+                ),
+                "static_dc_id": None,
+            }
+            for slug in (
+                "multiqc",
+                "coverage_depth",
+                "lineage_clustering",
+                "variants",
+                "sample_qc",
             )
         ),
     ]
@@ -655,33 +679,36 @@ async def initialize_db(wipe: bool = False) -> UserBeanie | None:
         logger.error("Cannot proceed with project creation: admin_user or token_payload is None")
         raise RuntimeError("Admin user and token are required for initialization")
 
-    # Create all reference datasets (replaces hardcoded iris logic)
-    from depictio.api.v1.db_init_reference_datasets import create_reference_datasets
+    if settings.disable_example_dashboards:
+        logger.info("Skipping example dashboard seeding (DEPICTIO_DISABLE_EXAMPLE_DASHBOARDS=true)")
+    else:
+        # Create all reference datasets (replaces hardcoded iris logic)
+        from depictio.api.v1.db_init_reference_datasets import create_reference_datasets
 
-    created_projects = await create_reference_datasets(
-        admin_user=admin_user, token_payload=token_payload
-    )
+        created_projects = await create_reference_datasets(
+            admin_user=admin_user, token_payload=token_payload
+        )
 
-    # Note: ampliseq-base shell project removed — only the extended (full) variant is loaded
+        # Note: ampliseq-base shell project removed — only the extended (full) variant is loaded
 
-    # Store metadata for background processing (use replace_one for idempotency)
-    from depictio.api.v1.db import initialization_collection
+        # Store metadata for background processing (use replace_one for idempotency)
+        from depictio.api.v1.db import initialization_collection
 
-    initialization_collection.replace_one(
-        {"_id": "reference_datasets_metadata"},
-        {
-            "_id": "reference_datasets_metadata",
-            "projects": created_projects,
-            "created_at": datetime.now(timezone.utc),
-        },
-        upsert=True,
-    )
+        initialization_collection.replace_one(
+            {"_id": "reference_datasets_metadata"},
+            {
+                "_id": "reference_datasets_metadata",
+                "projects": created_projects,
+                "created_at": datetime.now(timezone.utc),
+            },
+            upsert=True,
+        )
 
-    logger.info(f"Created {len(created_projects)} reference datasets")
+        logger.info(f"Created {len(created_projects)} reference datasets")
 
-    # Create dashboards for all reference datasets
-    dashboard_payloads = await create_initial_dashboards(admin_user=admin_user)
-    logger.info(f"Created {len([p for p in dashboard_payloads if p])} dashboards")
+        # Create dashboards for all reference datasets
+        dashboard_payloads = await create_initial_dashboards(admin_user=admin_user)
+        logger.info(f"Created {len([p for p in dashboard_payloads if p])} dashboards")
 
     logger.info("Database initialization completed successfully.")
 

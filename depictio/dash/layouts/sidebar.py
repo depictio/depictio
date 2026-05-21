@@ -565,6 +565,14 @@ def register_sidebar_callbacks(app, register_tabs: bool = True) -> None:
     # href — absolute URL on the FastAPI host (different port from Dash).
     # api-base-url-store holds settings.fastapi.external_url, populated by
     # the populate_api_base_url callback below.
+    #
+    # Cross-origin session hand-off: `localhost:5xxx` (Dash) and
+    # `localhost:8xxx` (FastAPI/React) are different browser origins, so
+    # the React SPA can't read the JWT we just wrote to localStorage. We
+    # ship the current session as a base64-encoded URL fragment (`#auth=…`);
+    # fragments are NOT sent to the server (so they don't end up in access
+    # logs or referrers), and the React bootstrap consumes + strips it on
+    # load. Skipped when there's no stored session (e.g. anonymous user).
     app.clientside_callback(
         """
         function(pathname, apiBaseUrl) {
@@ -572,7 +580,15 @@ def register_sidebar_callbacks(app, register_tabs: bool = True) -> None:
             var route = betaRouteFor(pathname);
             if (!route) return window.dash_clientside.no_update;
             var base = (apiBaseUrl || "").replace(/\\/$/, "");
-            return base ? (base + route) : route;
+            var href = base ? (base + route) : route;
+            try {
+                var raw = window.localStorage.getItem("local-store");
+                if (raw) {
+                    var encoded = window.btoa(unescape(encodeURIComponent(raw)));
+                    href += (href.indexOf("#") >= 0 ? "&" : "#") + "auth=" + encoded;
+                }
+            } catch (e) { /* ignore — fall through to no hand-off */ }
+            return href;
         }
         """.replace("__HELPER__", _BETA_HELPER_INLINE),
         Output("beta-switcher-link", "href"),

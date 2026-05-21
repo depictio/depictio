@@ -9,6 +9,10 @@ import { isOwnedByEmail } from '../lib/splitDefaultSections';
 export interface DashboardThumbnailViewProps {
   groups: GroupedDashboards[];
   projectNames: Map<string, string>;
+  /** Optional per-project `template_origin` lookup (id → raw origin blob).
+   *  When the dashboard's project has an entry, DashboardCard renders a
+   *  TemplateChip linking to the depictio-docs template page. */
+  projectTemplates?: Map<string, unknown>;
   currentUserEmail: string | null;
   pinnedIds: Set<string>;
   pinDisabled: boolean;
@@ -23,6 +27,7 @@ export interface DashboardThumbnailViewProps {
 const DashboardThumbnailView: React.FC<DashboardThumbnailViewProps> = ({
   groups,
   projectNames,
+  projectTemplates,
   currentUserEmail,
   pinnedIds,
   pinDisabled,
@@ -35,8 +40,12 @@ const DashboardThumbnailView: React.FC<DashboardThumbnailViewProps> = ({
 }) => (
   <SimpleGrid cols={{ base: 1, sm: 2, lg: 4 }} spacing="xl" verticalSpacing="xl">
     {groups.map((group) => {
-      const projectName = group.parent.project_id
-        ? projectNames.get(String(group.parent.project_id))
+      const projectId = group.parent.project_id
+        ? String(group.parent.project_id)
+        : null;
+      const projectName = projectId ? projectNames.get(projectId) : undefined;
+      const projectTemplateOrigin = projectId
+        ? projectTemplates?.get(projectId)
         : undefined;
       return (
         <DashboardCard
@@ -45,6 +54,7 @@ const DashboardThumbnailView: React.FC<DashboardThumbnailViewProps> = ({
           childTabs={group.children}
           isOwner={isOwnedByEmail(group.parent, currentUserEmail)}
           projectName={projectName}
+          projectTemplateOrigin={projectTemplateOrigin}
           pinned={pinnedIds.has(String(group.parent.dashboard_id))}
           pinDisabled={pinDisabled}
           onTogglePin={() => onTogglePin(String(group.parent.dashboard_id))}

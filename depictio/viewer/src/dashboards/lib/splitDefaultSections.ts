@@ -9,22 +9,36 @@ export interface DefaultSections {
   owned: GroupedDashboards[];
   accessed: GroupedDashboards[];
   public_: GroupedDashboards[];
-  examples: GroupedDashboards[];
+  nfcore: GroupedDashboards[];
+  demo: GroupedDashboards[];
 }
 
-/** Example dashboards are identified by hardcoded MongoDB ObjectIds — same
- *  list as Dash (`dashboards_management.py:1484-1488`). These IDs are
- *  stamped at db_init time on the seed dashboards (ampliseq, penguins, iris)
- *  and keep their assignment forever, regardless of ownership or public flag.
- *  Order in this array doubles as display order in the Examples section. */
-export const EXAMPLE_DASHBOARD_IDS: readonly string[] = [
-  '646b0f3c1e4a2d7f8e5b8ca2', // nf-core/ampliseq
+/** Demo dashboards: bundled example seeds covering the core viz patterns
+ *  (Penguins, Iris, Advanced Visualisations). Identified by hardcoded
+ *  MongoDB ObjectIds stamped at db_init time. Order in this array doubles
+ *  as display order. */
+export const DEMO_DASHBOARD_IDS: readonly string[] = [
+  '646b0f3c1e4a2d7f8e5b8d00', // Advanced Visualisations (main tab, was overview)
   '6824cb3b89d2b72169309738', // Penguins Species Analysis
   '6824cb3b89d2b72169309737', // Iris Species Comparison
 ];
 
-export function isExampleDashboard(d: DashboardListEntry): boolean {
-  return EXAMPLE_DASHBOARD_IDS.includes(String(d.dashboard_id));
+/** nf-core dashboards: ampliseq + viralrecon main tabs. Viralrecon's
+ *  dashboard_id is reserved in `db_init_reference_datasets.STATIC_IDS`
+ *  but its seed JSONs are generated locally — see
+ *  `depictio/projects/nf-core/viralrecon/3.0.0/CLAUDE.md`. The entry stays
+ *  in this list so once seeds exist the dashboard slots in automatically. */
+export const NFCORE_DASHBOARD_IDS: readonly string[] = [
+  '646b0f3c1e4a2d7f8e5b8ca2', // nf-core/ampliseq
+  '746b0f3c1e4a2d7f8e5b9ca2', // nf-core/viralrecon
+];
+
+export function isDemoDashboard(d: DashboardListEntry): boolean {
+  return DEMO_DASHBOARD_IDS.includes(String(d.dashboard_id));
+}
+
+export function isNfcoreDashboard(d: DashboardListEntry): boolean {
+  return NFCORE_DASHBOARD_IDS.includes(String(d.dashboard_id));
 }
 
 export function isOwnedByEmail(
@@ -53,10 +67,10 @@ export function groupByParent(entries: DashboardListEntry[]): GroupedDashboards[
   }));
 }
 
-/** Categorisation precedence (matches `dashboards_management.py:1476`):
- *  Example > Public > Accessed > Owned. The seed dashboards (ampliseq,
- *  penguins, iris) are owned by the admin user but should still surface
- *  under "Example" for everyone, including the admin themselves. */
+/** Categorisation precedence: nf-core > Demo > Public > Accessed > Owned.
+ *  Seed dashboards (advanced viz, penguins, iris, ampliseq, viralrecon) are
+ *  owned by the admin user but surface under their dedicated sections for
+ *  everyone, including the admin themselves. */
 export function splitDefaultSections(
   entries: DashboardListEntry[],
   currentUserEmail: string | null,
@@ -65,10 +79,15 @@ export function splitDefaultSections(
   const owned: GroupedDashboards[] = [];
   const accessed: GroupedDashboards[] = [];
   const publicList: GroupedDashboards[] = [];
-  const examples: GroupedDashboards[] = [];
+  const nfcore: GroupedDashboards[] = [];
+  const demo: GroupedDashboards[] = [];
   for (const g of grouped) {
-    if (isExampleDashboard(g.parent)) {
-      examples.push(g);
+    if (isNfcoreDashboard(g.parent)) {
+      nfcore.push(g);
+      continue;
+    }
+    if (isDemoDashboard(g.parent)) {
+      demo.push(g);
       continue;
     }
     const isOwner = isOwnedByEmail(g.parent, currentUserEmail);
@@ -77,14 +96,22 @@ export function splitDefaultSections(
     else if (isPublic) publicList.push(g);
     else accessed.push(g);
   }
-  // Sort examples in the canonical order from EXAMPLE_DASHBOARD_IDS so
-  // ampliseq always renders first regardless of insertion order in Mongo.
-  examples.sort(
+  // Sort grouped sections by the canonical IDs order so display stays stable
+  // regardless of Mongo insertion order.
+  sortByCanonicalIds(nfcore, NFCORE_DASHBOARD_IDS);
+  sortByCanonicalIds(demo, DEMO_DASHBOARD_IDS);
+  return { owned, accessed, public_: publicList, nfcore, demo };
+}
+
+function sortByCanonicalIds(
+  groups: GroupedDashboards[],
+  canonicalIds: readonly string[],
+): void {
+  groups.sort(
     (a, b) =>
-      EXAMPLE_DASHBOARD_IDS.indexOf(String(a.parent.dashboard_id)) -
-      EXAMPLE_DASHBOARD_IDS.indexOf(String(b.parent.dashboard_id)),
+      canonicalIds.indexOf(String(a.parent.dashboard_id)) -
+      canonicalIds.indexOf(String(b.parent.dashboard_id)),
   );
-  return { owned, accessed, public_: publicList, examples };
 }
 
 export function projectNameLookup(
@@ -94,6 +121,22 @@ export function projectNameLookup(
   for (const p of projects) {
     const id = String(p._id ?? p.id ?? '');
     if (id) map.set(id, p.name);
+  }
+  return map;
+}
+
+/** Per-project `template_origin` blob (or string), keyed by project id, for
+ *  the dashboard cards to render a TemplateChip without having to fetch the
+ *  project again. Projects without a template_origin are omitted so a simple
+ *  `.get(id)` doubles as a "was-this-from-a-template?" check. */
+export function projectTemplateLookup(
+  projects: { _id?: string; id?: string; template_origin?: unknown }[],
+): Map<string, unknown> {
+  const map = new Map<string, unknown>();
+  for (const p of projects) {
+    const id = String(p._id ?? p.id ?? '');
+    if (!id) continue;
+    if (p.template_origin) map.set(id, p.template_origin);
   }
   return map;
 }

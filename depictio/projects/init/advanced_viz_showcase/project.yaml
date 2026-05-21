@@ -3,7 +3,7 @@
 # scripts/generate_fixtures.py so the demo is reproducible and self-contained.
 
 id: "646b0f3c1e4a2d7f8e5b8d00"
-name: "Advanced Visualisation Showcase"
+name: "Advanced Visualisations"
 project_type: "advanced"
 is_public: true
 workflows:
