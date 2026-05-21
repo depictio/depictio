@@ -341,7 +341,6 @@ const DashboardsApp: React.FC = () => {
               dashboards={dashboards}
               projects={projects}
               currentUserEmail={currentUserEmail}
-              pinDisabled={isPublicMode || isDemoMode}
               onView={handleView}
               onEdit={(d) => setEditTarget(d)}
               onDelete={(d) => setDeleteTarget(d)}
