@@ -506,6 +506,19 @@ links:
   # Links 2-6 reference the metadata DC and are pruned automatically
   # when METADATA_FILE is absent (conditional block removes metadata DC).
 
+  # Link 1b: Metadata -> MultiQC (secondary sample filter via metadata DC)
+  # Without this, dashboards bound to metadata interactive filters
+  # (habitat, sampling_date, sample) cannot narrow MultiQC plots.
+  - source_dc_tag: "metadata"
+    source_column: "sample"
+    target_dc_tag: "multiqc_data"
+    target_type: "multiqc"
+    link_config:
+      resolver: "sample_mapping"
+      target_field: "sample_name"
+    description: "Filter MultiQC by metadata samples"
+    enabled: true
+
   # Link 2: Metadata -> Alpha Diversity
   - source_dc_tag: "metadata"
     source_column: "sample"
