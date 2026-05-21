@@ -156,7 +156,12 @@ const ComponentRenderer: React.FC<ComponentRendererProps> = ({
         </div>
       );
     }
-    return wrapWithChrome('interactive', metadata, undefined, inner, { onResetFilter, extraActions, showDragHandle });
+    // Reset button is "active" (enabled, filled orange) when THIS interactive
+    // component has sourced a non-empty filter. Interactive components emit
+    // with no `source` discriminator (only chart/table selections use one),
+    // so the active check matches on `index` + empty-value semantics.
+    const sourceFilterActive = isSourceFilterActive(filters, metadata.index, undefined);
+    return wrapWithChrome('interactive', metadata, undefined, inner, { onResetFilter, extraActions, showDragHandle, sourceFilterActive });
   }
 
   if (metadata.component_type === 'figure' && dashboardId) {
