@@ -332,10 +332,13 @@ class ReferenceDatasetRegistry:
         # natural identity. Custom user-added links (with different triples)
         # are preserved; YAML-declared links missing in Mongo get appended.
         if resolved_links:
-            project_doc = projects_collection.find_one(
-                {"_id": ObjectId(str(project.id))},
-                {"links": 1},
-            ) or {}
+            project_doc = (
+                projects_collection.find_one(
+                    {"_id": ObjectId(str(project.id))},
+                    {"links": 1},
+                )
+                or {}
+            )
             existing = list(project_doc.get("links") or [])
             existing_keys = {
                 (
