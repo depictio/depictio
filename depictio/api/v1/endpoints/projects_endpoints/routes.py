@@ -36,6 +36,8 @@ SEED_PROJECT_IDS: tuple[str, ...] = (
     "646b0f3c1e4a2d7f8e5b8c9a",  # Iris — depictio/projects/init/iris/project.yaml
     "646b0f3c1e4a2d7f8e5b8c9d",  # Penguins — depictio/projects/init/penguins/project.yaml
     "646b0f3c1e4a2d7f8e5b8ca2",  # nf-core/ampliseq 2.14.0 — depictio/projects/nf-core/ampliseq/2.14.0/project.yaml
+    "646b0f3c1e4a2d7f8e5b8d00",  # Advanced Visualisations — depictio/projects/init/advanced_viz_showcase/project.yaml
+    "746b0f3c1e4a2d7f8e5b9ca2",  # nf-core/viralrecon 3.0.0 — depictio/projects/nf-core/viralrecon/3.0.0/template.yaml
 )
 
 
