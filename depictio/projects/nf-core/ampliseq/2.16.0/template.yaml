@@ -599,6 +599,21 @@ links:
     description: "Filter multi-metric rarefaction curves by metadata samples"
     enabled: true
 
+  # Alpha Diversity tab pairs an in-tab habitat/sample filter (sourced on
+  # alpha_diversity_multi_canonical) with the rarefaction curve viz, so the
+  # filter needs a same-tab link to the rarefaction DC as well — otherwise
+  # picking a habitat on this tab narrows the cards/table/figure but leaves
+  # the rarefaction viz unfiltered.
+  - source_dc_tag: "alpha_diversity_multi_canonical"
+    source_column: "sample_id"
+    target_dc_tag: "rarefaction_canonical"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample_id"
+    description: "Filter rarefaction by Alpha Diversity tab sample selection"
+    enabled: true
+
   - source_dc_tag: "metadata"
     source_column: "sample"
     target_dc_tag: "stacked_taxonomy_canonical"

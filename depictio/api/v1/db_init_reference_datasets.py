@@ -327,18 +327,53 @@ class ReferenceDatasetRegistry:
             )
             resolved_links.append(link)
 
-        # Update project document with resolved links
+        # Upsert resolved links onto the project. Match existing links by
+        # (source_dc_id, target_dc_id, source_column) — that triple is the
+        # natural identity. Custom user-added links (with different triples)
+        # are preserved; YAML-declared links missing in Mongo get appended.
         if resolved_links:
-            link_dicts = [link.model_dump() for link in resolved_links]
-            # Convert PyObjectId to string for MongoDB
-            for link_dict in link_dicts:
-                link_dict["id"] = str(link_dict["id"])
-
-            projects_collection.update_one(
+            project_doc = projects_collection.find_one(
                 {"_id": ObjectId(str(project.id))},
-                {"$set": {"links": link_dicts}},
-            )
-            logger.info(f"Registered {len(resolved_links)} links for project {project.name}")
+                {"links": 1},
+            ) or {}
+            existing = list(project_doc.get("links") or [])
+            existing_keys = {
+                (
+                    str(lk.get("source_dc_id")),
+                    str(lk.get("target_dc_id")),
+                    str(lk.get("source_column")),
+                )
+                for lk in existing
+            }
+            added = 0
+            for link in resolved_links:
+                link_dict = link.model_dump()
+                link_dict["id"] = str(link_dict["id"])
+                key = (
+                    str(link_dict.get("source_dc_id")),
+                    str(link_dict.get("target_dc_id")),
+                    str(link_dict.get("source_column")),
+                )
+                if key in existing_keys:
+                    continue
+                existing.append(link_dict)
+                existing_keys.add(key)
+                added += 1
+
+            if added:
+                projects_collection.update_one(
+                    {"_id": ObjectId(str(project.id))},
+                    {"$set": {"links": existing}},
+                )
+                logger.info(
+                    f"Registered {added} new link(s) for project {project.name} "
+                    f"(total now: {len(existing)})"
+                )
+            else:
+                logger.info(
+                    f"All {len(resolved_links)} YAML-declared link(s) already present "
+                    f"for project {project.name}"
+                )
 
     # Dataset name → relative path under depictio/projects/
     DATASET_PATHS: dict[str, str] = {
@@ -508,10 +543,12 @@ class ReferenceDatasetRegistry:
                     {"$set": {"is_public": True}},
                 )
 
-            # Register links if not already present
-            existing_links = existing_project.get("links", [])
-            if not existing_links and links_config:
-                logger.info(f"Registering links for existing project {dataset_name}")
+            # Upsert links: register any YAML-declared link that isn't already
+            # present in Mongo. Without this, adding a new link to template.yaml
+            # would only take effect on a full reseed — existing projects would
+            # keep the old (incomplete) link set across reboots.
+            if links_config:
+                logger.info(f"Reconciling links for existing project {dataset_name}")
                 await cls._register_links(project, links_config)
 
             return {
