@@ -22,18 +22,14 @@
       "wf_id": {
         "$oid": "746b0f3c1e4a2d7f8e5b9c01"
       },
-      "dc_id": {
-        "$oid": "6a0e273941cd17ba0abd928c"
-      },
+      "dc_id": null,
       "dc_config": {
         "type": null,
         "metatype": null,
         "description": "Per-sample alignment, coverage, and variant calling summary metrics",
         "data_collection_tag": "summary_metrics",
         "dc_specific_properties": null,
-        "_id": {
-          "$oid": "6a0e273941cd17ba0abd928c"
-        }
+        "_id": null
       },
       "cols_json": {},
       "parent_index": null,
@@ -55,7 +51,7 @@
         "$oid": "746b0f3c1e4a2d7f8e5b9c01"
       },
       "dc_id": {
-        "$oid": "6a0e273941cd17ba0abd928e"
+        "$oid": "746b0f3c1e4a2d7f8e5b9c12"
       },
       "dc_config": {
         "type": null,
@@ -64,7 +60,7 @@
         "data_collection_tag": "variants_long",
         "dc_specific_properties": null,
         "_id": {
-          "$oid": "6a0e273941cd17ba0abd928e"
+          "$oid": "746b0f3c1e4a2d7f8e5b9c12"
         }
       },
       "cols_json": {},
@@ -99,7 +95,7 @@
         "$oid": "746b0f3c1e4a2d7f8e5b9c01"
       },
       "dc_id": {
-        "$oid": "6a0e273941cd17ba0abd928e"
+        "$oid": "746b0f3c1e4a2d7f8e5b9c12"
       },
       "dc_config": {
         "type": null,
@@ -108,7 +104,7 @@
         "data_collection_tag": "variants_long",
         "dc_specific_properties": null,
         "_id": {
-          "$oid": "6a0e273941cd17ba0abd928e"
+          "$oid": "746b0f3c1e4a2d7f8e5b9c12"
         }
       },
       "cols_json": {},
@@ -143,7 +139,7 @@
         "$oid": "746b0f3c1e4a2d7f8e5b9c01"
       },
       "dc_id": {
-        "$oid": "6a0e273941cd17ba0abd928e"
+        "$oid": "746b0f3c1e4a2d7f8e5b9c12"
       },
       "dc_config": {
         "type": null,
@@ -152,7 +148,7 @@
         "data_collection_tag": "variants_long",
         "dc_specific_properties": null,
         "_id": {
-          "$oid": "6a0e273941cd17ba0abd928e"
+          "$oid": "746b0f3c1e4a2d7f8e5b9c12"
         }
       },
       "cols_json": {},
@@ -187,7 +183,7 @@
         "$oid": "746b0f3c1e4a2d7f8e5b9c01"
       },
       "dc_id": {
-        "$oid": "6a0e273941cd17ba0abd928e"
+        "$oid": "746b0f3c1e4a2d7f8e5b9c12"
       },
       "dc_config": {
         "type": null,
@@ -196,7 +192,7 @@
         "data_collection_tag": "variants_long",
         "dc_specific_properties": null,
         "_id": {
-          "$oid": "6a0e273941cd17ba0abd928e"
+          "$oid": "746b0f3c1e4a2d7f8e5b9c12"
         }
       },
       "cols_json": {},
@@ -231,7 +227,7 @@
         "$oid": "746b0f3c1e4a2d7f8e5b9c01"
       },
       "dc_id": {
-        "$oid": "6a0e273941cd17ba0abd9290"
+        "$oid": "746b0f3c1e4a2d7f8e5b9c13"
       },
       "dc_config": {
         "type": null,
@@ -240,7 +236,7 @@
         "data_collection_tag": "manhattan_variants_canonical",
         "dc_specific_properties": null,
         "_id": {
-          "$oid": "6a0e273941cd17ba0abd9290"
+          "$oid": "746b0f3c1e4a2d7f8e5b9c13"
         }
       },
       "cols_json": {},
@@ -282,7 +278,7 @@
         "$oid": "746b0f3c1e4a2d7f8e5b9c01"
       },
       "dc_id": {
-        "$oid": "6a0e273941cd17ba0abd928e"
+        "$oid": "746b0f3c1e4a2d7f8e5b9c12"
       },
       "dc_config": {
         "type": null,
@@ -291,7 +287,7 @@
         "data_collection_tag": "variants_long",
         "dc_specific_properties": null,
         "_id": {
-          "$oid": "6a0e273941cd17ba0abd928e"
+          "$oid": "746b0f3c1e4a2d7f8e5b9c12"
         }
       },
       "cols_json": {},
@@ -323,7 +319,7 @@
         "$oid": "746b0f3c1e4a2d7f8e5b9c01"
       },
       "dc_id": {
-        "$oid": "6a0e273941cd17ba0abd928e"
+        "$oid": "746b0f3c1e4a2d7f8e5b9c12"
       },
       "dc_config": {
         "type": null,
@@ -332,7 +328,7 @@
         "data_collection_tag": "variants_long",
         "dc_specific_properties": null,
         "_id": {
-          "$oid": "6a0e273941cd17ba0abd928e"
+          "$oid": "746b0f3c1e4a2d7f8e5b9c12"
         }
       },
       "cols_json": {},
@@ -364,7 +360,7 @@
         "$oid": "746b0f3c1e4a2d7f8e5b9c01"
       },
       "dc_id": {
-        "$oid": "6a0e273941cd17ba0abd928e"
+        "$oid": "746b0f3c1e4a2d7f8e5b9c12"
       },
       "dc_config": {
         "type": null,
@@ -373,7 +369,7 @@
         "data_collection_tag": "variants_long",
         "dc_specific_properties": null,
         "_id": {
-          "$oid": "6a0e273941cd17ba0abd928e"
+          "$oid": "746b0f3c1e4a2d7f8e5b9c12"
         }
       },
       "cols_json": {},
@@ -405,7 +401,7 @@
         "$oid": "746b0f3c1e4a2d7f8e5b9c01"
       },
       "dc_id": {
-        "$oid": "6a0e273941cd17ba0abd928e"
+        "$oid": "746b0f3c1e4a2d7f8e5b9c12"
       },
       "dc_config": {
         "type": null,
@@ -414,7 +410,7 @@
         "data_collection_tag": "variants_long",
         "dc_specific_properties": null,
         "_id": {
-          "$oid": "6a0e273941cd17ba0abd928e"
+          "$oid": "746b0f3c1e4a2d7f8e5b9c12"
         }
       },
       "cols_json": {},
@@ -446,7 +442,7 @@
         "$oid": "746b0f3c1e4a2d7f8e5b9c01"
       },
       "dc_id": {
-        "$oid": "6a0e273941cd17ba0abd928e"
+        "$oid": "746b0f3c1e4a2d7f8e5b9c12"
       },
       "dc_config": {
         "type": null,
@@ -455,7 +451,7 @@
         "data_collection_tag": "variants_long",
         "dc_specific_properties": null,
         "_id": {
-          "$oid": "6a0e273941cd17ba0abd928e"
+          "$oid": "746b0f3c1e4a2d7f8e5b9c12"
         }
       },
       "cols_json": {},
@@ -486,7 +482,7 @@
         "$oid": "746b0f3c1e4a2d7f8e5b9c01"
       },
       "dc_id": {
-        "$oid": "6a0e273941cd17ba0abd928e"
+        "$oid": "746b0f3c1e4a2d7f8e5b9c12"
       },
       "dc_config": {
         "type": null,
@@ -495,7 +491,7 @@
         "data_collection_tag": "variants_long",
         "dc_specific_properties": null,
         "_id": {
-          "$oid": "6a0e273941cd17ba0abd928e"
+          "$oid": "746b0f3c1e4a2d7f8e5b9c12"
         }
       },
       "cols_json": {},
@@ -526,7 +522,7 @@
         "$oid": "746b0f3c1e4a2d7f8e5b9c01"
       },
       "dc_id": {
-        "$oid": "6a0e273941cd17ba0abd929c"
+        "$oid": "746b0f3c1e4a2d7f8e5b9c19"
       },
       "dc_config": {
         "type": null,
@@ -535,7 +531,7 @@
         "data_collection_tag": "lollipop_canonical",
         "dc_specific_properties": null,
         "_id": {
-          "$oid": "6a0e273941cd17ba0abd929c"
+          "$oid": "746b0f3c1e4a2d7f8e5b9c19"
         }
       },
       "cols_json": {},
@@ -565,7 +561,7 @@
         "$oid": "746b0f3c1e4a2d7f8e5b9c01"
       },
       "dc_id": {
-        "$oid": "6a0e273941cd17ba0abd928e"
+        "$oid": "746b0f3c1e4a2d7f8e5b9c12"
       },
       "dc_config": {
         "type": null,
@@ -574,7 +570,7 @@
         "data_collection_tag": "variants_long",
         "dc_specific_properties": null,
         "_id": {
-          "$oid": "6a0e273941cd17ba0abd928e"
+          "$oid": "746b0f3c1e4a2d7f8e5b9c12"
         }
       },
       "cols_json": {},
@@ -600,18 +596,14 @@
       "wf_id": {
         "$oid": "746b0f3c1e4a2d7f8e5b9c01"
       },
-      "dc_id": {
-        "$oid": "6a0e273941cd17ba0abd928c"
-      },
+      "dc_id": null,
       "dc_config": {
         "type": null,
         "metatype": null,
         "description": "Per-sample alignment, coverage, and variant calling summary metrics",
         "data_collection_tag": "summary_metrics",
         "dc_specific_properties": null,
-        "_id": {
-          "$oid": "6a0e273941cd17ba0abd928c"
-        }
+        "_id": null
       },
       "cols_json": {},
       "parent_index": null,
@@ -633,7 +625,7 @@
         "$oid": "746b0f3c1e4a2d7f8e5b9c01"
       },
       "dc_id": {
-        "$oid": "6a0e273941cd17ba0abd929e"
+        "$oid": "746b0f3c1e4a2d7f8e5b9c1a"
       },
       "dc_config": {
         "type": null,
@@ -642,7 +634,7 @@
         "data_collection_tag": "oncoplot_canonical",
         "dc_specific_properties": null,
         "_id": {
-          "$oid": "6a0e273941cd17ba0abd929e"
+          "$oid": "746b0f3c1e4a2d7f8e5b9c1a"
         }
       },
       "cols_json": {},
@@ -677,7 +669,7 @@
         "$oid": "746b0f3c1e4a2d7f8e5b9c01"
       },
       "dc_id": {
-        "$oid": "6a0e273941cd17ba0abd929e"
+        "$oid": "746b0f3c1e4a2d7f8e5b9c1a"
       },
       "dc_config": {
         "type": null,
@@ -686,7 +678,7 @@
         "data_collection_tag": "oncoplot_canonical",
         "dc_specific_properties": null,
         "_id": {
-          "$oid": "6a0e273941cd17ba0abd929e"
+          "$oid": "746b0f3c1e4a2d7f8e5b9c1a"
         }
       },
       "cols_json": {},
@@ -721,7 +713,7 @@
         "$oid": "746b0f3c1e4a2d7f8e5b9c01"
       },
       "dc_id": {
-        "$oid": "6a0e273941cd17ba0abd929e"
+        "$oid": "746b0f3c1e4a2d7f8e5b9c1a"
       },
       "dc_config": {
         "type": null,
@@ -730,7 +722,7 @@
         "data_collection_tag": "oncoplot_canonical",
         "dc_specific_properties": null,
         "_id": {
-          "$oid": "6a0e273941cd17ba0abd929e"
+          "$oid": "746b0f3c1e4a2d7f8e5b9c1a"
         }
       },
       "cols_json": {},
@@ -762,7 +754,7 @@
         "$oid": "746b0f3c1e4a2d7f8e5b9c01"
       },
       "dc_id": {
-        "$oid": "6a0e273941cd17ba0abd929e"
+        "$oid": "746b0f3c1e4a2d7f8e5b9c1a"
       },
       "dc_config": {
         "type": null,
@@ -771,7 +763,7 @@
         "data_collection_tag": "oncoplot_canonical",
         "dc_specific_properties": null,
         "_id": {
-          "$oid": "6a0e273941cd17ba0abd929e"
+          "$oid": "746b0f3c1e4a2d7f8e5b9c1a"
         }
       },
       "cols_json": {},

@@ -22,18 +22,14 @@
       "wf_id": {
         "$oid": "746b0f3c1e4a2d7f8e5b9c01"
       },
-      "dc_id": {
-        "$oid": "6a0e273941cd17ba0abd928c"
-      },
+      "dc_id": null,
       "dc_config": {
         "type": null,
         "metatype": null,
         "description": "Per-sample alignment, coverage, and variant calling summary metrics",
         "data_collection_tag": "summary_metrics",
         "dc_specific_properties": null,
-        "_id": {
-          "$oid": "6a0e273941cd17ba0abd928c"
-        }
+        "_id": null
       },
       "cols_json": {},
       "parent_index": null,
@@ -55,7 +51,7 @@
         "$oid": "746b0f3c1e4a2d7f8e5b9c01"
       },
       "dc_id": {
-        "$oid": "6a0e273941cd17ba0abd9292"
+        "$oid": "746b0f3c1e4a2d7f8e5b9c14"
       },
       "dc_config": {
         "type": null,
@@ -64,7 +60,7 @@
         "data_collection_tag": "pangolin_lineages",
         "dc_specific_properties": null,
         "_id": {
-          "$oid": "6a0e273941cd17ba0abd9292"
+          "$oid": "746b0f3c1e4a2d7f8e5b9c14"
         }
       },
       "cols_json": {},
@@ -99,7 +95,7 @@
         "$oid": "746b0f3c1e4a2d7f8e5b9c01"
       },
       "dc_id": {
-        "$oid": "6a0e273941cd17ba0abd9294"
+        "$oid": "746b0f3c1e4a2d7f8e5b9c15"
       },
       "dc_config": {
         "type": null,
@@ -108,7 +104,7 @@
         "data_collection_tag": "nextclade_results",
         "dc_specific_properties": null,
         "_id": {
-          "$oid": "6a0e273941cd17ba0abd9294"
+          "$oid": "746b0f3c1e4a2d7f8e5b9c15"
         }
       },
       "cols_json": {},
@@ -143,7 +139,7 @@
         "$oid": "746b0f3c1e4a2d7f8e5b9c01"
       },
       "dc_id": {
-        "$oid": "6a0e273941cd17ba0abd928c"
+        "$oid": "746b0f3c1e4a2d7f8e5b9c11"
       },
       "dc_config": {
         "type": null,
@@ -152,7 +148,7 @@
         "data_collection_tag": "summary_metrics",
         "dc_specific_properties": null,
         "_id": {
-          "$oid": "6a0e273941cd17ba0abd928c"
+          "$oid": "746b0f3c1e4a2d7f8e5b9c11"
         }
       },
       "cols_json": {},
@@ -184,7 +180,7 @@
         "$oid": "746b0f3c1e4a2d7f8e5b9c01"
       },
       "dc_id": {
-        "$oid": "6a0e273941cd17ba0abd9292"
+        "$oid": "746b0f3c1e4a2d7f8e5b9c14"
       },
       "dc_config": {
         "type": null,
@@ -193,7 +189,7 @@
         "data_collection_tag": "pangolin_lineages",
         "dc_specific_properties": null,
         "_id": {
-          "$oid": "6a0e273941cd17ba0abd9292"
+          "$oid": "746b0f3c1e4a2d7f8e5b9c14"
         }
       },
       "cols_json": {},
@@ -225,7 +221,7 @@
         "$oid": "746b0f3c1e4a2d7f8e5b9c01"
       },
       "dc_id": {
-        "$oid": "6a0e273941cd17ba0abd9294"
+        "$oid": "746b0f3c1e4a2d7f8e5b9c15"
       },
       "dc_config": {
         "type": null,
@@ -234,7 +230,7 @@
         "data_collection_tag": "nextclade_results",
         "dc_specific_properties": null,
         "_id": {
-          "$oid": "6a0e273941cd17ba0abd9294"
+          "$oid": "746b0f3c1e4a2d7f8e5b9c15"
         }
       },
       "cols_json": {},
@@ -266,7 +262,7 @@
         "$oid": "746b0f3c1e4a2d7f8e5b9c01"
       },
       "dc_id": {
-        "$oid": "6a0e273941cd17ba0abd9292"
+        "$oid": "746b0f3c1e4a2d7f8e5b9c14"
       },
       "dc_config": {
         "type": null,
@@ -275,7 +271,7 @@
         "data_collection_tag": "pangolin_lineages",
         "dc_specific_properties": null,
         "_id": {
-          "$oid": "6a0e273941cd17ba0abd9292"
+          "$oid": "746b0f3c1e4a2d7f8e5b9c14"
         }
       },
       "cols_json": {},
@@ -306,7 +302,7 @@
         "$oid": "746b0f3c1e4a2d7f8e5b9c01"
       },
       "dc_id": {
-        "$oid": "6a0e273941cd17ba0abd9294"
+        "$oid": "746b0f3c1e4a2d7f8e5b9c15"
       },
       "dc_config": {
         "type": null,
@@ -315,7 +311,7 @@
         "data_collection_tag": "nextclade_results",
         "dc_specific_properties": null,
         "_id": {
-          "$oid": "6a0e273941cd17ba0abd9294"
+          "$oid": "746b0f3c1e4a2d7f8e5b9c15"
         }
       },
       "cols_json": {},
@@ -346,7 +342,7 @@
         "$oid": "746b0f3c1e4a2d7f8e5b9c01"
       },
       "dc_id": {
-        "$oid": "6a0e273941cd17ba0abd92a4"
+        "$oid": "746b0f3c1e4a2d7f8e5b9c1d"
       },
       "dc_config": {
         "type": null,
@@ -355,7 +351,7 @@
         "data_collection_tag": "sankey_canonical",
         "dc_specific_properties": null,
         "_id": {
-          "$oid": "6a0e273941cd17ba0abd92a4"
+          "$oid": "746b0f3c1e4a2d7f8e5b9c1d"
         }
       },
       "cols_json": {},
@@ -394,7 +390,7 @@
         "$oid": "746b0f3c1e4a2d7f8e5b9c01"
       },
       "dc_id": {
-        "$oid": "6a0e273941cd17ba0abd92a8"
+        "$oid": "746b0f3c1e4a2d7f8e5b9c1f"
       },
       "dc_config": {
         "type": null,
@@ -403,7 +399,7 @@
         "data_collection_tag": "variant_feature_matrix_canonical",
         "dc_specific_properties": null,
         "_id": {
-          "$oid": "6a0e273941cd17ba0abd92a8"
+          "$oid": "746b0f3c1e4a2d7f8e5b9c1f"
         }
       },
       "cols_json": {},
@@ -443,7 +439,7 @@
         "$oid": "746b0f3c1e4a2d7f8e5b9c01"
       },
       "dc_id": {
-        "$oid": "6a0e273941cd17ba0abd9292"
+        "$oid": "746b0f3c1e4a2d7f8e5b9c14"
       },
       "dc_config": {
         "type": null,
@@ -452,7 +448,7 @@
         "data_collection_tag": "pangolin_lineages",
         "dc_specific_properties": null,
         "_id": {
-          "$oid": "6a0e273941cd17ba0abd9292"
+          "$oid": "746b0f3c1e4a2d7f8e5b9c14"
         }
       },
       "cols_json": {},
@@ -479,7 +475,7 @@
         "$oid": "746b0f3c1e4a2d7f8e5b9c01"
       },
       "dc_id": {
-        "$oid": "6a0e273941cd17ba0abd9294"
+        "$oid": "746b0f3c1e4a2d7f8e5b9c15"
       },
       "dc_config": {
         "type": null,
@@ -488,7 +484,7 @@
         "data_collection_tag": "nextclade_results",
         "dc_specific_properties": null,
         "_id": {
-          "$oid": "6a0e273941cd17ba0abd9294"
+          "$oid": "746b0f3c1e4a2d7f8e5b9c15"
         }
       },
       "cols_json": {},
