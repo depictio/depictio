@@ -2792,6 +2792,11 @@ def _resolve_multiqc_sample_filter(
     # `wf_id` only if the interactive component's stored_metadata doesn't
     # carry one (legacy components).
     metadata_wf_id: object | None = None
+    # The stored_metadata snapshot for the source interactive component — used
+    # to build the `init_data` for `load_deltatable_lite` so the metadata DC
+    # load doesn't fall back to an unauthenticated API hop (which 404/403's
+    # on non-public projects).
+    metadata_comp_meta: dict = {}
     direct_sample_values: list[str] = []
     indirect_filter_metadata: list[dict] = []
 
@@ -2813,6 +2818,7 @@ def _resolve_multiqc_sample_filter(
             if metadata_dc_id is None:
                 metadata_dc_id = comp_dc
                 metadata_wf_id = comp_meta.get("wf_id") or comp_meta.get("workflow_id") or wf_id
+                metadata_comp_meta = comp_meta
             if comp_dc == metadata_dc_id:
                 indirect_filter_metadata.append(
                     {
@@ -2891,12 +2897,36 @@ def _resolve_multiqc_sample_filter(
             )
             return list(dict.fromkeys(selected_samples))
 
+        # Build init_data so load_deltatable_lite reads the metadata DC's
+        # delta_location directly instead of falling back to an unauthenticated
+        # internal API hop (which returns 404 on non-public projects and
+        # silently drops the cross-DC filter — what made metadata→MultiQC
+        # filtering quietly stop working). Prefer the stored_metadata's
+        # dc_config snapshot; fall back to deltatables_collection if it's
+        # missing (legacy components saved before dc_config was attached).
+        init_data: dict[str, dict] = {}
+        dc_config = metadata_comp_meta.get("dc_config") or {}
+        delta_loc = dc_config.get("delta_location")
+        if not delta_loc:
+            from depictio.api.v1.db import deltatables_collection as _dt_coll
+
+            dt = _dt_coll.find_one({"data_collection_id": ObjectId(str(metadata_dc_id))})
+            if dt:
+                delta_loc = dt.get("delta_table_location")
+        if delta_loc:
+            init_data[str(metadata_dc_id)] = {
+                "delta_location": delta_loc,
+                "dc_type": dc_config.get("type") or "table",
+                "size_bytes": dc_config.get("size_bytes", 0),
+            }
+
         try:
             wfid = metadata_wf_id or wf_id
             meta_df = load_deltatable_lite(
                 workflow_id=ObjectId(str(wfid)) if not isinstance(wfid, ObjectId) else wfid,
                 data_collection_id=str(metadata_dc_id),
                 metadata=indirect_filter_metadata,
+                init_data=init_data or None,
             )
             if meta_df is not None and not meta_df.is_empty():
                 if link_source_column not in meta_df.columns:

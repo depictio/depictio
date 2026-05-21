@@ -120,7 +120,7 @@ workflows:
               separator: "\t"
               try_parse_dates: true
             columns_description:
-              "ID": "Sample identifier — must match samplesheet sampleID. All other columns are passed through."
+              "sample": "Sample identifier — must match samplesheet sampleID. All other columns are passed through."
 
       # ----------------------------------------------------------------
       # Recipe-transformed data collections
@@ -229,9 +229,21 @@ links:
   # Links 2-6 reference the metadata DC and are pruned automatically
   # when METADATA_FILE is absent (conditional block removes metadata DC).
 
-  # Link 2: Metadata -> Alpha Diversity
+  # Link 2: Metadata -> MultiQC (so dashboards bound to metadata interactive
+  # filters — habitat, sampling_date, sample — can also filter MultiQC plots).
   - source_dc_tag: "metadata"
-    source_column: "ID"
+    source_column: "sample"
+    target_dc_tag: "multiqc_data"
+    target_type: "multiqc"
+    link_config:
+      resolver: "sample_mapping"
+      target_field: "sample_name"
+    description: "Filter MultiQC by metadata samples (habitat / date selections)"
+    enabled: true
+
+  # Link 3: Metadata -> Alpha Diversity
+  - source_dc_tag: "metadata"
+    source_column: "sample"
     target_dc_tag: "alpha_diversity"
     target_type: "table"
     link_config:
@@ -240,9 +252,9 @@ links:
     description: "Filter alpha diversity by metadata samples"
     enabled: true
 
-  # Link 3: Metadata -> Alpha Rarefaction
+  # Link 4: Metadata -> Alpha Rarefaction
   - source_dc_tag: "metadata"
-    source_column: "ID"
+    source_column: "sample"
     target_dc_tag: "alpha_rarefaction"
     target_type: "table"
     link_config:
@@ -251,9 +263,9 @@ links:
     description: "Filter alpha rarefaction by metadata samples"
     enabled: true
 
-  # Link 4: Metadata -> Taxonomy Composition
+  # Link 5: Metadata -> Taxonomy Composition
   - source_dc_tag: "metadata"
-    source_column: "ID"
+    source_column: "sample"
     target_dc_tag: "taxonomy_composition"
     target_type: "table"
     link_config:
@@ -262,9 +274,9 @@ links:
     description: "Filter taxonomy composition by metadata samples"
     enabled: true
 
-  # Link 5: Metadata -> Taxonomy Rel Abundance
+  # Link 6: Metadata -> Taxonomy Rel Abundance
   - source_dc_tag: "metadata"
-    source_column: "ID"
+    source_column: "sample"
     target_dc_tag: "taxonomy_rel_abundance"
     target_type: "table"
     link_config:
