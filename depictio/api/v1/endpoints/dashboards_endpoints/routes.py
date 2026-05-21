@@ -383,6 +383,7 @@ async def list_dashboards(
 
 @dashboards_endpoint_router.get("/list_all")
 async def list_all_dashboards(
+    include_child_tabs: bool = False,
     current_user: User = Depends(get_user_or_anonymous),
 ):
     """Fetch a list of all dashboards (admin only).
@@ -390,11 +391,20 @@ async def list_all_dashboards(
     Tolerates missing tokens (single-user / public mode) so the React admin
     "Dashboards" tab loads — the inline ``is_admin`` gate below still blocks
     non-admin users.
+
+    By default returns only main-tab dashboards (so multi-tab projects show
+    up once). Pass ``?include_child_tabs=true`` to also surface every child
+    tab — used by the /admin-beta project panel to list the full dashboard
+    tree under each seed project.
     """
     if not current_user.is_admin:
         raise HTTPException(status_code=401, detail="Current user is not an admin.")
 
-    result = load_dashboards_from_db(owner=current_user.id, admin_mode=True)
+    result = load_dashboards_from_db(
+        owner=current_user.id,
+        admin_mode=True,
+        include_child_tabs=include_child_tabs,
+    )
 
     if not result["success"]:
         raise HTTPException(status_code=404, detail=result["message"])

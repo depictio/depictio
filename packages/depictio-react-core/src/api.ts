@@ -2693,14 +2693,23 @@ export interface AdminDashboard {
   dashboard_id: string;
   title?: string;
   is_public?: boolean;
+  is_main_tab?: boolean;
+  parent_dashboard_id?: string | null;
+  main_tab_name?: string;
+  project_id?: string;
   last_saved_ts?: string;
   permissions?: DashboardPermissions;
   stored_metadata?: unknown[];
   [key: string]: unknown;
 }
 
-export async function listAllDashboards(): Promise<AdminDashboard[]> {
-  const res = await fetch(`${API_BASE}/dashboards/list_all`, { headers: authHeaders() });
+export async function listAllDashboards(
+  includeChildTabs = false,
+): Promise<AdminDashboard[]> {
+  const qs = includeChildTabs ? '?include_child_tabs=true' : '';
+  const res = await fetch(`${API_BASE}/dashboards/list_all${qs}`, {
+    headers: authHeaders(),
+  });
   if (!res.ok) await throwHttpError(res, 'Failed to list all dashboards');
   const data = await res.json();
   return Array.isArray(data) ? data : [];
