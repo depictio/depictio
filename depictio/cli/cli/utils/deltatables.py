@@ -428,8 +428,16 @@ def client_aggregate_data(
             ),
         }
 
-    # Handle transformed (recipe-based) data collections
-    if data_collection.config.source == "transformed":
+    # Handle transformed (recipe-based) data collections.
+    # Init seeding for reference datasets pops the `transform` block while
+    # keeping `source: transformed` so the React viewer can still surface the
+    # recipe-derived lineage — those DCs already have a `scan` block pointing
+    # at the pre-computed seed file, so fall through to the regular file-scan
+    # path instead of erroring.
+    if (
+        data_collection.config.source == "transformed"
+        and data_collection.config.transform is not None
+    ):
         return process_recipe_data_collection(
             data_collection, CLI_config, overwrite, workflow, preview=preview_recipes
         )

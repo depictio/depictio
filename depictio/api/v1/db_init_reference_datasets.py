@@ -414,8 +414,12 @@ class ReferenceDatasetRegistry:
         config.pop("template", None)
 
         # 2. Build variables: DATA_ROOT + reference defaults (with DATA_ROOT substituted inside them)
+        # Skip DATA_ROOT in the loop — the caller-resolved path must win over any
+        # placeholder declared in template.reference.vars.DATA_ROOT.
         variables: dict[str, str] = {"DATA_ROOT": data_root}
         for var_name, var_default in reference_defaults.items():
+            if var_name == "DATA_ROOT":
+                continue
             variables[var_name] = var_default.replace("{DATA_ROOT}", data_root)
         provided_vars: set[str] = set(variables.keys())
         config = substitute_template_variables(config, variables)

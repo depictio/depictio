@@ -379,6 +379,23 @@ initContainerResources:
     memory: "128Mi"
     cpu: "100m"
 
+# Shared image for the busybox-based init containers
+# (wait-for-mongo, wait-for-redis, fix-permissions-*, etc.).
+# pullPolicy defaults to Always so PSA / Capsule policies that forbid
+# IfNotPresent on tagged images don't reject pod creation.
+initContainerImage:
+  repository: busybox
+  tag: "1.35"
+  pullPolicy: Always
+
+# Curl-based init containers that probe HTTP readiness of dependent
+# services (wait-for-backend-startup on frontend, wait-for-frontend on
+# celery). Same pullPolicy=Always reasoning as initContainerImage.
+curlInitContainerImage:
+  repository: curlimages/curl
+  tag: "8.5.0"
+  pullPolicy: Always
+
 global:
   domain: "example.com" # Default domain, can be overridden in environment-specific values
 
