@@ -94,18 +94,33 @@ type MultiMetricStyle =
   | 'top_n'
   | 'coverage'
   | 'concentration';
-const MULTI_METRIC_OPTIONS: {
-  value: MultiMetricStyle;
-  label: string;
-  group?: string;
-}[] = [
+// Mantine 7 ``Select`` expects nested groups in the shape
+// ``{ group, items: [...] }`` — the flat ``{value, label, group}`` format we
+// inherited from Mantine 6 crashes the option normalizer with
+// ``Cannot read properties of undefined (reading 'map')`` (it sees ``group``
+// and tries to ``.map`` the missing ``items`` array). See:
+// https://mantine.dev/core/select/#grouping-options
+const MULTI_METRIC_OPTIONS: Array<
+  | { value: MultiMetricStyle; label: string }
+  | { group: string; items: Array<{ value: MultiMetricStyle; label: string }> }
+> = [
   { value: 'single', label: 'Single metric (no extras)' },
-  { value: 'vertical', label: 'Vertical list (median / min / max)', group: 'Distribution' },
-  { value: 'compact', label: 'Compact strip (median / min / max)', group: 'Distribution' },
-  { value: 'box_plot', label: 'Box-plot (Tukey: IQR + whiskers + outliers)', group: 'Distribution' },
-  { value: 'top_n', label: 'Top-N bars (most frequent values of a column)', group: 'Cardinality' },
-  { value: 'coverage', label: 'Coverage gauge (current / theoretical max)', group: 'Cardinality' },
-  { value: 'concentration', label: 'Concentration (top-N share + names)', group: 'Cardinality' },
+  {
+    group: 'Distribution',
+    items: [
+      { value: 'vertical', label: 'Vertical list (median / min / max)' },
+      { value: 'compact', label: 'Compact strip (median / min / max)' },
+      { value: 'box_plot', label: 'Box-plot (Tukey: IQR + whiskers + outliers)' },
+    ],
+  },
+  {
+    group: 'Cardinality',
+    items: [
+      { value: 'top_n', label: 'Top-N bars (most frequent values of a column)' },
+      { value: 'coverage', label: 'Coverage gauge (current / theoretical max)' },
+      { value: 'concentration', label: 'Concentration (top-N share + names)' },
+    ],
+  },
 ];
 
 /** Convert (aggregations, secondary_layout) saved on the metadata back into
