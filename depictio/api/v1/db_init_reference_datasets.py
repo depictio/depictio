@@ -466,7 +466,12 @@ class ReferenceDatasetRegistry:
                             f"pre-computed seed not found at {pre_computed_path}"
                         )
                         continue
-                    dc_config.pop("source", None)
+                    # Keep ``source: transformed`` on the DC so the React
+                    # viewer (data-source info card, admin panel, builder
+                    # dropdown) surfaces the lineage — the data IS the output
+                    # of a recipe, just materialised as a seed file rather
+                    # than computed at scan time. Only the ``transform`` step
+                    # itself is dropped (it's been replaced with the file scan).
                     dc_config.pop("transform", None)
                     dc_config["scan"] = {
                         "mode": "single",
