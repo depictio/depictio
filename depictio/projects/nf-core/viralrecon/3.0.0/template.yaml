@@ -23,9 +23,8 @@ template:
       required: true
   dashboards:
     - "dashboards/base.yaml"
-  reference:
-    vars:
-      DATA_ROOT: "/path/to/viralrecon/output"
+  # No reference.vars needed — DATA_ROOT is resolved by db_init to the
+  # bundled project directory (/app/depictio/projects/nf-core/viralrecon/3.0.0).
 
 # ============================================================================
 # PROJECT CONFIGURATION
