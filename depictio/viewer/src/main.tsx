@@ -132,8 +132,49 @@ function readInitialColorScheme(): 'light' | 'dark' | 'auto' {
 //   4. Standard mode without a valid session — redirect to /auth so the
 //      user lands on the login form instead of a broken /dashboards-beta
 //      where every API call 401s.
+/** Cross-origin hand-off: the Dash app's beta-switcher pill links here
+ *  with a `#auth=<base64-utf8 JSON>` fragment carrying the session it
+ *  has in its own localStorage (different origin, so we can't read it
+ *  directly). Decode, persist into THIS origin's localStorage, then
+ *  strip the fragment from the URL so it doesn't leak via history
+ *  share-links or appear in the address bar. Errors are swallowed —
+ *  malformed fragments just fall through to the normal bootstrap path,
+ *  which will redirect to /auth if no valid session is reachable. */
+function consumeCrossOriginSessionHandoff(): void {
+  if (!window.location.hash || !window.location.hash.includes('auth=')) return;
+  try {
+    const params = new URLSearchParams(window.location.hash.slice(1));
+    const encoded = params.get('auth');
+    if (!encoded) return;
+    const decoded = decodeURIComponent(escape(window.atob(encoded)));
+    const session = JSON.parse(decoded);
+    // Permissive cast: the Dash app's stored shape is a SessionPayload
+    // superset, but TS doesn't know that statically. Validate the
+    // required `access_token` so a malformed payload doesn't blow up
+    // the bootstrap.
+    if (
+      session &&
+      typeof session === 'object' &&
+      typeof session.access_token === 'string'
+    ) {
+      persistSession(session as unknown as Parameters<typeof persistSession>[0]);
+    }
+  } catch (err) {
+    console.warn('[auth] cross-origin session hand-off failed:', err);
+  } finally {
+    // Always strip the fragment so the URL bar / shareable link don't
+    // carry the token after consumption — even on parse failure.
+    const { pathname, search } = window.location;
+    window.history.replaceState(null, '', pathname + search);
+  }
+}
+
 async function bootstrapSession(): Promise<void> {
   if (window.location.pathname.startsWith('/auth')) return;
+
+  // Run BEFORE validateSession so a freshly-handed-off token is the one
+  // we check against the backend.
+  consumeCrossOriginSessionHandoff();
 
   const localValid = await validateSession();
   let status;
