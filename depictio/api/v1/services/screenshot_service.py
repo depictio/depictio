@@ -499,13 +499,28 @@ async def generate_react_dual_theme_screenshots(
                     # Mantine popovers portal to document.body, so they sit
                     # outside the AppShell.Main DOM bbox — element.screenshot()
                     # would clip them off. Fall back to a viewport capture.
-                    await page.screenshot(path=output_path, full_page=False)
+                    await page.screenshot(
+                        path=output_path,
+                        full_page=False,
+                        timeout=settings.performance.screenshot_capture_timeout,
+                    )
                 else:
                     main_element = await page.query_selector(".mantine-AppShell-main")
                     if main_element:
-                        await main_element.screenshot(path=output_path)
+                        # Honour the configured capture timeout instead of
+                        # Playwright's default 30s — phylogeny / advanced-viz
+                        # heavy tabs do animated layout passes that the default
+                        # "wait for stable" can't catch in time.
+                        await main_element.screenshot(
+                            path=output_path,
+                            timeout=settings.performance.screenshot_capture_timeout,
+                        )
                     else:
-                        await page.screenshot(path=output_path, full_page=False)
+                        await page.screenshot(
+                            path=output_path,
+                            full_page=False,
+                            timeout=settings.performance.screenshot_capture_timeout,
+                        )
 
                 await context.close()
 
