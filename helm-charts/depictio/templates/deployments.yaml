@@ -323,7 +323,8 @@ spec:
               mountPath: /iris-config
         {{- if .Values.local_development }}
         - name: fix-permissions
-          image: busybox:1.35
+          image: "{{ .Values.initContainerImage.repository }}:{{ .Values.initContainerImage.tag }}"
+          imagePullPolicy: {{ .Values.initContainerImage.pullPolicy }}
           command: ["/bin/sh"]
           args:
           - -c
@@ -397,7 +398,8 @@ spec:
             - name: depictio-screenshots
               mountPath: /mounted-screenshots
         - name: wait-for-mongo
-          image: busybox:1.35
+          image: "{{ .Values.initContainerImage.repository }}:{{ .Values.initContainerImage.tag }}"
+          imagePullPolicy: {{ .Values.initContainerImage.pullPolicy }}
           command: ['sh', '-c', 'until nc -z {{ .Release.Name }}-mongo {{ .Values.mongo.service.port }}; do echo "Waiting for mongo..."; sleep 2; done']
           securityContext:
             {{- toYaml .Values.backend.securityContext | nindent 12 }}
@@ -405,7 +407,8 @@ spec:
             {{- toYaml .Values.initContainerResources | nindent 12 }}
         {{- if .Values.minio.enabled }}
         - name: wait-for-minio
-          image: busybox:1.35
+          image: "{{ .Values.initContainerImage.repository }}:{{ .Values.initContainerImage.tag }}"
+          imagePullPolicy: {{ .Values.initContainerImage.pullPolicy }}
           command: ['sh', '-c', 'until nc -z {{ .Release.Name }}-minio {{ .Values.minio.service.httpPort }}; do echo "Waiting for minio..."; sleep 2; done']
           securityContext:
             {{- toYaml .Values.backend.securityContext | nindent 12 }}
@@ -414,7 +417,8 @@ spec:
         {{- end }}
         {{- if .Values.redis.enabled }}
         - name: wait-for-redis
-          image: busybox:1.35
+          image: "{{ .Values.initContainerImage.repository }}:{{ .Values.initContainerImage.tag }}"
+          imagePullPolicy: {{ .Values.initContainerImage.pullPolicy }}
           command: ['sh', '-c', 'until nc -z {{ .Release.Name }}-redis {{ .Values.redis.service.port }}; do echo "Waiting for redis..."; sleep 2; done']
           securityContext:
             {{- toYaml .Values.backend.securityContext | nindent 12 }}
@@ -422,7 +426,8 @@ spec:
             {{- toYaml .Values.initContainerResources | nindent 12 }}
         {{- end }}
         - name: verify-config-storage
-          image: busybox:1.35
+          image: "{{ .Values.initContainerImage.repository }}:{{ .Values.initContainerImage.tag }}"
+          imagePullPolicy: {{ .Values.initContainerImage.pullPolicy }}
           command: ['sh', '-c']
           args:
             - |
@@ -570,7 +575,8 @@ spec:
       initContainers:
         # STEP 0: Fix permissions for mounted volumes (always run for frontend)
         - name: fix-permissions-frontend
-          image: busybox:1.35
+          image: "{{ .Values.initContainerImage.repository }}:{{ .Values.initContainerImage.tag }}"
+          imagePullPolicy: {{ .Values.initContainerImage.pullPolicy }}
           command: ["/bin/sh"]
           args:
           - -c
@@ -610,7 +616,8 @@ spec:
             {{- toYaml .Values.initContainerResources | nindent 12 }}
         # STEP 0.5: Verify config storage is mounted and writable
         - name: verify-config-storage
-          image: busybox:1.35
+          image: "{{ .Values.initContainerImage.repository }}:{{ .Values.initContainerImage.tag }}"
+          imagePullPolicy: {{ .Values.initContainerImage.pullPolicy }}
           command: ['sh', '-c']
           args:
             - |
@@ -672,7 +679,8 @@ spec:
               mountPath: /mounted-screenshots
         # STEP 1: Wait for backend service to be available (network check)
         - name: wait-for-backend
-          image: busybox:1.35
+          image: "{{ .Values.initContainerImage.repository }}:{{ .Values.initContainerImage.tag }}"
+          imagePullPolicy: {{ .Values.initContainerImage.pullPolicy }}
           command: ['sh', '-c']
           args:
             - |
@@ -700,7 +708,8 @@ spec:
 
         # STEP 2: Wait for backend to fully start and generate keys
         - name: wait-for-backend-startup
-          image: curlimages/curl:8.5.0
+          image: "{{ .Values.curlInitContainerImage.repository }}:{{ .Values.curlInitContainerImage.tag }}"
+          imagePullPolicy: {{ .Values.curlInitContainerImage.pullPolicy }}
           securityContext:
             {{- toYaml .Values.frontend.securityContext | nindent 12 }}
           resources:
@@ -736,7 +745,8 @@ spec:
 
         # STEP 3: Verify key files are actually available
         - name: wait-for-api-key
-          image: busybox:1.35
+          image: "{{ .Values.initContainerImage.repository }}:{{ .Values.initContainerImage.tag }}"
+          imagePullPolicy: {{ .Values.initContainerImage.pullPolicy }}
           securityContext:
             {{- toYaml .Values.frontend.securityContext | nindent 12 }}
           resources:
@@ -772,7 +782,8 @@ spec:
         # STEP 4: Wait for Redis to be available
         {{- if .Values.redis.enabled }}
         - name: wait-for-redis
-          image: busybox:1.35
+          image: "{{ .Values.initContainerImage.repository }}:{{ .Values.initContainerImage.tag }}"
+          imagePullPolicy: {{ .Values.initContainerImage.pullPolicy }}
           securityContext:
             {{- toYaml .Values.frontend.securityContext | nindent 12 }}
           resources:
@@ -900,7 +911,8 @@ spec:
       initContainers:
         # STEP 0: Fix permissions for mounted volumes
         - name: fix-permissions-celery
-          image: busybox:1.35
+          image: "{{ .Values.initContainerImage.repository }}:{{ .Values.initContainerImage.tag }}"
+          imagePullPolicy: {{ .Values.initContainerImage.pullPolicy }}
           command: ["/bin/sh"]
           args:
           - -c
@@ -929,7 +941,8 @@ spec:
             {{- toYaml .Values.initContainerResources | nindent 12 }}
         # STEP 1: Wait for MongoDB
         - name: wait-for-mongo
-          image: busybox:1.35
+          image: "{{ .Values.initContainerImage.repository }}:{{ .Values.initContainerImage.tag }}"
+          imagePullPolicy: {{ .Values.initContainerImage.pullPolicy }}
           command: ['sh', '-c', 'until nc -z {{ .Release.Name }}-mongo {{ .Values.mongo.service.port }}; do echo "Waiting for mongo..."; sleep 2; done']
           securityContext:
             {{- toYaml .Values.celery.securityContext | nindent 12 }}
@@ -938,7 +951,8 @@ spec:
         # STEP 2: Wait for Redis
         {{- if .Values.redis.enabled }}
         - name: wait-for-redis
-          image: busybox:1.35
+          image: "{{ .Values.initContainerImage.repository }}:{{ .Values.initContainerImage.tag }}"
+          imagePullPolicy: {{ .Values.initContainerImage.pullPolicy }}
           command: ['sh', '-c', 'until nc -z {{ .Release.Name }}-redis {{ .Values.redis.service.port }}; do echo "Waiting for redis..."; sleep 2; done']
           securityContext:
             {{- toYaml .Values.celery.securityContext | nindent 12 }}
@@ -947,7 +961,8 @@ spec:
         {{- end }}
         # STEP 3: Wait for backend service to be available
         - name: wait-for-backend
-          image: busybox:1.35
+          image: "{{ .Values.initContainerImage.repository }}:{{ .Values.initContainerImage.tag }}"
+          imagePullPolicy: {{ .Values.initContainerImage.pullPolicy }}
           command: ['sh', '-c']
           args:
             - |
@@ -971,7 +986,8 @@ spec:
             {{- toYaml .Values.initContainerResources | nindent 12 }}
         # STEP 4: Verify API key files are available
         - name: wait-for-api-key
-          image: busybox:1.35
+          image: "{{ .Values.initContainerImage.repository }}:{{ .Values.initContainerImage.tag }}"
+          imagePullPolicy: {{ .Values.initContainerImage.pullPolicy }}
           command: ['sh', '-c']
           args:
             - |
@@ -999,7 +1015,8 @@ spec:
         # STEP 5: Wait for frontend (Dash) service - required for screenshot generation
         # Must wait for app to be FULLY ready (callbacks registered), not just port open
         - name: wait-for-frontend
-          image: curlimages/curl:8.5.0
+          image: "{{ .Values.curlInitContainerImage.repository }}:{{ .Values.curlInitContainerImage.tag }}"
+          imagePullPolicy: {{ .Values.curlInitContainerImage.pullPolicy }}
           command: ['sh', '-c']
           args:
             - |
