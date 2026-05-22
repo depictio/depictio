@@ -16,7 +16,7 @@ without dragging the MongoDB-backed token loader along.
 import json
 from datetime import datetime
 from pathlib import Path
-from typing import TypedDict
+from typing import TypedDict, cast
 
 from bson import ObjectId
 from playwright.async_api import Page, async_playwright
@@ -59,29 +59,31 @@ class ScreenshotResult(TypedDict):
 
 def check_dashboard_owner_permission_sync(dashboard_id: str, user_id: str) -> bool:
     """
-    Check if user is the owner of a dashboard (via project ownership).
+    Check if user is the owner of a dashboard.
+
+    Looks at dashboard-level ``permissions.owners`` first — duplication
+    assigns the new owner there while keeping ``project_id`` pointing at
+    the original project, so a project-only check denies legitimate
+    copies. Falls back to the parent project's owners when the dashboard
+    has no per-dashboard owners (e.g. seeded dashboards).
 
     Uses synchronous MongoDB operations (pymongo). Safe to call from both
     sync contexts (Dash callbacks) and async contexts (via the async wrapper).
-
-    Args:
-        dashboard_id: Dashboard ObjectId as string
-        user_id: User ObjectId as string
-
-    Returns:
-        True if user owns dashboard, False otherwise
     """
     try:
-        # Convert dashboard_id string to ObjectId for MongoDB query
         dashboard_oid = ObjectId(dashboard_id)
         dashboard = dashboards_collection.find_one({"dashboard_id": dashboard_oid})
         if not dashboard:
             logger.warning(f"Dashboard not found: {dashboard_id}")
             return False
 
+        user_obj_id = ObjectId(user_id)
+
+        if _any_owner_matches(dashboard.get("permissions", {}).get("owners"), user_obj_id):
+            return True
+
         project_id = dashboard.get("project_id")
         if not project_id:
-            logger.warning(f"Dashboard {dashboard_id} has no project_id")
             return False
 
         project = projects_collection.find_one({"_id": ObjectId(project_id)})
@@ -89,13 +91,35 @@ def check_dashboard_owner_permission_sync(dashboard_id: str, user_id: str) -> bo
             logger.warning(f"Project not found: {project_id}")
             return False
 
-        owners = project.get("permissions", {}).get("owners", [])
-        user_obj_id = ObjectId(user_id)
-        return any(owner.get("_id") == user_obj_id for owner in owners)
+        return _any_owner_matches(project.get("permissions", {}).get("owners"), user_obj_id)
 
     except Exception as e:
         logger.error(f"Error checking dashboard ownership: {e}")
         return False
+
+
+def _any_owner_matches(owners: object, user_obj_id: ObjectId) -> bool:
+    """Return True if any owner record matches ``user_obj_id``.
+
+    Tolerates both ``ObjectId`` and string forms of the owner's ``_id``.
+    """
+    if not isinstance(owners, list):
+        return False
+    for owner_obj in owners:
+        if not isinstance(owner_obj, dict):
+            continue
+        owner = cast(dict[str, object], owner_obj)
+        raw = owner.get("_id")
+        if isinstance(raw, ObjectId):
+            if raw == user_obj_id:
+                return True
+        elif isinstance(raw, str):
+            try:
+                if ObjectId(raw) == user_obj_id:
+                    return True
+            except Exception:
+                continue
+    return False
 
 
 async def check_dashboard_owner_permission(dashboard_id: str, user_id: str) -> bool:
