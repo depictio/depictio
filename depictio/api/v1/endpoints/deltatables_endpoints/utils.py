@@ -173,9 +173,27 @@ def precompute_columns_specs(aggregated_df: pl.DataFrame, agg_functions: dict, d
                 else:
                     continue
 
-                result = result.values if isinstance(result, np.ndarray) else result
-                if method_name == "mode" and isinstance(result.values, np.ndarray):
-                    result = result[0]
+                # Normalize the pandas method's return:
+                # - .mode() returns a pd.Series (possibly empty, possibly with
+                #   a non-RangeIndex when the aggregated df was reindexed); we
+                #   want the first tied mode by position.
+                # - .mean() / .median() / .min() / .max() etc. return scalars.
+                # - .unique() returns an ndarray.
+                # Previous code did ``result[0]`` for the mode branch, which is
+                # LABEL-based indexing on a pd.Series and raised KeyError(0)
+                # any time the Series index didn't contain 0 — e.g. viralrecon
+                # pangolin_lineages, which has sparse string columns whose
+                # aggregated-df modes carry a non-default index. The whole
+                # deltatable upsert aborted, leaving every dashboard tile
+                # bound to that DC stuck on 404.
+                if hasattr(result, "iloc"):  # pd.Series
+                    if len(result) == 0:
+                        continue  # nothing to record for this method
+                    result = result.iloc[0]
+                elif isinstance(result, np.ndarray):
+                    if result.size == 0:
+                        continue
+                    result = result.flat[0]
                 tmp_dict["specs"][str(method_name)] = numpy_to_python(result)
 
         results.append(tmp_dict)
