@@ -5,25 +5,44 @@
 #   - values.yaml (base configuration)
 #   - values-embl-demo-base.yaml (EMBL infrastructure + demo mode)
 #   - values-embl-secrets.yaml (S3 credentials)
+#
+# Tenant quota: 32 CPU / 64 GiB / 30 pods, shared with values-embl-demo-dev.yaml
+# Per-env target: ~6 CPU / 12 GiB requests, ~14 CPU / 28 GiB limits — two
+# envs sum to ~28 / 56 limits with margin for mongo-init / wipe-job hooks.
+# Same rebalance rationale as the dev env values file — see header there
+# for details.
 
 # Demo environment configuration - auto-wipe on upgrades
 demo:
   autoWipeOnUpgrade: true  # Delete PVCs before each upgrade for fresh demo state
 
-# Celery worker (enabled for background tasks)
+# Celery worker — biggest share of the budget because it's the
+# advanced-viz compute bottleneck. Threads pool so polars C-extension
+# compute scales past the GIL.
 celery:
   enabled: true
-  replicas: 1
+  replicas: 1   # multi-replica celery not validated yet on this chart
   resources:
     requests:
-      memory: "512Mi"
-      cpu: "250m"
+      memory: "6Gi"
+      cpu: "3"
     limits:
-      memory: "2Gi"
-      cpu: "1"
+      memory: "16Gi"
+      cpu: "8"
+  env:
+    DEPICTIO_CELERY_WORKERS: "8"  # parallel tasks per worker
 
-# Google Analytics - Production Tracking ID
+# Backend API — handles both Dash AJAX and the React viewer's data-fetching
+# endpoints + serves the SPA static assets. React adoption raises backend
+# load.
 backend:
+  resources:
+    requests:
+      memory: "4Gi"
+      cpu: "2"
+    limits:
+      memory: "8Gi"
+      cpu: "4"
   env:
     # Demo mode with guided tour tooltips
     DEPICTIO_AUTH_DEMO_MODE: "true"
@@ -39,7 +58,17 @@ backend:
     # Explicit API URL to match ingress host (overrides computed URL)
     DEPICTIO_FASTAPI_PUBLIC_URL: "https://api.demo.depictio.embl.org"
 
+# Frontend Dash — being phased out in favour of the React viewer (served
+# from the backend container at /dashboard-beta). Slimmed to free budget
+# for backend + celery. Still single-worker (state_manager limitation).
 frontend:
+  resources:
+    requests:
+      memory: "512Mi"
+      cpu: "250m"
+    limits:
+      memory: "1Gi"
+      cpu: "500m"
   env:
     # Demo mode with guided tour tooltips
     DEPICTIO_AUTH_DEMO_MODE: "true"

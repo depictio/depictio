@@ -35,6 +35,35 @@ from depictio.models.models.users import TokenBeanie, User, UserBeanie
 dashboards_endpoint_router = APIRouter()
 
 
+# Screenshots PVC mount inside the backend container; bundled image ships
+# default PNGs here for the seeded reference dashboards.
+_SCREENSHOTS_DIR = "/app/depictio/dash/static/screenshots"
+# Mirrors the Dash auto-screenshot callback's 1h heuristic so the two
+# trigger sites agree on "stale".
+_SCREENSHOT_STALE_AFTER_S = 3600
+
+
+def _should_enqueue_screenshot(dashboard_id: str, now_s: float | None = None) -> bool:
+    """Return True iff dual-theme PNGs are missing or older than 1h.
+
+    Called by the dashboard save endpoint to avoid saturating the celery
+    queue on every React viewer interaction. Without this guard, every
+    tab-open / duplicate / rename / no-op edit triggers a fresh Playwright
+    render — blocking advanced-viz `compute_*` tasks behind a wall of
+    screenshot work at boot and after each user click.
+    """
+    import os
+    import time
+
+    light = os.path.join(_SCREENSHOTS_DIR, f"{dashboard_id}_light.png")
+    dark = os.path.join(_SCREENSHOTS_DIR, f"{dashboard_id}_dark.png")
+    if not (os.path.exists(light) and os.path.exists(dark)):
+        return True  # missing → must (re)generate
+    now = now_s if now_s is not None else time.time()
+    newest = max(os.path.getmtime(light), os.path.getmtime(dark))
+    return (now - newest) >= _SCREENSHOT_STALE_AFTER_S
+
+
 @dashboards_endpoint_router.post("/sync_with_projects")
 async def sync_dashboard_permissions_with_projects(
     current_user: User = Depends(get_current_user),
@@ -635,21 +664,23 @@ async def save_dashboard(
         dashboard_id_str = str(dashboard_id)
 
         # Auto-queue screenshot regeneration so /dashboards-beta and any
-        # other listing surface picks up the latest dashboard state without
-        # the user needing to navigate to the viewer first. Mirrors the
-        # explicit `.delay(...)` call the Dash editor's save callback makes
-        # at depictio/dash/layouts/save.py:367 — moving the dispatch here
-        # means every client (Dash editor, React editor, the React component
-        # builder's upsertComponent flow) gets screenshots queued by default.
-        # Lazy import to keep API startup independent of the Dash worker
-        # module, and a broad except so a Celery/broker outage never breaks
-        # the save response itself.
+        # other listing surface picks up the latest dashboard state.
+        # Guarded by `_should_enqueue_screenshot` to avoid the celery
+        # queue storm every React viewer interaction otherwise creates.
         try:
-            from depictio.dash.celery_app import generate_dashboard_screenshot_dual
+            if _should_enqueue_screenshot(dashboard_id_str):
+                # Lazy import keeps API startup independent of the Dash
+                # worker module; broad except so a Celery/broker outage
+                # never breaks the save response itself.
+                from depictio.dash.celery_app import generate_dashboard_screenshot_dual
 
-            user_id = str(getattr(current_user, "id", "") or "")
-            generate_dashboard_screenshot_dual.delay(dashboard_id_str, user_id)
-            logger.debug(f"Queued screenshot regeneration for dashboard {dashboard_id_str}")
+                user_id = str(getattr(current_user, "id", "") or "")
+                generate_dashboard_screenshot_dual.delay(dashboard_id_str, user_id)
+                logger.debug(f"Queued screenshot regeneration for dashboard {dashboard_id_str}")
+            else:
+                logger.debug(
+                    f"Skipping screenshot enqueue for {dashboard_id_str} — recent PNG exists"
+                )
         except Exception as exc:  # noqa: BLE001 — non-fatal best-effort dispatch
             logger.warning(f"Could not queue screenshot for {dashboard_id_str}: {exc}")
 

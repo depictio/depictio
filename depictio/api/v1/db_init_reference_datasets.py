@@ -486,6 +486,18 @@ class ReferenceDatasetRegistry:
                         "mode": "single",
                         "scan_parameters": {"filename": pre_computed_path},
                     }
+                    # Bundled recipe seeds are tab-separated by convention
+                    # ({data_root}/{dc_tag}.tsv). The template's original
+                    # `dc_specific_properties.format` describes the recipe's
+                    # *input* source (e.g. summary_metrics consumes a real
+                    # CSV from multiqc), which is irrelevant once we've
+                    # replaced the recipe with a file_scan. Force the seed
+                    # format to TSV so polars uses the right separator —
+                    # otherwise a CSV-declared, TSV-bundled DC parses the
+                    # whole tab-row as one column.
+                    dc_specific = dc_config.get("dc_specific_properties") or {}
+                    dc_specific["format"] = "tsv"
+                    dc_config["dc_specific_properties"] = dc_specific
                     logger.debug(
                         f"Init resolver: converted recipe DC '{dc_tag}' → file scan: {pre_computed_path}"
                     )
