@@ -66,7 +66,12 @@ def generate_dashboard_screenshot(self, dashboard_id: str) -> dict:
     bind=True, name="generate_dashboard_screenshot_dual", soft_time_limit=600, time_limit=900
 )
 def generate_dashboard_screenshot_dual(
-    self, dashboard_id: str, user_id: str, force: bool = False
+    self,
+    dashboard_id: str,
+    user_id: str = "",
+    force: bool = False,
+    open_settings: bool = False,
+    filename_prefix: str = "",
 ) -> dict:
     """
     Generate dual-theme dashboard screenshots asynchronously with deduplication
@@ -116,9 +121,13 @@ def generate_dashboard_screenshot_dual(
             if active_tasks:
                 for _worker, tasks in active_tasks.items():
                     for task in tasks:
+                        args = task.get("args")
+                        args_match = str(args).startswith(f"('{dashboard_id}'") or (
+                            isinstance(args, list) and args and args[0] == dashboard_id
+                        )
                         if (
                             task["name"] == "generate_dashboard_screenshot_dual"
-                            and task["args"] == f"('{dashboard_id}', '{user_id}')"
+                            and args_match
                             and task["id"] != self.request.id
                         ):
                             raise Ignore()
@@ -128,17 +137,22 @@ def generate_dashboard_screenshot_dual(
             logger.warning(f"Failed to check for duplicate tasks: {e}, proceeding with screenshot")
 
     # Validate user owns dashboard before generating screenshot
-    from depictio.api.v1.services.screenshot_service import check_dashboard_owner_permission_sync
-
-    if not check_dashboard_owner_permission_sync(dashboard_id, user_id):
-        logger.warning(
-            f"Screenshot denied: user {user_id} is not owner of dashboard {dashboard_id}"
+    # In single-user mode skip the ownership check entirely (mirrors the HTTP
+    # endpoint). Otherwise validate the user owns the dashboard.
+    if not settings.auth.is_single_user_mode:
+        from depictio.api.v1.services.screenshot_service import (
+            check_dashboard_owner_permission_sync,
         )
-        return {
-            "status": "forbidden",
-            "dashboard_id": dashboard_id,
-            "message": "User is not dashboard owner",
-        }
+
+        if not check_dashboard_owner_permission_sync(dashboard_id, user_id):
+            logger.warning(
+                f"Screenshot denied: user {user_id} is not owner of dashboard {dashboard_id}"
+            )
+            return {
+                "status": "forbidden",
+                "dashboard_id": dashboard_id,
+                "message": "User is not dashboard owner",
+            }
 
     async def async_screenshot_task():
         """Async wrapper: initializes MongoDB and runs Playwright screenshot generation."""
@@ -150,7 +164,12 @@ def generate_dashboard_screenshot_dual(
                 database=client[settings.mongodb.db_name],
                 document_models=[TokenBeanie, UserBeanie],
             )
-            return await generate_react_dual_theme_screenshots(dashboard_id, user_id=user_id)
+            return await generate_react_dual_theme_screenshots(
+                dashboard_id,
+                user_id=user_id,
+                open_settings=open_settings,
+                filename_prefix=filename_prefix,
+            )
         finally:
             client.close()
 

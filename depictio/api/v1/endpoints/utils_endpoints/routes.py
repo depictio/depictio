@@ -1,6 +1,5 @@
 import asyncio
 from datetime import datetime
-from pathlib import Path
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException
 
@@ -623,180 +622,17 @@ async def screenshot_dash_fixed(
     Minimal screenshot endpoint - just take a full page screenshot.
     Only dashboard owners can generate screenshots (except in single user mode).
 
-    DEPRECATED: production screenshot capture drives the React SPA via
-    `/screenshot-react-dual/{dashboard_id}`. This endpoint is retained for
-    emergency rollback only.
+    DEPRECATED: removed in the React migration. This Dash-targeted endpoint
+    drove the deleted Dash UI and ran Playwright in-process inside the API
+    container (which no longer ships chromium).
     """
-    from playwright.async_api import async_playwright
-
-    from depictio.api.v1.services.screenshot_service import check_dashboard_owner_permission
-
-    logger.warning("/screenshot-dash-fixed is deprecated — use /screenshot-react-dual instead.")
-
-    # In single user mode, skip all authentication and permission checks
-    if not settings.auth.is_single_user_mode:
-        # Multi-user mode: Require authentication and check ownership
-        if not authorization or not authorization.startswith("Bearer "):
-            raise HTTPException(
-                status_code=401, detail="Authentication required for screenshot generation"
-            )
-
-        # Get the current user from the token
-        token = authorization.replace("Bearer ", "")
-        try:
-            current_user = await get_current_user(token)
-        except HTTPException:
-            raise HTTPException(status_code=401, detail="Invalid authentication token")
-
-        # Check if user owns the dashboard
-        is_owner = await check_dashboard_owner_permission(
-            dashboard_id=dashboard_id, user_id=str(current_user.id)
-        )
-
-        if not is_owner:
-            raise HTTPException(
-                status_code=403, detail="Only dashboard owners can generate screenshots"
-            )
-
-    output_folder = "/app/depictio/api/static/screenshots"
-    output_file = f"{output_folder}/{str(dashboard_id)}.png"
-    Path(output_folder).mkdir(parents=True, exist_ok=True)
-
-    try:
-        from depictio.api.v1.endpoints.user_endpoints.utils import (
-            _get_admin_token_localstorage_payload,
-        )
-
-        token_data_json = await _get_admin_token_localstorage_payload()
-
-        # Simple browser screenshot
-        async with async_playwright() as p:
-            browser = await p.chromium.launch(headless=True)
-            page = await browser.new_page(viewport={"width": 1920, "height": 1080})
-
-            # ``no-walkthrough=1`` suppresses the React viewer's walkthrough
-            # popover + dim backdrop when the URL ever lands on a beta route.
-            dashboard_url = (
-                f"{settings.viewer.internal_url}/dashboard/{dashboard_id}?no-walkthrough=1"
-            )
-            logger.info(f"📸 Taking screenshot of: {dashboard_url}")
-
-            # Set auth and navigate
-            await page.goto(settings.viewer.internal_url)
-            await page.evaluate(f"localStorage.setItem('local-store', '{token_data_json}')")
-            await page.goto(dashboard_url, timeout=30000)
-
-            # Wait for dashboard content to render
-            await page.wait_for_timeout(5000)
-
-            # Wait for dashboard components to render with proper dimensions
-            try:
-                await page.wait_for_function(
-                    """
-                    () => {
-                        const components = document.querySelectorAll('.react-grid-item');
-                        if (components.length === 0) return false;
-
-                        // Check if at least one component has meaningful dimensions
-                        for (let component of components) {
-                            const rect = component.getBoundingClientRect();
-                            if (rect.width > 0 && rect.height > 0) {
-                                return true;
-                            }
-                        }
-                        return false;
-                    }
-                """,
-                    timeout=10000,
-                )
-                logger.info("✅ Dashboard components rendered with proper dimensions")
-            except Exception as e:
-                logger.warning(f"⚠️ Timeout waiting for components to render: {e}")
-
-            # Direct dashboard content targeting, excluding navbar and header
-            try:
-                # Hide navbar AND header elements, and adjust layout before screenshot
-                await page.evaluate("""
-                    () => {
-                        // Hide navbar
-                        const navbar = document.querySelector('.mantine-AppShell-navbar');
-                        if (navbar) {
-                            navbar.style.display = 'none';
-                        }
-
-                        // Hide header (badges, title, buttons)
-                        const header = document.querySelector('.mantine-AppShell-header');
-                        if (header) {
-                            header.style.display = 'none';
-                        }
-
-                        // Defensive walkthrough strip — see hide_ui_chrome in
-                        // screenshot_service.py for the rationale.
-                        document.querySelectorAll('[data-walkthrough]').forEach((el) => {
-                            el.style.display = 'none';
-                        });
-                        document.querySelectorAll('.depictio-walkthrough-popover').forEach((el) => {
-                            el.style.display = 'none';
-                        });
-
-                        // Remove any padding/margin from page-content to eliminate white space
-                        const pageContent = document.querySelector('#page-content');
-                        if (pageContent) {
-                            pageContent.style.padding = '0';
-                            pageContent.style.margin = '0';
-                        }
-
-                        // Remove padding from AppShell-main and ensure it takes full width
-                        const appShellMain = document.querySelector('.mantine-AppShell-main');
-                        if (appShellMain) {
-                            appShellMain.style.padding = '0';
-                            appShellMain.style.paddingLeft = '0';
-                            appShellMain.style.margin = '0';
-                        }
-                    }
-                """)
-
-                # Simple approach: screenshot the AppShell-main element directly
-                # This captures the full viewport content without navbar/header
-                main_element = await page.query_selector(".mantine-AppShell-main")
-                if main_element:
-                    await main_element.screenshot(path=output_file)
-                    logger.info("📸 Screenshot taken from .mantine-AppShell-main")
-                    screenshot_taken = True
-                else:
-                    raise Exception("Could not find .mantine-AppShell-main element")
-
-                if not screenshot_taken:
-                    raise Exception("Screenshot was not taken")
-
-            except Exception as e:
-                logger.warning(f"Component-based screenshot failed: {e}, trying fallback")
-                # Fallback to AppShell main
-                try:
-                    main_element = await page.query_selector(".mantine-AppShell-main")
-                    if main_element:
-                        await main_element.screenshot(path=output_file)
-                        logger.info("📸 AppShell main screenshot taken (fallback)")
-                    else:
-                        # Final fallback to full page
-                        await page.screenshot(path=output_file, full_page=True)
-                        logger.info("📸 Full page screenshot taken (final fallback)")
-                except Exception as fallback_e:
-                    logger.warning(f"All screenshot methods failed: {fallback_e}")
-                    await page.screenshot(path=output_file, full_page=True)
-
-            await browser.close()
-            logger.info("📸 Screenshot taken")
-
-        return {
-            "success": True,
-            "message": f"Screenshot saved to {output_file}",
-            "screenshot_path": output_file,
-        }
-
-    except Exception as e:
-        logger.error(f"❌ Screenshot error: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Screenshot failed: {str(e)}")
+    raise HTTPException(
+        status_code=410,
+        detail=(
+            "This Dash screenshot endpoint was removed in the React migration. "
+            "Use /depictio/api/v1/utils/screenshot-react-dual/{dashboard_id}."
+        ),
+    )
 
 
 @utils_endpoint_router.get("/screenshot-dash-dual/{dashboard_id}", deprecated=True)
@@ -823,31 +659,15 @@ async def screenshot_dash_dual(dashboard_id: str, current_user=Depends(get_curre
         dict: Status and paths to both screenshots
 
     Raises:
-        HTTPException: If screenshot generation fails or user lacks permission
+        HTTPException: Always 410 — removed in the React migration.
     """
-    from depictio.api.v1.services.screenshot_service import (
-        check_dashboard_owner_permission,
-        generate_dual_theme_screenshots,
+    raise HTTPException(
+        status_code=410,
+        detail=(
+            "This Dash screenshot endpoint was removed in the React migration. "
+            "Use /depictio/api/v1/utils/screenshot-react-dual/{dashboard_id}."
+        ),
     )
-
-    logger.warning("/screenshot-dash-dual is deprecated — use /screenshot-react-dual instead.")
-
-    # Check if user owns the dashboard
-    is_owner = await check_dashboard_owner_permission(
-        dashboard_id=dashboard_id, user_id=str(current_user.id)
-    )
-
-    if not is_owner:
-        raise HTTPException(
-            status_code=403, detail="Only dashboard owners can generate screenshots"
-        )
-
-    result = await generate_dual_theme_screenshots(dashboard_id)
-
-    if result["status"] in ("success", "skipped"):
-        return result
-    else:
-        raise HTTPException(status_code=500, detail=result.get("error", "Screenshot failed"))
 
 
 @utils_endpoint_router.get("/screenshot-react-dual/{dashboard_id}")
@@ -881,10 +701,10 @@ async def screenshot_react_dual(
         ScreenshotResult dict with `light_screenshot` / `dark_screenshot`
         paths (host-visible via the bind-mounted screenshots dir).
     """
-    from depictio.api.v1.services.screenshot_service import (
-        check_dashboard_owner_permission,
-        generate_react_dual_theme_screenshots,
-    )
+    import asyncio
+
+    from depictio.api.celery_app import generate_dashboard_screenshot_dual
+    from depictio.api.v1.services.screenshot_service import check_dashboard_owner_permission
 
     user_id: str | None = None
     if not settings.auth.is_single_user_mode:
@@ -906,16 +726,23 @@ async def screenshot_react_dual(
             )
         user_id = str(current_user.id)
 
-    result = await generate_react_dual_theme_screenshots(
-        dashboard_id=dashboard_id,
-        user_id=user_id,
-        open_settings=open_settings,
-        filename_prefix=filename_prefix,
+    # The API container has no chromium — Playwright lives only in the Celery
+    # worker image. Enqueue the screenshot task and await its result on a
+    # threadpool so the event loop isn't blocked.
+    task = generate_dashboard_screenshot_dual.delay(
+        dashboard_id, user_id or "", open_settings, filename_prefix
     )
+    try:
+        result = await asyncio.to_thread(task.get, timeout=180)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Screenshot task failed: {exc}")
 
     if result["status"] in ("success", "skipped"):
         return result
-    raise HTTPException(status_code=500, detail=result.get("error", "Screenshot failed"))
+    raise HTTPException(
+        status_code=500,
+        detail=result.get("error") or result.get("message") or "Screenshot failed",
+    )
 
 
 @utils_endpoint_router.get("/infrastructure-diagnostics")

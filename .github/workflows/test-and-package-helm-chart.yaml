@@ -1201,13 +1201,14 @@ jobs:
           echo "🧪 Testing screenshot generation endpoint..."
           DASHBOARD_ID="6824cb3b89d2b72169309737"
 
-          echo "📞 Making screenshot request (timeout: 90s)..."
+          echo "📞 Making screenshot request (timeout: 200s)..."
 
-          # Add timeout for screenshot generation (it's slow)
+          # Add timeout for screenshot generation (it's slow — the request
+          # enqueues a Celery task that does dual chromium captures on the worker)
           # http://localhost:8083/depictio/api/v1/dashboards/screenshot/$DASHBOARD_ID)
           set +e  # Don't exit on curl error
-          SCREENSHOT_RESPONSE=$(curl -s --max-time 90 -w "\n%{http_code}" \
-            http://localhost:8083/depictio/api/v1/utils/screenshot-dash-fixed/$DASHBOARD_ID)
+          SCREENSHOT_RESPONSE=$(curl -s --max-time 200 -w "\n%{http_code}" \
+            http://localhost:8083/depictio/api/v1/utils/screenshot-react-dual/$DASHBOARD_ID)
           CURL_EXIT_CODE=$?
           set -e
 
