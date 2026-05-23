@@ -105,7 +105,7 @@ spec:
             kubectl scale statefulset/{{ .Release.Name }}-mongo -n {{ .Release.Namespace }} --replicas=0 || true
             kubectl scale statefulset/{{ .Release.Name }}-redis -n {{ .Release.Namespace }} --replicas=0 || true
             kubectl scale deployment/{{ .Release.Name }}-depictio-backend -n {{ .Release.Namespace }} --replicas=0 || true
-            kubectl scale deployment/{{ .Release.Name }}-depictio-frontend -n {{ .Release.Namespace }} --replicas=0 || true
+            kubectl scale deployment/{{ .Release.Name }}-depictio-viewer -n {{ .Release.Namespace }} --replicas=0 || true
 
             # Wait for pods to terminate
             echo "⏳ Waiting for pods to terminate..."

@@ -116,6 +116,10 @@ services:
       context: .
     ports:
       - "${VIEWER_PORT:-5080}:80"
+    environment:
+      # nginx upstream for the API proxy. Matches the compose service name;
+      # also the Dockerfile.viewer default, set explicitly here for clarity.
+      DEPICTIO_API_UPSTREAM: "depictio-backend:8058"
     depends_on:
       - depictio-backend
     restart: unless-stopped

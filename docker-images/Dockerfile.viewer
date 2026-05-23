@@ -45,7 +45,16 @@ LABEL org.opencontainers.image.licenses="MIT"
 # disk too — keeps nginx's `root` simple and asset URLs untouched.
 COPY --from=builder /build/depictio/viewer/dist /usr/share/nginx/html/dashboard-beta
 
-COPY docker-images/nginx.conf /etc/nginx/conf.d/default.conf
+# Ship the config as an envsubst template. The base image's entrypoint
+# (/docker-entrypoint.d/20-envsubst-on-templates.sh) renders every
+# /etc/nginx/templates/*.template into /etc/nginx/conf.d/ at container
+# start, substituting only shell-exported vars (here: DEPICTIO_API_UPSTREAM).
+COPY docker-images/nginx.conf.template /etc/nginx/templates/default.conf.template
+
+# Default backend upstream — keeps docker-compose working with no extra
+# config (the compose service is named `depictio-backend`). Overridden in
+# k8s to `<release>-depictio-backend:8058`.
+ENV DEPICTIO_API_UPSTREAM=depictio-backend:8058
 
 EXPOSE 80
 

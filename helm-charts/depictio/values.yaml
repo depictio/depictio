@@ -147,7 +147,7 @@ minio:
 # Backend settings
 backend:
   image:
-    repository: ghcr.io/depictio/depictio # Corrected repository path with .io
+    repository: ghcr.io/depictio/depictio-api # FastAPI backend image (post-Dash split)
     tag: "0.13.12"
     pullPolicy: Always
   replicas: 1 # Balanced for stability and performance
@@ -254,10 +254,10 @@ backend:
 celery:
   enabled: true
   image:
-    # Inherits from backend.image by default if empty
-    repository: ""  # Empty = use backend.image.repository
-    tag: ""         # Empty = use backend.image.tag
-    pullPolicy: ""  # Empty = use backend.image.pullPolicy
+    # Distinct worker image (Celery + Playwright/chromium for screenshots).
+    repository: ghcr.io/depictio/depictio-worker
+    tag: "0.13.7"   # Override per-release; CI sets this explicitly.
+    pullPolicy: Always
   replicas: 1
   resources:
     requests:
@@ -284,76 +284,28 @@ celery:
     seccompProfile:
       type: RuntimeDefault
 
-# Frontend settings
-frontend:
+# Viewer settings (nginx serving the built React SPA + proxying the API)
+# Replaces the legacy Dash `frontend` block. The viewer is a stateless
+# static server: no Python env, no PVCs, no MongoDB/Redis waits — it proxies
+# to the backend at request time.
+viewer:
   image:
-    repository: ghcr.io/depictio/depictio # Corrected repository path with .io
+    repository: ghcr.io/depictio/depictio-viewer # nginx + built React SPA
     tag: "0.13.12"
     pullPolicy: Always
   replicas: 1 # Balanced for stability and performance
   resources:
     requests:
-      memory: "1Gi"
-      cpu: "0.5"
+      memory: "64Mi"
+      cpu: "50m"
     limits:
-      memory: "4Gi"
-      cpu: "2"
+      memory: "256Mi"
+      cpu: "500m"
   service:
     type: ClusterIP
     httpPort: 80
     httpsPort: 443
-    targetPort: 5080
-  env:
-    DEPICTIO_CONTEXT: "server"
-    DEPICTIO_DEV_MODE: "false"
-    DEPICTIO_VIEWER_DEBUG_UI: "false"
-    DEPICTIO_FASTAPI_SERVICE_PORT: "80"
-    DEPICTIO_MONGODB_SERVICE_PORT: "27018"
-    DEPICTIO_VIEWER_SERVICE_PORT: "5080"
-    # DEPICTIO_MINIO_SERVICE_PORT: "9000"
-    # DEPICTIO_FASTAPI_PUBLIC_URL: "https://{{ .Release.Name }}-api.{{ .Values.global.domain }}"
-    # DEPICTIO_MINIO_PUBLIC_URL: "https://{{ .Release.Name }}-minio.{{ .Values.global.domain }}"
-
-    # Performance - Reduced workers for better stability with multiple replicas
-    DEPICTIO_VIEWER_WORKERS: "4"
-
-    # Redis Cache Configuration
-    DEPICTIO_CACHE_REDIS_HOST: "redis"
-    DEPICTIO_CACHE_REDIS_PORT: "6379"
-    DEPICTIO_CACHE_REDIS_DB: "0"
-    DEPICTIO_CACHE_ENABLE_REDIS_CACHE: "true"
-
-    # Celery Configuration (uses Redis as broker)
-    DEPICTIO_CELERY_BROKER_HOST: "redis"
-    DEPICTIO_CELERY_BROKER_PORT: "6379"
-    DEPICTIO_CELERY_BROKER_DB: "1"
-    DEPICTIO_CELERY_RESULT_BACKEND_HOST: "redis"
-    DEPICTIO_CELERY_RESULT_BACKEND_PORT: "6379"
-    DEPICTIO_CELERY_RESULT_BACKEND_DB: "2"
-
-    # Analytics configuration
-    DEPICTIO_ANALYTICS_ENABLED: "false"
-
-    # Google Analytics configuration (GA4)
-    # Enable to track page views, user interactions, and engagement metrics
-    # Get your tracking ID from Google Analytics dashboard (Property → Data Streams)
-    DEPICTIO_GOOGLE_ANALYTICS_ENABLED: "false"
-    # DEPICTIO_GOOGLE_ANALYTICS_TRACKING_ID: "G-XXXXXXXXXX"
-
-  podSecurityContext:
-    runAsUser: 1000
-    runAsGroup: 2000
-    fsGroup: 2000
-  securityContext:
-    runAsNonRoot: true
-    runAsUser: 1000
-    runAsGroup: 2000
-    allowPrivilegeEscalation: false
-    capabilities:
-      drop:
-      - ALL
-    seccompProfile:
-      type: RuntimeDefault
+    targetPort: 80
 
 # Generic base ingress values
 ingress:

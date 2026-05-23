@@ -11,7 +11,7 @@ data:
   DEPICTIO_FASTAPI_SERVICE_PORT: {{ .Values.backend.env.DEPICTIO_FASTAPI_SERVICE_PORT | quote }}
   DEPICTIO_FASTAPI_PUBLIC_URL: {{ .Values.backend.env.DEPICTIO_FASTAPI_PUBLIC_URL | default (include "depictio.apiUrlWithProtocol" .) | quote }}
   DEPICTIO_VIEWER_SERVICE_PORT: {{ .Values.backend.env.DEPICTIO_VIEWER_SERVICE_PORT | quote }}
-  DEPICTIO_VIEWER_SERVICE_NAME: {{ printf "%s-depictio-frontend" .Release.Name | quote }}
+  DEPICTIO_VIEWER_SERVICE_NAME: {{ printf "%s-depictio-viewer" .Release.Name | quote }}
   DEPICTIO_MONGODB_SERVICE_NAME: {{ printf "%s-mongo" .Release.Name | quote }}
   DEPICTIO_MONGODB_WIPE: {{ .Values.backend.env.DEPICTIO_MONGODB_WIPE | quote }}
   DEPICTIO_MONGODB_SERVICE_PORT: {{ .Values.backend.env.DEPICTIO_MONGODB_SERVICE_PORT | quote }}
@@ -90,91 +90,6 @@ data:
   {{- end }}
 
 ---
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: {{ .Release.Name }}-frontend-config
-  namespace: {{ .Release.Namespace }}
-data:
-  DEPICTIO_DEV_MODE: {{ .Values.frontend.env.DEPICTIO_DEV_MODE | quote }}
-  DEPICTIO_VIEWER_DEBUG_UI: {{ .Values.frontend.env.DEPICTIO_VIEWER_DEBUG_UI | default "false" | quote }}
-  DEPICTIO_LOGGING_VERBOSITY_LEVEL: {{ .Values.backend.env.DEPICTIO_LOGGING_VERBOSITY_LEVEL | quote }}
-  DEPICTIO_FASTAPI_SERVICE_NAME: {{ printf "%s-depictio-backend" .Release.Name | quote }}
-  DEPICTIO_FASTAPI_SERVICE_PORT: {{ .Values.frontend.env.DEPICTIO_FASTAPI_SERVICE_PORT | quote }}
-  DEPICTIO_FASTAPI_PUBLIC_URL: {{ .Values.backend.env.DEPICTIO_FASTAPI_PUBLIC_URL | default (include "depictio.apiUrlWithProtocol" .) | quote }}
-  DEPICTIO_VIEWER_SERVICE_PORT: {{ .Values.frontend.env.DEPICTIO_VIEWER_SERVICE_PORT | quote }}
-  DEPICTIO_MONGODB_SERVICE_NAME: {{ printf "%s-mongo" .Release.Name | quote }}
-  DEPICTIO_MONGODB_SERVICE_PORT: {{ .Values.frontend.env.DEPICTIO_MONGODB_SERVICE_PORT | quote }}
-
-  # Redis Cache Configuration
-  {{- if .Values.redis.enabled }}
-  DEPICTIO_CACHE_REDIS_HOST: {{ printf "%s-redis" .Release.Name | quote }}
-  DEPICTIO_CACHE_REDIS_PORT: {{ .Values.frontend.env.DEPICTIO_CACHE_REDIS_PORT | default "6379" | quote }}
-  DEPICTIO_CACHE_REDIS_DB: {{ .Values.frontend.env.DEPICTIO_CACHE_REDIS_DB | default "0" | quote }}
-  DEPICTIO_CACHE_ENABLE_REDIS_CACHE: {{ .Values.frontend.env.DEPICTIO_CACHE_ENABLE_REDIS_CACHE | default "true" | quote }}
-
-  # Celery Configuration (uses Redis as broker)
-  DEPICTIO_CELERY_ENABLED: {{ .Values.celery.env.DEPICTIO_CELERY_ENABLED | quote }}
-  DEPICTIO_CELERY_BROKER_HOST: {{ printf "%s-redis" .Release.Name | quote }}
-  DEPICTIO_CELERY_BROKER_PORT: {{ .Values.frontend.env.DEPICTIO_CELERY_BROKER_PORT | default "6379" | quote }}
-  DEPICTIO_CELERY_BROKER_DB: {{ .Values.frontend.env.DEPICTIO_CELERY_BROKER_DB | default "1" | quote }}
-  DEPICTIO_CELERY_RESULT_BACKEND_HOST: {{ printf "%s-redis" .Release.Name | quote }}
-  DEPICTIO_CELERY_RESULT_BACKEND_PORT: {{ .Values.frontend.env.DEPICTIO_CELERY_RESULT_BACKEND_PORT | default "6379" | quote }}
-  DEPICTIO_CELERY_RESULT_BACKEND_DB: {{ .Values.frontend.env.DEPICTIO_CELERY_RESULT_BACKEND_DB | default "2" | quote }}
-  {{- else }}
-  DEPICTIO_CACHE_ENABLE_REDIS_CACHE: "false"
-  {{- end }}
-
-  # Authentication mode (defaults to authenticated mode)
-  DEPICTIO_AUTH_PUBLIC_MODE: {{ .Values.frontend.env.DEPICTIO_AUTH_PUBLIC_MODE | default "false" | quote }}
-  DEPICTIO_AUTH_DEMO_MODE: {{ .Values.frontend.env.DEPICTIO_AUTH_DEMO_MODE | default "false" | quote }}
-  DEPICTIO_AUTH_SINGLE_USER_MODE: {{ .Values.frontend.env.DEPICTIO_AUTH_SINGLE_USER_MODE | default "false" | quote }}
-  DEPICTIO_AUTH_ANONYMOUS_USER_EMAIL: {{ .Values.frontend.env.DEPICTIO_AUTH_ANONYMOUS_USER_EMAIL | default "anonymous@example.com" | quote }}
-  DEPICTIO_AUTH_TEMPORARY_USER_EXPIRY_HOURS: {{ .Values.frontend.env.DEPICTIO_AUTH_TEMPORARY_USER_EXPIRY_HOURS | default "24" | quote }}
-
-  # Google OAuth Configuration (Frontend only)
-  DEPICTIO_AUTH_GOOGLE_OAUTH_ENABLED: {{ .Values.frontend.env.DEPICTIO_AUTH_GOOGLE_OAUTH_ENABLED | default "false" | quote }}
-  {{- if .Values.auth }}
-  DEPICTIO_AUTH_GOOGLE_OAUTH_CLIENT_ID: {{ .Values.auth.DEPICTIO_AUTH_GOOGLE_OAUTH_CLIENT_ID | default "" | quote }}
-  DEPICTIO_AUTH_GOOGLE_OAUTH_CLIENT_SECRET: {{ .Values.auth.DEPICTIO_AUTH_GOOGLE_OAUTH_CLIENT_SECRET | default "" | quote }}
-  DEPICTIO_AUTH_GOOGLE_OAUTH_REDIRECT_URI: {{ .Values.auth.DEPICTIO_AUTH_GOOGLE_OAUTH_REDIRECT_URI | default "" | quote }}
-  {{- else }}
-  DEPICTIO_AUTH_GOOGLE_OAUTH_CLIENT_ID: ""
-  DEPICTIO_AUTH_GOOGLE_OAUTH_CLIENT_SECRET: ""
-  DEPICTIO_AUTH_GOOGLE_OAUTH_REDIRECT_URI: ""
-  {{- end }}
-
-  # Performance
-  DEPICTIO_VIEWER_WORKERS: {{ .Values.frontend.env.DEPICTIO_VIEWER_WORKERS | quote }}
-  # Analytics
-  DEPICTIO_ANALYTICS_ENABLED: {{ .Values.frontend.env.DEPICTIO_ANALYTICS_ENABLED | default "true" | quote }}
-  DEPICTIO_ANALYTICS_SESSION_TIMEOUT_MINUTES: {{ .Values.frontend.env.DEPICTIO_ANALYTICS_SESSION_TIMEOUT_MINUTES | default "30" | quote }}
-  DEPICTIO_ANALYTICS_CLEANUP_DAYS: {{ .Values.frontend.env.DEPICTIO_ANALYTICS_CLEANUP_DAYS | default "90" | quote }}
-  DEPICTIO_ANALYTICS_TRACK_ANONYMOUS_USERS: {{ .Values.frontend.env.DEPICTIO_ANALYTICS_TRACK_ANONYMOUS_USERS | default "true" | quote }}
-  DEPICTIO_ANALYTICS_CLEANUP_ENABLED: {{ .Values.frontend.env.DEPICTIO_ANALYTICS_CLEANUP_ENABLED | default "true" | quote }}
-  DEPICTIO_GOOGLE_ANALYTICS_ENABLED: {{ .Values.frontend.env.DEPICTIO_GOOGLE_ANALYTICS_ENABLED | default "false" | quote }}
-  {{- if .Values.googleAnalytics }}
-  DEPICTIO_GOOGLE_ANALYTICS_TRACKING_ID: {{ .Values.googleAnalytics.DEPICTIO_GOOGLE_ANALYTICS_TRACKING_ID | default "G-XXXXXXXXXX" | quote }}
-  {{- else }}
-  DEPICTIO_GOOGLE_ANALYTICS_TRACKING_ID: {{ .Values.frontend.env.DEPICTIO_GOOGLE_ANALYTICS_TRACKING_ID | default "G-XXXXXXXXXX" | quote }}
-  {{- end }}
-  # MinIO/S3 configuration
-  DEPICTIO_MINIO_ROOT_USER: {{ .Values.minio.env.DEPICTIO_MINIO_ROOT_USER | default "minio" | quote }}
-  DEPICTIO_MINIO_ROOT_PASSWORD: {{ .Values.minio.env.DEPICTIO_MINIO_ROOT_PASSWORD | default "minio123" | quote }}
-  DEPICTIO_MINIO_BUCKET: {{ .Values.minio.env.DEPICTIO_MINIO_BUCKET | default "depictio-bucket" | quote }}
-  {{- if not .Values.minio.enabled }}
-  # External MinIO/S3 configuration (when built-in MinIO is disabled)
-  DEPICTIO_MINIO_PUBLIC_URL: {{ .Values.minio.env.DEPICTIO_MINIO_PUBLIC_URL | quote }}
-  DEPICTIO_MINIO_EXTERNAL_SERVICE: "true"
-  {{- else }}
-  # Built-in MinIO service configuration
-  DEPICTIO_MINIO_PUBLIC_URL: {{ include "depictio.minioUrlWithProtocol" . | quote }}
-  DEPICTIO_MINIO_EXTERNAL_SERVICE: "false"
-  DEPICTIO_MINIO_SERVICE_NAME: {{ printf "%s-minio" .Release.Name | quote }}
-  DEPICTIO_MINIO_SERVICE_PORT: {{ .Values.minio.env.DEPICTIO_MINIO_SERVICE_PORT | default "9000" | quote }}
-  {{- end }}
-
----
 # Celery Worker ConfigMap
 {{- if .Values.celery.enabled }}
 apiVersion: v1
@@ -211,9 +126,9 @@ data:
   DEPICTIO_FASTAPI_SERVICE_NAME: {{ printf "%s-depictio-backend" .Release.Name | quote }}
   DEPICTIO_FASTAPI_SERVICE_PORT: {{ .Values.backend.env.DEPICTIO_FASTAPI_SERVICE_PORT | quote }}
   DEPICTIO_FASTAPI_PUBLIC_URL: {{ .Values.backend.env.DEPICTIO_FASTAPI_PUBLIC_URL | default (include "depictio.apiUrlWithProtocol" .) | quote }}
-  DEPICTIO_VIEWER_SERVICE_NAME: {{ printf "%s-depictio-frontend" .Release.Name | quote }}
-  # Use service port (80) not pod port (5080) - Celery connects via K8s service which routes 80 -> 5080
-  DEPICTIO_VIEWER_SERVICE_PORT: {{ .Values.frontend.service.httpPort | quote }}
+  DEPICTIO_VIEWER_SERVICE_NAME: {{ printf "%s-depictio-viewer" .Release.Name | quote }}
+  # Viewer Service exposes nginx on port 80.
+  DEPICTIO_VIEWER_SERVICE_PORT: {{ .Values.viewer.service.httpPort | quote }}
 
   # MinIO/S3 configuration
   DEPICTIO_MINIO_ROOT_USER: {{ .Values.minio.env.DEPICTIO_MINIO_ROOT_USER | default "minio" | quote }}

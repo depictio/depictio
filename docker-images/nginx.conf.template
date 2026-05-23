@@ -6,9 +6,17 @@
 # layout in depictio/viewer/vite.config.ts so client code sees the same
 # URL surface in dev and prod.
 #
-# Backend service name and port are overridable so this image works in
-# docker-compose (default `depictio-backend:8058`) and k8s (set
-# DEPICTIO_API_UPSTREAM via a templated configmap).
+# This is an nginx envsubst *template* (rendered at container start by the
+# base image's /docker-entrypoint.d/20-envsubst-on-templates.sh). The only
+# placeholder substituted is ${DEPICTIO_API_UPSTREAM} — the entrypoint runs
+# `envsubst "$defined_envs"` where $defined_envs lists ONLY shell-exported
+# vars, and DEPICTIO_API_UPSTREAM is the single var we export. Every other
+# `$var` below (e.g. $http_upgrade, $host, $upstream) is an nginx runtime
+# variable and is left untouched.
+#
+# Backend upstream is overridable so this image works in docker-compose
+# (default `depictio-backend:8058`, baked as ENV in Dockerfile.viewer) and
+# in k8s (set DEPICTIO_API_UPSTREAM=<release>-depictio-backend:8058).
 # -----------------------------
 
 # Map for WebSocket upgrade handling — required for /depictio/api/v1/events/ws.
@@ -63,7 +71,7 @@ server {
     # proxy_buffering off keeps SSE / chunked responses flowing without
     # nginx holding them until the buffer fills.
     location /depictio/api/ {
-        set $upstream depictio-backend:8058; proxy_pass http://$upstream;
+        set $upstream ${DEPICTIO_API_UPSTREAM}; proxy_pass http://$upstream;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection $connection_upgrade;
@@ -79,14 +87,14 @@ server {
     # Backend-owned static surfaces (dashboard thumbnails, shared logos).
     # Matches the vite.config.ts dev proxy entries.
     location /static/ {
-        set $upstream depictio-backend:8058; proxy_pass http://$upstream;
+        set $upstream ${DEPICTIO_API_UPSTREAM}; proxy_pass http://$upstream;
         proxy_set_header Host $host;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
     }
 
     location /assets/ {
-        set $upstream depictio-backend:8058; proxy_pass http://$upstream;
+        set $upstream ${DEPICTIO_API_UPSTREAM}; proxy_pass http://$upstream;
         proxy_set_header Host $host;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;

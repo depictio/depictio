@@ -1,4 +1,4 @@
-{{- $frontendSvc := printf "%s-depictio-frontend" .Release.Name -}}
+{{- $viewerSvc := printf "%s-depictio-viewer" .Release.Name -}}
 {{- $backendSvc := printf "%s-depictio-backend" .Release.Name -}}
 {{- $mongoSvc := printf "%s-mongo" .Release.Name -}}
 {{- $minioSvc := printf "%s-minio" .Release.Name -}}
@@ -25,11 +25,11 @@ The ingress is enabled but no host is specified. Please add a host to your ingre
 {{- else }}
 The application can be accessed using port forwarding:
 
-  kubectl port-forward svc/{{ $frontendSvc }} 8080:80
+  kubectl port-forward svc/{{ $viewerSvc }} 8080:80
   kubectl port-forward svc/{{ $backendSvc }} 8081:80
 
 Then visit:
-  - Frontend: http://localhost:8080
+  - Viewer: http://localhost:8080
   - Backend API: http://localhost:8081
 {{- end }}
 
@@ -51,13 +51,13 @@ NOTE: The backend image is set to 'Never' pull policy. This is typically used fo
 with images built and loaded directly into the cluster.
 {{- end }}
 
-{{- if contains "Never" .Values.frontend.image.pullPolicy }}
-NOTE: The frontend image is set to 'Never' pull policy. This is typically used for local development
+{{- if contains "Never" .Values.viewer.image.pullPolicy }}
+NOTE: The viewer image is set to 'Never' pull policy. This is typically used for local development
 with images built and loaded directly into the cluster.
 {{- end }}
 
 {{- if eq .Values.persistence.screenshots.accessMode "ReadWriteOnce" }}
-NOTE: The screenshots PVC uses ReadWriteOnce access mode. If frontend and backend pods are scheduled
+NOTE: The screenshots PVC uses ReadWriteOnce access mode. If the worker and backend pods are scheduled
 on different nodes, they won't be able to share the volume. In multi-node clusters, consider using
 ReadWriteMany if your storage class supports it.
 {{- end }}

@@ -5,13 +5,19 @@ on:
     branches: [ main ]
     paths:
       - "helm-charts/depictio/**"
-      - "docker-images/Dockerfile_depictio_uv.dockerfile"
+      - "docker-images/Dockerfile.api"
+      - "docker-images/Dockerfile.worker"
+      - "docker-images/Dockerfile.viewer"
+      - "docker-images/nginx.conf.template"
       - ".github/workflows/test-and-package-helm-chart.yaml"
   pull_request:
     branches: [ main ]
     paths:
       - "helm-charts/depictio/**"
-      - "docker-images/Dockerfile_depictio_uv.dockerfile"
+      - "docker-images/Dockerfile.api"
+      - "docker-images/Dockerfile.worker"
+      - "docker-images/Dockerfile.viewer"
+      - "docker-images/nginx.conf.template"
       - ".github/workflows/test-and-package-helm-chart.yaml"
   workflow_dispatch:
 
@@ -83,44 +89,66 @@ jobs:
           fi
           echo "tag=${TAG}" >> $GITHUB_OUTPUT
           echo "repo=${REPO_LOWER}" >> $GITHUB_OUTPUT
-          echo "full-image=ghcr.io/${REPO_LOWER}:${TAG}" >> $GITHUB_OUTPUT
-
-      - name: Check if rebuild needed
-        id: check-rebuild
-        run: |
-          FULL_IMAGE="${{ steps.image-info.outputs.full-image }}"
-          if docker manifest inspect "${FULL_IMAGE}" > /dev/null 2>&1; then
-            echo "rebuild=false" >> $GITHUB_OUTPUT
-            echo "✅ Image ${FULL_IMAGE} already exists, skipping build"
-          else
-            echo "rebuild=true" >> $GITHUB_OUTPUT
-            echo "🔨 Image doesn't exist, will build ${FULL_IMAGE}"
-          fi
+          # Per-service images for the post-Dash split: api / worker / viewer.
+          echo "api-image=ghcr.io/${REPO_LOWER}-api:${TAG}" >> $GITHUB_OUTPUT
+          echo "worker-image=ghcr.io/${REPO_LOWER}-worker:${TAG}" >> $GITHUB_OUTPUT
+          echo "viewer-image=ghcr.io/${REPO_LOWER}-viewer:${TAG}" >> $GITHUB_OUTPUT
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Build and push Docker image
-        id: build
-        if: steps.check-rebuild.outputs.rebuild == 'true'
+      - name: Build and push API image
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: docker-images/Dockerfile_depictio_uv.dockerfile
+          file: docker-images/Dockerfile.api
           platforms: linux/amd64
           push: true
           load: false
-          tags: ${{ steps.image-info.outputs.full-image }}
+          tags: ${{ steps.image-info.outputs.api-image }}
           cache-from: |
-            type=gha,scope=${{ github.ref_name }}
-            type=gha,scope=refs/heads/main
-          cache-to: type=gha,mode=max,scope=${{ github.ref_name }}
+            type=gha,scope=api-${{ github.ref_name }}
+            type=gha,scope=api-refs/heads/main
+          cache-to: type=gha,mode=max,scope=api-${{ github.ref_name }}
 
-      - name: Pull image to Minikube
+      - name: Build and push worker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker-images/Dockerfile.worker
+          platforms: linux/amd64
+          push: true
+          load: false
+          tags: ${{ steps.image-info.outputs.worker-image }}
+          cache-from: |
+            type=gha,scope=worker-${{ github.ref_name }}
+            type=gha,scope=worker-refs/heads/main
+          cache-to: type=gha,mode=max,scope=worker-${{ github.ref_name }}
+
+      - name: Build and push viewer image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker-images/Dockerfile.viewer
+          platforms: linux/amd64
+          push: true
+          load: false
+          tags: ${{ steps.image-info.outputs.viewer-image }}
+          cache-from: |
+            type=gha,scope=viewer-${{ github.ref_name }}
+            type=gha,scope=viewer-refs/heads/main
+          cache-to: type=gha,mode=max,scope=viewer-${{ github.ref_name }}
+
+      - name: Pull images to Minikube
         run: |
           eval $(minikube docker-env)
-          docker pull "${{ steps.image-info.outputs.full-image }}"
-          docker tag "${{ steps.image-info.outputs.full-image }}" "depictio:${{ steps.chart-info.outputs.app_version }}"
+          APP_VERSION="${{ steps.chart-info.outputs.app_version }}"
+          docker pull "${{ steps.image-info.outputs.api-image }}"
+          docker pull "${{ steps.image-info.outputs.worker-image }}"
+          docker pull "${{ steps.image-info.outputs.viewer-image }}"
+          docker tag "${{ steps.image-info.outputs.api-image }}" "depictio-api:${APP_VERSION}"
+          docker tag "${{ steps.image-info.outputs.worker-image }}" "depictio-worker:${APP_VERSION}"
+          docker tag "${{ steps.image-info.outputs.viewer-image }}" "depictio-viewer:${APP_VERSION}"
           docker images | grep depictio
 
       - name: Get Kubernetes cluster info
@@ -188,12 +216,15 @@ jobs:
           helm upgrade --install ${{ steps.release-info.outputs.release_name }} ./helm-charts/depictio \
             -f ./helm-charts/depictio/values.yaml \
             -f ./helm-charts/depictio/values-gh-actions.yaml \
-            --set backend.image.repository=depictio \
+            --set backend.image.repository=depictio-api \
             --set backend.image.tag=${{ steps.chart-info.outputs.app_version }} \
             --set backend.image.pullPolicy=Never \
-            --set frontend.image.repository=depictio \
-            --set frontend.image.tag=${{ steps.chart-info.outputs.app_version }} \
-            --set frontend.image.pullPolicy=Never \
+            --set celery.image.repository=depictio-worker \
+            --set celery.image.tag=${{ steps.chart-info.outputs.app_version }} \
+            --set celery.image.pullPolicy=Never \
+            --set viewer.image.repository=depictio-viewer \
+            --set viewer.image.tag=${{ steps.chart-info.outputs.app_version }} \
+            --set viewer.image.pullPolicy=Never \
             --debug
 
           echo "✅ Helm installation completed"
@@ -213,7 +244,7 @@ jobs:
           echo "🔍 Waiting for workloads to be created..."
           timeout=180  # 3 minutes total timeout
           elapsed=0
-          expected_deployments=4  # minio, backend, frontend, celery-worker
+          expected_deployments=4  # minio, backend, viewer, celery-worker
           expected_statefulsets=2  # mongo, redis
 
           while [ $elapsed -lt $timeout ]; do
@@ -258,7 +289,7 @@ jobs:
           kubectl get statefulsets --no-headers | grep "^${RELEASE_NAME}-" || echo "No statefulsets found"
 
           echo ""
-          echo "🔍 Detailed pod status monitoring for troubleshooting frontend..."
+          echo "🔍 Detailed pod status monitoring for troubleshooting viewer..."
 
           # Monitor pods every 30 seconds for 3 minutes to see what's happening
           monitor_timeout=180  # 3 minutes
@@ -275,7 +306,7 @@ jobs:
 
             echo ""
             echo "🔍 Frontend pod detailed status:"
-            FRONTEND_POD=$(kubectl get pods -l "release=${RELEASE_NAME},app=depictio-frontend" -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "")
+            FRONTEND_POD=$(kubectl get pods -l "release=${RELEASE_NAME},app=depictio-viewer" -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "")
             if [ -n "$FRONTEND_POD" ]; then
               echo "📋 Frontend pod: $FRONTEND_POD"
               kubectl describe pod $FRONTEND_POD | grep -A 10 -E "(Conditions:|Init Containers:|Containers:)"
@@ -392,7 +423,7 @@ jobs:
           echo "📋 Frontend Pod Logs"
           echo "===================="
 
-          FRONTEND_POD=$(kubectl get pods -l "release=${RELEASE_NAME},app=depictio-frontend" -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "")
+          FRONTEND_POD=$(kubectl get pods -l "release=${RELEASE_NAME},app=depictio-viewer" -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "")
           if [ -n "$FRONTEND_POD" ]; then
             echo "Pod: $FRONTEND_POD"
             echo ""
@@ -409,7 +440,7 @@ jobs:
             done
             echo ""
             echo "--- Main Container Logs ---"
-            kubectl logs $FRONTEND_POD -c depictio-frontend 2>/dev/null || echo "  (not available)"
+            kubectl logs $FRONTEND_POD -c depictio-viewer 2>/dev/null || echo "  (not available)"
           else
             echo "❌ Frontend pod not found"
           fi
@@ -470,10 +501,10 @@ jobs:
           }
 
           echo "⏳ Waiting for frontend pods to be ready..."
-          kubectl wait --for=condition=ready pod -l "release=${RELEASE_NAME},app=depictio-frontend" --timeout=300s || {
+          kubectl wait --for=condition=ready pod -l "release=${RELEASE_NAME},app=depictio-viewer" --timeout=300s || {
             echo "❌ Frontend pods failed to be ready"
             echo "📊 Frontend pod details:"
-            kubectl describe pods -l "release=${RELEASE_NAME},app=depictio-frontend"
+            kubectl describe pods -l "release=${RELEASE_NAME},app=depictio-viewer"
             exit 1
           }
 
@@ -511,9 +542,9 @@ jobs:
           fi
 
           echo "🔍 Finding frontend pod..."
-          FRONTEND_POD=$(kubectl get pods -l "release=${RELEASE_NAME},app=depictio-frontend" -o jsonpath='{.items[0].metadata.name}' || echo "")
+          FRONTEND_POD=$(kubectl get pods -l "release=${RELEASE_NAME},app=depictio-viewer" -o jsonpath='{.items[0].metadata.name}' || echo "")
           if [ -z "$FRONTEND_POD" ]; then
-            echo "❌ No frontend pod found with labels: release=${RELEASE_NAME},app=depictio-frontend"
+            echo "❌ No frontend pod found with labels: release=${RELEASE_NAME},app=depictio-viewer"
             echo "📊 Available pods:"
             kubectl get pods -l "release=${RELEASE_NAME}" --show-labels
             exit 1
@@ -648,13 +679,13 @@ jobs:
           echo ""
           echo "🔧 Service Endpoints Check:"
           kubectl get endpoints ${RELEASE_NAME}-depictio-backend
-          kubectl get endpoints ${RELEASE_NAME}-depictio-frontend
+          kubectl get endpoints ${RELEASE_NAME}-depictio-viewer
 
           echo ""
           echo "🌐 Services Details:"
           kubectl describe svc ${RELEASE_NAME}-depictio-backend
           echo ""
-          kubectl describe svc ${RELEASE_NAME}-depictio-frontend
+          kubectl describe svc ${RELEASE_NAME}-depictio-viewer
 
           echo ""
           echo "=============================="
@@ -666,7 +697,7 @@ jobs:
           REDIS_SERVICE="${RELEASE_NAME}-redis"
           MINIO_SERVICE="${RELEASE_NAME}-minio"
           BACKEND_SERVICE="${RELEASE_NAME}-depictio-backend"
-          FRONTEND_SERVICE="${RELEASE_NAME}-depictio-frontend"
+          FRONTEND_SERVICE="${RELEASE_NAME}-depictio-viewer"
 
           echo "📋 Service names:"
           echo "  MongoDB: $MONGODB_SERVICE"
@@ -1089,7 +1120,7 @@ jobs:
       - name: Test Basic Service Connectivity
         run: |
           RELEASE_NAME="${{ steps.release-info.outputs.release_name }}"
-          FRONTEND_SERVICE="${RELEASE_NAME}-depictio-frontend"
+          FRONTEND_SERVICE="${RELEASE_NAME}-depictio-viewer"
           BACKEND_SERVICE="${RELEASE_NAME}-depictio-backend"
 
           echo "🌐 Testing frontend service..."
@@ -1245,12 +1276,15 @@ jobs:
           # Install from packaged chart
           helm install $PACKAGE_RELEASE_NAME ./depictio-${{ steps.chart-info.outputs.chart_version }}.tgz \
             -f ./helm-charts/depictio/values-gh-actions.yaml \
-            --set backend.image.repository=depictio \
+            --set backend.image.repository=depictio-api \
             --set backend.image.tag=${{ steps.chart-info.outputs.app_version }} \
             --set backend.image.pullPolicy=Never \
-            --set frontend.image.repository=depictio \
-            --set frontend.image.tag=${{ steps.chart-info.outputs.app_version }} \
-            --set frontend.image.pullPolicy=Never
+            --set celery.image.repository=depictio-worker \
+            --set celery.image.tag=${{ steps.chart-info.outputs.app_version }} \
+            --set celery.image.pullPolicy=Never \
+            --set viewer.image.repository=depictio-viewer \
+            --set viewer.image.tag=${{ steps.chart-info.outputs.app_version }} \
+            --set viewer.image.pullPolicy=Never
 
           echo "✅ Successfully installed from packaged chart"
           kubectl get pods
