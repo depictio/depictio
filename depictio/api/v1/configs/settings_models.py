@@ -75,8 +75,8 @@ class FastAPIConfig(ServiceConfig):
 class ViewerConfig(ServiceConfig):
     """Viewer frontend server configuration."""
 
-    service_name: str = Field(default="depictio-frontend")
-    service_port: int = Field(default=5080)
+    service_name: str = Field(default="depictio-viewer")
+    service_port: int = Field(default=80)
     external_port: int = Field(default=5080)
     host: str = Field(default="0.0.0.0", description="Bind address for the viewer server")
     workers: int = Field(default=4, description="Number of Gunicorn worker processes")

@@ -422,11 +422,13 @@ async def generate_react_dual_theme_screenshots(
     Path(output_folder).mkdir(parents=True, exist_ok=True)
     light_path, dark_path = _react_output_paths(output_folder, dashboard_id, filename_prefix)
 
-    # The React SPA is served by the FastAPI process itself. Use `.url` so the
-    # property picks internal vs external based on DEPICTIO_CONTEXT — inside
-    # the API container this resolves to the docker DNS hostname, on a host
-    # invocation it falls back to the external port.
-    origin = settings.fastapi.url
+    # The React SPA is served by the viewer (nginx) container, not the API.
+    # Use the viewer's internal URL so the worker's headless browser loads
+    # the bundle from nginx; the SPA's relative /depictio/api/* calls are
+    # then proxied by that same nginx back to the backend. `.url` picks
+    # internal vs external by DEPICTIO_CONTEXT (server → docker/k8s DNS
+    # hostname; host invocation → external port).
+    origin = settings.viewer.url
     # `?no-walkthrough=1` tells the React SPA's WalkthroughHost to bail
     # before mounting either tour engine, so the captured PNG never
     # contains the popover, anchor, or dim backdrop — even when the

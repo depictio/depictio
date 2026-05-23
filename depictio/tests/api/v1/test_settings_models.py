@@ -224,7 +224,8 @@ class TestViewerConfig:
 
             assert config.debug is True
             assert config.host == "0.0.0.0"
-            assert config.service_name == "depictio-frontend"
+            assert config.service_name == "depictio-viewer"
+            assert config.service_port == 80
             assert config.workers == 4
             assert config.external_port == 5080
 
