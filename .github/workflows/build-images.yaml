@@ -12,7 +12,7 @@ on:
       - "docker-images/Dockerfile.api"
       - "docker-images/Dockerfile.worker"
       - "docker-images/Dockerfile.viewer"
-      - "docker-images/nginx.conf"
+      - "docker-images/nginx.conf.template"
       - "docker-images/run_fastapi.sh"
       - "docker-images/run_celery_worker.sh"
       - "pyproject.toml"
