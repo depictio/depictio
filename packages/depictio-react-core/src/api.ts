@@ -2216,8 +2216,8 @@ export async function updateProjectPermissions(
 }
 
 /** Upload a project .zip and create the project from its contents.
- *  ⚠️ Backend endpoint POST /projects/import does NOT exist yet — this client
- *  function is staged for when it lands. Until then, calls will 404. */
+ *  Hits the migrate router's import-project-zip endpoint (the sibling of
+ *  exportProjectZip's /migrate/export-project below). */
 export async function importProjectZip(
   file: File,
   overwrite: boolean,
@@ -2230,7 +2230,7 @@ export async function importProjectZip(
   // shared authHeaders() to avoid corrupting the multipart frame.
   const headers = { ...authHeaders() } as Record<string, string>;
   delete headers['Content-Type'];
-  const res = await fetch(`${API_BASE}/projects/import?${params}`, {
+  const res = await fetch(`${API_BASE}/migrate/import-project-zip?${params}`, {
     method: 'POST',
     headers,
     body: formData,

@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Literal
 
 from beanie import Document
-from pydantic import BaseModel, ConfigDict, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from depictio.models.config import DEPICTIO_CONTEXT
 from depictio.models.logging import logger
@@ -35,7 +35,9 @@ class Project(MongoModel):
     permissions: Permission
     is_public: bool = False
     hash: str | None = None
-    registration_time: str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    registration_time: str = Field(
+        default_factory=lambda: datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    )
     project_type: Literal["basic", "advanced"] = "basic"
     realtime: RealtimeConfig | None = None  # Optional real-time event configuration
     template_origin: TemplateOrigin | None = None  # Tracks if project was created from a template

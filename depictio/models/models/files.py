@@ -1,7 +1,7 @@
 import os
 from datetime import datetime
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field, field_validator
 
 from depictio.models.config import DEPICTIO_CONTEXT
 from depictio.models.models.base import MongoModel, PyObjectId
@@ -21,7 +21,9 @@ class File(MongoModel):
     run_id: PyObjectId | str | None = None
     run_tag: str | None = None
     data_collection_id: PyObjectId
-    registration_time: str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    registration_time: str = Field(
+        default_factory=lambda: datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    )
     file_hash: str
     filesize: int
     permissions: Permission
