@@ -863,10 +863,10 @@ async def create_my_token(
     Replaces the internal-API-key-gated /create_token for browser callers.
     Always issues a long-lived bearer token scoped to ``current_user``.
     """
-    if settings.auth.is_public_mode:
+    if settings.auth.is_public_mode and not current_user.is_admin:
         raise HTTPException(
             status_code=403,
-            detail="CLI token creation is disabled in public mode",
+            detail="CLI token creation is disabled in public mode for non-admin users",
         )
 
     name = (request.name or "").strip()
@@ -999,10 +999,10 @@ async def check_token_validity_endpoint(token: TokenBase):
 async def generate_agent_config_endpoint(
     token: TokenBeanie, current_user: UserBase = Depends(get_current_user)
 ) -> CLIConfig:
-    if settings.auth.is_public_mode or settings.auth.is_demo_mode:
+    if (settings.auth.is_public_mode or settings.auth.is_demo_mode) and not current_user.is_admin:
         raise HTTPException(
             status_code=403,
-            detail="CLI config generation is disabled in public/demo mode",
+            detail="CLI config generation is disabled in public/demo mode for non-admin users",
         )
     depictio_agent_config = await _generate_agent_config(user=current_user, token=token)
 

@@ -12,7 +12,7 @@ This test suite validates:
 import os
 from contextlib import contextmanager
 from datetime import datetime
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -291,6 +291,213 @@ class TestDisabledFeatures:
             assert "User registration disabled" in str(
                 exc_info.value.detail  # type: ignore[unresolved-attribute]
             )
+
+
+class TestPublicModeAdminBypass:
+    """In public/demo mode, admin callers bypass write-action gates that block
+    anonymous + temporary users (project creation, CLI token creation, CLI
+    config generation). Verifies the matching server-side enforcement for
+    `app_layout.return_create_project_button` / `ProjectsApp.tsx`.
+    """
+
+    @staticmethod
+    def _admin() -> MagicMock:
+        u = MagicMock()
+        u.is_admin = True
+        u.is_anonymous = False
+        u.is_temporary = False
+        return u
+
+    @staticmethod
+    def _anonymous() -> MagicMock:
+        u = MagicMock()
+        u.is_admin = False
+        u.is_anonymous = True
+        u.is_temporary = False
+        return u
+
+    @staticmethod
+    def _temp() -> MagicMock:
+        u = MagicMock()
+        u.is_admin = False
+        u.is_anonymous = False
+        u.is_temporary = True
+        return u
+
+    @pytest.mark.parametrize("user_factory", [_anonymous, _temp])
+    @pytest.mark.asyncio
+    async def test_create_project_blocks_non_admin_in_public_mode(self, user_factory):
+        from fastapi import HTTPException
+
+        from depictio.api.v1.endpoints.projects_endpoints.routes import create_project
+
+        mock_settings = MagicMock()
+        mock_settings.auth.is_public_mode = True
+        with patch("depictio.api.v1.endpoints.projects_endpoints.routes.settings", mock_settings):
+            with pytest.raises(HTTPException) as exc_info:
+                await create_project(project=MagicMock(), current_user=user_factory())
+        assert exc_info.value.status_code == 403  # type: ignore[unresolved-attribute]
+        assert "non-admin" in str(exc_info.value.detail).lower()  # type: ignore[unresolved-attribute]
+
+    @pytest.mark.asyncio
+    async def test_create_project_admin_bypasses_public_mode_gate(self):
+        """Admin call must reach past the public-mode gate. We model a
+        genuinely-absent existing project (both lookups return None) so the
+        success path is reached on its own merits, not via the swallow-404
+        branch inside `create_project`.
+        """
+        from depictio.api.v1.endpoints.projects_endpoints.routes import create_project
+
+        mock_settings = MagicMock()
+        mock_settings.auth.is_public_mode = True
+        with (
+            patch(
+                "depictio.api.v1.endpoints.projects_endpoints.routes.settings",
+                mock_settings,
+            ),
+            patch(
+                "depictio.api.v1.endpoints.projects_endpoints.routes.get_project_from_name",
+                new_callable=AsyncMock,
+                return_value=None,
+            ),
+            patch(
+                "depictio.api.v1.endpoints.projects_endpoints.routes.get_project_from_id",
+                new_callable=AsyncMock,
+                return_value=None,
+            ),
+            patch(
+                "depictio.api.v1.endpoints.projects_endpoints.routes.validate_workflow_uniqueness_in_project"
+            ),
+            patch(
+                "depictio.api.v1.endpoints.projects_endpoints.routes.projects_collection"
+            ) as mock_collection,
+        ):
+            project = MagicMock()
+            project.permissions.owners = []
+            project.name = "admin-test"
+            project.id = "abc"
+            project.mongo.return_value = {}
+            result = await create_project(project=project, current_user=self._admin())
+
+        assert result["success"] is True
+        mock_collection.insert_one.assert_called_once()
+
+    @pytest.mark.parametrize("user_factory", [_anonymous, _temp])
+    @pytest.mark.asyncio
+    async def test_create_my_token_blocks_non_admin_in_public_mode(self, user_factory):
+        from fastapi import HTTPException
+
+        from depictio.api.v1.endpoints.user_endpoints.routes import (
+            _CreateMeTokenRequest,
+            create_my_token,
+        )
+
+        mock_settings = MagicMock()
+        mock_settings.auth.is_public_mode = True
+        with patch("depictio.api.v1.endpoints.user_endpoints.routes.settings", mock_settings):
+            with pytest.raises(HTTPException) as exc_info:
+                await create_my_token(
+                    request=_CreateMeTokenRequest(name="t"),
+                    current_user=user_factory(),
+                )
+        assert exc_info.value.status_code == 403  # type: ignore[unresolved-attribute]
+        assert "non-admin" in str(exc_info.value.detail).lower()  # type: ignore[unresolved-attribute]
+
+    @pytest.mark.asyncio
+    async def test_create_my_token_admin_bypasses_public_mode_gate(self):
+        """Admin must pass the public-mode gate and reach token creation."""
+        from bson import ObjectId
+
+        from depictio.api.v1.endpoints.user_endpoints.routes import (
+            _CreateMeTokenRequest,
+            create_my_token,
+        )
+
+        mock_settings = MagicMock()
+        mock_settings.auth.is_public_mode = True
+        admin = self._admin()
+        admin.id = ObjectId()  # TokenData(sub=...) validates ObjectId-shape
+        sentinel_token = MagicMock(name="created-token")
+        with (
+            patch("depictio.api.v1.endpoints.user_endpoints.routes.settings", mock_settings),
+            patch(
+                "depictio.api.v1.endpoints.user_endpoints.routes.TokenBeanie.find_one",
+                new_callable=AsyncMock,
+                return_value=None,
+            ),
+            patch(
+                "depictio.api.v1.endpoints.user_endpoints.routes._add_token",
+                new_callable=AsyncMock,
+                return_value=sentinel_token,
+            ) as mock_add_token,
+        ):
+            result = await create_my_token(
+                request=_CreateMeTokenRequest(name="t"),
+                current_user=admin,
+            )
+        assert result is sentinel_token
+        mock_add_token.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("user_factory", [_anonymous, _temp])
+    @pytest.mark.asyncio
+    async def test_generate_agent_config_blocks_non_admin_in_public_mode(self, user_factory):
+        from fastapi import HTTPException
+
+        from depictio.api.v1.endpoints.user_endpoints.routes import (
+            generate_agent_config_endpoint,
+        )
+
+        mock_settings = MagicMock()
+        mock_settings.auth.is_public_mode = True
+        mock_settings.auth.is_demo_mode = False
+        with patch("depictio.api.v1.endpoints.user_endpoints.routes.settings", mock_settings):
+            with pytest.raises(HTTPException) as exc_info:
+                await generate_agent_config_endpoint(token=MagicMock(), current_user=user_factory())
+        assert exc_info.value.status_code == 403  # type: ignore[unresolved-attribute]
+        assert "non-admin" in str(exc_info.value.detail).lower()  # type: ignore[unresolved-attribute]
+
+    @pytest.mark.asyncio
+    async def test_generate_agent_config_blocks_non_admin_in_demo_mode(self):
+        """Demo mode shares the same admin-bypass logic as public mode."""
+        from fastapi import HTTPException
+
+        from depictio.api.v1.endpoints.user_endpoints.routes import (
+            generate_agent_config_endpoint,
+        )
+
+        mock_settings = MagicMock()
+        mock_settings.auth.is_public_mode = False
+        mock_settings.auth.is_demo_mode = True
+        with patch("depictio.api.v1.endpoints.user_endpoints.routes.settings", mock_settings):
+            with pytest.raises(HTTPException) as exc_info:
+                await generate_agent_config_endpoint(token=MagicMock(), current_user=self._temp())
+        assert exc_info.value.status_code == 403  # type: ignore[unresolved-attribute]
+
+    @pytest.mark.asyncio
+    async def test_generate_agent_config_admin_bypasses_public_mode_gate(self):
+        from depictio.api.v1.endpoints.user_endpoints.routes import (
+            generate_agent_config_endpoint,
+        )
+
+        mock_settings = MagicMock()
+        mock_settings.auth.is_public_mode = True
+        mock_settings.auth.is_demo_mode = True
+        admin = self._admin()
+        with (
+            patch(
+                "depictio.api.v1.endpoints.user_endpoints.routes.settings",
+                mock_settings,
+            ),
+            patch(
+                "depictio.api.v1.endpoints.user_endpoints.routes._generate_agent_config",
+                new_callable=AsyncMock,
+                return_value="OK-CONFIG",
+            ) as mock_generate,
+        ):
+            result = await generate_agent_config_endpoint(token=MagicMock(), current_user=admin)
+        assert result == "OK-CONFIG"
+        mock_generate.assert_awaited_once()
 
 
 class TestTokenValidation:

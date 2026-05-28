@@ -86,6 +86,10 @@ const ProjectsApp: React.FC = () => {
   // the gate engages. Treat unknown auth as "assume restricted" until we've
   // seen the response.
   const isPublic = authLoading || Boolean(authStatus?.is_public_mode);
+  // Admins bypass the public-mode gate so they can still administer a
+  // public/demo deployment. Mirrored server-side in
+  // `projects_endpoints.routes.create_project`.
+  const createDisabled = isPublic && !user?.is_admin;
 
   useEffect(() => {
     document.title = 'Depictio — Projects';
@@ -216,10 +220,11 @@ const ProjectsApp: React.FC = () => {
           {/* Visitors in public/demo mode see the button visibly disabled
               rather than hidden — keeps the affordance discoverable while
               making it obvious that login/elevated permissions are needed.
-              Mirrors `app_layout.return_create_project_button` in Dash. */}
+              Admins bypass the gate. Mirrors
+              `app_layout.return_create_project_button` in Dash. */}
           <Tooltip
-            label="Project creation is disabled in public/demo mode"
-            disabled={!isPublic}
+            label="Project creation is disabled in public/demo mode for non-admin users"
+            disabled={!createDisabled}
             withArrow
           >
             <Button
@@ -227,8 +232,8 @@ const ProjectsApp: React.FC = () => {
               variant="filled"
               size="md"
               onClick={openCreate}
-              disabled={isPublic}
-              data-disabled={isPublic ? true : undefined}
+              disabled={createDisabled}
+              data-disabled={createDisabled ? true : undefined}
               style={{ fontFamily: 'Virgil' }}
               data-tour-id="projects-create"
             >
@@ -267,7 +272,7 @@ const ProjectsApp: React.FC = () => {
               projects={projects}
               currentUserId={user?.id ?? null}
               isAdmin={Boolean(user?.is_admin)}
-              createDisabled={isPublic}
+              createDisabled={createDisabled}
               onCreateClick={openCreate}
               onView={handleView}
               onEdit={(p) => setEditTarget(p)}
