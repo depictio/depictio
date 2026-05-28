@@ -61,8 +61,13 @@ CASES: list[tuple[str, set[str], str | None, dict]] = [
         {},
     ),
     (
+        # Bracken's per-sample output has no `sample_id` column (the sample
+        # identity comes from the filename), so the name-aware suggester
+        # surfaces only sunburst. Stacked_taxonomy is still reachable via
+        # the producer's `feeds_viz` after the reshape declared in
+        # `bracken_sample.role_mapping["stacked_taxonomy"]`.
         "sunburst/bracken_sample.tsv",
-        {"sunburst", "stacked_taxonomy"},
+        {"sunburst"},
         "bracken_sample",
         {},
     ),
@@ -110,15 +115,22 @@ def test_suggestions_against_nfcore_fixtures(
 
 
 def test_suggest_viz_kinds_returns_empty_on_unfitting_schema() -> None:
+    # Pure-string schema with a column that doesn't match any role's
+    # name-alias set — the suggester should reject everything, including
+    # phylogenetic (whose `taxon` role no longer matches an arbitrary
+    # String column under the name-aware rules).
     schema = {"only_string_col": "String"}
-    # A pure-string schema can't satisfy any numeric-requiring viz.
     suggestions = suggest_viz_kinds(schema)
-    # `phylogenetic` requires only `taxon: String` so it WILL match —
-    # everything else needing a numeric column should not.
     kinds = {s.viz_kind for s in suggestions}
-    assert "phylogenetic" in kinds
-    assert "volcano" not in kinds
-    assert "manhattan" not in kinds
+    assert kinds == set(), f"expected no suggestions, got {kinds}"
+
+
+def test_phylogenetic_matches_on_taxon_aliases() -> None:
+    # A String column whose name IS in the phylogenetic taxon alias set
+    # (e.g. `taxon`, `tip_label`, `label`) should light up phylogenetic.
+    for col_name in ("taxon", "tip_label", "label"):
+        kinds = {s.viz_kind for s in suggest_viz_kinds({col_name: "String"})}
+        assert "phylogenetic" in kinds, f"{col_name}: phylogenetic missing from {kinds}"
 
 
 def test_suggest_viz_kinds_role_candidates_populated() -> None:
@@ -179,19 +191,114 @@ def test_ancombc_joined_results_suggests_volcano_and_da_barplot() -> None:
     assert "ancombc_results_joined" in matches
 
 
-def test_volcano_canonical_table_fingerprint() -> None:
-    """Files already in canonical volcano shape (feature_id / effect_size /
-    significance) must light up — used by ampliseq's `volcano_canonical`
-    DC and any hand-curated DE results saved with role-named columns."""
+def test_volcano_role_table_fingerprint() -> None:
+    """Files already in role-named volcano shape (feature_id / effect_size /
+    significance) must light up — used by ampliseq's volcano DC and any
+    hand-curated DE results saved with role-named columns."""
     schema = {col: "" for col in ("feature_id", "effect_size", "significance")}
     matches = {name for name, _ in suggest_producers(schema)}
-    assert "volcano_canonical_table" in matches
+    assert "volcano_role_table" in matches
 
 
-def test_da_barplot_canonical_table_fingerprint() -> None:
+def test_da_barplot_role_table_fingerprint() -> None:
     schema = {col: "" for col in ("feature_id", "contrast", "lfc")}
     matches = {name for name, _ in suggest_producers(schema)}
-    assert "da_barplot_canonical_table" in matches
+    assert "da_barplot_role_table" in matches
+
+
+def test_taxonomy_levels_long_fingerprint() -> None:
+    """Files with Kingdom..Genus + abundance must fingerprint as the
+    hierarchical taxonomy producer that feeds both sankey + sunburst.
+    Regression for the demo upload flow: sankey/sunburst files used to
+    surface no producer hint at all."""
+    schema = {
+        col: ""
+        for col in (
+            "sample_id",
+            "Habitat",
+            "Kingdom",
+            "Phylum",
+            "Class",
+            "Order",
+            "Family",
+            "Genus",
+            "abundance",
+        )
+    }
+    matches = dict(suggest_producers(schema))
+    assert "taxonomy_levels_long" in matches
+    # Producer must advertise feeding both sankey and sunburst so the UI
+    # surfaces both viz kinds in the modal's "looks like" hint.
+    from depictio.models.components.advanced_viz.producers import get_producer
+
+    p = get_producer("taxonomy_levels_long")
+    assert p is not None
+    assert set(p.feeds_viz) == {"sankey", "sunburst"}
+
+
+def test_rarefaction_iter_long_fingerprint() -> None:
+    """Long-form rarefaction with raw metric columns (sample_id / depth /
+    iter / shannon / observed_features / faith_pd) must fingerprint —
+    distinct from the role-named `rarefaction_role_table` which requires
+    a literal `metric` column."""
+    schema = {
+        col: ""
+        for col in (
+            "sample_id",
+            "depth",
+            "iter",
+            "shannon",
+            "observed_features",
+            "faith_pd",
+            "group",
+        )
+    }
+    matches = {name for name, _ in suggest_producers(schema)}
+    assert "rarefaction_iter_long" in matches
+
+
+def test_taxonomy_abundance_long_fingerprint() -> None:
+    """Long-form ampliseq taxonomy-heatmap source (sample_id × taxonomy ×
+    rel_abundance × Kingdom × Phylum) must fingerprint so the drop modal
+    surfaces complex_heatmap as a downstream option."""
+    schema = {
+        col: ""
+        for col in (
+            "sample_id",
+            "taxonomy",
+            "rel_abundance",
+            "habitat",
+            "Kingdom",
+            "Phylum",
+        )
+    }
+    matches = dict(suggest_producers(schema))
+    assert "taxonomy_abundance_long" in matches
+
+    from depictio.models.components.advanced_viz.producers import get_producer
+
+    p = get_producer("taxonomy_abundance_long")
+    assert p is not None
+    assert "complex_heatmap" in p.feeds_viz
+
+
+def test_alpha_diversity_wide_fingerprint() -> None:
+    """Wide alpha-diversity summary (sample_id × shannon × observed_features
+    × faith_pd × evenness) must fingerprint so the modal shows the badge,
+    even though no advanced-viz kind consumes it directly yet."""
+    schema = {
+        col: ""
+        for col in (
+            "sample_id",
+            "habitat",
+            "shannon",
+            "observed_features",
+            "faith_pd",
+            "evenness",
+        )
+    }
+    matches = {name for name, _ in suggest_producers(schema)}
+    assert "alpha_diversity_wide" in matches
 
 
 def test_viralrecon_variants_long_fingerprint() -> None:

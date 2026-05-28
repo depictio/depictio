@@ -1,6 +1,6 @@
 """Producer registry — known bioinformatics tool outputs and their viz affinity.
 
-Each `Producer` describes the canonical output of a specific tool (e.g.
+Each `Producer` describes the typical output of a specific tool (e.g.
 DESeq2's `results()` TSV, mosdepth's per-region BED) by:
     - a fingerprint of required column names (the smallest set that
       reliably identifies the tool's output among other tabular files);
@@ -217,15 +217,15 @@ KNOWN_PRODUCERS: tuple[Producer, ...] = (
         notes="Distinct from `ivar_variants_vcf`: long-form (no `#CHROM`, has `sample` per row).",
     ),
     # ------------------------------------------------------------------
-    # Canonical-schema fingerprints — match DCs whose columns already use
-    # the advanced-viz role names verbatim (i.e. files coming out of an
-    # nf-core canonical recipe, or hand-curated to match). Each producer
-    # mirrors one entry in CANONICAL_SCHEMAS where the role-name set is
+    # Role-named fingerprints — match DCs whose columns already use the
+    # advanced-viz role names verbatim (files coming out of an nf-core
+    # template recipe, or hand-curated to match). Each producer mirrors
+    # one entry in CANONICAL_SCHEMAS where the role-name set is
     # discriminating enough to fingerprint reliably.
     # ------------------------------------------------------------------
     Producer(
-        name="volcano_canonical_table",
-        tool="Canonical volcano table",
+        name="volcano_role_table",
+        tool="Volcano table",
         description="Differential-expression / abundance table with role-named columns.",
         required_columns=frozenset({"feature_id", "effect_size", "significance"}),
         feeds_viz=("volcano",),
@@ -238,8 +238,8 @@ KNOWN_PRODUCERS: tuple[Producer, ...] = (
         },
     ),
     Producer(
-        name="da_barplot_canonical_table",
-        tool="Canonical DA barplot table",
+        name="da_barplot_role_table",
+        tool="DA barplot table",
         description="Differential-abundance per-contrast log-fold-change table.",
         required_columns=frozenset({"feature_id", "contrast", "lfc"}),
         feeds_viz=("da_barplot",),
@@ -252,16 +252,16 @@ KNOWN_PRODUCERS: tuple[Producer, ...] = (
         },
     ),
     Producer(
-        name="manhattan_canonical_table",
-        tool="Canonical Manhattan table",
+        name="manhattan_role_table",
+        tool="Manhattan table",
         description="Genome-wide variant / association track (chr × pos × score).",
         required_columns=frozenset({"chr", "pos", "score"}),
         feeds_viz=("manhattan",),
         role_mapping={"manhattan": {"chr": "chr", "pos": "pos", "score": "score"}},
     ),
     Producer(
-        name="lollipop_canonical_table",
-        tool="Canonical lollipop table",
+        name="lollipop_role_table",
+        tool="Lollipop table",
         description="Per-feature positional variants (feature_id × position × category).",
         required_columns=frozenset({"feature_id", "position", "category"}),
         feeds_viz=("lollipop",),
@@ -274,8 +274,8 @@ KNOWN_PRODUCERS: tuple[Producer, ...] = (
         },
     ),
     Producer(
-        name="oncoplot_canonical_table",
-        tool="Canonical oncoplot table",
+        name="oncoplot_role_table",
+        tool="Oncoplot table",
         description="Sample × gene × mutation_type matrix in long form.",
         required_columns=frozenset({"sample_id", "gene", "mutation_type"}),
         feeds_viz=("oncoplot",),
@@ -288,8 +288,8 @@ KNOWN_PRODUCERS: tuple[Producer, ...] = (
         },
     ),
     Producer(
-        name="coverage_track_canonical_table",
-        tool="Canonical coverage track",
+        name="coverage_track_role_table",
+        tool="Coverage track table",
         description="Per-window coverage depth (chromosome × position × value).",
         required_columns=frozenset({"chromosome", "position", "value"}),
         feeds_viz=("coverage_track",),
@@ -302,8 +302,8 @@ KNOWN_PRODUCERS: tuple[Producer, ...] = (
         },
     ),
     Producer(
-        name="embedding_canonical_table",
-        tool="Canonical embedding table",
+        name="embedding_role_table",
+        tool="Embedding table",
         description="2D sample projection (sample_id × dim_1 × dim_2) — PCA / UMAP / PCoA.",
         required_columns=frozenset({"sample_id", "dim_1", "dim_2"}),
         feeds_viz=("embedding",),
@@ -316,8 +316,8 @@ KNOWN_PRODUCERS: tuple[Producer, ...] = (
         },
     ),
     Producer(
-        name="stacked_taxonomy_canonical_table",
-        tool="Canonical stacked taxonomy",
+        name="stacked_taxonomy_role_table",
+        tool="Stacked taxonomy table",
         description="Per-sample taxonomic abundance (sample_id × taxon × rank × abundance).",
         required_columns=frozenset({"sample_id", "taxon", "rank", "abundance"}),
         feeds_viz=("stacked_taxonomy",),
@@ -331,8 +331,8 @@ KNOWN_PRODUCERS: tuple[Producer, ...] = (
         },
     ),
     Producer(
-        name="rarefaction_canonical_table",
-        tool="Canonical rarefaction table",
+        name="rarefaction_role_table",
+        tool="Rarefaction table",
         description="Alpha-diversity rarefaction curve (sample_id × depth × metric).",
         required_columns=frozenset({"sample_id", "depth", "metric"}),
         feeds_viz=("rarefaction",),
@@ -345,8 +345,8 @@ KNOWN_PRODUCERS: tuple[Producer, ...] = (
         },
     ),
     Producer(
-        name="ma_canonical_table",
-        tool="Canonical MA-plot table",
+        name="ma_role_table",
+        tool="MA-plot table",
         description="Differential-expression MA shape (feature_id × avg_log_intensity × log2_fold_change).",
         required_columns=frozenset({"feature_id", "avg_log_intensity", "log2_fold_change"}),
         feeds_viz=("ma",),
@@ -359,8 +359,8 @@ KNOWN_PRODUCERS: tuple[Producer, ...] = (
         },
     ),
     Producer(
-        name="dot_plot_canonical_table",
-        tool="Canonical dot-plot table",
+        name="dot_plot_role_table",
+        tool="Dot-plot table",
         description="Single-cell marker summary (cluster × gene × mean_expression × frac_expressing).",
         required_columns=frozenset({"cluster", "gene", "mean_expression", "frac_expressing"}),
         feeds_viz=("dot_plot",),
@@ -374,8 +374,8 @@ KNOWN_PRODUCERS: tuple[Producer, ...] = (
         },
     ),
     Producer(
-        name="enrichment_canonical_table",
-        tool="Canonical enrichment table",
+        name="enrichment_role_table",
+        tool="Enrichment table",
         description="Pathway enrichment results (term × NES × padj × gene_count).",
         required_columns=frozenset({"term", "nes", "padj", "gene_count"}),
         feeds_viz=("enrichment",),
@@ -387,6 +387,100 @@ KNOWN_PRODUCERS: tuple[Producer, ...] = (
                 "gene_count": "gene_count",
             }
         },
+    ),
+    # ------------------------------------------------------------------
+    # Common-shape fingerprints — match real-world file conventions where
+    # column names don't line up with the role names. Cover the gaps the
+    # role-named producers above leave: sankey/sunburst with hierarchical
+    # taxonomy columns, long-form rarefaction with raw metric columns,
+    # wide alpha-diversity summary tables.
+    # ------------------------------------------------------------------
+    Producer(
+        name="taxonomy_levels_long",
+        tool="Hierarchical taxonomy table",
+        description=(
+            "Per-sample hierarchical taxonomy "
+            "(sample × Kingdom × Phylum × Class × Order × Family × Genus × abundance) "
+            "— feeds sankey + sunburst."
+        ),
+        # Kingdom..Genus + abundance is the discriminating shape. We require
+        # all 6 ranks to avoid accidental matches on lower-resolution tables.
+        required_columns=frozenset(
+            {"Kingdom", "Phylum", "Class", "Order", "Family", "Genus", "abundance"}
+        ),
+        feeds_viz=("sankey", "sunburst"),
+        role_mapping={
+            # sankey's step_cols is a multi-column list inferred at render
+            # time from the Kingdom..Genus column block — no single-column
+            # role mapping to declare here.
+            "sankey": {},
+            "sunburst": {"abundance": "abundance"},
+        },
+    ),
+    Producer(
+        name="rarefaction_iter_long",
+        tool="Rarefaction iteration table",
+        description=(
+            "Per-sample rarefaction curve in long form "
+            "(sample_id × depth × iter × metric column(s))."
+        ),
+        # `iter` is the discriminator vs other (sample_id, depth, ...) tables.
+        # The metric column varies by pipeline (shannon, observed_features,
+        # faith_pd, evenness…) so we don't list it in required_columns; the
+        # binding UI lets the user pick at component-creation time.
+        required_columns=frozenset({"sample_id", "depth", "iter"}),
+        feeds_viz=("rarefaction",),
+        role_mapping={
+            "rarefaction": {
+                "sample_id": "sample_id",
+                "depth": "depth",
+                # metric column resolved by the binding UI from the numeric
+                # columns alongside depth/iter.
+            }
+        },
+        notes="Companion to `rarefaction_role_table` for files using raw metric column names.",
+    ),
+    Producer(
+        name="taxonomy_abundance_long",
+        tool="Long-form taxonomy abundance",
+        description=(
+            "Per-sample taxonomy with relative abundance and rank columns "
+            "(sample_id × taxonomy × rel_abundance × Kingdom × Phylum × …). "
+            "Source shape for the ampliseq taxonomy-heatmap recipe."
+        ),
+        # `taxonomy` + `rel_abundance` together discriminate against the
+        # other taxonomy shapes (sankey/sunburst use `abundance`; stacked
+        # uses `taxon`).
+        required_columns=frozenset({"sample_id", "taxonomy", "rel_abundance"}),
+        feeds_viz=("complex_heatmap", "stacked_taxonomy", "sunburst"),
+        role_mapping={
+            "complex_heatmap": {"index": "Phylum"},
+            "stacked_taxonomy": {
+                "sample_id": "sample_id",
+                "taxon": "taxonomy",
+                "abundance": "rel_abundance",
+                # `rank` not directly available — derive from Kingdom/Phylum
+                # columns at component-creation time.
+            },
+            "sunburst": {"abundance": "rel_abundance"},
+        },
+        notes="Pivot to wide (Phylum × sample) for ComplexHeatmap — see recipes/taxonomy_heatmap.py.",
+    ),
+    Producer(
+        name="alpha_diversity_wide",
+        tool="Alpha diversity table",
+        description=(
+            "Per-sample alpha-diversity metrics in wide form "
+            "(sample_id × shannon × observed_features × evenness × …)."
+        ),
+        # `evenness` is the discriminator vs `rarefaction_iter_long`: both
+        # shapes share sample_id/shannon/observed_features, but long-form
+        # rarefaction never carries evenness as a column.
+        required_columns=frozenset({"sample_id", "shannon", "observed_features", "evenness"}),
+        feeds_viz=(),  # No advanced-viz kind for wide alpha-diversity yet —
+        # surfaced as an informational badge only.
+        role_mapping={},
+        notes="Wide summary; reshape to long via .melt(id_vars=['sample_id']) if feeding rarefaction.",
     ),
     Producer(
         name="ivar_variants_vcf",

@@ -121,12 +121,19 @@ function authHeaders(): Record<string, string> {
 }
 
 /** Local POST wrapper for layout/component persistence. Surfaces the response
- *  body on failure so callers can debug 422 validation errors at the console. */
+ *  body on failure so callers can debug 422 validation errors at the console.
+ *  Pass `forceScreenshot=true` for an explicit Save click — the backend bypasses
+ *  its 1h auto-save debounce and re-queues a fresh thumbnail. Auto-saves should
+ *  omit it so drag/resize/rename bursts don't overwhelm the celery worker. */
 async function saveDashboard(
   dashboardId: string,
   dashboardData: DashboardData,
+  opts: { forceScreenshot?: boolean } = {},
 ): Promise<void> {
-  const res = await fetch(`${API_BASE}/dashboards/save/${dashboardId}`, {
+  const url = opts.forceScreenshot
+    ? `${API_BASE}/dashboards/save/${dashboardId}?force_screenshot=true`
+    : `${API_BASE}/dashboards/save/${dashboardId}`;
+  const res = await fetch(url, {
     method: 'POST',
     headers: authHeaders(),
     body: JSON.stringify(dashboardData),
@@ -840,7 +847,7 @@ const EditorApp: React.FC = () => {
       withCloseButton: false,
     });
     try {
-      await saveDashboard(dashboardId, cur);
+      await saveDashboard(dashboardId, cur, { forceScreenshot: true });
       setSaveStatus('saved');
       notifications.update({
         id: notifId,

@@ -130,6 +130,250 @@ CANONICAL_SCHEMAS: dict[AdvancedVizKind, dict[str, frozenset[str]]] = {
     "sankey": {},
 }
 
+# Per-role column-name aliases used by `suggest_viz_kinds`. The suggester
+# matches schemas against viz kinds by checking that each required role has
+# a column whose NAME is in the role's alias set AND whose dtype is in the
+# role's accepted dtype set (CANONICAL_SCHEMAS above). Pure dtype matches no
+# longer count toward confidence — they were turning every Numeric+String
+# DC into a 13-viz suggestion soup.
+#
+# Aliases are matched case-insensitively. Each set contains the literal role
+# name plus common real-world variants (nf-core / QIIME2 / DESeq2 outputs,
+# typical short forms). When adding a producer to producers.py whose columns
+# map to a viz role, mirror those column names here so the dtype-aware
+# suggester surfaces the same viz kind the producer fingerprint does.
+ROLE_NAMES: dict[AdvancedVizKind, dict[str, frozenset[str]]] = {
+    "volcano": {
+        "feature_id": frozenset(
+            {
+                "feature_id",
+                "gene_id",
+                "id",
+                "gene",
+                "feature",
+                "name",
+                "symbol",
+            }
+        ),
+        "effect_size": frozenset(
+            {
+                "effect_size",
+                "log2foldchange",
+                "log2_fold_change",
+                "lfc",
+                "logfc",
+                "log2fc",
+                "fc",
+            }
+        ),
+        "significance": frozenset(
+            {
+                "significance",
+                "padj",
+                "pvalue",
+                "p_value",
+                "p_adj",
+                "q_val",
+                "qvalue",
+                "qval",
+                "fdr",
+            }
+        ),
+    },
+    "embedding": {
+        "sample_id": frozenset({"sample_id", "sample-id", "sample"}),
+        "dim_1": frozenset(
+            {
+                "dim_1",
+                "dim1",
+                "x",
+                "pc1",
+                "pca1",
+                "umap1",
+                "umap_1",
+                "tsne1",
+                "tsne_1",
+                "comp1",
+            }
+        ),
+        "dim_2": frozenset(
+            {
+                "dim_2",
+                "dim2",
+                "y",
+                "pc2",
+                "pca2",
+                "umap2",
+                "umap_2",
+                "tsne2",
+                "tsne_2",
+                "comp2",
+            }
+        ),
+    },
+    "manhattan": {
+        "chr": frozenset({"chr", "chrom", "chromosome", "#chrom"}),
+        "pos": frozenset({"pos", "position", "bp"}),
+        "score": frozenset(
+            {
+                "score",
+                "p_value",
+                "pvalue",
+                "p",
+                "neg_log_p",
+                "minus_log10_p",
+                "af",
+            }
+        ),
+    },
+    "stacked_taxonomy": {
+        "sample_id": frozenset({"sample_id", "sample-id", "sample"}),
+        "taxon": frozenset(
+            {"taxon", "taxonomy", "lineage", "name", "otu", "otu_id", "asv", "taxa"}
+        ),
+        "rank": frozenset({"rank", "taxonomy_lvl", "level", "taxon_rank"}),
+        "abundance": frozenset(
+            {
+                "abundance",
+                "rel_abundance",
+                "relative_abundance",
+                "new_est_reads",
+                "fraction_total_reads",
+                "count",
+                "reads",
+                "frequency",
+            }
+        ),
+    },
+    "phylogenetic": {
+        "taxon": frozenset({"taxon", "tip", "tip_label", "label", "leaf", "name"}),
+    },
+    "rarefaction": {
+        "sample_id": frozenset({"sample_id", "sample-id", "sample"}),
+        "depth": frozenset({"depth", "sampling_depth", "rarefaction_depth"}),
+        "metric": frozenset(
+            {
+                "metric",
+                "shannon",
+                "observed_features",
+                "faith_pd",
+                "evenness",
+                "chao1",
+                "simpson",
+                "value",
+            }
+        ),
+    },
+    "da_barplot": {
+        "feature_id": frozenset({"feature_id", "id", "name", "gene"}),
+        "contrast": frozenset({"contrast", "comparison", "group"}),
+        "lfc": frozenset({"lfc", "log2fc", "log2_fold_change", "logfc"}),
+    },
+    "enrichment": {
+        "term": frozenset({"term", "pathway", "go_term", "gene_set", "description"}),
+        "nes": frozenset({"nes", "normalized_enrichment_score"}),
+        "padj": frozenset({"padj", "p_adj", "fdr", "q_val", "qvalue"}),
+        "gene_count": frozenset({"gene_count", "size", "n_genes", "count"}),
+    },
+    "complex_heatmap": {
+        # complex_heatmap's only required role is a string row-id — make it
+        # explicit rather than matching any String column.
+        "index": frozenset(
+            {
+                "index",
+                "id",
+                "feature_id",
+                "gene_id",
+                "sample_id",
+                "name",
+                "row",
+            }
+        ),
+    },
+    "upset_plot": {},
+    "ma": {
+        "feature_id": frozenset({"feature_id", "gene_id", "id"}),
+        "avg_log_intensity": frozenset(
+            {
+                "avg_log_intensity",
+                "basemean",
+                "log_basemean",
+                "log_intensity",
+                "a",
+            }
+        ),
+        "log2_fold_change": frozenset(
+            {
+                "log2_fold_change",
+                "log2foldchange",
+                "lfc",
+                "logfc",
+                "m",
+            }
+        ),
+    },
+    "dot_plot": {
+        "cluster": frozenset({"cluster", "celltype", "cell_type", "group"}),
+        "gene": frozenset({"gene", "feature", "marker"}),
+        "mean_expression": frozenset(
+            {
+                "mean_expression",
+                "avg_expression",
+                "mean_expr",
+            }
+        ),
+        "frac_expressing": frozenset(
+            {
+                "frac_expressing",
+                "pct_expressing",
+                "frac",
+                "pct",
+            }
+        ),
+    },
+    "lollipop": {
+        "feature_id": frozenset({"feature_id", "gene", "feature"}),
+        "position": frozenset({"position", "pos", "aa_pos", "site"}),
+        "category": frozenset({"category", "effect", "type", "consequence"}),
+    },
+    "qq": {
+        "p_value": frozenset({"p_value", "pvalue", "p", "padj", "fdr"}),
+    },
+    "sunburst": {
+        "abundance": frozenset(
+            {
+                "abundance",
+                "rel_abundance",
+                "relative_abundance",
+                "count",
+                "reads",
+                "frequency",
+                "new_est_reads",
+                "fraction_total_reads",
+            }
+        ),
+    },
+    "oncoplot": {
+        "sample_id": frozenset({"sample_id", "sample", "tumor_sample_barcode"}),
+        "gene": frozenset({"gene", "hugo_symbol"}),
+        "mutation_type": frozenset(
+            {
+                "mutation_type",
+                "variant_classification",
+                "effect",
+                "consequence",
+            }
+        ),
+    },
+    "coverage_track": {
+        "chromosome": frozenset({"chromosome", "chrom", "chr", "#chrom"}),
+        "position": frozenset({"position", "pos", "start"}),
+        "value": frozenset({"value", "coverage", "depth", "score"}),
+    },
+    "sankey": {},
+}
+
+
 # Optional roles — validated only if the user has bound a column for them.
 _OPTIONAL_ROLES: dict[AdvancedVizKind, dict[str, frozenset[str]]] = {
     "volcano": {
@@ -293,14 +537,19 @@ def suggest_viz_kinds(
 ) -> list[VizSuggestion]:
     """Return viz kinds whose required roles can be satisfied by `dc_schema`.
 
+    A role is "satisfied" when the DC has a column whose NAME is in the
+    role's `ROLE_NAMES` alias set AND whose dtype is in the role's accepted
+    dtype set. Dtype-only matches still appear in `role_candidates` so the
+    binding UI can offer them as fallback choices, but they don't count
+    toward confidence — otherwise every Numeric+String DC matches every viz.
+
     Args:
         dc_schema: Map of column name → polars dtype name (the strings
             polars emits via `str(dtype)`).
         min_confidence: Minimum fraction of required roles that must have
-            at least one dtype-compatible candidate column. Default 1.0
-            = only return viz kinds where every required role has a
-            candidate. Drop to ~0.7 to surface "almost a match" viz kinds
-            in an exploratory UI.
+            a name+dtype match. Default 1.0 = only return viz kinds where
+            every required role has a named candidate. Drop to ~0.7 to
+            surface "almost a match" viz kinds in an exploratory UI.
 
     Returns:
         Sorted (by confidence desc, then viz_kind asc) list of
@@ -309,16 +558,19 @@ def suggest_viz_kinds(
     suggestions: list[VizSuggestion] = []
     for kind, required in CANONICAL_SCHEMAS.items():
         if not required:
-            # Schemas with no required roles (sankey, upset_plot, sunburst-ish)
-            # would match every DC — skip them in the suggestion engine; users
-            # who want those pick them from the catalog directly.
+            # Schemas with no required roles (sankey, upset_plot) match
+            # via producer fingerprints in producers.py instead — the
+            # suggestion engine can't say anything useful about them from
+            # schema alone.
             continue
+        role_aliases = ROLE_NAMES.get(kind, {})
         role_candidates: dict[str, list[str]] = {}
         satisfied = 0
         for role, accepted in required.items():
-            matches = [col for col, dtype in dc_schema.items() if dtype in accepted]
-            role_candidates[role] = matches
-            if matches:
+            dtype_matches = [col for col, dtype in dc_schema.items() if dtype in accepted]
+            role_candidates[role] = dtype_matches
+            aliases = {a.lower() for a in role_aliases.get(role, frozenset({role}))}
+            if any(col.lower() in aliases for col in dtype_matches):
                 satisfied += 1
         confidence = satisfied / len(required)
         if confidence >= min_confidence:
@@ -364,6 +616,7 @@ __all__ = [
     "CANONICAL_SCHEMAS",
     "EmbeddingConfig",
     "ManhattanConfig",
+    "ROLE_NAMES",
     "StackedTaxonomyConfig",
     "VizSuggestion",
     "VolcanoConfig",
