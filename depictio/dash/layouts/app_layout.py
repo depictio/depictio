@@ -77,30 +77,29 @@ def return_create_dashboard_button(email, is_anonymous=False):
     return create_button
 
 
-def return_create_project_button(email, is_anonymous=False):
+def return_create_project_button(email, is_admin=False, is_anonymous=False):
     """
     Create a project creation button.
 
-    Disabled in public/demo mode (no file upload allowed for security).
-    Otherwise always enabled — single-user's anonymous account has admin
-    privileges and standard mode requires login.
+    In public/demo mode, the button is rendered visibly disabled for
+    non-admin users (anonymous + temp visitors) so the affordance stays
+    discoverable. Admins bypass the gate — they can still administer a
+    public/demo deployment without flipping the public flag off. Mirrored in
+    `depictio/viewer/src/projects/ProjectsApp.tsx`.
 
     Args:
         email: User email address (unused, kept for API consistency).
+        is_admin: Whether the current user is an admin (bypasses public-mode gate).
         is_anonymous: Reserved for caller convention; does not affect gating.
 
     Returns:
-        dmc.Button: Styled button component for project creation.
+        dmc.Tooltip: Tooltip-wrapped button (tooltip only shown when disabled).
     """
     from depictio.api.v1.configs.config import settings
 
     del is_anonymous  # gating removed under unified model
-    is_public = settings.auth.is_public_mode
+    button_disabled = settings.auth.is_public_mode and not is_admin
 
-    # Public/demo mode: render the button visibly disabled instead of hiding
-    # it — visitors should still discover that "Create Project" exists, with
-    # the disabled state signalling that login/elevated permissions are
-    # required. Mirrored in `depictio/viewer/src/projects/ProjectsApp.tsx`.
     create_button = dmc.Button(
         "+ Create Project",
         id="create-project-button",
@@ -112,9 +111,14 @@ def return_create_project_button(email, is_anonymous=False):
         },
         size="lg",
         radius="md",
-        disabled=is_public,
+        disabled=button_disabled,
     )
-    return create_button
+    return dmc.Tooltip(
+        create_button,
+        label="Project creation is disabled in public/demo mode for non-admin users",
+        disabled=not button_disabled,
+        withArrow=True,
+    )
 
 
 def handle_unauthenticated_user(pathname):
@@ -345,7 +349,11 @@ def handle_authenticated_user(
         # Check if user is anonymous
         is_anonymous = hasattr(user, "is_anonymous") and user.is_anonymous
 
-        create_button = return_create_project_button(user.email, is_anonymous=is_anonymous)
+        create_button = return_create_project_button(
+            user.email,
+            is_admin=getattr(user, "is_admin", False),
+            is_anonymous=is_anonymous,
+        )
         header = create_header_with_button("Projects", create_button)
         content = create_projects_layout()
         return content, header, pathname, local_data

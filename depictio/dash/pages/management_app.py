@@ -339,7 +339,11 @@ def route_authenticated_user(
         return dashboards_page()
 
     if pathname == "/projects":
-        create_button = return_create_project_button(user.email, is_anonymous=is_anonymous)
+        create_button = return_create_project_button(
+            user.email,
+            is_admin=getattr(user, "is_admin", False),
+            is_anonymous=is_anonymous,
+        )
         header = create_header_with_button("Projects", create_button)
         content = create_projects_layout()
         return content, header

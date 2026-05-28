@@ -140,11 +140,11 @@ const ProjectsList: React.FC<ProjectsListProps> = ({
             </Title>
             <Text c="dimmed" ta="center">
               {createDisabled
-                ? 'Project creation is disabled on this public/demo instance.'
+                ? 'Project creation is disabled on this public/demo instance for non-admin users.'
                 : 'Create your first project to start organizing data collections and dashboards.'}
             </Text>
             <Tooltip
-              label="Project creation is disabled in public/demo mode"
+              label="Project creation is disabled in public/demo mode for non-admin users"
               disabled={!createDisabled}
               withArrow
             >
