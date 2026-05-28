@@ -112,10 +112,7 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
     try {
       await onImport(importFile, overwrite);
     } catch (err) {
-      setError(
-        (err as Error).message ||
-          'Failed to import project. The /projects/import endpoint may not yet be available.',
-      );
+      setError((err as Error).message || 'Failed to import project.');
     } finally {
       setSubmitting(false);
     }
@@ -354,14 +351,6 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
                 onChange={(e) => setOverwrite(e.currentTarget.checked)}
                 color="teal"
               />
-              <Alert
-                color="yellow"
-                variant="light"
-                icon={<Icon icon="mdi:information-outline" width={18} />}
-              >
-                The /projects/import endpoint is not yet wired on the backend.
-                Submitting will fail until that endpoint lands.
-              </Alert>
               {error && (
                 <Alert color="red" variant="light">
                   {error}

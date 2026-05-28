@@ -75,7 +75,7 @@ class WorkflowConfig(MongoModel):
 class WorkflowRunScan(BaseModel):
     stats: dict[str, int]
     files_id: dict[str, list[PyObjectId]]
-    scan_time: str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    scan_time: str = Field(default_factory=lambda: datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
     dc_stats: Optional[Dict[str, Dict[str, int]]] = None  # Per-data-collection stats
 
 
@@ -87,7 +87,9 @@ class WorkflowRun(MongoModel):
     run_location: str
     creation_time: str
     last_modification_time: str
-    registration_time: str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    registration_time: str = Field(
+        default_factory=lambda: datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    )
     run_hash: str = ""
     scan_results: list[WorkflowRunScan] | None = []
     permissions: Permission
@@ -241,7 +243,9 @@ class Workflow(MongoModel):
     runs: dict[str, WorkflowRun] | None = dict()
     config: WorkflowConfig | None = Field(default_factory=WorkflowConfig)
     data_location: WorkflowDataLocation
-    registration_time: str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    registration_time: str = Field(
+        default_factory=lambda: datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    )
 
     @field_validator("version", mode="before")
     def validate_version(cls, value):

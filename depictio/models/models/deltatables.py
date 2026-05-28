@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field, field_validator
 
 from depictio.models.models.base import MongoModel, PyObjectId
 from depictio.models.models.users import UserBase
@@ -35,7 +35,7 @@ class DeltaTableColumn(BaseModel):
 
 
 class Aggregation(MongoModel):
-    aggregation_time: datetime = datetime.now()
+    aggregation_time: datetime = Field(default_factory=datetime.now)
     aggregation_by: UserBase
     aggregation_version: int = 1
     aggregation_hash: str
