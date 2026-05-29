@@ -277,9 +277,26 @@ def extend_filters_via_links(
 
             if resolved and resolved.get("resolved_values"):
                 resolved_values = resolved["resolved_values"]
-                target_column = resolved.get("target_column") or link.get("link_config", {}).get(
-                    "target_field", source_column
+                # ``dict.get(key, default)`` returns the *value* when the key is
+                # present even if it's ``None`` — so the historical
+                # ``.get("target_field", source_column)`` chain silently
+                # produced ``target_column = None`` whenever link_config had
+                # ``target_field: null`` (which is common for the 'direct'
+                # resolver where users leave the field empty). Use an explicit
+                # ``or`` chain so each None falls through to the next fallback.
+                link_config = link.get("link_config") or {}
+                target_column = (
+                    resolved.get("target_column")
+                    or link_config.get("target_field")
+                    or source_column
                 )
+                if not target_column:
+                    logger.warning(
+                        f"[{component_type}] Skipping link {link.get('id')!r}: "
+                        f"could not resolve a target column (source_column={source_column!r}, "
+                        f"link_config.target_field={link_config.get('target_field')!r})"
+                    )
+                    continue
 
                 link_filter = {
                     "index": f"link_{link.get('id', 'unknown')}",

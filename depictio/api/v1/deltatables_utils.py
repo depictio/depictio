@@ -86,15 +86,17 @@ def _generate_filter_hash(metadata: list[dict] | None) -> str:
     # Sort by column name to ensure consistent ordering
     filter_repr = []
     for component in metadata:
-        # Extract metadata from nested structure if needed
+        # Extract metadata from nested structure if needed. ``dict.get(k, "")``
+        # returns the actual value when the key is present even if it's None,
+        # so coerce None → "" explicitly to keep the sort key well-ordered.
         if "metadata" in component:
             meta = component["metadata"]
-            column_name = meta.get("column_name", "")
-            component_type = meta.get("interactive_component_type", "")
+            column_name = meta.get("column_name") or ""
+            component_type = meta.get("interactive_component_type") or ""
             value = component.get("value")
         else:
-            column_name = component.get("column_name", "")
-            component_type = component.get("interactive_component_type", "")
+            column_name = component.get("column_name") or ""
+            component_type = component.get("interactive_component_type") or ""
             value = component.get("value")
 
         # Create stable representation
