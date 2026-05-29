@@ -341,15 +341,29 @@ def fetch_advanced_viz_data(
             col = (f.get("column_name") if isinstance(f, dict) else None) or (
                 (nested or {}).get("column_name") if nested else None
             )
-            if available_cols is not None and col and col not in available_cols:
+            # Drop filters that don't carry a column at all — link resolution
+            # can synthesise filter dicts where target_column resolves to None
+            # (source_filter has no column_name and the link has no target_field
+            # override), which would later crash _generate_filter_hash's sort
+            # with `'<' not supported between NoneType and str`.
+            if not col:
+                # Always a resolver bug upstream (filter_links can produce a
+                # link_filter with target_column=None when both the resolved
+                # value and link_config.target_field are absent). Log at
+                # WARNING so it shows up in ops aggregators.
+                logger.warning(
+                    "advanced_viz/data: dropping filter with no column_name (dc_id=%s)",
+                    dc_id,
+                )
+                continue
+            if available_cols is not None and col not in available_cols:
                 logger.info(
                     "advanced_viz/data: dropping cross-DC filter on column %r — not in DC %s",
                     col,
                     dc_id,
                 )
                 continue
-            if col:
-                filter_cols.add(col)
+            filter_cols.add(col)
             kept_filters.append(f)
         filter_metadata = kept_filters
 

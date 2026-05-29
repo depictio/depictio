@@ -109,13 +109,31 @@ const TableRenderer: React.FC<TableRendererProps> = ({
         if (cancelled) return;
         const selectionOn =
           Boolean(metadata.row_selection_enabled) && !!onFilterChange;
+        // Honor per-column visibility from the builder (mirrors
+        // TablePreview's cols_json[col].hide filter). The /render_table
+        // endpoint still returns every column from the dataframe — we
+        // restrict what AG Grid renders here so the preview and the final
+        // dashboard agree on which columns are visible.
+        const colsJson =
+          (metadata.cols_json as Record<string, { hide?: boolean }> | undefined) ?? {};
+        const visibleColumns = res.columns.filter(
+          (c) => colsJson[c.field]?.hide !== true,
+        );
         // Default sort: prefer whatever column the server picked (it does
         // its own ``acquisition*`` lookup so ingest order matches the image
         // grid). Fall back to the same heuristic client-side in case an
-        // older API responds without a ``sort_by`` field.
+        // older API responds without a ``sort_by`` field. Restrict the
+        // fallback to visible columns so we never default-sort on a hidden
+        // one. If the server's pick is itself hidden, drop it too — the
+        // user has chosen not to surface that column.
+        const serverSort = res.sort_by as string | null | undefined;
+        const serverSortVisible =
+          serverSort && visibleColumns.some((c) => c.field === serverSort)
+            ? serverSort
+            : null;
         const defaultSortField =
-          (res.sort_by as string | null | undefined) ??
-          res.columns
+          serverSortVisible ??
+          visibleColumns
             .map((c) => c.field)
             .find(
               (f) =>
@@ -126,7 +144,7 @@ const TableRenderer: React.FC<TableRendererProps> = ({
           (res.sort_dir as 'asc' | 'desc' | undefined) ?? 'desc';
         sortRef.current = { sortBy: defaultSortField, sortDir: defaultSortDir };
         setColDefs(
-          res.columns.map((c, i) => {
+          visibleColumns.map((c, i) => {
             const isNumeric = c.type === 'numericColumn';
             const isDefaultSort = c.field === defaultSortField;
             // ``type: 'numericColumn'`` is a built-in AG Grid type alias that

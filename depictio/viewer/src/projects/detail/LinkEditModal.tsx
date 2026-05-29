@@ -14,6 +14,7 @@ import {
   Text,
   Textarea,
   TextInput,
+  Title,
 } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
@@ -351,19 +352,45 @@ const LinkEditModal: React.FC<LinkEditModalProps> = ({
     <Modal
       opened={opened}
       onClose={submitting ? () => {} : onClose}
-      title={editing ? 'Edit cross-DC link' : 'Create cross-DC link'}
+      title={null}
       size="lg"
+      centered
+      padding="lg"
       closeOnClickOutside={!submitting}
       closeOnEscape={!submitting}
+      withCloseButton={!submitting}
     >
       <Stack gap="md" data-testid="link-edit-modal">
+        {/* Header mirrors CreateDataCollectionModal / ManageDataCollectionModal:
+            no native title, custom centered icon + Title inside the Stack so
+            the visual language stays consistent across the project's modals. */}
+        <Group justify="center" gap="sm">
+          <Icon
+            icon={editing ? 'mdi:link-edit' : 'mdi:link-plus'}
+            width={32}
+            color="var(--mantine-color-teal-6)"
+          />
+          <Title order={3} c="teal" m={0}>
+            {editing ? 'Edit Cross-DC Link' : 'Create Cross-DC Link'}
+          </Title>
+        </Group>
+
         {error && (
-          <Alert color="red" icon={<Icon icon="mdi:alert-circle" width={18} />}>
+          <Alert
+            color="red"
+            variant="light"
+            icon={<Icon icon="mdi:alert-circle" width={18} />}
+          >
             {error}
           </Alert>
         )}
 
-        <Group grow align="flex-start">
+        {/* Source DC + Source column share a row. Keeping descriptions OFF
+            the inputs themselves (and surfacing the hint below) so the two
+            inputs bottom-align cleanly — Mantine's per-field description
+            pushed the Source DC input down and the Source column input
+            stayed at the label baseline, which looked misaligned. */}
+        <Group grow align="flex-end">
           <Select
             label="Source data collection"
             placeholder="Pick a table DC"
@@ -380,8 +407,8 @@ const LinkEditModal: React.FC<LinkEditModalProps> = ({
               if (next && next === targetDcId) setTargetDcId('');
             }}
             searchable
+            clearable
             required
-            description="Only table DCs can act as a filter source."
             nothingFoundMessage="No table data collections in this project."
           />
           <Select
@@ -398,10 +425,15 @@ const LinkEditModal: React.FC<LinkEditModalProps> = ({
             onChange={(v) => setSourceColumn(v || '')}
             disabled={!sourceDcId || sourceColumnsLoading}
             searchable
+            clearable
             required
             nothingFoundMessage="No columns available."
           />
         </Group>
+        <Text size="xs" c="dimmed" mt={-8}>
+          Only table DCs can act as a filter source. Pick the column whose
+          values will be translated to the target DC.
+        </Text>
 
         <Select
           label="Target data collection"
@@ -411,6 +443,7 @@ const LinkEditModal: React.FC<LinkEditModalProps> = ({
           onChange={(v) => setTargetDcId(v || '')}
           disabled={!sourceDcId}
           searchable
+          clearable
           required
           description={`Detected target type: ${targetType}`}
         />
@@ -492,11 +525,18 @@ const LinkEditModal: React.FC<LinkEditModalProps> = ({
           onChange={(e) => setEnabled(e.currentTarget.checked)}
         />
 
-        <Group justify="flex-end" mt="md">
+        <Group justify="flex-end" mt="md" gap="xs">
           <Button variant="default" onClick={onClose} disabled={submitting}>
             Cancel
           </Button>
-          <Button onClick={handleSubmit} loading={submitting}>
+          <Button
+            color="teal"
+            onClick={handleSubmit}
+            loading={submitting}
+            leftSection={
+              <Icon icon={editing ? 'mdi:content-save' : 'mdi:plus'} width={16} />
+            }
+          >
             {editing ? 'Save changes' : 'Create link'}
           </Button>
         </Group>
