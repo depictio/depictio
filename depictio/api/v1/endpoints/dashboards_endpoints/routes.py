@@ -614,6 +614,7 @@ async def edit_dashboard(
 async def save_dashboard(
     dashboard_id: PyObjectId,
     data: DashboardData,
+    force_screenshot: bool = False,
     current_user: User = Depends(get_user_or_anonymous),
 ):
     """Check if an entry with the same dashboard_id exists, if not, insert, if yes, update."""
@@ -626,6 +627,16 @@ async def save_dashboard(
             )
 
     existing_dashboard = dashboards_collection.find_one({"dashboard_id": dashboard_id})
+
+    # Bump server-side so the dashboard listing's `?v=last_saved_ts` cache-bust
+    # actually advances on every save. The React client persists whatever it
+    # last loaded, which leaves the timestamp frozen between editor sessions —
+    # browsers then keep showing the stale thumbnail PNG. (The Dash save path
+    # bumps the same field; see dashboards_endpoints/routes.py:3705 etc.)
+    from datetime import datetime
+
+    save_payload = data.mongo()
+    save_payload["last_saved_ts"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     if existing_dashboard:
         project_id = existing_dashboard.get("project_id")
@@ -641,13 +652,13 @@ async def save_dashboard(
 
         result = dashboards_collection.find_one_and_update(
             {"dashboard_id": dashboard_id},
-            {"$set": data.mongo()},
+            {"$set": save_payload},
             return_document=True,
         )
     else:
         result = dashboards_collection.find_one_and_update(
             {"dashboard_id": dashboard_id},
-            {"$set": data.mongo()},
+            {"$set": save_payload},
             upsert=True,
             return_document=True,
         )
@@ -665,18 +676,29 @@ async def save_dashboard(
 
         # Auto-queue screenshot regeneration so /dashboards-beta and any
         # other listing surface picks up the latest dashboard state.
-        # Guarded by `_should_enqueue_screenshot` to avoid the celery
-        # queue storm every React viewer interaction otherwise creates.
+        # The `_should_enqueue_screenshot` debounce throttles implicit
+        # auto-saves (drag/resize/rename produce a save burst each); an
+        # explicit Save click passes `force_screenshot=true` to bypass
+        # the 1h window and always regenerate.
         try:
-            if _should_enqueue_screenshot(dashboard_id_str):
+            if force_screenshot or _should_enqueue_screenshot(dashboard_id_str):
                 # Lazy import keeps API startup independent of the Dash
                 # worker module; broad except so a Celery/broker outage
                 # never breaks the save response itself.
                 from depictio.dash.celery_app import generate_dashboard_screenshot_dual
 
                 user_id = str(getattr(current_user, "id", "") or "")
-                generate_dashboard_screenshot_dual.delay(dashboard_id_str, user_id)
-                logger.debug(f"Queued screenshot regeneration for dashboard {dashboard_id_str}")
+                # `force=True` on explicit Save also bypasses the celery
+                # task's own active-task dedup, so a Save mid-Playwright
+                # doesn't silently drop the new state.
+                generate_dashboard_screenshot_dual.delay(
+                    dashboard_id_str, user_id, force=force_screenshot
+                )
+                logger.debug(
+                    "Queued screenshot regeneration for dashboard %s (force=%s)",
+                    dashboard_id_str,
+                    force_screenshot,
+                )
             else:
                 logger.debug(
                     f"Skipping screenshot enqueue for {dashboard_id_str} — recent PNG exists"

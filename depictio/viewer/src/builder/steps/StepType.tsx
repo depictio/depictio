@@ -45,7 +45,10 @@ const StepType: React.FC = () => {
   const onPick = (t: ComponentType) => {
     setComponentType(t);
     // Mirror Dash: card click immediately advances to the next step.
-    setStep(1);
+    // Text components skip Step 1 (Data Source — hidden for text) and land
+    // directly on Step 2 (Design), matching the Next-button + stepper-click
+    // handlers in CreateComponentPage.
+    setStep(t === 'text' ? 2 : 1);
   };
 
   return (

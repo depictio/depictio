@@ -65,7 +65,9 @@ def generate_dashboard_screenshot(self, dashboard_id: str) -> dict:
 @celery_app.task(
     bind=True, name="generate_dashboard_screenshot_dual", soft_time_limit=600, time_limit=900
 )
-def generate_dashboard_screenshot_dual(self, dashboard_id: str, user_id: str) -> dict:
+def generate_dashboard_screenshot_dual(
+    self, dashboard_id: str, user_id: str, force: bool = False
+) -> dict:
     """
     Generate dual-theme dashboard screenshots asynchronously with deduplication
     and permission validation.
@@ -75,15 +77,19 @@ def generate_dashboard_screenshot_dual(self, dashboard_id: str, user_id: str) ->
     output filenames stay `{id}_light.png` / `{id}_dark.png` so existing
     dashboard-card consumers keep working unchanged.
 
-    Task signature is preserved (callers in `depictio/dash/layouts/save.py`
-    and `depictio/api/v1/endpoints/dashboards_endpoints/routes.py` don't
-    change). The Dash-targeted body lives at
-    `screenshot_service.generate_dual_theme_screenshots` for emergency
-    rollback only.
+    Task signature is preserved for the original (id, user_id) positional
+    pair. The optional `force` flag was added so explicit Save clicks can
+    bypass the active-task dedup — otherwise a second Save during the ~10s
+    Playwright render is silently dropped and the PNG reflects only the
+    first save's state.
 
     Args:
         dashboard_id: The dashboard ID to screenshot.
         user_id: The user ID requesting the screenshot (for permission validation).
+        force: When True, skip the active-task dedup check. Set by explicit
+            Save clicks (see `dashboards_endpoints/routes.py:save_dashboard`)
+            so the latest state always wins. Auto-save callers omit it to
+            preserve the dedup behaviour that protects against rapid bursts.
 
     Returns:
         dict with status and screenshot paths, or forbidden status if user is not owner.
@@ -100,24 +106,26 @@ def generate_dashboard_screenshot_dual(self, dashboard_id: str, user_id: str) ->
     )
     from depictio.models.models.users import TokenBeanie, UserBeanie
 
-    # Check for duplicate active tasks to avoid redundant screenshot generation
-    try:
-        inspect = celery_app.control.inspect()
-        active_tasks = inspect.active()
+    # Skip dedup on forced runs — explicit Save needs the just-saved state
+    # captured, even if a previous render is still mid-Playwright.
+    if not force:
+        try:
+            inspect = celery_app.control.inspect()
+            active_tasks = inspect.active()
 
-        if active_tasks:
-            for _worker, tasks in active_tasks.items():
-                for task in tasks:
-                    if (
-                        task["name"] == "generate_dashboard_screenshot_dual"
-                        and task["args"] == f"('{dashboard_id}', '{user_id}')"
-                        and task["id"] != self.request.id
-                    ):
-                        raise Ignore()
-    except Ignore:
-        raise
-    except Exception as e:
-        logger.warning(f"Failed to check for duplicate tasks: {e}, proceeding with screenshot")
+            if active_tasks:
+                for _worker, tasks in active_tasks.items():
+                    for task in tasks:
+                        if (
+                            task["name"] == "generate_dashboard_screenshot_dual"
+                            and task["args"] == f"('{dashboard_id}', '{user_id}')"
+                            and task["id"] != self.request.id
+                        ):
+                            raise Ignore()
+        except Ignore:
+            raise
+        except Exception as e:
+            logger.warning(f"Failed to check for duplicate tasks: {e}, proceeding with screenshot")
 
     # Validate user owns dashboard before generating screenshot
     from depictio.api.v1.services.screenshot_service import check_dashboard_owner_permission_sync
@@ -151,6 +159,31 @@ def generate_dashboard_screenshot_dual(self, dashboard_id: str, user_id: str) ->
 
         if result["status"] == "success":
             logger.info(f"✅ Screenshots generated for dashboard {dashboard_id}")
+            # Bump `last_saved_ts` once the PNGs are on disk so the React
+            # listing's `screenshotUrl(..., last_saved_ts)` cache-buster
+            # advances. Without this, a viewer that loaded the listing while
+            # the Playwright job was still running has cached the OLD bytes
+            # against the URL the save endpoint just minted — and would never
+            # refetch until the next save bumped the timestamp again.
+            try:
+                from datetime import datetime
+
+                from depictio.api.v1.db import dashboards_collection
+
+                dashboards_collection.update_one(
+                    {"dashboard_id": dashboard_id},
+                    {
+                        "$set": {
+                            "last_saved_ts": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                        }
+                    },
+                )
+            except Exception as exc:  # noqa: BLE001 — non-fatal best-effort bump
+                logger.warning(
+                    "Could not bump last_saved_ts after screenshot for %s: %s",
+                    dashboard_id,
+                    exc,
+                )
             return {
                 "status": "success",
                 "dashboard_id": dashboard_id,
