@@ -277,23 +277,44 @@ def extend_filters_via_links(
 
             if resolved and resolved.get("resolved_values"):
                 resolved_values = resolved["resolved_values"]
-                # ``dict.get(key, default)`` returns the *value* when the key is
-                # present even if it's ``None`` — so the historical
-                # ``.get("target_field", source_column)`` chain silently
-                # produced ``target_column = None`` whenever link_config had
-                # ``target_field: null`` (which is common for the 'direct'
-                # resolver where users leave the field empty). Use an explicit
-                # ``or`` chain so each None falls through to the next fallback.
+                # Resolve the column to filter on the *target* DC.
+                #
+                # ``resolved_values`` are values of the link's join column on the
+                # target side (the resolver translated the user's filter values
+                # through it — see links_endpoints resolve_link). So the filter we
+                # synthesise must name the *link's join column*, not the column the
+                # user happened to filter on.
+                #
+                # Order of preference:
+                #   1. resolved.target_column   — explicit, if the resolver ever
+                #      starts returning it (LinkResolutionResponse has no such
+                #      field today, so this is None).
+                #   2. link_config.target_field — the target-side column for
+                #      resolvers that rename across DCs (e.g. MultiQC
+                #      sample_mapping). Often null for the 'direct' resolver.
+                #   3. link.source_column       — the link's join column. For a
+                #      'direct' table→table link the join column has the same name
+                #      on both DCs, so this is the correct target column (e.g.
+                #      'sample_id'). DCLink has no separate target column field.
+                #
+                # NB: ``source_column`` here is the *user's filter column* (e.g.
+                # 'habitat'), NOT the join column — it must never be the fallback,
+                # or the synthetic filter names a column absent from the target DC
+                # and apply_runtime_filters silently drops it (→ every row
+                # returned, component never refreshes). ``dict.get(key, default)``
+                # returns the value even when it's ``None``, so use an explicit
+                # ``or`` chain and let each None fall through.
                 link_config = link.get("link_config") or {}
                 target_column = (
                     resolved.get("target_column")
                     or link_config.get("target_field")
-                    or source_column
+                    or link.get("source_column")
                 )
                 if not target_column:
                     logger.warning(
                         f"[{component_type}] Skipping link {link.get('id')!r}: "
-                        f"could not resolve a target column (source_column={source_column!r}, "
+                        f"could not resolve a target column (filter_column={source_column!r}, "
+                        f"link.source_column={link.get('source_column')!r}, "
                         f"link_config.target_field={link_config.get('target_field')!r})"
                     )
                     continue
