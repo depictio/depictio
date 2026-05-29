@@ -53,6 +53,12 @@ const LinksSection: React.FC<LinksSectionProps> = ({
   const [modalOpened, setModalOpened] = useState(false);
   const [editing, setEditing] = useState<DCLink | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
+  // Bumped on every openCreate / openEdit so the modal re-mounts fresh.
+  // Mantine searchable Selects sometimes retain their display text after a
+  // programmatic `value=''` reset; remounting sidesteps that entirely and
+  // guarantees "Target data collection" (and every other field) starts blank
+  // when the user clicks Add link a second time.
+  const [modalKey, setModalKey] = useState(0);
 
   const dcById = useMemo(() => {
     const map = new Map<string, DataCollectionOption>();
@@ -123,12 +129,21 @@ const LinksSection: React.FC<LinksSectionProps> = ({
 
   const openCreate = () => {
     setEditing(null);
+    setModalKey((k) => k + 1);
     setModalOpened(true);
   };
 
   const openEdit = (link: DCLink) => {
     setEditing(link);
+    setModalKey((k) => k + 1);
     setModalOpened(true);
+  };
+
+  const closeModal = () => {
+    setModalOpened(false);
+    // Clear `editing` too — without this, a saved edit would leave the
+    // modal in "edit" mode if it were ever re-mounted with the stale value.
+    setEditing(null);
   };
 
   const disabledTip = canMutate ? undefined : 'Disabled in public/demo mode';
@@ -245,14 +260,15 @@ const LinksSection: React.FC<LinksSectionProps> = ({
       )}
 
       <LinkEditModal
+        key={modalKey}
         opened={modalOpened}
         projectId={projectId}
         link={editing}
         dataCollections={dataCollections}
         resolvers={resolvers}
-        onClose={() => setModalOpened(false)}
+        onClose={closeModal}
         onSaved={() => {
-          setModalOpened(false);
+          closeModal();
           refresh();
         }}
       />
