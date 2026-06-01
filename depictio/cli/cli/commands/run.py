@@ -4,8 +4,10 @@ from typing import Annotated
 import typer
 
 from depictio.cli.cli.utils.api_calls import (
+    api_create_magic_link,
     api_get_project_from_name,
     api_login,
+    api_provision_user,
     api_sync_project_config_to_server,
 )
 from depictio.cli.cli.utils.common import generate_api_headers, load_depictio_config
@@ -20,6 +22,52 @@ from depictio.cli.cli.utils.scan import scan_project_files
 from depictio.cli.cli_logging import logger
 from depictio.models.s3_utils import S3_storage_checks
 from depictio.models.utils import convert_model_to_dict
+
+
+def _write_provisioned_cli_config(base_config, provision: dict) -> str:
+    """Write a temporary CLI config that runs the pipeline as the provisioned user.
+
+    Clones the service account's ``api_base_url`` + ``s3_storage`` but swaps in
+    the provisioned user's identity and run token. Pointing the rest of the run
+    at this file makes every step (sync, scan, process, dashboard import) own
+    its resources as that user — with no changes to downstream code. The file
+    holds a token, so it is created 0600 and removed on process exit.
+    """
+    import atexit
+    import os
+    import tempfile
+
+    import yaml
+
+    from depictio.models.models.base import convert_objectid_to_str
+
+    tok = provision["token"]
+    temp_cfg = {
+        "api_base_url": str(base_config.api_base_url),
+        "user": {
+            "id": provision["user_id"],
+            "email": provision["email"],
+            "is_admin": provision["is_admin"],
+            "token": {
+                "user_id": provision["user_id"],
+                "access_token": tok["access_token"],
+                "refresh_token": tok["refresh_token"],
+                "token_type": tok["token_type"],
+                "token_lifetime": tok["token_lifetime"],
+                "expire_datetime": tok["expire_datetime"],
+                "refresh_expire_datetime": tok["refresh_expire_datetime"],
+                "name": tok["name"],
+            },
+        },
+        "s3_storage": convert_objectid_to_str(base_config.s3_storage.model_dump()),
+    }
+
+    fd, path = tempfile.mkstemp(prefix="depictio-cli-provisioned-", suffix=".yaml")
+    with os.fdopen(fd, "w") as fh:
+        yaml.safe_dump(temp_cfg, fh)
+    os.chmod(path, 0o600)
+    atexit.register(lambda: os.path.exists(path) and os.unlink(path))
+    return path
 
 
 def register_run_command(app: typer.Typer):
@@ -81,6 +129,29 @@ def register_run_command(app: typer.Typer):
             "--skip-dashboard-import",
             help="Skip automatic dashboard import from template.",
         ),
+        # Provisioning options
+        user: Annotated[
+            str | None,
+            typer.Option(
+                "--user",
+                help=(
+                    "Provision (create-or-get) this user's account and run the pipeline as "
+                    "them, then emit a passwordless login link to their dashboard. "
+                    "Requires --provisioning-key."
+                ),
+            ),
+        ] = None,
+        provisioning_key: Annotated[
+            str | None,
+            typer.Option(
+                "--provisioning-key",
+                help=(
+                    "Shared provisioning secret used with --user "
+                    "(or set DEPICTIO_AUTH_PROVISIONING_API_KEY)."
+                ),
+                envvar="DEPICTIO_AUTH_PROVISIONING_API_KEY",
+            ),
+        ] = None,
         # Existing options
         workflow_name: Annotated[
             str | None,
@@ -181,13 +252,44 @@ def register_run_command(app: typer.Typer):
         if sync_files or overwrite:
             rescan_folders = True
 
+        if user and not provisioning_key:
+            rich_print_checked_statement(
+                "--user requires --provisioning-key "
+                "(or the DEPICTIO_AUTH_PROVISIONING_API_KEY environment variable).",
+                "error",
+            )
+            raise typer.Exit(code=1)
+
         # Track whether we're in template mode
         is_template_mode = template is not None
         template_resolved_config: dict | None = None
         template_dashboard_paths: list[Path] = []
+        # First dashboard imported for the provisioned user — target of the
+        # passwordless login link emitted at the end of the run.
+        provisioned_dashboard_id: str | None = None
 
         success_count = 0
         total_steps = 8 if is_template_mode else 7
+
+        # Step 0a (provisioning only): create-or-get the user and switch the run
+        # to act as them by pointing CLI_config_path at a temporary per-user
+        # config. Everything downstream then owns its resources as that user.
+        if user and not dry_run:
+            rich_print_section_separator("Provisioning user account")
+            try:
+                base_config = load_depictio_config(yaml_config_path=CLI_config_path)
+                provision = api_provision_user(
+                    str(base_config.api_base_url), user, provisioning_key
+                )
+                CLI_config_path = _write_provisioned_cli_config(base_config, provision)
+                action = "Created account for" if provision.get("created") else "Reusing account"
+                rich_print_checked_statement(
+                    f"{action} {provision['email']} — running pipeline as this user",
+                    "success",
+                )
+            except Exception as e:
+                rich_print_checked_statement(f"User provisioning failed: {e}", "error")
+                raise typer.Exit(code=1)
 
         # Step 0 (template only): Resolve template and validate data
         if is_template_mode:
@@ -595,6 +697,9 @@ def register_run_command(app: typer.Typer):
                     for r in results:
                         (imported if r["success"] else failed).append(r)
 
+                    if user and imported and provisioned_dashboard_id is None:
+                        provisioned_dashboard_id = imported[0].get("dashboard_id")
+
                     for r in imported:
                         action = "updated" if r.get("updated") else "imported"
                         rich_print_checked_statement(
@@ -629,6 +734,20 @@ def register_run_command(app: typer.Typer):
         elif is_template_mode and not template_dashboard_paths:
             rich_print_checked_statement("No dashboards defined in template", "info")
             success_count += 1
+
+        # Passwordless login link for the provisioned user. Minted now (not at
+        # provisioning time) so the short-lived ticket's clock starts when the
+        # link is handed out, not when a long pipeline began.
+        if user and not dry_run and provisioned_dashboard_id:
+            rich_print_section_separator("Passwordless login link")
+            try:
+                magic_config = load_depictio_config(yaml_config_path=CLI_config_path)
+                magic = api_create_magic_link(magic_config)
+                login_url = f"{magic['login_url']}&next=/dashboard-beta/{provisioned_dashboard_id}"
+                rich_print_checked_statement(f"One-time login link for {user}:", "info")
+                rich_print_checked_statement(login_url, "success")
+            except Exception as e:
+                rich_print_checked_statement(f"Could not create login link: {e}", "warning")
 
         # Final summary
         rich_print_section_separator("Depictio-CLI Run Summary")
