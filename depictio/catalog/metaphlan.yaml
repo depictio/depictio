@@ -22,6 +22,9 @@ outputs:
       - http://edamontology.org/format_3475 # TSV
     find:
       filename: "*_profile.txt"
+      # NB: the raw file has a multi-line #-comment preamble and a #-prefixed
+      # header row (#clade_name …); these required_columns describe the parsed
+      # (post-ingest) fingerprint the suggestion engine matches on.
       required_columns: [clade_name, NCBI_tax_id]
     read_options: {format: tsv}
     file_schema:

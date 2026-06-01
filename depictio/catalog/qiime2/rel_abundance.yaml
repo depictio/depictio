@@ -7,9 +7,9 @@ edam_operations:
 edam_formats:
   - http://edamontology.org/format_3475 # TSV
 find:
-  path_glob: "qiime2/rel_abundance_tables/rel-table-*.tsv"
-read_options: {format: tsv}
+  path_glob: "**/qiime2/rel_abundance_tables/rel-table-*.tsv"
+read_options: {format: tsv, skip_rows: 1} # skip the "# Constructed from biom file" preamble line
 file_schema:
-  ID: String # feature/ASV id; remaining columns are one Float64 per sample
+  "#OTU ID": String # feature/ASV id; remaining columns are one Float64 per sample
 recipe: nf-core/ampliseq/taxonomy_rel_abundance.py
 feeds_viz: [stacked_taxonomy, sunburst, complex_heatmap]

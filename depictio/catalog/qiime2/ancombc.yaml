@@ -11,7 +11,7 @@ edam_formats:
   - http://edamontology.org/format_3752 # CSV
 find:
   filename: "lfc_slice.csv" # the discriminating member of the slice set
-  path_glob: "qiime2/ancombc/differentials/*/lfc_slice.csv"
+  path_glob: "**/qiime2/ancombc/differentials/*/lfc_slice.csv"
 read_options: {format: csv}
 file_schema:
   id: String # + one Float64 column per contrast group (vary by metadata)

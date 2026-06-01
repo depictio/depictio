@@ -24,7 +24,7 @@ outputs:
       filename: "variants_long_table.csv"
       required_columns: [CHROM, POS, REF, ALT]
     read_options: {format: csv}
-    file_schema:
+    file_schema: # raw columns of variants_long_table.csv (AF, not ALT_FREQ; AA derived by the recipe)
       SAMPLE: String
       CHROM: String
       POS: Int64
@@ -32,7 +32,9 @@ outputs:
       ALT: String
       FILTER: String
       DP: Int64
-      ALT_FREQ: Float64
+      REF_DP: Int64
+      ALT_DP: Int64
+      AF: Float64
       GENE: String
       EFFECT: String
       HGVS_P: String
@@ -41,4 +43,4 @@ outputs:
     role_mapping:
       lollipop: {feature_id: GENE, position: POS, category: EFFECT}
       oncoplot: {sample_id: SAMPLE, gene: GENE, mutation_type: EFFECT}
-      manhattan: {chr: CHROM, pos: POS, score: ALT_FREQ}
+      manhattan: {chr: CHROM, pos: POS, score: AF}

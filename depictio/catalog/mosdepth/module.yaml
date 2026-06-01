@@ -1,4 +1,7 @@
 # mosdepth — multi-output tool → a folder (genome / amplicon / heatmap).
+# NB: the `all_samples.mosdepth.*.tsv` files below are depictio's per-run
+# aggregations of mosdepth's native per-sample output, not files mosdepth emits
+# directly. They are attributed to mosdepth for provenance/discovery.
 id: mosdepth
 name: mosdepth
 description: Fast BAM/CRAM depth-of-coverage calculation.

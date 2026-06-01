@@ -68,7 +68,8 @@ def catalog_info(
     for t in m.edam_topics:
         typer.echo(f"  EDAM:      {t}")
     for out in entry.outputs:
-        typer.echo(f"\n  ── {out.id}  [{out.mode}]")
+        mode = f"  [{out.mode}]" if out.mode else ""
+        typer.echo(f"\n  ── {out.id}{mode}")
         typer.echo(f"     {out.description}")
         if out.multiqc_module:
             typer.echo(f"     via MultiQC module: {out.multiqc_module}")
@@ -91,19 +92,53 @@ def catalog_validate(
         typer.Option("--path", "-p", help="Validate a single module folder/file instead"),
     ] = None,
 ) -> None:
-    """Validate catalog YAML against the schema (CI-friendly: non-zero on error)."""
+    """Validate catalog YAML against the schema (CI-friendly: non-zero on error).
+
+    `--path` accepts the whole catalog dir, a single module folder (with a
+    module.yaml), or a single flat-file module.
+    """
+    import yaml
+
     from depictio.models.components.advanced_viz.catalog import (
         CATALOG_DIR,
+        CatalogEntry,
         load_entries_from_dir,
     )
+    from depictio.models.components.advanced_viz.catalog import (
+        _load_module_dir as load_module_dir,
+    )
 
+    target = Path(path) if path else CATALOG_DIR
     try:
-        target = Path(path) if path else CATALOG_DIR
-        entries = load_entries_from_dir(target if target.is_dir() else target.parent)
-        typer.echo(f"  OK: {len(entries)} catalog module(s) valid in {target}")
+        if target.is_dir() and (target / "module.yaml").exists():
+            # a single multi-output module folder
+            entries = [load_module_dir(target)]
+        elif target.is_dir():
+            # the catalog root (or a dir of flat-file modules + module folders)
+            entries = load_entries_from_dir(target)
+        else:
+            # a single flat-file module
+            entries = [CatalogEntry.model_validate(yaml.safe_load(target.read_text()))]
     except Exception as exc:
-        typer.echo(f"  INVALID: {exc}")
+        typer.echo(f"  INVALID ({target}): {exc}")
         raise typer.Exit(code=1)
+
+    # every referenced recipe must resolve to a real file
+    from depictio.recipes import resolve_recipe_path
+
+    dangling = []
+    for entry in entries:
+        for out in entry.outputs:
+            if out.recipe:
+                try:
+                    resolve_recipe_path(out.recipe)
+                except Exception:
+                    dangling.append(f"{out.id} → {out.recipe}")
+    if dangling:
+        typer.echo(f"  INVALID ({target}): unresolved recipe reference(s): {dangling}")
+        raise typer.Exit(code=1)
+
+    typer.echo(f"  OK: {len(entries)} catalog module(s) valid in {target}")
 
 
 @app.command("match")

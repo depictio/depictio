@@ -7,7 +7,8 @@ description: >-
   artefacts depending on the plugin/subcommand invoked — modelled here as many
   output files in this folder.
 homepage: https://qiime2.org
-nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/qiime2
+# no module-level nf_core_url: QIIME 2 has no single nf-core module — each
+# output sets its own (qiime2/barplot, qiime2/ancombc, …).
 biotools_url: https://bio.tools/qiime2
 edam_topics:
   - http://edamontology.org/topic_3174 # Metagenomics

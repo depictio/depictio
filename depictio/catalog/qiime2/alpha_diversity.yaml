@@ -7,7 +7,7 @@ edam_operations:
 edam_formats:
   - http://edamontology.org/format_3475 # TSV
 find:
-  path_glob: "qiime2/diversity/alpha_diversity/*_vector/metadata.tsv"
+  path_glob: "**/qiime2/diversity/alpha_diversity/*_vector/metadata.tsv"
   required_columns: [id, faith_pd]
 read_options: {format: tsv}
 file_schema:

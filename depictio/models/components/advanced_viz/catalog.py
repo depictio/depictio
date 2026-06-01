@@ -133,6 +133,18 @@ class CatalogOutput(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
+    @model_validator(mode="after")
+    def _role_mapping_within_feeds_viz(self) -> CatalogOutput:
+        # You can only pre-map a viz this output actually feeds. (The reverse is
+        # *not* required: a recipe-reshaped output may feed a viz whose binding
+        # the recipe produces, with no raw-column role_mapping here.)
+        extra = set(self.role_mapping) - set(self.feeds_viz)
+        if extra:
+            raise ValueError(
+                f"output {self.id!r}: role_mapping has viz {sorted(extra)} not listed in feeds_viz"
+            )
+        return self
+
 
 class CatalogModule(BaseModel):
     """A tool (module). Identity is stored as directly-clickable URLs."""
@@ -163,6 +175,17 @@ class CatalogEntry(BaseModel):
         dupes = {i for i in ids if ids.count(i) > 1}
         if dupes:
             raise ValueError(f"duplicate output ids in module {self.module.id!r}: {sorted(dupes)}")
+        return self
+
+    @model_validator(mode="after")
+    def _multiqc_module_only_under_multiqc(self) -> CatalogEntry:
+        if self.module.id != "multiqc":
+            offenders = [o.id for o in self.outputs if o.multiqc_module]
+            if offenders:
+                raise ValueError(
+                    f"multiqc_module is only valid under the 'multiqc' module; "
+                    f"set on {offenders} in module {self.module.id!r}"
+                )
         return self
 
 
@@ -200,7 +223,8 @@ def entry_to_producers(entry: CatalogEntry) -> list[Producer]:
                 description=o.description,
                 required_columns=frozenset(o.find.required_columns),
                 feeds_viz=tuple(o.feeds_viz),
-                role_mapping=o.role_mapping,
+                # copy: outputs are cached (lru_cache); never share a mutable dict
+                role_mapping={viz: dict(roles) for viz, roles in o.role_mapping.items()},
                 notes="; ".join(note_bits),
             )
         )
@@ -339,8 +363,10 @@ def match_run_dir(
 ) -> list[CatalogMatch]:
     """Walk ``run_dir`` and return every file the catalog recognises.
 
-    This is depictio-cli's recognition step — the catalog analogue of MultiQC's
-    `find_log_files(search_patterns)`.
+    The catalog analogue of MultiQC's `find_log_files(search_patterns)`. NOTE:
+    this is currently a **diagnostic** surface (exposed via `depictio catalog
+    match`) and a future ingest hook — it is *not* yet wired into the live
+    data-collection scan path (see `data_collections.py`).
     """
     run_dir = Path(run_dir)
     entries = entries if entries is not None else load_catalog_entries()
@@ -430,9 +456,19 @@ def meta_yml_to_entry(meta: dict) -> CatalogEntry:
         biotools_url=biotools_url,
     )
 
+    # nf-core meta.yml declares `output:` either as a dict (older) or as a list
+    # of single-key maps (current). Normalise both to {channel: body}.
     output_block = meta.get("output")
+    channels: dict[str, object] = {}
+    if isinstance(output_block, dict):
+        channels = dict(output_block)
+    elif isinstance(output_block, list):
+        for item in output_block:
+            if isinstance(item, dict):
+                channels.update(item)
+
     outputs: list[CatalogOutput] = []
-    for channel, body in (output_block if isinstance(output_block, dict) else {}).items():
+    for channel, body in channels.items():
         if channel == "versions":
             continue
         files: list[dict] = []

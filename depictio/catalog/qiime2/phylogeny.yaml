@@ -8,7 +8,7 @@ edam_formats:
   - http://edamontology.org/format_1910 # Newick
 find:
   filename: "*.nwk"
-  path_glob: "qiime2/phylogenetic_tree/*.nwk"
+  path_glob: "**/qiime2/phylogenetic_tree/*.nwk"
 read_options: {format: csv} # not parsed as a table; recognised by filename only
 file_schema: {} # non-tabular (Newick)
 feeds_viz: [phylogenetic]

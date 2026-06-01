@@ -248,6 +248,80 @@ def test_meta_yml_scaffold_roundtrips_through_model():
     CatalogEntry.model_validate(entry.model_dump())
 
 
+def test_meta_yml_importer_handles_list_form_output():
+    # current nf-core meta.yml declares `output` as a list of single-key maps
+    meta = dict(PANGOLIN_META)
+    meta["output"] = [
+        {
+            "report": [
+                {
+                    "*.csv": {
+                        "type": "file",
+                        "pattern": "*.{csv}",
+                        "ontologies": [{"edam": "http://edamontology.org/format_3752"}],
+                    }
+                }
+            ]
+        },
+        {"versions": [{"versions.yml": {"type": "file", "pattern": "versions.yml"}}]},
+    ]
+    entry = meta_yml_to_entry(meta)
+    out_ids = {o.id for o in entry.outputs}
+    assert "pangolin_report" in out_ids  # list form is parsed, not dropped
+    assert "pangolin_versions" not in out_ids
+
+
+# ---------------------------------------------------------------------------
+# Validators added after review
+# ---------------------------------------------------------------------------
+
+
+def test_role_mapping_must_be_subset_of_feeds_viz():
+    with pytest.raises(ValueError, match="not listed in feeds_viz"):
+        CatalogEntry.model_validate(
+            {
+                "module": {"id": "demo", "name": "Demo"},
+                "outputs": [
+                    {
+                        "id": "demo_a",
+                        "find": {"filename": "*.csv"},
+                        "feeds_viz": ["volcano"],
+                        "role_mapping": {"ma": {"x": "y"}},  # ma not in feeds_viz
+                    }
+                ],
+            }
+        )
+
+
+def test_multiqc_module_only_allowed_under_multiqc():
+    with pytest.raises(ValueError, match="only valid under the 'multiqc' module"):
+        CatalogEntry.model_validate(
+            {
+                "module": {"id": "qiime2", "name": "QIIME 2"},
+                "outputs": [
+                    {"id": "x", "find": {"filename": "*.txt"}, "multiqc_module": "fastqc"},
+                ],
+            }
+        )
+
+
+def test_all_catalog_recipes_resolve():
+    from depictio.recipes import resolve_recipe_path
+
+    for entry in load_catalog_entries():
+        for out in entry.outputs:
+            if out.recipe:
+                resolve_recipe_path(out.recipe)  # raises RecipeError if dangling
+
+
+def test_entry_to_producers_copies_role_mapping():
+    # the lru-cached entry's role_mapping dict must not be aliased into producers
+    entry = next(e for e in load_catalog_entries() if e.module.id == "ivar")
+    producer = entry_to_producers(entry)[0]
+    producer.role_mapping["manhattan"]["chr"] = "MUTATED"
+    assert entry.outputs[0].role_mapping["manhattan"]["chr"] == "CHROM"
+
+
 # ---------------------------------------------------------------------------
 # Committed JSON Schema stays in sync with the model
 # ---------------------------------------------------------------------------

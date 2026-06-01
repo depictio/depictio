@@ -18,6 +18,6 @@ file_schema:
   Sample: String
   "%GC": Float64
   avg_sequence_length: Float64
-  total_sequences: Float64
-  "%Dups": Float64
+  total_sequences: Int64
+  total_deduplicated_percentage: Float64 # MultiQC's column name (not "%Dups")
 feeds_viz: []

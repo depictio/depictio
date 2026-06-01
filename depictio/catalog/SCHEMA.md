@@ -99,7 +99,11 @@ A file matches when **all** declared conditions hold (like MultiQC's
 
 Real tool→viz reshapes are pipeline-specific (join slice files, melt wide
 matrices, derive columns) and are written as Python recipes, so `recipe` is
-just an **optional reference** to one (`projects/<pipeline>/recipes/<name>.py`).
+just an **optional reference** to one. The value is a pipeline-qualified name
+`<pipeline>/<name>.py` (e.g. `nf-core/ampliseq/ancombc.py`), resolved by
+`depictio.recipes.resolve_recipe_path` to
+`depictio/projects/<pipeline>/recipes/<name>.py` (with a `{version}/` override
+tried first). `depictio catalog validate` checks every `recipe` resolves.
 There is no declarative `melt`/`pivot` mini-language: either the raw file is
 already bindable (omit `recipe`) or it needs real code (point `recipe` at it).
 

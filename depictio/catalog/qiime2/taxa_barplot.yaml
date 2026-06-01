@@ -7,7 +7,7 @@ edam_operations:
 edam_formats:
   - http://edamontology.org/format_3752 # CSV
 find:
-  path_glob: "qiime2/barplot/level-*.csv"
+  path_glob: "**/qiime2/barplot/level-*.csv"
 read_options: {format: csv}
 file_schema:
   index: String # sample id; remaining columns are one Float64 per taxon (vary by run)
