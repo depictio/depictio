@@ -409,13 +409,21 @@ const TabMenu: React.FC<TabMenuProps> = ({
   onDeleteTab,
   onMoveTab,
 }) => {
-  const stop = (e: React.SyntheticEvent) => e.stopPropagation();
+  const stop = (e: React.SyntheticEvent) => {
+    // Stop the click bubbling to the Tabs.Tab (which would switch tab) AND
+    // cancel the default action: `renderRoot` renders the tab as an
+    // `<a href>` for native open-in-new-tab support, so without
+    // `preventDefault` clicking "..." follows the href and refreshes the URL
+    // instead of opening the menu.
+    e.stopPropagation();
+    e.preventDefault();
+  };
 
   return (
     <Box
       // The Tabs.Tab parent treats any click as a navigation request — wrap
-      // the trigger in a stopPropagation guard so opening the menu doesn't
-      // also switch tab.
+      // the trigger in a stopPropagation + preventDefault guard so opening the
+      // menu doesn't also switch tab or trigger the anchor navigation.
       onClick={stop}
       onMouseDown={stop}
       style={{ display: 'inline-flex', alignItems: 'center' }}
