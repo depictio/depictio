@@ -1,0 +1,12 @@
+# MultiQC — multi-output tool → a folder.
+# Beyond its native aggregate, MultiQC is the home for tools whose results are
+# only surfaced through it (FastQC, Cutadapt, samtools stats, …): those live
+# here as outputs with `multiqc_module:` set, not as standalone modules.
+id: multiqc
+name: MultiQC
+description: Aggregates QC results from many tools into a single report.
+homepage: https://multiqc.info
+nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/multiqc
+biotools_url: https://bio.tools/multiqc
+edam_topics:
+  - http://edamontology.org/topic_3168 # Sequencing

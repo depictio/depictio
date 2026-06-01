@@ -1,16 +1,15 @@
 id: qiime2_alpha_rarefaction
 mode: alpha-rarefaction
 description: Alpha-rarefaction curve (sample × depth × iteration × metric).
-nf_core_module: qiime2/diversityalphararefaction
+nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/qiime2/diversityalphararefaction
 edam_operations:
-  - operation_3200 # Community profiling
+  - http://edamontology.org/operation_3200 # Community profiling
 edam_formats:
-  - format_3752 # CSV
+  - http://edamontology.org/format_3752 # CSV
 find:
   path_glob: "qiime2/alpha-rarefaction/*.csv"
 read_options: {format: csv}
 file_schema:
   sample-id: String # remaining columns are depth-N_iter-M metric values (wide)
-reshape: {kind: recipe, recipe: nf-core/ampliseq/alpha_rarefaction.py}
+recipe: nf-core/ampliseq/alpha_rarefaction.py
 feeds_viz: [rarefaction]
-pipelines: ["nf-core/ampliseq"]

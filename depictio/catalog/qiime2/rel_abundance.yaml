@@ -1,16 +1,15 @@
 id: qiime2_rel_abundance
 mode: rel-abundance
 description: Per-sample relative-abundance table with rank columns.
-nf_core_module: qiime2/relativeabundancetables
+nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/qiime2/relativeabundancetables
 edam_operations:
-  - operation_3460 # Taxonomic classification
+  - http://edamontology.org/operation_3460 # Taxonomic classification
 edam_formats:
-  - format_3475 # TSV
+  - http://edamontology.org/format_3475 # TSV
 find:
   path_glob: "qiime2/rel_abundance_tables/rel-table-*.tsv"
 read_options: {format: tsv}
 file_schema:
   ID: String # feature/ASV id; remaining columns are one Float64 per sample
-reshape: {kind: recipe, recipe: nf-core/ampliseq/taxonomy_rel_abundance.py}
+recipe: nf-core/ampliseq/taxonomy_rel_abundance.py
 feeds_viz: [stacked_taxonomy, sunburst, complex_heatmap]
-pipelines: ["nf-core/ampliseq"]

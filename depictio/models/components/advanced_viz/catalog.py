@@ -4,26 +4,33 @@ Structured like MultiQC modules / nf-core modules:
 
     depictio/catalog/
       pangolin.yaml            # single-output tool  -> one file
-      qiime2/                  # multi-output tool   -> a folder
-        module.yaml            #   tool identity (links to nf-core + bio.tools)
-        taxa_barplot.yaml      #   one output / running mode = one file
-        ancombc.yaml
+      multiqc/                 # multi-output tool   -> a folder
+        module.yaml            #   tool identity (full bio.tools / nf-core URLs)
+        aggregate.yaml         #   the native multiqc.parquet
+        fastqc.yaml            #   FastQC metrics surfaced *via* MultiQC
+      qiime2/
+        module.yaml
+        taxa_barplot.yaml
         ...
 
 A **module** is a tool. An **output** is one of the tool's files (one running
-mode). Each output declares, self-contained:
+mode). Tools whose results are only surfaced through MultiQC (FastQC, Cutadapt,
+samtools stats…) live as outputs under the `multiqc` module with
+`multiqc_module:` set, rather than as standalone modules.
 
-  - `find`   — how depictio-cli *recognises* the file on disk (filename glob /
-               path glob / content match / required columns), exactly like
-               MultiQC's search_patterns (`fn` / `contents`).
-  - `file_schema` — the columns + dtypes the tool actually writes (the raw file
-               as-emitted), so you can see what the file looks like.
-  - `reshape`— how to turn that raw file into a viz-ready shape (melt / pivot /
-               aggregate, or a `recipe` for arbitrary logic).
+Each output declares, self-contained:
+
+  - `find`        — how depictio-cli *recognises* the file (filename / path glob
+                    / content match / required columns), like MultiQC's
+                    search_patterns (`fn` / `contents`).
+  - `file_schema` — the columns + dtypes the tool actually writes (raw file).
+  - `recipe`      — optional transform turning that raw file into a viz-ready
+                    shape (a `projects/<pipeline>/recipes/<name>.py`); omit it
+                    when the file is already bindable.
   - `feeds_viz` + `role_mapping` — which depictio visualisation(s) it maps to.
 
-Identity is resolvable: `biotools_id` -> https://bio.tools/<id>,
-`nf_core_module` -> the nf-core/modules tree, `edam_*` -> edamontology.org.
+Identity is stored as resolvable URLs (`biotools_url`, `nf_core_url`,
+`edam_topics`…) so they are directly clickable — no reconstruction needed.
 
 Catalog entries compile down to the `Producer` primitives the suggestion engine
 already understands (see `entry_to_producers`), and merge via
@@ -46,25 +53,6 @@ if TYPE_CHECKING:
     from depictio.models.components.advanced_viz.producers import Producer
 
 CATALOG_DIR = Path(__file__).resolve().parents[3] / "catalog"
-
-ReshapeKind = Literal["identity", "melt", "pivot", "aggregate", "recipe"]
-
-
-# ---------------------------------------------------------------------------
-# Resolvable identity links
-# ---------------------------------------------------------------------------
-
-
-def biotools_url(biotools_id: str) -> str:
-    return f"https://bio.tools/{biotools_id}"
-
-
-def nf_core_module_url(module: str) -> str:
-    return f"https://github.com/nf-core/modules/tree/master/modules/nf-core/{module}"
-
-
-def edam_url(term: str) -> str:
-    return f"http://edamontology.org/{term}"
 
 
 # ---------------------------------------------------------------------------
@@ -109,48 +97,6 @@ class CatalogReadOptions(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
-class CatalogReshape(BaseModel):
-    """Declarative reshape from the raw file's shape to a viz-ready shape.
-
-    `kind="recipe"` is the escape hatch for arbitrary logic and points at an
-    existing `projects/<pipeline>/recipes/<name>.py` transform.
-    """
-
-    kind: ReshapeKind = "identity"
-
-    # melt (wide -> long)
-    id_vars: list[str] | None = None
-    value_vars: list[str] | None = None
-    variable_name: str | None = None
-    value_name: str | None = None
-
-    # pivot (long -> wide)
-    index: list[str] | None = None
-    on: str | None = None
-    values: str | None = None
-
-    # aggregate
-    group_by: list[str] | None = None
-    agg: Literal["sum", "mean", "median", "max", "min", "count"] | None = None
-
-    # recipe escape hatch — pipeline-qualified recipe name
-    recipe: str | None = None
-
-    model_config = ConfigDict(extra="forbid")
-
-    @model_validator(mode="after")
-    def _check_required_params(self) -> CatalogReshape:
-        if self.kind == "recipe" and not self.recipe:
-            raise ValueError("reshape.kind='recipe' requires a 'recipe' reference")
-        if self.kind == "melt" and not self.id_vars:
-            raise ValueError("reshape.kind='melt' requires 'id_vars'")
-        if self.kind == "pivot" and not (self.on and self.values):
-            raise ValueError("reshape.kind='pivot' requires 'on' and 'values'")
-        if self.kind == "aggregate" and not (self.group_by and self.agg):
-            raise ValueError("reshape.kind='aggregate' requires 'group_by' and 'agg'")
-        return self
-
-
 class CatalogOutput(BaseModel):
     """One file a tool emits, in one running mode → one visualisation mapping."""
 
@@ -158,26 +104,30 @@ class CatalogOutput(BaseModel):
     description: str = ""
     mode: str | None = None  # running mode / subcommand (e.g. "taxa-barplot")
 
-    # Per-output identity (overrides the module's, for multi-module tools like
-    # QIIME 2 whose subcommands are separate nf-core modules).
-    nf_core_module: str | None = None
-    biotools_id: str | None = None
-    edam_operations: list[str] = Field(default_factory=list)
-    edam_formats: list[str] = Field(default_factory=list)
+    # Tools surfaced through MultiQC (FastQC, Cutadapt, …) set this to the
+    # MultiQC module name they originate from, instead of being standalone.
+    multiqc_module: str | None = None
 
-    # Which pipeline(s) emit this output (provenance), e.g. "nf-core/ampliseq".
-    pipelines: list[str] = Field(default_factory=list)
+    # Per-output identity URLs (override the module's, for multi-module tools
+    # like QIIME 2 whose subcommands are separate nf-core modules).
+    nf_core_url: str | None = None
+    biotools_url: str | None = None
+    edam_operations: list[str] = Field(default_factory=list)  # full EDAM URLs
+    edam_formats: list[str] = Field(default_factory=list)  # full EDAM URLs
 
     # Recognition + parsing.
     find: CatalogFind
     read_options: CatalogReadOptions = Field(default_factory=CatalogReadOptions)
 
     # The schema of the file AS EMITTED by the tool (column name -> polars dtype
-    # string). Documents what the raw file looks like before any reshape.
+    # string). Documents what the raw file looks like before any transform.
     file_schema: dict[str, str] = Field(default_factory=dict)
 
-    # Raw file -> viz-ready shape, and the viz it then maps to.
-    reshape: CatalogReshape = Field(default_factory=CatalogReshape)
+    # Optional transform from the raw file to a viz-ready shape, referencing a
+    # pipeline recipe (projects/<pipeline>/recipes/<name>.py). Omit when the
+    # raw file is already bindable as-is.
+    recipe: str | None = None
+
     feeds_viz: list[AdvancedVizKind] = Field(default_factory=list)
     role_mapping: dict[AdvancedVizKind, dict[str, str]] = Field(default_factory=dict)
 
@@ -185,15 +135,15 @@ class CatalogOutput(BaseModel):
 
 
 class CatalogModule(BaseModel):
-    """A tool (module). Carries the resolvable bio.tools / nf-core / EDAM identity."""
+    """A tool (module). Identity is stored as directly-clickable URLs."""
 
     id: str
     name: str
     description: str = ""
     homepage: str | None = None
-    nf_core_module: str | None = None  # default for outputs that don't override
-    biotools_id: str | None = None
-    edam_topics: list[str] = Field(default_factory=list)
+    nf_core_url: str | None = None  # default for outputs that don't override
+    biotools_url: str | None = None
+    edam_topics: list[str] = Field(default_factory=list)  # full EDAM URLs
 
     model_config = ConfigDict(extra="forbid")
 
@@ -233,18 +183,16 @@ def entry_to_producers(entry: CatalogEntry) -> list[Producer]:
     for o in entry.outputs:
         if not o.find.required_columns:
             continue
-        biotools_id = o.biotools_id or entry.module.biotools_id
-        nf_core = o.nf_core_module or entry.module.nf_core_module
+        biotools = o.biotools_url or entry.module.biotools_url
+        nf_core = o.nf_core_url or entry.module.nf_core_url
         tool_label = f"{entry.module.name} ({o.mode})" if o.mode else entry.module.name
         note_bits: list[str] = []
-        if o.reshape.kind != "identity":
-            note_bits.append(f"reshape={o.reshape.kind}")
-        if o.reshape.recipe:
-            note_bits.append(f"recipe={o.reshape.recipe}")
+        if o.recipe:
+            note_bits.append(f"recipe={o.recipe}")
         if nf_core:
-            note_bits.append(f"nf-core:{nf_core}")
-        if biotools_id:
-            note_bits.append(f"biotools:{biotools_id}")
+            note_bits.append(nf_core)
+        if biotools:
+            note_bits.append(biotools)
         producers.append(
             Producer(
                 name=o.id,
@@ -417,18 +365,17 @@ def match_run_dir(
 # Offline nf-core meta.yml importer (scaffolding)
 # ---------------------------------------------------------------------------
 
+EDAM_BASE = "http://edamontology.org/"
 EDAM_FORMAT_READ: dict[str, str] = {
     "format_3752": "csv",
     "format_3475": "tsv",
     "format_3751": "tsv",
     "format_2330": "csv",
-    "format_3464": "json",
-    "format_3750": "yaml",
 }
 
 
-def _edam_id(term: str) -> str:
-    return term.rstrip("/").rsplit("/", 1)[-1]
+def _edam_id(url: str) -> str:
+    return url.rstrip("/").rsplit("/", 1)[-1]
 
 
 def _walk_file_outputs(node: object, found: list[dict]) -> None:
@@ -450,12 +397,12 @@ def _walk_file_outputs(node: object, found: list[dict]) -> None:
 def meta_yml_to_entry(meta: dict) -> CatalogEntry:
     """Scaffold a draft `CatalogEntry` from a parsed nf-core module ``meta.yml``.
 
-    Infers module identity, bio.tools id, EDAM formats and a `find.path_glob`
-    from each output channel's pattern. Leaves `file_schema`, `reshape` and
+    Infers module identity (as URLs), EDAM formats and a `find.filename` from
+    each output channel's pattern. Leaves `file_schema`, `recipe` and
     `feeds_viz` for the contributor — those can't be derived from metadata.
     """
     tools_raw: object = meta.get("tools") or []
-    biotools_id: str | None = None
+    biotools_url: str | None = None
     homepage: str | None = None
     tool_desc = ""
     if isinstance(tools_raw, list) and tools_raw and isinstance(tools_raw[0], dict):
@@ -467,17 +414,20 @@ def meta_yml_to_entry(meta: dict) -> CatalogEntry:
             homepage = str(hp) if hp else None
             ident = str(first.get("identifier") or "")
             if ident.startswith("biotools:"):
-                biotools_id = ident.split(":", 1)[1]
+                biotools_url = f"https://bio.tools/{ident.split(':', 1)[1]}"
 
     name = str(meta.get("name", "unknown"))
     module_id = name.split("_")[0]
+    nf_core_url = "https://github.com/nf-core/modules/tree/master/modules/nf-core/" + name.replace(
+        "_", "/"
+    )
     module = CatalogModule(
         id=module_id,
         name=name,
         description=tool_desc,
         homepage=homepage,
-        nf_core_module=name.replace("_", "/"),
-        biotools_id=biotools_id,
+        nf_core_url=nf_core_url,
+        biotools_url=biotools_url,
     )
 
     output_block = meta.get("output")
@@ -496,13 +446,10 @@ def meta_yml_to_entry(meta: dict) -> CatalogEntry:
             ontologies = f.get("ontologies") or []
             for onto in ontologies if isinstance(ontologies, list) else []:
                 if isinstance(onto, dict) and "edam" in onto:
-                    fid = _edam_id(str(onto["edam"]))
-                    edam_formats.append(fid)
-                    mapped = EDAM_FORMAT_READ.get(fid)
-                    if mapped == "tsv":
+                    url = str(onto["edam"])
+                    edam_formats.append(url)
+                    if EDAM_FORMAT_READ.get(_edam_id(url)) == "tsv":
                         read_fmt = "tsv"
-                    elif mapped == "csv":
-                        read_fmt = "csv"
         outputs.append(
             CatalogOutput(
                 id=f"{module_id}_{channel}",

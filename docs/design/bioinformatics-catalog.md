@@ -20,7 +20,7 @@ Concretely: a user ingests a file from `pangolin`, `mosdepth`, `DESeq2`,
 `ANCOM-BC`, `MetaPhlAn`, a QIIME 2 artefact… and depictio should say *"this
 looks like X — render it as a volcano / coverage track / stacked taxonomy / …"*,
 pre-wire the column→role binding, and — when the raw file isn't already in the
-right shape — know **what reshape (melt/pivot/aggregate/recipe)** gets it there.
+right shape — know **which recipe** reshapes it.
 
 ---
 
@@ -51,9 +51,8 @@ just hand-maintained and blind to upstream tool identity.
    `qiime2/ancombc/differentials/Category-habitat-level-2/lfc_slice.csv`.
 4. **Reshape is implicit.** `suggest_producers` matches a *DC that already has
    the right columns*. The gap between "raw file on disk" and "bindable DC" —
-   the melt/pivot/aggregate — lives only as prose in `Producer.notes` and as
-   bespoke per-pipeline recipes. It is neither declared nor validated as part
-   of the mapping.
+   the reshape recipe — lives only as prose in `Producer.notes`, disconnected
+   from the mapping. Nothing records *which* recipe a given tool output needs.
 
 ---
 
@@ -70,7 +69,7 @@ authoring/extension surface that carries the things a bare producer can't.
           depictio/catalog/*.yaml  ──compile──→  Producer  ──merge──→ all_producers()
           (community-extensible)     (entry_to_producers)      (curated wins)
                    │
-                   └─ reshape: melt/pivot/aggregate/recipe ──→ recipes/  ──→ canonical DC ──→ advanced_viz
+                   └─ recipe (optional) ──→ recipes/  ──→ canonical DC ──→ advanced_viz
 ```
 
 ### 3.1 The data model (`models/components/advanced_viz/catalog.py`)
@@ -79,16 +78,18 @@ Structured like **MultiQC modules**: a single-output tool is one flat YAML file;
 a multi-output tool is a folder with `module.yaml` + one file per output. A
 `CatalogModule` owns many `CatalogOutput`s:
 
-- **`CatalogModule`** — `id`, `name`, `homepage`, **`nf_core_module`**,
-  **`biotools_id`**, **`edam_topics`**. Resolvable identity (`biotools_id` →
-  `https://bio.tools/<id>`, `nf_core_module` → the nf-core/modules tree).
+- **`CatalogModule`** — `id`, `name`, `homepage`, **`nf_core_url`**,
+  **`biotools_url`**, **`edam_topics`**. Identity is stored as directly-clickable
+  URLs (no IDs to reconstruct).
 - **`CatalogOutput`** — one file in one running **`mode`**, carrying:
   - **`find`** (`CatalogFind`) — how depictio-cli *recognises* the file
     (`filename` / `path_glob` / `content_contains` / `required_columns`), the
     catalog analogue of MultiQC's `search_patterns`.
   - **`file_schema`** — the columns + dtypes the tool writes (raw, as-emitted).
-  - **`reshape`** (`CatalogReshape`) — raw file → viz-ready shape (see §3.3).
-  - `nf_core_module`/`biotools_id` overrides, `edam_*`, `pipelines` — provenance.
+  - **`recipe`** *(optional)* — a `projects/<pipeline>/recipes/<name>.py` that
+    reshapes the raw file (see §3.3); omitted when the file is already bindable.
+  - `multiqc_module` (for MultiQC-surfaced tools, see §3.4), `nf_core_url`/
+    `biotools_url` overrides, `edam_*` — provenance.
   - `feeds_viz` + `role_mapping` — viz affinity + pre-filled bindings.
 
 `entry_to_producers()` compiles each output whose `find.required_columns` is set
@@ -109,7 +110,7 @@ ecosystems already do:
 So: **one `CatalogModule`, many `CatalogOutput`s, each tagged with its `mode`**.
 The `depictio/catalog/qiime2/` folder carries `taxa-barplot`, `rel-abundance`,
 `diversity`, `alpha-rarefaction`, `composition/ancombc`, and `phylogeny` as
-independent output files — each with its own `find`, `file_schema`, reshape and
+independent output files — each with its own `find`, `file_schema`, recipe and
 viz affinity. Adding QIIME 2's next mode is adding one file, not touching code.
 This scales to the full QIIME 2 surface (and to any multi-subcommand tool:
 bcftools, samtools, seqkit…) without the registry
@@ -119,42 +120,50 @@ becoming a wall of near-duplicate fingerprints.
 a column shape but differ by mode, and the suggestion UI can group them under
 the tool.
 
-### 3.3 Reshape as a first-class, validated step
+### 3.3 Recipe as the (optional) reshape step
 
-Real tool outputs rarely land in the long/wide shape a viz wants — they need a
-melt, pivot, or aggregate first. The catalog makes that explicit:
+Real tool outputs rarely land in the shape a viz wants — they need a join, a
+melt, a derived column. In practice those transforms are pipeline-specific and
+already written as Python recipes, so the catalog does **not** reinvent a
+declarative melt/pivot/aggregate mini-language (which nothing used). Instead an
+output carries a single optional reference:
 
 ```yaml
-reshape:
-  kind: melt              # identity | melt | pivot | aggregate | recipe
-  id_vars: [clade_name, NCBI_tax_id]
-  variable_name: sample_id
-  value_name: abundance
+recipe: nf-core/ampliseq/ancombc.py   # projects/<pipeline>/recipes/<name>.py
 ```
 
-`CatalogReshape` validates its own parameters (a `melt` needs `id_vars`; a
-`pivot` needs `on` + `values`; an `aggregate` needs `group_by` + `agg`). For
-transforms too complex to express declaratively, `kind: recipe` points at an
-existing `projects/<pipeline>/recipes/<name>.py` — so the catalog *links* the
-mapping to the recipe DAG instead of duplicating it. This directly answers the
-"we may need to validate and ask for reformatting (pivot/melt/aggregate)
-compared to the tool's raw output" requirement: the reshape is declared,
-type-checked, and (for the declarative kinds) executable without bespoke code.
+Either the raw file is already bindable — omit `recipe` (e.g. MetaPhlAn's long
+profile, mosdepth's amplicon coverage) — or it needs real code, and `recipe`
+*links* the mapping to the existing recipe DAG instead of duplicating it. This
+answers the "we may need to reformat compared to the tool's raw output"
+requirement honestly: `file_schema` documents the raw shape, `recipe` names the
+transform that produces the canonical one.
 
-A consequence worth stating: **fingerprints describe the post-reshape /
-post-read shape**. An output whose raw file isn't reliably fingerprintable
-(QIIME 2's per-contrast ANCOM-BC slices; a wide barplot whose taxon columns vary
-per run) sets `fingerprint: null` and relies on its `reshape.recipe` to produce
-an already-known canonical shape. That's honest about where column-name matching
-stops and a recipe must take over.
+A consequence worth stating: **fingerprints (`find.required_columns`) describe
+the recognisable raw file**. An output whose raw file isn't reliably
+fingerprintable (QIIME 2's per-contrast ANCOM-BC slices; a wide barplot whose
+taxon columns vary per run) sets no `required_columns` — it is recognised by
+`filename`/`path_glob` instead and relies on its `recipe` to produce a known
+canonical shape. That's honest about where column-name matching stops and a
+recipe must take over.
 
-### 3.4 Upstream sync: vendored snapshots + offline importer
+### 3.4 MultiQC-surfaced tools
+
+Some tools (FastQC, Cutadapt, samtools stats…) are never read from their raw
+per-sample files in depictio — their metrics are surfaced through the **MultiQC**
+report. Modelling them as standalone modules would be a fiction. Instead they
+live as outputs under the `multiqc/` module with `multiqc_module:` set (e.g.
+`multiqc/fastqc.yaml` with `multiqc_module: fastqc`, recognised via MultiQC's
+`multiqc_fastqc.txt` table). The `multiqc/` folder thus holds the native
+`multiqc.parquet` aggregate **and** each tool-section it exposes.
+
+### 3.5 Upstream sync: vendored snapshots + offline importer
 
 bio.tools/nf-core are **authoring-time** inputs, not a runtime dependency
 (restricted networks must still work; this environment's allowlist already
 blocks the bio.tools API). `meta_yml_to_entry()` turns a parsed nf-core module
-`meta.yml` into a **draft** `CatalogEntry`: it infers tool identity, the
-`biotools:` id, EDAM formats, and file patterns, and leaves `fingerprint` +
+`meta.yml` into a **draft** `CatalogEntry`: it infers tool identity (as URLs),
+EDAM formats, and a `find` pattern, and leaves `file_schema`, `recipe` +
 `feeds_viz` as TODOs (those genuinely can't be derived from module metadata).
 `depictio catalog import-meta <meta.yml>` prints/writes the scaffold; the
 committed catalog is then self-contained.
@@ -168,8 +177,8 @@ YAML file under `depictio/catalog/` — no Python:
 
 1. `depictio catalog import-meta path/to/meta.yml -o depictio/catalog/<tool>.yaml`
    (or hand-write from `depictio/catalog/README.md`).
-2. Fill in each output's `fingerprint.required_columns`, `reshape`, `feeds_viz`,
-   `role_mapping`.
+2. Fill in each output's `find`, `file_schema`, `recipe` (if needed),
+   `feeds_viz`, `role_mapping`.
 3. `depictio catalog validate` (CI-friendly; non-zero on schema violation).
 4. Add a one-line assertion in `tests/models/test_catalog.py` (a column schema →
    expected producer) and open the PR.
@@ -193,14 +202,14 @@ suggestion tests are untouched and still green):
 - `models/components/advanced_viz/schemas.py` — `suggest_producers()` now spans
   curated **+** catalog producers.
 - MultiQC-style modules: single-output tools as flat files (`pangolin`,
-  `nextclade`, `ivar`, `metaphlan`, `multiqc`, `fastqc`) + multi-output folders
-  (`qiime2/` with 6 outputs, `mosdepth/` with 3) covering the viralrecon +
-  ampliseq tool surface.
+  `nextclade`, `ivar`, `metaphlan`) + multi-output folders (`qiime2/` with 6
+  outputs, `mosdepth/` with 3, `multiqc/` with the native aggregate + FastQC
+  bound as a MultiQC section) covering the viralrecon + ampliseq tool surface.
 - `depictio/catalog/catalog.schema.json` + `SCHEMA.md` + `README.md` — contract,
   field reference, contributor guide.
 - `cli/cli/commands/catalog.py` — `depictio catalog list | info | validate | match | import-meta | schema`.
-- `tests/models/test_catalog.py` — schema/reshape validation, merge semantics,
-  end-to-end suggestion, importer round-trip.
+- `tests/models/test_catalog.py` — find/match recognition, merge semantics,
+  end-to-end suggestion, importer round-trip, schema freshness.
 
 ---
 
@@ -209,10 +218,9 @@ suggestion tests are untouched and still green):
 - **Phase 1 (done):** model + loader + merge + 2 seed tools + importer + CLI +
   tests. Catalog producers flow into the existing suggestion surfaces with no
   frontend change.
-- **Phase 2 — execute declarative reshapes.** Teach the recipe/ingest path to
-  run `CatalogReshape` (melt/pivot/aggregate) directly, so a catalog entry with
-  a declarative reshape needs *no* `.py` recipe. Validate the post-reshape
-  schema against `feeds_viz`' `CANONICAL_SCHEMAS` at catalog-load time.
+- **Phase 2 — wire `match` + `recipe` into ingest.** Use `match_run_dir()` at
+  ingest to auto-recognise tool outputs and run the referenced `recipe`, then
+  validate the post-recipe schema against `feeds_viz`' `CANONICAL_SCHEMAS`.
 - **Phase 3 — EDAM-semantic suggestions.** Use `edam_operations` / `edam_topics`
   as a secondary match signal (and to *group* suggestions by tool/operation in
   the UI) when column fingerprints are ambiguous.
@@ -234,9 +242,9 @@ suggestion tests are untouched and still green):
    eventually *migrate* into catalog YAML (one source of truth), or stay as a
    vetted core the catalog only extends? Phase 1 keeps both; merge semantics
    already make either viable.
-3. **Reshape executor ownership (Phase 2).** Should declarative reshapes run in
-   the CLI ingest path, the Celery worker, or both? Affects where
-   `CatalogReshape` → polars lives.
+3. **`match` + recipe execution ownership (Phase 2).** Should `match_run_dir()`
+   recognition and the referenced `recipe` run in the CLI ingest path, the
+   Celery worker, or both?
 4. **Versioning.** Tools/outputs drift across versions (QIIME 2 especially).
    Mirror the recipe system's `{tool}/{version}/` override fallback in the
    catalog, or pin via an `applies_to_versions` field on the output?

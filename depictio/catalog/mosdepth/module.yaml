@@ -3,7 +3,7 @@ id: mosdepth
 name: mosdepth
 description: Fast BAM/CRAM depth-of-coverage calculation.
 homepage: https://github.com/brentp/mosdepth
-nf_core_module: mosdepth
-biotools_id: mosdepth
+nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/mosdepth
+biotools_url: https://bio.tools/mosdepth
 edam_topics:
-  - topic_0622 # Genomics
+  - http://edamontology.org/topic_0622 # Genomics

@@ -1,0 +1,13 @@
+id: multiqc_parquet
+mode: report
+description: MultiQC aggregated metrics + plots (native parquet, multi-table).
+edam_operations:
+  - http://edamontology.org/operation_3218 # Sequencing quality control
+edam_formats:
+  - http://edamontology.org/format_4012 # Parquet
+find:
+  path_glob: "**/multiqc/multiqc_data/multiqc.parquet"
+  filename: "multiqc.parquet"
+read_options: {format: parquet}
+file_schema: {} # multi-table parquet, handled by the MultiQC DC type
+feeds_viz: []

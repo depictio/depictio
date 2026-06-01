@@ -39,22 +39,18 @@ def catalog_list() -> None:
                 find_bits.append(f"path={out.find.path_glob}")
             if out.find.required_columns:
                 find_bits.append(f"cols={','.join(out.find.required_columns)}")
+            recipe = out.recipe or "—"
             typer.echo(f"      - {out.id}{mode}")
             typer.echo(f"          find: {'  '.join(find_bits)}")
-            typer.echo(f"          reshape={out.reshape.kind}  feeds: {viz}")
+            typer.echo(f"          recipe={recipe}  feeds: {viz}")
 
 
 @app.command("info")
 def catalog_info(
     module_id: Annotated[str, typer.Argument(help="Module id, e.g. qiime2 or pangolin")],
 ) -> None:
-    """Show one module's identity (resolvable links) + every output in detail."""
-    from depictio.models.components.advanced_viz.catalog import (
-        biotools_url,
-        edam_url,
-        load_catalog_entries,
-        nf_core_module_url,
-    )
+    """Show one module's identity (clickable URLs) + every output in detail."""
+    from depictio.models.components.advanced_viz.catalog import load_catalog_entries
 
     entry = next((e for e in load_catalog_entries() if e.module.id == module_id), None)
     if entry is None:
@@ -65,24 +61,26 @@ def catalog_info(
     typer.echo(f"  {m.description}")
     if m.homepage:
         typer.echo(f"  homepage:  {m.homepage}")
-    if m.biotools_id:
-        typer.echo(f"  bio.tools: {biotools_url(m.biotools_id)}")
-    if m.nf_core_module:
-        typer.echo(f"  nf-core:   {nf_core_module_url(m.nf_core_module)}")
+    if m.biotools_url:
+        typer.echo(f"  bio.tools: {m.biotools_url}")
+    if m.nf_core_url:
+        typer.echo(f"  nf-core:   {m.nf_core_url}")
     for t in m.edam_topics:
-        typer.echo(f"  EDAM:      {edam_url(t)}")
+        typer.echo(f"  EDAM:      {t}")
     for out in entry.outputs:
         typer.echo(f"\n  ── {out.id}  [{out.mode}]")
         typer.echo(f"     {out.description}")
-        if out.nf_core_module:
-            typer.echo(f"     nf-core:  {nf_core_module_url(out.nf_core_module)}")
+        if out.multiqc_module:
+            typer.echo(f"     via MultiQC module: {out.multiqc_module}")
+        if out.nf_core_url:
+            typer.echo(f"     nf-core:  {out.nf_core_url}")
         typer.echo(
             f"     find:     {out.find.model_dump(exclude_none=True, exclude_defaults=True)}"
         )
         if out.file_schema:
             cols = ", ".join(f"{c}:{t}" for c, t in out.file_schema.items())
             typer.echo(f"     file_schema: {cols}")
-        typer.echo(f"     reshape:  {out.reshape.model_dump(exclude_none=True)}")
+        typer.echo(f"     recipe:   {out.recipe or '— (none, raw file is bindable)'}")
         typer.echo(f"     feeds:    {', '.join(out.feeds_viz) or '—'}")
 
 
@@ -141,8 +139,8 @@ def catalog_import_meta(
 ) -> None:
     """Scaffold a draft catalog entry from an nf-core module ``meta.yml``.
 
-    Infers module identity, bio.tools id, EDAM formats and a `find` pattern.
-    Leaves `file_schema`, `reshape` and `feeds_viz` for you to complete.
+    Infers module identity (URLs), EDAM formats and a `find` pattern.
+    Leaves `file_schema`, `recipe` and `feeds_viz` for you to complete.
     """
     from depictio.models.components.advanced_viz.catalog import meta_yml_to_entry
 
@@ -155,7 +153,7 @@ def catalog_import_meta(
     if output:
         Path(output).write_text(text)
         typer.echo(f"  Wrote scaffold to {output}")
-        typer.echo("  TODO: fill in each output's file_schema + reshape + feeds_viz.")
+        typer.echo("  TODO: fill in each output's file_schema + recipe + feeds_viz.")
     else:
         typer.echo(text)
 

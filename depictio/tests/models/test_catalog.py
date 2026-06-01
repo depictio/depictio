@@ -1,9 +1,9 @@
 """Tests for the declarative bio-catalog layer (MultiQC-module-style).
 
-Covers: flat-file + folder module loading, the `find` recognition (incl.
-`match_run_dir` against bundled data), reshape validators, file_schema,
-compilation to `Producer` primitives, the merge into `all_producers()`
-(curated wins), end-to-end `suggest_producers()`, resolvable links, the offline
+Covers: flat-file + folder module loading, MultiQC-section binding, the `find`
+recognition (incl. `match_run_dir` against bundled data), file_schema, optional
+recipe, compilation to `Producer` primitives, the merge into `all_producers()`
+(curated wins), end-to-end `suggest_producers()`, URL identity, the offline
 nf-core ``meta.yml`` importer, and JSON-Schema freshness.
 """
 
@@ -16,14 +16,11 @@ import pytest
 from depictio.models.components.advanced_viz.catalog import (
     CatalogEntry,
     CatalogFind,
-    CatalogReshape,
-    biotools_url,
     entry_to_producers,
     load_catalog_entries,
     load_catalog_producers,
     match_run_dir,
     meta_yml_to_entry,
-    nf_core_module_url,
 )
 from depictio.models.components.advanced_viz.producers import (
     KNOWN_PRODUCERS,
@@ -42,7 +39,15 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 
 def test_bundled_catalog_loads():
     modules = {e.module.id for e in load_catalog_entries()}
-    assert {"pangolin", "nextclade", "ivar", "mosdepth", "qiime2", "metaphlan"} <= modules
+    assert {
+        "pangolin",
+        "nextclade",
+        "ivar",
+        "mosdepth",
+        "qiime2",
+        "metaphlan",
+        "multiqc",
+    } <= modules
 
 
 def test_single_output_tool_is_a_flat_file():
@@ -58,6 +63,18 @@ def test_multi_output_tool_is_a_folder():
     assert len(qiime2.outputs) >= 6
     modes = {o.mode for o in qiime2.outputs}
     assert {"taxa-barplot", "rel-abundance", "composition/ancombc", "phylogeny"} <= modes
+
+
+# ---------------------------------------------------------------------------
+# MultiQC-covered tools are bound to the multiqc module, not standalone
+# ---------------------------------------------------------------------------
+
+
+def test_fastqc_is_bound_to_multiqc_module():
+    entries = {e.module.id: e for e in load_catalog_entries()}
+    assert "fastqc" not in entries  # no standalone fastqc module
+    fastqc = next(o for o in entries["multiqc"].outputs if o.id == "fastqc")
+    assert fastqc.multiqc_module == "fastqc"
 
 
 # ---------------------------------------------------------------------------
@@ -84,7 +101,7 @@ def test_match_run_dir_recognises_bundled_viralrecon_files():
 
 
 # ---------------------------------------------------------------------------
-# The raw file schema is documented
+# The raw file schema is documented; recipe is optional
 # ---------------------------------------------------------------------------
 
 
@@ -95,41 +112,25 @@ def test_outputs_declare_raw_file_schema():
     assert genome.file_schema["coverage"] == "Float64"
 
 
+def test_recipe_is_optional():
+    entries = {e.module.id: e for e in load_catalog_entries()}
+    metaphlan = entries["metaphlan"].outputs[0]
+    assert metaphlan.recipe is None  # raw file already bindable
+    pangolin = entries["pangolin"].outputs[0]
+    assert pangolin.recipe == "nf-core/viralrecon/pangolin_lineages.py"
+
+
 # ---------------------------------------------------------------------------
-# Resolvable identity links
+# Identity is stored as directly-clickable URLs (no resolver helpers)
 # ---------------------------------------------------------------------------
 
 
-def test_identity_links_resolve():
+def test_identity_is_stored_as_urls():
     entries = {e.module.id: e for e in load_catalog_entries()}
     pangolin = entries["pangolin"].module
-    assert pangolin.biotools_id == "pangolin_cov-lineages"
-    assert biotools_url(pangolin.biotools_id) == "https://bio.tools/pangolin_cov-lineages"
-    assert nf_core_module_url("pangolin/run").endswith("/modules/nf-core/pangolin/run")
-
-
-# ---------------------------------------------------------------------------
-# Reshape validation (the data-reformatting requirement)
-# ---------------------------------------------------------------------------
-
-
-def test_reshape_recipe_requires_recipe():
-    with pytest.raises(ValueError, match="requires a 'recipe'"):
-        CatalogReshape(kind="recipe")
-
-
-def test_reshape_melt_requires_id_vars():
-    with pytest.raises(ValueError, match="requires 'id_vars'"):
-        CatalogReshape(kind="melt")
-
-
-def test_reshape_pivot_requires_on_and_values():
-    with pytest.raises(ValueError, match="requires 'on' and 'values'"):
-        CatalogReshape(kind="pivot", index=["sample"])
-
-
-def test_reshape_identity_is_default():
-    assert CatalogReshape().kind == "identity"
+    assert pangolin.biotools_url == "https://bio.tools/pangolin_cov-lineages"
+    assert pangolin.nf_core_url.endswith("/modules/nf-core/pangolin/run")
+    assert all(t.startswith("http://edamontology.org/") for t in pangolin.edam_topics)
 
 
 # ---------------------------------------------------------------------------
@@ -151,10 +152,10 @@ def test_entry_to_producers_uses_find_required_columns():
     assert names == {"demo_a"}
 
 
-def test_catalog_producers_have_provenance_in_notes():
+def test_catalog_producers_have_url_provenance_in_notes():
     producer = get_producer("metaphlan_profile")
     assert producer is not None
-    assert "biotools:metaphlan" in producer.notes
+    assert "https://bio.tools/metaphlan" in producer.notes
 
 
 def test_all_producers_merges_catalog_and_curated():
@@ -229,16 +230,17 @@ PANGOLIN_META = {
 }
 
 
-def test_meta_yml_importer_scaffolds_entry():
+def test_meta_yml_importer_scaffolds_entry_with_urls():
     entry = meta_yml_to_entry(PANGOLIN_META)
     assert entry.module.id == "pangolin"
-    assert entry.module.biotools_id == "pangolin_cov-lineages"
+    assert entry.module.biotools_url == "https://bio.tools/pangolin_cov-lineages"
+    assert entry.module.nf_core_url.endswith("/modules/nf-core/pangolin/run")
     out_ids = {o.id for o in entry.outputs}
     assert "pangolin_report" in out_ids
     assert "pangolin_versions" not in out_ids
     report = next(o for o in entry.outputs if o.id == "pangolin_report")
     assert report.find.filename == "*.{csv}"
-    assert "format_3752" in report.edam_formats
+    assert "http://edamontology.org/format_3752" in report.edam_formats
 
 
 def test_meta_yml_scaffold_roundtrips_through_model():

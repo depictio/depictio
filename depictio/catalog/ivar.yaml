@@ -7,19 +7,19 @@ module:
   name: iVar
   description: Reference-based variant calling for viral amplicon sequencing.
   homepage: https://andersen-lab.github.io/ivar/html/
-  nf_core_module: ivar/variants
-  biotools_id: ivar
+  nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/ivar/variants
+  biotools_url: https://bio.tools/ivar
   edam_topics:
-    - topic_0199 # Genetic variation
+    - http://edamontology.org/topic_0199 # Genetic variation
 
 outputs:
   - id: ivar_variants_long
     mode: variants
     description: Per-sample annotated variant calls (long table).
     edam_operations:
-      - operation_3227 # Variant calling
+      - http://edamontology.org/operation_3227 # Variant calling
     edam_formats:
-      - format_3752 # CSV
+      - http://edamontology.org/format_3752 # CSV
     find:
       filename: "variants_long_table.csv"
       required_columns: [CHROM, POS, REF, ALT]
@@ -36,10 +36,9 @@ outputs:
       GENE: String
       EFFECT: String
       HGVS_P: String
-    reshape: {kind: recipe, recipe: nf-core/viralrecon/variants_long.py}
+    recipe: nf-core/viralrecon/variants_long.py
     feeds_viz: [lollipop, oncoplot, manhattan, upset_plot, embedding]
     role_mapping:
       lollipop: {feature_id: GENE, position: POS, category: EFFECT}
       oncoplot: {sample_id: SAMPLE, gene: GENE, mutation_type: EFFECT}
       manhattan: {chr: CHROM, pos: POS, score: ALT_FREQ}
-    pipelines: ["nf-core/viralrecon"]

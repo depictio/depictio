@@ -53,7 +53,7 @@
     },
     "CatalogModule": {
       "additionalProperties": false,
-      "description": "A tool (module). Carries the resolvable bio.tools / nf-core / EDAM identity.",
+      "description": "A tool (module). Identity is stored as directly-clickable URLs.",
       "properties": {
         "id": {
           "title": "Id",
@@ -80,7 +80,7 @@
           "default": null,
           "title": "Homepage"
         },
-        "nf_core_module": {
+        "nf_core_url": {
           "anyOf": [
             {
               "type": "string"
@@ -90,9 +90,9 @@
             }
           ],
           "default": null,
-          "title": "Nf Core Module"
+          "title": "Nf Core Url"
         },
-        "biotools_id": {
+        "biotools_url": {
           "anyOf": [
             {
               "type": "string"
@@ -102,7 +102,7 @@
             }
           ],
           "default": null,
-          "title": "Biotools Id"
+          "title": "Biotools Url"
         },
         "edam_topics": {
           "items": {
@@ -144,7 +144,7 @@
           "default": null,
           "title": "Mode"
         },
-        "nf_core_module": {
+        "multiqc_module": {
           "anyOf": [
             {
               "type": "string"
@@ -154,9 +154,9 @@
             }
           ],
           "default": null,
-          "title": "Nf Core Module"
+          "title": "Multiqc Module"
         },
-        "biotools_id": {
+        "nf_core_url": {
           "anyOf": [
             {
               "type": "string"
@@ -166,7 +166,19 @@
             }
           ],
           "default": null,
-          "title": "Biotools Id"
+          "title": "Nf Core Url"
+        },
+        "biotools_url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Biotools Url"
         },
         "edam_operations": {
           "items": {
@@ -182,13 +194,6 @@
           "title": "Edam Formats",
           "type": "array"
         },
-        "pipelines": {
-          "items": {
-            "type": "string"
-          },
-          "title": "Pipelines",
-          "type": "array"
-        },
         "find": {
           "$ref": "#/$defs/CatalogFind"
         },
@@ -202,8 +207,17 @@
           "title": "File Schema",
           "type": "object"
         },
-        "reshape": {
-          "$ref": "#/$defs/CatalogReshape"
+        "recipe": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Recipe"
         },
         "feeds_viz": {
           "items": {
@@ -322,166 +336,6 @@
         }
       },
       "title": "CatalogReadOptions",
-      "type": "object"
-    },
-    "CatalogReshape": {
-      "additionalProperties": false,
-      "description": "Declarative reshape from the raw file's shape to a viz-ready shape.\n\n`kind=\"recipe\"` is the escape hatch for arbitrary logic and points at an\nexisting `projects/<pipeline>/recipes/<name>.py` transform.",
-      "properties": {
-        "kind": {
-          "default": "identity",
-          "enum": [
-            "identity",
-            "melt",
-            "pivot",
-            "aggregate",
-            "recipe"
-          ],
-          "title": "Kind",
-          "type": "string"
-        },
-        "id_vars": {
-          "anyOf": [
-            {
-              "items": {
-                "type": "string"
-              },
-              "type": "array"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Id Vars"
-        },
-        "value_vars": {
-          "anyOf": [
-            {
-              "items": {
-                "type": "string"
-              },
-              "type": "array"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Value Vars"
-        },
-        "variable_name": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Variable Name"
-        },
-        "value_name": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Value Name"
-        },
-        "index": {
-          "anyOf": [
-            {
-              "items": {
-                "type": "string"
-              },
-              "type": "array"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Index"
-        },
-        "on": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "On"
-        },
-        "values": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Values"
-        },
-        "group_by": {
-          "anyOf": [
-            {
-              "items": {
-                "type": "string"
-              },
-              "type": "array"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Group By"
-        },
-        "agg": {
-          "anyOf": [
-            {
-              "enum": [
-                "sum",
-                "mean",
-                "median",
-                "max",
-                "min",
-                "count"
-              ],
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Agg"
-        },
-        "recipe": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Recipe"
-        }
-      },
-      "title": "CatalogReshape",
       "type": "object"
     }
   },

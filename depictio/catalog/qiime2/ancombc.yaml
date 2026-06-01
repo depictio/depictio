@@ -4,17 +4,16 @@ description: >-
   ANCOM-BC differential-abundance results. The tool writes one CSV per
   statistic (lfc / p_val / q_val / w / se) per contrast group; a recipe joins +
   melts them into a long (id × contrast × lfc × q_val) table.
-nf_core_module: qiime2/ancombc
+nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/qiime2/ancombc
 edam_operations:
-  - operation_3223 # Differential expression / abundance analysis
+  - http://edamontology.org/operation_3223 # Differential expression / abundance analysis
 edam_formats:
-  - format_3752 # CSV
+  - http://edamontology.org/format_3752 # CSV
 find:
   filename: "lfc_slice.csv" # the discriminating member of the slice set
   path_glob: "qiime2/ancombc/differentials/*/lfc_slice.csv"
 read_options: {format: csv}
 file_schema:
   id: String # + one Float64 column per contrast group (vary by metadata)
-reshape: {kind: recipe, recipe: nf-core/ampliseq/ancombc.py}
+recipe: nf-core/ampliseq/ancombc.py
 feeds_viz: [volcano, da_barplot, ma, qq]
-pipelines: ["nf-core/ampliseq"]

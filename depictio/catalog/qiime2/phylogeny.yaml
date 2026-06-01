@@ -1,16 +1,14 @@
 id: qiime2_phylogeny
 mode: phylogeny
 description: Rooted phylogenetic tree (Newick) — file-backed phylogeny DC.
-nf_core_module: qiime2/phylogenetic
+nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/qiime2/phylogenetic
 edam_operations:
-  - operation_0567 # Phylogenetic tree visualisation
+  - http://edamontology.org/operation_0567 # Phylogenetic tree visualisation
 edam_formats:
-  - format_1910 # Newick
+  - http://edamontology.org/format_1910 # Newick
 find:
   filename: "*.nwk"
   path_glob: "qiime2/phylogenetic_tree/*.nwk"
 read_options: {format: csv} # not parsed as a table; recognised by filename only
 file_schema: {} # non-tabular (Newick)
-reshape: {kind: identity}
 feeds_viz: [phylogenetic]
-pipelines: ["nf-core/ampliseq"]

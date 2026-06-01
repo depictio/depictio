@@ -1,0 +1,23 @@
+id: fastqc
+mode: fastqc
+description: >-
+  FastQC per-sample sequencing-QC metrics, surfaced via MultiQC's `fastqc`
+  module (the `multiqc_fastqc.txt` table) rather than the raw fastqc_data.txt.
+multiqc_module: fastqc
+nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/fastqc
+biotools_url: https://bio.tools/fastqc
+edam_operations:
+  - http://edamontology.org/operation_3218 # Sequencing quality control
+edam_formats:
+  - http://edamontology.org/format_3475 # TSV
+find:
+  filename: "multiqc_fastqc.txt"
+  required_columns: [Sample, "%GC"]
+read_options: {format: tsv}
+file_schema:
+  Sample: String
+  "%GC": Float64
+  avg_sequence_length: Float64
+  total_sequences: Float64
+  "%Dups": Float64
+feeds_viz: []

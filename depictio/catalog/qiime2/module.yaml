@@ -7,8 +7,8 @@ description: >-
   artefacts depending on the plugin/subcommand invoked — modelled here as many
   output files in this folder.
 homepage: https://qiime2.org
-nf_core_module: qiime2
-biotools_id: qiime2
+nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/qiime2
+biotools_url: https://bio.tools/qiime2
 edam_topics:
-  - topic_3174 # Metagenomics
-  - topic_0080 # Sequence analysis
+  - http://edamontology.org/topic_3174 # Metagenomics
+  - http://edamontology.org/topic_0080 # Sequence analysis

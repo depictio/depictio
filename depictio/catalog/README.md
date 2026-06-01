@@ -7,30 +7,26 @@ structured like **MultiQC modules**.
 ## Layout
 
 A **module = a tool**. A single-output tool is one flat file; a multi-output
-tool (QIIME 2) is a folder with one file per output / running mode:
+tool is a folder with one file per output / running mode:
 
 ```
 depictio/catalog/
   pangolin.yaml          # single output  → one file
-  nextclade.yaml
-  ivar.yaml
-  metaphlan.yaml
-  multiqc.yaml
-  fastqc.yaml
-  qiime2/                # many outputs   → a folder
-    module.yaml          #   the tool's identity (links to nf-core + bio.tools)
-    taxa_barplot.yaml    #   one output / running mode = one file
-    rel_abundance.yaml
-    alpha_diversity.yaml
-    alpha_rarefaction.yaml
-    ancombc.yaml
-    phylogeny.yaml
+  nextclade.yaml  ivar.yaml  metaphlan.yaml
+  multiqc/               # many outputs   → a folder
+    module.yaml          #   the tool's identity (clickable bio.tools / nf-core URLs)
+    aggregate.yaml       #   the native multiqc.parquet
+    fastqc.yaml          #   FastQC surfaced *via* MultiQC (multiqc_module: fastqc)
+  qiime2/
+    module.yaml  taxa_barplot.yaml  rel_abundance.yaml  alpha_diversity.yaml
+    alpha_rarefaction.yaml  ancombc.yaml  phylogeny.yaml
   mosdepth/
-    module.yaml
-    genome_coverage.yaml
-    amplicon_coverage.yaml
-    amplicon_heatmap.yaml
+    module.yaml  genome_coverage.yaml  amplicon_coverage.yaml  amplicon_heatmap.yaml
 ```
+
+Tools whose results are only surfaced through **MultiQC** (FastQC, Cutadapt,
+samtools stats…) are **not** standalone modules — they live as outputs under
+`multiqc/` with `multiqc_module:` set, because that is how depictio reads them.
 
 Adding support for a tool (or a new mode of an existing tool) is a PR that adds
 one YAML file. **No Python required.**
@@ -45,12 +41,13 @@ in **`SCHEMA.md`**; machine contract in **`catalog.schema.json`**):
    `search_patterns` (`fn` / `contents`).
 2. **`file_schema`** — the columns + dtypes the tool actually writes (the raw
    file as-emitted), so you can see what the file looks like.
-3. **`reshape`** — how to turn that raw file into a viz-ready shape (`melt` /
-   `pivot` / `aggregate`, or a `recipe` for arbitrary logic).
+3. **`recipe`** *(optional)* — a `projects/<pipeline>/recipes/<name>.py` that
+   reshapes the raw file into a viz-ready shape. Omit it when the raw file is
+   already bindable.
 4. **`feeds_viz` + `role_mapping`** — which depictio visualisation(s) it maps to.
 
-Identity is **resolvable**: `biotools_id` → `https://bio.tools/<id>`,
-`nf_core_module` → the nf-core/modules tree, `edam_*` → edamontology.org.
+Identity is stored as **directly-clickable URLs** (`biotools_url`,
+`nf_core_url`, EDAM URLs) — nothing to reconstruct.
 
 Example (`pangolin.yaml`):
 
@@ -58,13 +55,13 @@ Example (`pangolin.yaml`):
 module:
   id: pangolin
   name: Pangolin
-  nf_core_module: pangolin/run         # → github.com/nf-core/modules/.../pangolin/run
-  biotools_id: pangolin_cov-lineages   # → bio.tools/pangolin_cov-lineages
+  nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/pangolin/run
+  biotools_url: https://bio.tools/pangolin_cov-lineages
 outputs:
   - id: pangolin_report
     find: { filename: "*.pangolin.csv", required_columns: [taxon, lineage] }
     file_schema: { taxon: String, lineage: String, scorpio_call: String, qc_status: String }
-    reshape: { kind: recipe, recipe: nf-core/viralrecon/pangolin_lineages.py }
+    recipe: nf-core/viralrecon/pangolin_lineages.py
     feeds_viz: []
 ```
 
@@ -80,7 +77,7 @@ This is the catalog analogue of MultiQC's file search. Each hit reports
 
 ```bash
 depictio catalog list                 # every module + output, with its find rules
-depictio catalog info qiime2          # one module: resolvable links + output detail
+depictio catalog info qiime2          # one module: clickable URLs + output detail
 depictio catalog validate             # validate the bundle (CI-friendly)
 depictio catalog match path/to/run    # recognise files in a run directory
 depictio catalog import-meta meta.yml # scaffold a draft entry from an nf-core meta.yml

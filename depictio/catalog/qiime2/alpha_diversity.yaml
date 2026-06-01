@@ -1,11 +1,11 @@
 id: qiime2_alpha_diversity
 mode: diversity
 description: Alpha-diversity vector (e.g. Faith PD) per sample.
-nf_core_module: qiime2/diversitycore
+nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/qiime2/diversitycore
 edam_operations:
-  - operation_3200 # Community profiling
+  - http://edamontology.org/operation_3200 # Community profiling
 edam_formats:
-  - format_3475 # TSV
+  - http://edamontology.org/format_3475 # TSV
 find:
   path_glob: "qiime2/diversity/alpha_diversity/*_vector/metadata.tsv"
   required_columns: [id, faith_pd]
@@ -13,6 +13,5 @@ read_options: {format: tsv}
 file_schema:
   id: String
   faith_pd: Float64
-reshape: {kind: recipe, recipe: nf-core/ampliseq/alpha_diversity.py}
+recipe: nf-core/ampliseq/alpha_diversity.py
 feeds_viz: []
-pipelines: ["nf-core/ampliseq"]

@@ -2,7 +2,7 @@ id: mosdepth_genome_coverage
 mode: genome
 description: Genome-wide coverage in windows, aggregated across all samples.
 edam_formats:
-  - format_3475 # TSV
+  - http://edamontology.org/format_3475 # TSV
 find:
   path_glob: "**/mosdepth/genome/all_samples.mosdepth.coverage.tsv"
 read_options: {format: tsv}
@@ -12,8 +12,7 @@ file_schema:
   end: Int64
   coverage: Float64
   sample: String
-reshape: {kind: recipe, recipe: nf-core/viralrecon/coverage_track_canonical.py}
+recipe: nf-core/viralrecon/coverage_track_canonical.py
 feeds_viz: [coverage_track]
 role_mapping:
   coverage_track: {chromosome: chrom, position: start, value: coverage}
-pipelines: ["nf-core/viralrecon"]
