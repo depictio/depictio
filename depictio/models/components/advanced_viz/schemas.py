@@ -595,12 +595,13 @@ def suggest_producers(dc_schema: dict[str, str]) -> list[tuple[str, float]]:
         producers with match_ratio == 1.0 (full fingerprint match) are
         meaningful — anything less is coincidence.
     """
-    # Lazy import to keep schemas.py import-cheap.
-    from depictio.models.components.advanced_viz.producers import KNOWN_PRODUCERS
+    # Lazy import to keep schemas.py import-cheap. all_producers() merges the
+    # hand-curated registry with the community YAML catalog.
+    from depictio.models.components.advanced_viz.producers import all_producers
 
     matches: list[tuple[str, float]] = []
     cols = set(dc_schema.keys())
-    for p in KNOWN_PRODUCERS:
+    for p in all_producers():
         if not p.required_columns:
             continue  # non-tabular producers (e.g. Newick) don't fingerprint
         present = len(p.required_columns & cols)

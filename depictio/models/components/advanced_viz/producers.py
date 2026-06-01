@@ -8,10 +8,12 @@ DESeq2's `results()` TSV, mosdepth's per-region BED) by:
       satisfy after a role→column rename (declared here);
     - a one-line description used in UI badges / docs.
 
-This is the in-repo alternative to an nf-core-modules-style install
-system: depictio's producer surface (~60 candidates across 18 viz kinds)
-is small enough that a single file works better than a package manager.
-Adding a new producer is one entry here + a test.
+`KNOWN_PRODUCERS` below is the hand-curated core: a small, vetted set kept
+in one file. The community-extensible surface lives alongside it as
+declarative YAML under ``depictio/catalog/`` (loaded by
+``advanced_viz/catalog.py``), which compiles down to the same `Producer`
+primitive. Use `all_producers()` — not `KNOWN_PRODUCERS` directly — to get
+the merged set (curated wins on name collisions).
 
 Used by:
     suggest_producers(dc_schema) -> list[(Producer, confidence)]
@@ -23,6 +25,7 @@ Used by:
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from functools import lru_cache
 
 from depictio.models.components.types import AdvancedVizKind
 
@@ -527,9 +530,28 @@ KNOWN_PRODUCERS: tuple[Producer, ...] = (
 )
 
 
+@lru_cache(maxsize=1)
+def all_producers() -> tuple[Producer, ...]:
+    """The full producer surface: hand-curated `KNOWN_PRODUCERS` + the
+    community catalog (``depictio/catalog/*.yaml``), de-duplicated by name.
+
+    Hand-curated producers win on name collisions, so the catalog can only
+    *add* coverage — never silently override a vetted fingerprint. This is
+    the single accessor the suggestion engine should consult.
+    """
+    # Lazy import: catalog.py imports Producer from this module, so importing
+    # it at top level would create a cycle.
+    from depictio.models.components.advanced_viz.catalog import load_catalog_producers
+
+    by_name: dict[str, Producer] = {p.name: p for p in KNOWN_PRODUCERS}
+    for p in load_catalog_producers():
+        by_name.setdefault(p.name, p)
+    return tuple(by_name.values())
+
+
 def get_producer(name: str) -> Producer | None:
-    """Lookup a producer by its stable id."""
-    for p in KNOWN_PRODUCERS:
+    """Lookup a producer by its stable id (curated or catalog-provided)."""
+    for p in all_producers():
         if p.name == name:
             return p
     return None

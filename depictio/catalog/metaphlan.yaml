@@ -1,0 +1,52 @@
+# MetaPhlAn — community bio-catalog entry
+# ============================================================================
+# A clean example of extending the catalog with a brand-new tool by adding one
+# YAML file (no Python). MetaPhlAn emits a single, well-shaped merged-abundance
+# table whose columns are stable, so it carries a real raw-stage fingerprint —
+# the suggestion engine can recognise it from column names alone, then a melt
+# brings it to the long form a stacked-taxonomy / sunburst binds against.
+# ============================================================================
+schema_version: 1
+
+tool:
+  id: metaphlan
+  name: MetaPhlAn
+  description: >-
+    Profiles the composition of microbial communities from metagenomic
+    shotgun sequencing data at species-level resolution.
+  homepage: https://github.com/biobakery/MetaPhlAn
+  biotools_id: metaphlan
+  edam_topics:
+    - topic_3174 # Metagenomics
+
+outputs:
+  - id: metaphlan_merged_abundance
+    mode: merge_metaphlan_tables
+    description: Merged per-sample relative-abundance table (clade × sample, wide).
+    nf_core_module: metaphlan/mergemetaphlantables
+    edam_operations:
+      - operation_3460 # Taxonomic classification
+    edam_formats:
+      - format_3475 # TSV
+    file_patterns:
+      - "*_profile.txt"
+      - "merged_abundance_table.txt"
+    read_options:
+      format: tsv
+    reshape:
+      kind: melt
+      id_vars: [clade_name, NCBI_tax_id]
+      variable_name: sample_id
+      value_name: abundance
+    fingerprint:
+      required_columns: [clade_name, NCBI_tax_id]
+    feeds_viz:
+      - stacked_taxonomy
+      - sunburst
+    role_mapping:
+      stacked_taxonomy:
+        sample_id: sample_id
+        taxon: clade_name
+        abundance: abundance
+      sunburst:
+        abundance: abundance
