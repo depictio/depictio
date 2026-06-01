@@ -26,10 +26,16 @@ def api_login(yaml_config_path: str = "~/.depictio/CLI.yaml") -> dict:
     logger.info(f"Depictio CLI configuration loaded: {depictio_CLI_config}")
     rich_print_checked_statement("Checking server accessibility...", "info")
 
-    # Connect to depictio API
+    # Connect to depictio API. Generous timeout because this is the CLI's
+    # first hit on the API — on a cold-started backend (gunicorn worker
+    # just forked, Beanie/Mongo connection establishing on first DB call,
+    # validators warming) the response can take noticeably longer than
+    # httpx's 5 s default. 30 s is well past any reasonable cold-path; the
+    # call still returns as soon as the server responds.
     response = httpx.post(
         f"{depictio_CLI_config['api_base_url']}/depictio/api/v1/cli/validate_cli_config",
         json=depictio_CLI_config,
+        timeout=30.0,
     )
     if response.status_code == 200:
         logger.info("Depictio CLI configuration is model-compliant.")
