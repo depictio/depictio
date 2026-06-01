@@ -36,7 +36,12 @@ from depictio.api.v1.tasks.cleanup_tasks import start_cleanup_tasks
 from depictio.api.v1.utils import clean_screenshots
 from depictio.models.models.analytics import UserActivity, UserSession
 from depictio.models.models.projects import ProjectBeanie
-from depictio.models.models.users import GroupBeanie, TokenBeanie, UserBeanie
+from depictio.models.models.users import (
+    GroupBeanie,
+    MagicLinkTicketBeanie,
+    TokenBeanie,
+    UserBeanie,
+)
 
 WORKER_ID = os.getpid()
 
@@ -62,6 +67,7 @@ async def init_motor_beanie() -> None:
             TokenBeanie,
             GroupBeanie,
             UserBeanie,
+            MagicLinkTicketBeanie,
             ProjectBeanie,
             UserSession,
             UserActivity,

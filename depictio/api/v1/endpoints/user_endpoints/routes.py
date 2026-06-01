@@ -20,6 +20,7 @@ from depictio.api.v1.endpoints.user_endpoints.core_functions import (
     _check_if_token_is_valid,
     _check_password,
     _cleanup_expired_temporary_users,
+    _create_magic_link_ticket,
     _create_temporary_user,
     _create_temporary_user_session,
     _create_user_in_db,
@@ -28,7 +29,9 @@ from depictio.api.v1.endpoints.user_endpoints.core_functions import (
     _get_anonymous_user_session,
     _hash_password,
     _list_tokens,
+    _provision_user,
     _purge_expired_tokens,
+    _redeem_magic_link_ticket,
 )
 from depictio.api.v1.endpoints.user_endpoints.utils import (
     create_access_token,
@@ -200,6 +203,99 @@ async def create_token(
         )
 
     return token
+
+
+# ── Pipeline provisioning + passwordless magic-link login ──────────────────────
+
+
+class _ProvisionUserRequest(BaseModel):
+    """Body for POST /auth/provision_user."""
+
+    email: EmailStr
+
+
+class _ExchangeMagicLinkRequest(BaseModel):
+    """Body for POST /auth/magic/exchange — the opaque ticket from the URL."""
+
+    ticket: str
+
+
+def _require_provisioning_key(api_key: str) -> None:
+    """Gate provisioning endpoints on the dedicated provisioning secret.
+
+    The endpoints are disabled (503) when no key is configured, so an instance
+    never silently exposes account creation; a wrong key is rejected (403).
+    """
+    configured = settings.auth.provisioning_api_key
+    if not configured:
+        raise HTTPException(
+            status_code=503,
+            detail="User provisioning is not enabled on this instance",
+        )
+    if api_key != configured:
+        raise HTTPException(status_code=403, detail="Invalid provisioning API key")
+
+
+@auth_endpoint_router.post("/provision_user", include_in_schema=True)
+async def provision_user_endpoint(
+    request: _ProvisionUserRequest,
+    api_key: str = Header(..., description="Provisioning API key"),
+) -> dict:
+    """Create-or-get a passwordless user and return a long-lived run token.
+
+    Called by pipelines (gated by the provisioning API key) so the CLI can act
+    as ``email`` for the rest of a run. Idempotent: re-running for the same
+    email returns a fresh token for the existing user.
+    """
+    _require_provisioning_key(api_key)
+    result = await _provision_user(request.email)
+    user = result["user"]
+    token = result["token"]
+    return {
+        "user_id": str(user.id),
+        "email": user.email,
+        "is_admin": user.is_admin,
+        "created": result["created"],
+        "token": {
+            "access_token": token.access_token,
+            "refresh_token": token.refresh_token,
+            "expire_datetime": token.expire_datetime.strftime("%Y-%m-%d %H:%M:%S"),
+            "refresh_expire_datetime": token.refresh_expire_datetime.strftime("%Y-%m-%d %H:%M:%S"),
+            "name": token.name,
+            "token_lifetime": token.token_lifetime,
+            "token_type": token.token_type,
+        },
+    }
+
+
+@auth_endpoint_router.post("/me/magic_link", include_in_schema=True)
+async def create_my_magic_link(
+    current_user: UserBeanie = Depends(get_current_user),
+) -> dict:
+    """Mint a short-lived, single-use magic-link login ticket for the caller.
+
+    Bearer-authed: the CLI calls this *as the provisioned user* at the end of a
+    run (once the dashboard exists) so the link's lifetime starts when it is
+    handed out, not when the long pipeline began.
+    """
+    ticket = await _create_magic_link_ticket(
+        current_user.id,  # type: ignore[invalid-argument-type]
+        expiry_minutes=settings.auth.magic_link_expiry_minutes,
+    )
+    base = f"{settings.dash.external_url}/auth/magic"
+    return {
+        "ticket": ticket.ticket,
+        "expire_datetime": ticket.expire_datetime.isoformat(),
+        # The secret rides in the URL fragment so it stays out of server/proxy
+        # access logs and Referer headers. The viewer reads it from the hash.
+        "login_url": f"{base}#ticket={ticket.ticket}",
+    }
+
+
+@auth_endpoint_router.post("/magic/exchange", include_in_schema=True)
+async def exchange_magic_link(request: _ExchangeMagicLinkRequest) -> dict:
+    """Redeem a magic-link ticket for a browser session (public, single-use)."""
+    return await _redeem_magic_link_ticket(request.ticket)
 
 
 @auth_endpoint_router.post("/refresh", include_in_schema=True)

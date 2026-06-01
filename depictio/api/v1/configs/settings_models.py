@@ -172,6 +172,16 @@ class AuthConfig(BaseSettings):
         default=None,
         description="Internal API key for service-to-service communication (auto-generated if unset)",
     )
+    provisioning_api_key_env: Optional[str] = Field(
+        default=None,
+        description="Shared secret used by pipelines to auto-provision user accounts "
+        "(POST /auth/provision_user). Scoped to provisioning only; kept separate from "
+        "internal_api_key. The provisioning endpoints are disabled when this is unset.",
+    )
+    magic_link_expiry_minutes: int = Field(
+        default=15,
+        description="Lifetime, in minutes, of a single-use magic-link login ticket",
+    )
     unauthenticated_mode: bool = Field(default=False, description="Enable unauthenticated mode")
     single_user_mode: bool = Field(
         default=False,
@@ -227,6 +237,9 @@ class AuthConfig(BaseSettings):
         # read environment variables when instantiated via default_factory
         if self.internal_api_key_env is None:
             self.internal_api_key_env = os.getenv("DEPICTIO_AUTH_INTERNAL_API_KEY")
+
+        if self.provisioning_api_key_env is None:
+            self.provisioning_api_key_env = os.getenv("DEPICTIO_AUTH_PROVISIONING_API_KEY")
 
         # Read auth mode environment variables
         env_public_mode = os.getenv("DEPICTIO_AUTH_PUBLIC_MODE", "").lower()
@@ -294,6 +307,17 @@ class AuthConfig(BaseSettings):
             keys_dir=self.keys_dir,
             algorithm=self.keys_algorithm,
         )
+
+    @computed_field
+    @property
+    def provisioning_api_key(self) -> str | None:
+        """Shared secret for pipeline-side user provisioning.
+
+        Unlike ``internal_api_key`` this is never auto-generated: when it is
+        unset the provisioning endpoints are disabled, so an instance does not
+        silently expose account creation.
+        """
+        return self.provisioning_api_key_env or None
 
 
 # ── Infrastructure ────────────────────────────────────────────────────────────
