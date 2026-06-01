@@ -1,0 +1,13 @@
+id: mosdepth_amplicon_heatmap
+mode: amplicon
+description: Log10 amplicon-coverage matrix (samples × amplicons).
+edam_formats:
+  - format_3475 # TSV
+find:
+  path_glob: "**/mosdepth/amplicon/all_samples.mosdepth.heatmap.tsv"
+read_options: {format: tsv}
+file_schema:
+  sample: String # remaining columns are one Float64 per amplicon (wide matrix)
+reshape: {kind: recipe, recipe: nf-core/viralrecon/complex_heatmap_canonical.py}
+feeds_viz: [complex_heatmap]
+pipelines: ["nf-core/viralrecon"]

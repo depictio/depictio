@@ -1,0 +1,14 @@
+# QIIME 2 — multi-output tool → a folder (one file per output / running mode).
+# module.yaml holds the identity; each sibling *.yaml is one output.
+id: qiime2
+name: QIIME 2
+description: >-
+  Decentralised microbiome bioinformatics platform. Emits many distinct
+  artefacts depending on the plugin/subcommand invoked — modelled here as many
+  output files in this folder.
+homepage: https://qiime2.org
+nf_core_module: qiime2
+biotools_id: qiime2
+edam_topics:
+  - topic_3174 # Metagenomics
+  - topic_0080 # Sequence analysis

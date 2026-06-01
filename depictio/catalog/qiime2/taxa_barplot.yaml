@@ -1,0 +1,16 @@
+id: qiime2_taxa_barplot
+mode: taxa-barplot
+description: Relative-abundance barplot table at a taxonomic level (wide).
+nf_core_module: qiime2/barplot
+edam_operations:
+  - operation_3460 # Taxonomic classification
+edam_formats:
+  - format_3752 # CSV
+find:
+  path_glob: "qiime2/barplot/level-*.csv"
+read_options: {format: csv}
+file_schema:
+  index: String # sample id; remaining columns are one Float64 per taxon (vary by run)
+reshape: {kind: recipe, recipe: nf-core/ampliseq/taxonomy_composition.py}
+feeds_viz: [stacked_taxonomy]
+pipelines: ["nf-core/ampliseq"]

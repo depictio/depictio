@@ -1,0 +1,45 @@
+# yaml-language-server: $schema=./catalog.schema.json
+# ivar — single-output (variants long table) → a single file.
+schema_version: 1
+
+module:
+  id: ivar
+  name: iVar
+  description: Reference-based variant calling for viral amplicon sequencing.
+  homepage: https://andersen-lab.github.io/ivar/html/
+  nf_core_module: ivar/variants
+  biotools_id: ivar
+  edam_topics:
+    - topic_0199 # Genetic variation
+
+outputs:
+  - id: ivar_variants_long
+    mode: variants
+    description: Per-sample annotated variant calls (long table).
+    edam_operations:
+      - operation_3227 # Variant calling
+    edam_formats:
+      - format_3752 # CSV
+    find:
+      filename: "variants_long_table.csv"
+      required_columns: [CHROM, POS, REF, ALT]
+    read_options: {format: csv}
+    file_schema:
+      SAMPLE: String
+      CHROM: String
+      POS: Int64
+      REF: String
+      ALT: String
+      FILTER: String
+      DP: Int64
+      ALT_FREQ: Float64
+      GENE: String
+      EFFECT: String
+      HGVS_P: String
+    reshape: {kind: recipe, recipe: nf-core/viralrecon/variants_long.py}
+    feeds_viz: [lollipop, oncoplot, manhattan, upset_plot, embedding]
+    role_mapping:
+      lollipop: {feature_id: GENE, position: POS, category: EFFECT}
+      oncoplot: {sample_id: SAMPLE, gene: GENE, mutation_type: EFFECT}
+      manhattan: {chr: CHROM, pos: POS, score: ALT_FREQ}
+    pipelines: ["nf-core/viralrecon"]

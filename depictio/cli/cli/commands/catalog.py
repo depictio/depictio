@@ -1,8 +1,8 @@
 """CLI subcommand for the bioinformatics tool→viz catalog.
 
-Discovery + validation of the declarative catalog (``depictio/catalog/*.yaml``)
-and an offline scaffolder that turns an nf-core module ``meta.yml`` into a draft
-catalog entry the contributor then completes (fingerprint columns + viz roles).
+Discovery + validation of the declarative catalog (``depictio/catalog/``),
+recognition of files in a run directory (``match``), and an offline scaffolder
+that turns an nf-core module ``meta.yml`` into a draft entry (``import-meta``).
 """
 
 from __future__ import annotations
@@ -18,59 +18,116 @@ app = typer.Typer()
 
 @app.command("list")
 def catalog_list() -> None:
-    """List every tool + output (mode) in the bundled catalog."""
+    """List every module + output (one file per output / running mode)."""
     from depictio.models.components.advanced_viz.catalog import load_catalog_entries
 
     entries = load_catalog_entries()
     if not entries:
         typer.echo("No catalog entries found.")
         return
-    typer.echo(f"Catalog entries ({len(entries)}):")
+    typer.echo(f"Catalog modules ({len(entries)}):")
     for entry in entries:
-        ident = entry.tool.biotools_id or "-"
-        typer.echo(
-            f"\n  {entry.tool.id}  ({entry.tool.kind})  biotools:{ident}  "
-            f"[{len(entry.outputs)} outputs]"
-        )
+        m = entry.module
+        typer.echo(f"\n  {m.id}  ({m.name})  [{len(entry.outputs)} output(s)]")
         for out in entry.outputs:
-            upstream = out.tool or entry.tool.name
             mode = f"/{out.mode}" if out.mode else ""
             viz = ", ".join(out.feeds_viz) if out.feeds_viz else "—"
-            fp = (
-                ",".join(out.fingerprint.required_columns)
-                if out.fingerprint and out.fingerprint.required_columns
-                else "(no fingerprint)"
-            )
-            typer.echo(f"      - {out.id}   « {upstream}{mode} »")
+            find_bits = []
+            if out.find.filename:
+                find_bits.append(f"fn={out.find.filename}")
+            if out.find.path_glob:
+                find_bits.append(f"path={out.find.path_glob}")
+            if out.find.required_columns:
+                find_bits.append(f"cols={','.join(out.find.required_columns)}")
+            typer.echo(f"      - {out.id}{mode}")
+            typer.echo(f"          find: {'  '.join(find_bits)}")
             typer.echo(f"          reshape={out.reshape.kind}  feeds: {viz}")
-            typer.echo(f"          fingerprint: {fp}")
+
+
+@app.command("info")
+def catalog_info(
+    module_id: Annotated[str, typer.Argument(help="Module id, e.g. qiime2 or pangolin")],
+) -> None:
+    """Show one module's identity (resolvable links) + every output in detail."""
+    from depictio.models.components.advanced_viz.catalog import (
+        biotools_url,
+        edam_url,
+        load_catalog_entries,
+        nf_core_module_url,
+    )
+
+    entry = next((e for e in load_catalog_entries() if e.module.id == module_id), None)
+    if entry is None:
+        typer.echo(f"No module '{module_id}'. Try `depictio catalog list`.")
+        raise typer.Exit(code=1)
+    m = entry.module
+    typer.echo(f"{m.name}  ({m.id})")
+    typer.echo(f"  {m.description}")
+    if m.homepage:
+        typer.echo(f"  homepage:  {m.homepage}")
+    if m.biotools_id:
+        typer.echo(f"  bio.tools: {biotools_url(m.biotools_id)}")
+    if m.nf_core_module:
+        typer.echo(f"  nf-core:   {nf_core_module_url(m.nf_core_module)}")
+    for t in m.edam_topics:
+        typer.echo(f"  EDAM:      {edam_url(t)}")
+    for out in entry.outputs:
+        typer.echo(f"\n  ── {out.id}  [{out.mode}]")
+        typer.echo(f"     {out.description}")
+        if out.nf_core_module:
+            typer.echo(f"     nf-core:  {nf_core_module_url(out.nf_core_module)}")
+        typer.echo(
+            f"     find:     {out.find.model_dump(exclude_none=True, exclude_defaults=True)}"
+        )
+        if out.file_schema:
+            cols = ", ".join(f"{c}:{t}" for c, t in out.file_schema.items())
+            typer.echo(f"     file_schema: {cols}")
+        typer.echo(f"     reshape:  {out.reshape.model_dump(exclude_none=True)}")
+        typer.echo(f"     feeds:    {', '.join(out.feeds_viz) or '—'}")
 
 
 @app.command("validate")
 def catalog_validate(
     path: Annotated[
         str | None,
-        typer.Option("--path", "-p", help="Validate a single YAML file instead of the bundle"),
+        typer.Option("--path", "-p", help="Validate a single module folder/file instead"),
     ] = None,
 ) -> None:
     """Validate catalog YAML against the schema (CI-friendly: non-zero on error)."""
     from depictio.models.components.advanced_viz.catalog import (
         CATALOG_DIR,
-        CatalogEntry,
         load_entries_from_dir,
     )
 
     try:
-        if path:
-            raw = yaml.safe_load(Path(path).read_text())
-            CatalogEntry.model_validate(raw)
-            typer.echo(f"  OK: {path}")
-        else:
-            entries = load_entries_from_dir(CATALOG_DIR)
-            typer.echo(f"  OK: {len(entries)} catalog entries valid in {CATALOG_DIR}")
+        target = Path(path) if path else CATALOG_DIR
+        entries = load_entries_from_dir(target if target.is_dir() else target.parent)
+        typer.echo(f"  OK: {len(entries)} catalog module(s) valid in {target}")
     except Exception as exc:
         typer.echo(f"  INVALID: {exc}")
         raise typer.Exit(code=1)
+
+
+@app.command("match")
+def catalog_match(
+    run_dir: Annotated[str, typer.Argument(help="A pipeline run directory to scan")],
+) -> None:
+    """Recognise which catalog outputs are present in a run directory.
+
+    The catalog analogue of MultiQC's file search: walks the directory and
+    reports every file matched by a module output's `find` rules.
+    """
+    from depictio.models.components.advanced_viz.catalog import match_run_dir
+
+    matches = match_run_dir(run_dir)
+    if not matches:
+        typer.echo(f"No catalogued tool outputs found under {run_dir}")
+        return
+    typer.echo(f"Recognised {len(matches)} file(s) in {run_dir}:")
+    for hit in matches:
+        viz = ", ".join(hit.feeds_viz) if hit.feeds_viz else "—"
+        typer.echo(f"  {hit.path}")
+        typer.echo(f"      → {hit.module_id} / {hit.output_id}  feeds: {viz}")
 
 
 @app.command("import-meta")
@@ -84,9 +141,8 @@ def catalog_import_meta(
 ) -> None:
     """Scaffold a draft catalog entry from an nf-core module ``meta.yml``.
 
-    Infers tool identity, bio.tools id, EDAM formats and file patterns. Leaves
-    ``fingerprint`` and ``feeds_viz`` for you to complete — those can't be
-    derived from module metadata alone.
+    Infers module identity, bio.tools id, EDAM formats and a `find` pattern.
+    Leaves `file_schema`, `reshape` and `feeds_viz` for you to complete.
     """
     from depictio.models.components.advanced_viz.catalog import meta_yml_to_entry
 
@@ -99,7 +155,7 @@ def catalog_import_meta(
     if output:
         Path(output).write_text(text)
         typer.echo(f"  Wrote scaffold to {output}")
-        typer.echo("  TODO: fill in each output's fingerprint.required_columns + feeds_viz.")
+        typer.echo("  TODO: fill in each output's file_schema + reshape + feeds_viz.")
     else:
         typer.echo(text)
 
@@ -122,7 +178,7 @@ def catalog_schema(
     from depictio.models.components.advanced_viz.catalog import CatalogEntry
 
     schema = CatalogEntry.model_json_schema()
-    text = json.dumps(schema, indent=2, sort_keys=False) + "\n"
+    text = json.dumps(schema, indent=2) + "\n"
     if output:
         Path(output).write_text(text)
         typer.echo(f"  Wrote JSON Schema to {output}")

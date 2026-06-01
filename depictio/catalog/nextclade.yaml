@@ -1,0 +1,38 @@
+# yaml-language-server: $schema=./catalog.schema.json
+# nextclade — single-output tool → a single file.
+schema_version: 1
+
+module:
+  id: nextclade
+  name: Nextclade
+  description: Viral genome clade assignment, mutation calling and sequence QC.
+  homepage: https://clades.nextstrain.org
+  nf_core_module: nextclade/run
+  biotools_id: nextclade
+  edam_topics:
+    - topic_3305 # Public health and epidemiology
+
+outputs:
+  - id: nextclade_report
+    mode: run
+    description: Per-sample clade assignment + sequence QC metrics.
+    edam_operations:
+      - operation_3460 # Taxonomic classification
+    edam_formats:
+      - format_3752 # CSV
+    find:
+      path_glob: "**/nextclade/*.csv"
+      required_columns: [seqName, clade]
+    read_options: {format: csv, separator: ";"}
+    file_schema:
+      seqName: String
+      clade: String
+      Nextclade_pango: String
+      qc.overallStatus: String
+      totalSubstitutions: Int64
+      totalDeletions: Int64
+      totalMissing: Int64
+      coverage: Float64
+    reshape: {kind: recipe, recipe: nf-core/viralrecon/nextclade_results.py}
+    feeds_viz: []
+    pipelines: ["nf-core/viralrecon"]

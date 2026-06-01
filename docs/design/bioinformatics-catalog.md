@@ -75,23 +75,27 @@ authoring/extension surface that carries the things a bare producer can't.
 
 ### 3.1 The data model (`models/components/advanced_viz/catalog.py`)
 
-One YAML file per tool. A `CatalogTool` owns many `CatalogOutput`s:
+Structured like **MultiQC modules**: a single-output tool is one flat YAML file;
+a multi-output tool is a folder with `module.yaml` + one file per output. A
+`CatalogModule` owns many `CatalogOutput`s:
 
-- **`CatalogTool`** — `id`, `name`, `homepage`, **`biotools_id`**,
-  **`edam_topics`**. The tool's stable identity.
-- **`CatalogOutput`** — one artefact in one running **`mode`**, carrying:
-  - `nf_core_module`, `edam_operations`, `edam_formats` — upstream provenance.
-  - `file_patterns` + `read_options` — where it lands, how to parse it.
-  - **`reshape`** (`CatalogReshape`) — how to get from the raw file to a
-    bindable shape (see §3.3).
-  - `fingerprint` — the column-name signature (compiles to
-    `Producer.required_columns`).
+- **`CatalogModule`** — `id`, `name`, `homepage`, **`nf_core_module`**,
+  **`biotools_id`**, **`edam_topics`**. Resolvable identity (`biotools_id` →
+  `https://bio.tools/<id>`, `nf_core_module` → the nf-core/modules tree).
+- **`CatalogOutput`** — one file in one running **`mode`**, carrying:
+  - **`find`** (`CatalogFind`) — how depictio-cli *recognises* the file
+    (`filename` / `path_glob` / `content_contains` / `required_columns`), the
+    catalog analogue of MultiQC's `search_patterns`.
+  - **`file_schema`** — the columns + dtypes the tool writes (raw, as-emitted).
+  - **`reshape`** (`CatalogReshape`) — raw file → viz-ready shape (see §3.3).
+  - `nf_core_module`/`biotools_id` overrides, `edam_*`, `pipelines` — provenance.
   - `feeds_viz` + `role_mapping` — viz affinity + pre-filled bindings.
 
-`entry_to_producers()` compiles each fingerprinted output to a `Producer`;
-`all_producers()` merges those with `KNOWN_PRODUCERS`, **curated winning on any
-name collision** so the catalog can only *add* coverage, never silently
-override a vetted fingerprint.
+`entry_to_producers()` compiles each output whose `find.required_columns` is set
+to a `Producer`; `all_producers()` merges those with `KNOWN_PRODUCERS`, **curated
+winning on any name collision** so the catalog can only *add* coverage, never
+silently override a vetted fingerprint. `match_run_dir()` is the ingest-time
+recognition step (`depictio catalog match <dir>`).
 
 ### 3.2 Many modes per tool (the QIIME 2 answer)
 
@@ -102,12 +106,13 @@ ecosystems already do:
 - **bio.tools** models a tool as a set of **EDAM operations**, each consuming/
   producing EDAM data with an EDAM format.
 
-So: **one `CatalogTool`, many `CatalogOutput`s, each tagged with its `mode`**.
-`depictio/catalog/qiime2.yaml` carries `diversity`, `composition/ancombc`, and
-`taxa-barplot` as three independent outputs — each with its own file pattern,
-reshape, fingerprint and viz affinity. Adding QIIME 2's next mode is appending
-one list item, not touching code. This scales to the full QIIME 2 surface (and
-to any multi-subcommand tool: bcftools, samtools, seqkit…) without the registry
+So: **one `CatalogModule`, many `CatalogOutput`s, each tagged with its `mode`**.
+The `depictio/catalog/qiime2/` folder carries `taxa-barplot`, `rel-abundance`,
+`diversity`, `alpha-rarefaction`, `composition/ancombc`, and `phylogeny` as
+independent output files — each with its own `find`, `file_schema`, reshape and
+viz affinity. Adding QIIME 2's next mode is adding one file, not touching code.
+This scales to the full QIIME 2 surface (and to any multi-subcommand tool:
+bcftools, samtools, seqkit…) without the registry
 becoming a wall of near-duplicate fingerprints.
 
 `mode` + `edam_operations` are the disambiguators: two QIIME 2 outputs can share
@@ -180,17 +185,20 @@ one-line test", not "understand the producer registry's internals".
 Phase-1, additive and backward-compatible (existing producers and the
 suggestion tests are untouched and still green):
 
-- `models/components/advanced_viz/catalog.py` — the model, loader,
-  `entry_to_producers`, and the offline `meta_yml_to_entry` importer.
+- `models/components/advanced_viz/catalog.py` — the model, flat-file + folder
+  loader, `find`-based `match_run_dir()`, `entry_to_producers`, and the offline
+  `meta_yml_to_entry` importer.
 - `models/components/advanced_viz/producers.py` — `all_producers()` merge
   accessor (curated wins); `get_producer()` now consults it.
 - `models/components/advanced_viz/schemas.py` — `suggest_producers()` now spans
   curated **+** catalog producers.
-- `depictio/catalog/qiime2.yaml` — the many-modes showcase (3 modes).
-- `depictio/catalog/metaphlan.yaml` — a clean new tool with a real raw-stage
-  fingerprint + melt reshape (shows a YAML-only contribution end-to-end).
-- `depictio/catalog/README.md` — contributor guide.
-- `cli/cli/commands/catalog.py` — `depictio catalog list | validate | import-meta`.
+- MultiQC-style modules: single-output tools as flat files (`pangolin`,
+  `nextclade`, `ivar`, `metaphlan`, `multiqc`, `fastqc`) + multi-output folders
+  (`qiime2/` with 6 outputs, `mosdepth/` with 3) covering the viralrecon +
+  ampliseq tool surface.
+- `depictio/catalog/catalog.schema.json` + `SCHEMA.md` + `README.md` — contract,
+  field reference, contributor guide.
+- `cli/cli/commands/catalog.py` — `depictio catalog list | info | validate | match | import-meta | schema`.
 - `tests/models/test_catalog.py` — schema/reshape validation, merge semantics,
   end-to-end suggestion, importer round-trip.
 

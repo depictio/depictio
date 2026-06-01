@@ -1,67 +1,90 @@
-# Catalog YAML schema reference
+# Catalog schema reference
 
 The authoritative, machine-readable contract is **`catalog.schema.json`** (JSON
-Schema, regenerate with `depictio catalog schema -o depictio/catalog/catalog.schema.json`).
-Editors that honour `# yaml-language-server: $schema=./catalog.schema.json`
-(the first line of each catalog file) get live validation + autocomplete.
-
-This page is the human-readable companion: every field, whether it's **required
-(MUST)** or **optional (CAN)**, its type, allowed values, and default.
+Schema; regenerate with `depictio catalog schema -o depictio/catalog/catalog.schema.json`).
+Editors that honour the `# yaml-language-server: $schema=` header get live
+validation + autocomplete. This page is the human-readable companion.
 
 Legend: **MUST** = required · **CAN** = optional (default shown). Unknown keys
-are rejected (`extra="forbid"`) — a typo fails validation rather than being
-silently ignored.
+are rejected (`extra="forbid"`).
 
 ---
 
-## Top level — `CatalogEntry` (one file)
+## Layout: a file (single output) or a folder (many outputs)
+
+```
+depictio/catalog/
+  pangolin.yaml          # single-output tool → one flat file (module + outputs)
+  qiime2/                # multi-output tool → a folder
+    module.yaml          #   the `module` identity block
+    taxa_barplot.yaml    #   one output per file (the CatalogOutput fields)
+    ancombc.yaml
+    ...
+```
+
+- **Flat file** = a whole `CatalogEntry`: a `module:` block + an `outputs:` list.
+- **Folder** = the same `CatalogEntry` split across files: `module.yaml` holds
+  the `module` fields directly; every other `*.yaml` is one output (the
+  `Output` fields directly, no wrapper).
+
+---
+
+## `module`
+
+The tool, with resolvable identity (`biotools_id` → `https://bio.tools/<id>`,
+`nf_core_module` → the nf-core/modules tree, `edam_topics` → edamontology.org).
 
 | Field | MUST/CAN | Type | Default | Notes |
 |---|---|---|---|---|
-| `schema_version` | CAN | int | `1` | Bump only on a breaking schema change. |
-| `tool` | **MUST** | `Tool` | — | The producing entity (a tool or a pipeline). |
-| `outputs` | **MUST** | list[`Output`] | — | ≥ 1 entry; each `id` must be unique within the file. |
-
-## `tool`
-
-| Field | MUST/CAN | Type | Default | Notes |
-|---|---|---|---|---|
-| `id` | **MUST** | str | — | Stable id. Tool: `qiime2`. Pipeline: `nf-core/viralrecon`. |
+| `id` | **MUST** | str | — | e.g. `qiime2`, `pangolin`. |
 | `name` | **MUST** | str | — | Display name. |
-| `kind` | CAN | `"tool"` \| `"pipeline"` | `"tool"` | `pipeline` = a composition; identity then lives per-output. |
-| `description` | CAN | str | `""` | One/two lines. |
+| `description` | CAN | str | `""` | |
 | `homepage` | CAN | str \| null | `null` | |
-| `biotools_id` | CAN | str \| null | `null` | bio.tools id (tool-scoped files). e.g. `metaphlan`. |
-| `edam_topics` | CAN | list[str] | `[]` | EDAM topic ids, e.g. `topic_3174` (Metagenomics). |
+| `nf_core_module` | CAN | str \| null | `null` | Default nf-core module for outputs, e.g. `mosdepth`. |
+| `biotools_id` | CAN | str \| null | `null` | bio.tools id. |
+| `edam_topics` | CAN | list[str] | `[]` | e.g. `topic_3174` (Metagenomics). |
 
 ## `outputs[]` — `Output`
 
-The unit that answers *"this artefact → these visualisations (after this reshape)"*.
+One file the tool emits (one running mode) → one visualisation mapping.
 
 | Field | MUST/CAN | Type | Default | Notes |
 |---|---|---|---|---|
-| `id` | **MUST** | str | — | Globally-unique producer id (used in API + tests). |
+| `id` | **MUST** | str | — | Globally-unique producer id. |
+| `find` | **MUST** | `Find` | — | How depictio-cli recognises the file. |
 | `description` | CAN | str | `""` | |
-| `mode` | CAN | str \| null | `null` | Running mode / subcommand (`diversity`, `composition/ancombc`, …). The key that lets one tool fan out into many outputs. |
-| `tool` | CAN | str \| null | `null` | **Pipeline files:** the upstream tool that emits this output. Falls back to `tool.name`. |
-| `biotools_id` | CAN | str \| null | `null` | **Pipeline files:** per-output bio.tools id. Falls back to `tool.biotools_id`. |
-| `nf_core_module` | CAN | str \| null | `null` | e.g. `qiime2/ancombc`, `mosdepth`. |
-| `edam_operations` | CAN | list[str] | `[]` | EDAM operation ids, e.g. `operation_3223` (differential abundance). |
-| `edam_formats` | CAN | list[str] | `[]` | EDAM format ids, e.g. `format_3475` (TSV). |
-| `pipelines` | CAN | list[str] | `[]` | Which pipeline(s) emit this, e.g. `nf-core/viralrecon@3.0.0`. Provenance + coverage. |
-| `file_patterns` | CAN | list[str] | `[]` | Globs relative to the run root. Empty when the output is derived (see `depends_on`). |
-| `read_options` | CAN | `ReadOptions` | identity | How to parse the file. |
-| `depends_on` | CAN | list[str] | `[]` | Other output `id`s this is derived from (the recipe `dc_ref` chain). |
-| `reshape` | CAN | `Reshape` | `{kind: identity}` | Raw file → bindable shape. |
-| `fingerprint` | CAN | `Fingerprint` \| null | `null` | Column-name signature. **Null** = not matched from columns (non-tabular, derived, or covered by a curated producer). |
-| `feeds_viz` | CAN | list[`AdvancedVizKind`] | `[]` | Viz kinds this output (post-reshape) can drive. |
-| `role_mapping` | CAN | dict[viz → dict[role → column]] | `{}` | Pre-fills the viz binding so the user doesn't name columns by hand. |
+| `mode` | CAN | str \| null | `null` | Running mode / subcommand (`taxa-barplot`, `composition/ancombc`, …). |
+| `nf_core_module` | CAN | str \| null | `null` | Per-output override (QIIME 2 subcommands are separate modules). |
+| `biotools_id` | CAN | str \| null | `null` | Per-output override. |
+| `edam_operations` | CAN | list[str] | `[]` | e.g. `operation_3223` (differential abundance). |
+| `edam_formats` | CAN | list[str] | `[]` | e.g. `format_3475` (TSV). |
+| `pipelines` | CAN | list[str] | `[]` | Which pipeline(s) emit this, e.g. `nf-core/viralrecon`. |
+| `read_options` | CAN | `ReadOptions` | csv defaults | How to parse the file. |
+| `file_schema` | CAN | dict[str,str] | `{}` | **The columns + dtypes the tool writes** (raw, pre-reshape). Documents the file as-emitted. |
+| `reshape` | CAN | `Reshape` | `{kind: identity}` | Raw file → viz-ready shape. |
+| `feeds_viz` | CAN | list[`AdvancedVizKind`] | `[]` | Viz kinds this output maps to (post-reshape). |
+| `role_mapping` | CAN | dict[viz → dict[role → column]] | `{}` | Pre-fills the viz binding. |
+
+### `find` — recognition (MUST set ≥ 1 condition)
+
+A file matches when **all** declared conditions hold (like MultiQC's
+`search_patterns`: `fn` + `contents`).
+
+| Field | MUST/CAN | Type | Notes |
+|---|---|---|---|
+| `filename` | cond. | str \| null | Glob on the basename, e.g. `*.pangolin.csv`. |
+| `path_glob` | cond. | str \| null | Glob on the path under the run root, `**`-aware, e.g. `**/mosdepth/genome/*.tsv`. |
+| `content_contains` | cond. | str \| null | Substring in the file head (text files), e.g. `##FastQC`. |
+| `required_columns` | cond. | list[str] | All must be present (tabular). Also becomes the column fingerprint for the suggestion engine. |
+
+> ≥ 1 of the four MUST be set. `filename`/`path_glob` locate the file;
+> `content_contains`/`required_columns` confirm it.
 
 ### `read_options` — `ReadOptions`
 
 | Field | MUST/CAN | Type | Default |
 |---|---|---|---|
-| `format` | CAN | `"csv"` \| `"tsv"` \| `"parquet"` | `"csv"` |
+| `format` | CAN | `csv` \| `tsv` \| `parquet` | `csv` |
 | `separator` | CAN | str \| null | `null` |
 | `comment_prefix` | CAN | str \| null | `null` |
 | `skip_rows` | CAN | int | `0` |
@@ -69,34 +92,17 @@ The unit that answers *"this artefact → these visualisations (after this resha
 
 ### `reshape` — `Reshape`
 
-`kind` selects the reshape; the other fields are the parameters for that kind
-(validated — a `melt` without `id_vars` is rejected).
+`kind` selects the reshape; its params are validated (a `melt` without
+`id_vars` is rejected).
 
-| Field | MUST/CAN | Type | Used by | Notes |
-|---|---|---|---|---|
-| `kind` | CAN | `identity` \| `melt` \| `pivot` \| `aggregate` \| `recipe` | — | Default `identity` (no reshape). |
-| `id_vars` | cond. | list[str] | `melt` | **Required for melt.** Columns to keep. |
-| `value_vars` | CAN | list[str] \| null | `melt` | Columns to unpivot (default: all others). |
-| `variable_name` | CAN | str \| null | `melt` | Name for the melted key column. |
-| `value_name` | CAN | str \| null | `melt` | Name for the melted value column. |
-| `index` | CAN | list[str] \| null | `pivot` | Row index columns. |
-| `on` | cond. | str \| null | `pivot` | **Required for pivot.** Column whose values become new columns. |
-| `values` | cond. | str \| null | `pivot` | **Required for pivot.** Column to fill the matrix. |
-| `group_by` | cond. | list[str] \| null | `aggregate` | **Required for aggregate.** |
-| `agg` | cond. | `sum`\|`mean`\|`median`\|`max`\|`min`\|`count` \| null | `aggregate` | **Required for aggregate.** |
-| `recipe` | cond. | str \| null | `recipe` | **Required for recipe.** Pipeline-qualified recipe path, e.g. `nf-core/ampliseq/ancombc.py`. |
-
-### `fingerprint` — `Fingerprint`
-
-| Field | MUST/CAN | Type | Default | Notes |
-|---|---|---|---|---|
-| `required_columns` | CAN | list[str] | `[]` | All must be present for the fingerprint to match. Describes the **post-reshape / post-read** column set. |
-| `optional_columns` | CAN | list[str] | `[]` | Recorded for docs; not required to match. |
-
-> An output with `fingerprint: null` (or no `required_columns`) is **not**
-> compiled to a column-matching `Producer` — it still carries provenance + its
-> recipe link, but its viz is reached via the recipe producing an
-> already-known canonical shape.
+| Field | Used by | Notes |
+|---|---|---|
+| `kind` | — | `identity` (default) \| `melt` \| `pivot` \| `aggregate` \| `recipe`. |
+| `id_vars` | `melt` | **Required for melt.** |
+| `value_vars`, `variable_name`, `value_name` | `melt` | Optional melt params. |
+| `on`, `values` | `pivot` | **Required for pivot.** `index` optional. |
+| `group_by`, `agg` | `aggregate` | **Required for aggregate.** `agg` ∈ sum/mean/median/max/min/count. |
+| `recipe` | `recipe` | **Required for recipe.** e.g. `nf-core/ampliseq/ancombc.py`. |
 
 ### `AdvancedVizKind` (allowed `feeds_viz` / `role_mapping` keys)
 
@@ -107,9 +113,9 @@ The unit that answers *"this artefact → these visualisations (after this resha
 
 ---
 
-## Two shapes of catalog file
+## How depictio-cli recognises files
 
-- **Tool-scoped** (`kind: tool`) — one tool, identity at the top. Outputs omit
-  `tool`/`biotools_id` (they inherit). See `metaphlan.yaml`.
-- **Pipeline-scoped** (`kind: pipeline`) — a composition; each output names its
-  upstream `tool` + `biotools_id`. See `viralrecon.yaml`, `ampliseq.yaml`.
+`depictio catalog match <run_dir>` walks the directory and reports every file a
+module output's `find` rules recognise — the catalog analogue of MultiQC's
+`find_log_files()`. Each hit carries `module / output → feeds_viz`, so the same
+data drives both ingest-time recognition and the editor's viz suggestions.

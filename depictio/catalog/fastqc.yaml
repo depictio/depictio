@@ -1,0 +1,30 @@
+# yaml-language-server: $schema=./catalog.schema.json
+# FastQC — the canonical "single function → single file" example (MultiQC-style).
+# FastQC's per-sample report is sectioned text, recognised by filename + content;
+# in depictio it is consumed via the MultiQC aggregate rather than a viz binding.
+schema_version: 1
+
+module:
+  id: fastqc
+  name: FastQC
+  description: Quality-control checks on raw high-throughput sequencing data.
+  homepage: https://www.bioinformatics.babraham.ac.uk/projects/fastqc/
+  nf_core_module: fastqc
+  biotools_id: fastqc
+  edam_topics:
+    - topic_3168 # Sequencing
+
+outputs:
+  - id: fastqc_data
+    mode: report
+    description: Per-sample FastQC data report (sectioned text).
+    edam_operations:
+      - operation_3218 # Sequencing quality control
+    find:
+      filename: "fastqc_data.txt"
+      content_contains: "##FastQC"
+    read_options: {format: tsv, has_header: false}
+    file_schema: {} # sectioned multi-table text, not a single flat schema
+    reshape: {kind: identity}
+    feeds_viz: [] # surfaced through the MultiQC aggregate
+    pipelines: ["nf-core/viralrecon", "nf-core/ampliseq"]

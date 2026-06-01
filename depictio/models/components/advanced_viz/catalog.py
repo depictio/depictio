@@ -1,39 +1,38 @@
 """Declarative bio-catalog: the community-extensible tool→viz mapping layer.
 
-This is the authoring/extension surface that sits *above* the hand-written
-`producers.py` registry. Where `producers.py` is a curated Python tuple of
-column-name fingerprints, the catalog is a directory of validated YAML
-files — one per tool — that the community can extend with a PR that adds a
-file (no Python required). Each catalog entry is validated against the
-Pydantic models here, then *compiled down* to the same `Producer` primitives
-the suggestion engine already understands (see `entry_to_producers`).
+Structured like MultiQC modules / nf-core modules:
 
-Three things the catalog captures that a bare `Producer` cannot:
+    depictio/catalog/
+      pangolin.yaml            # single-output tool  -> one file
+      qiime2/                  # multi-output tool   -> a folder
+        module.yaml            #   tool identity (links to nf-core + bio.tools)
+        taxa_barplot.yaml      #   one output / running mode = one file
+        ancombc.yaml
+        ...
 
-1.  **Upstream identity.** Every tool carries the metadata nf-core and
-    bio.tools already publish: an `nf_core_module`, a `biotools_id`, and
-    EDAM ontology terms (topics / operations / formats). That lets a
-    catalog entry be *scaffolded automatically* from an nf-core module's
-    `meta.yml` (see `meta_yml_to_entry`) and gives the suggestion engine a
-    semantic key beyond raw column names.
+A **module** is a tool. An **output** is one of the tool's files (one running
+mode). Each output declares, self-contained:
 
-2.  **Many running modes per tool.** A heavyweight tool such as QIIME 2
-    emits dozens of distinct artefacts depending on the subcommand
-    (diversity, taxa-barplot, ancombc, …). The catalog models this the way
-    nf-core models a module's many output channels: one `CatalogTool` owns
-    many `CatalogOutput`s, each tagged with a `mode` and its own file
-    pattern, fingerprint, reshape and viz affinity.
+  - `find`   — how depictio-cli *recognises* the file on disk (filename glob /
+               path glob / content match / required columns), exactly like
+               MultiQC's search_patterns (`fn` / `contents`).
+  - `file_schema` — the columns + dtypes the tool actually writes (the raw file
+               as-emitted), so you can see what the file looks like.
+  - `reshape`— how to turn that raw file into a viz-ready shape (melt / pivot /
+               aggregate, or a `recipe` for arbitrary logic).
+  - `feeds_viz` + `role_mapping` — which depictio visualisation(s) it maps to.
 
-3.  **The reshape a raw file needs.** A tool's on-disk output rarely lands
-    in the exact long/wide shape a viz wants — it must be melted, pivoted,
-    or aggregated first. Each output declares that reshape declaratively
-    (`CatalogReshape`) or defers to a full Python `recipe` for arbitrary
-    logic. This makes the previously-implicit gap between "file on disk"
-    and "DC a viz can bind to" explicit and validatable.
+Identity is resolvable: `biotools_id` -> https://bio.tools/<id>,
+`nf_core_module` -> the nf-core/modules tree, `edam_*` -> edamontology.org.
+
+Catalog entries compile down to the `Producer` primitives the suggestion engine
+already understands (see `entry_to_producers`), and merge via
+`producers.all_producers()` (hand-curated wins on name collision).
 """
 
 from __future__ import annotations
 
+from fnmatch import fnmatch
 from functools import lru_cache
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
@@ -46,21 +45,60 @@ from depictio.models.components.types import AdvancedVizKind
 if TYPE_CHECKING:
     from depictio.models.components.advanced_viz.producers import Producer
 
-# Catalog YAML files live at the package root, alongside (but distinct from)
-# the per-pipeline `projects/.../recipes/`. Recipes are Python transforms
-# scoped to one pipeline; the catalog is cross-pipeline tool metadata.
 CATALOG_DIR = Path(__file__).resolve().parents[3] / "catalog"
 
 ReshapeKind = Literal["identity", "melt", "pivot", "aggregate", "recipe"]
 
 
-class CatalogReadOptions(BaseModel):
-    """How to read a raw tool output file into a DataFrame.
+# ---------------------------------------------------------------------------
+# Resolvable identity links
+# ---------------------------------------------------------------------------
 
-    Captures the read-time quirks that today live as prose in
-    `Producer.notes` (e.g. QIIME 2's biom TSV needs `comment_prefix='#'`,
-    VCF needs `##` skipping). Polars-flavoured but tool-agnostic.
+
+def biotools_url(biotools_id: str) -> str:
+    return f"https://bio.tools/{biotools_id}"
+
+
+def nf_core_module_url(module: str) -> str:
+    return f"https://github.com/nf-core/modules/tree/master/modules/nf-core/{module}"
+
+
+def edam_url(term: str) -> str:
+    return f"http://edamontology.org/{term}"
+
+
+# ---------------------------------------------------------------------------
+# Recognition: how depictio-cli finds a file (MultiQC search_patterns analogue)
+# ---------------------------------------------------------------------------
+
+
+class CatalogFind(BaseModel):
+    """How to recognise this tool output among the files in a run directory.
+
+    Mirrors MultiQC's search_patterns: a filename glob (`fn`), a content match
+    (`contents`), plus depictio extras (a path glob and a tabular column check).
+    A file matches when *all* of the declared conditions hold.
     """
+
+    filename: str | None = None  # glob on the basename, e.g. "*.pangolin.csv"
+    path_glob: str | None = None  # glob on the path relative to the run root
+    content_contains: str | None = None  # substring in the file head (text files)
+    required_columns: list[str] = Field(default_factory=list)  # must all be present
+
+    model_config = ConfigDict(extra="forbid")
+
+    @model_validator(mode="after")
+    def _at_least_one_condition(self) -> CatalogFind:
+        if not (self.filename or self.path_glob or self.content_contains or self.required_columns):
+            raise ValueError(
+                "find must declare at least one of: filename, path_glob, "
+                "content_contains, required_columns"
+            )
+        return self
+
+
+class CatalogReadOptions(BaseModel):
+    """How to read the raw file into a DataFrame."""
 
     format: Literal["csv", "tsv", "parquet"] = "csv"
     separator: str | None = None
@@ -72,18 +110,15 @@ class CatalogReadOptions(BaseModel):
 
 
 class CatalogReshape(BaseModel):
-    """Declarative reshape from the raw file's shape to a bindable shape.
+    """Declarative reshape from the raw file's shape to a viz-ready shape.
 
-    Most real tool outputs are not in the long/wide form a viz wants. Rather
-    than force a Python recipe for every tool, common reshapes are expressed
-    declaratively so a catalog contributor never writes code for the easy
-    cases. `kind="recipe"` is the escape hatch for arbitrary logic and points
-    at an existing `projects/.../recipes/*.py` transform.
+    `kind="recipe"` is the escape hatch for arbitrary logic and points at an
+    existing `projects/<pipeline>/recipes/<name>.py` transform.
     """
 
     kind: ReshapeKind = "identity"
 
-    # melt (wide -> long): unpivot value_vars, keeping id_vars
+    # melt (wide -> long)
     id_vars: list[str] | None = None
     value_vars: list[str] | None = None
     variable_name: str | None = None
@@ -94,7 +129,7 @@ class CatalogReshape(BaseModel):
     on: str | None = None
     values: str | None = None
 
-    # aggregate (group + reduce)
+    # aggregate
     group_by: list[str] | None = None
     agg: Literal["sum", "mean", "median", "max", "min", "count"] | None = None
 
@@ -116,87 +151,47 @@ class CatalogReshape(BaseModel):
         return self
 
 
-class CatalogFingerprint(BaseModel):
-    """Column-name fingerprint that identifies this output on disk.
-
-    Compiles directly to `Producer.required_columns`. Keep it minimal but
-    discriminating (4-6 columns is usually enough). After the declared
-    `reshape`, fingerprints describe the *post-reshape* column set the viz
-    binds against.
-    """
-
-    required_columns: list[str] = Field(default_factory=list)
-    optional_columns: list[str] = Field(default_factory=list)
-
-    model_config = ConfigDict(extra="forbid")
-
-
 class CatalogOutput(BaseModel):
-    """One artefact a tool produces, in one running mode.
-
-    The unit that answers "this file → these visualisations (after this
-    reshape)". A tool with many modes owns many of these.
-    """
+    """One file a tool emits, in one running mode → one visualisation mapping."""
 
     id: str
     description: str = ""
-    # Subcommand / running mode that produced this artefact (e.g. QIIME 2
-    # "diversity", "ancombc", "taxa barplot"). The key that lets one tool
-    # fan out into many outputs without colliding.
-    mode: str | None = None
+    mode: str | None = None  # running mode / subcommand (e.g. "taxa-barplot")
 
-    # In a pipeline-scoped entry (`tool.kind == "pipeline"`), the specific
-    # upstream tool that emits this output (e.g. "pangolin", "QIIME 2") and its
-    # bio.tools id. In a tool-scoped entry these fall back to the entry's tool.
-    tool: str | None = None
-    biotools_id: str | None = None
-
-    # Upstream provenance — links back to the nf-core module + EDAM terms
-    # the meta.yml already declares for this output channel.
+    # Per-output identity (overrides the module's, for multi-module tools like
+    # QIIME 2 whose subcommands are separate nf-core modules).
     nf_core_module: str | None = None
+    biotools_id: str | None = None
     edam_operations: list[str] = Field(default_factory=list)
     edam_formats: list[str] = Field(default_factory=list)
 
-    # Which pipeline(s) emit this output, e.g. "nf-core/viralrecon@3.0.0".
-    # Provenance + lets coverage be asserted per pipeline.
+    # Which pipeline(s) emit this output (provenance), e.g. "nf-core/ampliseq".
     pipelines: list[str] = Field(default_factory=list)
 
-    # Where the file lands (glob, relative to the run root) + how to read it.
-    # Empty when the output is derived from other outputs (see depends_on).
-    file_patterns: list[str] = Field(default_factory=list)
+    # Recognition + parsing.
+    find: CatalogFind
     read_options: CatalogReadOptions = Field(default_factory=CatalogReadOptions)
 
-    # Other catalog output ids this one is derived from (the recipe dc_ref
-    # chain). Models depictio's 2-tier DAG: raw tool file -> typed output ->
-    # canonical/viz-ready output.
-    depends_on: list[str] = Field(default_factory=list)
+    # The schema of the file AS EMITTED by the tool (column name -> polars dtype
+    # string). Documents what the raw file looks like before any reshape.
+    file_schema: dict[str, str] = Field(default_factory=dict)
 
-    # How to get from the raw file to a bindable shape, and what that shape
-    # looks like once reshaped.
+    # Raw file -> viz-ready shape, and the viz it then maps to.
     reshape: CatalogReshape = Field(default_factory=CatalogReshape)
-    fingerprint: CatalogFingerprint | None = None
-
-    # Viz affinity (post-reshape) + role→column pre-fill, mirroring Producer.
     feeds_viz: list[AdvancedVizKind] = Field(default_factory=list)
     role_mapping: dict[AdvancedVizKind, dict[str, str]] = Field(default_factory=dict)
 
     model_config = ConfigDict(extra="forbid")
 
 
-class CatalogTool(BaseModel):
-    """The producing entity for a catalog file: a single tool or a pipeline.
-
-    A tool-scoped entry (`kind="tool"`) carries its own bio.tools / EDAM
-    identity at this level. A pipeline-scoped entry (`kind="pipeline"`, e.g.
-    nf-core/viralrecon) is a composition: identity lives per-output instead
-    (`CatalogOutput.tool` / `.biotools_id`).
-    """
+class CatalogModule(BaseModel):
+    """A tool (module). Carries the resolvable bio.tools / nf-core / EDAM identity."""
 
     id: str
     name: str
-    kind: Literal["tool", "pipeline"] = "tool"
     description: str = ""
     homepage: str | None = None
+    nf_core_module: str | None = None  # default for outputs that don't override
     biotools_id: str | None = None
     edam_topics: list[str] = Field(default_factory=list)
 
@@ -204,10 +199,10 @@ class CatalogTool(BaseModel):
 
 
 class CatalogEntry(BaseModel):
-    """One catalog YAML file: a tool and all of its mapped outputs."""
+    """One module + all of its outputs (assembled from a file or a folder)."""
 
     schema_version: int = 1
-    tool: CatalogTool
+    module: CatalogModule
     outputs: list[CatalogOutput] = Field(min_length=1)
 
     model_config = ConfigDict(extra="forbid")
@@ -217,7 +212,7 @@ class CatalogEntry(BaseModel):
         ids = [o.id for o in self.outputs]
         dupes = {i for i in ids if ids.count(i) > 1}
         if dupes:
-            raise ValueError(f"duplicate output ids in tool {self.tool.id!r}: {sorted(dupes)}")
+            raise ValueError(f"duplicate output ids in module {self.module.id!r}: {sorted(dupes)}")
         return self
 
 
@@ -227,39 +222,35 @@ class CatalogEntry(BaseModel):
 
 
 def entry_to_producers(entry: CatalogEntry) -> list[Producer]:
-    """Compile a catalog entry to the `Producer` fingerprints the engine uses.
+    """Compile an entry to `Producer` fingerprints for the suggestion engine.
 
-    Outputs without a fingerprint (non-tabular artefacts, or scaffolds a
-    contributor hasn't finished) are skipped — they carry provenance/docs
-    value but can't drive the column-name suggestion path.
+    Only outputs whose `find.required_columns` is set become column-matchable
+    producers; the rest are recognised by filename/path/content at ingest time.
     """
     from depictio.models.components.advanced_viz.producers import Producer
 
     producers: list[Producer] = []
     for o in entry.outputs:
-        if o.fingerprint is None or not o.fingerprint.required_columns:
+        if not o.find.required_columns:
             continue
-        # Output-level identity (pipeline files) falls back to the entry's tool.
-        tool_name = o.tool or entry.tool.name
-        biotools_id = o.biotools_id or entry.tool.biotools_id
-        tool_label = f"{tool_name} ({o.mode})" if o.mode else tool_name
+        biotools_id = o.biotools_id or entry.module.biotools_id
+        nf_core = o.nf_core_module or entry.module.nf_core_module
+        tool_label = f"{entry.module.name} ({o.mode})" if o.mode else entry.module.name
         note_bits: list[str] = []
         if o.reshape.kind != "identity":
             note_bits.append(f"reshape={o.reshape.kind}")
         if o.reshape.recipe:
             note_bits.append(f"recipe={o.reshape.recipe}")
-        if o.nf_core_module:
-            note_bits.append(f"nf-core:{o.nf_core_module}")
+        if nf_core:
+            note_bits.append(f"nf-core:{nf_core}")
         if biotools_id:
             note_bits.append(f"biotools:{biotools_id}")
-        if o.pipelines:
-            note_bits.append(f"pipelines:{','.join(o.pipelines)}")
         producers.append(
             Producer(
                 name=o.id,
                 tool=tool_label,
                 description=o.description,
-                required_columns=frozenset(o.fingerprint.required_columns),
+                required_columns=frozenset(o.find.required_columns),
                 feeds_viz=tuple(o.feeds_viz),
                 role_mapping=o.role_mapping,
                 notes="; ".join(note_bits),
@@ -269,35 +260,56 @@ def entry_to_producers(entry: CatalogEntry) -> list[Producer]:
 
 
 # ---------------------------------------------------------------------------
-# Loading
+# Loading: a flat file is one module; a folder is one module split across files
 # ---------------------------------------------------------------------------
+
+_MODULE_FILE = "module.yaml"
+
+
+def _load_module_dir(directory: Path) -> CatalogEntry:
+    """Assemble a CatalogEntry from a `<tool>/` folder.
+
+    `module.yaml` holds the module identity; every other `*.yaml` is one output.
+    """
+    module_path = directory / _MODULE_FILE
+    if not module_path.exists():
+        raise ValueError(f"module folder {directory} is missing {_MODULE_FILE}")
+    module = CatalogModule.model_validate(yaml.safe_load(module_path.read_text()))
+    outputs: list[CatalogOutput] = []
+    for path in sorted(directory.glob("*.yaml")):
+        if path.name == _MODULE_FILE:
+            continue
+        outputs.append(CatalogOutput.model_validate(yaml.safe_load(path.read_text())))
+    if not outputs:
+        raise ValueError(f"module folder {directory} has no output files")
+    return CatalogEntry(module=module, outputs=outputs)
 
 
 def load_entries_from_dir(directory: Path) -> list[CatalogEntry]:
-    """Load + validate every ``*.yaml`` catalog entry under ``directory``."""
+    """Load + validate every module under ``directory`` (flat files + folders)."""
     entries: list[CatalogEntry] = []
     if not directory.exists():
         return entries
-    for path in sorted(directory.rglob("*.yaml")):
-        raw = yaml.safe_load(path.read_text())
-        if raw is None:
-            continue
+    for path in sorted(directory.iterdir()):
         try:
-            entries.append(CatalogEntry.model_validate(raw))
-        except Exception as exc:  # surface the offending file, not a bare trace
+            if path.is_dir():
+                entries.append(_load_module_dir(path))
+            elif path.suffix == ".yaml":
+                raw = yaml.safe_load(path.read_text())
+                if raw is not None:
+                    entries.append(CatalogEntry.model_validate(raw))
+        except Exception as exc:
             raise ValueError(f"invalid catalog entry {path}: {exc}") from exc
     return entries
 
 
 @lru_cache(maxsize=1)
 def load_catalog_entries() -> tuple[CatalogEntry, ...]:
-    """All bundled catalog entries (cached)."""
     return tuple(load_entries_from_dir(CATALOG_DIR))
 
 
 @lru_cache(maxsize=1)
 def load_catalog_producers() -> tuple[Producer, ...]:
-    """Compiled `Producer`s from every bundled catalog entry (cached)."""
     producers: list[Producer] = []
     for entry in load_catalog_entries():
         producers.extend(entry_to_producers(entry))
@@ -305,33 +317,122 @@ def load_catalog_producers() -> tuple[Producer, ...]:
 
 
 # ---------------------------------------------------------------------------
+# Recognition: match a run directory against the catalog (depictio-cli)
+# ---------------------------------------------------------------------------
+
+
+class CatalogMatch(BaseModel):
+    """One recognised file: which module/output it is, and where."""
+
+    module_id: str
+    output_id: str
+    path: str
+    mode: str | None = None
+    feeds_viz: list[AdvancedVizKind] = Field(default_factory=list)
+
+
+def _read_columns(path: Path, read_options: CatalogReadOptions) -> list[str] | None:
+    """Read just the header columns of a file (best-effort)."""
+    try:
+        import polars as pl
+
+        if read_options.format == "parquet":
+            return list(pl.read_parquet_schema(path).keys())
+        sep = read_options.separator or ("\t" if read_options.format == "tsv" else ",")
+        df = pl.read_csv(
+            path,
+            separator=sep,
+            comment_prefix=read_options.comment_prefix,
+            has_header=read_options.has_header,
+            skip_rows=read_options.skip_rows,
+            n_rows=1,
+        )
+        return df.columns
+    except Exception:
+        return None
+
+
+def _output_matches(output: CatalogOutput, path: Path) -> bool:
+    """Apply the secondary find conditions (content / columns) to a candidate.
+
+    Filename/path location is done by `_candidate_paths` via pathlib glob (which
+    handles ``**`` correctly); here we only verify the content-based conditions.
+    """
+    f = output.find
+    if f.filename and not fnmatch(path.name, f.filename):
+        return False
+    if f.content_contains:
+        try:
+            head = path.read_bytes()[:8192].decode("utf-8", "ignore")
+        except Exception:
+            return False
+        if f.content_contains not in head:
+            return False
+    if f.required_columns:
+        cols = _read_columns(path, output.read_options)
+        if cols is None or not set(f.required_columns).issubset(cols):
+            return False
+    return True
+
+
+def _candidate_paths(output: CatalogOutput, run_dir: Path) -> list[Path]:
+    """Locate candidate files for an output using pathlib glob (``**`` aware)."""
+    f = output.find
+    if f.path_glob:
+        return [p for p in run_dir.glob(f.path_glob) if p.is_file()]
+    if f.filename:
+        return [p for p in run_dir.rglob(f.filename) if p.is_file()]
+    # content/column-only find: every file is a candidate
+    return [p for p in run_dir.rglob("*") if p.is_file()]
+
+
+def match_run_dir(
+    run_dir: str | Path, entries: tuple[CatalogEntry, ...] | None = None
+) -> list[CatalogMatch]:
+    """Walk ``run_dir`` and return every file the catalog recognises.
+
+    This is depictio-cli's recognition step — the catalog analogue of MultiQC's
+    `find_log_files(search_patterns)`.
+    """
+    run_dir = Path(run_dir)
+    entries = entries if entries is not None else load_catalog_entries()
+    matches: list[CatalogMatch] = []
+    for entry in entries:
+        for output in entry.outputs:
+            for path in _candidate_paths(output, run_dir):
+                if _output_matches(output, path):
+                    matches.append(
+                        CatalogMatch(
+                            module_id=entry.module.id,
+                            output_id=output.id,
+                            path=path.relative_to(run_dir).as_posix(),
+                            mode=output.mode,
+                            feeds_viz=output.feeds_viz,
+                        )
+                    )
+    return matches
+
+
+# ---------------------------------------------------------------------------
 # Offline nf-core meta.yml importer (scaffolding)
 # ---------------------------------------------------------------------------
 
-# EDAM data-format term -> how depictio would read it. Only the table-ish
-# formats matter for fingerprinting; everything else is recorded for docs.
 EDAM_FORMAT_READ: dict[str, str] = {
-    "format_3752": "csv",  # CSV
-    "format_3475": "tsv",  # TSV
-    "format_3751": "tsv",  # tab-separated values (generic)
-    "format_2330": "csv",  # textual
-    "format_3464": "json",  # JSON
-    "format_3750": "yaml",  # YAML
+    "format_3752": "csv",
+    "format_3475": "tsv",
+    "format_3751": "tsv",
+    "format_2330": "csv",
+    "format_3464": "json",
+    "format_3750": "yaml",
 }
 
 
 def _edam_id(term: str) -> str:
-    """Normalise an EDAM ontology URL/term to its bare id (``format_3752``)."""
     return term.rstrip("/").rsplit("/", 1)[-1]
 
 
 def _walk_file_outputs(node: object, found: list[dict]) -> None:
-    """Recursively collect ``{type: file, pattern, ontologies}`` leaves.
-
-    nf-core ``meta.yml`` ``output:`` blocks nest channels as lists-of-lists
-    interleaving a ``meta`` map with the actual file descriptors, so we walk
-    the structure rather than assume a fixed depth.
-    """
+    """Recursively collect ``{type: file, pattern, ontologies}`` leaves."""
     if isinstance(node, list):
         for item in node:
             _walk_file_outputs(item, found)
@@ -347,11 +448,11 @@ def _walk_file_outputs(node: object, found: list[dict]) -> None:
 
 
 def meta_yml_to_entry(meta: dict) -> CatalogEntry:
-    """Scaffold a `CatalogEntry` from a parsed nf-core module ``meta.yml``.
+    """Scaffold a draft `CatalogEntry` from a parsed nf-core module ``meta.yml``.
 
-    Produces a *draft* entry: tool identity + EDAM formats + file patterns are
-    inferred, but `fingerprint` (column names) and `feeds_viz` are left for the
-    contributor to complete — they can't be derived from the module metadata.
+    Infers module identity, bio.tools id, EDAM formats and a `find.path_glob`
+    from each output channel's pattern. Leaves `file_schema`, `reshape` and
+    `feeds_viz` for the contributor — those can't be derived from metadata.
     """
     tools_raw: object = meta.get("tools") or []
     biotools_id: str | None = None
@@ -369,12 +470,13 @@ def meta_yml_to_entry(meta: dict) -> CatalogEntry:
                 biotools_id = ident.split(":", 1)[1]
 
     name = str(meta.get("name", "unknown"))
-    tool_id = name.split("_")[0]
-    tool = CatalogTool(
-        id=tool_id,
+    module_id = name.split("_")[0]
+    module = CatalogModule(
+        id=module_id,
         name=name,
         description=tool_desc,
         homepage=homepage,
+        nf_core_module=name.replace("_", "/"),
         biotools_id=biotools_id,
     )
 
@@ -382,7 +484,7 @@ def meta_yml_to_entry(meta: dict) -> CatalogEntry:
     outputs: list[CatalogOutput] = []
     for channel, body in (output_block if isinstance(output_block, dict) else {}).items():
         if channel == "versions":
-            continue  # versions.yml is housekeeping, never a viz source
+            continue
         files: list[dict] = []
         _walk_file_outputs(body, files)
         if not files:
@@ -403,19 +505,18 @@ def meta_yml_to_entry(meta: dict) -> CatalogEntry:
                         read_fmt = "csv"
         outputs.append(
             CatalogOutput(
-                id=f"{tool_id}_{channel}",
+                id=f"{module_id}_{channel}",
                 description=str(files[0].get("description") or "").strip(),
                 mode=str(channel),
-                nf_core_module=name,
                 edam_formats=edam_formats,
-                file_patterns=patterns,
+                find=CatalogFind(filename=patterns[0] if patterns else f"*_{channel}"),
                 read_options=CatalogReadOptions(format=read_fmt),
             )
         )
 
     if not outputs:
-        # Guarantee a non-empty draft so the scaffold validates and the
-        # contributor sees where to fill in details.
-        outputs.append(CatalogOutput(id=f"{tool_id}_output", mode="output"))
+        outputs.append(
+            CatalogOutput(id=f"{module_id}_output", mode="output", find=CatalogFind(filename="*"))
+        )
 
-    return CatalogEntry(tool=tool, outputs=outputs)
+    return CatalogEntry(module=module, outputs=outputs)

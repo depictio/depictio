@@ -1,0 +1,9 @@
+# mosdepth — multi-output tool → a folder (genome / amplicon / heatmap).
+id: mosdepth
+name: mosdepth
+description: Fast BAM/CRAM depth-of-coverage calculation.
+homepage: https://github.com/brentp/mosdepth
+nf_core_module: mosdepth
+biotools_id: mosdepth
+edam_topics:
+  - topic_0622 # Genomics

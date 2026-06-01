@@ -1,0 +1,43 @@
+# yaml-language-server: $schema=./catalog.schema.json
+# pangolin — single-output tool → a single file.
+# Identity is resolvable: bio.tools/pangolin_cov-lineages and the nf-core module.
+schema_version: 1
+
+module:
+  id: pangolin
+  name: Pangolin
+  description: Phylogenetic Assignment of Named Global Outbreak LINeages (SARS-CoV-2).
+  homepage: https://github.com/cov-lineages/pangolin
+  nf_core_module: pangolin/run
+  biotools_id: pangolin_cov-lineages
+  edam_topics:
+    - topic_3305 # Public health and epidemiology
+
+outputs:
+  - id: pangolin_report
+    mode: run
+    description: Per-sample PANGO lineage report.
+    edam_operations:
+      - operation_3460 # Taxonomic classification
+    edam_formats:
+      - format_3752 # CSV
+    # How depictio-cli recognises the file (MultiQC-style):
+    find:
+      filename: "*.pangolin.csv"
+      required_columns: [taxon, lineage]
+    read_options: {format: csv}
+    # The schema of the file AS pangolin writes it (raw, pre-reshape):
+    file_schema:
+      taxon: String
+      lineage: String
+      conflict: Float64
+      ambiguity_score: Float64
+      scorpio_call: String
+      scorpio_support: Float64
+      pangolin_version: String
+      qc_status: String
+      note: String
+    # raw file -> tidy per-sample table:
+    reshape: {kind: recipe, recipe: nf-core/viralrecon/pangolin_lineages.py}
+    feeds_viz: [] # lineage table; feeds the sankey classification funnel via recipe
+    pipelines: ["nf-core/viralrecon"]

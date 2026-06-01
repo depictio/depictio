@@ -1,30 +1,127 @@
 {
   "$defs": {
-    "CatalogFingerprint": {
+    "CatalogFind": {
       "additionalProperties": false,
-      "description": "Column-name fingerprint that identifies this output on disk.\n\nCompiles directly to `Producer.required_columns`. Keep it minimal but\ndiscriminating (4-6 columns is usually enough). After the declared\n`reshape`, fingerprints describe the *post-reshape* column set the viz\nbinds against.",
+      "description": "How to recognise this tool output among the files in a run directory.\n\nMirrors MultiQC's search_patterns: a filename glob (`fn`), a content match\n(`contents`), plus depictio extras (a path glob and a tabular column check).\nA file matches when *all* of the declared conditions hold.",
       "properties": {
+        "filename": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Filename"
+        },
+        "path_glob": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Path Glob"
+        },
+        "content_contains": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Content Contains"
+        },
         "required_columns": {
           "items": {
             "type": "string"
           },
           "title": "Required Columns",
           "type": "array"
+        }
+      },
+      "title": "CatalogFind",
+      "type": "object"
+    },
+    "CatalogModule": {
+      "additionalProperties": false,
+      "description": "A tool (module). Carries the resolvable bio.tools / nf-core / EDAM identity.",
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
         },
-        "optional_columns": {
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "description": {
+          "default": "",
+          "title": "Description",
+          "type": "string"
+        },
+        "homepage": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Homepage"
+        },
+        "nf_core_module": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Nf Core Module"
+        },
+        "biotools_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Biotools Id"
+        },
+        "edam_topics": {
           "items": {
             "type": "string"
           },
-          "title": "Optional Columns",
+          "title": "Edam Topics",
           "type": "array"
         }
       },
-      "title": "CatalogFingerprint",
+      "required": [
+        "id",
+        "name"
+      ],
+      "title": "CatalogModule",
       "type": "object"
     },
     "CatalogOutput": {
       "additionalProperties": false,
-      "description": "One artefact a tool produces, in one running mode.\n\nThe unit that answers \"this file \u2192 these visualisations (after this\nreshape)\". A tool with many modes owns many of these.",
+      "description": "One file a tool emits, in one running mode \u2192 one visualisation mapping.",
       "properties": {
         "id": {
           "title": "Id",
@@ -47,7 +144,7 @@
           "default": null,
           "title": "Mode"
         },
-        "tool": {
+        "nf_core_module": {
           "anyOf": [
             {
               "type": "string"
@@ -57,7 +154,7 @@
             }
           ],
           "default": null,
-          "title": "Tool"
+          "title": "Nf Core Module"
         },
         "biotools_id": {
           "anyOf": [
@@ -70,18 +167,6 @@
           ],
           "default": null,
           "title": "Biotools Id"
-        },
-        "nf_core_module": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Nf Core Module"
         },
         "edam_operations": {
           "items": {
@@ -104,36 +189,21 @@
           "title": "Pipelines",
           "type": "array"
         },
-        "file_patterns": {
-          "items": {
-            "type": "string"
-          },
-          "title": "File Patterns",
-          "type": "array"
+        "find": {
+          "$ref": "#/$defs/CatalogFind"
         },
         "read_options": {
           "$ref": "#/$defs/CatalogReadOptions"
         },
-        "depends_on": {
-          "items": {
+        "file_schema": {
+          "additionalProperties": {
             "type": "string"
           },
-          "title": "Depends On",
-          "type": "array"
+          "title": "File Schema",
+          "type": "object"
         },
         "reshape": {
           "$ref": "#/$defs/CatalogReshape"
-        },
-        "fingerprint": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/CatalogFingerprint"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null
         },
         "feeds_viz": {
           "items": {
@@ -196,14 +266,15 @@
         }
       },
       "required": [
-        "id"
+        "id",
+        "find"
       ],
       "title": "CatalogOutput",
       "type": "object"
     },
     "CatalogReadOptions": {
       "additionalProperties": false,
-      "description": "How to read a raw tool output file into a DataFrame.\n\nCaptures the read-time quirks that today live as prose in\n`Producer.notes` (e.g. QIIME 2's biom TSV needs `comment_prefix='#'`,\nVCF needs `##` skipping). Polars-flavoured but tool-agnostic.",
+      "description": "How to read the raw file into a DataFrame.",
       "properties": {
         "format": {
           "default": "csv",
@@ -255,7 +326,7 @@
     },
     "CatalogReshape": {
       "additionalProperties": false,
-      "description": "Declarative reshape from the raw file's shape to a bindable shape.\n\nMost real tool outputs are not in the long/wide form a viz wants. Rather\nthan force a Python recipe for every tool, common reshapes are expressed\ndeclaratively so a catalog contributor never writes code for the easy\ncases. `kind=\"recipe\"` is the escape hatch for arbitrary logic and points\nat an existing `projects/.../recipes/*.py` transform.",
+      "description": "Declarative reshape from the raw file's shape to a viz-ready shape.\n\n`kind=\"recipe\"` is the escape hatch for arbitrary logic and points at an\nexisting `projects/<pipeline>/recipes/<name>.py` transform.",
       "properties": {
         "kind": {
           "default": "identity",
@@ -412,83 +483,18 @@
       },
       "title": "CatalogReshape",
       "type": "object"
-    },
-    "CatalogTool": {
-      "additionalProperties": false,
-      "description": "The producing entity for a catalog file: a single tool or a pipeline.\n\nA tool-scoped entry (`kind=\"tool\"`) carries its own bio.tools / EDAM\nidentity at this level. A pipeline-scoped entry (`kind=\"pipeline\"`, e.g.\nnf-core/viralrecon) is a composition: identity lives per-output instead\n(`CatalogOutput.tool` / `.biotools_id`).",
-      "properties": {
-        "id": {
-          "title": "Id",
-          "type": "string"
-        },
-        "name": {
-          "title": "Name",
-          "type": "string"
-        },
-        "kind": {
-          "default": "tool",
-          "enum": [
-            "tool",
-            "pipeline"
-          ],
-          "title": "Kind",
-          "type": "string"
-        },
-        "description": {
-          "default": "",
-          "title": "Description",
-          "type": "string"
-        },
-        "homepage": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Homepage"
-        },
-        "biotools_id": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Biotools Id"
-        },
-        "edam_topics": {
-          "items": {
-            "type": "string"
-          },
-          "title": "Edam Topics",
-          "type": "array"
-        }
-      },
-      "required": [
-        "id",
-        "name"
-      ],
-      "title": "CatalogTool",
-      "type": "object"
     }
   },
   "additionalProperties": false,
-  "description": "One catalog YAML file: a tool and all of its mapped outputs.",
+  "description": "One module + all of its outputs (assembled from a file or a folder).",
   "properties": {
     "schema_version": {
       "default": 1,
       "title": "Schema Version",
       "type": "integer"
     },
-    "tool": {
-      "$ref": "#/$defs/CatalogTool"
+    "module": {
+      "$ref": "#/$defs/CatalogModule"
     },
     "outputs": {
       "items": {
@@ -500,7 +506,7 @@
     }
   },
   "required": [
-    "tool",
+    "module",
     "outputs"
   ],
   "title": "CatalogEntry",

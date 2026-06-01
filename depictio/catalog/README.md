@@ -1,102 +1,88 @@
 # Depictio bioinformatics catalog
 
-This directory is the **community-extensible catalog** that maps the outputs of
-bioinformatics tools (nf-core modules / bio.tools entries) to depictio
-visualisations. It is the evolutive, grow-with-the-community layer that sits on
-top of the hand-curated fingerprint registry in
-`depictio/models/components/advanced_viz/producers.py`.
+The **community-extensible catalog** that maps the outputs of bioinformatics
+tools (nf-core modules / bio.tools entries) to depictio visualisations —
+structured like **MultiQC modules**.
 
-Each `*.yaml` file describes a **producing entity** (a single tool *or* a whole
-pipeline) and **all of the outputs** it produces. Adding support for a new tool
-— or a new running mode of an existing tool — is a pull request that adds or
-edits one YAML file. No Python required.
+## Layout
 
-**Schema:** the authoritative contract is **`catalog.schema.json`** (JSON
-Schema; regenerate via `depictio catalog schema -o depictio/catalog/catalog.schema.json`).
-A field-by-field, MUST/CAN reference is in **`SCHEMA.md`**. Each catalog file's
-first line points editors at the schema for live validation/autocomplete.
+A **module = a tool**. A single-output tool is one flat file; a multi-output
+tool (QIIME 2) is a folder with one file per output / running mode:
 
-**Bundled entries:**
-- `metaphlan.yaml` — tool-scoped (`kind: tool`): one tool, identity at the top.
-- `viralrecon.yaml`, `ampliseq.yaml` — pipeline-scoped (`kind: pipeline`):
-  every data collection of the nf-core seed pipelines, with each output naming
-  its upstream tool (pangolin, mosdepth, QIIME 2, …). QIIME 2's many modes
-  (diversity / taxa-barplot / rel-abundance / composition·ancombc / phylogeny)
-  appear as many outputs in `ampliseq.yaml`.
+```
+depictio/catalog/
+  pangolin.yaml          # single output  → one file
+  nextclade.yaml
+  ivar.yaml
+  metaphlan.yaml
+  multiqc.yaml
+  fastqc.yaml
+  qiime2/                # many outputs   → a folder
+    module.yaml          #   the tool's identity (links to nf-core + bio.tools)
+    taxa_barplot.yaml    #   one output / running mode = one file
+    rel_abundance.yaml
+    alpha_diversity.yaml
+    alpha_rarefaction.yaml
+    ancombc.yaml
+    phylogeny.yaml
+  mosdepth/
+    module.yaml
+    genome_coverage.yaml
+    amplicon_coverage.yaml
+    amplicon_heatmap.yaml
+```
 
-## Why a catalog (and not just more `producers.py`)
+Adding support for a tool (or a new mode of an existing tool) is a PR that adds
+one YAML file. **No Python required.**
 
-`producers.py` is a vetted core kept in a single Python file. The catalog
-extends it for three things a bare fingerprint can't express:
+## What one output declares
 
-1. **Upstream identity** — every tool carries its `biotools_id`, EDAM ontology
-   terms, and per-output `nf_core_module`. This is the same metadata nf-core
-   modules already publish in `meta.yml`, so entries can be *scaffolded
-   automatically* (see below).
-2. **Many running modes per tool** — heavyweight tools like QIIME 2 emit dozens
-   of differently-shaped artefacts depending on the subcommand. One `tool`
-   owns many `outputs`, each tagged with its `mode` (mirroring how nf-core
-   models a module's output channels and how bio.tools models a tool's EDAM
-   operations). See `qiime2.yaml`.
-3. **The reshape a raw file needs** — a tool's on-disk output is rarely in the
-   exact long/wide shape a viz wants. Each output declares the reshape
-   (`melt` / `pivot` / `aggregate`) declaratively, or defers to a Python
-   `recipe` for arbitrary logic.
+Each output is self-contained and answers four questions (full field reference
+in **`SCHEMA.md`**; machine contract in **`catalog.schema.json`**):
 
-At runtime the catalog is compiled to the same `Producer` primitives the
-suggestion engine already uses, and merged via `producers.all_producers()`
-(hand-curated entries win on any name collision).
+1. **`find`** — how depictio-cli *recognises* the file (filename glob /
+   path glob / content match / required columns), exactly like MultiQC's
+   `search_patterns` (`fn` / `contents`).
+2. **`file_schema`** — the columns + dtypes the tool actually writes (the raw
+   file as-emitted), so you can see what the file looks like.
+3. **`reshape`** — how to turn that raw file into a viz-ready shape (`melt` /
+   `pivot` / `aggregate`, or a `recipe` for arbitrary logic).
+4. **`feeds_viz` + `role_mapping`** — which depictio visualisation(s) it maps to.
 
-## Anatomy of an entry
+Identity is **resolvable**: `biotools_id` → `https://bio.tools/<id>`,
+`nf_core_module` → the nf-core/modules tree, `edam_*` → edamontology.org.
+
+Example (`pangolin.yaml`):
 
 ```yaml
-schema_version: 1
-tool:
-  id: metaphlan
-  name: MetaPhlAn
-  biotools_id: metaphlan          # links to bio.tools
-  edam_topics: [topic_3174]       # Metagenomics
+module:
+  id: pangolin
+  name: Pangolin
+  nf_core_module: pangolin/run         # → github.com/nf-core/modules/.../pangolin/run
+  biotools_id: pangolin_cov-lineages   # → bio.tools/pangolin_cov-lineages
 outputs:
-  - id: metaphlan_merged_abundance  # stable, globally-unique producer id
-    mode: merge_metaphlan_tables    # the running mode that emits this artefact
-    nf_core_module: metaphlan/mergemetaphlantables
-    edam_formats: [format_3475]     # TSV
-    file_patterns: ["merged_abundance_table.txt"]
-    read_options: {format: tsv}
-    reshape:                        # raw file -> bindable shape
-      kind: melt
-      id_vars: [clade_name, NCBI_tax_id]
-      variable_name: sample_id
-      value_name: abundance
-    fingerprint:                    # column-name signature (post any read parse)
-      required_columns: [clade_name, NCBI_tax_id]
-    feeds_viz: [stacked_taxonomy, sunburst]
-    role_mapping:                   # pre-fill viz role -> column
-      stacked_taxonomy: {sample_id: sample_id, taxon: clade_name, abundance: abundance}
+  - id: pangolin_report
+    find: { filename: "*.pangolin.csv", required_columns: [taxon, lineage] }
+    file_schema: { taxon: String, lineage: String, scorpio_call: String, qc_status: String }
+    reshape: { kind: recipe, recipe: nf-core/viralrecon/pangolin_lineages.py }
+    feeds_viz: []
 ```
 
-`reshape.kind` is one of: `identity` (default), `melt`, `pivot`, `aggregate`,
-`recipe`. When the reshape is too complex to express declaratively, set
-`kind: recipe` and point at an existing
-`depictio/projects/<pipeline>/recipes/<name>.py`.
-
-An output with no `fingerprint` is still useful (it carries provenance + the
-recipe link), it just won't be matched from column names by the suggestion
-engine — its viz comes via its `recipe` producing an already-known canonical
-shape.
-
-## Scaffold from an nf-core module
+## How depictio-cli recognises files
 
 ```bash
-# fetch a module meta.yml, then:
-depictio catalog import-meta path/to/meta.yml -o depictio/catalog/<tool>.yaml
-# then fill in each output's fingerprint.required_columns + feeds_viz
+depictio catalog match <run_dir>   # walk a run dir, report recognised tool outputs
 ```
+This is the catalog analogue of MultiQC's file search. Each hit reports
+`module / output → feeds_viz`.
 
-## Validate before committing
+## Commands
 
 ```bash
-depictio catalog list           # show every tool + mode
-depictio catalog validate       # validate the whole bundle (CI-friendly)
-depictio catalog validate -p depictio/catalog/<tool>.yaml
+depictio catalog list                 # every module + output, with its find rules
+depictio catalog info qiime2          # one module: resolvable links + output detail
+depictio catalog validate             # validate the bundle (CI-friendly)
+depictio catalog match path/to/run    # recognise files in a run directory
+depictio catalog import-meta meta.yml # scaffold a draft entry from an nf-core meta.yml
+depictio catalog schema -o catalog.schema.json   # regenerate the JSON Schema
 ```

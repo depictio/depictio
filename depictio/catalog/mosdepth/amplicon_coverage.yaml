@@ -1,0 +1,20 @@
+id: mosdepth_amplicon_coverage
+mode: amplicon
+description: Per-amplicon coverage depth, aggregated across all samples.
+edam_formats:
+  - format_3475 # TSV
+find:
+  path_glob: "**/mosdepth/amplicon/all_samples.mosdepth.coverage.tsv"
+read_options: {format: tsv}
+file_schema:
+  chrom: String
+  start: Int64
+  end: Int64
+  region: String
+  coverage: Float64
+  sample: String
+reshape: {kind: identity}
+feeds_viz: [coverage_track]
+role_mapping:
+  coverage_track: {chromosome: chrom, position: start, value: coverage}
+pipelines: ["nf-core/viralrecon"]
