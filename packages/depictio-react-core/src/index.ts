@@ -109,6 +109,7 @@ export {
   getAnonymousSession,
   startGoogleOAuth,
   handleGoogleCallback,
+  exchangeMagicToken,
   persistSession,
   clearSession,
   validateSession,
