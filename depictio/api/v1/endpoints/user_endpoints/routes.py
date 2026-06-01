@@ -675,7 +675,9 @@ async def register(
             detail="User registration disabled in single-user mode and public mode",
         )
     try:
-        return await _create_user_in_db(request.email, request.password, request.is_admin)
+        # SECURITY: never honour client-supplied ``is_admin`` on /register.
+        # Promotion to admin is an admin-only action (see /turn_sysadmin).
+        return await _create_user_in_db(request.email, request.password, is_admin=False)
 
     except HTTPException as e:
         # Re-raise HTTP exceptions
@@ -760,7 +762,7 @@ async def get_all_users(current_user=Depends(get_current_user)):
     if not current_user:
         raise HTTPException(status_code=401, detail="Current user not found.")
     if not current_user.is_admin:
-        raise HTTPException(status_code=401, detail="Current user is not an admin.")
+        raise HTTPException(status_code=403, detail="Admin privileges required.")
 
     # Use Beanie model to fetch users - works with both real DB and mocked DB
     users = await UserBeanie.find_all().to_list()
@@ -1040,7 +1042,7 @@ def delete_user(user_id: str, current_user=Depends(get_current_user)):
         raise HTTPException(status_code=401, detail="Current user not found.")
     # Check if the current user is an admin
     if not current_user.is_admin:
-        raise HTTPException(status_code=401, detail="Current user is not an admin.")
+        raise HTTPException(status_code=403, detail="Admin privileges required.")
 
     # Ensure user_id is an ObjectId
     if isinstance(user_id, str):
@@ -1062,32 +1064,14 @@ def delete_user(user_id: str, current_user=Depends(get_current_user)):
         return {"success": False}
 
 
-@auth_endpoint_router.get("/check_admin_default_password", include_in_schema=True)
-async def check_admin_default_password(current_user=Depends(get_current_user)):
-    """
-    Check if the admin user still has the default password 'changeme'.
-    Only accessible by authenticated users.
-    Returns: {"has_default_password": bool}
-    """
-    if not current_user:
-        raise HTTPException(status_code=401, detail="Current user not found.")
-
-    try:
-        # Check if admin@example.com exists and has default password
-        has_default = await _check_password("admin@example.com", "changeme")
-        return {"has_default_password": has_default}
-    except Exception as e:
-        logger.error(f"Error checking admin default password: {e}")
-        return {"has_default_password": False}
-
-
 @auth_endpoint_router.post("/turn_sysadmin/{user_id}/{is_admin}", include_in_schema=True)
-def turn_sysadmin(user_id: str, is_admin: bool, current_user=Depends(get_current_user)):
+async def turn_sysadmin(user_id: str, is_admin: bool, current_user=Depends(get_current_user)):
     if not current_user:
-        raise HTTPException(status_code=401, detail="Current user not found.")
-    # Check if the current user is an admin
+        raise HTTPException(status_code=401, detail="Authentication required.")
+    # Authenticated-but-not-admin is a 403, not a 401 — the caller IS
+    # authenticated, they just lack permission.
     if not current_user.is_admin:
-        raise HTTPException(status_code=401, detail="Current user is not an admin.")
+        raise HTTPException(status_code=403, detail="Admin privileges required.")
 
     # Ensure user_id is an ObjectId
     if isinstance(user_id, str):
@@ -1100,6 +1084,26 @@ def turn_sysadmin(user_id: str, is_admin: bool, current_user=Depends(get_current
     else:
         # Convert to string first, then to ObjectId
         user_id = ObjectId(str(user_id))  # type: ignore[invalid-assignment]
+
+    # Demotion guard rails: admins cannot demote themselves, and the system
+    # refuses to remove the last remaining non-anonymous admin (otherwise the
+    # cluster locks itself out of any admin-gated routes until the bootstrap
+    # re-runs).
+    if not is_admin:
+        if user_id == current_user.id:
+            raise HTTPException(status_code=400, detail="Admins cannot demote themselves.")
+        remaining_admins = await UserBeanie.find(
+            {
+                "is_admin": True,
+                "is_anonymous": {"$ne": True},
+                "_id": {"$ne": user_id},
+            }
+        ).count()
+        if remaining_admins == 0:
+            raise HTTPException(
+                status_code=400,
+                detail="Cannot demote the last remaining admin.",
+            )
 
     # Update the user in the database
     result = users_collection.update_one({"_id": user_id}, {"$set": {"is_admin": is_admin}})
@@ -1115,7 +1119,7 @@ def delete_group(group_id: str, current_user=Depends(get_current_user)):
         raise HTTPException(status_code=401, detail="Current user not found.")
     # Check if the current user is an admin
     if not current_user.is_admin:
-        raise HTTPException(status_code=401, detail="Current user is not an admin.")
+        raise HTTPException(status_code=403, detail="Admin privileges required.")
 
     # Ensure group_id is an ObjectId
     if isinstance(group_id, str):
@@ -1139,7 +1143,7 @@ def update_group_in_users(group_id: str, request: dict, current_user=Depends(get
         raise HTTPException(status_code=401, detail="Current user not found.")
     # Check if the current user is an admin
     if not current_user.is_admin:
-        raise HTTPException(status_code=401, detail="Current user is not an admin.")
+        raise HTTPException(status_code=403, detail="Admin privileges required.")
 
     if not request:
         raise HTTPException(status_code=400, detail="No request provided")
@@ -1181,7 +1185,7 @@ def get_group_with_users(group_id: str, current_user=Depends(get_current_user)):
         raise HTTPException(status_code=401, detail="Current user not found.")
     # Check if the current user is an admin
     if not current_user.is_admin:
-        raise HTTPException(status_code=401, detail="Current user is not an admin.")
+        raise HTTPException(status_code=403, detail="Admin privileges required.")
 
     # Ensure group_id is an ObjectId
     if isinstance(group_id, str):

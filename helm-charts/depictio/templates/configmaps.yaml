@@ -73,9 +73,14 @@ data:
   DEPICTIO_DASHBOARD_YAML_WATCHER_AUTO_START: {{ .Values.backend.env.DEPICTIO_DASHBOARD_YAML_WATCHER_AUTO_START | default "false" | quote }}
   DEPICTIO_DASHBOARD_YAML_WATCH_LOCAL_DIR: {{ .Values.backend.env.DEPICTIO_DASHBOARD_YAML_WATCH_LOCAL_DIR | default "false" | quote }}
   DEPICTIO_DASHBOARD_YAML_AUTO_EXPORT_ON_SAVE: {{ .Values.backend.env.DEPICTIO_DASHBOARD_YAML_AUTO_EXPORT_ON_SAVE | default "false" | quote }}
-  # MinIO/S3 configuration
-  DEPICTIO_MINIO_ROOT_USER: {{ .Values.minio.env.DEPICTIO_MINIO_ROOT_USER | default "minio" | quote }}
-  DEPICTIO_MINIO_ROOT_PASSWORD: {{ .Values.minio.env.DEPICTIO_MINIO_ROOT_PASSWORD | default "minio123" | quote }}
+  # MinIO/S3 configuration.
+  # NOTE: DEPICTIO_MINIO_ROOT_USER and DEPICTIO_MINIO_ROOT_PASSWORD are
+  # intentionally NOT in this ConfigMap. ConfigMaps are world-readable to
+  # anything in-cluster (incl. exec/describe) and ship in etcd unencrypted
+  # by default. Both values are injected from the
+  # ``{{ printf "%s-depictio-secrets" .Release.Name }}`` Secret via the
+  # backend / celery / minio Deployment ``env`` blocks. Adding them here
+  # would silently re-introduce the leak.
   DEPICTIO_MINIO_BUCKET: {{ .Values.minio.env.DEPICTIO_MINIO_BUCKET | default "depictio-bucket" | quote }}
   {{- if not .Values.minio.enabled }}
   # External MinIO/S3 configuration (when built-in MinIO is disabled)
@@ -141,9 +146,14 @@ data:
   # Viewer Service exposes nginx on port 80.
   DEPICTIO_VIEWER_SERVICE_PORT: {{ .Values.viewer.service.httpPort | quote }}
 
-  # MinIO/S3 configuration
-  DEPICTIO_MINIO_ROOT_USER: {{ .Values.minio.env.DEPICTIO_MINIO_ROOT_USER | default "minio" | quote }}
-  DEPICTIO_MINIO_ROOT_PASSWORD: {{ .Values.minio.env.DEPICTIO_MINIO_ROOT_PASSWORD | default "minio123" | quote }}
+  # MinIO/S3 configuration.
+  # NOTE: DEPICTIO_MINIO_ROOT_USER and DEPICTIO_MINIO_ROOT_PASSWORD are
+  # intentionally NOT in this ConfigMap. ConfigMaps are world-readable to
+  # anything in-cluster (incl. exec/describe) and ship in etcd unencrypted
+  # by default. Both values are injected from the
+  # ``{{ printf "%s-depictio-secrets" .Release.Name }}`` Secret via the
+  # backend / celery / minio Deployment ``env`` blocks. Adding them here
+  # would silently re-introduce the leak.
   DEPICTIO_MINIO_BUCKET: {{ .Values.minio.env.DEPICTIO_MINIO_BUCKET | default "depictio-bucket" | quote }}
   {{- if not .Values.minio.enabled }}
   DEPICTIO_MINIO_PUBLIC_URL: {{ .Values.minio.env.DEPICTIO_MINIO_PUBLIC_URL | quote }}

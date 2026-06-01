@@ -1099,8 +1099,9 @@ def get_phylogeny_newick(
             s3 = boto3.client(
                 "s3",
                 endpoint_url=settings.minio.endpoint_url,
-                aws_access_key_id=settings.minio.root_user,
-                aws_secret_access_key=settings.minio.root_password,
+                aws_access_key_id=settings.minio.aws_access_key_id,
+                aws_secret_access_key=settings.minio.aws_secret_access_key,
+                verify=settings.minio.verify_tls,
             )
             _, _, rest = file_path.partition("s3://")
             bucket, _, key = rest.partition("/")

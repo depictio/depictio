@@ -473,6 +473,39 @@ spec:
                   name: {{ .Release.Name }}-depictio-secrets
                   key: MINIO_ROOT_PASSWORD
             {{- end }}
+            # Bootstrap admin / optional CI test user. Sourced from the
+            # Secret (not the ConfigMap) so the password never appears in
+            # `kubectl describe configmap` output.
+            - name: DEPICTIO_BOOTSTRAP_ADMIN_EMAIL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Release.Name }}-depictio-secrets
+                  key: DEPICTIO_BOOTSTRAP_ADMIN_EMAIL
+                  optional: true
+            - name: DEPICTIO_BOOTSTRAP_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Release.Name }}-depictio-secrets
+                  key: DEPICTIO_BOOTSTRAP_ADMIN_PASSWORD
+                  optional: true
+            - name: DEPICTIO_BOOTSTRAP_SEED_TEST_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Release.Name }}-depictio-secrets
+                  key: DEPICTIO_BOOTSTRAP_SEED_TEST_USER
+                  optional: true
+            - name: DEPICTIO_BOOTSTRAP_TEST_USER_EMAIL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Release.Name }}-depictio-secrets
+                  key: DEPICTIO_BOOTSTRAP_TEST_USER_EMAIL
+                  optional: true
+            - name: DEPICTIO_BOOTSTRAP_TEST_USER_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Release.Name }}-depictio-secrets
+                  key: DEPICTIO_BOOTSTRAP_TEST_USER_PASSWORD
+                  optional: true
             - name: WATCHFILES_FORCE_POLLING
               value: "true"
             - name: PYTHONUNBUFFERED

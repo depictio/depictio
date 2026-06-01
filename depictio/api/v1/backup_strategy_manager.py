@@ -49,7 +49,7 @@ class S3BackupStrategyManager:
             aws_access_key_id=source_s3_config["aws_access_key_id"],
             aws_secret_access_key=source_s3_config["aws_secret_access_key"],
             region_name=source_s3_config.get("region_name", "us-east-1"),
-            verify=False,  # Disable SSL verification for local MinIO
+            verify=source_s3_config.get("verify", settings.minio.verify_tls),
         )
 
         # Initialize backup S3 client if configured

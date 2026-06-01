@@ -66,10 +66,10 @@ def _cascade_delete_project(project_id: PyObjectId, project_name: str) -> None:
                 s3_client = boto3.client(
                     "s3",
                     endpoint_url=settings.minio.endpoint_url,
-                    aws_access_key_id=settings.minio.root_user,
-                    aws_secret_access_key=settings.minio.root_password,
+                    aws_access_key_id=settings.minio.aws_access_key_id,
+                    aws_secret_access_key=settings.minio.aws_secret_access_key,
                     region_name="us-east-1",
-                    verify=False,
+                    verify=settings.minio.verify_tls,
                 )
                 for prefix in s3_paths:
                     paginator = s3_client.get_paginator("list_objects_v2")

@@ -10,11 +10,12 @@ import re
 from pathlib import Path
 from typing import Any, cast
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.middleware.base import BaseHTTPMiddleware
 
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.endpoints.routers import router
@@ -62,15 +63,93 @@ app = FastAPI(
     default_response_class=CustomJSONResponse,
 )
 
-# Add CORS middleware
-# Cast needed due to incomplete FastAPI middleware type stubs
+_logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# Security-headers middleware
+#
+# Applied before route handlers so every response (including streamed file
+# responses and CORS preflights) carries the same set of conservative
+# defaults. The viewer SPA also sets equivalents at the nginx edge — these
+# are a defence-in-depth fallback for direct backend-port access.
+# ---------------------------------------------------------------------------
+_SECURITY_HEADERS: dict[str, str] = {
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "SAMEORIGIN",
+    "Referrer-Policy": "strict-origin-when-cross-origin",
+    "Permissions-Policy": "camera=(), microphone=(), geolocation=(), interest-cohort=()",
+    # CSP: the React SPA bundle requires its own assets only; ag-grid / Mantine
+    # ship CSS-in-JS so 'unsafe-inline' is required for style-src. WebSockets to
+    # the same origin are needed for the realtime events stream.
+    "Content-Security-Policy": (
+        "default-src 'self'; "
+        "script-src 'self'; "
+        "style-src 'self' 'unsafe-inline'; "
+        "img-src 'self' data: blob: https:; "
+        "font-src 'self' data:; "
+        "connect-src 'self' ws: wss:; "
+        "frame-ancestors 'self'; "
+        "object-src 'none'; "
+        "base-uri 'self'; "
+        "form-action 'self'"
+    ),
+}
+
+
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    """Attach baseline security headers to every API response."""
+
+    async def dispatch(self, request: Request, call_next: Any) -> Response:
+        response = await call_next(request)
+        for header, value in _SECURITY_HEADERS.items():
+            response.headers.setdefault(header, value)
+        # HSTS only meaningful behind TLS; relying on X-Forwarded-Proto from
+        # the nginx viewer / ingress to avoid emitting it on plain-HTTP dev.
+        if request.headers.get("x-forwarded-proto", "").lower() == "https":
+            response.headers.setdefault(
+                "Strict-Transport-Security",
+                "max-age=31536000; includeSubDomains",
+            )
+        return response
+
+
+app.add_middleware(cast(Any, SecurityHeadersMiddleware))
+
+
+# ---------------------------------------------------------------------------
+# CORS — strict allowlist, no wildcard credentials.
+#
+# Browsers reject ``Access-Control-Allow-Origin: *`` whenever the request is
+# credentialed; the previous ``allow_origins=["*"], allow_credentials=True``
+# combination was both browser-rejected today and a CSRF amplifier the moment
+# anyone "fixed" it by reflecting the Origin header. The allowlist is loaded
+# from DEPICTIO_FASTAPI_CORS_ALLOWED_ORIGINS — empty means no cross-origin
+# browser traffic, which is the safe default when the viewer SPA is served
+# same-origin via nginx.
+# ---------------------------------------------------------------------------
+_cors_origins: list[str] = list(settings.fastapi.cors_allowed_origins)  # type: ignore[arg-type]
+if "*" in _cors_origins and settings.fastapi.cors_allow_credentials:
+    raise RuntimeError(
+        "DEPICTIO_FASTAPI_CORS_ALLOWED_ORIGINS contains '*' while "
+        "DEPICTIO_FASTAPI_CORS_ALLOW_CREDENTIALS is true. Browsers reject this "
+        "combination and reflecting Origin opens a CSRF hole — list explicit "
+        "origins (e.g. https://app.example.com) instead."
+    )
+
 app.add_middleware(
     cast(Any, CORSMiddleware),
-    allow_origins=["*"],  # Allow all origins
-    allow_credentials=True,
-    allow_methods=["*"],  # Allow all methods
-    allow_headers=["*"],  # Allow all headers
+    allow_origins=_cors_origins,
+    allow_credentials=settings.fastapi.cors_allow_credentials and bool(_cors_origins),
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "X-Requested-With"],
+    max_age=600,
 )
+if not _cors_origins:
+    _logger.info(
+        "CORS allowlist is empty — cross-origin browser requests are disabled. "
+        "Set DEPICTIO_FASTAPI_CORS_ALLOWED_ORIGINS to allow specific origins."
+    )
 
 # Add analytics middleware if enabled
 if settings.analytics.enabled:

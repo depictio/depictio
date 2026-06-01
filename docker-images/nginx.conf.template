@@ -28,6 +28,14 @@ map $http_upgrade $connection_upgrade {
     ''      close;
 }
 
+# HSTS only when the request reached us over HTTPS (the k8s ingress / cloud
+# LB sets X-Forwarded-Proto). Plain HTTP traffic (e.g. local docker-compose
+# dev) gets an empty header so HSTS isn't pinned to localhost.
+map $http_x_forwarded_proto $depictio_hsts {
+    default "";
+    https   "max-age=31536000; includeSubDomains";
+}
+
 # Runtime DNS resolver. Using a variable in `proxy_pass` below defers
 # backend hostname resolution from nginx-startup to request time, so the
 # viewer container starts cleanly even if the backend is still booting /
@@ -46,6 +54,14 @@ resolver ${NGINX_LOCAL_RESOLVERS} valid=10s ipv6=off;
 server {
     listen 80;
     server_name _;
+
+    # Hide the nginx version banner from error pages and the Server header.
+    server_tokens off;
+
+    # Upload size — covers project ZIP import and CSV/Delta uploads. Tuned
+    # to match the FastAPI side; raise via DEPICTIO_VIEWER_MAX_UPLOAD if
+    # the deployment needs larger imports.
+    client_max_body_size 200m;
 
     # Emit RELATIVE redirect Location headers. nginx listens on 80 inside the
     # container but is published on a different host port (e.g. 5100 in the
@@ -139,9 +155,15 @@ server {
         application/wasm
         image/svg+xml;
 
-    # Modest hardening — these mirror what the FastAPI middleware sets so
-    # the SPA sees consistent headers no matter which container served it.
+    # Security headers — mirror the FastAPI SecurityHeadersMiddleware so
+    # whichever container served the response, the browser sees the same
+    # baseline. CSP allows the SPA's own scripts + WS connections to same
+    # origin only; Mantine / ag-grid require ``unsafe-inline`` for their
+    # CSS-in-JS, which is acceptable because there is no inline *script*.
     add_header X-Content-Type-Options "nosniff" always;
     add_header X-Frame-Options "SAMEORIGIN" always;
     add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+    add_header Permissions-Policy "camera=(), microphone=(), geolocation=(), interest-cohort=()" always;
+    add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self' ws: wss:; frame-ancestors 'self'; object-src 'none'; base-uri 'self'; form-action 'self'" always;
+    add_header Strict-Transport-Security $depictio_hsts always;
 }

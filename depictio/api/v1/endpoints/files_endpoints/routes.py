@@ -146,13 +146,17 @@ async def delete_file(file_id: str, current_user=Depends(get_current_user)):
 
     user_oid = ObjectId(current_user.id)
     target_file_id = ObjectId(file_id)
-    query = {
-        "_id": target_file_id,
-        "$or": [
-            {"permissions.owners._id": user_oid},  # User is an owner
-            {"permissions.owners.is_admin": True},  # User is an admin
-        ],
-    }
+    # SECURITY: the previous predicate ``{"permissions.owners.is_admin": True}``
+    # matched any file whose owner happens to be an admin — meaning a
+    # non-admin user could delete *another* admin's files. The correct check
+    # is on the caller (``current_user.is_admin``), not on the file's owners.
+    if current_user.is_admin:
+        query: dict = {"_id": target_file_id}
+    else:
+        query = {
+            "_id": target_file_id,
+            "permissions.owners._id": user_oid,
+        }
 
     result = files_collection.delete_one(query)
     if result.deleted_count == 0:

@@ -751,10 +751,10 @@ async def screenshot_dashboard(
 
         # Wait for page to load
         # await page.wait_for_load_state("networkidle")
-        logger.debug("Looking for user in the database...")
-        current_user = await UserBeanie.find_one({"email": "admin@example.com"})
-
-        # current_user = await UserBeanie.find_one({"email": "admin@example.com"})
+        logger.debug("Looking for admin user in the database...")
+        current_user = await UserBeanie.find_one(
+            {"is_admin": True, "is_anonymous": {"$ne": True}}
+        )
         logger.debug(f"Current user: {current_user}")
 
         # Get all tokens for the current user

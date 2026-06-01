@@ -8,6 +8,7 @@ and imports it into the target instance via upsert (never wipes other projects).
 
 import io
 import json
+import os
 import zipfile
 from datetime import datetime
 from typing import Any, Literal, cast
@@ -159,7 +160,7 @@ def _copy_s3_locations(
         aws_access_key_id=source_config["aws_access_key_id"],
         aws_secret_access_key=source_config["aws_secret_access_key"],
         region_name=source_config.get("region_name", "us-east-1"),
-        verify=False,
+        verify=source_config.get("verify", settings.minio.verify_tls),
     )
     target_client = boto3.client(
         "s3",
@@ -167,7 +168,7 @@ def _copy_s3_locations(
         aws_access_key_id=target_config["aws_access_key_id"],
         aws_secret_access_key=target_config["aws_secret_access_key"],
         region_name=target_config.get("region_name", "us-east-1"),
-        verify=False,
+        verify=target_config.get("verify", settings.minio.verify_tls),
     )
 
     source_bucket = source_config["bucket"]
@@ -414,7 +415,7 @@ async def export_project(
                 aws_access_key_id=settings.minio.aws_access_key_id,
                 aws_secret_access_key=settings.minio.aws_secret_access_key,
                 region_name="us-east-1",
-                verify=False,
+                verify=settings.minio.verify_tls,
             )
             bundled_files = 0
             for path in s3_paths:
@@ -564,7 +565,7 @@ async def import_project_zip(
     file: UploadFile = File(...),
     dry_run: bool = False,
     overwrite: bool = False,
-    current_user: User = Depends(get_user_or_anonymous),
+    current_user: User = Depends(get_current_user),
 ) -> MigrateImportResponse:
     """
     Import a project bundle from a ZIP file (for UI use).
@@ -572,8 +573,9 @@ async def import_project_zip(
     Accepts a .zip file containing bundle.json and migrate_metadata.json.
     Always remaps all owners to the calling user (force_owner_remap=True).
 
-    Tolerates missing tokens (single-user / public mode); the inline
-    ``is_admin`` gate below still rejects non-admin callers.
+    Requires an authenticated admin caller — previously this used
+    ``get_user_or_anonymous`` which let an anonymous (admin-flagged)
+    public-mode user import arbitrary project ZIPs.
     """
     if not current_user.is_admin:
         raise HTTPException(status_code=403, detail="Only administrators can import projects")
@@ -594,12 +596,23 @@ async def import_project_zip(
                     aws_access_key_id=settings.minio.aws_access_key_id,
                     aws_secret_access_key=settings.minio.aws_secret_access_key,
                     region_name="us-east-1",
-                    verify=False,
+                    verify=settings.minio.verify_tls,
                 )
                 uploaded = 0
                 for zip_path in s3_keys:
                     s3_key = zip_path[len("s3_data/") :]  # strip prefix to get original path
                     if not s3_key:
+                        continue
+                    # Zip-slip guard: the ZIP can contain absolute paths or
+                    # ``..`` segments that would let an attacker upload arbitrary
+                    # objects outside the intended bundle prefix. Reject anything
+                    # that doesn't normalise to a clean relative S3 key.
+                    if (
+                        s3_key.startswith("/")
+                        or ".." in s3_key.split("/")
+                        or s3_key != os.path.normpath(s3_key).replace(os.sep, "/")
+                    ):
+                        logger.warning("Refusing to restore suspicious S3 key from ZIP: %s", s3_key)
                         continue
                     try:
                         s3_client.put_object(

@@ -367,7 +367,9 @@ class RequestEditPassword(BaseModel):
 class RequestUserRegistration(BaseModel):
     email: EmailStr
     password: str
-    is_admin: bool = False
+    # NOTE: ``is_admin`` is intentionally absent. Admin promotion is gated by
+    # /auth/turn_sysadmin (admin-only). Accepting an is_admin flag here would
+    # let any registering user self-promote.
     # is_active: bool = True
     # is_verified: bool = False
     # last_login: Optional[str] = None

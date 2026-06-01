@@ -2,8 +2,30 @@ import os
 from pathlib import Path
 from typing import Literal, Optional
 
-from pydantic import AliasChoices, Field, computed_field
+from pydantic import AliasChoices, Field, SecretStr, computed_field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# Passwords we refuse to accept on a server boot. Lower-cased before comparison.
+_WEAK_PASSWORDS: frozenset[str] = frozenset(
+    {
+        "",
+        "minio",
+        "minio123",
+        "password",
+        "passw0rd",
+        "changeme",
+        "change_me",
+        "admin",
+        "admin123",
+        "depictio",
+        "test_pwd",
+        "test",
+        "secret",
+        "12345678",
+        "letmein",
+    }
+)
+_MIN_SECRET_LEN = 16
 
 # ── Core Services ─────────────────────────────────────────────────────────────
 
@@ -68,8 +90,34 @@ class FastAPIConfig(ServiceConfig):
     logging_level: str = Field(
         default="INFO", description="Logging level (DEBUG, INFO, WARNING, ERROR)"
     )
+    cors_allowed_origins: list[str] | str = Field(
+        default_factory=list,
+        description=(
+            "Allowed CORS origins for the API. Set via DEPICTIO_FASTAPI_CORS_ALLOWED_ORIGINS "
+            "as a comma-separated list (e.g. 'https://app.example.com,https://example.com'). "
+            "An empty list disables credentialed cross-origin requests. The wildcard '*' is "
+            "rejected when combined with credentialed CORS — supply explicit origins instead."
+        ),
+    )
+    cors_allow_credentials: bool = Field(
+        default=True,
+        description="Whether the CORS layer attaches credentials (cookies / Authorization).",
+    )
 
     model_config = SettingsConfigDict(env_prefix="DEPICTIO_FASTAPI_")
+
+    @model_validator(mode="after")
+    def _normalise_cors_origins(self) -> "FastAPIConfig":
+        # Pydantic-settings parses lists from env via JSON by default; accept the
+        # friendlier comma-separated form so deployments can set
+        # DEPICTIO_FASTAPI_CORS_ALLOWED_ORIGINS=https://a,https://b
+        if isinstance(self.cors_allowed_origins, str):
+            object.__setattr__(
+                self,
+                "cors_allowed_origins",
+                [o.strip() for o in self.cors_allowed_origins.split(",") if o.strip()],
+            )
+        return self
 
 
 class ViewerConfig(ServiceConfig):
@@ -127,10 +175,27 @@ class S3DepictioCLIConfig(ServiceConfig):
     service_name: str = Field(default="minio")
     service_port: int = Field(default=9000)
     external_port: int = Field(default=9000)
-    root_user: str = Field(default="minio", description="MinIO/S3 root access key")
-    root_password: str = Field(default="minio123", description="MinIO/S3 root secret key")
+    root_user: str = Field(
+        default="minio",
+        description="MinIO/S3 root access key (not a secret on its own).",
+    )
+    root_password: SecretStr = Field(
+        default=SecretStr(""),
+        description=(
+            "MinIO/S3 root secret key. REQUIRED in server context — set via "
+            "DEPICTIO_MINIO_ROOT_PASSWORD. The server refuses to start when this is unset, "
+            "shorter than 16 characters, or matches a well-known default."
+        ),
+    )
     bucket: str = Field(
         default="depictio-bucket", description="Default S3 bucket name for Depictio data"
+    )
+    verify_tls: bool = Field(
+        default=True,
+        description=(
+            "Verify TLS certificates when talking to S3/MinIO. Only set to false for local "
+            "development against self-signed dev MinIO instances."
+        ),
     )
 
     model_config = SettingsConfigDict(env_prefix="DEPICTIO_MINIO_")
@@ -151,7 +216,9 @@ class S3DepictioCLIConfig(ServiceConfig):
 
     @property
     def aws_secret_access_key(self) -> str:
-        return self.root_password
+        # Single chokepoint that unwraps the secret for boto3/polars callers so
+        # tokens never appear in `repr(settings)` / `model_dump()` output.
+        return self.root_password.get_secret_value()
 
 
 class AuthConfig(BaseSettings):
@@ -294,6 +361,55 @@ class AuthConfig(BaseSettings):
             keys_dir=self.keys_dir,
             algorithm=self.keys_algorithm,
         )
+
+
+class AuthBootstrapConfig(BaseSettings):
+    """First-boot admin (and optional CI test user) seeding.
+
+    Replaces the legacy ``initial_users.yaml`` file. On startup the bootstrap
+    creates the admin user *only* when no admin exists in MongoDB; on
+    subsequent boots it is a no-op so operator-set passwords survive
+    container restarts and Helm wipe-jobs.
+    """
+
+    admin_email: str = Field(
+        default="",
+        description=(
+            "Email address used to seed the initial admin. REQUIRED in server context "
+            "when no admin yet exists in MongoDB. Set via DEPICTIO_BOOTSTRAP_ADMIN_EMAIL."
+        ),
+    )
+    admin_password: SecretStr = Field(
+        default=SecretStr(""),
+        description=(
+            "Password for the bootstrap admin. REQUIRED, ≥16 characters, must not match "
+            "any well-known default. Set via DEPICTIO_BOOTSTRAP_ADMIN_PASSWORD."
+        ),
+    )
+
+    # Optional CI / dev test user. Off by default; CI sets the flag to true and
+    # the existing fixture credentials keep working so the Cypress + workflow
+    # tests are zero-touch.
+    seed_test_user: bool = Field(
+        default=False,
+        description=(
+            "When true, also seed a non-admin user for CI/Cypress fixtures. Disabled by "
+            "default — production deployments must leave this off."
+        ),
+    )
+    test_user_email: str = Field(
+        default="test_user@example.com",
+        description="Email for the seeded CI test user (only consulted when seed_test_user=true).",
+    )
+    test_user_password: SecretStr = Field(
+        default=SecretStr("test_pwd"),
+        description=(
+            "Password for the seeded CI test user. Only used when seed_test_user=true. "
+            "Override via DEPICTIO_BOOTSTRAP_TEST_USER_PASSWORD."
+        ),
+    )
+
+    model_config = SettingsConfigDict(env_prefix="DEPICTIO_BOOTSTRAP_", case_sensitive=False)
 
 
 # ── Infrastructure ────────────────────────────────────────────────────────────
@@ -854,6 +970,7 @@ class Settings(BaseSettings):
     mongodb: MongoDBConfig = Field(default_factory=MongoDBConfig)
     minio: S3DepictioCLIConfig = Field(default_factory=S3DepictioCLIConfig)
     auth: AuthConfig = Field(default_factory=AuthConfig)
+    bootstrap: AuthBootstrapConfig = Field(default_factory=AuthBootstrapConfig)
 
     # Infrastructure
     logging: LoggingConfig = Field(default_factory=LoggingConfig)
@@ -891,3 +1008,51 @@ class Settings(BaseSettings):
         case_sensitive=False,
         extra="ignore",  # Ignore extra fields in .env that aren't in the model
     )
+
+    @model_validator(mode="after")
+    def _enforce_server_secrets(self) -> "Settings":
+        """Fail fast at startup if server-context secrets are missing or weak.
+
+        Skipped in client (CLI) context — the CLI talks to a remote API and
+        doesn't hold the MinIO root password or seed admins itself.
+        """
+        if self.context != "server":
+            return self
+
+        errors: list[str] = []
+
+        # MinIO root password is consumed by API + worker, so it must always
+        # be set on a server boot regardless of single-user / public mode.
+        minio_pw = self.minio.root_password.get_secret_value()
+        if minio_pw.lower() in _WEAK_PASSWORDS:
+            errors.append(
+                "DEPICTIO_MINIO_ROOT_PASSWORD is unset or matches a known-default value. "
+                "Set it to a strong secret before starting the server."
+            )
+        elif len(minio_pw) < _MIN_SECRET_LEN:
+            errors.append(
+                f"DEPICTIO_MINIO_ROOT_PASSWORD must be at least {_MIN_SECRET_LEN} characters."
+            )
+
+        # Bootstrap admin credentials. Empty values are allowed at validator
+        # time — the admin may already exist in MongoDB from a prior boot, in
+        # which case the bootstrap is a no-op. ``db_init`` does the final
+        # "no admin in DB + no env" check there because only that layer can
+        # talk to the database.
+        admin_pw = self.bootstrap.admin_password.get_secret_value()
+        if admin_pw:
+            if admin_pw.lower() in _WEAK_PASSWORDS:
+                errors.append(
+                    "DEPICTIO_BOOTSTRAP_ADMIN_PASSWORD matches a known-default value; "
+                    "choose a strong secret."
+                )
+            elif len(admin_pw) < _MIN_SECRET_LEN:
+                errors.append(
+                    "DEPICTIO_BOOTSTRAP_ADMIN_PASSWORD must be at least "
+                    f"{_MIN_SECRET_LEN} characters."
+                )
+
+        if errors:
+            raise ValueError("Insecure configuration:\n  - " + "\n  - ".join(errors))
+
+        return self
