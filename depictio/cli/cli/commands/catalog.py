@@ -25,19 +25,23 @@ def catalog_list() -> None:
     if not entries:
         typer.echo("No catalog entries found.")
         return
-    typer.echo(f"Catalog tools ({len(entries)}):")
+    typer.echo(f"Catalog entries ({len(entries)}):")
     for entry in entries:
         ident = entry.tool.biotools_id or "-"
-        typer.echo(f"\n  {entry.tool.id}  ({entry.tool.name})  biotools:{ident}")
+        typer.echo(
+            f"\n  {entry.tool.id}  ({entry.tool.kind})  biotools:{ident}  "
+            f"[{len(entry.outputs)} outputs]"
+        )
         for out in entry.outputs:
-            mode = f" [{out.mode}]" if out.mode else ""
+            upstream = out.tool or entry.tool.name
+            mode = f"/{out.mode}" if out.mode else ""
             viz = ", ".join(out.feeds_viz) if out.feeds_viz else "—"
             fp = (
                 ",".join(out.fingerprint.required_columns)
                 if out.fingerprint and out.fingerprint.required_columns
                 else "(no fingerprint)"
             )
-            typer.echo(f"      - {out.id}{mode}")
+            typer.echo(f"      - {out.id}   « {upstream}{mode} »")
             typer.echo(f"          reshape={out.reshape.kind}  feeds: {viz}")
             typer.echo(f"          fingerprint: {fp}")
 
@@ -96,5 +100,31 @@ def catalog_import_meta(
         Path(output).write_text(text)
         typer.echo(f"  Wrote scaffold to {output}")
         typer.echo("  TODO: fill in each output's fingerprint.required_columns + feeds_viz.")
+    else:
+        typer.echo(text)
+
+
+@app.command("schema")
+def catalog_schema(
+    output: Annotated[
+        str | None,
+        typer.Option("--output", "-o", help="Write the JSON Schema here (default: stdout)"),
+    ] = None,
+) -> None:
+    """Emit the JSON Schema for a catalog YAML file (the authoritative contract).
+
+    Regenerate the committed ``depictio/catalog/catalog.schema.json`` with::
+
+        depictio catalog schema -o depictio/catalog/catalog.schema.json
+    """
+    import json
+
+    from depictio.models.components.advanced_viz.catalog import CatalogEntry
+
+    schema = CatalogEntry.model_json_schema()
+    text = json.dumps(schema, indent=2, sort_keys=False) + "\n"
+    if output:
+        Path(output).write_text(text)
+        typer.echo(f"  Wrote JSON Schema to {output}")
     else:
         typer.echo(text)

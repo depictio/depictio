@@ -6,9 +6,23 @@ visualisations. It is the evolutive, grow-with-the-community layer that sits on
 top of the hand-curated fingerprint registry in
 `depictio/models/components/advanced_viz/producers.py`.
 
-Each `*.yaml` file describes **one tool** and **all of the outputs** it can
-produce. Adding support for a new tool — or a new running mode of an existing
-tool — is a pull request that adds or edits one YAML file. No Python required.
+Each `*.yaml` file describes a **producing entity** (a single tool *or* a whole
+pipeline) and **all of the outputs** it produces. Adding support for a new tool
+— or a new running mode of an existing tool — is a pull request that adds or
+edits one YAML file. No Python required.
+
+**Schema:** the authoritative contract is **`catalog.schema.json`** (JSON
+Schema; regenerate via `depictio catalog schema -o depictio/catalog/catalog.schema.json`).
+A field-by-field, MUST/CAN reference is in **`SCHEMA.md`**. Each catalog file's
+first line points editors at the schema for live validation/autocomplete.
+
+**Bundled entries:**
+- `metaphlan.yaml` — tool-scoped (`kind: tool`): one tool, identity at the top.
+- `viralrecon.yaml`, `ampliseq.yaml` — pipeline-scoped (`kind: pipeline`):
+  every data collection of the nf-core seed pipelines, with each output naming
+  its upstream tool (pangolin, mosdepth, QIIME 2, …). QIIME 2's many modes
+  (diversity / taxa-barplot / rel-abundance / composition·ancombc / phylogeny)
+  appear as many outputs in `ampliseq.yaml`.
 
 ## Why a catalog (and not just more `producers.py`)
 

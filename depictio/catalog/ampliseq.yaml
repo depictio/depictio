@@ -1,0 +1,301 @@
+# yaml-language-server: $schema=./catalog.schema.json
+# nf-core/ampliseq 2.16.0 — full output catalog
+# ============================================================================
+# PIPELINE-scoped entry. Amplicon metabarcoding: DADA2 ASV inference + QIIME 2
+# diversity / taxonomy / differential-abundance. QIIME 2 appears here as MANY
+# outputs (one per running mode: diversity, alpha-rarefaction, taxa-barplot,
+# rel-abundance, composition/ancombc, phylogeny, …) — the "tool with many
+# modes" case, modelled as many CatalogOutputs sharing tool: "QIIME 2".
+#
+# Covers every data collection in
+# depictio/projects/nf-core/ampliseq/2.16.0/template.yaml.
+# ============================================================================
+schema_version: 1
+
+tool:
+  id: nf-core/ampliseq
+  name: nf-core/ampliseq
+  kind: pipeline
+  description: >-
+    Amplicon sequencing analysis (16S/ITS/18S). DADA2 ASV inference, QIIME 2
+    taxonomic classification, diversity, and differential abundance.
+  homepage: https://nf-co.re/ampliseq
+  edam_topics:
+    - topic_3174 # Metagenomics
+    - topic_0637 # Taxonomy
+
+outputs:
+  # ---- QC + inputs ----------------------------------------------------------
+  - id: ampliseq_multiqc
+    tool: MultiQC
+    biotools_id: multiqc
+    mode: report
+    description: Aggregated QC metrics (FastQC, cutadapt, DADA2) — native parquet.
+    nf_core_module: multiqc
+    file_patterns: ["multiqc/multiqc_data/multiqc.parquet"]
+    read_options: {format: parquet}
+    fingerprint: null
+    pipelines: ["nf-core/ampliseq@2.16.0"]
+
+  - id: ampliseq_samplesheet
+    tool: nf-core/ampliseq
+    mode: input
+    description: Input samplesheet (sample → fastq mapping).
+    file_patterns: ["input/samplesheet.csv"]
+    fingerprint: null
+    pipelines: ["nf-core/ampliseq@2.16.0"]
+
+  - id: ampliseq_metadata
+    tool: nf-core/ampliseq
+    mode: input
+    description: Per-sample metadata (joined into diversity/taxonomy outputs).
+    file_patterns: ["input/Metadata_full.tsv"]
+    read_options: {format: tsv}
+    fingerprint: null
+    pipelines: ["nf-core/ampliseq@2.16.0"]
+
+  # ---- QIIME 2: diversity (alpha) ------------------------------------------
+  - id: ampliseq_alpha_diversity
+    tool: QIIME 2
+    biotools_id: qiime2
+    mode: diversity
+    description: Faith PD alpha-diversity vector (per sample).
+    nf_core_module: qiime2/diversitycore
+    edam_operations: [operation_3200] # Community profiling
+    file_patterns: ["qiime2/diversity/alpha_diversity/faith_pd_vector/metadata.tsv"]
+    read_options: {format: tsv}
+    reshape: {kind: recipe, recipe: nf-core/ampliseq/alpha_diversity.py}
+    fingerprint:
+      required_columns: [sample, faith_pd]
+    pipelines: ["nf-core/ampliseq@2.16.0"]
+
+  - id: ampliseq_alpha_diversity_multi_canonical
+    tool: QIIME 2
+    mode: diversity
+    description: Multi-metric alpha-diversity table (shannon / observed / faith / evenness).
+    depends_on: [ampliseq_alpha_diversity]
+    reshape: {kind: recipe, recipe: nf-core/ampliseq/alpha_diversity_multi_canonical.py}
+    fingerprint: null
+    feeds_viz: [] # no single advanced-viz kind for wide alpha metrics yet
+    pipelines: ["nf-core/ampliseq@2.16.0"]
+
+  - id: ampliseq_alpha_rarefaction
+    tool: QIIME 2
+    biotools_id: qiime2
+    mode: alpha-rarefaction
+    description: Alpha-rarefaction curve (sample × depth × iter × metric).
+    nf_core_module: qiime2/diversityalphararefaction
+    edam_operations: [operation_3200]
+    file_patterns: ["qiime2/alpha-rarefaction/faith_pd.csv"]
+    reshape: {kind: recipe, recipe: nf-core/ampliseq/alpha_rarefaction.py}
+    fingerprint:
+      required_columns: [sample, depth, iter]
+    feeds_viz: [rarefaction]
+    pipelines: ["nf-core/ampliseq@2.16.0"]
+
+  - id: ampliseq_rarefaction_canonical
+    tool: QIIME 2
+    mode: alpha-rarefaction
+    description: Rarefaction-ready curve (sample_id × depth × metric).
+    depends_on: [ampliseq_alpha_rarefaction]
+    reshape: {kind: recipe, recipe: nf-core/ampliseq/rarefaction_canonical.py}
+    fingerprint: null
+    feeds_viz: [rarefaction]
+    pipelines: ["nf-core/ampliseq@2.16.0"]
+
+  # ---- QIIME 2: taxonomy ----------------------------------------------------
+  - id: ampliseq_taxonomy_composition
+    tool: QIIME 2
+    biotools_id: qiime2
+    mode: taxa-barplot
+    description: Taxonomic composition at a given level (long).
+    nf_core_module: qiime2/barplot
+    edam_operations: [operation_3460] # Taxonomic classification
+    file_patterns: ["qiime2/barplot/level-2.csv"]
+    reshape: {kind: recipe, recipe: nf-core/ampliseq/taxonomy_composition.py}
+    fingerprint:
+      required_columns: [sample, taxonomy, count]
+    feeds_viz: [stacked_taxonomy]
+    pipelines: ["nf-core/ampliseq@2.16.0"]
+
+  - id: ampliseq_taxonomy_rel_abundance
+    tool: QIIME 2
+    biotools_id: qiime2
+    mode: rel-abundance
+    description: Per-sample relative abundance with rank columns.
+    nf_core_module: qiime2/relativeabundancetables
+    edam_operations: [operation_3460]
+    file_patterns: ["qiime2/rel_abundance_tables/rel-table-2.tsv"]
+    read_options: {format: tsv}
+    reshape: {kind: recipe, recipe: nf-core/ampliseq/taxonomy_rel_abundance.py}
+    fingerprint:
+      required_columns: [sample, taxonomy, rel_abundance]
+    feeds_viz: [stacked_taxonomy, sunburst, complex_heatmap]
+    pipelines: ["nf-core/ampliseq@2.16.0"]
+
+  - id: ampliseq_taxonomy_heatmap
+    tool: QIIME 2
+    mode: rel-abundance
+    description: Relative-abundance matrix pivoted to wide (rank × sample).
+    depends_on: [ampliseq_taxonomy_rel_abundance, ampliseq_metadata]
+    reshape: {kind: recipe, recipe: nf-core/ampliseq/taxonomy_heatmap.py}
+    fingerprint: null
+    feeds_viz: [complex_heatmap]
+    pipelines: ["nf-core/ampliseq@2.16.0"]
+
+  - id: ampliseq_stacked_taxonomy_canonical
+    tool: QIIME 2
+    mode: rel-abundance
+    description: Stacked-taxonomy-ready long table (sample_id × taxon × rank × abundance).
+    depends_on: [ampliseq_taxonomy_rel_abundance]
+    reshape: {kind: recipe, recipe: nf-core/ampliseq/stacked_taxonomy_canonical.py}
+    fingerprint: null
+    feeds_viz: [stacked_taxonomy]
+    pipelines: ["nf-core/ampliseq@2.16.0"]
+
+  - id: ampliseq_sunburst_canonical
+    tool: QIIME 2
+    mode: rel-abundance
+    description: Sunburst-ready hierarchical taxonomy (Kingdom..Genus × abundance).
+    depends_on: [ampliseq_taxonomy_rel_abundance, ampliseq_metadata]
+    reshape: {kind: recipe, recipe: nf-core/ampliseq/sunburst_canonical.py}
+    fingerprint: null
+    feeds_viz: [sunburst]
+    pipelines: ["nf-core/ampliseq@2.16.0"]
+
+  - id: ampliseq_sankey_canonical
+    tool: QIIME 2
+    mode: rel-abundance
+    description: Sankey-ready hierarchical taxonomy funnel.
+    depends_on: [ampliseq_taxonomy_rel_abundance, ampliseq_metadata]
+    reshape: {kind: recipe, recipe: nf-core/ampliseq/sankey_canonical.py}
+    fingerprint: null
+    feeds_viz: [sankey]
+    pipelines: ["nf-core/ampliseq@2.16.0"]
+
+  - id: ampliseq_complex_heatmap_canonical
+    tool: QIIME 2
+    mode: rel-abundance
+    description: ComplexHeatmap-ready taxonomy matrix.
+    depends_on: [ampliseq_taxonomy_heatmap]
+    reshape: {kind: recipe, recipe: nf-core/ampliseq/complex_heatmap_canonical.py}
+    fingerprint: null
+    feeds_viz: [complex_heatmap]
+    pipelines: ["nf-core/ampliseq@2.16.0"]
+
+  - id: ampliseq_upset_canonical
+    tool: QIIME 2
+    mode: rel-abundance
+    description: UpSet taxon × sample-group membership matrix.
+    depends_on: [ampliseq_taxonomy_rel_abundance, ampliseq_metadata]
+    reshape: {kind: recipe, recipe: nf-core/ampliseq/upset_canonical.py}
+    fingerprint: null
+    feeds_viz: [upset_plot]
+    pipelines: ["nf-core/ampliseq@2.16.0"]
+
+  - id: ampliseq_bray_curtis_canonical
+    tool: QIIME 2
+    mode: diversity
+    description: Bray-Curtis sample × sample dissimilarity matrix.
+    depends_on: [ampliseq_taxonomy_rel_abundance]
+    reshape: {kind: recipe, recipe: nf-core/ampliseq/bray_curtis_canonical.py}
+    fingerprint: null
+    feeds_viz: [complex_heatmap]
+    pipelines: ["nf-core/ampliseq@2.16.0"]
+
+  - id: ampliseq_embedding_pcoa
+    tool: QIIME 2
+    biotools_id: qiime2
+    mode: diversity
+    description: PCoA ordination of samples (dim_1 / dim_2).
+    nf_core_module: qiime2/diversitycore
+    edam_operations: [operation_3200]
+    depends_on: [ampliseq_taxonomy_heatmap, ampliseq_metadata]
+    reshape: {kind: recipe, recipe: nf-core/ampliseq/embedding_pcoa.py}
+    fingerprint: null # role-named; matched by embedding_role_table
+    feeds_viz: [embedding]
+    pipelines: ["nf-core/ampliseq@2.16.0"]
+
+  # ---- QIIME 2: composition / ANCOM-BC (differential abundance) -------------
+  - id: ampliseq_ancombc_results
+    tool: QIIME 2
+    biotools_id: qiime2
+    mode: composition/ancombc
+    description: ANCOM-BC differential-abundance results (joined from per-statistic slices).
+    nf_core_module: qiime2/ancombc
+    edam_operations: [operation_3223] # Differential expression / abundance
+    file_patterns:
+      - "qiime2/ancombc/differentials/*/lfc_slice.csv"
+      - "qiime2/ancombc/differentials/*/p_val_slice.csv"
+      - "qiime2/ancombc/differentials/*/q_val_slice.csv"
+      - "qiime2/ancombc/differentials/*/w_slice.csv"
+      - "qiime2/ancombc/differentials/*/se_slice.csv"
+    reshape: {kind: recipe, recipe: nf-core/ampliseq/ancombc.py}
+    fingerprint: null # {id,contrast,lfc,q_val} matched by curated ancombc_results_joined
+    feeds_viz: [volcano, da_barplot, ma, qq]
+    pipelines: ["nf-core/ampliseq@2.16.0"]
+
+  - id: ampliseq_volcano_canonical
+    tool: QIIME 2
+    mode: composition/ancombc
+    description: Volcano-ready differential abundance (feature_id × effect_size × significance).
+    depends_on: [ampliseq_ancombc_results]
+    reshape: {kind: recipe, recipe: nf-core/ampliseq/volcano_canonical.py}
+    fingerprint: null
+    feeds_viz: [volcano]
+    pipelines: ["nf-core/ampliseq@2.16.0"]
+
+  - id: ampliseq_da_barplot_canonical
+    tool: QIIME 2
+    mode: composition/ancombc
+    description: DA-barplot-ready table (feature_id × contrast × lfc).
+    depends_on: [ampliseq_ancombc_results]
+    reshape: {kind: recipe, recipe: nf-core/ampliseq/da_barplot_canonical.py}
+    fingerprint: null
+    feeds_viz: [da_barplot]
+    pipelines: ["nf-core/ampliseq@2.16.0"]
+
+  - id: ampliseq_ma_canonical
+    tool: QIIME 2
+    mode: composition/ancombc
+    description: MA-plot-ready table (feature_id × avg_log_intensity × log2_fold_change).
+    depends_on: [ampliseq_ancombc_results, ampliseq_taxonomy_composition]
+    reshape: {kind: recipe, recipe: nf-core/ampliseq/ma_canonical.py}
+    fingerprint: null
+    feeds_viz: [ma]
+    pipelines: ["nf-core/ampliseq@2.16.0"]
+
+  - id: ampliseq_qq_canonical
+    tool: QIIME 2
+    mode: composition/ancombc
+    description: QQ-plot-ready p-value table.
+    depends_on: [ampliseq_ancombc_results]
+    reshape: {kind: recipe, recipe: nf-core/ampliseq/qq_canonical.py}
+    fingerprint: null
+    feeds_viz: [qq]
+    pipelines: ["nf-core/ampliseq@2.16.0"]
+
+  # ---- QIIME 2: phylogeny ---------------------------------------------------
+  - id: ampliseq_phylogenetic_tree_canonical
+    tool: QIIME 2
+    biotools_id: qiime2
+    mode: phylogeny
+    description: Rooted phylogenetic tree (Newick) — file-backed phylogeny DC.
+    nf_core_module: qiime2/phylogenetic
+    edam_operations: [operation_0567] # Phylogenetic tree visualisation
+    edam_formats: [format_1910] # Newick
+    file_patterns: ["qiime2/phylogenetic_tree/rooted-tree.nwk"]
+    reshape: {kind: identity}
+    fingerprint: null # non-tabular (Newick), matched by DC phylogeny type
+    feeds_viz: [phylogenetic]
+    pipelines: ["nf-core/ampliseq@2.16.0"]
+
+  - id: ampliseq_phylogenetic_tree_metadata_canonical
+    tool: QIIME 2
+    mode: phylogeny
+    description: Tip metadata table joined to the phylogenetic tree (taxon → annotations).
+    depends_on: [ampliseq_taxonomy_rel_abundance, ampliseq_metadata]
+    reshape: {kind: recipe, recipe: nf-core/ampliseq/tree_metadata_canonical.py}
+    fingerprint: null
+    feeds_viz: [phylogenetic]
+    pipelines: ["nf-core/ampliseq@2.16.0"]

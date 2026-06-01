@@ -1,0 +1,231 @@
+# yaml-language-server: $schema=./catalog.schema.json
+# nf-core/viralrecon 3.0.0 — full output catalog
+# ============================================================================
+# A PIPELINE-scoped entry (tool.kind: pipeline): nf-core/viralrecon is a
+# composition of tools, so per-output `tool` / `biotools_id` carry the upstream
+# identity. Covers every data collection in
+# depictio/projects/nf-core/viralrecon/3.0.0/template.yaml.
+#
+# Output tiers:
+#   raw      — a tool's native file on disk (has file_patterns [+ fingerprint])
+#   typed    — raw cleaned by a recipe into a tidy table
+#   canonical— a typed output reshaped to an advanced-viz canonical schema
+#              (depends_on the typed output; fingerprinted by the role-named
+#              producers in producers.py, so fingerprint is null here)
+# ============================================================================
+schema_version: 1
+
+tool:
+  id: nf-core/viralrecon
+  name: nf-core/viralrecon
+  kind: pipeline
+  description: >-
+    Assembly and intra-host/low-frequency variant calling for viral samples
+    (amplicon / ivar workflow). SARS-CoV-2 lineage + clade assignment.
+  homepage: https://nf-co.re/viralrecon
+  edam_topics:
+    - topic_3305 # Public health and epidemiology
+    - topic_0622 # Genomics
+
+outputs:
+  # ---- MultiQC (QC aggregate) ----------------------------------------------
+  - id: viralrecon_multiqc
+    tool: MultiQC
+    biotools_id: multiqc
+    mode: report
+    description: Aggregated QC metrics from all pipeline tools (native parquet).
+    nf_core_module: multiqc
+    edam_formats: [format_3727] # mzML-ish n/a; parquet has no EDAM — left generic
+    file_patterns: ["multiqc/multiqc_data/multiqc.parquet"]
+    read_options: {format: parquet}
+    reshape: {kind: identity}
+    fingerprint: null # multi-table parquet, matched by MultiQC DC type not columns
+    pipelines: ["nf-core/viralrecon@3.0.0"]
+
+  # ---- ivar / bcftools / snpeff variants -----------------------------------
+  - id: viralrecon_variants_long
+    tool: ivar
+    biotools_id: ivar
+    mode: variants
+    description: Per-sample annotated variant calls (long form).
+    nf_core_module: ivar/variants
+    edam_operations: [operation_3227] # Variant calling
+    edam_formats: [format_3752]
+    file_patterns: ["variants/ivar/variants_long_table.csv"]
+    reshape: {kind: recipe, recipe: nf-core/viralrecon/variants_long.py}
+    # Same fingerprint as the curated `viralrecon_variants_long` producer —
+    # left null so the curated entry stays the single matcher.
+    fingerprint: null
+    feeds_viz: [lollipop, oncoplot, manhattan]
+    pipelines: ["nf-core/viralrecon@3.0.0"]
+
+  - id: viralrecon_manhattan_variants_canonical
+    tool: ivar
+    mode: variants
+    description: Manhattan-ready variant track (chr / pos / score).
+    edam_operations: [operation_3227]
+    file_patterns: ["variants/ivar/variants_long_table.csv"]
+    reshape: {kind: recipe, recipe: nf-core/viralrecon/manhattan_variants_canonical.py}
+    fingerprint: null # role-named; matched by manhattan_role_table
+    feeds_viz: [manhattan]
+    pipelines: ["nf-core/viralrecon@3.0.0"]
+
+  - id: viralrecon_lollipop_canonical
+    tool: ivar
+    mode: variants
+    description: Lollipop-ready variant track (feature_id / position / category).
+    depends_on: [viralrecon_variants_long]
+    reshape: {kind: recipe, recipe: nf-core/viralrecon/lollipop_canonical.py}
+    fingerprint: null
+    feeds_viz: [lollipop]
+    pipelines: ["nf-core/viralrecon@3.0.0"]
+
+  - id: viralrecon_oncoplot_canonical
+    tool: ivar
+    mode: variants
+    description: Oncoplot-ready matrix (sample_id × gene × mutation_type).
+    depends_on: [viralrecon_variants_long]
+    reshape: {kind: recipe, recipe: nf-core/viralrecon/oncoplot_canonical.py}
+    fingerprint: null
+    feeds_viz: [oncoplot]
+    pipelines: ["nf-core/viralrecon@3.0.0"]
+
+  # ---- pangolin -------------------------------------------------------------
+  - id: viralrecon_pangolin_lineages
+    tool: pangolin
+    biotools_id: pangolin_cov-lineages
+    mode: run
+    description: PANGO lineage assignment per sample.
+    nf_core_module: pangolin/run
+    edam_operations: [operation_3460] # taxonomic classification
+    edam_formats: [format_3752]
+    file_patterns: ["variants/ivar/consensus/bcftools/pangolin/*.pangolin.csv"]
+    reshape: {kind: recipe, recipe: nf-core/viralrecon/pangolin_lineages.py}
+    fingerprint:
+      required_columns: [sample, lineage, scorpio_call]
+    pipelines: ["nf-core/viralrecon@3.0.0"]
+
+  # ---- nextclade ------------------------------------------------------------
+  - id: viralrecon_nextclade_results
+    tool: Nextclade
+    biotools_id: nextclade
+    mode: run
+    description: Nextclade clade assignment + sequence QC per sample.
+    nf_core_module: nextclade/run
+    edam_operations: [operation_3460]
+    edam_formats: [format_3752]
+    file_patterns: ["variants/ivar/consensus/bcftools/nextclade/*.csv"]
+    reshape: {kind: recipe, recipe: nf-core/viralrecon/nextclade_results.py}
+    fingerprint:
+      required_columns: [sample, clade, Nextclade_pango]
+    pipelines: ["nf-core/viralrecon@3.0.0"]
+
+  # ---- mosdepth -------------------------------------------------------------
+  - id: viralrecon_mosdepth_amplicon_coverage
+    tool: mosdepth
+    biotools_id: mosdepth
+    mode: amplicon
+    description: Per-amplicon coverage depth across all samples.
+    nf_core_module: mosdepth
+    edam_formats: [format_3475]
+    file_patterns: ["variants/bowtie2/mosdepth/amplicon/all_samples.mosdepth.coverage.tsv"]
+    read_options: {format: tsv}
+    reshape: {kind: identity}
+    fingerprint: null # {chrom,start,end} matched by curated mosdepth_coverage
+    feeds_viz: [coverage_track]
+    pipelines: ["nf-core/viralrecon@3.0.0"]
+
+  - id: viralrecon_mosdepth_genome_coverage
+    tool: mosdepth
+    biotools_id: mosdepth
+    mode: genome
+    description: Genome-wide coverage in 200bp windows across all samples.
+    nf_core_module: mosdepth
+    edam_formats: [format_3475]
+    file_patterns: ["variants/bowtie2/mosdepth/genome/all_samples.mosdepth.coverage.tsv"]
+    read_options: {format: tsv}
+    reshape: {kind: identity}
+    fingerprint: null
+    feeds_viz: [coverage_track]
+    pipelines: ["nf-core/viralrecon@3.0.0"]
+
+  - id: viralrecon_mosdepth_amplicon_heatmap
+    tool: mosdepth
+    biotools_id: mosdepth
+    mode: amplicon
+    description: Log10 amplicon-coverage matrix (samples × amplicons).
+    nf_core_module: mosdepth
+    edam_formats: [format_3475]
+    file_patterns: ["variants/bowtie2/mosdepth/amplicon/all_samples.mosdepth.heatmap.tsv"]
+    read_options: {format: tsv}
+    reshape: {kind: identity}
+    fingerprint: null
+    feeds_viz: [complex_heatmap]
+    pipelines: ["nf-core/viralrecon@3.0.0"]
+
+  - id: viralrecon_coverage_track_canonical
+    tool: mosdepth
+    mode: genome
+    description: Coverage-track-ready genome coverage (chromosome / position / value).
+    depends_on: [viralrecon_mosdepth_genome_coverage]
+    reshape: {kind: recipe, recipe: nf-core/viralrecon/coverage_track_canonical.py}
+    fingerprint: null # role-named; matched by coverage_track_role_table
+    feeds_viz: [coverage_track]
+    pipelines: ["nf-core/viralrecon@3.0.0"]
+
+  - id: viralrecon_complex_heatmap_canonical
+    tool: mosdepth
+    mode: amplicon
+    description: ComplexHeatmap-ready amplicon-coverage matrix (samples × amplicons).
+    depends_on: [viralrecon_mosdepth_amplicon_heatmap]
+    reshape: {kind: recipe, recipe: nf-core/viralrecon/complex_heatmap_canonical.py}
+    fingerprint: null
+    feeds_viz: [complex_heatmap]
+    pipelines: ["nf-core/viralrecon@3.0.0"]
+
+  # ---- pipeline-level aggregates (cross-tool) -------------------------------
+  - id: viralrecon_summary_metrics
+    tool: nf-core/viralrecon
+    mode: summary
+    description: Per-sample alignment / coverage / variant summary metrics.
+    edam_formats: [format_3752]
+    file_patterns: ["multiqc/summary_variants_metrics_mqc.csv"]
+    reshape: {kind: recipe, recipe: nf-core/viralrecon/summary_metrics.py}
+    fingerprint:
+      required_columns: [sample, num_reads_mapped, pct_genome_covered_10x]
+    pipelines: ["nf-core/viralrecon@3.0.0"]
+
+  - id: viralrecon_sankey_canonical
+    tool: nf-core/viralrecon
+    mode: classification
+    description: Sankey classification funnel (qc_status → lineage → clade).
+    depends_on: [viralrecon_pangolin_lineages, viralrecon_nextclade_results]
+    reshape: {kind: recipe, recipe: nf-core/viralrecon/sankey_canonical.py}
+    fingerprint: null
+    feeds_viz: [sankey]
+    pipelines: ["nf-core/viralrecon@3.0.0"]
+
+  - id: viralrecon_upset_canonical
+    tool: nf-core/viralrecon
+    mode: variants
+    description: UpSet mutation × lineage binary membership matrix.
+    depends_on: [viralrecon_variants_long, viralrecon_pangolin_lineages]
+    reshape: {kind: recipe, recipe: nf-core/viralrecon/upset_canonical.py}
+    fingerprint: null
+    feeds_viz: [upset_plot]
+    pipelines: ["nf-core/viralrecon@3.0.0"]
+
+  - id: viralrecon_variant_feature_matrix_canonical
+    tool: nf-core/viralrecon
+    mode: variants
+    description: Sample × mutation binary matrix for live PCA / UMAP embedding.
+    depends_on:
+      [
+        viralrecon_variants_long,
+        viralrecon_pangolin_lineages,
+        viralrecon_nextclade_results,
+      ]
+    reshape: {kind: recipe, recipe: nf-core/viralrecon/variant_feature_matrix_canonical.py}
+    fingerprint: null
+    feeds_viz: [embedding]
+    pipelines: ["nf-core/viralrecon@3.0.0"]

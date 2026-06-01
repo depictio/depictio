@@ -1,0 +1,508 @@
+{
+  "$defs": {
+    "CatalogFingerprint": {
+      "additionalProperties": false,
+      "description": "Column-name fingerprint that identifies this output on disk.\n\nCompiles directly to `Producer.required_columns`. Keep it minimal but\ndiscriminating (4-6 columns is usually enough). After the declared\n`reshape`, fingerprints describe the *post-reshape* column set the viz\nbinds against.",
+      "properties": {
+        "required_columns": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Required Columns",
+          "type": "array"
+        },
+        "optional_columns": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Optional Columns",
+          "type": "array"
+        }
+      },
+      "title": "CatalogFingerprint",
+      "type": "object"
+    },
+    "CatalogOutput": {
+      "additionalProperties": false,
+      "description": "One artefact a tool produces, in one running mode.\n\nThe unit that answers \"this file \u2192 these visualisations (after this\nreshape)\". A tool with many modes owns many of these.",
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "description": {
+          "default": "",
+          "title": "Description",
+          "type": "string"
+        },
+        "mode": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Mode"
+        },
+        "tool": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Tool"
+        },
+        "biotools_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Biotools Id"
+        },
+        "nf_core_module": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Nf Core Module"
+        },
+        "edam_operations": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Edam Operations",
+          "type": "array"
+        },
+        "edam_formats": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Edam Formats",
+          "type": "array"
+        },
+        "pipelines": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Pipelines",
+          "type": "array"
+        },
+        "file_patterns": {
+          "items": {
+            "type": "string"
+          },
+          "title": "File Patterns",
+          "type": "array"
+        },
+        "read_options": {
+          "$ref": "#/$defs/CatalogReadOptions"
+        },
+        "depends_on": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Depends On",
+          "type": "array"
+        },
+        "reshape": {
+          "$ref": "#/$defs/CatalogReshape"
+        },
+        "fingerprint": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CatalogFingerprint"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "feeds_viz": {
+          "items": {
+            "enum": [
+              "volcano",
+              "embedding",
+              "manhattan",
+              "stacked_taxonomy",
+              "phylogenetic",
+              "rarefaction",
+              "da_barplot",
+              "enrichment",
+              "complex_heatmap",
+              "upset_plot",
+              "ma",
+              "dot_plot",
+              "lollipop",
+              "qq",
+              "sunburst",
+              "oncoplot",
+              "coverage_track",
+              "sankey"
+            ],
+            "type": "string"
+          },
+          "title": "Feeds Viz",
+          "type": "array"
+        },
+        "role_mapping": {
+          "additionalProperties": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object"
+          },
+          "propertyNames": {
+            "enum": [
+              "volcano",
+              "embedding",
+              "manhattan",
+              "stacked_taxonomy",
+              "phylogenetic",
+              "rarefaction",
+              "da_barplot",
+              "enrichment",
+              "complex_heatmap",
+              "upset_plot",
+              "ma",
+              "dot_plot",
+              "lollipop",
+              "qq",
+              "sunburst",
+              "oncoplot",
+              "coverage_track",
+              "sankey"
+            ]
+          },
+          "title": "Role Mapping",
+          "type": "object"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "title": "CatalogOutput",
+      "type": "object"
+    },
+    "CatalogReadOptions": {
+      "additionalProperties": false,
+      "description": "How to read a raw tool output file into a DataFrame.\n\nCaptures the read-time quirks that today live as prose in\n`Producer.notes` (e.g. QIIME 2's biom TSV needs `comment_prefix='#'`,\nVCF needs `##` skipping). Polars-flavoured but tool-agnostic.",
+      "properties": {
+        "format": {
+          "default": "csv",
+          "enum": [
+            "csv",
+            "tsv",
+            "parquet"
+          ],
+          "title": "Format",
+          "type": "string"
+        },
+        "separator": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Separator"
+        },
+        "comment_prefix": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Comment Prefix"
+        },
+        "skip_rows": {
+          "default": 0,
+          "title": "Skip Rows",
+          "type": "integer"
+        },
+        "has_header": {
+          "default": true,
+          "title": "Has Header",
+          "type": "boolean"
+        }
+      },
+      "title": "CatalogReadOptions",
+      "type": "object"
+    },
+    "CatalogReshape": {
+      "additionalProperties": false,
+      "description": "Declarative reshape from the raw file's shape to a bindable shape.\n\nMost real tool outputs are not in the long/wide form a viz wants. Rather\nthan force a Python recipe for every tool, common reshapes are expressed\ndeclaratively so a catalog contributor never writes code for the easy\ncases. `kind=\"recipe\"` is the escape hatch for arbitrary logic and points\nat an existing `projects/.../recipes/*.py` transform.",
+      "properties": {
+        "kind": {
+          "default": "identity",
+          "enum": [
+            "identity",
+            "melt",
+            "pivot",
+            "aggregate",
+            "recipe"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "id_vars": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Id Vars"
+        },
+        "value_vars": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Value Vars"
+        },
+        "variable_name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Variable Name"
+        },
+        "value_name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Value Name"
+        },
+        "index": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Index"
+        },
+        "on": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "On"
+        },
+        "values": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Values"
+        },
+        "group_by": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Group By"
+        },
+        "agg": {
+          "anyOf": [
+            {
+              "enum": [
+                "sum",
+                "mean",
+                "median",
+                "max",
+                "min",
+                "count"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Agg"
+        },
+        "recipe": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Recipe"
+        }
+      },
+      "title": "CatalogReshape",
+      "type": "object"
+    },
+    "CatalogTool": {
+      "additionalProperties": false,
+      "description": "The producing entity for a catalog file: a single tool or a pipeline.\n\nA tool-scoped entry (`kind=\"tool\"`) carries its own bio.tools / EDAM\nidentity at this level. A pipeline-scoped entry (`kind=\"pipeline\"`, e.g.\nnf-core/viralrecon) is a composition: identity lives per-output instead\n(`CatalogOutput.tool` / `.biotools_id`).",
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "kind": {
+          "default": "tool",
+          "enum": [
+            "tool",
+            "pipeline"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "description": {
+          "default": "",
+          "title": "Description",
+          "type": "string"
+        },
+        "homepage": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Homepage"
+        },
+        "biotools_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Biotools Id"
+        },
+        "edam_topics": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Edam Topics",
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "name"
+      ],
+      "title": "CatalogTool",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "One catalog YAML file: a tool and all of its mapped outputs.",
+  "properties": {
+    "schema_version": {
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "tool": {
+      "$ref": "#/$defs/CatalogTool"
+    },
+    "outputs": {
+      "items": {
+        "$ref": "#/$defs/CatalogOutput"
+      },
+      "minItems": 1,
+      "title": "Outputs",
+      "type": "array"
+    }
+  },
+  "required": [
+    "tool",
+    "outputs"
+  ],
+  "title": "CatalogEntry",
+  "type": "object"
+}

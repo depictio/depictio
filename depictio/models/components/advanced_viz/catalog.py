@@ -145,15 +145,31 @@ class CatalogOutput(BaseModel):
     # fan out into many outputs without colliding.
     mode: str | None = None
 
+    # In a pipeline-scoped entry (`tool.kind == "pipeline"`), the specific
+    # upstream tool that emits this output (e.g. "pangolin", "QIIME 2") and its
+    # bio.tools id. In a tool-scoped entry these fall back to the entry's tool.
+    tool: str | None = None
+    biotools_id: str | None = None
+
     # Upstream provenance — links back to the nf-core module + EDAM terms
     # the meta.yml already declares for this output channel.
     nf_core_module: str | None = None
     edam_operations: list[str] = Field(default_factory=list)
     edam_formats: list[str] = Field(default_factory=list)
 
+    # Which pipeline(s) emit this output, e.g. "nf-core/viralrecon@3.0.0".
+    # Provenance + lets coverage be asserted per pipeline.
+    pipelines: list[str] = Field(default_factory=list)
+
     # Where the file lands (glob, relative to the run root) + how to read it.
+    # Empty when the output is derived from other outputs (see depends_on).
     file_patterns: list[str] = Field(default_factory=list)
     read_options: CatalogReadOptions = Field(default_factory=CatalogReadOptions)
+
+    # Other catalog output ids this one is derived from (the recipe dc_ref
+    # chain). Models depictio's 2-tier DAG: raw tool file -> typed output ->
+    # canonical/viz-ready output.
+    depends_on: list[str] = Field(default_factory=list)
 
     # How to get from the raw file to a bindable shape, and what that shape
     # looks like once reshaped.
@@ -168,10 +184,17 @@ class CatalogOutput(BaseModel):
 
 
 class CatalogTool(BaseModel):
-    """A bioinformatics tool, with its bio.tools / EDAM / nf-core identity."""
+    """The producing entity for a catalog file: a single tool or a pipeline.
+
+    A tool-scoped entry (`kind="tool"`) carries its own bio.tools / EDAM
+    identity at this level. A pipeline-scoped entry (`kind="pipeline"`, e.g.
+    nf-core/viralrecon) is a composition: identity lives per-output instead
+    (`CatalogOutput.tool` / `.biotools_id`).
+    """
 
     id: str
     name: str
+    kind: Literal["tool", "pipeline"] = "tool"
     description: str = ""
     homepage: str | None = None
     biotools_id: str | None = None
@@ -216,7 +239,10 @@ def entry_to_producers(entry: CatalogEntry) -> list[Producer]:
     for o in entry.outputs:
         if o.fingerprint is None or not o.fingerprint.required_columns:
             continue
-        tool_label = f"{entry.tool.name} ({o.mode})" if o.mode else entry.tool.name
+        # Output-level identity (pipeline files) falls back to the entry's tool.
+        tool_name = o.tool or entry.tool.name
+        biotools_id = o.biotools_id or entry.tool.biotools_id
+        tool_label = f"{tool_name} ({o.mode})" if o.mode else tool_name
         note_bits: list[str] = []
         if o.reshape.kind != "identity":
             note_bits.append(f"reshape={o.reshape.kind}")
@@ -224,8 +250,10 @@ def entry_to_producers(entry: CatalogEntry) -> list[Producer]:
             note_bits.append(f"recipe={o.reshape.recipe}")
         if o.nf_core_module:
             note_bits.append(f"nf-core:{o.nf_core_module}")
-        if entry.tool.biotools_id:
-            note_bits.append(f"biotools:{entry.tool.biotools_id}")
+        if biotools_id:
+            note_bits.append(f"biotools:{biotools_id}")
+        if o.pipelines:
+            note_bits.append(f"pipelines:{','.join(o.pipelines)}")
         producers.append(
             Producer(
                 name=o.id,

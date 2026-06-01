@@ -33,17 +33,45 @@ from depictio.models.components.advanced_viz.schemas import suggest_producers
 def test_bundled_catalog_loads():
     entries = load_catalog_entries()
     tool_ids = {e.tool.id for e in entries}
-    assert "qiime2" in tool_ids
-    assert "metaphlan" in tool_ids
+    assert {"metaphlan", "nf-core/viralrecon", "nf-core/ampliseq"} <= tool_ids
 
 
-def test_qiime2_is_multi_mode():
-    """The headline 'tool with many running modes' shape: one tool, many outputs."""
+def test_pipeline_coverage_viralrecon_and_ampliseq():
+    """Every data collection of the two seed pipelines is catalogued."""
     entries = {e.tool.id: e for e in load_catalog_entries()}
-    qiime2 = entries["qiime2"]
-    modes = {o.mode for o in qiime2.outputs}
-    assert len(qiime2.outputs) >= 3
-    assert {"diversity", "composition/ancombc", "taxa-barplot"} <= modes
+    # Counts mirror the template.yaml data_collection_tag counts.
+    assert len(entries["nf-core/viralrecon"].outputs) == 16
+    assert len(entries["nf-core/ampliseq"].outputs) == 24
+    for tid in ("nf-core/viralrecon", "nf-core/ampliseq"):
+        assert entries[tid].tool.kind == "pipeline"
+        # pipeline outputs name their upstream tool + the pipeline they belong to
+        for o in entries[tid].outputs:
+            assert o.tool, f"{o.id} missing upstream tool"
+            assert o.pipelines, f"{o.id} missing pipelines provenance"
+
+
+def test_qiime2_appears_as_many_modes_in_ampliseq():
+    """The 'tool with many running modes' shape: QIIME 2 fans out across modes."""
+    entries = {e.tool.id: e for e in load_catalog_entries()}
+    qiime2_outputs = [o for o in entries["nf-core/ampliseq"].outputs if o.tool == "QIIME 2"]
+    modes = {o.mode for o in qiime2_outputs}
+    assert len(qiime2_outputs) >= 8
+    assert {"diversity", "composition/ancombc", "taxa-barplot", "phylogeny"} <= modes
+
+
+def test_depends_on_chain_is_modelled():
+    """Canonical outputs declare the upstream output they derive from."""
+    entries = {e.tool.id: e for e in load_catalog_entries()}
+    by_id = {o.id: o for o in entries["nf-core/viralrecon"].outputs}
+    sankey = by_id["viralrecon_sankey_canonical"]
+    assert set(sankey.depends_on) == {
+        "viralrecon_pangolin_lineages",
+        "viralrecon_nextclade_results",
+    }
+    # every depends_on target resolves to a real output in the same file
+    for o in entries["nf-core/viralrecon"].outputs:
+        for dep in o.depends_on:
+            assert dep in by_id, f"{o.id} depends on unknown {dep}"
 
 
 def test_catalog_carries_upstream_identity():
@@ -52,6 +80,10 @@ def test_catalog_carries_upstream_identity():
     assert metaphlan.tool.biotools_id == "metaphlan"
     assert any(o.nf_core_module for o in metaphlan.outputs)
     assert any(o.edam_formats for o in metaphlan.outputs)
+    # pipeline files carry per-output bio.tools identity
+    viralrecon = entries["nf-core/viralrecon"]
+    pangolin = next(o for o in viralrecon.outputs if o.tool == "pangolin")
+    assert pangolin.biotools_id == "pangolin_cov-lineages"
 
 
 # ---------------------------------------------------------------------------
@@ -206,3 +238,23 @@ def test_meta_yml_scaffold_roundtrips_through_model():
     """The scaffold must itself be a valid CatalogEntry."""
     entry = meta_yml_to_entry(PANGOLIN_META)
     CatalogEntry.model_validate(entry.model_dump())
+
+
+# ---------------------------------------------------------------------------
+# Committed JSON Schema stays in sync with the model
+# ---------------------------------------------------------------------------
+
+
+def test_committed_json_schema_is_current():
+    """`catalog.schema.json` must match the model (regen via `catalog schema`)."""
+    import json
+    from pathlib import Path
+
+    schema_path = (
+        Path(__file__).resolve().parents[3] / "depictio" / "catalog" / "catalog.schema.json"
+    )
+    committed = json.loads(schema_path.read_text())
+    assert committed == CatalogEntry.model_json_schema(), (
+        "catalog.schema.json is stale — run: "
+        "depictio catalog schema -o depictio/catalog/catalog.schema.json"
+    )
