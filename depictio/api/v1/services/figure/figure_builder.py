@@ -95,6 +95,14 @@ def create_figure_from_data(
         else:
             pandas_df = df
 
+        # `mantine_light`/`mantine_dark` Plotly templates are registered
+        # natively now that Dash/dmc is gone. Ensure they exist before px
+        # consumes the template name — covers every caller (API inline, Celery
+        # task, worker prerender), not just the endpoint-level guards.
+        from depictio.api.v1.services.figure.mantine_templates import ensure_mantine_templates
+
+        ensure_mantine_templates()
+
         template = get_theme_template(theme)
 
         keep_empty_string_params = {

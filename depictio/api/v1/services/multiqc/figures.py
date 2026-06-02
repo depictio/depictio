@@ -381,6 +381,13 @@ def create_multiqc_plot(
     :func:`generate_figure_cache_key` — this helper only caches the unfiltered
     baseline.
     """
+    # Register the mantine_light/mantine_dark Plotly templates this figure uses
+    # (Dash/dmc removed). Covers the worker prerender path too, which has no
+    # endpoint-level guard.
+    from depictio.api.v1.services.figure.mantine_templates import ensure_mantine_templates
+
+    ensure_mantine_templates()
+
     import multiqc
 
     cache = get_cache()

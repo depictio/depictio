@@ -28,15 +28,9 @@ def _ensure_mantine_templates() -> None:
     """Worker-side Plotly template registration. Mirrors the helper in
     `figure_endpoints.routes`. Without this, plotly express raises
     ``KeyError: 'mantine_light'`` when Depictio's theme template lookup runs."""
-    import plotly.io as pio
+    from depictio.api.v1.services.figure.mantine_templates import ensure_mantine_templates
 
-    if "mantine_light" not in pio.templates or "mantine_dark" not in pio.templates:
-        try:
-            import dash_mantine_components as dmc
-
-            dmc.add_figure_templates()
-        except Exception as e:
-            logger.warning(f"celery_tasks: failed to register mantine templates: {e}")
+    ensure_mantine_templates()
 
 
 @celery_app.task(name="depictio.figure.build_preview", soft_time_limit=120, time_limit=180)

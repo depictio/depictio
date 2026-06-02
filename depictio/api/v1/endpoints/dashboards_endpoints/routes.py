@@ -2560,12 +2560,9 @@ def render_map_endpoint(
     import plotly.io as pio
 
     if "mantine_light" not in pio.templates or "mantine_dark" not in pio.templates:
-        try:
-            import dash_mantine_components as dmc
+        from depictio.api.v1.services.figure.mantine_templates import ensure_mantine_templates
 
-            dmc.add_figure_templates()
-        except Exception as e:
-            logger.warning(f"render_map: failed to register mantine templates: {e}")
+        ensure_mantine_templates()
 
     selection_values = _own_selection_values(filters, component, source="map_selection")
 
@@ -3116,12 +3113,9 @@ def render_multiqc_endpoint(
     import plotly.io as pio
 
     if "mantine_light" not in pio.templates or "mantine_dark" not in pio.templates:
-        try:
-            import dash_mantine_components as dmc
+        from depictio.api.v1.services.figure.mantine_templates import ensure_mantine_templates
 
-            dmc.add_figure_templates()
-        except Exception as e:
-            logger.warning(f"render_multiqc: failed to register mantine templates: {e}")
+        ensure_mantine_templates()
 
     # Per-stage timing instrumentation. Stripped to a single TIMING log line
     # so it's easy to grep `docker logs` for per-stage cost on warm vs cold
@@ -3432,14 +3426,9 @@ def render_multiqc_general_stats_endpoint(
     import plotly.io as pio
 
     if "mantine_light" not in pio.templates or "mantine_dark" not in pio.templates:
-        try:
-            import dash_mantine_components as dmc
+        from depictio.api.v1.services.figure.mantine_templates import ensure_mantine_templates
 
-            dmc.add_figure_templates()
-        except Exception as e:
-            logger.warning(
-                f"render_multiqc_general_stats: failed to register mantine templates: {e}"
-            )
+        ensure_mantine_templates()
 
     import time as _time
 
@@ -3455,7 +3444,7 @@ def render_multiqc_general_stats_endpoint(
         from depictio.api.v1.services.multiqc.general_stats_payload import (
             build_general_stats_payload,
         )
-        from depictio.api.v1.services.multiqc.patching import (
+        from depictio.api.v1.services.multiqc.paths import (
             normalize_multiqc_paths,
         )
 
