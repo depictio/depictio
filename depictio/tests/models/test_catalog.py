@@ -234,6 +234,27 @@ def test_compose_run_dir_groups_modules_with_their_viz():
     # pipeline-agnostic composition: recognised modules grouped, each with renders
     assert "mosdepth" in by_tool and "multiqc" in by_tool
     assert all(isinstance(m.renders, list) for ms in by_tool.values() for m in ms)
+    # a component without a kind renders as just "component" (no ":kind")
+    assert by_tool["multiqc"][0].renders == ["multiqc"]
+
+
+def test_match_run_dir_confirm_with_versions_scopes_by_software_versions(tmp_path):
+    # ivar + pangolin files present, but software_versions.yml lists only ivar
+    (tmp_path / "variants_long_table.csv").write_text("x\n")  # → ivar find
+    (tmp_path / "sample.pangolin.csv").write_text("x\n")  # → pangolin find
+    (tmp_path / "software_versions.yml").write_text(
+        "IVAR_VARIANTS:\n  ivar: '1.4'\nWORKFLOW:\n  nf-core/viralrecon: 3.0.0\n"
+    )
+    unconfirmed = {m.tool_id for m in match_run_dir(tmp_path)}
+    assert {"ivar", "pangolin"} <= unconfirmed
+    confirmed = {m.tool_id for m in match_run_dir(tmp_path, confirm_with_versions=True)}
+    assert "ivar" in confirmed and "pangolin" not in confirmed  # scoped to executed tools
+
+
+def test_confirm_with_versions_is_noop_without_versions_file(tmp_path):
+    (tmp_path / "variants_long_table.csv").write_text("x\n")
+    # no software_versions.yml → confirm must not filter (non-breaking)
+    assert {m.tool_id for m in match_run_dir(tmp_path, confirm_with_versions=True)} == {"ivar"}
 
 
 # ---------------------------------------------------------------------------

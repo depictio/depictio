@@ -584,10 +584,15 @@ def suggest_viz_kinds(
 def suggest_producers(dc_schema: dict[str, str]) -> list[tuple[str, float]]:
     """Identify known tool outputs whose required_columns fingerprint matches.
 
-    Producer fingerprints are stricter than viz suggestions — they look at
-    actual column NAMES (case-sensitive), not just dtype shapes. When a DC
-    matches a producer, we can pre-fill role bindings exactly (via the
-    producer's role_mapping) instead of guessing.
+    DEPRECATED / being retired (catalog direction v3): this column-name
+    fingerprinting is unreliable — it ignores dtypes, tiny fingerprints (1-2
+    cols) cause false positives, and there is no specificity ranking. It is kept
+    only because the API + React "suggested producer" chips still call it;
+    removal is a pending frontend PR. Prefer `suggest_viz_kinds` (role/dtype
+    based) for the free-mode mapping assist, and `catalog match`/`compose` for
+    scan-time module recognition.
+
+    Producer fingerprints look at column NAMES (case-sensitive), not dtypes.
 
     Returns:
         Sorted list of (producer_name, match_ratio). match_ratio = fraction

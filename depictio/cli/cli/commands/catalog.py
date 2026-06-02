@@ -171,6 +171,13 @@ def catalog_match(
 @app.command("compose")
 def catalog_compose(
     run_dir: Annotated[str, typer.Argument(help="A run directory to compose a dashboard from")],
+    confirm_versions: Annotated[
+        bool,
+        typer.Option(
+            "--confirm-versions",
+            help="Restrict to tools listed in the run's software_versions.yml",
+        ),
+    ] = False,
 ) -> None:
     """Preview the guided dashboard a run would compose (module → viz).
 
@@ -180,7 +187,7 @@ def catalog_compose(
     """
     from depictio.models.components.advanced_viz.catalog import compose_run_dir
 
-    by_tool = compose_run_dir(run_dir)
+    by_tool = compose_run_dir(run_dir, confirm_with_versions=confirm_versions)
     if not by_tool:
         typer.echo(f"No catalogued module outputs found under {run_dir}")
         return

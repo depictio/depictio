@@ -26,10 +26,12 @@
 >
 > - **Free mode:** the user browses the catalog's modules and **maps columns to
 >   roles by hand** (assisted by `suggest_viz_kinds` / `CANONICAL_SCHEMAS`, which
->   match candidate columns to a viz's roles by dtype). There is **no automatic
->   column-fingerprint recognition** — `producers.py`'s `suggest_producers`
->   proved unreliable (dtype-blind, tiny fingerprints, no ranking) and is
->   **dropped**; `suggest_viz_kinds` (role/dtype based) is kept.
+>   match candidate columns to a viz's roles by dtype). The target is **no
+>   automatic column-fingerprint recognition** — `producers.py`'s
+>   `suggest_producers` proved unreliable (dtype-blind, tiny fingerprints, no
+>   ranking) and is **being retired** (its path is still wired into the API +
+>   React chips today; actual removal is a pending frontend PR);
+>   `suggest_viz_kinds` (role/dtype based) is kept.
 > - **Guided mode:** depictio-cli recognises **module outputs** in a run
 >   (`find`, optionally scoped/confirmed by the run's `software_versions.yml`)
 >   and composes a starter dashboard. This is **pipeline-agnostic**: it works for

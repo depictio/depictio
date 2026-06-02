@@ -381,19 +381,48 @@ class CatalogMatch(BaseModel):
     renders: list[str] = Field(default_factory=list)
 
 
+def read_software_versions(run_dir: str | Path) -> set[str]:
+    """Collect the tool names from a run's nf-core ``software_versions.yml``.
+
+    nf-core writes ``{PROCESS: {tool: version}}``; we return the set of tool
+    names (lowercased) actually executed — the module-level provenance used to
+    scope/confirm recognition. Empty set if no such file is found.
+    """
+    run_dir = Path(run_dir)
+    tools: set[str] = set()
+    for path in run_dir.rglob("software_versions.yml"):
+        try:
+            data = yaml.safe_load(path.read_text()) or {}
+        except Exception:
+            continue
+        for versions in data.values():
+            if isinstance(versions, dict):
+                tools.update(str(tool).lower() for tool in versions)
+    return tools
+
+
 def match_run_dir(
-    run_dir: str | Path, entries: tuple[CatalogEntry, ...] | None = None
+    run_dir: str | Path,
+    entries: tuple[CatalogEntry, ...] | None = None,
+    confirm_with_versions: bool = False,
 ) -> list[CatalogMatch]:
     """Walk ``run_dir`` and return every module output the catalog recognises.
 
     The catalog analogue of MultiQC's file search, at **module granularity**
     (pipeline-agnostic). NOTE: exposed via `depictio catalog match`/`compose`
     and intended as the scan-time recogniser; not yet wired into live ingestion.
+
+    With ``confirm_with_versions=True`` and a ``software_versions.yml`` present,
+    matches are restricted to tools the run actually executed — a second signal
+    on top of filename matching (no file present → no restriction, non-breaking).
     """
     run_dir = Path(run_dir)
     entries = entries if entries is not None else load_catalog_entries()
+    executed = read_software_versions(run_dir) if confirm_with_versions else set()
     matches: list[CatalogMatch] = []
     for entry in entries:
+        if executed and entry.id.lower() not in executed:
+            continue  # tool not in the run's software_versions.yml
         for output in entry.outputs:
             f = output.find
             if f.path_glob:
@@ -421,7 +450,9 @@ def match_run_dir(
 
 
 def compose_run_dir(
-    run_dir: str | Path, entries: tuple[CatalogEntry, ...] | None = None
+    run_dir: str | Path,
+    entries: tuple[CatalogEntry, ...] | None = None,
+    confirm_with_versions: bool = False,
 ) -> dict[str, list[CatalogMatch]]:
     """Group recognised module outputs by tool — a guided-dashboard *proposal*.
 
@@ -431,6 +462,6 @@ def compose_run_dir(
     each module's `renders`. A preview only — it does not yet build a dashboard.
     """
     by_tool: dict[str, list[CatalogMatch]] = {}
-    for match in match_run_dir(run_dir, entries):
+    for match in match_run_dir(run_dir, entries, confirm_with_versions=confirm_with_versions):
         by_tool.setdefault(match.tool_id, []).append(match)
     return by_tool
