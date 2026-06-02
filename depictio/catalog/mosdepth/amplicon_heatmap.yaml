@@ -3,5 +3,6 @@ mode: amplicon
 description: Log10 amplicon-coverage matrix (samples × amplicons).
 find: { path_glob: "**/mosdepth/amplicon/all_samples.mosdepth.heatmap.tsv" }
 recipe: nf-core/viralrecon/complex_heatmap_canonical.py
+fixture: nf-core/viralrecon/3.0.0/mosdepth_amplicon_heatmap.tsv
 renders_as:
   - { component: advanced_viz, kind: complex_heatmap, roles: {index: sample} }

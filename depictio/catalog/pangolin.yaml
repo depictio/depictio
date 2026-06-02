@@ -14,5 +14,7 @@ outputs:
     description: Per-sample PANGO lineage report (rendered as a table).
     find: { filename: "*.pangolin.csv" }
     recipe: nf-core/viralrecon/pangolin_lineages.py
+    fixture: nf-core/viralrecon/3.0.0/pangolin_lineages.tsv
     renders_as:
+      - { component: figure, visu_type: histogram, dict_kwargs: {x: lineage, color: qc_status} } # lineage calls
       - { component: table }

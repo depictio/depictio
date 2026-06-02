@@ -20,3 +20,4 @@ outputs:
       - { component: advanced_viz, kind: lollipop, roles: {feature_id: GENE, position: POS, category: EFFECT} }
       - { component: advanced_viz, kind: oncoplot, roles: {sample_id: sample, gene: GENE, mutation_type: EFFECT} }
       - { component: advanced_viz, kind: manhattan, roles: {chr: CHROM, pos: POS, score: AF} }
+      - { component: figure, visu_type: histogram, dict_kwargs: {x: AF, color: EFFECT} } # allele-frequency distribution
