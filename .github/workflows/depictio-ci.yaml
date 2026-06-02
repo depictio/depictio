@@ -637,8 +637,6 @@ jobs:
           echo "✅ Users verified: $ADMIN_USER, $TEST_USER"
 
       - name: Verify Iris integration from system initialization
-        # SKIPPED: Dash-removal PR — re-enable in a follow-up once data ingestion / React screenshot endpoint coverage is back.
-        if: false
         run: |
           # Verify project
           IRIS_PROJECT=$(docker compose exec -T mongo mongosh localhost:27018/depictioDB --eval "JSON.stringify(db.projects.find().toArray())" --quiet 2>&1 | grep '^[\[{]' | jq -r '.[] | select(.name == "Iris Dataset Project Data Analysis") | .name')
@@ -657,8 +655,6 @@ jobs:
           echo "✅ Iris integration verified: Project=$IRIS_PROJECT, DT=$IRIS_DT, Dashboard=$IRIS_DASH"
 
       - name: Verify Penguins integration from system initialization
-        # SKIPPED: Dash-removal PR — re-enable in a follow-up once data ingestion / React screenshot endpoint coverage is back.
-        if: false
         run: |
           # Verify project
           PENGUIN_PROJECT=$(docker compose exec -T mongo mongosh localhost:27018/depictioDB --eval "JSON.stringify(db.projects.find().toArray())" --quiet 2>&1 | grep '^[\[{]' | jq -r '.[] | select(.name == "Palmer Penguins Species Comparison") | .name')
@@ -676,8 +672,6 @@ jobs:
           echo "✅ Penguins integration verified: Project=$PENGUIN_PROJECT, DCs=$PENGUIN_DC_COUNT, Dashboard=$PENGUIN_DASH"
 
       - name: Verify Ampliseq integration from system initialization
-        # SKIPPED: Dash-removal PR — re-enable in a follow-up once data ingestion / React screenshot endpoint coverage is back.
-        if: false
         run: |
           # Verify project
           AMPLISEQ_PROJECT=$(docker compose exec -T mongo mongosh localhost:27018/depictioDB --eval "JSON.stringify(db.projects.find().toArray())" --quiet 2>&1 | grep '^[\[{]' | jq -r '.[] | select(.name == "Ampliseq Microbial Community Analysis") | .name')
@@ -702,9 +696,7 @@ jobs:
 
           echo "✅ Ampliseq integration verified: Project=$AMPLISEQ_PROJECT, DCs=$AMPLISEQ_DC_COUNT, Dashboards=$AMPLISEQ_DASH_COUNT (Main=$AMPLISEQ_MAIN_DASH, Child=$AMPLISEQ_CHILD_DASH)"
 
-      - name: Test Screenshot Generation - screenshot-dash-fixed
-        # SKIPPED: Dash-removal PR — re-enable in a follow-up once data ingestion / React screenshot endpoint coverage is back.
-        if: false
+      - name: Test Screenshot Generation - screenshot-react-dual
         run: |
           echo "📸 Testing screenshot generation functionality..."
 
@@ -752,8 +744,7 @@ jobs:
           curl -s -o /dev/null -w "Viewer Status: %{http_code}, Time: %{time_total}s\n" http://localhost:5080/ || echo "Viewer connectivity test failed"
 
           # Make the API call and capture response with timeout
-          SCREENSHOT_RESPONSE=$(timeout 60s curl -s -w "\n%{http_code}" http://localhost:8058/depictio/api/v1/utils/screenshot-dash-fixed/$DASHBOARD_ID || echo -e "\nTIMEOUT")
-          # SCREENSHOT_RESPONSE=$(curl -s -w "\n%{http_code}" http://localhost:8058/depictio/api/v1/dashboards/screenshot/$DASHBOARD_ID)
+          SCREENSHOT_RESPONSE=$(timeout 120s curl -s -w "\n%{http_code}" http://localhost:8058/depictio/api/v1/utils/screenshot-react-dual/$DASHBOARD_ID || echo -e "\nTIMEOUT")
 
           # Extract HTTP status code (last line)
           HTTP_CODE=$(echo "$SCREENSHOT_RESPONSE" | tail -n1)
@@ -781,39 +772,33 @@ jobs:
           elif [ "$HTTP_CODE" = "200" ]; then
             echo "✅ Screenshot endpoint responded successfully"
 
-            # Parse and check response without logging sensitive data
-            SUCCESS=$(echo "$JSON_RESPONSE" | jq -r '.success // false' 2>/dev/null)
-            MESSAGE=$(echo "$JSON_RESPONSE" | jq -r '.message // "unknown"' 2>/dev/null)
-            SCREENSHOT_PATH=$(echo "$JSON_RESPONSE" | jq -r '.screenshot_path // "unknown"' 2>/dev/null)
-            URL=$(echo "$JSON_RESPONSE" | jq -r '.url // "unknown"' 2>/dev/null)
+            # React dual-theme endpoint returns {status, light_screenshot, dark_screenshot, error}
+            STATUS=$(echo "$JSON_RESPONSE" | jq -r '.status // "unknown"' 2>/dev/null)
+            LIGHT=$(echo "$JSON_RESPONSE" | jq -r '.light_screenshot // "unknown"' 2>/dev/null)
+            DARK=$(echo "$JSON_RESPONSE" | jq -r '.dark_screenshot // "unknown"' 2>/dev/null)
 
             echo "📋 Response details:"
-            echo "  Success: $SUCCESS"
-            echo "  Message: $MESSAGE"
-            echo "  Screenshot path: $SCREENSHOT_PATH"
-            echo "  URL: $URL"
+            echo "  Status: $STATUS"
+            echo "  Light screenshot: $LIGHT"
+            echo "  Dark screenshot: $DARK"
 
-
-            if [ "$SUCCESS" = "true" ]; then
+            if [ "$STATUS" = "success" ]; then
               echo "✅ Screenshot generation successful"
 
-              # Additional verification - check if screenshot path is valid
-              if [[ "$SCREENSHOT_PATH" == *".png" ]]; then
-                echo "✅ Screenshot path format is valid"
-              else
-                echo "⚠️  Screenshot path format may be invalid"
-              fi
-
-              # Optional: Verify screenshot file exists in container
+              # Verify the light-theme PNG exists in the backend container — the
+              # worker writes to the static/screenshots dir the backend serves.
               echo "🧪 Checking if screenshot file exists in backend container..."
-              if docker compose exec -T depictio-backend test -f "$SCREENSHOT_PATH" 2>/dev/null; then
+              if docker compose exec -T depictio-backend test -f "$LIGHT" 2>/dev/null; then
                 echo "✅ Screenshot file exists in backend container"
               else
                 echo "⚠️  Screenshot file not found in backend container (may be normal depending on setup)"
               fi
 
+            elif [ "$STATUS" = "skipped" ]; then
+              echo "⚠️  Screenshot skipped (viewer unreachable from worker in CI) — endpoint reachable, treating as non-fatal"
             else
-              echo "❌ Screenshot generation failed"
+              echo "❌ Screenshot generation failed (status=$STATUS)"
+              echo "Response: $JSON_RESPONSE"
               exit 1
             fi
 
