@@ -38,9 +38,20 @@ pipeline-agnostic (see `docs/design/bioinformatics-catalog.md`).
   `/suggest-from-columns`) + the React "suggested producer" chips. Keep
   `suggest_viz_kinds` (role/dtype based).
 
+## Render enrichment + preview
+- `renders_as` now supports `figure` (UI `visu_type`/`dict_kwargs` **and** code
+  mode `code`) + `card` (`column`/`aggregation`). `qiime2_alpha_diversity` is the
+  flagship (code-mode multi-facet box + 3 metric cards). **TODO:** enrich the
+  other entries with their figures/cards (ampliseq/viralrecon dashboards).
+- **`fixture`** (path under `projects/`) is wired: `catalog validate` grounds
+  renders against the real bundled sample (Level-3). **TODO:** add a `fixture`
+  to every output (reuse the bundled `projects/nf-core/*/*.tsv` canonical files).
+- **`catalog preview <output>`** (next): load the `fixture` → build the
+  component (advanced_viz / figure / card) → render the real viz. Reuses the
+  existing component renderers + the figure code-mode executor
+  (`simple_code_executor.execute_code(code, df)`).
+
 ## Validation / CI hardening
-- **Level-3 validation**: per-entry sample fixtures so CI proves
-  find → recipe → render end-to-end on real data (green CI = trustworthy entry).
 - `match_run_dir` perf: single `os.walk` pass (currently one `rglob` per output)
   — only matters once the catalog/run grows.
 

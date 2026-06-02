@@ -39,7 +39,8 @@ Both use the same fields; a folder just splits the outputs into files.
 | `mode` | CAN | str | Running mode / subcommand. |
 | `description` | CAN | str | |
 | `recipe` | CAN | str | Pipeline-qualified reshape, e.g. `nf-core/ampliseq/ancombc.py`. **Owns the output columns.** |
-| `columns` | CAN* | dict[str,str] | Bindable columns (polars dtype names). **MUST be set iff there is no recipe and a render uses roles; MUST be absent if `recipe` is set.** |
+| `columns` | CAN* | dict[str,str] | Bindable columns (polars dtype names). **MUST be set iff there is no recipe and a render binds columns; MUST be absent if `recipe` is set.** |
+| `fixture` | CAN | str | Path under `depictio/projects/` of a bundled sample of the bindable shape (e.g. `nf-core/ampliseq/2.16.0/alpha_diversity_multi_canonical.tsv`). Grounds renders in CI (Level-3) and feeds `preview` later. |
 | `renders_as` | CAN | list[Render] | Dashboard render target(s) + binding. |
 | `nf_core_url` / `biotools_url` / `edam_*` | CAN | str / list | Per-output identity overrides. |
 
@@ -54,10 +55,18 @@ Both use the same fields; a folder just splits the outputs into files.
 
 | Field | MUST/CAN | Type | Notes |
 |---|---|---|---|
-| `component` | **MUST** | `advanced_viz` \| `multiqc_plot` \| `table` \| `figure` | The dashboard component. |
-| `kind` | cond. | AdvancedVizKind | **Required iff** `component=advanced_viz`; forbidden otherwise. |
-| `roles` | CAN | dict[role,column] | Pre-fills the binding. Role names MUST be valid for the viz `kind`; columns MUST exist (in `columns`, or in the recipe's output). |
+| `component` | **MUST** | real `ComponentType` (`advanced_viz`/`figure`/`card`/`table`/`text`/`jbrowse`/`image`/`map`) + `multiqc` | The dashboard component. |
+| `kind` | cond. | AdvancedVizKind | **Required iff** `component=advanced_viz`; forbidden otherwise. Role names MUST be valid for the kind. |
+| `roles` | cond. | dict[role,column] | `advanced_viz` binding (role → column). |
+| `visu_type` | cond. | `box`/`scatter`/`bar`/`histogram`/`line`/`heatmap` | `figure` **UI mode** (plotly express). |
+| `dict_kwargs` | CAN | dict[str,str] | `figure` UI mode: plotly-express kwargs (`x`,`y`,`color`,`facet_col`…); column-valued ones are grounded. |
+| `code` | cond. | str | `figure` **code mode**: inline Python that sets `fig` (depictio `code_content`). A figure needs `visu_type` **or** `code`. |
+| `column` + `aggregation` | cond. | str | `card`: the metric column + aggregation (e.g. `average`). |
 | `section` | CAN | str | e.g. the MultiQC section name. |
+
+Figure/card/roles fields are **component-scoped** (validated): `roles`/`kind`
+only for `advanced_viz`, `visu_type`/`dict_kwargs`/`code` only for `figure`,
+`column`/`aggregation` only for `card`.
 
 `AdvancedVizKind`: volcano, embedding, manhattan, stacked_taxonomy,
 phylogenetic, rarefaction, da_barplot, enrichment, complex_heatmap, upset_plot,
@@ -97,10 +106,10 @@ while writing `roles`.
 
 1. Schema / structure (Pydantic, `extra="forbid"`).
 2. `kind` valid for `advanced_viz`; role names valid for the `kind`.
-3. `roles` columns grounded — against declared `columns`, or against the
-   **recipe's real output columns** (the recipe is imported and its
-   `EXPECTED_SCHEMA` read).
-4. Every referenced `recipe` resolves.
+3. Each render's bound columns (`roles`/`dict_kwargs`/`card.column`) are
+   **grounded** against the real data shape — the `fixture` (most complete) if
+   set, else the recipe's `EXPECTED_SCHEMA`, else the declared `columns`.
+4. Every referenced `recipe` resolves; every `fixture` reads.
 5. Every `nf_core_url` module + `edam_*` term **exists** in the vendored index.
 
 Green CI = the entry is wired correctly, no manual review needed.

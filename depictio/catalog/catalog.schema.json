@@ -86,6 +86,18 @@
           "title": "Renders As",
           "type": "array"
         },
+        "fixture": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Fixture"
+        },
         "nf_core_url": {
           "anyOf": [
             {
@@ -134,7 +146,7 @@
     },
     "Render": {
       "additionalProperties": false,
-      "description": "One render target for an output: a component + its role\u2192column binding.",
+      "description": "One render target for an output: a dashboard component + its binding.\n\n- `advanced_viz` \u2192 `kind` + `roles` (role \u2192 column).\n- `figure` \u2192 either UI mode (`visu_type` + `dict_kwargs`, plotly-express) or\n  code mode (`code`: an inline snippet that sets `fig`, depictio's\n  figure `code_content`).\n- `card` \u2192 `column` + `aggregation` (a metric/KPI).\n- `multiqc`/`table`/\u2026 \u2192 no extra binding.",
       "properties": {
         "component": {
           "anyOf": [
@@ -197,6 +209,69 @@
           },
           "title": "Roles",
           "type": "object"
+        },
+        "visu_type": {
+          "anyOf": [
+            {
+              "enum": [
+                "scatter",
+                "line",
+                "bar",
+                "box",
+                "histogram",
+                "heatmap"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Visu Type"
+        },
+        "dict_kwargs": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Dict Kwargs",
+          "type": "object"
+        },
+        "code": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Code"
+        },
+        "column": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Column"
+        },
+        "aggregation": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Aggregation"
         },
         "section": {
           "anyOf": [

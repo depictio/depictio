@@ -32,9 +32,16 @@ from typing import Literal
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from depictio.models.components.types import AdvancedVizKind, ComponentType
+from depictio.models.components.types import AdvancedVizKind, ChartType, ComponentType
 
 CATALOG_DIR = Path(__file__).resolve().parents[3] / "catalog"
+PROJECTS_DIR = CATALOG_DIR.parent / "projects"
+
+# plotly-express kwargs whose VALUES are column names (grounded against data);
+# other dict_kwargs (title, points, log_x…) are passed through untouched.
+_FIGURE_COLUMN_KWARGS: frozenset[str] = frozenset(
+    {"x", "y", "color", "facet_col", "facet_row", "size", "symbol", "names", "values", "hover_name"}
+)
 
 # Render targets = depictio's real component registry (`ComponentType`:
 # advanced_viz, figure, table, card, text, jbrowse, image, map) plus the
@@ -109,33 +116,74 @@ class CatalogFind(BaseModel):
 
 
 class Render(BaseModel):
-    """One render target for an output: a component + its role→column binding."""
+    """One render target for an output: a dashboard component + its binding.
+
+    - `advanced_viz` → `kind` + `roles` (role → column).
+    - `figure` → either UI mode (`visu_type` + `dict_kwargs`, plotly-express) or
+      code mode (`code`: an inline snippet that sets `fig`, depictio's
+      figure `code_content`).
+    - `card` → `column` + `aggregation` (a metric/KPI).
+    - `multiqc`/`table`/… → no extra binding.
+    """
 
     component: ComponentKind
-    kind: AdvancedVizKind | None = None  # required iff component == advanced_viz
-    roles: dict[str, str] = Field(default_factory=dict)  # viz role -> column name
-    section: str | None = None  # e.g. the MultiQC module/section name
+    # advanced_viz
+    kind: AdvancedVizKind | None = None
+    roles: dict[str, str] = Field(default_factory=dict)  # viz role -> column
+    # figure
+    visu_type: ChartType | None = None  # UI mode: box/scatter/bar/histogram…
+    dict_kwargs: dict[str, str] = Field(default_factory=dict)  # plotly-express kwargs
+    code: str | None = None  # code mode: inline Python that sets `fig`
+    # card
+    column: str | None = None
+    aggregation: str | None = None
+    # multiqc
+    section: str | None = None
 
     model_config = ConfigDict(extra="forbid")
 
+    def bound_columns(self) -> set[str]:
+        """Columns this render binds to (for grounding against the data shape)."""
+        cols = set(self.roles.values())
+        cols |= {v for k, v in self.dict_kwargs.items() if k in _FIGURE_COLUMN_KWARGS}
+        if self.column:
+            cols.add(self.column)
+        return cols  # NB: `code`-mode figures are free-form → not grounded
+
     @model_validator(mode="after")
     def _check_component(self) -> Render:
-        if self.component == "advanced_viz":
+        c = self.component
+        # advanced_viz: kind + roles
+        if c == "advanced_viz":
             if not self.kind:
                 raise ValueError("renders_as advanced_viz requires a 'kind'")
             from depictio.models.components.advanced_viz.schemas import CANONICAL_SCHEMAS
 
-            valid_roles = set(CANONICAL_SCHEMAS.get(self.kind, {}))
-            unknown = set(self.roles) - valid_roles
+            unknown = set(self.roles) - set(CANONICAL_SCHEMAS.get(self.kind, {}))
             if unknown:
                 raise ValueError(
                     f"renders_as {self.kind}: unknown role(s) {sorted(unknown)}; "
-                    f"valid roles: {sorted(valid_roles)}"
+                    f"valid roles: {sorted(CANONICAL_SCHEMAS.get(self.kind, {}))}"
                 )
-        elif self.kind is not None:
-            raise ValueError(
-                f"'kind' is only valid for component=advanced_viz, not {self.component}"
-            )
+        else:
+            if self.kind is not None:
+                raise ValueError(f"'kind' is only valid for component=advanced_viz, not {c}")
+            if self.roles:
+                raise ValueError(f"'roles' is only valid for component=advanced_viz, not {c}")
+        # figure: visu_type (UI) or code (code mode)
+        if c == "figure":
+            if not (self.visu_type or self.code):
+                raise ValueError(
+                    "renders_as figure requires 'visu_type' (UI) or 'code' (code mode)"
+                )
+        elif self.visu_type or self.dict_kwargs or self.code:
+            raise ValueError(f"figure fields are only valid for component=figure, not {c}")
+        # card: column + aggregation
+        if c == "card":
+            if not (self.column and self.aggregation):
+                raise ValueError("renders_as card requires 'column' and 'aggregation'")
+        elif self.column or self.aggregation:
+            raise ValueError(f"card fields are only valid for component=card, not {c}")
         return self
 
 
@@ -154,6 +202,12 @@ class CatalogOutput(BaseModel):
     columns: dict[str, str] = Field(default_factory=dict)
 
     renders_as: list[Render] = Field(default_factory=list)
+
+    # A bundled sample of this output's bindable shape (path under
+    # depictio/projects/, e.g. nf-core/ampliseq/2.16.0/alpha_diversity_multi_canonical.tsv).
+    # Used by `catalog validate` (ground renders against real columns) and, later,
+    # by `catalog preview` (render the component on real data).
+    fixture: str | None = None
 
     # Per-output identity overrides (e.g. QIIME 2 subcommands = distinct modules).
     nf_core_url: str | None = None
@@ -177,27 +231,27 @@ class CatalogOutput(BaseModel):
                 f"output {self.id!r}: unknown dtype(s) {bad}; allowed: {sorted(ALLOWED_DTYPES)}"
             )
         if self.columns:
-            # Roles must bind to declared columns.
+            # Renders must bind to declared columns (unless a fixture grounds them).
             for r in self.renders_as:
-                missing = set(r.roles.values()) - set(self.columns)
-                if missing:
+                missing = r.bound_columns() - set(self.columns)
+                if missing and not self.fixture:
                     raise ValueError(
                         f"output {self.id!r} render {r.kind or r.component}: "
-                        f"role(s) bind to unknown column(s) {sorted(missing)}; "
+                        f"binds unknown column(s) {sorted(missing)}; "
                         f"declared columns: {sorted(self.columns)}"
                     )
-        elif not self.recipe:
-            # No columns and no recipe: roles can't be grounded. Allowed only
-            # for non-tabular / role-less renders (multiqc_plot, figure, …).
+        elif not self.recipe and not self.fixture:
+            # No columns, no recipe, no fixture: bindings can't be grounded.
+            # Allowed only for non-tabular / binding-less renders (multiqc, figure code…).
             for r in self.renders_as:
-                if r.roles:
+                if r.bound_columns():
                     raise ValueError(
-                        f"output {self.id!r} render {r.kind or r.component}: has roles "
-                        f"but no recipe and no 'columns' to bind them — declare 'columns' "
-                        f"or add a 'recipe'"
+                        f"output {self.id!r} render {r.kind or r.component}: binds "
+                        f"{sorted(r.bound_columns())} but has no 'columns', 'recipe' or "
+                        f"'fixture' to ground them"
                     )
-        # recipe + no columns: roles are checked against the recipe's output by
-        # `depictio catalog validate`.
+        # recipe/fixture grounding (against the recipe's real output or the
+        # fixture's real columns) is done by `depictio catalog validate`.
         return self
 
     @model_validator(mode="after")
@@ -351,6 +405,15 @@ def check_existence(entries: tuple[CatalogEntry, ...] | list[CatalogEntry]) -> l
 # Recipe output columns — used by `catalog validate` to ground recipe outputs.
 # Imports a recipe module, so it lives here but is only called from the CLI/CI.
 # ---------------------------------------------------------------------------
+
+
+def fixture_columns(fixture_ref: str) -> list[str]:
+    """Read the column header of a bundled fixture (path under projects/)."""
+    import polars as pl
+
+    path = PROJECTS_DIR / fixture_ref
+    sep = "\t" if path.suffix == ".tsv" else ","
+    return pl.read_csv(path, separator=sep, n_rows=0).columns
 
 
 def recipe_output_columns(recipe_ref: str) -> list[str]:

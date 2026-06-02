@@ -79,7 +79,7 @@ def test_recipe_and_columns_are_mutually_exclusive():
 
 
 def test_roles_without_columns_or_recipe_is_rejected():
-    with pytest.raises(ValueError, match="no recipe and no 'columns'"):
+    with pytest.raises(ValueError, match="no 'columns', 'recipe' or 'fixture'"):
         CatalogOutput.model_validate(
             _output(
                 renders_as=[
@@ -155,7 +155,8 @@ def test_component_must_be_a_real_depictio_type():
         CatalogOutput.model_validate(_output(renders_as=[{"component": "multiqc_plot"}]))
     with pytest.raises(ValueError):
         CatalogOutput.model_validate(_output(renders_as=[{"component": "not_a_component"}]))
-    for comp in ("figure", "card", "jbrowse", "multiqc"):
+    # components that need no extra binding fields are valid bare
+    for comp in ("table", "jbrowse", "text", "image", "map", "multiqc"):
         CatalogOutput.model_validate(_output(renders_as=[{"component": comp}]))
 
 
@@ -181,6 +182,96 @@ def test_output_edam_operation_prefix_enforced():
                 renders_as=[{"component": "table"}],
             )
         )
+
+
+# ---------------------------------------------------------------------------
+# figure (UI + code mode) + card renders
+# ---------------------------------------------------------------------------
+
+
+def test_figure_render_ui_and_code_modes():
+    CatalogOutput.model_validate(  # UI mode
+        _output(
+            columns={"habitat": "String", "shannon": "Float64"},
+            renders_as=[
+                {
+                    "component": "figure",
+                    "visu_type": "box",
+                    "dict_kwargs": {"x": "habitat", "y": "shannon"},
+                }
+            ],
+        )
+    )
+    CatalogOutput.model_validate(  # code mode
+        _output(renders_as=[{"component": "figure", "code": "fig = px.box(df)"}])
+    )
+    with pytest.raises(ValueError, match="requires 'visu_type'"):
+        CatalogOutput.model_validate(_output(renders_as=[{"component": "figure"}]))
+
+
+def test_card_render_requires_column_and_aggregation():
+    CatalogOutput.model_validate(
+        _output(
+            columns={"shannon": "Float64"},
+            renders_as=[{"component": "card", "column": "shannon", "aggregation": "average"}],
+        )
+    )
+    with pytest.raises(ValueError, match="card requires"):
+        CatalogOutput.model_validate(_output(renders_as=[{"component": "card", "column": "x"}]))
+
+
+def test_figure_and_card_fields_are_component_scoped():
+    with pytest.raises(ValueError, match="figure fields"):
+        CatalogOutput.model_validate(
+            _output(
+                columns={"a": "String"}, renders_as=[{"component": "table", "visu_type": "box"}]
+            )
+        )
+    with pytest.raises(ValueError, match="card fields"):
+        CatalogOutput.model_validate(
+            _output(columns={"a": "String"}, renders_as=[{"component": "table", "column": "a"}])
+        )
+
+
+def test_bound_columns_covers_roles_dict_kwargs_and_card_column():
+    from depictio.models.components.advanced_viz.catalog import Render
+
+    fig = Render.model_validate(
+        {
+            "component": "figure",
+            "visu_type": "box",
+            "dict_kwargs": {"x": "habitat", "y": "shannon", "title": "t"},
+        }
+    )
+    assert fig.bound_columns() == {"habitat", "shannon"}  # 'title' is not a column kwarg
+    card = Render.model_validate(
+        {"component": "card", "column": "shannon", "aggregation": "average"}
+    )
+    assert card.bound_columns() == {"shannon"}
+    code = Render.model_validate({"component": "figure", "code": "fig = px.box(df)"})
+    assert code.bound_columns() == set()  # code mode is free-form
+
+
+def test_alpha_diversity_has_code_figure_and_metric_cards():
+    out = next(
+        o
+        for e in load_catalog_entries()
+        if e.id == "qiime2"
+        for o in e.outputs
+        if o.id == "qiime2_alpha_diversity"
+    )
+    components = [r.component for r in out.renders_as]
+    assert components.count("card") == 3 and "figure" in components
+    fig = next(r for r in out.renders_as if r.component == "figure")
+    assert fig.code and "fig = px.box" in fig.code  # code-mode figure
+    assert out.fixture and out.fixture.endswith("alpha_diversity_multi_canonical.tsv")
+
+
+def test_fixture_columns_reads_bundled_sample():
+    from depictio.models.components.advanced_viz.catalog import fixture_columns
+
+    cols = fixture_columns("nf-core/ampliseq/2.16.0/alpha_diversity_multi_canonical.tsv")
+    assert {"sample_id", "shannon", "evenness", "faith_pd"} <= set(cols)
 
 
 # ---------------------------------------------------------------------------

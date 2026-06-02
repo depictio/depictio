@@ -1,8 +1,24 @@
 id: qiime2_alpha_diversity
 mode: diversity
-description: Alpha-diversity vector (e.g. Faith PD) per sample (rendered as a table).
+description: Multi-metric alpha-diversity per sample (shannon, evenness, faith_pd…).
 nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/qiime2/diversitycore
 find: { path_glob: "**/qiime2/diversity/alpha_diversity/*_vector/metadata.tsv" }
-recipe: nf-core/ampliseq/alpha_diversity.py
+recipe: nf-core/ampliseq/alpha_diversity_multi_canonical.py
+# bindable sample (recipe declares only sample_id/habitat; metric cols are dynamic)
+fixture: nf-core/ampliseq/2.16.0/alpha_diversity_multi_canonical.tsv
 renders_as:
+  # code-mode figure: multi-facet box plot of the metrics by habitat
+  - component: figure
+    code: |
+      m = df.to_pandas().melt(
+          id_vars=["sample_id", "habitat"],
+          value_vars=["shannon", "evenness", "faith_pd"],
+          var_name="metric", value_name="value",
+      )
+      fig = px.box(m, x="habitat", y="value", color="habitat",
+                   facet_col="metric", title="Alpha diversity by habitat")
+  # one metric card per index (distribution / KPI)
+  - { component: card, column: shannon, aggregation: average }
+  - { component: card, column: evenness, aggregation: average }
+  - { component: card, column: faith_pd, aggregation: average }
   - { component: table }

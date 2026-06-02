@@ -105,6 +105,7 @@ def catalog_validate(
         CATALOG_DIR,
         CatalogEntry,
         check_existence,
+        fixture_columns,
         load_entries_from_dir,
         recipe_output_columns,
     )
@@ -126,22 +127,36 @@ def catalog_validate(
 
     # nf-core module + EDAM term existence (against the vendored indices).
     problems: list[str] = check_existence(entries)
-    # Ground recipe-output roles against the recipe's real output columns.
+    # Ground each render's bound columns against the real data shape:
+    # the fixture (most complete) > the recipe's EXPECTED_SCHEMA > declared columns.
     for entry in entries:
         for out in entry.outputs:
-            if not out.recipe:
-                continue
-            try:
-                cols = set(recipe_output_columns(out.recipe))
-            except Exception as exc:
-                problems.append(f"{out.id}: recipe {out.recipe} → {exc}")
-                continue
+            source = ""
+            if out.fixture:
+                try:
+                    available = set(fixture_columns(out.fixture))
+                    source = f"fixture {out.fixture}"
+                except Exception as exc:
+                    problems.append(f"{out.id}: fixture {out.fixture} → {exc}")
+                    continue
+            elif out.recipe:
+                try:
+                    available = set(recipe_output_columns(out.recipe))
+                    source = f"recipe {out.recipe}"
+                except Exception as exc:
+                    problems.append(f"{out.id}: recipe {out.recipe} → {exc}")
+                    continue
+            elif out.columns:
+                available = set(out.columns)
+                source = "declared columns"
+            else:
+                continue  # nothing to ground against (non-tabular / binding-less)
             for r in out.renders_as:
-                missing = set(r.roles.values()) - cols
+                missing = r.bound_columns() - available
                 if missing:
                     problems.append(
-                        f"{out.id} render {r.kind or r.component}: role(s) bind to "
-                        f"{sorted(missing)} absent from recipe output {sorted(cols)}"
+                        f"{out.id} render {r.kind or r.component}: binds "
+                        f"{sorted(missing)} absent from {source} {sorted(available)}"
                     )
     if problems:
         typer.echo(f"  INVALID ({target}):")
