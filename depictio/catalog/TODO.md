@@ -46,10 +46,13 @@ pipeline-agnostic (see `docs/design/bioinformatics-catalog.md`).
 - **`fixture`** (path under `projects/`) is wired: `catalog validate` grounds
   renders against the real bundled sample (Level-3). **TODO:** add a `fixture`
   to every output (reuse the bundled `projects/nf-core/*/*.tsv` canonical files).
-- **`catalog preview <output>`** (next): load the `fixture` → build the
-  component (advanced_viz / figure / card) → render the real viz. Reuses the
-  existing component renderers + the figure code-mode executor
-  (`simple_code_executor.execute_code(code, df)`).
+- **`catalog preview <output>`** — DONE for **figure (UI + code), card, table**:
+  loads the `fixture` → builds each `renders_as` component → writes one
+  self-contained interactive HTML (plotly.js + ag-grid-community) and opens it in
+  the browser. Render core: `depictio/catalog/render.py` (Dash-free; mirrors the
+  figure code-mode executor). **TODO:** add `advanced_viz` (reuse the Celery
+  `compute_*` helpers) and `multiqc` (needs a report fixture) — today they show a
+  "not supported yet" placeholder.
 
 ## Validation / CI hardening
 - `match_run_dir` perf: single `os.walk` pass (currently one `rglob` per output)

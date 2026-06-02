@@ -87,6 +87,58 @@ def catalog_columns(
         typer.echo(f"  - {c}")
 
 
+@app.command("preview")
+def catalog_preview(
+    output_id: Annotated[str, typer.Argument(help="Output id, e.g. qiime2_alpha_diversity")],
+    render: Annotated[
+        int | None,
+        typer.Option("--render", "-r", help="Preview only this render index (default: all)"),
+    ] = None,
+    out: Annotated[
+        str | None,
+        typer.Option("--out", "-o", help="Write the HTML here (default: a temp file)"),
+    ] = None,
+    no_open: Annotated[
+        bool,
+        typer.Option("--no-open", help="Do not open the HTML in a browser"),
+    ] = False,
+) -> None:
+    """Render an output's components on its fixture → self-contained HTML.
+
+    Builds every ``renders_as`` target (figure/card/table) on the output's
+    bundled ``fixture`` and opens an interactive page in the browser — the
+    contributor's loop for previewing a viz before opening a PR. No running
+    depictio stack required.
+    """
+    import tempfile
+    import webbrowser
+
+    from depictio.catalog.render import render_output_to_html
+    from depictio.models.components.advanced_viz.catalog import load_catalog_entries
+
+    output = next(
+        (o for e in load_catalog_entries() for o in e.outputs if o.id == output_id),
+        None,
+    )
+    if output is None:
+        typer.echo(f"No output '{output_id}'. Try `depictio catalog list`.")
+        raise typer.Exit(code=1)
+
+    try:
+        page = render_output_to_html(output, render_index=render)
+    except Exception as exc:
+        typer.echo(f"  could not preview {output_id!r}: {exc}")
+        raise typer.Exit(code=1)
+
+    out_path = (
+        Path(out) if out else Path(tempfile.gettempdir()) / f"catalog_preview_{output_id}.html"
+    )
+    out_path.write_text(page)
+    typer.echo(f"  Wrote preview to {out_path}")
+    if not no_open:
+        webbrowser.open(out_path.resolve().as_uri())
+
+
 @app.command("validate")
 def catalog_validate(
     path: Annotated[
