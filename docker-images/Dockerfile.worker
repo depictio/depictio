@@ -56,16 +56,22 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev || uv sync --no-dev
 
 # Browser bundle target inside the image. We download into a BuildKit
-# cache mount and copy out — caches the ~150 MB chromium across rebuilds
-# so editing Python doesn't reinvalidate the download. We drop
-# `--with-deps` because every shared library chromium needs is already
-# apt-installed above; `--with-deps` would otherwise run another
-# `apt-get update && apt-get install` over the same set.
+# cache mount and copy out — caches the chromium payload across rebuilds
+# so editing Python doesn't reinvalidate the download.
+#
+# `--only-shell`: every screenshot/PDF path calls
+# `p.chromium.launch(headless=True)` (no headless=False, no channel=), so we
+# install ONLY chromium-headless-shell — Playwright auto-selects it for
+# headless launches. Skips the full headed chromium browser, cutting the
+# browser layer roughly in half (~900 MB → ~450 MB).
+#
+# We also drop `--with-deps`: every shared library the shell needs is already
+# apt-installed above, and `--with-deps` would re-run apt over the same set.
 ENV PLAYWRIGHT_BROWSERS_PATH=/usr/local/share/playwright-browsers
 RUN --mount=type=cache,target=/var/cache/playwright,sharing=locked \
     mkdir -p ${PLAYWRIGHT_BROWSERS_PATH} && \
     PLAYWRIGHT_BROWSERS_PATH=/var/cache/playwright \
-        uv run playwright install chromium && \
+        uv run playwright install --only-shell && \
     cp -a /var/cache/playwright/. ${PLAYWRIGHT_BROWSERS_PATH}/ && \
     chmod -R 755 ${PLAYWRIGHT_BROWSERS_PATH}
 

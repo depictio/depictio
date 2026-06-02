@@ -51,7 +51,12 @@ conftest.py
 # -----------------------------
 # Exclude Virtual Environments in Local Packages
 # -----------------------------
-packages/*/.venv/
+# Any local dev venv anywhere in the tree — e.g. depictio/cli/.venv (~430 MB),
+# created by the cli-venv workflow. Without this it lands in the `COPY depictio/`
+# layer and bloats every image. Kept broad so new sub-project venvs can't
+# silently re-bloat the build context.
+**/.venv/
+.venv/
 packages/*/.git/
 packages/*/.ruff_cache/
 packages/*/.pytest_cache/
