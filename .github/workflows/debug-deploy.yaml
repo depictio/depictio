@@ -44,8 +44,8 @@ jobs:
           echo "===== BACKEND LOGS ====="
           docker logs depictio-backend
 
-          echo "===== FRONTEND LOGS ====="
-          docker logs depictio-frontend
+          echo "===== VIEWER LOGS ====="
+          docker logs depictio-viewer
 
           echo "===== MONGO LOGS ====="
           docker logs mongo
@@ -65,8 +65,8 @@ jobs:
           echo "===== BACKEND LOGS ====="
           docker logs depictio-backend
 
-          echo "===== FRONTEND LOGS ====="
-          docker logs depictio-frontend
+          echo "===== VIEWER LOGS ====="
+          docker logs depictio-viewer
 
           echo "===== MONGO LOGS ====="
           docker logs mongo

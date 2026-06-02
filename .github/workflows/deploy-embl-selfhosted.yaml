@@ -180,9 +180,9 @@ jobs:
             -n datasci-depictio-project-demo-dev \
             --timeout=300s
 
-          echo "⏳ Waiting for frontend to be ready..."
+          echo "⏳ Waiting for viewer to be ready..."
           kubectl wait --for=condition=ready pod \
-            -l release=devdemo,app=depictio-frontend \
+            -l release=devdemo,app=depictio-viewer \
             -n datasci-depictio-project-demo-dev \
             --timeout=300s
 
@@ -359,9 +359,9 @@ jobs:
             -n datasci-depictio-project-demo \
             --timeout=300s
 
-          echo "⏳ Waiting for frontend to be ready..."
+          echo "⏳ Waiting for viewer to be ready..."
           kubectl wait --for=condition=ready pod \
-            -l release=demo,app=depictio-frontend \
+            -l release=demo,app=depictio-viewer \
             -n datasci-depictio-project-demo \
             --timeout=300s
 
