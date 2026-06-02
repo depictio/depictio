@@ -1,39 +1,25 @@
 # yaml-language-server: $schema=./catalog.schema.json
-# MetaPhlAn — single-output tool → a single file.
-schema_version: 1
-
-module:
-  id: metaphlan
-  name: MetaPhlAn
-  description: Species-level microbial community profiling from metagenomic shotgun reads.
-  homepage: https://github.com/biobakery/MetaPhlAn
-  nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/metaphlan/metaphlan
-  biotools_url: https://bio.tools/metaphlan
-  edam_topics:
-    - http://edamontology.org/topic_3174 # Metagenomics
+# MetaPhlAn — no recipe: the raw profile is bindable, so `columns` is declared here.
+id: metaphlan
+name: MetaPhlAn
+description: Species-level microbial community profiling from metagenomic shotgun reads.
+homepage: https://github.com/biobakery/MetaPhlAn
+biotools_url: https://bio.tools/metaphlan
+nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/metaphlan/metaphlan
+edam_topics:
+  - http://edamontology.org/topic_3174 # Metagenomics
 
 outputs:
   - id: metaphlan_profile
     mode: profile
     description: Per-sample taxonomic relative-abundance profile.
-    edam_operations:
-      - http://edamontology.org/operation_3460 # Taxonomic classification
-    edam_formats:
-      - http://edamontology.org/format_3475 # TSV
-    find:
-      filename: "*_profile.txt"
-      # NB: the raw file has a multi-line #-comment preamble and a #-prefixed
-      # header row (#clade_name …); these required_columns describe the parsed
-      # (post-ingest) fingerprint the suggestion engine matches on.
-      required_columns: [clade_name, NCBI_tax_id]
-    read_options: {format: tsv}
-    file_schema:
+    find: { filename: "*_profile.txt" }
+    # no recipe → bindable as-is; declare the columns so roles can bind:
+    columns:
       clade_name: String
       NCBI_tax_id: String
       relative_abundance: Float64
       additional_species: String
-    # already long; depictio adds sample_id from the filename — no recipe needed
-    feeds_viz: [stacked_taxonomy, sunburst]
-    role_mapping:
-      stacked_taxonomy: {taxon: clade_name, abundance: relative_abundance}
-      sunburst: {abundance: relative_abundance}
+    renders_as:
+      - { component: advanced_viz, kind: stacked_taxonomy, roles: {taxon: clade_name, abundance: relative_abundance} }
+      - { component: advanced_viz, kind: sunburst, roles: {abundance: relative_abundance} }

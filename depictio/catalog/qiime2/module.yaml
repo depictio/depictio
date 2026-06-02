@@ -1,14 +1,12 @@
-# QIIME 2 — multi-output tool → a folder (one file per output / running mode).
-# module.yaml holds the identity; each sibling *.yaml is one output.
+# QIIME 2 — multi-output tool → a folder. module.yaml holds the tool fields;
+# each sibling *.yaml is one output. QIIME 2 has no single nf-core module, so
+# nf_core_url is set per-output.
 id: qiime2
 name: QIIME 2
 description: >-
-  Decentralised microbiome bioinformatics platform. Emits many distinct
-  artefacts depending on the plugin/subcommand invoked — modelled here as many
-  output files in this folder.
+  Decentralised microbiome bioinformatics platform; emits many distinct
+  artefacts depending on the plugin/subcommand invoked.
 homepage: https://qiime2.org
-# no module-level nf_core_url: QIIME 2 has no single nf-core module — each
-# output sets its own (qiime2/barplot, qiime2/ancombc, …).
 biotools_url: https://bio.tools/qiime2
 edam_topics:
   - http://edamontology.org/topic_3174 # Metagenomics

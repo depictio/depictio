@@ -1,41 +1,18 @@
 # yaml-language-server: $schema=./catalog.schema.json
-# pangolin — single-output tool → a single file.
-schema_version: 1
-
-module:
-  id: pangolin
-  name: Pangolin
-  description: Phylogenetic Assignment of Named Global Outbreak LINeages (SARS-CoV-2).
-  homepage: https://github.com/cov-lineages/pangolin
-  nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/pangolin/run
-  biotools_url: https://bio.tools/pangolin_cov-lineages
-  edam_topics:
-    - http://edamontology.org/topic_3305 # Public health and epidemiology
+id: pangolin
+name: Pangolin
+description: Phylogenetic Assignment of Named Global Outbreak LINeages (SARS-CoV-2).
+homepage: https://github.com/cov-lineages/pangolin
+biotools_url: https://bio.tools/pangolin_cov-lineages
+nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/pangolin/run
+edam_topics:
+  - http://edamontology.org/topic_3305 # Public health and epidemiology
 
 outputs:
   - id: pangolin_report
     mode: run
-    description: Per-sample PANGO lineage report.
-    edam_operations:
-      - http://edamontology.org/operation_3460 # Taxonomic classification
-    edam_formats:
-      - http://edamontology.org/format_3752 # CSV
-    # How depictio-cli recognises the file (MultiQC-style):
-    find:
-      filename: "*.pangolin.csv"
-      required_columns: [taxon, lineage]
-    read_options: {format: csv}
-    # The schema of the file AS pangolin writes it (raw, pre-recipe):
-    file_schema:
-      taxon: String
-      lineage: String
-      conflict: Float64
-      ambiguity_score: Float64
-      scorpio_call: String
-      scorpio_support: Float64
-      pangolin_version: String
-      qc_status: String
-      note: String
-    # raw file -> tidy per-sample table:
+    description: Per-sample PANGO lineage report (rendered as a table).
+    find: { filename: "*.pangolin.csv" }
     recipe: nf-core/viralrecon/pangolin_lineages.py
-    feeds_viz: [] # lineage table; feeds the sankey classification funnel via the recipe
+    renders_as:
+      - { component: table }

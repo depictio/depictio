@@ -1,85 +1,66 @@
 # Depictio bioinformatics catalog
 
-The **community-extensible catalog** that maps the outputs of bioinformatics
-tools (nf-core modules / bio.tools entries) to depictio visualisations —
-structured like **MultiQC modules**.
+A community-extensible **linking table** that connects, for each bioinformatics
+tool output:
+
+```
+raw nf-core file  ──find──▶  recipe (.py)  ──▶  bindable columns  ──renders_as──▶  dashboard component
+   (on disk)                  (optional)         (recipe OR YAML)                 (viz / multiqc plot / table)
+                                            anchored on bio.tools + nf-core + EDAM
+```
+
+It is **not** a second column→viz suggestion engine (`producers.py` already does
+that). It is the map used to **build / assist dashboards when scanning a run**.
 
 ## Layout
 
-A **module = a tool**. A single-output tool is one flat file; a multi-output
-tool is a folder with one file per output / running mode:
+A **tool** is a flat file (single output) or a folder (many outputs):
 
 ```
 depictio/catalog/
-  pangolin.yaml          # single output  → one file
-  nextclade.yaml  ivar.yaml  metaphlan.yaml
-  multiqc/               # many outputs   → a folder
-    module.yaml          #   the tool's identity (clickable bio.tools / nf-core URLs)
-    aggregate.yaml       #   the native multiqc.parquet
-    fastqc.yaml          #   FastQC surfaced *via* MultiQC (multiqc_module: fastqc)
-  qiime2/
-    module.yaml  taxa_barplot.yaml  rel_abundance.yaml  alpha_diversity.yaml
-    alpha_rarefaction.yaml  ancombc.yaml  phylogeny.yaml
-  mosdepth/
-    module.yaml  genome_coverage.yaml  amplicon_coverage.yaml  amplicon_heatmap.yaml
+  ivar.yaml              # single output  → one flat file (tool fields + outputs)
+  pangolin.yaml  nextclade.yaml  metaphlan.yaml
+  qiime2/                # many outputs   → a folder
+    module.yaml          #   the tool's fields (id, name, URLs…)
+    taxa_barplot.yaml    #   one output per file
+    ancombc.yaml  rel_abundance.yaml  alpha_diversity.yaml  alpha_rarefaction.yaml
+  mosdepth/   multiqc/
 ```
 
-Tools whose results are only surfaced through **MultiQC** (FastQC, Cutadapt,
-samtools stats…) are **not** standalone modules — they live as outputs under
-`multiqc/` with `multiqc_module:` set, because that is how depictio reads them.
-
-Adding support for a tool (or a new mode of an existing tool) is a PR that adds
-one YAML file. **No Python required.**
+Adding a tool = a PR that adds one YAML file. **No Python** (unless the output
+needs a reshape, which is a recipe).
 
 ## What one output declares
 
-Each output is self-contained and answers four questions (full field reference
-in **`SCHEMA.md`**; machine contract in **`catalog.schema.json`**):
-
-1. **`find`** — how depictio-cli *recognises* the file (filename glob /
-   path glob / content match / required columns), exactly like MultiQC's
-   `search_patterns` (`fn` / `contents`).
-2. **`file_schema`** — the columns + dtypes the tool actually writes (the raw
-   file as-emitted), so you can see what the file looks like.
-3. **`recipe`** *(optional)* — a `projects/<pipeline>/recipes/<name>.py` that
-   reshapes the raw file into a viz-ready shape. Omit it when the raw file is
-   already bindable.
-4. **`feeds_viz` + `role_mapping`** — which depictio visualisation(s) it maps to.
-
-Identity is stored as **directly-clickable URLs** (`biotools_url`,
-`nf_core_url`, EDAM URLs) — nothing to reconstruct.
-
-Example (`pangolin.yaml`):
-
 ```yaml
-module:
-  id: pangolin
-  name: Pangolin
-  nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/pangolin/run
-  biotools_url: https://bio.tools/pangolin_cov-lineages
-outputs:
-  - id: pangolin_report
-    find: { filename: "*.pangolin.csv", required_columns: [taxon, lineage] }
-    file_schema: { taxon: String, lineage: String, scorpio_call: String, qc_status: String }
-    recipe: nf-core/viralrecon/pangolin_lineages.py
-    feeds_viz: []
+- id: ivar_variants_long
+  find:   { filename: "variants_long_table.csv" }   # recognise the raw file
+  recipe: nf-core/viralrecon/variants_long.py        # optional reshape
+  renders_as:
+    - { component: advanced_viz, kind: manhattan, roles: {chr: CHROM, pos: POS, score: AF} }
 ```
 
-## How depictio-cli recognises files
+The golden rule for schemas — **one home, no duplication**:
 
-```bash
-depictio catalog match <run_dir>   # walk a run dir, report recognised tool outputs
-```
-This is the catalog analogue of MultiQC's file search. Each hit reports
-`module / output → feeds_viz`.
+| Output | where its columns live |
+|---|---|
+| **has a recipe** | the recipe (`EXPECTED_SCHEMA`). The YAML does **not** repeat them; `roles` are grounded against the recipe at validation time. |
+| **no recipe** (raw is bindable) | the YAML, via a `columns:` block; `roles` bind to those. |
+
+Don't know a recipe's output column names while writing `roles`?
+`depictio catalog columns <recipe>` prints them.
 
 ## Commands
 
 ```bash
-depictio catalog list                 # every module + output, with its find rules
-depictio catalog info qiime2          # one module: clickable URLs + output detail
-depictio catalog validate             # validate the bundle (CI-friendly)
-depictio catalog match path/to/run    # recognise files in a run directory
-depictio catalog import-meta meta.yml # scaffold a draft entry from an nf-core meta.yml
+depictio catalog list                 # every tool + output + render targets
+depictio catalog info qiime2          # one tool: URLs + outputs in detail
+depictio catalog columns <recipe.py>  # the recipe's output columns (to write roles)
+depictio catalog match path/to/run    # recognise tool outputs in a run dir
+depictio catalog validate             # CI gate: schema + roles grounded vs recipe
 depictio catalog schema -o catalog.schema.json   # regenerate the JSON Schema
 ```
+
+`validate` is the CI guarantee: it fails if any `renders_as` role doesn't exist
+in the recipe's real output — so a green CI means the entry is wired correctly,
+with no manual review.

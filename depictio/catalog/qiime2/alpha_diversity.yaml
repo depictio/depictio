@@ -1,17 +1,8 @@
 id: qiime2_alpha_diversity
 mode: diversity
-description: Alpha-diversity vector (e.g. Faith PD) per sample.
+description: Alpha-diversity vector (e.g. Faith PD) per sample (rendered as a table).
 nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/qiime2/diversitycore
-edam_operations:
-  - http://edamontology.org/operation_3200 # Community profiling
-edam_formats:
-  - http://edamontology.org/format_3475 # TSV
-find:
-  path_glob: "**/qiime2/diversity/alpha_diversity/*_vector/metadata.tsv"
-  required_columns: [id, faith_pd]
-read_options: {format: tsv}
-file_schema:
-  id: String
-  faith_pd: Float64
+find: { path_glob: "**/qiime2/diversity/alpha_diversity/*_vector/metadata.tsv" }
 recipe: nf-core/ampliseq/alpha_diversity.py
-feeds_viz: []
+renders_as:
+  - { component: table }

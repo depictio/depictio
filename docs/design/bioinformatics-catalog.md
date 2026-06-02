@@ -1,10 +1,23 @@
 # Bioinformatics tool → visualisation catalog
 
-**Status:** Design proposal + landed prototype (phase 1)
+**Status:** Design proposal + landed prototype.
 **Branch:** `claude/optimistic-mayer-iQrTO`
 **Audience:** maintainers, before the catalog grows past the seed entries.
 **Related:** `docs/design/advanced-viz.md` (the viz family this maps *into*),
 `depictio/recipes/__init__.py` (the transform engine this maps *through*).
+
+> **⚠️ STATUS v2 — redesigned.** After review, the catalog was reshaped from a
+> "compile-to-Producer suggestion layer" into a **decoupled linking table**:
+> `raw file (find) → recipe → bindable columns → dashboard component (renders_as)`,
+> anchored on bio.tools/nf-core/EDAM, consumed at **scan time** to build/assist
+> dashboards. It no longer feeds the column→viz suggestion engine (`producers.py`
+> already covers that on canonical shapes). Schema-ownership rule: **the recipe
+> owns output columns; the YAML declares `columns` only when there is no recipe.**
+>
+> **The current, authoritative model is `depictio/catalog/README.md` +
+> `SCHEMA.md` + `catalog.schema.json`.** Sections 3–5 below describe the original
+> producer-compilation prototype and are kept for rationale/history only —
+> §1 (Goal), §2 (gaps) and §6 (roadmap) still hold.
 
 ---
 

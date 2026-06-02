@@ -1,15 +1,10 @@
 id: qiime2_rel_abundance
 mode: rel-abundance
-description: Per-sample relative-abundance table with rank columns.
+description: Per-sample relative-abundance table with taxonomy ranks.
 nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/qiime2/relativeabundancetables
-edam_operations:
-  - http://edamontology.org/operation_3460 # Taxonomic classification
-edam_formats:
-  - http://edamontology.org/format_3475 # TSV
-find:
-  path_glob: "**/qiime2/rel_abundance_tables/rel-table-*.tsv"
-read_options: {format: tsv, skip_rows: 1} # skip the "# Constructed from biom file" preamble line
-file_schema:
-  "#OTU ID": String # feature/ASV id; remaining columns are one Float64 per sample
+find: { path_glob: "**/qiime2/rel_abundance_tables/rel-table-*.tsv" }
 recipe: nf-core/ampliseq/taxonomy_rel_abundance.py
-feeds_viz: [stacked_taxonomy, sunburst, complex_heatmap]
+renders_as:
+  - { component: advanced_viz, kind: stacked_taxonomy, roles: {sample_id: sample, taxon: taxonomy, abundance: rel_abundance} }
+  - { component: advanced_viz, kind: sunburst, roles: {abundance: rel_abundance} }
+  - { component: advanced_viz, kind: complex_heatmap, roles: {index: taxonomy} }

@@ -1,124 +1,90 @@
 # Catalog schema reference
 
-The authoritative, machine-readable contract is **`catalog.schema.json`** (JSON
-Schema; regenerate with `depictio catalog schema -o depictio/catalog/catalog.schema.json`).
-Editors that honour the `# yaml-language-server: $schema=` header get live
-validation + autocomplete. This page is the human-readable companion.
+Machine-readable contract: **`catalog.schema.json`** (regenerate with
+`depictio catalog schema -o depictio/catalog/catalog.schema.json`). The
+`# yaml-language-server: $schema=` header gives editors live validation +
+autocomplete. This page is the human companion.
 
 Legend: **MUST** = required · **CAN** = optional (default shown). Unknown keys
 are rejected (`extra="forbid"`).
 
 ---
 
-## Layout: a file (single output) or a folder (many outputs)
+## Layout: a flat file (one output) or a folder (many)
 
-```
-depictio/catalog/
-  pangolin.yaml          # single-output tool → one flat file (module + outputs)
-  multiqc/               # multi-output tool → a folder
-    module.yaml          #   the `module` identity block
-    aggregate.yaml       #   the native multiqc.parquet
-    fastqc.yaml          #   FastQC surfaced *via* MultiQC (multiqc_module: fastqc)
-  qiime2/
-    module.yaml
-    taxa_barplot.yaml
-    ...
-```
+- **Flat file** = tool fields at the root **+** an `outputs:` list.
+- **Folder** = `module.yaml` (tool fields) **+** one `*.yaml` per output.
 
-- **Flat file** = a whole `CatalogEntry`: a `module:` block + an `outputs:` list.
-- **Folder** = the same `CatalogEntry` split across files: `module.yaml` holds
-  the `module` fields directly; every other `*.yaml` is one output (the
-  `Output` fields directly, no wrapper).
-- **MultiQC-covered tools** (FastQC, Cutadapt, samtools stats…) are not
-  standalone modules — they live as outputs under `multiqc/` with
-  `multiqc_module:` set, because depictio reads them from the MultiQC report.
+Both use the same fields; a folder just splits the outputs into files.
 
----
-
-## `module`
-
-The tool. Identity is stored as **directly-clickable URLs** (no IDs to resolve).
-
-| Field | MUST/CAN | Type | Default | Notes |
-|---|---|---|---|---|
-| `id` | **MUST** | str | — | e.g. `qiime2`, `pangolin`. |
-| `name` | **MUST** | str | — | Display name. |
-| `description` | CAN | str | `""` | |
-| `homepage` | CAN | str \| null | `null` | |
-| `nf_core_url` | CAN | str \| null | `null` | Full nf-core module URL; default for outputs. |
-| `biotools_url` | CAN | str \| null | `null` | Full `https://bio.tools/<id>` URL. |
-| `edam_topics` | CAN | list[str] | `[]` | Full EDAM URLs, e.g. `http://edamontology.org/topic_3174`. |
-
-## `outputs[]` — `Output`
-
-One file the tool emits (one running mode) → one visualisation mapping.
-
-| Field | MUST/CAN | Type | Default | Notes |
-|---|---|---|---|---|
-| `id` | **MUST** | str | — | Globally-unique producer id. |
-| `find` | **MUST** | `Find` | — | How depictio-cli recognises the file. |
-| `description` | CAN | str | `""` | |
-| `mode` | CAN | str \| null | `null` | Running mode / subcommand (`taxa-barplot`, `composition/ancombc`, …). |
-| `multiqc_module` | CAN | str \| null | `null` | If surfaced via MultiQC, the MultiQC module name (e.g. `fastqc`). |
-| `nf_core_url` | CAN | str \| null | `null` | Per-output override (QIIME 2 subcommands are separate modules). |
-| `biotools_url` | CAN | str \| null | `null` | Per-output override. |
-| `edam_operations` | CAN | list[str] | `[]` | Full EDAM URLs. |
-| `edam_formats` | CAN | list[str] | `[]` | Full EDAM URLs. |
-| `read_options` | CAN | `ReadOptions` | csv defaults | How to parse the file. |
-| `file_schema` | CAN | dict[str,str] | `{}` | **The columns + dtypes the tool writes** (raw, as-emitted). |
-| `recipe` | CAN | str \| null | `null` | Pipeline recipe that reshapes the raw file (`nf-core/ampliseq/ancombc.py`). Omit when the raw file is already bindable. |
-| `feeds_viz` | CAN | list[`AdvancedVizKind`] | `[]` | Viz kinds this output maps to (post-recipe). |
-| `role_mapping` | CAN | dict[viz → dict[role → column]] | `{}` | Pre-fills the viz binding. |
-
-### `find` — recognition (MUST set ≥ 1 condition)
-
-A file matches when **all** declared conditions hold (like MultiQC's
-`search_patterns`: `fn` + `contents`).
+## Tool fields (root of a flat file, or `module.yaml`)
 
 | Field | MUST/CAN | Type | Notes |
 |---|---|---|---|
-| `filename` | cond. | str \| null | Glob on the basename, e.g. `*.pangolin.csv`. |
-| `path_glob` | cond. | str \| null | Glob on the path under the run root, `**`-aware, e.g. `**/mosdepth/genome/*.tsv`. |
-| `content_contains` | cond. | str \| null | Substring in the file head (text files). |
-| `required_columns` | cond. | list[str] | All must be present (tabular). Also becomes the column fingerprint for the suggestion engine. |
+| `id` | **MUST** | str | e.g. `ivar`, `qiime2`. |
+| `name` | **MUST** | str | Display name. |
+| `description` | CAN | str | |
+| `homepage` | CAN | str | |
+| `nf_core_url` | CAN | str | Full nf-core module URL (per-output for multi-module tools like QIIME 2). |
+| `biotools_url` | CAN | str | Full `https://bio.tools/<id>` URL. |
+| `edam_topics` | CAN | list[str] | Full EDAM URLs. |
+| `outputs` | **MUST** (flat file) | list[Output] | In a folder, these are the sibling files. |
 
-> ≥ 1 of the four MUST be set. `filename`/`path_glob` locate the file;
-> `content_contains`/`required_columns` confirm it.
+## `outputs[]` — Output
 
-### `read_options` — `ReadOptions`
-
-| Field | MUST/CAN | Type | Default |
+| Field | MUST/CAN | Type | Notes |
 |---|---|---|---|
-| `format` | CAN | `csv` \| `tsv` \| `parquet` | `csv` |
-| `separator` | CAN | str \| null | `null` |
-| `comment_prefix` | CAN | str \| null | `null` |
-| `skip_rows` | CAN | int | `0` |
-| `has_header` | CAN | bool | `true` |
+| `id` | **MUST** | str | Globally-unique. |
+| `find` | **MUST** | Find | How to recognise the raw file. |
+| `mode` | CAN | str | Running mode / subcommand. |
+| `description` | CAN | str | |
+| `recipe` | CAN | str | Pipeline-qualified reshape, e.g. `nf-core/ampliseq/ancombc.py`. **Owns the output columns.** |
+| `columns` | CAN* | dict[str,str] | Bindable columns (polars dtype names). **MUST be set iff there is no recipe and a render uses roles; MUST be absent if `recipe` is set.** |
+| `renders_as` | CAN | list[Render] | Dashboard render target(s) + binding. |
+| `nf_core_url` / `biotools_url` / `edam_*` | CAN | str / list | Per-output identity overrides. |
 
-### `recipe` — the only reshape mechanism
+### Find — recognise the raw file (MUST set ≥ 1)
 
-Real tool→viz reshapes are pipeline-specific (join slice files, melt wide
-matrices, derive columns) and are written as Python recipes, so `recipe` is
-just an **optional reference** to one. The value is a pipeline-qualified name
-`<pipeline>/<name>.py` (e.g. `nf-core/ampliseq/ancombc.py`), resolved by
-`depictio.recipes.resolve_recipe_path` to
-`depictio/projects/<pipeline>/recipes/<name>.py` (with a `{version}/` override
-tried first). `depictio catalog validate` checks every `recipe` resolves.
-There is no declarative `melt`/`pivot` mini-language: either the raw file is
-already bindable (omit `recipe`) or it needs real code (point `recipe` at it).
+| Field | Type | Notes |
+|---|---|---|
+| `filename` | str | Glob on the basename, e.g. `*.pangolin.csv`. |
+| `path_glob` | str | Glob on the path under the run root, `**`-aware. |
 
-### `AdvancedVizKind` (allowed `feeds_viz` / `role_mapping` keys)
+### Render — one render target
 
-`volcano`, `embedding`, `manhattan`, `stacked_taxonomy`, `phylogenetic`,
-`rarefaction`, `da_barplot`, `enrichment`, `complex_heatmap`, `upset_plot`,
-`ma`, `dot_plot`, `lollipop`, `qq`, `sunburst`, `oncoplot`, `coverage_track`,
-`sankey`.
+| Field | MUST/CAN | Type | Notes |
+|---|---|---|---|
+| `component` | **MUST** | `advanced_viz` \| `multiqc_plot` \| `table` \| `figure` | The dashboard component. |
+| `kind` | cond. | AdvancedVizKind | **Required iff** `component=advanced_viz`; forbidden otherwise. |
+| `roles` | CAN | dict[role,column] | Pre-fills the binding. Role names MUST be valid for the viz `kind`; columns MUST exist (in `columns`, or in the recipe's output). |
+| `section` | CAN | str | e.g. the MultiQC section name. |
+
+`AdvancedVizKind`: volcano, embedding, manhattan, stacked_taxonomy,
+phylogenetic, rarefaction, da_barplot, enrichment, complex_heatmap, upset_plot,
+ma, dot_plot, lollipop, qq, sunburst, oncoplot, coverage_track, sankey.
 
 ---
 
-## How depictio-cli recognises files
+## The schema-ownership rule (no duplication)
 
-`depictio catalog match <run_dir>` walks the directory and reports every file a
-module output's `find` rules recognise — the catalog analogue of MultiQC's
-`find_log_files()`. Each hit carries `module / output → feeds_viz`, so the same
-data drives both ingest-time recognition and the editor's viz suggestions.
+- **Recipe present** → the recipe (`EXPECTED_SCHEMA`) owns the output columns;
+  the YAML must **not** declare `columns`. `roles` are grounded against the
+  recipe by `depictio catalog validate`.
+- **No recipe** → the raw file is bindable; declare its `columns` in the YAML,
+  and `roles` bind to them.
+- Non-tabular / role-less renders (`table`, `multiqc_plot`, `figure`) need
+  neither a recipe nor `columns`.
+
+Use `depictio catalog columns <recipe>` to see a recipe's output column names
+while writing `roles`.
+
+## What `validate` checks (the CI guarantee)
+
+1. Schema / structure (Pydantic, `extra="forbid"`).
+2. `kind` valid for `advanced_viz`; role names valid for the `kind`.
+3. `roles` columns grounded — against declared `columns`, or against the
+   **recipe's real output columns** (the recipe is imported and its
+   `EXPECTED_SCHEMA` read).
+4. Every referenced `recipe` resolves.
+
+Green CI = the entry is wired correctly, no manual review needed.

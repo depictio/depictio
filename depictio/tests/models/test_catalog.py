@@ -1,10 +1,9 @@
-"""Tests for the declarative bio-catalog layer (MultiQC-module-style).
+"""Tests for the bio-catalog: the tool→recipe→component linking table.
 
-Covers: flat-file + folder module loading, MultiQC-section binding, the `find`
-recognition (incl. `match_run_dir` against bundled data), file_schema, optional
-recipe, compilation to `Producer` primitives, the merge into `all_producers()`
-(curated wins), end-to-end `suggest_producers()`, URL identity, the offline
-nf-core ``meta.yml`` importer, and JSON-Schema freshness.
+Covers flat-file + folder loading, the find/columns/recipe/renders_as model and
+its validators, role grounding (against declared columns *and* against the
+recipe's real output), match recognition, identity URLs, decoupling from the
+suggestion engine, and JSON-Schema freshness.
 """
 
 from __future__ import annotations
@@ -16,69 +15,45 @@ import pytest
 from depictio.models.components.advanced_viz.catalog import (
     CatalogEntry,
     CatalogFind,
-    entry_to_producers,
+    CatalogOutput,
     load_catalog_entries,
-    load_catalog_producers,
     match_run_dir,
-    meta_yml_to_entry,
+    recipe_output_columns,
 )
-from depictio.models.components.advanced_viz.producers import (
-    KNOWN_PRODUCERS,
-    all_producers,
-    get_producer,
-)
-from depictio.models.components.advanced_viz.schemas import suggest_producers
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 
 
 # ---------------------------------------------------------------------------
-# Loading: flat file = one module; folder = one module split across files
+# Loading: flat file = one tool; folder = one tool split across files
 # ---------------------------------------------------------------------------
 
 
 def test_bundled_catalog_loads():
-    modules = {e.module.id for e in load_catalog_entries()}
-    assert {
-        "pangolin",
-        "nextclade",
-        "ivar",
-        "mosdepth",
-        "qiime2",
-        "metaphlan",
-        "multiqc",
-    } <= modules
+    tools = {e.id for e in load_catalog_entries()}
+    assert {"pangolin", "nextclade", "ivar", "mosdepth", "qiime2", "metaphlan", "multiqc"} <= tools
 
 
 def test_single_output_tool_is_a_flat_file():
-    entries = {e.module.id: e for e in load_catalog_entries()}
-    assert len(entries["pangolin"].outputs) == 1
-    assert (REPO_ROOT / "depictio" / "catalog" / "pangolin.yaml").is_file()
+    entries = {e.id: e for e in load_catalog_entries()}
+    assert (REPO_ROOT / "depictio" / "catalog" / "ivar.yaml").is_file()
+    assert len(entries["ivar"].outputs) == 1
 
 
 def test_multi_output_tool_is_a_folder():
-    entries = {e.module.id: e for e in load_catalog_entries()}
-    qiime2 = entries["qiime2"]
+    entries = {e.id: e for e in load_catalog_entries()}
     assert (REPO_ROOT / "depictio" / "catalog" / "qiime2").is_dir()
-    assert len(qiime2.outputs) >= 6
-    modes = {o.mode for o in qiime2.outputs}
-    assert {"taxa-barplot", "rel-abundance", "composition/ancombc", "phylogeny"} <= modes
+    assert len(entries["qiime2"].outputs) >= 5
+
+
+def test_identity_is_stored_as_urls():
+    ivar = next(e for e in load_catalog_entries() if e.id == "ivar")
+    assert ivar.biotools_url == "https://bio.tools/ivar"
+    assert ivar.nf_core_url.endswith("/modules/nf-core/ivar/variants")
 
 
 # ---------------------------------------------------------------------------
-# MultiQC-covered tools are bound to the multiqc module, not standalone
-# ---------------------------------------------------------------------------
-
-
-def test_fastqc_is_bound_to_multiqc_module():
-    entries = {e.module.id: e for e in load_catalog_entries()}
-    assert "fastqc" not in entries  # no standalone fastqc module
-    fastqc = next(o for o in entries["multiqc"].outputs if o.id == "fastqc")
-    assert fastqc.multiqc_module == "fastqc"
-
-
-# ---------------------------------------------------------------------------
-# Recognition: the `find` block (MultiQC search_patterns analogue)
+# find
 # ---------------------------------------------------------------------------
 
 
@@ -87,239 +62,141 @@ def test_find_requires_a_condition():
         CatalogFind()
 
 
+# ---------------------------------------------------------------------------
+# columns ownership: the recipe owns output columns; no duplication in YAML
+# ---------------------------------------------------------------------------
+
+
+def _output(**kw) -> dict:
+    base = {"id": "o", "find": {"filename": "*.csv"}}
+    base.update(kw)
+    return base
+
+
+def test_recipe_and_columns_are_mutually_exclusive():
+    with pytest.raises(ValueError, match="recipe is set"):
+        CatalogOutput.model_validate(_output(recipe="nf-core/x/y.py", columns={"a": "String"}))
+
+
+def test_roles_without_columns_or_recipe_is_rejected():
+    with pytest.raises(ValueError, match="no recipe and no 'columns'"):
+        CatalogOutput.model_validate(
+            _output(
+                renders_as=[
+                    {"component": "advanced_viz", "kind": "manhattan", "roles": {"chr": "c"}}
+                ]
+            )
+        )
+
+
+def test_no_recipe_roles_must_bind_to_declared_columns():
+    with pytest.raises(ValueError, match="unknown column"):
+        CatalogOutput.model_validate(
+            _output(
+                columns={"chrom": "String", "start": "Int64", "value": "Float64"},
+                renders_as=[
+                    {
+                        "component": "advanced_viz",
+                        "kind": "coverage_track",
+                        "roles": {"chromosome": "chrom", "position": "start", "value": "NOPE"},
+                    }
+                ],
+            )
+        )
+
+
+def test_unknown_dtype_rejected():
+    with pytest.raises(ValueError, match="unknown dtype"):
+        CatalogOutput.model_validate(_output(columns={"a": "Flaot64"}))
+
+
+# ---------------------------------------------------------------------------
+# renders_as
+# ---------------------------------------------------------------------------
+
+
+def test_advanced_viz_requires_kind():
+    with pytest.raises(ValueError, match="requires a 'kind'"):
+        CatalogOutput.model_validate(
+            _output(columns={"a": "String"}, renders_as=[{"component": "advanced_viz"}])
+        )
+
+
+def test_unknown_role_for_viz_rejected():
+    with pytest.raises(ValueError, match="unknown role"):
+        CatalogOutput.model_validate(
+            _output(
+                columns={"a": "String"},
+                renders_as=[
+                    {"component": "advanced_viz", "kind": "manhattan", "roles": {"bogus": "a"}}
+                ],
+            )
+        )
+
+
+def test_kind_forbidden_on_non_advanced_component():
+    with pytest.raises(ValueError, match="only valid for component=advanced_viz"):
+        CatalogOutput.model_validate(
+            _output(columns={"a": "String"}, renders_as=[{"component": "table", "kind": "volcano"}])
+        )
+
+
+def test_table_and_multiqc_plot_need_no_columns():
+    # non-tabular renders are allowed without recipe/columns/roles
+    CatalogOutput.model_validate(_output(renders_as=[{"component": "table"}]))
+    CatalogOutput.model_validate(
+        _output(renders_as=[{"component": "multiqc_plot", "section": "fastqc"}])
+    )
+
+
+# ---------------------------------------------------------------------------
+# Role grounding against the recipe's REAL output columns (the CI guarantee)
+# ---------------------------------------------------------------------------
+
+
+def test_all_recipe_output_roles_resolve_against_the_recipe():
+    for entry in load_catalog_entries():
+        for out in entry.outputs:
+            if not out.recipe:
+                continue
+            cols = set(recipe_output_columns(out.recipe))  # raises if recipe missing
+            for r in out.renders_as:
+                missing = set(r.roles.values()) - cols
+                assert not missing, (
+                    f"{out.id} render {r.kind}: roles {sorted(missing)} "
+                    f"not in recipe output {sorted(cols)}"
+                )
+
+
+def test_ivar_roles_match_recipe_output():
+    ivar = next(e for e in load_catalog_entries() if e.id == "ivar").outputs[0]
+    cols = set(recipe_output_columns(ivar.recipe))
+    assert {"sample", "CHROM", "POS", "AF", "GENE", "EFFECT"} <= cols  # post-recipe (sample, AF)
+
+
+# ---------------------------------------------------------------------------
+# Recognition
+# ---------------------------------------------------------------------------
+
+
 def test_match_run_dir_recognises_bundled_viralrecon_files():
     run = REPO_ROOT / "depictio" / "projects" / "nf-core" / "viralrecon" / "3.0.0" / "run_1"
     if not run.exists():
         pytest.skip("bundled viralrecon run_1 not present")
     by_output = {m.output_id: m for m in match_run_dir(run)}
-    # mosdepth (3 files) + multiqc parquet are all recognised by their find rules
     assert "mosdepth_genome_coverage" in by_output
-    assert "mosdepth_amplicon_heatmap" in by_output
-    assert "multiqc_parquet" in by_output
-    # and recognition carries the viz mapping through
-    assert by_output["mosdepth_genome_coverage"].feeds_viz == ["coverage_track"]
+    assert "multiqc_report" in by_output
 
 
 # ---------------------------------------------------------------------------
-# The raw file schema is documented; recipe is optional
+# The catalog does NOT feed the column→viz suggestion engine (decoupled)
 # ---------------------------------------------------------------------------
 
 
-def test_outputs_declare_raw_file_schema():
-    entries = {e.module.id: e for e in load_catalog_entries()}
-    genome = next(o for o in entries["mosdepth"].outputs if o.id == "mosdepth_genome_coverage")
-    assert genome.file_schema["chrom"] == "String"
-    assert genome.file_schema["coverage"] == "Float64"
+def test_catalog_is_decoupled_from_suggestion_engine():
+    from depictio.models.components.advanced_viz.producers import KNOWN_PRODUCERS, all_producers
 
-
-def test_recipe_is_optional():
-    entries = {e.module.id: e for e in load_catalog_entries()}
-    metaphlan = entries["metaphlan"].outputs[0]
-    assert metaphlan.recipe is None  # raw file already bindable
-    pangolin = entries["pangolin"].outputs[0]
-    assert pangolin.recipe == "nf-core/viralrecon/pangolin_lineages.py"
-
-
-# ---------------------------------------------------------------------------
-# Identity is stored as directly-clickable URLs (no resolver helpers)
-# ---------------------------------------------------------------------------
-
-
-def test_identity_is_stored_as_urls():
-    entries = {e.module.id: e for e in load_catalog_entries()}
-    pangolin = entries["pangolin"].module
-    assert pangolin.biotools_url == "https://bio.tools/pangolin_cov-lineages"
-    assert pangolin.nf_core_url.endswith("/modules/nf-core/pangolin/run")
-    assert all(t.startswith("http://edamontology.org/") for t in pangolin.edam_topics)
-
-
-# ---------------------------------------------------------------------------
-# Compilation to Producer + merge semantics
-# ---------------------------------------------------------------------------
-
-
-def test_entry_to_producers_uses_find_required_columns():
-    entry = CatalogEntry.model_validate(
-        {
-            "module": {"id": "demo", "name": "Demo"},
-            "outputs": [
-                {"id": "demo_a", "find": {"required_columns": ["x", "y"]}},
-                {"id": "demo_b", "find": {"filename": "*.txt"}},  # no columns -> not a producer
-            ],
-        }
-    )
-    names = {p.name for p in entry_to_producers(entry)}
-    assert names == {"demo_a"}
-
-
-def test_catalog_producers_have_url_provenance_in_notes():
-    producer = get_producer("metaphlan_profile")
-    assert producer is not None
-    assert "https://bio.tools/metaphlan" in producer.notes
-
-
-def test_all_producers_merges_catalog_and_curated():
-    merged = {p.name for p in all_producers()}
-    assert {p.name for p in KNOWN_PRODUCERS} <= merged
-    assert {p.name for p in load_catalog_producers()} <= merged
-
-
-def test_curated_wins_on_name_collision():
-    fabricated = CatalogEntry.model_validate(
-        {
-            "module": {"id": "x", "name": "X"},
-            "outputs": [
-                {
-                    "id": "deseq2_results",  # collides with a curated producer
-                    "find": {"required_columns": ["totally", "different"]},
-                }
-            ],
-        }
-    )
-    curated = next(p for p in KNOWN_PRODUCERS if p.name == "deseq2_results")
-    assert get_producer("deseq2_results") is curated
-    assert entry_to_producers(fabricated)[0].required_columns != curated.required_columns
-
-
-# ---------------------------------------------------------------------------
-# End-to-end: catalog feeds the suggestion engine
-# ---------------------------------------------------------------------------
-
-
-def test_suggest_producers_picks_up_catalog_tool():
-    schema = {
-        "clade_name": "String",
-        "NCBI_tax_id": "String",
-        "relative_abundance": "Float64",
-    }
-    names = {name for name, _ in suggest_producers(schema)}
-    assert "metaphlan_profile" in names
-
-
-# ---------------------------------------------------------------------------
-# Offline nf-core meta.yml importer
-# ---------------------------------------------------------------------------
-
-PANGOLIN_META = {
-    "name": "pangolin_run",
-    "tools": [
-        {
-            "pangolin": {
-                "description": "Phylogenetic Assignment of Named Global Outbreak LINeages",
-                "homepage": "https://github.com/cov-lineages/pangolin",
-                "identifier": "biotools:pangolin_cov-lineages",
-            }
-        }
-    ],
-    "output": {
-        "report": [
-            [
-                {"meta": {"type": "map"}},
-                {
-                    "*.csv": {
-                        "type": "file",
-                        "description": "Pangolin lineage report",
-                        "pattern": "*.{csv}",
-                        "ontologies": [{"edam": "http://edamontology.org/format_3752"}],
-                    }
-                },
-            ]
-        ],
-        "versions": [{"versions.yml": {"type": "file", "pattern": "versions.yml"}}],
-    },
-}
-
-
-def test_meta_yml_importer_scaffolds_entry_with_urls():
-    entry = meta_yml_to_entry(PANGOLIN_META)
-    assert entry.module.id == "pangolin"
-    assert entry.module.biotools_url == "https://bio.tools/pangolin_cov-lineages"
-    assert entry.module.nf_core_url.endswith("/modules/nf-core/pangolin/run")
-    out_ids = {o.id for o in entry.outputs}
-    assert "pangolin_report" in out_ids
-    assert "pangolin_versions" not in out_ids
-    report = next(o for o in entry.outputs if o.id == "pangolin_report")
-    assert report.find.filename == "*.{csv}"
-    assert "http://edamontology.org/format_3752" in report.edam_formats
-
-
-def test_meta_yml_scaffold_roundtrips_through_model():
-    entry = meta_yml_to_entry(PANGOLIN_META)
-    CatalogEntry.model_validate(entry.model_dump())
-
-
-def test_meta_yml_importer_handles_list_form_output():
-    # current nf-core meta.yml declares `output` as a list of single-key maps
-    meta = dict(PANGOLIN_META)
-    meta["output"] = [
-        {
-            "report": [
-                {
-                    "*.csv": {
-                        "type": "file",
-                        "pattern": "*.{csv}",
-                        "ontologies": [{"edam": "http://edamontology.org/format_3752"}],
-                    }
-                }
-            ]
-        },
-        {"versions": [{"versions.yml": {"type": "file", "pattern": "versions.yml"}}]},
-    ]
-    entry = meta_yml_to_entry(meta)
-    out_ids = {o.id for o in entry.outputs}
-    assert "pangolin_report" in out_ids  # list form is parsed, not dropped
-    assert "pangolin_versions" not in out_ids
-
-
-# ---------------------------------------------------------------------------
-# Validators added after review
-# ---------------------------------------------------------------------------
-
-
-def test_role_mapping_must_be_subset_of_feeds_viz():
-    with pytest.raises(ValueError, match="not listed in feeds_viz"):
-        CatalogEntry.model_validate(
-            {
-                "module": {"id": "demo", "name": "Demo"},
-                "outputs": [
-                    {
-                        "id": "demo_a",
-                        "find": {"filename": "*.csv"},
-                        "feeds_viz": ["volcano"],
-                        "role_mapping": {"ma": {"x": "y"}},  # ma not in feeds_viz
-                    }
-                ],
-            }
-        )
-
-
-def test_multiqc_module_only_allowed_under_multiqc():
-    with pytest.raises(ValueError, match="only valid under the 'multiqc' module"):
-        CatalogEntry.model_validate(
-            {
-                "module": {"id": "qiime2", "name": "QIIME 2"},
-                "outputs": [
-                    {"id": "x", "find": {"filename": "*.txt"}, "multiqc_module": "fastqc"},
-                ],
-            }
-        )
-
-
-def test_all_catalog_recipes_resolve():
-    from depictio.recipes import resolve_recipe_path
-
-    for entry in load_catalog_entries():
-        for out in entry.outputs:
-            if out.recipe:
-                resolve_recipe_path(out.recipe)  # raises RecipeError if dangling
-
-
-def test_entry_to_producers_copies_role_mapping():
-    # the lru-cached entry's role_mapping dict must not be aliased into producers
-    entry = next(e for e in load_catalog_entries() if e.module.id == "ivar")
-    producer = entry_to_producers(entry)[0]
-    producer.role_mapping["manhattan"]["chr"] = "MUTATED"
-    assert entry.outputs[0].role_mapping["manhattan"]["chr"] == "CHROM"
+    assert all_producers() == KNOWN_PRODUCERS  # catalog is not merged in
 
 
 # ---------------------------------------------------------------------------

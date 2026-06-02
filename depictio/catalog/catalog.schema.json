@@ -2,7 +2,7 @@
   "$defs": {
     "CatalogFind": {
       "additionalProperties": false,
-      "description": "How to recognise this tool output among the files in a run directory.\n\nMirrors MultiQC's search_patterns: a filename glob (`fn`), a content match\n(`contents`), plus depictio extras (a path glob and a tabular column check).\nA file matches when *all* of the declared conditions hold.",
+      "description": "How to recognise the raw output file among a scanned run's files.",
       "properties": {
         "filename": {
           "anyOf": [
@@ -27,109 +27,17 @@
           ],
           "default": null,
           "title": "Path Glob"
-        },
-        "content_contains": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Content Contains"
-        },
-        "required_columns": {
-          "items": {
-            "type": "string"
-          },
-          "title": "Required Columns",
-          "type": "array"
         }
       },
       "title": "CatalogFind",
       "type": "object"
     },
-    "CatalogModule": {
-      "additionalProperties": false,
-      "description": "A tool (module). Identity is stored as directly-clickable URLs.",
-      "properties": {
-        "id": {
-          "title": "Id",
-          "type": "string"
-        },
-        "name": {
-          "title": "Name",
-          "type": "string"
-        },
-        "description": {
-          "default": "",
-          "title": "Description",
-          "type": "string"
-        },
-        "homepage": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Homepage"
-        },
-        "nf_core_url": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Nf Core Url"
-        },
-        "biotools_url": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Biotools Url"
-        },
-        "edam_topics": {
-          "items": {
-            "type": "string"
-          },
-          "title": "Edam Topics",
-          "type": "array"
-        }
-      },
-      "required": [
-        "id",
-        "name"
-      ],
-      "title": "CatalogModule",
-      "type": "object"
-    },
     "CatalogOutput": {
       "additionalProperties": false,
-      "description": "One file a tool emits, in one running mode \u2192 one visualisation mapping.",
+      "description": "One file a tool emits \u2192 one or more dashboard renders.",
       "properties": {
         "id": {
           "title": "Id",
-          "type": "string"
-        },
-        "description": {
-          "default": "",
-          "title": "Description",
           "type": "string"
         },
         "mode": {
@@ -144,7 +52,15 @@
           "default": null,
           "title": "Mode"
         },
-        "multiqc_module": {
+        "description": {
+          "default": "",
+          "title": "Description",
+          "type": "string"
+        },
+        "find": {
+          "$ref": "#/$defs/CatalogFind"
+        },
+        "recipe": {
           "anyOf": [
             {
               "type": "string"
@@ -154,7 +70,21 @@
             }
           ],
           "default": null,
-          "title": "Multiqc Module"
+          "title": "Recipe"
+        },
+        "columns": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Columns",
+          "type": "object"
+        },
+        "renders_as": {
+          "items": {
+            "$ref": "#/$defs/Render"
+          },
+          "title": "Renders As",
+          "type": "array"
         },
         "nf_core_url": {
           "anyOf": [
@@ -193,90 +123,6 @@
           },
           "title": "Edam Formats",
           "type": "array"
-        },
-        "find": {
-          "$ref": "#/$defs/CatalogFind"
-        },
-        "read_options": {
-          "$ref": "#/$defs/CatalogReadOptions"
-        },
-        "file_schema": {
-          "additionalProperties": {
-            "type": "string"
-          },
-          "title": "File Schema",
-          "type": "object"
-        },
-        "recipe": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Recipe"
-        },
-        "feeds_viz": {
-          "items": {
-            "enum": [
-              "volcano",
-              "embedding",
-              "manhattan",
-              "stacked_taxonomy",
-              "phylogenetic",
-              "rarefaction",
-              "da_barplot",
-              "enrichment",
-              "complex_heatmap",
-              "upset_plot",
-              "ma",
-              "dot_plot",
-              "lollipop",
-              "qq",
-              "sunburst",
-              "oncoplot",
-              "coverage_track",
-              "sankey"
-            ],
-            "type": "string"
-          },
-          "title": "Feeds Viz",
-          "type": "array"
-        },
-        "role_mapping": {
-          "additionalProperties": {
-            "additionalProperties": {
-              "type": "string"
-            },
-            "type": "object"
-          },
-          "propertyNames": {
-            "enum": [
-              "volcano",
-              "embedding",
-              "manhattan",
-              "stacked_taxonomy",
-              "phylogenetic",
-              "rarefaction",
-              "da_barplot",
-              "enrichment",
-              "complex_heatmap",
-              "upset_plot",
-              "ma",
-              "dot_plot",
-              "lollipop",
-              "qq",
-              "sunburst",
-              "oncoplot",
-              "coverage_track",
-              "sankey"
-            ]
-          },
-          "title": "Role Mapping",
-          "type": "object"
         }
       },
       "required": [
@@ -286,21 +132,60 @@
       "title": "CatalogOutput",
       "type": "object"
     },
-    "CatalogReadOptions": {
+    "Render": {
       "additionalProperties": false,
-      "description": "How to read the raw file into a DataFrame.",
+      "description": "One render target for an output: a component + its role\u2192column binding.",
       "properties": {
-        "format": {
-          "default": "csv",
+        "component": {
           "enum": [
-            "csv",
-            "tsv",
-            "parquet"
+            "advanced_viz",
+            "multiqc_plot",
+            "table",
+            "figure"
           ],
-          "title": "Format",
+          "title": "Component",
           "type": "string"
         },
-        "separator": {
+        "kind": {
+          "anyOf": [
+            {
+              "enum": [
+                "volcano",
+                "embedding",
+                "manhattan",
+                "stacked_taxonomy",
+                "phylogenetic",
+                "rarefaction",
+                "da_barplot",
+                "enrichment",
+                "complex_heatmap",
+                "upset_plot",
+                "ma",
+                "dot_plot",
+                "lollipop",
+                "qq",
+                "sunburst",
+                "oncoplot",
+                "coverage_track",
+                "sankey"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Kind"
+        },
+        "roles": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Roles",
+          "type": "object"
+        },
+        "section": {
           "anyOf": [
             {
               "type": "string"
@@ -310,45 +195,79 @@
             }
           ],
           "default": null,
-          "title": "Separator"
-        },
-        "comment_prefix": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Comment Prefix"
-        },
-        "skip_rows": {
-          "default": 0,
-          "title": "Skip Rows",
-          "type": "integer"
-        },
-        "has_header": {
-          "default": true,
-          "title": "Has Header",
-          "type": "boolean"
+          "title": "Section"
         }
       },
-      "title": "CatalogReadOptions",
+      "required": [
+        "component"
+      ],
+      "title": "Render",
       "type": "object"
     }
   },
   "additionalProperties": false,
-  "description": "One module + all of its outputs (assembled from a file or a folder).",
+  "description": "A tool + all its outputs (one flat file, or a folder of files).",
   "properties": {
+    "id": {
+      "title": "Id",
+      "type": "string"
+    },
+    "name": {
+      "title": "Name",
+      "type": "string"
+    },
+    "description": {
+      "default": "",
+      "title": "Description",
+      "type": "string"
+    },
+    "homepage": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Homepage"
+    },
+    "nf_core_url": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Nf Core Url"
+    },
+    "biotools_url": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Biotools Url"
+    },
+    "edam_topics": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Edam Topics",
+      "type": "array"
+    },
     "schema_version": {
       "default": 1,
       "title": "Schema Version",
       "type": "integer"
-    },
-    "module": {
-      "$ref": "#/$defs/CatalogModule"
     },
     "outputs": {
       "items": {
@@ -360,7 +279,8 @@
     }
   },
   "required": [
-    "module",
+    "id",
+    "name",
     "outputs"
   ],
   "title": "CatalogEntry",

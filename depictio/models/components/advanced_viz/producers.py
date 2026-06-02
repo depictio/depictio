@@ -532,25 +532,19 @@ KNOWN_PRODUCERS: tuple[Producer, ...] = (
 
 @lru_cache(maxsize=1)
 def all_producers() -> tuple[Producer, ...]:
-    """The full producer surface: hand-curated `KNOWN_PRODUCERS` + the
-    community catalog (``depictio/catalog/*.yaml``), de-duplicated by name.
+    """The producer surface consulted by the column→viz suggestion engine.
 
-    Hand-curated producers win on name collisions, so the catalog can only
-    *add* coverage — never silently override a vetted fingerprint. This is
-    the single accessor the suggestion engine should consult.
+    Currently just the hand-curated `KNOWN_PRODUCERS`. The bio-catalog
+    (``depictio/catalog/``) intentionally does **not** feed this path: it is a
+    file→recipe→component linking table (used at scan time), not a second
+    column-fingerprint registry, and the curated producers already cover the
+    canonical (post-recipe) shapes.
     """
-    # Lazy import: catalog.py imports Producer from this module, so importing
-    # it at top level would create a cycle.
-    from depictio.models.components.advanced_viz.catalog import load_catalog_producers
-
-    by_name: dict[str, Producer] = {p.name: p for p in KNOWN_PRODUCERS}
-    for p in load_catalog_producers():
-        by_name.setdefault(p.name, p)
-    return tuple(by_name.values())
+    return KNOWN_PRODUCERS
 
 
 def get_producer(name: str) -> Producer | None:
-    """Lookup a producer by its stable id (curated or catalog-provided)."""
+    """Lookup a producer by its stable id."""
     for p in all_producers():
         if p.name == name:
             return p
