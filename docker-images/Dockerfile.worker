@@ -17,11 +17,10 @@ LABEL org.opencontainers.image.licenses="MIT"
 
 WORKDIR /app
 
-# System deps cover Playwright's chromium plus xvfb for any headed paths
-# the worker still uses.
+# System deps cover Playwright's chromium runtime libs. All screenshot
+# code paths use headless=True (zero xvfb/Xvfb/DISPLAY references in the
+# tree), so the X virtual framebuffer isn't needed — drops ~20 MB.
 RUN apt-get update && apt-get install --no-install-recommends -y \
-        xvfb \
-        xauth \
         curl \
         netcat-openbsd \
         ca-certificates \
@@ -56,9 +55,18 @@ COPY --chown=depictio:depictio depictio ./depictio/
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev || uv sync --no-dev
 
+# Browser bundle target inside the image. We download into a BuildKit
+# cache mount and copy out — caches the ~150 MB chromium across rebuilds
+# so editing Python doesn't reinvalidate the download. We drop
+# `--with-deps` because every shared library chromium needs is already
+# apt-installed above; `--with-deps` would otherwise run another
+# `apt-get update && apt-get install` over the same set.
 ENV PLAYWRIGHT_BROWSERS_PATH=/usr/local/share/playwright-browsers
-RUN mkdir -p ${PLAYWRIGHT_BROWSERS_PATH} && chmod 755 ${PLAYWRIGHT_BROWSERS_PATH}
-RUN uv run playwright install --with-deps chromium && \
+RUN --mount=type=cache,target=/var/cache/playwright,sharing=locked \
+    mkdir -p ${PLAYWRIGHT_BROWSERS_PATH} && \
+    PLAYWRIGHT_BROWSERS_PATH=/var/cache/playwright \
+        uv run playwright install chromium && \
+    cp -a /var/cache/playwright/. ${PLAYWRIGHT_BROWSERS_PATH}/ && \
     chmod -R 755 ${PLAYWRIGHT_BROWSERS_PATH}
 
 COPY --chown=depictio:depictio docker-images/run_celery_worker.sh /app/run_celery_worker.sh
