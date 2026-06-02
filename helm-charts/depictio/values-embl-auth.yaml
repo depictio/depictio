@@ -69,44 +69,6 @@ backend:
     # DEPICTIO_CELERY_ENABLED: "false"
 
 
-frontend:
-  replicas: 2  # Multiple replicas for high availability with anti-affinity
-  securityContext:
-    runAsNonRoot: true
-    runAsUser: 1000
-    runAsGroup: 1000
-    allowPrivilegeEscalation: false
-    capabilities:
-      drop: ["ALL"]
-    seccompProfile:
-      type: RuntimeDefault
-
-  resources:
-    requests:
-      memory: "2Gi"     # Balanced for multiple replicas
-      cpu: "500m"       # Balanced CPU allocation
-    limits:
-      memory: "4Gi"     # Reasonable limit for multiple replicas
-      cpu: "2"          # Balanced CPU limit
-
-  env:
-    # Anonymous user configuration
-    DEPICTIO_AUTH_ANONYMOUS_USER_EMAIL: "anonymous@depict.io"
-    DEPICTIO_AUTH_TEMPORARY_USER_EXPIRY_HOURS: "1"
-
-    # Performance - Balanced workers for multiple replicas
-    DEPICTIO_VIEWER_WORKERS: "4"
-
-    # Analytics Configuration
-    DEPICTIO_ANALYTICS_ENABLED: "true"
-    DEPICTIO_GOOGLE_ANALYTICS_ENABLED: "true"
-
-    # Google OAuth Configuration
-    DEPICTIO_AUTH_GOOGLE_OAUTH_ENABLED: "true"
-
-    # Celery Configuration - Disabled for now
-    DEPICTIO_CELERY_ENABLED: "false"
-
 mongo:
   replicas: 1  # Temporarily single replica to get system working
   image:

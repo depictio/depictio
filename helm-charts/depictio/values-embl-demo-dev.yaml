@@ -65,31 +65,6 @@ backend:
     # Explicit API URL to match ingress host (for browser-based requests)
     DEPICTIO_FASTAPI_PUBLIC_URL: "https://dev.api.demo.depictio.embl.org"
 
-# Frontend Dash — being phased out in favour of the React viewer (served
-# from the backend container at /dashboard-beta). Halved to free budget
-# for backend + celery. Still single-worker (state_manager limitation).
-frontend:
-  resources:
-    requests:
-      memory: "512Mi"
-      cpu: "250m"
-    limits:
-      memory: "1Gi"
-      cpu: "500m"
-  env:
-    # Demo mode with guided tour tooltips
-    DEPICTIO_AUTH_DEMO_MODE: "true"
-    DEPICTIO_AUTH_PUBLIC_MODE: "true"
-    # Anonymous user configuration
-    DEPICTIO_AUTH_ANONYMOUS_USER_EMAIL: "anonymous@depict.io"
-    DEPICTIO_AUTH_TEMPORARY_USER_EXPIRY_HOURS: "1"
-    # Performance
-    DEPICTIO_VIEWER_WORKERS: "1"  # MUST be 1 until state_manager is refactored
-    DEPICTIO_DEV_MODE: "false"
-    DEPICTIO_VIEWER_DEBUG_UI: "true"  # Show Dash debug UI without full dev mode
-    DEPICTIO_GOOGLE_ANALYTICS_ENABLED: "true"
-    DEPICTIO_GOOGLE_ANALYTICS_TRACKING_ID: "G-MCC33FDF2Z"
-
 # Ingress - Dev Environment
 ingress:
   enabled: true
