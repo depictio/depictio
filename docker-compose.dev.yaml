@@ -31,8 +31,8 @@ services:
     volumes:
       - ./${DATA_DIR:-data}/minio_data:/data
     environment:
-      MINIO_ROOT_USER: ${DEPICTIO_MINIO_ROOT_USER:-minio}
-      MINIO_ROOT_PASSWORD: ${DEPICTIO_MINIO_ROOT_PASSWORD:-minio123}
+      MINIO_ROOT_USER: ${DEPICTIO_MINIO_ROOT_USER:?DEPICTIO_MINIO_ROOT_USER must be set in docker-compose/.env}
+      MINIO_ROOT_PASSWORD: ${DEPICTIO_MINIO_ROOT_PASSWORD:?DEPICTIO_MINIO_ROOT_PASSWORD must be set in docker-compose/.env (>=16 chars, not a known default)}
     command: server /data --console-address :9001
     ports:
       - "${MINIO_PORT:-9000}:9000"

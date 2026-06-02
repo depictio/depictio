@@ -60,14 +60,21 @@ def _read_env_instance() -> dict[str, str]:
     return out
 
 
+def _die_missing(name: str) -> str:
+    raise SystemExit(
+        f"Required env var {name} is not set in .env.instance or the shell. "
+        "Refusing to fall back to a hardcoded credential."
+    )
+
+
 # Connection settings — overridden by the worktree's .env.instance when present.
 _env = _read_env_instance()
 MONGO_PORT = int(_env.get("MONGO_PORT", _env.get("DEPICTIO_MONGODB_PORT", "27018")))
 MINIO_PORT = int(_env.get("MINIO_PORT", _env.get("DEPICTIO_MINIO_EXTERNAL_PORT", "9000")))
 MONGO_URI = f"mongodb://localhost:{MONGO_PORT}/depictioDB"
 S3_ENDPOINT = f"http://localhost:{MINIO_PORT}"
-S3_USER = _env.get("DEPICTIO_MINIO_ROOT_USER", "minio")
-S3_PASSWORD = _env.get("DEPICTIO_MINIO_ROOT_PASSWORD", "minio123")
+S3_USER = _env.get("DEPICTIO_MINIO_ROOT_USER") or _die_missing("DEPICTIO_MINIO_ROOT_USER")
+S3_PASSWORD = _env.get("DEPICTIO_MINIO_ROOT_PASSWORD") or _die_missing("DEPICTIO_MINIO_ROOT_PASSWORD")
 
 # Each new DC: (Mongo id, tag, TSV filename, description, columns_description, container_path).
 NEW_DCS: list[dict[str, Any]] = [

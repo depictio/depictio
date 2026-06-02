@@ -107,18 +107,16 @@ async def list_registered_files(data_collection_id: str, current_user=Depends(ge
 
     user_oid = ObjectId(current_user.id)
     target_data_collection_id = ObjectId(data_collection_id)
+    # SECURITY: same predicate shape as delete_file below — admin status is
+    # a property of the *caller*, not of the file's owners. Keying off
+    # ``permissions.owners.is_admin`` previously let any caller list every
+    # file whose owner happened to be admin.
+    if current_user.is_admin:
+        permission_match: dict = {}
+    else:
+        permission_match = {"permissions.owners._id": user_oid}
     pipeline = [
-        {
-            "$match": {
-                "$or": [
-                    {"permissions.owners._id": user_oid},  # User is an owner
-                    {"permissions.owners.is_admin": True},  # User is an admin
-                ]
-            }
-        },
-        {
-            "$match": {"data_collection_id": target_data_collection_id}
-        },  # Match files with the specific data collection ID
+        {"$match": {**permission_match, "data_collection_id": target_data_collection_id}},
     ]
 
     result = files_collection.aggregate(pipeline)

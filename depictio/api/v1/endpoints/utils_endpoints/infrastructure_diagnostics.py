@@ -87,7 +87,7 @@ async def test_network_latency() -> dict[str, Any]:
         for i in range(5):
             start_time = time.time()
             try:
-                async with httpx.AsyncClient(timeout=timeout, verify=False) as client:
+                async with httpx.AsyncClient(timeout=timeout) as client:
                     response = await client.get(url)
                     latency = (time.time() - start_time) * 1000
                     latencies.append(latency)

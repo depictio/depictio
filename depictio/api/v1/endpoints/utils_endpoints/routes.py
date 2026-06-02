@@ -224,7 +224,7 @@ async def check_service_readiness(
 
     for attempt in range(max_retries):
         try:
-            async with httpx.AsyncClient(timeout=timeout_obj, verify=False) as client:
+            async with httpx.AsyncClient(timeout=timeout_obj) as client:
                 response = await client.get(url)
                 logger.info(
                     f"🔍 Service readiness check attempt {attempt + 1}: {url} -> {response.status_code}"
