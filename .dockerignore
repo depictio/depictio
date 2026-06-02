@@ -28,9 +28,8 @@ keys/
 venv/
 wf_data/
 
-# Exclude screenshots except reference dashboards (needed for init container)
+# Exclude generated screenshots (runtime artifacts written by the worker)
 screenshots/
-!depictio/dash/static/screenshots/
 
 # -----------------------------
 # Exclude Tests (not needed in production image)

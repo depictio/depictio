@@ -33,7 +33,7 @@ async def test_dns_resolution() -> dict[str, Any]:
 
     # Also try common service patterns in case settings are different
     additional_services = [
-        "depictio-frontend",
+        "depictio-viewer",
         "depictio-backend",
         "mongo",
         "minio",
