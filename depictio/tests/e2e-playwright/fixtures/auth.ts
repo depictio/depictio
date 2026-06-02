@@ -49,26 +49,79 @@ export async function uiLogin(
  * Seed the browser with auth tokens so subsequent navigations are logged in
  * without hitting the UI. Mirrors Cypress `cy.loginWithToken` end-state.
  *
- * The Dash app reads tokens from `local-store` (Dash dcc.Store backed by
- * localStorage). We write the same shape so the Dash UI picks them up on
- * the next page load.
+ * Two storage shapes are supported, selected by PLAYWRIGHT_TARGET:
+ *   - "react" (default): the React app's Zustand `persist` store under the
+ *     `depictio-auth` key, shape `{ state: { accessToken, refreshToken }, version: 0 }`.
+ *   - "dash": the Dash app's `local-store` dcc.Store, shape
+ *     `{ access_token, refresh_token, logged_in, user_id }`.
  */
+const TARGET = (process.env.PLAYWRIGHT_TARGET ?? "react").toLowerCase();
+
 export async function seedTokenInStorage(
   page: Page,
   tokens: TokenBundle,
 ): Promise<void> {
   await page.goto("/");
-  await page.evaluate((t) => {
-    window.localStorage.setItem(
-      "local-store",
-      JSON.stringify({
-        access_token: t.access_token,
-        refresh_token: t.refresh_token,
-        logged_in: true,
-        user_id: t.user_id,
-      }),
-    );
-  }, tokens);
+  await page.evaluate(
+    ({ t, target }) => {
+      if (target === "dash") {
+        window.localStorage.setItem(
+          "local-store",
+          JSON.stringify({
+            access_token: t.access_token,
+            refresh_token: t.refresh_token,
+            logged_in: true,
+            user_id: t.user_id,
+          }),
+        );
+      } else {
+        window.localStorage.setItem(
+          "depictio-auth",
+          JSON.stringify({
+            state: {
+              accessToken: t.access_token,
+              refreshToken: t.refresh_token,
+            },
+            version: 0,
+          }),
+        );
+      }
+    },
+    { t: tokens, target: TARGET },
+  );
+}
+
+/**
+ * UI registration: opens /auth, switches to the register view, fills and
+ * submits the form. Equivalent to Cypress `cy.registerUser`.
+ */
+export async function uiRegister(
+  page: Page,
+  email: string,
+  password: string,
+  confirmPassword?: string,
+): Promise<void> {
+  await page.goto("/auth");
+  const modal = page.locator("#modal-content");
+  await expect(modal).toBeVisible({ timeout: 10_000 });
+
+  await modal.locator("#open-register-form").click();
+  await modal.locator("#register-email").fill(email);
+  await modal.locator("#register-password").fill(password);
+  await modal
+    .locator("#register-confirm-password")
+    .fill(confirmPassword ?? password);
+  await modal.locator("#register-button").click();
+}
+
+/**
+ * UI logout: navigates to /profile and clicks the logout button, then
+ * expects the auth modal to reappear. Equivalent to Cypress `cy.logoutRobust`.
+ */
+export async function uiLogout(page: Page): Promise<void> {
+  await page.goto("/profile");
+  await page.locator("#logout-button").click();
+  await expect(page.locator("#modal-content")).toBeVisible({ timeout: 10_000 });
 }
 
 /**

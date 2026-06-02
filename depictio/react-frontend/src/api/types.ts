@@ -40,3 +40,8 @@ export interface Dashboard {
   tab_order?: number;
   permissions?: DashboardPermissions;
 }
+
+export interface Project {
+  id: string;
+  name: string;
+}

@@ -21,3 +21,21 @@ export async function fetchMe(): Promise<User> {
   const { data } = await apiClient.get<User>(`${API_PREFIX}/auth/me`);
   return data;
 }
+
+export interface RegisterResult {
+  success: boolean;
+  message: string;
+}
+
+export async function register(
+  email: string,
+  password: string,
+): Promise<RegisterResult> {
+  // The backend returns HTTP 200 with { success: false, message } for
+  // duplicate users, so callers must inspect `success`, not just the status.
+  const { data } = await apiClient.post<RegisterResult>(
+    `${API_PREFIX}/auth/register`,
+    { email, password, is_admin: false },
+  );
+  return data;
+}

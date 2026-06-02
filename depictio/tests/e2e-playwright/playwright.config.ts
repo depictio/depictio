@@ -1,6 +1,9 @@
 import { defineConfig, devices } from "@playwright/test";
 
-const BASE_URL = process.env.PLAYWRIGHT_BASE_URL ?? "http://localhost:5080";
+// Default target is the React frontend (Vite dev server on :5173).
+// Set PLAYWRIGHT_BASE_URL=http://localhost:5080 (+ PLAYWRIGHT_TARGET=dash) to
+// run the same specs against the legacy Dash app.
+const BASE_URL = process.env.PLAYWRIGHT_BASE_URL ?? "http://localhost:5173";
 const API_URL = process.env.PLAYWRIGHT_API_URL ?? "http://localhost:8058";
 const IS_CI = !!process.env.CI;
 
