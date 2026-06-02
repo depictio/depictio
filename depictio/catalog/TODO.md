@@ -43,13 +43,14 @@ pipeline-agnostic (see `docs/design/bioinformatics-catalog.md`).
   mode `code`) + `card` (`column`/`aggregation`). `qiime2_alpha_diversity` is the
   flagship (code-mode multi-facet box + 3 metric cards). **TODO:** enrich the
   other entries with their figures/cards (ampliseq/viralrecon dashboards).
-- **`fixture`** (path under `projects/`) is wired: `catalog validate` grounds
-  renders against the real bundled sample (Level-3). **TODO:** add a `fixture`
-  to every output (reuse the bundled `projects/nf-core/*/*.tsv` canonical files).
-- **`catalog preview <output>`** (next): load the `fixture` → build the
-  component (advanced_viz / figure / card) → render the real viz. Reuses the
-  existing component renderers + the figure code-mode executor
-  (`simple_code_executor.execute_code(code, df)`).
+- **`fixture`** (path under `projects/`, csv/tsv/parquet) is wired + covered:
+  `catalog validate` grounds renders against the real bundled sample (Level-3),
+  and every tabular output declares one. CI runs `depictio catalog validate`.
+- **`catalog preview <output>`** — **separate PR (owned by maintainer)**: load
+  the `fixture` → build the component (advanced_viz / figure / card) → render the
+  real viz. Reuses the component renderers + the figure code-mode executor
+  (`simple_code_executor.execute_code(code, df)`). The `fixture` field is the
+  contract this builds on.
 
 ## Validation / CI hardening
 - `match_run_dir` perf: single `os.walk` pass (currently one `rglob` per output)

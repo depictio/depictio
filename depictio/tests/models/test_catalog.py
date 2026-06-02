@@ -423,6 +423,111 @@ def test_catalog_is_decoupled_from_suggestion_engine():
 
 
 # ---------------------------------------------------------------------------
+# Fixture aspect: every fixture reads + grounds its renders; recipes resolve
+# ---------------------------------------------------------------------------
+
+
+def test_every_fixture_reads_and_grounds_its_renders():
+    from depictio.models.components.advanced_viz.catalog import fixture_columns
+
+    seen = 0
+    for entry in load_catalog_entries():
+        for out in entry.outputs:
+            if not out.fixture:
+                continue
+            seen += 1
+            cols = set(fixture_columns(out.fixture))  # reads (csv/tsv/parquet) or raises
+            for r in out.renders_as:
+                missing = r.bound_columns() - cols
+                assert not missing, (
+                    f"{out.id} render {r.kind or r.component}: {sorted(missing)} ∉ fixture"
+                )
+    assert seen >= 8  # most tabular outputs carry a bundled fixture
+
+
+def test_every_recipe_resolves_to_a_real_file():
+    for entry in load_catalog_entries():
+        for out in entry.outputs:
+            if out.recipe:
+                recipe_output_columns(out.recipe)  # raises RecipeError if missing
+
+
+def test_fixture_columns_reads_parquet():
+    from depictio.models.components.advanced_viz.catalog import fixture_columns
+
+    cols = fixture_columns("nf-core/ampliseq/2.14.0/run_1/multiqc_data/multiqc.parquet")
+    assert isinstance(cols, list) and cols  # parquet schema read
+
+
+def test_card_top_n_requires_breakdown_col():
+    with pytest.raises(ValueError, match="requires 'breakdown_col'"):
+        CatalogOutput.model_validate(
+            _output(
+                columns={"x": "String"},
+                renders_as=[
+                    {
+                        "component": "card",
+                        "column": "x",
+                        "aggregation": "count",
+                        "secondary_layout": "top_n",
+                    }
+                ],
+            )
+        )
+
+
+def test_card_coverage_requires_coverage_max():
+    with pytest.raises(ValueError, match="requires 'coverage_max'"):
+        CatalogOutput.model_validate(
+            _output(
+                columns={"x": "Int64"},
+                renders_as=[
+                    {
+                        "component": "card",
+                        "column": "x",
+                        "aggregation": "count",
+                        "secondary_layout": "coverage",
+                    }
+                ],
+            )
+        )
+
+
+# ---------------------------------------------------------------------------
+# CLI integration (via CliRunner) — the commands a contributor/CI runs
+# ---------------------------------------------------------------------------
+
+
+def _cli():
+    from typer.testing import CliRunner
+
+    from depictio.cli.cli.commands.catalog import app
+
+    return CliRunner(), app
+
+
+def test_cli_validate_exits_zero_on_bundled_catalog():
+    runner, app = _cli()
+    result = runner.invoke(app, ["validate"])
+    assert result.exit_code == 0, result.stdout
+
+
+def test_cli_commands_smoke():
+    runner, app = _cli()
+    run = REPO_ROOT / "depictio" / "projects" / "nf-core" / "viralrecon" / "3.0.0" / "run_1"
+    for args in (
+        ["list"],
+        ["info", "qiime2"],
+        ["columns", "nf-core/ampliseq/ancombc.py"],
+        ["schema"],
+        ["match", str(run)],
+        ["compose", str(run)],
+    ):
+        result = runner.invoke(app, args)
+        assert result.exit_code == 0, f"{args} → {result.stdout}"
+
+
+# ---------------------------------------------------------------------------
 # Committed JSON Schema stays in sync with the model
 # ---------------------------------------------------------------------------
 

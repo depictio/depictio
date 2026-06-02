@@ -200,6 +200,12 @@ class Render(BaseModel):
         if c == "card":
             if not (self.column and self.aggregation):
                 raise ValueError("renders_as card requires 'column' and 'aggregation'")
+            if self.secondary_layout in ("top_n", "concentration") and not self.breakdown_col:
+                raise ValueError(
+                    f"secondary_layout={self.secondary_layout!r} requires 'breakdown_col'"
+                )
+            if self.secondary_layout == "coverage" and self.coverage_max is None:
+                raise ValueError("secondary_layout='coverage' requires 'coverage_max'")
         elif any(
             (
                 self.column,
@@ -441,6 +447,8 @@ def fixture_columns(fixture_ref: str) -> list[str]:
     import polars as pl
 
     path = PROJECTS_DIR / fixture_ref
+    if path.suffix == ".parquet":
+        return list(pl.read_parquet_schema(path).keys())
     sep = "\t" if path.suffix == ".tsv" else ","
     return pl.read_csv(path, separator=sep, n_rows=0).columns
 
