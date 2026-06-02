@@ -7,16 +7,12 @@ recipe: nf-core/ampliseq/alpha_diversity_multi_canonical.py
 # bindable sample (recipe declares only sample_id/habitat; metric cols are dynamic)
 fixture: nf-core/ampliseq/2.16.0/alpha_diversity_multi_canonical.tsv
 renders_as:
-  # code-mode figure: multi-facet box plot of the metrics by habitat
+  # code-mode figure: multi-facet box plot of the metrics by habitat.
+  # depictio code mode = single-line `df_modified = …` preprocessing, then `fig = …`.
   - component: figure
     code: |
-      m = df.to_pandas().melt(
-          id_vars=["sample_id", "habitat"],
-          value_vars=["shannon", "evenness", "faith_pd"],
-          var_name="metric", value_name="value",
-      )
-      fig = px.box(m, x="habitat", y="value", color="habitat",
-                   facet_col="metric", title="Alpha diversity by habitat")
+      df_modified = df.to_pandas().melt(id_vars=["sample_id", "habitat"], value_vars=["shannon", "evenness", "faith_pd"], var_name="metric", value_name="value")
+      fig = px.box(df_modified, x="habitat", y="value", color="habitat", facet_col="metric", title="Alpha diversity by habitat")
   # one metric card per index (distribution / KPI)
   - { component: card, column: shannon, aggregation: average }
   - { component: card, column: evenness, aggregation: average }

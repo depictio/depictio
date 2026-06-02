@@ -56,7 +56,7 @@ Don't know a recipe's output column names while writing `roles`?
 depictio catalog list                 # every tool + output + render targets
 depictio catalog info qiime2          # one tool: URLs + outputs in detail
 depictio catalog columns <recipe.py>  # the recipe's output columns (to write roles)
-depictio catalog preview <output>     # render the output's components on its fixture → HTML (opens in browser)
+depictio catalog preview <output>     # serve the output's components on its fixture using depictio's real stack (opens a browser)
 depictio catalog match path/to/run    # recognise tool outputs in a run dir
 depictio catalog validate             # CI gate: schema + roles vs recipe + nf-core/EDAM existence
 depictio catalog refresh-index        # (maintainer, needs network) refresh _index/ from nf-core + EDAM

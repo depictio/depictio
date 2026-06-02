@@ -47,12 +47,16 @@ pipeline-agnostic (see `docs/design/bioinformatics-catalog.md`).
   renders against the real bundled sample (Level-3). **TODO:** add a `fixture`
   to every output (reuse the bundled `projects/nf-core/*/*.tsv` canonical files).
 - **`catalog preview <output>`** — DONE for **figure (UI + code), card, table**:
-  loads the `fixture` → builds each `renders_as` component → writes one
-  self-contained interactive HTML (plotly.js + ag-grid-community) and opens it in
-  the browser. Render core: `depictio/catalog/render.py` (Dash-free; mirrors the
-  figure code-mode executor). **TODO:** add `advanced_viz` (reuse the Celery
-  `compute_*` helpers) and `multiqc` (needs a report fixture) — today they show a
-  "not supported yet" placeholder.
+  loads the `fixture` → builds each `renders_as` component with **depictio's own
+  builders** (`render_figure` / `_process_code_mode_figure`, `build_card`,
+  depictio's AG-Grid column defs) → serves them in a local Dash app wrapped in
+  `MantineProvider` with depictio's `assets/`, so it looks exactly like the
+  viewer (same DMC theme, mantine plotly template, dash-ag-grid table). Render
+  core: `depictio/catalog/render.py` (requires the depictio dash runtime). Code
+  figures must follow depictio's code-mode contract (single-line
+  `df_modified = …` then `fig = …`). **TODO:** add `advanced_viz` (reuse the
+  Celery `compute_*` helpers) and `multiqc` (needs a report fixture) — today they
+  show a "not supported yet" placeholder.
 
 ## Validation / CI hardening
 - `match_run_dir` perf: single `os.walk` pass (currently one `rglob` per output)

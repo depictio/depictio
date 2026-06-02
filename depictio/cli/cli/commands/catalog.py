@@ -90,30 +90,28 @@ def catalog_columns(
 @app.command("preview")
 def catalog_preview(
     output_id: Annotated[str, typer.Argument(help="Output id, e.g. qiime2_alpha_diversity")],
-    render: Annotated[
-        int | None,
-        typer.Option("--render", "-r", help="Preview only this render index (default: all)"),
-    ] = None,
-    out: Annotated[
-        str | None,
-        typer.Option("--out", "-o", help="Write the HTML here (default: a temp file)"),
-    ] = None,
+    theme: Annotated[
+        str,
+        typer.Option("--theme", "-t", help="Theme: light or dark"),
+    ] = "light",
+    port: Annotated[
+        int,
+        typer.Option("--port", "-p", help="Port for the local preview server"),
+    ] = 8899,
     no_open: Annotated[
         bool,
-        typer.Option("--no-open", help="Do not open the HTML in a browser"),
+        typer.Option("--no-open", help="Do not open a browser tab"),
     ] = False,
 ) -> None:
-    """Render an output's components on its fixture → self-contained HTML.
+    """Preview an output's components on its fixture using depictio's real stack.
 
-    Builds every ``renders_as`` target (figure/card/table) on the output's
-    bundled ``fixture`` and opens an interactive page in the browser — the
-    contributor's loop for previewing a viz before opening a PR. No running
-    depictio stack required.
+    Builds every ``renders_as`` target (figure/card/table) with depictio's own
+    component builders (so it looks exactly like the depictio viewer — same DMC
+    theme, mantine plotly template, dash-ag-grid table) and serves them in a
+    local Dash app. The contributor's loop for previewing a viz before a PR.
+    Requires the depictio runtime (the dash environment).
     """
-    import tempfile
-    import webbrowser
-
-    from depictio.catalog.render import render_output_to_html
+    from depictio.catalog.render import run_preview_server
     from depictio.models.components.advanced_viz.catalog import load_catalog_entries
 
     output = next(
@@ -124,19 +122,9 @@ def catalog_preview(
         typer.echo(f"No output '{output_id}'. Try `depictio catalog list`.")
         raise typer.Exit(code=1)
 
-    try:
-        page = render_output_to_html(output, render_index=render)
-    except Exception as exc:
-        typer.echo(f"  could not preview {output_id!r}: {exc}")
-        raise typer.Exit(code=1)
-
-    out_path = (
-        Path(out) if out else Path(tempfile.gettempdir()) / f"catalog_preview_{output_id}.html"
-    )
-    out_path.write_text(page)
-    typer.echo(f"  Wrote preview to {out_path}")
-    if not no_open:
-        webbrowser.open(out_path.resolve().as_uri())
+    url = f"http://127.0.0.1:{port}/"
+    typer.echo(f"  Previewing {output_id!r} ({theme} theme) at {url}  — Ctrl+C to stop")
+    run_preview_server(output, theme=theme, port=port, open_browser=not no_open)
 
 
 @app.command("validate")
