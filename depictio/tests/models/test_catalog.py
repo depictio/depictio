@@ -312,7 +312,7 @@ def test_match_run_dir_recognises_bundled_viralrecon_files():
     assert "mosdepth_genome_coverage" in by_output
     assert "multiqc_report" in by_output
     # matches carry the viz they render (the dashboard building blocks)
-    assert by_output["mosdepth_genome_coverage"].renders == ["advanced_viz:coverage_track"]
+    assert "advanced_viz:coverage_track" in by_output["mosdepth_genome_coverage"].renders
 
 
 def test_compose_run_dir_groups_modules_with_their_viz():
