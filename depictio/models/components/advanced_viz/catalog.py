@@ -273,6 +273,8 @@ def load_entries_from_dir(directory: Path) -> list[CatalogEntry]:
     if not directory.exists():
         return entries
     for path in sorted(directory.iterdir()):
+        if path.name.startswith((".", "_")):
+            continue  # skip non-tool dirs/files like _index/
         try:
             if path.is_dir():
                 entries.append(_load_tool_dir(path))
@@ -288,6 +290,61 @@ def load_entries_from_dir(directory: Path) -> list[CatalogEntry]:
 @lru_cache(maxsize=1)
 def load_catalog_entries() -> tuple[CatalogEntry, ...]:
     return tuple(load_entries_from_dir(CATALOG_DIR))
+
+
+# ---------------------------------------------------------------------------
+# Existence checks against vendored indices (offline) — used by `validate`.
+# nf-core modules + EDAM terms are validated for existence; bio.tools stays
+# format-only (its registry is too large to vendor).
+# ---------------------------------------------------------------------------
+
+INDEX_DIR = CATALOG_DIR / "_index"
+
+
+def load_index(name: str) -> set[str]:
+    """Load a vendored index (`_index/<name>.txt`); `#`/blank lines ignored."""
+    path = INDEX_DIR / f"{name}.txt"
+    if not path.exists():
+        return set()
+    return {
+        s for line in path.read_text().splitlines() if (s := line.strip()) and not s.startswith("#")
+    }
+
+
+def _nf_core_module(url: str | None) -> str | None:
+    if url and "/modules/nf-core/" in url:
+        return url.split("/modules/nf-core/", 1)[1].rstrip("/")
+    return None
+
+
+def check_existence(entries: tuple[CatalogEntry, ...] | list[CatalogEntry]) -> list[str]:
+    """Check nf-core modules + EDAM terms exist in the vendored indices.
+
+    Returns a list of problems (empty = all good). A missing/empty index is
+    skipped (graceful), so seeding-then-refreshing stays non-breaking.
+    """
+    nf_index = load_index("nf_core_modules")
+    edam_index = load_index("edam_terms")
+    problems: list[str] = []
+
+    def _check_nf(url: str | None, ctx: str) -> None:
+        module = _nf_core_module(url)
+        if module and nf_index and module not in nf_index:
+            problems.append(f"{ctx}: nf-core module {module!r} not in vendored index")
+
+    def _check_edam(urls: list[str], ctx: str) -> None:
+        for url in urls:
+            term = url.rstrip("/").rsplit("/", 1)[-1]
+            if edam_index and term not in edam_index:
+                problems.append(f"{ctx}: EDAM term {term!r} not in vendored index")
+
+    for entry in entries:
+        _check_nf(entry.nf_core_url, entry.id)
+        _check_edam(entry.edam_topics, entry.id)
+        for out in entry.outputs:
+            _check_nf(out.nf_core_url, out.id)
+            _check_edam(out.edam_operations + out.edam_formats, out.id)
+    return problems
 
 
 # ---------------------------------------------------------------------------

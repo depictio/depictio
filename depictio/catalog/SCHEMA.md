@@ -78,6 +78,21 @@ ma, dot_plot, lollipop, qq, sunburst, oncoplot, coverage_track, sankey.
 Use `depictio catalog columns <recipe>` to see a recipe's output column names
 while writing `roles`.
 
+## Two validation tiers
+
+| Tier | Fields | Validation |
+|---|---|---|
+| **Free** | `mode`, `description` | none (free text label) |
+| **Validated** | `component`/`kind`, `nf_core_url`, `biotools_url`, `edam_*`, `recipe`, `columns`, `roles` | against the real authority |
+
+- `component` → depictio's real `ComponentType` (+ `multiqc`).
+- `kind` + role names → the viz's `CANONICAL_SCHEMAS`.
+- `biotools_url` → format only (the bio.tools registry is too large to vendor).
+- `nf_core_url` module + `edam_*` term → **existence** against vendored indices
+  in `_index/` (`nf_core_modules.txt`, `edam_terms.txt`), checked offline in CI.
+  Regenerate them with `depictio catalog refresh-index` (needs network; run by a
+  maintainer). A missing/empty index is skipped, so seeding stays non-breaking.
+
 ## What `validate` checks (the CI guarantee)
 
 1. Schema / structure (Pydantic, `extra="forbid"`).
@@ -86,5 +101,6 @@ while writing `roles`.
    **recipe's real output columns** (the recipe is imported and its
    `EXPECTED_SCHEMA` read).
 4. Every referenced `recipe` resolves.
+5. Every `nf_core_url` module + `edam_*` term **exists** in the vendored index.
 
 Green CI = the entry is wired correctly, no manual review needed.

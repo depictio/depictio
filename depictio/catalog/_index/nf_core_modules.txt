@@ -1,0 +1,19 @@
+# Vendored index of valid nf-core module paths (the part after
+# .../modules/nf-core/). `depictio catalog validate` checks every catalog
+# `nf_core_url` against this list (offline existence check).
+#
+# SEED ONLY: this currently lists the modules used by the bundled catalog.
+# Run `depictio catalog refresh-index` (needs network) to replace it with the
+# authoritative nf-core/modules list, so typo'd module paths are caught.
+fastqc
+ivar/variants
+metaphlan/metaphlan
+mosdepth
+multiqc
+nextclade/run
+pangolin/run
+qiime2/ancombc
+qiime2/barplot
+qiime2/diversityalphararefaction
+qiime2/diversitycore
+qiime2/relativeabundancetables

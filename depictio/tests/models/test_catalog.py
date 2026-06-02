@@ -223,6 +223,37 @@ def test_match_run_dir_recognises_bundled_viralrecon_files():
 
 
 # ---------------------------------------------------------------------------
+# Existence checks against the vendored indices (nf-core + EDAM)
+# ---------------------------------------------------------------------------
+
+
+def test_existence_check_passes_on_bundled_catalog():
+    from depictio.models.components.advanced_viz.catalog import check_existence
+
+    assert check_existence(load_catalog_entries()) == []
+
+
+def test_existence_check_flags_unknown_module_and_edam():
+    from depictio.models.components.advanced_viz.catalog import check_existence
+
+    entry = CatalogEntry.model_validate(
+        {
+            "id": "x",
+            "name": "X",
+            # well-formed URL (passes format) but not a real module:
+            "nf_core_url": "https://github.com/nf-core/modules/tree/master/modules/nf-core/bogusmod",
+            "edam_topics": ["http://edamontology.org/topic_9999999"],  # well-formed, nonexistent
+            "outputs": [
+                {"id": "x_o", "find": {"filename": "*.csv"}, "renders_as": [{"component": "table"}]}
+            ],
+        }
+    )
+    problems = check_existence([entry])
+    assert any("bogusmod" in p for p in problems)
+    assert any("topic_9999999" in p for p in problems)
+
+
+# ---------------------------------------------------------------------------
 # The catalog does NOT feed the column→viz suggestion engine (decoupled)
 # ---------------------------------------------------------------------------
 

@@ -1,0 +1,13 @@
+# Vendored index of valid EDAM term ids (topic_/operation_/format_).
+# `depictio catalog validate` checks every catalog edam_* entry against this list
+# (offline existence check).
+#
+# SEED ONLY: currently the terms used by the bundled catalog. Run
+# `depictio catalog refresh-index` (needs network) to replace it with the full
+# EDAM term list, so typo'd ids are caught.
+topic_0080
+topic_0199
+topic_0622
+topic_3168
+topic_3174
+topic_3305

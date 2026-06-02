@@ -57,9 +57,14 @@ depictio catalog list                 # every tool + output + render targets
 depictio catalog info qiime2          # one tool: URLs + outputs in detail
 depictio catalog columns <recipe.py>  # the recipe's output columns (to write roles)
 depictio catalog match path/to/run    # recognise tool outputs in a run dir
-depictio catalog validate             # CI gate: schema + roles grounded vs recipe
+depictio catalog validate             # CI gate: schema + roles vs recipe + nf-core/EDAM existence
+depictio catalog refresh-index        # (maintainer, needs network) refresh _index/ from nf-core + EDAM
 depictio catalog schema -o catalog.schema.json   # regenerate the JSON Schema
 ```
+
+Identity validation is two-tier: `mode`/`description` are free; `nf_core_url`
+modules and `edam_*` terms are checked for **existence** against vendored
+indices in `_index/` (offline CI), while `biotools_url` is format-only.
 
 `validate` is the CI guarantee: it fails if any `renders_as` role doesn't exist
 in the recipe's real output — so a green CI means the entry is wired correctly,
