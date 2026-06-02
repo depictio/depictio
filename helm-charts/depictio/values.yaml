@@ -172,7 +172,7 @@ backend:
     DEPICTIO_MONGODB_WIPE: "false" # Set to true for development to wipe MongoDB on startup
     DEPICTIO_MONGODB_SERVICE_PORT: "27018"
     # DEPICTIO_MINIO_SERVICE_PORT: "9000"
-    # DEPICTIO_VIEWER_SERVICE_NAME: "depictio-frontend"
+    # DEPICTIO_VIEWER_SERVICE_NAME: "depictio-viewer"
     # DEPICTIO_FASTAPI_PUBLIC_URL: "https://{{ .Release.Name }}-api.{{ .Values.global.domain }}"
     # DEPICTIO_MINIO_PUBLIC_URL: "https://{{ .Release.Name }}-minio.{{ .Values.global.domain }}"
     # Performance - Reduced workers for better stability with multiple replicas
