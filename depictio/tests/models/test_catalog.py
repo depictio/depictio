@@ -220,6 +220,36 @@ def test_card_render_requires_column_and_aggregation():
         CatalogOutput.model_validate(_output(renders_as=[{"component": "card", "column": "x"}]))
 
 
+def test_multi_metric_card_with_secondary_aggregations():
+    CatalogOutput.model_validate(  # hero + secondary aggregations = multi-metric card
+        _output(
+            columns={"shannon": "Float64"},
+            renders_as=[
+                {
+                    "component": "card",
+                    "column": "shannon",
+                    "aggregation": "average",
+                    "aggregations": ["median", "min", "max", "std_dev"],
+                }
+            ],
+        )
+    )
+    with pytest.raises(ValueError):  # unknown aggregation rejected (typed)
+        CatalogOutput.model_validate(
+            _output(
+                columns={"a": "Float64"},
+                renders_as=[{"component": "card", "column": "a", "aggregation": "avrage"}],
+            )
+        )
+    with pytest.raises(ValueError, match="card fields"):  # card kwargs scoped to card
+        CatalogOutput.model_validate(
+            _output(
+                columns={"a": "String"},
+                renders_as=[{"component": "table", "aggregations": ["median"]}],
+            )
+        )
+
+
 def test_figure_and_card_fields_are_component_scoped():
     with pytest.raises(ValueError, match="figure fields"):
         CatalogOutput.model_validate(
@@ -264,6 +294,8 @@ def test_alpha_diversity_has_code_figure_and_metric_cards():
     assert components.count("card") == 3 and "figure" in components
     fig = next(r for r in out.renders_as if r.component == "figure")
     assert fig.code and "fig = px.box" in fig.code  # code-mode figure
+    card = next(r for r in out.renders_as if r.component == "card")
+    assert card.aggregation == "average" and card.aggregations  # multi-metric card
     assert out.fixture and out.fixture.endswith("alpha_diversity_multi_canonical.tsv")
 
 

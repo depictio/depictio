@@ -264,6 +264,25 @@
         "aggregation": {
           "anyOf": [
             {
+              "enum": [
+                "count",
+                "sum",
+                "average",
+                "median",
+                "min",
+                "max",
+                "range",
+                "variance",
+                "std_dev",
+                "skewness",
+                "kurtosis",
+                "percentile",
+                "q1",
+                "q3",
+                "box_plot_stats",
+                "nunique",
+                "mode"
+              ],
               "type": "string"
             },
             {
@@ -272,6 +291,44 @@
           ],
           "default": null,
           "title": "Aggregation"
+        },
+        "aggregations": {
+          "items": {
+            "enum": [
+              "count",
+              "sum",
+              "average",
+              "median",
+              "min",
+              "max",
+              "range",
+              "variance",
+              "std_dev",
+              "skewness",
+              "kurtosis",
+              "percentile",
+              "q1",
+              "q3",
+              "box_plot_stats",
+              "nunique",
+              "mode"
+            ],
+            "type": "string"
+          },
+          "title": "Aggregations",
+          "type": "array"
+        },
+        "filter_expr": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Filter Expr"
         },
         "section": {
           "anyOf": [

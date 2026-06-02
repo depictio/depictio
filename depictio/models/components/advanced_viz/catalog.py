@@ -32,7 +32,12 @@ from typing import Literal
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from depictio.models.components.types import AdvancedVizKind, ChartType, ComponentType
+from depictio.models.components.types import (
+    AdvancedVizKind,
+    AggregationFunction,
+    ChartType,
+    ComponentType,
+)
 
 CATALOG_DIR = Path(__file__).resolve().parents[3] / "catalog"
 PROJECTS_DIR = CATALOG_DIR.parent / "projects"
@@ -134,9 +139,13 @@ class Render(BaseModel):
     visu_type: ChartType | None = None  # UI mode: box/scatter/bar/histogram…
     dict_kwargs: dict[str, str] = Field(default_factory=dict)  # plotly-express kwargs
     code: str | None = None  # code mode: inline Python that sets `fig`
-    # card
+    # card (single- or multi-metric)
     column: str | None = None
-    aggregation: str | None = None
+    aggregation: AggregationFunction | None = None  # hero metric
+    aggregations: list[AggregationFunction] = Field(
+        default_factory=list
+    )  # secondary (multi-metric)
+    filter_expr: str | None = None  # optional polars pre-filter
     # multiqc
     section: str | None = None
 
@@ -178,11 +187,11 @@ class Render(BaseModel):
                 )
         elif self.visu_type or self.dict_kwargs or self.code:
             raise ValueError(f"figure fields are only valid for component=figure, not {c}")
-        # card: column + aggregation
+        # card: column + hero aggregation (+ optional secondary aggregations / filter)
         if c == "card":
             if not (self.column and self.aggregation):
                 raise ValueError("renders_as card requires 'column' and 'aggregation'")
-        elif self.column or self.aggregation:
+        elif self.column or self.aggregation or self.aggregations or self.filter_expr:
             raise ValueError(f"card fields are only valid for component=card, not {c}")
         return self
 

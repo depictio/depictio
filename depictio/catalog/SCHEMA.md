@@ -61,7 +61,9 @@ Both use the same fields; a folder just splits the outputs into files.
 | `visu_type` | cond. | `box`/`scatter`/`bar`/`histogram`/`line`/`heatmap` | `figure` **UI mode** (plotly express). |
 | `dict_kwargs` | CAN | dict[str,str] | `figure` UI mode: plotly-express kwargs (`x`,`y`,`color`,`facet_col`…); column-valued ones are grounded. |
 | `code` | cond. | str | `figure` **code mode**: inline Python that sets `fig` (depictio `code_content`). A figure needs `visu_type` **or** `code`. |
-| `column` + `aggregation` | cond. | str | `card`: the metric column + aggregation (e.g. `average`). |
+| `column` + `aggregation` | cond. | str / `AggregationFunction` | `card`: the metric column + **hero** aggregation. |
+| `aggregations` | CAN | list[`AggregationFunction`] | `card`: **secondary** aggregations → a **multi-metric** card (e.g. `[median, min, max, std_dev]`). |
+| `filter_expr` | CAN | str | `card`: optional polars pre-filter before aggregation. |
 | `section` | CAN | str | e.g. the MultiQC section name. |
 
 Figure/card/roles fields are **component-scoped** (validated): `roles`/`kind`
