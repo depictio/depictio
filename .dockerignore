@@ -28,8 +28,12 @@ keys/
 venv/
 wf_data/
 
-# Exclude generated screenshots (runtime artifacts written by the worker)
+# Exclude generated screenshots, but keep the committed reference-dashboard
+# thumbnails so the backend image ships them — the helm `copy-screenshot-files`
+# init container copies /app/depictio/api/static/screenshots/*.png into the
+# shared volume on startup.
 screenshots/
+!depictio/api/static/screenshots/
 
 # -----------------------------
 # Exclude Tests (not needed in production image)
