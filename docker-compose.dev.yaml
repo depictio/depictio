@@ -80,6 +80,12 @@ services:
         DEPICTIO_FASTAPI_EXTERNAL_HOST: "${DEPICTIO_FASTAPI_EXTERNAL_HOST:-localhost}"
         DEPICTIO_VIEWER_EXTERNAL_PORT: "${DEPICTIO_VIEWER_EXTERNAL_PORT:-5080}"
         DEPICTIO_VIEWER_EXTERNAL_HOST: "${DEPICTIO_VIEWER_EXTERNAL_HOST:-localhost}"
+        # Internal viewer target (server context). The dev stack's only viewer is
+        # the Vite dev server, not the nginx `depictio-viewer` (prod-only). The
+        # screenshot worker navigates to this URL to render dashboards, so it must
+        # point at the Vite container (service name + its in-container port 5173).
+        DEPICTIO_VIEWER_SERVICE_NAME: "${DEPICTIO_VIEWER_SERVICE_NAME:-depictio-viewer-dev}"
+        DEPICTIO_VIEWER_SERVICE_PORT: "${DEPICTIO_VIEWER_SERVICE_PORT:-5173}"
         DEPICTIO_MINIO_EXTERNAL_PORT: "${DEPICTIO_MINIO_EXTERNAL_PORT:-9000}"
         DEPICTIO_MINIO_EXTERNAL_HOST: "${DEPICTIO_MINIO_EXTERNAL_HOST:-localhost}"
         # Point the prerender store at the in-container mount instead of the
@@ -104,22 +110,42 @@ services:
       - minio
 
   # ─────────────────────────────────────────────────────────────────────
-  # Production-style viewer: nginx serving the prebuilt React SPA bundle
-  # from `depictio/viewer/dist`. For fast frontend iteration with HMR,
-  # run `pnpm dev` on the host against the dockerised backend.
+  # Dev viewer: Vite dev server with hot-module reload — the only viewer in
+  # the dev stack (the prod-bundle nginx viewer lives in docker-compose.yaml).
+  # Runs by default (no profile); the React source trees are bind-mounted so
+  # host-side edits reflect live in the browser:
+  #   docker compose -f docker-compose.dev.yaml up
   # ─────────────────────────────────────────────────────────────────────
-  depictio-viewer:
-    container_name: depictio-viewer
-    image: ${DEPICTIO_VIEWER_VERSION:-depictio-viewer:dev}
+  depictio-viewer-dev:
+    container_name: depictio-viewer-dev
+    image: ${DEPICTIO_VIEWER_DEV_VERSION:-depictio-viewer-dev:dev}
     build:
-      dockerfile: docker-images/Dockerfile.viewer
+      dockerfile: docker-images/Dockerfile.viewer.dev
       context: .
     ports:
-      - "${VIEWER_PORT:-5080}:80"
+      - "${VIEWER_DEV_PORT:-5173}:5173"
     environment:
-      # nginx upstream for the API proxy. Matches the compose service name;
-      # also the Dockerfile.viewer default, set explicitly here for clarity.
-      DEPICTIO_API_UPSTREAM: "depictio-backend:8058"
+      # Proxy /depictio/api to the dockerised backend on the compose network
+      # (internal port 8058), NOT the host default 0.0.0.0:8122 from
+      # vite.config.ts — that's unreachable from inside the container.
+      VITE_API_TARGET: "http://depictio-backend:8058"
+      # macOS/Colima bind mounts don't deliver native fs events into the
+      # Linux VM, so HMR misses host-side saves — poll instead.
+      VITE_USE_POLLING: "true"
+      # The browser's HMR WebSocket connects back to the host-facing port,
+      # not the in-container 5173. Without this, HMR fails behind the port
+      # mapping (e.g. multi-instance VIEWER_DEV_PORT).
+      VITE_HMR_CLIENT_PORT: "${VIEWER_DEV_PORT:-5173}"
+    volumes:
+      # Live source only — node_modules stay in the image (never masked).
+      # A dependency change means a rebuild; source edits hot-reload.
+      - ./depictio/viewer/src:/build/depictio/viewer/src
+      - ./depictio/viewer/index.html:/build/depictio/viewer/index.html
+      # vite.config.ts mounted so config edits are live (Vite auto-restarts).
+      - ./depictio/viewer/vite.config.ts:/build/depictio/viewer/vite.config.ts
+      - ./depictio/viewer/public:/build/depictio/viewer/public
+      - ./packages/depictio-components/src:/build/packages/depictio-components/src
+      - ./packages/depictio-react-core/src:/build/packages/depictio-react-core/src
     depends_on:
       - depictio-backend
     restart: unless-stopped
@@ -153,6 +179,12 @@ services:
         DEPICTIO_LOGGING_VERBOSITY_LEVEL: "${DEPICTIO_LOGGING_VERBOSITY_LEVEL:-DEBUG}"
         DEPICTIO_AUTH_SINGLE_USER_MODE: "${DEPICTIO_AUTH_SINGLE_USER_MODE:-false}"
         DEPICTIO_CONTEXT: "server"
+        # The screenshot task renders dashboards by navigating to the viewer's
+        # internal URL. The dev stack's only viewer is the Vite dev server, so
+        # point at it (service name + in-container port 5173) instead of the
+        # removed nginx `depictio-viewer:80`.
+        DEPICTIO_VIEWER_SERVICE_NAME: "${DEPICTIO_VIEWER_SERVICE_NAME:-depictio-viewer-dev}"
+        DEPICTIO_VIEWER_SERVICE_PORT: "${DEPICTIO_VIEWER_SERVICE_PORT:-5173}"
         # Match the backend flag — keeps event publishers consistent whether
         # the work runs on the API process or the celery worker.
         DEPICTIO_EVENTS_ENABLED: "${DEPICTIO_EVENTS_ENABLED:-false}"

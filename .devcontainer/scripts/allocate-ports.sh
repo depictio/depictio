@@ -4,8 +4,8 @@
 
 # Port allocation for git worktree-based multi-instance dev setups.
 #
-# Strategy: scan offsets 100..250 and pick the first one whose 8-port window
-# (mongo, redis, fastapi, dash, minio-api, minio-console, viewer, flower) is
+# Strategy: scan offsets 100..250 and pick the first one whose 7-port window
+# (mongo, redis, fastapi, minio-api, minio-console, viewer-dev, flower) is
 # entirely free on the host. No persistence — every `source` re-allocates,
 # so ports may shift between runs if neighbours boot first. Acceptable for
 # pure dev worktrees; if you need stable URLs, pin them by hand.
@@ -53,7 +53,7 @@ port_in_use() {
 }
 
 # Host-side port bases. Each instance binds (base + offset) for each entry.
-PORT_BASES=(27000 6000 8000 5000 9000 9500 5500 7000)
+PORT_BASES=(27000 6000 8000 9000 9500 5500 7000)
 
 PORT_OFFSET=""
 for candidate in $(seq 100 250); do
@@ -85,9 +85,9 @@ echo "🎯 Branch: $BRANCH_NAME (allocated offset: $PORT_OFFSET)"
 MONGO_PORT=$((27000 + PORT_OFFSET))
 REDIS_PORT=$((6000 + PORT_OFFSET))
 FASTAPI_PORT=$((8000 + PORT_OFFSET))
-DASH_PORT=$((5000 + PORT_OFFSET))
 MINIO_PORT=$((9000 + PORT_OFFSET))
 MINIO_CONSOLE_PORT=$((9500 + PORT_OFFSET))
+# Vite dev server (depictio-viewer-dev) — the dev stack's only viewer (live HMR).
 VIEWER_DEV_PORT=$((5500 + PORT_OFFSET))
 FLOWER_PORT=$((7000 + PORT_OFFSET))
 
@@ -102,10 +102,9 @@ echo "🔌 Port Assignments:"
 echo "   MongoDB:      ${MONGO_PORT}"
 echo "   Redis:        ${REDIS_PORT}"
 echo "   FastAPI:      ${FASTAPI_PORT}"
-echo "   Dash:         ${DASH_PORT}"
 echo "   MinIO API:    ${MINIO_PORT}"
 echo "   MinIO Console: ${MINIO_CONSOLE_PORT}"
-echo "   Viewer (Vite): ${VIEWER_DEV_PORT}"
+echo "   Viewer (Vite HMR): ${VIEWER_DEV_PORT}"
 echo "   Flower:       ${FLOWER_PORT}"
 echo ""
 echo "⚙️  Development Settings:"
@@ -135,7 +134,6 @@ PORT_OFFSET=${PORT_OFFSET}
 MONGO_PORT=${MONGO_PORT}
 REDIS_PORT=${REDIS_PORT}
 FASTAPI_PORT=${FASTAPI_PORT}
-DASH_PORT=${DASH_PORT}
 MINIO_PORT=${MINIO_PORT}
 MINIO_CONSOLE_PORT=${MINIO_CONSOLE_PORT}
 VIEWER_DEV_PORT=${VIEWER_DEV_PORT}
@@ -145,13 +143,13 @@ FLOWER_PORT=${FLOWER_PORT}
 DEPICTIO_MONGODB_PORT=${MONGO_PORT}
 DEPICTIO_REDIS_PORT=${REDIS_PORT}
 DEPICTIO_FASTAPI_PORT=${FASTAPI_PORT}
-DEPICTIO_DASH_PORT=${DASH_PORT}
 DEPICTIO_MINIO_PORT=${MINIO_PORT}
 DEPICTIO_MINIO_ENDPOINT_URL=http://minio:9000
 
 # External ports (for browser-to-service communication from host)
 DEPICTIO_FASTAPI_EXTERNAL_PORT=${FASTAPI_PORT}
-DEPICTIO_DASH_EXTERNAL_PORT=${DASH_PORT}
+# Dev viewer is Vite (only viewer in the dev stack) — point external URLs at it.
+DEPICTIO_VIEWER_EXTERNAL_PORT=${VIEWER_DEV_PORT}
 DEPICTIO_MINIO_EXTERNAL_PORT=${MINIO_PORT}
 DEPICTIO_MINIO_EXTERNAL_HOST=localhost
 DEPICTIO_FASTAPI_EXTERNAL_HOST=localhost
@@ -189,31 +187,24 @@ services:
   minio:
     container_name: ${COMPOSE_PROJECT_NAME}-minio
 
-  depictio-frontend:
-    container_name: ${COMPOSE_PROJECT_NAME}-depictio-frontend
-    environment:
-      - DEPICTIO_FASTAPI_EXTERNAL_PORT=${FASTAPI_PORT}
-      - DEPICTIO_DASH_EXTERNAL_PORT=${DASH_PORT}
-      - DEPICTIO_DEV_MODE=true
-      - DEPICTIO_MONGODB_WIPE=${MONGODB_WIPE}
-      - DEPICTIO_AUTH_SINGLE_USER_MODE=${DEPICTIO_AUTH_SINGLE_USER_MODE}
-
   depictio-backend:
     container_name: ${COMPOSE_PROJECT_NAME}-depictio-backend
     environment:
       - DEPICTIO_DEV_MODE=true
       - DEPICTIO_MONGODB_WIPE=${MONGODB_WIPE}
       - DEPICTIO_AUTH_SINGLE_USER_MODE=${DEPICTIO_AUTH_SINGLE_USER_MODE}
-      - DEPICTIO_DASH_EXTERNAL_PORT=${DASH_PORT}
+      - DEPICTIO_FASTAPI_EXTERNAL_PORT=${FASTAPI_PORT}
+      - DEPICTIO_VIEWER_EXTERNAL_PORT=${VIEWER_DEV_PORT}
+
+  # Dev viewer (Vite HMR) — the only viewer in the dev stack.
+  depictio-viewer-dev:
+    container_name: ${COMPOSE_PROJECT_NAME}-depictio-viewer-dev
 
   depictio-celery-worker:
     container_name: ${COMPOSE_PROJECT_NAME}-depictio-celery-worker
     environment:
       - DEPICTIO_DEV_MODE=true
       - DEPICTIO_MONGODB_WIPE=${MONGODB_WIPE}
-
-  depictio-viewer-dev:
-    container_name: ${COMPOSE_PROJECT_NAME}-depictio-viewer-dev
 
   flower:
     container_name: ${COMPOSE_PROJECT_NAME}-flower
@@ -230,7 +221,6 @@ export PORT_OFFSET
 export MONGO_PORT
 export REDIS_PORT
 export FASTAPI_PORT
-export DASH_PORT
 export MINIO_PORT
 export MINIO_CONSOLE_PORT
 export VIEWER_DEV_PORT

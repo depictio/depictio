@@ -1,0 +1,32 @@
+# -----------------------------
+# Depictio viewer DEV image (Vite dev server with hot-module reload)
+# -----------------------------
+# Single-stage node image that installs the pnpm workspace and runs
+# `vite` in dev mode. Unlike Dockerfile.viewer (which builds a static
+# bundle and ships it under nginx), this image keeps the dev server alive
+# so the React source — bind-mounted by docker-compose.dev.yaml — hot
+# reloads in the browser on every save.
+#
+# Pinned to pnpm 10 / node 20 to match Dockerfile.viewer's builder stage.
+# -----------------------------
+
+FROM node:20-slim
+WORKDIR /build
+
+RUN corepack enable && corepack prepare pnpm@10 --activate
+
+# Install the full workspace so node_modules (including the aliased
+# depictio-components / depictio-react-core source deps) live in the image.
+# Compose bind-mounts only the `src` trees on top at runtime, so deps are
+# never masked — a dependency change means a rebuild, source edits are live.
+COPY pnpm-workspace.yaml pnpm-lock.yaml ./
+COPY packages ./packages/
+COPY depictio/viewer ./depictio/viewer/
+
+RUN --mount=type=cache,id=pnpm,target=/root/.local/share/pnpm/store \
+    pnpm install --frozen-lockfile
+
+# Vite dev server (host 0.0.0.0, port 5173 — both set in vite.config.ts).
+EXPOSE 5173
+
+CMD ["pnpm", "--filter", "depictio-viewer", "dev"]

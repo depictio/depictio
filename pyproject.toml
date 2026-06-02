@@ -63,6 +63,10 @@ dependencies = [
   # CLI utilities (required by API code that imports CLI helpers)
   "typer==0.16.0",
   "rich==14.2.0",
+  # Dev-only file watcher for live-reloading the Celery worker. run_celery_worker.sh
+  # wraps celery in `watchmedo auto-restart` when DEPICTIO_DEV_MODE=true; in prod
+  # it's installed (~1 MB) but never invoked. Celery has no built-in reloader.
+  "watchdog==6.0.0",
 ]
 authors = [{ name = "Thomas Weber", email = "thomas.weber@embl.de" }]
 urls = { Homepage = "http://github.com/depictio/depictio" }
