@@ -19,6 +19,29 @@
 > producer-compilation prototype and are kept for rationale/history only —
 > §1 (Goal), §2 (gaps) and §6 (roadmap) still hold.
 
+> **🧭 DIRECTION v3 — module-granular, pipeline-agnostic.** The catalog is a
+> **library of `module → viz` building blocks**, keyed by tool/module, not by
+> pipeline. Everything composes from the atom
+> `nf-core module output → find → (recipe?) → renders_as (viz)`.
+>
+> - **Free mode:** the user browses the catalog's modules and **maps columns to
+>   roles by hand** (assisted by `suggest_viz_kinds` / `CANONICAL_SCHEMAS`, which
+>   match candidate columns to a viz's roles by dtype). There is **no automatic
+>   column-fingerprint recognition** — `producers.py`'s `suggest_producers`
+>   proved unreliable (dtype-blind, tiny fingerprints, no ranking) and is
+>   **dropped**; `suggest_viz_kinds` (role/dtype based) is kept.
+> - **Guided mode:** depictio-cli recognises **module outputs** in a run
+>   (`find`, optionally scoped/confirmed by the run's `software_versions.yml`)
+>   and composes a starter dashboard. This is **pipeline-agnostic**: it works for
+>   a new nf-core pipeline (its dashboard = the assembly of its modules' viz) and
+>   for a **custom workflow that reuses nf-core modules** (recognise the module
+>   outputs regardless of the wrapping pipeline).
+>
+> Consequences: indexing the catalog **by module** (as built) is correct — a
+> pipeline/workflow is just a **list of modules** that picks from it. To fully
+> realise this, `find`/`recipe` should eventually be **keyed by module** (reusable
+> across pipelines) rather than filed under `projects/<pipeline>/recipes/`.
+
 ---
 
 ## 1. Goal

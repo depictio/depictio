@@ -220,6 +220,20 @@ def test_match_run_dir_recognises_bundled_viralrecon_files():
     by_output = {m.output_id: m for m in match_run_dir(run)}
     assert "mosdepth_genome_coverage" in by_output
     assert "multiqc_report" in by_output
+    # matches carry the viz they render (the dashboard building blocks)
+    assert by_output["mosdepth_genome_coverage"].renders == ["advanced_viz:coverage_track"]
+
+
+def test_compose_run_dir_groups_modules_with_their_viz():
+    from depictio.models.components.advanced_viz.catalog import compose_run_dir
+
+    run = REPO_ROOT / "depictio" / "projects" / "nf-core" / "viralrecon" / "3.0.0" / "run_1"
+    if not run.exists():
+        pytest.skip("bundled viralrecon run_1 not present")
+    by_tool = compose_run_dir(run)
+    # pipeline-agnostic composition: recognised modules grouped, each with renders
+    assert "mosdepth" in by_tool and "multiqc" in by_tool
+    assert all(isinstance(m.renders, list) for ms in by_tool.values() for m in ms)
 
 
 # ---------------------------------------------------------------------------

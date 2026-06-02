@@ -168,6 +168,31 @@ def catalog_match(
         typer.echo(f"  {hit.path}  →  {hit.tool_id} / {hit.output_id}")
 
 
+@app.command("compose")
+def catalog_compose(
+    run_dir: Annotated[str, typer.Argument(help="A run directory to compose a dashboard from")],
+) -> None:
+    """Preview the guided dashboard a run would compose (module → viz).
+
+    Pipeline-agnostic: works for an nf-core pipeline run or a custom workflow
+    that reuses nf-core modules. Groups recognised module outputs by tool and
+    shows the viz building blocks — a proposal, not a built dashboard.
+    """
+    from depictio.models.components.advanced_viz.catalog import compose_run_dir
+
+    by_tool = compose_run_dir(run_dir)
+    if not by_tool:
+        typer.echo(f"No catalogued module outputs found under {run_dir}")
+        return
+    n_viz = sum(len(m.renders) for ms in by_tool.values() for m in ms)
+    typer.echo(f"Proposed dashboard from {run_dir}: {len(by_tool)} module(s), {n_viz} viz block(s)")
+    for tool_id, matches in sorted(by_tool.items()):
+        typer.echo(f"\n  {tool_id}")
+        for m in matches:
+            renders = ", ".join(m.renders) if m.renders else "—"
+            typer.echo(f"      {m.output_id}  ({m.path})  → {renders}")
+
+
 @app.command("refresh-index")
 def catalog_refresh_index() -> None:
     """Regenerate the vendored existence indices from authoritative sources.

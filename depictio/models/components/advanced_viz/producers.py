@@ -8,18 +8,17 @@ DESeq2's `results()` TSV, mosdepth's per-region BED) by:
       satisfy after a role→column rename (declared here);
     - a one-line description used in UI badges / docs.
 
-`KNOWN_PRODUCERS` below is the hand-curated core: a small, vetted set kept
-in one file. The community-extensible surface lives alongside it as
-declarative YAML under ``depictio/catalog/`` (loaded by
-``advanced_viz/catalog.py``), which compiles down to the same `Producer`
-primitive. Use `all_producers()` — not `KNOWN_PRODUCERS` directly — to get
-the merged set (curated wins on name collisions).
+`KNOWN_PRODUCERS` below is the hand-curated core. The bio-catalog
+(``depictio/catalog/``, loaded by ``advanced_viz/catalog.py``) is **separate
+and does not feed this registry** — it is a module→recipe→viz linking table,
+not a column-fingerprint engine. ``all_producers()`` returns `KNOWN_PRODUCERS`.
 
-Used by:
-    suggest_producers(dc_schema) -> list[(Producer, confidence)]
-        — Reverse lookup: "which known tool's output does this DC look
-        like?" Drives the React DC card's "Suggested visualisations"
-        chips and the component-creation flow's DC pre-filter.
+NOTE (direction v3): automatic column-fingerprint recognition
+(`suggest_producers`) proved unreliable (dtype-blind, tiny fingerprints, no
+ranking) and is being retired in favour of (a) free mode — the user maps
+columns to roles by hand, assisted by `suggest_viz_kinds`/`CANONICAL_SCHEMAS`;
+(b) guided mode — depictio-cli recognises module outputs at scan time
+(`catalog match`/`compose`). `suggest_viz_kinds` (role/dtype based) is kept.
 """
 
 from __future__ import annotations

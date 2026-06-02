@@ -367,22 +367,28 @@ def recipe_output_columns(recipe_ref: str) -> list[str]:
 
 
 class CatalogMatch(BaseModel):
-    """One recognised file: which tool/output it is, and where."""
+    """One recognised file: which tool/output it is, where, and what it renders.
+
+    `renders` lists the dashboard components the matched output maps to, as
+    `"component"` or `"component:kind"` strings — the building blocks a guided
+    dashboard would assemble for this module.
+    """
 
     tool_id: str
     output_id: str
     path: str
     mode: str | None = None
+    renders: list[str] = Field(default_factory=list)
 
 
 def match_run_dir(
     run_dir: str | Path, entries: tuple[CatalogEntry, ...] | None = None
 ) -> list[CatalogMatch]:
-    """Walk ``run_dir`` and return every file the catalog recognises.
+    """Walk ``run_dir`` and return every module output the catalog recognises.
 
-    The catalog analogue of MultiQC's file search. NOTE: exposed via `depictio
-    catalog match` and intended as the scan-time recogniser; it is not yet wired
-    into the live ingestion path.
+    The catalog analogue of MultiQC's file search, at **module granularity**
+    (pipeline-agnostic). NOTE: exposed via `depictio catalog match`/`compose`
+    and intended as the scan-time recogniser; not yet wired into live ingestion.
     """
     run_dir = Path(run_dir)
     entries = entries if entries is not None else load_catalog_entries()
@@ -396,6 +402,9 @@ def match_run_dir(
                 candidates = [p for p in run_dir.rglob(f.filename) if p.is_file()]
             else:
                 candidates = []
+            renders: list[str] = [
+                f"{r.component}:{r.kind}" if r.kind else str(r.component) for r in output.renders_as
+            ]
             for path in candidates:
                 if f.filename and not fnmatch(path.name, f.filename):
                     continue
@@ -405,6 +414,23 @@ def match_run_dir(
                         output_id=output.id,
                         path=path.relative_to(run_dir).as_posix(),
                         mode=output.mode,
+                        renders=renders,
                     )
                 )
     return matches
+
+
+def compose_run_dir(
+    run_dir: str | Path, entries: tuple[CatalogEntry, ...] | None = None
+) -> dict[str, list[CatalogMatch]]:
+    """Group recognised module outputs by tool — a guided-dashboard *proposal*.
+
+    This is the pipeline-agnostic composition step: scan a run (an nf-core
+    pipeline OR a custom workflow reusing nf-core modules), recognise the module
+    outputs present, and group them so a starter dashboard can be assembled from
+    each module's `renders`. A preview only — it does not yet build a dashboard.
+    """
+    by_tool: dict[str, list[CatalogMatch]] = {}
+    for match in match_run_dir(run_dir, entries):
+        by_tool.setdefault(match.tool_id, []).append(match)
+    return by_tool
