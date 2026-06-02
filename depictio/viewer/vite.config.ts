@@ -28,7 +28,23 @@ const authDevFallback = (): Plugin => ({
   name: 'depictio-spa-dev-fallback',
   apply: 'serve',
   configureServer(server) {
-    server.middlewares.use((req, _res, next) => {
+    server.middlewares.use((req, res, next) => {
+      // Bare root → dashboards list, in one hop. Without this, Vite
+      // 302-redirects `/` to the SPA base `/dashboard-beta/` first, and only
+      // then does the app bounce to `/dashboards-beta` — a visible
+      // singular→plural double redirect. Intercepting here (before Vite's
+      // base-redirect middleware) lands the user on `/dashboards-beta`
+      // directly. Mirrors the nginx `location = /` redirect in prod.
+      if (
+        req.url === '/' ||
+        req.url === '/dashboard-beta' ||
+        req.url === '/dashboard-beta/'
+      ) {
+        res.statusCode = 302;
+        res.setHeader('Location', '/dashboards-beta');
+        res.end();
+        return;
+      }
       if (req.url && SPA_ROUTE_RE.test(req.url)) {
         req.url = '/dashboard-beta/';
       }
@@ -73,6 +89,12 @@ export default defineConfig({
     // host (and the FastAPI proxy, if/when wired). Default `localhost`
     // binds only to the container's loopback and refuses outside traffic.
     host: '0.0.0.0',
+    // Vite 5.4.12+ blocks requests whose Host isn't localhost/an IP (DNS-
+    // rebinding protection). The screenshot worker navigates to the dev
+    // viewer by its compose service name (http://depictio-viewer-dev:5173),
+    // which would be rejected as "host not allowed". This is a dev-only
+    // server on the docker network, so allow any host.
+    allowedHosts: true,
     proxy: {
       '/depictio/api': {
         target: API_TARGET,

@@ -406,7 +406,11 @@ async def generate_react_dual_theme_screenshots(
     Because Mantine popovers portal to document.body, a popover-open
     capture switches from element.screenshot to a viewport capture.
     """
-    if user_id:
+    # Single-user mode has no per-user ownership — skip the check entirely,
+    # mirroring the Celery task (celery_app.py) and the HTTP screenshot route.
+    # Without this, seeded/dev dashboards (owned by the seed admin, not the
+    # anonymous single-user) get a spurious "not dashboard owner" rejection.
+    if user_id and not settings.auth.is_single_user_mode:
         is_owner = await check_dashboard_owner_permission(
             dashboard_id=dashboard_id, user_id=user_id
         )

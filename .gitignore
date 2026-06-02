@@ -211,6 +211,9 @@ depictio/.depictio/*.yaml
 screenshot_*.png
 # Ignore all screenshots recursively
 depictio/dash/**/screenshots/**
+# Dashboard screenshots are generated at runtime by the worker and served from
+# here; the backend mkdir's the dir at boot (depictio/api/main.py). Not tracked.
+depictio/api/static/screenshots/
 
 # Allow reference dashboard screenshots (iris, penguins, ampliseq)
 # Iris dashboard (6824cb3b89d2b72169309737)

@@ -40,6 +40,15 @@ server {
     listen 80;
     server_name _;
 
+    # Emit RELATIVE redirect Location headers. nginx listens on 80 inside the
+    # container but is published on a different host port (e.g. 5100 in the
+    # multi-instance dev setup, or behind an ingress in k8s). With the default
+    # `absolute_redirect on`, nginx rewrites `return 302 /dashboard-beta/` into
+    # an absolute `http://<host>/dashboard-beta/` using its OWN :80 — dropping
+    # the real host port, so the browser lands on the wrong URL. Relative
+    # redirects let the browser resolve against the address it actually used.
+    absolute_redirect off;
+
     # Hashed asset URLs (Vite emits `assets/<name>.<hash>.js`) are
     # immutable — long cache is safe. index.html and all other paths
     # stay no-cache so deploys are picked up on the next navigation.
@@ -100,11 +109,13 @@ server {
         proxy_set_header X-Forwarded-Proto $scheme;
     }
 
-    # Bare `/` lands on the viewer. Pre-migration the FastAPI root served
-    # the Dash app; once Dash is removed (Layer 5) this becomes the only
-    # entry point and a redirect to /dashboard-beta/ is the right default.
+    # Bare `/` lands on the dashboards list. Redirect straight to
+    # /dashboards-beta (not the SPA base /dashboard-beta/) so there's no
+    # singular→plural double hop — the app's own bare-root bounce would
+    # otherwise fire on top. Relative Location (absolute_redirect off above)
+    # keeps the caller's host:port. Mirrors the Vite dev middleware.
     location = / {
-        return 302 /dashboard-beta/;
+        return 302 /dashboards-beta;
     }
 
     gzip on;
