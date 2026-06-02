@@ -318,6 +318,64 @@
           "title": "Aggregations",
           "type": "array"
         },
+        "secondary_layout": {
+          "anyOf": [
+            {
+              "enum": [
+                "vertical",
+                "compact",
+                "box_plot",
+                "top_n",
+                "coverage",
+                "concentration"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Secondary Layout"
+        },
+        "breakdown_col": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Breakdown Col"
+        },
+        "top_n_count": {
+          "anyOf": [
+            {
+              "maximum": 5,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Top N Count"
+        },
+        "coverage_max": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Coverage Max"
+        },
         "filter_expr": {
           "anyOf": [
             {

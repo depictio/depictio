@@ -54,6 +54,9 @@ _FIGURE_COLUMN_KWARGS: frozenset[str] = frozenset(
 # catalog entry can only target a component that exists.
 ComponentKind = ComponentType | Literal["multiqc"]
 
+# How a multi-metric card renders its secondary strip (mirrors CardLiteComponent).
+CardLayout = Literal["vertical", "compact", "box_plot", "top_n", "coverage", "concentration"]
+
 
 def _check_identity_urls(
     nf_core_url: str | None,
@@ -145,6 +148,10 @@ class Render(BaseModel):
     aggregations: list[AggregationFunction] = Field(
         default_factory=list
     )  # secondary (multi-metric)
+    secondary_layout: CardLayout | None = None  # vertical/compact/box_plot(Tukey)/top_n/coverage/…
+    breakdown_col: str | None = None  # group-by column for top_n / concentration
+    top_n_count: int | None = Field(default=None, ge=1, le=5)
+    coverage_max: float | None = None  # denominator for secondary_layout=coverage
     filter_expr: str | None = None  # optional polars pre-filter
     # multiqc
     section: str | None = None
@@ -157,6 +164,8 @@ class Render(BaseModel):
         cols |= {v for k, v in self.dict_kwargs.items() if k in _FIGURE_COLUMN_KWARGS}
         if self.column:
             cols.add(self.column)
+        if self.breakdown_col:
+            cols.add(self.breakdown_col)
         return cols  # NB: `code`-mode figures are free-form → not grounded
 
     @model_validator(mode="after")
@@ -191,7 +200,18 @@ class Render(BaseModel):
         if c == "card":
             if not (self.column and self.aggregation):
                 raise ValueError("renders_as card requires 'column' and 'aggregation'")
-        elif self.column or self.aggregation or self.aggregations or self.filter_expr:
+        elif any(
+            (
+                self.column,
+                self.aggregation,
+                self.aggregations,
+                self.secondary_layout,
+                self.breakdown_col,
+                self.top_n_count,
+                self.coverage_max,
+                self.filter_expr,
+            )
+        ):
             raise ValueError(f"card fields are only valid for component=card, not {c}")
         return self
 

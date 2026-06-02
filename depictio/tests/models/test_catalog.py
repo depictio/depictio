@@ -295,7 +295,7 @@ def test_alpha_diversity_has_code_figure_and_metric_cards():
     fig = next(r for r in out.renders_as if r.component == "figure")
     assert fig.code and "fig = px.box" in fig.code  # code-mode figure
     card = next(r for r in out.renders_as if r.component == "card")
-    assert card.aggregation == "average" and card.aggregations  # multi-metric card
+    assert card.aggregation == "average" and card.secondary_layout == "box_plot"  # Tukey card
     assert out.fixture and out.fixture.endswith("alpha_diversity_multi_canonical.tsv")
 
 

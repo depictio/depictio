@@ -63,6 +63,8 @@ Both use the same fields; a folder just splits the outputs into files.
 | `code` | cond. | str | `figure` **code mode**: inline Python that sets `fig` (depictio `code_content`). A figure needs `visu_type` **or** `code`. |
 | `column` + `aggregation` | cond. | str / `AggregationFunction` | `card`: the metric column + **hero** aggregation. |
 | `aggregations` | CAN | list[`AggregationFunction`] | `card`: **secondary** aggregations → a **multi-metric** card (e.g. `[median, min, max, std_dev]`). |
+| `secondary_layout` | CAN | `vertical`/`compact`/`box_plot`/`top_n`/`coverage`/`concentration` | `card`: how the secondary strip renders. `box_plot` = a **Tukey** box-and-whisker; `top_n`/`concentration` use `breakdown_col`(+`top_n_count`); `coverage` uses `coverage_max`. |
+| `breakdown_col` / `top_n_count` / `coverage_max` | CAN | str / int(1-5) / float | `card`: params for the `top_n`/`concentration`/`coverage` layouts. |
 | `filter_expr` | CAN | str | `card`: optional polars pre-filter before aggregation. |
 | `section` | CAN | str | e.g. the MultiQC section name. |
 

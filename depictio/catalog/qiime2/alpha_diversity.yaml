@@ -17,8 +17,8 @@ renders_as:
       )
       fig = px.box(m, x="habitat", y="value", color="habitat",
                    facet_col="metric", title="Alpha diversity by habitat")
-  # one multi-metric card per index: hero average + secondary distribution stats
-  - { component: card, column: shannon,  aggregation: average, aggregations: [median, min, max, std_dev] }
-  - { component: card, column: evenness, aggregation: average, aggregations: [median, min, max, std_dev] }
-  - { component: card, column: faith_pd, aggregation: average, aggregations: [median, min, max, std_dev] }
+  # one multi-metric card per index: hero average + a Tukey box-and-whisker
+  - { component: card, column: shannon,  aggregation: average, secondary_layout: box_plot }
+  - { component: card, column: evenness, aggregation: average, secondary_layout: box_plot }
+  - { component: card, column: faith_pd, aggregation: average, secondary_layout: box_plot }
   - { component: table }
