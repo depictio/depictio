@@ -32,13 +32,41 @@ from typing import Literal
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from depictio.models.components.types import AdvancedVizKind
+from depictio.models.components.types import AdvancedVizKind, ComponentType
 
 CATALOG_DIR = Path(__file__).resolve().parents[3] / "catalog"
 
-# Dashboard render targets. `advanced_viz` is the typed viz family; the others
-# are regular Dash components (a MultiQC plot, a plain table, a static figure).
-ComponentKind = Literal["advanced_viz", "multiqc_plot", "table", "figure"]
+# Render targets = depictio's real component registry (`ComponentType`:
+# advanced_viz, figure, table, card, text, jbrowse, image, map) plus the
+# dash-module `multiqc` component. Validated against the actual components, so a
+# catalog entry can only target a component that exists.
+ComponentKind = ComponentType | Literal["multiqc"]
+
+
+def _check_identity_urls(
+    nf_core_url: str | None,
+    biotools_url: str | None,
+    edam: dict[str, list[str]],
+) -> None:
+    """Validate identity references point at the right authority (offline check).
+
+    Format-level only: guarantees well-formed bio.tools / nf-core / EDAM refs.
+    Existence (the term/module is real) is a CI step against a vendored index.
+    """
+    if biotools_url and not biotools_url.startswith("https://bio.tools/"):
+        raise ValueError(f"biotools_url must be a https://bio.tools/ URL, got {biotools_url!r}")
+    if nf_core_url and "github.com/nf-core/modules" not in nf_core_url:
+        raise ValueError(
+            f"nf_core_url must point at github.com/nf-core/modules/..., got {nf_core_url!r}"
+        )
+    for category, urls in edam.items():  # category -> expected EDAM prefix
+        for url in urls:
+            if not url.startswith(f"http://edamontology.org/{category}_"):
+                raise ValueError(
+                    f"edam_{category} entries must be http://edamontology.org/{category}_NNNN URLs, "
+                    f"got {url!r}"
+                )
+
 
 # Accepted polars dtype names for `columns` (string form, as polars prints them).
 ALLOWED_DTYPES: frozenset[str] = frozenset(
@@ -172,6 +200,15 @@ class CatalogOutput(BaseModel):
         # `depictio catalog validate`.
         return self
 
+    @model_validator(mode="after")
+    def _identity_urls(self) -> CatalogOutput:
+        _check_identity_urls(
+            self.nf_core_url,
+            self.biotools_url,
+            {"operation": self.edam_operations, "format": self.edam_formats},
+        )
+        return self
+
 
 class CatalogTool(BaseModel):
     """A tool. Identity is stored as directly-clickable URLs."""
@@ -185,6 +222,11 @@ class CatalogTool(BaseModel):
     edam_topics: list[str] = Field(default_factory=list)
 
     model_config = ConfigDict(extra="forbid")
+
+    @model_validator(mode="after")
+    def _identity_urls(self) -> CatalogTool:
+        _check_identity_urls(self.nf_core_url, self.biotools_url, {"topic": self.edam_topics})
+        return self
 
 
 class CatalogEntry(CatalogTool):

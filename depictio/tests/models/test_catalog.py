@@ -145,8 +145,42 @@ def test_table_and_multiqc_plot_need_no_columns():
     # non-tabular renders are allowed without recipe/columns/roles
     CatalogOutput.model_validate(_output(renders_as=[{"component": "table"}]))
     CatalogOutput.model_validate(
-        _output(renders_as=[{"component": "multiqc_plot", "section": "fastqc"}])
+        _output(renders_as=[{"component": "multiqc", "section": "fastqc"}])
     )
+
+
+def test_component_must_be_a_real_depictio_type():
+    # `component` is validated against the real ComponentType registry (+ multiqc)
+    with pytest.raises(ValueError):
+        CatalogOutput.model_validate(_output(renders_as=[{"component": "multiqc_plot"}]))
+    with pytest.raises(ValueError):
+        CatalogOutput.model_validate(_output(renders_as=[{"component": "not_a_component"}]))
+    for comp in ("figure", "card", "jbrowse", "multiqc"):
+        CatalogOutput.model_validate(_output(renders_as=[{"component": comp}]))
+
+
+def test_identity_url_format_is_validated():
+    from depictio.models.components.advanced_viz.catalog import CatalogTool
+
+    with pytest.raises(ValueError, match="bio.tools"):
+        CatalogTool.model_validate(
+            {"id": "x", "name": "X", "biotools_url": "https://example.com/x"}
+        )
+    with pytest.raises(ValueError, match="nf-core/modules"):
+        CatalogTool.model_validate({"id": "x", "name": "X", "nf_core_url": "https://github.com/x"})
+    with pytest.raises(ValueError, match="edamontology"):
+        CatalogTool.model_validate({"id": "x", "name": "X", "edam_topics": ["topic_3174"]})
+
+
+def test_output_edam_operation_prefix_enforced():
+    with pytest.raises(ValueError, match="operation_"):
+        CatalogOutput.model_validate(
+            _output(
+                columns={"a": "String"},
+                edam_operations=["http://edamontology.org/format_3752"],  # wrong category
+                renders_as=[{"component": "table"}],
+            )
+        )
 
 
 # ---------------------------------------------------------------------------

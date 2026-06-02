@@ -6,4 +6,4 @@ nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/fast
 find: { filename: "multiqc_fastqc.txt" }
 # surfaced as a MultiQC plot component (not column-bound) → no recipe, no columns.
 renders_as:
-  - { component: multiqc_plot, section: fastqc }
+  - { component: multiqc, section: fastqc }
