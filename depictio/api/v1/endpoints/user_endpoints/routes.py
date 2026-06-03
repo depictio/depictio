@@ -820,17 +820,9 @@ async def get_all_users(current_user=Depends(get_current_user)):
     return users_list
 
 
-@auth_endpoint_router.get("/get_users_group", include_in_schema=False)
-async def get_users_group():
-    from depictio.api.v1.db import groups_collection
-
-    groups = groups_collection.find({"name": "users"})
-    groups = [convert_objectid_to_str(group) for group in groups]
-    if len(groups) == 0:
-        return None
-    if len(groups) > 1:
-        raise HTTPException(status_code=500, detail="Multiple groups with the same name")
-    return groups[0]
+# NOTE: the unauthenticated /get_users_group route was removed in the security
+# sweep — group management endpoints are disabled (see the commented blocks
+# below) and the route had no remaining callers in the repo.
 
 
 @auth_endpoint_router.post("/edit_password", include_in_schema=True)

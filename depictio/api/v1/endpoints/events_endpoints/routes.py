@@ -391,7 +391,7 @@ async def test_trigger_event(
         logger.warning(
             f"Denied test-trigger: non-admin user {current_user.id} ({current_user.email})"
         )
-        raise HTTPException(status_code=403, detail="User is not an admin.")
+        raise HTTPException(status_code=403, detail="Current user is not an admin.")
 
     from datetime import datetime, timezone
 

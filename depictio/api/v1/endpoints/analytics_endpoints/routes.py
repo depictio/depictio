@@ -87,9 +87,9 @@ async def require_analytics_admin(
     # 2. Authenticated admin session path.
     if token is not None:
         user = await _async_fetch_user_from_token(token)
-        if user is not None and user.is_admin:
-            return
-        if user is not None and not user.is_admin:
+        if user is not None:
+            if user.is_admin:
+                return
             logger.warning(
                 f"Non-admin user {user.id} denied access to protected analytics endpoint"
             )

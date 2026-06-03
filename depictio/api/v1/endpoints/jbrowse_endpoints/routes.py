@@ -16,6 +16,7 @@ from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user
 from depictio.api.v1.endpoints.validators import validate_workflow_and_collection
 from depictio.api.v1.s3 import s3_client
 from depictio.models.models.files import File
+from depictio.models.models.users import User
 
 jbrowse_endpoints_router = APIRouter()
 
@@ -296,7 +297,7 @@ async def map_tracks_using_wildcards(
 @jbrowse_endpoints_router.post("/filter_config")
 async def filter_config(
     filter_params: dict,
-    current_user: str = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
     """Filter JBrowse config to include only specified tracks."""
     tracks = filter_params.get("tracks", [])
@@ -325,7 +326,7 @@ async def filter_config(
         )
 
     config_base = Path(jbrowse_config_dir).resolve()
-    default_config_path = str(config_base / f"{current_user.id}_{data_collection_oid}.json")  # type: ignore[possibly-unbound-attribute]
+    default_config_path = str(config_base / f"{current_user.id}_{data_collection_oid}.json")
 
     config = json.load(open(default_config_path))
 
@@ -339,7 +340,7 @@ async def filter_config(
     config["tracks"] = filtered_tracks
 
     output_path_resolved = (
-        config_base / f"{current_user.id}_{data_collection_oid}_filtered_{dashboard_id}.json"  # type: ignore[possibly-unbound-attribute]
+        config_base / f"{current_user.id}_{data_collection_oid}_filtered_{dashboard_id}.json"
     ).resolve()
     # Defence in depth: even with ObjectId validation above, refuse to write
     # outside the configured jbrowse config directory.
