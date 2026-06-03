@@ -1062,10 +1062,18 @@ async def generate_agent_config_endpoint(
     the response model would re-mask the ``SecretStr`` S3 secret as ``'**********'``,
     which silently breaks the CLI's direct-to-S3 Delta writes.
     """
-    if (settings.auth.is_public_mode or settings.auth.is_demo_mode) and not current_user.is_admin:
+    # The agent config carries the S3 ROOT secret (deliberate, see
+    # cli_config_to_payload). In single-user mode the admin is the only
+    # legitimate account, so any other authenticated principal (e.g. a stale
+    # account from before the mode switch) must not be able to pull it.
+    if (
+        settings.auth.is_public_mode
+        or settings.auth.is_demo_mode
+        or settings.auth.is_single_user_mode
+    ) and not current_user.is_admin:
         raise HTTPException(
             status_code=403,
-            detail="CLI config generation is disabled in public/demo mode for non-admin users",
+            detail="CLI config generation is disabled for non-admin users in this mode",
         )
     depictio_agent_config = await _generate_agent_config(user=current_user, token=token)
 

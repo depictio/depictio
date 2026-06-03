@@ -495,8 +495,14 @@ class TestPublicModeAdminBypass:
             patch(
                 "depictio.api.v1.endpoints.user_endpoints.routes._generate_agent_config",
                 new_callable=AsyncMock,
-                return_value="OK-CONFIG",
+                return_value=MagicMock(),
             ) as mock_generate,
+            # The endpoint serializes via cli_config_to_payload (deliberate
+            # SecretStr unwrap) — stub it so the sentinel passes through.
+            patch(
+                "depictio.api.v1.endpoints.user_endpoints.routes.cli_config_to_payload",
+                return_value="OK-CONFIG",
+            ),
         ):
             result = await generate_agent_config_endpoint(token=MagicMock(), current_user=admin)
         assert result == "OK-CONFIG"

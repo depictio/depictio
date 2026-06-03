@@ -29,7 +29,9 @@ def api_login(yaml_config_path: str = "~/.depictio/CLI.yaml") -> dict:
     # secret — the server only reads ``user.token`` from this payload, so the
     # masked value is fine (and keeps the secret out of logs and transit).
     depictio_CLI_config = loaded_config.model_dump(mode="json")
-    logger.info(f"Depictio CLI configuration loaded: {depictio_CLI_config}")
+    # DEBUG, not INFO: the dump still contains the live access token at
+    # user.token.access_token — keep it out of default-level logs.
+    logger.debug(f"Depictio CLI configuration loaded: {depictio_CLI_config}")
     rich_print_checked_statement("Checking server accessibility...", "info")
 
     # Connect to depictio API. Generous timeout because this is the CLI's

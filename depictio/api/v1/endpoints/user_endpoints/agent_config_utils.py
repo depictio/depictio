@@ -24,10 +24,8 @@ def cli_config_to_payload(cli_config: CLIConfig) -> dict:
     secret to be usable.
     """
     payload = cli_config.model_dump(mode="json")
-    pw = cli_config.s3_storage.root_password
-    payload["s3_storage"]["root_password"] = (
-        pw.get_secret_value() if hasattr(pw, "get_secret_value") else pw
-    )
+    # aws_secret_access_key is the single accessor that unwraps the SecretStr.
+    payload["s3_storage"]["root_password"] = cli_config.s3_storage.aws_secret_access_key
     return payload
 
 

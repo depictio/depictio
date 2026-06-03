@@ -5,6 +5,7 @@ import typer
 from pydantic import validate_call
 
 from depictio.cli.cli.utils.api_calls import api_get_project_from_name, api_login
+from depictio.cli.cli.utils.common import load_depictio_config
 from depictio.cli.cli_logging import logger
 from depictio.models.models.base import convert_objectid_to_str
 from depictio.models.models.cli import CLIConfig
@@ -28,8 +29,6 @@ def validate_project_config_and_check_S3_storage(CLI_config_path: str, project_c
         # that payload is a ``mode="json"`` dump whose SecretStr S3 secret is
         # MASKED ('**********') — rebuilding CLIConfig from it silently breaks
         # every downstream direct-to-S3 Delta write (SignatureDoesNotMatch).
-        from depictio.cli.cli.utils.common import load_depictio_config
-
         CLI_config = load_depictio_config(yaml_config_path=CLI_config_path)
         # Validate the project configuration
         response_validation = local_validate_project_config(CLI_config, project_config_path)
@@ -217,8 +216,6 @@ def validate_template_project_config(
 
     # Reload from YAML — api_login's returned payload carries a MASKED
     # SecretStr S3 secret (see validate_project_config_and_check_S3_storage).
-    from depictio.cli.cli.utils.common import load_depictio_config
-
     CLI_config = load_depictio_config(yaml_config_path=CLI_config_path)
 
     try:
