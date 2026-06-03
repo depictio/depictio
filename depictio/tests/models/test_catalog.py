@@ -45,9 +45,17 @@ def test_every_tool_is_a_folder_with_module_yaml():
 
 
 def test_identity_is_stored_as_urls():
-    ivar = next(e for e in load_catalog_entries() if e.id == "ivar")
-    assert ivar.biotools_url == "https://bio.tools/ivar"
+    entries = {e.id: e for e in load_catalog_entries()}
+    # nf-core-backed module → lightweight: only the nf_core_url pointer is kept,
+    # the rest of the identity is derived from the module's meta.yml.
+    ivar = entries["ivar"]
     assert ivar.nf_core_url.endswith("/modules/nf-core/ivar/variants")
+    assert ivar.biotools_url is None  # not duplicated; lives in nf-core meta.yml
+    # QIIME 2 has no single nf-core module → identity stays declared in full,
+    # and when declared it must be a full URL (not a bare id).
+    qiime2 = entries["qiime2"]
+    assert qiime2.biotools_url == "https://bio.tools/qiime2"
+    assert qiime2.nf_core_url is None
 
 
 # ---------------------------------------------------------------------------

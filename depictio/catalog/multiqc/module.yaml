@@ -1,11 +1,9 @@
 # MultiQC — multi-output tool → a folder. Home of the native report plus the
-# per-tool sections surfaced through it (FastQC, …), each rendered as a
-# multiqc_plot component.
+# per-tool sections surfaced through it (FastQC, …). Lightweight: identity is
+# derived from the nf-core meta.yml that `nf_core_url` points at — EXCEPT the
+# homepage, declared here as an *override* because meta.yml is stale (it still
+# says multiqc.info; MultiQC is now maintained under Seqera).
 id: multiqc
 name: MultiQC
-description: Aggregates QC results from many tools into a single report.
-homepage: https://seqera.io/multiqc/ # MultiQC is now maintained under Seqera
-biotools_url: https://bio.tools/multiqc
+homepage: https://seqera.io/multiqc/ # override: meta.yml stale (multiqc.info)
 nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/multiqc
-edam_topics:
-  - http://edamontology.org/topic_3168 # Sequencing

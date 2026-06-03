@@ -37,6 +37,16 @@ Both use the same fields; a folder just splits the outputs into files.
 | `edam_topics` | CAN | list[str] | Full EDAM URLs. |
 | `outputs` | **MUST** (flat file) | list[Output] | In a folder, these are the sibling files. |
 
+**Keep `module.yaml` lightweight.** For an nf-core-backed tool, declare only
+`id`, `name` and `nf_core_url` — the rest of the identity (`homepage`,
+`biotools_url`, `edam_topics`, `description`) already lives in the module's
+nf-core `meta.yml` and is derived from it, so don't duplicate it. Add an identity
+field here **only** to *override* a stale `meta.yml` (e.g. MultiQC `homepage`) or
+when the tool has **no** single nf-core module to derive from (QIIME 2 — identity
+declared in full, `nf_core_url` set per-output). The `nf_core_url` pointer is what
+existence-checking validates; the derived fields are trusted until a future
+`sync-identity` reconciles them against `meta.yml`.
+
 ## `outputs[]` — Output
 
 | Field | MUST/CAN | Type | Notes |

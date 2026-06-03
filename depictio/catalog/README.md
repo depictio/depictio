@@ -20,8 +20,8 @@ one YAML per output, and each output's **co-located fixture**:
 ```
 depictio/catalog/
   ivar/
-    module.yaml          # tool identity (id, name, bio.tools/nf-core/EDAM URLs)
-    variants_long.yaml   # one output per file
+    module.yaml          # lightweight tool identity: id, name, nf_core_url (pointer)
+    variants_long.yaml   # one output per file — find + recipe + renders_as live HERE
     variants_long.tsv    # its fixture, right next to it
   qiime2/
     module.yaml
@@ -33,6 +33,16 @@ depictio/catalog/
 
 Adding a tool = a PR that adds **one folder** (`module.yaml` + output YAML(s) +
 fixture). **No Python** unless an output needs a reshape (a recipe).
+
+`module.yaml` is deliberately **lightweight**: it carries the folder anchor
+(`id`), a display `name`, and the `nf_core_url` **pointer** — nothing else. The
+rest of the identity (homepage, bio.tools id, EDAM topics) already lives in the
+module's nf-core `meta.yml`, so we don't duplicate it. Declare an identity field
+in `module.yaml` only to **override** a stale `meta.yml` (e.g. MultiQC's homepage
+moved to Seqera) or when there is **no** nf-core module to derive from (QIIME 2,
+whose `nf_core_url` is per-output and whose identity stays declared in full).
+All depictio-specific glue — `find`, `recipe`, `fixture`, `renders_as` — lives in
+the **output** YAMLs, never in `module.yaml`.
 
 ## What one output declares
 
