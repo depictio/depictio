@@ -1197,6 +1197,31 @@ jobs:
           echo "📋 Backend logs BEFORE screenshot request:"
           kubectl logs $BACKEND_POD --tail=200
 
+          # Drain the startup auto-screenshot backlog before testing.
+          # Seeding saves every reference dashboard on boot, and each save
+          # enqueues a dual-theme screenshot task. With worker concurrency 1
+          # (~22s/capture) that backlog can outlast the endpoint's 180s
+          # task-wait, so a request fired mid-flood times out waiting in
+          # queue (status 500 "operation timed out") — not a real failure.
+          # Poll the shared screenshots dir (via the backend pod, same PVC)
+          # until the file count holds steady longer than one capture cycle,
+          # i.e. the queue has drained and the worker is idle.
+          echo "⏳ Waiting for startup screenshot backlog to drain..."
+          PREV=-1; STABLE=0
+          for i in $(seq 1 80); do
+            CNT=$(kubectl exec "$BACKEND_POD" -- sh -c 'ls -1 /app/depictio/api/static/screenshots 2>/dev/null | wc -l' 2>/dev/null | tr -d '[:space:]')
+            CNT=${CNT:-0}
+            if [ "$CNT" -gt 0 ] && [ "$CNT" = "$PREV" ]; then
+              STABLE=$((STABLE + 1))
+              # 7 stable polls × 5s = 35s of no new PNGs > one ~22s capture
+              [ "$STABLE" -ge 7 ] && { echo "✅ Screenshot backlog drained at ${CNT} files (after ${i} polls)"; break; }
+            else
+              STABLE=0
+            fi
+            PREV=$CNT
+            sleep 5
+          done
+
           # Test screenshot endpoint
           echo "🧪 Testing screenshot generation endpoint..."
           DASHBOARD_ID="6824cb3b89d2b72169309737"
