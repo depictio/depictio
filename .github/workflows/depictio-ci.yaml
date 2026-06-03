@@ -631,6 +631,47 @@ jobs:
           echo "✅ All services ready and healthy"
           echo "ready=true" >> $GITHUB_OUTPUT
 
+      - name: Trigger reference data ingestion
+        # db_init seeds projects + dashboards in Mongo at backend startup,
+        # but the deltatables are only created when ingestion runs against
+        # the CSV/parquet sources. process_initial_data_collections is the
+        # canonical entry point — it lives behind an admin-only endpoint and
+        # runs the work in a BackgroundTask. The verify steps below assert on
+        # the deltatables, so we have to kick this off + wait for it before
+        # moving on. Re-enabling these checks (3a29116) without this step
+        # left Iris/Penguins/Ampliseq deltatables uncreated → "❌ ... not found".
+        run: |
+          # Copy admin token out of the backend container (db_init seeded one
+          # at startup; same trick cli-comprehensive-test uses).
+          docker cp depictio-backend:/app/depictio/.depictio/admin_config.yaml /tmp/admin_config.yaml
+          ADMIN_TOKEN=$(python3 -c "import yaml; print(yaml.safe_load(open('/tmp/admin_config.yaml'))['user']['token']['access_token'])")
+
+          echo "🌱 Triggering reference data ingestion..."
+          HTTP_CODE=$(curl -sS -o /tmp/ingest.out -w "%{http_code}" -X POST \
+            -H "Authorization: Bearer ${ADMIN_TOKEN}" \
+            http://localhost:8058/depictio/api/v1/utils/process_initial_data_collections)
+          echo "  HTTP ${HTTP_CODE}: $(cat /tmp/ingest.out)"
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "❌ Ingestion trigger failed"
+            docker compose logs depictio-backend --tail=80
+            exit 1
+          fi
+
+          # process_initial_data_collections runs in a BackgroundTask, so 200
+          # just means "enqueued". Poll deltatables until the Iris one shows
+          # up (or time out). 60 s budget is generous for a CSV the size of
+          # iris (150 rows).
+          echo "⏳ Waiting for Iris deltatable to land in Mongo..."
+          for i in {1..30}; do
+            COUNT=$(docker compose exec -T mongo mongosh localhost:27018/depictioDB --quiet --eval \
+              "db.deltatables.countDocuments({})" 2>/dev/null | tr -d '\r')
+            if [ "${COUNT:-0}" -gt 0 ]; then
+              echo "✅ Deltatable(s) registered after ${i}× 2 s polls (count=${COUNT})"
+              break
+            fi
+            sleep 2
+          done
+
       - name: Verify users and initial data
         run: |
           # Verify admin user
