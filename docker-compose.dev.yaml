@@ -166,7 +166,9 @@ services:
       context: .
     profiles: ["ci"]
     ports:
-      - "${VIEWER_PORT:-5080}:80"
+      # Container listens on 8080 (nginx-unprivileged / non-root); published
+      # host port unchanged.
+      - "${VIEWER_PORT:-5080}:8080"
     depends_on:
       - depictio-backend
     restart: unless-stopped

@@ -130,7 +130,9 @@ services:
     image: ghcr.io/depictio/depictio-viewer:${DEPICTIO_VERSION:-next}
     container_name: depictio-viewer
     ports:
-      - 5080:80
+      # Container now listens on 8080 (nginx-unprivileged / non-root); the
+      # published host port is unchanged at 5080.
+      - 5080:8080
     restart: unless-stopped
     depends_on:
       depictio-backend:

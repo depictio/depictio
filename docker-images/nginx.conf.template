@@ -52,7 +52,12 @@ map $http_x_forwarded_proto $depictio_hsts {
 resolver ${NGINX_LOCAL_RESOLVERS} valid=10s ipv6=off;
 
 server {
-    listen 80;
+    # 8080, not 80: the viewer runs on nginx-unprivileged (uid 101) so it
+    # can satisfy Pod Security Standards "restricted" (runAsNonRoot). A
+    # non-root process can't bind privileged ports (<1024). The k8s Service
+    # and the docker-compose published port still expose it as 80 / 5080 —
+    # only the in-container listen port changed.
+    listen 8080;
     server_name _;
 
     # Hide the nginx version banner from error pages and the Server header.

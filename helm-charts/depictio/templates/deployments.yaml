@@ -602,10 +602,18 @@ spec:
                   - {{ .Release.Name }}
               topologyKey: kubernetes.io/hostname
       {{- end }}
+      {{- with .Values.viewer.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       containers:
         - name: depictio-viewer
           image: "{{ .Values.viewer.image.repository }}:{{ .Values.viewer.image.tag }}"
           imagePullPolicy: {{ .Values.viewer.image.pullPolicy }}
+          {{- with .Values.viewer.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
           env:
             # nginx upstream for the API proxy — points at the backend Service.
             # Two k8s-specific requirements baked in here:
@@ -619,13 +627,13 @@ spec:
             - name: DEPICTIO_API_UPSTREAM
               value: "{{ .Release.Name }}-depictio-backend.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.backend.service.httpPort }}"
           ports:
-            - containerPort: 80
+            - containerPort: 8080
           resources:
             {{- toYaml .Values.viewer.resources | nindent 12 }}
           readinessProbe:
             httpGet:
               path: /dashboard-beta/
-              port: 80
+              port: 8080
             initialDelaySeconds: 5
             periodSeconds: 5
             timeoutSeconds: 3

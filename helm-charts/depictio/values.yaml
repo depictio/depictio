@@ -354,7 +354,27 @@ viewer:
     type: ClusterIP
     httpPort: 80
     httpsPort: 443
-    targetPort: 80
+    # 8080: the viewer image is nginx-unprivileged (uid 101) listening on
+    # 8080. The Service port stays 80 for callers; only the pod target moved.
+    targetPort: 8080
+  # Non-root hardening so the viewer pod passes Pod Security Standards
+  # "restricted" — matches backend / celery / mongo / minio. The
+  # nginx-unprivileged image already runs as uid 101 on an unprivileged
+  # port, so no NET_BIND_SERVICE capability is required.
+  podSecurityContext:
+    runAsUser: 101
+    runAsGroup: 101
+    fsGroup: 101
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 101
+    runAsGroup: 101
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop:
+      - ALL
+    seccompProfile:
+      type: RuntimeDefault
 
 # PodDisruptionBudget for the HA-critical workloads (backend, viewer, celery).
 # Opt-in and off by default so single-replica environments are unaffected: a
