@@ -1088,11 +1088,16 @@ async def list_tokens_(
 
 @auth_endpoint_router.get("/list", response_model=list[UserBaseUI], include_in_schema=True)
 async def list_users(current_user: UserBase = Depends(get_user_or_anonymous)):
-    """List all users for the React admin Users tab.
+    """List all users for the React admin Users tab. Admin-only.
 
-    Uses ``get_user_or_anonymous`` for parity with the projects list — the
-    anonymous user in single-user mode is admin, so no token is required.
+    Uses ``get_user_or_anonymous`` for parity with the admin projects list —
+    the anonymous user in single-user mode is admin, so no token is required
+    there — but the inline admin gate below blocks non-admin callers in
+    multi-user/public deployments (user listing = account enumeration).
     """
+    if not current_user.is_admin:
+        logger.warning(f"Non-admin user {current_user.id} denied access to user list")
+        raise HTTPException(status_code=403, detail="Current user is not an admin.")
     users = await UserBeanie.find_all().to_list()
     logger.debug(f"Users: {users}")
     users = [user.turn_to_userbaseui() for user in users]

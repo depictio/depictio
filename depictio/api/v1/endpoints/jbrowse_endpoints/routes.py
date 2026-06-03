@@ -2,7 +2,6 @@ import collections
 import hashlib
 import json
 import os
-from datetime import datetime
 from pathlib import Path
 
 from botocore.exceptions import NoCredentialsError
@@ -12,12 +11,11 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
-from depictio.api.v1.db import files_collection, jbrowse_collection, workflows_collection
+from depictio.api.v1.db import files_collection, workflows_collection
 from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user
 from depictio.api.v1.endpoints.validators import validate_workflow_and_collection
 from depictio.api.v1.s3 import s3_client
 from depictio.models.models.files import File
-from depictio.models.models.jbrowse import LogData
 
 jbrowse_endpoints_router = APIRouter()
 
@@ -268,48 +266,9 @@ async def create_trackset(
     return {"message": "JBrowse configuration updated."}
 
 
-@jbrowse_endpoints_router.post("/log")
-async def log_message(log_data: LogData):
-    """Log JBrowse navigation data."""
-    current_timestamp = int(datetime.now().timestamp() * 1000)
-
-    if log_data.coarseDynamicBlocks and log_data.selectedTracks:
-        block = log_data.coarseDynamicBlocks[0][0]
-        tracks = [t for track in log_data.selectedTracks for t in track.tracks]
-
-        dict_jbrowse_url_args = {
-            "assembly": block.assemblyName,
-            "loc": f"chr{block.refName}:{round(int(block.start))}:{round(int(block.end))}",
-            "tracks": tracks,
-        }
-    else:
-        dict_jbrowse_url_args = {}
-
-    dict_jbrowse_url_args["timestamp"] = current_timestamp
-    dict_jbrowse_url_args["dashboard_id"] = "1"  # Replace with actual dashboard ID
-    # Update or insert the message into the database
-    if jbrowse_collection.find_one():
-        document = jbrowse_collection.find_one({"dashboard_id": "1"})
-        document.update(dict_jbrowse_url_args)  # type: ignore[union-attr]
-        jbrowse_collection.update_one(
-            {"_id": ObjectId(document["_id"])},  # type: ignore[non-subscriptable]
-            {"$set": document},
-            upsert=True,  # type: ignore[non-subscriptable]
-        )
-    else:
-        jbrowse_collection.insert_one(dict_jbrowse_url_args)
-
-    return {"Status": "Logged successfully."}
-
-
-@jbrowse_endpoints_router.get("/last_status")
-async def get_jbrowse_logs():
-    """Get the last JBrowse navigation status."""
-    log = jbrowse_collection.find_one()
-    if log:
-        log.pop("_id", None)
-        return log
-    return {"message": "No logs available."}
+# NOTE: the legacy unauthenticated /log and /last_status prototype routes were
+# removed in the security sweep — they wrote/read a hardcoded dashboard_id "1"
+# document with no auth and had no remaining callers in the repo.
 
 
 @jbrowse_endpoints_router.get("/map_tracks_using_wildcards/{workflow_id}/{data_collection_id}")

@@ -217,13 +217,19 @@ async def handle_client_message(
 
 
 @events_router.get("/status")
-async def get_events_status() -> dict[str, Any]:
+async def get_events_status(
+    current_user: User = Depends(get_current_user),
+) -> dict[str, Any]:
     """
-    Get the status of the real-time events system.
+    Get the status of the real-time events system. Admin-only — connection
+    counts and service internals are operator diagnostics, not tenant data.
 
     Returns:
         Status information including enabled state, connection counts, etc.
     """
+    if not current_user.is_admin:
+        logger.warning(f"Non-admin user {current_user.id} denied access to events status")
+        raise HTTPException(status_code=403, detail="Current user is not an admin.")
     return {
         "enabled": settings.events.enabled,
         "mongodb_change_streams": settings.events.mongodb_change_streams_enabled,
