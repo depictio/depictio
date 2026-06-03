@@ -140,18 +140,25 @@ class TestListRecipes:
                 recipes_mod.PROJECTS_DIR = original
 
     def test_list_recipes_empty_projects_dir(self) -> None:
-        """Empty projects dir returns empty list."""
+        """No recipes anywhere (empty projects + empty catalog) → empty list."""
         import depictio.recipes as recipes_mod
 
         with tempfile.TemporaryDirectory() as tmpdir:
             projects_dir = Path(tmpdir) / "projects"
             projects_dir.mkdir()
-            original = recipes_mod.PROJECTS_DIR
+            catalog_dir = Path(tmpdir) / "catalog"
+            catalog_dir.mkdir()
+            original_projects = recipes_mod.PROJECTS_DIR
+            original_catalog = recipes_mod.CATALOG_DIR
             try:
+                # list_recipes() now draws from two homes (pipeline-keyed projects
+                # AND module-owned catalog folders) — patch both to test "empty".
                 recipes_mod.PROJECTS_DIR = projects_dir
+                recipes_mod.CATALOG_DIR = catalog_dir
                 assert list_recipes() == []
             finally:
-                recipes_mod.PROJECTS_DIR = original
+                recipes_mod.PROJECTS_DIR = original_projects
+                recipes_mod.CATALOG_DIR = original_catalog
 
 
 class TestLoadRecipe:
