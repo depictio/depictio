@@ -1087,17 +1087,16 @@ jobs:
 
           echo "✅ Config commands passed"
 
-      - name: Trigger reference data ingestion (wait for Iris deltatable)
+      - name: Trigger reference data ingestion (wait for it to settle)
         # The dashboard import below validates column names against the server
-        # schema, which reads the Iris deltatable. db_init seeds the project +
-        # dashboard at startup, but the deltatable is created by background
-        # ingestion (process_initial_data_collections, a BackgroundTask). Without
-        # waiting, the column-validation call reaches the backend before the
-        # deltatable exists, the load hangs, and the CLI reports
-        # "Server unreachable: timed out". Mirrors docker-system-init's trigger
-        # step, but waits for the Iris deltatable specifically (the one the
-        # import reads). Previously this raced through only because the implicit
-        # `up -d` built the Vite image first, accidentally delaying the import.
+        # schema, which calls the backend (project resolve + column fetch).
+        # db_init seeds the projects + dashboards at startup, but the deltatables
+        # are created by background ingestion (process_initial_data_collections,
+        # a BackgroundTask). While that ingestion runs inside the single
+        # dev-mode uvicorn worker, the worker is saturated and the import's
+        # calls time out with "Server unreachable: timed out". So trigger
+        # ingestion and wait for it to SETTLE (deltatable count stops growing)
+        # before importing. Mirrors docker-system-init's trigger step.
         run: |
           docker cp depictio-backend:/app/depictio/.depictio/admin_config.yaml /tmp/admin_config.yaml
           # Parse the token with the CLI venv's interpreter, NOT the ambient
@@ -1117,16 +1116,30 @@ jobs:
           if [ "$HTTP_CODE" != "200" ]; then
             echo "❌ Ingestion trigger failed"; docker compose logs depictio-backend --tail=80; exit 1
           fi
-          IRIS_DC_ID=$(docker compose exec -T mongo mongosh localhost:27018/depictioDB --eval "JSON.stringify(db.projects.find().toArray())" --quiet 2>&1 | grep '^[\[{]' | jq -r '.[] | select(.name == "Iris Dataset Project Data Analysis") | .workflows[0].data_collections[0]._id')
-          echo "⏳ Waiting for the Iris deltatable (DC=$IRIS_DC_ID)..."
-          IRIS_DT=""
-          for i in $(seq 1 60); do
-            IRIS_DT=$(docker compose exec -T mongo mongosh localhost:27018/depictioDB --eval "JSON.stringify(db.deltatables.find({\"data_collection_id\": ObjectId(\"$IRIS_DC_ID\")}).toArray())" --quiet 2>&1 | grep '^[\[{]' | jq -r '.[]._id // empty')
-            [ -n "$IRIS_DT" ] && { echo "✅ Iris deltatable ready after ${i}× 3s polls"; break; }
+          # Wait for ingestion to SETTLE, not just for the Iris deltatable doc
+          # to appear. process_initial_data_collections ingests every reference
+          # project in a BackgroundTask inside the single dev-mode uvicorn
+          # worker; while it runs, that worker is saturated and the import's
+          # own backend calls (project resolve + column schema) time out with
+          # "Server unreachable: timed out". Poll the deltatable count until it
+          # stops growing (stable across 4× 3s polls) — i.e. ingestion is done
+          # and the backend is responsive again.
+          echo "⏳ Waiting for background ingestion to settle..."
+          PREV=-1; STABLE=0; COUNT=0
+          for i in $(seq 1 80); do
+            COUNT=$(docker compose exec -T mongo mongosh localhost:27018/depictioDB --quiet --eval "db.deltatables.countDocuments({})" 2>/dev/null | tr -d '\r')
+            COUNT=${COUNT:-0}
+            if [ "$COUNT" -gt 0 ] && [ "$COUNT" = "$PREV" ]; then
+              STABLE=$((STABLE + 1))
+              [ "$STABLE" -ge 4 ] && { echo "✅ Ingestion settled at ${COUNT} deltatables (after ${i} polls)"; break; }
+            else
+              STABLE=0
+            fi
+            PREV=$COUNT
             sleep 3
           done
-          if [ -z "$IRIS_DT" ]; then
-            echo "❌ Iris deltatable not ready after 180s"
+          if [ "${COUNT:-0}" -eq 0 ]; then
+            echo "❌ No deltatables created after ingestion wait"
             docker compose logs --tail=120 depictio-backend depictio-celery-worker
             exit 1
           fi
