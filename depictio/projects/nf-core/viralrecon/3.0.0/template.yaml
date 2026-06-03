@@ -296,6 +296,12 @@ workflows:
       # depictio/models/components/advanced_viz/schemas.py).
       # ----------------------------------------------------------------
 
+      # KEPT intentionally (unlike volcano/qq/lollipop, which were retired as
+      # pure remappers). The recipe is a rename, but the SEPARATE DC earns its
+      # keep by isolating the oncoplot's "Mutation Type" filter from the shared
+      # variants_long scope — rebinding to variants_long would couple it to the
+      # lollipop / variants-table filters. catalog/ivar/variants_long.yaml also
+      # declares oncoplot as a render, so the relationship stays documented.
       - data_collection_tag: "oncoplot_canonical"
         description: "Oncoplot-ready variant matrix (sample_id × gene × mutation_type)"
         config:
