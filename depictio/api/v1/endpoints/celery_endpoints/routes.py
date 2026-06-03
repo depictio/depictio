@@ -13,12 +13,24 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from depictio.api.celery_app import celery_app
 from depictio.api.v1.configs.config import settings
-from depictio.api.v1.endpoints.user_endpoints.routes import get_user_or_anonymous
+from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user
 from depictio.models.models.users import User
 
 logger = logging.getLogger(__name__)
 
 celery_endpoint_router = APIRouter()
+
+
+def _require_admin(current_user: User) -> None:
+    """Reject non-admin callers — these endpoints expose worker internals.
+
+    Mirrors the admin gate used by the utils_endpoints routes.
+    """
+    if not current_user.is_admin:
+        logger.warning(
+            f"Denied celery introspection: non-admin user {current_user.id} ({current_user.email})"
+        )
+        raise HTTPException(status_code=403, detail="User is not an admin.")
 
 
 def _inspect():
@@ -32,13 +44,16 @@ def _inspect():
 
 @celery_endpoint_router.get("/health")
 def celery_health(
-    current_user: User = Depends(get_user_or_anonymous),
+    current_user: User = Depends(get_current_user),
 ):
     """Return broker connectivity + worker count + queue list.
 
     Useful for liveness/readiness probes and to confirm the offload flag is
-    actually pointing at a live worker pool.
+    actually pointing at a live worker pool. Admin-only: it leaks broker host
+    and worker topology. No external healthcheck probes this route (verified
+    against docker-compose*.yaml and helm-charts/), so gating it is safe.
     """
+    _require_admin(current_user)
     try:
         inspect = _inspect()
         ping = inspect.ping() or {}
@@ -65,9 +80,10 @@ def celery_health(
 
 @celery_endpoint_router.get("/active")
 def celery_active(
-    current_user: User = Depends(get_user_or_anonymous),
+    current_user: User = Depends(get_current_user),
 ):
-    """Return tasks currently executing on each worker."""
+    """Return tasks currently executing on each worker. Admin-only."""
+    _require_admin(current_user)
     try:
         active = _inspect().active() or {}
     except Exception as e:
@@ -94,9 +110,10 @@ def celery_active(
 
 @celery_endpoint_router.get("/stats")
 def celery_stats(
-    current_user: User = Depends(get_user_or_anonymous),
+    current_user: User = Depends(get_current_user),
 ):
-    """Aggregate per-worker stats (pool size, totals, prefetch count)."""
+    """Aggregate per-worker stats (pool size, totals, prefetch count). Admin-only."""
+    _require_admin(current_user)
     try:
         stats = _inspect().stats() or {}
     except Exception as e:

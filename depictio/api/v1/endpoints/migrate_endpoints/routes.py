@@ -36,7 +36,7 @@ from depictio.api.v1.db import (
     users_collection,
 )
 from depictio.api.v1.endpoints.backup_endpoints.routes import _convert_complex_objects_to_strings
-from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user, get_user_or_anonymous
+from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user
 from depictio.models.models.users import User
 
 migrate_endpoint_router = APIRouter()

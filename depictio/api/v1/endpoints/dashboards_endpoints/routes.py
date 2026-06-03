@@ -720,14 +720,21 @@ async def delete_dashboard(
     If the dashboard is a main tab, also delete all child tabs.
     """
 
-    user_id = current_user.id
-
-    # First, check if the dashboard exists and user has permission
-    dashboard = dashboards_collection.find_one(
-        {"dashboard_id": dashboard_id, "permissions.owners._id": user_id}
-    )
+    # First, check if the dashboard exists
+    dashboard = dashboards_collection.find_one({"dashboard_id": dashboard_id})
 
     if not dashboard:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Dashboard with ID '{dashboard_id}' not found or access denied.",
+        )
+
+    # Authorize via the project-based permission model (owner level, with admin bypass)
+    project_id = dashboard.get("project_id")
+    if not project_id:
+        raise HTTPException(status_code=500, detail="Dashboard is not associated with a project.")
+
+    if not check_project_permission(project_id, current_user, "owner"):
         raise HTTPException(
             status_code=404,
             detail=f"Dashboard with ID '{dashboard_id}' not found or access denied.",
@@ -3872,12 +3879,23 @@ async def export_dashboard_as_yaml(
         project = projects_collection.find_one({"_id": ObjectId(project_id)})
         is_public = project.get("is_public", False) if project else False
         project_name = project.get("name", "") if project else ""
+        # Allow if the project is public, otherwise require at least viewer
+        # access on the project (admin bypass handled inside the check).
+        if not is_public and not check_project_permission(project_id, current_user, "viewer"):
+            raise HTTPException(
+                status_code=403,
+                detail="You don't have permission to export this dashboard.",
+            )
     else:
+        # Legacy standalone dashboard without an associated project: fall back
+        # to the dashboard-level public flag.
         is_public = dashboard_doc.get("is_public", False)
         project_name = ""
-
-    if not is_public and current_user is None:
-        raise HTTPException(status_code=401, detail="Authentication required")
+        if not is_public:
+            raise HTTPException(
+                status_code=403,
+                detail="You don't have permission to export this dashboard.",
+            )
 
     # Check if this is a main tab with child tabs
     is_main_tab = dashboard_doc.get("is_main_tab", True)

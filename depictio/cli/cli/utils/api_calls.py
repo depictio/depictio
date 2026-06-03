@@ -37,6 +37,9 @@ def api_login(yaml_config_path: str = "~/.depictio/CLI.yaml") -> dict:
     response = httpx.post(
         f"{depictio_CLI_config['api_base_url']}/depictio/api/v1/cli/validate_cli_config",
         json=depictio_CLI_config,
+        # /validate_cli_config now requires a bearer token (was unauthenticated);
+        # the same token already lives in the posted config body.
+        headers=generate_api_headers(depictio_CLI_config),
         timeout=120.0,
     )
     if response.status_code == 200:

@@ -1,3 +1,4 @@
+import hmac
 import os
 from datetime import datetime
 from typing import Annotated, Any
@@ -30,6 +31,7 @@ from depictio.api.v1.endpoints.user_endpoints.core_functions import (
     _list_tokens,
     _purge_expired_tokens,
 )
+from depictio.api.v1.endpoints.user_endpoints.rate_limit import enforce_rate_limit
 from depictio.api.v1.endpoints.user_endpoints.utils import (
     create_access_token,
     delete_group_helper,
@@ -41,7 +43,6 @@ from depictio.models.models.users import (
     GroupBeanie,
     RequestEditPassword,
     RequestUserRegistration,
-    TokenBase,
     TokenBeanie,
     TokenData,
     User,
@@ -65,6 +66,19 @@ oauth2_scheme_optional = OAuth2PasswordBearer(
     tokenUrl="/depictio/api/v1/auth/login",
     auto_error=False,
 )
+
+
+def _is_valid_internal_api_key(api_key: str | None) -> bool:
+    """Constant-time comparison of the presented API key against the configured one.
+
+    Uses ``hmac.compare_digest`` to avoid leaking the key via timing. Guards for
+    ``None``/missing configured key first, since ``compare_digest`` requires both
+    operands to be ``str``/``bytes``.
+    """
+    expected = settings.auth.internal_api_key
+    if not api_key or not expected:
+        return False
+    return hmac.compare_digest(api_key, expected)
 
 
 async def get_current_user(token: Annotated[str, Depends(oauth2_scheme)]) -> User:
@@ -125,13 +139,17 @@ async def get_user_or_anonymous(
 
 
 @auth_endpoint_router.post("/login", response_model=TokenBeanie)
-async def login(login_request: OAuth2PasswordRequestForm = Depends()) -> TokenBeanie:
+async def login(
+    request: Request,
+    login_request: OAuth2PasswordRequestForm = Depends(),
+) -> TokenBeanie:
     """Authenticate user and return access token.
 
     Validates user credentials and returns a JWT token for API access.
     In unauthenticated mode, returns the anonymous user's token.
 
     Args:
+        request: Incoming request (used for per-IP rate limiting).
         login_request: OAuth2 form containing username (email) and password.
 
     Returns:
@@ -139,7 +157,12 @@ async def login(login_request: OAuth2PasswordRequestForm = Depends()) -> TokenBe
 
     Raises:
         HTTPException: 401 if credentials are invalid.
+        HTTPException: 429 if too many requests from the same IP.
     """
+    # Redis-backed per-IP rate limit to slow credential-stuffing / brute force.
+    # Fail-open if Redis is down (see rate_limit.enforce_rate_limit).
+    enforce_rate_limit(request, "login")
+
     if settings.auth.is_single_user_mode:
         admin = await UserBeanie.find_one({"is_admin": True, "is_anonymous": {"$ne": True}})
         if not admin:
@@ -189,7 +212,7 @@ async def create_token(
         HTTPException: 403 if API key is invalid.
         HTTPException: 400 if token with same name already exists.
     """
-    if api_key != settings.auth.internal_api_key:
+    if not _is_valid_internal_api_key(api_key):
         raise HTTPException(status_code=403, detail="Invalid API key")
 
     token = await _add_token(token_data)
@@ -223,6 +246,14 @@ async def refresh_token_browser(request: dict) -> dict:
     if not refresh_token:
         raise HTTPException(status_code=400, detail="Missing refresh_token")
 
+    # TODO(PR2): refresh-token rotation + reuse detection. Currently the refresh
+    # token is long-lived and reusable: each refresh re-issues an access token
+    # but leaves the same refresh_token valid, so a leaked refresh token grants
+    # indefinite access with no way to detect replay. PR2 should rotate the
+    # refresh token on every use, invalidate the old one, and flag/revoke the
+    # token family if a consumed refresh token is presented again. Also harden
+    # permanent ("long-lived") tokens here. Explicitly deferred — do not
+    # implement in this PR.
     token_doc = await TokenBeanie.find_one(
         {"refresh_token": refresh_token, "refresh_expire_datetime": {"$gt": datetime.now()}}
     )
@@ -262,7 +293,7 @@ async def refresh_token_endpoint(
         HTTPException: 403 if API key is invalid.
         HTTPException: 401 if refresh token is invalid or expired.
     """
-    if api_key != settings.auth.internal_api_key:
+    if not _is_valid_internal_api_key(api_key):
         raise HTTPException(status_code=403, detail="Invalid API key")
 
     refresh_token = request.get("refresh_token")
@@ -302,7 +333,7 @@ async def api_fetch_user_from_token(
         HTTPException: 403 if API key is invalid.
         HTTPException: 404 if user not found for the token.
     """
-    if api_key != settings.auth.internal_api_key:
+    if not _is_valid_internal_api_key(api_key):
         raise HTTPException(status_code=403, detail="Invalid API key")
 
     user = await _async_fetch_user_from_token(token)
@@ -330,7 +361,7 @@ async def api_fetch_user_from_email(
         HTTPException: 403 if API key is invalid.
         HTTPException: 404 if user not found for the email.
     """
-    if api_key != settings.auth.internal_api_key:
+    if not _is_valid_internal_api_key(api_key):
         raise HTTPException(status_code=403, detail="Invalid API key")
 
     user = await _async_fetch_user_from_email(email)
@@ -358,7 +389,7 @@ async def api_fetch_user_from_id(
         HTTPException: 403 if API key is invalid.
         HTTPException: 404 if user not found for the ID.
     """
-    if api_key != settings.auth.internal_api_key:
+    if not _is_valid_internal_api_key(api_key):
         raise HTTPException(status_code=403, detail="Invalid API key")
 
     user = await _async_fetch_user_from_id(user_id)
@@ -485,7 +516,7 @@ async def api_get_anonymous_user_session(
     """Get the anonymous user session data for unauthenticated mode."""
     logger.debug("Fetching anonymous user session")
 
-    if api_key != settings.auth.internal_api_key:
+    if not _is_valid_internal_api_key(api_key):
         logger.error("Invalid API key")
         raise HTTPException(
             status_code=403,
@@ -520,7 +551,7 @@ async def create_temporary_user_endpoint(
     """
     logger.debug(f"Creating temporary user with expiry: {expiry_hours} hours")
 
-    if api_key != settings.auth.internal_api_key:
+    if not _is_valid_internal_api_key(api_key):
         logger.error("Invalid API key")
         raise HTTPException(
             status_code=403,
@@ -560,7 +591,7 @@ async def cleanup_expired_temporary_users_endpoint(
     """
     logger.debug("Cleaning up expired temporary users")
 
-    if api_key != settings.auth.internal_api_key:
+    if not _is_valid_internal_api_key(api_key):
         logger.error("Invalid API key")
         raise HTTPException(
             status_code=403,
@@ -577,36 +608,11 @@ async def cleanup_expired_temporary_users_endpoint(
 # These mirror /create_temporary_user and /get_anonymous_user_session but are
 # callable by the React /auth SPA, which can't carry the internal API key.
 # Gated by mode flag so they 404 in standard mode (i.e. the only mode where
-# user accounts exist), with a small per-IP rate limiter to discourage abuse.
+# user accounts exist), with a Redis-backed per-IP rate limiter (see
+# ``rate_limit.enforce_rate_limit``) to discourage abuse. The limiter is
+# fail-open: a Redis outage degrades to "no rate limiting" rather than locking
+# everyone out of auth.
 # ---------------------------------------------------------------------------
-
-# Per-IP timestamps for the public auth endpoints. In-memory (single-process)
-# rate limiter — sufficient for the development setup. Production hardening
-# would move this to Redis.
-_PUBLIC_AUTH_RATE_LIMIT: dict[str, list[float]] = {}
-_PUBLIC_AUTH_RATE_WINDOW_SECS = 60.0
-_PUBLIC_AUTH_RATE_MAX_CALLS = 10
-
-
-def _enforce_public_auth_rate_limit(request: Request) -> None:
-    """Rate-limit the /auth/public/* endpoints per client IP.
-
-    Allows up to ``_PUBLIC_AUTH_RATE_MAX_CALLS`` calls per
-    ``_PUBLIC_AUTH_RATE_WINDOW_SECS`` window. Raises 429 when exceeded.
-    """
-    import time
-
-    client_ip = request.client.host if request.client else "unknown"
-    now = time.monotonic()
-    window_start = now - _PUBLIC_AUTH_RATE_WINDOW_SECS
-    history = [ts for ts in _PUBLIC_AUTH_RATE_LIMIT.get(client_ip, []) if ts >= window_start]
-    if len(history) >= _PUBLIC_AUTH_RATE_MAX_CALLS:
-        raise HTTPException(
-            status_code=429,
-            detail="Too many authentication requests; please wait before retrying.",
-        )
-    history.append(now)
-    _PUBLIC_AUTH_RATE_LIMIT[client_ip] = history
 
 
 @auth_endpoint_router.post("/public/create_temporary_user", include_in_schema=True)
@@ -623,7 +629,7 @@ async def create_temporary_user_public(request: Request) -> dict:
             detail="Temporary users only available in public mode",
         )
 
-    _enforce_public_auth_rate_limit(request)
+    enforce_rate_limit(request, "public/create_temporary_user")
 
     temp_user = await _create_temporary_user(
         expiry_hours=settings.auth.temporary_user_expiry_hours,
@@ -648,43 +654,76 @@ async def get_anonymous_user_session_public(request: Request) -> dict:
             detail="Anonymous user session only available in single-user mode",
         )
 
-    _enforce_public_auth_rate_limit(request)
+    enforce_rate_limit(request, "public/get_anonymous_user_session")
 
     return await _get_anonymous_user_session()
 
 
+# Generic error surfaced for ANY registration failure (duplicate email, invalid
+# input, etc.). Kept deliberately vague so an attacker cannot enumerate which
+# emails already have accounts — the real reason is logged internally.
+_REGISTER_GENERIC_ERROR = (
+    "Registration could not be completed. Please check your details and try again."
+)
+
+
 @auth_endpoint_router.post("/register")
 async def register(
-    request: RequestUserRegistration,
+    registration: RequestUserRegistration,
+    request: Request,
 ) -> dict[str, Any]:
     """
     Endpoint to register a new user.
 
     Args:
-        request: User registration data containing email and password
+        registration: User registration data containing email and password.
+        request: Incoming request (used for per-IP rate limiting). FastAPI
+            injects this by type regardless of parameter order; kept second so
+            ``register(model)`` positional calls (tests) still bind correctly.
 
     Returns:
-        Dictionary with user data, success status and message
+        Dictionary with user data, success status and message.
+
+    Raises:
+        HTTPException: 400 with a GENERIC message on any failure (e.g. duplicate
+            email) to avoid account enumeration. The real reason is logged.
     """
-    logger.info(f"Registering user with email: {request.email}")
+    logger.info(f"Registering user with email: {registration.email}")
     # Disable registration in single-user mode (no need for accounts)
-    # and in public mode (use temporary users instead)
+    # and in public mode (use temporary users instead). Checked before rate
+    # limiting since these modes have no registration path to abuse.
     if settings.auth.is_single_user_mode or settings.auth.is_public_mode:
         raise HTTPException(
             status_code=403,
             detail="User registration disabled in single-user mode and public mode",
         )
+
+    # Redis-backed per-IP rate limit to slow automated enumeration / spam
+    # registration. Fail-open if Redis is down.
+    enforce_rate_limit(request, "register")
     try:
         # SECURITY: never honour client-supplied ``is_admin`` on /register.
         # Promotion to admin is an admin-only action (see /turn_sysadmin).
-        return await _create_user_in_db(request.email, request.password, is_admin=False)
-
-    except HTTPException as e:
-        # Re-raise HTTP exceptions
-        raise e
+        result = await _create_user_in_db(registration.email, registration.password, is_admin=False)
+    except HTTPException:
+        # Re-raise HTTP exceptions but DON'T leak the detail to the client —
+        # collapse to the generic error. Log the real reason internally.
+        logger.warning(f"Registration HTTPException for {registration.email}", exc_info=True)
+        raise HTTPException(status_code=400, detail=_REGISTER_GENERIC_ERROR)
     except Exception as e:
-        logger.error(f"Error creating user: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to create user: {str(e)}")
+        logger.error(f"Error creating user {registration.email}: {e}")
+        raise HTTPException(status_code=400, detail=_REGISTER_GENERIC_ERROR)
+
+    # SECURITY: ``_create_user_in_db`` returns ``success=False`` with a
+    # "User already exists" message on duplicate email. Surfacing that verbatim
+    # leaks which emails are registered (account enumeration). Collapse any
+    # non-success outcome to the same generic error; log the real reason.
+    if not result or not result.get("success"):
+        internal_reason = result.get("message") if result else "unknown"
+        logger.warning(f"Registration rejected for {registration.email}: {internal_reason}")
+        raise HTTPException(status_code=400, detail=_REGISTER_GENERIC_ERROR)
+
+    return result
 
 
 # DISABLED: Group management endpoints disabled for user-only permissions
@@ -832,7 +871,7 @@ async def delete_token(
     token_id: PydanticObjectId,
     api_key: str = Header(..., description="Internal API key for authentication"),
 ):
-    if api_key != settings.auth.internal_api_key:
+    if not _is_valid_internal_api_key(api_key):
         raise HTTPException(
             status_code=403,
             detail="Invalid API key",
@@ -985,10 +1024,32 @@ async def purge_expired_tokens_endpoint(
         raise HTTPException(status_code=500, detail="Failed to purge expired tokens")
 
 
-# Updated backend endpoint
 @auth_endpoint_router.post("/check_token_validity", include_in_schema=True)
-async def check_token_validity_endpoint(token: TokenBase):
-    validation_result = await _check_if_token_is_valid(token)
+async def check_token_validity_endpoint(
+    access_token: Annotated[str | None, Depends(oauth2_scheme_optional)] = None,
+):
+    """Check validity of the *presented* bearer token.
+
+    SECURITY: the token is derived from the ``Authorization`` header, NOT from
+    the request body. Previously this accepted a ``TokenBase`` in the body,
+    which let any unauthenticated caller probe the validity of arbitrary tokens
+    (and learn refresh state). Now a caller can only ask about the credential it
+    already holds. Missing/unknown tokens return the same ``logout`` outcome as
+    an expired one (no distinction leaked).
+    """
+    logout_response = {"success": False, "can_refresh": False, "action": "logout"}
+
+    if not access_token:
+        return logout_response
+
+    token_doc = await TokenBeanie.find_one({"access_token": access_token})
+    if not token_doc:
+        return logout_response
+
+    # Reuse the shared validity logic with the looked-up token document.
+    # ``TokenBeanie`` is a ``TokenBase`` subclass, so it satisfies the signature
+    # directly — no need to reconstruct.
+    validation_result = await _check_if_token_is_valid(token_doc)
 
     return {
         "success": validation_result["access_valid"],

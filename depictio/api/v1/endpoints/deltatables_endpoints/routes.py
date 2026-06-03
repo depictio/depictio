@@ -330,13 +330,17 @@ async def get_deltatable(
 @deltatables_endpoint_router.post("/batch/exists")
 async def batch_check_deltatables_exist(
     data_collection_ids: list[PyObjectId],
-    current_user: str = Depends(get_user_or_anonymous),
+    current_user: User = Depends(get_user_or_anonymous),
 ):
     """
     Check existence of multiple deltatables in a single call.
 
     This endpoint eliminates the N+1 query pattern in design_draggable()
     by allowing batch checking of deltatable existence.
+
+    Data collections the caller cannot access are reported identically to
+    nonexistent ones (``exists: False``) so the endpoint can't be used as an
+    existence oracle or to leak ``delta_table_location`` metadata.
 
     Args:
         data_collection_ids: List of data collection IDs to check.
@@ -345,13 +349,36 @@ async def batch_check_deltatables_exist(
     Returns:
         Dict mapping data collection ID to existence status and location.
     """
+    # Restrict to the DCs the caller is allowed to see. Build a single
+    # permission $match across all requested ids (mirrors the per-id filter in
+    # ``_build_permission_pipeline``) so inaccessible DCs never surface.
+    object_ids = [ObjectId(dc_id) for dc_id in data_collection_ids]
+    accessible_match: dict = {"workflows.data_collections._id": {"$in": object_ids}}
+    if not current_user.is_admin:
+        accessible_match["$or"] = [
+            {"permissions.owners._id": current_user.id},
+            {"permissions.viewers._id": current_user.id},
+            {"permissions.viewers": "*"},
+            {"is_public": True},
+        ]
+    accessible_pipeline = [
+        {"$match": accessible_match},
+        {"$unwind": "$workflows"},
+        {"$unwind": "$workflows.data_collections"},
+        {"$match": {"workflows.data_collections._id": {"$in": object_ids}}},
+        {"$project": {"_id": "$workflows.data_collections._id"}},
+    ]
+    accessible_ids = {str(doc["_id"]) for doc in projects_collection.aggregate(accessible_pipeline)}
+
     deltatable_cursor = deltatables_collection.find(
         {"data_collection_id": {"$in": data_collection_ids}},
         {"data_collection_id": 1, "delta_table_location": 1},
     )
 
     found_deltatables = {
-        str(dt["data_collection_id"]): dt.get("delta_table_location") for dt in deltatable_cursor
+        str(dt["data_collection_id"]): dt.get("delta_table_location")
+        for dt in deltatable_cursor
+        if str(dt["data_collection_id"]) in accessible_ids
     }
 
     return {

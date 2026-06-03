@@ -37,6 +37,35 @@ logger = logging.getLogger(__name__)
 advanced_viz_endpoint_router = APIRouter()
 
 
+def _assert_dc_access(data_collection_id: ObjectId, current_user) -> None:
+    """Raise 404 unless ``current_user`` may read ``data_collection_id``.
+
+    Mirrors ``deltatables_endpoints._build_permission_pipeline``: a project is
+    visible if the caller owns it, is a viewer (explicitly or via ``"*"``), the
+    project is public, or the caller is an admin (admins — including the
+    anonymous-admin used in single-user mode — skip the membership filter as
+    they wouldn't appear in the project's permissions list).
+
+    Uses 404 (not 403) to avoid leaking existence of inaccessible DCs, matching
+    the ``GET /deltatables/get/{dc_id}`` convention.
+    """
+    from depictio.api.v1.db import projects_collection
+
+    match_clause: dict = {"workflows.data_collections._id": data_collection_id}
+    if not getattr(current_user, "is_admin", False):
+        match_clause["$or"] = [
+            {"permissions.owners._id": current_user.id},
+            {"permissions.viewers._id": current_user.id},
+            {"permissions.viewers": "*"},
+            {"is_public": True},
+        ]
+    if not projects_collection.find_one(match_clause, {"_id": 1}):
+        raise HTTPException(
+            status_code=404,
+            detail="Data collection not found or access denied.",
+        )
+
+
 def _resolve_link_filters_for_dc(
     filters: list[dict],
     wf_id: str,
@@ -286,6 +315,11 @@ def fetch_advanced_viz_data(
     except Exception as exc:
         raise HTTPException(status_code=400, detail=f"Invalid wf_id/dc_id: {exc}")
 
+    # Permission gate: get_user_or_anonymous yields an anonymous (possibly
+    # admin-in-public-mode) user, so without this any caller could load any
+    # DC's data by supplying its IDs. Mirror the deltatables access check.
+    _assert_dc_access(dc_oid, current_user)
+
     from depictio.api.v1.db import deltatables_collection
     from depictio.api.v1.deltatables_utils import load_deltatable_lite
 
@@ -406,7 +440,7 @@ def fetch_advanced_viz_data(
 _CACHE_KEY_VERSION = "v3"
 
 
-def _compute_cache_key(payload: dict) -> str:
+def _compute_cache_key(payload: dict, user_id) -> str:
     """Stable key for the compute_results cache.
 
     Hashes the full payload sort-stably so every tunable (embedding params,
@@ -414,12 +448,39 @@ def _compute_cache_key(payload: dict) -> str:
     filter_metadata) participates in the key. Bump ``_CACHE_KEY_VERSION``
     when the task contract changes in a way that invalidates prior entries
     (e.g. fixing a bug that produced stuck "pending" docs).
+
+    ``user_id`` is bound into the hashed blob so that one user can never read
+    (or pending-collide with) another user's cached result by guessing the
+    job_id — the key is derived purely from server-side inputs, so the job_id
+    returned to user A is not reproducible by user B even with an identical
+    payload. (Anonymous users sharing one account still share entries among
+    themselves, which is acceptable; real users are isolated.)
     """
     import hashlib
     import json as _json
 
-    blob = _json.dumps({"_v": _CACHE_KEY_VERSION, "p": payload}, sort_keys=True, default=str)
+    blob = _json.dumps(
+        {"_v": _CACHE_KEY_VERSION, "u": str(user_id), "p": payload},
+        sort_keys=True,
+        default=str,
+    )
     return hashlib.sha256(blob.encode()).hexdigest()[:32]
+
+
+def _assert_job_owner(doc: dict, current_user) -> None:
+    """Raise 404 unless ``current_user`` owns the cached compute ``doc``.
+
+    Defence-in-depth companion to the user-bound cache key: even if a job_id
+    leaks (logs, network capture), only its owner — or an admin — can poll it.
+    The cache key already binds ``user_id`` so keys are not cross-derivable;
+    this additionally blocks reads of a *known* foreign job_id. Docs written
+    before user binding lack ``user_id`` and are treated as non-owned for
+    non-admins (their keys are no longer regenerable anyway).
+    """
+    if getattr(current_user, "is_admin", False):
+        return
+    if doc.get("user_id") != str(current_user.id):
+        raise HTTPException(status_code=404, detail="Job not found")
 
 
 @advanced_viz_endpoint_router.post("/compute_embedding")
@@ -449,7 +510,7 @@ def dispatch_compute_embedding(
     _apply_link_filters_to_payload(payload, access_token, "embedding")
 
     cache = db["compute_results"]
-    cache_key = _compute_cache_key(payload)
+    cache_key = _compute_cache_key(payload, current_user.id)
     existing = cache.find_one({"_id": cache_key})
 
     # Cache hit (done or pending).
@@ -473,6 +534,7 @@ def dispatch_compute_embedding(
                 "_id": cache_key,
                 "status": "pending",
                 "method": method,
+                "user_id": str(current_user.id),
                 "created_at": datetime.now(timezone.utc),
                 "payload": {
                     "wf_id": str(payload["wf_id"]),
@@ -530,6 +592,7 @@ def poll_compute_embedding(
     doc = cache.find_one({"_id": job_id})
     if not doc:
         raise HTTPException(status_code=404, detail="Job not found")
+    _assert_job_owner(doc, current_user)
 
     # If already terminal (done/failed), short-circuit.
     if doc.get("status") in ("done", "failed"):
@@ -606,7 +669,7 @@ def dispatch_compute_complex_heatmap(
     # method marker to namespace these from embedding entries.
     payload_for_key = dict(payload)
     payload_for_key.setdefault("method", "complex_heatmap")
-    cache_key = _compute_cache_key(payload_for_key)
+    cache_key = _compute_cache_key(payload_for_key, current_user.id)
     existing = cache.find_one({"_id": cache_key})
     if existing:
         return {
@@ -629,6 +692,7 @@ def dispatch_compute_complex_heatmap(
                 "_id": cache_key,
                 "status": "pending",
                 "method": "complex_heatmap",
+                "user_id": str(current_user.id),
                 "created_at": datetime.now(timezone.utc),
                 "payload": {
                     "wf_id": str(payload["wf_id"]),
@@ -677,6 +741,7 @@ def poll_compute_complex_heatmap(
     doc = cache.find_one({"_id": job_id})
     if not doc:
         raise HTTPException(status_code=404, detail="Job not found")
+    _assert_job_owner(doc, current_user)
     if doc.get("status") in ("done", "failed"):
         return {
             "job_id": job_id,
@@ -739,7 +804,7 @@ def dispatch_compute_upset(
     cache = db["compute_results"]
     payload_for_key = dict(payload)
     payload_for_key.setdefault("method", "upset_plot")
-    cache_key = _compute_cache_key(payload_for_key)
+    cache_key = _compute_cache_key(payload_for_key, current_user.id)
     existing = cache.find_one({"_id": cache_key})
     if existing:
         return {
@@ -758,6 +823,7 @@ def dispatch_compute_upset(
                 "_id": cache_key,
                 "status": "pending",
                 "method": "upset_plot",
+                "user_id": str(current_user.id),
                 "created_at": datetime.now(timezone.utc),
                 "payload": {
                     "wf_id": str(payload["wf_id"]),
@@ -804,6 +870,7 @@ def poll_compute_upset(
     doc = cache.find_one({"_id": job_id})
     if not doc:
         raise HTTPException(status_code=404, detail="Job not found")
+    _assert_job_owner(doc, current_user)
     if doc.get("status") in ("done", "failed"):
         return {
             "job_id": job_id,
@@ -848,6 +915,7 @@ def _dispatch_compute(
     payload: dict,
     method_name: str,
     compute_task,
+    current_user,
 ) -> dict[str, Any]:
     """Shared dispatch helper for Celery-backed advanced viz endpoints.
 
@@ -867,7 +935,9 @@ def _dispatch_compute(
         raise HTTPException(status_code=400, detail="wf_id and dc_id are required")
 
     cache = db["compute_results"]
-    cache_key = _compute_cache_key({**payload, "method": payload.get("method", method_name)})
+    cache_key = _compute_cache_key(
+        {**payload, "method": payload.get("method", method_name)}, current_user.id
+    )
 
     def _from_cache(existing: dict) -> dict[str, Any]:
         return {
@@ -888,6 +958,7 @@ def _dispatch_compute(
                 "_id": cache_key,
                 "status": "pending",
                 "method": method_name,
+                "user_id": str(current_user.id),
                 "created_at": datetime.now(timezone.utc),
                 "payload": {
                     "wf_id": str(payload["wf_id"]),
@@ -912,7 +983,7 @@ def _dispatch_compute(
     return {"job_id": cache_key, "status": "pending", "from_cache": False}
 
 
-def _poll_compute(job_id: str) -> dict[str, Any]:
+def _poll_compute(job_id: str, current_user) -> dict[str, Any]:
     """Shared poll helper — mirror of the per-endpoint poll body."""
     from datetime import datetime, timezone
 
@@ -925,6 +996,7 @@ def _poll_compute(job_id: str) -> dict[str, Any]:
     doc = cache.find_one({"_id": job_id})
     if not doc:
         raise HTTPException(status_code=404, detail="Job not found")
+    _assert_job_owner(doc, current_user)
     if doc.get("status") in ("done", "failed"):
         return {
             "job_id": job_id,
@@ -975,7 +1047,7 @@ def dispatch_compute_coverage_track(
     from depictio.api.v1.celery_tasks import compute_coverage_track as compute_task
 
     _apply_link_filters_to_payload(payload, access_token, "coverage_track")
-    return _dispatch_compute(payload, "coverage_track", compute_task)
+    return _dispatch_compute(payload, "coverage_track", compute_task, current_user)
 
 
 @advanced_viz_endpoint_router.get("/compute_coverage_track/{job_id}")
@@ -984,7 +1056,7 @@ def poll_compute_coverage_track(
     current_user=Depends(get_user_or_anonymous),
 ) -> dict[str, Any]:
     """Poll a previously-dispatched coverage-track compute."""
-    return _poll_compute(job_id)
+    return _poll_compute(job_id, current_user)
 
 
 @advanced_viz_endpoint_router.post("/compute_sankey")
@@ -997,7 +1069,7 @@ def dispatch_compute_sankey(
     from depictio.api.v1.celery_tasks import compute_sankey as compute_task
 
     _apply_link_filters_to_payload(payload, access_token, "sankey")
-    return _dispatch_compute(payload, "sankey", compute_task)
+    return _dispatch_compute(payload, "sankey", compute_task, current_user)
 
 
 @advanced_viz_endpoint_router.get("/compute_sankey/{job_id}")
@@ -1006,7 +1078,7 @@ def poll_compute_sankey(
     current_user=Depends(get_user_or_anonymous),
 ) -> dict[str, Any]:
     """Poll a previously-dispatched Sankey compute."""
-    return _poll_compute(job_id)
+    return _poll_compute(job_id, current_user)
 
 
 @advanced_viz_endpoint_router.get(
@@ -1034,6 +1106,10 @@ def get_phylogeny_newick(
         dc_oid = ObjectId(str(data_collection_id))
     except Exception as exc:
         raise HTTPException(status_code=400, detail=f"Invalid dc_id: {exc}") from exc
+
+    # Same vulnerability class as /advanced_viz/data: caller-supplied dc_id
+    # returning raw data — gate on project-level access before any file read.
+    _assert_dc_access(dc_oid, current_user)
 
     # Build a list of candidate paths and try each. The CLI scan records the
     # *host* path it saw when the user ran depictio-cli on their laptop
@@ -1110,9 +1186,9 @@ def get_phylogeny_newick(
         with open(file_path) as fh:
             return fh.read()
     except FileNotFoundError as exc:
-        raise HTTPException(
-            status_code=404, detail=f"Phylogeny file not found at {file_path}"
-        ) from exc
+        # Don't leak server-side paths in the response — log them instead.
+        logger.warning("phylogeny file not found at %s", file_path)
+        raise HTTPException(status_code=404, detail="Phylogeny file not found") from exc
     except Exception as exc:
         logger.warning("phylogeny newick read failed: %s", exc, exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to read phylogeny: {exc}") from exc
+        raise HTTPException(status_code=500, detail="Failed to read phylogeny") from exc

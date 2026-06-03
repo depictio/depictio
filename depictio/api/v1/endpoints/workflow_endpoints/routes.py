@@ -289,12 +289,17 @@ async def delete_workflow(workflow_id: str, current_user: User = Depends(get_cur
         )
 
     workflow_tag = existing_workflow["workflow_tag"]
-    user_id = current_user.id  # type: ignore[possibly-unbound-attribute]
+    user_oid = ObjectId(current_user.id)
 
-    if user_id not in [u["user_id"] for u in existing_workflow["permissions"]["owners"]]:
+    # Owners are stored as UserBase entries keyed by ``_id`` (the previous code
+    # read a non-existent ``user_id`` field and compared an ObjectId against
+    # strings, so the check never matched). Normalise both sides to ObjectId and
+    # let admins (incl. the anonymous-admin in single-user mode) bypass.
+    owner_ids = {ObjectId(owner["_id"]) for owner in existing_workflow["permissions"]["owners"]}
+    if not current_user.is_admin and user_oid not in owner_ids:
         raise HTTPException(
             status_code=403,
-            detail=f"User with ID '{user_id}' is not authorized to delete workflow with ID '{workflow_id}'",
+            detail=f"User with ID '{user_oid}' is not authorized to delete workflow with ID '{workflow_id}'",
         )
 
     workflows_collection.delete_one({"_id": workflow_oid})

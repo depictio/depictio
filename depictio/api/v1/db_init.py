@@ -584,9 +584,7 @@ async def _resolve_existing_admin_token(
     admin_user: UserBeanie,
 ) -> dict | None:
     """Return the cached default-token payload for an existing admin, or None."""
-    token_beanie = await TokenBeanie.find_one(
-        {"user_id": admin_user.id, "name": "default_token"}
-    )
+    token_beanie = await TokenBeanie.find_one({"user_id": admin_user.id, "name": "default_token"})
     if not token_beanie:
         return None
     return {
@@ -607,9 +605,7 @@ async def _bootstrap_admin_and_test_user() -> tuple[UserBeanie | None, dict | No
     """
     # Look up any non-anonymous admin; if one is in the DB we never touch
     # their password, so operator-set rotations survive container restarts.
-    admin_user = await UserBeanie.find_one(
-        {"is_admin": True, "is_anonymous": {"$ne": True}}
-    )
+    admin_user = await UserBeanie.find_one({"is_admin": True, "is_anonymous": {"$ne": True}})
 
     if admin_user is None:
         admin_email = settings.bootstrap.admin_email.strip()

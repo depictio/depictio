@@ -74,7 +74,9 @@ MINIO_PORT = int(_env.get("MINIO_PORT", _env.get("DEPICTIO_MINIO_EXTERNAL_PORT",
 MONGO_URI = f"mongodb://localhost:{MONGO_PORT}/depictioDB"
 S3_ENDPOINT = f"http://localhost:{MINIO_PORT}"
 S3_USER = _env.get("DEPICTIO_MINIO_ROOT_USER") or _die_missing("DEPICTIO_MINIO_ROOT_USER")
-S3_PASSWORD = _env.get("DEPICTIO_MINIO_ROOT_PASSWORD") or _die_missing("DEPICTIO_MINIO_ROOT_PASSWORD")
+S3_PASSWORD = _env.get("DEPICTIO_MINIO_ROOT_PASSWORD") or _die_missing(
+    "DEPICTIO_MINIO_ROOT_PASSWORD"
+)
 
 # Each new DC: (Mongo id, tag, TSV filename, description, columns_description, container_path).
 NEW_DCS: list[dict[str, Any]] = [

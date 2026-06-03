@@ -7,40 +7,76 @@ Provides WebSocket endpoint for dashboard real-time updates with JWT authenticat
 import asyncio
 from typing import Any
 
-from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket, WebSocketDisconnect
 from starlette import status
 
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.endpoints.user_endpoints.core_functions import _async_fetch_user_from_token
+from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user
 from depictio.api.v1.services.events import connection_manager, event_service
+from depictio.models.models.users import User
 
 events_router = APIRouter()
 
 
-async def verify_websocket_token(token: str | None) -> dict[str, str] | None:
-    """
-    Verify JWT token for WebSocket connection.
+async def _resolve_websocket_user(token: str | None) -> User | None:
+    """Decode the WS query-string token into a full ``User`` (or ``None``).
 
-    WebSocket doesn't support Authorization headers, so we use query params.
-
-    Args:
-        token: JWT token from query parameter
-
-    Returns:
-        User dict if valid, None otherwise
+    WebSocket doesn't support Authorization headers, so the JWT arrives as a
+    query parameter. Keeping the resolved user object (rather than a flattened
+    dict) lets the subscribe path run dashboard/project permission checks.
     """
     if not token:
         return None
-
     try:
-        user = await _async_fetch_user_from_token(token)
-        if user:
-            return {"user_id": str(user.id), "email": user.email}
+        return await _async_fetch_user_from_token(token)
     except Exception as e:
         logger.debug(f"WebSocket token verification failed: {e}")
+        return None
 
-    return None
+
+def _user_can_access_dashboard(user: User | None, dashboard_id: str) -> bool:
+    """Verify the authenticated user may subscribe to ``dashboard_id``'s events.
+
+    Resolves the dashboard's owning project (minimal local MongoDB query, to
+    avoid a ``PyObjectId``-typed cross-module helper that doesn't accept the
+    raw ``str`` dashboard id) and reuses
+    ``dashboards_endpoints.check_project_permission`` at viewer level. The
+    permission helper is imported lazily because ``dashboards_endpoints.routes``
+    pulls in a large dependency graph that can create an import cycle at app
+    startup. When no user is resolved (public/anonymous mode) only public
+    projects are subscribable.
+    """
+    from bson import ObjectId
+
+    from depictio.api.v1.db import dashboards_collection, projects_collection
+    from depictio.api.v1.endpoints.dashboards_endpoints.routes import check_project_permission
+
+    try:
+        dashboard = dashboards_collection.find_one({"dashboard_id": dashboard_id})
+        if not dashboard:
+            logger.debug(f"WS subscribe denied: dashboard {dashboard_id} not found")
+            return False
+
+        project_id = dashboard.get("project_id")
+        if not project_id:
+            logger.debug(f"WS subscribe denied: dashboard {dashboard_id} has no project_id")
+            return False
+
+        project = projects_collection.find_one({"_id": ObjectId(project_id)})
+        if not project:
+            logger.debug(f"WS subscribe denied: project {project_id} not found")
+            return False
+
+        if user is None:
+            # Anonymous / public mode: only public projects are subscribable.
+            return bool(project.get("is_public", False))
+
+        return check_project_permission(project["_id"], user, required_permission="viewer")
+    except Exception as e:
+        logger.warning(f"WS subscribe permission check failed for dashboard {dashboard_id}: {e}")
+        return False
 
 
 @events_router.websocket("/ws")
@@ -82,17 +118,30 @@ async def websocket_endpoint(
         await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="Events disabled")
         return
 
-    # Verify token (optional - allows unauthenticated connections if auth mode allows)
-    user_info = await verify_websocket_token(token)
-    user_id = user_info["user_id"] if user_info else None
+    # Verify token (optional - allows unauthenticated connections if auth mode allows).
+    # TODO(PR2 cookie migration): replace the token-in-query-string scheme with
+    # cookie/subprotocol-based WebSocket auth. Query-string tokens leak into proxy
+    # access logs and browser history. The full migration (and dropping the `token`
+    # query param) is explicitly deferred to PR2.
+    user = await _resolve_websocket_user(token)
+    user_id = str(user.id) if user else None
 
-    if not user_info and not settings.auth.requires_anonymous_user:
+    if user is None and not settings.auth.requires_anonymous_user:
         # Require authentication unless single-user / public / unauthenticated mode
         # is enabled (mirrors the HTTP `get_user_or_anonymous` fallback).
         await websocket.close(
             code=status.WS_1008_POLICY_VIOLATION, reason="Authentication required"
         )
         return
+
+    # Gate the initial query-param subscription: connection_manager.connect()
+    # auto-subscribes to `dashboard_id`, so it must pass the same ownership check
+    # as message-based subscribes. Drop the auto-subscribe if the user can't access it.
+    if dashboard_id and not _user_can_access_dashboard(user, dashboard_id):
+        logger.warning(
+            f"WS connect: user {user_id} denied auto-subscribe to dashboard {dashboard_id}"
+        )
+        dashboard_id = None
 
     # Accept connection and register with connection manager
     client_id = await connection_manager.connect(
@@ -110,7 +159,7 @@ async def websocket_endpoint(
                     websocket.receive_json(),
                     timeout=settings.events.ws_connection_timeout,
                 )
-                await handle_client_message(client_id, data, websocket)
+                await handle_client_message(client_id, data, websocket, user)
 
             except asyncio.TimeoutError:
                 # No message received, but connection is still alive
@@ -125,12 +174,17 @@ async def websocket_endpoint(
         await connection_manager.disconnect(client_id)
 
 
-async def handle_client_message(client_id: str, data: dict[str, Any], websocket: WebSocket) -> None:
+async def handle_client_message(
+    client_id: str,
+    data: dict[str, Any],
+    websocket: WebSocket,
+    user: User | None,
+) -> None:
     """
     Handle incoming messages from WebSocket clients.
 
     Supports:
-        - subscribe: Subscribe to a dashboard
+        - subscribe: Subscribe to a dashboard (permission-checked)
         - unsubscribe: Unsubscribe from a dashboard
         - ping: Client ping (responds with pong)
     """
@@ -138,6 +192,19 @@ async def handle_client_message(client_id: str, data: dict[str, Any], websocket:
     dashboard_id = data.get("dashboard_id")
 
     if msg_type == "subscribe" and dashboard_id:
+        # Verify the authenticated user can access this dashboard before
+        # wiring up its event stream. Without this, any connected client could
+        # subscribe to (and receive update payloads for) arbitrary dashboards.
+        if not _user_can_access_dashboard(user, dashboard_id):
+            logger.warning(f"WS subscribe denied: client {client_id} -> dashboard {dashboard_id}")
+            await websocket.send_json(
+                {
+                    "type": "subscribe_denied",
+                    "dashboard_id": dashboard_id,
+                    "reason": "not_authorized",
+                }
+            )
+            return
         await connection_manager.subscribe_to_dashboard(client_id, dashboard_id)
         await websocket.send_json({"type": "subscribed", "dashboard_id": dashboard_id})
 
@@ -298,7 +365,10 @@ def _pick_id_column(columns: list[str]) -> str | None:
 
 
 @events_router.post("/test-trigger/{dc_id}")
-async def test_trigger_event(dc_id: str) -> dict[str, Any]:
+async def test_trigger_event(
+    dc_id: str,
+    current_user: User = Depends(get_current_user),
+) -> dict[str, Any]:
     """
     Manually trigger a ``data_collection_updated`` event — useful for
     verifying WebSocket notifications without standing up MongoDB change
@@ -307,7 +377,16 @@ async def test_trigger_event(dc_id: str) -> dict[str, Any]:
     Broadcasts to every dashboard with an active subscription via
     ``connection_manager``. Open the React viewer for the dashboard, then
     POST to this endpoint to see the live-update flow end-to-end.
+
+    Admin-only: this is a test/debug endpoint that broadcasts arbitrary DC
+    update events to all connected clients.
     """
+    if not current_user.is_admin:
+        logger.warning(
+            f"Denied test-trigger: non-admin user {current_user.id} ({current_user.email})"
+        )
+        raise HTTPException(status_code=403, detail="User is not an admin.")
+
     from datetime import datetime, timezone
 
     from depictio.api.v1.deltatables_utils import invalidate_data_collection_cache

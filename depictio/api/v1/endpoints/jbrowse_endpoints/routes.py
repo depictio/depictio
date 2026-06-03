@@ -3,9 +3,11 @@ import hashlib
 import json
 import os
 from datetime import datetime
+from pathlib import Path
 
 from botocore.exceptions import NoCredentialsError
 from bson import ObjectId
+from bson.errors import InvalidId
 from fastapi import APIRouter, Depends, HTTPException
 
 from depictio.api.v1.configs.config import settings
@@ -343,17 +345,28 @@ async def filter_config(
     data_collection_oid = filter_params.get("data_collection_id")
     dashboard_id = filter_params.get("dashboard_id")
 
-    default_config_path = os.path.join(
-        jbrowse_config_dir,
-        f"{current_user.id}_{data_collection_oid}.json",  # type: ignore[possibly-unbound-attribute]
-    )
-
     if not tracks:
         return {"message": "No tracks provided.", "session": None}
-    if not default_config_path:
-        return {"message": "No default config provided.", "session": None}
+    if not data_collection_oid:
+        return {"message": "No data collection ID provided.", "session": None}
     if not dashboard_id:
         return {"message": "No dashboard ID provided."}
+
+    # ``data_collection_oid`` and ``dashboard_id`` are user-controlled and are
+    # concatenated into filesystem paths below. Validate them as strict
+    # ObjectIds so a value like ``../../`` can't escape the config dir, then
+    # assert the resolved paths stay inside ``jbrowse_config_dir``.
+    try:
+        data_collection_oid = str(ObjectId(data_collection_oid))
+        dashboard_id = str(ObjectId(dashboard_id))
+    except (InvalidId, TypeError):
+        raise HTTPException(
+            status_code=422,
+            detail="data_collection_id and dashboard_id must be valid ObjectIds.",
+        )
+
+    config_base = Path(jbrowse_config_dir).resolve()
+    default_config_path = str(config_base / f"{current_user.id}_{data_collection_oid}.json")  # type: ignore[possibly-unbound-attribute]
 
     config = json.load(open(default_config_path))
 
@@ -366,8 +379,16 @@ async def filter_config(
 
     config["tracks"] = filtered_tracks
 
-    output_path = default_config_path.replace(".json", f"_filtered_{dashboard_id}.json")
-    output_return_path = output_path.replace(f"{settings.jbrowse.config_dir}/", "")  # type: ignore[possibly-unbound-attribute]
+    output_path_resolved = (
+        config_base / f"{current_user.id}_{data_collection_oid}_filtered_{dashboard_id}.json"  # type: ignore[possibly-unbound-attribute]
+    ).resolve()
+    # Defence in depth: even with ObjectId validation above, refuse to write
+    # outside the configured jbrowse config directory.
+    if not output_path_resolved.is_relative_to(config_base):
+        raise HTTPException(status_code=400, detail="Resolved config path escapes config dir.")
+
+    output_path = str(output_path_resolved)
+    output_return_path = output_path_resolved.name
 
     with open(output_path, "w") as file:
         json.dump(config, file, indent=4)
