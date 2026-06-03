@@ -202,7 +202,8 @@ STATIC_IDS = {
             "mosdepth_amplicon_coverage": "746b0f3c1e4a2d7f8e5b9c16",
             "mosdepth_genome_coverage": "746b0f3c1e4a2d7f8e5b9c17",
             "mosdepth_amplicon_heatmap": "746b0f3c1e4a2d7f8e5b9c18",
-            "lollipop_canonical": "746b0f3c1e4a2d7f8e5b9c19",
+            # lollipop retired: the Lollipop component binds directly to
+            # variants_long via catalog roles (GENE/POS/EFFECT) — `use: ivar/variants_long`.
             "oncoplot_canonical": "746b0f3c1e4a2d7f8e5b9c1a",
             "complex_heatmap_canonical": "746b0f3c1e4a2d7f8e5b9c1b",
             "coverage_track_canonical": "746b0f3c1e4a2d7f8e5b9c1c",

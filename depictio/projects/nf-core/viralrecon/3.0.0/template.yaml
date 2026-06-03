@@ -296,22 +296,6 @@ workflows:
       # depictio/models/components/advanced_viz/schemas.py).
       # ----------------------------------------------------------------
 
-      - data_collection_tag: "lollipop_canonical"
-        description: "Lollipop-ready variant tracks (feature_id=GENE / position=POS / category=EFFECT)"
-        config:
-          type: "Table"
-          metatype: "Aggregated"
-          source: "transformed"
-          transform:
-            recipe: "nf-core/viralrecon/lollipop_canonical.py"
-          dc_specific_properties:
-            format: "CSV"
-            columns_description:
-              "feature_id": "Gene the variant is on"
-              "position": "Genomic position"
-              "category": "Variant effect class (missense / synonymous / nonsense / ...)"
-              "effect": "Allele frequency (size encoding)"
-
       - data_collection_tag: "oncoplot_canonical"
         description: "Oncoplot-ready variant matrix (sample_id × gene × mutation_type)"
         config:

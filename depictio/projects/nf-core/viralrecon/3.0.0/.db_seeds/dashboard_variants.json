@@ -517,21 +517,21 @@
       "component_type": "advanced_viz",
       "title": "Variant tracks per gene (lollipop)",
       "workflow_tag": "viralrecon",
-      "data_collection_tag": "lollipop_canonical",
+      "data_collection_tag": "variants_long",
       "wf_id": {
         "$oid": "746b0f3c1e4a2d7f8e5b9c01"
       },
       "dc_id": {
-        "$oid": "746b0f3c1e4a2d7f8e5b9c19"
+        "$oid": "746b0f3c1e4a2d7f8e5b9c12"
       },
       "dc_config": {
         "type": null,
         "metatype": null,
-        "description": "Lollipop-ready variant tracks (feature_id=GENE / position=POS / category=EFFECT)",
-        "data_collection_tag": "lollipop_canonical",
+        "description": "Per-sample annotated variant calls (long table).",
+        "data_collection_tag": "variants_long",
         "dc_specific_properties": null,
         "_id": {
-          "$oid": "746b0f3c1e4a2d7f8e5b9c19"
+          "$oid": "746b0f3c1e4a2d7f8e5b9c12"
         }
       },
       "cols_json": {},
@@ -543,10 +543,10 @@
       "viz_kind": "lollipop",
       "config": {
         "viz_kind": "lollipop",
-        "feature_id_col": "feature_id",
-        "position_col": "position",
-        "category_col": "category",
-        "effect_col": "effect",
+        "feature_id_col": "GENE",
+        "position_col": "POS",
+        "category_col": "EFFECT",
+        "effect_col": "AF",
         "max_subplot_genes": 6
       },
       "wf_tag": "nextflow/viralrecon"

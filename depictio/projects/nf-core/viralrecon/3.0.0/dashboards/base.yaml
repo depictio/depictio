@@ -1052,15 +1052,15 @@ tabs:
       h: 5
   # Per-gene lollipop sub-panels — drill-into-gene view. Full width.
   - component_type: advanced_viz
+    # Catalog-bound: `use` inherits viz_kind + role columns (feature_id=GENE,
+    # position=POS, category=EFFECT) from catalog/ivar/variants_long.yaml's
+    # lollipop render. Only the optional effect column + display knob are local.
+    use: ivar/variants_long
     workflow_tag: viralrecon
-    data_collection_tag: lollipop_canonical
+    data_collection_tag: variants_long
     viz_kind: lollipop
     config:
-      viz_kind: lollipop
-      feature_id_col: feature_id
-      position_col: position
-      category_col: category
-      effect_col: effect
+      effect_col: AF
       max_subplot_genes: 6
     tag: adv-var-lollipop
     index: adv-var-lollipop
