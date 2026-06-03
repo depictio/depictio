@@ -34,16 +34,14 @@ def test_bundled_catalog_loads():
     assert {"pangolin", "nextclade", "ivar", "mosdepth", "qiime2", "metaphlan", "multiqc"} <= tools
 
 
-def test_single_output_tool_is_a_flat_file():
+def test_every_tool_is_a_folder_with_module_yaml():
+    # architecture: one folder per module (module.yaml + output yamls + fixtures)
+    catalog = REPO_ROOT / "depictio" / "catalog"
     entries = {e.id: e for e in load_catalog_entries()}
-    assert (REPO_ROOT / "depictio" / "catalog" / "ivar.yaml").is_file()
-    assert len(entries["ivar"].outputs) == 1
-
-
-def test_multi_output_tool_is_a_folder():
-    entries = {e.id: e for e in load_catalog_entries()}
-    assert (REPO_ROOT / "depictio" / "catalog" / "qiime2").is_dir()
-    assert len(entries["qiime2"].outputs) >= 5
+    for tool_id in entries:
+        assert (catalog / tool_id / "module.yaml").is_file()
+    assert len(entries["ivar"].outputs) == 1  # single-output tool
+    assert len(entries["qiime2"].outputs) >= 5  # multi-output tool
 
 
 def test_identity_is_stored_as_urls():
@@ -296,13 +294,22 @@ def test_alpha_diversity_has_code_figure_and_metric_cards():
     assert fig.code and "fig = px.box" in fig.code  # code-mode figure
     card = next(r for r in out.renders_as if r.component == "card")
     assert card.aggregation == "average" and card.secondary_layout == "box_plot"  # Tukey card
-    assert out.fixture == "qiime2_alpha_diversity.tsv"  # module-keyed fixture
+    assert out.fixture == "alpha_diversity.tsv"  # co-located in qiime2/
 
 
-def test_fixture_columns_reads_bundled_sample():
-    from depictio.models.components.advanced_viz.catalog import fixture_columns
+def test_fixture_is_co_located_and_readable():
+    from depictio.models.components.advanced_viz.catalog import read_fixture_columns
 
-    cols = fixture_columns("qiime2_alpha_diversity.tsv")
+    out = next(
+        o
+        for e in load_catalog_entries()
+        if e.id == "qiime2"
+        for o in e.outputs
+        if o.id == "qiime2_alpha_diversity"
+    )
+    fx = out.fixture_file()  # resolved next to qiime2/alpha_diversity.yaml
+    assert fx is not None and fx.parent.name == "qiime2" and fx.exists()
+    cols = read_fixture_columns(fx)
     assert {"sample_id", "shannon", "evenness", "faith_pd"} <= set(cols)
 
 
@@ -428,21 +435,22 @@ def test_catalog_is_decoupled_from_suggestion_engine():
 
 
 def test_every_fixture_reads_and_grounds_its_renders():
-    from depictio.models.components.advanced_viz.catalog import fixture_columns
+    from depictio.models.components.advanced_viz.catalog import read_fixture_columns
 
     seen = 0
     for entry in load_catalog_entries():
         for out in entry.outputs:
-            if not out.fixture:
+            fx = out.fixture_file()
+            if fx is None:
                 continue
             seen += 1
-            cols = set(fixture_columns(out.fixture))  # reads (csv/tsv/parquet) or raises
+            cols = set(read_fixture_columns(fx))  # reads (csv/tsv/parquet) or raises
             for r in out.renders_as:
                 missing = r.bound_columns() - cols
                 assert not missing, (
                     f"{out.id} render {r.kind or r.component}: {sorted(missing)} ∉ fixture"
                 )
-    assert seen >= 8  # most tabular outputs carry a bundled fixture
+    assert seen >= 8  # most tabular outputs carry a co-located fixture
 
 
 def test_every_recipe_resolves_to_a_real_file():
@@ -452,16 +460,15 @@ def test_every_recipe_resolves_to_a_real_file():
                 recipe_output_columns(out.recipe)  # raises RecipeError if missing
 
 
-def test_fixtures_are_catalog_local_and_module_keyed():
-    from depictio.models.components.advanced_viz.catalog import FIXTURES_DIR, fixture_path
-
-    # every referenced fixture lives under catalog/_fixtures/ (no pipeline path)
+def test_fixtures_are_co_located_with_their_module():
+    # each fixture is a bare filename, resolved inside its module's folder
     for entry in load_catalog_entries():
         for out in entry.outputs:
             if out.fixture:
-                assert "/" not in out.fixture  # module-keyed filename, not a pipeline path
-                assert fixture_path(out.fixture).parent == FIXTURES_DIR
-                assert fixture_path(out.fixture).exists()
+                assert "/" not in out.fixture  # bare filename, not a path
+                fx = out.fixture_file()
+                assert fx is not None and fx.exists()
+                assert fx.parent.name == entry.id  # lives in the module folder
 
 
 def test_card_top_n_requires_breakdown_col():

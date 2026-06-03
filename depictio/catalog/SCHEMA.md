@@ -10,7 +10,14 @@ are rejected (`extra="forbid"`).
 
 ---
 
-## Layout: a flat file (one output) or a folder (many)
+## Layout: one folder per module (fixtures co-located)
+
+Each tool is a folder: `module.yaml` (tool fields) + one YAML per output + each
+output's fixture next to it (`<output>.tsv`). A single flat file (tool fields +
+`outputs:` list) is also accepted by the loader, but the folder layout is the
+convention.
+
+### Legacy: a flat file (one output) or a folder (many)
 
 - **Flat file** = tool fields at the root **+** an `outputs:` list.
 - **Folder** = `module.yaml` (tool fields) **+** one `*.yaml` per output.
@@ -40,7 +47,7 @@ Both use the same fields; a folder just splits the outputs into files.
 | `description` | CAN | str | |
 | `recipe` | CAN | str | Pipeline-qualified reshape, e.g. `nf-core/ampliseq/ancombc.py`. **Owns the output columns.** |
 | `columns` | CAN* | dict[str,str] | Bindable columns (polars dtype names). **MUST be set iff there is no recipe and a render binds columns; MUST be absent if `recipe` is set.** |
-| `fixture` | CAN | str | A **module-keyed** sample filename under `depictio/catalog/_fixtures/` (e.g. `qiime2_alpha_diversity.tsv`) — a small, committed, pipeline-agnostic sample of the bindable shape. Grounds renders in CI (Level-3) and feeds `preview` later. |
+| `fixture` | CAN | str | A **co-located** sample filename, resolved next to the output's YAML in the module folder (e.g. `alpha_diversity.tsv`) — a small, committed, pipeline-agnostic sample of the bindable shape. Grounds renders in CI (Level-3) and feeds `preview` later. |
 | `renders_as` | CAN | list[Render] | Dashboard render target(s) + binding. |
 | `nf_core_url` / `biotools_url` / `edam_*` | CAN | str / list | Per-output identity overrides. |
 

@@ -1,0 +1,8 @@
+id: pangolin
+name: Pangolin
+description: Phylogenetic Assignment of Named Global Outbreak LINeages (SARS-CoV-2).
+homepage: https://github.com/cov-lineages/pangolin
+biotools_url: https://bio.tools/pangolin_cov-lineages
+nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/pangolin/run
+edam_topics:
+  - http://edamontology.org/topic_3305 # Public health and epidemiology

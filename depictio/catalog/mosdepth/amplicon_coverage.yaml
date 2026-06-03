@@ -10,7 +10,7 @@ columns:
   region: String
   coverage: Float64
   sample: String
-fixture: mosdepth_amplicon_coverage.tsv
+fixture: amplicon_coverage.tsv
 renders_as:
   - { component: advanced_viz, kind: coverage_track, roles: {chromosome: chrom, position: start, value: coverage} }
   - { component: card, column: coverage, aggregation: average } # mean amplicon depth

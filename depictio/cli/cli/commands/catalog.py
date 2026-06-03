@@ -105,8 +105,8 @@ def catalog_validate(
         CATALOG_DIR,
         CatalogEntry,
         check_existence,
-        fixture_columns,
         load_entries_from_dir,
+        read_fixture_columns,
         recipe_output_columns,
     )
     from depictio.models.components.advanced_viz.catalog import (
@@ -132,9 +132,10 @@ def catalog_validate(
     for entry in entries:
         for out in entry.outputs:
             source = ""
-            if out.fixture:
+            fx = out.fixture_file()
+            if fx:
                 try:
-                    available = set(fixture_columns(out.fixture))
+                    available = set(read_fixture_columns(fx))
                     source = f"fixture {out.fixture}"
                 except Exception as exc:
                     problems.append(f"{out.id}: fixture {out.fixture} → {exc}")

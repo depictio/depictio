@@ -1,0 +1,8 @@
+id: ivar
+name: iVar
+description: Reference-based variant calling for viral amplicon sequencing.
+homepage: https://andersen-lab.github.io/ivar/html/
+biotools_url: https://bio.tools/ivar
+nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/ivar/variants
+edam_topics:
+  - http://edamontology.org/topic_0199 # Genetic variation

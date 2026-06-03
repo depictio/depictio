@@ -43,8 +43,9 @@ pipeline-agnostic (see `docs/design/bioinformatics-catalog.md`).
   mode `code`) + `card` (`column`/`aggregation`). `qiime2_alpha_diversity` is the
   flagship (code-mode multi-facet box + 3 metric cards). **TODO:** enrich the
   other entries with their figures/cards (ampliseq/viralrecon dashboards).
-- **`fixture`** is now **module-keyed + catalog-local**: small samples under
-  `_fixtures/<output_id>.tsv`, pipeline-agnostic, committed with the catalog.
+- **`fixture`** is now **co-located in the module folder** (`<output>.tsv` next
+  to its YAML), pipeline-agnostic, committed with the catalog — each module is a
+  self-contained unit (identity + outputs + fixtures).
   `catalog validate` grounds renders against them (Level-3); they also feed
   `preview`. A dedicated `catalog-ci` workflow + `depictio catalog validate` run
   on every catalog/recipe change.

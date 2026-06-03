@@ -14,21 +14,25 @@ that). It is the map used to **build / assist dashboards when scanning a run**.
 
 ## Layout
 
-A **tool** is a flat file (single output) or a folder (many outputs):
+**One folder per module** — a self-contained unit holding the tool identity,
+one YAML per output, and each output's **co-located fixture**:
 
 ```
 depictio/catalog/
-  ivar.yaml              # single output  → one flat file (tool fields + outputs)
-  pangolin.yaml  nextclade.yaml  metaphlan.yaml
-  qiime2/                # many outputs   → a folder
-    module.yaml          #   the tool's fields (id, name, URLs…)
-    taxa_barplot.yaml    #   one output per file
-    ancombc.yaml  rel_abundance.yaml  alpha_diversity.yaml  alpha_rarefaction.yaml
-  mosdepth/   multiqc/
+  ivar/
+    module.yaml          # tool identity (id, name, bio.tools/nf-core/EDAM URLs)
+    variants_long.yaml   # one output per file
+    variants_long.tsv    # its fixture, right next to it
+  qiime2/
+    module.yaml
+    alpha_diversity.yaml   alpha_diversity.tsv
+    ancombc.yaml           ancombc.tsv
+    taxa_barplot.yaml  rel_abundance.yaml  alpha_rarefaction.yaml  (+ .tsv)
+  mosdepth/   multiqc/   pangolin/   nextclade/   metaphlan/
 ```
 
-Adding a tool = a PR that adds one YAML file. **No Python** (unless the output
-needs a reshape, which is a recipe).
+Adding a tool = a PR that adds **one folder** (`module.yaml` + output YAML(s) +
+fixture). **No Python** unless an output needs a reshape (a recipe).
 
 ## What one output declares
 

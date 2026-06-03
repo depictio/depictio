@@ -5,7 +5,7 @@ nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/qiim
 find: { path_glob: "**/qiime2/diversity/alpha_diversity/*_vector/metadata.tsv" }
 recipe: nf-core/ampliseq/alpha_diversity_multi_canonical.py
 # bindable sample (recipe declares only sample_id/habitat; metric cols are dynamic)
-fixture: qiime2_alpha_diversity.tsv
+fixture: alpha_diversity.tsv
 renders_as:
   # code-mode figure: multi-facet box plot of the metrics by habitat
   - component: figure

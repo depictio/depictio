@@ -30,7 +30,7 @@ from pathlib import Path
 from typing import Literal
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, model_validator
 
 from depictio.models.components.types import (
     AdvancedVizKind,
@@ -40,10 +40,6 @@ from depictio.models.components.types import (
 )
 
 CATALOG_DIR = Path(__file__).resolve().parents[3] / "catalog"
-# Module-keyed, catalog-local sample data (one file per output, named by id).
-# Pipeline-agnostic and committed with the catalog → usable for both validation
-# (Level-3 grounding) and `catalog preview`.
-FIXTURES_DIR = CATALOG_DIR / "_fixtures"
 
 # plotly-express kwargs whose VALUES are column names (grounded against data);
 # other dict_kwargs (title, points, log_x…) are passed through untouched.
@@ -255,6 +251,17 @@ class CatalogOutput(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
+    # Folder this output's YAML was loaded from (set by the loader). The
+    # `fixture` is resolved relative to it → fixtures are co-located with the
+    # module's YAML.
+    _source_dir: Path | None = PrivateAttr(default=None)
+
+    def fixture_file(self) -> Path | None:
+        """Resolved path of the co-located fixture, if any."""
+        if self.fixture and self._source_dir is not None:
+            return self._source_dir / self.fixture
+        return None
+
     @model_validator(mode="after")
     def _columns_ownership(self) -> CatalogOutput:
         # No duplication: a recipe owns the output columns.
@@ -356,7 +363,10 @@ def _load_tool_dir(directory: Path) -> CatalogEntry:
         outputs.append(CatalogOutput.model_validate(yaml.safe_load(path.read_text())))
     if not outputs:
         raise ValueError(f"tool folder {directory} has no output files")
-    return CatalogEntry(**tool.model_dump(), outputs=outputs)
+    entry = CatalogEntry(**tool.model_dump(), outputs=outputs)
+    for out in entry.outputs:
+        out._source_dir = directory  # fixtures are co-located in the module folder
+    return entry
 
 
 def load_entries_from_dir(directory: Path) -> list[CatalogEntry]:
@@ -373,7 +383,10 @@ def load_entries_from_dir(directory: Path) -> list[CatalogEntry]:
             elif path.suffix == ".yaml":
                 raw = yaml.safe_load(path.read_text())
                 if raw is not None:
-                    entries.append(CatalogEntry.model_validate(raw))
+                    entry = CatalogEntry.model_validate(raw)
+                    for out in entry.outputs:
+                        out._source_dir = path.parent  # fixtures next to the flat file
+                    entries.append(entry)
         except Exception as exc:
             raise ValueError(f"invalid catalog entry {path}: {exc}") from exc
     return entries
@@ -445,16 +458,10 @@ def check_existence(entries: tuple[CatalogEntry, ...] | list[CatalogEntry]) -> l
 # ---------------------------------------------------------------------------
 
 
-def fixture_path(fixture_ref: str) -> Path:
-    """Resolve a module-keyed fixture name to its path under `_fixtures/`."""
-    return FIXTURES_DIR / fixture_ref
-
-
-def fixture_columns(fixture_ref: str) -> list[str]:
-    """Read the column header of a module-keyed fixture (csv/tsv/parquet)."""
+def read_fixture_columns(path: Path) -> list[str]:
+    """Read the column header of a fixture file (csv/tsv/parquet)."""
     import polars as pl
 
-    path = fixture_path(fixture_ref)
     if path.suffix == ".parquet":
         return list(pl.read_parquet_schema(path).keys())
     sep = "\t" if path.suffix == ".tsv" else ","
