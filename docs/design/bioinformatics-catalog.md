@@ -167,7 +167,7 @@ declarative melt/pivot/aggregate mini-language (which nothing used). Instead an
 output carries a single optional reference:
 
 ```yaml
-recipe: nf-core/ampliseq/ancombc.py   # projects/<pipeline>/recipes/<name>.py
+recipe: qiime2/ancombc.py   # module-owned: depictio/catalog/<module>/<name>.py
 ```
 
 Either the raw file is already bindable — omit `recipe` (e.g. MetaPhlAn's long
