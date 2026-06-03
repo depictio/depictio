@@ -78,8 +78,8 @@ def _verify_s3_images(s3_base_folder: str, CLI_config: CLIConfig) -> dict:
         # Initialize S3 client
         s3_client = boto3.client(
             "s3",
-            aws_access_key_id=CLI_config.s3_storage.root_user,
-            aws_secret_access_key=CLI_config.s3_storage.root_password,
+            aws_access_key_id=CLI_config.s3_storage.aws_access_key_id,
+            aws_secret_access_key=CLI_config.s3_storage.aws_secret_access_key,
             endpoint_url=CLI_config.s3_storage.url,
         )
 

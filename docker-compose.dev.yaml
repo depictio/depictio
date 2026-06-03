@@ -133,7 +133,9 @@ services:
       dockerfile: docker-images/Dockerfile.viewer.dev
       context: .
     ports:
-      - "${VIEWER_DEV_PORT:-5173}:5173"
+      # Bound to localhost like every other dev port — set VIEWER_DEV_HOST=0.0.0.0
+      # if you need LAN access (e.g. testing from a phone).
+      - "${VIEWER_DEV_HOST:-127.0.0.1}:${VIEWER_DEV_PORT:-5173}:5173"
     environment:
       # Proxy /depictio/api to the dockerised backend on the compose network
       # (internal port 8058), NOT the host default 0.0.0.0:8122 from

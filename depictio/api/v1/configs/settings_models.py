@@ -218,7 +218,10 @@ class S3DepictioCLIConfig(ServiceConfig):
     def aws_secret_access_key(self) -> str:
         # Single chokepoint that unwraps the secret for boto3/polars callers so
         # tokens never appear in `repr(settings)` / `model_dump()` output.
-        return self.root_password.get_secret_value()
+        # Tolerates plain-str values: direct attribute assignment (tests, legacy
+        # callers) bypasses pydantic coercion, leaving a raw str in the field.
+        pw = self.root_password
+        return pw.get_secret_value() if isinstance(pw, SecretStr) else pw
 
 
 class AuthConfig(BaseSettings):
