@@ -323,3 +323,85 @@ async def test_register_collapses_duplicate_email_to_generic_error():
     detail = str(exc_info.value.detail)  # type: ignore[unresolved-attribute]
     assert "exist" not in detail.lower(), f"Enumeration leak in register error: {detail!r}"
     assert detail == user_routes._REGISTER_GENERIC_ERROR
+
+
+# ---------------------------------------------------------------------------
+# PR-C — backup restore: backup_id format + path containment
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "bad_id",
+    [
+        "../../../../etc/passwd",
+        "foo/bar",
+        "abc",
+        "20250627_12345",  # one digit short
+        "20250627_123456.json",
+        "",
+    ],
+)
+def test_backup_id_format_rejected(bad_id):
+    """backup_id is concatenated into a filename — anything but the canonical
+    YYYYMMDD_HHMMSS timestamp must 422 before a path is built."""
+    from fastapi import HTTPException
+
+    from depictio.api.v1.endpoints.backup_endpoints.routes import _validate_backup_id
+
+    with pytest.raises(HTTPException) as exc_info:
+        _validate_backup_id(bad_id)
+    assert exc_info.value.status_code == 422  # type: ignore[unresolved-attribute]
+
+
+def test_backup_id_canonical_format_accepted(tmp_path):
+    from depictio.api.v1.endpoints.backup_endpoints.routes import (
+        _resolve_backup_path,
+        _validate_backup_id,
+    )
+
+    _validate_backup_id("20250627_123456")  # no raise
+    resolved = _resolve_backup_path(str(tmp_path), "20250627_123456")
+    assert resolved.endswith("depictio_backup_20250627_123456.json")
+
+
+# ---------------------------------------------------------------------------
+# PR-C — migrate /export-project SSRF gate
+# ---------------------------------------------------------------------------
+
+
+def test_export_project_rejects_unlisted_s3_endpoint():
+    """Caller-supplied S3 endpoints are rejected unless they match the
+    deployment's own MinIO endpoint or the operator allowlist (default empty)."""
+    from unittest.mock import MagicMock, patch
+
+    from fastapi import HTTPException
+
+    from depictio.api.v1.endpoints.migrate_endpoints import routes as migrate_routes
+
+    mock_settings = MagicMock()
+    mock_settings.minio.endpoint_url = "http://minio:9000"
+    mock_settings.backup.migration_allowed_s3_endpoints = ["https://allowed.example.com"]
+
+    with patch.object(migrate_routes, "settings", mock_settings):
+        # Arbitrary external endpoint → 403 (SSRF/exfiltration gate).
+        with pytest.raises(HTTPException) as exc_info:
+            migrate_routes._validate_target_s3_endpoint(
+                {"endpoint_url": "http://169.254.169.254/latest/meta-data"}
+            )
+        assert exc_info.value.status_code == 403  # type: ignore[unresolved-attribute]
+
+        # Own MinIO endpoint → allowed (self-migration).
+        migrate_routes._validate_target_s3_endpoint({"endpoint_url": "http://minio:9000"})
+
+        # Allowlisted endpoint → allowed; near-miss port → 403.
+        migrate_routes._validate_target_s3_endpoint({"endpoint_url": "https://allowed.example.com"})
+        with pytest.raises(HTTPException) as exc_info:
+            migrate_routes._validate_target_s3_endpoint(
+                {"endpoint_url": "https://allowed.example.com:9999"}
+            )
+        assert exc_info.value.status_code == 403  # type: ignore[unresolved-attribute]
+
+        # Missing/malformed endpoint → 400.
+        with pytest.raises(HTTPException) as exc_info:
+            migrate_routes._validate_target_s3_endpoint({"endpoint_url": ""})
+        assert exc_info.value.status_code == 400  # type: ignore[unresolved-attribute]

@@ -626,6 +626,32 @@ class BackupConfig(BaseSettings):
     backup_s3_region: str = Field(default="us-east-1", description="Backup S3 region")
     compress_local_backups: bool = Field(default=True, description="Compress local S3 data backups")
     backup_file_retention_days: int = Field(default=30, description="Days to retain backup files")
+    migration_allowed_s3_endpoints: list[str] | str = Field(
+        default_factory=list,
+        description=(
+            "Opt-in allowlist of external S3/MinIO endpoint URLs that project migration "
+            "(/export-project) is permitted to push data to. Set via "
+            "DEPICTIO_BACKUP_MIGRATION_ALLOWED_S3_ENDPOINTS as a comma-separated list "
+            "(e.g. 'https://s3.partner.example.com,https://minio.other.example.com:9000'). "
+            "Empty by default — when empty, ALL caller-supplied external endpoints are "
+            "rejected and only the deployment's own configured MinIO endpoint is allowed "
+            "(self-migration). Each entry is matched exactly on normalized scheme+host+port. "
+            "This is a server-side SSRF / data-exfiltration guard: only add operator-vetted "
+            "endpoints you trust the server to connect to."
+        ),
+    )
+
+    @model_validator(mode="after")
+    def _normalise_migration_endpoints(self) -> "BackupConfig":
+        # Accept the friendlier comma-separated form for the env var in addition to
+        # pydantic-settings' default JSON list parsing, mirroring cors_allowed_origins.
+        if isinstance(self.migration_allowed_s3_endpoints, str):
+            object.__setattr__(
+                self,
+                "migration_allowed_s3_endpoints",
+                [e.strip() for e in self.migration_allowed_s3_endpoints.split(",") if e.strip()],
+            )
+        return self
 
     @computed_field
     @property

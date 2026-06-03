@@ -1,6 +1,9 @@
+import hashlib
 import json
 import os
+import re
 from datetime import datetime
+from pathlib import Path
 from typing import Any, cast
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -24,6 +27,113 @@ from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user
 from depictio.models.models.users import User
 
 backup_endpoint_router = APIRouter()
+
+# Backup IDs are generated as ``datetime.strftime("%Y%m%d_%H%M%S")`` in
+# ``_create_mongodb_backup`` (e.g. ``20250627_123456``). Enforcing this strict
+# format prevents path-traversal / arbitrary-filename injection because the
+# ``backup_id`` is concatenated into a filename on the server.
+_BACKUP_ID_PATTERN = re.compile(r"^\d{8}_\d{6}$")
+
+
+def _validate_backup_id(backup_id: str) -> None:
+    """Reject any ``backup_id`` that does not match the canonical timestamp format.
+
+    Raises HTTP 422 before the value is ever used to build a filesystem path.
+    """
+    if not isinstance(backup_id, str) or not _BACKUP_ID_PATTERN.fullmatch(backup_id):
+        raise HTTPException(
+            status_code=422,
+            detail="Invalid backup_id format. Expected 'YYYYMMDD_HHMMSS'.",
+        )
+
+
+def _resolve_backup_path(backup_dir: str, backup_id: str) -> str:
+    """Build and validate the backup file path for a (already format-checked) backup_id.
+
+    Performs a resolved-path containment check so that even an unexpected
+    ``backup_id`` cannot escape the configured backup directory.
+    """
+    base = Path(backup_dir).resolve()
+    candidate = (base / f"depictio_backup_{backup_id}.json").resolve()
+    if not candidate.is_relative_to(base):
+        # Path escaped the backup directory — treat as a validation error and
+        # log internally without echoing the resolved path back to the caller.
+        logger.error(f"Rejected backup path outside backup directory: backup_id={backup_id!r}")
+        raise HTTPException(
+            status_code=422,
+            detail="Invalid backup_id format. Expected 'YYYYMMDD_HHMMSS'.",
+        )
+    return str(candidate)
+
+
+def _compute_file_sha256(file_path: str) -> str:
+    """Compute the SHA-256 hex digest of a file's contents (streamed)."""
+    sha256 = hashlib.sha256()
+    with open(file_path, "rb") as fh:
+        for chunk in iter(lambda: fh.read(1024 * 1024), b""):
+            sha256.update(chunk)
+    return sha256.hexdigest()
+
+
+def _read_expected_checksum(checksum_path: str) -> str | None:
+    """Read the expected SHA-256 digest from a ``.sha256`` sidecar file.
+
+    The sidecar follows the ``sha256sum`` convention ("<hexdigest>  <filename>").
+    Returns the lowercase hex digest, or ``None`` if the sidecar is missing or
+    malformed.
+    """
+    if not os.path.exists(checksum_path):
+        return None
+    try:
+        with open(checksum_path, "r") as fh:
+            first_line = fh.readline().strip()
+    except OSError:
+        return None
+    if not first_line:
+        return None
+    digest = first_line.split()[0].strip().lower()
+    if re.fullmatch(r"[0-9a-f]{64}", digest):
+        return digest
+    return None
+
+
+def _verify_backup_integrity(backup_path: str, allow_unverified: bool) -> None:
+    """Verify a backup file's SHA-256 against its sidecar before restore.
+
+    - Missing sidecar (legacy pre-checksum backups): allowed only when
+      ``allow_unverified`` is True, otherwise HTTP 409.
+    - Sidecar present but digest mismatch: always HTTP 400 (never bypassable),
+      since a mismatch indicates tampering or corruption.
+    """
+    checksum_path = f"{backup_path}.sha256"
+    expected = _read_expected_checksum(checksum_path)
+
+    if expected is None:
+        if allow_unverified:
+            logger.warning(
+                "Restoring backup without checksum verification "
+                "(allow_unverified=True); no valid .sha256 sidecar found."
+            )
+            return
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "Backup integrity could not be verified: checksum is missing. "
+                "Re-create the backup, or set allow_unverified=true to restore "
+                "a legacy backup at your own risk."
+            ),
+        )
+
+    actual = _compute_file_sha256(backup_path)
+    if actual != expected:
+        logger.error(
+            "Backup checksum mismatch detected during restore "
+            f"(path basename={os.path.basename(backup_path)})"
+        )
+        raise HTTPException(
+            status_code=400,
+            detail="Backup integrity check failed: checksum mismatch.",
+        )
 
 
 class BackupRequest(BaseModel):
@@ -220,6 +330,14 @@ async def create_backup(
         with open(backup_path, "w") as backup_file:
             json.dump(enhanced_backup, backup_file, indent=2, default=str)
 
+        # Integrity: store a SHA-256 sidecar so restores can verify the backup
+        # file has not been tampered with or truncated. The sidecar is written
+        # after the backup file so the digest reflects the final contents.
+        backup_checksum = _compute_file_sha256(backup_path)
+        checksum_path = f"{backup_path}.sha256"
+        with open(checksum_path, "w") as checksum_file:
+            checksum_file.write(f"{backup_checksum}  {backup_filename}\n")
+
         logger.info(f"Backup created successfully: {backup_filename}")
 
         response_data = {
@@ -242,7 +360,7 @@ async def create_backup(
 
     except Exception as e:
         logger.error(f"Backup creation failed: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Backup creation failed: {str(e)}")
+        raise HTTPException(status_code=500, detail="Backup creation failed.")
 
 
 @backup_endpoint_router.post("/create-enhanced", response_model=BackupResponse, deprecated=True)
@@ -285,6 +403,9 @@ class BackupRestoreRequest(BaseModel):
     backup_id: str
     dry_run: bool = True
     collections: list[str] | None = None  # If None, restore all collections
+    # Escape hatch for legacy backups created before checksum sidecars existed.
+    # Only bypasses a *missing* checksum; a checksum *mismatch* is never bypassable.
+    allow_unverified: bool = False
 
 
 class BackupRestoreResponse(BaseModel):
@@ -357,7 +478,7 @@ async def list_backups(
 
     except Exception as e:
         logger.error(f"Failed to list backups: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Failed to list backups: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to list backups.")
 
 
 @backup_endpoint_router.post("/validate", response_model=BackupValidateResponse)
@@ -373,10 +494,12 @@ async def validate_backup(
             status_code=403, detail="Access denied: Only administrators can validate backups"
         )
 
+    # Reject malformed backup_id before it touches the filesystem.
+    _validate_backup_id(request.backup_id)
+
     try:
-        BACKUP_DIR = settings.backup.backup_path
-        backup_filename = f"depictio_backup_{request.backup_id}.json"
-        backup_path = os.path.join(BACKUP_DIR, backup_filename)
+        backup_dir = settings.backup.backup_path
+        backup_path = _resolve_backup_path(backup_dir, request.backup_id)
 
         if not os.path.exists(backup_path):
             return BackupValidateResponse(
@@ -400,9 +523,11 @@ async def validate_backup(
             errors=result.get("errors", []),
         )
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Backup validation failed: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Backup validation failed: {str(e)}")
+        raise HTTPException(status_code=500, detail="Backup validation failed.")
 
 
 def _convert_complex_objects_to_strings(obj):
@@ -438,21 +563,27 @@ async def restore_backup(
             status_code=403, detail="Access denied: Only administrators can restore backups"
         )
 
+    # Reject malformed backup_id before it touches the filesystem.
+    _validate_backup_id(request.backup_id)
+
     logger.info(
         f"Admin user {current_user.email} initiating restore from backup {request.backup_id}"
     )
 
     try:
         backup_dir = settings.backup.backup_path
-        backup_filename = f"depictio_backup_{request.backup_id}.json"
-        backup_path = os.path.join(backup_dir, backup_filename)
+        backup_path = _resolve_backup_path(backup_dir, request.backup_id)
 
         if not os.path.exists(backup_path):
             return BackupRestoreResponse(
                 success=False,
                 message=f"Backup not found: {request.backup_id}",
-                errors=[f"Backup file does not exist: {backup_filename}"],
+                errors=["Backup file does not exist."],
             )
+
+        # Integrity gate: verify the backup file checksum before reading/applying
+        # any data. Raises 400 (mismatch) or 409 (missing, unless allow_unverified).
+        _verify_backup_integrity(backup_path, request.allow_unverified)
 
         with open(backup_path, "r") as f:
             backup_data = json.load(f)
@@ -543,13 +674,13 @@ async def restore_backup(
                 total_restored += len(documents)
 
             except Exception as e:
-                error_msg = f"Failed to restore {collection_name}: {str(e)}"
-                errors.append(error_msg)
-                logger.error(error_msg)
+                # Log full detail internally; return a sanitized message.
+                logger.error(f"Failed to restore {collection_name}: {str(e)}")
+                errors.append(f"Failed to restore collection '{collection_name}'.")
                 restored_collections[collection_name] = {
                     "count": 0,
                     "status": "failed",
-                    "error": str(e),
+                    "error": "restore failed",
                 }
 
         return BackupRestoreResponse(
@@ -560,6 +691,8 @@ async def restore_backup(
             errors=errors,
         )
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Restore operation failed: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Restore operation failed: {str(e)}")
+        raise HTTPException(status_code=500, detail="Restore operation failed.")
