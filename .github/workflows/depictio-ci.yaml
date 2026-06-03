@@ -451,8 +451,8 @@ jobs:
           echo "UID=$(id -u)" >> $GITHUB_ENV
           echo "GID=$(id -g)" >> $GITHUB_ENV
           cp .env.example .env
-          mkdir -p data/depictioDB data/minio_data data/prof_files data/cache
-          chmod 777 data data/depictioDB data/minio_data data/prof_files data/cache
+          mkdir -p data/depictioDB data/minio_data data/prof_files data/cache data/redis
+          chmod 777 data data/depictioDB data/minio_data data/prof_files data/cache data/redis
 
       - name: Start services
         run: |
@@ -969,8 +969,8 @@ jobs:
           echo "UID=$(id -u)" >> $GITHUB_ENV
           echo "GID=$(id -g)" >> $GITHUB_ENV
           cp .env.example .env
-          mkdir -p data/depictioDB data/minio_data data/prof_files data/cache
-          chmod 777 data data/depictioDB data/minio_data data/prof_files data/cache
+          mkdir -p data/depictioDB data/minio_data data/prof_files data/cache data/redis
+          chmod 777 data data/depictioDB data/minio_data data/prof_files data/cache data/redis
 
       - name: Log in and start services
         run: |
@@ -1701,8 +1701,8 @@ jobs:
           grep "DEPICTIO_BACKUP" docker-compose/.env || echo "❌ No DEPICTIO_BACKUP vars found!"
 
           echo "📂 Creating required directories..."
-          mkdir -p data/depictioDB data/minio_data data/minio_backup_data
-          chmod 777 data data/depictioDB data/minio_data data/minio_backup_data
+          mkdir -p data/depictioDB data/minio_data data/minio_backup_data data/redis
+          chmod 777 data data/depictioDB data/minio_data data/minio_backup_data data/redis
           # Ensure MongoDB can create additional directories
           chmod -R 777 data/depictioDB 2>/dev/null || echo "Directory permissions already set"
           ls -la data/depictioDB data/minio_data data/minio_backup_data
@@ -2592,8 +2592,8 @@ jobs:
           # Disable all special auth modes for standard auth tests (requires login)
           sed -i 's/DEPICTIO_AUTH_SINGLE_USER_MODE=true/DEPICTIO_AUTH_SINGLE_USER_MODE=false/' docker-compose/.env
           # PUBLIC_MODE and DEMO_MODE are already false in defaults, no sed needed
-          mkdir -p data/depictioDB data/minio_data data/prof_files data/cache
-          chmod 777 data data/depictioDB data/minio_data data/prof_files data/cache
+          mkdir -p data/depictioDB data/minio_data data/prof_files data/cache data/redis
+          chmod 777 data data/depictioDB data/minio_data data/prof_files data/cache data/redis
 
       - name: Log in and start services
         run: |
@@ -2679,8 +2679,8 @@ jobs:
           sed -i 's/DEPICTIO_AUTH_SINGLE_USER_MODE=true/DEPICTIO_AUTH_SINGLE_USER_MODE=false/' docker-compose/.env
           sed -i 's/DEPICTIO_AUTH_PUBLIC_MODE=false/DEPICTIO_AUTH_PUBLIC_MODE=true/' docker-compose/.env
           sed -i 's/# DEPICTIO_DEV_MODE=false/DEPICTIO_DEV_MODE=true/' docker-compose/.env
-          mkdir -p data/depictioDB data/minio_data data/prof_files data/cache
-          chmod 777 data data/depictioDB data/minio_data data/prof_files data/cache
+          mkdir -p data/depictioDB data/minio_data data/prof_files data/cache data/redis
+          chmod 777 data data/depictioDB data/minio_data data/prof_files data/cache data/redis
 
       - name: Log in and start services
         run: |
@@ -2854,8 +2854,8 @@ jobs:
           sed -i 's/DEPICTIO_AUTH_PUBLIC_MODE=false/DEPICTIO_AUTH_PUBLIC_MODE=true/' docker-compose/.env
           sed -i 's/DEPICTIO_AUTH_DEMO_MODE=false/DEPICTIO_AUTH_DEMO_MODE=true/' docker-compose/.env
           sed -i 's/# DEPICTIO_DEV_MODE=false/DEPICTIO_DEV_MODE=true/' docker-compose/.env
-          mkdir -p data/depictioDB data/minio_data data/prof_files data/cache
-          chmod 777 data data/depictioDB data/minio_data data/prof_files data/cache
+          mkdir -p data/depictioDB data/minio_data data/prof_files data/cache data/redis
+          chmod 777 data data/depictioDB data/minio_data data/prof_files data/cache data/redis
 
       - name: Log in and start services
         run: |
@@ -2993,8 +2993,8 @@ jobs:
           # PUBLIC_MODE and DEMO_MODE are already disabled in defaults (false)
           # No sed commands needed - defaults are correct for single-user mode
           sed -i 's/# DEPICTIO_DEV_MODE=false/DEPICTIO_DEV_MODE=true/' docker-compose/.env
-          mkdir -p data/depictioDB data/minio_data data/prof_files data/cache
-          chmod 777 data data/depictioDB data/minio_data data/prof_files data/cache
+          mkdir -p data/depictioDB data/minio_data data/prof_files data/cache data/redis
+          chmod 777 data data/depictioDB data/minio_data data/prof_files data/cache data/redis
 
       - name: Log in and start services
         run: |
