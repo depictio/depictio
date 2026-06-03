@@ -7,16 +7,17 @@
 # URL surface in dev and prod.
 #
 # This is an nginx envsubst *template* (rendered at container start by the
-# base image's /docker-entrypoint.d/20-envsubst-on-templates.sh). The only
-# placeholder substituted is ${DEPICTIO_API_UPSTREAM} — the entrypoint runs
-# `envsubst "$defined_envs"` where $defined_envs lists ONLY shell-exported
-# vars, and DEPICTIO_API_UPSTREAM is the single var we export. Every other
-# `$var` below (e.g. $http_upgrade, $host, $upstream) is an nginx runtime
-# variable and is left untouched.
+# base image's /docker-entrypoint.d/20-envsubst-on-templates.sh). Two
+# placeholders are substituted: ${DEPICTIO_API_UPSTREAM} (the backend
+# host:port we export as ENV) and ${NGINX_LOCAL_RESOLVERS} (the DNS
+# resolver auto-detected from /etc/resolv.conf by 15-local-resolvers.envsh).
+# Every other `$var` below (e.g. $http_upgrade, $host, $upstream) is an
+# nginx runtime variable and is left untouched.
 #
 # Backend upstream is overridable so this image works in docker-compose
-# (default `depictio-backend:8058`, baked as ENV in Dockerfile.viewer) and
-# in k8s (set DEPICTIO_API_UPSTREAM=<release>-depictio-backend:8058).
+# (default `depictio-backend:8058` — the pod port — baked as ENV in
+# Dockerfile.viewer) and in k8s, where the chart sets DEPICTIO_API_UPSTREAM
+# to the FQDN on the Service port: `<release>-depictio-backend.<ns>.svc.cluster.local:80`.
 # -----------------------------
 
 # Map for WebSocket upgrade handling — required for /depictio/api/v1/events/ws.
@@ -27,14 +28,20 @@ map $http_upgrade $connection_upgrade {
     ''      close;
 }
 
-# Docker's embedded DNS resolver. Using a variable in `proxy_pass` below
-# defers backend hostname resolution from nginx-startup to request time,
-# so the viewer container starts cleanly even if `depictio-backend` is
-# still booting / not yet registered in the compose network's DNS.
-# Without this, nginx fails fast with "host not found in upstream" when
-# the backend isn't already up — a hard race in docker-compose CI runs
-# where services start in parallel.
-resolver 127.0.0.11 valid=10s ipv6=off;
+# Runtime DNS resolver. Using a variable in `proxy_pass` below defers
+# backend hostname resolution from nginx-startup to request time, so the
+# viewer container starts cleanly even if the backend is still booting /
+# not yet registered in DNS. Without this, nginx fails fast with "host not
+# found in upstream" when the backend isn't already up — a hard race in
+# docker-compose CI runs where services start in parallel.
+#
+# ${NGINX_LOCAL_RESOLVERS} is auto-detected from /etc/resolv.conf by the
+# base image's 15-local-resolvers.envsh entrypoint (enabled via
+# NGINX_ENTRYPOINT_LOCAL_RESOLVERS=1 in Dockerfile.viewer). This makes the
+# resolver correct in BOTH environments: 127.0.0.11 (Docker embedded DNS)
+# under docker-compose, and the kube-dns ClusterIP (e.g. 10.96.0.10) under
+# Kubernetes. Hardcoding 127.0.0.11 broke every API proxy call on k8s.
+resolver ${NGINX_LOCAL_RESOLVERS} valid=10s ipv6=off;
 
 server {
     listen 80;

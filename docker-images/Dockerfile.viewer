@@ -53,8 +53,15 @@ COPY docker-images/nginx.conf.template /etc/nginx/templates/default.conf.templat
 
 # Default backend upstream — keeps docker-compose working with no extra
 # config (the compose service is named `depictio-backend`). Overridden in
-# k8s to `<release>-depictio-backend:8058`.
+# k8s to `<release>-depictio-backend:80` (the backend Service port).
 ENV DEPICTIO_API_UPSTREAM=depictio-backend:8058
+
+# Auto-detect the DNS resolver from /etc/resolv.conf at container start
+# (base image's 15-local-resolvers.envsh exports $NGINX_LOCAL_RESOLVERS,
+# consumed by the `resolver` directive in nginx.conf.template). Required so
+# the API proxy resolves the backend in Kubernetes (kube-dns) as well as in
+# docker-compose (127.0.0.11) — see nginx.conf.template for the full why.
+ENV NGINX_ENTRYPOINT_LOCAL_RESOLVERS=1
 
 EXPOSE 80
 
