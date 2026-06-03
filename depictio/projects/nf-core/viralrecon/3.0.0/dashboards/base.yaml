@@ -915,22 +915,21 @@ tabs:
   # 30 kb resolution; left-rail filters apply tab-wide regardless of physical
   # placement, so we put them under Manhattan with the bars/lollipop block.
   - component_type: advanced_viz
+    # Catalog-bound: `use` inherits chr=CHROM / pos=POS / score=AF from
+    # catalog/ivar/variants_long.yaml's manhattan render. Label + colour-by
+    # map onto variants_long's own columns (lineage isn't in variants_long).
+    use: ivar/variants_long
     workflow_tag: viralrecon
-    data_collection_tag: manhattan_variants_canonical
+    data_collection_tag: variants_long
     viz_kind: manhattan
     config:
-      viz_kind: manhattan
-      chr_col: chr
-      pos_col: pos
-      score_col: score
-      feature_col: variant_label
+      feature_col: mutation_label
       score_kind: Allele frequency (AF)
       score_threshold: 0.5
       color_by_columns:
-        - effect
-        - lineage
+        - EFFECT
         - sample
-      default_color_by: effect
+      default_color_by: EFFECT
     tag: adv-manh-track
     index: adv-manh-track
     title: Variant frequencies along the genome

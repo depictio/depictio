@@ -108,50 +108,6 @@ def test_ampliseq_embedding_pcoa(tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# viralrecon: manhattan
-# ---------------------------------------------------------------------------
-
-
-def test_viralrecon_manhattan_variants_canonical(tmp_path: Path) -> None:
-    src_dir = tmp_path / "variants" / "ivar"
-    src_dir.mkdir(parents=True)
-    src = src_dir / "variants_long_table.csv"
-    pl.DataFrame(
-        {
-            "SAMPLE": ["sampleA", "sampleA", "sampleB"],
-            "CHROM": ["MN908947.3"] * 3,
-            "POS": [100, 200, 300],
-            "REF": ["A", "C", "G"],
-            "ALT": ["T", "T", "A"],
-            "FILTER": ["PASS", "PASS", "PASS"],
-            "DP": [50, 80, 30],
-            "REF_DP": [10, 5, 1],
-            "ALT_DP": [40, 75, 29],
-            "AF": [0.80, 0.94, 0.97],
-            "GENE": ["S", "S", "N"],
-            "EFFECT": ["missense_variant", "synonymous_variant", "missense_variant"],
-        }
-    ).write_csv(src)
-
-    result = execute_recipe("nf-core/viralrecon/manhattan_variants_canonical.py", tmp_path)
-
-    assert not result.is_empty()
-    assert set(["chr", "pos", "score"]).issubset(result.columns)
-    # score = -log10(1 - AF); for AF=0.8 → log10(0.2) ≈ -0.699 → score ≈ 0.699
-    af_80_score = result.filter(pl.col("pos") == 100)["score"].item()
-    assert 0.65 < af_80_score < 0.75
-
-    cfg = ManhattanConfig(
-        chr_col="chr",
-        pos_col="pos",
-        score_col="score",
-        feature_col="feature",
-    )
-    errors = validate_binding(cfg, _polars_schema_name(result))
-    assert errors == [], f"binding errors: {errors}"
-
-
-# ---------------------------------------------------------------------------
 # Negative-path: binding validator catches missing + wrong-dtype columns
 # ---------------------------------------------------------------------------
 

@@ -196,7 +196,8 @@ STATIC_IDS = {
             "multiqc_data": "746b0f3c1e4a2d7f8e5b9c10",
             "summary_metrics": "746b0f3c1e4a2d7f8e5b9c11",
             "variants_long": "746b0f3c1e4a2d7f8e5b9c12",
-            "manhattan_variants_canonical": "746b0f3c1e4a2d7f8e5b9c13",
+            # manhattan retired: binds directly to variants_long via catalog
+            # roles (chr=CHROM/pos=POS/score=AF) — `use: ivar/variants_long`.
             "pangolin_lineages": "746b0f3c1e4a2d7f8e5b9c14",
             "nextclade_results": "746b0f3c1e4a2d7f8e5b9c15",
             "mosdepth_amplicon_coverage": "746b0f3c1e4a2d7f8e5b9c16",
