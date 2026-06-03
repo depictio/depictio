@@ -1,0 +1,5 @@
+sample	num_reads_mapped	pct_reads_mapped	coverage_median	pct_genome_covered_1x	pct_genome_covered_10x	num_variants_snp	num_variants_indel	num_variants_total	lineage
+SAMPLE1	1850432.0	98.4	1240.0	99.8	99.1	28.0	3.0	31.0	BA.5.2
+SAMPLE2	1432109.0	97.1	980.0	99.5	98.2	30.0	2.0	32.0	BA.2.75
+SAMPLE3	987654.0	95.6	610.0	98.9	95.4	26.0	4.0	30.0	XBB.1.5
+SAMPLE4	2103998.0	99.0	1510.0	99.9	99.6	33.0	1.0	34.0	BA.5.2

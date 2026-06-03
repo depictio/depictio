@@ -125,7 +125,7 @@ workflows:
           metatype: "Aggregated"
           source: "transformed"
           transform:
-            recipe: "nf-core/viralrecon/summary_metrics.py"
+            recipe: "multiqc/summary_metrics.py"
           dc_specific_properties:
             format: "CSV"
             columns_description:
