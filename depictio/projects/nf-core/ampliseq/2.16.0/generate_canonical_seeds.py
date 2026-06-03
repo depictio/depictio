@@ -200,10 +200,6 @@ def main() -> None:
     upset.write_csv(DATA_ROOT / "upset_canonical.tsv", separator="\t")
     print(f"  -> upset_canonical.tsv ({upset.shape})")
 
-    qq = _load_recipe("qq_canonical").transform({"ancombc": ancombc_results})
-    qq.write_csv(DATA_ROOT / "qq_canonical.tsv", separator="\t")
-    print(f"  -> qq_canonical.tsv ({qq.shape})")
-
     ma = _load_recipe("ma_canonical").transform(
         {"ancombc": ancombc_results, "composition": taxonomy_composition}
     )

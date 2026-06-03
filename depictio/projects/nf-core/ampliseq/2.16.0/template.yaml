@@ -389,20 +389,6 @@ workflows:
             columns_description:
               "taxon": "Taxon identifier"
 
-      - data_collection_tag: "qq_canonical"
-        description: "Q-Q-ready p-value distribution (ANCOM-BC FDR diagnostic)"
-        config:
-          type: "Table"
-          source: "transformed"
-          transform:
-            recipe: "nf-core/ampliseq/qq_canonical.py"
-          dc_specific_properties:
-            format: "TSV"
-            columns_description:
-              "p_value": "Raw p-value (0–1)"
-              "feature_id": "Taxon identifier (hover)"
-              "category": "Contrast (stratification)"
-
       - data_collection_tag: "ma_canonical"
         description: "MA-plot-ready (mean log abundance vs lfc) for ANCOM-BC"
         config:

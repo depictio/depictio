@@ -76,7 +76,8 @@ STATIC_IDS = {
             # entry below). Don't reuse it for a DC.
             # Tier 2 derivation DCs.
             "upset_canonical": "646b0f3c1e4a2d7f8e5b8cd6",
-            "qq_canonical": "646b0f3c1e4a2d7f8e5b8cd7",
+            # qq retired: no component rendered it; the catalog declares
+            # `qq` as a render of qiime2/ancombc (use: qiime2/ancombc, viz_kind: qq).
             "ma_canonical": "646b0f3c1e4a2d7f8e5b8cd8",
             # Phase D — Bray-Curtis sample-distance matrix (symmetric heatmap input).
             "bray_curtis_canonical": "646b0f3c1e4a2d7f8e5b8cd9",
