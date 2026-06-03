@@ -294,6 +294,11 @@ viewer:
     tag: "0.13.12"
     pullPolicy: Always
   replicas: 1 # Balanced for stability and performance
+  # Deployment update strategy. Default "Recreate" matches the other
+  # workloads (and is required where a single pod holds a ReadWriteOnce PVC).
+  # The viewer is stateless (no PVC), so environments that run >1 replica can
+  # set "RollingUpdate" here for zero-downtime deploys.
+  strategy: "Recreate"
   resources:
     requests:
       memory: "64Mi"
@@ -306,6 +311,15 @@ viewer:
     httpPort: 80
     httpsPort: 443
     targetPort: 80
+
+# PodDisruptionBudget for the HA-critical workloads (backend, viewer, celery).
+# Opt-in and off by default so single-replica environments are unaffected: a
+# PDB with minAvailable:1 on a 1-replica Deployment would block every voluntary
+# node drain / cluster upgrade. The template therefore emits a PDB for a
+# component only when this is enabled AND that component runs >1 replica.
+podDisruptionBudget:
+  enabled: false
+  minAvailable: 1
 
 # Generic base ingress values
 ingress:

@@ -536,7 +536,7 @@ metadata:
 spec:
   replicas: {{ .Values.viewer.replicas }}
   strategy:
-    type: Recreate
+    type: {{ .Values.viewer.strategy | default "Recreate" }}
   selector:
     matchLabels:
       release: {{ .Release.Name }}

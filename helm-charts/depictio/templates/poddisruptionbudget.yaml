@@ -1,0 +1,34 @@
+{{- /*
+PodDisruptionBudgets for the HA-critical workloads. Emitted only when
+`podDisruptionBudget.enabled` is true AND the component runs more than one
+replica — a PDB with minAvailable:1 on a single-replica Deployment would
+block every voluntary disruption (node drain, cluster upgrade). The selector
+mirrors each Deployment's `spec.selector.matchLabels` exactly.
+*/ -}}
+{{- if .Values.podDisruptionBudget.enabled }}
+{{- $minAvailable := .Values.podDisruptionBudget.minAvailable | default 1 }}
+{{- $components := list
+      (dict "app" "depictio-backend" "replicas" .Values.backend.replicas)
+      (dict "app" "depictio-viewer"  "replicas" .Values.viewer.replicas)
+      (dict "app" "celery-worker"    "replicas" (ternary .Values.celery.replicas 0 .Values.celery.enabled)) }}
+{{- range $component := $components }}
+{{- if gt (int $component.replicas) 1 }}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ $.Release.Name }}-{{ $component.app }}-pdb
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    app: {{ $component.app }}
+spec:
+  minAvailable: {{ $minAvailable }}
+  selector:
+    matchLabels:
+      release: {{ $.Release.Name }}
+      app: {{ $component.app }}
+      project: {{ $.Values.project.slug }}
+      type: app
+{{- end }}
+{{- end }}
+{{- end }}

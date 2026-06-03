@@ -16,6 +16,20 @@
 demo:
   autoWipeOnUpgrade: true  # Delete PVCs before each upgrade for fresh demo state
 
+# Viewer (nginx SPA) — stateless and tiny, so run 2 replicas for HA + a
+# zero-downtime rolling deploy (no PVC, so RollingUpdate is safe here; the
+# rest of the stack stays on Recreate). Cost is negligible (~50m CPU each).
+viewer:
+  replicas: 2
+  strategy: "RollingUpdate"
+
+# Protect the multi-replica workloads during node drains / cluster upgrades.
+# Only emitted for components with >1 replica (see values.yaml), so celery
+# (1 replica on stable) is intentionally left without a PDB here.
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+
 # Celery worker — biggest share of the budget because it's the
 # advanced-viz compute bottleneck. Threads pool so polars C-extension
 # compute scales past the GIL.
@@ -32,18 +46,27 @@ celery:
   env:
     DEPICTIO_CELERY_WORKERS: "8"  # parallel tasks per worker
 
-# Backend API — handles both Dash AJAX and the React viewer's data-fetching
-# endpoints + serves the SPA static assets. React adoption raises backend
-# load.
+# Backend API — serves the React viewer's data-fetching endpoints
+# (render_figure, bulk_compute_cards, …) + the SPA static assets.
+# Run 2 replicas for HA + better tail latency under concurrent dashboard
+# loads. Budget-neutral: per-pod requests/limits are halved vs the old single
+# pod, so the aggregate (2 CPU / 4 Gi requests, 4 CPU / 8 Gi limits, 4 gunicorn
+# workers) is unchanged. The init seed/wipe is safe across pods — one wins the
+# Mongo `init_lock`, the rest wait. Kept on Recreate (the default): this env
+# auto-wipes PVCs on upgrade, so overlapping old/new pods must be avoided.
 backend:
+  replicas: 2
   resources:
     requests:
+      memory: "2Gi"
+      cpu: "1"
+    limits:
       memory: "4Gi"
       cpu: "2"
-    limits:
-      memory: "8Gi"
-      cpu: "4"
   env:
+    # 2 gunicorn workers per pod × 2 pods = 4 total (same as the single-pod
+    # default), sized to the 2-CPU per-pod limit.
+    DEPICTIO_FASTAPI_WORKERS: "2"
     # Demo mode with guided tour tooltips
     DEPICTIO_AUTH_DEMO_MODE: "true"
     DEPICTIO_AUTH_PUBLIC_MODE: "true"
