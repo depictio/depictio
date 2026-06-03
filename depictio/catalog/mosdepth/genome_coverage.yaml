@@ -2,7 +2,7 @@ id: mosdepth_genome_coverage
 mode: genome
 description: Genome-wide coverage in windows, aggregated across all samples.
 find: { path_glob: "**/mosdepth/genome/all_samples.mosdepth.coverage.tsv" }
-recipe: nf-core/viralrecon/coverage_track_canonical.py
+recipe: mosdepth/coverage_track_canonical.py
 fixture: genome_coverage.tsv
 renders_as:
   - { component: advanced_viz, kind: coverage_track, roles: {chromosome: chromosome, position: position, value: value} }

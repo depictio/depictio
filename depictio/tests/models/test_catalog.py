@@ -468,6 +468,36 @@ def test_every_recipe_resolves_to_a_real_file():
                 recipe_output_columns(out.recipe)  # raises RecipeError if missing
 
 
+def test_module_owned_recipes_are_co_located_in_the_module_folder():
+    # A module-owned recipe ref is `<module>/<name>.py` and the file lives next to
+    # the module's YAMLs — the tool owns its reshape, pipeline-agnostically.
+    from depictio.recipes import CATALOG_DIR, resolve_recipe_path
+
+    seen = 0
+    for entry in load_catalog_entries():
+        for out in entry.outputs:
+            ref = out.recipe or ""
+            if "/" not in ref or ref.startswith("nf-core/"):
+                continue  # pipeline-keyed legacy ref (kept for version-specific reshapes)
+            seen += 1
+            module, name = ref.split("/")
+            assert module == entry.id, f"{ref} must be owned by module '{entry.id}'"
+            resolved = resolve_recipe_path(ref)
+            assert resolved == CATALOG_DIR / module / name
+            assert resolved.parent.name == entry.id and resolved.exists()
+    assert seen >= 6  # ivar, nextclade, pangolin, mosdepth(x2), qiime2(x4)
+
+
+def test_legacy_pipeline_keyed_recipe_still_resolves():
+    # Pipeline-version-specific reshapes stay under projects/<pipeline>/recipes/.
+    from depictio.recipes import resolve_recipe_path
+
+    shared = resolve_recipe_path("nf-core/ampliseq/taxonomy_rel_abundance.py")
+    assert shared.parts[-2:] == ("recipes", "taxonomy_rel_abundance.py")
+    override = resolve_recipe_path("nf-core/ampliseq/taxonomy_rel_abundance.py", "2.14.0")
+    assert "2.14.0" in override.parts  # version override still wins
+
+
 def test_fixtures_are_co_located_with_their_module():
     # each fixture is a bare filename, resolved inside its module's folder
     for entry in load_catalog_entries():
@@ -538,7 +568,7 @@ def test_cli_commands_smoke():
     for args in (
         ["list"],
         ["info", "qiime2"],
-        ["columns", "nf-core/ampliseq/ancombc.py"],
+        ["columns", "qiime2/ancombc.py"],  # module-owned recipe (co-located in catalog/qiime2/)
         ["schema"],
         ["match", str(run)],
         ["compose", str(run)],

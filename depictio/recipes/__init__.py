@@ -10,10 +10,17 @@ import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
 
-# Recipes live inside the projects directory, co-located with the templates that use them.
-# Shared (pipeline-level) recipes:  projects/{pipeline}/recipes/{name}.py
-# Version overrides:                 projects/{pipeline}/{version}/recipes/{name}.py
+# Recipes live in one of two homes:
+#   1. Module-owned (preferred): co-located in the catalog module folder, referenced
+#      as `<module>/{name}.py`  → depictio/catalog/{module}/{name}.py
+#      A reshape that is intrinsic to a tool output belongs with that tool.
+#   2. Pipeline-keyed (legacy): co-located with the project templates that use them,
+#      referenced as `nf-core/{pipeline}/{name}.py`:
+#        Shared:            projects/{pipeline}/recipes/{name}.py
+#        Version override:  projects/{pipeline}/{version}/recipes/{name}.py
+#      Kept for reshapes that are genuinely pipeline- (or pipeline-version-) specific.
 PROJECTS_DIR = Path(__file__).parent.parent / "projects"
+CATALOG_DIR = Path(__file__).parent.parent / "catalog"
 
 
 class RecipeError(Exception):
@@ -35,7 +42,8 @@ def resolve_recipe_path(recipe_ref: str, pipeline_version: str | None = None) ->
 
     Resolution order:
         1. PROJECTS_DIR/{pipeline}/{version}/recipes/{name}  — version override (if version given)
-        2. PROJECTS_DIR/{pipeline}/recipes/{name}            — shared fallback
+        2. CATALOG_DIR/{module}/{name}                       — module-owned recipe
+        3. PROJECTS_DIR/{pipeline}/recipes/{name}            — pipeline-keyed shared fallback
     """
     *pipeline_parts, name = recipe_ref.split("/")
     pipeline = "/".join(pipeline_parts)
@@ -44,6 +52,13 @@ def resolve_recipe_path(recipe_ref: str, pipeline_version: str | None = None) ->
         versioned = PROJECTS_DIR / pipeline / pipeline_version / "recipes" / name
         if versioned.exists():
             return versioned
+
+    # Module-owned recipe: `<module>/{name}.py` lives in the catalog module folder.
+    # Pipeline-qualified refs (`nf-core/{pipeline}/{name}.py`) never collide here —
+    # CATALOG_DIR/nf-core/{pipeline}/ does not exist.
+    module_owned = CATALOG_DIR / pipeline / name
+    if module_owned.exists():
+        return module_owned
 
     shared = PROJECTS_DIR / pipeline / "recipes" / name
     if shared.exists():
@@ -320,4 +335,9 @@ def list_recipes() -> list[str]:
         pipeline_dir = version_dir
         recipe_ref = str(pipeline_dir.relative_to(PROJECTS_DIR) / py_file.name)
         recipes.append(recipe_ref)
+    # Module-owned recipes co-located in catalog module folders (`<module>/{name}.py`).
+    for py_file in CATALOG_DIR.glob("*/*.py"):
+        if py_file.name == "__init__.py":
+            continue
+        recipes.append(f"{py_file.parent.name}/{py_file.name}")
     return sorted(recipes)

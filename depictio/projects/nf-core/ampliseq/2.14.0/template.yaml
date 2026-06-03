@@ -147,7 +147,7 @@ workflows:
           type: "Table"
           source: "transformed"
           transform:
-            recipe: "nf-core/ampliseq/alpha_rarefaction.py"
+            recipe: "qiime2/alpha_rarefaction.py"
           dc_specific_properties:
             format: "TSV"
             columns_description:
@@ -162,7 +162,7 @@ workflows:
           type: "Table"
           source: "transformed"
           transform:
-            recipe: "nf-core/ampliseq/taxonomy_composition.py"
+            recipe: "qiime2/taxonomy_composition.py"
           dc_specific_properties:
             format: "TSV"
             columns_description:
@@ -194,7 +194,7 @@ workflows:
           type: "Table"
           source: "transformed"
           transform:
-            recipe: "nf-core/ampliseq/ancombc.py"
+            recipe: "qiime2/ancombc.py"
           dc_specific_properties:
             format: "TSV"
             columns_description:

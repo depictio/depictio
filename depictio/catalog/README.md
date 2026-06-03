@@ -49,7 +49,7 @@ the **output** YAMLs, never in `module.yaml`.
 ```yaml
 - id: ivar_variants_long
   find:   { filename: "variants_long_table.csv" }   # recognise the raw file
-  recipe: nf-core/viralrecon/variants_long.py        # optional reshape
+  recipe: ivar/variants_long.py                      # optional reshape (module-owned, co-located here)
   renders_as:
     - { component: advanced_viz, kind: manhattan, roles: {chr: CHROM, pos: POS, score: AF} }
 ```

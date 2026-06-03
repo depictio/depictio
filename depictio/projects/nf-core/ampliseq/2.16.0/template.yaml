@@ -160,7 +160,7 @@ workflows:
           type: "Table"
           source: "transformed"
           transform:
-            recipe: "nf-core/ampliseq/alpha_rarefaction.py"
+            recipe: "qiime2/alpha_rarefaction.py"
           dc_specific_properties:
             format: "TSV"
             columns_description:
@@ -175,7 +175,7 @@ workflows:
           type: "Table"
           source: "transformed"
           transform:
-            recipe: "nf-core/ampliseq/taxonomy_composition.py"
+            recipe: "qiime2/taxonomy_composition.py"
           dc_specific_properties:
             format: "TSV"
             columns_description:
@@ -218,7 +218,7 @@ workflows:
           type: "Table"
           source: "transformed"
           transform:
-            recipe: "nf-core/ampliseq/ancombc.py"
+            recipe: "qiime2/ancombc.py"
             source_overrides:
               lfc:
                 path: "qiime2/ancombc/differentials/Category-{GROUP_COL}-level-2/lfc_slice.csv"
@@ -336,7 +336,7 @@ workflows:
           type: "Table"
           source: "transformed"
           transform:
-            recipe: "nf-core/ampliseq/alpha_diversity_multi_canonical.py"
+            recipe: "qiime2/alpha_diversity_multi_canonical.py"
           dc_specific_properties:
             format: "TSV"
             columns_description:

@@ -55,7 +55,7 @@ existence-checking validates; the derived fields are trusted until a future
 | `find` | **MUST** | Find | How to recognise the raw file. |
 | `mode` | CAN | str | Running mode / subcommand. |
 | `description` | CAN | str | |
-| `recipe` | CAN | str | Pipeline-qualified reshape, e.g. `nf-core/ampliseq/ancombc.py`. **Owns the output columns.** |
+| `recipe` | CAN | str | Reshape that **owns the output columns**. Module-owned (preferred): `<module>/<name>.py`, co-located in this catalog folder, e.g. `qiime2/ancombc.py`. Pipeline-keyed legacy still resolves (`nf-core/<pipeline>/<name>.py`) for pipeline-version-specific reshapes. |
 | `columns` | CAN* | dict[str,str] | Bindable columns (polars dtype names). **MUST be set iff there is no recipe and a render binds columns; MUST be absent if `recipe` is set.** |
 | `fixture` | CAN | str | A **co-located** sample filename, resolved next to the output's YAML in the module folder (e.g. `alpha_diversity.tsv`) — a small, committed, pipeline-agnostic sample of the bindable shape. Grounds renders in CI (Level-3) and feeds `preview` later. |
 | `renders_as` | CAN | list[Render] | Dashboard render target(s) + binding. |

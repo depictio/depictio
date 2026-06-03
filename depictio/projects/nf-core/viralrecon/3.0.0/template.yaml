@@ -147,7 +147,7 @@ workflows:
           metatype: "Aggregated"
           source: "transformed"
           transform:
-            recipe: "nf-core/viralrecon/variants_long.py"
+            recipe: "ivar/variants_long.py"
           dc_specific_properties:
             format: "CSV"
             columns_description:
@@ -192,7 +192,7 @@ workflows:
           metatype: "Aggregated"
           source: "transformed"
           transform:
-            recipe: "nf-core/viralrecon/pangolin_lineages.py"
+            recipe: "pangolin/pangolin_lineages.py"
           dc_specific_properties:
             format: "CSV"
             columns_description:
@@ -214,7 +214,7 @@ workflows:
           metatype: "Aggregated"
           source: "transformed"
           transform:
-            recipe: "nf-core/viralrecon/nextclade_results.py"
+            recipe: "nextclade/nextclade_results.py"
           dc_specific_properties:
             format: "CSV"
             columns_description:
@@ -335,7 +335,7 @@ workflows:
           metatype: "Aggregated"
           source: "transformed"
           transform:
-            recipe: "nf-core/viralrecon/complex_heatmap_canonical.py"
+            recipe: "mosdepth/complex_heatmap_canonical.py"
           dc_specific_properties:
             format: "TSV"
             columns_description:
@@ -348,7 +348,7 @@ workflows:
           metatype: "Aggregated"
           source: "transformed"
           transform:
-            recipe: "nf-core/viralrecon/coverage_track_canonical.py"
+            recipe: "mosdepth/coverage_track_canonical.py"
           dc_specific_properties:
             format: "TSV"
             columns_description:

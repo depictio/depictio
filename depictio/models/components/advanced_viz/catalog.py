@@ -229,7 +229,10 @@ class CatalogOutput(BaseModel):
     description: str = ""
 
     find: CatalogFind
-    recipe: str | None = None  # pipeline-qualified, e.g. nf-core/ampliseq/ancombc.py
+    # Module-owned (preferred): `<module>/<name>.py`, co-located in this catalog
+    # folder, e.g. `qiime2/ancombc.py`. Pipeline-keyed legacy form still resolves:
+    # `nf-core/<pipeline>/<name>.py` (kept for pipeline-version-specific reshapes).
+    recipe: str | None = None
 
     # Bindable columns. REQUIRED when there is no recipe (raw == bindable);
     # FORBIDDEN when a recipe is present (the recipe owns the output columns).

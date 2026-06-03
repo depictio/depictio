@@ -22,15 +22,23 @@ pipeline-agnostic (see `docs/design/bioinformatics-catalog.md`).
   **seeds**; run `depictio catalog refresh-index` (needs network) to make them
   authoritative so existence checks catch typos.
 
-## Module-granular debt (v3 — dedicated PR)
-- **Re-key `recipe`/`find` by module**, not by pipeline. Today recipes live
-  under `projects/<pipeline>/recipes/` (e.g. `mosdepth/genome_coverage.yaml`
-  points at `nf-core/viralrecon/coverage_track_canonical.py`), which breaks
-  reuse by a custom workflow. Goal: a module owns its recipe/find; a
-  pipeline/workflow is just a list of modules.
+## Module-granular debt (v3)
+- **Re-key `recipe` by module** — ✅ **done.** Module-owned reshapes now live
+  in the catalog module folder (`depictio/catalog/<module>/<name>.py`) and are
+  referenced `<module>/<name>.py`; the resolver (`depictio/recipes/__init__.py`)
+  tries module-owned before the pipeline-keyed `projects/<pipeline>/recipes/`
+  fallback. 9 reshapes moved (ivar/nextclade/pangolin/mosdepth×2/qiime2×4).
+  Kept pipeline-keyed on purpose: `taxonomy_rel_abundance` (has a 2.14.0 version
+  override) and the dashboard-composition recipes (sankey/upset/volcano/…) that
+  are genuinely pipeline-specific. Templates + the seed-gen script were updated;
+  `db_init` is unaffected (it converts recipe DCs → file-scan by `dc_tag`, never
+  resolving the recipe file).
+- **Re-key `find` by module** — still pipeline-coupled in template DCs; revisit
+  with the scan wiring.
 - Add typed **input schema** to recipes (`SOURCES`/`INPUT_SCHEMAS`) for input
   validation + fixture generation + nf-core drift detection (do this when
-  wiring the scan).
+  wiring the scan). This is what lets one module own *N* reshape variants keyed
+  by input shape, instead of duplicating a recipe per pipeline.
 
 ## Retire `suggest_producers` (frontend PR)
 - Column-fingerprint recognition is unreliable; currently only de-scoped in

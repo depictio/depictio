@@ -28,10 +28,22 @@ sys.path.insert(0, str(REPO_ROOT))
 
 DATA_ROOT = Path(__file__).resolve().parent
 RECIPES_DIR = DATA_ROOT.parent / "recipes"
+# Module-owned recipes now live in the catalog module folders (e.g. the qiime2
+# canonical reshapes), so look there too — pipeline-keyed recipes still win.
+CATALOG_DIR = REPO_ROOT / "depictio" / "catalog"
 
 
 def _load_recipe(name: str):
-    spec = importlib.util.spec_from_file_location(name, RECIPES_DIR / f"{name}.py")
+    path = RECIPES_DIR / f"{name}.py"
+    if not path.exists():
+        # Fall back to a module-owned recipe co-located in a catalog module folder.
+        matches = sorted(CATALOG_DIR.glob(f"*/{name}.py"))
+        if not matches:
+            raise FileNotFoundError(
+                f"Recipe '{name}' not found under {RECIPES_DIR} or {CATALOG_DIR}"
+            )
+        path = matches[0]
+    spec = importlib.util.spec_from_file_location(name, path)
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod

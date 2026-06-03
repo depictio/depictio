@@ -2,7 +2,7 @@ id: nextclade_report
 mode: run
 description: Per-sample clade assignment + sequence QC.
 find: { path_glob: "**/nextclade/*.csv" }
-recipe: nf-core/viralrecon/nextclade_results.py
+recipe: nextclade/nextclade_results.py
 fixture: report.tsv
 renders_as:
   - { component: figure, visu_type: histogram, dict_kwargs: {x: clade, color: qc_overallStatus} } # clade calls

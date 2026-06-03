@@ -3,7 +3,7 @@ mode: diversity
 description: Multi-metric alpha-diversity per sample (shannon, evenness, faith_pd…).
 nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/qiime2/diversitycore
 find: { path_glob: "**/qiime2/diversity/alpha_diversity/*_vector/metadata.tsv" }
-recipe: nf-core/ampliseq/alpha_diversity_multi_canonical.py
+recipe: qiime2/alpha_diversity_multi_canonical.py
 # bindable sample (recipe declares only sample_id/habitat; metric cols are dynamic)
 fixture: alpha_diversity.tsv
 renders_as:

@@ -72,7 +72,7 @@ def catalog_info(
 
 @app.command("columns")
 def catalog_columns(
-    recipe: Annotated[str, typer.Argument(help="Recipe ref, e.g. nf-core/ampliseq/ancombc.py")],
+    recipe: Annotated[str, typer.Argument(help="Recipe ref, e.g. qiime2/ancombc.py")],
 ) -> None:
     """Print the output columns a recipe produces (to help write `roles`)."""
     from depictio.models.components.advanced_viz.catalog import recipe_output_columns
