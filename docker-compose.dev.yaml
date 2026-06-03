@@ -80,10 +80,11 @@ services:
         DEPICTIO_FASTAPI_EXTERNAL_HOST: "${DEPICTIO_FASTAPI_EXTERNAL_HOST:-localhost}"
         DEPICTIO_VIEWER_EXTERNAL_PORT: "${DEPICTIO_VIEWER_EXTERNAL_PORT:-5080}"
         DEPICTIO_VIEWER_EXTERNAL_HOST: "${DEPICTIO_VIEWER_EXTERNAL_HOST:-localhost}"
-        # Internal viewer target (server context). The dev stack's only viewer is
-        # the Vite dev server, not the nginx `depictio-viewer` (prod-only). The
-        # screenshot worker navigates to this URL to render dashboards, so it must
-        # point at the Vite container (service name + its in-container port 5173).
+        # Internal viewer target (server context). Defaults to the Vite dev server
+        # (the no-profile default viewer). The screenshot worker navigates to this
+        # URL to render dashboards. CI overrides it to the nginx `depictio-viewer`
+        # (the `ci`-profile viewer below) so screenshots exercise the shipped
+        # bundle; locally it stays on Vite (service name + in-container port 5173).
         DEPICTIO_VIEWER_SERVICE_NAME: "${DEPICTIO_VIEWER_SERVICE_NAME:-depictio-viewer-dev}"
         DEPICTIO_VIEWER_SERVICE_PORT: "${DEPICTIO_VIEWER_SERVICE_PORT:-5173}"
         DEPICTIO_MINIO_EXTERNAL_PORT: "${DEPICTIO_MINIO_EXTERNAL_PORT:-9000}"
@@ -110,9 +111,10 @@ services:
       - minio
 
   # ─────────────────────────────────────────────────────────────────────
-  # Dev viewer: Vite dev server with hot-module reload — the only viewer in
-  # the dev stack (the prod-bundle nginx viewer lives in docker-compose.yaml).
-  # Runs by default (no profile); the React source trees are bind-mounted so
+  # Dev viewer: Vite dev server with hot-module reload — the default viewer in
+  # the dev stack. Runs by default (no profile); the nginx prod-bundle viewer
+  # below is gated behind the `ci` profile, so a plain `up` is Vite-only.
+  # The React source trees are bind-mounted so
   # host-side edits reflect live in the browser:
   #   docker compose -f docker-compose.dev.yaml up
   # ─────────────────────────────────────────────────────────────────────
@@ -199,9 +201,9 @@ services:
         DEPICTIO_AUTH_SINGLE_USER_MODE: "${DEPICTIO_AUTH_SINGLE_USER_MODE:-false}"
         DEPICTIO_CONTEXT: "server"
         # The screenshot task renders dashboards by navigating to the viewer's
-        # internal URL. The dev stack's only viewer is the Vite dev server, so
-        # point at it (service name + in-container port 5173) instead of the
-        # removed nginx `depictio-viewer:80`.
+        # internal URL. Defaults to the Vite dev server (service name + in-container
+        # port 5173); CI overrides it to the nginx `depictio-viewer:80` (ci profile)
+        # so screenshots render against the shipped bundle.
         DEPICTIO_VIEWER_SERVICE_NAME: "${DEPICTIO_VIEWER_SERVICE_NAME:-depictio-viewer-dev}"
         DEPICTIO_VIEWER_SERVICE_PORT: "${DEPICTIO_VIEWER_SERVICE_PORT:-5173}"
         # Match the backend flag — keeps event publishers consistent whether
