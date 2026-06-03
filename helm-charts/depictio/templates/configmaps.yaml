@@ -104,6 +104,17 @@ data:
   DEPICTIO_CELERY_WORKERS: {{ .Values.celery.env.DEPICTIO_CELERY_WORKERS | quote }}
   DEPICTIO_CELERY_ENABLED: {{ .Values.celery.env.DEPICTIO_CELERY_ENABLED | quote }}
 
+  # Authentication mode — MUST mirror the backend (sourced from the same
+  # backend.env keys). The screenshot task validates dashboard ownership
+  # inside the worker; without these the worker defaults to authenticated
+  # mode and rejects single-user/public-mode captures as "User is not
+  # dashboard owner" (HTTP 500) even though the backend allowed the request.
+  DEPICTIO_AUTH_PUBLIC_MODE: {{ .Values.backend.env.DEPICTIO_AUTH_PUBLIC_MODE | default "false" | quote }}
+  DEPICTIO_AUTH_DEMO_MODE: {{ .Values.backend.env.DEPICTIO_AUTH_DEMO_MODE | default "false" | quote }}
+  DEPICTIO_AUTH_SINGLE_USER_MODE: {{ .Values.backend.env.DEPICTIO_AUTH_SINGLE_USER_MODE | default "false" | quote }}
+  DEPICTIO_AUTH_ANONYMOUS_USER_EMAIL: {{ .Values.backend.env.DEPICTIO_AUTH_ANONYMOUS_USER_EMAIL | default "anonymous@example.com" | quote }}
+  DEPICTIO_AUTH_TEMPORARY_USER_EXPIRY_HOURS: {{ .Values.backend.env.DEPICTIO_AUTH_TEMPORARY_USER_EXPIRY_HOURS | default "24" | quote }}
+
   # Redis/Celery broker settings
   {{- if .Values.redis.enabled }}
   DEPICTIO_CELERY_BROKER_HOST: {{ printf "%s-redis" .Release.Name | quote }}

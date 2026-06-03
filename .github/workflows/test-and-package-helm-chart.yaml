@@ -1216,12 +1216,27 @@ jobs:
           echo "📋 Backend logs AFTER screenshot request:"
           kubectl logs $BACKEND_POD --tail=200
 
+          # The screenshot is actually rendered in the Celery worker (Playwright/
+          # chromium live only there). Capture its logs too — a worker-side failure
+          # (e.g. auth-mode mismatch → "User is not dashboard owner") is invisible
+          # in the backend logs and surfaces only as an opaque 500 otherwise.
+          echo "📋 Celery worker logs AFTER screenshot request:"
+          WORKER_POD=$(kubectl get pods -l "release=${RELEASE_NAME},app=celery-worker" -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)
+          if [ -n "$WORKER_POD" ]; then
+            kubectl logs "$WORKER_POD" --tail=200 || true
+          else
+            echo "⚠️  No celery-worker pod found"
+          fi
+
           if [ $CURL_EXIT_CODE -eq 0 ]; then
             # Extract HTTP status code (last line)
             HTTP_CODE=$(echo "$SCREENSHOT_RESPONSE" | tail -n1)
             JSON_RESPONSE=$(echo "$SCREENSHOT_RESPONSE" | head -n -1)
 
             echo "📊 HTTP Status: $HTTP_CODE"
+            # Always surface the response body — on a 500 this carries the
+            # actual error detail (the only place it appears).
+            echo "📄 Response body: $JSON_RESPONSE"
 
             if [ "$HTTP_CODE" = "200" ]; then
               echo "✅ Screenshot endpoint responded successfully"
