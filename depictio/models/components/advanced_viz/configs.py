@@ -25,9 +25,15 @@ class VolcanoConfig(_BaseVizConfig):
     viz_kind: Literal["volcano"] = "volcano"
 
     # Column bindings (role -> column name in the bound DC).
-    feature_id_col: str = Field(..., description="Column with the feature identifier")
-    effect_size_col: str = Field(..., description="Column with effect size (e.g. log2FC, lfc)")
-    significance_col: str = Field(..., description="Column with p-value or padj/q-value")
+    feature_id_col: str = Field(
+        default="feature_id", description="Column with the feature identifier"
+    )
+    effect_size_col: str = Field(
+        default="effect_size", description="Column with effect size (e.g. log2FC, lfc)"
+    )
+    significance_col: str = Field(
+        default="significance", description="Column with p-value or padj/q-value"
+    )
     label_col: str | None = Field(default=None, description="Optional column for hover labels")
     category_col: str | None = Field(
         default=None, description="Optional column for point colour/category"
@@ -62,7 +68,7 @@ class EmbeddingConfig(_BaseVizConfig):
 
     viz_kind: Literal["embedding"] = "embedding"
 
-    sample_id_col: str = Field(..., description="Column with the sample identifier")
+    sample_id_col: str = Field(default="sample_id", description="Column with the sample identifier")
     dim_1_col: str = Field(
         default="dim_1", description="Column with first embedding dim (precomputed mode)"
     )
@@ -115,9 +121,9 @@ class ManhattanConfig(_BaseVizConfig):
 
     viz_kind: Literal["manhattan"] = "manhattan"
 
-    chr_col: str = Field(..., description="Column with chromosome label")
-    pos_col: str = Field(..., description="Column with genomic position (1-based)")
-    score_col: str = Field(..., description="Column with the y-axis score")
+    chr_col: str = Field(default="chr", description="Column with chromosome label")
+    pos_col: str = Field(default="pos", description="Column with genomic position (1-based)")
+    score_col: str = Field(default="score", description="Column with the y-axis score")
     feature_col: str | None = Field(
         default=None, description="Optional column with feature/locus id (gene, SNP, peak)"
     )
@@ -195,10 +201,12 @@ class StackedTaxonomyConfig(_BaseVizConfig):
 
     viz_kind: Literal["stacked_taxonomy"] = "stacked_taxonomy"
 
-    sample_id_col: str = Field(..., description="Column with the sample identifier")
-    taxon_col: str = Field(..., description="Column with taxon name")
-    rank_col: str = Field(..., description="Column with taxonomic rank label")
-    abundance_col: str = Field(..., description="Column with relative or absolute abundance")
+    sample_id_col: str = Field(default="sample_id", description="Column with the sample identifier")
+    taxon_col: str = Field(default="taxon", description="Column with taxon name")
+    rank_col: str = Field(default="rank", description="Column with taxonomic rank label")
+    abundance_col: str = Field(
+        default="abundance", description="Column with relative or absolute abundance"
+    )
 
     default_rank: str | None = Field(
         default=None,
@@ -236,9 +244,9 @@ class RarefactionConfig(_BaseVizConfig):
 
     viz_kind: Literal["rarefaction"] = "rarefaction"
 
-    sample_id_col: str = Field(..., description="Sample identifier column")
-    depth_col: str = Field(..., description="Subsampling depth (x axis)")
-    metric_col: str = Field(..., description="Alpha-diversity metric value (y axis)")
+    sample_id_col: str = Field(default="sample_id", description="Sample identifier column")
+    depth_col: str = Field(default="depth", description="Subsampling depth (x axis)")
+    metric_col: str = Field(default="metric", description="Alpha-diversity metric value (y axis)")
     iter_col: str | None = Field(
         default=None,
         description="Iteration column to aggregate over (mean / CI). Omit if already averaged.",
@@ -273,9 +281,11 @@ class DaBarplotConfig(_BaseVizConfig):
 
     viz_kind: Literal["da_barplot"] = "da_barplot"
 
-    feature_id_col: str = Field(..., description="Feature / taxon identifier")
-    contrast_col: str = Field(..., description="Contrast name (faceting + single-panel filter)")
-    lfc_col: str = Field(..., description="Log-fold-change (signed)")
+    feature_id_col: str = Field(default="feature_id", description="Feature / taxon identifier")
+    contrast_col: str = Field(
+        default="contrast", description="Contrast name (faceting + single-panel filter)"
+    )
+    lfc_col: str = Field(default="lfc", description="Log-fold-change (signed)")
     significance_col: str | None = Field(
         default=None, description="FDR-adjusted p-value (for highlighting significant bars)"
     )
@@ -302,10 +312,10 @@ class EnrichmentConfig(_BaseVizConfig):
 
     viz_kind: Literal["enrichment"] = "enrichment"
 
-    term_col: str = Field(..., description="Pathway / GO-term name column")
-    nes_col: str = Field(..., description="Normalised enrichment score (signed) — x axis")
-    padj_col: str = Field(..., description="FDR-adjusted p-value")
-    gene_count_col: str = Field(..., description="Gene-set size column — dot size")
+    term_col: str = Field(default="term", description="Pathway / GO-term name column")
+    nes_col: str = Field(default="nes", description="Normalised enrichment score (signed) — x axis")
+    padj_col: str = Field(default="padj", description="FDR-adjusted p-value")
+    gene_count_col: str = Field(default="gene_count", description="Gene-set size column — dot size")
     source_col: str | None = Field(
         default=None,
         description="Optional ontology / source column (GO_BP / KEGG / Reactome / Hallmark / ...).",
@@ -485,12 +495,13 @@ class MAConfig(_BaseVizConfig):
 
     viz_kind: Literal["ma"] = "ma"
 
-    feature_id_col: str = Field(..., description="Feature identifier column")
+    feature_id_col: str = Field(default="feature_id", description="Feature identifier column")
     avg_log_intensity_col: str = Field(
-        ..., description="Column with average log intensity (x-axis, A in MA)"
+        default="avg_log_intensity",
+        description="Column with average log intensity (x-axis, A in MA)",
     )
     log2_fold_change_col: str = Field(
-        ..., description="Column with log2 fold change (y-axis, M in MA)"
+        default="log2_fold_change", description="Column with log2 fold change (y-axis, M in MA)"
     )
     significance_col: str | None = Field(
         default=None, description="Optional p/padj column for tier colouring"
@@ -513,11 +524,14 @@ class DotPlotConfig(_BaseVizConfig):
 
     viz_kind: Literal["dot_plot"] = "dot_plot"
 
-    cluster_col: str = Field(..., description="Cluster / group column (x axis)")
-    gene_col: str = Field(..., description="Gene / feature column (y axis)")
-    mean_expression_col: str = Field(..., description="Mean expression value (dot colour)")
+    cluster_col: str = Field(default="cluster", description="Cluster / group column (x axis)")
+    gene_col: str = Field(default="gene", description="Gene / feature column (y axis)")
+    mean_expression_col: str = Field(
+        default="mean_expression", description="Mean expression value (dot colour)"
+    )
     frac_expressing_col: str = Field(
-        ..., description="Fraction of cells expressing the gene in the cluster (dot size)"
+        default="frac_expressing",
+        description="Fraction of cells expressing the gene in the cluster (dot size)",
     )
 
     max_dot_size: int = Field(default=22, ge=4, le=60, description="Max marker size in pixels")
@@ -534,9 +548,15 @@ class LollipopConfig(_BaseVizConfig):
 
     viz_kind: Literal["lollipop"] = "lollipop"
 
-    feature_id_col: str = Field(..., description="Gene / feature the variant is on")
-    position_col: str = Field(..., description="Position along the feature (integer)")
-    category_col: str = Field(..., description="Variant consequence category (colour)")
+    feature_id_col: str = Field(
+        default="feature_id", description="Gene / feature the variant is on"
+    )
+    position_col: str = Field(
+        default="position", description="Position along the feature (integer)"
+    )
+    category_col: str = Field(
+        default="category", description="Variant consequence category (colour)"
+    )
     effect_col: str | None = Field(
         default=None, description="Optional numeric effect column (marker size)"
     )
@@ -559,7 +579,7 @@ class QQConfig(_BaseVizConfig):
 
     viz_kind: Literal["qq"] = "qq"
 
-    p_value_col: str = Field(..., description="Raw p-value column (0–1)")
+    p_value_col: str = Field(default="p_value", description="Raw p-value column (0–1)")
     feature_id_col: str | None = Field(default=None, description="Optional id column for hover")
     category_col: str | None = Field(
         default=None, description="Optional stratification column (one trace per value)"
@@ -581,7 +601,7 @@ class SunburstConfig(_BaseVizConfig):
     rank_cols: list[str] = Field(
         ..., min_length=2, description="Hierarchical rank columns from root to leaf"
     )
-    abundance_col: str = Field(..., description="Leaf abundance weight column")
+    abundance_col: str = Field(default="abundance", description="Leaf abundance weight column")
     category_palette: dict[str, str] | None = Field(
         default=None,
         description=(
@@ -606,11 +626,14 @@ class CoverageTrackConfig(_BaseVizConfig):
 
     viz_kind: Literal["coverage_track"] = "coverage_track"
 
-    chromosome_col: str = Field(..., description="Column with the chromosome / contig label")
-    position_col: str = Field(
-        ..., description="Column with the bin centre or single-base position (integer)"
+    chromosome_col: str = Field(
+        default="chromosome", description="Column with the chromosome / contig label"
     )
-    value_col: str = Field(..., description="Column with the coverage / signal value")
+    position_col: str = Field(
+        default="position",
+        description="Column with the bin centre or single-base position (integer)",
+    )
+    value_col: str = Field(default="value", description="Column with the coverage / signal value")
     end_col: str | None = Field(
         default=None,
         description="Optional bin end column — when set with position_col, treated as interval",
@@ -738,10 +761,10 @@ class OncoplotConfig(_BaseVizConfig):
 
     viz_kind: Literal["oncoplot"] = "oncoplot"
 
-    sample_id_col: str = Field(..., description="Sample identifier column (x axis)")
-    gene_col: str = Field(..., description="Gene identifier column (y axis)")
+    sample_id_col: str = Field(default="sample_id", description="Sample identifier column (x axis)")
+    gene_col: str = Field(default="gene", description="Gene identifier column (y axis)")
     mutation_type_col: str = Field(
-        ..., description="Categorical mutation-type column (cell colour)"
+        default="mutation_type", description="Categorical mutation-type column (cell colour)"
     )
 
 

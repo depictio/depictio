@@ -38,6 +38,16 @@ class AdvancedVizLiteComponent(BaseLiteComponent):
 
     component_type: Literal["advanced_viz"] = "advanced_viz"
 
+    # Optional catalog reference. ``use: <tool>/<output>`` (e.g.
+    # ``mosdepth/genome_coverage``) is expanded at load time into ``viz_kind``
+    # + ``config`` from the catalog output's advanced_viz ``renders_as`` entry
+    # (role→column mapping). See ``_expand_catalog_use``. When an output
+    # renders more than one advanced_viz kind, set ``viz_kind`` to pick one.
+    use: str | None = Field(
+        default=None,
+        description="Catalog output ref '<tool>/<output>' to inherit viz_kind + role bindings",
+    )
+
     # Top-level viz_kind mirrors config.viz_kind. Convenient for lookups and
     # for the outer dispatch in the React renderer without unwrapping config.
     viz_kind: AdvancedVizKind = Field(..., description="Advanced viz kind")
@@ -46,6 +56,71 @@ class AdvancedVizLiteComponent(BaseLiteComponent):
     config: VizConfig = Field(
         ..., description="Per-kind configuration (column bindings + display defaults)"
     )
+
+    @model_validator(mode="before")
+    @classmethod
+    def _expand_catalog_use(cls, data: Any) -> Any:
+        """Expand ``use: <tool>/<output>`` into ``viz_kind`` + ``config``.
+
+        Reads the catalog output's advanced_viz ``renders_as`` entry and maps
+        each declared role to the ``<role>_col`` config field. A user-supplied
+        ``config`` overrides the inherited bindings; an explicit ``viz_kind``
+        disambiguates outputs that render more than one advanced_viz kind.
+        Runs before the legacy-kind rewrite and before union discrimination.
+        """
+        if not isinstance(data, dict) or not data.get("use"):
+            return data
+
+        # Lazy import: avoids a module-load cycle (catalog ← models ← component).
+        from depictio.models.components.advanced_viz.catalog import load_catalog_entries
+
+        ref = data["use"]
+        if "/" not in ref:
+            raise ValueError(f"`use` must be '<tool>/<output>', got {ref!r}")
+        tool_id, output_short = ref.split("/", 1)
+
+        entries = {e.id: e for e in load_catalog_entries()}
+        entry = entries.get(tool_id)
+        if entry is None:
+            raise ValueError(f"`use`: unknown catalog tool {tool_id!r} (have {sorted(entries)})")
+
+        output = next(
+            (o for o in entry.outputs if o.id in (f"{tool_id}_{output_short}", output_short)),
+            None,
+        )
+        if output is None:
+            raise ValueError(
+                f"`use`: tool {tool_id!r} has no output {output_short!r} "
+                f"(have {[o.id for o in entry.outputs]})"
+            )
+
+        av = [
+            r for r in (output.renders_as or []) if getattr(r, "component", None) == "advanced_viz"
+        ]
+        if not av:
+            raise ValueError(f"`use`: catalog output {output.id!r} has no advanced_viz render")
+
+        explicit_kind = data.get("viz_kind")
+        if explicit_kind is not None:
+            render = next((r for r in av if r.kind == explicit_kind), None)
+            if render is None:
+                raise ValueError(
+                    f"`use`: output {output.id!r} has no advanced_viz kind {explicit_kind!r} "
+                    f"(have {[r.kind for r in av]})"
+                )
+        elif len(av) == 1:
+            render = av[0]
+        else:
+            raise ValueError(
+                f"`use`: output {output.id!r} renders multiple kinds {[r.kind for r in av]} "
+                "— set `viz_kind` to pick one"
+            )
+
+        # role → <role>_col, with any user-supplied config taking precedence.
+        inherited = {f"{role}_col": col for role, col in (render.roles or {}).items()}
+        user_cfg = data.get("config") or {}
+        merged = {**inherited, **user_cfg, "viz_kind": render.kind}
+        return {**data, "viz_kind": render.kind, "config": merged}
 
     @model_validator(mode="before")
     @classmethod
