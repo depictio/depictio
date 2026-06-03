@@ -110,10 +110,15 @@ else
     pass "no 'minio123' in shipped configs"
 fi
 
-# 1.3 — no `verify=False` in production code (tests + dev tooling OK)
+# 1.3 — no `verify=False` in our production code (tests + dev tooling OK).
+# Excludes vendored virtualenvs / site-packages: numpy & pandas expose an
+# unrelated `verify=` kwarg, so a co-located depictio/cli/.venv would
+# otherwise flood this check with false positives.
 grep -rIn --include='*.py' --exclude-dir=node_modules --exclude-dir=.git \
         --exclude-dir=tests --exclude-dir=dev \
+        --exclude-dir=.venv --exclude-dir=venv --exclude-dir=site-packages \
         'verify=False' depictio 2>/dev/null \
+    | grep -vE '/(\.venv|venv|site-packages|node_modules)/' \
     | grep -vE ':[[:space:]]*#' \
     > /tmp/depictio_verify_false || true
 if [ -s /tmp/depictio_verify_false ]; then

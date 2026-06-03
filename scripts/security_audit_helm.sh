@@ -63,10 +63,11 @@ else
     echo "${BOLD}Overrides:${NC}  (defaults from values.yaml only)"
 fi
 
-# Render
+# Render. The ${arr[@]+"${arr[@]}"} guard keeps an empty array from tripping
+# `set -u` on macOS's bash 3.2 (where bare ${arr[@]} is an "unbound variable").
 if ! helm template "$RELEASE" "$CHART_DIR" \
         --namespace "$NAMESPACE" \
-        "${VALUES_FLAGS[@]}" \
+        ${VALUES_FLAGS[@]+"${VALUES_FLAGS[@]}"} \
         > "$MANIFESTS" 2>/tmp/helm-render.err; then
     echo "${RED}helm template failed:${NC}"
     cat /tmp/helm-render.err
@@ -79,16 +80,26 @@ echo "${BOLD}Rendered manifests:${NC} $MANIFESTS  ($(wc -l <"$MANIFESTS") lines)
 # =============================================================================
 section "Secret hygiene"
 
-# helper: print a block surrounding a match, used for context-aware grep
+# helper: for each k8s doc that assigns the given key, print its "kind".
+# - splits on real "---" document boundaries (not blank lines)
+# - matches the needle ONLY as a YAML key assignment ("<indent>NEEDLE:"),
+#   so explanatory comments that merely *name* the variable (e.g.
+#   "# NEEDLE intentionally NOT in this ConfigMap") are not counted.
 find_blocks_kind() {
-    # $1 = literal string to search for; prints "kind: <Kind>" of each enclosing doc
     awk -v needle="$1" '
-        BEGIN { RS=""; FS="\n" }
-        { for (i=1; i<=NF; i++) if (index($i, needle)) {
-            kind="(unknown)"
-            for (j=1; j<=NF; j++) if (match($j, /^kind: /)) { kind=substr($j, 7); break }
-            print kind; next
-        }}' "$MANIFESTS"
+        BEGIN { RS="\n---\n"; FS="\n" }
+        {
+            found=0; kind="(unknown)"
+            for (i=1; i<=NF; i++) {
+                line=$i
+                # strip leading whitespace
+                sub(/^[[:space:]]+/, "", line)
+                if (substr(line,1,1) == "#") continue        # skip comments
+                if (line ~ ("^" needle ":")) found=1          # real key assignment
+                if (line ~ /^kind:[[:space:]]/) { sub(/^kind:[[:space:]]*/, "", line); kind=line }
+            }
+            if (found) print kind
+        }' "$MANIFESTS"
 }
 
 # 1.1 — MinIO root password never lands in a ConfigMap
@@ -179,30 +190,32 @@ done
 section "Pod security context"
 
 if [ "$HAS_YQ" -eq 1 ]; then
-    # Per-Deployment / StatefulSet check that runAsNonRoot is true and ALL caps dropped.
-    for kind in Deployment StatefulSet; do
-        yq -r 'select(.kind == "'"$kind"'") | .metadata.name + "|" + (.spec.template.spec.containers[0].securityContext.runAsNonRoot // "missing" | tostring) + "|" + (.spec.template.spec.containers[0].securityContext.capabilities.drop // [] | join(","))' \
-            "$MANIFESTS" 2>/dev/null | while IFS='|' read -r name nonroot caps; do
-            [ -z "$name" ] && continue
-            # Mongo + MinIO are the historical offenders
-            case "$name" in
-                *mongo*|*minio*|*backend*|*viewer*|*celery*)
-                    if [ "$nonroot" = "true" ]; then
-                        echo "${GREEN}[PASS]${NC} $name runs as non-root"; PASS=$((PASS+1))
-                    else
-                        echo "${RED}[FAIL]${NC} $name runs as non-root — runAsNonRoot=$nonroot"; FAIL=$((FAIL+1))
-                        FAIL_LINES+=("$name runs as non-root — runAsNonRoot=$nonroot")
-                    fi
-                    if echo ",$caps," | grep -q ',ALL,'; then
-                        echo "${GREEN}[PASS]${NC} $name drops ALL capabilities"; PASS=$((PASS+1))
-                    else
-                        echo "${RED}[FAIL]${NC} $name drops ALL capabilities — got: ${caps:-none}"; FAIL=$((FAIL+1))
-                        FAIL_LINES+=("$name drops ALL capabilities — got: ${caps:-none}")
-                    fi
-                    ;;
-            esac
+    # Per-Deployment / StatefulSet check that runAsNonRoot is true and ALL caps
+    # dropped. Process substitution (not `yq | while`) keeps the loop in THIS
+    # shell so pass()/fail() counters survive — a piped while-loop runs in a
+    # subshell and silently drops every increment.
+    while IFS='|' read -r name nonroot caps; do
+        [ -z "$name" ] && continue
+        case "$name" in
+            *mongo*|*minio*|*backend*|*viewer*|*celery*)
+                if [ "$nonroot" = "true" ]; then
+                    pass "$name runs as non-root"
+                else
+                    fail "$name runs as non-root" "runAsNonRoot=$nonroot"
+                fi
+                if echo ",$caps," | grep -q ',ALL,'; then
+                    pass "$name drops ALL capabilities"
+                else
+                    fail "$name drops ALL capabilities" "got: ${caps:-none}"
+                fi
+                ;;
+        esac
+    done < <(
+        for kind in Deployment StatefulSet; do
+            yq -r 'select(.kind == "'"$kind"'") | .metadata.name + "|" + (.spec.template.spec.containers[0].securityContext.runAsNonRoot // "missing" | tostring) + "|" + (.spec.template.spec.containers[0].securityContext.capabilities.drop // [] | join(","))' \
+                "$MANIFESTS" 2>/dev/null
         done
-    done
+    )
 else
     skip "per-pod runAsNonRoot / capabilities" "install 'yq' (mikefarah) to enable structured checks"
 fi
