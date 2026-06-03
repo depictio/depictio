@@ -16,7 +16,6 @@ import importlib
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Settings-level fail-fast — context=server only
 # ---------------------------------------------------------------------------
@@ -111,6 +110,35 @@ def test_file_delete_query_uses_caller_admin_flag():
         "File-delete predicate must NOT key off the file owner's admin flag — "
         "that lets any caller delete files whose owner happens to be admin."
     )
-    assert "current_user.is_admin" in src, (
-        "File-delete must branch on the *caller's* admin flag."
-    )
+    assert "current_user.is_admin" in src, "File-delete must branch on the *caller's* admin flag."
+
+
+# ---------------------------------------------------------------------------
+# edit_password must await the async old-password check
+# ---------------------------------------------------------------------------
+
+
+def test_edit_password_awaits_old_password_check():
+    """``_check_password`` is async — a missing ``await`` makes the call return a
+    truthy coroutine, silently bypassing the old-password check. Pin the await.
+    """
+    import ast
+    import inspect
+
+    from depictio.api.v1.endpoints.user_endpoints import routes as user_routes
+
+    tree = ast.parse(inspect.getsource(user_routes.edit_password))
+
+    checked = False
+    for node in ast.walk(tree):
+        # Find the `not _check_password(...)` predicate and require it be awaited.
+        if isinstance(node, ast.Call) and (
+            isinstance(node.func, ast.Name) and node.func.id == "_check_password"
+        ):
+            parents = [a for a in ast.walk(tree) if isinstance(a, ast.Await) and a.value is node]
+            assert parents, (
+                "edit_password must `await _check_password(...)` — without await the "
+                "old-password verification is bypassed entirely."
+            )
+            checked = True
+    assert checked, "Expected edit_password to call _check_password()."

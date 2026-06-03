@@ -7,10 +7,9 @@ from fastapi import HTTPException
 from jwt import ExpiredSignatureError, InvalidTokenError
 from pydantic import EmailStr, validate_call
 
-from depictio.api.v1.configs.config import settings
+from depictio.api.v1.configs.config import ALGORITHM, PUBLIC_KEY, settings
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.endpoints.user_endpoints.utils import create_access_token
-from depictio.api.v1.key_utils_base import ALGORITHM, PUBLIC_KEY
 from depictio.models.models.base import PyObjectId
 from depictio.models.models.users import TokenBase, TokenBeanie, TokenData, UserBeanie
 

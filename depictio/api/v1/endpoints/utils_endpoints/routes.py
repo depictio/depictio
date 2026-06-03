@@ -49,7 +49,10 @@ async def drop_S3_content(current_user=Depends(get_current_user)):
 
     # Check if the user is an admin
     if not current_user.is_admin:
-        raise HTTPException(status_code=401, detail="User is not an admin.")
+        logger.warning(
+            f"Denied drop_S3_content: non-admin user {current_user.id} ({current_user.email})"
+        )
+        raise HTTPException(status_code=403, detail="User is not an admin.")
 
     bucket_name = settings.minio.bucket
 
@@ -77,7 +80,10 @@ async def drop_all_collections(current_user=Depends(get_current_user)):
 
     # Check if the user is an admin
     if not current_user.is_admin:
-        raise HTTPException(status_code=401, detail="User is not an admin.")
+        logger.warning(
+            f"Denied drop_all_collections: non-admin user {current_user.id} ({current_user.email})"
+        )
+        raise HTTPException(status_code=403, detail="User is not an admin.")
 
     workflows_collection.drop()
     data_collections_collection.drop()

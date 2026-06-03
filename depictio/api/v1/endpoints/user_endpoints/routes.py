@@ -803,8 +803,10 @@ async def edit_password(
     """
     logger.debug(f"Editing password for user: {current_user.email}")
 
-    # Validate password change request
-    if not _check_password(current_user.email, request.old_password):
+    # Validate password change request. ``_check_password`` is async — without
+    # ``await`` it returns a truthy coroutine and the old-password check is
+    # silently bypassed (CVE-class auth bug). Login awaits it correctly.
+    if not await _check_password(current_user.email, request.old_password):
         raise HTTPException(status_code=400, detail="Old password is incorrect")
 
     # Hash the new password
