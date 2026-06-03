@@ -4,7 +4,7 @@
 id: multiqc
 name: MultiQC
 description: Aggregates QC results from many tools into a single report.
-homepage: https://multiqc.info
+homepage: https://seqera.io/multiqc/ # MultiQC is now maintained under Seqera
 biotools_url: https://bio.tools/multiqc
 nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/multiqc
 edam_topics:
