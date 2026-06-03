@@ -5,6 +5,7 @@ import { createTemporaryUser, getAnonymousSession, persistSession } from 'depict
 import AuthBackground from './components/AuthBackground';
 import AuthCard from './components/AuthCard';
 import GoogleOAuthCallback from './components/GoogleOAuthCallback';
+import MagicLinkCallback from './components/MagicLinkCallback';
 import LoginForm from './components/LoginForm';
 import RegisterForm from './components/RegisterForm';
 import { useAuthMode } from './hooks/useAuthMode';
@@ -12,10 +13,11 @@ import './styles/auth.css';
 
 const POST_AUTH_REDIRECT = '/dashboards-beta';
 
-type View = 'login' | 'register' | 'oauth-callback';
+type View = 'login' | 'register' | 'oauth-callback' | 'magic-callback';
 
 function detectView(pathname: string): View {
   if (pathname.startsWith('/auth/google/callback')) return 'oauth-callback';
+  if (pathname.startsWith('/auth/magic')) return 'magic-callback';
   if (pathname.startsWith('/auth/register')) return 'register';
   return 'login';
 }
@@ -40,7 +42,7 @@ export default function AuthApp() {
   // 3. Standard mode with an already-resolved session — bounce straight
   //    through without touching localStorage.
   useEffect(() => {
-    if (view === 'oauth-callback') return;
+    if (view === 'oauth-callback' || view === 'magic-callback') return;
     if (loading || !status) return;
 
     let cancelled = false;
@@ -79,6 +81,8 @@ export default function AuthApp() {
       <div className="auth-page-content">
         {view === 'oauth-callback' ? (
           <GoogleOAuthCallback />
+        ) : view === 'magic-callback' ? (
+          <MagicLinkCallback />
         ) : loading ? (
           <AuthCard heading="Welcome to Depictio :">
             <Stack align="center" gap="md">

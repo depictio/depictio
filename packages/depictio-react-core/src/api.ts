@@ -1962,6 +1962,21 @@ export async function handleGoogleCallback(code: string, state: string): Promise
   };
 }
 
+/** Redeem a single-use magic-link ticket for a browser session.
+ *
+ *  The opaque ticket arrives in the login URL (fragment); this exchanges it
+ *  server-side — where it is burned so it can never be replayed — for a real
+ *  session ready to persist. Throws on an invalid/expired/used ticket. */
+export async function exchangeMagicToken(ticket: string): Promise<SessionPayload> {
+  const res = await fetch(`${API_BASE}/auth/magic/exchange`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ticket }),
+  });
+  if (!res.ok) await throwHttpError(res, 'Magic link is invalid or has expired');
+  return (await res.json()) as SessionPayload;
+}
+
 /** Persist a session payload to localStorage under the same key Dash uses. */
 export function persistSession(session: SessionPayload): void {
   try {
