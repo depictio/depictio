@@ -369,3 +369,4 @@ dev/advanced_viz_docs_screenshots/fixtures/
 
 # Generated CLI configs (emitted by upload.sh on the fly)
 **/.cli_config.generated.yaml
+.depictio-instance-CLI.yaml

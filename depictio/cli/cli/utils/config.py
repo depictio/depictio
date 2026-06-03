@@ -24,16 +24,13 @@ def validate_project_config_and_check_S3_storage(CLI_config_path: str, project_c
     logger.info(response)
 
     if response["success"]:
-        CLI_config_dict = response["CLI_config"]
-        # Check S3 accessibility
-        # S3_storage_checks(CLI_config_dict["s3"])
+        # Reload the config from the YAML rather than from api_login's return:
+        # that payload is a ``mode="json"`` dump whose SecretStr S3 secret is
+        # MASKED ('**********') — rebuilding CLIConfig from it silently breaks
+        # every downstream direct-to-S3 Delta write (SignatureDoesNotMatch).
+        from depictio.cli.cli.utils.common import load_depictio_config
 
-        # Create CLIConfig explicitly with mapped keys
-        CLI_config = CLIConfig(
-            user=CLI_config_dict["user"],
-            api_base_url=CLI_config_dict["api_base_url"],
-            s3_storage=CLI_config_dict["s3_storage"],
-        )
+        CLI_config = load_depictio_config(yaml_config_path=CLI_config_path)
         # Validate the project configuration
         response_validation = local_validate_project_config(CLI_config, project_config_path)
         return CLI_config, response_validation
@@ -218,12 +215,11 @@ def validate_template_project_config(
     if not response["success"]:
         raise typer.Exit(code=1)
 
-    CLI_config_dict = response["CLI_config"]
-    CLI_config = CLIConfig(
-        user=CLI_config_dict["user"],
-        api_base_url=CLI_config_dict["api_base_url"],
-        s3_storage=CLI_config_dict["s3_storage"],
-    )
+    # Reload from YAML — api_login's returned payload carries a MASKED
+    # SecretStr S3 secret (see validate_project_config_and_check_S3_storage).
+    from depictio.cli.cli.utils.common import load_depictio_config
+
+    CLI_config = load_depictio_config(yaml_config_path=CLI_config_path)
 
     try:
         # Add permissions from CLI user

@@ -12,6 +12,25 @@ from depictio.models.models.users import TokenBeanie, UserBeanie
 from depictio.models.utils import make_json_serializable
 
 
+def cli_config_to_payload(cli_config: CLIConfig) -> dict:
+    """Serialize a CLIConfig for delivery to the CLI/agent.
+
+    ``s3_storage.root_password`` is a ``SecretStr`` since the secrets-hardening
+    pass, so every standard serialization path (``model_dump(mode="json")``,
+    ``make_json_serializable``, FastAPI ``response_model``) emits the masked
+    ``'**********'`` — which silently breaks the CLI's direct-to-S3 Delta
+    writes. This helper is the single DELIBERATE disclosure point: the agent
+    config is requested by an authenticated user and must carry the real
+    secret to be usable.
+    """
+    payload = cli_config.model_dump(mode="json")
+    pw = cli_config.s3_storage.root_password
+    payload["s3_storage"]["root_password"] = (
+        pw.get_secret_value() if hasattr(pw, "get_secret_value") else pw
+    )
+    return payload
+
+
 @validate_call(validate_return=True)
 async def _generate_agent_config(user: UserBeanie, token: TokenBeanie) -> CLIConfig:
     """
@@ -64,8 +83,9 @@ async def export_agent_config(cli_config: CLIConfig, email: str, wipe: bool = Fa
     Returns:
         Path to the generated config file
     """
-    # Make the config serializable
-    serializable_config = make_json_serializable(cli_config.model_dump())
+    # Make the config serializable — via the payload helper so the S3 secret
+    # lands unmasked in the exported YAML (the CLI needs it for Delta writes).
+    serializable_config = make_json_serializable(cli_config_to_payload(cli_config))
     serializable_config["api_base_url"] = str(cli_config.api_base_url)
 
     # Convert to YAML

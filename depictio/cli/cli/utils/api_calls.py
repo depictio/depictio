@@ -9,7 +9,7 @@ from pydantic import validate_call
 from depictio.cli.cli.utils.common import generate_api_headers, load_depictio_config
 from depictio.cli.cli.utils.rich_utils import rich_print_checked_statement
 from depictio.cli.cli_logging import logger
-from depictio.models.models.base import BaseModel, PyObjectId, convert_objectid_to_str
+from depictio.models.models.base import BaseModel, PyObjectId
 from depictio.models.models.cli import CLIConfig
 from depictio.models.models.files import File
 from depictio.models.models.workflows import WorkflowRun
@@ -21,8 +21,14 @@ def api_login(yaml_config_path: str = "~/.depictio/CLI.yaml") -> dict:
     """
     Login to the Depictio API using the CLI configuration.
     """
-    depictio_CLI_config = load_depictio_config(yaml_config_path=yaml_config_path)
-    depictio_CLI_config = convert_objectid_to_str(depictio_CLI_config.model_dump())
+    loaded_config = load_depictio_config(yaml_config_path=yaml_config_path)
+    # Build headers from the MODEL (not the dumped dict) so validate_call's
+    # union coercion can't re-validate — and historically mutate — the payload.
+    api_headers = generate_api_headers(loaded_config)
+    # mode="json" stringifies ObjectIds/datetimes AND masks the SecretStr S3
+    # secret — the server only reads ``user.token`` from this payload, so the
+    # masked value is fine (and keeps the secret out of logs and transit).
+    depictio_CLI_config = loaded_config.model_dump(mode="json")
     logger.info(f"Depictio CLI configuration loaded: {depictio_CLI_config}")
     rich_print_checked_statement("Checking server accessibility...", "info")
 
@@ -39,7 +45,7 @@ def api_login(yaml_config_path: str = "~/.depictio/CLI.yaml") -> dict:
         json=depictio_CLI_config,
         # /validate_cli_config now requires a bearer token (was unauthenticated);
         # the same token already lives in the posted config body.
-        headers=generate_api_headers(depictio_CLI_config),
+        headers=api_headers,
         timeout=120.0,
     )
     if response.status_code == 200:

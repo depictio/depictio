@@ -93,6 +93,11 @@ class MongoModel(BaseModel):
         if not isinstance(values, dict):
             return values
 
+        # Work on a shallow copy — before-validators receive the CALLER's dict,
+        # so assigning into it leaks ObjectIds back into e.g. a freshly
+        # json-serialized payload the caller is about to POST.
+        values = dict(values)
+
         # If '_id' is provided, move it to 'id' and remove '_id'
         if "_id" in values:
             values["id"] = values.pop("_id")

@@ -12,7 +12,10 @@ from pydantic import BaseModel, EmailStr
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.db import users_collection
-from depictio.api.v1.endpoints.user_endpoints.agent_config_utils import _generate_agent_config
+from depictio.api.v1.endpoints.user_endpoints.agent_config_utils import (
+    _generate_agent_config,
+    cli_config_to_payload,
+)
 from depictio.api.v1.endpoints.user_endpoints.core_functions import (
     _add_token,
     _async_fetch_user_from_email,
@@ -38,7 +41,6 @@ from depictio.api.v1.endpoints.user_endpoints.utils import (
     update_group_in_users_helper,
 )
 from depictio.models.models.base import convert_objectid_to_str
-from depictio.models.models.cli import CLIConfig
 from depictio.models.models.users import (
     GroupBeanie,
     RequestEditPassword,
@@ -1050,12 +1052,16 @@ async def check_token_validity_endpoint(
     }
 
 
-@auth_endpoint_router.post(
-    "/generate_agent_config", response_model=CLIConfig, include_in_schema=True
-)
+@auth_endpoint_router.post("/generate_agent_config", include_in_schema=True)
 async def generate_agent_config_endpoint(
     token: TokenBeanie, current_user: UserBase = Depends(get_current_user)
-) -> CLIConfig:
+) -> dict:
+    """Generate a CLI/agent config for the authenticated user.
+
+    Serialized via ``cli_config_to_payload`` instead of ``response_model=CLIConfig``:
+    the response model would re-mask the ``SecretStr`` S3 secret as ``'**********'``,
+    which silently breaks the CLI's direct-to-S3 Delta writes.
+    """
     if (settings.auth.is_public_mode or settings.auth.is_demo_mode) and not current_user.is_admin:
         raise HTTPException(
             status_code=403,
@@ -1063,7 +1069,7 @@ async def generate_agent_config_endpoint(
         )
     depictio_agent_config = await _generate_agent_config(user=current_user, token=token)
 
-    return depictio_agent_config
+    return cli_config_to_payload(depictio_agent_config)
 
 
 @auth_endpoint_router.get("/list_tokens", response_model=list[TokenBeanie], include_in_schema=True)
