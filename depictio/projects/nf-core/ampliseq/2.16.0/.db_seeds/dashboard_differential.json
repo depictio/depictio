@@ -449,21 +449,21 @@
       "component_type": "advanced_viz",
       "title": "Differential-abundance bars (per contrast)",
       "workflow_tag": "ampliseq",
-      "data_collection_tag": "da_barplot_canonical",
+      "data_collection_tag": "ancombc_results",
       "wf_id": {
         "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
       },
       "dc_id": {
-        "$oid": "646b0f3c1e4a2d7f8e5b8cd0"
+        "$oid": "646b0f3c1e4a2d7f8e5b8caa"
       },
       "dc_config": {
         "type": null,
         "metatype": null,
-        "description": "DA-barplot-ready ANCOM-BC results (feature_id/contrast/lfc)",
-        "data_collection_tag": "da_barplot_canonical",
+        "description": "ANCOM-BC differential abundance (habitat, Phylum level)",
+        "data_collection_tag": "ancombc_results",
         "dc_specific_properties": null,
         "_id": {
-          "$oid": "646b0f3c1e4a2d7f8e5b8cd0"
+          "$oid": "646b0f3c1e4a2d7f8e5b8caa"
         }
       },
       "cols_json": {},
@@ -472,11 +472,11 @@
       "viz_kind": "da_barplot",
       "config": {
         "viz_kind": "da_barplot",
-        "feature_id_col": "feature_id",
+        "feature_id_col": "id",
         "contrast_col": "contrast",
         "lfc_col": "lfc",
-        "significance_col": "significance",
-        "label_col": "label",
+        "significance_col": "q_val",
+        "label_col": "Phylum",
         "significance_threshold": 0.05,
         "top_n": 15,
         "contrast_view": "all"

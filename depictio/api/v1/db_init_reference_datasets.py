@@ -66,7 +66,6 @@ STATIC_IDS = {
             # ancombc_results via role columns id/lfc/q_val.)
             "stacked_taxonomy_canonical": "646b0f3c1e4a2d7f8e5b8cb1",
             "embedding_pcoa": "646b0f3c1e4a2d7f8e5b8cb2",
-            "da_barplot_canonical": "646b0f3c1e4a2d7f8e5b8cd0",
             "rarefaction_canonical": "646b0f3c1e4a2d7f8e5b8cd1",
             "complex_heatmap_canonical": "646b0f3c1e4a2d7f8e5b8cd2",
             "sunburst_canonical": "646b0f3c1e4a2d7f8e5b8cd3",

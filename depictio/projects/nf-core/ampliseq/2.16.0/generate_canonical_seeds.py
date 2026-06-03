@@ -149,10 +149,6 @@ def main() -> None:
     print(f"  -> embedding_pcoa.tsv ({embedding_pcoa.shape})")
 
     # --- Tier 1 (this PR): new canonical DCs -------------------------------
-    da_barplot = _load_recipe("da_barplot_canonical").transform({"ancombc": ancombc_results})
-    da_barplot.write_csv(DATA_ROOT / "da_barplot_canonical.tsv", separator="\t")
-    print(f"  -> da_barplot_canonical.tsv ({da_barplot.shape})")
-
     rarefaction = _load_recipe("rarefaction_canonical").transform(
         {
             "shannon": rarefaction_shannon,
