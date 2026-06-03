@@ -208,7 +208,7 @@ tabs:
         title: Total Taxa
     -   component_type: card
         workflow_tag: ampliseq
-        data_collection_tag: alpha_diversity
+        data_collection_tag: alpha_diversity_multi_canonical
         aggregation: average
         column_name: faith_pd
         # --- optional ---
@@ -280,7 +280,7 @@ tabs:
             h: 5
     -   component_type: figure
         workflow_tag: ampliseq
-        data_collection_tag: alpha_diversity
+        data_collection_tag: alpha_diversity_multi_canonical
         visu_type: bar
         # --- optional ---
         figure_params:
