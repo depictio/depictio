@@ -40,7 +40,10 @@ from depictio.models.components.types import (
 )
 
 CATALOG_DIR = Path(__file__).resolve().parents[3] / "catalog"
-PROJECTS_DIR = CATALOG_DIR.parent / "projects"
+# Module-keyed, catalog-local sample data (one file per output, named by id).
+# Pipeline-agnostic and committed with the catalog → usable for both validation
+# (Level-3 grounding) and `catalog preview`.
+FIXTURES_DIR = CATALOG_DIR / "_fixtures"
 
 # plotly-express kwargs whose VALUES are column names (grounded against data);
 # other dict_kwargs (title, points, log_x…) are passed through untouched.
@@ -442,11 +445,16 @@ def check_existence(entries: tuple[CatalogEntry, ...] | list[CatalogEntry]) -> l
 # ---------------------------------------------------------------------------
 
 
+def fixture_path(fixture_ref: str) -> Path:
+    """Resolve a module-keyed fixture name to its path under `_fixtures/`."""
+    return FIXTURES_DIR / fixture_ref
+
+
 def fixture_columns(fixture_ref: str) -> list[str]:
-    """Read the column header of a bundled fixture (path under projects/)."""
+    """Read the column header of a module-keyed fixture (csv/tsv/parquet)."""
     import polars as pl
 
-    path = PROJECTS_DIR / fixture_ref
+    path = fixture_path(fixture_ref)
     if path.suffix == ".parquet":
         return list(pl.read_parquet_schema(path).keys())
     sep = "\t" if path.suffix == ".tsv" else ","

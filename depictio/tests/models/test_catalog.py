@@ -296,13 +296,13 @@ def test_alpha_diversity_has_code_figure_and_metric_cards():
     assert fig.code and "fig = px.box" in fig.code  # code-mode figure
     card = next(r for r in out.renders_as if r.component == "card")
     assert card.aggregation == "average" and card.secondary_layout == "box_plot"  # Tukey card
-    assert out.fixture and out.fixture.endswith("alpha_diversity_multi_canonical.tsv")
+    assert out.fixture == "qiime2_alpha_diversity.tsv"  # module-keyed fixture
 
 
 def test_fixture_columns_reads_bundled_sample():
     from depictio.models.components.advanced_viz.catalog import fixture_columns
 
-    cols = fixture_columns("nf-core/ampliseq/2.16.0/alpha_diversity_multi_canonical.tsv")
+    cols = fixture_columns("qiime2_alpha_diversity.tsv")
     assert {"sample_id", "shannon", "evenness", "faith_pd"} <= set(cols)
 
 
@@ -452,11 +452,16 @@ def test_every_recipe_resolves_to_a_real_file():
                 recipe_output_columns(out.recipe)  # raises RecipeError if missing
 
 
-def test_fixture_columns_reads_parquet():
-    from depictio.models.components.advanced_viz.catalog import fixture_columns
+def test_fixtures_are_catalog_local_and_module_keyed():
+    from depictio.models.components.advanced_viz.catalog import FIXTURES_DIR, fixture_path
 
-    cols = fixture_columns("nf-core/ampliseq/2.14.0/run_1/multiqc_data/multiqc.parquet")
-    assert isinstance(cols, list) and cols  # parquet schema read
+    # every referenced fixture lives under catalog/_fixtures/ (no pipeline path)
+    for entry in load_catalog_entries():
+        for out in entry.outputs:
+            if out.fixture:
+                assert "/" not in out.fixture  # module-keyed filename, not a pipeline path
+                assert fixture_path(out.fixture).parent == FIXTURES_DIR
+                assert fixture_path(out.fixture).exists()
 
 
 def test_card_top_n_requires_breakdown_col():

@@ -15,7 +15,7 @@ outputs:
     description: Per-sample annotated variant calls (long table).
     find: { filename: "variants_long_table.csv" } # raw nf-core file
     recipe: nf-core/viralrecon/variants_long.py # owns the output columns
-    fixture: nf-core/viralrecon/3.0.0/variants_long.tsv # bundled bindable sample
+    fixture: ivar_variants_long.tsv # bundled bindable sample
     renders_as:
       - { component: advanced_viz, kind: lollipop, roles: {feature_id: GENE, position: POS, category: EFFECT} }
       - { component: advanced_viz, kind: oncoplot, roles: {sample_id: sample, gene: GENE, mutation_type: EFFECT} }

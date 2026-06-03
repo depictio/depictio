@@ -105,11 +105,6 @@ jobs:
           source venv/bin/activate
           ruff check depictio
 
-      - name: Validate bio-catalog
-        run: |
-          source venv/bin/activate
-          depictio catalog validate
-
       # - name: Run ty type checker (must pass)
       #   run: |
       #     source venv/bin/activate

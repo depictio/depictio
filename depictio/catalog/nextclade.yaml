@@ -14,7 +14,7 @@ outputs:
     description: Per-sample clade assignment + sequence QC (rendered as a table).
     find: { path_glob: "**/nextclade/*.csv" }
     recipe: nf-core/viralrecon/nextclade_results.py
-    fixture: nf-core/viralrecon/3.0.0/nextclade_results.tsv
+    fixture: nextclade_report.tsv
     renders_as:
       - { component: figure, visu_type: histogram, dict_kwargs: {x: clade, color: qc_overallStatus} } # clade calls
       - { component: card, column: coverage, aggregation: average } # mean genome coverage
