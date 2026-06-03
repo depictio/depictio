@@ -62,7 +62,8 @@ STATIC_IDS = {
             "ancombc_results": "646b0f3c1e4a2d7f8e5b8caa",
             # Canonical-schema DCs feeding the advanced_viz components — see
             # depictio/projects/nf-core/ampliseq/recipes/*_canonical.py.
-            "volcano_canonical": "646b0f3c1e4a2d7f8e5b8cb0",
+            # (volcano retired: the Volcano component binds directly to
+            # ancombc_results via role columns id/lfc/q_val.)
             "stacked_taxonomy_canonical": "646b0f3c1e4a2d7f8e5b8cb1",
             "embedding_pcoa": "646b0f3c1e4a2d7f8e5b8cb2",
             "da_barplot_canonical": "646b0f3c1e4a2d7f8e5b8cd0",

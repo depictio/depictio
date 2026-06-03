@@ -276,28 +276,6 @@ workflows:
       # required schemas declared by the advanced_viz components in
       # depictio/models/components/advanced_viz/schemas.py.
 
-      - id: "646b0f3c1e4a2d7f8e5b8cb0"
-        data_collection_tag: "volcano_canonical"
-        description: "Volcano-ready ANCOM-BC results (feature_id/effect_size/significance)"
-        config:
-          type: "Table"
-          source: "transformed"
-          transform:
-            recipe: "nf-core/ampliseq/volcano_canonical.py"
-          dc_specific_properties:
-            format: "TSV"
-            columns_description:
-              "feature_id": "Taxon identifier"
-              "effect_size": "Log-fold change (lfc)"
-              "significance": "FDR-adjusted p-value (q_val)"
-              "label": "Display label (Phylum)"
-              "category": "Contrast group for colouring"
-              "contrast": "Statistical contrast"
-              "Kingdom": "Kingdom-level taxonomy"
-              "Phylum": "Phylum-level taxonomy"
-              "neg_log10_qval": "-log10(q-value)"
-              "significant": "q < 0.05"
-
       - id: "646b0f3c1e4a2d7f8e5b8cb1"
         data_collection_tag: "stacked_taxonomy_canonical"
         description: "Stacked-taxonomy-ready relative abundance (sample/taxon/rank/abundance)"

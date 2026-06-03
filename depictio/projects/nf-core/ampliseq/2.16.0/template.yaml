@@ -249,22 +249,6 @@ workflows:
       # depictio/models/components/advanced_viz/schemas.py).
       # ====================================================================
 
-      - data_collection_tag: "volcano_canonical"
-        description: "Volcano-ready ANCOM-BC results (feature_id/effect_size/significance)"
-        config:
-          type: "Table"
-          source: "transformed"
-          transform:
-            recipe: "nf-core/ampliseq/volcano_canonical.py"
-          dc_specific_properties:
-            format: "TSV"
-            columns_description:
-              "feature_id": "Taxon identifier"
-              "effect_size": "Log-fold change (lfc)"
-              "significance": "FDR-adjusted p-value (q_val)"
-              "label": "Display label (Phylum)"
-              "category": "Contrast group for colouring"
-
       - data_collection_tag: "stacked_taxonomy_canonical"
         description: "Stacked-taxonomy-ready relative abundance (sample/taxon/rank/abundance)"
         config:
@@ -692,20 +676,11 @@ links:
     enabled: true
 
   # --------------------------------------------------------------------------
-  # Links 16-17: ANCOM-BC results -> volcano / DA-barplot via shared
-  # `contrast` column. Lets the Differential-Abundance tab's Contrast filter
-  # restrict the volcano and DA-barplot to one habitat comparison at a time.
+  # Link 16: ANCOM-BC results -> DA-barplot via shared `contrast` column.
+  # Lets the Differential-Abundance tab's Contrast filter restrict the
+  # DA-barplot to one habitat comparison at a time. (The volcano now binds
+  # directly to ancombc_results, so its contrast filter needs no join.)
   # --------------------------------------------------------------------------
-  - source_dc_tag: "ancombc_results"
-    source_column: "contrast"
-    target_dc_tag: "volcano_canonical"
-    target_type: "table"
-    link_config:
-      resolver: "direct"
-      target_field: "contrast"
-    description: "Restrict volcano to selected contrast"
-    enabled: true
-
   - source_dc_tag: "ancombc_results"
     source_column: "contrast"
     target_dc_tag: "da_barplot_canonical"

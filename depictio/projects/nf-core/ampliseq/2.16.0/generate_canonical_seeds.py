@@ -125,10 +125,8 @@ def main() -> None:
     print(f"  -> taxonomy_heatmap.tsv ({taxonomy_heatmap.shape})")
 
     # --- Tier 1: existing canonical DCs (pre-PR) ---------------------------
-    volcano_canonical = _load_recipe("volcano_canonical").transform({"ancombc": ancombc_results})
-    volcano_canonical.write_csv(DATA_ROOT / "volcano_canonical.tsv", separator="\t")
-    print(f"  -> volcano_canonical.tsv ({volcano_canonical.shape})")
-
+    # (volcano retired: the Volcano component binds directly to ancombc_results
+    # via role columns id/lfc/q_val — see catalog/qiime2/ancombc.yaml renders_as.)
     stacked_taxonomy_canonical = _load_recipe("stacked_taxonomy_canonical").transform(
         {
             "phylum": rel_phylum,

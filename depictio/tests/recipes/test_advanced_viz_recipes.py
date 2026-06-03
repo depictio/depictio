@@ -34,46 +34,6 @@ def _polars_schema_name(df: pl.DataFrame) -> dict[str, str]:
 
 
 # ---------------------------------------------------------------------------
-# ampliseq: volcano
-# ---------------------------------------------------------------------------
-
-
-def test_ampliseq_volcano_canonical(tmp_path: Path) -> None:
-    """Ampliseq volcano recipe rewrites ANCOM-BC columns to canonical schema."""
-    src = tmp_path / "ancombc_habitat_level2.tsv"
-    pl.DataFrame(
-        {
-            "id": ["k__Bacteria;p__Firmicutes", "k__Bacteria;p__Bacteroidetes"],
-            "contrast": ["A_vs_B", "A_vs_B"],
-            "lfc": [1.2, -0.7],
-            "p_val": [0.001, 0.04],
-            "q_val": [0.005, 0.06],
-            "w": [3.1, -1.4],
-            "Kingdom": ["Bacteria", "Bacteria"],
-            "Phylum": ["Firmicutes", "Bacteroidetes"],
-            "neg_log10_qval": [2.301, 1.222],
-            "significant": [True, False],
-        }
-    ).write_csv(src, separator="\t")
-
-    result = execute_recipe("nf-core/ampliseq/volcano_canonical.py", tmp_path)
-
-    # The recipe engine has already enforced EXPECTED_SCHEMA at this point.
-    assert not result.is_empty()
-    assert set(["feature_id", "effect_size", "significance"]).issubset(result.columns)
-
-    cfg = VolcanoConfig(
-        feature_id_col="feature_id",
-        effect_size_col="effect_size",
-        significance_col="significance",
-        label_col="label",
-        category_col="category",
-    )
-    errors = validate_binding(cfg, _polars_schema_name(result))
-    assert errors == [], f"binding errors: {errors}"
-
-
-# ---------------------------------------------------------------------------
 # ampliseq: stacked_taxonomy
 # ---------------------------------------------------------------------------
 
