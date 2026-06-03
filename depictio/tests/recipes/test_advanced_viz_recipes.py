@@ -39,29 +39,35 @@ def _polars_schema_name(df: pl.DataFrame) -> dict[str, str]:
 
 
 def test_ampliseq_stacked_taxonomy_canonical(tmp_path: Path) -> None:
-    src = tmp_path / "taxonomy_rel_abundance_long.tsv"
-    pl.DataFrame(
+    # The recipe fans in QIIME2 rel-table-{2..6}.tsv (one wide table per rank,
+    # taxa × samples) via dc_ref sources — injected here as `extra_sources`.
+    # Only the Phylum level (rel-table-2) is supplied; the recipe tolerates the
+    # deeper levels being absent and derives a Kingdom level from the Phylum rows.
+    phylum = pl.DataFrame(
         {
-            "sample": ["S1", "S1", "S2", "S2"],
-            "taxonomy": [
-                "k__Bacteria;p__Firmicutes",
-                "k__Bacteria;p__Bacteroidetes",
-                "k__Bacteria;p__Firmicutes",
-                "k__Bacteria;p__Bacteroidetes",
-            ],
-            "rel_abundance": [0.55, 0.30, 0.40, 0.50],
-            "habitat": ["river", "river", "soil", "soil"],
-            "Kingdom": ["Bacteria"] * 4,
-            "Phylum": ["Firmicutes", "Bacteroidetes", "Firmicutes", "Bacteroidetes"],
+            "#OTU ID": ["k__Bacteria;p__Firmicutes", "k__Bacteria;p__Bacteroidetes"],
+            "S1": [0.55, 0.30],
+            "S2": [0.40, 0.50],
         }
-    ).write_csv(src, separator="\t")
+    )
+    empty = pl.DataFrame()
 
-    result = execute_recipe("nf-core/ampliseq/stacked_taxonomy_canonical.py", tmp_path)
+    result = execute_recipe(
+        "qiime2/stacked_taxonomy_canonical.py",
+        tmp_path,
+        extra_sources={
+            "phylum": phylum,
+            "class_": empty,
+            "order": empty,
+            "family": empty,
+            "genus": empty,
+        },
+    )
 
     assert not result.is_empty()
     assert set(["sample_id", "taxon", "rank", "abundance"]).issubset(result.columns)
-    # Both rows have 2-segment taxonomy ⇒ rank = "Phylum"
-    assert set(result["rank"].unique().to_list()) == {"Phylum"}
+    # Phylum rows plus a Kingdom level the recipe derives by summing Phylum.
+    assert set(result["rank"].unique().to_list()) == {"Kingdom", "Phylum"}
 
     cfg = StackedTaxonomyConfig(
         sample_id_col="sample_id",
@@ -79,20 +85,23 @@ def test_ampliseq_stacked_taxonomy_canonical(tmp_path: Path) -> None:
 
 
 def test_ampliseq_embedding_pcoa(tmp_path: Path) -> None:
-    src = tmp_path / "taxonomy_heatmap.tsv"
-    # 3 taxa x 4 samples; values are dummy relative abundances.
+    # The recipe consumes the derived `taxonomy_heatmap` DC (wide matrix:
+    # Phylum/Kingdom row-ids + per-sample columns) via a dc_ref source — injected
+    # here as `extra_sources`. 3 taxa x 4 samples of dummy relative abundances.
     rng = np.random.default_rng(seed=0)
     samples = ["S1", "S2", "S3", "S4"]
     matrix = rng.uniform(0, 1, size=(3, 4))
-    pl.DataFrame(
+    heatmap = pl.DataFrame(
         {
             "Phylum": ["Firmicutes", "Bacteroidetes", "Proteobacteria"],
             "Kingdom": ["Bacteria"] * 3,
             **{s: matrix[:, i].tolist() for i, s in enumerate(samples)},
         }
-    ).write_csv(src, separator="\t")
+    )
 
-    result = execute_recipe("nf-core/ampliseq/embedding_pcoa.py", tmp_path)
+    result = execute_recipe(
+        "qiime2/embedding_pcoa.py", tmp_path, extra_sources={"taxonomy_heatmap": heatmap}
+    )
 
     assert not result.is_empty()
     assert set(["sample_id", "dim_1", "dim_2"]).issubset(result.columns)

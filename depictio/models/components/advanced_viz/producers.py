@@ -466,7 +466,7 @@ KNOWN_PRODUCERS: tuple[Producer, ...] = (
             },
             "sunburst": {"abundance": "rel_abundance"},
         },
-        notes="Pivot to wide (Phylum × sample) for ComplexHeatmap — see recipes/taxonomy_heatmap.py.",
+        notes="Pivot to wide (Phylum × sample) for ComplexHeatmap — see catalog/qiime2/taxonomy_heatmap.py.",
     ),
     Producer(
         name="alpha_diversity_wide",

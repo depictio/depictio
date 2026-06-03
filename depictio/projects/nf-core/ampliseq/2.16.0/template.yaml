@@ -192,7 +192,7 @@ workflows:
           type: "Table"
           source: "transformed"
           transform:
-            recipe: "nf-core/ampliseq/taxonomy_heatmap.py"
+            recipe: "qiime2/taxonomy_heatmap.py"
           dc_specific_properties:
             format: "TSV"
             columns_description:
@@ -242,7 +242,7 @@ workflows:
           type: "Table"
           source: "transformed"
           transform:
-            recipe: "nf-core/ampliseq/stacked_taxonomy_canonical.py"
+            recipe: "qiime2/stacked_taxonomy_canonical.py"
           dc_specific_properties:
             format: "TSV"
             columns_description:
@@ -258,7 +258,7 @@ workflows:
           type: "Table"
           source: "transformed"
           transform:
-            recipe: "nf-core/ampliseq/embedding_pcoa.py"
+            recipe: "qiime2/embedding_pcoa.py"
           dc_specific_properties:
             format: "TSV"
             columns_description:
@@ -273,7 +273,7 @@ workflows:
           type: "Table"
           source: "transformed"
           transform:
-            recipe: "nf-core/ampliseq/rarefaction_canonical.py"
+            recipe: "qiime2/rarefaction_canonical.py"
           dc_specific_properties:
             format: "TSV"
             columns_description:
