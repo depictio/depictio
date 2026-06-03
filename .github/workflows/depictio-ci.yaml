@@ -982,7 +982,15 @@ jobs:
           docker pull "${DEPICTIO_WORKER_VERSION}"
           docker pull "${DEPICTIO_VIEWER_VERSION}"
           export DEPICTIO_FASTAPI_WORKERS=1  # Single worker to avoid boot race conditions
-          docker compose -f docker-compose.dev.yaml --env-file docker-compose/.env up -d
+          # Name the services explicitly so the Vite `depictio-viewer-dev`
+          # service (no profile, runs by default in compose, image only
+          # exists locally — `depictio-viewer-dev:dev`) isn't pulled. Without
+          # this, `docker compose up` tries Docker Hub for that image, times
+          # out, and aborts the whole pull. `--profile ci` enables the nginx
+          # viewer the CLI test exercises.
+          export DEPICTIO_VIEWER_SERVICE_NAME=depictio-viewer
+          export DEPICTIO_VIEWER_SERVICE_PORT=80
+          docker compose -f docker-compose.dev.yaml --env-file docker-compose/.env --profile ci up -d mongo redis minio depictio-backend depictio-celery-worker depictio-viewer
 
           echo "⏳ Waiting for services to be ready..."
 
@@ -1732,7 +1740,14 @@ jobs:
           # Note: UID and GID are readonly bash variables, already available
           export DATA_DIR=data             # Ensure DATA_DIR exported for docker-compose
           export DEPICTIO_FASTAPI_WORKERS=1  # Single worker to avoid boot race conditions
-          docker compose -f docker-compose.dev.yaml -f docker-compose/docker-compose.backup-minio.yaml --env-file docker-compose/.env up -d --force-recreate
+          # Name services explicitly — see cli-comprehensive-test for the
+          # same rationale. Implicit `up -d` pulls `depictio-viewer-dev:dev`,
+          # which only exists locally; pull hits Docker Hub, times out, and
+          # the whole compose aborts. Adds the backup-only `minio-backup`
+          # service on top of the standard set.
+          export DEPICTIO_VIEWER_SERVICE_NAME=depictio-viewer
+          export DEPICTIO_VIEWER_SERVICE_PORT=80
+          docker compose -f docker-compose.dev.yaml -f docker-compose/docker-compose.backup-minio.yaml --env-file docker-compose/.env --profile ci up -d --force-recreate mongo redis minio minio-backup depictio-backend depictio-celery-worker depictio-viewer
 
           echo "⏳ Waiting 30 seconds for services to start..."
           sleep 30
