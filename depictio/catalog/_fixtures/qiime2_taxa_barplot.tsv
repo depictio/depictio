@@ -1,0 +1,31 @@
+sample	taxonomy	count	habitat	Kingdom	Phylum
+SRR10070130	Bacteria;Proteobacteria	41069.0	Riverwater	Bacteria	Proteobacteria
+SRR10070131	Bacteria;Proteobacteria	42885.0	Riverwater	Bacteria	Proteobacteria
+SRR10070132	Bacteria;Proteobacteria	15962.0	Groundwater	Bacteria	Proteobacteria
+SRR10070133	Bacteria;Proteobacteria	42372.0	Groundwater	Bacteria	Proteobacteria
+SRR10070134	Bacteria;Proteobacteria	50473.0	Riverwater	Bacteria	Proteobacteria
+SRR10070141	Bacteria;Proteobacteria	26307.0	Groundwater	Bacteria	Proteobacteria
+SRR10070149	Bacteria;Proteobacteria	25124.0	Sediment	Bacteria	Proteobacteria
+SRR10070150	Bacteria;Proteobacteria	27408.0	Sediment	Bacteria	Proteobacteria
+SRR10070151	Bacteria;Proteobacteria	25256.0	Sediment	Bacteria	Proteobacteria
+SRR10102392	Bacteria;Proteobacteria	14605.0	Soil	Bacteria	Proteobacteria
+SRR10102393	Bacteria;Proteobacteria	15595.0	Soil	Bacteria	Proteobacteria
+SRR10102394	Bacteria;Proteobacteria	14565.0	Soil	Bacteria	Proteobacteria
+SRR10070130	Bacteria;	1491.0	Riverwater	Bacteria
+SRR10070131	Bacteria;	1797.0	Riverwater	Bacteria
+SRR10070132	Bacteria;	1846.0	Groundwater	Bacteria
+SRR10070133	Bacteria;	8837.0	Groundwater	Bacteria
+SRR10070134	Bacteria;	1995.0	Riverwater	Bacteria
+SRR10070141	Bacteria;	4204.0	Groundwater	Bacteria
+SRR10070149	Bacteria;	10164.0	Sediment	Bacteria
+SRR10070150	Bacteria;	10678.0	Sediment	Bacteria
+SRR10070151	Bacteria;	10579.0	Sediment	Bacteria
+SRR10102392	Bacteria;	1657.0	Soil	Bacteria
+SRR10102393	Bacteria;	1757.0	Soil	Bacteria
+SRR10102394	Bacteria;	1389.0	Soil	Bacteria
+SRR10070130	Bacteria;Bacteroidetes	14502.0	Riverwater	Bacteria	Bacteroidetes
+SRR10070131	Bacteria;Bacteroidetes	14881.0	Riverwater	Bacteria	Bacteroidetes
+SRR10070132	Bacteria;Bacteroidetes	255.0	Groundwater	Bacteria	Bacteroidetes
+SRR10070133	Bacteria;Bacteroidetes	1092.0	Groundwater	Bacteria	Bacteroidetes
+SRR10070134	Bacteria;Bacteroidetes	17772.0	Riverwater	Bacteria	Bacteroidetes
+SRR10070141	Bacteria;Bacteroidetes	611.0	Groundwater	Bacteria	Bacteroidetes
