@@ -35,10 +35,16 @@ services:
     image: mongo:8.0.14
     container_name: mongo
     command: mongod --port 27018
-    ports:
-      - 27018:27018
+    # Internal-only: reachable by other services over the compose network.
+    # Not published to the host to avoid exposing the DB.
     volumes:
       - mongo_data:/data/db
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    deploy:
+      resources:
+        limits:
+          memory: 1G
     healthcheck:
       test: ["CMD-SHELL", "mongosh --port 27018 --eval 'db.adminCommand(\"ping\")'"]
       interval: 30s
@@ -50,11 +56,17 @@ services:
   redis:
     image: redis:8.2.1
     container_name: redis
-    ports:
-      - 6379:6379
+    # Internal-only: reachable by other services over the compose network.
+    # Not published to the host to avoid exposing the broker/cache.
     volumes:
       - redis_data:/data
     command: redis-server
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    deploy:
+      resources:
+        limits:
+          memory: 512M
     healthcheck:
       test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
       interval: 30s
@@ -71,15 +83,20 @@ services:
     # external S3/MinIO instead, override the env var so this profile is off:
     #   COMPOSE_PROFILES=external-s3 docker compose up -d
     profiles: ["local-minio"]
-    ports:
-      - ${MINIO_PORT:-9000}:9000
-      - ${MINIO_CONSOLE_PORT:-9001}:9001
+    # Internal-only: the backend/worker reach MinIO over the compose network.
+    # Neither the S3 API nor the console is published to the host.
     volumes:
       - minio_data:/data
     environment:
       MINIO_ROOT_USER: ${DEPICTIO_MINIO_ROOT_USER:?DEPICTIO_MINIO_ROOT_USER must be set in .env}
       MINIO_ROOT_PASSWORD: ${DEPICTIO_MINIO_ROOT_PASSWORD:?DEPICTIO_MINIO_ROOT_PASSWORD must be set in .env (>=16 chars)}
     command: server /data --console-address :9001
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    deploy:
+      resources:
+        limits:
+          memory: 2G
     healthcheck:
       test: ["CMD-SHELL", "curl -sf http://localhost:9000/minio/health/live || exit 1"]
       interval: 30s
@@ -92,9 +109,22 @@ services:
     image: ghcr.io/depictio/depictio-api:${DEPICTIO_VERSION:-next}
     container_name: depictio-backend
     ports:
-      - 8058:8058
+      # Loopback-only: front this with a reverse proxy / TLS terminator for
+      # external access rather than publishing the API on all interfaces.
+      - 127.0.0.1:8058:8058
     volumes:
       - depictio_keys:/app/depictio/keys
+    # read_only root FS: the only writable runtime paths are the depictio_keys
+    # volume above and the /tmp tmpfs below.
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    deploy:
+      resources:
+        limits:
+          memory: 2G
     env_file:
       - path: .env
         required: false
@@ -133,6 +163,26 @@ services:
       # Container now listens on 8080 (nginx-unprivileged / non-root); the
       # published host port is unchanged at 5080.
       - 5080:8080
+    # read_only root FS: nginx-unprivileged only needs writable scratch dirs,
+    # provided as tmpfs below (pid → /tmp, caches → /var/cache/nginx,
+    # runtime sockets → /var/run).
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /var/cache/nginx
+      - /var/run
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8080/ || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
     restart: unless-stopped
     depends_on:
       depictio-backend:
@@ -154,6 +204,18 @@ services:
       DEPICTIO_MINIO_ROOT_USER: "${DEPICTIO_MINIO_ROOT_USER:?DEPICTIO_MINIO_ROOT_USER must be set in .env}"
       DEPICTIO_MINIO_ROOT_PASSWORD: "${DEPICTIO_MINIO_ROOT_PASSWORD:?DEPICTIO_MINIO_ROOT_PASSWORD must be set in .env (>=16 chars)}"
     command: ["/app/run_celery_worker.sh"]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A depictio.api.celery_worker:celery_app inspect ping -d celery@$$HOSTNAME || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
     restart: unless-stopped
     depends_on:
       mongo:

@@ -10,7 +10,7 @@
 # _uv.dockerfile's viewer-builder stage.
 # -----------------------------
 
-FROM node:20-slim AS builder
+FROM node:20-slim@sha256:2cf067cfed83d5ea958367df9f966191a942351a2df77d6f0193e162b5febfc0 AS builder
 WORKDIR /build
 
 RUN corepack enable && corepack prepare pnpm@10 --activate
@@ -37,7 +37,7 @@ RUN VITE_NO_SOURCEMAP=true NODE_OPTIONS="--max-old-space-size=4096" \
 # pod set runAsNonRoot:true + drop ALL capabilities and satisfy the
 # Kubernetes Pod Security Standards "restricted" profile — the stock
 # nginx image needs root to bind privileged port 80 and fails that gate.
-FROM nginxinc/nginx-unprivileged:1.27-alpine
+FROM nginxinc/nginx-unprivileged:1.27-alpine@sha256:65e3e85dbaed8ba248841d9d58a899b6197106c23cb0ff1a132b7bfe0547e4c0
 
 ARG VERSION=latest
 LABEL org.opencontainers.image.description="Depictio viewer — nginx-served React SPA."
