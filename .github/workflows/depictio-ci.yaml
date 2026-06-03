@@ -463,7 +463,14 @@ jobs:
           docker pull "${DEPICTIO_WORKER_VERSION}"
           docker pull "${DEPICTIO_VIEWER_VERSION}"
           export DEPICTIO_FASTAPI_WORKERS=1  # Single worker to avoid boot race conditions
-          docker compose -f docker-compose.dev.yaml --env-file docker-compose/.env up -d
+          # CI exercises the nginx `depictio-viewer` (the artifact that ships),
+          # not the Vite dev server. We name the services explicitly so the Vite
+          # `depictio-viewer-dev` (no profile, never built/pulled in CI) is
+          # neither built nor started; `--profile ci` enables nginx. The worker's
+          # screenshot task must navigate to nginx, so point it there.
+          export DEPICTIO_VIEWER_SERVICE_NAME=depictio-viewer
+          export DEPICTIO_VIEWER_SERVICE_PORT=80
+          docker compose -f docker-compose.dev.yaml --env-file docker-compose/.env --profile ci up -d mongo redis minio depictio-backend depictio-celery-worker depictio-viewer
 
       - name: Logs
         run: sleep 3 && docker compose logs
@@ -2542,7 +2549,7 @@ jobs:
           docker pull "${DEPICTIO_WORKER_VERSION}"
           docker pull "${DEPICTIO_VIEWER_VERSION}"
           export DEPICTIO_FASTAPI_WORKERS=1  # Single worker to avoid boot race conditions
-          docker compose -f docker-compose.dev.yaml --env-file docker-compose/.env up -d
+          docker compose -f docker-compose.dev.yaml --env-file docker-compose/.env --profile ci up -d mongo redis minio depictio-backend depictio-celery-worker depictio-viewer
           sleep 15
 
       - name: Set up Node.js
@@ -2629,7 +2636,7 @@ jobs:
           docker pull "${DEPICTIO_WORKER_VERSION}"
           docker pull "${DEPICTIO_VIEWER_VERSION}"
           export DEPICTIO_FASTAPI_WORKERS=1  # Single worker to avoid boot race conditions
-          docker compose -f docker-compose.dev.yaml --env-file docker-compose/.env up -d
+          docker compose -f docker-compose.dev.yaml --env-file docker-compose/.env --profile ci up -d mongo redis minio depictio-backend depictio-celery-worker depictio-viewer
 
       - name: Wait for services to be ready
         run: |
@@ -2804,7 +2811,7 @@ jobs:
           docker pull "${DEPICTIO_WORKER_VERSION}"
           docker pull "${DEPICTIO_VIEWER_VERSION}"
           export DEPICTIO_FASTAPI_WORKERS=1  # Single worker to avoid boot race conditions
-          docker compose -f docker-compose.dev.yaml --env-file docker-compose/.env up -d
+          docker compose -f docker-compose.dev.yaml --env-file docker-compose/.env --profile ci up -d mongo redis minio depictio-backend depictio-celery-worker depictio-viewer
 
       - name: Wait for services to be ready
         run: |
@@ -2943,7 +2950,7 @@ jobs:
           docker pull "${DEPICTIO_WORKER_VERSION}"
           docker pull "${DEPICTIO_VIEWER_VERSION}"
           export DEPICTIO_FASTAPI_WORKERS=1  # Single worker to avoid boot race conditions
-          docker compose -f docker-compose.dev.yaml --env-file docker-compose/.env up -d
+          docker compose -f docker-compose.dev.yaml --env-file docker-compose/.env --profile ci up -d mongo redis minio depictio-backend depictio-celery-worker depictio-viewer
 
       - name: Wait for services to be ready
         run: |

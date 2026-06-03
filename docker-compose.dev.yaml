@@ -150,6 +150,25 @@ services:
       - depictio-backend
     restart: unless-stopped
 
+  # Production-style viewer: nginx serving the built SPA bundle (mirrors the
+  # `depictio-viewer` in docker-compose.yaml). OFF by default — local dev uses
+  # the Vite `depictio-viewer-dev` above. It carries a `ci` profile so a plain
+  # `up` skips it; CI activates it with `--profile ci` so the integration suite
+  # exercises the nginx artifact that actually ships (built from PR source via
+  # the `build:` block, not pulled from the registry).
+  depictio-viewer:
+    container_name: depictio-viewer
+    image: ${DEPICTIO_VIEWER_VERSION:-depictio-viewer:dev}
+    build:
+      dockerfile: docker-images/Dockerfile.viewer
+      context: .
+    profiles: ["ci"]
+    ports:
+      - "${VIEWER_PORT:-5080}:80"
+    depends_on:
+      - depictio-backend
+    restart: unless-stopped
+
   depictio-celery-worker:
     container_name: depictio-celery-worker
     image: ${DEPICTIO_WORKER_VERSION:-depictio-worker:dev}
