@@ -1100,7 +1100,15 @@ jobs:
         # `up -d` built the Vite image first, accidentally delaying the import.
         run: |
           docker cp depictio-backend:/app/depictio/.depictio/admin_config.yaml /tmp/admin_config.yaml
-          ADMIN_TOKEN=$(python3 -c "import yaml; print(yaml.safe_load(open('/tmp/admin_config.yaml'))['user']['token']['access_token'])")
+          # Parse the token with the CLI venv's interpreter, NOT the ambient
+          # `python3`: this job's `python3` is the actions/setup-python
+          # toolcache build, which has no PyYAML, so a bare `import yaml`
+          # aborts with ModuleNotFoundError before the first echo. The CLI
+          # venv (created above via `uv pip install -e .[multiqc]`) ships
+          # PyYAML. (docker-system-init's identical line works because that
+          # job uses the system python3, which has python3-yaml.)
+          ADMIN_TOKEN=$(depictio/cli/venv/bin/python -c "import yaml; print(yaml.safe_load(open('/tmp/admin_config.yaml'))['user']['token']['access_token'])")
+          if [ -z "$ADMIN_TOKEN" ]; then echo "❌ Failed to extract admin token from admin_config.yaml"; exit 1; fi
           echo "🌱 Triggering reference data ingestion..."
           HTTP_CODE=$(curl -sS -o /tmp/ingest.out -w "%{http_code}" -X POST \
             -H "Authorization: Bearer ${ADMIN_TOKEN}" \
